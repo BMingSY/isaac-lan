@@ -55,14 +55,7 @@ third_party/     第三方许可证
 ./build-win32/isaac_lan_net_test.exe
 ```
 
-通过标记为 `ALL STATE TRANSPORT TESTS PASSED`。需要检查多进程传输时，可在 Windows Python 中运行：
-
-```sh
-python tools/check_network_processes.py build-win32/isaac_lan_net_test.exe \
-  --output artifacts/network-processes.json
-```
-
-这两个入口不启动游戏。
+通过标记为 `ALL STATE TRANSPORT TESTS PASSED`，此测试不启动游戏。
 
 ## 准备隔离客户端
 

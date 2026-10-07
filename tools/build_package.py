@@ -14,7 +14,8 @@ def build(build_directory, output):
         contents = (build_directory / name).read_bytes()
         shutil.copy2(build_directory / name, output / name)
         files[name] = hashlib.sha256(contents).hexdigest()
-    payload = {'format': 1, 'game_build': '1.9.7.17.J460', 'files': files}
+    version = (source / 'VERSION').read_text().strip()
+    payload = {'format': 1, 'game_build': '1.9.7.17.J460', 'extension_version': version, 'files': files}
     (output / 'payload.json').write_text(json.dumps(payload, indent=2) + '\n')
     shutil.copy2(source / 'package/install.ps1', output)
     shutil.copy2(source / 'README.md', output)
