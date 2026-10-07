@@ -1,0 +1,212 @@
+#include "lan_session.h"
+#include "progression.h"
+#include "state_compression.h"
+#include <windows.h>
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <functional>
+#include <memory>
+using namespace isaac::lan;
+namespace {
+void require(bool v,const char* message) { if(!v) throw std::runtime_error(message); }
+template<class F> void until(F f) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(8);
+    while(!f()) { require(std::chrono::steady_clock::now()<deadline,"Test timed out");Sleep(0); }
+}
+struct Group {
+    std::array<std::unique_ptr<Session>,4> peers;
+    unsigned count;
+    explicit Group(unsigned n):count(n) {
+        for(unsigned i=0;i<n;++i) peers[i]=std::make_unique<Session>();
+        require(peers[0]->host(0,"state-test","host-mods"),"Host failed");
+        for(unsigned i=1;i<n;++i) require(peers[i]->join("127.0.0.1",peers[0]->port(),"state-test",{},"cosmetic-mods"),"Join failed");
+        until([&]{poll();return peers[0]->players()==n && peers[n-1]->players()==n;});
+        Start start;start.seed="YV039KQF";require(peers[0]->start(start),"Start failed");
+        until([&]{poll();return std::all_of(peers.begin(),peers.begin()+n,[](const auto& p){return p->phase()==Phase::running;});});
+    }
+    void poll() {
+        for(unsigned i=0;i<count;++i) if(peers[i]) {
+            peers[i]->poll();if(peers[i]->phase()==Phase::failed) throw std::runtime_error(peers[i]->error());
+        }
+    }
+    void ready() { for(unsigned i=0;i<count;++i) require(peers[i]->ready(),"Ready failed");poll(); }
+    Frame step(unsigned sequence) {
+        require(peers[0]->submit(sequence,{}),"Host submit failed");
+        std::optional<Frame> frame;until([&]{poll();frame=peers[0]->take();return frame.has_value();});
+        peers[0]->completed(frame->tick);return *frame;
+    }
+    void publish(unsigned tick,std::size_t length=6507) {
+        WorldState state;state.tick=tick;state.connected=peers[0]->connectedMask();state.inputSequences=peers[0]->inputSequences();
+        state.bytes.resize(length);for(std::size_t i=0;i<length;++i) state.bytes[i]=static_cast<unsigned char>(i+tick);
+        for(unsigned slot=1;slot<count;++slot) require(peers[0]->publish(slot,state),"Publish failed");
+    }
+};
+void codec() {
+    StateCompression compression;
+    std::vector<std::uint8_t> plain(512000,42);
+    const auto compact=compression.compress(plain);
+    require(compact.size()<plain.size()/10 && compression.expand(compact)==plain,"Independent snapshot compression failed");
+    auto corrupt=compact;corrupt[1]=0xff;
+    bool tooLarge=false;try { compression.expand(corrupt); } catch(const std::exception&) { tooLarge=true; }
+    require(tooLarge,"Compressed state could allocate an unbounded replica");
+    Writer w(Message::world);w.u32(0x12345678);w.blob(std::vector<std::uint8_t>(409,0x55));
+    for(unsigned length=1;length<w.bytes.size();++length) {
+        bool rejected=false;
+        try { Reader r(std::span(w.bytes).first(length));r.u8();r.u32();r.blob();r.finish(); } catch(const std::exception&) { rejected=true; }
+        require(rejected,"Truncated state packet accepted");
+    }
+    Reader r(w.bytes);r.u8();require(r.u32()==0x12345678 && r.blob().size()==409,"State codec failed");r.finish();
+    std::puts("PASS bounded state codec rejects truncated packets");
+}
+void inputsAndStates(unsigned n) {
+    Group g(n);
+    until([&]{g.poll();return g.peers[0]->latency()[n-1]>=0 && g.peers[n-1]->latency()[n-1]>=0;});
+    for(unsigned slot=1;slot<n;++slot) require(g.peers[0]->latency()[slot]>=0,"Peer round-trip measurement missing");
+    require(g.peers[0]->modsDiffer(),"Different Mods did not remain an advisory");
+    require(g.peers[0]->ready(),"Host ready failed");
+    require(g.peers[0]->submit(0,{}),"Initial host sample failed");
+    require(!g.peers[0]->take(),"Host started before guests loaded");
+    for(unsigned i=1;i<n;++i) require(g.peers[i]->ready(),"Guest ready failed");
+    std::optional<Frame> first;until([&]{g.poll();first=g.peers[0]->take();return first.has_value();});
+    require(first->tick==0,"Loading manufactured simulation frames");g.peers[0]->completed(0);
+    InputFrame press;press.values[0]=50000;press.triggered=1u<<12;
+    require(g.peers[1]->submit(0,press),"Guest press failed");
+    require(g.peers[1]->submit(1,{}),"Guest release failed");
+    until([&]{g.poll();return g.peers[0]->inputSequences()[1]==1;});
+    const auto frame=g.step(1);
+    require(frame.inputs[1].values[0]==0 && frame.inputs[1].triggered==(1u<<12),"Latest input lost short button edge or retained stale movement");
+    require(g.step(2).inputs[1].triggered==0,"Button edge repeated");
+    for(unsigned t=3;t<180;++t) {
+        require(g.step(t).tick==t,"Host stalled waiting for a guest input");
+        g.publish(t);
+        g.poll();
+    }
+    std::array<std::uint32_t,4> last{};
+    until([&] {
+        g.poll();bool done=true;
+        for(unsigned i=1;i<n;++i) {
+            if(auto state=g.peers[i]->takeState()) {
+                require(state->connected==(1u<<n)-1 && state->inputSequences[1]==1,"Authority metadata incorrect");
+                for(std::size_t b=0;b<state->bytes.size();++b) require(state->bytes[b]==static_cast<unsigned char>(b+state->tick),"State chunks corrupted");
+                last[i]=state->tick;g.peers[i]->applied(state->tick);
+            }
+            done=done && last[i]==179;
+        }
+        return done;
+    });
+    g.poll();
+    require(g.peers[1]->verifiedTick()==179,"State acknowledgement missing");
+    g.peers[0]->finish();until([&]{g.poll();return g.peers[1]->phase()==Phase::closed;});
+    std::printf("PASS %u players: host never waits for remote ticks; latest states coalesce; edges arrive once; shared finish\n",n);
+}
+void floorRejoin() {
+    Group g(2);g.ready();g.step(0);
+    const auto identity=g.peers[1]->identity();g.peers[1]->close();g.poll();
+    require(g.step(1).connected==1,"Departure did not remove guest from active roster");
+    g.peers[1]=std::make_unique<Session>();require(g.peers[1]->join("127.0.0.1",g.peers[0]->port(),"state-test",identity,"other-mods"),"Returning connection failed");
+    until([&]{g.poll();return g.peers[1]->phase()==Phase::waiting;});
+    Start checkpoint=g.peers[0]->settings();checkpoint.snapshot.resize(65537,0x47);
+    require(g.peers[0]->checkpoint(checkpoint,2),"Floor checkpoint failed");
+    for(unsigned i=2;i<30;++i) require(g.step(i).connected==1,"Loading guest entered combat early");
+    until([&]{g.poll();return g.peers[1]->phase()==Phase::running;});
+    require(g.peers[1]->settings().snapshot==checkpoint.snapshot,"Floor checkpoint corrupt");
+    require(g.peers[1]->ready(),"Restored engine ready failed");
+    until([&]{g.poll();return g.peers[0]->connectedMask()==3;});
+    require(g.step(30).connected==3,"Ready guest was not restored");g.publish(30);
+    std::optional<WorldState> value;until([&]{g.poll();value=g.peers[1]->takeState();return value.has_value();});
+    require(value->tick==30,"Returning client replayed history instead of current state");g.peers[1]->applied(value->tick);g.poll();
+    std::puts("PASS rejoin loads current checkpoint then latest state; host continues during loading; no input-history replay");
+}
+void stageEvents() {
+    Group g(2);g.ready();g.step(0);g.publish(0,40000);
+    // Supersede a view that may be only partly queued, then publish the new
+    // floor. The event must survive state coalescing and preserve native args.
+    Stage stage{1,1,0,0,false,{},{}};
+    for(unsigned i=0;i<stage.seeds.size();++i) stage.seeds[i]=0x12340000+i;
+    require(g.peers[0]->beginStage(stage),"Stage broadcast failed");
+    std::optional<Stage> received;until([&]{g.poll();received=g.peers[1]->takeStage();return received.has_value();});
+    require(*received==stage,"Native floor event changed arguments");
+    require(!g.peers[1]->takeState(),"Old floor view survived its begin event");
+    g.step(1);g.publish(1);std::optional<WorldState> world;
+    until([&]{g.poll();world=g.peers[1]->takeState();return world.has_value();});
+    require(world->tick==1,"Floor event damaged subsequent world transfer");
+    const auto identity=g.peers[1]->identity();g.peers[1]->abort("isolated connection loss");
+    until([&]{g.peers[0]->poll();return g.peers[0]->connectedMask()==1;});
+    require(g.peers[1]->reconnect(),"Automatic return connection failed");
+    until([&]{g.poll();return g.peers[1]->phase()==Phase::waiting;});
+    require(g.peers[1]->identity()==identity,"Automatic return lost player identity");
+    require(g.peers[0]->beginStage({2,2,0,0,false,{},{}}),"Second stage broadcast failed");g.poll();
+    require(!g.peers[1]->takeStage() && g.peers[1]->phase()==Phase::waiting,"Waiting player entered an online floor animation");
+    std::puts("PASS native floor begin precedes new state; automatic return retains identity until a checkpoint is supplied");
+}
+void stageDuringRejoin() {
+    Group g(2);g.ready();g.step(0);
+    const auto identity=g.peers[1]->identity();g.peers[1]->close();g.poll();g.step(1);
+    g.peers[1]=std::make_unique<Session>();
+    require(g.peers[1]->join("127.0.0.1",g.peers[0]->port(),"state-test",identity),"Returning connection failed");
+    until([&]{g.poll();return g.peers[1]->phase()==Phase::waiting;});
+    Start saved=g.peers[0]->settings();saved.snapshot.resize(65537,0x47);
+    require(g.peers[0]->checkpoint(saved,2),"Current-floor checkpoint failed");
+    until([&]{g.poll();return g.peers[1]->phase()==Phase::running;});
+    require(g.peers[0]->beginStage({1,1,0,0,false,{},{}}),"First loading floor event failed");
+    const Stage last{2,2,0,0,false,{},{}};require(g.peers[0]->beginStage(last),"Second loading floor event failed");
+    g.poll();require(!g.peers[1]->takeStage(),"Native event reached an unprepared engine");
+    require(g.peers[1]->ready(),"Returning readiness failed");
+    std::optional<Stage> received;
+    until([&]{g.poll();received=g.peers[1]->takeStage();return received.has_value();});
+    require(*received==last,"Slow loader missed the latest floor event");
+    std::puts("PASS host floor changes during guest loading are delivered before the first live view");
+}
+void rewindTransaction() {
+    Group g(2);g.ready();g.step(0);g.publish(0,40000);
+    Stage value{1,1,0,12,false,{},{}};value.rewind.resize(300001);
+    unsigned random=17;
+    for(auto& b:value.rewind) { random=random*1664525+1013904223;b=random>>24; }
+    require(g.peers[0]->beginStage(value),"Rewind transfer failed");
+    g.step(1);g.publish(1);
+    std::optional<Stage> received;
+    until([&]{g.poll();received=g.peers[1]->takeStage();return received.has_value();});
+    require(*received==value,"Chunked native rewind checkpoint changed");
+    std::optional<WorldState> world;
+    until([&]{g.poll();world=g.peers[1]->takeState();return world.has_value();});
+    require(world->tick==1,"Rewind did not precede its new world state");
+    std::puts("PASS large native rewind is reliable and precedes subsequent world views");
+}
+void progression() {
+    Progress local,shared,current;local.achievements[7]=1;shared.achievements[9]=1;current=shared;current.achievements[11]=1;
+    local.counters[0]=12;shared.counters[0]=1000;current.counters[0]=1003;
+    const auto merged=mergeProgress(local,shared,current);
+    require(merged.achievements[7] && !merged.achievements[9] && merged.achievements[11] && merged.counters[0]==15,"Local progression isolation failed");
+    std::puts("PASS local progression remains isolated");
+}
+void rKeyTransaction() {
+    Group g(2);g.ready();g.step(0);
+    Stage value;value.epoch=1;value.level=1;value.rKey=true;
+    for(unsigned i=0;i<value.seeds.size();++i) value.seeds[i]=0x12345600+i;
+    require(g.peers[0]->beginStage(value),"R Key event failed");
+    g.step(1);g.publish(1);
+    std::optional<Stage> event;
+    until([&]{g.poll();event=g.peers[1]->takeStage();return event.has_value();});
+    require(*event==value,"Native R Key mode or pre-restart Seeds changed");
+    std::optional<WorldState> world;
+    until([&]{g.poll();world=g.peers[1]->takeState();return world.has_value();});
+    require(world->tick==1,"R Key event did not precede its new floor state");
+    std::puts("PASS native R Key event preserves pre-restart seeds and precedes world state");
+}
+void roomCommands() {
+    Group g(2);g.ready();g.step(0);
+    RoomRequest request{1,0,0,0,84,71,true};
+    require(!g.peers[0]->requestRoom(request),"Host submitted a remote player command");
+    require(g.peers[1]->requestRoom(request),"Guest native room command failed");
+    std::optional<RoomRequest> received;
+    until([&]{g.poll();received=g.peers[0]->takeRoomRequests()[1];return received.has_value();});
+    require(*received==request,"Native room command changed source or animation");
+    require(!g.peers[0]->takeRoomRequests()[1],"Room command repeated after consumption");
+    std::puts("PASS native Mod room requests retain source and owner; commands consume once");
+}
+}
+int main() {
+    try { codec();progression();inputsAndStates(2);inputsAndStates(4);floorRejoin();stageEvents();stageDuringRejoin();rewindTransaction();rKeyTransaction();roomCommands();std::puts("ALL STATE TRANSPORT TESTS PASSED");return 0; }
+    catch(const std::exception& e) { std::fprintf(stderr,"FAIL %s\n",e.what());return 1; }
+}

@@ -1,0 +1,29 @@
+param([Parameter(Mandatory=$true)][int]$GameProcessId,[switch]$HostFixture)
+$ErrorActionPreference='Stop'
+$process=Get-Process -Id $GameProcessId
+if ($process.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') { throw 'Owned isolated game required.' }
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class LanProgressFixture {
+ [DllImport("kernel32.dll",SetLastError=true)] public static extern IntPtr OpenProcess(uint access,bool inherit,int pid);
+ [DllImport("kernel32.dll",SetLastError=true)] public static extern bool ReadProcessMemory(IntPtr handle,IntPtr address,byte[] data,UIntPtr size,out UIntPtr read);
+ [DllImport("kernel32.dll",SetLastError=true)] public static extern bool WriteProcessMemory(IntPtr handle,IntPtr address,byte[] data,UIntPtr size,out UIntPtr written);
+ [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr handle);
+}
+'@
+$handle=[LanProgressFixture]::OpenProcess(0x0038,$false,$GameProcessId)
+if ($handle -eq [IntPtr]::Zero) { throw 'Cannot open the owned fixture.' }
+try {
+ $bytes=New-Object byte[] 4
+ [UIntPtr]$count=[UIntPtr]::Zero
+ $base=$process.MainModule.BaseAddress.ToInt64()
+ if (-not [LanProgressFixture]::ReadProcessMemory($handle,[IntPtr]($base+0x87169c),$bytes,[UIntPtr]([uint32]4),[ref]$count)) { throw 'Cannot read manager.' }
+ [long]$progress=[BitConverter]::ToUInt32($bytes,0)+0x14
+ [byte[]]$achievement=@(0);[int]$counter=321
+ if ($HostFixture) { $achievement[0]=1;$counter=98765 }
+ if (-not [LanProgressFixture]::WriteProcessMemory($handle,[IntPtr]($progress+0x38+640),$achievement,[UIntPtr]([uint32]1),[ref]$count)) { throw 'Cannot set achievement fixture.' }
+ $bytes=[BitConverter]::GetBytes($counter)
+ if (-not [LanProgressFixture]::WriteProcessMemory($handle,[IntPtr]($progress+0x2bc+522*4),$bytes,[UIntPtr]([uint32]4),[ref]$count)) { throw 'Cannot set counter fixture.' }
+ Write-Output "Fixture achievement640=$($achievement[0]) counter522=$counter"
+} finally { [void][LanProgressFixture]::CloseHandle($handle) }

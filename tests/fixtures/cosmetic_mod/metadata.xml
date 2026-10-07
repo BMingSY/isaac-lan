@@ -1,0 +1,7 @@
+<metadata>
+    <name>LAN cosmetic warning fixture</name>
+    <directory>lan_compat_cosmetic_mod</directory>
+    <id>0</id>
+    <description>Isolated test of advisory-only Mod differences.</description>
+    <version>1</version>
+</metadata>
