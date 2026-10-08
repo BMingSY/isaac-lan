@@ -28,6 +28,8 @@ using Update = void(__attribute__((thiscall)) *)(void*, bool);
 using Load = bool(__attribute__((thiscall)) *)(void*, const char*);
 using ItemText = void(__attribute__((thiscall)) *)(void*, void*, void*);
 using CustomText = void(__attribute__((thiscall)) *)(void*, void*, const char*, const char*);
+using GetItemConfig = Address(__cdecl*)();
+using GetItem = Address(__attribute__((thiscall)) *)(void*, int);
 Show originalShow;
 Update originalUpdate;
 Load originalLoad;
@@ -339,13 +341,13 @@ int synchronize(lua_State* L) {
                                        reinterpret_cast<void*>(target), e.title.c_str(),
                                        e.subtitle.c_str());
                 } else {
-                    const auto config = at<Address>(image, 0x87169c) + 0x2a670;
-                    const auto items = config + (e.parameter == 2 ? 12 : 0);
-                    const auto begin = at<Address>(items, 0), end = at<Address>(items, 4);
-                    if (static_cast<unsigned>(e.id) >= (end - begin) / 4)
-                        return;
-                    const auto item = at<Address>(begin, e.id * 4);
-                    if (!item)
+                    // Resolve through J460's checked native accessors. Manager's
+                    // EntityConfig is not ItemConfig; reading its vectors here
+                    // would pass a non-item pointer into the native HUD.
+                    const auto config = engine<GetItemConfig>(0x2ca00)();
+                    const auto lookup = engine<GetItem>(e.parameter == 2 ? 0x32fd70 : 0x32fd10);
+                    const auto item = lookup(reinterpret_cast<void*>(config), e.id);
+                    if (!item || at<int>(item, 0) != e.parameter || at<int>(item, 4) != e.id)
                         return;
                     originalItemText(reinterpret_cast<void*>(hud), reinterpret_cast<void*>(target),
                                      reinterpret_cast<void*>(item));
