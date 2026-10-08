@@ -899,6 +899,87 @@ int withPlayer(lua_State* L) {
     lua.pushBoolean(L, true);
     return 1;
 }
+int withLocalView(lua_State* L) {
+    int result = 0;
+    withView(
+        [&] {
+            lua.pushValue(L, 1);
+            result = lua.pcall(L, 0, 0, 0, 0, nullptr);
+        },
+        true);
+    if (result)
+        return lua.error(L);
+    lua.pushBoolean(L, true);
+    return 1;
+}
+int integrationMove(lua_State* L) {
+    const auto slot = lua.checkInteger(L, 1), index = lua.checkInteger(L, 2),
+               dimension = lua.checkInteger(L, 3);
+    lua.pushBoolean(L, !runtime::replica() && slot >= 0 && slot < 4 && participant(slot) &&
+                           (connectedMask & (1u << slot)) && index >= -20 && index < 169 &&
+                           dimension >= 0 && dimension <= 2 &&
+                           queue(participant(slot), index, dimension, -1, true));
+    return 1;
+}
+int cancelIntegrationMove(lua_State* L) {
+    const auto slot = lua.checkInteger(L, 1), index = lua.checkInteger(L, 2),
+               dimension = lua.checkInteger(L, 3);
+    if (!runtime::replica() && slot >= 0 && slot < 4) {
+        const auto head = participant(slot);
+        std::erase_if(pending, [&](const auto& request) {
+            return request.player == head && request.destination.index == index &&
+                   request.destination.dimension == dimension;
+        });
+    }
+    return 0;
+}
+int actorIdentities(lua_State* L) {
+    // The borrowed canonical roster remains available inside nested UI scopes.
+    const auto all = values(teamRoster ? *teamRoster : roster());
+    lua.createTable(L, static_cast<int>(all.size()), 0);
+    unsigned entry = 0;
+    for (unsigned owner = 0; owner < 4; ++owner) {
+        const auto head = participant(owner);
+        if (!head)
+            continue;
+        std::vector<Address> actors{head};
+        for (auto actor : all)
+            if (actor != head &&
+                (at<int>(actor, 0x1618) == static_cast<int>(owner + 1) ||
+                 at<Address>(head, 0x1e68) == actor || at<Address>(actor, 0x1e68) == head))
+                actors.push_back(actor);
+        for (unsigned role = 0; role < actors.size(); ++role) {
+            lua.createTable(L, 0, 3);
+            lua.pushInteger(L, std::find(all.begin(), all.end(), actors[role]) - all.begin());
+            lua.setField(L, -2, "index");
+            lua.pushInteger(L, owner + 1);
+            lua.setField(L, -2, "owner");
+            lua.pushInteger(L, role + 1);
+            lua.setField(L, -2, "role");
+            lua.rawSetI(L, -2, ++entry);
+        }
+    }
+    return 1;
+}
+int withOwner(lua_State* L) {
+    const auto slot = lua.checkInteger(L, 1);
+    const auto head = slot >= 0 && slot < 4 ? participant(slot) : 0;
+    const auto room = head ? findRoom(head) : nullptr;
+    if (runtime::replica() || depth || !room || !(connectedMask & (1u << slot))) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    int result;
+    {
+        Scope scope(*room, controlledActors(head));
+        lua.pushValue(L, 2);
+        result = lua.pcall(L, 0, 0, 0, 0, nullptr);
+    }
+    if (result)
+        return lua.error(L);
+    lua.pushBoolean(L, true);
+    return 1;
+}
 int positions(lua_State* L) {
     const auto players = enabled ? participants : logicalPlayers();
     lua.createTable(L, 0, static_cast<int>(players.size()));
@@ -1398,6 +1479,9 @@ bool checkpointReady() {
 }
 bool stateReady() {
     return enabled && !depth && !resumeStage && !pendingStage && !pendingRKey;
+}
+bool viewReady() {
+    return enabled && !transferring && !resumeStage && !pendingStage && !pendingRKey;
 }
 bool virtualized() {
     return enabled;
@@ -1951,6 +2035,11 @@ bool bind(lua_State* L, HMODULE module) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, name);
     };
+    function("api_move", integrationMove);
+    function("api_cancel_move", cancelIntegrationMove);
+    function("api_with_local_view", withLocalView);
+    function("api_actors", actorIdentities);
+    function("api_with_owner", withOwner);
     function("rooms_enable", enable);
     function("rooms_move", request);
     function("rooms_with_player", withPlayer);

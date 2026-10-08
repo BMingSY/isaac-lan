@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace isaac::lan {
-constexpr std::uint16_t protocolVersion = 18;
+constexpr std::uint16_t protocolVersion = 19;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -36,7 +36,14 @@ enum class Message : std::uint8_t {
     roomRequest,
     ping,
     pong,
-    latency
+    latency,
+    integration
+};
+constexpr std::size_t maxIntegrationSize = 2048;
+constexpr std::size_t maxIntegrationQueue = 32;
+struct IntegrationMessage {
+    unsigned sender = 0; // Assigned by the transport, never supplied in a payload.
+    std::string bytes;
 };
 enum class Phase {
     idle,

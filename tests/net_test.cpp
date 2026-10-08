@@ -577,6 +577,80 @@ void publicationLimits() {
     });
     require(received->bytes == state.bytes && received->tick == 0, "Valid publication damaged");
 }
+void integrations() {
+    Group g(3);
+    require(g.peers[0]->runId().size() == 32 && g.peers[0]->runId() == g.peers[1]->runId() &&
+                g.peers[0]->runId() == g.peers[2]->runId(),
+            "Run identity differs between peers");
+    g.ready();
+    g.step(0);
+    require(!g.peers[1]->sendIntegration(2, "forged-peer") && !g.peers[1]->sendIntegration(0, {}) &&
+                !g.peers[1]->sendIntegration(0, std::string(maxIntegrationSize + 1, 'x')),
+            "Invalid integration destination or limit accepted");
+    for (unsigned i = 0; i < 8; ++i)
+        require(g.peers[1]->sendIntegration(0, std::string("request-") + std::to_string(i)),
+                "Action send failed");
+    require(g.peers[2]->sendIntegration(0, "other-owner"), "Second owner action failed");
+    unsigned received = 0;
+    until([&] {
+        g.poll();
+        while (auto packet = g.peers[0]->takeIntegration()) {
+            if (packet->sender == 1)
+                require(packet->bytes == std::string("request-") + std::to_string(received++),
+                        "Reliable requests were merged or reordered");
+            else
+                require(packet->sender == 2 && packet->bytes == "other-owner",
+                        "Sender identity not transport-assigned");
+        }
+        return received == 8;
+    });
+    require(g.peers[0]->sendIntegration(1, "result"), "Host result failed");
+    std::optional<IntegrationMessage> result;
+    until([&] {
+        g.poll();
+        result = g.peers[1]->takeIntegration();
+        return result.has_value();
+    });
+    require(result->sender == 0 && result->bytes == "result" && !g.peers[2]->takeIntegration(),
+            "Result leaked to a different recipient");
+    for (unsigned i = 0; i < maxIntegrationQueue; ++i)
+        require(g.peers[0]->sendIntegration(0, "local"), "Local action queue filled prematurely");
+    require(!g.peers[0]->sendIntegration(0, "overflow"), "Local action queue was unbounded");
+    for (unsigned i = 0; i < maxIntegrationQueue; ++i)
+        require(g.peers[0]->takeIntegration().has_value(), "Local action lost");
+    Stage stage;
+    stage.epoch = 3;
+    stage.level = 2;
+    require(g.peers[0]->beginStage(stage), "Epoch event failed");
+    until([&] {
+        g.poll();
+        return g.peers[1]->worldEpoch() == 3 && g.peers[2]->worldEpoch() == 3;
+    });
+    require(g.peers[0]->worldEpoch() == 3, "Authority epoch not retained");
+    const auto runId = g.peers[0]->runId();
+    const auto identity = g.peers[2]->identity();
+    g.peers[2]->close();
+    until([&] {
+        g.peers[0]->poll();
+        return g.peers[0]->connectedMask() == 3;
+    });
+    g.peers[2] = std::make_unique<Session>();
+    require(g.peers[2]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity),
+            "Integration rejoin failed");
+    until([&] {
+        g.poll();
+        return g.peers[2]->phase() == Phase::waiting;
+    });
+    Start checkpoint = g.peers[0]->settings();
+    checkpoint.snapshot = {1, 2, 3};
+    require(g.peers[0]->checkpoint(checkpoint, 1), "Integration checkpoint failed");
+    until([&] {
+        g.poll();
+        return g.peers[2]->phase() == Phase::running;
+    });
+    require(g.peers[2]->runId() == runId && g.peers[2]->worldEpoch() == 3,
+            "Rejoin lost run identity or world epoch");
+}
 void hostDisconnect() {
     Group g(2);
     g.ready();
@@ -608,6 +682,7 @@ int main(int argc, char** argv) {
                                   {"handshake", handshake},
                                   {"commands", commands},
                                   {"publication-limits", publicationLimits},
+                                  {"integrations", integrations},
                                   {"host-disconnect", hostDisconnect}});
     if (!result)
         std::puts("ALL STATE TRANSPORT TESTS PASSED");

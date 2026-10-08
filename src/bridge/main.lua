@@ -1,5 +1,7 @@
 -- Embedded in the native extension. No Workshop registration or mod directory.
 local native = assert(_IsaacLan)
+local integration = assert(_IsaacLanModules)["api/public"]
+local registry = _IsaacLanModules["compat/registry"]
 local game
 local owner = { Name = "Isaac LAN native extension" }
 local function callback(id, fn)
@@ -32,7 +34,25 @@ local registerMod = RegisterMod
 function RegisterMod(name, version)
     local mod = registerMod(name, version)
     registeredMods[#registeredMods + 1] = mod
+    local caller = debug.getinfo(2, "S")
+    registry.observeMod(mod, caller and caller.source or "")
     return mod
+end
+local originalRequire = require
+function require(name)
+    local caller = debug.getinfo(2, "S")
+    local value = originalRequire(name)
+    registry.observeRequire(caller and caller.source or "", name, value)
+    return value
+end
+function _IsaacLanViewCommitted()
+    integration.commit()
+end
+function _IsaacLanActionStep()
+    if native.api_info().ready == 1 then
+        _IsaacLanModules["compat/goodtrip/authority"].observe()
+    end
+    integration.actions.step()
 end
 local function modFingerprint()
     local parts = {}
@@ -120,6 +140,7 @@ callback(ModCallbacks.MC_POST_UPDATE, function()
     log("READY players=" .. status.players)
 end)
 callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
+    integration.reset("session_ended")
     if prepared then
         native.net_close(1)
         started, prepared, engineStarted = false, false, false
@@ -176,6 +197,7 @@ function _IsaacLanCommand(action, value)
 end
 function _IsaacLanFrame()
     status = native.net_poll()
+    integration.poll()
     if status.phase == 3 and not started then
         started = true
         assert(native.net_engine_start())

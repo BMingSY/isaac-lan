@@ -41,6 +41,10 @@ class Session {
     std::optional<Stage> takeStage();
     bool requestRoom(const RoomRequest&);
     std::array<std::optional<RoomRequest>, maxPlayers> takeRoomRequests();
+    bool sendIntegration(unsigned destination, const std::string& bytes);
+    std::optional<IntegrationMessage> takeIntegration();
+    const std::string& runId() const;
+    std::uint32_t worldEpoch() const;
     void applied(std::uint32_t tick);
     std::array<std::uint32_t, maxPlayers> inputSequences() const;
     const std::array<int, maxPlayers>& latency() const;

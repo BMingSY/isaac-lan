@@ -1,5 +1,15 @@
 #pragma once
 namespace isaac::frontend {
+struct IntegrationModule {
+    const char* name;
+    const char* file;
+    const char* source;
+};
+// clang-format off
+inline constexpr IntegrationModule integrationModules[] = {
+@ISAAC_LAN_INTEGRATION_MODULES@
+};
+// clang-format on
 inline constexpr char stateSource[] = R"IsaacLAN(@ISAAC_LAN_STATE@)IsaacLAN";
 inline constexpr char bridgeSource[] = R"IsaacLAN(@ISAAC_LAN_BRIDGE@)IsaacLAN";
 inline constexpr char menuSource[] = R"IsaacLAN(@ISAAC_LAN_MENU@)IsaacLAN";
