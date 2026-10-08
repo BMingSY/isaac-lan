@@ -810,6 +810,7 @@ local function applyEntity(e, v, now)
         actor = e.Type == 1,
         controller = e.Type == 1 and e:ToPlayer().ControllerIndex or -1,
         prediction = e.Type == 1 and (prior and prior.prediction or prediction.new(vec(v[6]))),
+        doorway = prior and prior.doorway,
     }
 end
 local replicaEpoch, awaitingFloor = nil, false
@@ -876,6 +877,17 @@ function state.apply(bytes, tick, ack)
         parts[#parts + 1] = pack(">Bi4i4ff", table.unpack(p))
     end
     assert(native.rooms_sync(table.concat(parts)))
+    local positions = native.rooms_positions()
+    local localPosition = assert(positions[tostring(value[10])])
+    local key = localPosition.dimension .. ":" .. localPosition.index
+    local roomChanged = key ~= replicaRoom
+    if roomChanged then
+        -- Reset before applying actors: room snapshots exclude player entities.
+        -- Clearing afterward used to lose the arrival's player motion record.
+        motion = {}
+        replicaRoom = key
+        lastRender = nil
+    end
     native.state_clock(value[3])
     assert(native.net_progress(value[13]))
     local now = Isaac.GetTime() / 1000
@@ -892,7 +904,7 @@ function state.apply(bytes, tick, ack)
         applyActorVisuals(p, actor)
     end
     actorVisuals = value[9]
-    local mapChanged = false
+    local mapChanged = roomChanged
     for _, d in ipairs(value[8]) do
         local descriptor = level:GetRoomByIdx(d[1], d[7])
         if descriptor and descriptor.Data then
@@ -908,14 +920,6 @@ function state.apply(bytes, tick, ack)
     -- DisplayFlags already contain the host's visibility result. Recomputing
     -- it here both overrides that result and walks transient empty descriptors
     -- while the replica is replacing a room.
-    local positions = native.rooms_positions()
-    local localPosition = assert(positions[tostring(value[10])])
-    local key = localPosition.dimension .. ":" .. localPosition.index
-    if key ~= replicaRoom then
-        motion = {}
-        replicaRoom = key
-        mapChanged = true
-    end
     local currentIDs = {}
     assert(native.rooms_with_player(value[10], function()
         local room = game:GetRoom()
@@ -1016,7 +1020,7 @@ function state.apply(bytes, tick, ack)
     end
     for _, m in pairs(motion) do
         if m.actor and m.controller == value[10] + 1 then
-            m.prediction:confirm(m.target, ack)
+            m.prediction:confirm(m.target, ack, m.velocity * 60)
         end
     end
     receivedAt, receivedTick = now, tick
@@ -1024,6 +1028,27 @@ function state.apply(bytes, tick, ack)
     assert(native.presentation_events(value[15]))
     state.lastTick = tick
     return true
+end
+local outwardDirections = { Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) }
+local function doorCorridor(room, position)
+    for slot = 0, 7 do
+        local door = room:GetDoor(slot)
+        if door and door:IsOpen() then
+            local outward = outwardDirections[slot % 4 + 1]
+            local delta = door.Position - position
+            local along = delta:Dot(outward)
+            local across = math.abs(delta.X * outward.Y - delta.Y * outward.X)
+            if along < 64 and along > -24 and across < 16 then
+                return slot, outward, along
+            end
+        end
+    end
+end
+local function clearForPlayer(room, position, aperture)
+    local collision = room:GetGridCollisionAtPos(position)
+    return collision == GridCollisionClass.COLLISION_NONE
+        or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
+        or (aperture and collision == GridCollisionClass.COLLISION_WALL)
 end
 function state.present(input, sequence)
     if receivedTick < 0 then
@@ -1064,34 +1089,57 @@ function state.present(input, sequence)
             local position = m.from + (m.target - m.from) * fraction
             if m.actor and m.controller == status.slot + 1 then
                 local p = e:ToPlayer()
+                local controls = p.ControlsEnabled
+                    and p:AreControlsEnabled()
+                    and p:IsExtraAnimationFinished()
+                if not controls then
+                    m.prediction:reset(m.target, sequence - 1)
+                    m.doorway = nil
+                end
                 position = m.prediction:step(
-                    p.ControlsEnabled and direction or Vector(0, 0),
+                    controls and direction or Vector(0, 0),
                     sequence,
-                    p.MoveSpeed * 180,
+                    p.MoveSpeed * (4.4117647 * 60),
                     dt
                 )
                 assert(native.rooms_with_player(status.slot, function()
                     local room = Game():GetRoom()
-                    position = room:GetClampedPosition(position, math.max(5, e.Size))
-                    if
-                        not p.CanFly
-                        and room:GetGridCollisionAtPos(position)
-                            ~= GridCollisionClass.COLLISION_NONE
-                    then
+                    if m.doorway then
+                        local door = room:GetDoor(m.doorway.slot)
+                        if
+                            not door
+                            or not door:IsOpen()
+                            or direction:Dot(m.doorway.outward) <= 0
+                            or now - m.doorway.at > 0.5
+                        then
+                            m.doorway = nil
+                        end
+                    end
+                    local slot, outward, along = doorCorridor(room, position)
+                    local aperture = controls and slot ~= nil
+                    if aperture and not m.doorway and direction:Dot(outward) > 0 and along < 18 then
+                        m.doorway =
+                            { slot = slot, outward = outward, at = now, position = position }
+                    end
+                    if m.doorway then
+                        -- Await the host's room commit at the doorway. Do not
+                        -- extrapolate a source-room walk into the destination.
+                        position = m.doorway.position
+                        m.prediction.velocity = Vector(0, 0)
+                    end
+                    if not aperture then
+                        position = room:GetClampedPosition(position, math.max(5, e.Size))
+                    end
+                    if not p.CanFly and not clearForPlayer(room, position, aperture) then
                         -- Slide along blocked grids; returning to the older
                         -- authority position on every blocked frame flickers.
                         local x = Vector(position.X, m.display.Y)
                         local y = Vector(m.display.X, position.Y)
-                        if room:GetGridCollisionAtPos(x) == GridCollisionClass.COLLISION_NONE then
+                        if clearForPlayer(room, x, aperture) then
                             position = x
-                        elseif
-                            room:GetGridCollisionAtPos(y) == GridCollisionClass.COLLISION_NONE
-                        then
+                        elseif clearForPlayer(room, y, aperture) then
                             position = y
-                        elseif
-                            room:GetGridCollisionAtPos(m.display)
-                            == GridCollisionClass.COLLISION_NONE
-                        then
+                        elseif clearForPlayer(room, m.display, aperture) then
                             position = m.display
                         else
                             position = m.target

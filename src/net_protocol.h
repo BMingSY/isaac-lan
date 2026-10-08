@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace isaac::lan {
-constexpr std::uint16_t protocolVersion = 19;
+constexpr std::uint16_t protocolVersion = 20;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -64,10 +64,18 @@ struct InputFrame {
     std::uint16_t triggered = 0;
     bool operator==(const InputFrame&) const = default;
 };
+// Held controls belong to the room the sender has actually displayed.
+struct InputRoom {
+    std::uint32_t epoch = 0;
+    std::int16_t index = 0;
+    std::uint8_t dimension = 0;
+    bool operator==(const InputRoom&) const = default;
+};
 struct Frame {
     std::uint32_t tick = 0;
     std::uint8_t players = 0;
     std::array<InputFrame, maxPlayers> inputs{};
+    std::array<std::optional<InputRoom>, maxPlayers> inputRooms{};
     std::array<Command, maxPlayers> commands{};
     std::uint8_t connected = 15;
     bool operator==(const Frame&) const = default;

@@ -347,9 +347,15 @@ bool captureNextInput() {
     lan::Reader reader{std::span(reinterpret_cast<const std::uint8_t*>(data), size)};
     localInput = reader.input();
     lua.setTop(state, top);
-    if (!rooms::stateReady())
+    std::optional<lan::InputRoom> inputRoom;
+    const auto locations = rooms::captureLocations();
+    if (rooms::stateReady() && session->slot() < locations.size()) {
+        const auto& position = locations[session->slot()];
+        inputRoom = lan::InputRoom{floorEpoch, static_cast<std::int16_t>(position.index),
+                                   static_cast<std::uint8_t>(position.dimension)};
+    } else
         localInput = {};
-    if (!session->submit(nextInputTick, localInput)) {
+    if (!session->submit(nextInputTick, localInput, inputRoom)) {
         fail("Local input sequence rejected");
         return false;
     }
@@ -504,6 +510,16 @@ void updateOne(void* game) {
                 logger("mod_room_command slot=" + std::to_string(slot) +
                        " accepted=" + std::to_string(accepted));
         }
+    // A door transfer can finish while source-room input is still in flight.
+    // Resume held controls only after the guest has seen the destination room.
+    const auto locations = rooms::captureLocations();
+    for (unsigned slot = 1; slot < frame->players; ++slot) {
+        const auto& context = frame->inputRooms[slot];
+        if (!context || context->epoch != floorEpoch || slot >= locations.size() ||
+            context->index != locations[slot].index ||
+            context->dimension != locations[slot].dimension)
+            frame->inputs[slot] = {};
+    }
     for (unsigned slot = 0; slot < frame->players; ++slot) {
         const auto command = frame->commands[slot];
         const bool paused = *reinterpret_cast<int*>(g + 0x23a74) != 0;

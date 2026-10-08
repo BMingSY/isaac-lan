@@ -19,6 +19,8 @@ def measure(path):
     transition_steps = []
     movement_delays = []
     releases = []
+    acceleration_transitions = 0
+    acceleration_responses = 0
     for i, row in enumerate(rows):
         raw = (row["raw_x"], row["raw_y"])
         preview = (row["preview_x"], row["preview_y"])
@@ -29,6 +31,13 @@ def measure(path):
         previous = rows[i - 1]
         if raw == (previous["raw_x"], previous["raw_y"]):
             continue
+        if "before_vx" in row and row["time"] > previous["time"]:
+            acceleration_transitions += 1
+            change_x, change_y = raw[0] - previous["raw_x"], raw[1] - previous["raw_y"]
+            response = (row["after_vx"] - row["before_vx"]) * change_x + (
+                row["after_vy"] - row["before_vy"]
+            ) * change_y
+            acceleration_responses += response > 0.01
         for later in rows[i : i + 5]:
             if (later["preview_x"], later["preview_y"]) == raw:
                 delays.append((later["time"] - row["time"]) * 1000)
@@ -56,6 +65,8 @@ def measure(path):
         "max_input_to_preview_ms": max(delays),
         "mean_input_to_preview_ms": sum(delays) / len(delays),
         "movement_transitions": len(transition_steps),
+        "acceleration_transitions": acceleration_transitions,
+        "acceleration_transitions_responding_same_frame": acceleration_responses,
         "movement_transitions_responding_same_frame": sum(step > 0.1 for step in transition_steps),
         "max_input_to_movement_ms": max(movement_delays),
         "mean_input_to_movement_ms": sum(movement_delays) / len(movement_delays),
@@ -74,8 +85,9 @@ if __name__ == "__main__":
     assert result["fixed"]["preview_mismatched_frames"] == 0, result
     assert result["fixed"]["max_input_to_preview_ms"] == 0, result
     assert (
-        result["fixed"]["movement_transitions_responding_same_frame"]
-        >= 0.9 * result["fixed"]["movement_transitions"]
+        result["fixed"]["acceleration_transitions"] >= 30
+        and result["fixed"]["acceleration_transitions_responding_same_frame"]
+        >= 0.9 * result["fixed"]["acceleration_transitions"]
     ), result
     if args.baseline:
         result["baseline"] = measure(args.baseline)

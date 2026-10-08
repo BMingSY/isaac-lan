@@ -13,10 +13,23 @@ local frame = _IsaacLanFrame
 local renders, linked, chosen, finished = 0, false, false, false
 local movementRenders, captureCount = 0, 0
 local sent, preview, previewSequence = Vector(0, 0), Vector(0, 0), 0
+local beforeVelocity, afterVelocity = Vector(0, 0), Vector(0, 0)
+local makePrediction = _IsaacLanPrediction.new
+_IsaacLanPrediction.new = function(position)
+    local model = makePrediction(position)
+    local step = model.step
+    model.step = function(self, ...)
+        beforeVelocity = Vector(self.velocity.X, self.velocity.Y)
+        local result = step(self, ...)
+        afterVelocity = Vector(self.velocity.X, self.velocity.Y)
+        return result
+    end
+    return model
+end
 local out = not host and assert(io.open("./lan-test-digest-response.csv", "w"))
 if out then
     out:write(
-        "time,frame,tick,capture,sequence,sent_x,sent_y,raw_x,raw_y,preview_x,preview_y,x,y\n"
+        "time,frame,tick,capture,sequence,sent_x,sent_y,raw_x,raw_y,preview_x,preview_y,x,y,before_vx,before_vy,after_vx,after_vy\n"
     )
 end
 local function direction(bytes)
@@ -115,7 +128,7 @@ Isaac.AddCallback(
         local p = Isaac.GetPlayer(native.rooms_heads()["1"])
         out:write(
             string.format(
-                "%.3f,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.6f,%.6f\n",
+                "%.3f,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
                 Isaac.GetTime() / 1000,
                 renders,
                 _IsaacLanStatus().verified,
@@ -128,7 +141,11 @@ Isaac.AddCallback(
                 preview.X,
                 preview.Y,
                 p.Position.X,
-                p.Position.Y
+                p.Position.Y,
+                beforeVelocity.X,
+                beforeVelocity.Y,
+                afterVelocity.X,
+                afterVelocity.Y
             )
         )
     end

@@ -160,6 +160,7 @@ if(BUILD_TESTING)
         progression
         r-key
         room-commands
+        input-rooms
         lobby
         handshake
         commands
