@@ -9,4 +9,4 @@ inline constexpr char version[] = "1.9.7.17.J460";
 std::string checkFile(const std::filesystem::path& path, bool checkCode = false);
 // Called before installing any engine hooks. Relocated addresses are masked.
 std::string checkMemory(std::uintptr_t image);
-}
+} // namespace isaac::build

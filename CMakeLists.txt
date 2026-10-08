@@ -1,20 +1,77 @@
 cmake_minimum_required(VERSION 3.20)
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" ISAAC_LAN_VERSION LIMIT_COUNT 1)
-project(isaac_lan_coop VERSION "${ISAAC_LAN_VERSION}" LANGUAGES C CXX)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "VERSION")
+project(
+    isaac_lan_coop
+    VERSION "${ISAAC_LAN_VERSION}"
+    LANGUAGES C CXX)
+set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "VERSION")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(CTest)
+option(ISAAC_LAN_BUILD_ENGINE "Build the Windows x86 engine adapter and tools" ON)
+if(BUILD_TESTING)
+    add_executable(isaac_lan_core_test tests/core_test.cpp)
+    target_include_directories(isaac_lan_core_test PRIVATE src)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_core_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    if(MINGW)
+        target_link_options(isaac_lan_core_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    foreach(
+        test_case
+        integers
+        strings-blobs
+        input-progress
+        truncated-packets
+        hashes
+        progression
+        archive-round-trip
+        archive-integrity
+        archive-settings
+        archive-locations)
+        add_test(NAME core.${test_case} COMMAND isaac_lan_core_test ${test_case})
+        set_tests_properties(core.${test_case} PROPERTIES TIMEOUT 30)
+    endforeach()
+endif()
+if(NOT ISAAC_LAN_BUILD_ENGINE)
+    return()
+endif()
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The native engine adapter requires a 32-bit Windows toolchain")
 endif()
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/main.lua" ISAAC_LAN_BRIDGE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/state.lua" ISAAC_LAN_STATE)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/state.lua")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/main.lua")
+set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/state.lua")
+set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/main.lua")
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/menu.lua" ISAAC_LAN_MENU)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/menu.lua")
+set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/menu.lua")
 configure_file(src/bridge/embedded.h.in generated/embedded_bridge.h @ONLY)
-add_library(isaac_lan_probe SHARED src/probe.cpp src/runtime_net.cpp src/engine_rooms.cpp src/engine_visuals.cpp src/engine_input.cpp src/engine_save.cpp src/engine_audio.cpp src/engine_presentation.cpp src/engine_rewind.cpp src/frontend.cpp src/lab_capture.cpp)
+add_library(
+    isaac_lan_probe SHARED
+    src/probe.cpp
+    src/runtime_net.cpp
+    src/engine_rooms.cpp
+    src/engine_visuals.cpp
+    src/engine_input.cpp
+    src/engine_save.cpp
+    src/engine_audio.cpp
+    src/engine_presentation.cpp
+    src/engine_rewind.cpp
+    src/frontend.cpp
+    src/lab_capture.cpp)
 add_library(isaac_lan_build STATIC src/game_build.cpp)
 target_include_directories(isaac_lan_build PUBLIC src)
 target_compile_definitions(isaac_lan_build PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -22,29 +79,63 @@ add_executable(isaac_lan_check tools/game_check.cpp)
 target_link_libraries(isaac_lan_check PRIVATE isaac_lan_build)
 target_link_libraries(isaac_lan_probe PRIVATE isaac_lan_build)
 target_include_directories(isaac_lan_probe PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-set(IMGUI_SOURCE_DIR "" CACHE PATH "Unmodified Dear ImGui v1.92.6 source checkout")
+set(IMGUI_SOURCE_DIR
+    ""
+    CACHE PATH "Unmodified Dear ImGui v1.92.6 source checkout")
 if(NOT EXISTS "${IMGUI_SOURCE_DIR}/imgui.h")
     message(FATAL_ERROR "Set IMGUI_SOURCE_DIR to a Dear ImGui v1.92.6 checkout")
 endif()
-add_library(isaac_lan_ui STATIC "${IMGUI_SOURCE_DIR}/imgui.cpp" "${IMGUI_SOURCE_DIR}/imgui_draw.cpp"
-    "${IMGUI_SOURCE_DIR}/imgui_tables.cpp" "${IMGUI_SOURCE_DIR}/imgui_widgets.cpp"
-    "${IMGUI_SOURCE_DIR}/backends/imgui_impl_win32.cpp" "${IMGUI_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp")
+add_library(
+    isaac_lan_ui STATIC
+    "${IMGUI_SOURCE_DIR}/imgui.cpp"
+    "${IMGUI_SOURCE_DIR}/imgui_draw.cpp"
+    "${IMGUI_SOURCE_DIR}/imgui_tables.cpp"
+    "${IMGUI_SOURCE_DIR}/imgui_widgets.cpp"
+    "${IMGUI_SOURCE_DIR}/backends/imgui_impl_win32.cpp"
+    "${IMGUI_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp")
 target_include_directories(isaac_lan_ui PUBLIC "${IMGUI_SOURCE_DIR}" "${IMGUI_SOURCE_DIR}/backends")
 target_link_libraries(isaac_lan_ui PUBLIC opengl32 gdi32 dwmapi)
 add_library(isaac_lan_net STATIC src/lan_session.cpp src/state_compression.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt)
-add_executable(isaac_lan_net_test tests/net_test.cpp)
-target_link_libraries(isaac_lan_net_test PRIVATE isaac_lan_net winmm)
-set(MINHOOK_SOURCE_DIR "" CACHE PATH "Unmodified MinHook v1.3.4 source checkout")
+if(BUILD_TESTING)
+    add_executable(isaac_lan_net_test tests/net_test.cpp)
+    target_link_libraries(isaac_lan_net_test PRIVATE isaac_lan_net winmm)
+    foreach(
+        test_case
+        codec
+        compression-limits
+        inputs-2
+        inputs-3
+        inputs-4
+        floor-rejoin
+        stage-events
+        stage-during-rejoin
+        rewind
+        progression
+        r-key
+        room-commands
+        lobby
+        handshake
+        commands
+        publication-limits
+        host-disconnect)
+        add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
+        set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30)
+    endforeach()
+endif()
+set(MINHOOK_SOURCE_DIR
+    ""
+    CACHE PATH "Unmodified MinHook v1.3.4 source checkout")
 if(NOT EXISTS "${MINHOOK_SOURCE_DIR}/include/MinHook.h")
     message(FATAL_ERROR "Set MINHOOK_SOURCE_DIR to a MinHook v1.3.4 checkout")
 endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
 set_target_properties(isaac_lan_probe PROPERTIES PREFIX "")
 target_compile_definitions(isaac_lan_probe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_link_libraries(isaac_lan_probe PRIVATE bcrypt iphlpapi gdiplus minhook isaac_lan_net isaac_lan_ui)
+target_link_libraries(isaac_lan_probe PRIVATE bcrypt iphlpapi gdiplus minhook isaac_lan_net
+                                              isaac_lan_ui)
 add_executable(isaac_lan_lab tools/lab_runner.cpp)
 add_library(isaac_lan_loader SHARED src/loader.cpp src/loader.def)
 set_target_properties(isaac_lan_loader PROPERTIES PREFIX "" OUTPUT_NAME "winmm")
@@ -60,7 +151,9 @@ if(MINGW)
     target_link_options(isaac_lan_lab PRIVATE -static-libgcc -static-libstdc++ -municode)
     target_compile_options(isaac_lan_probe PRIVATE -Wall -Wextra -Werror)
     target_compile_options(isaac_lan_lab PRIVATE -Wall -Wextra -Werror)
-    target_link_options(isaac_lan_net_test PRIVATE -static-libgcc -static-libstdc++)
+    if(BUILD_TESTING)
+        target_link_options(isaac_lan_net_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_net_test PRIVATE -Wall -Wextra -Werror)
+    endif()
     target_compile_options(isaac_lan_net PRIVATE -Wall -Wextra -Werror)
-    target_compile_options(isaac_lan_net_test PRIVATE -Wall -Wextra -Werror)
 endif()

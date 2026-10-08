@@ -9,10 +9,11 @@ namespace isaac::input {
 // scope never changes the authoritative inputs used to simulate combat.
 class ViewScope {
     int previous;
-public:
+
+  public:
     explicit ViewScope(int slot);
     ~ViewScope();
-    ViewScope(const ViewScope&)=delete;
+    ViewScope(const ViewScope&) = delete;
 };
 void install(std::uintptr_t image, void (*logger)(const std::string&), bool installed = false);
 FARPROC resolve(HMODULE module, LPCSTR name, FARPROC original);
@@ -25,6 +26,6 @@ void pollPhysicalInput();
 unsigned menuOwner();
 void setMenuOwner(unsigned slot);
 bool menuTriggered(int action);
-void confirmOriginalMenu(void* menu, void(__attribute__((thiscall))* update)(void*));
+void confirmOriginalMenu(void* menu, void(__attribute__((thiscall)) * update)(void*));
 void leaveLan();
-}
+} // namespace isaac::input

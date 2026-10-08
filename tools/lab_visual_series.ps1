@@ -1,7 +1,9 @@
-param([Parameter(Mandatory=$true)][int]$GameProcessId,[Parameter(Mandatory=$true)][string]$OutputDirectory,[int]$Seconds=15,[switch]$BackgroundCapture)
-$ErrorActionPreference='Stop'
-$p=Get-Process -Id $GameProcessId
-if ($p.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') { throw 'Owned isolated game required.' }
+param([Parameter(Mandatory = $true)][int]$GameProcessId, [Parameter(Mandatory = $true)][string]$OutputDirectory, [int]$Seconds = 15, [switch]$BackgroundCapture)
+$ErrorActionPreference = 'Stop'
+$p = Get-Process -Id $GameProcessId
+if ($p.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') {
+    throw 'Owned isolated game required.'
+}
 New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
 Add-Type -AssemblyName System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing @'
@@ -43,15 +45,15 @@ public static class LanVisualSeries {
 }
 '@
 if (!$BackgroundCapture) {
-$shell=New-Object -ComObject WScript.Shell
-[void]$shell.AppActivate($GameProcessId)
-[uint32]$foregroundId=0
-$other=[LanVisualSeries]::GetWindowThreadProcessId([LanVisualSeries]::GetForegroundWindow(),[ref]$foregroundId)
-$current=[LanVisualSeries]::GetCurrentThreadId()
-[void][LanVisualSeries]::AttachThreadInput($current,$other,$true)
-[void][LanVisualSeries]::ShowWindow($p.MainWindowHandle,9)
-[void][LanVisualSeries]::SetForegroundWindow($p.MainWindowHandle)
-[void][LanVisualSeries]::AttachThreadInput($current,$other,$false)
-Start-Sleep -Milliseconds 200
+    $shell = New-Object -ComObject WScript.Shell
+    [void]$shell.AppActivate($GameProcessId)
+    [uint32]$foregroundId = 0
+    $other = [LanVisualSeries]::GetWindowThreadProcessId([LanVisualSeries]::GetForegroundWindow(), [ref]$foregroundId)
+    $current = [LanVisualSeries]::GetCurrentThreadId()
+    [void][LanVisualSeries]::AttachThreadInput($current, $other, $true)
+    [void][LanVisualSeries]::ShowWindow($p.MainWindowHandle, 9)
+    [void][LanVisualSeries]::SetForegroundWindow($p.MainWindowHandle)
+    [void][LanVisualSeries]::AttachThreadInput($current, $other, $false)
+    Start-Sleep -Milliseconds 200
 }
-[LanVisualSeries]::Capture($GameProcessId,$OutputDirectory,$Seconds,[bool]$BackgroundCapture)
+[LanVisualSeries]::Capture($GameProcessId, $OutputDirectory, $Seconds, [bool]$BackgroundCapture)

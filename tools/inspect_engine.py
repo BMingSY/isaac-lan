@@ -4,6 +4,7 @@
 Symbol hints are supplied from a separate, explicitly selected REPENTOGON checkout.
 A unique signature match is a candidate, not proof of ABI/semantic compatibility.
 """
+
 import argparse
 import hashlib
 import json
@@ -18,8 +19,12 @@ def pattern_regex(pattern):
     pattern = pattern.replace("(", "").replace(")", "")
     if not re.fullmatch(r"(?:[0-9a-fA-F]{2}|\?\?)+", pattern):
         raise ValueError("Unsupported signature syntax")
-    return re.compile(b"".join(b"." if s == "??" else re.escape(bytes.fromhex(s))
-                               for s in re.findall(r"..", pattern)), re.DOTALL)
+    return re.compile(
+        b"".join(
+            b"." if s == "??" else re.escape(bytes.fromhex(s)) for s in re.findall(r"..", pattern)
+        ),
+        re.DOTALL,
+    )
 
 
 def inspect(executable, reference):
@@ -35,14 +40,19 @@ def inspect(executable, reference):
         "sha256": hashlib.sha256(binary).hexdigest(),
         "image_base": hex(pe.OPTIONAL_HEADER.ImageBase),
         "image_size": hex(pe.OPTIONAL_HEADER.SizeOfImage),
-        "machine": "x86", "symbols": {}, "imports": {},
+        "machine": "x86",
+        "symbols": {},
+        "imports": {},
         "note": "Static candidates only; do not enable engine writes based on this report.",
     }
     for imported in pe.DIRECTORY_ENTRY_IMPORT:
         result["imports"][imported.dll.decode()] = [
-            {"name": entry.name.decode() if entry.name else f"ordinal:{entry.ordinal}",
-             "iat_rva": hex(entry.address - pe.OPTIONAL_HEADER.ImageBase)}
-            for entry in imported.imports]
+            {
+                "name": entry.name.decode() if entry.name else f"ordinal:{entry.ordinal}",
+                "iat_rva": hex(entry.address - pe.OPTIONAL_HEADER.ImageBase),
+            }
+            for entry in imported.imports
+        ]
     for filename in ("Game", "Room", "Level", "EntityList", "PlayerManager", "Manager"):
         source = (reference / "libzhl/functions" / (filename + ".zhl")).read_text()
         source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
@@ -57,9 +67,14 @@ def inspect(executable, reference):
                 expression = pattern_regex(pattern)
             except ValueError:
                 continue
-            addresses = [rva + m.start() for rva, code in sections for m in expression.finditer(code)]
-            entry = {"declaration": declaration, "rvas": [hex(a) for a in addresses],
-                     "status": "unique_candidate" if len(addresses) == 1 else "unresolved"}
+            addresses = [
+                rva + m.start() for rva, code in sections for m in expression.finditer(code)
+            ]
+            entry = {
+                "declaration": declaration,
+                "rvas": [hex(a) for a in addresses],
+                "status": "unique_candidate" if len(addresses) == 1 else "unresolved",
+            }
             if len(addresses) == 1 and "(" in pattern:
                 capture_offset = pattern.index("(") // 2
                 value = struct.unpack("<I", pe.get_data(addresses[0] + capture_offset, 4))[0]
@@ -78,7 +93,7 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     resolved = sum(s["status"] == "unique_candidate" for s in result["symbols"].values())
-    print(f'{result["sha256"]}: {resolved}/{len(result["symbols"])} unique candidates')
+    print(f"{result['sha256']}: {resolved}/{len(result['symbols'])} unique candidates")
     for name in ("g_Game", "Game::Update", "Room::constructor", "Room::Init", "Level::ChangeRoom"):
         print(name, result["symbols"].get(name))
 

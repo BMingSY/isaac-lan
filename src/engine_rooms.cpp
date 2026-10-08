@@ -21,21 +21,39 @@
 namespace isaac::rooms {
 namespace {
 using Address = std::uintptr_t;
-struct Vec2 { float x, y; };
+struct Vec2 {
+    float x, y;
+};
 Address image;
 void (*logger)(const std::string&);
-template<class T> T& at(Address p, std::size_t n) { return *reinterpret_cast<T*>(p + n); }
-template<class T> T engine(Address rva) { return reinterpret_cast<T>(image + rva); }
-Address game() { return at<Address>(image, 0x871678); }
+template <class T> T& at(Address p, std::size_t n) {
+    return *reinterpret_cast<T*>(p + n);
+}
+template <class T> T engine(Address rva) {
+    return reinterpret_cast<T>(image + rva);
+}
+Address game() {
+    return at<Address>(image, 0x871678);
+}
 using Allocate = void*(__cdecl*)(std::size_t);
 using Delete = void(__cdecl*)(void*, std::size_t);
-void* allocate(std::size_t size) { return engine<Allocate>(0x60f4c0)(size); }
-void release(Address p, std::size_t size) { if (p) engine<Delete>(0x6ef15c)(reinterpret_cast<void*>(p), size); }
-struct Vector { Address begin = 0, end = 0, capacity = 0; };
+void* allocate(std::size_t size) {
+    return engine<Allocate>(0x60f4c0)(size);
+}
+void release(Address p, std::size_t size) {
+    if (p)
+        engine<Delete>(0x6ef15c)(reinterpret_cast<void*>(p), size);
+}
+struct Vector {
+    Address begin = 0, end = 0, capacity = 0;
+};
 static_assert(sizeof(Vector) == 12);
-Vector& roster() { return at<Vector>(game(), 0x1baa8); }
+Vector& roster() {
+    return at<Vector>(game(), 0x1baa8);
+}
 std::vector<Address> values(const Vector& v) {
-    if (!v.begin) return {};
+    if (!v.begin)
+        return {};
     return {reinterpret_cast<Address*>(v.begin), reinterpret_cast<Address*>(v.end)};
 }
 void assign(Vector& v, const std::vector<Address>& players) {
@@ -43,11 +61,15 @@ void assign(Vector& v, const std::vector<Address>& players) {
     if (needed > v.capacity - v.begin) {
         const auto size = std::max<std::size_t>(needed * 2, 128);
         const auto next = reinterpret_cast<Address>(allocate(size));
-        if (!next) { logger("rooms_fatal=allocation"); TerminateProcess(GetCurrentProcess(), 92); }
+        if (!next) {
+            logger("rooms_fatal=allocation");
+            TerminateProcess(GetCurrentProcess(), 92);
+        }
         release(v.begin, v.capacity - v.begin);
         v = {next, next, next + size};
     }
-    if (needed) std::memcpy(reinterpret_cast<void*>(v.begin), players.data(), needed);
+    if (needed)
+        std::memcpy(reinterpret_cast<void*>(v.begin), players.data(), needed);
     v.end = v.begin + needed;
 }
 struct Key {
@@ -62,29 +84,24 @@ constexpr std::array<std::size_t, 32> contextOffsets = {
     0x22e94, 0x22e98, 0x22e9c,
     // Room::Init resets the global color modifier. Every occupied room must
     // retain its own current/target/lerp values, including background entries.
-    0x676b4,0x676b8,0x676bc,0x676c0,0x676c4,0x676c8,0x676cc,
-    0x676d0,0x676d4,0x676d8,0x676dc,0x676e0,0x676e4,
-    0x676e8,0x676ec,0x676f0,0x676f4,0x676f8,0x676fc,
-    0x26538,0x2653c
-};
+    0x676b4, 0x676b8, 0x676bc, 0x676c0, 0x676c4, 0x676c8, 0x676cc, 0x676d0, 0x676d4, 0x676d8,
+    0x676dc, 0x676e0, 0x676e4, 0x676e8, 0x676ec, 0x676f0, 0x676f4, 0x676f8, 0x676fc, 0x26538,
+    0x2653c};
 struct AmbushState {
     Vector pendingWaves;
-    std::array<std::uint32_t,13> scalars{};
+    std::array<std::uint32_t, 13> scalars{};
 };
-static_assert(sizeof(AmbushState)==0x40);
+static_assert(sizeof(AmbushState) == 0x40);
 struct Room;
-Room* sharedOwner=nullptr;
+Room* sharedOwner = nullptr;
 void selectSharedState(Room* room);
 // J460's room-sized postprocess buffers are process globals. Their native
 // shared-pointer pairs must move with the room, including reference owners.
 // Keeping only fx_ray isolated lets a 2x2 room overwrite a 1x1 room's surfaces.
-constexpr std::array<unsigned,27> renderImages={
-    0x879758,0x879774,0x879794,0x87979c,0x8797a4,0x8797ac,
-    0x8797b4,0x8797bc,0x8797c4,0x8797cc,0x8797d4,0x8797dc,
-    0x8797e4,0x8797ec,0x8797f4,0x8797fc,0x879804,0x87980c,
-    0x879814,0x87981c,0x879824,0x87982c,0x879834,0x87983c,
-    0x879844,0x87984c,0x879854
-};
+constexpr std::array<unsigned, 27> renderImages = {
+    0x879758, 0x879774, 0x879794, 0x87979c, 0x8797a4, 0x8797ac, 0x8797b4, 0x8797bc, 0x8797c4,
+    0x8797cc, 0x8797d4, 0x8797dc, 0x8797e4, 0x8797ec, 0x8797f4, 0x8797fc, 0x879804, 0x87980c,
+    0x879814, 0x87981c, 0x879824, 0x87982c, 0x879834, 0x87983c, 0x879844, 0x87984c, 0x879854};
 struct Room {
     Key key;
     Address pointer;
@@ -92,90 +109,103 @@ struct Room {
     std::array<std::uint32_t, contextOffsets.size()> context{};
     Vector scratch;
     AmbushState ambush;
-    std::array<std::array<Address,2>,renderImages.size()> images{};
+    std::array<std::array<Address, 2>, renderImages.size()> images{};
     // A guest retains remote actors for the vanilla multiplayer HUD, without
     // loading their rooms, running their entry logic, or allocating backdrops.
-    bool replicaShell=false;
-    bool graphicsRefresh=true;
-    unsigned char sceneSnapshot=0;
+    bool replicaShell = false;
+    bool graphicsRefresh = true;
+    unsigned char sceneSnapshot = 0;
     unsigned updates = 0, halves = 0;
     Room() {
         // The leading Ambush vector is immutable XML configuration. Each room
         // owns only its shuffled pending-wave vector, counters and RNGs.
-        ambush.scalars=at<AmbushState>(game(),0x265d4).scalars;
-        ambush.scalars[2]=ambush.scalars[3]=ambush.scalars[4]=0;
+        ambush.scalars = at<AmbushState>(game(), 0x265d4).scalars;
+        ambush.scalars[2] = ambush.scalars[3] = ambush.scalars[4] = 0;
     }
     void capture() {
-        for (unsigned i = 0; i < context.size(); ++i) context[i] = at<std::uint32_t>(game(), contextOffsets[i]);
-        graphicsRefresh=at<bool>(game(),0x26534);sceneSnapshot=at<unsigned char>(game(),0x26540);
+        for (unsigned i = 0; i < context.size(); ++i)
+            context[i] = at<std::uint32_t>(game(), contextOffsets[i]);
+        graphicsRefresh = at<bool>(game(), 0x26534);
+        sceneSnapshot = at<unsigned char>(game(), 0x26540);
     }
     void activate() {
         selectSharedState(this);
         at<Address>(game(), 0x18300) = pointer;
-        for (unsigned i = 0; i < context.size(); ++i) at<std::uint32_t>(game(), contextOffsets[i]) = context[i];
-        at<bool>(game(),0x26534)=graphicsRefresh;at<unsigned char>(game(),0x26540)=sceneSnapshot;
+        for (unsigned i = 0; i < context.size(); ++i)
+            at<std::uint32_t>(game(), contextOffsets[i]) = context[i];
+        at<bool>(game(), 0x26534) = graphicsRefresh;
+        at<unsigned char>(game(), 0x26540) = sceneSnapshot;
     }
 };
 void selectSharedState(Room* room) {
-    if(room==sharedOwner) return;
-    auto& engineState=at<AmbushState>(game(),0x265d4);
+    if (room == sharedOwner)
+        return;
+    auto& engineState = at<AmbushState>(game(), 0x265d4);
     // Exchange ownership instead of copying an MSVC vector or its elements.
     // Room::Init also replaces the process-wide fx_ray texture. Keep the
     // native reference owner with its room; raw pointer copies would dangle
     // when another room releases or replaces that texture.
-    if(sharedOwner) {
-        std::swap(sharedOwner->ambush,engineState);
-        for(unsigned i=0;i<renderImages.size();++i)
-            std::swap(sharedOwner->images[i],at<std::array<Address,2>>(image,renderImages[i]));
+    if (sharedOwner) {
+        std::swap(sharedOwner->ambush, engineState);
+        for (unsigned i = 0; i < renderImages.size(); ++i)
+            std::swap(sharedOwner->images[i], at<std::array<Address, 2>>(image, renderImages[i]));
     }
-    if(room) {
-        std::swap(room->ambush,engineState);
-        for(unsigned i=0;i<renderImages.size();++i)
-            std::swap(room->images[i],at<std::array<Address,2>>(image,renderImages[i]));
+    if (room) {
+        std::swap(room->ambush, engineState);
+        for (unsigned i = 0; i < renderImages.size(); ++i)
+            std::swap(room->images[i], at<std::array<Address, 2>>(image, renderImages[i]));
     }
-    sharedOwner=room;
+    sharedOwner = room;
 }
 std::map<Key, std::unique_ptr<Room>> loaded;
 std::map<Address, Room*> location;
 std::vector<Address> participants;
-bool floorChanged=false;
+bool floorChanged = false;
 struct Dormant {
     std::unique_ptr<Room> room;
     std::vector<Address> actors;
     SavedLocation saved;
 };
-std::map<unsigned,Dormant> dormant;
-unsigned connectedMask=15;
-unsigned slotOf(Address player,unsigned fallback=0) {
-    const auto controller=at<int>(player,0x1618);
-    return controller>=1 && controller<=4?static_cast<unsigned>(controller-1):fallback;
+std::map<unsigned, Dormant> dormant;
+unsigned connectedMask = 15;
+unsigned slotOf(Address player, unsigned fallback = 0) {
+    const auto controller = at<int>(player, 0x1618);
+    return controller >= 1 && controller <= 4 ? static_cast<unsigned>(controller - 1) : fallback;
 }
 Address participant(unsigned slot) {
-    for(auto p:participants) if(slotOf(p)==slot) return p;
+    for (auto p : participants)
+        if (slotOf(p) == slot)
+            return p;
     return 0;
 }
 std::vector<Address> logicalPlayers() {
     std::vector<Address> result;
     for (auto player : values(roster())) {
-        if (at<unsigned>(player, 0x2c) != 0 || at<Address>(player, 0x3bc)) continue;
+        if (at<unsigned>(player, 0x2c) != 0 || at<Address>(player, 0x3bc))
+            continue;
         const auto twin = at<Address>(player, 0x1e68);
-        if (twin && at<int>(player, 0x161c) > at<int>(twin, 0x161c)) continue;
+        if (twin && at<int>(player, 0x161c) > at<int>(twin, 0x161c))
+            continue;
         const int controller = at<int>(player, 0x1618);
-        if (controller >= 1 && controller <= 4 && std::any_of(result.begin(), result.end(), [controller](Address p) {
-            return at<int>(p, 0x1618) == controller;
-        })) continue;
+        if (controller >= 1 && controller <= 4 &&
+            std::any_of(result.begin(), result.end(),
+                        [controller](Address p) { return at<int>(p, 0x1618) == controller; }))
+            continue;
         result.push_back(player);
     }
-    if (std::all_of(result.begin(), result.end(), [](Address p) { return at<int>(p, 0x1618) >= 1 && at<int>(p, 0x1618) <= 4; }))
-        std::sort(result.begin(), result.end(), [](Address a, Address b) { return at<int>(a, 0x1618) < at<int>(b, 0x1618); });
+    if (std::all_of(result.begin(), result.end(),
+                    [](Address p) { return at<int>(p, 0x1618) >= 1 && at<int>(p, 0x1618) <= 4; }))
+        std::sort(result.begin(), result.end(),
+                  [](Address a, Address b) { return at<int>(a, 0x1618) < at<int>(b, 0x1618); });
     return result;
 }
 std::vector<Address> controlledActors(Address head) {
     std::vector<Address> result;
     const int controller = at<int>(head, 0x1618);
     for (auto player : values(roster()))
-        if (player == head || (controller >= 1 && controller <= 4 && at<int>(player, 0x1618) == controller)
-            || at<Address>(head, 0x1e68) == player || at<Address>(player, 0x1e68) == head)
+        if (player == head ||
+            (controller >= 1 && controller <= 4 && at<int>(player, 0x1618) == controller) ||
+            at<Address>(head, 0x1e68) == player || at<Address>(player, 0x1e68) == head)
             result.push_back(player);
     return result;
 }
@@ -184,32 +214,43 @@ unsigned depth = 0;
 Vector* teamRoster = nullptr;
 bool enabled = false, transferring = false;
 Address skipSave = 0;
-struct Request { Address player; Key destination; int door; bool teleport; };
+struct Request {
+    Address player;
+    Key destination;
+    int door;
+    bool teleport;
+};
 std::vector<Request> pending;
 std::set<unsigned> pendingItemRevival;
-struct StageRequest { bool same; int animation; Address player; };
+struct StageRequest {
+    bool same;
+    int animation;
+    Address player;
+};
 std::optional<StageRequest> pendingStage;
-bool pendingRKey=false;
-using RKey=void(__cdecl*)();
+bool pendingRKey = false;
+using RKey = void(__cdecl*)();
 RKey originalRKey;
 std::optional<bool> pendingExit;
 bool resumeStage = false;
 std::vector<SavedLocation> resumeLocations;
-bool restoringSavedLocations=false;
-using StageTransition = void(__attribute__((thiscall))*)(void*, bool, int, void*);
+bool restoringSavedLocations = false;
+using StageTransition = void(__attribute__((thiscall)) *)(void*, bool, int, void*);
 StageTransition originalStage;
-using LeaveRoom = void(__attribute__((thiscall))*)(void*, bool);
+using LeaveRoom = void(__attribute__((thiscall)) *)(void*, bool);
 LeaveRoom originalLeave;
 std::set<Address> preparedDepartures;
 void __attribute__((fastcall)) leaveRoom(void* player, void*, bool stage) {
     originalLeave(player, stage);
-    if (enabled) preparedDepartures.insert(reinterpret_cast<Address>(player));
+    if (enabled)
+        preparedDepartures.insert(reinterpret_cast<Address>(player));
 }
 std::vector<Address> occupants(const Room& room) {
     std::vector<Address> result;
     for (auto player : values(roster())) {
         auto it = location.find(player);
-        if (it != location.end() && it->second == &room) result.push_back(player);
+        if (it != location.end() && it->second == &room)
+            result.push_back(player);
     }
     return result;
 }
@@ -227,71 +268,105 @@ struct Scope {
     std::optional<audio::RoomScope> audioScope;
     bool reconcilePlayers;
     std::vector<Address> originalPlayers;
-    Scope(Room& target, const std::vector<Address>& players, bool reconcile=true) : room(target), parent(active),previousShared(sharedOwner),
-        previousRoom(at<Address>(game(), 0x18300)), previousRoster(roster()), reconcilePlayers(reconcile), originalPlayers(players) {
-        for (unsigned i = 0; i < previous.size(); ++i) previous[i] = at<std::uint32_t>(game(), contextOffsets[i]);
-        previousRefresh=at<bool>(game(),0x26534);previousSnapshot=at<unsigned char>(game(),0x26540);
-        if (depth == 0) teamRoster = &previousRoster;
+    Scope(Room& target, const std::vector<Address>& players, bool reconcile = true)
+        : room(target), parent(active), previousShared(sharedOwner),
+          previousRoom(at<Address>(game(), 0x18300)), previousRoster(roster()),
+          reconcilePlayers(reconcile), originalPlayers(players) {
+        for (unsigned i = 0; i < previous.size(); ++i)
+            previous[i] = at<std::uint32_t>(game(), contextOffsets[i]);
+        previousRefresh = at<bool>(game(), 0x26534);
+        previousSnapshot = at<unsigned char>(game(), 0x26540);
+        if (depth == 0)
+            teamRoster = &previousRoster;
         // A display callback can scope the same room again. Its temporary
         // roster must not overwrite an outer scope's live allocation.
-        storage=depth ? &nestedScratch : &room.scratch;
+        storage = depth ? &nestedScratch : &room.scratch;
         assign(*storage, players);
         roster() = *storage;
-        room.activate(); active = &room; ++depth;
+        room.activate();
+        active = &room;
+        ++depth;
         audioScope.emplace();
     }
     explicit Scope(Room& target) : Scope(target, occupants(target)) {}
     ~Scope() {
         audioScope.reset();
-        room.capture(); *storage = roster();
+        room.capture();
+        *storage = roster();
         const auto current = values(*storage);
         roster() = previousRoster;
         // Native player transformations can change the scoped vector. Reconcile
         // those changes into the full roster instead of writing into a slice of
         // the game's original allocation.
-        if(reconcilePlayers) {
-        auto all = values(roster());
-        for (auto player : originalPlayers) if (std::find(current.begin(), current.end(), player) == current.end()) {
-            std::erase(all, player); location.erase(player);
-        }
-        for (auto player : current) if (std::find(all.begin(), all.end(), player) == all.end()) {
-            all.push_back(player); location[player] = &room;
-        }
-        if (all != values(roster())) assign(roster(), all);
+        if (reconcilePlayers) {
+            auto all = values(roster());
+            for (auto player : originalPlayers)
+                if (std::find(current.begin(), current.end(), player) == current.end()) {
+                    std::erase(all, player);
+                    location.erase(player);
+                }
+            for (auto player : current)
+                if (std::find(all.begin(), all.end(), player) == all.end()) {
+                    all.push_back(player);
+                    location[player] = &room;
+                }
+            if (all != values(roster()))
+                assign(roster(), all);
         }
         at<Address>(game(), 0x18300) = previousRoom;
-        for (unsigned i = 0; i < previous.size(); ++i) at<std::uint32_t>(game(), contextOffsets[i]) = previous[i];
-        at<bool>(game(),0x26534)=previousRefresh;at<unsigned char>(game(),0x26540)=previousSnapshot;
+        for (unsigned i = 0; i < previous.size(); ++i)
+            at<std::uint32_t>(game(), contextOffsets[i]) = previous[i];
+        at<bool>(game(), 0x26534) = previousRefresh;
+        at<unsigned char>(game(), 0x26540) = previousSnapshot;
         active = parent;
         selectSharedState(previousShared);
-        if(storage==&nestedScratch) release(nestedScratch.begin,nestedScratch.capacity-nestedScratch.begin);
-        if (--depth == 0) teamRoster = nullptr;
+        if (storage == &nestedScratch)
+            release(nestedScratch.begin, nestedScratch.capacity - nestedScratch.begin);
+        if (--depth == 0)
+            teamRoster = nullptr;
     }
 };
 struct TeamScope {
     Vector saved;
     bool changed;
-    TeamScope() : saved(roster()), changed(enabled && teamRoster) { if (changed) roster() = *teamRoster; }
-    ~TeamScope() { if (changed) { *teamRoster = roster(); roster() = saved; } }
+    TeamScope() : saved(roster()), changed(enabled && teamRoster) {
+        if (changed)
+            roster() = *teamRoster;
+    }
+    ~TeamScope() {
+        if (changed) {
+            *teamRoster = roster();
+            roster() = saved;
+        }
+    }
 };
 // Native floor loading has no per-room Scope. Presentation still needs the
 // local actor first, without changing the roster used by gameplay/loading.
 struct ViewRoster {
     Vector saved, scratch;
     explicit ViewRoster(const std::vector<Address>& players) : saved(roster()) {
-        assign(scratch,players);roster()=scratch;
+        assign(scratch, players);
+        roster() = scratch;
     }
     ~ViewRoster() {
-        scratch=roster();roster()=saved;
-        release(scratch.begin,scratch.capacity-scratch.begin);
+        scratch = roster();
+        roster() = saved;
+        release(scratch.begin, scratch.capacity - scratch.begin);
     }
 };
-unsigned viewDepth=0;
-struct ViewCall { ViewCall() { ++viewDepth; } ~ViewCall() { --viewDepth; } };
-using CameraSmooth = void(__attribute__((thiscall))*)(void*, bool);
+unsigned viewDepth = 0;
+struct ViewCall {
+    ViewCall() {
+        ++viewDepth;
+    }
+    ~ViewCall() {
+        --viewDepth;
+    }
+};
+using CameraSmooth = void(__attribute__((thiscall)) *)(void*, bool);
 CameraSmooth originalCameraSmooth;
 RoomCall originalCameraDrag;
-using PlayersCenter = Vec2*(__attribute__((thiscall))*)(void*, Vec2*, bool);
+using PlayersCenter = Vec2*(__attribute__((thiscall)) *)(void*, Vec2*, bool);
 PlayersCenter originalPlayersCenter;
 Vec2* __attribute__((fastcall)) playersCenter(void* manager, void*, Vec2* result, bool cached) {
     // J460 caches this globally by render frame, not by room/roster. A second
@@ -302,15 +377,23 @@ Vec2* __attribute__((fastcall)) playersCenter(void* manager, void*, Vec2* result
 // room needs that same presentation step with its own occupants, including the
 // rooms shown only on a guest. Keep the native Camera objects and smoothing.
 void __attribute__((fastcall)) cameraSmooth(void* camera, void*, bool halfFrame) {
-    if (!enabled || depth || transferring) { originalCameraSmooth(camera, halfFrame); return; }
-    if(runtime::replica()) return;
+    if (!enabled || depth || transferring) {
+        originalCameraSmooth(camera, halfFrame);
+        return;
+    }
+    if (runtime::replica())
+        return;
     for (auto& [key, room] : loaded) {
         (void)key;
-        if (room->replicaShell || occupants(*room).empty()) continue;
-        const auto local=participant(runtime::localViewSlot());
-        const auto players=occupants(*room);
-        if(runtime::replica() && std::find(players.begin(),players.end(),local)==players.end()) continue;
-        Scope scope(*room,std::find(players.begin(),players.end(),local)!=players.end()?controlledActors(local):players);
+        if (room->replicaShell || occupants(*room).empty())
+            continue;
+        const auto local = participant(runtime::localViewSlot());
+        const auto players = occupants(*room);
+        if (runtime::replica() && std::find(players.begin(), players.end(), local) == players.end())
+            continue;
+        Scope scope(*room, std::find(players.begin(), players.end(), local) != players.end()
+                               ? controlledActors(local)
+                               : players);
         const auto target = at<Address>(room->pointer, 0x11f8);
         originalCameraSmooth(reinterpret_cast<void*>(target), halfFrame);
         // Mirror Manager's one-frame focus override reset for every room.
@@ -318,48 +401,64 @@ void __attribute__((fastcall)) cameraSmooth(void* camera, void*, bool halfFrame)
     }
 }
 void __attribute__((fastcall)) cameraDrag(void* camera, void*) {
-    if (!enabled || depth || transferring) { originalCameraDrag(camera); return; }
-    if(runtime::replica()) return;
+    if (!enabled || depth || transferring) {
+        originalCameraDrag(camera);
+        return;
+    }
+    if (runtime::replica())
+        return;
     const auto manager = *reinterpret_cast<Address*>(image + 0x87169c);
     const bool halfFrame = (at<unsigned>(manager, 0x4abbc) & 1u) != 0;
     for (auto& [key, room] : loaded) {
         (void)key;
-        if (room->replicaShell || occupants(*room).empty()) continue;
-        const auto local=participant(runtime::localViewSlot());
-        const auto players=occupants(*room);
-        if(runtime::replica() && std::find(players.begin(),players.end(),local)==players.end()) continue;
-        Scope scope(*room,std::find(players.begin(),players.end(),local)!=players.end()?controlledActors(local):players);
+        if (room->replicaShell || occupants(*room).empty())
+            continue;
+        const auto local = participant(runtime::localViewSlot());
+        const auto players = occupants(*room);
+        if (runtime::replica() && std::find(players.begin(), players.end(), local) == players.end())
+            continue;
+        Scope scope(*room, std::find(players.begin(), players.end(), local) != players.end()
+                               ? controlledActors(local)
+                               : players);
         const auto target = at<Address>(room->pointer, 0x11f8);
         originalCameraDrag(reinterpret_cast<void*>(target));
-        if (halfFrame) at<bool>(target, 0x8c) = false;
+        if (halfFrame)
+            at<bool>(target, 0x8c) = false;
     }
 }
-using IsCoop = bool(__attribute__((thiscall))*)(void*);
+using IsCoop = bool(__attribute__((thiscall)) *)(void*);
 IsCoop originalIsCoop;
 bool __attribute__((fastcall)) isCoop(void* manager, void*) {
-    TeamScope team; return originalIsCoop(manager);
+    TeamScope team;
+    return originalIsCoop(manager);
 }
-using CoopCount = int(__attribute__((thiscall))*)(void*);
+using CoopCount = int(__attribute__((thiscall)) *)(void*);
 CoopCount originalLiving, originalDead;
 int __attribute__((fastcall)) living(void* manager, void*) {
-    TeamScope team; return originalLiving(manager);
+    TeamScope team;
+    return originalLiving(manager);
 }
 int __attribute__((fastcall)) dead(void* manager, void*) {
-    TeamScope team; return originalDead(manager);
+    TeamScope team;
+    return originalDead(manager);
 }
 RoomCall originalAward;
 void __attribute__((fastcall)) award(void* room, void*) {
-    if(runtime::replica()) return;
+    if (runtime::replica())
+        return;
     // Loot quantity and shared loot-affecting items use the original complete
     // co-op roster; combat targeting continues to use only room occupants.
-    TeamScope team; originalAward(room);
+    TeamScope team;
+    originalAward(room);
 }
 RoomCall originalReviveAll;
 void __attribute__((fastcall)) reviveAll(void* manager, void*) {
-    if (runtime::replica()) return;
+    if (runtime::replica())
+        return;
     // Boss completion also revives through Room::TriggerBossDeath, outside
     // the award hook. Include online ghosts in other occupied rooms there.
-    TeamScope team; originalReviveAll(manager);
+    TeamScope team;
+    originalReviveAll(manager);
 }
 using Exit = void(__stdcall*)(bool);
 Exit originalExit;
@@ -369,37 +468,49 @@ using PostUpdate = void(__cdecl*)();
 PostUpdate originalPostUpdate;
 PostUpdate originalPostNewRoom;
 void __cdecl postNewRoom() {
-    if(enabled && active) {
-        const auto head=participant(runtime::localViewSlot());
-        const auto it=location.find(head);
-        const auto scoped=values(roster());
-        if(it==location.end() || it->second!=active
-            || std::find(scoped.begin(),scoped.end(),head)==scoped.end()) return;
+    if (enabled && active) {
+        const auto head = participant(runtime::localViewSlot());
+        const auto it = location.find(head);
+        const auto scoped = values(roster());
+        if (it == location.end() || it->second != active ||
+            std::find(scoped.begin(), scoped.end(), head) == scoped.end())
+            return;
     }
     originalPostNewRoom();
 }
 void __cdecl postUpdate() {
-    if (!enabled || depth || transferring) { originalPostUpdate(); return; }
+    if (!enabled || depth || transferring) {
+        originalPostUpdate();
+        return;
+    }
     // Global callbacks have no actor/room argument and run once per game
     // update in vanilla. Keep their caches tied to this process's viewport;
     // native entity callbacks still execute in every authoritative room.
-    const auto head=participant(runtime::localViewSlot());
-    const auto it=location.find(head);
-    if(it!=location.end()) {
-        auto players=occupants(*it->second);
-        std::stable_partition(players.begin(),players.end(),[&](Address p) { return slotOf(p)==static_cast<unsigned>(runtime::localViewSlot()); });
-        Scope scope(*it->second,players);
+    const auto head = participant(runtime::localViewSlot());
+    const auto it = location.find(head);
+    if (it != location.end()) {
+        auto players = occupants(*it->second);
+        std::stable_partition(players.begin(), players.end(), [&](Address p) {
+            return slotOf(p) == static_cast<unsigned>(runtime::localViewSlot());
+        });
+        Scope scope(*it->second, players);
         input::ViewScope inputView(runtime::localViewSlot());
         originalPostUpdate();
     }
 }
 void __stdcall exitGame(bool save) {
-    if (enabled && depth) { pendingExit=save;return; }
+    if (enabled && depth) {
+        pendingExit = save;
+        return;
+    }
     runtime::beforeExit(save);
     if (enabled) {
-        if (save) for (auto& [key, room] : loaded) {
-            (void)key; Scope scope(*room); originalSave(reinterpret_cast<void*>(room->pointer));
-        }
+        if (save)
+            for (auto& [key, room] : loaded) {
+                (void)key;
+                Scope scope(*room);
+                originalSave(reinterpret_cast<void*>(room->pointer));
+            }
         beforeStart();
     }
     originalExit(save);
@@ -423,17 +534,22 @@ void moveEntity(Address entity, Room& from, Room& to) {
         auto data = reinterpret_cast<Address*>(at<Address>(list, 4));
         auto& size = at<unsigned>(list, 12);
         for (unsigned i = 0; i < size;) {
-            if (data[i] != entity) { ++i; continue; }
+            if (data[i] != entity) {
+                ++i;
+                continue;
+            }
             std::memmove(data + i, data + i + 1, (--size - i) * sizeof(Address));
         }
     }
     using Invalidate = void(__attribute__((thiscall))*)(void*, unsigned, unsigned, unsigned);
     engine<Invalidate>(0x1b570)(reinterpret_cast<void*>(from.pointer + 0x1218),
-        at<unsigned>(entity, 0x28), at<unsigned>(entity, 0x2c), at<unsigned>(entity, 0x30));
+                                at<unsigned>(entity, 0x28), at<unsigned>(entity, 0x2c),
+                                at<unsigned>(entity, 0x30));
     at<bool>(entity, 0x170) = false;
     at<unsigned>(entity, 0x20) = at<unsigned>(to.pointer, 0x1214)++;
     using Add = void(__attribute__((thiscall))*)(void*, void*);
-    engine<Add>(0x18500)(reinterpret_cast<void*>(to.pointer + 0x1218), reinterpret_cast<void*>(entity));
+    engine<Add>(0x18500)(reinterpret_cast<void*>(to.pointer + 0x1218),
+                         reinterpret_cast<void*>(entity));
 }
 std::vector<Address> followers(Address player, const Room& room) {
     std::vector<Address> candidates, result;
@@ -444,61 +560,72 @@ std::vector<Address> followers(Address player, const Room& room) {
         const auto list = room.pointer + 0x1218 + offset;
         for (unsigned i = 0; i < at<unsigned>(list, 12); ++i) {
             const auto entity = at<Address>(at<Address>(list, 4), i * 4);
-            if (std::find(candidates.begin(), candidates.end(), entity) == candidates.end()) candidates.push_back(entity);
+            if (std::find(candidates.begin(), candidates.end(), entity) == candidates.end())
+                candidates.push_back(entity);
         }
     }
     auto owned = [player](Address entity) {
         for (unsigned depth = 0; entity && depth < 8; ++depth) {
-            if (entity == player) return true;
-            if (at<unsigned>(entity, 0x28) == 3) return at<Address>(entity, 0x410) == player;
+            if (entity == player)
+                return true;
+            if (at<unsigned>(entity, 0x28) == 3)
+                return at<Address>(entity, 0x410) == player;
             entity = at<Address>(entity, 0x3bc);
         }
         return false;
     };
     for (auto entity : candidates) {
         const auto type = at<unsigned>(entity, 0x28);
-        if ((type == 3 && at<Address>(entity, 0x410) == player)
-            || (type == 8 && (owned(at<Address>(entity, 0x3bc)) || owned(at<Address>(entity, 0x3c8)))))
+        if ((type == 3 && at<Address>(entity, 0x410) == player) ||
+            (type == 8 && (owned(at<Address>(entity, 0x3bc)) || owned(at<Address>(entity, 0x3c8)))))
             result.push_back(entity);
     }
     return result;
 }
 void place(Address entity, Vec2 position) {
     at<Vec2>(entity, 0x33c) = at<Vec2>(entity, 0x344) = position;
-    at<Vec2>(entity, 0x360) = {0, 0}; at<bool>(entity, 0x175) = false;
+    at<Vec2>(entity, 0x360) = {0, 0};
+    at<bool>(entity, 0x175) = false;
 }
-bool occupiedCombat(const Room& room,Address arriving) {
-    if(room.replicaShell) return false;
-    using IsClear=bool(__attribute__((thiscall))*)(void*);
+bool occupiedCombat(const Room& room, Address arriving) {
+    if (room.replicaShell)
+        return false;
+    using IsClear = bool(__attribute__((thiscall))*)(void*);
     // J460 Room::IsClear reads its descriptor's CLEAR flag. Reuse the same
     // native predicate used by Lua, not an enemy-count approximation.
-    if(engine<IsClear>(0x36080)(reinterpret_cast<void*>(room.pointer))) return false;
-    return std::any_of(participants.begin(),participants.end(),[&](Address player) {
-        const auto found=location.find(player);
-        return slotOf(player)!=slotOf(arriving) && (connectedMask&(1u<<slotOf(player))) && found!=location.end() && found->second==&room;
+    if (engine<IsClear>(0x36080)(reinterpret_cast<void*>(room.pointer)))
+        return false;
+    return std::any_of(participants.begin(), participants.end(), [&](Address player) {
+        const auto found = location.find(player);
+        return slotOf(player) != slotOf(arriving) && (connectedMask & (1u << slotOf(player))) &&
+               found != location.end() && found->second == &room;
     });
 }
-void arrival(Address player, const Room& room, int door, const std::vector<Address>& companions,bool protect) {
+void arrival(Address player, const Room& room, int door, const std::vector<Address>& companions,
+             bool protect) {
     if (door >= 0 && door < 8) {
         using DoorPosition = Vec2*(__attribute__((thiscall))*)(void*, Vec2*, int);
         Vec2 position;
         engine<DoorPosition>(0x3f79d0)(reinterpret_cast<void*>(room.pointer), &position, door);
         constexpr Vec2 inward[] = {{40, 0}, {0, 40}, {-40, 0}, {0, -40}};
-        position.x += inward[door % 4].x; position.y += inward[door % 4].y;
+        position.x += inward[door % 4].x;
+        position.y += inward[door % 4].y;
         place(player, position);
-        for (auto entity : companions) place(entity, position);
+        for (auto entity : companions)
+            place(entity, position);
     }
-    if(protect) {
+    if (protect) {
         using Cooldown = void(__attribute__((thiscall))*)(void*, int);
         engine<Cooldown>(0x361d0)(reinterpret_cast<void*>(player), 90);
     }
 }
 void __attribute__((fastcall)) save(void* room, void*) {
-    if (reinterpret_cast<Address>(room) != skipSave) originalSave(room);
+    if (reinterpret_cast<Address>(room) != skipSave)
+        originalSave(room);
 }
-using Change = void(__attribute__((thiscall))*)(void*, int, int);
+using Change = void(__attribute__((thiscall)) *)(void*, int, int);
 Change originalChange;
-using Transition = void(__attribute__((thiscall))*)(void*, int, int, int, void*, int);
+using Transition = void(__attribute__((thiscall)) *)(void*, int, int, int, void*, int);
 Transition originalTransition;
 Address actor = 0;
 using PlayerUpdate = RoomCall;
@@ -506,107 +633,184 @@ PlayerUpdate originalPlayerUpdate;
 void __attribute__((fastcall)) playerUpdate(void* player, void*) {
     // Native stage loading waits for player departure/arrival animations.
     // Those updates must advance while room replication is suspended.
-    if(runtime::replica() && enabled) return;
-    const auto before = actor; actor = reinterpret_cast<Address>(player);
-    originalPlayerUpdate(player); actor = before;
+    if (runtime::replica() && enabled)
+        return;
+    const auto before = actor;
+    actor = reinterpret_cast<Address>(player);
+    originalPlayerUpdate(player);
+    actor = before;
 }
 Address currentActor(void* explicitActor = nullptr) {
-    if (explicitActor) return reinterpret_cast<Address>(explicitActor);
-    if (actor) return actor;
-    if(viewDepth) return participant(runtime::localViewSlot());
-    if (active) { auto players = values(roster()); if (players.size() == 1) return players.front(); }
+    if (explicitActor)
+        return reinterpret_cast<Address>(explicitActor);
+    if (actor)
+        return actor;
+    if (viewDepth)
+        return participant(runtime::localViewSlot());
+    if (active) {
+        auto players = values(roster());
+        if (players.size() == 1)
+            return players.front();
+    }
     return 0;
 }
-bool remoteCommand(Address player,int index,int dimension,bool teleport) {
-    if(player!=participant(runtime::localViewSlot())) return false;
-    const auto from=location.find(player);if(from==location.end()) return false;
-    const auto source=from->second->key;
-    if(index< -20 || index>=169 || dimension< -1 || dimension>2) return false;
-    return runtime::requestRoom({static_cast<std::uint8_t>(at<int>(game(),0)),static_cast<std::uint8_t>(at<int>(game(),4)),
-        static_cast<std::uint8_t>(source.dimension),static_cast<std::uint8_t>(dimension<0?source.dimension:dimension),
-        static_cast<std::int16_t>(source.index),static_cast<std::int16_t>(index),teleport});
+bool remoteCommand(Address player, int index, int dimension, bool teleport) {
+    if (player != participant(runtime::localViewSlot()))
+        return false;
+    const auto from = location.find(player);
+    if (from == location.end())
+        return false;
+    const auto source = from->second->key;
+    if (index < -20 || index >= 169 || dimension < -1 || dimension > 2)
+        return false;
+    return runtime::requestRoom(
+        {static_cast<std::uint8_t>(at<int>(game(), 0)),
+         static_cast<std::uint8_t>(at<int>(game(), 4)), static_cast<std::uint8_t>(source.dimension),
+         static_cast<std::uint8_t>(dimension < 0 ? source.dimension : dimension),
+         static_cast<std::int16_t>(source.index), static_cast<std::int16_t>(index), teleport});
 }
-bool queue(Address player, int index, int dimension, int door, bool teleport=false) {
+bool queue(Address player, int index, int dimension, int door, bool teleport = false) {
     for (auto head : participants) {
         const auto actors = controlledActors(head);
-        if (std::find(actors.begin(), actors.end(), player) != actors.end()) { player = head; break; }
+        if (std::find(actors.begin(), actors.end(), player) != actors.end()) {
+            player = head;
+            break;
+        }
     }
     auto it = location.find(player);
-    if (!enabled || it == location.end() || index < -20 || index >= 169 || dimension < -1 || dimension > 2) return false;
+    if (!enabled || it == location.end() || index < -20 || index >= 169 || dimension < -1 ||
+        dimension > 2)
+        return false;
     Key key{dimension < 0 ? it->second->key.dimension : dimension, index};
     using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-    const auto desc = reinterpret_cast<Address>(engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), key.index, key.dimension));
-    if (!desc || !at<Address>(desc, 0x10)) return false;
+    const auto desc = reinterpret_cast<Address>(
+        engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), key.index, key.dimension));
+    if (!desc || !at<Address>(desc, 0x10))
+        return false;
     // Multiple grid cells of a large room refer to the same descriptor. Keep
     // one native Room instance even when players enter through different cells.
-    if (key.index >= 0 && at<int>(desc, 4) >= 0) key.index = at<int>(desc, 4);
-    if (key == it->second->key) return true;
-    if (std::any_of(pending.begin(), pending.end(), [player](const auto& r) { return r.player == player; })) return true;
+    if (key.index >= 0 && at<int>(desc, 4) >= 0)
+        key.index = at<int>(desc, 4);
+    if (key == it->second->key)
+        return true;
+    if (std::any_of(pending.begin(), pending.end(),
+                    [player](const auto& r) { return r.player == player; }))
+        return true;
     pending.push_back({player, key, door, teleport});
-    if(teleport) {
-        using Animate=void(__attribute__((thiscall))*)(void*,bool);
-        for(auto p:controlledActors(player)) engine<Animate>(0x3abcc0)(reinterpret_cast<void*>(p),true);
+    if (teleport) {
+        using Animate = void(__attribute__((thiscall))*)(void*, bool);
+        for (auto p : controlledActors(player))
+            engine<Animate>(0x3abcc0)(reinterpret_cast<void*>(p), true);
     }
     return true;
 }
-void __attribute__((fastcall)) transition(void* g, void*, int index, int direction, int animation, void* player, int dimension) {
-    if (!enabled || transferring) { originalTransition(g, index, direction, animation, player, dimension); return; }
+void __attribute__((fastcall)) transition(void* g, void*, int index, int direction, int animation,
+                                          void* player, int dimension) {
+    if (!enabled || transferring) {
+        originalTransition(g, index, direction, animation, player, dimension);
+        return;
+    }
     const auto who = currentActor(player);
-    if(runtime::replica()) { if(!remoteCommand(who,index,dimension,animation==3)) logger("mod_room_command=REJECTED local_actor_unresolved");return; }
-    if(animation==12 && who) { rewind::request(slotOf(who));return; }
+    if (runtime::replica()) {
+        if (!remoteCommand(who, index, dimension, animation == 3))
+            logger("mod_room_command=REJECTED local_actor_unresolved");
+        return;
+    }
+    if (animation == 12 && who) {
+        rewind::request(slotOf(who));
+        return;
+    }
     // Native item revivals (Dead Cat, Collar, Ankh, 1up) hide the actor until
     // RoomTransition::ChangeRoom restores visibility. Our per-actor transfer
     // bypasses that process-wide screen, including when the previous room is
     // already the actor's current room.
-    if(animation>=5 && animation<=10 && who) pendingItemRevival.insert(slotOf(who));
+    if (animation >= 5 && animation <= 10 && who)
+        pendingItemRevival.insert(slotOf(who));
     const int leave = at<int>(game(), 0x18318);
     int enter = leave >= 0 && leave < 8 ? (leave % 4 + 2) % 4 + (leave / 4) * 4 : -1;
     if (enter >= 0) {
         using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-        const auto target = reinterpret_cast<Address>(engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), index, dimension));
-        if (target) for (int slot = 0; slot < 8; ++slot) {
-            const int neighbor = at<int>(target, 0x1c + slot * 4);
-            if (neighbor < 0 || neighbor >= 169 || slot % 4 != (leave % 4 + 2) % 4) continue;
-            const auto source = reinterpret_cast<Address>(engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), neighbor, dimension));
-            if (source && at<int>(source, 4) == at<int>(game(), 0x18304)) { enter = slot; break; }
-        }
+        const auto target = reinterpret_cast<Address>(
+            engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), index, dimension));
+        if (target)
+            for (int slot = 0; slot < 8; ++slot) {
+                const int neighbor = at<int>(target, 0x1c + slot * 4);
+                if (neighbor < 0 || neighbor >= 169 || slot % 4 != (leave % 4 + 2) % 4)
+                    continue;
+                const auto source = reinterpret_cast<Address>(
+                    engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), neighbor, dimension));
+                if (source && at<int>(source, 4) == at<int>(game(), 0x18304)) {
+                    enter = slot;
+                    break;
+                }
+            }
     }
     // Native TELEPORT starts the actor's exit animation before changing the
     // room. Keep that sequence per actor, without the global transition that
     // would also freeze/flash players fighting in other rooms.
-    if (!queue(who, index, dimension, animation==3?-1:enter, animation==3)) logger("room_transition=REJECTED actor_unresolved");
+    if (!queue(who, index, dimension, animation == 3 ? -1 : enter, animation == 3))
+        logger("room_transition=REJECTED actor_unresolved");
 }
 void __attribute__((fastcall)) change(void* g, void*, int index, int dimension) {
-    if (!enabled || transferring) { originalChange(g, index, dimension); return; }
-    if(runtime::replica()) { if(!remoteCommand(currentActor(),index,dimension,false)) logger("mod_room_command=REJECTED local_actor_unresolved");return; }
-    if (!queue(currentActor(), index, dimension, at<int>(game(), 0x1831c))) logger("room_change=REJECTED actor_unresolved");
+    if (!enabled || transferring) {
+        originalChange(g, index, dimension);
+        return;
+    }
+    if (runtime::replica()) {
+        if (!remoteCommand(currentActor(), index, dimension, false))
+            logger("mod_room_command=REJECTED local_actor_unresolved");
+        return;
+    }
+    if (!queue(currentActor(), index, dimension, at<int>(game(), 0x1831c)))
+        logger("room_change=REJECTED actor_unresolved");
 }
-void __attribute__((fastcall)) stageTransition(void* g, void*, bool same, int animation, void* player) {
-    if (!enabled) { originalStage(g, same, animation, player); return; }
+void __attribute__((fastcall)) stageTransition(void* g, void*, bool same, int animation,
+                                               void* player) {
+    if (!enabled) {
+        originalStage(g, same, animation, player);
+        return;
+    }
     // A floor transaction has precedence over room transfers in the same tick.
     // The first actor in deterministic room-update order owns the transaction.
-    if (!pendingStage) pendingStage = StageRequest{same, animation, currentActor(player)};
+    if (!pendingStage)
+        pendingStage = StageRequest{same, animation, currentActor(player)};
 }
 void __cdecl rKey() {
-    if(!enabled) { originalRKey();return; }
+    if (!enabled) {
+        originalRKey();
+        return;
+    }
     // J460's R Key timer calls TriggerRKey directly. Defer it until the room
     // scope is gone so its native cleanup sees the complete co-op roster.
-    if(!runtime::replica()) pendingRKey=true;
+    if (!runtime::replica())
+        pendingRKey = true;
 }
 Room* findRoom(Address player) {
-    auto it = location.find(player); return it == location.end() ? nullptr : it->second;
+    auto it = location.find(player);
+    return it == location.end() ? nullptr : it->second;
 }
 void canonical() {
-    if(runtime::replica()) if(auto room=findRoom(participant(runtime::localViewSlot()))) { room->activate();return; }
-    for (auto player : participants) if (auto room = findRoom(player)) { room->activate(); return; }
+    if (runtime::replica())
+        if (auto room = findRoom(participant(runtime::localViewSlot()))) {
+            room->activate();
+            return;
+        }
+    for (auto player : participants)
+        if (auto room = findRoom(player)) {
+            room->activate();
+            return;
+        }
 }
 void destroy(Room& room) {
-    if(sharedOwner==&room) selectSharedState(nullptr);
+    if (sharedOwner == &room)
+        selectSharedState(nullptr);
     engine<RoomCall>(0x308c10)(&room.ambush.pendingWaves);
-    using AssignImage=void*(__attribute__((thiscall))*)(void*,const void*);
-    const std::array<Address,2> emptyImage{};
-    for(auto& handle:room.images) engine<AssignImage>(0x4283d0)(&handle,&emptyImage);
-    release(room.scratch.begin, room.scratch.capacity - room.scratch.begin); room.scratch = {};
+    using AssignImage = void*(__attribute__((thiscall))*)(void*, const void*);
+    const std::array<Address, 2> emptyImage{};
+    for (auto& handle : room.images)
+        engine<AssignImage>(0x4283d0)(&handle, &emptyImage);
+    release(room.scratch.begin, room.scratch.capacity - room.scratch.begin);
+    room.scratch = {};
     if (room.owned) {
         engine<RoomCall>(0x3e9ba0)(reinterpret_cast<void*>(room.pointer));
         release(room.pointer, 0x7898);
@@ -614,63 +818,86 @@ void destroy(Room& room) {
 }
 using LuaFn = int(__cdecl*)(lua_State*);
 struct API {
-    void (__cdecl* pushClosure)(lua_State*, LuaFn, int);
-    void (__cdecl* setField)(lua_State*, int, const char*);
-    void (__cdecl* pushBoolean)(lua_State*, int);
-    void (__cdecl* pushInteger)(lua_State*, long long);
-    void (__cdecl* createTable)(lua_State*, int, int);
-    long long (__cdecl* checkInteger)(lua_State*, int);
-    const char* (__cdecl* checkString)(lua_State*, int, std::size_t*);
-    const char* (__cdecl* pushString)(lua_State*, const char*, std::size_t);
-    int (__cdecl* getTop)(lua_State*);
-    void* (__cdecl* toUserdata)(lua_State*,int);
-    void* (__cdecl* newUserdata)(lua_State*,std::size_t);
-    std::size_t (__cdecl* rawLength)(lua_State*,int);
-    int (__cdecl* getMetatable)(lua_State*,int);
-    int (__cdecl* setMetatable)(lua_State*,int);
-    void (__cdecl* rawSetI)(lua_State*,int,long long);
-    void (__cdecl* pushValue)(lua_State*, int);
-    int (__cdecl* pcall)(lua_State*, int, int, int, std::intptr_t, void*);
-    int (__cdecl* error)(lua_State*);
+    void(__cdecl* pushClosure)(lua_State*, LuaFn, int);
+    void(__cdecl* setField)(lua_State*, int, const char*);
+    void(__cdecl* pushBoolean)(lua_State*, int);
+    void(__cdecl* pushInteger)(lua_State*, long long);
+    void(__cdecl* createTable)(lua_State*, int, int);
+    long long(__cdecl* checkInteger)(lua_State*, int);
+    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
+    const char*(__cdecl* pushString)(lua_State*, const char*, std::size_t);
+    int(__cdecl* getTop)(lua_State*);
+    void*(__cdecl* toUserdata)(lua_State*, int);
+    void*(__cdecl* newUserdata)(lua_State*, std::size_t);
+    std::size_t(__cdecl* rawLength)(lua_State*, int);
+    int(__cdecl* getMetatable)(lua_State*, int);
+    int(__cdecl* setMetatable)(lua_State*, int);
+    void(__cdecl* rawSetI)(lua_State*, int, long long);
+    void(__cdecl* pushValue)(lua_State*, int);
+    int(__cdecl* pcall)(lua_State*, int, int, int, std::intptr_t, void*);
+    int(__cdecl* error)(lua_State*);
 } lua{};
 bool adopt() {
-    if (enabled || depth) return false;
+    if (enabled || depth)
+        return false;
     participants = logicalPlayers();
-    if (participants.empty() || participants.size() > 4) return false;
+    if (participants.empty() || participants.size() > 4)
+        return false;
     if (!originalPlayerUpdate) {
-        auto update = reinterpret_cast<void*>(at<Address>(at<Address>(participants.front(), 0), 0xc));
-        if (MH_CreateHook(update, reinterpret_cast<void*>(playerUpdate), reinterpret_cast<void**>(&originalPlayerUpdate)) != MH_OK
-            || MH_EnableHook(update) != MH_OK) return false;
+        auto update =
+            reinterpret_cast<void*>(at<Address>(at<Address>(participants.front(), 0), 0xc));
+        if (MH_CreateHook(update, reinterpret_cast<void*>(playerUpdate),
+                          reinterpret_cast<void**>(&originalPlayerUpdate)) != MH_OK ||
+            MH_EnableHook(update) != MH_OK)
+            return false;
     }
     auto room = std::make_unique<Room>();
-    room->pointer = at<Address>(game(), 0x18300); room->owned = true;
-    room->key = {at<int>(game(), 0x1830c), at<int>(game(), 0x18304)}; room->capture();
-    sharedOwner=room.get(); // Adopt the state already owned by the native game.
-    for (auto player : values(roster())) location[player] = room.get();
-    loaded.emplace(room->key, std::move(room)); enabled = true;
+    room->pointer = at<Address>(game(), 0x18300);
+    room->owned = true;
+    room->key = {at<int>(game(), 0x1830c), at<int>(game(), 0x18304)};
+    room->capture();
+    sharedOwner = room.get(); // Adopt the state already owned by the native game.
+    for (auto player : values(roster()))
+        location[player] = room.get();
+    loaded.emplace(room->key, std::move(room));
+    enabled = true;
     logger("rooms=ENABLED players=" + std::to_string(participants.size()));
     return true;
 }
-int enable(lua_State* L) { lua.pushBoolean(L, adopt()); return 1; }
+int enable(lua_State* L) {
+    lua.pushBoolean(L, adopt());
+    return 1;
+}
 int request(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
     const int index = static_cast<int>(lua.checkInteger(L, 2));
     const int dimension = static_cast<int>(lua.checkInteger(L, 3));
     const int door = static_cast<int>(lua.checkInteger(L, 4));
-    lua.pushBoolean(L, slot >= 0 && slot<4 && participant(slot)
-        && queue(participant(slot), index, dimension, door)); return 1;
+    lua.pushBoolean(L, slot >= 0 && slot < 4 && participant(slot) &&
+                           queue(participant(slot), index, dimension, door));
+    return 1;
 }
 int withPlayer(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
-    Room* room = slot >= 0 && slot<4 ? findRoom(participant(slot)) : nullptr;
-    if (depth || (!room && (enabled || slot < 0 || static_cast<unsigned>(slot) >= values(roster()).size()))) {
-        lua.pushBoolean(L, false); return 1;
+    Room* room = slot >= 0 && slot < 4 ? findRoom(participant(slot)) : nullptr;
+    if (depth || (!room && (enabled || slot < 0 ||
+                            static_cast<unsigned>(slot) >= values(roster()).size()))) {
+        lua.pushBoolean(L, false);
+        return 1;
     }
     int result;
-    if (room) { Scope scope(*room); lua.pushValue(L, 2); result = lua.pcall(L, 0, 0, 0, 0, nullptr); }
-    else { lua.pushValue(L, 2); result = lua.pcall(L, 0, 0, 0, 0, nullptr); }
-    if (result) return lua.error(L);
-    lua.pushBoolean(L, true); return 1;
+    if (room) {
+        Scope scope(*room);
+        lua.pushValue(L, 2);
+        result = lua.pcall(L, 0, 0, 0, 0, nullptr);
+    } else {
+        lua.pushValue(L, 2);
+        result = lua.pcall(L, 0, 0, 0, 0, nullptr);
+    }
+    if (result)
+        return lua.error(L);
+    lua.pushBoolean(L, true);
+    return 1;
 }
 int positions(lua_State* L) {
     const auto players = enabled ? participants : logicalPlayers();
@@ -679,516 +906,790 @@ int positions(lua_State* L) {
         auto room = findRoom(players[slot]);
         if (room || !enabled) {
             lua.createTable(L, 0, 4);
-            auto integer = [&](const char* key, long long value) { lua.pushInteger(L, value); lua.setField(L, -2, key); };
+            auto integer = [&](const char* key, long long value) {
+                lua.pushInteger(L, value);
+                lua.setField(L, -2, key);
+            };
             integer("index", room ? room->key.index : at<int>(game(), 0x18304));
             integer("dimension", room ? room->key.dimension : at<int>(game(), 0x1830c));
-            integer("updates", room ? room->updates : 0); integer("halves", room ? room->halves : 0);
-            lua.setField(L, -2, std::to_string(slotOf(players[slot],slot)).c_str());
+            integer("updates", room ? room->updates : 0);
+            integer("halves", room ? room->halves : 0);
+            lua.setField(L, -2, std::to_string(slotOf(players[slot], slot)).c_str());
         }
     }
     return 1;
 }
-int ready(lua_State* L) { lua.pushBoolean(L, enabled && !resumeStage && !pendingStage && !pendingRKey); return 1; }
+int ready(lua_State* L) {
+    lua.pushBoolean(L, enabled && !resumeStage && !pendingStage && !pendingRKey);
+    return 1;
+}
 int beginRKey(lua_State* L) {
-    const bool ready=runtime::replica() && enabled && !depth;
-    if(ready) pendingRKey=true;
-    lua.pushBoolean(L,ready);return 1;
+    const bool ready = runtime::replica() && enabled && !depth;
+    if (ready)
+        pendingRKey = true;
+    lua.pushBoolean(L, ready);
+    return 1;
 }
 int setConnections(lua_State* L) {
-    const auto mask=lua.checkInteger(L,1);
-    if(mask<1 || mask>15 || !(mask&1)) { lua.pushBoolean(L,false);return 1; }
-    setConnected(static_cast<unsigned>(mask));lua.pushBoolean(L,true);return 1;
+    const auto mask = lua.checkInteger(L, 1);
+    if (mask < 1 || mask > 15 || !(mask & 1)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    setConnected(static_cast<unsigned>(mask));
+    lua.pushBoolean(L, true);
+    return 1;
 }
-int connections(lua_State* L) { lua.pushInteger(L,connectedMask);return 1; }
+int connections(lua_State* L) {
+    lua.pushInteger(L, connectedMask);
+    return 1;
+}
 int heads(lua_State* L) {
-    const auto all=values(roster()), players=logicalPlayers();
-    lua.createTable(L,0,static_cast<int>(players.size()));
-    for (unsigned slot=0;slot<players.size();++slot) {
-        lua.pushInteger(L,std::find(all.begin(),all.end(),players[slot])-all.begin());
-        lua.setField(L,-2,std::to_string(slotOf(players[slot],slot)).c_str());
+    const auto all = values(roster()), players = logicalPlayers();
+    lua.createTable(L, 0, static_cast<int>(players.size()));
+    for (unsigned slot = 0; slot < players.size(); ++slot) {
+        lua.pushInteger(L, std::find(all.begin(), all.end(), players[slot]) - all.begin());
+        lua.setField(L, -2, std::to_string(slotOf(players[slot], slot)).c_str());
     }
     return 1;
 }
-void projectRemote(unsigned slot,const SavedLocation& p) {
-    const auto head=participant(slot);Key key{p.dimension,p.index};
-    auto found=loaded.find(key);
-    if(found==loaded.end()) {
-        auto room=std::make_unique<Room>();room->key=key;room->owned=true;room->replicaShell=true;
-        room->pointer=reinterpret_cast<Address>(allocate(0x7898));
+void projectRemote(unsigned slot, const SavedLocation& p) {
+    const auto head = participant(slot);
+    Key key{p.dimension, p.index};
+    auto found = loaded.find(key);
+    if (found == loaded.end()) {
+        auto room = std::make_unique<Room>();
+        room->key = key;
+        room->owned = true;
+        room->replicaShell = true;
+        room->pointer = reinterpret_cast<Address>(allocate(0x7898));
         engine<RoomCall>(0x3e9400)(reinterpret_cast<void*>(room->pointer));
-        found=loaded.emplace(key,std::move(room)).first;
+        found = loaded.emplace(key, std::move(room)).first;
     }
-    auto from=findRoom(head);auto to=found->second.get();
-    if(from!=to) for(auto actor:controlledActors(head)) {
-        if(from) {
-            for(auto entity:followers(actor,*from)) moveEntity(entity,*from,*to);
-            moveEntity(actor,*from,*to);
+    auto from = findRoom(head);
+    auto to = found->second.get();
+    if (from != to)
+        for (auto actor : controlledActors(head)) {
+            if (from) {
+                for (auto entity : followers(actor, *from))
+                    moveEntity(entity, *from, *to);
+                moveEntity(actor, *from, *to);
+            }
+            location[actor] = to;
         }
-        location[actor]=to;
-    }
 }
 int syncLocations(lua_State* L) {
-    std::size_t size=0;const auto bytes=lua.checkString(L,1,&size);
+    std::size_t size = 0;
+    const auto bytes = lua.checkString(L, 1, &size);
     try {
-        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes),size});
-        const auto mask=r.u8(),count=r.u8();
-        if(!runtime::replica() || count>4 || !(mask&1) || mask>15) throw std::runtime_error("Invalid replica roster");
+        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        const auto mask = r.u8(), count = r.u8();
+        if (!runtime::replica() || count > 4 || !(mask & 1) || mask > 15)
+            throw std::runtime_error("Invalid replica roster");
         setConnected(mask);
-        std::vector<std::pair<unsigned,SavedLocation>> values;
-        for(unsigned i=0;i<count;++i) {
-            const auto slot=r.u8();SavedLocation p{static_cast<int>(r.u32()),static_cast<int>(r.u32()),std::bit_cast<float>(r.u32()),std::bit_cast<float>(r.u32())};
-            if(slot>=4 || !(mask&(1u<<slot)) || p.dimension<0 || p.dimension>2 || p.index< -20 || p.index>=169 || !std::isfinite(p.x) || !std::isfinite(p.y))
+        std::vector<std::pair<unsigned, SavedLocation>> values;
+        for (unsigned i = 0; i < count; ++i) {
+            const auto slot = r.u8();
+            SavedLocation p{static_cast<int>(r.u32()), static_cast<int>(r.u32()),
+                            std::bit_cast<float>(r.u32()), std::bit_cast<float>(r.u32())};
+            if (slot >= 4 || !(mask & (1u << slot)) || p.dimension < 0 || p.dimension > 2 ||
+                p.index < -20 || p.index >= 169 || !std::isfinite(p.x) || !std::isfinite(p.y))
                 throw std::runtime_error("Invalid authoritative player location");
-            const auto actor=participant(slot);if(!actor) throw std::runtime_error("Replica player missing");
-            const auto room=findRoom(actor);
-            if(slot==static_cast<unsigned>(runtime::localViewSlot()) && (!room || room->key.index!=p.index || room->key.dimension!=p.dimension)) {
-                if(!queue(actor,p.index,p.dimension,-1)) throw std::runtime_error("Replica room transfer failed");
+            const auto actor = participant(slot);
+            if (!actor)
+                throw std::runtime_error("Replica player missing");
+            const auto room = findRoom(actor);
+            if (slot == static_cast<unsigned>(runtime::localViewSlot()) &&
+                (!room || room->key.index != p.index || room->key.dimension != p.dimension)) {
+                if (!queue(actor, p.index, p.dimension, -1))
+                    throw std::runtime_error("Replica room transfer failed");
             }
-            values.emplace_back(slot,p);
+            values.emplace_back(slot, p);
         }
-        r.finish();finishFrame();
-        for(const auto& [slot,p]:values) {
-            const auto head=participant(slot);
-            if(slot!=static_cast<unsigned>(runtime::localViewSlot())) projectRemote(slot,p);
-            place(head,{p.x,p.y});
+        r.finish();
+        finishFrame();
+        for (const auto& [slot, p] : values) {
+            const auto head = participant(slot);
+            if (slot != static_cast<unsigned>(runtime::localViewSlot()))
+                projectRemote(slot, p);
+            place(head, {p.x, p.y});
         }
         canonical();
-        lua.pushBoolean(L,true);
-    } catch(const std::exception& error) { runtime::abort(error.what());lua.pushBoolean(L,false); }
+        lua.pushBoolean(L, true);
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
     return 1;
 }
 // Replica room initialization uses an explicit layout from the authority.
 // Special rooms are created lazily by gameplay (Devil/Angel, Error, etc.);
 // generating the floor from the same seed does not create these descriptors.
 // No process pointers, STL containers or spawn configuration cross the wire.
-std::map<Key,std::array<std::uint8_t,0x5c>> replicaLayouts;
+std::map<Key, std::array<std::uint8_t, 0x5c>> replicaLayouts;
 int roomLayout(lua_State* L) {
     try {
-        if(lua.getTop(L)==0) {
-            const auto desc=at<Address>(at<Address>(game(),0x18300),4);
-            const auto override=at<Address>(desc,0x14);
-            const auto config=override?override:at<Address>(desc,0x10);
+        if (lua.getTop(L) == 0) {
+            const auto desc = at<Address>(at<Address>(game(), 0x18300), 4);
+            const auto override = at<Address>(desc, 0x14);
+            const auto config = override ? override : at<Address>(desc, 0x10);
             lan::Writer w(lan::Message::world);
-            w.u32(at<int>(game(),0x1830c));w.u32(at<int>(game(),0x18304));
-            for(auto offset:{0u,4u,8u,12u,16u,0x2cu,0x38u,0x3cu,0x48u,0x4cu}) w.u32(at<unsigned>(config,offset));
-            w.u8(at<unsigned char>(config,0x46));w.u8(at<unsigned char>(config,0x47));
-            w.u32(at<unsigned>(desc,0x18));
-            for(unsigned offset=0x1c;offset<0x3c;offset+=4) w.u32(at<unsigned>(desc,offset));
-            for(unsigned offset=0x58;offset<=0x64;offset+=4) w.u32(at<unsigned>(desc,offset));
-            lua.pushString(L,reinterpret_cast<const char*>(w.bytes.data()+1),w.bytes.size()-1);return 1;
+            w.u32(at<int>(game(), 0x1830c));
+            w.u32(at<int>(game(), 0x18304));
+            for (auto offset : {0u, 4u, 8u, 12u, 16u, 0x2cu, 0x38u, 0x3cu, 0x48u, 0x4cu})
+                w.u32(at<unsigned>(config, offset));
+            w.u8(at<unsigned char>(config, 0x46));
+            w.u8(at<unsigned char>(config, 0x47));
+            w.u32(at<unsigned>(desc, 0x18));
+            for (unsigned offset = 0x1c; offset < 0x3c; offset += 4)
+                w.u32(at<unsigned>(desc, offset));
+            for (unsigned offset = 0x58; offset <= 0x64; offset += 4)
+                w.u32(at<unsigned>(desc, offset));
+            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                           w.bytes.size() - 1);
+            return 1;
         }
-        if(!runtime::replica()) throw std::runtime_error("Only replicas receive room layouts");
-        std::size_t size;const auto data=lua.checkString(L,1,&size);
-        lan::Reader r({reinterpret_cast<const std::uint8_t*>(data),size});
-        Key key{static_cast<int>(r.u32()),static_cast<int>(r.u32())};
-        std::array<std::uint8_t,0x5c> config{};
-        auto address=reinterpret_cast<Address>(config.data());
-        for(auto offset:{0u,4u,8u,12u,16u,0x2cu,0x38u,0x3cu,0x48u,0x4cu}) at<unsigned>(address,offset)=r.u32();
-        at<unsigned char>(address,0x46)=r.u8();at<unsigned char>(address,0x47)=r.u8();
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas receive room layouts");
+        std::size_t size;
+        const auto data = lua.checkString(L, 1, &size);
+        lan::Reader r({reinterpret_cast<const std::uint8_t*>(data), size});
+        Key key{static_cast<int>(r.u32()), static_cast<int>(r.u32())};
+        std::array<std::uint8_t, 0x5c> config{};
+        auto address = reinterpret_cast<Address>(config.data());
+        for (auto offset : {0u, 4u, 8u, 12u, 16u, 0x2cu, 0x38u, 0x3cu, 0x48u, 0x4cu})
+            at<unsigned>(address, offset) = r.u32();
+        at<unsigned char>(address, 0x46) = r.u8();
+        at<unsigned char>(address, 0x47) = r.u8();
         // An empty native MSVC small string and no initial spawns. Entity and
         // grid state is installed by the authoritative snapshot after Init.
-        at<unsigned>(address,0x28)=15;
-        const auto allowed=r.u32();std::array<unsigned,8> doors{};for(auto& door:doors) door=r.u32();
-        std::array<unsigned,4> seeds{};for(auto& seed:seeds) seed=r.u32();r.finish();
-        if(key.dimension<0 || key.dimension>2 || key.index< -20 || key.index>=169
-            || at<unsigned>(address,0x48)<1 || at<unsigned>(address,0x48)>12
-            || at<unsigned>(address,8)<1 || at<unsigned>(address,8)>32
-            || !at<unsigned char>(address,0x46) || at<unsigned char>(address,0x46)>26
-            || !at<unsigned char>(address,0x47) || at<unsigned char>(address,0x47)>14)
+        at<unsigned>(address, 0x28) = 15;
+        const auto allowed = r.u32();
+        std::array<unsigned, 8> doors{};
+        for (auto& door : doors)
+            door = r.u32();
+        std::array<unsigned, 4> seeds{};
+        for (auto& seed : seeds)
+            seed = r.u32();
+        r.finish();
+        if (key.dimension < 0 || key.dimension > 2 || key.index < -20 || key.index >= 169 ||
+            at<unsigned>(address, 0x48) < 1 || at<unsigned>(address, 0x48) > 12 ||
+            at<unsigned>(address, 8) < 1 || at<unsigned>(address, 8) > 32 ||
+            !at<unsigned char>(address, 0x46) || at<unsigned char>(address, 0x46) > 26 ||
+            !at<unsigned char>(address, 0x47) || at<unsigned char>(address, 0x47) > 14)
             throw std::runtime_error("Invalid authoritative room layout");
-        using Desc=void*(__attribute__((thiscall))*)(void*,int,int);
-        const auto desc=reinterpret_cast<Address>(engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()),key.index,key.dimension));
-        if(!desc) throw std::runtime_error("Replica descriptor is unavailable");
-        const auto current=findRoom(participant(runtime::localViewSlot()));
-        if(!current || current->key!=key || current->replicaShell || !at<Address>(desc,0x10)) {
-            auto& stored=replicaLayouts[key];stored=config;
-            at<Address>(desc,0x10)=reinterpret_cast<Address>(stored.data());at<Address>(desc,0x14)=0;
-            at<int>(desc,0)=at<int>(desc,4)=key.index;at<int>(desc,0xc)=key.dimension;
-            at<unsigned>(desc,0x18)=allowed;
-            for(unsigned i=0;i<doors.size();++i) at<unsigned>(desc,0x1c+4*i)=doors[i];
-            for(unsigned i=0;i<seeds.size();++i) at<unsigned>(desc,0x58+4*i)=seeds[i];
+        using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+        const auto desc = reinterpret_cast<Address>(
+            engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), key.index, key.dimension));
+        if (!desc)
+            throw std::runtime_error("Replica descriptor is unavailable");
+        const auto current = findRoom(participant(runtime::localViewSlot()));
+        if (!current || current->key != key || current->replicaShell || !at<Address>(desc, 0x10)) {
+            auto& stored = replicaLayouts[key];
+            stored = config;
+            at<Address>(desc, 0x10) = reinterpret_cast<Address>(stored.data());
+            at<Address>(desc, 0x14) = 0;
+            at<int>(desc, 0) = at<int>(desc, 4) = key.index;
+            at<int>(desc, 0xc) = key.dimension;
+            at<unsigned>(desc, 0x18) = allowed;
+            for (unsigned i = 0; i < doors.size(); ++i)
+                at<unsigned>(desc, 0x1c + 4 * i) = doors[i];
+            for (unsigned i = 0; i < seeds.size(); ++i)
+                at<unsigned>(desc, 0x58 + 4 * i) = seeds[i];
         }
-        lua.pushBoolean(L,true);return 1;
-    } catch(const std::exception& error) { runtime::abort(error.what());lua.pushBoolean(L,false);return 1; }
+        lua.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
 }
 int stateClock(lua_State* L) {
-    if(runtime::replica()) at<unsigned>(game(),0x264f8)=static_cast<unsigned>(lua.checkInteger(L,1));
+    if (runtime::replica())
+        at<unsigned>(game(), 0x264f8) = static_cast<unsigned>(lua.checkInteger(L, 1));
     return 0;
 }
 int refreshMap(lua_State* L) {
-    if(!runtime::replica()) { lua.pushBoolean(L,false);return 1; }
+    if (!runtime::replica()) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
     // J460 Game::UpdateVisibility ends by refreshing these two map caches.
     // Use that display-only step after applying authoritative DisplayFlags;
     // its preceding door walk would recompute visibility from replica doors.
-    const auto g=game();
-    for(auto offset:{0x25ee4u,0x26044u}) engine<RoomCall>(0x58b5e0)(reinterpret_cast<void*>(g+offset));
-    if(at<int>(g,0x22ed4)!=2) { at<int>(g,0x22ed4)=1;at<int>(g,0x22edc)=2; }
-    lua.pushBoolean(L,true);return 1;
+    const auto g = game();
+    for (auto offset : {0x25ee4u, 0x26044u})
+        engine<RoomCall>(0x58b5e0)(reinterpret_cast<void*>(g + offset));
+    if (at<int>(g, 0x22ed4) != 2) {
+        at<int>(g, 0x22ed4) = 1;
+        at<int>(g, 0x22edc) = 2;
+    }
+    lua.pushBoolean(L, true);
+    return 1;
 }
 int actorSprites(lua_State* L) {
-    const auto index=lua.checkInteger(L,1);const auto all=values(roster());
-    auto sample=static_cast<Address*>(lua.toUserdata(L,2));
-    if(index<0 || static_cast<std::size_t>(index)>=all.size() || !sample || lua.rawLength(L,2)!=8
-        || sample[1]!=all[index]+0x48) { lua.pushBoolean(L,false);return 1; }
-    const auto player=all[index];const auto costumes=at<Vector>(player,0x1220);
-    if(costumes.end<costumes.begin || (costumes.end-costumes.begin)%0x130 || costumes.end-costumes.begin>0x130*4096) {
-        lua.pushBoolean(L,false);return 1;
+    const auto index = lua.checkInteger(L, 1);
+    const auto all = values(roster());
+    auto sample = static_cast<Address*>(lua.toUserdata(L, 2));
+    if (index < 0 || static_cast<std::size_t>(index) >= all.size() || !sample ||
+        lua.rawLength(L, 2) != 8 || sample[1] != all[index] + 0x48) {
+        lua.pushBoolean(L, false);
+        return 1;
     }
-    lua.createTable(L,10+(costumes.end-costumes.begin)/0x130,0);
-    unsigned ordinal=1;
-    auto push=[&](Address sprite) {
+    const auto player = all[index];
+    const auto costumes = at<Vector>(player, 0x1220);
+    if (costumes.end < costumes.begin || (costumes.end - costumes.begin) % 0x130 ||
+        costumes.end - costumes.begin > 0x130 * 4096) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    lua.createTable(L, 10 + (costumes.end - costumes.begin) / 0x130, 0);
+    unsigned ordinal = 1;
+    auto push = [&](Address sprite) {
         // Clone the game's non-owning LuaBridge Sprite wrapper, retaining its
         // native metatable/destructor. The ANM2 remains owned by the player.
-        auto wrapper=static_cast<Address*>(lua.newUserdata(L,8));wrapper[0]=sample[0];wrapper[1]=sprite;
-        lua.getMetatable(L,2);lua.setMetatable(L,-2);lua.rawSetI(L,-2,ordinal++);
+        auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
+        wrapper[0] = sample[0];
+        wrapper[1] = sprite;
+        lua.getMetatable(L, 2);
+        lua.setMetatable(L, -2);
+        lua.rawSetI(L, -2, ordinal++);
     };
-    for(auto offset:{0x41cu,0xff8u,0xee4u}) push(player+offset);
+    for (auto offset : {0x41cu, 0xff8u, 0xee4u})
+        push(player + offset);
     // The seven native charge-bar sprites advance in Player::Update, which
     // replicas suppress. Their charged/flash overlays must follow the host.
-    for(unsigned i=0;i<7;++i) push(player+0x758+i*0x114);
-    for(auto address=costumes.begin;address<costumes.end;address+=0x130) push(address);
+    for (unsigned i = 0; i < 7; ++i)
+        push(player + 0x758 + i * 0x114);
+    for (auto address = costumes.begin; address < costumes.end; address += 0x130)
+        push(address);
     return 1;
 }
 int actorGhost(lua_State* L) {
-    const auto index=lua.checkInteger(L,1),ghost=lua.checkInteger(L,2);const auto all=values(roster());
-    if(!runtime::replica() || index<0 || static_cast<std::size_t>(index)>=all.size() || (ghost!=0 && ghost!=1)) {
-        lua.pushBoolean(L,false);return 1;
+    const auto index = lua.checkInteger(L, 1), ghost = lua.checkInteger(L, 2);
+    const auto all = values(roster());
+    if (!runtime::replica() || index < 0 || static_cast<std::size_t>(index) >= all.size() ||
+        (ghost != 0 && ghost != 1)) {
+        lua.pushBoolean(L, false);
+        return 1;
     }
-    engine<RoomCall>(ghost?0x3d96f0:0x3d93b0)(reinterpret_cast<void*>(all[index]));
-    lua.pushBoolean(L,true);return 1;
-}
-int laserPath(lua_State* L) {
-    auto sprite=static_cast<Address*>(lua.toUserdata(L,1));
-    if(!sprite || lua.rawLength(L,1)!=8 || sprite[1]<0x48 || at<unsigned>(sprite[1]-0x48,0x28)!=7) {
-        lua.pushBoolean(L,false);return 1;
-    }
-    const auto entity=sprite[1]-0x48;
-    constexpr std::array<unsigned,6> floats={0x468,0x46c,0x470,0x474,0x478,0x4e0};
-    try {
-        if(lua.getTop(L)==1) {
-            lan::Writer bytes(lan::Message::world);bytes.u8(at<bool>(entity,0x45d));
-            for(auto offset:floats) bytes.u32(at<std::uint32_t>(entity,offset));
-            bytes.u32(at<unsigned>(entity,0x47c));
-            for(auto offset:{0x480u,0x48cu}) {
-                const auto points=at<Vector>(entity,offset);
-                if(points.end<points.begin || points.end>points.capacity || (points.end-points.begin)%8 || points.end-points.begin>2048*8)
-                    throw std::runtime_error("Invalid native laser path");
-                bytes.u16((points.end-points.begin)/8);
-                for(auto p=points.begin;p<points.end;p+=4) bytes.u32(at<std::uint32_t>(p,0));
-            }
-            lua.pushString(L,reinterpret_cast<const char*>(bytes.bytes.data()+1),bytes.bytes.size()-1);return 1;
-        }
-        if(!runtime::replica()) { lua.pushBoolean(L,false);return 1; }
-        std::size_t size=0;const auto data=lua.checkString(L,2,&size);
-        lan::Reader bytes({reinterpret_cast<const std::uint8_t*>(data),size});
-        const auto sample=bytes.u8();if(sample>1) throw std::runtime_error("Invalid laser type");
-        std::array<std::uint32_t,6> values{};
-        auto number=[&]() { const auto bits=bytes.u32();if(!std::isfinite(std::bit_cast<float>(bits))) throw std::runtime_error("Invalid laser coordinate");return bits; };
-        for(auto& value:values) value=number();
-        const auto samples=bytes.u32();if(samples>2048) throw std::runtime_error("Invalid laser sample count");
-        std::array<std::vector<Address>,2> paths;
-        for(auto& path:paths) {
-            const auto count=bytes.u16();if(count>2048) throw std::runtime_error("Laser path too long");
-            path.resize(count*2);for(auto& value:path) value=number();
-        }
-        bytes.finish();
-        at<bool>(entity,0x45d)=sample!=0;
-        for(unsigned i=0;i<floats.size();++i) at<std::uint32_t>(entity,floats[i])=values[i];
-        at<unsigned>(entity,0x47c)=samples;
-        assign(at<Vector>(entity,0x480),paths[0]);assign(at<Vector>(entity,0x48c),paths[1]);
-        lua.pushBoolean(L,true);
-    } catch(const std::exception& e) { runtime::abort(e.what());lua.pushBoolean(L,false); }
+    engine<RoomCall>(ghost ? 0x3d96f0 : 0x3d93b0)(reinterpret_cast<void*>(all[index]));
+    lua.pushBoolean(L, true);
     return 1;
 }
-std::map<Address,RoomCall> entityUpdates;
-RoomCall originalDoorUpdate=nullptr;
-void __attribute__((fastcall)) doorUpdate(void* door,void*) {
+int laserPath(lua_State* L) {
+    auto sprite = static_cast<Address*>(lua.toUserdata(L, 1));
+    if (!sprite || lua.rawLength(L, 1) != 8 || sprite[1] < 0x48 ||
+        at<unsigned>(sprite[1] - 0x48, 0x28) != 7) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto entity = sprite[1] - 0x48;
+    constexpr std::array<unsigned, 6> floats = {0x468, 0x46c, 0x470, 0x474, 0x478, 0x4e0};
+    try {
+        if (lua.getTop(L) == 1) {
+            lan::Writer bytes(lan::Message::world);
+            bytes.u8(at<bool>(entity, 0x45d));
+            for (auto offset : floats)
+                bytes.u32(at<std::uint32_t>(entity, offset));
+            bytes.u32(at<unsigned>(entity, 0x47c));
+            for (auto offset : {0x480u, 0x48cu}) {
+                const auto points = at<Vector>(entity, offset);
+                if (points.end < points.begin || points.end > points.capacity ||
+                    (points.end - points.begin) % 8 || points.end - points.begin > 2048 * 8)
+                    throw std::runtime_error("Invalid native laser path");
+                bytes.u16((points.end - points.begin) / 8);
+                for (auto p = points.begin; p < points.end; p += 4)
+                    bytes.u32(at<std::uint32_t>(p, 0));
+            }
+            lua.pushString(L, reinterpret_cast<const char*>(bytes.bytes.data() + 1),
+                           bytes.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica()) {
+            lua.pushBoolean(L, false);
+            return 1;
+        }
+        std::size_t size = 0;
+        const auto data = lua.checkString(L, 2, &size);
+        lan::Reader bytes({reinterpret_cast<const std::uint8_t*>(data), size});
+        const auto sample = bytes.u8();
+        if (sample > 1)
+            throw std::runtime_error("Invalid laser type");
+        std::array<std::uint32_t, 6> values{};
+        auto number = [&]() {
+            const auto bits = bytes.u32();
+            if (!std::isfinite(std::bit_cast<float>(bits)))
+                throw std::runtime_error("Invalid laser coordinate");
+            return bits;
+        };
+        for (auto& value : values)
+            value = number();
+        const auto samples = bytes.u32();
+        if (samples > 2048)
+            throw std::runtime_error("Invalid laser sample count");
+        std::array<std::vector<Address>, 2> paths;
+        for (auto& path : paths) {
+            const auto count = bytes.u16();
+            if (count > 2048)
+                throw std::runtime_error("Laser path too long");
+            path.resize(count * 2);
+            for (auto& value : path)
+                value = number();
+        }
+        bytes.finish();
+        at<bool>(entity, 0x45d) = sample != 0;
+        for (unsigned i = 0; i < floats.size(); ++i)
+            at<std::uint32_t>(entity, floats[i]) = values[i];
+        at<unsigned>(entity, 0x47c) = samples;
+        assign(at<Vector>(entity, 0x480), paths[0]);
+        assign(at<Vector>(entity, 0x48c), paths[1]);
+        lua.pushBoolean(L, true);
+    } catch (const std::exception& e) {
+        runtime::abort(e.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
+std::map<Address, RoomCall> entityUpdates;
+RoomCall originalDoorUpdate = nullptr;
+void __attribute__((fastcall)) doorUpdate(void* door, void*) {
     // Replica doors receive their complete state and animation from the host.
     // Running native door decisions here can immediately undo a locked door.
-    if(!runtime::replica()) originalDoorUpdate(door);
+    if (!runtime::replica())
+        originalDoorUpdate(door);
 }
-void __attribute__((fastcall)) replicaEntityUpdate(void* entity,void*) {
-    if(runtime::replica()) return;
-    const auto entry=at<Address>(at<Address>(reinterpret_cast<Address>(entity),0),0xc);
+void __attribute__((fastcall)) replicaEntityUpdate(void* entity, void*) {
+    if (runtime::replica())
+        return;
+    const auto entry = at<Address>(at<Address>(reinterpret_cast<Address>(entity), 0), 0xc);
     entityUpdates.at(entry)(entity);
 }
 void interceptReplicaEntities(Room& room) {
     // Preserve room cleanup, doors and background updates, while the server
     // owns entity gameplay. Native containers and allocation remain untouched.
-    for(std::size_t offset:{0x20u,0x40u,0x70u}) {
-        const auto list=room.pointer+0x1218+offset;
-        const auto data=at<Address>(list,4),count=at<unsigned>(list,12);
-        for(unsigned i=0;i<count;++i) {
-            const auto entity=at<Address>(data,i*4);
-            if(at<unsigned>(entity,0x28)==1) continue;
-            const auto entry=at<Address>(at<Address>(entity,0),0xc);
-            if(entityUpdates.contains(entry)) continue;
-            RoomCall original=nullptr;
-            if(MH_CreateHook(reinterpret_cast<void*>(entry),reinterpret_cast<void*>(replicaEntityUpdate),reinterpret_cast<void**>(&original))!=MH_OK
-                || MH_EnableHook(reinterpret_cast<void*>(entry))!=MH_OK) {
-                runtime::abort("Cannot isolate replica entity updates");return;
+    for (std::size_t offset : {0x20u, 0x40u, 0x70u}) {
+        const auto list = room.pointer + 0x1218 + offset;
+        const auto data = at<Address>(list, 4), count = at<unsigned>(list, 12);
+        for (unsigned i = 0; i < count; ++i) {
+            const auto entity = at<Address>(data, i * 4);
+            if (at<unsigned>(entity, 0x28) == 1)
+                continue;
+            const auto entry = at<Address>(at<Address>(entity, 0), 0xc);
+            if (entityUpdates.contains(entry))
+                continue;
+            RoomCall original = nullptr;
+            if (MH_CreateHook(reinterpret_cast<void*>(entry),
+                              reinterpret_cast<void*>(replicaEntityUpdate),
+                              reinterpret_cast<void**>(&original)) != MH_OK ||
+                MH_EnableHook(reinterpret_cast<void*>(entry)) != MH_OK) {
+                runtime::abort("Cannot isolate replica entity updates");
+                return;
             }
-            entityUpdates.emplace(entry,original);
+            entityUpdates.emplace(entry, original);
         }
     }
 }
-}
+} // namespace
 
 bool update(void*, RoomCall original) {
-    if (!enabled || depth || transferring) return false;
+    if (!enabled || depth || transferring)
+        return false;
     for (auto& [key, room] : loaded) {
         (void)key;
-        if (room->replicaShell || occupants(*room).empty()) continue;
-        if(runtime::replica()) {
-            const auto players=occupants(*room);
-            if(std::find(players.begin(),players.end(),participant(runtime::localViewSlot()))==players.end()) continue;
+        if (room->replicaShell || occupants(*room).empty())
+            continue;
+        if (runtime::replica()) {
+            const auto players = occupants(*room);
+            if (std::find(players.begin(), players.end(), participant(runtime::localViewSlot())) ==
+                players.end())
+                continue;
         }
-        Scope scope(*room); restorePositions(room->pointer);
-        if(at<bool>(game(),0x676b4)) {
-            using Lerp=void(__attribute__((thiscall))*)(void*,const void*,const void*);
-            engine<Lerp>(0x2ef410)(reinterpret_cast<void*>(game()+0x676b8),
-                reinterpret_cast<void*>(game()+0x676d0),reinterpret_cast<void*>(game()+0x676e8));
+        Scope scope(*room);
+        restorePositions(room->pointer);
+        if (at<bool>(game(), 0x676b4)) {
+            using Lerp = void(__attribute__((thiscall))*)(void*, const void*, const void*);
+            engine<Lerp>(0x2ef410)(reinterpret_cast<void*>(game() + 0x676b8),
+                                   reinterpret_cast<void*>(game() + 0x676d0),
+                                   reinterpret_cast<void*>(game() + 0x676e8));
         }
-        if(runtime::replica()) interceptReplicaEntities(*room);
-        original(reinterpret_cast<void*>(room->pointer)); ++room->updates;
+        if (runtime::replica())
+            interceptReplicaEntities(*room);
+        original(reinterpret_cast<void*>(room->pointer));
+        ++room->updates;
     }
     return true;
 }
 bool half(void (*original)()) {
-    if (!enabled || depth || transferring) return false;
-    if (runtime::replica()) return true;
+    if (!enabled || depth || transferring)
+        return false;
+    if (runtime::replica())
+        return true;
     for (auto& [key, room] : loaded) {
         (void)key;
-        if (room->replicaShell || occupants(*room).empty()) continue;
-        Scope scope(*room); original(); ++room->halves;
+        if (room->replicaShell || occupants(*room).empty())
+            continue;
+        Scope scope(*room);
+        original();
+        ++room->halves;
     }
     return true;
 }
 bool render(void* g, RoomCall original, int slot) {
-    if (!enabled || depth || slot < 0 || slot>=4) return false;
-    auto room = findRoom(participant(slot)); if (!room) return false;
-    withView([&] { audio::present();original(g); });return true;
+    if (!enabled || depth || slot < 0 || slot >= 4)
+        return false;
+    auto room = findRoom(participant(slot));
+    if (!room)
+        return false;
+    withView([&] {
+        audio::present();
+        original(g);
+    });
+    return true;
 }
 void presentCamera() {
-    if(!enabled || depth || transferring || !runtime::replica()) return;
-    const auto head=participant(runtime::localViewSlot());
-    const auto room=findRoom(head);
-    if(!room || room->replicaShell) return;
-    const auto manager=at<Address>(image,0x87169c);
-    const bool halfFrame=(at<unsigned>(manager,0x4abbc)&1u)!=0;
+    if (!enabled || depth || transferring || !runtime::replica())
+        return;
+    const auto head = participant(runtime::localViewSlot());
+    const auto room = findRoom(head);
+    if (!room || room->replicaShell)
+        return;
+    const auto manager = at<Address>(image, 0x87169c);
+    const bool halfFrame = (at<unsigned>(manager, 0x4abbc) & 1u) != 0;
     // Replica packets restore authority positions before prediction. Advance
     // the native camera only after the visible local position is reconciled.
-    Scope scope(*room,controlledActors(head));
-    auto camera=reinterpret_cast<void*>(at<Address>(room->pointer,0x11f8));
-    originalCameraSmooth(camera,halfFrame);
-    at<bool>(reinterpret_cast<Address>(camera),0x8c)=false;
+    Scope scope(*room, controlledActors(head));
+    auto camera = reinterpret_cast<void*>(at<Address>(room->pointer, 0x11f8));
+    originalCameraSmooth(camera, halfFrame);
+    at<bool>(reinterpret_cast<Address>(camera), 0x8c) = false;
     originalCameraDrag(camera);
 }
 bool backgroundLoading() {
-    if(!enabled || !transferring || !active) return false;
-    const auto it=location.find(participant(runtime::localViewSlot()));
-    return it==location.end() || it->second!=active;
+    if (!enabled || !transferring || !active)
+        return false;
+    const auto it = location.find(participant(runtime::localViewSlot()));
+    return it == location.end() || it->second != active;
 }
 void withView(const std::function<void()>& draw, bool localPlayersOnly) {
-    const int slot=runtime::localViewSlot();
-    if(slot<0 || slot>=4) { draw();return; }
+    const int slot = runtime::localViewSlot();
+    if (slot < 0 || slot >= 4) {
+        draw();
+        return;
+    }
     ViewCall call;
-    const auto head=enabled && !transferring?participant(slot):0;
-    const auto room=head?findRoom(head):nullptr;
-    auto players=values(teamRoster?*teamRoster:roster());
-    if(localPlayersOnly) std::erase_if(players,[&](Address p) { return at<int>(p,0x1618)!=slot+1; });
-    std::stable_partition(players.begin(),players.end(),[&](Address p) { return at<int>(p,0x1618)==slot+1; });
-    if(!room) { ViewRoster view(players);draw();return; }
-    Scope scope(*room,players,false);draw();
+    const auto head = enabled && !transferring ? participant(slot) : 0;
+    const auto room = head ? findRoom(head) : nullptr;
+    auto players = values(teamRoster ? *teamRoster : roster());
+    if (localPlayersOnly)
+        std::erase_if(players, [&](Address p) { return at<int>(p, 0x1618) != slot + 1; });
+    std::stable_partition(players.begin(), players.end(),
+                          [&](Address p) { return at<int>(p, 0x1618) == slot + 1; });
+    if (!room) {
+        ViewRoster view(players);
+        draw();
+        return;
+    }
+    Scope scope(*room, players, false);
+    draw();
 }
-bool checkpointReady() { return enabled && !depth && !resumeStage && !pendingStage && !pendingRKey && loaded.size()==1; }
-bool stateReady() { return enabled && !depth && !resumeStage && !pendingStage && !pendingRKey; }
-bool virtualized() { return enabled; }
+bool checkpointReady() {
+    return enabled && !depth && !resumeStage && !pendingStage && !pendingRKey && loaded.size() == 1;
+}
+bool stateReady() {
+    return enabled && !depth && !resumeStage && !pendingStage && !pendingRKey;
+}
+bool virtualized() {
+    return enabled;
+}
 bool withCheckpointRoster(const std::function<void()>& capture) {
-    if(!stateReady() || runtime::replica()) return false;
+    if (!stateReady() || runtime::replica())
+        return false;
     // Store occupied rooms through the native serializer without unloading
     // them or executing entry callbacks. Offline actors join only this borrowed
     // save roster; they never reappear in live combat during checkpointing.
-    for(auto& [key,room]:loaded) {
+    for (auto& [key, room] : loaded) {
         (void)key;
-        if(room->replicaShell) continue;
-        Scope scope(*room);originalSave(reinterpret_cast<void*>(room->pointer));
+        if (room->replicaShell)
+            continue;
+        Scope scope(*room);
+        originalSave(reinterpret_cast<void*>(room->pointer));
     }
-    auto all=values(roster());
-    for(const auto& [slot,parked]:dormant) { (void)slot;all.insert(all.end(),parked.actors.begin(),parked.actors.end()); }
-    std::stable_sort(all.begin(),all.end(),[](Address a,Address b){return at<int>(a,0x1618)<at<int>(b,0x1618);});
-    ViewRoster saved(all);capture();return true;
+    auto all = values(roster());
+    for (const auto& [slot, parked] : dormant) {
+        (void)slot;
+        all.insert(all.end(), parked.actors.begin(), parked.actors.end());
+    }
+    std::stable_sort(all.begin(), all.end(),
+                     [](Address a, Address b) { return at<int>(a, 0x1618) < at<int>(b, 0x1618); });
+    ViewRoster saved(all);
+    capture();
+    return true;
 }
-bool takeFloorChange() { const bool value=floorChanged;floorChanged=false;return value; }
-bool receiveRoomRequest(unsigned slot,const lan::RoomRequest& request) {
-    if(slot>=4 || runtime::replica() || !stateReady() || !(connectedMask&(1u<<slot))
-        || at<int>(game(),0)!=request.stage || at<int>(game(),4)!=request.type) return false;
-    const auto head=participant(slot);const auto from=findRoom(head);
-    if(!from || from->key.index!=request.source || from->key.dimension!=request.sourceDimension) return false;
-    return queue(head,request.destination,request.dimension,-1,request.teleport);
+bool takeFloorChange() {
+    const bool value = floorChanged;
+    floorChanged = false;
+    return value;
+}
+bool receiveRoomRequest(unsigned slot, const lan::RoomRequest& request) {
+    if (slot >= 4 || runtime::replica() || !stateReady() || !(connectedMask & (1u << slot)) ||
+        at<int>(game(), 0) != request.stage || at<int>(game(), 4) != request.type)
+        return false;
+    const auto head = participant(slot);
+    const auto from = findRoom(head);
+    if (!from || from->key.index != request.source ||
+        from->key.dimension != request.sourceDimension)
+        return false;
+    return queue(head, request.destination, request.dimension, -1, request.teleport);
 }
 std::vector<SavedLocation> captureLocations() {
     std::vector<SavedLocation> result;
-    if(!enabled || depth) return result;
-    for(unsigned slot=0;slot<4;++slot) {
-        if(auto parked=dormant.find(slot);parked!=dormant.end()) { result.push_back(parked->second.saved);continue; }
-        const auto player=participant(slot);if(!player) continue;
-        const auto room=findRoom(player);
-        if(!room) return {};
-        result.push_back({room->key.dimension,room->key.index,at<float>(player,0x33c),at<float>(player,0x340)});
+    if (!enabled || depth)
+        return result;
+    for (unsigned slot = 0; slot < 4; ++slot) {
+        if (auto parked = dormant.find(slot); parked != dormant.end()) {
+            result.push_back(parked->second.saved);
+            continue;
+        }
+        const auto player = participant(slot);
+        if (!player)
+            continue;
+        const auto room = findRoom(player);
+        if (!room)
+            return {};
+        result.push_back({room->key.dimension, room->key.index, at<float>(player, 0x33c),
+                          at<float>(player, 0x340)});
     }
     return result;
 }
 void setConnected(unsigned mask) {
-    connectedMask=mask|1u;
-    if(!enabled || depth) return;
-    bool changed=false;
-    for(unsigned slot=1;slot<4;++slot) {
-        const auto head=participant(slot);
-        if(!(connectedMask&(1u<<slot)) && head) {
-            auto from=findRoom(head);if(!from) continue;
+    connectedMask = mask | 1u;
+    if (!enabled || depth)
+        return;
+    bool changed = false;
+    for (unsigned slot = 1; slot < 4; ++slot) {
+        const auto head = participant(slot);
+        if (!(connectedMask & (1u << slot)) && head) {
+            auto from = findRoom(head);
+            if (!from)
+                continue;
             Dormant parked;
-            parked.saved={from->key.dimension,from->key.index,at<float>(head,0x33c),at<float>(head,0x340)};
-            parked.actors=controlledActors(head);
-            parked.room=std::make_unique<Room>();parked.room->key={0,-99};parked.room->owned=true;
-            parked.room->pointer=reinterpret_cast<Address>(allocate(0x7898));
+            parked.saved = {from->key.dimension, from->key.index, at<float>(head, 0x33c),
+                            at<float>(head, 0x340)};
+            parked.actors = controlledActors(head);
+            parked.room = std::make_unique<Room>();
+            parked.room->key = {0, -99};
+            parked.room->owned = true;
+            parked.room->pointer = reinterpret_cast<Address>(allocate(0x7898));
             engine<RoomCall>(0x3e9400)(reinterpret_cast<void*>(parked.room->pointer));
-            for(auto actor:parked.actors) {
-                for(auto entity:followers(actor,*from)) moveEntity(entity,*from,*parked.room);
-                moveEntity(actor,*from,*parked.room);location.erase(actor);
+            for (auto actor : parked.actors) {
+                for (auto entity : followers(actor, *from))
+                    moveEntity(entity, *from, *parked.room);
+                moveEntity(actor, *from, *parked.room);
+                location.erase(actor);
             }
-            auto all=values(roster());for(auto actor:parked.actors) std::erase(all,actor);assign(roster(),all);
-            dormant.emplace(slot,std::move(parked));participants=logicalPlayers();
-            changed=true;
-            logger("player_dormant slot="+std::to_string(slot));
-        } else if((connectedMask&(1u<<slot)) && dormant.contains(slot)) {
-            auto& parked=dormant.at(slot);auto root=findRoom(participant(0));if(!root) continue;
-            const auto host=participant(0);
-            const Vec2 target{at<float>(host,0x33c)+12,at<float>(host,0x340)};
-            auto all=values(roster());
-            for(auto actor:parked.actors) {
-                for(auto entity:followers(actor,*parked.room)) { moveEntity(entity,*parked.room,*root);place(entity,target); }
-                moveEntity(actor,*parked.room,*root);place(actor,target);location[actor]=root;all.push_back(actor);
+            auto all = values(roster());
+            for (auto actor : parked.actors)
+                std::erase(all, actor);
+            assign(roster(), all);
+            dormant.emplace(slot, std::move(parked));
+            participants = logicalPlayers();
+            changed = true;
+            logger("player_dormant slot=" + std::to_string(slot));
+        } else if ((connectedMask & (1u << slot)) && dormant.contains(slot)) {
+            auto& parked = dormant.at(slot);
+            auto root = findRoom(participant(0));
+            if (!root)
+                continue;
+            const auto host = participant(0);
+            const Vec2 target{at<float>(host, 0x33c) + 12, at<float>(host, 0x340)};
+            auto all = values(roster());
+            for (auto actor : parked.actors) {
+                for (auto entity : followers(actor, *parked.room)) {
+                    moveEntity(entity, *parked.room, *root);
+                    place(entity, target);
+                }
+                moveEntity(actor, *parked.room, *root);
+                place(actor, target);
+                location[actor] = root;
+                all.push_back(actor);
             }
-            std::stable_sort(all.begin(),all.end(),[](Address a,Address b){return at<int>(a,0x1618)<at<int>(b,0x1618);});
-            assign(roster(),all);participants=logicalPlayers();
-            destroy(*parked.room);dormant.erase(slot);
-            changed=true;
-            logger("player_returned slot="+std::to_string(slot));
+            std::stable_sort(all.begin(), all.end(), [](Address a, Address b) {
+                return at<int>(a, 0x1618) < at<int>(b, 0x1618);
+            });
+            assign(roster(), all);
+            participants = logicalPlayers();
+            destroy(*parked.room);
+            dormant.erase(slot);
+            changed = true;
+            logger("player_returned slot=" + std::to_string(slot));
         }
     }
-    const auto all=values(roster());for(unsigned i=0;i<all.size();++i) at<unsigned>(all[i],0x161c)=i;
-    if(changed) {
-        using GetHUD=void*(__attribute__((thiscall))*)(void*);
+    const auto all = values(roster());
+    for (unsigned i = 0; i < all.size(); ++i)
+        at<unsigned>(all[i], 0x161c) = i;
+    if (changed) {
+        using GetHUD = void*(__attribute__((thiscall))*)(void*);
         engine<RoomCall>(0x5a8620)(engine<GetHUD>(0x178e0)(reinterpret_cast<void*>(game())));
     }
     canonical();
 }
 void protectArrivals(unsigned mask) {
-    using Cooldown=void(__attribute__((thiscall))*)(void*,int);
-    for(unsigned slot=0;slot<4;++slot) if(mask&(1u<<slot)) {
-        const auto head=participant(slot);if(!head) continue;
-        const auto room=findRoom(head);if(!room || !occupiedCombat(*room,head)) continue;
-        for(auto actor:controlledActors(head)) engine<Cooldown>(0x361d0)(reinterpret_cast<void*>(actor),90);
-    }
+    using Cooldown = void(__attribute__((thiscall))*)(void*, int);
+    for (unsigned slot = 0; slot < 4; ++slot)
+        if (mask & (1u << slot)) {
+            const auto head = participant(slot);
+            if (!head)
+                continue;
+            const auto room = findRoom(head);
+            if (!room || !occupiedCombat(*room, head))
+                continue;
+            for (auto actor : controlledActors(head))
+                engine<Cooldown>(0x361d0)(reinterpret_cast<void*>(actor), 90);
+        }
 }
-unsigned connected() { return connectedMask; }
+unsigned connected() {
+    return connectedMask;
+}
 unsigned soundAudience() {
-    if(!enabled) return 0;
-    const auto current=at<Address>(game(),0x18300);unsigned mask=0;
-    for(auto player:participants) if(const auto room=findRoom(player);room && room->pointer==current) mask|=1u<<slotOf(player);
+    if (!enabled)
+        return 0;
+    const auto current = at<Address>(game(), 0x18300);
+    unsigned mask = 0;
+    for (auto player : participants)
+        if (const auto room = findRoom(player); room && room->pointer == current)
+            mask |= 1u << slotOf(player);
     return mask;
 }
 bool restoreLocations(const std::vector<SavedLocation>& saved) {
-    if(!enabled || depth || saved.size()!=participants.size()) return false;
+    if (!enabled || depth || saved.size() != participants.size())
+        return false;
     // Apply saved positions to the complete restored roster before parking
     // offline actors. Otherwise their dormant position captures the native
     // Continue spawn point on one machine and the saved point on another.
-    const auto mask=connectedMask;setConnected(15);
-    for(unsigned slot=0;slot<saved.size();++slot) {
-        if(runtime::replica() && slot!=static_cast<unsigned>(runtime::localViewSlot())) continue;
-        if(!queue(participants[slot],saved[slot].index,saved[slot].dimension,-1)) return false;
+    const auto mask = connectedMask;
+    setConnected(15);
+    for (unsigned slot = 0; slot < saved.size(); ++slot) {
+        if (runtime::replica() && slot != static_cast<unsigned>(runtime::localViewSlot()))
+            continue;
+        if (!queue(participants[slot], saved[slot].index, saved[slot].dimension, -1))
+            return false;
     }
     finishFrame();
-    for(unsigned slot=0;slot<saved.size();++slot) {
-        if(runtime::replica() && slot!=static_cast<unsigned>(runtime::localViewSlot())) projectRemote(slot,saved[slot]);
-        const auto head=participants[slot];const auto room=findRoom(head);
-        const Vec2 target{saved[slot].x,saved[slot].y};
-        for(auto actor:controlledActors(head)) {
-            place(actor,target);
-            for(auto entity:followers(actor,*room)) place(entity,target);
+    for (unsigned slot = 0; slot < saved.size(); ++slot) {
+        if (runtime::replica() && slot != static_cast<unsigned>(runtime::localViewSlot()))
+            projectRemote(slot, saved[slot]);
+        const auto head = participants[slot];
+        const auto room = findRoom(head);
+        const Vec2 target{saved[slot].x, saved[slot].y};
+        for (auto actor : controlledActors(head)) {
+            place(actor, target);
+            for (auto entity : followers(actor, *room))
+                place(entity, target);
         }
     }
-    setConnected(mask);canonical();return true;
+    setConnected(mask);
+    canonical();
+    return true;
 }
 void finishFrame() {
-    if (depth) return;
-    if (pendingExit) { requestExit(*pendingExit); pendingExit.reset(); return; }
+    if (depth)
+        return;
+    if (pendingExit) {
+        requestExit(*pendingExit);
+        pendingExit.reset();
+        return;
+    }
     if (resumeStage && !enabled && at<int>(game(), 0x1ba78) == 0 && at<int>(game(), 0x1b83c) == 0) {
         if (adopt()) {
-            resumeStage = false;floorChanged=true;
-            if(!resumeLocations.empty()) {
-                auto locations=std::move(resumeLocations);resumeLocations.clear();
-                restoringSavedLocations=true;
-                const bool restored=restoreLocations(locations);
-                restoringSavedLocations=false;
-                if(!restored) runtime::abort("Hourglass player locations could not be restored");
+            resumeStage = false;
+            floorChanged = true;
+            if (!resumeLocations.empty()) {
+                auto locations = std::move(resumeLocations);
+                resumeLocations.clear();
+                restoringSavedLocations = true;
+                const bool restored = restoreLocations(locations);
+                restoringSavedLocations = false;
+                if (!restored)
+                    runtime::abort("Hourglass player locations could not be restored");
             }
             logger("floor_transaction=COMPLETE stage=" + std::to_string(at<int>(game(), 0)));
         }
     }
-    if (!enabled) return;
+    if (!enabled)
+        return;
     // Transformations may replace the player object while keeping its native
     // controller. Resolve that controller again before dereferencing a head.
     const auto currentParticipants = logicalPlayers();
     participants = currentParticipants;
-    if(rewind::executePending()) return;
-    if(pendingRKey) {
-        if(!runtime::replica()) {
-            const auto locations=captureLocations();
+    if (rewind::executePending())
+        return;
+    if (pendingRKey) {
+        if (!runtime::replica()) {
+            const auto locations = captureLocations();
             withCheckpointRoster([&] {
-                for(unsigned slot=0;slot<locations.size();++slot) rewind::remember(slot,-1,locations);
+                for (unsigned slot = 0; slot < locations.size(); ++slot)
+                    rewind::remember(slot, -1, locations);
             });
         }
         // Send the pre-restart Seeds. Both originals advance those values and
         // reset the same native floor; R Key's item pool remains untouched.
-        runtime::beginStage(false,0,true);
-        beforeStart();resumeStage=true;
+        runtime::beginStage(false, 0, true);
+        beforeStart();
+        resumeStage = true;
         originalRKey();
-        logger("floor_transaction=R_KEY");return;
+        logger("floor_transaction=R_KEY");
+        return;
     }
     if (pendingStage) {
-        const auto request = *pendingStage; pendingStage.reset();
-        if (auto room = findRoom(request.player)) room->activate();
-        if(!runtime::replica()) {
-            const auto locations=captureLocations();
+        const auto request = *pendingStage;
+        pendingStage.reset();
+        if (auto room = findRoom(request.player))
+            room->activate();
+        if (!runtime::replica()) {
+            const auto locations = captureLocations();
             withCheckpointRoster([&] {
-                for(unsigned slot=0;slot<locations.size();++slot) rewind::remember(slot,-1,locations);
+                for (unsigned slot = 0; slot < locations.size(); ++slot)
+                    rewind::remember(slot, -1, locations);
             });
         }
-        runtime::beginStage(request.same,request.animation);
+        runtime::beginStage(request.same, request.animation);
         beforeStart();
         resumeStage = true;
         logger("floor_transaction=BEGIN same=" + std::to_string(request.same));
-        originalStage(reinterpret_cast<void*>(game()), request.same, request.animation, reinterpret_cast<void*>(request.player));
+        originalStage(reinterpret_cast<void*>(game()), request.same, request.animation,
+                      reinterpret_cast<void*>(request.player));
         return;
     }
     setConnected(connectedMask);
-    if (pending.empty() && pendingItemRevival.empty()) { preparedDepartures.clear(); return; }
-    auto requests = std::move(pending); pending.clear();
+    if (pending.empty() && pendingItemRevival.empty()) {
+        preparedDepartures.clear();
+        return;
+    }
+    auto requests = std::move(pending);
+    pending.clear();
     for (const auto& request : requests) {
-        Room* from = findRoom(request.player); if (!from || from->key == request.destination) continue;
-        if(request.teleport && (at<bool>(request.player,0x1398) || at<bool>(request.player,0x139a))) {
-            pending.push_back(request);continue;
+        Room* from = findRoom(request.player);
+        if (!from || from->key == request.destination)
+            continue;
+        if (request.teleport &&
+            (at<bool>(request.player, 0x1398) || at<bool>(request.player, 0x139a))) {
+            pending.push_back(request);
+            continue;
         }
         using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-        auto desc = reinterpret_cast<Address>(engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), request.destination.index, request.destination.dimension));
-        if (!desc || !at<Address>(desc, 0x10)) { logger("room_transfer=invalid_destination"); continue; }
-        if(!runtime::replica() && !restoringSavedLocations) {
-            const auto locations=captureLocations();
+        auto desc = reinterpret_cast<Address>(
+            engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), request.destination.index,
+                                   request.destination.dimension));
+        if (!desc || !at<Address>(desc, 0x10)) {
+            logger("room_transfer=invalid_destination");
+            continue;
+        }
+        if (!runtime::replica() && !restoringSavedLocations) {
+            const auto locations = captureLocations();
             withCheckpointRoster([&] {
-                Scope scope(*from,values(roster()));
-                rewind::remember(slotOf(request.player),request.door,locations);
+                Scope scope(*from, values(roster()));
+                rewind::remember(slotOf(request.player), request.door, locations);
             });
         }
         auto found = loaded.find(request.destination);
@@ -1196,183 +1697,276 @@ void finishFrame() {
         const bool created = found == loaded.end() || found->second->replicaShell;
         if (found == loaded.end()) {
             auto room = std::make_unique<Room>();
-            room->pointer = reinterpret_cast<Address>(allocate(0x7898)); room->owned = true;
+            room->pointer = reinterpret_cast<Address>(allocate(0x7898));
+            room->owned = true;
             engine<RoomCall>(0x3e9400)(reinterpret_cast<void*>(room->pointer));
-            room->key = request.destination; room->context = from->context;
-            to = room.get(); loaded.emplace(request.destination, std::move(room));
+            room->key = request.destination;
+            room->context = from->context;
+            to = room.get();
+            loaded.emplace(request.destination, std::move(room));
         } else {
             to = found->second.get();
             // Remote actors use an uninitialized storage shell. When this
             // becomes the displayed room, native ChangeRoom still needs the
             // departure room's previous-index/dimension context.
-            if(to->replicaShell) to->context=from->context;
+            if (to->replicaShell)
+                to->context = from->context;
         }
-        const bool protect=!created && occupiedCombat(*to,request.player);
-        to->replicaShell=false;
+        const bool protect = !created && occupiedCombat(*to, request.player);
+        to->replicaShell = false;
         const auto actors = controlledActors(request.player);
         {
             Scope scope(*from, actors);
             // Game::ChangeRoom normally performs this before Level::ChangeRoom.
             // Door transitions queued by our adapter bypass that wrapper. Run
             // its native per-player cleanup once, including room-limited stats.
-            for (auto player : actors) if (!preparedDepartures.contains(player))
-                originalLeave(reinterpret_cast<void*>(player), false);
+            for (auto player : actors)
+                if (!preparedDepartures.contains(player))
+                    originalLeave(reinterpret_cast<void*>(player), false);
         }
         std::vector<Address> companions;
         for (auto player : actors) {
-            for (auto entity : followers(player, *from)) if (std::find(companions.begin(), companions.end(), entity) == companions.end()) companions.push_back(entity);
-            moveEntity(player, *from, *to); location[player] = to;
+            for (auto entity : followers(player, *from))
+                if (std::find(companions.begin(), companions.end(), entity) == companions.end())
+                    companions.push_back(entity);
+            moveEntity(player, *from, *to);
+            location[player] = to;
         }
-        for (auto entity : companions) moveEntity(entity, *from, *to);
+        for (auto entity : companions)
+            moveEntity(entity, *from, *to);
         {
             Scope scope(*to, actors);
             if (created) {
-                transferring = true; skipSave = to->pointer;
+                transferring = true;
+                skipSave = to->pointer;
                 // The request already resolves a destination. J460 otherwise
                 // reuses LeaveDoor from the preceding transition and replaces
                 // that destination with the old room's neighbor (0x340432).
                 // Arrival below applies our explicit entry door afterward.
                 at<int>(game(), 0x18318) = -1;
                 at<int>(game(), 0x1831c) = request.door;
-                originalChange(reinterpret_cast<void*>(game()), request.destination.index, request.destination.dimension);
-                if(!runtime::replica()) engine<RoomCall>(0x3eb1b0)(reinterpret_cast<void*>(to->pointer));
-                skipSave = 0; transferring = false;
+                originalChange(reinterpret_cast<void*>(game()), request.destination.index,
+                               request.destination.dimension);
+                if (!runtime::replica())
+                    engine<RoomCall>(0x3eb1b0)(reinterpret_cast<void*>(to->pointer));
+                skipSave = 0;
+                transferring = false;
             } else {
                 // Joining an occupied room must apply the arriving characters'
                 // entry effects without reinitializing resident entities.
-                for (auto player : actors) engine<RoomCall>(0x3a8350)(reinterpret_cast<void*>(player));
-                for (auto entity : companions) if (at<unsigned>(entity, 0x28) == 3)
-                    engine<RoomCall>(0x22c8a0)(reinterpret_cast<void*>(entity));
+                for (auto player : actors)
+                    engine<RoomCall>(0x3a8350)(reinterpret_cast<void*>(player));
+                for (auto entity : companions)
+                    if (at<unsigned>(entity, 0x28) == 3)
+                        engine<RoomCall>(0x22c8a0)(reinterpret_cast<void*>(entity));
             }
-            arrival(request.player, *to, request.door, companions,protect);
-            for (auto player : actors) if (player != request.player) arrival(player, *to, request.door, {},protect);
-            if(created) presentation::roomEntered(to->pointer);
-            if(!created) {
+            arrival(request.player, *to, request.door, companions, protect);
+            for (auto player : actors)
+                if (player != request.player)
+                    arrival(player, *to, request.door, {}, protect);
+            if (created)
+                presentation::roomEntered(to->pointer);
+            if (!created) {
                 // J460's native POST_NEW_ROOM dispatcher (callback 19). A
                 // resident room needs the entry notification without Init;
                 // local Mod interfaces must not keep the departure descriptor.
                 engine<PostUpdate>(0x465180)();
             }
-            if(request.teleport) {
-                using Animate=void(__attribute__((thiscall))*)(void*,bool);
-                for(auto p:actors) engine<Animate>(0x3abcc0)(reinterpret_cast<void*>(p),false);
+            if (request.teleport) {
+                using Animate = void(__attribute__((thiscall))*)(void*, bool);
+                for (auto p : actors)
+                    engine<Animate>(0x3abcc0)(reinterpret_cast<void*>(p), false);
             }
         }
         canonical();
-        logger("room_transfer slot=" + std::to_string(slotOf(request.player))
-            + " from=" + std::to_string(from->key.index) + " to=" + std::to_string(to->key.index)
-            + " created=" + std::to_string(created));
+        logger("room_transfer slot=" + std::to_string(slotOf(request.player)) +
+               " from=" + std::to_string(from->key.index) + " to=" + std::to_string(to->key.index) +
+               " created=" + std::to_string(created));
     }
     preparedDepartures.clear();
-    for(auto slot:pendingItemRevival) if(const auto head=participant(slot)) {
-        for(auto player:controlledActors(head)) {
-            // Same visibility exclusion as native RoomTransition::ChangeRoom.
-            if(!(at<unsigned>(player,0x16c)&0x02000000u)) at<bool>(player,0x171)=true;
-            using Cooldown=void(__attribute__((thiscall))*)(void*,int);
-            engine<Cooldown>(0x361d0)(reinterpret_cast<void*>(player),90);
+    for (auto slot : pendingItemRevival)
+        if (const auto head = participant(slot)) {
+            for (auto player : controlledActors(head)) {
+                // Same visibility exclusion as native RoomTransition::ChangeRoom.
+                if (!(at<unsigned>(player, 0x16c) & 0x02000000u))
+                    at<bool>(player, 0x171) = true;
+                using Cooldown = void(__attribute__((thiscall))*)(void*, int);
+                engine<Cooldown>(0x361d0)(reinterpret_cast<void*>(player), 90);
+            }
         }
-    }
     pendingItemRevival.clear();
     // Empty rooms return to the game's RoomDescriptor save format. Re-entering
     // creates a fresh room through native initialization, preserving cleared
     // enemies/pickups while resetting transient room state as vanilla does.
     for (auto it = loaded.begin(); it != loaded.end();) {
-        if (!occupants(*it->second).empty()) { ++it; continue; }
+        if (!occupants(*it->second).empty()) {
+            ++it;
+            continue;
+        }
         {
             Scope scope(*it->second);
-            if(!it->second->replicaShell && !runtime::replica()) originalSave(reinterpret_cast<void*>(it->second->pointer));
+            if (!it->second->replicaShell && !runtime::replica())
+                originalSave(reinterpret_cast<void*>(it->second->pointer));
         }
         logger("room_unload index=" + std::to_string(it->first.index));
-        destroy(*it->second); it = loaded.erase(it);
+        destroy(*it->second);
+        it = loaded.erase(it);
     }
 }
 void resumeAfterTransition(std::vector<SavedLocation> locations) {
-    resumeLocations=std::move(locations);resumeStage=true;
+    resumeLocations = std::move(locations);
+    resumeStage = true;
 }
 void requestExit(bool save) {
     // Game::Exit only frees the run; Manager owns the switch back to menus.
     // Queue the native menu transaction so no caller keeps a freed camera and
     // the next Manager update cannot mistakenly re-enter gameplay.
-    const auto manager=at<Address>(image,0x87169c);
-    at<bool>(manager,0x4b284)=save;
-    at<int>(manager,0x4b28c)=2;
-    using Transition=void(__attribute__((thiscall))*)(void*,int);
-    engine<Transition>(0x60f550)(reinterpret_cast<void*>(manager+0x4b290),-1);
-    at<bool>(manager,0x4b288)=true;
+    const auto manager = at<Address>(image, 0x87169c);
+    at<bool>(manager, 0x4b284) = save;
+    at<int>(manager, 0x4b28c) = 2;
+    using Transition = void(__attribute__((thiscall))*)(void*, int);
+    engine<Transition>(0x60f550)(reinterpret_cast<void*>(manager + 0x4b290), -1);
+    at<bool>(manager, 0x4b288) = true;
 }
 void beforeStart() {
-    for(const auto& [entry,original]:entityUpdates) {
-        (void)original;MH_DisableHook(reinterpret_cast<void*>(entry));MH_RemoveHook(reinterpret_cast<void*>(entry));
+    for (const auto& [entry, original] : entityUpdates) {
+        (void)original;
+        MH_DisableHook(reinterpret_cast<void*>(entry));
+        MH_RemoveHook(reinterpret_cast<void*>(entry));
     }
     entityUpdates.clear();
     // Game restart owns destruction of the canonical room and global players.
     // Additional room destruction must happen before that native cleanup.
-    resumeStage = false; pendingStage.reset();pendingRKey=false;resumeLocations.clear();
-    if (!enabled || depth) return;
+    resumeStage = false;
+    pendingStage.reset();
+    pendingRKey = false;
+    resumeLocations.clear();
+    if (!enabled || depth)
+        return;
     // Native floor changes and saves own the complete player roster. Reattach
     // dormant actors for that transaction, then park them again on the new
     // floor if their controllers are still offline.
-    const auto mask=connectedMask;setConnected(15);connectedMask=mask;
-    enabled = false; pending.clear(); preparedDepartures.clear();pendingItemRevival.clear();
+    const auto mask = connectedMask;
+    setConnected(15);
+    connectedMask = mask;
+    enabled = false;
+    pending.clear();
+    preparedDepartures.clear();
+    pendingItemRevival.clear();
     Room* root = nullptr;
-    for (auto& [key, room] : loaded) { (void)key; if (room->pointer == at<Address>(game(), 0x18300)) root = room.get(); }
+    for (auto& [key, room] : loaded) {
+        (void)key;
+        if (room->pointer == at<Address>(game(), 0x18300))
+            root = room.get();
+    }
     if (root) {
-        for (const auto& [player, room] : location) if (room != root) {
-            for (auto entity : followers(player, *room)) moveEntity(entity, *room, *root);
-            moveEntity(player, *room, *root);
-        }
+        for (const auto& [player, room] : location)
+            if (room != root) {
+                for (auto entity : followers(player, *room))
+                    moveEntity(entity, *room, *root);
+                moveEntity(player, *room, *root);
+            }
         root->owned = false;
         root->activate();
     }
-    sharedOwner=nullptr; // Native cleanup retains root's queue and light texture.
-    for (auto& [key, room] : loaded) { (void)key; destroy(*room); }
-    loaded.clear(); location.clear(); participants.clear();
+    sharedOwner = nullptr; // Native cleanup retains root's queue and light texture.
+    for (auto& [key, room] : loaded) {
+        (void)key;
+        destroy(*room);
+    }
+    loaded.clear();
+    location.clear();
+    participants.clear();
 }
 bool install(Address base, void (*log)(const std::string&)) {
-    image = base; logger = log;
+    image = base;
+    logger = log;
     auto hook = [](Address rva, void* replacement, void** original) {
-        return MH_CreateHook(reinterpret_cast<void*>(image + rva), replacement, original) == MH_OK
-            && MH_EnableHook(reinterpret_cast<void*>(image + rva)) == MH_OK;
+        return MH_CreateHook(reinterpret_cast<void*>(image + rva), replacement, original) ==
+                   MH_OK &&
+               MH_EnableHook(reinterpret_cast<void*>(image + rva)) == MH_OK;
     };
-    return hook(0x3efa50, reinterpret_cast<void*>(save), reinterpret_cast<void**>(&originalSave))
-        && hook(0x33fc80, reinterpret_cast<void*>(change), reinterpret_cast<void**>(&originalChange))
-        && hook(0x2fd7c0, reinterpret_cast<void*>(transition), reinterpret_cast<void**>(&originalTransition))
-        && hook(0x2fdc10, reinterpret_cast<void*>(stageTransition), reinterpret_cast<void**>(&originalStage))
-        && hook(0x307ad0, reinterpret_cast<void*>(rKey), reinterpret_cast<void**>(&originalRKey))
-        && hook(0x5bf990, reinterpret_cast<void*>(isCoop), reinterpret_cast<void**>(&originalIsCoop))
-        && hook(0x5bfa00, reinterpret_cast<void*>(living), reinterpret_cast<void**>(&originalLiving))
-        && hook(0x5bfa70, reinterpret_cast<void*>(dead), reinterpret_cast<void**>(&originalDead))
-        && hook(0x5bfae0, reinterpret_cast<void*>(reviveAll), reinterpret_cast<void**>(&originalReviveAll))
-        && hook(0x3fb250, reinterpret_cast<void*>(award), reinterpret_cast<void**>(&originalAward))
-        && hook(0x2fa0c0, reinterpret_cast<void*>(exitGame), reinterpret_cast<void**>(&originalExit))
-        && hook(0x3a6680, reinterpret_cast<void*>(leaveRoom), reinterpret_cast<void**>(&originalLeave))
-        && hook(0x5439d0, reinterpret_cast<void*>(cameraSmooth), reinterpret_cast<void**>(&originalCameraSmooth))
-        && hook(0x5446e0, reinterpret_cast<void*>(cameraDrag), reinterpret_cast<void**>(&originalCameraDrag))
-        && hook(0x5beba0, reinterpret_cast<void*>(playersCenter), reinterpret_cast<void**>(&originalPlayersCenter))
-        && hook(0x30c5c0, reinterpret_cast<void*>(doorUpdate), reinterpret_cast<void**>(&originalDoorUpdate))
-        && hook(0x4607a0, reinterpret_cast<void*>(postUpdate), reinterpret_cast<void**>(&originalPostUpdate))
-        && hook(0x465180, reinterpret_cast<void*>(postNewRoom), reinterpret_cast<void**>(&originalPostNewRoom));
+    return hook(0x3efa50, reinterpret_cast<void*>(save), reinterpret_cast<void**>(&originalSave)) &&
+           hook(0x33fc80, reinterpret_cast<void*>(change),
+                reinterpret_cast<void**>(&originalChange)) &&
+           hook(0x2fd7c0, reinterpret_cast<void*>(transition),
+                reinterpret_cast<void**>(&originalTransition)) &&
+           hook(0x2fdc10, reinterpret_cast<void*>(stageTransition),
+                reinterpret_cast<void**>(&originalStage)) &&
+           hook(0x307ad0, reinterpret_cast<void*>(rKey), reinterpret_cast<void**>(&originalRKey)) &&
+           hook(0x5bf990, reinterpret_cast<void*>(isCoop),
+                reinterpret_cast<void**>(&originalIsCoop)) &&
+           hook(0x5bfa00, reinterpret_cast<void*>(living),
+                reinterpret_cast<void**>(&originalLiving)) &&
+           hook(0x5bfa70, reinterpret_cast<void*>(dead), reinterpret_cast<void**>(&originalDead)) &&
+           hook(0x5bfae0, reinterpret_cast<void*>(reviveAll),
+                reinterpret_cast<void**>(&originalReviveAll)) &&
+           hook(0x3fb250, reinterpret_cast<void*>(award),
+                reinterpret_cast<void**>(&originalAward)) &&
+           hook(0x2fa0c0, reinterpret_cast<void*>(exitGame),
+                reinterpret_cast<void**>(&originalExit)) &&
+           hook(0x3a6680, reinterpret_cast<void*>(leaveRoom),
+                reinterpret_cast<void**>(&originalLeave)) &&
+           hook(0x5439d0, reinterpret_cast<void*>(cameraSmooth),
+                reinterpret_cast<void**>(&originalCameraSmooth)) &&
+           hook(0x5446e0, reinterpret_cast<void*>(cameraDrag),
+                reinterpret_cast<void**>(&originalCameraDrag)) &&
+           hook(0x5beba0, reinterpret_cast<void*>(playersCenter),
+                reinterpret_cast<void**>(&originalPlayersCenter)) &&
+           hook(0x30c5c0, reinterpret_cast<void*>(doorUpdate),
+                reinterpret_cast<void**>(&originalDoorUpdate)) &&
+           hook(0x4607a0, reinterpret_cast<void*>(postUpdate),
+                reinterpret_cast<void**>(&originalPostUpdate)) &&
+           hook(0x465180, reinterpret_cast<void*>(postNewRoom),
+                reinterpret_cast<void**>(&originalPostNewRoom));
 }
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name) do { auto p = GetProcAddress(module, name); memcpy(&lua.field, &p, sizeof(p)); if (!lua.field) return false; } while (false)
-    IMPORT(pushClosure, "lua_pushcclosure"); IMPORT(setField, "lua_setfield"); IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(pushInteger, "lua_pushinteger"); IMPORT(createTable, "lua_createtable"); IMPORT(checkInteger, "luaL_checkinteger");
-    IMPORT(checkString,"luaL_checklstring");
-    IMPORT(pushString,"lua_pushlstring");IMPORT(getTop,"lua_gettop");
-    IMPORT(toUserdata,"lua_touserdata");IMPORT(newUserdata,"lua_newuserdata");IMPORT(rawLength,"lua_rawlen");
-    IMPORT(getMetatable,"lua_getmetatable");IMPORT(setMetatable,"lua_setmetatable");IMPORT(rawSetI,"lua_rawseti");
-    IMPORT(pushValue, "lua_pushvalue"); IMPORT(pcall, "lua_pcallk"); IMPORT(error, "lua_error");
+#define IMPORT(field, name)                                                                        \
+    do {                                                                                           \
+        auto p = GetProcAddress(module, name);                                                     \
+        memcpy(&lua.field, &p, sizeof(p));                                                         \
+        if (!lua.field)                                                                            \
+            return false;                                                                          \
+    } while (false)
+    IMPORT(pushClosure, "lua_pushcclosure");
+    IMPORT(setField, "lua_setfield");
+    IMPORT(pushBoolean, "lua_pushboolean");
+    IMPORT(pushInteger, "lua_pushinteger");
+    IMPORT(createTable, "lua_createtable");
+    IMPORT(checkInteger, "luaL_checkinteger");
+    IMPORT(checkString, "luaL_checklstring");
+    IMPORT(pushString, "lua_pushlstring");
+    IMPORT(getTop, "lua_gettop");
+    IMPORT(toUserdata, "lua_touserdata");
+    IMPORT(newUserdata, "lua_newuserdata");
+    IMPORT(rawLength, "lua_rawlen");
+    IMPORT(getMetatable, "lua_getmetatable");
+    IMPORT(setMetatable, "lua_setmetatable");
+    IMPORT(rawSetI, "lua_rawseti");
+    IMPORT(pushValue, "lua_pushvalue");
+    IMPORT(pcall, "lua_pcallk");
+    IMPORT(error, "lua_error");
 #undef IMPORT
-    auto function = [&](const char* name, LuaFn fn) { lua.pushClosure(L, fn, 0); lua.setField(L, -2, name); };
-    function("rooms_enable", enable); function("rooms_move", request); function("rooms_with_player", withPlayer); function("rooms_positions", positions);
-    function("r_key_begin",beginRKey);
+    auto function = [&](const char* name, LuaFn fn) {
+        lua.pushClosure(L, fn, 0);
+        lua.setField(L, -2, name);
+    };
+    function("rooms_enable", enable);
+    function("rooms_move", request);
+    function("rooms_with_player", withPlayer);
+    function("rooms_positions", positions);
+    function("r_key_begin", beginRKey);
     function("rooms_ready", ready);
     function("rooms_heads", heads);
-    function("rooms_sync",syncLocations);function("state_clock",stateClock);function("room_layout",roomLayout);
-    function("map_refresh",refreshMap);
-    function("actor_sprites",actorSprites);function("actor_ghost",actorGhost);
-    function("laser_path",laserPath);
-    function("rooms_set_connected",setConnections);function("rooms_connected",connections);
-    return visuals::bind(L,module);
+    function("rooms_sync", syncLocations);
+    function("state_clock", stateClock);
+    function("room_layout", roomLayout);
+    function("map_refresh", refreshMap);
+    function("actor_sprites", actorSprites);
+    function("actor_ghost", actorGhost);
+    function("laser_path", laserPath);
+    function("rooms_set_connected", setConnections);
+    function("rooms_connected", connections);
+    return visuals::bind(L, module);
 }
-}
+} // namespace isaac::rooms

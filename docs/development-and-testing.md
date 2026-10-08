@@ -40,6 +40,8 @@ third_party/     第三方许可证
 
 | 层次 | 验证内容 | 无法单独证明 |
 | --- | --- | --- |
+| 协议与存档单元测试 | 编解码、尺寸限制、截断与损坏数据、玩家位置、进度合并边界 | Windows 传输与引擎行为正确 |
+| Python 工具测试 | 打包内容与哈希、归档校验、连续场景调度、延迟中继与正常关闭 | 真实游戏运行正确 |
 | 传输测试 | 输入边沿、状态合并、分块、控制命令、重连、加载期间换层与事务顺序 | 引擎对象与真实画面正确 |
 | 隔离引擎场景 | 特定角色、门、道具、状态恢复及 UI 归属 | 正常操作时所有调用路径正确 |
 | 双客户端正常操作 | 菜单开局、走门、战斗、拾取、用卡、暂停与换层 | 没有采样间隙中的短暂视觉问题 |
@@ -47,12 +49,68 @@ third_party/     第三方许可证
 
 先完成与改动相关的层次，再根据未解决的问题扩大验证范围。文档修改不需要重新启动游戏。
 
+## CI 与基础测试
+
+推送到 `main` 和所有 PR 都运行 `.github/workflows/ci.yml`：
+
+- 检查 C++、Lua、Python、CMake 和 PowerShell 格式，以及脚本语法。
+- 在 Linux 上执行 Python 工具测试及启用 AddressSanitizer／UndefinedBehaviorSanitizer 的协议、存档测试。
+- 构建 Windows x86 完整产物，验证安装包，并在 Windows 上执行单元测试和真实 Winsock 传输测试。
+
+Windows 构建与测试由 `build-windows.yml` 复用，标签发布也使用同一套检查。基础 CI 不需要游戏文件；真实引擎与画面回归仍按下文在隔离客户端运行。
+
+无需 Windows 工具链或第三方源码即可运行协议与存档测试：
+
+```sh
+cmake -S . -B build-core -G Ninja \
+  -DISAAC_LAN_BUILD_ENGINE=OFF -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-core
+ctest --test-dir build-core --output-on-failure
+```
+
+Python 工具测试与脚本语法检查：
+
+```sh
+python3 -m venv .deps/checks
+.deps/checks/bin/pip install -r tools/requirements-ci.txt
+.deps/checks/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+.deps/checks/bin/python tools/check_scripts.py
+```
+
+语法检查需要 `luac`（Lua 5.3），并额外检查由连续回归工具生成的 Lua 场景。CMake 默认启用 `BUILD_TESTING`，只构建产物时可设为 `OFF`。
+
+## 缩进与格式
+
+项目代码使用四个空格缩进，GitHub Actions YAML 使用两个空格。编辑器规则见 `.editorconfig`；C++、Lua、Python 和 CMake 的格式规则分别由 `.clang-format`、`.stylua.toml`、`pyproject.toml` 和 `.cmake-format.json` 管理。
+
+安装上节的检查依赖，并将 [StyLua 2.0.2](https://github.com/JohnnyMorganz/StyLua/releases/tag/v2.0.2) 放到 `PATH`，即可统一格式或只检查：
+
+```sh
+PATH="$PWD/.deps/checks/bin:$PATH" python tools/format.py
+PATH="$PWD/.deps/checks/bin:$PATH" python tools/format.py --check
+```
+
+PowerShell 在 Windows 中使用固定版本的 PSScriptAnalyzer：
+
+```powershell
+Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
+./tools/format_powershell.ps1
+./tools/format_powershell.ps1 -Check
+```
+
 ## 传输回归
 
 构建后，在能运行 Windows EXE 的环境执行：
 
 ```sh
+ctest --test-dir build-win32 --output-on-failure
+```
+
+CTest 分别报告协议、存档和传输用例。也可以运行全部传输测试或指定一个用例：
+
+```sh
 ./build-win32/isaac_lan_net_test.exe
+./build-win32/isaac_lan_net_test.exe floor-rejoin
 ```
 
 通过标记为 `ALL STATE TRANSPORT TESTS PASSED`，此测试不启动游戏。

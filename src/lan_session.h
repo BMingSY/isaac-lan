@@ -9,13 +9,15 @@ namespace isaac::lan {
 class Session {
     struct Impl;
     std::unique_ptr<Impl> impl;
-public:
+
+  public:
     explicit Session(void (*logger)(const std::string&) = nullptr);
     ~Session();
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
     bool host(std::uint16_t port, const std::string& fingerprint, const std::string& mods = {});
-    bool join(const std::string& ipv4, std::uint16_t port, const std::string& fingerprint, const std::string& identity = {}, const std::string& mods = {});
+    bool join(const std::string& ipv4, std::uint16_t port, const std::string& fingerprint,
+              const std::string& identity = {}, const std::string& mods = {});
     bool reconnect();
     void poll();
     void close();
@@ -38,10 +40,10 @@ public:
     bool beginStage(const Stage&);
     std::optional<Stage> takeStage();
     bool requestRoom(const RoomRequest&);
-    std::array<std::optional<RoomRequest>,maxPlayers> takeRoomRequests();
+    std::array<std::optional<RoomRequest>, maxPlayers> takeRoomRequests();
     void applied(std::uint32_t tick);
-    std::array<std::uint32_t,maxPlayers> inputSequences() const;
-    const std::array<int,maxPlayers>& latency() const;
+    std::array<std::uint32_t, maxPlayers> inputSequences() const;
+    const std::array<int, maxPlayers>& latency() const;
     void completed(std::uint32_t tick);
     const std::string& identity() const;
     Phase phase() const;
@@ -55,4 +57,4 @@ public:
     std::optional<std::uint32_t> verifiedTick() const;
     std::uint16_t port() const;
 };
-}
+} // namespace isaac::lan

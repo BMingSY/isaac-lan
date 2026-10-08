@@ -1,4 +1,5 @@
 """Loopback-only latency fixture; preserves TCP byte order and packet throughput."""
+
 from collections import deque
 import select
 import socket
@@ -25,7 +26,9 @@ class DelayedRelay:
         eof, shutdown = set(), set()
         try:
             while not self.stop.is_set():
-                readable, _, _ = select.select([self.listener, *(s for s in routes if s not in eof)], [], [], .002)
+                readable, _, _ = select.select(
+                    [self.listener, *(s for s in routes if s not in eof)], [], [], 0.002
+                )
                 for source in readable:
                     if source is self.listener:
                         client, _ = self.listener.accept()
