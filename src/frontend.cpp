@@ -346,15 +346,6 @@ void __attribute__((fastcall)) hudRender(void* hud, void*) {
         originalHudRender(hud);
     });
 }
-using ItemText = void(__attribute__((thiscall)) *)(void*, void*, void*);
-ItemText originalItemText = nullptr;
-void __attribute__((fastcall)) itemText(void* hud, void*, void* player, void* item) {
-    const int slot = runtime::localViewSlot();
-    if (slot >= 0 && player &&
-        read<int>(reinterpret_cast<std::uintptr_t>(player), 0x1618) != slot + 1)
-        return;
-    originalItemText(hud, player, item);
-}
 void __attribute__((fastcall)) minimapUpdate(void* map, void*) {
     rooms::withView([&] { originalMinimapUpdate(map); });
 }
@@ -1020,10 +1011,6 @@ bool install(std::uintptr_t base, const std::wstring& root, void (*log)(const st
                          reinterpret_cast<void*>(hudRender),
                          reinterpret_cast<void**>(&originalHudRender)) == MH_OK &&
            MH_EnableHook(reinterpret_cast<void*>(image + 0x5a3eb0)) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + 0x5a2d20),
-                         reinterpret_cast<void*>(itemText),
-                         reinterpret_cast<void**>(&originalItemText)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + 0x5a2d20)) == MH_OK &&
            MH_CreateHook(reinterpret_cast<void*>(image + 0x43bbc0),
                          reinterpret_cast<void*>(historyPlayerId),
                          reinterpret_cast<void**>(&originalHistoryPlayerId)) == MH_OK &&

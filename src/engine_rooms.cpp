@@ -4,6 +4,7 @@
 #include "engine_input.h"
 #include "engine_rewind.h"
 #include "engine_presentation.h"
+#include "engine_item_presentation.h"
 #include "runtime_net.h"
 #include "net_protocol.h"
 #include <MinHook.h>
@@ -1645,6 +1646,18 @@ unsigned soundAudience() {
             mask |= 1u << slotOf(player);
     return mask;
 }
+std::uintptr_t presentationPlayer(void* explicitPlayer) {
+    return enabled ? currentActor(explicitPlayer) : 0;
+}
+bool withPlayer(unsigned slot, const std::function<void()>& call) {
+    const auto head = slot < 4 ? participant(slot) : 0;
+    const auto room = head ? findRoom(head) : nullptr;
+    if (!enabled || depth || !room || !(connectedMask & (1u << slot)))
+        return false;
+    Scope scope(*room, controlledActors(head));
+    call();
+    return true;
+}
 bool restoreLocations(const std::vector<SavedLocation>& saved) {
     if (!enabled || depth || saved.size() != participants.size())
         return false;
@@ -1913,6 +1926,7 @@ void requestExit(bool save) {
     at<bool>(manager, 0x4b288) = true;
 }
 void beforeStart() {
+    presentation::items::reset();
     for (const auto& [entry, original] : entityUpdates) {
         (void)original;
         MH_DisableHook(reinterpret_cast<void*>(entry));

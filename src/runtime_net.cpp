@@ -1,4 +1,5 @@
 #include "runtime_net.h"
+#include "engine_item_presentation.h"
 #include "frontend.h"
 #include "lan_session.h"
 #include "engine_rooms.h"
@@ -554,6 +555,7 @@ void updateOne(void* game) {
         return;
     }
     originalUpdate(game);
+    presentation::items::advance();
     rooms::finishFrame();
     pendingHalf = gated;
 }
@@ -1102,6 +1104,9 @@ bool halfAllowed() {
 }
 bool replica() {
     return gated && session && !session->isHost();
+}
+std::uint32_t worldEpoch() {
+    return floorEpoch;
 }
 void present() {
     if (!replica() || !state || presentRef < 0 || session->phase() != lan::Phase::running ||

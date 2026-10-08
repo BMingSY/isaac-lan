@@ -1,4 +1,5 @@
 #include "engine_presentation.h"
+#include "engine_item_presentation.h"
 #include "engine_rooms.h"
 #include "runtime_net.h"
 #include "net_protocol.h"
@@ -126,7 +127,8 @@ int active(lua_State* L) {
 } // namespace
 bool install(std::uintptr_t base) {
     image = base;
-    return MH_CreateHook(reinterpret_cast<void*>(image + 0x42f1c0),
+    return items::install(base) &&
+           MH_CreateHook(reinterpret_cast<void*>(image + 0x42f1c0),
                          reinterpret_cast<void*>(startIntro),
                          reinterpret_cast<void**>(&originalIntro)) == MH_OK &&
            MH_EnableHook(reinterpret_cast<void*>(image + 0x42f1c0)) == MH_OK;
@@ -153,9 +155,10 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "presentation_reset");
     lua.pushClosure(L, active, 0);
     lua.setField(L, -2, "presentation_active");
-    return true;
+    return items::bind(L, module);
 }
 void reset() {
+    items::reset();
     intros.clear();
     serial = seen = 0;
 }

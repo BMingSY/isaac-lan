@@ -44,6 +44,7 @@ CASES = {
     "hourglass": ("state_hourglass.lua", "native full team hourglass"),
     "weapon-charge": ("state_weapon_charge.lua", "guest native charged weapon"),
     "peer-intro": ("state_peer_intro.lua", "peer native intro isolation"),
+    "item-presentation": ("state_item_presentation.lua", "item presentation ownership"),
     "mirror-camera": ("state_mirror_camera.lua", "native mirror direction and large room camera"),
     "floor-items": ("state_floor_items.lua", "native Forget Me Now five-pip and R Key"),
 }
@@ -150,6 +151,8 @@ def main():
                     cmd += ["--native-record-view", "0", "--frame-ms", "16"]
                 if case in ("item-revive", "peer-intro"):
                     cmd += ["--native-record-view", "0", "--frame-ms", "50"]
+                if case == "item-presentation":
+                    cmd += ["--native-record-both", "--frame-ms", "50"]
                 if case in ("hourglass", "weapon-charge"):
                     cmd += ["--native-record-view", "1", "--frame-ms", "50"]
                 if case == "mirror-camera":

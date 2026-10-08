@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace isaac::lan {
-constexpr std::uint16_t protocolVersion = 20;
+constexpr std::uint16_t protocolVersion = 21;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;

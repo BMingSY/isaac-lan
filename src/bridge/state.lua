@@ -723,8 +723,9 @@ function state.capture(slot, tick)
             end
         end
     end
+    local mega = native.item_presentation_sprite(slot, Isaac.GetPlayer(0):GetSprite())
     return encode({
-        4,
+        5,
         tick,
         game:GetFrameCount(),
         level:GetStage(),
@@ -739,6 +740,7 @@ function state.capture(slot, tick)
         native.net_progress(),
         native.net_floor_epoch(),
         native.presentation_events(slot),
+        { native.item_presentation_events(slot), mega and sprite(mega) or false },
     })
 end
 local replicas, motion = {}, {}
@@ -840,7 +842,7 @@ function state.apply(bytes, tick, ack)
         return false
     end
     local value = decode(bytes)
-    assert(value[1] == 4 and value[2] == tick, "Invalid state schema")
+    assert(value[1] == 5 and value[2] == tick, "Invalid state schema")
     local game = Game()
     local level = game:GetLevel()
     local floorDiffers = level:GetStage() ~= value[4] or level:GetStageType() ~= value[5]
@@ -1026,6 +1028,13 @@ function state.apply(bytes, tick, ack)
     receivedAt, receivedTick = now, tick
     applySound(value[12], tick)
     assert(native.presentation_events(value[15]))
+    assert(native.item_presentation_events(value[16][1]))
+    if value[16][2] then
+        applySprite(
+            assert(native.item_presentation_sprite(value[10], Isaac.GetPlayer(0):GetSprite())),
+            value[16][2]
+        )
+    end
     state.lastTick = tick
     return true
 end

@@ -113,6 +113,7 @@ add_library(
     src/engine_save.cpp
     src/engine_audio.cpp
     src/engine_presentation.cpp
+    src/engine_item_presentation.cpp
     src/engine_rewind.cpp
     src/frontend.cpp
     src/lab_capture.cpp)
