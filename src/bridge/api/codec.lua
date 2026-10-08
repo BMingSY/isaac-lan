@@ -9,7 +9,8 @@ function codec.encode(value)
             chunks[#chunks + 1] = v and "T" or "F"
         elseif kind == "number" then
             assert(v == v and math.abs(v) < math.huge, "payload_number")
-            chunks[#chunks + 1] = "N" .. string.pack(">d", v)
+            chunks[#chunks + 1] = math.type(v) == "integer" and ("I" .. string.pack(">i8", v))
+                or ("N" .. string.pack(">d", v))
         elseif kind == "string" then
             assert(#v <= 512, "payload_string")
             chunks[#chunks + 1] = "S" .. string.pack(">I2", #v) .. v
@@ -63,6 +64,11 @@ function codec.decode(bytes)
         end
         if tag == "F" then
             return false
+        end
+        if tag == "I" then
+            local value
+            value, offset = string.unpack(">i8", bytes, offset)
+            return value
         end
         if tag == "N" then
             local value

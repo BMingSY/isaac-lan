@@ -6,13 +6,17 @@ end
 local codec = assert(loadfile(root .. "/src/bridge/api/codec.lua"))()
 local value = { array = { true, false, 3.5, -7 }, text = "\0hello", empty = {} }
 local decoded = codec.decode(codec.encode(value))
+for _, integer in ipairs({ math.mininteger, math.maxinteger, 9007199254740993 }) do
+    local roundTrip = codec.decode(codec.encode(integer))
+    assert(roundTrip == integer and math.type(roundTrip) == "integer", "Integer precision lost")
+end
 assert(
     decoded.array[1]
         and decoded.array[2] == false
         and decoded.array[3] == 3.5
         and decoded.text == value.text
 )
-for _, bad in ipairs({ "", "X\0\0", "S\0\5x", "A\0\1", "N", "Tjunk", "R\0\1T" }) do
+for _, bad in ipairs({ "", "X\0\0", "S\0\5x", "A\0\1", "N", "I", "Tjunk", "R\0\1T" }) do
     rejects(function()
         codec.decode(bad)
     end)
