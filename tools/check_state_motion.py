@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check actual MC_POST_RENDER positions, including frames between snapshots."""
+
 import argparse
 import csv
 import json
@@ -16,10 +17,13 @@ def measure(path):
         if steady > 6 and 40 <= current[2] <= 440:
             movement.append((current[3] - previous[3]) * current[5])
     assert len(movement) > 500, "Insufficient continuous-motion render samples"
-    return {"render_samples": len(rows), "compared_samples": len(movement),
-            "max_reverse_step": max(0, -min(movement)),
-            "max_absolute_step": max(map(abs, movement)),
-            "reverse_steps_over_two_units": sum(step < -2 for step in movement)}
+    return {
+        "render_samples": len(rows),
+        "compared_samples": len(movement),
+        "max_reverse_step": max(0, -min(movement)),
+        "max_absolute_step": max(map(abs, movement)),
+        "reverse_steps_over_two_units": sum(step < -2 for step in movement),
+    }
 
 
 if __name__ == "__main__":

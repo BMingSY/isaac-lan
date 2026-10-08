@@ -10,10 +10,11 @@ namespace isaac::lan {
 class StateCompression {
     struct Impl;
     std::unique_ptr<Impl> impl;
-public:
+
+  public:
     StateCompression();
     ~StateCompression();
     std::vector<std::uint8_t> compress(std::span<const std::uint8_t> bytes);
     std::vector<std::uint8_t> expand(std::span<const std::uint8_t> bytes);
 };
-}
+} // namespace isaac::lan
