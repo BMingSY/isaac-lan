@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Format, scripts and core tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install check tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build lua5.3 python3-venv
+          python3 -m venv .deps/checks
+          .deps/checks/bin/pip install -r tools/requirements-ci.txt
+          curl -fsSL --retry 3 \
+            https://github.com/JohnnyMorganz/StyLua/releases/download/v2.0.2/stylua-linux-x86_64.zip \
+            -o .deps/stylua.zip
+          echo 'ee9f8f9ba7c19079809d017a5d3f265a9575d1313c0fd24562cbabb99ed26f4f  .deps/stylua.zip' | sha256sum --check
+          .deps/checks/bin/python -m zipfile -e .deps/stylua.zip .deps/checks/bin
+          chmod +x .deps/checks/bin/stylua
+          echo "$PWD/.deps/checks/bin" >> "$GITHUB_PATH"
+      - name: Check formatting
+        run: python tools/format.py --check
+      - name: Check Python and Lua syntax
+        run: python tools/check_scripts.py
+      - name: Test packaging and harness tools
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Build portable tests with sanitizers
+        run: |
+          cmake -S . -B build-core -G Ninja \
+            -DISAAC_LAN_BUILD_ENGINE=OFF -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
+          cmake --build build-core --parallel 2
+      - name: Test protocol and saved sessions
+        run: ctest --test-dir build-core --output-on-failure
+
+  windows:
+    name: Windows x86 build and tests
+    uses: ./.github/workflows/build-windows.yml
