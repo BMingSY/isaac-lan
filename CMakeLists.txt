@@ -10,6 +10,36 @@ set_property(
     PROPERTY CMAKE_CONFIGURE_DEPENDS "VERSION")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(CTest)
+option(ISAAC_LAN_BUILD_ENGINE "Build the Windows x86 engine adapter and tools" ON)
+if(BUILD_TESTING)
+    add_executable(isaac_lan_core_test tests/core_test.cpp)
+    target_include_directories(isaac_lan_core_test PRIVATE src)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_core_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    if(MINGW)
+        target_link_options(isaac_lan_core_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    foreach(
+        test_case
+        integers
+        strings-blobs
+        input-progress
+        truncated-packets
+        hashes
+        progression
+        archive-round-trip
+        archive-integrity
+        archive-settings
+        archive-locations)
+        add_test(NAME core.${test_case} COMMAND isaac_lan_core_test ${test_case})
+        set_tests_properties(core.${test_case} PROPERTIES TIMEOUT 30)
+    endforeach()
+endif()
+if(NOT ISAAC_LAN_BUILD_ENGINE)
+    return()
+endif()
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The native engine adapter requires a 32-bit Windows toolchain")
 endif()
@@ -69,8 +99,32 @@ add_library(isaac_lan_net STATIC src/lan_session.cpp src/state_compression.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt)
-add_executable(isaac_lan_net_test tests/net_test.cpp)
-target_link_libraries(isaac_lan_net_test PRIVATE isaac_lan_net winmm)
+if(BUILD_TESTING)
+    add_executable(isaac_lan_net_test tests/net_test.cpp)
+    target_link_libraries(isaac_lan_net_test PRIVATE isaac_lan_net winmm)
+    foreach(
+        test_case
+        codec
+        compression-limits
+        inputs-2
+        inputs-3
+        inputs-4
+        floor-rejoin
+        stage-events
+        stage-during-rejoin
+        rewind
+        progression
+        r-key
+        room-commands
+        lobby
+        handshake
+        commands
+        publication-limits
+        host-disconnect)
+        add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
+        set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30)
+    endforeach()
+endif()
 set(MINHOOK_SOURCE_DIR
     ""
     CACHE PATH "Unmodified MinHook v1.3.4 source checkout")
@@ -97,7 +151,9 @@ if(MINGW)
     target_link_options(isaac_lan_lab PRIVATE -static-libgcc -static-libstdc++ -municode)
     target_compile_options(isaac_lan_probe PRIVATE -Wall -Wextra -Werror)
     target_compile_options(isaac_lan_lab PRIVATE -Wall -Wextra -Werror)
-    target_link_options(isaac_lan_net_test PRIVATE -static-libgcc -static-libstdc++)
+    if(BUILD_TESTING)
+        target_link_options(isaac_lan_net_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_net_test PRIVATE -Wall -Wextra -Werror)
+    endif()
     target_compile_options(isaac_lan_net PRIVATE -Wall -Wextra -Werror)
-    target_compile_options(isaac_lan_net_test PRIVATE -Wall -Wextra -Werror)
 endif()

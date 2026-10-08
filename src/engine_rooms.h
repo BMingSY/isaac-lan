@@ -1,4 +1,5 @@
 #pragma once
+#include "saved_location.h"
 #include <windows.h>
 #include <cstdint>
 #include <string>
@@ -22,10 +23,6 @@ void finishFrame();
 void presentCamera();
 void requestExit(bool save);
 void beforeStart();
-struct SavedLocation {
-    int dimension, index;
-    float x, y;
-};
 void resumeAfterTransition(std::vector<SavedLocation> locations);
 std::vector<SavedLocation> captureLocations();
 bool restoreLocations(const std::vector<SavedLocation>&);

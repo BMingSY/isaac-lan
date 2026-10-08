@@ -1,6 +1,7 @@
 #include "lan_session.h"
 #include "progression.h"
 #include "state_compression.h"
+#include "test_support.h"
 #include <windows.h>
 #include <algorithm>
 #include <chrono>
@@ -9,10 +10,6 @@
 #include <memory>
 using namespace isaac::lan;
 namespace {
-void require(bool v, const char* message) {
-    if (!v)
-        throw std::runtime_error(message);
-}
 template <class F> void until(F f) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(8);
     while (!f()) {
@@ -408,23 +405,211 @@ void roomCommands() {
     require(!g.peers[0]->takeRoomRequests()[1], "Room command repeated after consumption");
     std::puts("PASS native Mod room requests retain source and owner; commands consume once");
 }
-} // namespace
-int main() {
-    try {
-        codec();
-        progression();
-        inputsAndStates(2);
-        inputsAndStates(4);
-        floorRejoin();
-        stageEvents();
-        stageDuringRejoin();
-        rewindTransaction();
-        rKeyTransaction();
-        roomCommands();
-        std::puts("ALL STATE TRANSPORT TESTS PASSED");
-        return 0;
-    } catch (const std::exception& e) {
-        std::fprintf(stderr, "FAIL %s\n", e.what());
-        return 1;
+void compressionLimits() {
+    StateCompression compression;
+    rejects([&] { compression.compress({}); }, "Empty state accepted");
+    rejects([&] { compression.compress(std::vector<std::uint8_t>(maxWorldSize + 1)); },
+            "Oversized state accepted");
+    for (const auto& plain :
+         {std::vector<std::uint8_t>{0xff}, std::vector<std::uint8_t>(maxWorldSize, 42)})
+        require(compression.expand(compression.compress(plain)) == plain,
+                "Compression boundary round trip failed");
+    Writer raw(Message::world);
+    raw.bytes.clear();
+    raw.u8(0);
+    raw.u32(3);
+    raw.u8(0);
+    raw.u8(0x80);
+    raw.u8(0xff);
+    require(compression.expand(raw.bytes) == std::vector<std::uint8_t>({0, 0x80, 0xff}),
+            "Plain mode failed");
+    for (std::size_t size = 0; size < raw.bytes.size(); ++size)
+        rejects([&] { compression.expand(std::span(raw.bytes).first(size)); },
+                "Truncated plain state accepted");
+    auto invalid = raw.bytes;
+    invalid.push_back(0);
+    rejects([&] { compression.expand(invalid); }, "Trailing plain state data accepted");
+    invalid = raw.bytes;
+    invalid[0] = 2;
+    rejects([&] { compression.expand(invalid); }, "Unknown compression mode accepted");
+    invalid = raw.bytes;
+    std::fill(invalid.begin() + 1, invalid.begin() + 5, 0);
+    rejects([&] { compression.expand(invalid); }, "Zero-length state accepted");
+    invalid = raw.bytes;
+    invalid[0] = 1;
+    rejects([&] { compression.expand(invalid); }, "Invalid compressed payload accepted");
+    const auto compressed = compression.compress(std::vector<std::uint8_t>(10000, 42));
+    invalid = compressed;
+    invalid.pop_back();
+    rejects([&] { compression.expand(invalid); }, "Truncated compressed payload accepted");
+    invalid = compressed;
+    invalid[4] ^= 1;
+    rejects([&] { compression.expand(invalid); }, "Incorrect expanded size accepted");
+}
+void lobby() {
+    Session host, guest;
+    require(!host.ready() && !host.submit(0, {}) && !host.command(Command::pause),
+            "Idle session accepted gameplay");
+    require(host.host(0, "test", "mods"), "Host failed");
+    Start start;
+    start.seed = "YV039KQF";
+    require(!host.start(start), "Single-player lobby started");
+    require(guest.join("127.0.0.1", host.port(), "test", {}, "mods"), "Join failed");
+    auto poll = [&] {
+        host.poll();
+        guest.poll();
+    };
+    until([&] {
+        poll();
+        return host.players() == 2 && guest.phase() == Phase::lobby;
+    });
+    require(!host.modsDiffer() && !guest.modsDiffer(), "Identical Mods reported different");
+    require(!guest.start(start), "Guest started session");
+    require(host.choose({1, true}) && guest.choose({2, false}), "Choice failed");
+    until([&] {
+        poll();
+        return host.choices()[1].character == 2;
+    });
+    start.characters = {1, 2, 0, 0};
+    require(!host.start(start), "Unready guest started");
+    require(guest.choose({2, true}), "Guest ready choice failed");
+    until([&] {
+        poll();
+        return host.choices()[1].ready && guest.choices()[0].ready;
+    });
+    start.seed = "short";
+    require(!host.start(start), "Invalid seed accepted");
+    start.seed = "YV039KQF";
+    start.difficulty = 4;
+    require(!host.start(start), "Invalid difficulty accepted");
+    start.difficulty = 0;
+    start.characters[1] = 3;
+    require(!host.start(start), "Mismatched character accepted");
+    start.characters[1] = 2;
+    require(host.start(start), "Ready lobby did not start");
+    until([&] {
+        poll();
+        return guest.phase() == Phase::running;
+    });
+    require(guest.settings().characters == start.characters && guest.settings().seed == start.seed,
+            "Start settings changed");
+    require(!host.choose({}) && !guest.choose({}), "Running session changed lobby choice");
+}
+void handshake() {
+    Session host, rejected;
+    require(host.host(0, "supported"), "Host failed");
+    require(rejected.join("127.0.0.1", host.port(), "incompatible"), "Connection failed");
+    until([&] {
+        host.poll();
+        rejected.poll();
+        return rejected.phase() == Phase::failed;
+    });
+    require(host.phase() == Phase::lobby && host.players() == 1 && !rejected.error().empty(),
+            "Rejected handshake damaged host");
+    Session guest;
+    require(guest.join("127.0.0.1", host.port(), "supported"), "Valid join after rejection failed");
+    until([&] {
+        host.poll();
+        guest.poll();
+        return host.players() == 2 && guest.phase() == Phase::lobby;
+    });
+    Session badAddress, badIdentity;
+    require(!badAddress.join("invalid", host.port(), "supported"), "Invalid IPv4 accepted");
+    require(!badIdentity.join("127.0.0.1", host.port(), "supported", "not-an-identity"),
+            "Invalid identity accepted");
+}
+void commands() {
+    Group g(2);
+    g.ready();
+    g.step(0);
+    require(!g.peers[1]->command(Command::saveExit) && !g.peers[0]->command(Command::leave) &&
+                !g.peers[0]->command(Command::none),
+            "Unauthorized command accepted");
+    for (Command command : {Command::pause, Command::resume}) {
+        require(g.peers[1]->command(command), "Guest command failed");
+        // Poll until the command is consumed, rather than assuming one socket
+        // poll is enough on every Windows runner.
+        unsigned sequence = g.peers[0]->inputSequences()[0] + 1;
+        Frame frame;
+        until([&] {
+            g.poll();
+            frame = g.step(sequence++);
+            return frame.commands[1] == command;
+        });
+        require(g.step(sequence).commands[1] == Command::none, "Guest command repeated");
     }
+    require(g.peers[0]->command(Command::saveExit), "Host save command failed");
+    auto sequence = g.peers[0]->inputSequences()[0] + 1;
+    require(g.step(sequence).commands[0] == Command::saveExit, "Host save command missing");
+    require(g.step(sequence + 1).commands[0] == Command::none, "Host save command repeated");
+    require(g.peers[1]->command(Command::leave), "Guest departure failed");
+    until([&] {
+        g.peers[0]->poll();
+        return g.peers[0]->connectedMask() == 1;
+    });
+    require(g.step(sequence + 2).connected == 1, "Departed guest stayed active");
+}
+void publicationLimits() {
+    Group g(2);
+    g.ready();
+    g.step(0);
+    require(!g.peers[0]->submit(0, {}) && !g.peers[0]->submit(2, {}),
+            "Duplicate or skipped input sequence accepted");
+    WorldState state;
+    state.bytes = {42};
+    require(!g.peers[0]->publish(0, state) && !g.peers[0]->publish(2, state) &&
+                !g.peers[1]->publish(1, state),
+            "Invalid publication owner or slot accepted");
+    state.tick = 1;
+    require(!g.peers[0]->publish(1, state), "Future world tick accepted");
+    state.tick = 0;
+    state.bytes.clear();
+    require(!g.peers[0]->publish(1, state), "Empty world state accepted");
+    state.bytes.resize(maxWorldSize + 1);
+    require(!g.peers[0]->publish(1, state), "Oversized world state accepted");
+    state.bytes = {42};
+    require(g.peers[0]->publish(1, state), "Valid world state rejected after invalid attempts");
+    std::optional<WorldState> received;
+    until([&] {
+        g.poll();
+        received = g.peers[1]->takeState();
+        return received.has_value();
+    });
+    require(received->bytes == state.bytes && received->tick == 0, "Valid publication damaged");
+}
+void hostDisconnect() {
+    Group g(2);
+    g.ready();
+    g.step(0);
+    g.peers[0]->close();
+    until([&] {
+        g.peers[1]->poll();
+        return g.peers[1]->phase() == Phase::failed;
+    });
+    require(!g.peers[1]->error().empty() && !g.peers[1]->take(),
+            "Host departure did not end guest simulation");
+}
+} // namespace
+int main(int argc, char** argv) {
+    const auto result = runTests(argc, argv,
+                                 {{"codec", codec},
+                                  {"compression-limits", compressionLimits},
+                                  {"inputs-2", [] { inputsAndStates(2); }},
+                                  {"inputs-3", [] { inputsAndStates(3); }},
+                                  {"inputs-4", [] { inputsAndStates(4); }},
+                                  {"floor-rejoin", floorRejoin},
+                                  {"stage-events", stageEvents},
+                                  {"stage-during-rejoin", stageDuringRejoin},
+                                  {"rewind", rewindTransaction},
+                                  {"progression", progression},
+                                  {"r-key", rKeyTransaction},
+                                  {"room-commands", roomCommands},
+                                  {"lobby", lobby},
+                                  {"handshake", handshake},
+                                  {"commands", commands},
+                                  {"publication-limits", publicationLimits},
+                                  {"host-disconnect", hostDisconnect}});
+    if (!result)
+        std::puts("ALL STATE TRANSPORT TESTS PASSED");
+    return result;
 }
