@@ -29,6 +29,7 @@ CASES = {
     "drop": ("state_drop_lobby.lua", "unexpected drop returns to LAN lobby then rejoins"),
     "arrival": ("state_arrival.lua", "door protection only when joining occupied combat"),
     "motion": ("state_motion.lua", "continuous local movement"),
+    "input-response": ("state_input_response.lua", "immediate native input response"),
     "visuals": ("state_guest_visuals.lua", "guest native revival visuals"),
     "mod-ui": ("state_mod_ui.lua", "local Mod map and room request"),
     "special-doors": ("state_special_doors.lua", "special door slots and raw-input Devil entry"),
@@ -199,6 +200,18 @@ def main():
                     check=True,
                 )
                 value["movement"] = json.loads((output / "movement.json").read_text())
+            if case == "input-response":
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(SOURCE / "tools/check_input_response.py"),
+                        str(output / "client/lan-test-digest-response.csv"),
+                        "--output",
+                        str(output / "response.json"),
+                    ],
+                    check=True,
+                )
+                value["input_response"] = json.loads((output / "response.json").read_text())
             if case in ("mirror-camera", "gameplay"):
                 subprocess.run(
                     [

@@ -14,6 +14,7 @@ local motionFile, moveSign, motionSamples =
     host and nil or assert(io.open("./lan-test-digest-motion.csv", "w")), 0, 0
 local lastAuthority, wallFrames, settledFrames = nil, 0, 0
 local originalFrame = _IsaacLanFrame
+local ticks, corrected, samples = 0, 0, 0
 function _IsaacLanFrame()
     renders = renders + 1
     if not linked and renders >= (host and 300 or 360) then
@@ -32,6 +33,12 @@ function _IsaacLanFrame()
     if s.phase == 4 or s.phase == 9 then
         report("FAILED " .. s.error)
     end
+    moveSign = not host and samples >= 30 and (math.floor((samples - 30) / 30) % 2 == 0 and 1 or -1)
+        or 0
+    if not host and samples >= 600 then
+        moveSign = samples < 710 and 1 or samples >= 800 and samples < 850 and -1 or 0
+    end
+    native.test_gamepad(moveSign == 1 and 8 or moveSign == -1 and 4 or 0)
     if s.verified >= 1000 and not finished then
         if not host then
             assert(
@@ -48,33 +55,13 @@ function _IsaacLanFrame()
     return s
 end
 local gate = native.net_gate
-local ticks, corrected, samples = 0, 0, 0
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     for i = 0, Game():GetNumPlayers() - 1 do
         Isaac.GetPlayer(i):SetMinDamageCooldown(10000)
     end
     return gate(function()
         samples = samples + 1
-        local v = {}
-        for i = 1, 16 do
-            v[i] = 0
-        end
-        moveSign = not host
-                and samples >= 30
-                and (math.floor((samples - 30) / 30) % 2 == 0 and 1 or -1)
-            or 0
-        if not host and samples >= 600 then
-            moveSign = samples < 710 and 1 or samples >= 800 and samples < 850 and -1 or 0
-        end
-        if moveSign ~= 0 then
-            v[moveSign == 1 and 2 or 1] = 65535
-        end
-        local pieces = {}
-        for i = 1, 16 do
-            pieces[i] = string.pack(">I2", v[i])
-        end
-        pieces[17] = string.pack(">I2", 0)
-        return table.concat(pieces)
+        return capture()
     end, function(t, n, b)
         before(t, n, b)
         ticks = t

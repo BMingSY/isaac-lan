@@ -147,6 +147,8 @@ python3 tools/validate_replica.py \
 
 `--latency-ms 75` 表示两个方向各增加 75 ms，模拟约 150 ms RTT。它不模拟所有公网拥塞、抖动和丢包，不能等同于真实 frp 链路。
 
+输入响应定向回归可使用 `--cases input-response motion mirror-camera active-edges`。`input-response` 通过原生手柄绑定，在不同发送周期相位反复起步、转向和松手，记录原生输入、最后发送的输入、预测输入与显示位置；检查最新持有值在同一渲染帧进入预测。这个时间不包含设备到游戏输入管理器的延迟。`motion` 检查持续移动、网格阻挡和松手后的收敛，使用同一条原生输入链路。
+
 ## 正常操作与画面证据
 
 单独运行正常操作流程：

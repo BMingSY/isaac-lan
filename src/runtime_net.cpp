@@ -1100,10 +1100,12 @@ void present() {
     const int top = lua.getTop(state);
     lua.rawGetI(state, registry, presentRef);
     lan::Writer packed(lan::Message::input);
-    packed.input(localInput);
+    packed.input(input::previewPhysicalInput());
     lua.pushLString(state, reinterpret_cast<const char*>(packed.bytes.data() + 1),
                     packed.bytes.size() - 1);
-    lua.pushInteger(state, nextInputTick ? nextInputTick - 1 : 0);
+    // Movement displayed between network samples belongs to the upcoming
+    // input, not the last sent sample (which the host may already acknowledge).
+    lua.pushInteger(state, nextInputTick);
     if (call(presentRef, 2, 0, top))
         rooms::presentCamera();
 }

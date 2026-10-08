@@ -910,6 +910,10 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.setGlobal(state, "_IsaacLan");
         lua.pushString(state, fingerprint.c_str());
         lua.setGlobal(state, "_IsaacLanFingerprint");
+        if (lua.load(state, predictionSource, sizeof(predictionSource) - 1,
+                     "@isaac-lan/prediction.lua", "t") != 0 ||
+            !invoke(0, 0))
+            throw std::runtime_error("Cannot initialize local movement prediction");
         if (lua.load(state, stateSource, sizeof(stateSource) - 1, "@isaac-lan/state.lua", "t") !=
                 0 ||
             !invoke(0, 0))

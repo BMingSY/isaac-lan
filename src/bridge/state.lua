@@ -1,6 +1,7 @@
 -- Host-owned gameplay, explicit portable state, and client-only presentation.
 -- No Lua source, native pointers or Mod tables are transferred over the wire.
 local native = assert(_IsaacLan)
+local prediction = assert(_IsaacLanPrediction)
 local state = {}
 _IsaacLanState = state
 local pack, unpack = string.pack, string.unpack
@@ -742,7 +743,6 @@ function state.capture(slot, tick)
 end
 local replicas, motion = {}, {}
 local replicaRoom, receivedAt, receivedTick, lastRender = nil, 0, -1, nil
-local predictedInputs = {}
 local paused = false
 local actorVisuals = {}
 local function ref(identifier)
@@ -809,6 +809,7 @@ local function applyEntity(e, v, now)
         at = now,
         actor = e.Type == 1,
         controller = e.Type == 1 and e:ToPlayer().ControllerIndex or -1,
+        prediction = e.Type == 1 and (prior and prior.prediction or prediction.new(vec(v[6]))),
     }
 end
 local replicaEpoch, awaitingFloor = nil, false
@@ -819,7 +820,6 @@ function state.beginFloor(epoch, stage, stageType, animation, same, rewind, rKey
     replicaEpoch = epoch
     awaitingFloor = true
     motion = {}
-    predictedInputs = {}
     actorVisuals = {}
     replicaRoom = nil
     if rewind and #rewind > 0 then
@@ -856,7 +856,6 @@ function state.apply(bytes, tick, ack)
         replicaEpoch = value[14]
         awaitingFloor = true
         motion = {}
-        predictedInputs = {}
         actorVisuals = {}
         replicaRoom = nil
         return false
@@ -914,7 +913,6 @@ function state.apply(bytes, tick, ack)
     local key = localPosition.dimension .. ":" .. localPosition.index
     if key ~= replicaRoom then
         motion = {}
-        predictedInputs = {}
         replicaRoom = key
         mapChanged = true
     end
@@ -1016,9 +1014,9 @@ function state.apply(bytes, tick, ack)
             lastInventory[identifier] = nil
         end
     end
-    for sequence in pairs(predictedInputs) do
-        if sequence <= ack then
-            predictedInputs[sequence] = nil
+    for _, m in pairs(motion) do
+        if m.actor and m.controller == value[10] + 1 then
+            m.prediction:confirm(m.target, ack)
         end
     end
     receivedAt, receivedTick = now, tick
@@ -1041,7 +1039,7 @@ function state.present(input, sequence)
         end
     end
     local now = Isaac.GetTime() / 1000
-    local dt = lastRender and math.min(now - lastRender, 0.05) or 0
+    local dt = lastRender and math.max(0, math.min(now - lastRender, 0.05)) or 0
     lastRender = now
     local status = _IsaacLanStatus()
     paused = status.pause ~= 0
@@ -1058,12 +1056,6 @@ function state.present(input, sequence)
     if direction:Length() > 1 then
         direction = direction:Normalized()
     end
-    local pending = predictedInputs[sequence]
-    if not pending then
-        pending = { direction = direction, dt = 0 }
-        predictedInputs[sequence] = pending
-    end
-    pending.dt = math.min(pending.dt + dt, 0.1)
     for identifier, m in pairs(motion) do
         local e = ref(identifier)
         if e then
@@ -1071,19 +1063,13 @@ function state.present(input, sequence)
             local fraction = math.min(age * 30, 1)
             local position = m.from + (m.target - m.from) * fraction
             if m.actor and m.controller == status.slot + 1 then
-                position = m.target
                 local p = e:ToPlayer()
-                for _, control in pairs(predictedInputs) do
-                    position = position + control.direction * p.MoveSpeed * 180 * control.dt
-                end
-                -- Keep immediate local input, but reconcile new acknowledgements
-                -- over several render frames instead of jumping to each packet.
-                -- Large corrections (teleports) remain immediate.
-                local advance = m.display + direction * p.MoveSpeed * 180 * dt
-                local error = position - advance
-                if error:LengthSquared() < 160 * 160 then
-                    position = advance + error * (1 - math.exp(-dt / 0.12))
-                end
+                position = m.prediction:step(
+                    p.ControlsEnabled and direction or Vector(0, 0),
+                    sequence,
+                    p.MoveSpeed * 180,
+                    dt
+                )
                 assert(native.rooms_with_player(status.slot, function()
                     local room = Game():GetRoom()
                     position = room:GetClampedPosition(position, math.max(5, e.Size))
@@ -1112,6 +1098,7 @@ function state.present(input, sequence)
                         end
                     end
                 end))
+                m.prediction:clip(position)
                 m.display = position
             elseif age > 1 / 30 then
                 position = position + m.velocity * math.min(age - 1 / 30, 0.1) * 30
@@ -1132,7 +1119,6 @@ function state.reset()
     motion = {}
     lastInventory = {}
     costumeIDs = {}
-    predictedInputs = {}
     actorVisuals = {}
     replicaRoom = nil
     receivedTick = -1
