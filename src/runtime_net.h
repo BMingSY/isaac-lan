@@ -23,6 +23,7 @@ void beginStage(bool same, int animation, bool rKey = false);
 void beginRewind(std::span<const std::uint8_t> bytes);
 bool requestRoom(const lan::RoomRequest&);
 std::uint32_t tick();
+std::uint32_t worldEpoch();
 void abort(const std::string& error);
 void beforeExit(bool save);
 void afterExit(bool save);

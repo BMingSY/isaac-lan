@@ -31,7 +31,7 @@ class Session {
     bool choose(Choice choice);
     bool command(Command command);
     const std::array<Choice, maxPlayers>& choices() const;
-    bool submit(std::uint32_t tick, const InputFrame& input);
+    bool submit(std::uint32_t tick, const InputFrame& input, std::optional<InputRoom> room = {});
     // Only the host consumes inputs; missing remote samples never stall it.
     std::optional<Frame> take();
     bool ready();

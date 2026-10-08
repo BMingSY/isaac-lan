@@ -439,6 +439,14 @@ void finishUpdate() {
 void pollPhysicalInput() {
     samplePhysicalInput();
 }
+lan::InputFrame previewPhysicalInput() {
+    samplePhysicalInput();
+    lan::InputFrame preview;
+    for (const auto& physical : physicalInput)
+        for (unsigned action = 0; action < lan::actionCount; ++action)
+            preview.values[action] = std::max(preview.values[action], physical.values[action]);
+    return preview;
+}
 unsigned menuOwner() {
     return pauseOwner;
 }

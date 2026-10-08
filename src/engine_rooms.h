@@ -29,6 +29,8 @@ bool restoreLocations(const std::vector<SavedLocation>&);
 void setConnected(unsigned mask);
 unsigned connected();
 unsigned soundAudience();
+std::uintptr_t presentationPlayer(void* explicitPlayer = nullptr);
+bool withPlayer(unsigned slot, const std::function<void()>& call);
 void protectArrivals(unsigned mask);
 bool receiveRoomRequest(unsigned slot, const lan::RoomRequest&);
 bool checkpointReady();

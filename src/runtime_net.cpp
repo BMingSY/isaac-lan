@@ -1,4 +1,5 @@
 #include "runtime_net.h"
+#include "engine_item_presentation.h"
 #include "frontend.h"
 #include "lan_session.h"
 #include "engine_rooms.h"
@@ -347,9 +348,15 @@ bool captureNextInput() {
     lan::Reader reader{std::span(reinterpret_cast<const std::uint8_t*>(data), size)};
     localInput = reader.input();
     lua.setTop(state, top);
-    if (!rooms::stateReady())
+    std::optional<lan::InputRoom> inputRoom;
+    const auto locations = rooms::captureLocations();
+    if (rooms::stateReady() && session->slot() < locations.size()) {
+        const auto& position = locations[session->slot()];
+        inputRoom = lan::InputRoom{floorEpoch, static_cast<std::int16_t>(position.index),
+                                   static_cast<std::uint8_t>(position.dimension)};
+    } else
         localInput = {};
-    if (!session->submit(nextInputTick, localInput)) {
+    if (!session->submit(nextInputTick, localInput, inputRoom)) {
         fail("Local input sequence rejected");
         return false;
     }
@@ -504,6 +511,16 @@ void updateOne(void* game) {
                 logger("mod_room_command slot=" + std::to_string(slot) +
                        " accepted=" + std::to_string(accepted));
         }
+    // A door transfer can finish while source-room input is still in flight.
+    // Resume held controls only after the guest has seen the destination room.
+    const auto locations = rooms::captureLocations();
+    for (unsigned slot = 1; slot < frame->players; ++slot) {
+        const auto& context = frame->inputRooms[slot];
+        if (!context || context->epoch != floorEpoch || slot >= locations.size() ||
+            context->index != locations[slot].index ||
+            context->dimension != locations[slot].dimension)
+            frame->inputs[slot] = {};
+    }
     for (unsigned slot = 0; slot < frame->players; ++slot) {
         const auto command = frame->commands[slot];
         const bool paused = *reinterpret_cast<int*>(g + 0x23a74) != 0;
@@ -538,6 +555,7 @@ void updateOne(void* game) {
         return;
     }
     originalUpdate(game);
+    presentation::items::advance();
     rooms::finishFrame();
     pendingHalf = gated;
 }
@@ -1087,6 +1105,9 @@ bool halfAllowed() {
 bool replica() {
     return gated && session && !session->isHost();
 }
+std::uint32_t worldEpoch() {
+    return floorEpoch;
+}
 void present() {
     if (!replica() || !state || presentRef < 0 || session->phase() != lan::Phase::running ||
         !rooms::stateReady())
@@ -1100,10 +1121,12 @@ void present() {
     const int top = lua.getTop(state);
     lua.rawGetI(state, registry, presentRef);
     lan::Writer packed(lan::Message::input);
-    packed.input(localInput);
+    packed.input(input::previewPhysicalInput());
     lua.pushLString(state, reinterpret_cast<const char*>(packed.bytes.data() + 1),
                     packed.bytes.size() - 1);
-    lua.pushInteger(state, nextInputTick ? nextInputTick - 1 : 0);
+    // Movement displayed between network samples belongs to the upcoming
+    // input, not the last sent sample (which the host may already acknowledge).
+    lua.pushInteger(state, nextInputTick);
     if (call(presentRef, 2, 0, top))
         rooms::presentCamera();
 }

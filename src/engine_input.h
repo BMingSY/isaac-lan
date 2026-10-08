@@ -23,6 +23,8 @@ void finishUpdate();
 void reset();
 // Latch one-render-frame button edges until the next 30 Hz network sample.
 void pollPhysicalInput();
+// Read held bindings for local prediction without consuming latched button edges.
+lan::InputFrame previewPhysicalInput();
 unsigned menuOwner();
 void setMenuOwner(unsigned slot);
 bool menuTriggered(int action);

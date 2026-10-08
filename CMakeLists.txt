@@ -24,7 +24,10 @@ if(BUILD_TESTING)
         add_test(NAME bridge.goodtrip
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/goodtrip_rules.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(bridge.api bridge.goodtrip PROPERTIES TIMEOUT 30)
+        add_test(NAME bridge.prediction
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/prediction.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.api bridge.goodtrip bridge.prediction PROPERTIES TIMEOUT 30)
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
     target_include_directories(isaac_lan_core_test PRIVATE src)
@@ -58,6 +61,11 @@ if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
 endif()
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/main.lua" ISAAC_LAN_BRIDGE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/state.lua" ISAAC_LAN_STATE)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/prediction.lua" ISAAC_LAN_PREDICTION)
+set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/prediction.lua")
 set_property(
     DIRECTORY
     APPEND
@@ -105,6 +113,7 @@ add_library(
     src/engine_save.cpp
     src/engine_audio.cpp
     src/engine_presentation.cpp
+    src/engine_item_presentation.cpp
     src/engine_rewind.cpp
     src/frontend.cpp
     src/lab_capture.cpp)
@@ -152,6 +161,7 @@ if(BUILD_TESTING)
         progression
         r-key
         room-commands
+        input-rooms
         lobby
         handshake
         commands

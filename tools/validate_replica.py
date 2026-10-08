@@ -29,6 +29,8 @@ CASES = {
     "drop": ("state_drop_lobby.lua", "unexpected drop returns to LAN lobby then rejoins"),
     "arrival": ("state_arrival.lua", "door protection only when joining occupied combat"),
     "motion": ("state_motion.lua", "continuous local movement"),
+    "input-response": ("state_input_response.lua", "immediate native input response"),
+    "local-movement": ("state_local_movement.lua", "local movement and door arrival"),
     "visuals": ("state_guest_visuals.lua", "guest native revival visuals"),
     "mod-ui": ("state_mod_ui.lua", "local Mod map and room request"),
     "special-doors": ("state_special_doors.lua", "special door slots and raw-input Devil entry"),
@@ -42,6 +44,8 @@ CASES = {
     "hourglass": ("state_hourglass.lua", "native full team hourglass"),
     "weapon-charge": ("state_weapon_charge.lua", "guest native charged weapon"),
     "peer-intro": ("state_peer_intro.lua", "peer native intro isolation"),
+    "item-presentation": ("state_item_presentation.lua", "item presentation ownership"),
+    "item-text": ("state_item_text.lua", "native guest pickup text"),
     "mirror-camera": ("state_mirror_camera.lua", "native mirror direction and large room camera"),
     "floor-items": ("state_floor_items.lua", "native Forget Me Now five-pip and R Key"),
 }
@@ -148,6 +152,8 @@ def main():
                     cmd += ["--native-record-view", "0", "--frame-ms", "16"]
                 if case in ("item-revive", "peer-intro"):
                     cmd += ["--native-record-view", "0", "--frame-ms", "50"]
+                if case in ("item-presentation", "item-text"):
+                    cmd += ["--native-record-both", "--frame-ms", "50"]
                 if case in ("hourglass", "weapon-charge"):
                     cmd += ["--native-record-view", "1", "--frame-ms", "50"]
                 if case == "mirror-camera":
@@ -199,6 +205,30 @@ def main():
                     check=True,
                 )
                 value["movement"] = json.loads((output / "movement.json").read_text())
+            if case == "input-response":
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(SOURCE / "tools/check_input_response.py"),
+                        str(output / "client/lan-test-digest-response.csv"),
+                        "--output",
+                        str(output / "response.json"),
+                    ],
+                    check=True,
+                )
+                value["input_response"] = json.loads((output / "response.json").read_text())
+            if case == "local-movement":
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(SOURCE / "tools/check_local_movement.py"),
+                        str(output / "client/lan-test-digest-local-movement.csv"),
+                        "--output",
+                        str(output / "local-movement.json"),
+                    ],
+                    check=True,
+                )
+                value["local_movement"] = json.loads((output / "local-movement.json").read_text())
             if case in ("mirror-camera", "gameplay"):
                 subprocess.run(
                     [

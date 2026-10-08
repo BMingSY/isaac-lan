@@ -49,6 +49,10 @@
 
 音效和 Boss 播报按房间观看者筛选，并带有事件序号；客机去重、过滤过期事件，Boss 播报还会核对所在房间。音乐从本机房间的原生音乐状态恢复。角色动画、装扮和蓄力精灵使用房主采集的状态，在渲染边界重新应用。
 
+卡牌、药丸和道具的拾取／使用提示，以及书类道具的全屏演出，只交给触发角色的控制器观看；同房间的队友也不会收到这些界面动画。房主发送有界的原生演出事件，客机只播放界面，不再调用 `UseCard`、`UsePill` 或 `UseActiveItem`。事件带序号和楼层 epoch，重复快照、过期事件和旧楼层事件不会重新播放。
+
+房主为每个控制器保留独立的原生 ItemOverlay，每个权威更新推进动画，仅把本机控制器的对象绘制到房主视口。使用全局 ItemOverlay 会暂停整个 Game 更新，让另一位玩家同时按下的道具操作丢失；独立对象避免这类全局暂停和演出互相覆盖，也保留 Mega Mush 动画结束后恢复角色可见性的原版行为。额外对象通过游戏自身的构造、配置加载和析构入口管理。
+
 客机实体不运行原生战斗更新，因此还需要显式同步阴影、激光路径和部分精灵层状态。原生会把某些效果烘焙到背景；客机清理和标志处理需要避免旧实体留下永久黑影。
 
 后台房间初始化对进程级色彩、过场纹理或渲染标志的写入，也要在本机显示前恢复。是否恢复正确必须通过队友正常过门时的连续画面验证。
@@ -63,4 +67,4 @@ Good Trip 等本机界面发起原生换房时，客机发送 `RoomRequest`，�
 
 依赖全局换房回调的第三方玩法 Mod 在队友房间可能效果不完整。当前没有复制任意 Mod 私有状态的机制，也不为每个 Mod 改写内部逻辑。
 
-相关源码入口：[`engine_rooms.cpp`](../src/engine_rooms.cpp)、[`engine_input.cpp`](../src/engine_input.cpp)、[`frontend.cpp`](../src/frontend.cpp)、[`engine_visuals.cpp`](../src/engine_visuals.cpp)、[`engine_audio.cpp`](../src/engine_audio.cpp)、[`engine_presentation.cpp`](../src/engine_presentation.cpp)。
+相关源码入口：[`engine_rooms.cpp`](../src/engine_rooms.cpp)、[`engine_input.cpp`](../src/engine_input.cpp)、[`frontend.cpp`](../src/frontend.cpp)、[`engine_visuals.cpp`](../src/engine_visuals.cpp)、[`engine_audio.cpp`](../src/engine_audio.cpp)、[`engine_presentation.cpp`](../src/engine_presentation.cpp)、[`engine_item_presentation.cpp`](../src/engine_item_presentation.cpp)。

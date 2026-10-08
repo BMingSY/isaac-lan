@@ -405,6 +405,34 @@ void roomCommands() {
     require(!g.peers[0]->takeRoomRequests()[1], "Room command repeated after consumption");
     std::puts("PASS native Mod room requests retain source and owner; commands consume once");
 }
+void inputRooms() {
+    Group g(2);
+    g.ready();
+    g.step(0);
+    const InputRoom source{3, 84, 1}, destination{3, 71, 1};
+    InputFrame press;
+    press.values[2] = 65535;
+    press.triggered = 1u << 6;
+    require(g.peers[1]->submit(0, press, source), "Source room input failed");
+    require(g.peers[1]->submit(1, {}, source), "Source release failed");
+    until([&] {
+        g.poll();
+        return g.peers[0]->inputSequences()[1] == 1;
+    });
+    auto frame = g.step(1);
+    require(frame.inputRooms[1] == source && frame.inputs[1].triggered == press.triggered,
+            "Source input lost room identity or short press");
+    require(g.peers[1]->submit(2, press, source), "Queued source press failed");
+    require(g.peers[1]->submit(3, {}, destination), "Destination input failed");
+    until([&] {
+        g.poll();
+        return g.peers[0]->inputSequences()[1] == 3;
+    });
+    frame = g.step(2);
+    require(frame.inputRooms[1] == destination && frame.inputs[1].triggered == 0,
+            "Source room edge leaked into the destination");
+    std::puts("PASS input room identity and edges stay within room boundaries");
+}
 void compressionLimits() {
     StateCompression compression;
     rejects([&] { compression.compress({}); }, "Empty state accepted");
@@ -678,6 +706,7 @@ int main(int argc, char** argv) {
                                   {"progression", progression},
                                   {"r-key", rKeyTransaction},
                                   {"room-commands", roomCommands},
+                                  {"input-rooms", inputRooms},
                                   {"lobby", lobby},
                                   {"handshake", handshake},
                                   {"commands", commands},

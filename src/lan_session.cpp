@@ -178,6 +178,7 @@ struct Session::Impl {
     std::array<Choice, maxPlayers> choices{};
     std::array<Command, maxPlayers> commands{};
     std::array<InputFrame, maxPlayers> latest{};
+    std::array<std::optional<InputRoom>, maxPlayers> inputRooms{};
     std::array<std::uint32_t, maxPlayers> sequences{};
     std::array<int, maxPlayers> latency{0, -1, -1, -1};
     Clock::time_point latencyAt = Clock::now() - std::chrono::seconds(1);
@@ -317,6 +318,7 @@ struct Session::Impl {
     void remove(unsigned slot) {
         activeMask &= ~(1u << slot);
         latest[slot] = {};
+        inputRooms[slot].reset();
         commands[slot] = Command::none;
         roomRequests[slot].reset();
         peers[slot].reset();
@@ -424,6 +426,7 @@ struct Session::Impl {
                 p.hasInput = false;
                 p.inputSequence = 0;
                 latest[slot] = {};
+                inputRooms[slot].reset();
                 // A slow loader may have an older floor checkpoint. Deliver
                 // the latest native floor event before its first live view.
                 if (p.floorAfterLoad) {
@@ -440,6 +443,15 @@ struct Session::Impl {
             if (type == Message::input && (state == Phase::running || state == Phase::finishing)) {
                 const auto sequence = r.u32();
                 const auto value = r.input();
+                std::optional<InputRoom> room;
+                const auto hasRoom = r.u8();
+                if (hasRoom > 1)
+                    throw std::runtime_error("Invalid input room flag");
+                if (hasRoom) {
+                    room = InputRoom{r.u32(), static_cast<std::int16_t>(r.u16()), r.u8()};
+                    if (room->index < -20 || room->index >= 169 || room->dimension > 2)
+                        throw std::runtime_error("Invalid input room");
+                }
                 if (!p.ready || p.waiting || state == Phase::finishing)
                     return;
                 if (p.hasInput && sequence <= p.inputSequence)
@@ -447,9 +459,10 @@ struct Session::Impl {
                 p.hasInput = true;
                 p.inputSequence = sequence;
                 p.inputAt = Clock::now();
-                const auto edges = latest[slot].triggered;
+                const auto edges = room == inputRooms[slot] ? latest[slot].triggered : 0;
                 latest[slot] = value;
                 latest[slot].triggered |= edges;
+                inputRooms[slot] = room;
                 sequences[slot] = sequence;
                 return;
             }
@@ -1153,6 +1166,7 @@ bool Session::checkpoint(const Start& settings, std::uint32_t tick) {
     for (unsigned slot = 1; slot < impl->playerCount; ++slot)
         if (auto& p = impl->peers[slot]; p && p->accepted && p->waiting) {
             impl->latest[slot] = {};
+            impl->inputRooms[slot].reset();
             impl->commands[slot] = Command::none;
             p->ready = false;
             p->loaded = false;
@@ -1209,7 +1223,8 @@ bool Session::command(Command c) {
     }
     return true;
 }
-bool Session::submit(std::uint32_t sequence, const InputFrame& input) {
+bool Session::submit(std::uint32_t sequence, const InputFrame& input,
+                     std::optional<InputRoom> room) {
     if (impl->state != Phase::running || sequence != impl->nextInput)
         return false;
     if (impl->hosting) {
@@ -1217,10 +1232,17 @@ bool Session::submit(std::uint32_t sequence, const InputFrame& input) {
         impl->latest[0] = input;
         impl->latest[0].triggered |= edges;
         impl->sequences[0] = sequence;
+        impl->inputRooms[0] = room;
     } else {
         Writer w(Message::input);
         w.u32(sequence);
         w.input(input);
+        w.u8(room.has_value());
+        if (room) {
+            w.u32(room->epoch);
+            w.u16(static_cast<std::uint16_t>(room->index));
+            w.u8(room->dimension);
+        }
         impl->peers[0]->sendMessage(w);
     }
     ++impl->nextInput;
@@ -1256,6 +1278,7 @@ std::optional<Frame> Session::take() {
     for (unsigned i = 0; i < impl->playerCount; ++i) {
         if (impl->activeMask & (1u << i))
             frame.inputs[i] = impl->latest[i];
+        frame.inputRooms[i] = impl->inputRooms[i];
         impl->latest[i].triggered = 0;
     }
     impl->progress = Clock::now();
