@@ -188,6 +188,11 @@ struct Session::Impl {
     std::optional<Stage> assemblingStage;
     std::size_t stageSize = 0;
     std::array<std::optional<RoomRequest>, maxPlayers> roomRequests{};
+    std::string integrationRun;
+    std::uint32_t integrationEpoch = 0;
+    std::vector<IntegrationMessage> integrationQueue;
+    std::array<unsigned, maxPlayers> integrationCounts{};
+    Clock::time_point integrationWindow = Clock::now();
     std::size_t worldSize = 0, snapshotSize = 0;
     std::uint64_t snapshotChecksum = 0;
     Clock::time_point progress = Clock::now();
@@ -301,6 +306,8 @@ struct Session::Impl {
         for (auto c : value.characters)
             w.u16(c);
         w.progress(value.progress);
+        w.string(integrationRun);
+        w.u32(integrationEpoch);
         w.u32(value.firstTick);
         w.u8(value.connected);
         w.u32(value.snapshot.size());
@@ -335,6 +342,25 @@ struct Session::Impl {
     void message(unsigned slot, Reader& r) {
         const auto type = static_cast<Message>(r.u8());
         auto& p = *peers[slot];
+        if (type == Message::integration && p.accepted) {
+            auto bytes = r.blob(maxIntegrationSize);
+            if (bytes.empty() || (state != Phase::lobby && state != Phase::running))
+                return;
+            if (hosting && state == Phase::running && (!p.ready || p.waiting || p.rejoining))
+                return;
+            if (Clock::now() - integrationWindow >= std::chrono::seconds(1)) {
+                integrationWindow = Clock::now();
+                integrationCounts = {};
+            }
+            const auto sender = hosting ? slot : 0;
+            const auto queued =
+                std::count_if(integrationQueue.begin(), integrationQueue.end(),
+                              [sender](const auto& item) { return item.sender == sender; });
+            if (++integrationCounts[sender] <= 64 &&
+                static_cast<std::size_t>(queued) < maxIntegrationQueue)
+                integrationQueue.push_back({sender, {bytes.begin(), bytes.end()}});
+            return;
+        }
         if (type == Message::ping && !hosting && p.accepted) {
             Writer response(Message::pong);
             response.u32(r.u32());
@@ -521,6 +547,11 @@ struct Session::Impl {
             for (auto& c : value.characters)
                 c = r.u16();
             value.progress = r.progress();
+            integrationRun = r.string();
+            integrationEpoch = r.u32();
+            if (integrationRun.size() != 32)
+                throw std::runtime_error("Invalid integration run identity");
+            integrationQueue.clear();
             value.firstTick = r.u32();
             value.connected = r.u8();
             snapshotSize = r.u32();
@@ -593,6 +624,7 @@ struct Session::Impl {
             if (assemblingStage->rewind.size() == total) {
                 if (total)
                     assemblingStage->rewind = compression.expand(assemblingStage->rewind);
+                integrationEpoch = assemblingStage->epoch;
                 receivedStage = std::move(assemblingStage);
                 assemblingStage.reset();
             }
@@ -839,6 +871,7 @@ bool Session::reconnect() {
 bool Session::beginStage(const Stage& value) {
     if (!impl->hosting || impl->state != Phase::running)
         return false;
+    impl->integrationEpoch = value.epoch;
     auto encoded = value;
     if (!encoded.rewind.empty())
         encoded.rewind = impl->compression.compress(encoded.rewind);
@@ -892,6 +925,42 @@ std::array<std::optional<RoomRequest>, maxPlayers> Session::takeRoomRequests() {
     auto result = std::move(impl->roomRequests);
     impl->roomRequests = {};
     return result;
+}
+bool Session::sendIntegration(unsigned destination, const std::string& bytes) {
+    if (destination >= impl->playerCount || bytes.empty() || bytes.size() > maxIntegrationSize ||
+        (impl->state != Phase::lobby && impl->state != Phase::running))
+        return false;
+    if (impl->hosting && !destination) {
+        const auto count =
+            std::count_if(impl->integrationQueue.begin(), impl->integrationQueue.end(),
+                          [](const auto& item) { return !item.sender; });
+        if (static_cast<std::size_t>(count) >= maxIntegrationQueue)
+            return false;
+        impl->integrationQueue.push_back({0, bytes});
+        return true;
+    }
+    if (!impl->hosting && destination)
+        return false;
+    auto& peer = impl->peers[impl->hosting ? destination : 0];
+    if (!peer || !peer->accepted || peer->queued > 32768)
+        return false;
+    Writer w(Message::integration);
+    w.blob({reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()});
+    peer->sendMessage(w);
+    return true;
+}
+std::optional<IntegrationMessage> Session::takeIntegration() {
+    if (impl->integrationQueue.empty())
+        return std::nullopt;
+    auto result = std::move(impl->integrationQueue.front());
+    impl->integrationQueue.erase(impl->integrationQueue.begin());
+    return result;
+}
+const std::string& Session::runId() const {
+    return impl->integrationRun;
+}
+std::uint32_t Session::worldEpoch() const {
+    return impl->integrationEpoch;
 }
 void Session::poll() {
     if (impl->state == Phase::failed || impl->state == Phase::closed || impl->state == Phase::idle)
@@ -1056,6 +1125,9 @@ bool Session::start(const Start& settings) {
             if (!impl->choices[i].ready ||
                 (settings.snapshot.empty() && impl->choices[i].character != settings.characters[i]))
                 return false;
+    impl->integrationRun = randomIdentity();
+    impl->integrationEpoch = 0;
+    impl->integrationQueue.clear();
     impl->startSettings = settings;
     impl->startSettings.firstTick = 0;
     impl->activeMask = (1u << impl->playerCount) - 1;

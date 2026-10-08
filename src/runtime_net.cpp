@@ -28,6 +28,7 @@ struct API {
     const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
     const char*(__cdecl* toString)(lua_State*, int, std::size_t*);
     int(__cdecl* getTop)(lua_State*);
+    int(__cdecl* getGlobal)(lua_State*, const char*);
     void(__cdecl* setTop)(lua_State*, int);
     void(__cdecl* pushValue)(lua_State*, int);
     int(__cdecl* type)(lua_State*, int);
@@ -278,6 +279,16 @@ bool call(int reference, int arguments, int results, int stackBefore) {
     lua.setTop(state, stackBefore);
     return false;
 }
+void integrationCallback(const char* name) {
+    if (!state || !gated || !session)
+        return;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, name) == 6 && lua.pcall(state, 0, 0, 0, 0, nullptr) && logger) {
+        const auto reason = lua.toString(state, -1, nullptr);
+        logger(std::string("integration_error=") + name + " " + (reason ? reason : "Lua error"));
+    }
+    lua.setTop(state, top);
+}
 void publishState() {
     if (!session || !session->isHost() || session->phase() != lan::Phase::running)
         return;
@@ -379,6 +390,7 @@ void updateReplica(void* game) {
         if (logger)
             logger("floor_event=RECEIVED epoch=" + std::to_string(floorEpoch));
     }
+    bool committedView = false;
     if (auto packet = session->takeState())
         replicaPending = std::move(packet);
     if (replicaPending) {
@@ -422,6 +434,7 @@ void updateReplica(void* game) {
         authoritative = std::move(packet);
         replicaPending.reset();
         session->applied(currentTick);
+        committedView = true;
     }
     lan::Frame presentation;
     presentation.players = session->players();
@@ -429,6 +442,8 @@ void updateReplica(void* game) {
     input::apply(presentation);
     originalUpdate(game);
     rooms::finishFrame();
+    if (committedView)
+        integrationCallback("_IsaacLanViewCommitted");
     // Player interpolation also performs gameplay in this engine. Replicas
     // use the presentation callback instead of running that native simulation.
     pendingHalf = false;
@@ -480,6 +495,7 @@ void updateOne(void* game) {
     const auto arrivals = frame->connected & ~rooms::connected();
     rooms::setConnected(frame->connected);
     rooms::protectArrivals(arrivals);
+    integrationCallback("_IsaacLanActionStep");
     const auto requests = session->takeRoomRequests();
     for (unsigned slot = 1; slot < frame->players; ++slot)
         if (requests[slot]) {
@@ -639,6 +655,50 @@ int poll(lua_State* L) {
     }
     return 1;
 }
+int integrationInfo(lua_State* L) {
+    lua.createTable(L, 0, 9);
+    const bool active = session && session->phase() == lan::Phase::running;
+    auto integer = [&](const char* key, long long value) {
+        lua.pushInteger(L, value);
+        lua.setField(L, -2, key);
+    };
+    integer("active", active);
+    integer("ready", active && gated && rooms::viewReady() && (session->isHost() || authoritative));
+    integer("authority", active && session->isHost());
+    integer("slot", session ? session->slot() : 0);
+    integer("players", session ? session->players() : 0);
+    integer("connected", session ? session->connectedMask() : 0);
+    integer("worldEpoch", floorEpoch);
+    integer("tick", currentTick);
+    integer("nowMs", GetTickCount64());
+    lua.pushString(L, session ? session->runId().c_str() : "");
+    lua.setField(L, -2, "runId");
+    return 1;
+}
+int integrationSend(lua_State* L) {
+    const auto slot = lua.checkInteger(L, 1);
+    std::size_t size = 0;
+    const auto bytes = lua.checkString(L, 2, &size);
+    bool sent = false;
+    try {
+        sent = session && slot >= 0 && slot < 4 && size <= lan::maxIntegrationSize &&
+               session->sendIntegration(static_cast<unsigned>(slot), {bytes, size});
+    } catch (const std::exception& error) {
+        if (logger)
+            logger(std::string("integration_send_error=") + error.what());
+    }
+    lua.pushBoolean(L, sent);
+    return 1;
+}
+int integrationReceive(lua_State* L) {
+    if (session)
+        if (auto message = session->takeIntegration()) {
+            lua.pushInteger(L, message->sender);
+            lua.pushLString(L, message->bytes.data(), message->bytes.size());
+            return 2;
+        }
+    return 0;
+}
 int start(lua_State* L) {
     const char* seed = lua.checkString(L, 1, nullptr);
     const auto difficulty = lua.checkInteger(L, 2);
@@ -762,7 +822,7 @@ int gate(lua_State* L) {
     nextTick = currentTick = session->settings().firstTick;
     authoritative.reset();
     replicaPending.reset();
-    floorEpoch = 0;
+    floorEpoch = session->worldEpoch();
     localInput = {};
     consumedInputSequences = {};
     captureCost = {};
@@ -1130,6 +1190,7 @@ void halfCompleted() {
                 if (!session->checkpoint(settings, nextTick))
                     throw std::runtime_error("Cannot publish current-floor checkpoint");
             }
+            integrationCallback("_IsaacLanViewCommitted");
             publishState();
         } catch (const std::exception& error) {
             fail(error.what());
@@ -1157,6 +1218,7 @@ bool bind(lua_State* L, HMODULE module) {
     IMPORT(checkString, "luaL_checklstring");
     IMPORT(toString, "lua_tolstring");
     IMPORT(getTop, "lua_gettop");
+    IMPORT(getGlobal, "lua_getglobal");
     IMPORT(setTop, "lua_settop");
     IMPORT(pushValue, "lua_pushvalue");
     IMPORT(type, "lua_type");
@@ -1170,6 +1232,9 @@ bool bind(lua_State* L, HMODULE module) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, name);
     };
+    function("api_info", integrationInfo);
+    function("api_send", integrationSend);
+    function("api_receive", integrationReceive);
     function("net_host", host);
     function("net_join", join);
     function("net_poll", poll);

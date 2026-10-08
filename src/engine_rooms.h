@@ -33,6 +33,7 @@ void protectArrivals(unsigned mask);
 bool receiveRoomRequest(unsigned slot, const lan::RoomRequest&);
 bool checkpointReady();
 bool stateReady();
+bool viewReady();
 bool virtualized();
 bool withCheckpointRoster(const std::function<void()>& capture);
 bool takeFloorChange();

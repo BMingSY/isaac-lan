@@ -13,6 +13,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(CTest)
 option(ISAAC_LAN_BUILD_ENGINE "Build the Windows x86 engine adapter and tools" ON)
 if(BUILD_TESTING)
+    find_program(
+        ISAAC_LAN_LUA
+        NAMES lua5.3 lua
+        NO_CMAKE_FIND_ROOT_PATH)
+    if(ISAAC_LAN_LUA)
+        add_test(NAME bridge.api
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_api.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.goodtrip
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/goodtrip_rules.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.api bridge.goodtrip PROPERTIES TIMEOUT 30)
+    endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
     target_include_directories(isaac_lan_core_test PRIVATE src)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -58,6 +71,29 @@ set_property(
     DIRECTORY
     APPEND
     PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/menu.lua")
+set(ISAAC_LAN_INTEGRATION_MODULES "")
+foreach(
+    module
+    api/codec
+    api/lifecycle
+    api/actions
+    api/public
+    compat/wrapping
+    compat/registry
+    compat/stats_plus
+    compat/eid
+    compat/goodtrip/authority
+    compat/goodtrip/client)
+    set(source_file "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/${module}.lua")
+    file(READ "${source_file}" module_source)
+    set_property(
+        DIRECTORY
+        APPEND
+        PROPERTY CMAKE_CONFIGURE_DEPENDS "${source_file}")
+    string(
+        APPEND ISAAC_LAN_INTEGRATION_MODULES
+        "{\"${module}\", \"@isaac-lan/${module}.lua\", R\"IsaacLAN(${module_source})IsaacLAN\"},\n")
+endforeach()
 configure_file(src/bridge/embedded.h.in generated/embedded_bridge.h @ONLY)
 add_library(
     isaac_lan_probe SHARED
@@ -120,6 +156,7 @@ if(BUILD_TESTING)
         handshake
         commands
         publication-limits
+        integrations
         host-disconnect)
         add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
         set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30)

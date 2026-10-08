@@ -21,6 +21,7 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <stdexcept>
 #include <vector>
 
@@ -33,6 +34,7 @@ void (*logger)(const std::string&);
 int(__cdecl* bindNative)(lua_State*);
 lua_State* state = nullptr;
 struct Lua {
+    void(__cdecl* createTable)(lua_State*, int, int);
     int(__cdecl* getTop)(lua_State*);
     void(__cdecl* setTop)(lua_State*, int);
     int(__cdecl* getGlobal)(lua_State*, const char*);
@@ -477,6 +479,118 @@ int configurationHash(lua_State* L) {
     }
     return 1;
 }
+int integrationNonce(lua_State* L) {
+    std::array<unsigned char, 16> value{};
+    if (BCryptGenRandom(nullptr, value.data(), value.size(), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0)
+        return 0;
+    std::string result;
+    for (auto byte : value) {
+        result += "0123456789abcdef"[byte >> 4];
+        result += "0123456789abcdef"[byte & 15];
+    }
+    lua.pushString(L, result.c_str());
+    return 1;
+}
+int integrationSetting(lua_State* L) {
+    const auto key = lua.string(L, 1, nullptr);
+    if (!key || std::strlen(key) > 80 ||
+        std::strspn(key, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") !=
+            std::strlen(key))
+        return 0;
+    wchar_t executable[32768]{};
+    GetModuleFileNameW(nullptr, executable, std::size(executable));
+    const auto path =
+        std::filesystem::path(executable).parent_path() / L"isaac-lan" / L"integrations.ini";
+    if (lua.getTop(L) >= 2) {
+        std::string value = lua.boolean(L, 2) ? "1" : "0";
+        std::error_code error;
+        std::filesystem::create_directories(path.parent_path(), error);
+        const std::wstring wideKey(key, key + std::strlen(key));
+        lua.pushBoolean(L, !error && WritePrivateProfileStringW(L"compatibility", wideKey.c_str(),
+                                                                value == "1" ? L"1" : L"0",
+                                                                path.c_str()));
+    } else {
+        const std::wstring wideKey(key, key + std::strlen(key));
+        lua.pushBoolean(
+            L, GetPrivateProfileIntW(L"compatibility", wideKey.c_str(), 1, path.c_str()) != 0);
+    }
+    return 1;
+}
+std::map<std::filesystem::path, std::array<std::string, 4>> modSourceCache;
+int modInfo(lua_State* L) {
+    namespace fs = std::filesystem;
+    const auto input = lua.string(L, 1, nullptr);
+    if (!input)
+        return 0;
+    try {
+        std::string source(input);
+        std::replace(source.begin(), source.end(), '\\', '/');
+        const auto start = source.find("mods/");
+        if (start == std::string::npos)
+            return 0;
+        const auto end = source.find('/', start + 5);
+        if (end == std::string::npos)
+            return 0;
+        const auto folder = source.substr(start + 5, end - start - 5);
+        if (folder.empty() || folder == "." || folder == "..")
+            return 0;
+        wchar_t executable[32768]{};
+        GetModuleFileNameW(nullptr, executable, std::size(executable));
+        const auto root =
+            fs::path(executable).parent_path() / L"mods" /
+            fs::path(std::u8string(reinterpret_cast<const char8_t*>(folder.data()), folder.size()));
+        if (!fs::is_directory(root) || fs::exists(root / L"disable.it"))
+            return 0;
+        // Cache per Lua environment; versioned source is immutable while loaded.
+        auto& cache = modSourceCache;
+        auto found = cache.find(root);
+        if (found == cache.end()) {
+            std::ifstream metadata(root / L"metadata.xml", std::ios::binary);
+            std::string xml((std::istreambuf_iterator<char>(metadata)), {});
+            if (xml.size() > 512 * 1024)
+                return 0;
+            auto tag = [&](const char* key) {
+                const std::string open = std::string("<") + key + ">",
+                                  close = std::string("</") + key + ">";
+                auto a = xml.find(open),
+                     b = a == std::string::npos ? a : xml.find(close, a + open.size());
+                return b == std::string::npos ? std::string{}
+                                              : xml.substr(a + open.size(), b - a - open.size());
+            };
+            std::vector<fs::path> files;
+            for (const auto& item : fs::recursive_directory_iterator(root))
+                if (item.is_regular_file() && item.path().extension() == L".lua" &&
+                    item.path().filename() != L"gtconfig.lua" &&
+                    item.path().filename() != L"eid_config.lua")
+                    files.push_back(item.path());
+            std::sort(files.begin(), files.end());
+            Hash hash;
+            hash.text("Isaac LAN/compat-source-v1");
+            for (const auto& file : files) {
+                hash.text(fs::relative(file, root).generic_string());
+                Hash entry;
+                entry.file(file);
+                hash.text(entry.finish());
+            }
+            found =
+                cache
+                    .emplace(root, std::array<std::string, 4>{tag("id"), tag("version"),
+                                                              hash.finish(), root.generic_string()})
+                    .first;
+        }
+        lua.createTable(L, 0, 4);
+        const std::array<const char*, 4> keys{"workshopId", "metadataVersion", "sourceHash",
+                                              "directory"};
+        for (unsigned i = 0; i < keys.size(); ++i) {
+            lua.pushString(L, found->second[i].c_str());
+            lua.setField(L, -2, keys[i]);
+        }
+        return 1;
+    } catch (const std::exception& error) {
+        logger(std::string("compat_source_error=") + error.what());
+        return 0;
+    }
+}
 void manifest() {
     namespace fs = std::filesystem;
     wchar_t executable[32768]{};
@@ -754,6 +868,7 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
             return;                                                                                \
         }                                                                                          \
     } while (false)
+    IMPORT(createTable, "lua_createtable");
     IMPORT(getTop, "lua_gettop");
     IMPORT(setTop, "lua_settop");
     IMPORT(getGlobal, "lua_getglobal");
@@ -774,9 +889,16 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
 #undef IMPORT
     const int top = lua.getTop(state);
     try {
+        modSourceCache.clear();
         manifest();
         if (bindNative(state) != 1)
             throw std::runtime_error("Cannot bind native game interfaces");
+        lua.pushClosure(state, integrationNonce, 0);
+        lua.setField(state, -2, "api_nonce");
+        lua.pushClosure(state, integrationSetting, 0);
+        lua.setField(state, -2, "api_setting");
+        lua.pushClosure(state, modInfo, 0);
+        lua.setField(state, -2, "api_mod_info");
         lua.pushClosure(state, configurationHash, 0);
         lua.setField(state, -2, "configuration_hash");
         lua.pushClosure(state, beginText, 0);
@@ -792,6 +914,17 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
                 0 ||
             !invoke(0, 0))
             throw std::runtime_error("Cannot initialize authoritative state bridge");
+        lua.createTable(state, 0, std::size(integrationModules));
+        lua.setGlobal(state, "_IsaacLanModules");
+        for (const auto& module : integrationModules) {
+            lua.getGlobal(state, "_IsaacLanModules");
+            if (lua.load(state, module.source, std::strlen(module.source), module.file, "t") != 0 ||
+                !invoke(0, 1))
+                throw std::runtime_error(std::string("Cannot load integration module ") +
+                                         module.file);
+            lua.setField(state, -2, module.name);
+            lua.setTop(state, -2);
+        }
         if (lua.load(state, bridgeSource, sizeof(bridgeSource) - 1, "@isaac-lan/embedded.lua",
                      "t") != 0 ||
             !invoke(0, 0))
