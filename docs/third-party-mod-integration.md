@@ -37,6 +37,57 @@ end
 
 无 API 或 `IsActive()` 为 false 时沿用单机逻辑。联机但 `IsReady()` 为 false 时等待视图；联机缺少主机动作时关闭对应操作，不能回退到客机执行原玩法代码。
 
+## 两个简短示例
+
+以下片段承接上文注册得到的 `mod` 和 `lan`。
+
+### 本机界面刷新
+
+面板只缓存本机角色的原生属性，双角色仍各占一项；每次更新重新建立数组，复位时清空旧数据。
+
+```lua
+local panel = {}
+if lan then
+    lan:On("StateReset", function()
+        panel = {}
+    end)
+    lan:On("ViewUpdated", function()
+        panel = {}
+        for i, player in ipairs(lan:GetLocalPlayers()) do
+            panel[i] = { damage = player.Damage, tearDelay = player.MaxFireDelay }
+        end
+    end)
+end
+```
+
+原有绘制回调在 LAN 就绪时读取 `panel`，准备阶段跳过绘制；无 API 或未联机时仍使用原有单机数据。`ViewUpdated` 已在本机视图内执行，无需再包一层 `WithLocalView`，也无需同步面板自己的状态。
+
+### 向主机请求玩法动作
+
+使用下文[主机动作与回执](#主机动作与回执)中的 `travel` 处理器，两端使用相同接入 ID。确认目标时调用 `requestTravel(index, originalTravel)`，第二个参数传入原来的单机传送函数。
+
+```lua
+local function requestTravel(index, originalTravel)
+    if not lan or not lan:IsActive() then
+        return originalTravel(index)
+    end
+    if not lan:IsReady() then
+        return nil, "view_not_ready"
+    end
+    if not lan:HasHostAction("travel", 1) then
+        return nil, "action_unavailable"
+    end
+    return lan:RequestAction("travel", {
+        index = index,
+        dimension = lan:GetLocalRoom().dimension,
+    }, function(result)
+        Isaac.DebugString(result.status .. ":" .. result.code)
+    end)
+end
+```
+
+请求 ID 只表示已提交；收到 `applied` 才表示完成。LAN 请求失败时向界面报告返回的错误码，`unknown` 时核对权威状态，不自动重试或调用原传送函数。
+
 ## 本机视图与身份
 
 | 方法 | 行为 |
@@ -160,6 +211,8 @@ end
 ```
 
 ## 自动兼容注册
+
+自动兼容让尚未主动接入 API 的旧 Mod 可以在 LAN 中使用已有功能。包装在目标 Mod 加载、初始化时安装，会贯穿后续单机和 LAN 会话；因此方法在未联机时调用原函数，在 LAN 中才使用本机视图或主机动作。保留单机行为是这些包装的运行约束，安装依据仍是目标身份、支持版本和运行时探测。
 
 `IsaacLAN:RegisterCompatibility(definition)` 返回停用函数。定义包含唯一 `id`、正整数 `adapterVersion`、目标注册名称 `modName`、`targets`、`probe(target)`、`install(target, api)`，以及可选 `authority(api)` 与回调 `dispatch(target, record, ...)`。
 
