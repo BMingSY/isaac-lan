@@ -1,6 +1,7 @@
 #include "net_protocol.h"
 #include "automation_input.h"
 #include "menu_input.h"
+#include "bootstrap_profile.h"
 #include "lanbot_console.h"
 #include "progression.h"
 #include "session_archive.h"
@@ -13,6 +14,24 @@
 using namespace isaac::lan;
 
 namespace {
+void bootstrapProfile() {
+    using isaac::bootstrap::Profile;
+    using isaac::bootstrap::profile;
+    require(profile(true, true, false, false) == Profile::installed,
+            "Steam inherited a lab root and blocked the installed game");
+    require(profile(true, false, false, false) == Profile::installed,
+            "Ordinary installed launch lost its real profile");
+    for (bool installed : {false, true}) {
+        require(profile(installed, true, true, true) == Profile::isolated,
+                "A genuine lab launch escaped profile isolation");
+        require(profile(installed, true, true, false) == Profile::missingMarker,
+                "An unmarked lab executable fell back to the real profile");
+    }
+    require(profile(false, true, false, true) == Profile::wrongPath,
+            "Foreign lab environment authorized an uninstalled executable");
+    require(profile(false, false, false, false) == Profile::missingMarker,
+            "Unmarked executable was permitted to bootstrap");
+}
 void keyboardPause() {
     InputFrame escape;
     escape.values[15] = 65535;
@@ -428,6 +447,7 @@ int main(int argc, char** argv) {
                      {"input-progress", inputAndProgress},
                      {"automation-input", automationInput},
                      {"keyboard-pause", keyboardPause},
+                     {"bootstrap-profile", bootstrapProfile},
                      {"intro-barrier", introBarrier},
                      {"room-map", roomMap},
                      {"truncated-packets", truncatedPackets},

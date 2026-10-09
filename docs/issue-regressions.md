@@ -123,3 +123,13 @@ python tools/run_network_engine.py \
 | 同一 Boss 房，同房，持续移动 | 1.35／2 | 16.67／21 |
 
 `performance.json` 保留完整统计，`performance-summary.json` 保留分房／同房比较。适配回调已分别记录 EID、Stats+ 与 GoodTrip，没有观察到该组场景中的持续帧率下降。该结论只适用于本机双实例、当前种子、角色与道具；用户反馈的持续卡顿仍待用其实际游戏状态复现。新 DLL 的 SHA-256 为 `81149799dc07669ee22cc5c62536da8f03a121758eb802afa698bb6930d61526`，本地安装包为 `artifacts/manual-feedback-package-20261009/Isaac-LAN-v0.2.0-windows-x86.zip`，包内容与 x86 运行依赖检查通过。版本号仍未修改；未推送或发布。
+
+### Steam 启动错误 11
+
+用户从 Steam 启动正式安装后反馈初始化 code 11。该错误对应继承的 `ISAAC_LAN_LAB_ROOT` 与当前可执行文件路径不符；原判断把另一目录的正式游戏也当作隔离实例。现在只有路径吻合且具有隔离标记的实例才启用存档重定向。具有正式安装标记的其他游戏忽略残留隔离变量；未安装的陌生路径仍拒绝启动，缺少标记的隔离实例也不能回退到真实存档。
+
+- 离线 C++／Lua 21 项检查通过，新增回归覆盖正式启动、继承外部隔离变量、真实隔离实例和缺少标记的拒绝行为。Windows 构建及 Windows 版新增用例通过。
+- 本轮只检查启动、隔离范围和构建指纹，没有注入游戏操作或自动创建房间。Steam 版在带有外部隔离变量的环境下记录 `startup_lab_environment=IGNORED`、`isolation=installed` 与前端 READY；隔离实例保持 `isolation=profile_redirect`。两端构建指纹一致。
+- 重启原因：Steam 原进程初始化失败并退出，需要安装修复后重开；随后隔离实例需要重新加载相同 DLL，否则强制构建指纹会拒绝连接。更新隔离实例时保留 Steam 进程。
+
+报告和本地包：`artifacts/manual-steam-pair-20261009-233535/`。新 DLL SHA-256：`358dd9dc8ba5222b7fb73e4627e29a9652670778ed0758fcf4ae5c97888464f0`。

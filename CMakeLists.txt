@@ -54,6 +54,7 @@ if(BUILD_TESTING)
         input-progress
         automation-input
         keyboard-pause
+        bootstrap-profile
         intro-barrier
         room-map
         truncated-packets

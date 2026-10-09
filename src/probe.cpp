@@ -18,6 +18,7 @@
 #include "engine_input.h"
 #include "frontend.h"
 #include "game_build.h"
+#include "bootstrap_profile.h"
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* L);
 
@@ -508,8 +509,6 @@ int audit(lua_State* L) {
 extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     wchar_t env[1024] = {}, executable[1024] = {};
     DWORD size = GetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", env, 1024);
-    if (size >= 1024)
-        return 10;
     const auto length = GetModuleFileNameW(nullptr, executable, 1024);
     if (!length || length >= 1024)
         return 11;
@@ -518,22 +517,34 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     std::string identity;
     std::getline(marker, identity);
     const bool installed = identity == "IsaacLAN/1";
-    isolated = size != 0;
+    if (size >= 1024 && !installed)
+        return 10;
+    const std::wstring expected =
+        size && size < 1024 ? std::wstring(env) + L"\\game\\isaac-ng.exe" : std::wstring{};
+    const bool matchesLab = !expected.empty() && _wcsicmp(executable, expected.c_str()) == 0;
+    const bool markedLab =
+        matchesLab && GetFileAttributesW((std::wstring(env) + L"\\.isaac-lan-lab").c_str()) !=
+                          INVALID_FILE_ATTRIBUTES;
+    const auto selected = isaac::bootstrap::profile(installed, size != 0, matchesLab, markedLab);
+    if (selected == isaac::bootstrap::Profile::wrongPath)
+        return 11;
+    if (selected == isaac::bootstrap::Profile::missingMarker)
+        return 12;
+    isolated = selected == isaac::bootstrap::Profile::isolated;
     if (isolated) {
         root = env;
-        std::wstring expected = root + L"\\game\\isaac-ng.exe";
-        if (_wcsicmp(executable, expected.c_str()) != 0)
-            return 11;
-        if (GetFileAttributesW((root + L"\\.isaac-lan-lab").c_str()) == INVALID_FILE_ATTRIBUTES)
-            return 12;
     } else {
-        if (!installed)
-            return 12;
         root = (directory / L"isaac-lan").wstring();
         std::error_code error;
         std::filesystem::create_directories(root, error);
         if (error)
             return 14;
+        if (size) {
+            SetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", nullptr);
+            SetEnvironmentVariableW(L"ISAAC_LAN_LAB_READY", nullptr);
+            SetEnvironmentVariableW(L"ISAAC_LAN_LAB_LOADER_READY", nullptr);
+            log("startup_lab_environment=IGNORED foreign_executable");
+        }
     }
     image = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
     auto compatibilityError = isaac::build::checkFile(executable);
