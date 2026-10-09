@@ -38,10 +38,13 @@ third_party/     第三方许可证
 
 ## 测试分层
 
+日常修改先运行[离线测试流程](offline-testing.md)：`.deps/checks/bin/python tools/test.py`。该入口只运行无需游戏的检查，默认不执行下文的实机工具。
+
 | 层次 | 验证内容 | 无法单独证明 |
 | --- | --- | --- |
 | Lua 接入测试 | 独立编码、本机作用域、生命周期、动作去重／回执与兼容注册 | 真实第三方服务和游戏回调正确 |
 | 协议与存档单元测试 | 编解码、尺寸限制、截断与损坏数据、玩家位置、进度合并边界 | Windows 传输与引擎行为正确 |
+| 离线状态与行为场景 | 生产 Lua 的资源应用、实体关系与去重、连续多帧过门／绕障碍、生成动作序列 | 原生特殊角色、死亡副作用、引擎物理与画面正确 |
 | Python 工具测试 | 打包内容与哈希、归档校验、连续场景调度、延迟中继与正常关闭 | 真实游戏运行正确 |
 | 传输测试 | 输入边沿、状态合并、分块、控制命令、重连、加载期间换层与事务顺序 | 引擎对象与真实画面正确 |
 | 隔离引擎场景 | 特定角色、门、道具、状态恢复及 UI 归属 | 正常操作时所有调用路径正确 |
@@ -55,7 +58,7 @@ third_party/     第三方许可证
 推送到 `main` 和所有 PR 都运行 `.github/workflows/ci.yml`：
 
 - 检查 C++、Lua、Python、CMake 和 PowerShell 格式，以及脚本语法。
-- 在 Linux 上执行 Python 工具测试及启用 AddressSanitizer／UndefinedBehaviorSanitizer 的协议、存档测试。
+- 在 Linux 上执行 pytest 工具／离线状态／连续行为测试，以及启用 AddressSanitizer／UndefinedBehaviorSanitizer 的协议、存档测试；保留测试报告与失败请求。
 - 构建 Windows x86 完整产物，验证安装包，并在 Windows 上执行单元测试和真实 Winsock 传输测试。
 
 Windows 构建与测试由 `build-windows.yml` 复用，标签发布也使用同一套检查。基础 CI 不需要游戏文件；真实引擎与画面回归仍按下文在隔离客户端运行。
@@ -74,7 +77,7 @@ Python 工具测试与脚本语法检查：
 ```sh
 python3 -m venv .deps/checks
 .deps/checks/bin/pip install -r tools/requirements-ci.txt
-.deps/checks/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+.deps/checks/bin/python -m pytest --offline-profile fast -q
 .deps/checks/bin/python tools/check_scripts.py
 ```
 
@@ -131,7 +134,7 @@ python3 tools/prepare_lab.py --game /mnt/d/Games/Isaac \
 
 工具复制游戏和资源，写入 `.isaac-lan-lab` 标记，并重定向测试存档。它拒绝复用已存在的目标目录，不会启动游戏。测试期间通过标记、路径和进程检查限制操作范围。
 
-## 一场游戏里的连续回归
+## 按需实机：一场游戏里的连续回归
 
 ```sh
 python3 tools/validate_replica.py \
@@ -140,6 +143,8 @@ python3 tools/validate_replica.py \
 ```
 
 `gameplay` 把兼容的定向用例串在同一场游戏里，保留游戏进程和连接，清理用例夹具后进入下一项。输入、复活、蓄力、沙漏、特殊门、重置层和镜头等不用每项重新启动。
+
+这是需要真实游戏的独立入口，不属于日常默认检查。优先用离线场景验证规则，仅根据未覆盖的原生接口、角色机制或画面问题选择相关实机场景。
 
 保存续玩、掉线、加载期间换层等改变会话生命周期的用例保留独立运行。`normal` 再从原菜单和正常手柄输入走完一层；定向夹具不能替代这一步。
 

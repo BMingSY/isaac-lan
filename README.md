@@ -36,6 +36,8 @@
 
 [架构与开发文档](https://github.com/BMingSY/isaac-lan/tree/main/docs)
 
+日常开发运行[离线测试流程](docs/offline-testing.md)，无需启动游戏。
+
 ## 源码构建
 
 需要 CMake、Ninja、32 位 MinGW-w64，以及 Dear ImGui v1.92.6、MinHook v1.3.4 的源码。

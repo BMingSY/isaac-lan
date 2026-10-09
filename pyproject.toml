@@ -5,3 +5,12 @@ line-length = 100
 [tool.ruff.format]
 indent-style = "space"
 line-ending = "lf"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "state: portable state codec and resource/entity reconciliation",
+    "behavior: continuous bot movement and lifecycle",
+    "property: generated values and action sequences",
+]

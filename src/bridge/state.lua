@@ -4,84 +4,11 @@ local native = assert(_IsaacLan)
 local prediction = assert(_IsaacLanPrediction)
 local state = {}
 _IsaacLanState = state
-local pack, unpack = string.pack, string.unpack
-local function encode(value)
-    local pieces, path = {}, {}
-    local function put(v, depth)
-        assert(depth < 12, "State nesting exceeded")
-        local t = type(v)
-        if t == "boolean" then
-            pieces[#pieces + 1] = v and "\1" or "\0"
-        elseif t == "number" then
-            if math.type(v) == "integer" then
-                if v >= -2147483648 and v <= 2147483647 then
-                    pieces[#pieces + 1] = pack(">Bi4", 2, v)
-                else
-                    pieces[#pieces + 1] = pack(">Bi8", 3, v)
-                end
-            else
-                assert(v == v and math.abs(v) < math.huge, "Non-finite state value")
-                pieces[#pieces + 1] = pack(">Bf", 4, v)
-            end
-        elseif t == "string" then
-            assert(#v <= 65535)
-            pieces[#pieces + 1] = pack(">Bs2", 5, v)
-        elseif t == "table" then
-            assert(#v <= 65535)
-            pieces[#pieces + 1] = pack(">BI2", 6, #v)
-            for i = 1, #v do
-                path[depth + 1] = i
-                put(v[i], depth + 1)
-                path[depth + 1] = nil
-            end
-        else
-            error("Unsupported state value: " .. t .. " at [" .. table.concat(path, "][") .. "]")
-        end
-    end
-    put(value, 0)
-    return table.concat(pieces)
-end
-local function decode(bytes)
-    assert(#bytes <= 2 * 1024 * 1024, "State size exceeded")
-    local cursor, nodes = 1, 0
-    local function read(format)
-        local value
-        value, cursor = unpack(">" .. format, bytes, cursor)
-        return value
-    end
-    local function get(depth)
-        nodes = nodes + 1
-        assert(depth < 12 and nodes < 250000, "State structure exceeded")
-        local tag = read("B")
-        if tag == 0 then
-            return false
-        elseif tag == 1 then
-            return true
-        elseif tag == 2 then
-            return read("i4")
-        elseif tag == 3 then
-            return read("i8")
-        elseif tag == 4 then
-            local n = read("f")
-            assert(n == n and math.abs(n) < math.huge)
-            return n
-        elseif tag == 5 then
-            return read("s2")
-        elseif tag == 6 then
-            local t = {}
-            local count = read("I2")
-            for i = 1, count do
-                t[i] = get(depth + 1)
-            end
-            return t
-        end
-        error("Unknown state value tag")
-    end
-    local result = get(0)
-    assert(cursor == #bytes + 1, "Trailing state bytes")
-    return result
-end
+local modules = assert(_IsaacLanModules)
+local codec = assert(modules["state/codec"])
+local encode, decode = codec.encode, codec.decode
 state.encode, state.decode = encode, decode
+local pack, unpack = string.pack, string.unpack
 local function vector(v)
     return { v.X, v.Y }
 end
@@ -331,51 +258,14 @@ local function entity(e, visual)
         visual and assert(native.entity_shadow(e:GetSprite())) or false,
     }
 end
-local heartTypes = {
-    "BrokenHearts",
-    "MaxHearts",
-    "BoneHearts",
-    "Hearts",
-    "RottenHearts",
-    "EternalHearts",
-    "GoldenHearts",
-}
-local function inventory(p)
-    local items = {}
-    local config = Isaac.GetItemConfig()
-    for item = 1, config:GetCollectibles().Size - 1 do
-        -- J460's ghost branch dereferences the ItemConfig even for unused IDs.
-        if config:GetCollectible(item) then
-            local count = p:GetCollectibleNum(item, true)
-            if count > 0 then
-                items[#items + 1] = { item, count }
-            end
-        end
-    end
-    local active = {}
-    for slot = 0, 3 do
-        active[#active + 1] =
-            { p:GetActiveItem(slot), p:GetActiveCharge(slot) + p:GetBatteryCharge(slot) }
-    end
-    local hearts = {}
-    for _, name in ipairs(heartTypes) do
-        hearts[#hearts + 1] = p["Get" .. name](p)
-    end
-    hearts[#hearts + 1] = p:GetSoulHearts()
-    hearts[#hearts + 1] = p:GetBlackHearts()
-    return {
-        p:GetPlayerType(),
-        items,
-        active,
-        hearts,
-        { p:GetNumCoins(), p:GetNumBombs(), p:GetNumKeys(), p:GetSoulCharge(), p:GetBloodCharge() },
-        { p:GetTrinket(0), p:GetTrinket(1) },
-        { p:GetCard(0), p:GetCard(1) },
-        { p:GetPill(0), p:GetPill(1) },
-        p:IsCoopGhost(),
-        p:GetEffects():GetNullEffectNum(NullItemID.ID_LOST_CURSE),
-    }
-end
+local inventoryState = assert(modules["state/inventory"])({
+    config = function()
+        return Isaac.GetItemConfig()
+    end,
+    activeType = ItemType.ITEM_ACTIVE,
+    curse = NullItemID.ID_LOST_CURSE,
+})
+local inventory, applyInventory = inventoryState.capture, inventoryState.apply
 local lastInventory, costumeIDs = {}, {}
 local function costumeID(path)
     if costumeIDs[path] == nil then
@@ -493,107 +383,6 @@ local function applySound(value, tick)
         end
     end
     replicaLoops = playing
-end
-local function applyInventory(p, v, refreshItems)
-    if v[9] then
-        return
-    end -- Native ghost conversion owns its hidden inventory.
-    if p:GetPlayerType() ~= v[1] then
-        p:ChangePlayerType(v[1])
-    end
-    local effects = p:GetEffects()
-    local delta = v[10] - effects:GetNullEffectNum(NullItemID.ID_LOST_CURSE)
-    if delta ~= 0 then
-        if delta > 0 then
-            effects:AddNullEffect(NullItemID.ID_LOST_CURSE, true, delta)
-        else
-            effects:RemoveNullEffect(NullItemID.ID_LOST_CURSE, -delta)
-        end
-    end
-    if refreshItems then
-        local desired = {}
-        for _, entry in ipairs(v[2]) do
-            desired[entry[1]] = entry[2]
-        end
-        local config = Isaac.GetItemConfig()
-        for item = 1, config:GetCollectibles().Size - 1 do
-            local itemConfig = config:GetCollectible(item)
-            if itemConfig and itemConfig.Type ~= ItemType.ITEM_ACTIVE then
-                local difference = (desired[item] or 0) - p:GetCollectibleNum(item, true)
-                for _ = 1, math.abs(difference) do
-                    if difference > 0 then
-                        p:AddCollectible(item, 0, false)
-                    else
-                        p:RemoveCollectible(item, true)
-                    end
-                end
-            end
-        end
-    end
-    for i, active in ipairs(v[3]) do
-        local slot = i - 1
-        if p:GetActiveItem(slot) ~= active[1] then
-            if p:GetActiveItem(slot) ~= 0 then
-                p:RemoveCollectible(p:GetActiveItem(slot), true, slot)
-            end
-            if active[1] ~= 0 then
-                if slot >= 2 then
-                    p:SetPocketActiveItem(active[1], slot, true)
-                else
-                    p:AddCollectible(active[1], 0, false, slot)
-                end
-            end
-        end
-        p:SetActiveCharge(active[2], slot)
-    end
-    for slot = 0, 1 do
-        if p:GetTrinket(slot) ~= v[6][slot + 1] then
-            for i = 0, 1 do
-                local t = p:GetTrinket(i)
-                if t ~= 0 then
-                    p:TryRemoveTrinket(t)
-                end
-            end
-            -- AddTrinket puts the newest trinket in the first slot.
-            for i = 2, 1, -1 do
-                if v[6][i] ~= 0 then
-                    p:AddTrinket(v[6][i], false)
-                end
-            end
-            break
-        end
-    end
-    for _, pair in ipairs({ { "Coins", 1 }, { "Bombs", 2 }, { "Keys", 3 } }) do
-        p["Add" .. pair[1]](p, v[5][pair[2]] - p["GetNum" .. pair[1]](p))
-    end
-    p:AddSoulCharge(v[5][4] - p:GetSoulCharge())
-    p:AddBloodCharge(v[5][5] - p:GetBloodCharge())
-    for i, name in ipairs(heartTypes) do
-        local delta = v[4][i] - p["Get" .. name](p)
-        if delta ~= 0 then
-            p["Add" .. name](p, delta)
-        end
-    end
-    local souls, black = v[4][8], v[4][9]
-    if p:GetSoulHearts() ~= souls or p:GetBlackHearts() ~= black then
-        p:AddSoulHearts(-p:GetSoulHearts())
-        for offset = 0, souls - 1, 2 do
-            local count = math.min(2, souls - offset)
-            if (black & (1 << (offset // 2))) ~= 0 then
-                p:AddBlackHearts(count)
-            else
-                p:AddSoulHearts(count)
-            end
-        end
-    end
-    for slot = 0, 1 do
-        if p:GetCard(slot) ~= v[7][slot + 1] then
-            p:SetCard(slot, v[7][slot + 1])
-        end
-        if v[7][slot + 1] == 0 and p:GetPill(slot) ~= v[8][slot + 1] then
-            p:SetPill(slot, v[8][slot + 1])
-        end
-    end
 end
 local function roomState(slot)
     local value
@@ -922,45 +711,20 @@ function state.apply(bytes, tick, ack)
     -- DisplayFlags already contain the host's visibility result. Recomputing
     -- it here both overrides that result and walks transient empty descriptors
     -- while the replica is replacing a room.
-    local currentIDs = {}
     assert(native.rooms_with_player(value[10], function()
         local room = game:GetRoom()
         local data = value[11]
-        for _, v in ipairs(data[3]) do
-            local e = ref(v[1])
-            if
-                e and (not e:Exists() or e.Type ~= v[2] or e.Variant ~= v[3] or e.SubType ~= v[4])
-            then
-                discard(e)
-                e = nil
-            end
-            if not e then
-                -- A depleted pedestal has subtype zero. Spawn interprets zero
-                -- as a new item roll, so use a concrete placeholder and apply
-                -- the authoritative identity and sprite immediately afterward.
-                local subtype = v[2] == 5 and v[3] == 100 and v[4] == 0 and 1 or v[4]
-                e = game:Spawn(v[2], v[3], vec(v[6]), vec(v[7]), ref(v[12]), subtype, v[5])
-            end
-            assert(e, "Replica spawn failed")
-            e:GetData().__isaac_lan_replica = v[1]
-            applyEntity(e, v, now)
-            currentIDs[v[1]] = true
-        end
-        for _, v in ipairs(data[3]) do
-            local e = ref(v[1])
-            e.Parent = ref(v[11])
-            e.SpawnerEntity = ref(v[12])
-            e.Child = ref(v[13])
-            e.Target = ref(v[14])
-        end
-        for _, e in ipairs(Isaac.GetRoomEntities()) do
-            if e:Exists() and e.Type ~= 1 then
-                local identifier = e:GetData().__isaac_lan_replica
-                if not identifier or not currentIDs[identifier] then
-                    discard(e)
-                end
-            end
-        end
+        modules["state/entities"](data[3], {
+            ref = ref,
+            spawn = function(v, spawner, subtype)
+                return game:Spawn(v[2], v[3], vec(v[6]), vec(v[7]), spawner, subtype, v[5])
+            end,
+            discard = discard,
+            apply = function(e, v)
+                applyEntity(e, v, now)
+            end,
+            entities = Isaac.GetRoomEntities,
+        })
         local present = {}
         assert(native.door_slot(-1))
         for _, v in ipairs(data[4]) do
