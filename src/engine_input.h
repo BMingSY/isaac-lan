@@ -21,6 +21,7 @@ bool bind(lua_State*, HMODULE);
 void apply(const lan::Frame& frame);
 void finishUpdate();
 void reset();
+void clearAutomation();
 // Latch one-render-frame button edges until the next 30 Hz network sample.
 void pollPhysicalInput();
 // Read held bindings for local prediction without consuming latched button edges.

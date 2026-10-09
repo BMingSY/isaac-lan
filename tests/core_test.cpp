@@ -1,4 +1,6 @@
 #include "net_protocol.h"
+#include "automation_input.h"
+#include "lanbot_console.h"
 #include "progression.h"
 #include "session_archive.h"
 #include "test_support.h"
@@ -8,6 +10,56 @@
 using namespace isaac::lan;
 
 namespace {
+void automationInput() {
+    using isaac::input::botConsoleArguments;
+    require(botConsoleArguments("lanbot") == std::string_view{} &&
+                botConsoleArguments("lanbot on") == "on" &&
+                botConsoleArguments("lanbot\tmode hold") == "mode hold",
+            "Native console must forward complete LANBOT arguments, including bare help");
+    require(!botConsoleArguments("lanbotscript on") && !botConsoleArguments("lua lanbot on") &&
+                !botConsoleArguments("spawn 5.100.1") && !botConsoleArguments(""),
+            "Native LANBOT dispatch must preserve other console commands");
+    isaac::input::AutomationInput bot;
+    InputFrame manual;
+    manual.values[0] = 65535;
+    manual.values[8] = 42000;
+    manual.values[13] = 65535;
+    manual.triggered = (1u << 0) | (1u << 8) | (1u << 13);
+    require(bot.compose(manual, 10, true).values == manual.values, "Disabled bot changed input");
+    bot.set(true, 2 | 32, 10);
+    auto preview = bot.compose(manual, 10, false);
+    require(preview.values[0] == 0 && preview.values[1] == 65535 && preview.values[5] == 65535,
+            "Bot must replace, rather than merge, manual movement and shooting");
+    require(preview.values[8] == 42000 && preview.values[13] == 65535 &&
+                preview.triggered == ((1u << 1) | (1u << 5) | (1u << 8) | (1u << 13)),
+            "Automation changed manual UI or consumable input");
+    auto captured = bot.compose(manual, 10, true);
+    require(captured.values == preview.values && captured.triggered == preview.triggered,
+            "Prediction consumed edges or disagreed with capture");
+    bot.set(true, 2 | 32, 11);
+    require((bot.compose(manual, 11, true).triggered & 255) == 0, "Held bot input repeated edges");
+    bot.set(true, 0, 12);
+    bot.set(true, 64, 13);
+    bot.set(true, 0, 14);
+    captured = bot.compose(manual, 14, true);
+    require(captured.values[6] == 0 && (captured.triggered & 255) == 64,
+            "Short bot press between network samples was lost");
+    bot.set(true, 128, 15);
+    captured = bot.compose(manual, 19, true);
+    require(captured.values[0] == 0 && captured.values[7] == 0 && (captured.triggered & 255) == 0,
+            "Expired decisions must release gameplay controls while retaining ownership");
+    bot.set(true, 1, 20);
+    bot.set(false, 0, 20);
+    captured = bot.compose(manual, 20, true);
+    require(captured.values == manual.values && captured.triggered == manual.triggered,
+            "Pause/off must discard bot edges and restore manual input");
+    bot.set(true, 4, std::numeric_limits<std::uint32_t>::max());
+    require(bot.compose({}, 1, false).values[2] == 65535, "Frame counter wrap expired fresh input");
+    require(bot.compose({}, 3, false).values[2] == 0, "Frame counter wrap retained stale input");
+    bot.clear();
+    require(bot.compose(manual, 4, true).values == manual.values,
+            "Session reset retained bot input");
+}
 void integers() {
     Writer w(Message::input);
     w.u8(0xff);
@@ -296,6 +348,7 @@ int main(int argc, char** argv) {
                     {{"integers", integers},
                      {"strings-blobs", stringsAndBlobs},
                      {"input-progress", inputAndProgress},
+                     {"automation-input", automationInput},
                      {"truncated-packets", truncatedPackets},
                      {"hashes", hashes},
                      {"progression", progression},

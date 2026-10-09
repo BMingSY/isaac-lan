@@ -101,10 +101,16 @@ def check(game, build_directory, output):
     struct.pack_into("<H", wrong_arch, pe + 4, 0x8664)
     conflicting = bytearray(clean)
     conflicting[0x2FADC0 - 0x1000 + 0x400] = 0xCC  # Game::Update entry.
+    console_update_conflict = bytearray(clean)
+    console_update_conflict[0x28B260 - 0x1000 + 0x400] = 0xCC
+    console_command_conflict = bytearray(clean)
+    console_command_conflict[0x28CDC0 - 0x1000 + 0x400] = 0xCC
     variants = [
         ("stock_j460", clean, True, True),
         ("unrelated_patch", patched, True, True),
         ("changed_engine_entry", conflicting, True, False),
+        ("changed_console_update", console_update_conflict, True, False),
+        ("changed_console_command", console_command_conflict, True, False),
         ("wrong_version", wrong_version, False, False),
         ("wrong_architecture", wrong_arch, False, False),
         ("truncated_file", clean[:1024], False, False),
