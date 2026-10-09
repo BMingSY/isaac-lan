@@ -1130,6 +1130,25 @@ void present() {
     if (call(presentRef, 2, 0, top))
         rooms::presentCamera();
 }
+void refreshAutomation(std::uint32_t renderFrame) {
+    if (!state || !gated || !session || session->phase() != lan::Phase::running) {
+        input::clearAutomation();
+        return;
+    }
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanBotFrame") == 6) {
+        lua.pushInteger(state, renderFrame);
+        if (lua.pcall(state, 1, 0, 0, 0, nullptr)) {
+            input::clearAutomation();
+            if (logger) {
+                const auto reason = lua.toString(state, -1, nullptr);
+                logger(std::string("lanbot_error=") + (reason ? reason : "Lua error"));
+            }
+        }
+    } else
+        input::clearAutomation();
+    lua.setTop(state, top);
+}
 void beginStage(bool same, int animation, bool rKey) {
     if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
         return;

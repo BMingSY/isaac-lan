@@ -29,6 +29,28 @@ end
 local function log(s)
     Isaac.DebugString("ISAAC_LAN " .. s)
 end
+local observation =
+    _IsaacLanModules["lanbot/observe"](native, integration, _IsaacLanModules["lanbot/navigation"])
+local bot = _IsaacLanModules["lanbot"]({
+    info = native.api_info,
+    input = function(active, buttons)
+        assert(native.input_bot(active and 1 or 0, buttons))
+    end,
+    observe = observation.read,
+    clock = Isaac.GetTime,
+    log = function(message)
+        log("LANBOT " .. message)
+    end,
+}, _IsaacLanModules)
+callback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, args)
+    if command == "lanbot" then
+        Isaac.ConsoleOutput(bot.command(args) .. "\n")
+    end
+    -- MC_EXECUTE_CMD must return nil, including for unhandled commands.
+end)
+function _IsaacLanBotFrame(frame)
+    bot.step(frame)
+end
 local registeredMods = {}
 local registerMod = RegisterMod
 function RegisterMod(name, version)
@@ -140,6 +162,7 @@ callback(ModCallbacks.MC_POST_UPDATE, function()
     log("READY players=" .. status.players)
 end)
 callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
+    bot.reset()
     integration.reset("session_ended")
     if prepared then
         native.net_close(1)
@@ -149,12 +172,14 @@ callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
 end)
 function _IsaacLanCommand(action, value)
     if action == "host" then
+        bot.reset()
         native.net_close()
         started, prepared = false, false
         assert(native.input_virtual())
         assert(native.net_host(tonumber(value), _IsaacLanFingerprint, modFingerprint()))
         savedPlayers = native.net_saved_info()
     elseif action == "join" then
+        bot.reset()
         native.net_close()
         started, prepared = false, false
         assert(native.input_virtual())
@@ -198,6 +223,7 @@ end
 function _IsaacLanFrame()
     status = native.net_poll()
     integration.poll()
+    bot.poll()
     if status.phase == 3 and not started then
         started = true
         assert(native.net_engine_start())

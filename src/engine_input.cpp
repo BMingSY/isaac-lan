@@ -1,5 +1,7 @@
 #include "engine_input.h"
 #include "frontend.h"
+#include "runtime_net.h"
+#include "automation_input.h"
 #include <xinput.h>
 #include <MinHook.h>
 #include <algorithm>
@@ -68,6 +70,11 @@ lan::Frame accepted;
 unsigned pauseOwner = 0;
 std::array<lan::InputFrame, 5> physicalInput;
 std::optional<unsigned> sampledFrame;
+AutomationInput automation;
+unsigned renderFrame() {
+    const auto manager = at<std::uintptr_t>(image, 0x87169c);
+    return manager ? at<unsigned>(manager, 0x4abbc) : 0;
+}
 using GetState = DWORD(WINAPI*)(DWORD, XINPUT_STATE*);
 using GetCapabilities = DWORD(WINAPI*)(DWORD, DWORD, XINPUT_CAPABILITIES*);
 using SetState = DWORD(WINAPI*)(DWORD, XINPUT_VIBRATION*);
@@ -291,6 +298,16 @@ int testGamepad(lua_State* L) {
     labRightTrigger = lua.getTop(L) > 2 ? static_cast<int>(lua.checkInteger(L, 3)) : 0;
     return 0;
 }
+int botInput(lua_State* L) {
+    const auto active = lua.checkInteger(L, 1), buttons = lua.checkInteger(L, 2);
+    const bool valid = (active == 0 || active == 1) && buttons >= 0 && buttons <= 255;
+    if (valid)
+        automation.set(active != 0, static_cast<std::uint8_t>(buttons), renderFrame());
+    else
+        automation.clear();
+    lua.pushBoolean(L, valid);
+    return 1;
+}
 void samplePhysicalInput() {
     if (!originalQuery)
         return;
@@ -301,7 +318,9 @@ void samplePhysicalInput() {
     if (sampledFrame == frame)
         return;
     sampledFrame = frame;
+    runtime::refreshAutomation(frame);
     if (frontend::capturesInput()) {
+        automation.clear();
         physicalInput = {};
         return;
     }
@@ -338,6 +357,7 @@ int capture(lua_State* L) {
     }
     frame.values[13] = 0;
     frame.triggered &= ~(1u << 13);
+    frame = automation.compose(frame, renderFrame(), true);
     lan::Writer writer(lan::Message::input);
     writer.input(frame);
     lua.pushLString(L, reinterpret_cast<const char*>(writer.bytes.data() + 1),
@@ -423,11 +443,15 @@ void apply(const lan::Frame& frame) {
     }
 }
 void reset() {
+    automation.clear();
     enabled = false;
     accepted = {};
     pauseOwner = 0;
     physicalInput = {};
     sampledFrame.reset();
+}
+void clearAutomation() {
+    automation.clear();
 }
 void finishUpdate() {
     // A network input covers one full update and its interpolation update.
@@ -445,7 +469,7 @@ lan::InputFrame previewPhysicalInput() {
     for (const auto& physical : physicalInput)
         for (unsigned action = 0; action < lan::actionCount; ++action)
             preview.values[action] = std::max(preview.values[action], physical.values[action]);
-    return preview;
+    return automation.compose(preview, renderFrame(), false);
 }
 unsigned menuOwner() {
     return pauseOwner;
@@ -497,6 +521,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("input_assign", assign);
     function("input_devices", devices);
     function("input_capture", capture);
+    function("input_bot", botInput);
     function("players_spawn", spawn);
     if (labInput)
         function("test_gamepad", testGamepad);
