@@ -89,7 +89,7 @@ return function(nav)
         local best, bestScore, evaluated = 0, math.huge, 0
         for _, direction in ipairs(directions) do
             local x, y, vx, vy = p.x, p.y, p.vx, p.vy
-            local score, valid = 0, true
+            local score, valid, distance, steps = 0, true, 0, 0
             for step = 1, 10 do
                 local dt, retain = 1 / 30, 0.775
                 vx = vx * retain + direction[1] * p.speed * (1 - retain)
@@ -109,10 +109,18 @@ return function(nav)
                 end
                 x, y = nextX, nextY
                 score = score + risk(obs, x, y, step * dt, settings)
+                if goal then
+                    distance, steps = distance + nav.distance({ x = x, y = y }, goal), steps + 1
+                end
+                if door and (x - door.x) * door.dx + (y - door.y) * door.dy >= 0 then
+                    break -- Crossing commits a room transfer; this room ends here.
+                end
             end
             if valid then
                 if goal then
-                    score = score + nav.distance({ x = x, y = y }, goal) * 2
+                    -- Score progress along the trajectory. A final point past
+                    -- a nearby waypoint must not make standing still optimal.
+                    score = score + distance / math.max(1, steps) * 2
                 end
                 -- Prefer continuity, not a fixed left/right tie break every frame.
                 if direction[3] ~= previous then

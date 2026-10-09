@@ -318,6 +318,7 @@ void samplePhysicalInput() {
     if (sampledFrame == frame)
         return;
     sampledFrame = frame;
+    runtime::pollLocalConsole();
     runtime::refreshAutomation(frame);
     if (frontend::capturesInput()) {
         automation.clear();

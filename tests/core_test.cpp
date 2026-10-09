@@ -1,5 +1,6 @@
 #include "net_protocol.h"
 #include "automation_input.h"
+#include "lanbot_console.h"
 #include "progression.h"
 #include "session_archive.h"
 #include "test_support.h"
@@ -10,6 +11,14 @@ using namespace isaac::lan;
 
 namespace {
 void automationInput() {
+    using isaac::input::botConsoleArguments;
+    require(botConsoleArguments("lanbot") == std::string_view{} &&
+                botConsoleArguments("lanbot on") == "on" &&
+                botConsoleArguments("lanbot\tmode hold") == "mode hold",
+            "Native console must forward complete LANBOT arguments, including bare help");
+    require(!botConsoleArguments("lanbotscript on") && !botConsoleArguments("lua lanbot on") &&
+                !botConsoleArguments("spawn 5.100.1") && !botConsoleArguments(""),
+            "Native LANBOT dispatch must preserve other console commands");
     isaac::input::AutomationInput bot;
     InputFrame manual;
     manual.values[0] = 65535;

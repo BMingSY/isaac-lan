@@ -332,6 +332,38 @@ test("door corridor only permits selected doorway", function()
     assert(nav.passable(obs.map, point.x, point.y, 10, door(2, "0:2")))
     assert(not nav.passable(obs.map, point.x, point.y + 35, 10, door(2, "0:2")))
 end)
+test("continuous movement reaches nearby waypoints and crosses the selected door", function()
+    for _, settings in ipairs({ { x = 384, y = 154 }, { x = 160, y = 160 } }) do
+        local obs, plan = snapshot(), planner.new()
+        obs.actor.x, obs.actor.y = settings.x, settings.y
+        local selected = door(2, "0:2")
+        obs.doors = { selected }
+        for row = 0, 9 do
+            obs.map.walk[row * 12 + 12] = false
+        end
+        local crossed = false
+        for frame = 1, 300 do
+            obs.frame = frame
+            plan:observe(obs)
+            local goal = assert(plan:choose(obs, "explore", "balanced"))
+            local waypoint = plan:waypoint(obs, goal)
+            local buttons = combat.move(obs, waypoint, "balanced", 0, selected)
+            local dx = ((buttons & 2) ~= 0 and 1 or 0) - ((buttons & 1) ~= 0 and 1 or 0)
+            local dy = ((buttons & 8) ~= 0 and 1 or 0) - ((buttons & 4) ~= 0 and 1 or 0)
+            local scale = dx ~= 0 and dy ~= 0 and 0.7071 or 1
+            local p = obs.actor
+            p.vx = p.vx * 0.88 + dx * scale * p.speed * 0.12
+            p.vy = p.vy * 0.88 + dy * scale * p.speed * 0.12
+            p.x, p.y = p.x + p.vx / 60, p.y + p.vy / 60
+            if p.x >= selected.x then
+                assert(math.abs(p.y - selected.y) + p.radius <= 22)
+                crossed = true
+                break
+            end
+        end
+        assert(crossed, "Planner stalled before the doorway")
+    end
+end)
 test("stuck targets cool down and alternate doors are chosen", function()
     local plan, obs = planner.new(), snapshot()
     obs.doors = { door(2, "0:2"), door(1, "0:3") }
@@ -775,6 +807,11 @@ test("embedded console entry dispatches lanbot and returns nil", function()
     callbacks[1](nil, "lanbot", "resume")
     _IsaacLanBotFrame(2)
     assert(source.active)
+    assert(_IsaacLanBotCommand("off") == nil and output[#output]:find("LANBOT off"))
+    assert(not source.active)
+    _IsaacLanBotCommand("on")
+    _IsaacLanBotFrame(3)
+    assert(source.active and output[#output]:find("running"))
     callbacks[4]()
     assert(not source.active)
 end)

@@ -42,9 +42,12 @@ local bot = _IsaacLanModules["lanbot"]({
         log("LANBOT " .. message)
     end,
 }, _IsaacLanModules)
+function _IsaacLanBotCommand(args)
+    Isaac.ConsoleOutput(bot.command(args) .. "\n")
+end
 callback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, args)
     if command == "lanbot" then
-        Isaac.ConsoleOutput(bot.command(args) .. "\n")
+        _IsaacLanBotCommand(args)
     end
     -- MC_EXECUTE_CMD must return nil, including for unhandled commands.
 end)

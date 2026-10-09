@@ -4,6 +4,7 @@
 #include "lan_session.h"
 #include "engine_rooms.h"
 #include "engine_input.h"
+#include "lanbot_console.h"
 #include "engine_save.h"
 #include "session_archive.h"
 #include "progression.h"
@@ -211,6 +212,40 @@ using GameUpdate = void(__attribute__((thiscall)) *)(void*);
 GameUpdate originalUpdate = nullptr;
 using Controls = void(__cdecl*)();
 Controls originalControls;
+using ConsoleUpdate = void(__attribute__((thiscall)) *)(void*);
+ConsoleUpdate originalConsoleUpdate = nullptr;
+using ConsoleCommand = void(__attribute__((thiscall)) *)(void*, const void*, bool, void*);
+ConsoleCommand originalConsoleCommand = nullptr;
+void __attribute__((fastcall)) consoleCommand(void* console, void*, const void* text, bool silent,
+                                              void* player) {
+    // J460 uses the MSVC x86 string layout at this native boundary.
+    const auto address = reinterpret_cast<std::uintptr_t>(text);
+    const auto size = *reinterpret_cast<const unsigned*>(address + 16);
+    const auto capacity = *reinterpret_cast<const unsigned*>(address + 20);
+    const auto data =
+        capacity < 16 ? static_cast<const char*>(text) : *static_cast<const char* const*>(text);
+    const auto args = input::botConsoleArguments(std::string_view(data, size));
+    if (args && state) {
+        const int top = lua.getTop(state);
+        if (lua.getGlobal(state, "_IsaacLanBotCommand") == 6) {
+            lua.pushLString(state, args->data(), args->size());
+            if (lua.pcall(state, 1, 0, 0, 0, nullptr) && logger) {
+                const auto reason = lua.toString(state, -1, nullptr);
+                logger(std::string("lanbot_console_error=") + (reason ? reason : "Lua error"));
+            }
+            lua.setTop(state, top);
+            return;
+        }
+        lua.setTop(state, top);
+    }
+    originalConsoleCommand(console, text, silent, player);
+}
+void __attribute__((fastcall)) consoleUpdate(void* console, void*) {
+    // LAN services this local interface once per render, independently of the
+    // host's 30 Hz simulation and the guest's snapshot presentation.
+    if (!gated || !session || session->phase() != lan::Phase::running)
+        originalConsoleUpdate(console);
+}
 void __cdecl controls() {
     if (!gated)
         originalControls();
@@ -1092,6 +1127,14 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
            MH_CreateHook(reinterpret_cast<void*>(image + 0x2fadc0), reinterpret_cast<void*>(update),
                          reinterpret_cast<void**>(&originalUpdate)) == MH_OK &&
            MH_EnableHook(reinterpret_cast<void*>(image + 0x2fadc0)) == MH_OK &&
+           MH_CreateHook(reinterpret_cast<void*>(image + 0x28b260),
+                         reinterpret_cast<void*>(consoleUpdate),
+                         reinterpret_cast<void**>(&originalConsoleUpdate)) == MH_OK &&
+           MH_EnableHook(reinterpret_cast<void*>(image + 0x28b260)) == MH_OK &&
+           MH_CreateHook(reinterpret_cast<void*>(image + 0x28cdc0),
+                         reinterpret_cast<void*>(consoleCommand),
+                         reinterpret_cast<void**>(&originalConsoleCommand)) == MH_OK &&
+           MH_EnableHook(reinterpret_cast<void*>(image + 0x28cdc0)) == MH_OK &&
            MH_CreateHook(reinterpret_cast<void*>(image + 0x2fa540),
                          reinterpret_cast<void*>(controls),
                          reinterpret_cast<void**>(&originalControls)) == MH_OK &&
@@ -1148,6 +1191,13 @@ void refreshAutomation(std::uint32_t renderFrame) {
     } else
         input::clearAutomation();
     lua.setTop(state, top);
+}
+void pollLocalConsole() {
+    if (!gated || !session || session->phase() != lan::Phase::running || !originalConsoleUpdate)
+        return;
+    const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + 0x871678);
+    if (game)
+        originalConsoleUpdate(reinterpret_cast<void*>(game + 0x68d78));
 }
 void beginStage(bool same, int animation, bool rKey) {
     if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
