@@ -237,6 +237,7 @@ void stageEvents() {
     Stage stage{1, 1, 0, 0, false, {}, {}};
     for (unsigned i = 0; i < stage.seeds.size(); ++i)
         stage.seeds[i] = 0x12340000 + i;
+    stage.stateFlags = {0x10000, (1u << (44 - 32)) | (1u << (48 - 32))};
     require(g.peers[0]->beginStage(stage), "Stage broadcast failed");
     std::optional<Stage> received;
     until([&] {
@@ -244,6 +245,8 @@ void stageEvents() {
         received = g.peers[1]->takeStage();
         return received.has_value();
     });
+    require(received->stateFlags == stage.stateFlags,
+            "Native floor event lost alternate-route and ascent flags");
     require(*received == stage, "Native floor event changed arguments");
     require(!g.peers[1]->takeState(), "Old floor view survived its begin event");
     g.step(1);
@@ -298,7 +301,8 @@ void stageDuringRejoin() {
     });
     require(g.peers[0]->beginStage({1, 1, 0, 0, false, {}, {}}),
             "First loading floor event failed");
-    const Stage last{2, 2, 0, 0, false, {}, {}};
+    Stage last{2, 2, 0, 0, false, {}, {}};
+    last.stateFlags[1] = 1u << (44 - 32);
     require(g.peers[0]->beginStage(last), "Second loading floor event failed");
     g.poll();
     require(!g.peers[1]->takeStage(), "Native event reached an unprepared engine");
@@ -319,6 +323,7 @@ void rewindTransaction() {
     g.step(0);
     g.publish(0, 40000);
     Stage value{1, 1, 0, 12, false, {}, {}};
+    value.stateFlags[1] = 1u << (44 - 32);
     value.rewind.resize(300001);
     unsigned random = 17;
     for (auto& b : value.rewind) {

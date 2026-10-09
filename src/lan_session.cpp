@@ -23,6 +23,8 @@ Writer stageMessage(const Stage& value, std::size_t offset = 0) {
     w.u8(value.same);
     for (auto seed : value.seeds)
         w.u32(seed);
+    for (auto flags : value.stateFlags)
+        w.u32(flags);
     w.u8(value.rKey);
     w.u32(value.rewind.size());
     w.u32(offset);
@@ -618,6 +620,8 @@ struct Session::Impl {
             const auto same = r.u8();
             for (auto& seed : value.seeds)
                 seed = r.u32();
+            for (auto& flags : value.stateFlags)
+                flags = r.u32();
             const auto rKey = r.u8();
             value.rKey = rKey != 0;
             const auto total = r.u32(), offset = r.u32();
@@ -635,6 +639,10 @@ struct Session::Impl {
                 assembling.reset();
             }
             if (!assemblingStage || assemblingStage->epoch != value.epoch ||
+                assemblingStage->level != value.level || assemblingStage->type != value.type ||
+                assemblingStage->animation != value.animation ||
+                assemblingStage->same != value.same ||
+                assemblingStage->stateFlags != value.stateFlags ||
                 assemblingStage->seeds != value.seeds || assemblingStage->rKey != value.rKey ||
                 total != stageSize || offset != assemblingStage->rewind.size() || offset > total ||
                 bytes.size() > total - offset || (total && bytes.empty()))

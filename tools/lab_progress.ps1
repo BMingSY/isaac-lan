@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][int]$GameProcessId, [switch]$HostFixture)
+param([Parameter(Mandatory = $true)][int]$GameProcessId, [switch]$HostFixture, [switch]$AltPathFixture)
 $ErrorActionPreference = 'Stop'
 $process = Get-Process -Id $GameProcessId
 if ($process.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') {
@@ -38,6 +38,17 @@ try {
         throw 'Cannot set counter fixture.'
     }
     Write-Output "Fixture achievement640=$($achievement[0]) counter522=$counter"
+    if ($AltPathFixture) {
+        # A Secret Exit is unlocked only on the host. Keep Dross locked on both
+        # peers so the natural entrance reproducibly selects Downpour.
+        [byte[]]$secretExit = @([byte][int]$HostFixture.IsPresent)
+        [byte[]]$locked = @(0)
+        if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + 407), $secretExit, [UIntPtr]([uint32]1), [ref]$count) -or
+            -not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + 412), $locked, [UIntPtr]([uint32]1), [ref]$count)) {
+            throw 'Cannot set alternate-path unlock fixture.'
+        }
+        Write-Output "Fixture achievement407=$($secretExit[0]) achievement412=0"
+    }
 } finally {
     [void][LanProgressFixture]::CloseHandle($handle)
 }

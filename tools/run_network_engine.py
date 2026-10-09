@@ -72,6 +72,11 @@ def main():
         help="Verify native solo save bytes before and after a LAN session in each owned lab",
     )
     parser.add_argument(
+        "--alt-path-fixture",
+        action="store_true",
+        help="With --progress-fixture, unlock A Secret Exit only on the owned host and lock Dross",
+    )
+    parser.add_argument(
         "--automatic",
         action="store_true",
         help="Use the automatically loaded DLL instead of remote-thread injection",
@@ -184,6 +189,8 @@ def main():
         parser.error("Scenario timeout must be between 10 and 1800 seconds")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
+    if args.alt_path_fixture and not args.progress_fixture:
+        parser.error("--alt-path-fixture requires --progress-fixture")
     if not 16 <= args.frame_ms <= 1000:
         parser.error("frame-ms must be 16..1000")
     if args.exercise_official and not args.exercise_menu:
@@ -503,6 +510,8 @@ def main():
                     ]
                     if role == "host":
                         fixture.append("-HostFixture")
+                    if args.alt_path_fixture:
+                        fixture.append("-AltPathFixture")
                     print(execute(*fixture), flush=True)
                     hold.unlink()
             if args.exercise_menu or (args.capture_ui and role == "host"):

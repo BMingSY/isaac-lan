@@ -430,9 +430,15 @@ void updateReplica(void* game) {
         // Native Forget Me Now, five-pip rooms and R Key update Seeds before
         // starting the transition. A stage number alone regenerates the old
         // client topology, whose missing descriptor can crash the minimap.
-        if (transition->rewind.empty())
+        if (transition->rewind.empty()) {
             std::memcpy(reinterpret_cast<void*>(g + 0x1bb84), transition->seeds.data(),
                         sizeof(transition->seeds));
+            // Route flags are set by authoritative trapdoor gameplay. Replicas
+            // must inherit them before native next-floor selection, not after
+            // loading a normal floor and discovering mismatched descriptors.
+            std::memcpy(reinterpret_cast<void*>(g + 0x26548), transition->stateFlags.data(),
+                        sizeof(transition->stateFlags));
+        }
         const int top = lua.getTop(state);
         lua.rawGetI(state, registry, stageRef);
         lua.pushInteger(state, transition->epoch);
@@ -1251,6 +1257,8 @@ void beginStage(bool same, int animation, bool rKey) {
         value.type = 0;
     }
     std::memcpy(value.seeds.data(), reinterpret_cast<void*>(game + 0x1bb84), sizeof(value.seeds));
+    std::memcpy(value.stateFlags.data(), reinterpret_cast<void*>(game + 0x26548),
+                sizeof(value.stateFlags));
     session->beginStage(value);
     if (logger)
         logger("floor_event=SENT epoch=" + std::to_string(floorEpoch));

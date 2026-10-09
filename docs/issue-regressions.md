@@ -184,3 +184,29 @@ python tools/run_network_engine.py \
 正式 Steam 进程重新启动后，只读检查原生 `DebugConsoleEnabled=1`，前端与渲染器均 READY，日志未发现启动错误；报告 `artifacts/guest-presentation-audio-console-20261010/steam-console-state.json`。未在正式存档内自动开局或发送控制台命令，实际按键弹出留给用户进入游戏后验收。Steam URI 没有创建正式游戏进程，随后从 Steam 安装目录直接启动，并设置该子进程的 Steam App ID；隔离主机保持原进程。
 
 本地包：`artifacts/guest-presentation-audio-console-package-20261010-final/Isaac-LAN-v0.2.0-windows-x86/`；DLL SHA-256：`2a618b5c1f62966f7387f7ea65a3bb62bdd0aa885e8daed3412dce70a10066bf`。版本号未更改，未推送或发布。
+
+### 原生支线入口的换层同步
+
+2026-10-10 用户再次反馈进入下水道时客机退出。保留的两端日志位于 `artifacts/downpour-floor-20261010/`：主机初始化 `stage=2,type=4,seed=298737635`，客机却初始化 `stage=3,type=0`，种子相同；随后出现 `Replica floor initialization failed` 并返回大厅。本次没有新增原生崩溃转储。此前支线测试通过 `SetStage` 指定目标楼层，没有覆盖踩原生支线活板门的路径。
+
+J460 的原生活板门在进入支线时设置 `GameStateFlag.STATE_SECRET_PATH`（44）。该标记属于 `Game+0x26548` 的 53 位游戏状态，原生 GetStateFlag／SetStateFlag 与活板门反汇编确认了位置。客机不模拟活板门的玩法逻辑，旧换层事件只发送当前楼层、动画与 Seeds，导致客机用自己的路径标记选择下一层。
+
+现在换层可靠事件携带两字的游戏状态标记，客机在调用原生换层前恢复这些标记；普通出口清除路径标记时同样同步。沙漏仍使用其完整原生回滚存档，避免额外标记覆盖回滚结果。协议更新为 23，分块接收同时核对楼层、动画与状态标记的一致性。
+
+离线报告 `artifacts/downpour-floor-offline-20261010-r1/` 通过：25 项 C++／Lua 检查、59 个 Python 用例和 11 个子用例、19 项 Windows 协议／传输检查、格式与脚本语法、Windows 构建及 J460 原生入口检查。新增传输回归在修复前失败于 `Native floor event lost alternate-route and ascent flags`，修复后覆盖可靠换层、重连加载期间的最新事件与大沙漏分块。
+
+最终集中实机 `artifacts/downpour-floor-engine-20261010-r4/` 通过，用时 215.18 秒。同一主客机进程、同一连接完成六次换层，采用普通沙箱、75 ms 单向延迟、Stats+ 2.1.3、EID 5.25 和 GoodTrip 1.2.8。种子与本次用户日志一致。隔离进度夹具把主机的 A Secret Exit 解锁设为 1、客机设为 0，双方 Dross 设为未解锁，以固定入口结果；成就编号 407／412 参见 [REPENTOGON 枚举](https://repentogon.com/enums/Achievement.html)。
+
+| 检查 | 结果与证据 |
+| --- | --- |
+| 客机从地下室 II 进入下水道 II | 击败 Boss 后原生生成 `-10` 入口，客机踩该房间的原生活板门。两端均初始化 `stage=2,type=4,seed=298737635`；客机换层前路径标记为 true。 |
+| 下水道普通出口 | 主机踩普通活板门，两端均进入 `stage=4,type=0`，客机路径标记为 false。 |
+| 主机触发下水道入口 | 使用第二次原生 Boss 死亡生成的入口，两端同样进入 `stage=2,type=4`。 |
+| 客机继续进入矿井 | 原生 Boss 死亡生成矿井入口，客机踩其活板门后，两端均进入 `stage=3,type=4`。客机画面：`client/frames/1935.png`。 |
+| 解锁进度恢复 | 联机前分别记录 `secret_exit=1/0`；保存退出后两端再次记录 `LOCAL_UNLOCK_RESTORED secret_exit=1/0`，客机没有永久继承主机的支线解锁。 |
+
+重启原因：r1 的测试脚本尝试用控制台生成入口但失败；r2 将普通出口应清除的路径标记误判为 true；r3 在换层检查的同一个 tick 主动让客机进入下一项的 Boss 房，误判为换层后角色未汇合。修正夹具后重新加载，原生修复代码与 DLL 在四轮中未变化。失败会话仅由工具关闭其拥有的 `client-002`／`client-003` 进程；用户正式游戏与手动双开进程在开始本轮工作前已退出。每轮各场景复用同一对进程。
+
+验收后恢复并校验 105 个隔离目录配置／存档文件，清理 18 个测试新增文件。正式 Steam 使用安装器更新，手动双开及测试目录按隔离标记和已知构建哈希更新 DLL。正式安装前后核对 346 个存档／配置／Mod 数据等保留文件一致；Steam 与手动双开目录的 Stats+、EID、GoodTrip 保持启用。报告：`artifacts/downpour-floor-20261010/installed-verified.json`。
+
+本地包：`artifacts/downpour-floor-package-20261010/Isaac-LAN-v0.2.0-windows-x86/`，包内容、校验和与 x86 系统依赖检查通过。DLL SHA-256：`4613261b6c516669713f2b59a09f7cbe1bb31d31c0dd8e63727c5185b89d40d9`。版本号未更改，未推送或发布。
