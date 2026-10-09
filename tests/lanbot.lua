@@ -312,6 +312,16 @@ test("A-star detours around obstacles without cutting corners", function()
     assert(previous.x == to.x and previous.y == to.y)
     assert(not nav.path(map, from, to, 10, 1))
 end)
+test("swapping an active boss reward still counts toward the one-reward limit", function()
+    local plan, obs = planner.new(), snapshot()
+    obs.boss = true
+    obs.pickups = { { id = "active1", x = 170, y = 160, collectible = true } }
+    plan:observe(obs)
+    assert(plan:choose(obs, "run", "balanced").id == "active1")
+    obs.pickups = { { id = "active2", x = 240, y = 160, collectible = true } }
+    plan:observe(obs)
+    assert(obs.actor.items == 0 and not plan:choose(obs, "run", "balanced"))
+end)
 test("door corridor only permits selected doorway", function()
     local obs = snapshot()
     for row = 0, 9 do

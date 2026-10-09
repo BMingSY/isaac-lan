@@ -34,13 +34,29 @@ return function(nav)
         for _, door in ipairs(obs.doors) do
             node.edges[door.slot] = door
         end
-        if
-            self.pendingPickup
-            and self.pendingPickup.room == obs.room
-            and obs.actor.items > self.pendingPickup.items
-        then
-            self.bossClaims[obs.room] = (self.bossClaims[obs.room] or 0) + 1
-            self.pendingPickup = nil
+        if self.pendingPickup and self.pendingPickup.room == obs.room then
+            local found
+            for _, item in ipairs(obs.pickups) do
+                if item.id == self.pendingPickup.id then
+                    found = item
+                    break
+                end
+            end
+            -- Swapping an active item does not increase the inventory count.
+            -- Count a disappeared reward after reaching it conservatively.
+            if
+                obs.actor.items > self.pendingPickup.items
+                or self.pendingPickup.near and not found
+            then
+                self.bossClaims[obs.room] = (self.bossClaims[obs.room] or 0) + 1
+                self.pendingPickup = nil
+            elseif
+                found
+                and nav.distance(obs.actor, found)
+                    <= obs.actor.radius + (found.radius or 10) + 8
+            then
+                self.pendingPickup.near = true
+            end
         end
     end
     function methods:available(id, frame)
@@ -137,7 +153,20 @@ return function(nav)
         end
         if pickup and not self.advance then
             if obs.boss and pickup.collectible then
-                self.pendingPickup = { room = obs.room, items = obs.actor.items }
+                if
+                    not self.pendingPickup
+                    or self.pendingPickup.id ~= pickup.id
+                    or self.pendingPickup.room ~= obs.room
+                then
+                    self.pendingPickup =
+                        { room = obs.room, items = obs.actor.items, id = pickup.id }
+                end
+                if
+                    nav.distance(obs.actor, pickup)
+                    <= obs.actor.radius + (pickup.radius or 10) + 8
+                then
+                    self.pendingPickup.near = true
+                end
             end
             return { x = pickup.x, y = pickup.y, id = pickup.id, task = "pickup" }
         end
