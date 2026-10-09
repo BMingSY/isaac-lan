@@ -36,7 +36,6 @@
 
 [架构与开发文档](https://github.com/BMingSY/isaac-lan/tree/main/docs)
 
-日常开发运行[离线测试流程](docs/offline-testing.md)，无需启动游戏。
 
 ## 源码构建
 
