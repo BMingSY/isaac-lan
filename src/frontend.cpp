@@ -905,10 +905,6 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
                      "@isaac-lan/prediction.lua", "t") != 0 ||
             !invoke(0, 0))
             throw std::runtime_error("Cannot initialize local movement prediction");
-        if (lua.load(state, stateSource, sizeof(stateSource) - 1, "@isaac-lan/state.lua", "t") !=
-                0 ||
-            !invoke(0, 0))
-            throw std::runtime_error("Cannot initialize authoritative state bridge");
         lua.createTable(state, 0, std::size(integrationModules));
         lua.setGlobal(state, "_IsaacLanModules");
         for (const auto& module : integrationModules) {
@@ -920,6 +916,10 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
             lua.setField(state, -2, module.name);
             lua.setTop(state, -2);
         }
+        if (lua.load(state, stateSource, sizeof(stateSource) - 1, "@isaac-lan/state.lua", "t") !=
+                0 ||
+            !invoke(0, 0))
+            throw std::runtime_error("Cannot initialize authoritative state bridge");
         if (lua.load(state, bridgeSource, sizeof(bridgeSource) - 1, "@isaac-lan/embedded.lua",
                      "t") != 0 ||
             !invoke(0, 0))

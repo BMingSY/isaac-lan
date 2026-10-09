@@ -31,7 +31,7 @@ if(BUILD_TESTING)
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(bridge.api bridge.goodtrip bridge.prediction bridge.lanbot
-                             PROPERTIES TIMEOUT 30)
+                             PROPERTIES TIMEOUT 30 LABELS "offline;lua")
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
     target_include_directories(isaac_lan_core_test PRIVATE src)
@@ -55,7 +55,7 @@ if(BUILD_TESTING)
         archive-settings
         archive-locations)
         add_test(NAME core.${test_case} COMMAND isaac_lan_core_test ${test_case})
-        set_tests_properties(core.${test_case} PROPERTIES TIMEOUT 30)
+        set_tests_properties(core.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;core")
     endforeach()
 endif()
 if(NOT ISAAC_LAN_BUILD_ENGINE)
@@ -87,6 +87,9 @@ set_property(
 set(ISAAC_LAN_INTEGRATION_MODULES "")
 foreach(
     module
+    state/codec
+    state/inventory
+    state/entities
     api/codec
     api/lifecycle
     api/actions
@@ -179,7 +182,7 @@ if(BUILD_TESTING)
         integrations
         host-disconnect)
         add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
-        set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30)
+        set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;network")
     endforeach()
 endif()
 set(MINHOOK_SOURCE_DIR

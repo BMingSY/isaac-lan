@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      offline_profile:
+        description: Offline scenario generation budget
+        type: choice
+        options: [fast, full]
+        default: fast
 
 permissions:
   contents: read
@@ -39,8 +45,13 @@ jobs:
         run: python tools/format.py --check
       - name: Check Python and Lua syntax
         run: python tools/check_scripts.py
-      - name: Test packaging and harness tools
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Test tools, semantic state and continuous behavior without the game
+        env:
+          OFFLINE_PROFILE: ${{ inputs.offline_profile || 'fast' }}
+        run: |
+          python -m pytest --offline-profile "$OFFLINE_PROFILE" \
+            --offline-report-dir test-runs/ci/traces \
+            --junitxml test-runs/ci/pytest.xml --durations=10 -q
       - name: Build portable tests with sanitizers
         run: |
           cmake -S . -B build-core -G Ninja \
@@ -49,6 +60,13 @@ jobs:
           cmake --build build-core --parallel 2
       - name: Test protocol and saved sessions
         run: ctest --test-dir build-core --output-on-failure
+      - name: Preserve offline test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: offline-test-reports
+          path: test-runs/ci/
+          if-no-files-found: ignore
 
   windows:
     name: Windows x86 build and tests

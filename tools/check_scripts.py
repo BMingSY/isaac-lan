@@ -2,6 +2,7 @@
 """Compile project Python and Lua scripts without starting the game."""
 
 from pathlib import Path
+import shutil
 import py_compile
 import subprocess
 import tempfile
@@ -9,6 +10,7 @@ import tempfile
 from build_gameplay_suite import build
 
 ROOT = Path(__file__).resolve().parents[1]
+LUAC = shutil.which("luac5.3") or "luac"
 
 
 def main():
@@ -23,11 +25,11 @@ def main():
         if name.endswith(".py"):
             py_compile.compile(str(ROOT / name), doraise=True)
         elif name.endswith(".lua"):
-            subprocess.run(["luac", "-p", str(ROOT / name)], check=True)
+            subprocess.run([LUAC, "-p", str(ROOT / name)], check=True)
     with tempfile.TemporaryDirectory() as temporary:
         suite = Path(temporary) / "gameplay.lua"
         build(suite)
-        subprocess.run(["luac", "-p", str(suite)], check=True)
+        subprocess.run([LUAC, "-p", str(suite)], check=True)
     print("PASS Python, Lua and bundled gameplay syntax")
 
 
