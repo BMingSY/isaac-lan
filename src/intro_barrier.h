@@ -8,8 +8,8 @@ class IntroBarrier {
   public:
     using Room = std::array<int, 4>;
     void start(Room room, unsigned serial, unsigned tick, unsigned audience) {
-        if (const auto guests = audience & ~1u)
-            waiting[room] = {serial, tick, guests};
+        if (audience)
+            waiting[room] = {serial, tick, audience};
     }
     void observe(unsigned slot, unsigned serial, bool active) {
         if (slot >= 4 || active)

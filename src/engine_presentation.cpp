@@ -23,6 +23,7 @@ struct Intro {
 std::deque<Intro> intros;
 unsigned serial = 0, seen = 0;
 unsigned played = 0;
+unsigned hostIntro = 0;
 IntroBarrier waiting;
 using StartIntro = void(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 StartIntro originalIntro;
@@ -60,8 +61,11 @@ void __attribute__((fastcall)) startIntro(void* transition, void*, unsigned firs
         intros.pop_front();
     // A native intro owns the process-wide transition screen. Background room
     // entry must notify its occupants without taking over the host's viewport.
-    if (audience & 1u)
+    if (audience & 1u) {
+        hostIntro = event.serial;
+        played = event.serial;
         playIntro(transition, first, second);
+    }
 }
 struct API {
     int(__cdecl* getTop)(lua_State*);
@@ -132,6 +136,34 @@ int active(lua_State* L) {
     return 1;
 }
 } // namespace
+IntroSimulationScope::IntroSimulationScope(bool advance) {
+    if (runtime::replica() || !hostIntro || !rooms::stateReady())
+        return;
+    const auto game = at<std::uintptr_t>(image, 0x871678);
+    const auto target = game + 0x1b83c;
+    if (at<int>(target, 0) != 2 && at<int>(target, 0) != 3)
+        return;
+    if (advance && at<int>(game, 0x23a74) == 0) {
+        using Update = void(__attribute__((thiscall))*)(void*);
+        // Game::Update otherwise advances this screen and returns before ANY
+        // Room::Update. Advance it once, then let the room scheduler run.
+        rooms::withPlayer(0, [&] {
+            reinterpret_cast<Update>(image + 0x4318a0)(reinterpret_cast<void*>(target));
+        });
+        waiting.observe(0, hostIntro, at<int>(target, 0) != 0);
+        if (at<int>(target, 0) == 0)
+            hostIntro = 0;
+    }
+    if (at<int>(target, 0) == 2 || at<int>(target, 0) == 3) {
+        transition = target;
+        saved = at<int>(target, 0);
+        at<int>(target, 0) = 0;
+    }
+}
+IntroSimulationScope::~IntroSimulationScope() {
+    if (transition && at<int>(transition, 0) == 0)
+        at<int>(transition, 0) = saved;
+}
 bool install(std::uintptr_t base) {
     image = base;
     return items::install(base) &&
@@ -168,7 +200,7 @@ void reset() {
     items::reset();
     intros.clear();
     waiting.clear();
-    serial = seen = played = 0;
+    serial = seen = played = hostIntro = 0;
 }
 unsigned playedIntro() {
     return played;

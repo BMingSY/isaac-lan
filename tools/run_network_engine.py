@@ -149,6 +149,11 @@ def main():
         help="Send physical move/fire input only to the owned client window",
     )
     parser.add_argument(
+        "--keyboard-pause",
+        action="store_true",
+        help="Send real Escape events requested by the concentrated pause fixture",
+    )
+    parser.add_argument(
         "--mod",
         type=Path,
         action="append",
@@ -604,12 +609,23 @@ def main():
             menu_control(pid, "{ENTER}")  # start through UI
         deadline = time.monotonic() + args.scenario_timeout
         exercised = False
+        pause_keys = set()
         recorded = False
         solo_saved, solo_continued, solo_hashes = set(), set(), {}
         while time.monotonic() < deadline:
             if relay and relay.error:
                 raise RuntimeError("Latency relay: " + relay.error)
             logs = [read_log(lab) for lab in labs]
+            if args.keyboard_pause:
+                for number, role in re.findall(
+                    r"LAN_NETWORK KEYBOARD_PAUSE_REQUEST (\d+) (host|client)", logs[0]
+                ):
+                    if number not in pause_keys:
+                        control(processes[roles.index(role)], "PostKeys", "{ESC}")
+                        pause_keys.add(number)
+                        result.setdefault("keyboard_pause", []).append(
+                            {"request": int(number), "role": role, "key": "Escape"}
+                        )
             if args.solo_fixture:
                 for lab, role, pid, log in zip(labs, roles, processes, logs):
                     saved_file = log_path(lab).parent / "gamestate1.dat"

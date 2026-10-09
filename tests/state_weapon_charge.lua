@@ -1,4 +1,4 @@
--- Native charged weapon, raw shooting input, and replicated native charge UI.
+-- Native charged weapon and raw shooting input; charge UI is rendered locally.
 local native = assert(_IsaacLan)
 local f = assert(io.open("./lan-test-role.txt", "r"))
 local host = f:read("*l") == "host"
@@ -110,10 +110,6 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     assert(
                         sprites[4]:GetFilename() == "gfx/chargebar.anm2",
                         "Native charge-bar sprite is missing"
-                    )
-                    assert(
-                        sprites[4]:GetAnimation() == actor[5][4][2],
-                        "Native charge-bar animation did not replicate"
                     )
                     for slot, weapon in pairs(expected) do
                         assert(actual[slot], "Replica charged weapon is missing")

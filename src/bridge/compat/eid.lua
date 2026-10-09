@@ -9,6 +9,11 @@ local definition = {
             metadataVersion = "5.23",
             sourceHash = "8f2614a6a4cd58d60345dd0a33072a0bc7822ecf06ad9106234a6a9b2380b3fc",
         },
+        {
+            workshopId = "836319872",
+            metadataVersion = "5.24",
+            sourceHash = "705a61422ffc09c683d4250dedf2a569b6d76d4eee884dec70b705eedfa898f5",
+        },
     },
 }
 function definition.probe(target)
@@ -16,7 +21,9 @@ function definition.probe(target)
     if eid ~= target.mod then
         return "pending", "exports_not_ready"
     end
-    if tostring(eid.ModVersion) ~= "5.24" or eid.ModVersionCommit ~= "980bb0b" then
+    local expected = target.metadataVersion == "5.24" and { "5.25", "d7aab88" }
+        or { "5.24", "980bb0b" }
+    if tostring(eid.ModVersion) ~= expected[1] or eid.ModVersionCommit ~= expected[2] then
         return "unsupported", "runtime_version_mismatch"
     end
     if type(eid.setPlayer) ~= "function" or type(eid.OnRender) ~= "function" then

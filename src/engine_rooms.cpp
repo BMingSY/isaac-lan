@@ -661,8 +661,14 @@ PlayerUpdate originalPlayerUpdate;
 void __attribute__((fastcall)) playerUpdate(void* player, void*) {
     // Native stage loading waits for player departure/arrival animations.
     // Those updates must advance while room replication is suspended.
-    if (runtime::replica() && enabled)
+    if (runtime::replica() && enabled) {
+        // Gameplay stays authoritative. Charge-bar overlays are local UI and
+        // need the native animation update after Render changes their pose.
+        using UpdateSprite = void(__attribute__((thiscall))*)(void*);
+        for (unsigned i = 0; i < 7; ++i)
+            engine<UpdateSprite>(0x9100)(static_cast<char*>(player) + 0x758 + i * 0x114);
         return;
+    }
     const auto before = actor;
     actor = reinterpret_cast<Address>(player);
     originalPlayerUpdate(player);
@@ -1598,6 +1604,7 @@ bool half(void (*original)()) {
         return false;
     if (runtime::replica())
         return true;
+    presentation::IntroSimulationScope intro;
     for (auto& [key, room] : loaded) {
         (void)key;
         if (room->replicaShell || occupants(*room).empty())

@@ -606,7 +606,10 @@ void updateOne(void* game) {
     if (!gated) {
         return;
     }
-    originalUpdate(game);
+    {
+        presentation::IntroSimulationScope intro(true);
+        originalUpdate(game);
+    }
     presentation::items::advance();
     rooms::finishFrame();
     pendingHalf = gated;

@@ -365,4 +365,45 @@ assert(registry.status()[1].state == "error" and installs == 2)
 isolated.api:SetCompatibilityEnabled("test.authority-error", false)
 local enabled, enableCode = isolated.api:SetCompatibilityEnabled("test.authority-error", true)
 assert(not enabled and enableCode == "authority_install_failed" and authorityAttempts == 2)
+-- Both pinned EID builds select the guest from its local view, including after
+-- a room notification. A metadata/runtime mismatch must keep the adapter off.
+for _, build in ipairs({
+    { "5.23", 5.24, "980bb0b", "8f2614a6a4cd58d60345dd0a33072a0bc7822ecf06ad9106234a6a9b2380b3fc" },
+    { "5.24", 5.25, "d7aab88", "705a61422ffc09c683d4250dedf2a569b6d76d4eee884dec70b705eedfa898f5" },
+}) do
+    local p = peer(1)
+    p.modInfo = {
+        workshopId = "836319872",
+        metadataVersion = build[1],
+        sourceHash = build[4],
+        directory = "eid",
+    }
+    local eid = {
+        Name = "External Item Descriptions",
+        ModVersion = build[2],
+        ModVersionCommit = build[3],
+        OnRender = function() end,
+        AddCallback = function() end,
+        AddPriorityCallback = function() end,
+        RemoveCallback = function() end,
+        setPlayer = function(self)
+            self.player = p.env.Isaac.GetPlayer(0)
+        end,
+    }
+    p.env.EID = eid
+    local adapter = assert(loadfile(root .. "/src/bridge/compat/eid.lua", "t", p.env))()
+    local r = p.env._IsaacLanModules["compat/registry"]
+    r.observeMod(eid, "eid-source")
+    r.poll()
+    assert(r.status()[1].state == "active", "Supported EID adapter was not installed")
+    p.bridge.commit()
+    eid:setPlayer()
+    assert(eid.player == actor2 and p.scope == nil, "EID selected a remote actor")
+    p.positions["1"].index = 71
+    p.bridge.commit()
+    eid:setPlayer()
+    assert(eid.player == actor2, "EID retained the other room's actor")
+    eid.ModVersion = 0
+    assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "unsupported")
+end
 print("PASS bridge codec, views, lifecycle, action authority, receipts, dedupe and compatibility")

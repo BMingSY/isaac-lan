@@ -343,9 +343,9 @@ local function applyActorVisuals(p, actor)
     applySprite(p:GetSprite(), actor[3][10])
     local used = {}
     for i, v in ipairs(actor[5]) do
-        if i <= 10 then
+        if i <= 3 then
             applySprite(sprites[i], v)
-        else
+        elseif i > 10 then
             for j = 11, #sprites do
                 if not used[j] and sprites[j]:GetFilename() == v[1] then
                     applySprite(sprites[j], v)
@@ -355,6 +355,10 @@ local function applyActorVisuals(p, actor)
             end
         end
     end
+    -- Charge bars (4..10) are local UI. An offscreen authority does not render
+    -- their Charging/Charged layers; copying those stale layers every frame
+    -- erases the replica's own charge display after players separate rooms.
+    -- Native Render derives them from the replicated weapon charge below.
     assert(native.actor_pose(p:GetSprite(), actor[6]))
 end
 local hostLoops, replicaLoops, lastSound = {}, {}, 0

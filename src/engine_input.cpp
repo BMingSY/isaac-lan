@@ -2,6 +2,7 @@
 #include "frontend.h"
 #include "runtime_net.h"
 #include "automation_input.h"
+#include "menu_input.h"
 #include <xinput.h>
 #include <MinHook.h>
 #include <algorithm>
@@ -338,6 +339,9 @@ void samplePhysicalInput() {
                               &action, nullptr, nullptr))
                 input.triggered |= 1u << action;
         }
+        const auto game = at<std::uintptr_t>(image, 0x871678);
+        if (source == 0 && game)
+            keyboardPause(input, at<int>(game, 0x23a74) != 0);
     }
 }
 int capture(lua_State* L) {

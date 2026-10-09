@@ -53,6 +53,7 @@ if(BUILD_TESTING)
         strings-blobs
         input-progress
         automation-input
+        keyboard-pause
         intro-barrier
         room-map
         truncated-packets

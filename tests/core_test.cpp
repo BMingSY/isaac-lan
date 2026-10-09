@@ -1,5 +1,6 @@
 #include "net_protocol.h"
 #include "automation_input.h"
+#include "menu_input.h"
 #include "lanbot_console.h"
 #include "progression.h"
 #include "session_archive.h"
@@ -12,6 +13,23 @@
 using namespace isaac::lan;
 
 namespace {
+void keyboardPause() {
+    InputFrame escape;
+    escape.values[15] = 65535;
+    escape.triggered = 1u << 15;
+    auto menu = escape;
+    const auto original = menu;
+    isaac::input::keyboardPause(escape, false);
+    require(escape.triggered == ((1u << 12) | (1u << 15)) && escape.values[12] == 65535,
+            "Keyboard Escape cannot open pause on a LAN controller");
+    isaac::input::keyboardPause(menu, true);
+    require(menu == original, "Escape changed native menu navigation");
+    require(menu.values[12] == 0, "Menu Back became another pause press");
+    menu.triggered = 0;
+    isaac::input::keyboardPause(menu, false);
+    require(menu.triggered == 0 && menu.values[12] == 0,
+            "Held Escape created a repeated pause edge");
+}
 void roomMap() {
     std::array<int, 507> offsets;
     offsets.fill(-1);
@@ -39,7 +57,10 @@ void introBarrier() {
     isaac::presentation::IntroBarrier barrier;
     const std::array room{1, 0, 0, 84}, other{1, 0, 0, 85};
     barrier.start(room, 1, 100, 1);
-    require(!barrier.paused(room, 110, 15), "Host-only intro waited for a guest");
+    require(barrier.paused(room, 110, 15) && !barrier.paused(other, 110, 15),
+            "Host intro must pause only the boss room");
+    barrier.observe(0, 1, false);
+    require(!barrier.paused(room, 111, 15), "Completed host intro kept its room frozen");
     barrier.start(room, 2, 100, 7);
     require(barrier.paused(room, 110, 7) && !barrier.paused(other, 110, 7),
             "Intro froze an unrelated room");
@@ -47,10 +68,12 @@ void introBarrier() {
     barrier.observe(2, 2, true);
     require(barrier.paused(room, 120, 7), "Stale or active intro released combat");
     barrier.observe(1, 2, false);
+    barrier.observe(0, 2, false);
     require(barrier.paused(room, 130, 7), "Combat resumed before every guest finished");
     barrier.observe(2, 2, false);
     require(!barrier.paused(room, 140, 7), "Finished intro kept combat frozen");
     barrier.start(room, 3, 150, 3);
+    barrier.observe(0, 3, false);
     require(!barrier.paused(room, 160, 1), "Disconnected guest froze combat");
     barrier.start(room, 4, 200, 3);
     require(!barrier.paused(room, 801, 3), "Missing acknowledgement froze combat indefinitely");
@@ -404,6 +427,7 @@ int main(int argc, char** argv) {
                      {"strings-blobs", stringsAndBlobs},
                      {"input-progress", inputAndProgress},
                      {"automation-input", automationInput},
+                     {"keyboard-pause", keyboardPause},
                      {"intro-barrier", introBarrier},
                      {"room-map", roomMap},
                      {"truncated-packets", truncatedPackets},
