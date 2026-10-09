@@ -3,6 +3,8 @@
 #include "lanbot_console.h"
 #include "progression.h"
 #include "session_archive.h"
+#include "intro_barrier.h"
+#include "room_map.h"
 #include "test_support.h"
 #include <algorithm>
 #include <limits>
@@ -10,6 +12,52 @@
 using namespace isaac::lan;
 
 namespace {
+void roomMap() {
+    std::array<int, 507> offsets;
+    offsets.fill(-1);
+    unsigned count = 20;
+    const std::array<unsigned, 2> cells{98, 99};
+    isaac::rooms::registerMapRoom(offsets, count, 0, 98, 20, cells);
+    require(offsets[98] == 20 && offsets[99] == 20 && offsets[97] == -1 && count == 21,
+            "Generated room was absent from the native minimap index");
+    isaac::rooms::registerMapRoom(offsets, count, 1, 98, 22, cells);
+    require(offsets[98] == 20 && offsets[169 + 98] == 22 && count == 23,
+            "Room registration crossed dimensions");
+    const auto before = offsets;
+    for (const auto invalid : {std::array<unsigned, 2>{98, 169}, std::array<unsigned, 2>{97, 99}}) {
+        bool failed = false;
+        try {
+            isaac::rooms::registerMapRoom(offsets, count, 0, 98, 24, invalid);
+        } catch (const std::runtime_error&) {
+            failed = true;
+        }
+        require(failed && offsets == before && count == 23,
+                "Invalid map aliases partially changed the floor");
+    }
+}
+void introBarrier() {
+    isaac::presentation::IntroBarrier barrier;
+    const std::array room{1, 0, 0, 84}, other{1, 0, 0, 85};
+    barrier.start(room, 1, 100, 1);
+    require(!barrier.paused(room, 110, 15), "Host-only intro waited for a guest");
+    barrier.start(room, 2, 100, 7);
+    require(barrier.paused(room, 110, 7) && !barrier.paused(other, 110, 7),
+            "Intro froze an unrelated room");
+    barrier.observe(1, 1, false);
+    barrier.observe(2, 2, true);
+    require(barrier.paused(room, 120, 7), "Stale or active intro released combat");
+    barrier.observe(1, 2, false);
+    require(barrier.paused(room, 130, 7), "Combat resumed before every guest finished");
+    barrier.observe(2, 2, false);
+    require(!barrier.paused(room, 140, 7), "Finished intro kept combat frozen");
+    barrier.start(room, 3, 150, 3);
+    require(!barrier.paused(room, 160, 1), "Disconnected guest froze combat");
+    barrier.start(room, 4, 200, 3);
+    require(!barrier.paused(room, 801, 3), "Missing acknowledgement froze combat indefinitely");
+    barrier.start(room, 5, 900, 3);
+    barrier.clear();
+    require(!barrier.paused(room, 901, 3), "Session reset retained an intro");
+}
 void automationInput() {
     using isaac::input::botConsoleArguments;
     require(botConsoleArguments("lanbot") == std::string_view{} &&
@@ -142,6 +190,13 @@ void inputAndProgress() {
     require(r.input() == input && !r.progress() && r.progress() == progress,
             "Input or progress round trip failed");
     r.finish();
+    const auto menu = menuInput(input);
+    require(menu.triggered == (input.triggered & menuActionMask) &&
+                menu.values[12] == input.values[12] && menu.values[15] == input.values[15],
+            "Room filtering discarded session menu actions");
+    for (unsigned i = 0; i < actionCount; ++i)
+        if (i != 12 && i != 15)
+            require(menu.values[i] == 0, "Room filtering retained a gameplay action");
     Writer invalid(Message::input);
     invalid.u8(2);
     rejects(
@@ -349,6 +404,8 @@ int main(int argc, char** argv) {
                      {"strings-blobs", stringsAndBlobs},
                      {"input-progress", inputAndProgress},
                      {"automation-input", automationInput},
+                     {"intro-barrier", introBarrier},
+                     {"room-map", roomMap},
                      {"truncated-packets", truncatedPackets},
                      {"hashes", hashes},
                      {"progression", progression},

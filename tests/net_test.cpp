@@ -431,6 +431,29 @@ void inputRooms() {
     frame = g.step(2);
     require(frame.inputRooms[1] == destination && frame.inputs[1].triggered == 0,
             "Source room edge leaked into the destination");
+    press.triggered |= menuActionMask;
+    require(g.peers[1]->submit(4, press, source), "Source menu press failed");
+    auto intro = destination;
+    intro.introSerial = 19;
+    intro.introActive = true;
+    require(g.peers[1]->submit(5, {}, intro), "Intro room input failed");
+    until([&] {
+        g.poll();
+        return g.peers[0]->inputSequences()[1] == 5;
+    });
+    frame = g.step(3);
+    require(frame.inputRooms[1] == intro && frame.inputs[1].triggered == menuActionMask,
+            "Room transfer swallowed a menu edge or lost intro acknowledgement");
+    require(g.peers[1]->submit(6, press, intro), "Intro gameplay input failed");
+    intro.introActive = false;
+    require(g.peers[1]->submit(7, {}, intro), "Intro completion input failed");
+    until([&] {
+        g.poll();
+        return g.peers[0]->inputSequences()[1] == 7;
+    });
+    frame = g.step(4);
+    require(frame.inputRooms[1] == intro && frame.inputs[1].triggered == press.triggered,
+            "Intro completion discarded input from the same room");
     std::puts("PASS input room identity and edges stay within room boundaries");
 }
 void compressionLimits() {

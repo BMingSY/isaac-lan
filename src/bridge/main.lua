@@ -11,8 +11,8 @@ local status, started, prepared, engineStarted, tick = {}, false, false, false, 
 local players = {}
 local continuedRun = false
 local savedPlayers = 0
-local function refreshPlayers()
-    local heads = native.rooms_heads()
+local function refreshPlayers(restoredOrder)
+    local heads = restoredOrder and native.rooms_heads(1) or native.rooms_heads()
     players = {}
     for slot = 0, status.players - 1 do
         if heads[tostring(slot)] then
@@ -120,7 +120,10 @@ callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
         if continued then
             -- Native continue detaches unavailable physical controllers. Bind
             -- the restored heads before its first update can pause for them.
-            local heads = refreshPlayers()
+            -- Native Continue may attach a saved controller to a different
+            -- physical device or keyboard. Use restored roster order until
+            -- assigning LAN controllers; physical IDs cannot identify slots yet.
+            local heads = refreshPlayers(true)
             for slot = 0, status.players - 1 do
                 assert(native.input_assign(heads[tostring(slot)], slot + 1))
             end

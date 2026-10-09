@@ -1,5 +1,6 @@
 #include "runtime_net.h"
 #include "engine_item_presentation.h"
+#include "engine_presentation.h"
 #include "frontend.h"
 #include "lan_session.h"
 #include "engine_rooms.h"
@@ -52,14 +53,20 @@ std::optional<lan::Archive> exitingArchive, resumingArchive;
 bool exitingHost = false;
 bool networkRun = false, soloContinueAvailable = false;
 std::vector<std::uint8_t> soloState;
-void beginNetworkRun() {
+bool beginNetworkRun() {
     if (networkRun)
-        return;
+        return true;
     const auto manager = *reinterpret_cast<std::uintptr_t*>(executableImage + 0x87169c);
     soloContinueAvailable = *reinterpret_cast<bool*>(manager + 0x20dcc);
     soloState = soloContinueAvailable ? save::encode(executableImage) : std::vector<std::uint8_t>{};
+    if (soloContinueAvailable && soloState.empty()) {
+        if (logger)
+            logger("solo_backup=FAILED");
+        return false;
+    }
     networkRun = true;
     rooms::setConnected(15);
+    return true;
 }
 using SaveGame = void(__cdecl*)();
 SaveGame originalSaveGame, originalDeleteGame, originalSaveRerun;
@@ -265,6 +272,10 @@ void __attribute__((fastcall)) executeStart(void* manager, void*) {
     if (resume) {
         rooms::beforeStart();
         input::reset();
+        // Hotplug IDs can change after returning to the menu. Native Continue
+        // drops players whose saved controller is absent, before Lua can bind
+        // them. Restore LAN device IDs before that roster is reconstructed.
+        input::prepareControllers();
         if (session->settings().progress && !localProgress) {
             localProgress = readProgress();
             commonProgress = session->settings().progress;
@@ -287,8 +298,10 @@ void __attribute__((fastcall)) startGame(void* game, void*, int type, int challe
     rooms::beforeStart();
     input::reset();
     const bool networkStart = session && session->phase() == lan::Phase::running;
-    if (networkStart)
-        beginNetworkRun();
+    if (networkStart && !beginNetworkRun()) {
+        session->abort("Cannot preserve the existing solo save");
+        return;
+    }
     if (networkStart && session->settings().progress && !localProgress) {
         localProgress = readProgress();
         commonProgress = session->settings().progress;
@@ -389,8 +402,10 @@ bool captureNextInput() {
         const auto& position = locations[session->slot()];
         inputRoom = lan::InputRoom{floorEpoch, static_cast<std::int16_t>(position.index),
                                    static_cast<std::uint8_t>(position.dimension)};
+        inputRoom->introSerial = presentation::playedIntro();
+        inputRoom->introActive = presentation::introActive();
     } else
-        localInput = {};
+        localInput = lan::menuInput(localInput);
     if (!session->submit(nextInputTick, localInput, inputRoom)) {
         fail("Local input sequence rejected");
         return false;
@@ -554,7 +569,9 @@ void updateOne(void* game) {
         if (!context || context->epoch != floorEpoch || slot >= locations.size() ||
             context->index != locations[slot].index ||
             context->dimension != locations[slot].dimension)
-            frame->inputs[slot] = {};
+            frame->inputs[slot] = lan::menuInput(frame->inputs[slot]);
+        else
+            presentation::observeIntro(slot, context->introSerial, context->introActive);
     }
     for (unsigned slot = 0; slot < frame->players; ++slot) {
         const auto command = frame->commands[slot];
@@ -822,7 +839,11 @@ int startEngine(lua_State* L) {
     reinterpret_cast<SeedConstructor>(executableImage + 0x5e9290)(&seeds);
     reinterpret_cast<SetSeed>(executableImage + 0x5eb880)(&seeds, seed);
     const auto manager = *reinterpret_cast<void**>(executableImage + 0x87169c);
-    beginNetworkRun();
+    if (!beginNetworkRun()) {
+        fail("Cannot preserve the existing solo save");
+        lua.pushBoolean(L, false);
+        return 1;
+    }
     if (!settings.snapshot.empty()) {
         try {
             resumingArchive = lan::Archive::decode(settings.snapshot);
@@ -898,7 +919,11 @@ int close(lua_State* L) {
         frontend::returnToLobby();
     rejoinAt =
         retry ? std::optional{InputClock::now() + std::chrono::milliseconds(250)} : std::nullopt;
-    restoreProgress();
+    // MC_PRE_GAME_EXIT runs before native Exit finishes saving/restoring its
+    // co-op state. Keep the local baseline and serializer guard alive through
+    // that tail; clearing them here lets shared progress be written afterward.
+    if (!gameExit)
+        restoreProgress();
     input::reset();
     if (session && !keep) {
         if (gated && session->phase() == lan::Phase::running) {
@@ -1059,6 +1084,7 @@ void beforeExit(bool save) {
 void afterExit(bool save) {
     if (!networkRun)
         return;
+    restoreProgress();
     const bool host = exitingHost;
     exitingHost = false;
     try {
@@ -1259,6 +1285,10 @@ void requestWindowClose() {
 }
 void abort(const std::string& error) {
     fail(error);
+}
+void roomEntered() {
+    if (!replica())
+        integrationCallback("_IsaacLanRoomEntered");
 }
 void halfStarted() {
     if (gated)

@@ -9,6 +9,7 @@ namespace isaac::lan {
 struct RoomRequest;
 }
 namespace isaac::runtime {
+void roomEntered();
 void requestWindowClose();
 bool install(std::uintptr_t image, void (*logger)(const std::string&), void (*halfUpdate)(),
              void (*restorePositions)());

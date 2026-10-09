@@ -416,6 +416,9 @@ def main():
                 file.unlink()
             (lab / "game/lan-test-pad.txt").unlink(missing_ok=True)
             (lab / "game/lan-test-role.txt").write_text(role + "\n")
+            (lab / "game/lan-test-solo-fixture.txt").write_text(
+                ("1" if args.solo_fixture else "0") + "\n"
+            )
             (lab / "game/lan-test-player-count.txt").write_text(str(len(labs)) + "\n")
             (lab / "game/lan-test-menu-port.txt").write_text(
                 str(args.menu_port + (1 if args.latency_ms and role != "host" else 0)) + "\n"
@@ -671,7 +674,9 @@ def main():
                 errors.extend(
                     line
                     for line in native.splitlines()
-                    if "frontend_error=" in line or "native_exception" in line
+                    if "frontend_error=" in line
+                    or "native_exception" in line
+                    or "integration_error=_IsaacLanRoomEntered" in line
                 )
             if errors:
                 raise RuntimeError("\n".join(errors))

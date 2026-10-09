@@ -275,7 +275,7 @@ void __attribute__((fastcall)) mapCache(void* config, void*) {
             reinterpret_cast<Flush>(image + 0x619180)(reinterpret_cast<void*>(image + 0x8798e0),
                                                       false);
         }
-        originalMapCache(config);
+        rooms::withMapPickups([&] { originalMapCache(config); });
     });
 }
 MenuUpdate originalHudUpdate = nullptr, originalHudPostUpdate = nullptr,

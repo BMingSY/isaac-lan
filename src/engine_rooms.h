@@ -19,6 +19,7 @@ bool half(void (*original)());
 bool render(void* game, RoomCall original, int slot);
 bool backgroundLoading();
 void withView(const std::function<void()>& draw, bool localPlayersOnly = false);
+void withMapPickups(const std::function<void()>& cache);
 void finishFrame();
 void presentCamera();
 void requestExit(bool save);

@@ -7,6 +7,7 @@
 #include "engine_item_presentation.h"
 #include "runtime_net.h"
 #include "net_protocol.h"
+#include "room_map.h"
 #include <MinHook.h>
 #include <algorithm>
 #include <array>
@@ -179,7 +180,7 @@ Address participant(unsigned slot) {
             return p;
     return 0;
 }
-std::vector<Address> logicalPlayers() {
+std::vector<Address> logicalPlayers(bool useControllers = true) {
     std::vector<Address> result;
     for (auto player : values(roster())) {
         if (at<unsigned>(player, 0x2c) != 0 || at<Address>(player, 0x3bc))
@@ -188,14 +189,15 @@ std::vector<Address> logicalPlayers() {
         if (twin && at<int>(player, 0x161c) > at<int>(twin, 0x161c))
             continue;
         const int controller = at<int>(player, 0x1618);
-        if (controller >= 1 && controller <= 4 &&
+        if (useControllers && controller >= 1 && controller <= 4 &&
             std::any_of(result.begin(), result.end(),
                         [controller](Address p) { return at<int>(p, 0x1618) == controller; }))
             continue;
         result.push_back(player);
     }
-    if (std::all_of(result.begin(), result.end(),
-                    [](Address p) { return at<int>(p, 0x1618) >= 1 && at<int>(p, 0x1618) <= 4; }))
+    if (useControllers && std::all_of(result.begin(), result.end(), [](Address p) {
+            return at<int>(p, 0x1618) >= 1 && at<int>(p, 0x1618) <= 4;
+        }))
         std::sort(result.begin(), result.end(),
                   [](Address a, Address b) { return at<int>(a, 0x1618) < at<int>(b, 0x1618); });
     return result;
@@ -220,6 +222,7 @@ struct Request {
     Key destination;
     int door;
     bool teleport;
+    bool animateDeparture;
 };
 std::vector<Request> pending;
 std::set<unsigned> pendingItemRevival;
@@ -555,9 +558,10 @@ void moveEntity(Address entity, Room& from, Room& to) {
 std::vector<Address> followers(Address player, const Room& room) {
     std::vector<Address> candidates, result;
     // J460 keeps attached knives in the persistence list along with familiars;
-    // transient weapons can also occur in the ordinary list. Preserve the native
-    // iteration order and avoid transferring an entity twice.
-    for (unsigned offset : {0x30u, 0x20u}) {
+    // transient weapons can also occur in the ordinary list. Dark Esau is an
+    // NPC in the enemy list, despite following a player across rooms. Preserve
+    // native iteration order and avoid transferring an entity twice.
+    for (unsigned offset : {0x30u, 0x20u, 0x40u}) {
         const auto list = room.pointer + 0x1218 + offset;
         for (unsigned i = 0; i < at<unsigned>(list, 12); ++i) {
             const auto entity = at<Address>(at<Address>(list, 4), i * 4);
@@ -575,10 +579,33 @@ std::vector<Address> followers(Address player, const Room& room) {
         }
         return false;
     };
+    std::vector<Address> jacobs;
+    for (auto occupant : occupants(room))
+        if (at<int>(occupant, 0x13c0) == 37 || at<int>(occupant, 0x13c0) == 39)
+            jacobs.push_back(occupant);
     for (auto entity : candidates) {
         const auto type = at<unsigned>(entity, 0x28);
+        bool darkEsau =
+            type == 866 &&
+            (at<Address>(player, 0x1fc0) == entity || owned(at<Address>(entity, 0x3bc)) ||
+             owned(at<Address>(entity, 0x3c8)) || owned(at<Address>(entity, 0x3c4)));
+        // Native room saves restore Dark Esau as an NPC without a spawner and
+        // cannot restore a player's EntityPtr across our independent rooms.
+        // Rebind only when the room has one unambiguous Tainted Jacob owner.
+        if (type == 866 && !darkEsau && jacobs.size() == 1 && jacobs[0] == player &&
+            !at<Address>(entity, 0x3bc) && !at<Address>(entity, 0x3c8) &&
+            !at<Address>(entity, 0x3c4)) {
+            using SetRef = void(__attribute__((fastcall))*)(void*, void*);
+            engine<SetRef>(0x2b5b50)(reinterpret_cast<void*>(player + 0x1fc0),
+                                     reinterpret_cast<void*>(entity));
+            engine<SetRef>(0x2b5b50)(reinterpret_cast<void*>(entity + 0x3c8),
+                                     reinterpret_cast<void*>(player));
+            darkEsau = true;
+        }
         if ((type == 3 && at<Address>(entity, 0x410) == player) ||
-            (type == 8 && (owned(at<Address>(entity, 0x3bc)) || owned(at<Address>(entity, 0x3c8)))))
+            (type == 8 &&
+             (owned(at<Address>(entity, 0x3bc)) || owned(at<Address>(entity, 0x3c8)))) ||
+            darkEsau)
             result.push_back(entity);
     }
     return result;
@@ -670,7 +697,8 @@ bool remoteCommand(Address player, int index, int dimension, bool teleport) {
          static_cast<std::uint8_t>(dimension < 0 ? source.dimension : dimension),
          static_cast<std::int16_t>(source.index), static_cast<std::int16_t>(index), teleport});
 }
-bool queue(Address player, int index, int dimension, int door, bool teleport = false) {
+bool queue(Address player, int index, int dimension, int door, bool teleport = false,
+           bool animateDeparture = true) {
     for (auto head : participants) {
         const auto actors = controlledActors(head);
         if (std::find(actors.begin(), actors.end(), player) != actors.end()) {
@@ -697,8 +725,8 @@ bool queue(Address player, int index, int dimension, int door, bool teleport = f
     if (std::any_of(pending.begin(), pending.end(),
                     [player](const auto& r) { return r.player == player; }))
         return true;
-    pending.push_back({player, key, door, teleport});
-    if (teleport) {
+    pending.push_back({player, key, door, teleport, animateDeparture});
+    if (teleport && animateDeparture) {
         using Animate = void(__attribute__((thiscall))*)(void*, bool);
         for (auto p : controlledActors(player))
             engine<Animate>(0x3abcc0)(reinterpret_cast<void*>(p), true);
@@ -712,8 +740,9 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
         return;
     }
     const auto who = currentActor(player);
+    const bool teleport = animation == 3 || animation == 11 || animation == 16;
     if (runtime::replica()) {
-        if (!remoteCommand(who, index, dimension, animation == 3))
+        if (!remoteCommand(who, index, dimension, teleport))
             logger("mod_room_command=REJECTED local_actor_unresolved");
         return;
     }
@@ -749,7 +778,10 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
     // Native TELEPORT starts the actor's exit animation before changing the
     // room. Keep that sequence per actor, without the global transition that
     // would also freeze/flash players fighting in other rooms.
-    if (!queue(who, index, dimension, animation == 3 ? -1 : enter, animation == 3))
+    // Portal effects start their native Trapdoor animation after this call.
+    // Transfer at the frame boundary and apply the arrival there, rather than
+    // waiting for a TeleportUp animation which the effect will overwrite.
+    if (!queue(who, index, dimension, teleport ? -1 : enter, teleport, animation == 3))
         logger("room_transition=REJECTED actor_unresolved");
 }
 void __attribute__((fastcall)) change(void* g, void*, int index, int dimension) {
@@ -888,7 +920,8 @@ int withPlayer(lua_State* L) {
     }
     int result;
     if (room) {
-        Scope scope(*room);
+        const bool actorOnly = lua.getTop(L) > 2 && lua.checkInteger(L, 3) != 0;
+        Scope scope(*room, actorOnly ? controlledActors(participant(slot)) : occupants(*room));
         lua.pushValue(L, 2);
         result = lua.pcall(L, 0, 0, 0, 0, nullptr);
     } else {
@@ -1027,11 +1060,13 @@ int connections(lua_State* L) {
     return 1;
 }
 int heads(lua_State* L) {
-    const auto all = values(roster()), players = logicalPlayers();
+    const bool restoredOrder = lua.getTop(L) > 0 && lua.checkInteger(L, 1) != 0;
+    const auto all = values(roster()), players = logicalPlayers(!restoredOrder);
     lua.createTable(L, 0, static_cast<int>(players.size()));
     for (unsigned slot = 0; slot < players.size(); ++slot) {
         lua.pushInteger(L, std::find(all.begin(), all.end(), players[slot]) - all.begin());
-        lua.setField(L, -2, std::to_string(slotOf(players[slot], slot)).c_str());
+        lua.setField(L, -2,
+                     std::to_string(restoredOrder ? slot : slotOf(players[slot], slot)).c_str());
     }
     return 1;
 }
@@ -1109,15 +1144,98 @@ int syncLocations(lua_State* L) {
 // generating the floor from the same seed does not create these descriptors.
 // No process pointers, STL containers or spawn configuration cross the wire.
 std::map<Key, std::array<std::uint8_t, 0x5c>> replicaLayouts;
+// The native minimap reads saved entities, which replicas never simulate or
+// save. Supply pickup metadata only while caching the map; room loading and
+// saving must retain their original owned vectors.
+using MapEntity = std::array<std::uint32_t, 0x78 / 4>;
+std::map<Key, std::vector<MapEntity>> replicaMapEntities;
+constexpr std::array<unsigned, 6> mapFields{0, 4, 8, 0x14, 0x28, 0x2c};
+int mapPickups(lua_State* L) {
+    try {
+        if (lua.getTop(L) == 2) {
+            const int index = lua.checkInteger(L, 1), dimension = lua.checkInteger(L, 2);
+            using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+            const auto desc = reinterpret_cast<Address>(
+                engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), index, dimension));
+            if (!desc)
+                throw std::runtime_error("Map descriptor is unavailable");
+            lan::Writer w(lan::Message::world);
+            w.u32(dimension);
+            w.u32(index);
+            const auto received = replicaMapEntities.find({dimension, index});
+            if (runtime::replica() && received != replicaMapEntities.end()) {
+                for (const auto& entity : received->second)
+                    for (auto offset : mapFields)
+                        w.u32(entity[offset / 4]);
+            } else {
+                const auto saved = at<Vector>(desc, 0x74);
+                for (auto entity = saved.begin; entity < saved.end; entity += 0x78)
+                    if (at<unsigned>(entity, 0) == 5 || at<unsigned>(entity, 0) == 6)
+                        for (auto offset : mapFields)
+                            w.u32(at<unsigned>(entity, offset));
+            }
+            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                           w.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas receive map pickups");
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 1, &size);
+        if (size < 8 || (size - 8) % 24 || size > 8 + 4096 * 24)
+            throw std::runtime_error("Invalid map pickups");
+        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        Key key{static_cast<int>(r.u32()), static_cast<int>(r.u32())};
+        if (key.dimension < 0 || key.dimension > 2 || key.index < -20 || key.index >= 169)
+            throw std::runtime_error("Invalid map room");
+        std::vector<MapEntity> entities((size - 8) / 24);
+        for (auto& entity : entities) {
+            for (auto offset : mapFields)
+                entity[offset / 4] = r.u32();
+            if (entity[0] != 5 && entity[0] != 6)
+                throw std::runtime_error("Invalid map entity");
+        }
+        r.finish();
+        auto& previous = replicaMapEntities[key];
+        const bool changed = previous != entities;
+        previous = std::move(entities);
+        lua.pushBoolean(L, true);
+        lua.pushBoolean(L, changed);
+        return 2;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+}
 int roomLayout(lua_State* L) {
     try {
-        if (lua.getTop(L) == 0) {
-            const auto desc = at<Address>(at<Address>(game(), 0x18300), 4);
+        if (lua.getTop(L) == 0 || lua.getTop(L) == 2) {
+            using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+            const int dimension = lua.getTop(L) ? lua.checkInteger(L, 2) : at<int>(game(), 0x1830c);
+            const int index = lua.getTop(L) ? lua.checkInteger(L, 1) : at<int>(game(), 0x18304);
+            const auto desc =
+                lua.getTop(L)
+                    ? reinterpret_cast<Address>(engine<Desc>(0x340bc0)(
+                          reinterpret_cast<void*>(game()), lua.checkInteger(L, 1), dimension))
+                    : at<Address>(at<Address>(game(), 0x18300), 4);
             const auto override = at<Address>(desc, 0x14);
             const auto config = override ? override : at<Address>(desc, 0x10);
             lan::Writer w(lan::Message::world);
-            w.u32(at<int>(game(), 0x1830c));
-            w.u32(at<int>(game(), 0x18304));
+            w.u32(dimension);
+            w.u32(index < 0 ? index : at<int>(desc, 4));
+            w.u32(at<int>(desc, 0));
+            w.u32(at<int>(desc, 8));
+            // Large rooms occupy several cells; the minimap uses this native
+            // cell-to-descriptor table rather than GetRoomByIdx's fallback.
+            std::vector<unsigned> cells;
+            if (index >= 0)
+                for (unsigned cell = 0; cell < 169; ++cell)
+                    if (at<int>(game(), 0x17adc + (dimension * 169 + cell) * 4) == at<int>(desc, 8))
+                        cells.push_back(cell);
+            w.u8(cells.size());
+            for (auto cell : cells)
+                w.u8(cell);
             for (auto offset : {0u, 4u, 8u, 12u, 16u, 0x2cu, 0x38u, 0x3cu, 0x48u, 0x4cu})
                 w.u32(at<unsigned>(config, offset));
             w.u8(at<unsigned char>(config, 0x46));
@@ -1137,6 +1255,10 @@ int roomLayout(lua_State* L) {
         const auto data = lua.checkString(L, 1, &size);
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(data), size});
         Key key{static_cast<int>(r.u32()), static_cast<int>(r.u32())};
+        const int gridIndex = r.u32(), listIndex = r.u32();
+        std::vector<unsigned> cells(r.u8());
+        for (auto& cell : cells)
+            cell = r.u8();
         std::array<std::uint8_t, 0x5c> config{};
         auto address = reinterpret_cast<Address>(config.data());
         for (auto offset : {0u, 4u, 8u, 12u, 16u, 0x2cu, 0x38u, 0x3cu, 0x48u, 0x4cu})
@@ -1155,24 +1277,42 @@ int roomLayout(lua_State* L) {
             seed = r.u32();
         r.finish();
         if (key.dimension < 0 || key.dimension > 2 || key.index < -20 || key.index >= 169 ||
+            gridIndex < -20 || gridIndex >= 169 || listIndex < (key.index < 0 ? -1 : 0) ||
+            listIndex >= (key.index < 0 ? 527 : 507) ||
+            (key.index >= 0 && std::find(cells.begin(), cells.end(), key.index) == cells.end()) ||
+            std::any_of(cells.begin(), cells.end(), [](auto cell) { return cell >= 169; }) ||
             at<unsigned>(address, 0x48) < 1 || at<unsigned>(address, 0x48) > 12 ||
             at<unsigned>(address, 8) < 1 || at<unsigned>(address, 8) > 32 ||
             !at<unsigned char>(address, 0x46) || at<unsigned char>(address, 0x46) > 26 ||
             !at<unsigned char>(address, 0x47) || at<unsigned char>(address, 0x47) > 14)
-            throw std::runtime_error("Invalid authoritative room layout");
+            throw std::runtime_error(
+                "Invalid authoritative room layout dimension=" + std::to_string(key.dimension) +
+                " index=" + std::to_string(key.index) + " grid=" + std::to_string(gridIndex) +
+                " list=" + std::to_string(listIndex));
         using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-        const auto desc = reinterpret_cast<Address>(
-            engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), key.index, key.dimension));
+        // All floor descriptors are constructed by the game at startup. A new
+        // red room has no replica index yet: GetRoomByIdx returns a shared
+        // sentinel in that case, which must never be populated as a real room.
+        const auto desc = key.index >= 0
+                              ? game() + 0x14 + listIndex * 0xb8
+                              : reinterpret_cast<Address>(engine<Desc>(0x340bc0)(
+                                    reinterpret_cast<void*>(game()), key.index, key.dimension));
         if (!desc)
             throw std::runtime_error("Replica descriptor is unavailable");
-        const auto current = findRoom(participant(runtime::localViewSlot()));
-        if (!current || current->key != key || current->replicaShell || !at<Address>(desc, 0x10)) {
+        {
             auto& stored = replicaLayouts[key];
             stored = config;
             at<Address>(desc, 0x10) = reinterpret_cast<Address>(stored.data());
             at<Address>(desc, 0x14) = 0;
-            at<int>(desc, 0) = at<int>(desc, 4) = key.index;
+            at<int>(desc, 0) = gridIndex;
+            at<int>(desc, 4) = key.index;
+            at<int>(desc, 8) = listIndex;
             at<int>(desc, 0xc) = key.dimension;
+            if (key.index >= 0) {
+                registerMapRoom(std::span<int, 507>(reinterpret_cast<int*>(game() + 0x17adc), 507),
+                                at<unsigned>(game(), 0x182cc), key.dimension, key.index, listIndex,
+                                cells);
+            }
             at<unsigned>(desc, 0x18) = allowed;
             for (unsigned i = 0; i < doors.size(); ++i)
                 at<unsigned>(desc, 0x1c + 4 * i) = doors[i];
@@ -1251,12 +1391,27 @@ int actorSprites(lua_State* L) {
 int actorGhost(lua_State* L) {
     const auto index = lua.checkInteger(L, 1), ghost = lua.checkInteger(L, 2);
     const auto all = values(roster());
-    if (!runtime::replica() || index < 0 || static_cast<std::size_t>(index) >= all.size() ||
-        (ghost != 0 && ghost != 1)) {
+    wchar_t labRoot[1024];
+    const auto length = GetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", labRoot, 1024);
+    const bool lab = length && length < 1024 &&
+                     GetFileAttributesW((std::wstring(labRoot) + L"\\.isaac-lan-lab").c_str()) !=
+                         INVALID_FILE_ATTRIBUTES;
+    if ((!runtime::replica() && !lab) || index < 0 ||
+        static_cast<std::size_t>(index) >= all.size() || (ghost != 0 && ghost != 1)) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    engine<RoomCall>(ghost ? 0x3d96f0 : 0x3d93b0)(reinterpret_cast<void*>(all[index]));
+    const auto room = findRoom(all[index]);
+    if (!room) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    {
+        // Ghost conversion removes familiars and can drop items. A remote
+        // actor must never execute those effects in the displayed local room.
+        Scope scope(*room, controlledActors(all[index]));
+        engine<RoomCall>(ghost ? 0x3d96f0 : 0x3d93b0)(reinterpret_cast<void*>(all[index]));
+    }
     lua.pushBoolean(L, true);
     return 1;
 }
@@ -1335,12 +1490,38 @@ int laserPath(lua_State* L) {
     return 1;
 }
 std::map<Address, RoomCall> entityUpdates;
+RoomCall originalNeedleVisual = nullptr;
+void __attribute__((fastcall)) needleVisual(void* npc, void*) {
+    // Needle positions its body layers from native movement history during
+    // Render. Replicas receive those layer poses and have no simulated trail.
+    if (!runtime::replica())
+        originalNeedleVisual(npc);
+}
 RoomCall originalDoorUpdate = nullptr;
 void __attribute__((fastcall)) doorUpdate(void* door, void*) {
     // Replica doors receive their complete state and animation from the host.
     // Running native door decisions here can immediately undo a locked door.
     if (!runtime::replica())
         originalDoorUpdate(door);
+}
+RoomCall originalTrapdoorUpdate = nullptr;
+void __attribute__((fastcall)) trapdoorUpdate(void* trapdoor, void*) {
+    if (runtime::replica())
+        return;
+    const auto room = at<Address>(game(), 0x18300);
+    using IsClear = bool(__attribute__((thiscall))*)(void*);
+    if (enabled && at<int>(room, 8) == 5 &&
+        !engine<IsClear>(0x36080)(reinterpret_cast<void*>(room))) {
+        // Native trapdoors reopen from state zero when nobody stands nearby.
+        // Keep the boss exit closed throughout combat, then let its normal
+        // update open it and perform the floor transition after the clear.
+        const auto grid = reinterpret_cast<Address>(trapdoor);
+        at<int>(grid, 0xc) = 0;
+        using Play = void(__attribute__((thiscall))*)(void*, const char*, bool);
+        engine<Play>(0x0a380)(reinterpret_cast<void*>(grid + 0x40), "Closed", false);
+        return;
+    }
+    originalTrapdoorUpdate(trapdoor);
 }
 void __attribute__((fastcall)) replicaEntityUpdate(void* entity, void*) {
     if (runtime::replica())
@@ -1389,7 +1570,16 @@ bool update(void*, RoomCall original) {
                 continue;
         }
         Scope scope(*room);
+        if (!runtime::replica() && presentation::roomPaused())
+            continue;
         restorePositions(room->pointer);
+        // Game::Update decrements this before Room::Update, outside our room
+        // scopes. Each room restores its own value here, so advance it once
+        // for every authoritative room. Delirium's death sequence waits for
+        // this timer to reach zero before spawning the completion chest.
+        auto& flash = at<int>(game(), 0x26538);
+        if (!runtime::replica() && flash > 0)
+            --flash;
         if (at<bool>(game(), 0x676b4)) {
             using Lerp = void(__attribute__((thiscall))*)(void*, const void*, const void*);
             engine<Lerp>(0x2ef410)(reinterpret_cast<void*>(game() + 0x676b8),
@@ -1413,6 +1603,8 @@ bool half(void (*original)()) {
         if (room->replicaShell || occupants(*room).empty())
             continue;
         Scope scope(*room);
+        if (presentation::roomPaused())
+            continue;
         original();
         ++room->halves;
     }
@@ -1759,6 +1951,27 @@ void finishFrame() {
         return;
     }
     setConnected(connectedMask);
+    if (!runtime::replica()) {
+        // Vanilla global room changes carry co-op ghosts with living players.
+        // Per-player transfers need that same rule when the last survivor
+        // leaves a room, including a death that occurs while already split.
+        for (const auto ghost : participants) {
+            if (!at<bool>(ghost, 0x20a9))
+                continue;
+            const auto source = findRoom(ghost);
+            const auto livingHere =
+                std::any_of(participants.begin(), participants.end(), [&](Address p) {
+                    return !at<bool>(p, 0x20a9) && findRoom(p) == source;
+                });
+            if (!source || livingHere)
+                continue;
+            const auto survivor = std::find_if(participants.begin(), participants.end(),
+                                               [](Address p) { return !at<bool>(p, 0x20a9); });
+            if (survivor != participants.end())
+                if (const auto target = findRoom(*survivor))
+                    queue(ghost, target->key.index, target->key.dimension, -1);
+        }
+    }
     if (pending.empty() && pendingItemRevival.empty()) {
         preparedDepartures.clear();
         return;
@@ -1769,8 +1982,12 @@ void finishFrame() {
         Room* from = findRoom(request.player);
         if (!from || from->key == request.destination)
             continue;
-        if (request.teleport &&
-            (at<bool>(request.player, 0x1398) || at<bool>(request.player, 0x139a))) {
+        using Finished = bool(__attribute__((thiscall))*)(void*, const char*);
+        // TeleportOut holds the extra-animation flag until ChangeRoom. Waiting
+        // for that flag to clear deadlocks the transition; wait for the native
+        // sprite's last frame, then replace it with TeleportIn on arrival.
+        if (request.teleport && request.animateDeparture && at<bool>(request.player, 0x1398) &&
+            !engine<Finished>(0xa550)(reinterpret_cast<void*>(request.player + 0x48), "")) {
             pending.push_back(request);
             continue;
         }
@@ -1812,6 +2029,11 @@ void finishFrame() {
         const bool protect = !created && occupiedCombat(*to, request.player);
         to->replicaShell = false;
         const auto actors = controlledActors(request.player);
+        std::vector<Address> companions;
+        for (auto player : actors)
+            for (auto entity : followers(player, *from))
+                if (std::find(companions.begin(), companions.end(), entity) == companions.end())
+                    companions.push_back(entity);
         {
             Scope scope(*from, actors);
             // Game::ChangeRoom normally performs this before Level::ChangeRoom.
@@ -1821,7 +2043,6 @@ void finishFrame() {
                 if (!preparedDepartures.contains(player))
                     originalLeave(reinterpret_cast<void*>(player), false);
         }
-        std::vector<Address> companions;
         for (auto player : actors) {
             for (auto entity : followers(player, *from))
                 if (std::find(companions.begin(), companions.end(), entity) == companions.end())
@@ -1830,7 +2051,11 @@ void finishFrame() {
             location[player] = to;
         }
         for (auto entity : companions)
-            moveEntity(entity, *from, *to);
+            // A fresh native Room::Init discards ordinary NPCs already in its
+            // entity list. Insert Dark Esau after initialization, while the
+            // source room still owns him; familiars retain their normal path.
+            if (!created || at<unsigned>(entity, 0x28) != 866)
+                moveEntity(entity, *from, *to);
         {
             Scope scope(*to, actors);
             if (created) {
@@ -1848,6 +2073,9 @@ void finishFrame() {
                     engine<RoomCall>(0x3eb1b0)(reinterpret_cast<void*>(to->pointer));
                 skipSave = 0;
                 transferring = false;
+                for (auto entity : companions)
+                    if (at<unsigned>(entity, 0x28) == 866)
+                        moveEntity(entity, *from, *to);
             } else {
                 // Joining an occupied room must apply the arriving characters'
                 // entry effects without reinitializing resident entities.
@@ -1861,6 +2089,7 @@ void finishFrame() {
             for (auto player : actors)
                 if (player != request.player)
                     arrival(player, *to, request.door, {}, protect);
+            runtime::roomEntered();
             if (created)
                 presentation::roomEntered(to->pointer);
             if (!created) {
@@ -1871,8 +2100,15 @@ void finishFrame() {
             }
             if (request.teleport) {
                 using Animate = void(__attribute__((thiscall))*)(void*, bool);
-                for (auto p : actors)
+                for (auto p : actors) {
                     engine<Animate>(0x3abcc0)(reinterpret_cast<void*>(p), false);
+                    // Womb/portal effects disable ControlsEnabled themselves.
+                    // Native RoomTransition releases it at completion, which
+                    // our per-player transfer replaces. Keep its extra sprite
+                    // animation, but release only the arriving portal actors.
+                    if (!request.animateDeparture)
+                        at<bool>(p, 0x410) = true;
+                }
             }
         }
         canonical();
@@ -1927,6 +2163,7 @@ void requestExit(bool save) {
 }
 void beforeStart() {
     presentation::items::reset();
+    replicaMapEntities.clear();
     for (const auto& [entry, original] : entityUpdates) {
         (void)original;
         MH_DisableHook(reinterpret_cast<void*>(entry));
@@ -1976,6 +2213,31 @@ void beforeStart() {
     location.clear();
     participants.clear();
 }
+void withMapPickups(const std::function<void()>& cache) {
+    if (!runtime::replica()) {
+        cache();
+        return;
+    }
+    struct Restore {
+        std::vector<std::pair<Address, Vector>> vectors;
+        ~Restore() {
+            for (const auto& [descriptor, vector] : vectors)
+                at<Vector>(descriptor, 0x74) = vector;
+        }
+    } restore;
+    using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+    for (const auto& [key, entities] : replicaMapEntities) {
+        const auto descriptor = reinterpret_cast<Address>(
+            engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), key.index, key.dimension));
+        if (!descriptor || !at<Address>(descriptor, 0x10))
+            continue;
+        restore.vectors.emplace_back(descriptor, at<Vector>(descriptor, 0x74));
+        const auto begin = reinterpret_cast<Address>(entities.data());
+        const auto end = begin + entities.size() * sizeof(MapEntity);
+        at<Vector>(descriptor, 0x74) = {begin, end, end};
+    }
+    cache();
+}
 bool install(Address base, void (*log)(const std::string&)) {
     image = base;
     logger = log;
@@ -2013,6 +2275,10 @@ bool install(Address base, void (*log)(const std::string&)) {
                 reinterpret_cast<void**>(&originalPlayersCenter)) &&
            hook(0x30c5c0, reinterpret_cast<void*>(doorUpdate),
                 reinterpret_cast<void**>(&originalDoorUpdate)) &&
+           hook(0x31fef0, reinterpret_cast<void*>(trapdoorUpdate),
+                reinterpret_cast<void**>(&originalTrapdoorUpdate)) &&
+           hook(0x14f670, reinterpret_cast<void*>(needleVisual),
+                reinterpret_cast<void**>(&originalNeedleVisual)) &&
            hook(0x4607a0, reinterpret_cast<void*>(postUpdate),
                 reinterpret_cast<void**>(&originalPostUpdate)) &&
            hook(0x465180, reinterpret_cast<void*>(postNewRoom),
@@ -2064,6 +2330,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_sync", syncLocations);
     function("state_clock", stateClock);
     function("room_layout", roomLayout);
+    function("map_pickups", mapPickups);
     function("map_refresh", refreshMap);
     function("actor_sprites", actorSprites);
     function("actor_ghost", actorGhost);

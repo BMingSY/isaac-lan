@@ -18,6 +18,25 @@ local function hex(value)
         end)
     )
 end
+local function stateEnvironment()
+    local env = setmetatable({
+        _IsaacLan = {},
+        _IsaacLanPrediction = {},
+        _IsaacLanModules = {
+            ["state/codec"] = codec,
+            ["state/inventory"] = dofile(root .. "/src/bridge/state/inventory.lua"),
+            ["state/entities"] = dofile(root .. "/src/bridge/state/entities.lua"),
+            ["state/grids"] = dofile(root .. "/src/bridge/state/grids.lua"),
+        },
+        ItemType = { ITEM_ACTIVE = 2 },
+        NullItemID = { ID_LOST_CURSE = 1 },
+        Vector = function(x, y)
+            return { X = x, Y = y }
+        end,
+    }, { __index = _G })
+    assert(loadfile(root .. "/src/bridge/state.lua", "t", env))()
+    return env
+end
 local actions = {
     version = function()
         return { _VERSION }
@@ -49,21 +68,7 @@ local actions = {
     bot_command = bot.command,
     bot_session = bot.session,
     state_init = function()
-        local env = setmetatable({
-            _IsaacLan = {},
-            _IsaacLanPrediction = {},
-            _IsaacLanModules = {
-                ["state/codec"] = codec,
-                ["state/inventory"] = dofile(root .. "/src/bridge/state/inventory.lua"),
-                ["state/entities"] = dofile(root .. "/src/bridge/state/entities.lua"),
-            },
-            ItemType = { ITEM_ACTIVE = 2 },
-            NullItemID = { ID_LOST_CURSE = 1 },
-            Vector = function(x, y)
-                return { X = x, Y = y }
-            end,
-        }, { __index = _G })
-        assert(loadfile(root .. "/src/bridge/state.lua", "t", env))()
+        local env = stateEnvironment()
         local state = assert(env._IsaacLanState)
         return {
             state.encode == codec.encode,
@@ -72,6 +77,65 @@ local actions = {
             type(state.capture),
             type(state.present),
         }
+    end,
+    room_entry = function(cleared, boss)
+        local env, closed, animation = stateEnvironment(), 0, "Opened"
+        env.RoomType = { ROOM_BOSS = 5 }
+        env.GridEntityType = { GRID_TRAPDOOR = 17 }
+        local rock = {
+            State = 4,
+            GetType = function()
+                return 2
+            end,
+        }
+        local trapdoor = {
+            State = 2,
+            GetType = function()
+                return 17
+            end,
+            GetSprite = function()
+                -- Vanilla J460 Sprite has Play, but no HasAnimation method.
+                return {
+                    Play = function(_, name, force)
+                        assert(force)
+                        animation = name
+                    end,
+                }
+            end,
+        }
+        local room = {
+            IsClear = function()
+                return cleared
+            end,
+            GetType = function()
+                return boss and 5 or 1
+            end,
+            GetGridSize = function()
+                return 3
+            end,
+            GetGridEntity = function(_, index)
+                return index == 0 and rock or index == 1 and trapdoor or nil
+            end,
+            GetDoor = function(_, slot)
+                if slot == 0 or slot == 3 then
+                    return {
+                        Close = function(_, force)
+                            assert(force)
+                            closed = closed + 1
+                        end,
+                    }
+                end
+            end,
+        }
+        env.Game = function()
+            return {
+                GetRoom = function()
+                    return room
+                end,
+            }
+        end
+        env._IsaacLanRoomEntered()
+        return { closed, trapdoor.State, animation, rock.State }
     end,
 }
 for line in io.lines() do

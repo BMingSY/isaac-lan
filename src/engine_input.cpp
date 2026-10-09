@@ -485,6 +485,9 @@ void leaveLan() {
     if (logger)
         logger("input_virtual=DISABLED");
 }
+void prepareControllers() {
+    assignLanDeviceIds();
+}
 void confirmOriginalMenu(void* menu, void(__attribute__((thiscall)) * update)(void*)) {
     if (!hookQuery())
         return;

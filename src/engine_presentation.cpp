@@ -1,11 +1,13 @@
 #include "engine_presentation.h"
 #include "engine_item_presentation.h"
 #include "engine_rooms.h"
+#include "intro_barrier.h"
 #include "runtime_net.h"
 #include "net_protocol.h"
 #include <MinHook.h>
 #include <deque>
 #include <cstring>
+#include <array>
 
 namespace isaac::presentation {
 namespace {
@@ -20,6 +22,8 @@ struct Intro {
 };
 std::deque<Intro> intros;
 unsigned serial = 0, seen = 0;
+unsigned played = 0;
+IntroBarrier waiting;
 using StartIntro = void(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 StartIntro originalIntro;
 void playIntro(void* transition, unsigned first, unsigned second) {
@@ -49,6 +53,9 @@ void __attribute__((fastcall)) startIntro(void* transition, void*, unsigned firs
     const auto game = at<std::uintptr_t>(image, 0x871678);
     intros.push_back({++serial, runtime::tick(), audience, at<int>(game, 0), at<int>(game, 4),
                       at<int>(game, 0x1830c), at<int>(game, 0x18304), first, second});
+    const auto& event = intros.back();
+    waiting.start({event.stage, event.type, event.dimension, event.room}, event.serial, event.tick,
+                  audience);
     while (intros.size() > 32)
         intros.pop_front();
     // A native intro owns the process-wide transition screen. Background room
@@ -105,6 +112,7 @@ int events(lua_State* L) {
                 continue;
             rooms::withView(
                 [&] { playIntro(reinterpret_cast<void*>(game + 0x1b83c), first, second); }, true);
+            played = id;
         }
         r.finish();
         lua.pushBoolean(L, true);
@@ -120,8 +128,7 @@ int resetLua(lua_State*) {
     return 0;
 }
 int active(lua_State* L) {
-    const auto transition = at<std::uintptr_t>(image, 0x871678) + 0x1b83c;
-    lua.pushBoolean(L, at<int>(transition, 0) == 2 && at<int>(transition, 0x238) != 0);
+    lua.pushBoolean(L, introActive());
     return 1;
 }
 } // namespace
@@ -160,7 +167,26 @@ bool bind(lua_State* L, HMODULE module) {
 void reset() {
     items::reset();
     intros.clear();
-    serial = seen = 0;
+    waiting.clear();
+    serial = seen = played = 0;
+}
+unsigned playedIntro() {
+    return played;
+}
+bool introActive() {
+    const auto transition = at<std::uintptr_t>(image, 0x871678) + 0x1b83c;
+    return at<int>(transition, 0) == 2 && at<int>(transition, 0x238) != 0;
+}
+void observeIntro(unsigned slot, unsigned id, bool active) {
+    waiting.observe(slot, id, active);
+}
+bool roomPaused() {
+    const auto game = at<std::uintptr_t>(image, 0x871678);
+    const std::array key{at<int>(game, 0), at<int>(game, 4), at<int>(game, 0x1830c),
+                         at<int>(game, 0x18304)};
+    // A missing acknowledgement must not leave a room frozen after a player
+    // disconnects or fails to render. Normal completion is event-specific.
+    return waiting.paused(key, runtime::tick(), rooms::connected());
 }
 void roomEntered(std::uintptr_t room) {
     if (runtime::replica())

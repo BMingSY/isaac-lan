@@ -449,6 +449,11 @@ struct Session::Impl {
                     throw std::runtime_error("Invalid input room flag");
                 if (hasRoom) {
                     room = InputRoom{r.u32(), static_cast<std::int16_t>(r.u16()), r.u8()};
+                    room->introSerial = r.u32();
+                    const auto active = r.u8();
+                    if (active > 1)
+                        throw std::runtime_error("Invalid intro state");
+                    room->introActive = active != 0;
                     if (room->index < -20 || room->index >= 169 || room->dimension > 2)
                         throw std::runtime_error("Invalid input room");
                 }
@@ -459,7 +464,9 @@ struct Session::Impl {
                 p.hasInput = true;
                 p.inputSequence = sequence;
                 p.inputAt = Clock::now();
-                const auto edges = room == inputRooms[slot] ? latest[slot].triggered : 0;
+                const bool sameRoom = room && inputRooms[slot] ? room->sameRoom(*inputRooms[slot])
+                                                               : room == inputRooms[slot];
+                const auto edges = latest[slot].triggered & (sameRoom ? 0xffffu : menuActionMask);
                 latest[slot] = value;
                 latest[slot].triggered |= edges;
                 inputRooms[slot] = room;
@@ -1242,6 +1249,8 @@ bool Session::submit(std::uint32_t sequence, const InputFrame& input,
             w.u32(room->epoch);
             w.u16(static_cast<std::uint16_t>(room->index));
             w.u8(room->dimension);
+            w.u32(room->introSerial);
+            w.u8(room->introActive);
         }
         impl->peers[0]->sendMessage(w);
     }

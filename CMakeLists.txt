@@ -30,8 +30,14 @@ if(BUILD_TESTING)
         add_test(NAME bridge.lanbot
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(bridge.api bridge.goodtrip bridge.prediction bridge.lanbot
-                             PROPERTIES TIMEOUT 30 LABELS "offline;lua")
+        add_test(NAME bridge.grids
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/grids.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.resume
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_resume.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.api bridge.goodtrip bridge.prediction bridge.lanbot bridge.grids
+                             bridge.resume PROPERTIES TIMEOUT 30 LABELS "offline;lua")
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
     target_include_directories(isaac_lan_core_test PRIVATE src)
@@ -47,6 +53,8 @@ if(BUILD_TESTING)
         strings-blobs
         input-progress
         automation-input
+        intro-barrier
+        room-map
         truncated-packets
         hashes
         progression
@@ -90,6 +98,7 @@ foreach(
     state/codec
     state/inventory
     state/entities
+    state/grids
     api/codec
     api/lifecycle
     api/actions

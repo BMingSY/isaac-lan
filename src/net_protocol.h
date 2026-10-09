@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace isaac::lan {
-constexpr std::uint16_t protocolVersion = 21;
+constexpr std::uint16_t protocolVersion = 22;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -64,12 +64,26 @@ struct InputFrame {
     std::uint16_t triggered = 0;
     bool operator==(const InputFrame&) const = default;
 };
+// Menu requests belong to the session, not to a room's movement epoch.
+constexpr std::uint16_t menuActionMask = (1u << 12) | (1u << 15);
+inline InputFrame menuInput(const InputFrame& input) {
+    InputFrame result;
+    result.values[12] = input.values[12];
+    result.values[15] = input.values[15];
+    result.triggered = input.triggered & menuActionMask;
+    return result;
+}
 // Held controls belong to the room the sender has actually displayed.
 struct InputRoom {
     std::uint32_t epoch = 0;
     std::int16_t index = 0;
     std::uint8_t dimension = 0;
+    std::uint32_t introSerial = 0;
+    bool introActive = false;
     bool operator==(const InputRoom&) const = default;
+    bool sameRoom(const InputRoom& other) const {
+        return epoch == other.epoch && index == other.index && dimension == other.dimension;
+    }
 };
 struct Frame {
     std::uint32_t tick = 0;
