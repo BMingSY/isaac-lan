@@ -27,7 +27,11 @@ if(BUILD_TESTING)
         add_test(NAME bridge.prediction
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/prediction.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(bridge.api bridge.goodtrip bridge.prediction PROPERTIES TIMEOUT 30)
+        add_test(NAME bridge.lanbot
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.api bridge.goodtrip bridge.prediction bridge.lanbot
+                             PROPERTIES TIMEOUT 30)
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
     target_include_directories(isaac_lan_core_test PRIVATE src)
@@ -42,6 +46,7 @@ if(BUILD_TESTING)
         integers
         strings-blobs
         input-progress
+        automation-input
         truncated-packets
         hashes
         progression
@@ -86,6 +91,11 @@ foreach(
     api/lifecycle
     api/actions
     api/public
+    lanbot/navigation
+    lanbot/combat
+    lanbot/planner
+    lanbot/observe
+    lanbot
     compat/wrapping
     compat/registry
     compat/stats_plus

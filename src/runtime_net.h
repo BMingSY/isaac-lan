@@ -19,6 +19,8 @@ void halfCompleted();
 int localViewSlot();
 bool replica();
 void present();
+void refreshAutomation(std::uint32_t renderFrame);
+void pollLocalConsole();
 void beginStage(bool same, int animation, bool rKey = false);
 void beginRewind(std::span<const std::uint8_t> bytes);
 bool requestRoom(const lan::RoomRequest&);
