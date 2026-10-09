@@ -61,6 +61,15 @@ struct Overlay {
     }
 };
 std::array<std::unique_ptr<Overlay>, 4> owned;
+void __attribute__((fastcall)) update(void* overlay, void*, bool finish) {
+    // Replica overlays are display state. Native Update also heals players,
+    // changes rooms and emits sounds at animation markers. Those effects run
+    // once on the authority; snapshots supply the complete local animation.
+    if (runtime::replica() && rooms::virtualized() &&
+        reinterpret_cast<Address>(overlay) == game() + 0x1c034)
+        return;
+    originalUpdate(overlay, finish);
+}
 struct Actor {
     unsigned slot = 0, role = 0;
     Address player = 0;
@@ -220,11 +229,12 @@ struct API {
     int(__cdecl* getMetatable)(lua_State*, int);
     int(__cdecl* setMetatable)(lua_State*, int);
 } lua{};
-int megaSprite(lua_State* L) {
+int overlaySprite(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
+    const auto part = lua.getTop(L) >= 3 ? lua.checkInteger(L, 3) : 1;
     auto sample = static_cast<Address*>(lua.toUserdata(L, 2));
     Address overlay = game() + 0x1c034;
-    if (slot < 0 || slot >= 4 || !sample || lua.rawLength(L, 2) != 8) {
+    if (slot < 0 || slot >= 4 || part < 0 || part > 1 || !sample || lua.rawLength(L, 2) != 8) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -235,16 +245,57 @@ int megaSprite(lua_State* L) {
         }
         overlay = owned[slot]->address();
     }
-    if (!runtime::replica() && (at<int>(overlay, 4) != 45 || !at<int>(overlay, 0))) {
+    if (!runtime::replica() && (!at<int>(overlay, 0) || (part == 1 ? at<int>(overlay, 4) != 45
+                                                                   : !at<bool>(overlay, 0x111)))) {
         lua.pushBoolean(L, false);
         return 1;
     }
     auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
     wrapper[0] = sample[0];
-    wrapper[1] = overlay + 0x11a4;
+    wrapper[1] = overlay + (part == 1 ? 0x11a4 : 8);
     lua.getMetatable(L, 2);
     lua.setMetatable(L, -2);
     return 1;
+}
+int pose(lua_State* L) {
+    try {
+        const auto slot = lua.checkInteger(L, 1);
+        if (slot < 0 || slot >= 4)
+            throw std::runtime_error("Invalid item overlay slot");
+        Address overlay = game() + 0x1c034;
+        if (lua.getTop(L) == 1) {
+            if (!runtime::replica())
+                overlay = owned[slot] ? owned[slot]->address() : 0;
+            lan::Writer w(lan::Message::world);
+            w.u8(overlay ? at<unsigned>(overlay, 0) : 0);
+            w.u8(overlay ? at<unsigned>(overlay, 4) : 0);
+            w.u32(overlay ? at<unsigned>(overlay, 0x119c) : 0);
+            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                           w.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica() || slot != runtime::localViewSlot())
+            throw std::runtime_error("Only the local replica applies item overlay pose");
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 2, &size);
+        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        const auto state = r.u8(), id = r.u8();
+        const auto delay = r.u32();
+        r.finish();
+        if (state > 2 || id >= 48 || delay > 900)
+            throw std::runtime_error("Invalid item overlay pose");
+        if (state && at<unsigned>(overlay, 4) != id)
+            originalShow(reinterpret_cast<void*>(overlay), id, delay, nullptr);
+        at<unsigned>(overlay, 0) = state;
+        at<unsigned>(overlay, 4) = id;
+        at<unsigned>(overlay, 0x119c) = delay;
+        lua.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& e) {
+        runtime::abort(e.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
 }
 int synchronize(lua_State* L) {
     try {
@@ -379,6 +430,8 @@ int status(lua_State* L) {
     integer("overlayID", at<int>(overlay, 4));
     integer("overlayDelay", at<int>(overlay, 0x119c));
     integer("globalOverlayState", at<int>(game() + 0x1c034, 0));
+    integer("bookLoaded", at<bool>(overlay, 0x111));
+    integer("bookPlaying", at<bool>(overlay, 0x4c));
     integer("megaLoaded", at<bool>(overlay, 0x12ad));
     integer("megaPlaying", at<bool>(overlay, 0x11e8));
     integer("megaFrame", at<unsigned>(overlay, 0x11e4));
@@ -390,12 +443,13 @@ int status(lua_State* L) {
 } // namespace
 bool install(Address base) {
     image = base;
-    originalUpdate = engine<Update>(0x5aca90);
     auto hook = [&](unsigned offset, void* callback, void** original) {
         const auto target = reinterpret_cast<void*>(image + offset);
         return MH_CreateHook(target, callback, original) == MH_OK && MH_EnableHook(target) == MH_OK;
     };
-    return hook(0x5ad210, reinterpret_cast<void*>(show), reinterpret_cast<void**>(&originalShow)) &&
+    return hook(0x5aca90, reinterpret_cast<void*>(update),
+                reinterpret_cast<void**>(&originalUpdate)) &&
+           hook(0x5ad210, reinterpret_cast<void*>(show), reinterpret_cast<void**>(&originalShow)) &&
            hook(0x5acfe0, reinterpret_cast<void*>(render),
                 reinterpret_cast<void**>(&originalRender)) &&
            hook(0x5abe70, reinterpret_cast<void*>(load), reinterpret_cast<void**>(&originalLoad)) &&
@@ -431,8 +485,10 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "item_presentation_events");
     lua.pushClosure(L, status, 0);
     lua.setField(L, -2, "item_presentation_state");
-    lua.pushClosure(L, megaSprite, 0);
+    lua.pushClosure(L, overlaySprite, 0);
     lua.setField(L, -2, "item_presentation_sprite");
+    lua.pushClosure(L, pose, 0);
+    lua.setField(L, -2, "item_presentation_pose");
     return true;
 }
 void advance() {

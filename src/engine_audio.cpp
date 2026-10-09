@@ -1,4 +1,5 @@
 #include "engine_audio.h"
+#include "audio_ownership.h"
 #include "engine_rooms.h"
 #include "runtime_net.h"
 #include "net_protocol.h"
@@ -27,10 +28,10 @@ std::uintptr_t image = 0;
 template <class T> T& at(std::uintptr_t p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }
-using Key = std::pair<int, int>;
+using Key = RoomKey;
 Key roomKey() {
     const auto g = at<std::uintptr_t>(image, 0x871678);
-    return {at<int>(g, 0x1830c), at<int>(g, 0x18304)};
+    return audioRoomKey(runtime::worldEpoch(), at<int>(g, 0x1830c), at<int>(g, 0x18304));
 }
 struct MusicState {
     unsigned mode = 0;
@@ -44,10 +45,13 @@ using MusicCall = void(__attribute__((thiscall)) *)(void*, int, float);
 MusicCall originalMusicPlay = nullptr, originalMusicFade = nullptr;
 unsigned scopeDepth = 0;
 std::array<unsigned, 2> audibleIDs{};
+unsigned playedSounds = 0, filteredSounds = 0;
+int lastSoundID = 0;
+std::map<int, unsigned> playedSoundIDs;
 void musicCall(void* manager, int id, float parameter, unsigned mode, MusicCall original) {
     const auto audience = rooms::soundAudience();
     if (audience) {
-        if (runtime::replica())
+        if (runtime::replica() && !audible(audience, runtime::localViewSlot()))
             return;
         music[roomKey()] = {mode, id, parameter};
         if (scopeDepth) {
@@ -57,7 +61,7 @@ void musicCall(void* manager, int id, float parameter, unsigned mode, MusicCall 
             at<unsigned>(reinterpret_cast<std::uintptr_t>(manager), 0x310) = 0;
             return;
         }
-        if (!(audience & 1))
+        if (!audible(audience, runtime::localViewSlot()))
             return;
         played = std::pair{roomKey(), music[roomKey()]};
     }
@@ -74,14 +78,23 @@ Play originalPlay = nullptr;
 void __attribute__((fastcall)) play(void* manager, void*, int id, float volume, int delay,
                                     bool loop, float pitch, float pan) {
     const auto audience = rooms::soundAudience();
+    if (runtime::replica() && !audible(audience, runtime::localViewSlot())) {
+        ++filteredSounds;
+        return;
+    }
     if (audience && !runtime::replica()) {
         events.push_back(
             {++serial, runtime::tick(), audience, id, volume, delay, loop, pitch, pan});
         while (events.size() > 512)
             events.pop_front();
         // Background rooms retain gameplay and send their sounds to occupants.
-        if (!(audience & 1))
+        if (!audible(audience, runtime::localViewSlot()))
             volume = 0;
+    }
+    if (volume > 0) {
+        ++playedSounds;
+        lastSoundID = id;
+        ++playedSoundIDs[id];
     }
     originalPlay(manager, id, volume, delay, loop, pitch, pan);
 }
@@ -94,10 +107,45 @@ struct API {
     int(__cdecl* getTop)(lua_State*);
     void(__cdecl* pushBoolean)(lua_State*, int);
 } lua{};
+void ensureRoomMusic() {
+    if (runtime::replica() || music.contains(roomKey()))
+        return;
+    // StartGame selects its first track before room virtualization starts.
+    // A later room can also request the already selected track and skip Play.
+    // Evaluate that room once with empty virtual IDs, without changing the
+    // physical channels. Its native selector supplies the correct room track.
+    const auto manager = at<std::uintptr_t>(image, 0x87169c) + 0x29fbc;
+    const auto previous = std::array{at<unsigned>(manager, 0x30c), at<unsigned>(manager, 0x310)};
+    at<unsigned>(manager, 0x30c) = at<unsigned>(manager, 0x310) = 0;
+    const auto g = at<std::uintptr_t>(image, 0x871678);
+    using RoomMusic = void(__attribute__((thiscall))*)(void*);
+    reinterpret_cast<RoomMusic>(image +
+                                0x3eb1b0)(reinterpret_cast<void*>(at<std::uintptr_t>(g, 0x18300)));
+    if (!music.contains(roomKey()))
+        music[roomKey()] = {0, 0, 0};
+    at<unsigned>(manager, 0x30c) = previous[0];
+    at<unsigned>(manager, 0x310) = previous[1];
+}
+int status(lua_State* L) {
+    const auto manager = at<std::uintptr_t>(image, 0x87169c) + 0x29fbc;
+    lan::Writer w(lan::Message::world);
+    for (auto value :
+         {scopeDepth ? audibleIDs[0] : at<unsigned>(manager, 0x30c), at<unsigned>(manager, 0x30c),
+          playedSounds, filteredSounds, static_cast<unsigned>(lastSoundID)})
+        w.u32(value);
+    if (lua.getTop(L)) {
+        const auto id = static_cast<int>(lua.checkInteger(L, 1));
+        const auto found = playedSoundIDs.find(id);
+        w.u32(found == playedSoundIDs.end() ? 0 : found->second);
+    }
+    lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1), w.bytes.size() - 1);
+    return 1;
+}
 int musicState(lua_State* L) {
     try {
         const auto key = roomKey();
         if (lua.getTop(L) == 0) {
+            ensureRoomMusic();
             const auto found = music.find(key);
             const auto value = found == music.end() ? MusicState{} : found->second;
             lan::Writer w(lan::Message::world);
@@ -191,6 +239,8 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "music_state");
     lua.pushClosure(L, resetLua, 0);
     lua.setField(L, -2, "sound_reset");
+    lua.pushClosure(L, status, 0);
+    lua.setField(L, -2, "audio_state");
     return true;
 }
 void reset() {
@@ -198,6 +248,9 @@ void reset() {
     serial = 0;
     music.clear();
     played.reset();
+    playedSounds = filteredSounds = 0;
+    lastSoundID = 0;
+    playedSoundIDs.clear();
 }
 RoomScope::RoomScope() {
     if (!image)

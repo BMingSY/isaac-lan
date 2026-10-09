@@ -7,6 +7,7 @@
 #include "session_archive.h"
 #include "intro_barrier.h"
 #include "room_map.h"
+#include "audio_ownership.h"
 #include "test_support.h"
 #include <algorithm>
 #include <limits>
@@ -14,6 +15,18 @@
 using namespace isaac::lan;
 
 namespace {
+void audioOwnership() {
+    using namespace isaac::audio;
+    require(audible(0, 1), "Solo/menu audio was filtered");
+    require(audible(2, 1) && !audible(2, 0), "Guest room leaked sounds to the host");
+    require(audible(1, 0) && !audible(1, 1), "Host room leaked sounds to the guest");
+    require(audible(3, 0) && audible(3, 1), "Shared room lost its sounds");
+    require(!audible(1, -1) && !audible(1, 4), "Invalid listener received room audio");
+    require(audioRoomKey(1, 0, 84) != audioRoomKey(2, 0, 84),
+            "Another floor reused the preceding floor's music");
+    require(audioRoomKey(1, 0, 84) != audioRoomKey(1, 1, 84),
+            "A dimension reused another room's music");
+}
 void transitionCharge() {
     InputFrame held;
     held.values.fill(65535);
@@ -482,6 +495,7 @@ int main(int argc, char** argv) {
                      {"automation-input", automationInput},
                      {"keyboard-pause", keyboardPause},
                      {"transition-charge", transitionCharge},
+                     {"audio-ownership", audioOwnership},
                      {"bootstrap-profile", bootstrapProfile},
                      {"intro-barrier", introBarrier},
                      {"room-map", roomMap},

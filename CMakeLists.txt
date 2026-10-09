@@ -39,6 +39,9 @@ if(BUILD_TESTING)
         add_test(NAME bridge.mod-loading
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/mod_loading.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.presentation
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/presentation.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(
             bridge.api
             bridge.goodtrip
@@ -47,6 +50,7 @@ if(BUILD_TESTING)
             bridge.grids
             bridge.resume
             bridge.mod-loading
+            bridge.presentation
             PROPERTIES TIMEOUT 30 LABELS "offline;lua")
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
@@ -65,6 +69,7 @@ if(BUILD_TESTING)
         automation-input
         keyboard-pause
         transition-charge
+        audio-ownership
         bootstrap-profile
         intro-barrier
         room-map
@@ -112,6 +117,7 @@ foreach(
     state/inventory
     state/entities
     state/grids
+    state/presentation
     api/codec
     api/lifecycle
     api/actions
