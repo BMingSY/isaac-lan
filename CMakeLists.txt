@@ -36,8 +36,18 @@ if(BUILD_TESTING)
         add_test(NAME bridge.resume
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_resume.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(bridge.api bridge.goodtrip bridge.prediction bridge.lanbot bridge.grids
-                             bridge.resume PROPERTIES TIMEOUT 30 LABELS "offline;lua")
+        add_test(NAME bridge.mod-loading
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/mod_loading.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(
+            bridge.api
+            bridge.goodtrip
+            bridge.prediction
+            bridge.lanbot
+            bridge.grids
+            bridge.resume
+            bridge.mod-loading
+            PROPERTIES TIMEOUT 30 LABELS "offline;lua")
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
     target_include_directories(isaac_lan_core_test PRIVATE src)
@@ -54,6 +64,7 @@ if(BUILD_TESTING)
         input-progress
         automation-input
         keyboard-pause
+        transition-charge
         bootstrap-profile
         intro-barrier
         room-map
@@ -111,6 +122,7 @@ foreach(
     lanbot/observe
     lanbot
     compat/wrapping
+    compat/observation
     compat/registry
     compat/stats_plus
     compat/eid

@@ -14,6 +14,40 @@
 using namespace isaac::lan;
 
 namespace {
+void transitionCharge() {
+    InputFrame held;
+    held.values.fill(65535);
+    held.triggered = 0xffff;
+    const auto transfer = isaac::input::transitionInput(held, true);
+    for (unsigned action = 0; action < actionCount; ++action)
+        require(transfer.values[action] ==
+                    ((action >= 4 && action < 8) || action == 12 || action == 15 ? 65535 : 0),
+                "Room transfer released charge or retained movement/item controls");
+    require(transfer.triggered == menuActionMask, "Transfer replayed a gameplay edge");
+    require(isaac::input::transitionInput({}, true).values[4] == 0,
+            "Real shooting release was swallowed");
+    require(isaac::input::transitionInput(held, false) == menuInput(held),
+            "Previous-floor fire leaked into the new floor");
+    const InputRoom source{7, 84, 0}, destination{8, 85, 0};
+    std::optional<InputRoom> previous = source, room;
+    auto loading = held;
+    isaac::input::captureRoomInput(loading, room, previous, 7);
+    require(room == source && loading == transfer,
+            "Scoped room loading synthesized a charged-weapon release");
+    room.reset();
+    loading = {};
+    isaac::input::captureRoomInput(loading, room, previous, 7);
+    require(room == source && loading == InputFrame{}, "Loading swallowed a real fire release");
+    room.reset();
+    loading = held;
+    isaac::input::captureRoomInput(loading, room, previous, 8);
+    require(!room && loading == menuInput(held), "Previous-floor room was reused while loading");
+    room = destination;
+    loading = held;
+    isaac::input::captureRoomInput(loading, room, previous, 8);
+    require(previous == destination && loading == held,
+            "Stable destination did not restore full native controls");
+}
 void bootstrapProfile() {
     using isaac::bootstrap::Profile;
     using isaac::bootstrap::profile;
@@ -447,6 +481,7 @@ int main(int argc, char** argv) {
                      {"input-progress", inputAndProgress},
                      {"automation-input", automationInput},
                      {"keyboard-pause", keyboardPause},
+                     {"transition-charge", transitionCharge},
                      {"bootstrap-profile", bootstrapProfile},
                      {"intro-barrier", introBarrier},
                      {"room-map", roomMap},

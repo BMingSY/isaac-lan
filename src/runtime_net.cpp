@@ -6,6 +6,7 @@
 #include "engine_rooms.h"
 #include "engine_input.h"
 #include "lanbot_console.h"
+#include "menu_input.h"
 #include "engine_save.h"
 #include "session_archive.h"
 #include "progression.h"
@@ -184,6 +185,7 @@ lua_State* state = nullptr;
 int captureRef = -2, applyRef = -2, captureStateRef = -2, restoreStateRef = -2, presentRef = -2,
     stageRef = -2;
 lan::InputFrame localInput;
+std::optional<lan::InputRoom> lastInputRoom;
 std::optional<lan::WorldState> authoritative;
 bool gated = false, pendingHalf = false;
 std::uint32_t nextInputTick = 0;
@@ -404,8 +406,8 @@ bool captureNextInput() {
                                    static_cast<std::uint8_t>(position.dimension)};
         inputRoom->introSerial = presentation::playedIntro();
         inputRoom->introActive = presentation::introActive();
-    } else
-        localInput = lan::menuInput(localInput);
+    }
+    input::captureRoomInput(localInput, inputRoom, lastInputRoom, floorEpoch);
     if (!session->submit(nextInputTick, localInput, inputRoom)) {
         fail("Local input sequence rejected");
         return false;
@@ -562,14 +564,16 @@ void updateOne(void* game) {
                        " accepted=" + std::to_string(accepted));
         }
     // A door transfer can finish while source-room input is still in flight.
-    // Resume held controls only after the guest has seen the destination room.
+    // Resume movement/items after the guest sees the destination. Held fire
+    // must not become a release that discharges a charged weapon.
     const auto locations = rooms::captureLocations();
     for (unsigned slot = 1; slot < frame->players; ++slot) {
         const auto& context = frame->inputRooms[slot];
         if (!context || context->epoch != floorEpoch || slot >= locations.size() ||
             context->index != locations[slot].index ||
             context->dimension != locations[slot].dimension)
-            frame->inputs[slot] = lan::menuInput(frame->inputs[slot]);
+            frame->inputs[slot] = input::transitionInput(frame->inputs[slot],
+                                                         context && context->epoch == floorEpoch);
         else
             presentation::observeIntro(slot, context->introSerial, context->introActive);
     }
@@ -901,6 +905,7 @@ int gate(lua_State* L) {
     replicaPending.reset();
     floorEpoch = session->worldEpoch();
     localInput = {};
+    lastInputRoom.reset();
     consumedInputSequences = {};
     captureCost = {};
     applyCost = {};
@@ -944,6 +949,7 @@ int close(lua_State* L) {
     authoritative.reset();
     replicaPending.reset();
     floorEpoch = 0;
+    lastInputRoom.reset();
     if (!keep) {
         session.reset();
         input::leaveLan();

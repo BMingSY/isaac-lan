@@ -56,6 +56,7 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     }
     _IsaacLanState = { reset = noop }
     _IsaacLanModules = {
+        ["compat/observation"] = dofile(root .. "/src/bridge/compat/observation.lua"),
         ["api/public"] = { poll = noop, commit = noop, reset = noop, actions = { step = noop } },
         ["compat/registry"] = { observeMod = noop, observeRequire = noop },
         ["lanbot/observe"] = function()

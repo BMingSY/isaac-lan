@@ -47,6 +47,11 @@ def main():
         help="Enumerate virtual pads during isolated engine startup",
     )
     parser.add_argument(
+        "--no-luadebug",
+        action="store_true",
+        help="Validate the ordinary Lua sandbox without debug globals",
+    )
+    parser.add_argument(
         "--frontend",
         action="store_true",
         help="Use embedded native bridge with every Workshop mod disabled",
@@ -260,6 +265,7 @@ def main():
         result["installed_branch"] = True
         result["automatic_loading"] = args.automatic or args.installed
     fixtures = []
+    original_mod_states = {}
     fixture_roles = {}
     for mod, enabled_roles in (
         [(mod, roles) for mod in args.mod]
@@ -398,6 +404,11 @@ def main():
                 if (old / ".lan-compat-fixture").is_file():
                     (old / "disable.it").touch()
             for fixture in fixtures:
+                original = lab / "game/mods" / fixture.name.removeprefix("lan_compat_")
+                if original.is_dir() and original not in original_mod_states:
+                    disabled = original / "disable.it"
+                    original_mod_states[original] = disabled.exists()
+                    disabled.touch()
                 if role not in fixture_roles[fixture.name]:
                     continue
                 destination = lab / "game/mods" / fixture.name
@@ -409,7 +420,19 @@ def main():
             if args.frontend:
                 (lab / "frontend.test").write_text("Internal frontend test only.\n")
                 (internal / "disable.it").touch()
-                shutil.copy2(tested_script, lab / "frontend-scenario.lua")
+                scenario_config = {
+                    "host": role == "host",
+                    "port": str(args.menu_port + (1 if args.latency_ms and role != "host" else 0)),
+                }
+                result.setdefault("scenario_config", {})[role] = scenario_config
+                (lab / "frontend-scenario.lua").write_text(
+                    "_IsaacLanTest = { host = "
+                    + ("true" if scenario_config["host"] else "false")
+                    + ', port = "'
+                    + scenario_config["port"]
+                    + '" }\n'
+                    + tested_script.read_text()
+                )
             else:
                 (lab / "frontend.test").unlink(missing_ok=True)
                 (lab / "frontend-scenario.lua").unlink(missing_ok=True)
@@ -443,6 +466,7 @@ def main():
                 str(lab / "isaac_lan_lab.exe"),
                 windows(lab),
                 *(["--automatic"] if args.automatic or args.installed else []),
+                *(["--no-luadebug"] if args.no_luadebug else []),
             )
             match = re.search(r"(?:bootstrap_status=0|autoload_started=1) pid=(\d+)", response)
             if not match:
@@ -824,6 +848,9 @@ def main():
                 if (destination / ".lan-compat-fixture").is_file():
                     (destination / "disable.it").touch()
             (lab / "game/lan-test-mod-advisory.txt").unlink(missing_ok=True)
+        for original, was_disabled in original_mod_states.items():
+            if not was_disabled:
+                (original / "disable.it").unlink(missing_ok=True)
         result["seconds"] = time.monotonic() - started
         (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

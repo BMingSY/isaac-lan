@@ -54,22 +54,7 @@ end)
 function _IsaacLanBotFrame(frame)
     bot.step(frame)
 end
-local registeredMods = {}
-local registerMod = RegisterMod
-function RegisterMod(name, version)
-    local mod = registerMod(name, version)
-    registeredMods[#registeredMods + 1] = mod
-    local caller = debug.getinfo(2, "S")
-    registry.observeMod(mod, caller and caller.source or "")
-    return mod
-end
-local originalRequire = require
-function require(name)
-    local caller = debug.getinfo(2, "S")
-    local value = originalRequire(name)
-    registry.observeRequire(caller and caller.source or "", name, value)
-    return value
-end
+local registeredMods = _IsaacLanModules["compat/observation"](registry, native.debug or debug)
 function _IsaacLanViewCommitted()
     integration.commit()
 end

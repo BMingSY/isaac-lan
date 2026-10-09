@@ -406,4 +406,108 @@ for _, build in ipairs({
     eid.ModVersion = 0
     assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "unsupported")
 end
+-- Stats+ may have cached both native actors before the LAN viewport was ready.
+do
+    local p = peer(1)
+    p.modInfo = {
+        workshopId = "2729900570",
+        metadataVersion = "2.1.3",
+        sourceHash = "f9bce56542b60f8f0291cf1fb6d85c059c87f841e1efa7b82ecef794e4a3bab2",
+        directory = "stats",
+    }
+    local mod = {
+        Name = "stats-plus",
+        AddCallback = function() end,
+        AddPriorityCallback = function() end,
+        RemoveCallback = function() end,
+    }
+    local players = { { entityPlayer = actor1, index = 0 }, { entityPlayer = actor2, index = 1 } }
+    local playerClass = {
+        prototype = {
+            getAllEntityPlayers = function()
+                return { actor1, actor2 }
+            end,
+            getPlayers = function()
+                return players
+            end,
+        },
+    }
+    local service = setmetatable({}, { __index = playerClass.prototype })
+    local apiClass = {
+        prototype = {
+            provider = function(_, provider)
+                return provider
+            end,
+        },
+    }
+    local updates, reloads = 0, 0
+    local watcherClass = { prototype = { updatePlayer = function() end } }
+    local watcher = {
+        updatePlayer = function(_, player)
+            assert(
+                p.env.GetPtrHash(player.entityPlayer) == p.env.GetPtrHash(actor2),
+                "Stats watcher updated a teammate"
+            )
+            updates = updates + 1
+        end,
+    }
+    local lifecycleClass = {}
+    local lifecycle = {
+        reloadAll = function()
+            reloads = reloads + 1
+            players = {}
+            for i, actor in ipairs(service:getAllEntityPlayers()) do
+                players[i] = { entityPlayer = actor, index = i - 1 }
+            end
+        end,
+    }
+    local container = {
+        resolve = function(_, class)
+            return class == playerClass and service
+                or class == watcherClass and watcher
+                or lifecycle
+        end,
+    }
+    assert(loadfile(root .. "/src/bridge/compat/stats_plus.lua", "t", p.env))()
+    local r = p.env._IsaacLanModules["compat/registry"]
+    r.observeRequire("stats-source", "services.PlayerService", { PlayerService = playerClass })
+    r.observeRequire("stats-source", "services.extension.API", { API = apiClass })
+    r.observeRequire(
+        "stats-source",
+        "services.stat.StatValueWatcher",
+        { StatValueWatcher = watcherClass }
+    )
+    r.observeMod(mod, "stats-source")
+    r.poll()
+    assert(r.status()[1].state == "pending", "Stats adapter captured missing lifecycle exports")
+    r.observeRequire(
+        "stats-source",
+        "app.APPLICATION_CONTAINER",
+        { APPLICATION_CONTAINER = container }
+    )
+    r.observeRequire(
+        "stats-source",
+        "services.LifecycleService",
+        { LifecycleService = lifecycleClass }
+    )
+    r.poll()
+    p.bridge.commit()
+    assert(reloads == 1 and updates == 1 and #service:getPlayers() == 1)
+    assert(service:getPlayers()[1].entityPlayer == actor2 and service:getPlayers()[1].index == 0)
+    players = { { entityPlayer = actor1, index = 0 }, { entityPlayer = actor2, index = 1 } }
+    assert(#service:getPlayers() == 1, "Stats rendered a stale teammate multiplier")
+    p.bridge.commit()
+    assert(
+        reloads == 2 and service:getPlayers()[1].index == 0,
+        "Stats did not rebuild stale provider caches"
+    )
+    p.bridge.commit()
+    assert(reloads == 2, "Unchanged Stats cache was rebuilt every snapshot")
+    players[1].entityPlayer = setmetatable({}, { __index = actor2 })
+    p.bridge.commit()
+    assert(reloads == 2, "A fresh Lua wrapper rebuilt the same native player's cache")
+    p.active = 0
+    players = { { entityPlayer = actor1, index = 0 }, { entityPlayer = actor2, index = 1 } }
+    assert(#service:getPlayers() == 2, "Stats adapter changed inactive native co-op")
+end
 print("PASS bridge codec, views, lifecycle, action authority, receipts, dedupe and compatibility")

@@ -1,4 +1,5 @@
 local bridge, wrapping = _IsaacLanModules["api/public"], _IsaacLanModules["compat/wrapping"]
+local debug = (_IsaacLan and _IsaacLan.debug) or debug
 local authority = _IsaacLanModules["compat/goodtrip/authority"]
 local definition = {
     id = authority.id,
