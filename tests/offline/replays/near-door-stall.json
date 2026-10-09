@@ -1,0 +1,4 @@
+[
+  {"request": ["bot_reset", 0, 265, 6, 6, 50, false, "explore", "balanced"]},
+  {"request": ["bot_step", 360]}
+]

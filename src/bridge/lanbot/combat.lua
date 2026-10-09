@@ -87,14 +87,31 @@ return function(nav)
     function combat.move(obs, goal, style, previous, door)
         local p, settings = obs.actor, combat.styles[style]
         local best, bestScore, evaluated = 0, math.huge, 0
+        local gx, gy = goal and goal.x - p.x or 0, goal and goal.y - p.y or 0
         for _, direction in ipairs(directions) do
             local x, y, vx, vy = p.x, p.y, p.vx, p.vy
-            local score, valid, distance, steps = 0, true, 0, 0
+            local score, valid = 0, true
             for step = 1, 10 do
                 local dt, retain = 1 / 30, 0.775
                 vx = vx * retain + direction[1] * p.speed * (1 - retain)
                 vy = vy * retain + direction[2] * p.speed * (1 - retain)
                 local nextX, nextY = x + vx * dt, y + vy * dt
+                local reached = false
+                if
+                    goal
+                    and gx * gx + gy * gy > 0.001
+                    and (nextX - goal.x) * gx + (nextY - goal.y) * gy >= 0
+                then
+                    local along = (nextX - x) * gx + (nextY - y) * gy
+                    if along > 0 then
+                        local fraction = math.max(
+                            0,
+                            math.min(1, ((goal.x - x) * gx + (goal.y - y) * gy) / along)
+                        )
+                        nextX, nextY = x + (nextX - x) * fraction, y + (nextY - y) * fraction
+                        reached = true
+                    end
+                end
                 if
                     not nav.line(
                         obs.map,
@@ -109,18 +126,19 @@ return function(nav)
                 end
                 x, y = nextX, nextY
                 score = score + risk(obs, x, y, step * dt, settings)
-                if goal then
-                    distance, steps = distance + nav.distance({ x = x, y = y }, goal), steps + 1
-                end
                 if door and (x - door.x) * door.dx + (y - door.y) * door.dy >= 0 then
                     break -- Crossing commits a room transfer; this room ends here.
+                end
+                if reached then
+                    -- Replan at the waypoint plane. Predicting past a turn
+                    -- can reject safe progress, while a fixed early tolerance
+                    -- can bias scores toward sideways motion at low speeds.
+                    break
                 end
             end
             if valid then
                 if goal then
-                    -- Score progress along the trajectory. A final point past
-                    -- a nearby waypoint must not make standing still optimal.
-                    score = score + distance / math.max(1, steps) * 2
+                    score = score + nav.distance({ x = x, y = y }, goal) * 2
                 end
                 -- Prefer continuity, not a fixed left/right tie break every frame.
                 if direction[3] ~= previous then
