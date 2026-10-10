@@ -1,4 +1,4 @@
-return function(native, bridge, nav, terrain)
+return function(native, bridge, nav, terrain, actorPose)
     local observe = {}
     terrain = terrain()
     local observedTick, observedAt
@@ -103,6 +103,13 @@ return function(native, bridge, nav, terrain)
             -- Players integrate movement at 60 Hz; NPC/projectile velocities
             -- belong to the ordinary 30 Hz simulation updates.
             p.vx, p.vy = player.Velocity.X * 60, player.Velocity.Y * 60
+            if info.authority == 0 and actorPose then
+                local pose = actorPose(player)
+                if not pose then
+                    return
+                end
+                p.x, p.y, p.vx, p.vy = pose.x, pose.y, pose.vx, pose.vy
+            end
             p.speed = math.max(0.1, player.MoveSpeed) * 264.705882
             p.keys, p.items = player:GetNumKeys(), player:GetCollectibleCount()
             p.health = player:GetHearts() + player:GetSoulHearts()
@@ -318,14 +325,18 @@ return function(native, bridge, nav, terrain)
                         value.contactWait = pickup.State == 0
                         value.contactRadius = math.max(60, value.radius * 2)
                         for _, candidate in ipairs(roomPlayers) do
+                            local accepted = info.authority == 0 and actorPose
+                            local pose = accepted and actorPose(candidate)
+                                or not accepted
+                                    and { x = candidate.Position.X, y = candidate.Position.Y }
                             if
                                 not candidate:IsCoopGhost()
                                 and not candidate:IsDead()
-                                and nav.distance(
-                                        { x = candidate.Position.X, y = candidate.Position.Y },
-                                        value
-                                    )
-                                    < value.contactRadius + candidate.Size + 12
+                                and (
+                                    not pose
+                                    or nav.distance(pose, value)
+                                        < value.contactRadius + candidate.Size + 12
+                                )
                             then
                                 value.contactBlocked = true
                             end
@@ -373,7 +384,7 @@ return function(native, bridge, nav, terrain)
                 return a.id < b.id
             end)
         end)
-        return result
+        return result, not result and "view_not_ready" or nil
     end
     return observe
 end

@@ -137,6 +137,26 @@ local function botStep()
     end
     if renders % 120 == 0 then
         command("status")
+        if not host and _IsaacLanState and _IsaacLanState.actorPose then
+            for _, entry in ipairs(native.api_actors()) do
+                local p = Isaac.GetPlayer(entry.index)
+                local pose = _IsaacLanState.actorPose(p)
+                if pose then
+                    report(
+                        "ACCEPTED_POSE controller="
+                            .. p.ControllerIndex
+                            .. " x="
+                            .. pose.x
+                            .. " y="
+                            .. pose.y
+                            .. " display_x="
+                            .. p.Position.X
+                            .. " display_y="
+                            .. p.Position.Y
+                    )
+                end
+            end
+        end
     end
 end
 chestCallback = function(_, pickup, collider)

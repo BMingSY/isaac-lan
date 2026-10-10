@@ -844,6 +844,63 @@ test("client observation ages, goes neutral when stale, then recovers", function
     assert(observe.read(3, localInfo).age == 0)
     localInfo.nowMs = 0
 end)
+test("accepted actor pose ignores prediction, expires and follows cache clearing", function()
+    local pose = dofile(root .. "/src/bridge/sync/actor_pose.lua")
+    local motion = {}
+    local player = {
+        ControllerIndex = 2,
+        Position = Vector(198, 277),
+    }
+    motion[42] = {
+        actor = true,
+        controller = 2,
+        at = 1,
+        target = Vector(244, 277),
+        velocity = Vector(-1, 0),
+        display = player.Position,
+    }
+    local value = assert(pose(motion, 42, player.ControllerIndex, 1.1))
+    assert(value.x == 244 and value.vx == -60 and player.Position.X == 198)
+    value.x = 0
+    assert(pose(motion, 42, player.ControllerIndex, 1.1).x == 244, "Borrowed pose was mutated")
+    assert(not pose(motion, 42, player.ControllerIndex, 1.3), "Expired pose used for input")
+    player.ControllerIndex = 1
+    assert(not pose(motion, 42, player.ControllerIndex, 1.1), "Replacement actor inherited pose")
+    assert(not pose({}, 42, player.ControllerIndex, 1.1), "Cleared room cache retained pose")
+end)
+test(
+    "client observation uses accepted positions when prediction is already outside chest",
+    function()
+        local old = roster[2].Position
+        roster[2].Position = Vector(198, 277)
+        local reader = modules["lanbot/observe"](
+            native,
+            bridge,
+            nav,
+            modules["lanbot/terrain"],
+            function(p)
+                if p == roster[2] then
+                    return { x = 244, y = 277, vx = 0, vy = 0 }
+                end
+                return { x = p.Position.X, y = p.Position.Y, vx = 0, vy = 0 }
+            end
+        )
+        local obs = assert(reader.read(1, localInfo))
+        assert(obs.actor.x == 244 and roster[2].Position.X == 198)
+        local waiting = modules["lanbot/observe"](
+            native,
+            bridge,
+            nav,
+            modules["lanbot/terrain"],
+            function()
+                return nil
+            end
+        )
+        local missing, reason = waiting.read(1, localInfo)
+        assert(not missing and reason == "view_not_ready")
+        roster[2].Position = old
+    end
+)
 local function fakeEntity(kind, flags)
     local e = {
         InitSeed = 10 + kind,
@@ -1186,6 +1243,55 @@ test("touch a big chest from the side without entering its overlapping Void port
     end
     assert(opened and not entered, "BOT failed native chest contact or entered the Void")
 end)
+test("replica retreats its actual body when prediction already left the chest", function()
+    local oldLocal, oldRemote = roster[2].Position, roster[0].Position
+    local chest = fakeEntity(5)
+    chest.Position, chest.Variant, chest.Wait, chest.State =
+        Vector(320, 160), PickupVariant.PICKUP_BIGCHEST, 0, 0
+    entities = { chest }
+    local actual, velocity = 244, 0
+    roster[2].Position, roster[0].Position = Vector(199, 160), Vector(430, 160)
+    local reader = modules["lanbot/observe"](
+        native,
+        bridge,
+        nav,
+        modules["lanbot/terrain"],
+        function(p)
+            return {
+                x = p == roster[2] and actual or 430,
+                y = 160,
+                vx = p == roster[2] and velocity or 0,
+                vy = 0,
+            }
+        end
+    )
+    local bot, source, _, _, env = fixture()
+    env.info, env.observe = function()
+        return localInfo
+    end, reader.read
+    bot.command("on")
+    local left
+    for frame = 1, 12 do
+        localInfo.tick = frame
+        roster[2].Position = Vector(actual - 45, 160)
+        bot.step(frame)
+        if frame == 2 then
+            assert(
+                (source.mask & 1) ~= 0,
+                "Predicted clearance stopped actual retreat: "
+                    .. bot.status()
+                    .. " mask="
+                    .. source.mask
+            )
+        end
+        velocity = velocity * 0.775 + ((source.mask & 1) ~= 0 and -260 or 0) * 0.225
+        actual = actual + velocity / 30
+        left = left or actual < 238
+    end
+    assert(left, "Actual body never left the contact boundary")
+    bot.command("off")
+    roster[2].Position, roster[0].Position, entities = oldLocal, oldRemote, {}
+end)
 test("observer selects the big chest before an optional Void trapdoor", function()
     local oldGrid = room.GetGridEntity
     local chest = fakeEntity(5)
@@ -1329,6 +1435,7 @@ test(
     end
 )
 test("embedded console entry dispatches lanbot and returns nil", function()
+    _IsaacLanState = { actorPose = function() end }
     local source = { active = false, mask = 0 }
     native.api_info = function()
         return localInfo
