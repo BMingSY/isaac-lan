@@ -71,6 +71,12 @@ if(BUILD_TESTING)
             NAME bridge.shared-resources
             COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_resources.lua"
                     "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.shared-curses
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_curses.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.special-visuals
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/special_visuals.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(
             bridge.entity-codec
             bridge.layers
@@ -89,6 +95,8 @@ if(BUILD_TESTING)
             bridge.special-coordinator
             bridge.special-menu
             bridge.shared-resources
+            bridge.shared-curses
+            bridge.special-visuals
             PROPERTIES TIMEOUT 30 LABELS "offline;lua")
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)

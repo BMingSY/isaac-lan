@@ -1,4 +1,4 @@
--- Names are internal; the version-10 wire tuple and its order remain stable.
+-- Portable view fields; changing tuple layouts also changes this version.
 local names = {
     "version",
     "tick",
@@ -16,8 +16,9 @@ local names = {
     "epoch",
     "presentation",
     "items",
+    "curses",
 }
-local version = 10
+local version = 11
 return {
     VERSION = version,
     pack = function(view)
