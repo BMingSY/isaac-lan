@@ -95,13 +95,20 @@ DWORD remoteCall(HANDLE process, LPTHREAD_START_ROUTINE function, void* argument
 } // namespace
 
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 2 && argc != 3) {
-        fwprintf(stderr, L"Usage: isaac_lan_lab.exe <marked isolated directory> [--automatic]\n");
+    if (argc < 2 || argc > 4) {
+        fwprintf(stderr, L"Usage: isaac_lan_lab.exe <marked isolated directory> [--automatic] "
+                         L"[--no-luadebug]\n");
         return 1;
     }
-    const bool automatic = argc == 3 && !wcscmp(argv[2], L"--automatic");
-    if (argc == 3 && !automatic)
-        return 1;
+    bool automatic = false, debug = true;
+    for (int i = 2; i < argc; ++i) {
+        if (!wcscmp(argv[i], L"--automatic") && !automatic)
+            automatic = true;
+        else if (!wcscmp(argv[i], L"--no-luadebug") && debug)
+            debug = false;
+        else
+            return 1;
+    }
     wchar_t full[1024];
     if (!GetFullPathNameW(argv[1], 1024, full, nullptr))
         return 2;
@@ -131,7 +138,7 @@ int wmain(int argc, wchar_t** argv) {
         return 6;
     SetEnvironmentVariableW(L"ISAAC_LAN_LAB_READY", automatic ? nullptr : readyName.c_str());
     SetEnvironmentVariableW(L"ISAAC_LAN_LAB_LOADER_READY", automatic ? readyName.c_str() : nullptr);
-    std::wstring command = L"\"" + exe + L"\" --luadebug";
+    std::wstring command = L"\"" + exe + L"\"" + (debug ? L" --luadebug" : L"");
     std::vector<wchar_t> arguments(command.begin(), command.end());
     arguments.push_back(0);
     STARTUPINFOW startup{};

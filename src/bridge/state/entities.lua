@@ -17,13 +17,6 @@ return function(values, env)
         env.apply(e, v)
         currentIDs[v[1]] = true
     end
-    for _, v in ipairs(values) do
-        local e = assert(env.ref(v[1]), "Replica identity missing")
-        e.Parent = env.ref(v[11])
-        e.SpawnerEntity = env.ref(v[12])
-        e.Child = env.ref(v[13])
-        e.Target = env.ref(v[14])
-    end
     for _, e in ipairs(env.entities()) do
         if e:Exists() and e.Type ~= 1 then
             local identifier = e:GetData().__isaac_lan_replica
@@ -31,5 +24,14 @@ return function(values, env)
                 env.discard(e)
             end
         end
+    end
+    -- Native NPC spawns can allocate their own segments. Removing those extra
+    -- entities unlinks their parent, so install authoritative links afterward.
+    for _, v in ipairs(values) do
+        local e = assert(env.ref(v[1]), "Replica identity missing")
+        e.Parent = env.ref(v[11])
+        e.SpawnerEntity = env.ref(v[12])
+        e.Child = env.ref(v[13])
+        e.Target = env.ref(v[14])
     end
 end

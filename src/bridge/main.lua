@@ -11,8 +11,8 @@ local status, started, prepared, engineStarted, tick = {}, false, false, false, 
 local players = {}
 local continuedRun = false
 local savedPlayers = 0
-local function refreshPlayers()
-    local heads = native.rooms_heads()
+local function refreshPlayers(restoredOrder)
+    local heads = restoredOrder and native.rooms_heads(1) or native.rooms_heads()
     players = {}
     for slot = 0, status.players - 1 do
         if heads[tostring(slot)] then
@@ -54,22 +54,7 @@ end)
 function _IsaacLanBotFrame(frame)
     bot.step(frame)
 end
-local registeredMods = {}
-local registerMod = RegisterMod
-function RegisterMod(name, version)
-    local mod = registerMod(name, version)
-    registeredMods[#registeredMods + 1] = mod
-    local caller = debug.getinfo(2, "S")
-    registry.observeMod(mod, caller and caller.source or "")
-    return mod
-end
-local originalRequire = require
-function require(name)
-    local caller = debug.getinfo(2, "S")
-    local value = originalRequire(name)
-    registry.observeRequire(caller and caller.source or "", name, value)
-    return value
-end
+local registeredMods = _IsaacLanModules["compat/observation"](registry, native.debug or debug)
 function _IsaacLanViewCommitted()
     integration.commit()
 end
@@ -120,7 +105,10 @@ callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
         if continued then
             -- Native continue detaches unavailable physical controllers. Bind
             -- the restored heads before its first update can pause for them.
-            local heads = refreshPlayers()
+            -- Native Continue may attach a saved controller to a different
+            -- physical device or keyboard. Use restored roster order until
+            -- assigning LAN controllers; physical IDs cannot identify slots yet.
+            local heads = refreshPlayers(true)
             for slot = 0, status.players - 1 do
                 assert(native.input_assign(heads[tostring(slot)], slot + 1))
             end

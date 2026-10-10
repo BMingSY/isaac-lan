@@ -105,7 +105,7 @@ local function attach(entry, target)
     if entry.definition.dispatch then
         entry.callbackCleanup = wrapping.callbacks(target, function(record, ...)
             probe(entry)
-            if entry.state == "active" and entry.enabled and bridge.active() then
+            if entry.state == "active" and entry.enabled then
                 return entry.definition.dispatch(target, record, ...)
             end
             return record.original(...)

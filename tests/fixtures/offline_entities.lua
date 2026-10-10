@@ -33,7 +33,7 @@ return function(root)
         new(-1, 1, 0, 0, room)
         refs[900] = new(900, 10, 0, 0, "0:2")
     end
-    function fixture.apply(selectedRoom, values)
+    function fixture.apply(selectedRoom, values, implicitSegments)
         room = selectedRoom
         reconcile(values, {
             ref = ref,
@@ -41,9 +41,16 @@ return function(root)
                 spawned = spawned + 1
                 local e = new(v[1], v[2], v[3], subtype, room)
                 e.spawnSubtype = subtype
+                if implicitSegments and v[2] == 62 and subtype == 0 then
+                    local child = new(nil, 62, v[3], 1, room)
+                    child.Parent, e.Child = e, child
+                end
                 return e
             end,
             discard = function(e)
+                if e.Parent then
+                    e.Parent.Child = nil
+                end
                 e.alive = false
                 removed = removed + 1
             end,

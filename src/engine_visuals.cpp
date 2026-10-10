@@ -37,6 +37,23 @@ Address sprite(lua_State* L) {
         throw std::runtime_error("Invalid native Sprite wrapper");
     return wrapper[1];
 }
+int prepareEntity(lua_State* L) {
+    auto sample = static_cast<Address*>(lua.toUserdata(L, 1));
+    if (runtime::replica() || !sample || lua.rawLength(L, 1) != 8 || sample[1] < 0x48) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto entity = sample[1] - 0x48;
+    if (at<unsigned>(entity, 0x28) == 881) {
+        using Prepare = void(__attribute__((thiscall))*)(void*);
+        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+        // Background authoritative rooms never render in the host viewport.
+        // Compute their Needle body layer poses before capturing the sprite.
+        reinterpret_cast<Prepare>(image + 0x14f670)(reinterpret_cast<void*>(entity));
+    }
+    lua.pushBoolean(L, true);
+    return 1;
+}
 int doorSprite(lua_State* L) {
     // ExtraSprite's Lua property returns an owning copy in J460. Expose the
     // door-owned ANM2 through the same non-owning wrapper as GetSprite().
@@ -59,6 +76,22 @@ int gridVariant(lua_State* L) {
         return 1;
     }
     at<int>(sample[1] - 0x40, 8) = static_cast<int>(lua.checkInteger(L, 2));
+    lua.pushBoolean(L, true);
+    return 1;
+}
+int removeGrid(lua_State* L) {
+    const auto index = lua.checkInteger(L, 1);
+    if (!runtime::replica() || index < 0 || index >= 448) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+    const auto room = at<Address>(at<Address>(image, 0x871678), 0x18300);
+    using Remove = void(__attribute__((thiscall))*)(void*, int, int, bool);
+    // Lua RemoveGridEntity queues removal for a later Room::Update. That
+    // pending index would delete a replacement installed by this snapshot.
+    reinterpret_cast<Remove>(image + 0x41e980)(reinterpret_cast<void*>(room),
+                                               static_cast<int>(index), 0, false);
     lua.pushBoolean(L, true);
     return 1;
 }
@@ -286,12 +319,12 @@ std::vector<Address> costumes(Address player) {
 int entityShadow(lua_State* L) {
     try {
         // EntityList::RenderShadows and Entity::RenderShadowLayer read these
-        // three floats in J460. Effect Update normally initializes them;
+        // three shadow floats and native altitude in J460. Update initializes them;
         // replicas must receive them instead of drawing constructor shadows.
         const auto entity = sprite(L) - 0x48;
         if (lua.getTop(L) == 1) {
             lan::Writer w(lan::Message::world);
-            for (auto offset : {0x15cu, 0x160u, 0x164u})
+            for (auto offset : {0x15cu, 0x160u, 0x164u, 0x350u})
                 w.u32(at<unsigned>(entity, offset));
             lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
                            w.bytes.size() - 1);
@@ -302,7 +335,7 @@ int entityShadow(lua_State* L) {
         std::size_t size = 0;
         const auto bytes = lua.checkString(L, 2, &size);
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
-        for (auto offset : {0x15cu, 0x160u, 0x164u})
+        for (auto offset : {0x15cu, 0x160u, 0x164u, 0x350u})
             at<unsigned>(entity, offset) = number(r);
         r.finish();
         lua.pushBoolean(L, true);
@@ -440,8 +473,12 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "actor_pose");
     lua.pushClosure(L, entityShadow, 0);
     lua.setField(L, -2, "entity_shadow");
+    lua.pushClosure(L, prepareEntity, 0);
+    lua.setField(L, -2, "entity_prepare");
     lua.pushClosure(L, gridVariant, 0);
     lua.setField(L, -2, "grid_variant");
+    lua.pushClosure(L, removeGrid, 0);
+    lua.setField(L, -2, "grid_remove");
     lua.pushClosure(L, doorSprite, 0);
     lua.setField(L, -2, "door_sprite");
     lua.pushClosure(L, doorSlot, 0);

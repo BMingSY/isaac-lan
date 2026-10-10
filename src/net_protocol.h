@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace isaac::lan {
-constexpr std::uint16_t protocolVersion = 21;
+constexpr std::uint16_t protocolVersion = 24;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -37,7 +37,9 @@ enum class Message : std::uint8_t {
     ping,
     pong,
     latency,
-    integration
+    integration,
+    ending,
+    cinematic
 };
 constexpr std::size_t maxIntegrationSize = 2048;
 constexpr std::size_t maxIntegrationQueue = 32;
@@ -64,12 +66,26 @@ struct InputFrame {
     std::uint16_t triggered = 0;
     bool operator==(const InputFrame&) const = default;
 };
+// Menu requests belong to the session, not to a room's movement epoch.
+constexpr std::uint16_t menuActionMask = (1u << 12) | (1u << 15);
+inline InputFrame menuInput(const InputFrame& input) {
+    InputFrame result;
+    result.values[12] = input.values[12];
+    result.values[15] = input.values[15];
+    result.triggered = input.triggered & menuActionMask;
+    return result;
+}
 // Held controls belong to the room the sender has actually displayed.
 struct InputRoom {
     std::uint32_t epoch = 0;
     std::int16_t index = 0;
     std::uint8_t dimension = 0;
+    std::uint32_t introSerial = 0;
+    bool introActive = false;
     bool operator==(const InputRoom&) const = default;
+    bool sameRoom(const InputRoom& other) const {
+        return epoch == other.epoch && index == other.index && dimension == other.dimension;
+    }
 };
 struct Frame {
     std::uint32_t tick = 0;
@@ -84,6 +100,11 @@ struct Progress {
     std::array<std::uint8_t, 642> achievements{};
     std::array<std::uint32_t, 523> counters{};
     bool operator==(const Progress&) const = default;
+};
+struct Ending {
+    unsigned id = 0;
+    Progress progress;
+    bool operator==(const Ending&) const = default;
 };
 struct Start {
     std::uint32_t firstTick = 0;
@@ -113,6 +134,11 @@ struct Stage {
     std::array<std::uint32_t, 21> seeds{};
     // R Key runs a native immediate restart, not a stage animation.
     bool rKey = false;
+    // Native GameStateFlag bits select the next route. Replica players do not
+    // simulate the trapdoor that sets STATE_SECRET_PATH before an alt entrance.
+    std::array<std::uint32_t, 2> stateFlags{};
+    // Native Dogma interlude changes to the Beast arena on the same floor.
+    std::uint8_t cinematic = 0;
     bool operator==(const Stage&) const = default;
 };
 // A local Mod's native room command, not a client-authored world snapshot.

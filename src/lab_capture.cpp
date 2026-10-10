@@ -38,8 +38,11 @@ void save(std::filesystem::path directory) {
         return;
     const CLSID png = {
         0x557cf406, 0x1a04, 0x11d3, {0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e}};
-    std::ofstream log(directory / "frames.csv");
-    log << "sequence,time_ms,width,height,dropped,file,read_framebuffer,tick,room,playing\n";
+    const auto logPath = directory / "frames.csv";
+    const bool header = !std::filesystem::exists(logPath) || !std::filesystem::file_size(logPath);
+    std::ofstream log(logPath, std::ios::app);
+    if (header)
+        log << "sequence,time_ms,width,height,dropped,file,read_framebuffer,tick,room,playing\n";
     for (;;) {
         Image value;
         unsigned losses;
@@ -101,8 +104,6 @@ void frame(const std::wstring& labRoot) {
     previous = now;
     GLint viewport[4], alignment, buffer;
     glGetIntegerv(GL_VIEWPORT, viewport);
-    if (viewport[2] <= 0 || viewport[3] <= 0 || viewport[2] > 2048 || viewport[3] > 2048)
-        return;
     Image value;
     value.width = viewport[2];
     value.height = viewport[3];
@@ -135,6 +136,13 @@ void frame(const std::wstring& labRoot) {
             value.height = client.bottom;
         }
     }
+    // Gameplay can leave the viewport sized for an offscreen texture. Check
+    // the window dimensions after selecting the presented back buffer.
+    if (value.width <= 0 || value.height <= 0 || value.width > 2048 || value.height > 2048) {
+        if (value.readFramebuffer)
+            bind(0x8ca8, value.readFramebuffer);
+        return;
+    }
     value.pixels.resize(value.width * value.height * 3);
     glGetIntegerv(GL_PACK_ALIGNMENT, &alignment);
     glGetIntegerv(GL_READ_BUFFER, &buffer);
@@ -162,5 +170,8 @@ void stop() {
     available.notify_one();
     if (worker.joinable())
         worker.join();
+    // Selecting a save slot reloads Lua in the same game process. The next
+    // bridge must resume this recording, retaining its sequence and CSV.
+    checked = enabled = closing = false;
 }
 } // namespace isaac::lab_capture

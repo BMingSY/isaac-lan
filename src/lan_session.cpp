@@ -23,7 +23,10 @@ Writer stageMessage(const Stage& value, std::size_t offset = 0) {
     w.u8(value.same);
     for (auto seed : value.seeds)
         w.u32(seed);
+    for (auto flags : value.stateFlags)
+        w.u32(flags);
     w.u8(value.rKey);
+    w.u8(value.cinematic);
     w.u32(value.rewind.size());
     w.u32(offset);
     w.blob(std::span(value.rewind)
@@ -76,6 +79,7 @@ struct Socket {
     std::uint32_t inputSequence = 0;
     std::optional<std::uint32_t> acknowledged;
     std::size_t snapshotSent = 0;
+    Clock::time_point packetAt = Clock::now();
     Clock::time_point connectedAt = Clock::now();
     Clock::time_point advancedAt = Clock::now(), inputAt = Clock::now();
     Clock::time_point pingAt = Clock::now() - std::chrono::seconds(1);
@@ -186,6 +190,10 @@ struct Session::Impl {
     std::optional<std::uint32_t> consumedLocal, verified;
     std::optional<WorldState> receivedState, assembling;
     std::optional<Stage> receivedStage;
+    std::optional<std::uint32_t> cinematicEpoch;
+    unsigned cinematicReadyMask = 0;
+    std::optional<unsigned> ending;
+    std::optional<Ending> receivedEnding;
     std::optional<Stage> assemblingStage;
     std::size_t stageSize = 0;
     std::array<std::optional<RoomRequest>, maxPlayers> roomRequests{};
@@ -315,6 +323,19 @@ struct Session::Impl {
         w.u64(snapshotHash(value.snapshot));
         return w;
     }
+    void finishCinematic() {
+        if (!hosting || !cinematicEpoch || (cinematicReadyMask & activeMask) != activeMask)
+            return;
+        Writer release(Message::cinematic);
+        release.u32(*cinematicEpoch);
+        release.u8(2);
+        broadcast(release);
+        cinematicEpoch.reset();
+        progress = Clock::now();
+        for (auto& p : peers)
+            if (p)
+                p->inputAt = Clock::now();
+    }
     void remove(unsigned slot) {
         activeMask &= ~(1u << slot);
         latest[slot] = {};
@@ -398,6 +419,15 @@ struct Session::Impl {
             }
             if (!p.accepted)
                 throw std::runtime_error("Handshake required");
+            if (type == Message::cinematic && state == Phase::running) {
+                const auto epoch = r.u32();
+                if (!cinematicEpoch || epoch != *cinematicEpoch || r.u8() != 1 ||
+                    !(activeMask & (1u << slot)))
+                    throw std::runtime_error("Invalid cinematic readiness");
+                cinematicReadyMask |= 1u << slot;
+                finishCinematic();
+                return;
+            }
             if (type == Message::choice && state == Phase::lobby) {
                 const auto c = r.u16(), ready = static_cast<std::uint16_t>(r.u8());
                 if (ready > 1)
@@ -449,6 +479,11 @@ struct Session::Impl {
                     throw std::runtime_error("Invalid input room flag");
                 if (hasRoom) {
                     room = InputRoom{r.u32(), static_cast<std::int16_t>(r.u16()), r.u8()};
+                    room->introSerial = r.u32();
+                    const auto active = r.u8();
+                    if (active > 1)
+                        throw std::runtime_error("Invalid intro state");
+                    room->introActive = active != 0;
                     if (room->index < -20 || room->index >= 169 || room->dimension > 2)
                         throw std::runtime_error("Invalid input room");
                 }
@@ -459,7 +494,9 @@ struct Session::Impl {
                 p.hasInput = true;
                 p.inputSequence = sequence;
                 p.inputAt = Clock::now();
-                const auto edges = room == inputRooms[slot] ? latest[slot].triggered : 0;
+                const bool sameRoom = room && inputRooms[slot] ? room->sameRoom(*inputRooms[slot])
+                                                               : room == inputRooms[slot];
+                const auto edges = latest[slot].triggered & (sameRoom ? 0xffffu : menuActionMask);
                 latest[slot] = value;
                 latest[slot].triggered |= edges;
                 inputRooms[slot] = room;
@@ -526,6 +563,30 @@ struct Session::Impl {
             r.u32();
             p.finished = true;
             state = Phase::closed;
+            return;
+        }
+        if (type == Message::cinematic && state == Phase::running) {
+            const auto epoch = r.u32();
+            if (!cinematicEpoch || epoch != *cinematicEpoch || r.u8() != 2 ||
+                !(cinematicReadyMask & (1u << localSlot)))
+                throw std::runtime_error("Invalid cinematic release");
+            cinematicEpoch.reset();
+            progress = Clock::now();
+            return;
+        }
+        if (type == Message::ending && state == Phase::running) {
+            const auto value = r.u8();
+            if (value < 2 || value > 14 || ending)
+                throw std::runtime_error("Invalid authoritative ending");
+            const auto progress = r.progress();
+            if (!progress)
+                throw std::runtime_error("Missing ending progression");
+            ending = value;
+            receivedEnding = Ending{value, *progress};
+            receivedState.reset();
+            assembling.reset();
+            receivedStage.reset();
+            assemblingStage.reset();
             return;
         }
         if (type == Message::lobby && state == Phase::lobby) {
@@ -611,12 +672,18 @@ struct Session::Impl {
             const auto same = r.u8();
             for (auto& seed : value.seeds)
                 seed = r.u32();
+            for (auto& flags : value.stateFlags)
+                flags = r.u32();
             const auto rKey = r.u8();
             value.rKey = rKey != 0;
+            value.cinematic = r.u8();
             const auto total = r.u32(), offset = r.u32();
             auto bytes = r.blob(3000);
             if (!value.epoch || value.level < 1 || value.level > 13 || value.type > 5 || same > 1 ||
                 total > maxWorldSize + 5 || rKey > 1 ||
+                (value.cinematic &&
+                 (value.cinematic != 25 || value.level != 13 || value.type != 1 ||
+                  value.animation != 1 || same || rKey || total)) ||
                 (rKey && (total || value.animation || value.level != 1 || value.type)) ||
                 (total ? value.animation != 12 : value.animation > 6))
                 throw std::runtime_error("Invalid floor transition");
@@ -628,8 +695,13 @@ struct Session::Impl {
                 assembling.reset();
             }
             if (!assemblingStage || assemblingStage->epoch != value.epoch ||
+                assemblingStage->level != value.level || assemblingStage->type != value.type ||
+                assemblingStage->animation != value.animation ||
+                assemblingStage->same != value.same ||
+                assemblingStage->stateFlags != value.stateFlags ||
                 assemblingStage->seeds != value.seeds || assemblingStage->rKey != value.rKey ||
-                total != stageSize || offset != assemblingStage->rewind.size() || offset > total ||
+                assemblingStage->cinematic != value.cinematic || total != stageSize ||
+                offset != assemblingStage->rewind.size() || offset > total ||
                 bytes.size() > total - offset || (total && bytes.empty()))
                 throw std::runtime_error("Invalid rewind transaction chunk");
             assemblingStage->rewind.insert(assemblingStage->rewind.end(), bytes.begin(),
@@ -638,6 +710,12 @@ struct Session::Impl {
                 if (total)
                     assemblingStage->rewind = compression.expand(assemblingStage->rewind);
                 integrationEpoch = assemblingStage->epoch;
+                if (assemblingStage->cinematic) {
+                    if (cinematicEpoch)
+                        throw std::runtime_error("Overlapping cinematic transaction");
+                    cinematicEpoch = assemblingStage->epoch;
+                    cinematicReadyMask = 0;
+                }
                 receivedStage = std::move(assemblingStage);
                 assemblingStage.reset();
             }
@@ -882,8 +960,17 @@ bool Session::reconnect() {
     return join(ip, port, fingerprint, identity, mods);
 }
 bool Session::beginStage(const Stage& value) {
-    if (!impl->hosting || impl->state != Phase::running)
+    if (!impl->hosting || impl->state != Phase::running || impl->ending)
         return false;
+    if (impl->cinematicEpoch ||
+        (value.cinematic &&
+         (value.cinematic != 25 || value.level != 13 || value.type != 1 || value.animation != 1 ||
+          value.same || value.rKey || !value.rewind.empty())))
+        return false;
+    if (value.cinematic) {
+        impl->cinematicEpoch = value.epoch;
+        impl->cinematicReadyMask = 0;
+    }
     impl->integrationEpoch = value.epoch;
     auto encoded = value;
     if (!encoded.rewind.empty())
@@ -918,6 +1005,56 @@ bool Session::beginStage(const Stage& value) {
 std::optional<Stage> Session::takeStage() {
     auto value = impl->receivedStage;
     impl->receivedStage.reset();
+    return value;
+}
+bool Session::cinematicActive() const {
+    return impl->cinematicEpoch.has_value();
+}
+bool Session::cinematicReady() {
+    if (impl->state != Phase::running || !impl->cinematicEpoch)
+        return false;
+    const unsigned bit = 1u << impl->localSlot;
+    if (impl->cinematicReadyMask & bit)
+        return true;
+    impl->cinematicReadyMask |= bit;
+    if (impl->hosting)
+        impl->finishCinematic();
+    else {
+        Writer ready(Message::cinematic);
+        ready.u32(*impl->cinematicEpoch);
+        ready.u8(1);
+        impl->peers[0]->sendMessage(ready);
+    }
+    return true;
+}
+bool Session::beginEnding(unsigned ending, const Progress& progress) {
+    if (!impl->hosting || impl->state != Phase::running || ending < 2 || ending > 14)
+        return false;
+    if (impl->ending)
+        return *impl->ending == ending;
+    impl->ending = ending;
+    Writer w(Message::ending);
+    w.u8(static_cast<std::uint8_t>(ending));
+    w.progress(progress);
+    for (unsigned slot = 1; slot < impl->playerCount; ++slot)
+        if (auto& p = impl->peers[slot]; p && p->accepted && p->ready && !p->waiting) {
+            // The terminal event precedes finish/EOF. Never append an unfinished
+            // view after it, even when the engine exits during this update.
+            try {
+                p->sending.reset();
+                p->pending.reset();
+                p->sendingStage.reset();
+                p->sendMessage(w);
+                p->flush();
+            } catch (const std::exception&) {
+                impl->remove(slot);
+            }
+        }
+    return true;
+}
+std::optional<Ending> Session::takeEnding() {
+    const auto value = impl->receivedEnding;
+    impl->receivedEnding.reset();
     return value;
 }
 bool Session::requestRoom(const RoomRequest& value) {
@@ -1034,9 +1171,13 @@ void Session::poll() {
                     if (!p.accepted && Clock::now() - p.connectedAt > std::chrono::seconds(10))
                         throw std::runtime_error("Handshake timed out");
                     p.flush();
-                    p.receive([&](Reader& r) { impl->message(i, r); });
+                    p.receive([&](Reader& r) {
+                        impl->message(i, r);
+                        p.packetAt = Clock::now();
+                    });
                     if (impl->hosting && p.ready &&
-                        Clock::now() - p.inputAt > std::chrono::seconds(15))
+                        Clock::now() - (impl->cinematicEpoch ? p.packetAt : p.inputAt) >
+                            std::chrono::seconds(15))
                         throw ConnectionLost("Player connection timed out");
                 } catch (const std::exception& e) {
                     if (!impl->hosting)
@@ -1062,6 +1203,7 @@ void Session::poll() {
             impl->receiveReturning();
             impl->updateMods();
             impl->measureLatency();
+            impl->finishCinematic();
             impl->sendPending();
         }
         for (unsigned i = 0; i < maxPlayers; ++i)
@@ -1084,7 +1226,9 @@ void Session::poll() {
             }
         }
         if (!impl->hosting && impl->state == Phase::running && impl->localReady &&
-            Clock::now() - impl->progress > std::chrono::seconds(20))
+            Clock::now() - (impl->cinematicEpoch && impl->peers[0] ? impl->peers[0]->packetAt
+                                                                   : impl->progress) >
+                std::chrono::seconds(20))
             throw std::runtime_error("Host state transfer timed out");
     } catch (const std::exception& e) {
         impl->fail(e.what());
@@ -1242,6 +1386,8 @@ bool Session::submit(std::uint32_t sequence, const InputFrame& input,
             w.u32(room->epoch);
             w.u16(static_cast<std::uint16_t>(room->index));
             w.u8(room->dimension);
+            w.u32(room->introSerial);
+            w.u8(room->introActive);
         }
         impl->peers[0]->sendMessage(w);
     }
@@ -1249,7 +1395,8 @@ bool Session::submit(std::uint32_t sequence, const InputFrame& input,
     return true;
 }
 std::optional<Frame> Session::take() {
-    if (!impl->hosting || impl->state != Phase::running || !impl->localReady || !impl->nextInput)
+    if (!impl->hosting || impl->state != Phase::running || impl->cinematicEpoch ||
+        !impl->localReady || !impl->nextInput)
         return {};
     if (!impl->initialStarted) {
         for (unsigned i = 1; i < impl->playerCount; ++i)
@@ -1297,8 +1444,9 @@ bool Session::ready() {
     return true;
 }
 bool Session::publish(unsigned slot, const WorldState& state) {
-    if (!impl->hosting || impl->state != Phase::running || !slot || slot >= impl->playerCount ||
-        state.bytes.empty() || state.bytes.size() > maxWorldSize || state.tick >= impl->nextConsume)
+    if (!impl->hosting || impl->state != Phase::running || impl->ending || impl->cinematicEpoch ||
+        !slot || slot >= impl->playerCount || state.bytes.empty() ||
+        state.bytes.size() > maxWorldSize || state.tick >= impl->nextConsume)
         return false;
     if (auto& p = impl->peers[slot]; p && p->ready)
         p->pending = state;

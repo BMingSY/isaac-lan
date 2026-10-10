@@ -9,6 +9,7 @@ namespace isaac::lan {
 struct RoomRequest;
 }
 namespace isaac::runtime {
+void roomEntered();
 void requestWindowClose();
 bool install(std::uintptr_t image, void (*logger)(const std::string&), void (*halfUpdate)(),
              void (*restorePositions)());
@@ -18,10 +19,13 @@ void halfStarted();
 void halfCompleted();
 int localViewSlot();
 bool replica();
+bool ending();
 void present();
 void refreshAutomation(std::uint32_t renderFrame);
 void pollLocalConsole();
-void beginStage(bool same, int animation, bool rKey = false);
+void beginStage(bool same, int animation, bool rKey = false, unsigned cinematic = 0);
+void prepareEnding();
+bool beginEnding(unsigned ending);
 void beginRewind(std::span<const std::uint8_t> bytes);
 bool requestRoom(const lan::RoomRequest&);
 std::uint32_t tick();

@@ -365,4 +365,259 @@ assert(registry.status()[1].state == "error" and installs == 2)
 isolated.api:SetCompatibilityEnabled("test.authority-error", false)
 local enabled, enableCode = isolated.api:SetCompatibilityEnabled("test.authority-error", true)
 assert(not enabled and enableCode == "authority_install_failed" and authorityAttempts == 2)
+-- Both pinned EID builds select the guest from its local view, including after
+-- a room notification. A metadata/runtime mismatch must keep the adapter off.
+for _, build in ipairs({
+    { "5.23", 5.24, "980bb0b", "8f2614a6a4cd58d60345dd0a33072a0bc7822ecf06ad9106234a6a9b2380b3fc" },
+    { "5.24", 5.25, "d7aab88", "705a61422ffc09c683d4250dedf2a569b6d76d4eee884dec70b705eedfa898f5" },
+}) do
+    local p = peer(1)
+    p.env.ModCallbacks = {
+        MC_POST_RENDER = 2,
+        MC_POST_UPDATE = 1,
+        MC_POST_NEW_ROOM = 19,
+        MC_POST_NEW_LEVEL = 18,
+        MC_POST_GAME_STARTED = 15,
+    }
+    p.modInfo = {
+        workshopId = "836319872",
+        metadataVersion = build[1],
+        sourceHash = build[4],
+        directory = "eid",
+    }
+    local callbacks = {}
+    local eid = {
+        Name = "External Item Descriptions",
+        ModVersion = build[2],
+        ModVersionCommit = build[3],
+        OnRender = function() end,
+        AddCallback = function(_, id, fn)
+            callbacks[id] = fn
+        end,
+        AddPriorityCallback = function() end,
+        RemoveCallback = function() end,
+        setPlayer = function(self)
+            self.player = p.env.Isaac.GetPlayer(0)
+        end,
+    }
+    p.env.EID = eid
+    local adapter = assert(loadfile(root .. "/src/bridge/compat/eid.lua", "t", p.env))()
+    local r = p.env._IsaacLanModules["compat/registry"]
+    r.observeMod(eid, "eid-source")
+    r.poll()
+    assert(r.status()[1].state == "active", "Supported EID adapter was not installed")
+    p.bridge.commit()
+    eid:setPlayer()
+    assert(eid.player == actor2 and p.scope == nil, "EID selected a remote actor")
+    p.positions["1"].index = 71
+    p.bridge.commit()
+    eid:setPlayer()
+    assert(eid.player == actor2, "EID retained the other room's actor")
+    local entries, updates, previous = 0, 0, nil
+    eid:AddCallback(p.env.ModCallbacks.MC_POST_NEW_ROOM, function(self, marker, gap, tail)
+        assert(self == eid and marker == 12 and gap == nil and tail == "entry")
+        assert(p.scope == 1 and self.player == actor2, "Deferred EID entry used the remote room")
+        previous = { player = self.player }
+        entries = entries + 1
+    end)
+    eid:AddCallback(p.env.ModCallbacks.MC_POST_UPDATE, function()
+        updates = updates + 1
+    end)
+    p.ready, p.epoch = 0, p.epoch + 1
+    callbacks[19](eid, 11, nil, "old")
+    callbacks[19](eid, 12, nil, "entry")
+    callbacks[1](eid)
+    p.bridge.commit()
+    assert(entries == 0 and updates == 0 and previous == nil)
+    p.ready = 1
+    p.bridge.commit()
+    assert(entries == 1 and previous.player == actor2, "Rewind lost EID's native entry cache")
+    p.bridge.commit()
+    assert(entries == 1 and updates == 0, "EID replayed an entry or stale update twice")
+    eid.ModVersion = 0
+    assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "unsupported")
+end
+-- Stats+ may have cached both native actors before the LAN viewport was ready.
+do
+    local p = peer(1)
+    p.modInfo = {
+        workshopId = "2729900570",
+        metadataVersion = "2.1.3",
+        sourceHash = "f9bce56542b60f8f0291cf1fb6d85c059c87f841e1efa7b82ecef794e4a3bab2",
+        directory = "stats",
+    }
+    local mod = {
+        Name = "stats-plus",
+        AddCallback = function() end,
+        AddPriorityCallback = function() end,
+        RemoveCallback = function() end,
+    }
+    local players = { { entityPlayer = actor1, index = 0 }, { entityPlayer = actor2, index = 1 } }
+    local playerClass = {
+        prototype = {
+            getAllEntityPlayers = function()
+                return { actor1, actor2 }
+            end,
+            getPlayers = function()
+                return players
+            end,
+        },
+    }
+    local service = setmetatable({}, { __index = playerClass.prototype })
+    local apiClass = {
+        prototype = {
+            provider = function(_, provider)
+                return provider
+            end,
+        },
+    }
+    local updates, reloads = 0, 0
+    local watcherClass = { prototype = { updatePlayer = function() end } }
+    local watcher = {
+        updatePlayer = function(_, player)
+            assert(
+                p.env.GetPtrHash(player.entityPlayer) == p.env.GetPtrHash(actor2),
+                "Stats watcher updated a teammate"
+            )
+            updates = updates + 1
+        end,
+    }
+    local lifecycleClass = {}
+    local lifecycle = {
+        reloadAll = function()
+            reloads = reloads + 1
+            players = {}
+            for i, actor in ipairs(service:getAllEntityPlayers()) do
+                players[i] = { entityPlayer = actor, index = i - 1 }
+            end
+        end,
+    }
+    local container = {
+        resolve = function(_, class)
+            return class == playerClass and service
+                or class == watcherClass and watcher
+                or lifecycle
+        end,
+    }
+    assert(loadfile(root .. "/src/bridge/compat/stats_plus.lua", "t", p.env))()
+    local r = p.env._IsaacLanModules["compat/registry"]
+    r.observeRequire("stats-source", "services.PlayerService", { PlayerService = playerClass })
+    r.observeRequire("stats-source", "services.extension.API", { API = apiClass })
+    r.observeRequire(
+        "stats-source",
+        "services.stat.StatValueWatcher",
+        { StatValueWatcher = watcherClass }
+    )
+    r.observeMod(mod, "stats-source")
+    r.poll()
+    assert(r.status()[1].state == "pending", "Stats adapter captured missing lifecycle exports")
+    r.observeRequire(
+        "stats-source",
+        "app.APPLICATION_CONTAINER",
+        { APPLICATION_CONTAINER = container }
+    )
+    r.observeRequire(
+        "stats-source",
+        "services.LifecycleService",
+        { LifecycleService = lifecycleClass }
+    )
+    r.poll()
+    p.bridge.commit()
+    assert(reloads == 1 and updates == 1 and #service:getPlayers() == 1)
+    assert(service:getPlayers()[1].entityPlayer == actor2 and service:getPlayers()[1].index == 0)
+    players = { { entityPlayer = actor1, index = 0 }, { entityPlayer = actor2, index = 1 } }
+    assert(#service:getPlayers() == 1, "Stats rendered a stale teammate multiplier")
+    p.bridge.commit()
+    assert(
+        reloads == 2 and service:getPlayers()[1].index == 0,
+        "Stats did not rebuild stale provider caches"
+    )
+    p.bridge.commit()
+    assert(reloads == 2, "Unchanged Stats cache was rebuilt every snapshot")
+    players[1].entityPlayer = setmetatable({}, { __index = actor2 })
+    p.bridge.commit()
+    assert(reloads == 2, "A fresh Lua wrapper rebuilt the same native player's cache")
+    p.active = 0
+    players = { { entityPlayer = actor1, index = 0 }, { entityPlayer = actor2, index = 1 } }
+    assert(#service:getPlayers() == 2, "Stats adapter changed inactive native co-op")
+end
+-- Goodtrip's native callbacks can arrive after its cached actor was cleared
+-- during loading, while the committed view and lifecycle identity are unchanged.
+do
+    local p = peer(1)
+    p.env.ModCallbacks = {
+        MC_POST_RENDER = 2,
+        MC_POST_UPDATE = 1,
+        MC_POST_NEW_ROOM = 19,
+        MC_POST_NEW_LEVEL = 18,
+        MC_POST_GAME_STARTED = 15,
+    }
+    p.modInfo = {
+        workshopId = "1630477831",
+        metadataVersion = "1.2.8",
+        sourceHash = "57a2525436aac726053e9f465667090a9b4a68e150c19285a51dc035a6397858",
+        directory = "goodtrip",
+    }
+    local id = "isaac-lan.compat.goodtrip"
+    local lan = p.api:RegisterMod({}, { id = id, integrationVersion = 1 })
+    p.env._IsaacLanModules["compat/goodtrip/authority"] = {
+        id = id,
+        install = function()
+            return function() end
+        end,
+    }
+    local callbacks, player, preparations = {}, nil, 0
+    local gt = {
+        Name = "goodtrip",
+        AddCallback = function(_, cb, fn)
+            callbacks[cb] = fn
+        end,
+        AddPriorityCallback = function() end,
+        RemoveCallback = function() end,
+        teleport_to_grid_index = function() end,
+        tab_action = function() end,
+        prep = function()
+            player = p.env.Isaac.GetPlayer(0)
+            preparations = preparations + 1
+        end,
+        new_room = function() end,
+        new_level = function() end,
+        step = function()
+            if p.active == 1 then
+                assert(
+                    p.scope == 1 and player == actor2,
+                    "Goodtrip rendered a missing or remote actor"
+                )
+            else
+                assert(
+                    p.scope == nil and player == actor1,
+                    "Goodtrip retained a missing LAN actor after disconnect"
+                )
+            end
+        end,
+    }
+    p.env.gt = gt
+    assert(loadfile(root .. "/src/bridge/compat/goodtrip/client.lua", "t", p.env))()
+    p.env._IsaacLanModules["compat/registry"].observeMod(gt, "goodtrip-source")
+    gt:AddCallback(p.env.ModCallbacks.MC_POST_RENDER, gt.step)
+    p.bridge.commit()
+    player = nil
+    local before = preparations
+    callbacks[2](gt)
+    assert(preparations == before + 1, "Goodtrip did not repair its loading-time actor cache")
+    callbacks[2](gt)
+    assert(preparations == before + 1, "Goodtrip rebuilt a valid cache every render")
+    player = actor1
+    callbacks[2](gt)
+    assert(player == actor2 and preparations == before + 2)
+    p.ready = 0
+    player = nil
+    callbacks[2](gt)
+    assert(player == nil and not lan:IsReady(), "Uncommitted Goodtrip viewport accessed an actor")
+    -- A disconnect before the first viewport commit must restore ordinary UI,
+    -- even though the skipped game-start callback never prepared this cache.
+    p.active = 0
+    callbacks[2](gt)
+    assert(player == actor1, "Partial LAN startup left the native Goodtrip UI uninitialized")
+end
 print("PASS bridge codec, views, lifecycle, action authority, receipts, dedupe and compatibility")

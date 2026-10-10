@@ -1,5 +1,5 @@
 -- Deliberately small player/config contract. Unknown methods fail immediately.
-return function(root)
+return function(root, sharedResources)
     local module = dofile(root .. "/src/bridge/state/inventory.lua")
     local fixture = {}
     local methods = {}
@@ -153,10 +153,14 @@ return function(root)
     for i, name in ipairs({ "Coins", "Bombs", "Keys", "SoulCharge", "BloodCharge" }) do
         local getter = i <= 3 and "GetNum" .. name or "Get" .. name
         methods[getter] = function(p)
+            if i <= 3 and sharedResources then
+                return sharedResources[i]
+            end
             return p.resources[i]
         end
         methods["Add" .. name] = function(p, delta)
-            p.resources[i] = p.resources[i] + delta
+            local resources = i <= 3 and sharedResources or p.resources
+            resources[i] = resources[i] + delta
             p.resourceDelta = p.resourceDelta + math.abs(delta)
         end
     end

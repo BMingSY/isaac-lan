@@ -158,6 +158,14 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             assert(native.rooms_move(1, combat, 0, 0))
         end
         if t == 122 then
+            player(1, function(_, room)
+                for slot = 0, 7 do
+                    local door = room:GetDoor(slot)
+                    if door then
+                        assert(not door:IsOpen(), "Occupied combat door stayed open after entry")
+                    end
+                end
+            end)
             player(1, function(p)
                 report("ARRIVAL cooldown=" .. p:GetDamageCooldown())
                 assert(

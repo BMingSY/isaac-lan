@@ -20,11 +20,14 @@ function definition.probe(target)
     local playerClass = exported(target, "services.PlayerService", "PlayerService")
     local apiClass = exported(target, "services.extension.API", "API")
     local watcher = exported(target, "services.stat.StatValueWatcher", "StatValueWatcher")
-    if not playerClass or not apiClass or not watcher then
+    local container = exported(target, "app.APPLICATION_CONTAINER", "APPLICATION_CONTAINER")
+    local lifecycle = exported(target, "services.LifecycleService", "LifecycleService")
+    if not playerClass or not apiClass or not watcher or not container or not lifecycle then
         return "pending", "services_not_loaded"
     end
     if
         type(playerClass.prototype.getAllEntityPlayers) ~= "function"
+        or type(playerClass.prototype.getPlayers) ~= "function"
         or type(apiClass.prototype.provider) ~= "function"
         or type(watcher.prototype.updatePlayer) ~= "function"
     then
@@ -40,6 +43,22 @@ function definition.install(target, api)
     local lan = api:RegisterMod(target.mod, { id = definition.id, integrationVersion = 1 })
     local playerClass = exported(target, "services.PlayerService", "PlayerService")
     local apiClass = exported(target, "services.extension.API", "API")
+    local cachedPlayers = playerClass.prototype.getPlayers
+    wrapping.patch(cleanups, playerClass.prototype, "getPlayers", function(original)
+        return function(service, ...)
+            local players = original(service, ...)
+            if not lan:IsActive() then
+                return players
+            end
+            local localPlayers = {}
+            for _, player in ipairs(players) do
+                if lan:GetOwnerId(player.entityPlayer) == bridge.info().slot + 1 then
+                    localPlayers[#localPlayers + 1] = player
+                end
+            end
+            return localPlayers
+        end
+    end)
     wrapping.patch(cleanups, playerClass.prototype, "getAllEntityPlayers", function(original)
         return function(service, ...)
             if lan:IsActive() then
@@ -82,13 +101,29 @@ function definition.install(target, api)
     end)
     cleanups[#cleanups + 1] = lan:On("ViewUpdated", function()
         assert(container and lifecycleClass, "stats_container_unavailable")
+        local service = container:resolve(playerClass)
+        local current = cachedPlayers(service)
+        local expected = lan:GetLocalPlayers()
+        if #current ~= #expected then
+            dirty = true
+        else
+            for i, player in ipairs(current) do
+                if
+                    player.index ~= i - 1
+                    or GetPtrHash(player.entityPlayer) ~= GetPtrHash(expected[i])
+                then
+                    dirty = true
+                    break
+                end
+            end
+        end
         if dirty then
             container:resolve(lifecycleClass):reloadAll()
             dirty = false
         end
         -- Native snapshots don't replay evaluate-cache callbacks on replicas.
         local watcher = container:resolve(watcherClass)
-        for _, player in ipairs(container:resolve(playerClass):getPlayers()) do
+        for _, player in ipairs(service:getPlayers()) do
             watcher:updatePlayer(player)
         end
     end)

@@ -1,11 +1,17 @@
 -- Native Glowing Hourglass restores the user's pre-entry whole-team save.
 local native = assert(_IsaacLan)
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port
+if _IsaacLanTest then
+    host, port = _IsaacLanTest.host, _IsaacLanTest.port
+else
+    local f = assert(io.open("./lan-test-role.txt", "r"))
+    host = f:read("*l") == "host"
+    f:close()
+    f = assert(io.open("./lan-test-menu-port.txt", "r"))
+    port = f:read("*l")
+    f:close()
+end
+local consoleRewind = _IsaacLanTest and _IsaacLanTest.consoleRewind
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end
@@ -93,6 +99,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         capture,
         function(t, n, b)
             before(t, n, b)
+            if t == 25 and consoleRewind then
+                local seed = Game():GetSeeds():GetStartSeed()
+                Isaac.ExecuteCommand("rewind")
+                assert(seed ~= 0 and Game():GetSeeds():GetStartSeed() == seed)
+                report("CONSOLE_REWIND_WITHOUT_CHECKPOINT")
+            end
             if t == 30 then
                 for i = 0, 1 do
                     local p = Isaac.GetPlayer(i)
@@ -147,11 +159,15 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 end
             end
             if t == 220 then
-                assert(native.rooms_with_player(0, function()
-                    Isaac.GetPlayer(0)
-                        :UseActiveItem(CollectibleType.COLLECTIBLE_GLOWING_HOUR_GLASS, 0, -1)
-                end))
-                report("HOURGLASS_USE")
+                if consoleRewind then
+                    Isaac.ExecuteCommand("rewind")
+                else
+                    assert(native.rooms_with_player(0, function()
+                        Isaac.GetPlayer(0)
+                            :UseActiveItem(CollectibleType.COLLECTIBLE_GLOWING_HOUR_GLASS, 0, -1)
+                    end))
+                end
+                report(consoleRewind and "CONSOLE_REWIND" or "HOURGLASS_USE")
             end
             if t == 350 then
                 assertRoster()

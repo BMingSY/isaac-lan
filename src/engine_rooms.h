@@ -11,6 +11,7 @@ namespace isaac::lan {
 struct RoomRequest;
 }
 namespace isaac::rooms {
+bool finalCombat();
 using RoomCall = void(__attribute__((thiscall)) *)(void*);
 bool install(std::uintptr_t image, void (*logger)(const std::string&));
 bool bind(lua_State*, HMODULE);
@@ -19,9 +20,11 @@ bool half(void (*original)());
 bool render(void* game, RoomCall original, int slot);
 bool backgroundLoading();
 void withView(const std::function<void()>& draw, bool localPlayersOnly = false);
+void withMapPickups(const std::function<void()>& cache);
 void finishFrame();
 void presentCamera();
 void requestExit(bool save);
+void playEnding(unsigned ending);
 void beforeStart();
 void resumeAfterTransition(std::vector<SavedLocation> locations);
 std::vector<SavedLocation> captureLocations();
@@ -31,6 +34,8 @@ unsigned connected();
 unsigned soundAudience();
 std::uintptr_t presentationPlayer(void* explicitPlayer = nullptr);
 bool withPlayer(unsigned slot, const std::function<void()>& call);
+bool withRoomPlayers(unsigned slot, const std::function<void()>& call);
+bool gatherForTransition(const std::function<void()>& begin);
 void protectArrivals(unsigned mask);
 bool receiveRoomRequest(unsigned slot, const lan::RoomRequest&);
 bool checkpointReady();

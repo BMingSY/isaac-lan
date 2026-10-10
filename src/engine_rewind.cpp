@@ -170,9 +170,11 @@ void remember(unsigned slot, int door, const std::vector<rooms::SavedLocation>& 
         checkpoint.counters[i] = at<unsigned>(buffer, 0x1fe34 + i * 4);
     checkpoints[slot] = std::move(checkpoint);
 }
-void request(unsigned slot) {
-    if (!pending && slot < 4 && checkpoints[slot])
-        pending = slot;
+bool request(unsigned slot) {
+    if (slot >= 4 || !checkpoints[slot] || (pending && *pending != slot))
+        return false;
+    pending = slot;
+    return true;
 }
 bool executePending() {
     if (!pending)

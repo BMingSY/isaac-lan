@@ -15,6 +15,17 @@ def test_state_bridge_initializes_with_embedded_portable_modules(lua):
     assert lua.call("state_init") == [True, True, "function", "function", "function"]
 
 
+@pytest.mark.parametrize(
+    "cleared,boss", [(False, False), (False, True), (True, False), (True, True)]
+)
+def test_combat_arrival_closes_doors_and_only_uncleared_boss_trapdoor(lua, cleared, boss):
+    closed, trapdoor, animation, rock = lua.call("room_entry", cleared, boss)
+    assert closed == (0 if cleared else 2)
+    assert rock == 4
+    assert trapdoor == (0 if boss and not cleared else 2)
+    assert animation == ("Closed" if boss and not cleared else "Opened")
+
+
 def inventory_value(resources=None, passive=None, actives=None, souls=0, black=0):
     actives = actives or [[0, 0] for _ in range(4)]
     counts = dict(passive or {})
@@ -118,11 +129,16 @@ def test_inventory_converges_and_repeated_snapshot_has_no_extra_effect(
     assert lua.call("inventory_apply", value, True) == first
 
 
-def test_death_ghost_inventory_is_owned_by_native_conversion(lua):
+def test_ghost_resources_follow_authority_without_rebuilding_hidden_items(lua):
     before = lua.call("inventory_reset", True)
     value = inventory_value([77, 3, 9, 0, 0], {1: 2})
     value[8] = True
-    assert lua.call("inventory_apply", value, True) == before
+    after = lua.call("inventory_apply", value, True)
+    assert after[0][4] == value[4]
+    before[0][4] = value[4]
+    assert after[0] == before[0]
+    assert after[1] == before[1]  # No item mutations on a ghost.
+    assert lua.call("inventory_apply", value, True) == after
 
 
 def test_inventory_changes_replace_prior_items_and_preserve_slot_order(lua):
@@ -187,6 +203,16 @@ def test_entity_removal_preserves_players_and_other_rooms(lua):
     result = lua.call("entities_apply", "0:1", [])
     assert [row[0] for row in result[0]] == [-1, 900]
     assert result[1:] == [2, 2]
+
+
+def test_native_segment_cleanup_cannot_unlink_authoritative_body(lua):
+    lua.call("entities_reset")
+    values = [entity(1, kind=62, child=2), entity(2, kind=62, subtype=1, parent=1)]
+    first = lua.call("entities_apply", "0:1", values, True)
+    local = [row for row in first[0] if 0 < row[0] < 900]
+    assert [(row[0], row[4], row[6]) for row in local] == [(1, 0, 2), (2, 1, 0)]
+    assert first[1:] == [2, 1]
+    assert lua.call("entities_apply", "0:1", values, True) == first
 
 
 def test_empty_collectible_pedestal_never_rolls_a_new_item(lua):

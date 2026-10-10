@@ -1,11 +1,14 @@
 #include "engine_presentation.h"
 #include "engine_item_presentation.h"
 #include "engine_rooms.h"
+#include "intro_barrier.h"
+#include "room_map.h"
 #include "runtime_net.h"
 #include "net_protocol.h"
 #include <MinHook.h>
 #include <deque>
 #include <cstring>
+#include <array>
 
 namespace isaac::presentation {
 namespace {
@@ -20,6 +23,9 @@ struct Intro {
 };
 std::deque<Intro> intros;
 unsigned serial = 0, seen = 0;
+unsigned played = 0;
+unsigned hostIntro = 0;
+IntroBarrier waiting;
 using StartIntro = void(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 StartIntro originalIntro;
 void playIntro(void* transition, unsigned first, unsigned second) {
@@ -47,14 +53,31 @@ void __attribute__((fastcall)) startIntro(void* transition, void*, unsigned firs
     if (runtime::replica())
         return;
     const auto game = at<std::uintptr_t>(image, 0x871678);
+    const bool terminal =
+        rooms::finalCombat() || rooms::gatherHomeCombat(at<int>(game, 0), at<int>(game, 4),
+                                                        first == 99, audience, rooms::connected());
+    if (terminal && (audience & rooms::connected()) != rooms::connected()) {
+        // Gather before the native versus screen. The complete roster then
+        // shares its control lock and the encounter's cinematics.
+        if (rooms::gatherForTransition([=] {
+                rooms::withRoomPlayers(0, [&] { startIntro(transition, nullptr, first, second); });
+            }))
+            return;
+    }
     intros.push_back({++serial, runtime::tick(), audience, at<int>(game, 0), at<int>(game, 4),
                       at<int>(game, 0x1830c), at<int>(game, 0x18304), first, second});
+    const auto& event = intros.back();
+    waiting.start({event.stage, event.type, event.dimension, event.room}, event.serial, event.tick,
+                  audience);
     while (intros.size() > 32)
         intros.pop_front();
     // A native intro owns the process-wide transition screen. Background room
     // entry must notify its occupants without taking over the host's viewport.
-    if (audience & 1u)
+    if (audience & 1u) {
+        hostIntro = event.serial;
+        played = event.serial;
         playIntro(transition, first, second);
+    }
 }
 struct API {
     int(__cdecl* getTop)(lua_State*);
@@ -105,6 +128,7 @@ int events(lua_State* L) {
                 continue;
             rooms::withView(
                 [&] { playIntro(reinterpret_cast<void*>(game + 0x1b83c), first, second); }, true);
+            played = id;
         }
         r.finish();
         lua.pushBoolean(L, true);
@@ -120,11 +144,38 @@ int resetLua(lua_State*) {
     return 0;
 }
 int active(lua_State* L) {
-    const auto transition = at<std::uintptr_t>(image, 0x871678) + 0x1b83c;
-    lua.pushBoolean(L, at<int>(transition, 0) == 2 && at<int>(transition, 0x238) != 0);
+    lua.pushBoolean(L, introActive());
     return 1;
 }
 } // namespace
+IntroSimulationScope::IntroSimulationScope(bool advance) {
+    if (runtime::replica() || !hostIntro || !rooms::stateReady())
+        return;
+    const auto game = at<std::uintptr_t>(image, 0x871678);
+    const auto target = game + 0x1b83c;
+    if (at<int>(target, 0) != 2 && at<int>(target, 0) != 3)
+        return;
+    if (advance && at<int>(game, 0x23a74) == 0) {
+        using Update = void(__attribute__((thiscall))*)(void*);
+        // Game::Update otherwise advances this screen and returns before ANY
+        // Room::Update. Advance it once, then let the room scheduler run.
+        rooms::withRoomPlayers(0, [&] {
+            reinterpret_cast<Update>(image + 0x4318a0)(reinterpret_cast<void*>(target));
+        });
+        waiting.observe(0, hostIntro, at<int>(target, 0) != 0);
+        if (at<int>(target, 0) == 0)
+            hostIntro = 0;
+    }
+    if (at<int>(target, 0) == 2 || at<int>(target, 0) == 3) {
+        transition = target;
+        saved = at<int>(target, 0);
+        at<int>(target, 0) = 0;
+    }
+}
+IntroSimulationScope::~IntroSimulationScope() {
+    if (transition && at<int>(transition, 0) == 0)
+        at<int>(transition, 0) = saved;
+}
 bool install(std::uintptr_t base) {
     image = base;
     return items::install(base) &&
@@ -160,7 +211,41 @@ bool bind(lua_State* L, HMODULE module) {
 void reset() {
     items::reset();
     intros.clear();
-    serial = seen = 0;
+    waiting.clear();
+    serial = seen = played = hostIntro = 0;
+}
+unsigned playedIntro() {
+    return played;
+}
+bool introActive() {
+    const auto transition = at<std::uintptr_t>(image, 0x871678) + 0x1b83c;
+    const auto mode = at<int>(transition, 0);
+    return (mode == 2 || mode == 3) && at<int>(transition, 0x238) != 0;
+}
+void observeIntro(unsigned slot, unsigned id, bool active) {
+    const auto completed = waiting.observe(slot, id, active);
+    if (!completed || runtime::ending())
+        return;
+    // A guest-only versus screen never runs on the authority. Complete its
+    // native control restoration once, after that guest finished both phases,
+    // using only its actors in the room where the event originated.
+    rooms::withPlayer(slot, [&] {
+        const auto game = at<std::uintptr_t>(image, 0x871678);
+        const std::array room{at<int>(game, 0), at<int>(game, 4), at<int>(game, 0x1830c),
+                              at<int>(game, 0x18304)};
+        if (room != *completed || at<int>(game, 0x26614) >= 2)
+            return;
+        using Controls = void(__attribute__((thiscall))*)(void*, bool);
+        reinterpret_cast<Controls>(image + 0x5bea10)(reinterpret_cast<void*>(game + 0x1baa8), true);
+    });
+}
+bool roomPaused() {
+    const auto game = at<std::uintptr_t>(image, 0x871678);
+    const std::array key{at<int>(game, 0), at<int>(game, 4), at<int>(game, 0x1830c),
+                         at<int>(game, 0x18304)};
+    // A missing acknowledgement must not leave a room frozen after a player
+    // disconnects or fails to render. Normal completion is event-specific.
+    return waiting.paused(key, runtime::tick(), rooms::connected());
 }
 void roomEntered(std::uintptr_t room) {
     if (runtime::replica())
