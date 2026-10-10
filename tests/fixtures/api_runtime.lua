@@ -128,8 +128,8 @@ return function(root)
             "api/lifecycle",
             "api/actions",
             "api/public",
-            "compat/wrapping",
-            "compat/registry",
+            "compat/mods/wrapping",
+            "compat/mods/registry",
         }) do
             env._IsaacLanModules[name] =
                 assert(loadfile(root .. "/src/bridge/" .. name .. ".lua", "t", env))()

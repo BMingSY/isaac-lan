@@ -60,7 +60,7 @@ if not host then
             return table.unpack(values, 1, values.n)
         end
     end
-    local registry = _IsaacLanModules["compat/registry"]
+    local registry = _IsaacLanModules["compat/mods/registry"]
     -- Registration copies the adapter definition. Profile that registered copy.
     for i = 1, 64 do
         local name, definitions = debug.getupvalue(registry.register, i)

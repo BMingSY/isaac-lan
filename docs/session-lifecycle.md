@@ -24,7 +24,7 @@ sequenceDiagram
     end
 ```
 
-网络状态机定义在 [`net_protocol.h`](../src/net_protocol.h)。`loading` 表示收到的检查点尚未传完；传完后仍需原生加载与 `ready`，不能只凭网络状态为 `running` 就参与战斗。
+网络状态机定义在 [`net/protocol.h`](../src/net/protocol.h)。`loading` 表示收到的检查点尚未传完；传完后仍需原生加载与 `ready`，不能只凭网络状态为 `running` 就参与战斗。
 
 ## 原生换层与重建
 
@@ -64,7 +64,7 @@ sequenceDiagram
 
 客机不需要从第一层重放输入，也不必等下一层。已离线栏位通过 `player-id.txt` 识别；它用于匹配运行中的原角色。当前没有中途增加新玩家或房主迁移流程。
 
-[`captureCheckpoint`](../src/runtime_net.cpp) 在所有已加载房间完成原生保存后采集检查点，临时把停放角色放入存档名单。这个名单只用于序列化，不让离线角色重新参加战斗。
+[`runtime/session.cpp`](../src/runtime/session.cpp) 在所有已加载房间完成原生保存后采集检查点，临时把停放角色放入存档名单。这个名单只用于序列化，不让离线角色重新参加战斗。
 
 加载期间房主继续推进。客机发送 `ready` 前不提交有效玩法输入，也不计入在线人数。准备完成后接收最新视图，使用保留的原角色及状态回到房主当前房间。
 
@@ -74,7 +74,7 @@ sequenceDiagram
 
 ## 联机存档与续玩
 
-[`session_archive.h`](../src/session_archive.h) 的存档包含扩展指纹、开局设置、全队房间与位置、原生 GameState 数据和完整性哈希。格式标识为 `IsaacLAN/save/2`。
+[`session_archive.h`](../src/runtime/session_archive.h) 的存档包含扩展指纹、开局设置、全队房间与位置、原生 GameState 数据和完整性哈希。格式标识为 `IsaacLAN/save/2`。
 
 房主三个存档栏分别使用游戏目录下的 `isaac-lan/session-1.bin`、`session-2.bin`、`session-3.bin`。联机会话保存与原有单机 Continue 状态分别管理。
 
@@ -82,7 +82,7 @@ sequenceDiagram
 
 ## 全队回退
 
-发光沙漏使用 [`engine_rewind.cpp`](../src/engine_rewind.cpp) 保存的每个控制器上一次进房检查点。检查点记录当时全队的原生状态与各自位置。
+发光沙漏使用 [`engine/versions/j460/rewind.cpp`](../src/engine/versions/j460/rewind.cpp) 保存的每个控制器上一次进房检查点。检查点记录当时全队的原生状态与各自位置。
 
 房主接受使用请求后发布带回退载荷的可靠 `Stage` 事务，两端使用原生沙漏恢复路径，再恢复各玩家当时的房间。回退可能跨层；网络状态序号继续递增，楼层代次推进，不能重新接纳回退前的旧视图。
 

@@ -1,18 +1,22 @@
-#include "net_protocol.h"
-#include "automation_input.h"
-#include "menu_input.h"
-#include "bootstrap_profile.h"
-#include "lanbot_console.h"
-#include "progression.h"
-#include "session_archive.h"
-#include "intro_barrier.h"
-#include "room_map.h"
-#include "audio_ownership.h"
-#include "localized_text.h"
-#include "laser_state.h"
-#include "actor_roster.h"
-#include "log_record.h"
-#include "poop_state.h"
+#include "net/protocol.h"
+#include "core/automation_input.h"
+#include "core/menu_input.h"
+#include "core/bootstrap_profile.h"
+#include "core/lanbot_console.h"
+#include "runtime/progression.h"
+#include "runtime/session_archive.h"
+#include "core/intro_barrier.h"
+#include "runtime/room_map.h"
+#include "compat/bosses/encounters.h"
+#include "compat/routes/mines.h"
+#include "compat/characters/traits.h"
+#include "compat/items/rewind_targets.h"
+#include "core/audio_ownership.h"
+#include "core/localized_text.h"
+#include "core/laser_state.h"
+#include "runtime/actor_roster.h"
+#include "core/log_record.h"
+#include "core/poop_state.h"
 #include "test_support.h"
 #include <algorithm>
 #include <limits>
@@ -20,8 +24,35 @@
 using namespace isaac::lan;
 
 namespace {
+void compatibilityTargets() {
+    using namespace isaac::compat;
+    require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
+            "Lazarus form matching crossed another character");
+    require(characters::taintedJacob(37) && characters::taintedJacob(39) &&
+                !characters::taintedJacob(19),
+            "Dark Esau owner matching crossed ordinary Jacob");
+    items::RewindTargets<int, 4> targets;
+    require(!targets.request(0) && !targets.request(4) && !targets.take(),
+            "Missing/out-of-range rewind target was accepted");
+    targets.remember(0, 100);
+    targets.remember(1, 200);
+    require(targets.request(0) && targets.request(0) && !targets.request(1),
+            "Another user's rewind replaced the pending target");
+    require(targets.take() == 0 && !targets.take() && targets.at(0) == 100,
+            "Pending rewind was replayed or its checkpoint was consumed");
+    require(targets.request(1) && targets.take() == 1 && targets.at(1) == 200,
+            "Controllers did not retain separate rewind targets");
+    targets.remember(0, 300);
+    require(targets.request(0) && targets.at(0) == 300,
+            "Re-entry did not replace a user's checkpoint");
+    targets.reset();
+    require(!targets.take() && !targets.request(0) && !targets.request(1),
+            "A new run retained old pending/checkpoint state");
+}
 void roomTransitionContext() {
     using namespace isaac::rooms;
+    using namespace isaac::compat::bosses;
+    using namespace isaac::compat::routes;
     require(validRoomRequest(-100, -1) && validRoomRequest(-101, 0),
             "Native mirror/mineshaft aliases were rejected before descriptor lookup");
     require(!validRoomRequest(-21, 0) && !validRoomRequest(-102, 0) && !validRoomRequest(169, 0) &&
@@ -773,6 +804,7 @@ int main(int argc, char** argv) {
                      {"intro-barrier", introBarrier},
                      {"room-map", roomMap},
                      {"room-transition-context", roomTransitionContext},
+                     {"compatibility-targets", compatibilityTargets},
                      {"truncated-packets", truncatedPackets},
                      {"hashes", hashes},
                      {"progression", progression},

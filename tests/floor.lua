@@ -16,7 +16,10 @@ local level = {
         stage, stageType, changes = s, t, changes + 1
     end,
 }
-local floor = dofile(root .. "/src/bridge/state/floor.lua")(native)
+local floor = dofile(root .. "/src/bridge/runtime/floor.lua")(
+    native,
+    dofile(root .. "/src/bridge/compat/routes/home.lua")
+)
 assert(floor.ready(level, 7, 6, 4))
 -- A new Ascent snapshot can arrive before its reliable native transition.
 assert(not floor.ready(level, 8, 6, 0))

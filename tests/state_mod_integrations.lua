@@ -1,12 +1,17 @@
 -- Actual supported Mods are copied unchanged by --mod / --client-mod.
 local native, api = assert(_IsaacLan), assert(IsaacLAN)
 local modules = _IsaacLanModules
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port
+if _IsaacLanTest then
+    host, port = _IsaacLanTest.host, _IsaacLanTest.port
+else
+    local f = assert(io.open("./lan-test-role.txt", "r"))
+    host = f:read("*l") == "host"
+    f:close()
+    f = assert(io.open("./lan-test-menu-port.txt", "r"))
+    port = f:read("*l")
+    f:close()
+end
 local character = 0 -- A Jacob/Esau fixture is generated with character = 19.
 local owner = { Name = "Isolated third-party integration contract" }
 local lan = api:RegisterMod(owner, { id = "test.integration.views", integrationVersion = 1 })
@@ -165,7 +170,7 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
         if not playerService then
             for _, callback in ipairs(Isaac.GetCallbacks(ModCallbacks.MC_POST_UPDATE)) do
                 if callback.Mod.Name == "stats-plus" then
-                    playerService = modules["compat/wrapping"].find(
+                    playerService = modules["compat/mods/wrapping"].find(
                         callback.Function,
                         function(value)
                             return type(value.getAllEntityPlayers) == "function"

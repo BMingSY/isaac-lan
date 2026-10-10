@@ -1,5 +1,5 @@
 local root = assert(arg[1])
-local factory = dofile(root .. "/src/bridge/state/presentation.lua")
+local factory = dofile(root .. "/src/bridge/presentation/items.lua")
 local captured, applied, order = {}, {}, {}
 local main = { layers = { "card_face", "card_border", "card_glow" }, frame = 14 }
 local mega = { layers = { "player", "costumes" }, frame = 6 }

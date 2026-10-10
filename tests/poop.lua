@@ -1,6 +1,6 @@
 local root = assert(arg[1])
 local received, count
-local module = dofile(root .. "/src/bridge/state/poop.lua")({
+local module = dofile(root .. "/src/bridge/compat/characters/blue_baby.lua")({
     actor_poop = function(sprite, value)
         assert(sprite == "sprite")
         received, count = value, (count or 0) + 1

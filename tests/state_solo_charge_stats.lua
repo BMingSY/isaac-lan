@@ -11,7 +11,7 @@ local phase, renders, soloSeed = "start", 0, nil
 local linked, chosen, ended = false, false, false
 local originalWarning
 local soloDraws, localDraws, chargeSamples, shots = 0, 0, 0, 0
-local registry = _IsaacLanModules["compat/registry"]
+local registry = _IsaacLanModules["compat/mods/registry"]
 local observe = registry.observeRequire
 function registry.observeRequire(source, name, value)
     observe(source, name, value)
