@@ -10,7 +10,9 @@ import shutil
 import signal
 import subprocess
 import time
-from game_logs import probe_path
+from game_logs import freeze_probe_logs, probe_path, probe_text
+from check_performance import summarize_tree
+from progress_fixture import prepare as prepare_progress_fixture
 
 
 def windows(path):
@@ -114,6 +116,16 @@ def main():
         "--automatic",
         action="store_true",
         help="Use the automatically loaded DLL instead of remote-thread injection",
+    )
+    parser.add_argument(
+        "--heap-check",
+        action="store_true",
+        help="Observe owned games and preserve full crash dumps",
+    )
+    parser.add_argument(
+        "--performance",
+        action="store_true",
+        help="Enable metrics in the owned lab config (use a protected runner)",
     )
     parser.add_argument(
         "--installed",
@@ -286,6 +298,7 @@ def main():
         ).hexdigest()
     installed_labs = []
     process_watchers = []
+    heap_watchers = []
     package = args.output / "installed-package"
     if args.installed:
         package.mkdir()
@@ -506,17 +519,32 @@ def main():
             else:
                 hold.unlink(missing_ok=True)
             shutil.copy2(args.build / "isaac_lan_lab.exe", lab / "isaac_lan_lab.exe")
-            response = execute(
-                str(lab / "isaac_lan_lab.exe"),
-                windows(lab),
+            flags = [
                 *(["--automatic"] if args.automatic or args.installed else []),
                 *(["--no-luadebug"] if args.no_luadebug else []),
-            )
+            ]
+            if args.performance:
+                config = lab / "game/isaac-lan/config.ini"
+                config.parent.mkdir(parents=True, exist_ok=True)
+                config.write_text(
+                    "[logging]\nlevel=INFO\n[diagnostics]\nperformance=true\nsample_interval_ms=1000\n"
+                )
+            if args.progress_fixture:
+                prepare_progress_fixture(
+                    lab,
+                    host=role == "host",
+                    endings=args.endings_fixture,
+                    alt_path=args.alt_path_fixture,
+                    hush=args.hush_fixture,
+                    ascent=args.ascent_fixture,
+                )
+            response = execute(str(lab / "isaac_lan_lab.exe"), windows(lab), *flags)
             match = re.search(r"(?:bootstrap_status=0|autoload_started=1) pid=(\d+)", response)
             if not match:
                 raise RuntimeError(response)
             pid = int(match[1])
-            processes.append(pid)
+            if pid not in processes:
+                processes.append(pid)
             exit_report = args.output.resolve() / (role + "-exit.json")
             watcher = subprocess.Popen(
                 [
@@ -545,6 +573,29 @@ def main():
                 if time.monotonic() >= deadline:
                     raise RuntimeError(f"{role} did not reach intro")
                 time.sleep(0.1)
+            if args.heap_check:
+                path = args.output / (role + "-heap-watch.log")
+                dumps = args.output.resolve() / role / "heap-dumps"
+                dumps.mkdir(parents=True)
+                stream = path.open("wb")
+                watcher = subprocess.Popen(
+                    [
+                        str(args.build / "isaac_lan_heap_watch.exe"),
+                        windows(lab),
+                        windows(dumps),
+                        str(pid),
+                    ],
+                    stdout=stream,
+                    stderr=subprocess.STDOUT,
+                )
+                heap_watchers.append((role, watcher, stream, path))
+                deadline = time.monotonic() + 15
+                while f"heap_watch_ready pid={pid}" not in path.read_text(errors="replace"):
+                    if watcher.poll() is not None or time.monotonic() >= deadline:
+                        raise RuntimeError(
+                            f"{role} heap observer failed to initialize: {path.read_text(errors='replace')}"
+                        )
+                    time.sleep(0.1)
             control(pid, "PostKeys", "{SPACE}")
             if args.menu_start:
                 time.sleep(1)
@@ -603,7 +654,7 @@ def main():
                         control(
                             pid, "Capture", windows(args.output.resolve() / "official-online.png")
                         )
-                        native = probe_path(lab).read_text().rsplit("bootstrap=PASS", 1)[-1]
+                        native = probe_text(lab).rsplit("bootstrap=PASS", 1)[-1]
                         assert "native_online_entry=OFFICIAL" in native
                         entry = native.split("native_online_entry=OFFICIAL", 1)[0]
                         assert (
@@ -782,7 +833,7 @@ def main():
                 if "LAN_NETWORK FAILED" in line or "Error in" in line or "Caught exception" in line
             ]
             for lab in labs:
-                native = probe_path(lab).read_text(errors="replace").rsplit("bootstrap=PASS", 1)[-1]
+                native = probe_text(lab).rsplit("bootstrap=PASS", 1)[-1]
                 errors.extend(
                     line
                     for line in native.splitlines()
@@ -879,9 +930,25 @@ def main():
             floor_hud.stop()
         # Only PIDs returned by our own isolated child runner are controlled.
         closed = set()
-        for pid in processes:
+        for lab, pid in zip(labs, processes):
             try:
-                control(pid, "Close")
+                response = execute(
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    windows(source / "tools/lab_owned_exit.ps1"),
+                    "-GameProcessId",
+                    str(pid),
+                    "-ExpectedExecutable",
+                    windows(lab / "game/isaac-ng.exe"),
+                    timeout=60,
+                )
+                if "forced=1" in response:
+                    result.setdefault("close_errors", []).append(
+                        f"Owned process {pid} required forced termination"
+                    )
                 closed.add(pid)
             except Exception as error:
                 result.setdefault("close_errors", []).append(str(error))
@@ -892,13 +959,46 @@ def main():
                 watcher.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 watcher.terminate()
+                watcher.wait(timeout=5)
             if path.exists():
                 result.setdefault("process_exit", {})[role] = json.loads(
                     path.read_text(encoding="utf-8-sig")
                 )
+        for role, watcher, stream, path in heap_watchers:
+            try:
+                watcher.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                watcher.terminate()
+                try:
+                    watcher.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    watcher.kill()
+                    watcher.wait(timeout=5)
+                result.setdefault("close_errors", []).append(f"{role}: heap watcher did not finish")
+            stream.close()
+            text = path.read_text(errors="replace")
+            exits = re.findall(r"heap_game_exit pid=(\d+) code=([0-9a-fA-F]{8})", text)
+            if exits:
+                code = int(exits[-1][1], 16)
+                result.setdefault("process_exit", {}).setdefault(
+                    role,
+                    {
+                        "pid": int(exits[-1][0]),
+                        "exit_code": code,
+                        "exit_hex": f"{code:08X}",
+                    },
+                )
+            result.setdefault("heap_watch", {})[role] = {
+                "exit_code": watcher.poll(),
+                "dump_count": text.count("heap_dump "),
+            }
+            if watcher.returncode != 0:
+                result.setdefault("close_errors", []).append(
+                    f"{role}: heap watcher failed ({watcher.returncode})"
+                )
         for lab, role in zip(labs, roles):
             out = args.output / role
-            out.mkdir()
+            out.mkdir(exist_ok=True)
             if (
                 (args.native_record_both or args.native_record_view == roles.index(role))
                 and len(processes) > roles.index(role)
@@ -912,7 +1012,12 @@ def main():
                     result.setdefault("close_errors", []).append(
                         f"{role} recording cleanup: {error}"
                     )
-            for path in [log_path(lab), probe_path(lab)]:
+            freeze_probe_logs(
+                lab,
+                out,
+                processes[roles.index(role)] if len(processes) > roles.index(role) else None,
+            )
+            for path in [log_path(lab)]:
                 if path.exists():
                     shutil.copy2(path, out / path.name)
             # Protected runners restore the entire isolated profile afterward.
@@ -941,6 +1046,10 @@ def main():
             if not was_disabled:
                 (original / "disable.it").unlink(missing_ok=True)
         finalize_result(result, roles[: len(processes)])
+        if args.performance:
+            (args.output / "performance-summary.json").write_text(
+                json.dumps(summarize_tree(args.output), indent=2) + "\n"
+            )
         result["seconds"] = time.monotonic() - started
         (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

@@ -24,6 +24,8 @@ local dogmaWarning = _IsaacLanTest.dogmaWarning
 local warningFrames, attackFrames, warningAt = 0, 0, nil
 local dogmaAngelSeen = false
 local crawlspaceTest = _IsaacLanTest.crawlspace
+local campaign = _IsaacLanTest.campaign
+local visitedFloors = {}
 local crawlspaceReturns, crawlspaceSource, crawlspaceBoss = 0, nil, nil
 local crawlspaceEntrance, crawlspaceExit, crawlspaceDirection, crawlspaceAction
 local returnContext = crawlspaceTest
@@ -68,6 +70,15 @@ end
 local function mark(s, t)
     step, stepAt = s, t
     report("STEP " .. s .. " tick=" .. t)
+end
+local function observeFloor()
+    if campaign then
+        local stage = Game():GetLevel():GetStage()
+        if not visitedFloors[stage] then
+            visitedFloors[stage] = true
+            report("CAMPAIGN_FLOOR stage=" .. stage)
+        end
+    end
 end
 local function actor(slot, fn)
     assert(native.rooms_with_player(slot, function()
@@ -370,9 +381,9 @@ local function fight(t)
                     and t % 10 == 0
                     and t - appeared[key] >= warmup
                     and not e:IsDead()
-                    and e.HitPoints > 0
+                    and (campaign or e.HitPoints > 0)
                 then
-                    if e.Type == 950 or e.Type == 951 then
+                    if campaign or e.Type == 950 or e.Type == 951 then
                         -- These bosses have non-damageable companion/intro
                         -- entities. Native tear collision must choose targets;
                         -- direct TakeDamage can bypass their phase protection.
@@ -383,7 +394,9 @@ local function fight(t)
                             true,
                             false
                         )
-                        tear.CollisionDamage = 1000000
+                        -- The campaign uses bounded tear damage so native
+                        -- multi-phase bosses finish their own phase changes.
+                        tear.CollisionDamage = campaign and 100 or 1000000
                     else
                         e:TakeDamage(1000000, DamageFlag.DAMAGE_IGNORE_ARMOR, EntityRef(p), 0)
                     end
@@ -432,6 +445,13 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, function(_, gameOver)
     assert(not gameOver, "Ending route ended in a defeat")
     assert(wins == caseIndex - 1, "Duplicate native win callback")
     assert(bosses[terminal[cases[caseIndex]]], "Win callback without the expected terminal Boss")
+    if campaign then
+        for _, stage in ipairs({ 1, 2, 3, 4, 5, 6, 7, 8, 10, 11 }) do
+            assert(visitedFloors[stage], "Campaign missed generated floor " .. stage)
+        end
+        assert(floorEvents >= 9 or host, "Replica campaign did not receive all floor transitions")
+        report("CAMPAIGN_PASS first_floor=1 terminal=lamb native_win=true")
+    end
     if dogmaWarning then
         assert(warningFrames > 5, "Dogma pre-attack warning was not observed")
         assert(attackFrames > 0, "Dogma actual beam attack was not observed")
@@ -638,6 +658,7 @@ local function advance(t)
     end
     local level, name = Game():GetLevel(), cases[caseIndex]
     local stage, kind = level:GetStage(), level:GetStageType()
+    observeFloor()
     if homeOnly and debug10 and not debug10BeastWalking and level:GetCurrentRoomIndex() == -10 then
         local beast
         actor(1, function()
@@ -680,14 +701,20 @@ local function advance(t)
             end)
             report("PREREQUISITE_FIXTURE knife_pieces=626,627")
         end
-        prepare(
-            name == "ascent" and (homeOnly and 13 or crawlspaceTest and 6 or 1)
-                or name == "mother" and 2
-                or name == "delirium" and 8
-                or 6,
-            0,
-            t
-        )
+        if campaign then
+            assert(stage == 1 and kind < 4, "Campaign did not start on the first normal floor")
+            mark("source-wait", t)
+            report("CAMPAIGN_START first_floor=1 boss_entry=fixture transitions=native")
+        else
+            prepare(
+                name == "ascent" and (homeOnly and 13 or crawlspaceTest and 6 or 1)
+                    or name == "mother" and 2
+                    or name == "delirium" and 8
+                    or 6,
+                0,
+                t
+            )
+        end
     elseif step == "source-wait" and t - stepAt > 140 then
         if homeOnly then
             mark("floor-arrived", t)
@@ -1362,6 +1389,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 homeOrigin, homeDistance, homeMovement = nil, 0, false
             end
             snapshots = snapshots + 1
+            observeFloor()
             if homeOnly then
                 checkHomeVisual(_IsaacLanState.decode(body)[16])
             end

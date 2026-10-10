@@ -16,6 +16,23 @@
 
 所有玩家需要使用相同游戏版本和同一份联机扩展。
 
+## 配置与日志
+
+首次启动会在游戏目录生成 `isaac-lan/config.ini`，修改后重启游戏生效：
+
+```ini
+[logging]
+level = INFO
+
+[diagnostics]
+performance = false
+sample_interval_ms = 1000
+```
+
+`level` 支持 `DEBUG`、`INFO`、`WARN`、`ERROR`，默认不写 DEBUG 日志。需要排查卡顿时，可将 `performance` 改为 `true`；采样间隔支持 100–60000 毫秒。
+
+日志位于原版 `log.txt` 同级目录下的 `isaac-lan/logs/`，通常在 `文档/My Games/Binding of Isaac Repentance+/`。每次启动单独建目录，每局再按序号、种子和主客机分目录：启动及退出记录在 `startup.log`，局内记录在 `runtime.log`；开启性能统计后，同目录还有 `performance.jsonl`。历史日志一直保留，需要时可手动删除旧目录。升级和卸载会保留配置、联机存档及历史日志。
+
 ## 创建与加入
 
 1. 房主设置端口，点击“创建房间”，把自己的局域网 IPv4 地址和端口告诉队友。
@@ -53,4 +70,4 @@ python3 tools/build_package.py --build build-win32 --output dist/Isaac-LAN-J460
 
 ## 问题与建议
 
-请提交到 [Issues](https://github.com/BMingSY/isaac-lan/issues)，写明游戏版本、主客机、复现步骤和使用的其他 Mod；遇到联机异常时可以附上原版 `log.txt` 同级目录下的 `isaac-lan/probe.log`。
+请提交到 [Issues](https://github.com/BMingSY/isaac-lan/issues)，写明游戏版本、主客机、复现步骤和使用的其他 Mod；遇到联机异常时可以附上 `isaac-lan/logs/` 中对应启动的完整目录。

@@ -8,6 +8,7 @@
 #include "engine/input.h"
 #include "embedded_bridge.h"
 #include "diagnostics/lab_capture.h"
+#include "diagnostics/performance.h"
 #include <MinHook.h>
 #include <bcrypt.h>
 #include <GL/gl.h>
@@ -834,6 +835,7 @@ BOOL WINAPI swap(HDC dc) {
     }
     poll();
     draw();
+    diagnostics::render();
     lab_capture::frame(labRoot);
     return originalSwap(dc);
 }

@@ -4,94 +4,86 @@ $process = Get-Process -Id $GameProcessId
 if ($process.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') {
     throw 'Owned isolated game required.'
 }
+# Fixtures are prepared on disk before launch. Editing character unlocks here
+# leaves native menu counts stale and can overflow its rendering buffer.
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class LanProgressFixture {
  [DllImport("kernel32.dll",SetLastError=true)] public static extern IntPtr OpenProcess(uint access,bool inherit,int pid);
  [DllImport("kernel32.dll",SetLastError=true)] public static extern bool ReadProcessMemory(IntPtr handle,IntPtr address,byte[] data,UIntPtr size,out UIntPtr read);
- [DllImport("kernel32.dll",SetLastError=true)] public static extern bool WriteProcessMemory(IntPtr handle,IntPtr address,byte[] data,UIntPtr size,out UIntPtr written);
  [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr handle);
 }
 '@
-$handle = [LanProgressFixture]::OpenProcess(0x0038, $false, $GameProcessId)
+$handle = [LanProgressFixture]::OpenProcess(0x0010, $false, $GameProcessId)
 if ($handle -eq [IntPtr]::Zero) {
-    throw 'Cannot open the owned fixture.'
+    throw 'Cannot read the owned fixture.'
+}
+function Read-Bytes([long]$Address, [uint32]$Length) {
+    $bytes = New-Object byte[] $Length
+    [UIntPtr]$count = [UIntPtr]::Zero
+    if (-not [LanProgressFixture]::ReadProcessMemory($handle, [IntPtr]$Address, $bytes, [UIntPtr]$Length, [ref]$count) -or $count.ToUInt64() -ne $Length) {
+        throw 'Cannot read complete progress fixture.'
+    }
+    return , $bytes
+}
+function Assert-Achievement([int]$Identifier, [byte]$Expected) {
+    if ((Read-Bytes ($progress + 0x38 + $Identifier) 1)[0] -ne $Expected) {
+        throw "Startup achievement fixture $Identifier differs."
+    }
+}
+function Assert-Counter([int]$Identifier, [int]$Expected) {
+    if ([BitConverter]::ToInt32((Read-Bytes ($progress + 0x2bc + $Identifier * 4) 4), 0) -ne $Expected) {
+        throw "Startup counter fixture $Identifier differs."
+    }
 }
 try {
-    $bytes = New-Object byte[] 4
-    [UIntPtr]$count = [UIntPtr]::Zero
     $base = $process.MainModule.BaseAddress.ToInt64()
-    if (-not [LanProgressFixture]::ReadProcessMemory($handle, [IntPtr]($base + 0x87169c), $bytes, [UIntPtr]([uint32]4), [ref]$count)) {
-        throw 'Cannot read manager.'
-    }
-    [long]$progress = [BitConverter]::ToUInt32($bytes, 0) + 0x14
-    [byte[]]$achievement = @(0); [int]$counter = 321
+    [long]$progress = [BitConverter]::ToUInt32((Read-Bytes ($base + 0x87169c) 4), 0) + 0x14
+    [byte]$achievement = [int]$HostFixture.IsPresent
+    [int]$counter = 321
     if ($HostFixture) {
-        $achievement[0] = 1; $counter = 98765
+        $counter = 98765
     }
-    if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + 640), $achievement, [UIntPtr]([uint32]1), [ref]$count)) {
-        throw 'Cannot set achievement fixture.'
-    }
-    $bytes = [BitConverter]::GetBytes($counter)
-    if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x2bc + 522 * 4), $bytes, [UIntPtr]([uint32]4), [ref]$count)) {
-        throw 'Cannot set counter fixture.'
-    }
-    Write-Output "Fixture achievement640=$($achievement[0]) counter522=$counter"
+    Assert-Achievement 640 $achievement
+    Assert-Counter 522 $counter
+    Write-Output "Fixture achievement640=$achievement counter522=$counter verified_at_startup=True"
     if ($AscentFixture -and $HostFixture) {
-        # Womb, Polaroid and A Strange Door are the Ascent prerequisites.
-        # Keep the remaining pool and character unlocks at the lab baseline.
-        [byte[]]$unlocked = @(1)
         foreach ($id in @(4, 57, 635)) {
-            if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + $id), $unlocked, [UIntPtr]([uint32]1), [ref]$count)) {
-                throw 'Cannot set Ascent prerequisite fixture.'
-            }
+            Assert-Achievement $id 1
         }
         Write-Output 'Fixture Ascent prerequisites achievement4=1 achievement57=1 achievement635=1'
     }
     if ($EndingsFixture) {
         if ($HostFixture) {
-            [byte[]]$routes = New-Object byte[] 642
-            for ($i = 0; $i -lt $routes.Length; $i++) {
-                $routes[$i] = 1
-            }
-            if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38), $routes, [UIntPtr]([uint32]$routes.Length), [ref]$count)) {
-                throw 'Cannot set ending-route unlock fixture.'
+            $flags = Read-Bytes ($progress + 0x38) 642
+            for ($i = 0; $i -lt $flags.Length; $i++) {
+                $expected = 1
+                if ($AltPathFixture -and $i -eq 412) {
+                    $expected = 0
+                }
+                if ($flags[$i] -ne $expected) {
+                    throw "Startup ending-route fixture $i differs."
+                }
             }
         } else {
-            # Retain existing achievements consistent with the saved counters.
-            # Clearing every flag in memory leaves the old persistent file and
-            # native completion records able to restore them at the menu.
-            [byte[]]$locked = @(0)
-            if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + 407), $locked, [UIntPtr]([uint32]1), [ref]$count)) {
-                throw 'Cannot lock the guest alternate-path entrance.'
-            }
+            Assert-Achievement 407 0
         }
         Write-Output "Fixture ending routes host_unlocked=$($HostFixture.IsPresent) guest_prior_progress_retained=True"
     }
     if ($HushFixture) {
-        [byte[]]$voidUnlock = @([byte][int]$HostFixture.IsPresent)
         [int]$hushKills = 0
         if ($HostFixture) {
             $hushKills = 3
         }
-        $bytes = [BitConverter]::GetBytes($hushKills)
-        if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + 320), $voidUnlock, [UIntPtr]([uint32]1), [ref]$count) -or
-            -not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x2bc + 158 * 4), $bytes, [UIntPtr]([uint32]4), [ref]$count)) {
-            throw 'Cannot set Hush continuation fixture.'
-        }
-        Write-Output "Fixture achievement320=$($voidUnlock[0]) counter158=$hushKills"
+        Assert-Achievement 320 $achievement
+        Assert-Counter 158 $hushKills
+        Write-Output "Fixture achievement320=$achievement counter158=$hushKills"
     }
     if ($AltPathFixture) {
-        # A Secret Exit is unlocked only on the host. Keep Dross locked on both
-        # peers so the natural entrance reproducibly selects Downpour.
-        [byte[]]$secretExit = @([byte][int]$HostFixture.IsPresent)
-        [byte[]]$locked = @(0)
-        if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + 407), $secretExit, [UIntPtr]([uint32]1), [ref]$count) -or
-            -not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + 412), $locked, [UIntPtr]([uint32]1), [ref]$count)) {
-            throw 'Cannot set alternate-path unlock fixture.'
-        }
-        Write-Output "Fixture achievement407=$($secretExit[0]) achievement412=0"
+        Assert-Achievement 407 $achievement
+        Assert-Achievement 412 0
+        Write-Output "Fixture achievement407=$achievement achievement412=0"
     }
 } finally {
     [void][LanProgressFixture]::CloseHandle($handle)

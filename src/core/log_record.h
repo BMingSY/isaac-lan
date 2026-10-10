@@ -8,7 +8,7 @@ inline Level level(std::string_view message) {
     for (auto token : {"=FAIL", "=ERROR", "_failure=", "_error=", "native_exception"})
         if (message.find(token) != message.npos)
             return Level::error;
-    for (auto token : {"=IGNORED", "=TIMEOUT", "half_late=", "network_stall"})
+    for (auto token : {"=IGNORED", "=TIMEOUT", "half_late=", "network_stall", "config_warning="})
         if (message.find(token) != message.npos)
             return Level::warning;
     for (auto token : {"state_cost ", "state_transfer ", "input_query_rva="})

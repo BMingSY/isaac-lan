@@ -165,6 +165,8 @@ struct Socket {
 };
 } // namespace
 struct Session::Impl {
+    Observer observer = nullptr;
+    bool debugLogs = false;
     StateCompression compression;
     void (*logger)(const std::string&);
     bool winsock = false, hosting = false, connecting = false, localReady = false,
@@ -206,7 +208,8 @@ struct Session::Impl {
     std::uint64_t snapshotChecksum = 0;
     Clock::time_point progress = Clock::now();
 
-    explicit Impl(void (*log)(const std::string&)) : logger(log) {
+    explicit Impl(void (*log)(const std::string&), Observer observe = nullptr, bool debug = false)
+        : observer(observe), debugLogs(debug), logger(log) {
         WSADATA data{};
         winsock = WSAStartup(MAKEWORD(2, 2), &data) == 0;
     }
@@ -749,7 +752,12 @@ struct Session::Impl {
                 throw std::runtime_error("Invalid world state chunk");
             assembling->bytes.insert(assembling->bytes.end(), bytes.begin(), bytes.end());
             if (assembling->bytes.size() == total) {
+                const auto began = observer ? Clock::now() : Clock::time_point{};
                 assembling->bytes = compression.expand(assembling->bytes);
+                if (observer)
+                    observer(
+                        "decompress",
+                        std::chrono::duration<double, std::milli>(Clock::now() - began).count());
                 receivedState = std::move(assembling);
                 assembling.reset();
             }
@@ -796,8 +804,13 @@ struct Session::Impl {
                     p.pending.reset();
                     p.worldSent = 0;
                     const auto size = p.sending->bytes.size();
+                    const auto began = observer ? Clock::now() : Clock::time_point{};
                     p.sending->bytes = compression.compress(p.sending->bytes);
-                    if (logger && p.sending->tick % 300 == 0)
+                    if (observer)
+                        observer("compress",
+                                 std::chrono::duration<double, std::milli>(Clock::now() - began)
+                                     .count());
+                    if (logger && debugLogs && p.sending->tick % 300 == 0)
                         logger("state_transfer slot=" + std::to_string(slot) + " tick=" +
                                std::to_string(p.sending->tick) + " raw=" + std::to_string(size) +
                                " wire=" + std::to_string(p.sending->bytes.size()));
@@ -881,7 +894,8 @@ struct Session::Impl {
         }
     }
 };
-Session::Session(void (*logger)(const std::string&)) : impl(std::make_unique<Impl>(logger)) {}
+Session::Session(void (*logger)(const std::string&), Observer observer, bool debugLogs)
+    : impl(std::make_unique<Impl>(logger, observer, debugLogs)) {}
 Session::~Session() = default;
 bool Session::host(std::uint16_t port, const std::string& fingerprint, const std::string& mods) {
     if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty())
@@ -954,8 +968,10 @@ bool Session::reconnect() {
                mods = impl->mods;
     const auto port = impl->boundPort;
     const auto logger = impl->logger;
+    const auto observer = impl->observer;
+    const auto debug = impl->debugLogs;
     const auto choices = impl->choices;
-    impl = std::make_unique<Impl>(logger);
+    impl = std::make_unique<Impl>(logger, observer, debug);
     impl->choices = choices;
     return join(ip, port, fingerprint, identity, mods);
 }
@@ -1514,5 +1530,27 @@ std::optional<std::uint32_t> Session::verifiedTick() const {
 }
 std::uint16_t Session::port() const {
     return impl->boundPort;
+}
+TransportResources Session::resources() const {
+    TransportResources out;
+    out.connections = impl->listener != INVALID_SOCKET;
+    const auto observe = [&out](const auto& p) {
+        if (!p)
+            return;
+        ++out.connections;
+        out.queuedBytes += p->queued;
+        out.receiveCapacity += p->received.capacity();
+        for (const auto* state : {&p->sending, &p->pending})
+            if (*state)
+                out.worldBytes += (*state)->bytes.capacity();
+    };
+    for (const auto& p : impl->peers)
+        observe(p);
+    for (const auto& p : impl->incoming)
+        observe(p);
+    for (const auto* state : {&impl->receivedState, &impl->assembling})
+        if (*state)
+            out.worldBytes += (*state)->bytes.capacity();
+    return out;
 }
 } // namespace isaac::lan

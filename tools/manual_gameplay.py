@@ -13,7 +13,7 @@ import re
 import shutil
 import subprocess
 import time
-from game_logs import probe_path
+from game_logs import freeze_probe_logs, probe_path, probe_text
 
 SOURCE = Path(__file__).resolve().parents[1]
 ROOT = Path("/mnt/d/isaac-lan-lab")
@@ -590,7 +590,6 @@ class Gameplay:
             for path, name in [
                 (root / "game/lan-human-state.json", f"{role}-final-state.json"),
                 (root / "game/lan-human-floors.jsonl", f"{role}-floors.jsonl"),
-                (probe_path(root), f"{role}-probe-before-close.log"),
                 (
                     root / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt",
                     f"{role}-game-before-close.log",
@@ -598,10 +597,12 @@ class Gameplay:
             ]:
                 if path.exists():
                     shutil.copy2(path, self.output / name)
+            freeze_probe_logs(root, self.output / role, pid)
+            (self.output / f"{role}-probe-before-close.log").write_text(probe_text(root, pid))
             native = probe_path(root)
             if native.exists():
                 (self.output / f"{role}-probe-this-run.log").write_text(
-                    native.read_text(errors="replace").rsplit("bootstrap=PASS", 1)[-1]
+                    probe_text(root, pid).rsplit("bootstrap=PASS", 1)[-1]
                 )
         failures = []
         closed = []
