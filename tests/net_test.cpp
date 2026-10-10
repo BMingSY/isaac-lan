@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <functional>
 #include <memory>
+#include <psapi.h>
 using namespace isaac::lan;
 namespace {
 template <class F> void until(F f) {
@@ -900,6 +901,58 @@ void hostDisconnect() {
             "Host departure did not end guest simulation");
 }
 } // namespace
+void resourceLifecycle() {
+    const auto retained = [] {
+        PROCESS_MEMORY_COUNTERS_EX value{};
+        value.cb = sizeof(value);
+        require(GetProcessMemoryInfo(GetCurrentProcess(),
+                                     reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&value),
+                                     sizeof(value)),
+                "Cannot inspect private memory");
+        return value.PrivateUsage;
+    };
+    const auto handles = [] {
+        DWORD value = 0;
+        require(GetProcessHandleCount(GetCurrentProcess(), &value), "Cannot inspect handle count");
+        return value;
+    };
+    const auto cycle = [] {
+        Group g(2);
+        g.ready();
+        for (unsigned tick = 0; tick < 128; ++tick) {
+            g.step(tick);
+            g.publish(tick, 65536);
+            if (tick % 16 == 0) {
+                g.poll();
+                g.peers[1]->takeState();
+            }
+            const auto resources = g.peers[0]->resources();
+            require(resources.queuedBytes <= 262144 * 4 &&
+                        resources.worldBytes <= 2 * maxWorldSize * 4,
+                    "Slow consumer accumulated unbounded queues or views");
+        }
+        for (auto& peer : g.peers) {
+            if (!peer)
+                continue;
+            peer->close();
+            require(peer->resources().connections == 0 && peer->resources().queuedBytes == 0,
+                    "Closed transport retained sockets or queued messages");
+        }
+    };
+    for (unsigned warm = 0; warm < 5; ++warm)
+        cycle();
+    const auto beforeHandles = handles();
+    const auto beforeMemory = retained();
+    for (unsigned i = 0; i < 40; ++i)
+        cycle();
+    require(handles() <= beforeHandles + 2, "Repeated sessions leaked process handles");
+    require(retained() <= beforeMemory + 8 * 1024 * 1024,
+            "Warm repeated sessions retained over 8 MiB; inspect the resource report");
+    std::printf("RESOURCE cycles=45 snapshots=5760 private_before=%llu private_after=%llu "
+                "handles_before=%lu handles_after=%lu\n",
+                static_cast<unsigned long long>(beforeMemory),
+                static_cast<unsigned long long>(retained()), beforeHandles, handles());
+}
 int main(int argc, char** argv) {
     const auto result = runTests(argc, argv,
                                  {{"codec", codec},
@@ -923,7 +976,8 @@ int main(int argc, char** argv) {
                                   {"publication-limits", publicationLimits},
                                   {"integrations", integrations},
                                   {"greed-settings", greedSettings},
-                                  {"host-disconnect", hostDisconnect}});
+                                  {"host-disconnect", hostDisconnect},
+                                  {"resource-lifecycle", resourceLifecycle}});
     if (!result)
         std::puts("ALL STATE TRANSPORT TESTS PASSED");
     return result;

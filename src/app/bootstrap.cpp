@@ -21,6 +21,9 @@
 #include "engine/build.h"
 #include "core/bootstrap_profile.h"
 #include "diagnostics/runtime_log.h"
+#include "diagnostics/performance.h"
+#include "diagnostics/crash_signal.h"
+#include "app/configuration.h"
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* L);
 
@@ -34,6 +37,7 @@ std::string profile;
 std::uintptr_t image = 0;
 bool initialized = false;
 bool isolated = true;
+isaac::configuration::Settings settings;
 // A lab focus driver can temporarily join Win32 input queues. GLFW must never
 // dereference a window property belonging to the other game process.
 HWND WINAPI localActiveWindow() {
@@ -186,6 +190,8 @@ struct LuaAPI {
     void(__cdecl* setField)(lua_State*, int, const char*) = nullptr;
     const char*(__cdecl* pushString)(lua_State*, const char*) = nullptr;
     long long(__cdecl* checkInteger)(lua_State*, int) = nullptr;
+    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*) = nullptr;
+    double(__cdecl* checkNumber)(lua_State*, int) = nullptr;
     void(__cdecl* pushBoolean)(lua_State*, int) = nullptr;
     void(__cdecl* pushValue)(lua_State*, int) = nullptr;
     int(__cdecl* pcall)(lua_State*, int, int, int, std::intptr_t, void*) = nullptr;
@@ -502,6 +508,7 @@ int stepRoom(lua_State* L) {
 }
 
 LONG CALLBACK recordException(EXCEPTION_POINTERS* exception) {
+    isaac::diagnostics::notifyCrash(exception);
     if (exception->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION)
         return EXCEPTION_CONTINUE_SEARCH;
     char line[512];
@@ -539,6 +546,36 @@ LONG CALLBACK recordException(EXCEPTION_POINTERS* exception) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+int diagnosticsBegin(lua_State* L) {
+    const auto seed = lua.checkString(L, 1, nullptr);
+    const auto role = lua.checkString(L, 2, nullptr);
+    const auto continued = lua.checkInteger(L, 3) != 0;
+    const bool ok = isaac::logging::beginRun(seed, role, continued);
+    if (ok)
+        isaac::diagnostics::beginRun();
+    lua.pushBoolean(L, ok);
+    return 1;
+}
+int diagnosticsEnd(lua_State*) {
+    isaac::diagnostics::endRun();
+    isaac::logging::endRun();
+    return 0;
+}
+int diagnosticsEnabled(lua_State* L) {
+    lua.pushBoolean(L, isaac::diagnostics::enabled());
+    return 1;
+}
+int diagnosticsSample(lua_State* L) {
+    isaac::diagnostics::sample(lua.checkString(L, 1, nullptr), lua.checkNumber(L, 2));
+    return 0;
+}
+int diagnosticsCounter(lua_State* L) {
+    const auto name = lua.checkString(L, 1, nullptr);
+    const auto value = lua.checkInteger(L, 2);
+    if (value >= 0)
+        isaac::diagnostics::counter(name, static_cast<std::uint64_t>(value));
+    return 0;
+}
 int audit(lua_State* L) {
     std::uintptr_t game = 0, room = 0, begin = 0, end = 0;
     int stage = 0, index = 0, gameFrame = 0, enteredFrame = 0;
@@ -598,8 +635,14 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         logDirectory = std::filesystem::path(documents) / L"My Games/Binding of Isaac Repentance+";
     else
         return 14;
+    const auto config = isaac::configuration::load(directory / L"isaac-lan/config.ini");
+    settings = config.settings;
+    isaac::logging::configure(settings.logLevel);
+    isaac::diagnostics::configure(settings);
     if (!isaac::logging::initialize(logDirectory))
         return 14;
+    for (const auto& warning : config.warnings)
+        log("config_warning=" + warning);
     if (isolated) {
         root = env;
     } else {
@@ -714,11 +757,22 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* 
     LUA_IMPORT(setField, "lua_setfield");
     LUA_IMPORT(pushString, "lua_pushstring");
     LUA_IMPORT(checkInteger, "luaL_checkinteger");
+    LUA_IMPORT(checkString, "luaL_checklstring");
+    LUA_IMPORT(checkNumber, "luaL_checknumber");
     LUA_IMPORT(pushBoolean, "lua_pushboolean");
     LUA_IMPORT(pushValue, "lua_pushvalue");
     LUA_IMPORT(pcall, "lua_pcallk");
 #undef LUA_IMPORT
     lua.createTable(L, 0, 1);
+    for (const auto& [name, fn] : std::array<std::pair<const char*, LuaFn>, 5>{
+             {{"diagnostics_begin", diagnosticsBegin},
+              {"diagnostics_end", diagnosticsEnd},
+              {"diagnostics_enabled", diagnosticsEnabled},
+              {"diagnostics_sample", diagnosticsSample},
+              {"diagnostics_counter", diagnosticsCounter}}}) {
+        lua.pushClosure(L, fn, 0);
+        lua.setField(L, -2, name);
+    }
     lua.pushClosure(L, audit, 0);
     lua.setField(L, -2, "audit");
     lua.pushClosure(L, createRoom, 0);

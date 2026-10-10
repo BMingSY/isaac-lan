@@ -6,7 +6,21 @@ local state = {}
 _IsaacLanState = state
 local modules = assert(_IsaacLanModules)
 local codec = assert(modules["sync/codec"])
-local encode, decode = codec.encode, codec.decode
+local performance = modules["diagnostics/performance"]
+        and modules["diagnostics/performance"](native, function()
+            return Isaac.GetTime()
+        end)
+    or {
+        wrap = function(_, fn)
+            return fn
+        end,
+        counter = function() end,
+        resources = function() end,
+    }
+local encode = performance.wrap("encode", codec.encode)
+local decode = performance.wrap("decode", codec.decode)
+local reconcileEntities = performance.wrap("apply.entities", modules["sync/entities"])
+local reconcileGrids = performance.wrap("apply.grids", modules["sync/grids"])
 local npcState = assert(modules["sync/npc"])
 local curses = assert(modules["sync/curses"])
 local greed = assert(modules["compat/routes/greed"])(function()
@@ -28,6 +42,10 @@ local entityCodec = assert(modules["sync/entity_codec"])(
 )
 local entity, sprite, applySprite, vec =
     entityCodec.capture, entityCodec.sprite, entityCodec.applySprite, entityCodec.vec
+entity = performance.wrap("capture.entity", entity)
+sprite = performance.wrap("capture.sprite", sprite)
+applySprite = performance.wrap("apply.sprite", applySprite)
+entityCodec.apply = performance.wrap("apply.entity", entityCodec.apply)
 function _IsaacLanRoomEntered()
     modules["runtime/room_entry"](
         Game():GetRoom(),
@@ -48,7 +66,8 @@ local inventoryState = assert(modules["sync/inventory"])({
     activeType = ItemType.ITEM_ACTIVE,
     curse = NullItemID.ID_LOST_CURSE,
 })
-local inventory, applyInventory = inventoryState.capture, inventoryState.apply
+local inventory = performance.wrap("capture.inventory", inventoryState.capture)
+local applyInventory = performance.wrap("apply.inventory", inventoryState.apply)
 local lastInventory = {}
 local actorsPresentation = assert(modules["presentation/actors"])(native, function(path)
     return Isaac.GetCostumeIdByPath(path)
@@ -125,6 +144,7 @@ local function roomState(slot)
 end
 local captureTick, captureActors, captureVisuals = nil, {}, {}
 function state.capture(slot, tick)
+    performance.resources()
     local game = Game()
     local level = game:GetLevel()
     local locations = native.rooms_positions()
@@ -278,6 +298,7 @@ end, function()
     replicaRoom = nil
 end)
 function state.apply(bytes, tick, ack)
+    performance.resources()
     if floor.waiting() then
         return false
     end
@@ -371,7 +392,7 @@ function state.apply(bytes, tick, ack)
         local room = game:GetRoom()
         local data = value.room
         crawlspace.apply(data[7])
-        modules["sync/entities"](data[3], {
+        reconcileEntities(data[3], {
             ref = ref,
             spawn = function(v, spawner, subtype)
                 return game:Spawn(v[2], v[3], vec(v[6]), vec(v[7]), spawner, subtype, v[5])
@@ -383,7 +404,7 @@ function state.apply(bytes, tick, ack)
             entities = Isaac.GetRoomEntities,
         })
         assert(native.door_slot(-1))
-        modules["sync/grids"](data[4], {
+        reconcileGrids(data[4], {
             get = function(index)
                 return room:GetGridEntity(index)
             end,
@@ -437,6 +458,9 @@ function state.apply(bytes, tick, ack)
             lastInventory[identifier] = nil
         end
     end
+    performance.counter("entities", #value.room[3])
+    performance.counter("grids", #value.room[4])
+    performance.counter("map_rooms", #value.map)
     for _, m in pairs(motion) do
         if m.actor and m.controller == value.slot + 1 then
             m.prediction:confirm(m.target, ack, m.velocity * 60)

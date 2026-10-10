@@ -13,6 +13,7 @@
 | [分房模拟与本机显示](rooms-and-presentation.md) | 房间上下文、实体归属、镜头、UI、音效与 Mod 回调 |
 | [会话与状态恢复](session-lifecycle.md) | 开局、换层、暂停、存档、重连与回退事务 |
 | [开发与测试](development-and-testing.md) | 源码入口、构建产物、隔离客户端、连续回归与画面检查 |
+| [配置、诊断与资源回归](diagnostics-and-resource-testing.md) | 分局日志、性能窗口、内存及句柄检查、第一层至结局脚本与堆转储 |
 | [第三方 Mod 接入 API v1](third-party-mod-integration.md) | 本机视图、主机动作、自动兼容注册，以及 Stats+、GoodTrip、EID 的内置兼容与边界 |
 | [LAN 人机托管使用说明](lanbot.md) | 原生控制台命令、目标模式、战斗风格、人工接管与实现边界 |
 | [LAN 人机托管设计](lanbot-design.md) | 本地规划、实时走位、输入接管、后续实机验收与可选 Agent 扩展 |

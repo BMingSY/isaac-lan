@@ -36,6 +36,7 @@ SYSTEM_DLLS = {
     "advapi32.dll",
     "ole32.dll",
     "oleaut32.dll",
+    "psapi.dll",
     "comdlg32.dll",
 }
 

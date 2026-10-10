@@ -1,4 +1,5 @@
 sync/entity_schema
+diagnostics/performance
 sync/entity_codec
 sync/world_schema
 presentation/actors

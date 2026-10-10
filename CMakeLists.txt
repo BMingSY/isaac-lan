@@ -13,6 +13,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(CTest)
 option(ISAAC_LAN_BUILD_ENGINE "Build the Windows x86 engine adapter and tools" ON)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_diagnostics_test tests/diagnostics_test.cpp src/app/configuration.cpp)
+    target_include_directories(isaac_lan_diagnostics_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_diagnostics_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_diagnostics_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    foreach(test_case defaults validation preservation bounded-metrics)
+        add_test(NAME diagnostics.${test_case} COMMAND isaac_lan_diagnostics_test ${test_case})
+        set_tests_properties(diagnostics.${test_case} PROPERTIES TIMEOUT 30 LABELS
+                                                                 "offline;diagnostics")
+    endforeach()
     find_program(
         ISAAC_LAN_LUA
         NAMES lua5.3 lua
@@ -80,6 +93,10 @@ if(BUILD_TESTING)
         add_test(NAME bridge.special-visuals
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/special_visuals.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(
+            NAME bridge.resource-lifecycle
+            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/resource_lifecycle.lua"
+                    "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(
             bridge.entity-codec
             bridge.layers
@@ -101,6 +118,7 @@ if(BUILD_TESTING)
             bridge.shared-curses
             bridge.greed
             bridge.special-visuals
+            bridge.resource-lifecycle
             PROPERTIES TIMEOUT 30 LABELS "offline;lua")
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
@@ -188,7 +206,10 @@ configure_file(src/bridge/embedded.h.in generated/embedded_bridge.h @ONLY)
 add_library(
     isaac_lan_probe SHARED
     src/app/bootstrap.cpp
+    src/app/configuration.cpp
     src/diagnostics/runtime_log.cpp
+    src/diagnostics/performance.cpp
+    src/diagnostics/crash_signal.cpp
     src/runtime/session.cpp
     src/engine/versions/j460/rooms.cpp
     src/engine/versions/j460/visuals.cpp
@@ -229,7 +250,7 @@ target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt)
 if(BUILD_TESTING)
     add_executable(isaac_lan_net_test tests/net_test.cpp)
-    target_link_libraries(isaac_lan_net_test PRIVATE isaac_lan_net winmm)
+    target_link_libraries(isaac_lan_net_test PRIVATE isaac_lan_net winmm psapi)
     foreach(
         test_case
         codec
@@ -253,7 +274,8 @@ if(BUILD_TESTING)
         publication-limits
         integrations
         greed-settings
-        host-disconnect)
+        host-disconnect
+        resource-lifecycle)
         add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
         set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;network")
     endforeach()
@@ -267,11 +289,33 @@ endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
 set_target_properties(isaac_lan_probe PROPERTIES PREFIX "")
 target_compile_definitions(isaac_lan_probe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_link_libraries(isaac_lan_probe PRIVATE bcrypt iphlpapi gdiplus minhook isaac_lan_net
-                                              isaac_lan_ui)
+target_link_libraries(
+    isaac_lan_probe
+    PRIVATE bcrypt
+            iphlpapi
+            gdiplus
+            psapi
+            minhook
+            isaac_lan_net
+            isaac_lan_ui)
 add_executable(isaac_lan_lab tools/lab_runner.cpp)
+add_executable(isaac_lan_heap_watch tools/heap_watch.cpp)
+target_link_libraries(isaac_lan_heap_watch PRIVATE dbghelp)
+target_include_directories(isaac_lan_heap_watch PRIVATE src)
+target_compile_definitions(isaac_lan_heap_watch PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(BUILD_TESTING)
-    add_executable(isaac_lan_log_test tests/runtime_log_test.cpp src/diagnostics/runtime_log.cpp)
+    add_executable(isaac_lan_heap_fixture tests/heap_fixture.cpp src/diagnostics/crash_signal.cpp)
+    target_include_directories(isaac_lan_heap_fixture PRIVATE src)
+    target_compile_definitions(isaac_lan_heap_fixture PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    if(MINGW)
+        target_link_options(isaac_lan_heap_fixture PRIVATE -static-libgcc -static-libstdc++
+                            -Wl,--large-address-aware)
+        target_compile_options(isaac_lan_heap_fixture PRIVATE -Wall -Wextra -Werror)
+    endif()
+
+    add_executable(isaac_lan_log_test tests/runtime_log_test.cpp src/diagnostics/runtime_log.cpp
+                                      src/diagnostics/performance.cpp)
+    target_link_libraries(isaac_lan_log_test PRIVATE psapi)
     target_include_directories(isaac_lan_log_test PRIVATE src)
     target_compile_definitions(isaac_lan_log_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     if(MINGW)
@@ -279,6 +323,8 @@ if(BUILD_TESTING)
         target_link_options(isaac_lan_log_test PRIVATE -static-libgcc -static-libstdc++)
     endif()
     add_test(NAME log.path-and-records COMMAND isaac_lan_log_test path-and-records)
+    add_test(NAME diagnostics.lifecycle COMMAND isaac_lan_log_test metrics-lifecycle)
+    set_tests_properties(diagnostics.lifecycle PROPERTIES TIMEOUT 30 LABELS "offline;resources")
     set_tests_properties(log.path-and-records PROPERTIES TIMEOUT 30 LABELS "offline;logging")
 endif()
 add_library(isaac_lan_loader SHARED src/app/loader.cpp src/app/loader.def)
@@ -287,6 +333,9 @@ target_include_directories(isaac_lan_loader PRIVATE src)
 target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_definitions(isaac_lan_lab PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(MINGW)
+    target_link_options(isaac_lan_heap_watch PRIVATE -static-libgcc -static-libstdc++ -municode
+                        -Wl,--large-address-aware)
+    target_compile_options(isaac_lan_heap_watch PRIVATE -Wall -Wextra -Werror)
     target_link_options(isaac_lan_check PRIVATE -static-libgcc -static-libstdc++ -municode)
     target_compile_options(isaac_lan_build PRIVATE -Wall -Wextra -Werror)
     target_compile_options(isaac_lan_check PRIVATE -Wall -Wextra -Werror)
