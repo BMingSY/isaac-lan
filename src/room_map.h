@@ -33,6 +33,17 @@ inline void prepareDepartureMetadata(std::span<std::uint32_t, 3> destination,
     destination[1] = source[1];
     destination[2] = source[2];
 }
+inline void completeArrivalControls(int animation, bool& controlsEnabled, int nativeState) {
+    // Native RoomTransition releases portal and minecart controls after
+    // arrival. Per-actor transfers replace that process-wide completion.
+    if ((animation == 0 && nativeState < 2) || animation == 11 || animation == 16 ||
+        animation == 19)
+        controlsEnabled = true;
+}
+inline bool gatherHomeCombat(int stage, int kind, bool dogma, unsigned audience,
+                             unsigned connected) {
+    return stage == 13 && kind == 1 && dogma && (audience & connected) != connected;
+}
 inline void registerMapRoom(std::span<int, 507> offsets, unsigned& count, int dimension, int index,
                             int listIndex, std::span<const unsigned> cells) {
     if (dimension < 0 || dimension > 2 || index < 0 || index >= 169 || listIndex < 0 ||

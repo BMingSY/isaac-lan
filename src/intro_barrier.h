@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <map>
+#include <optional>
 
 namespace isaac::presentation {
 class IntroBarrier {
@@ -11,14 +12,16 @@ class IntroBarrier {
         if (audience)
             waiting[room] = {serial, tick, audience};
     }
-    void observe(unsigned slot, unsigned serial, bool active) {
+    std::optional<Room> observe(unsigned slot, unsigned serial, bool active) {
         if (slot >= 4 || active)
-            return;
+            return std::nullopt;
         for (auto& [room, value] : waiting) {
-            (void)room;
-            if (value.serial == serial)
+            if (value.serial == serial && (value.audience & (1u << slot))) {
                 value.audience &= ~(1u << slot);
+                return room;
+            }
         }
+        return std::nullopt;
     }
     bool paused(Room room, unsigned tick, unsigned connected) {
         const auto entry = waiting.find(room);

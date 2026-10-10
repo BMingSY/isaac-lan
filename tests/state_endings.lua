@@ -18,6 +18,27 @@ local observed, snapshots, floorEvents = {}, 0, 0
 local bosses = {}
 local appeared = {}
 local scratchReported = {}
+local homeOnly = _IsaacLanTest.homeOnly
+local homeVisuals = { sleep = 0, television = 0 }
+local homeWalking, homeMovement, homeOrigin = false, false, nil
+local homeWakeMovement = false
+local homeDistance = 0
+local homeWalkReadyAt, homeWalkPrevious, homeWalkMotion = nil, nil, 0
+local replicaWakeOrigin, replicaWakePrevious, replicaWakeDistance, replicaWakeMotion =
+    nil, nil, 0, 0
+local dreamFrames = {}
+local function checkHomeVisual(value)
+    assert(native.home_scene_pose() == value[5], "Home scene state differs from authority")
+    if value[6] then
+        local sprite = assert(native.home_scene_sprite(Isaac.GetPlayer(0):GetSprite()))
+        assert(sprite:GetFilename() == value[6][1] and sprite:GetFrame() == value[6][3])
+        assert(native.sprite_state(sprite) == value[6][12], "Home scene layers differ")
+        local id = value[5]:byte(2)
+        if id == 2 or id == 3 then
+            homeVisuals.television = homeVisuals.television + 1
+        end
+    end
+end
 local terminal = {
     lamb = 273,
     ["blue-baby"] = 102,
@@ -275,6 +296,20 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, function(_, gameOver)
     assert(not gameOver, "Ending route ended in a defeat")
     assert(wins == caseIndex - 1, "Duplicate native win callback")
     assert(bosses[terminal[cases[caseIndex]]], "Win callback without the expected terminal Boss")
+    if homeOnly then
+        assert(homeVisuals.sleep > 10, "Native Home sleep animation was not displayed")
+        local frames = 0
+        for _ in pairs(dreamFrames) do
+            frames = frames + 1
+        end
+        assert(frames > 10, "Native Home dream sprite did not animate")
+        assert(homeVisuals.television > 10, "Native TV animation was not displayed")
+        assert(homeMovement, "Guest did not move after entering the Dogma arena")
+        assert(homeWakeMovement, "Guest did not move after waking at Home")
+        report(
+            "HOME_VISUALS sleep=" .. homeVisuals.sleep .. " television=" .. homeVisuals.television
+        )
+    end
     wins, lastExit = wins + 1, renders
     lastExitMs = native.api_info().nowMs
     report("NATIVE_WIN callback=MC_POST_GAME_END game_over=false")
@@ -290,6 +325,34 @@ function _IsaacLanFrame()
         EID.Config.DisableStartOfRunWarnings = true
     end
     local s = frame()
+    if homeOnly and s.prepared then
+        local visual = native.item_presentation_state()
+        if host and visual.sceneState == 1 and (visual.sceneID == 2 or visual.sceneID == 3) then
+            local sprite = native.home_scene_sprite(Isaac.GetPlayer(0):GetSprite())
+            if sprite and sprite:GetFilename() ~= "" then
+                homeVisuals.television = homeVisuals.television + 1
+            end
+        end
+        if visual.dreamActive == 1 and visual.dreamHome == 1 then
+            local sample = Isaac.GetPlayer(0):GetSprite()
+            local background = assert(native.home_dream_sprite(sample, 0))
+            local dream = assert(native.home_dream_sprite(sample, 1))
+            -- Native scene cleanup clears its sprites before switching the
+            -- manager back to gameplay. Do not count that final empty frame.
+            if background:GetFilename() ~= "" and dream:GetFilename() ~= "" then
+                homeVisuals.sleep = homeVisuals.sleep + 1
+                dreamFrames[dream:GetFrame()] = true
+                if homeVisuals.sleep == 1 then
+                    report(
+                        "NATIVE_HOME_DREAM background="
+                            .. background:GetFilename()
+                            .. " dream="
+                            .. dream:GetFilename()
+                    )
+                end
+            end
+        end
+    end
     local now = native.api_info().nowMs
     if finished then
         native.test_gamepad(0)
@@ -389,7 +452,7 @@ function _IsaacLanFrame()
     end
     if s.phase == 2 and not chosen then
         chosen = true
-        _IsaacLanCommand("choose", "0:1")
+        _IsaacLanCommand("choose", homeOnly and not host and "7:1" or "0:1")
     end
     if
         host
@@ -400,7 +463,7 @@ function _IsaacLanFrame()
         and s.ready1 == 1
     then
         started = true
-        _IsaacLanCommand("start", "YV039KQF:0:0:0:0:0")
+        _IsaacLanCommand("start", "YV039KQF:0:0:" .. (homeOnly and "7" or "0") .. ":0:0")
     end
     return s
 end
@@ -428,12 +491,19 @@ local function advance(t)
             report("PREREQUISITE_FIXTURE knife_pieces=626,627")
         end
         prepare(
-            name == "ascent" and 1 or name == "mother" and 2 or name == "delirium" and 8 or 6,
+            name == "ascent" and (homeOnly and 13 or 1)
+                or name == "mother" and 2
+                or name == "delirium" and 8
+                or 6,
             0,
             t
         )
     elseif step == "source-wait" and t - stepAt > 140 then
-        boss(t)
+        if homeOnly then
+            mark("floor-arrived", t)
+        else
+            boss(t)
+        end
     elseif step == "floor-wait" then
         if stage ~= previousStage or kind ~= previousType then
             exitContact = nil
@@ -674,9 +744,15 @@ local function advance(t)
         mark("home-night", t)
         report("NATIVE_HOME_NIGHT")
     elseif step == "home-night" and t - stepAt > 180 then
-        move(living, t)
-        mark("dogma-tv", t)
+        if homeOnly then
+            homeWalking, homeWalkReadyAt = true, nil
+            mark("home-walk", t)
+        else
+            move(living, t)
+            mark("dogma-tv", t)
+        end
     elseif step == "dogma-tv" then
+        actor(0, protect)
         local found
         actor(1, function(p)
             protect(p)
@@ -689,8 +765,99 @@ local function advance(t)
                 end
             end
         end)
-        if found then
-            mark("beast-fight", t)
+        if found and t - stepAt > 20 then
+            actor(0, function()
+                local arena = Game():GetLevel():GetRoomByIdx(living, 0)
+                assert(
+                    arena.Data and Game():GetRoom():GetRoomShape() == arena.Data.Shape,
+                    "Host did not arrive in the native Dogma arena"
+                )
+                assert(
+                    Game():GetLevel():GetCurrentRoomIndex() == living,
+                    "Host remained outside the Dogma arena"
+                )
+            end)
+            report("NATIVE_DOGMA_ARENA both_peers=" .. living)
+            if homeOnly then
+                actor(1, function(p)
+                    homeOrigin, homeDistance = p.Position, 0
+                end)
+                homeWalking = true
+                mark("dogma-walk", t)
+            else
+                mark("beast-fight", t)
+            end
+        end
+    elseif step == "dogma-walk" or step == "home-walk" then
+        actor(0, protect)
+        actor(1, function(p)
+            protect(p)
+            local ready = p.ControlsEnabled
+                and p:AreControlsEnabled()
+                and p:IsExtraAnimationFinished()
+            if not ready then
+                homeWalkReadyAt = nil
+                if (t - stepAt) % 150 == 1 then
+                    report(
+                        "DOGMA_CONTROLS enabled="
+                            .. tostring(p.ControlsEnabled)
+                            .. " allowed="
+                            .. tostring(p:AreControlsEnabled())
+                            .. " extra_finished="
+                            .. tostring(p:IsExtraAnimationFinished())
+                            .. " cooldown="
+                            .. p.ControlsCooldown
+                            .. " animation="
+                            .. p:GetSprite():GetAnimation()
+                    )
+                end
+                assert(t - stepAt < 900, "Native Home controls remain locked at " .. step)
+                return
+            end
+            if not homeWalkReadyAt then
+                homeWalkReadyAt, homeOrigin, homeDistance = t, p.Position, 0
+                homeWalkPrevious, homeWalkMotion = p.Position, 0
+            end
+            homeDistance = math.max(homeDistance, (p.Position - homeOrigin):Length())
+            local delta = (p.Position - homeWalkPrevious):Length()
+            if delta > 0.01 and delta < 20 then
+                homeWalkMotion = homeWalkMotion + 1
+            end
+            homeWalkPrevious = p.Position
+            if t - homeWalkReadyAt > 100 then
+                assert(
+                    homeDistance > 10 and homeWalkMotion > 20,
+                    "Guest input cannot move in the Dogma arena"
+                )
+                report(
+                    (
+                        step == "home-walk" and "NATIVE_HOME_WAKE_MOVEMENT distance="
+                        or "NATIVE_DOGMA_MOVEMENT distance="
+                    )
+                        .. homeDistance
+                        .. " walking_ticks="
+                        .. homeWalkMotion
+                )
+                homeWalking, homeWalkReadyAt = false, nil
+                if step == "home-walk" then
+                    homeWakeMovement = true
+                else
+                    homeMovement = true
+                    mark("beast-fight", t)
+                end
+            end
+        end)
+        if homeWakeMovement and step == "home-walk" then
+            move(living, t)
+            mark("dogma-tv", t)
+        end
+        if homeMovement then
+            actor(0, function(p)
+                assert(
+                    p.ControlsEnabled and p:AreControlsEnabled(),
+                    "Host Dogma controls remain disabled"
+                )
+            end)
         end
     elseif step == "beast-fight" then
         fight(t)
@@ -800,10 +967,16 @@ local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(
         function()
-            if not host and shoot >= 0 then
+            if not host and (shoot >= 0 or homeWalking) then
                 local values = {}
+                local direction = ({ 0, 2, 1, 3 })[math.floor(native.api_info().tick / 12) % 4 + 1]
                 for action = 0, 15 do
-                    values[#values + 1] = string.pack(">I2", action == shoot and 65535 or 0)
+                    values[#values + 1] = string.pack(
+                        ">I2",
+                        (homeWalking and action == direction or not homeWalking and action == shoot)
+                                and 65535
+                            or 0
+                    )
                 end
                 return table.concat(values) .. string.pack(">I2", 0)
             end
@@ -818,7 +991,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             if not bytes then
                 return bytes
             end
-            return string.pack(">s4", bytes) .. _IsaacLanState.encode({ caseIndex, step, shoot })
+            if homeOnly and slot == 0 then
+                checkHomeVisual(_IsaacLanState.decode(bytes)[16])
+            end
+            return string.pack(">s4", bytes)
+                .. _IsaacLanState.encode({ caseIndex, step, shoot, homeWalking })
         end,
         function(bytes, t, ack)
             local body, pos = string.unpack(">s4", bytes)
@@ -829,8 +1006,55 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
             assert(meta[1] == caseIndex, "Ending case changed without a native win")
             snapshots = snapshots + 1
+            if homeOnly then
+                checkHomeVisual(_IsaacLanState.decode(body)[16])
+            end
             observed[meta[2]] = (observed[meta[2]] or 0) + 1
             shoot = meta[3]
+            homeWalking = meta[4]
+            if homeOnly and meta[2] == "home-walk" then
+                local p = Isaac.GetPlayer(assert(native.rooms_heads()["1"]))
+                replicaWakeOrigin = replicaWakeOrigin or p.Position
+                replicaWakeDistance =
+                    math.max(replicaWakeDistance, (p.Position - replicaWakeOrigin):Length())
+                if replicaWakePrevious then
+                    local delta = (p.Position - replicaWakePrevious):Length()
+                    if p:IsExtraAnimationFinished() and delta > 0.01 and delta < 40 then
+                        replicaWakeMotion = replicaWakeMotion + 1
+                    end
+                end
+                replicaWakePrevious = p.Position
+            elseif homeOnly and meta[2] == "dogma-tv" and not homeWakeMovement then
+                local p = Isaac.GetPlayer(assert(native.rooms_heads()["1"]))
+                assert(
+                    p.ControlsEnabled and p:AreControlsEnabled(),
+                    "Replica remains locked after waking"
+                )
+                assert(
+                    replicaWakeDistance > 10 and replicaWakeMotion > 5,
+                    "Replica did not display walking after waking"
+                )
+                homeWakeMovement = true
+                report(
+                    "NATIVE_HOME_WAKE_MOVEMENT replica_distance="
+                        .. replicaWakeDistance
+                        .. " walking_snapshots="
+                        .. replicaWakeMotion
+                )
+            end
+            if homeOnly and (meta[2] == "dogma-walk" or meta[2] == "beast-fight") then
+                local p = Isaac.GetPlayer(assert(native.rooms_heads()["1"]))
+                homeOrigin = homeOrigin or p.Position
+                homeDistance = math.max(homeDistance, (p.Position - homeOrigin):Length())
+                if meta[2] == "beast-fight" and not homeMovement then
+                    assert(
+                        p.ControlsEnabled and p:AreControlsEnabled(),
+                        "Replica Dogma controls remain disabled"
+                    )
+                    assert(homeDistance > 10, "Replica did not display Dogma arena movement")
+                    homeMovement = true
+                end
+            end
             assert(native.api_with_local_view(function()
                 for _, e in ipairs(Isaac.GetRoomEntities()) do
                     if e:ToNPC() then

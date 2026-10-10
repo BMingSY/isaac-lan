@@ -33,6 +33,7 @@ unsigned connected();
 unsigned soundAudience();
 std::uintptr_t presentationPlayer(void* explicitPlayer = nullptr);
 bool withPlayer(unsigned slot, const std::function<void()>& call);
+bool withRoomPlayers(unsigned slot, const std::function<void()>& call);
 bool gatherForTransition(const std::function<void()>& begin);
 void protectArrivals(unsigned mask);
 bool receiveRoomRequest(unsigned slot, const lan::RoomRequest&);

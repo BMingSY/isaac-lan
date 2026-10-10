@@ -5,6 +5,7 @@ local linked, chosen, finished, renders = false, false, false, 0
 local snapshots, checkpoint, observed = 0, {}, {}
 local endTick = route == "poop" and 1000 or route == "hush" and 2200 or 7000
 local frame = _IsaacLanFrame
+local guestType = route == "poop" and 25 or route == "knife" and 7 or 0
 local function report(s)
     Isaac.DebugString("LAN_NETWORK SIDE " .. route .. " " .. s)
 end
@@ -29,11 +30,11 @@ function _IsaacLanFrame()
     end
     if s.phase == 2 and not chosen then
         chosen = true
-        _IsaacLanCommand("choose", (not host and route == "poop" and "25" or "0") .. ":1")
+        _IsaacLanCommand("choose", (not host and tostring(guestType) or "0") .. ":1")
     end
     if host and s.phase == 2 and s.players == 2 and s.ready0 == 1 and s.ready1 == 1 then
         local seed = route == "knife" and Seeds.Seed2String(1477942995):gsub("%s", "") or "YPVLAR60"
-        _IsaacLanCommand("start", seed .. ":0:0:" .. (route == "poop" and "25" or "0") .. ":0:0")
+        _IsaacLanCommand("start", seed .. ":0:0:" .. guestType .. ":0:0")
     end
     if
         not finished
@@ -58,9 +59,47 @@ local step, stepAt, origin, other, boss = "init", 0
 local firstMana, seenHush, exitPosition, cartRoom, cartPosition = nil, false
 local rooms, roomNumber, buttons, visited = {}, 0, 0, {}
 local knife, shadow = false, false
+local walkOrigin, walkDistance, walkSamples = nil, 0, 0
+local walkPrevious, walkMotion = nil, 0
 local function mark(name, t)
     step, stepAt = name, t
     report("STEP " .. name .. " tick=" .. t)
+end
+local function beginWalk(p, name, t)
+    walkOrigin, walkDistance, walkSamples = p.Position, 0, 0
+    walkPrevious, walkMotion = p.Position, 0
+    mark(name, t)
+end
+local function checkWalk(p, t)
+    walkSamples = walkSamples + 1
+    walkDistance = math.max(walkDistance, (p.Position - walkOrigin):Length())
+    local delta = (p.Position - walkPrevious):Length()
+    if p:IsExtraAnimationFinished() and delta > 0.01 and delta < 20 then
+        walkMotion = walkMotion + 1
+    end
+    walkPrevious = p.Position
+    if t - stepAt < 100 then
+        return false
+    end
+    report(
+        "MOVEMENT "
+            .. step
+            .. " distance="
+            .. walkDistance
+            .. " walking_ticks="
+            .. walkMotion
+            .. " controls="
+            .. tostring(p.ControlsEnabled)
+    )
+    assert(
+        p.ControlsEnabled and p:AreControlsEnabled() and p:IsExtraAnimationFinished(),
+        "Native minecart arrival did not release the actor's controls: " .. step
+    )
+    assert(
+        walkSamples > 60 and walkDistance > 10 and walkMotion > 10,
+        "Guest direction input did not move: " .. step
+    )
+    return true
 end
 local function move(index, t)
     assert(native.rooms_move(1, index, 0, -1))
@@ -349,21 +388,34 @@ local function mines(t)
         if pos.dimension ~= 0 or pos.index ~= cartRoom then
             report("CHECKED native minecart entrance index=" .. pos.index)
             visited = {}
-            mark("tunnel", t)
+            actor(1, function(p)
+                beginWalk(p, "shaft-walk", t)
+            end)
         else
             actor(1, function(p)
                 p.Position, p.Velocity = cartPosition, Vector.Zero
             end)
         end
+    elseif step == "shaft-walk" or step == "return-walk" then
+        actor(1, function(p)
+            if checkWalk(p, t) then
+                if step == "shaft-walk" then
+                    mark("tunnel", t)
+                    report("CHECKED guest direction input after minecart entrance")
+                else
+                    checkpoint.complete = true
+                    mark("done", t)
+                    report("CHECKED knife piece chase and original floor return with movement")
+                end
+            end
+        end)
     elseif step == "tunnel" and t - stepAt > 60 then
         actor(1, function(p)
             local room = Game():GetRoom()
             local position = native.rooms_positions()["1"]
             if knife and shadow and position.dimension == 0 and position.index == cartRoom then
                 assert(p:HasCollectible(627), "Native shaft return lost knife piece 2")
-                checkpoint.complete = true
-                mark("done", t)
-                report("CHECKED knife piece chase and original floor return")
+                beginWalk(p, "return-walk", t)
                 return
             end
             for _, e in ipairs(Isaac.GetRoomEntities()) do
@@ -416,6 +468,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     return gate(
         function()
             local values = {}
+            local walk = false
+            if not host and route == "knife" and native.rooms_ready() then
+                local position = native.rooms_positions()["1"]
+                local head = native.rooms_heads()["1"]
+                walk = position
+                    and (
+                        position.dimension == 1
+                        or head and Isaac.GetPlayer(head):HasCollectible(627)
+                    )
+            end
+            local direction = ({ 0, 2, 1, 3 })[math.floor(inputTick / 12) % 4 + 1]
             local use = not host
                 and route == "poop"
                 and (inputTick == 120 or inputTick == 320 or inputTick == 520)
@@ -424,6 +487,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     ">I2",
                     (
                         use and action == ButtonAction.ACTION_PILLCARD
+                        or walk and action == direction
                         or not host
                             and route == "poop"
                             and action == 5
@@ -479,8 +543,46 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             else
                 local p = Isaac.GetPlayer(assert(native.rooms_heads()["1"]))
                 local position = native.rooms_positions()["1"]
+                local name = position.dimension == 1 and "shaft"
+                    or p:HasCollectible(627) and "return"
+                if name then
+                    local walk = observed[name]
+                    if not walk then
+                        walk = {
+                            origin = p.Position,
+                            previous = p.Position,
+                            start = t,
+                            distance = 0,
+                            motion = 0,
+                        }
+                        observed[name] = walk
+                    end
+                    walk.distance = math.max(walk.distance, (p.Position - walk.origin):Length())
+                    local delta = (p.Position - walk.previous):Length()
+                    if p:IsExtraAnimationFinished() and delta > 0.01 and delta < 40 then
+                        walk.motion = walk.motion + 1
+                    end
+                    walk.previous = p.Position
+                    if t - walk.start > 90 and not walk.checked then
+                        assert(
+                            p.ControlsEnabled
+                                and p:AreControlsEnabled()
+                                and p:IsExtraAnimationFinished(),
+                            "Replica minecart controls remain disabled: " .. name
+                        )
+                        assert(
+                            walk.distance > 10 and walk.motion > 5,
+                            "Replica missed authoritative input movement: " .. name
+                        )
+                        walk.checked = true
+                        report("CHECKED replica " .. name .. " movement distance=" .. walk.distance)
+                    end
+                end
                 if p:HasCollectible(627) and position.dimension == 0 and position.index >= 0 then
-                    observed.complete = true
+                    observed.complete = observed.shaft
+                        and observed.shaft.checked
+                        and observed["return"]
+                        and observed["return"].checked
                 end
             end
         end,

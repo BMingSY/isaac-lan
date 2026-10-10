@@ -8,6 +8,7 @@
 #include "intro_barrier.h"
 #include "room_map.h"
 #include "audio_ownership.h"
+#include "home_scene.h"
 #include "localized_text.h"
 #include "laser_state.h"
 #include "actor_roster.h"
@@ -48,6 +49,36 @@ void roomTransitionContext() {
     require(fresh[0] == 0xccdd && fresh[1] == source[1] && fresh[2] == 1 &&
                 source == std::array<std::uint32_t, 3>{0xaabb, 0x12340000, 1},
             "Cross-dimension init lost departure metadata or changed native ownership");
+    // Minecart collision locks its passenger. A queued per-player arrival
+    // must release that lock without touching the paused actor in another room.
+    for (int animation : {11, 16, 19}) {
+        std::array<bool, 2> controls{false, false};
+        completeArrivalControls(animation, controls[1], 0);
+        require(!controls[0] && controls[1],
+                "Native portal/minecart arrival stranded its passenger or unlocked another actor");
+    }
+    for (int animation : {2, 3, 12}) {
+        bool controls = false;
+        completeArrivalControls(animation, controls, 0);
+        require(!controls, "Ordinary room movement released an unrelated control lock");
+    }
+    std::array<bool, 2> ordinary{false, false};
+    completeArrivalControls(0, ordinary[1], 0);
+    require(!ordinary[0] && ordinary[1], "Native ordinary arrival stranded its passenger");
+    ordinary[1] = false;
+    completeArrivalControls(0, ordinary[1], 2);
+    require(!ordinary[1], "Ordinary arrival bypassed the native run state lock");
+    require(gatherHomeCombat(13, 1, true, 2, 3) && !gatherHomeCombat(13, 1, true, 3, 3) &&
+                !gatherHomeCombat(13, 0, true, 2, 3) && !gatherHomeCombat(12, 1, true, 2, 3) &&
+                !gatherHomeCombat(13, 1, false, 2, 3),
+            "Home combat failed to gather a split roster or gathered outside the native encounter");
+    isaac::presentation::HomeSleep sleep;
+    require(!sleep.observe(1, 13, 0) && !sleep.observe(1, 13, 0) && sleep.observe(1, 13, 1) &&
+                !sleep.observe(1, 13, 1),
+            "Home sleep failed to wait for night or replayed a duplicate snapshot");
+    isaac::presentation::HomeSleep late;
+    require(!late.observe(1, 13, 1) && !late.observe(1, 13, 1) && !late.observe(2, 12, 0),
+            "A late join or another floor replayed the Home dream");
 }
 void poopState() {
     auto packet = [](unsigned mana, unsigned spell) {
@@ -235,6 +266,15 @@ void audioOwnership() {
             "Another floor reused the preceding floor's music");
     require(audioRoomKey(1, 0, 84) != audioRoomKey(1, 1, 84),
             "A dimension reused another room's music");
+    const auto ordinary = audioRoomKey(1, 0, 84), next = audioRoomKey(1, 0, 85);
+    require(continueRoomTrack(ordinary, next, 1, {1, 0}) &&
+                continueRoomTrack(ordinary, audioRoomKey(1, 1, 84), 1, {1, 0}),
+            "Walking between rooms restarted the same running track");
+    require(!continueRoomTrack(ordinary, next, 2, {1, 0}) &&
+                !continueRoomTrack(ordinary, next, 1, {2, 1}) &&
+                !continueRoomTrack(ordinary, ordinary, 1, {1, 0}) &&
+                !continueRoomTrack(ordinary, audioRoomKey(2, 0, 84), 1, {1, 0}),
+            "Room music suppressed a boss track, queued jingle, local fade or floor selection");
 }
 void transitionCharge() {
     InputFrame held;
@@ -339,10 +379,11 @@ void introBarrier() {
     barrier.start(room, 2, 100, 7);
     require(barrier.paused(room, 110, 7) && !barrier.paused(other, 110, 7),
             "Intro froze an unrelated room");
-    barrier.observe(1, 1, false);
-    barrier.observe(2, 2, true);
+    require(!barrier.observe(1, 1, false) && !barrier.observe(2, 2, true),
+            "Stale or active intro restored actor controls");
     require(barrier.paused(room, 120, 7), "Stale or active intro released combat");
-    barrier.observe(1, 2, false);
+    require(barrier.observe(1, 2, false) == room && !barrier.observe(1, 2, false),
+            "Guest control completion must identify its room exactly once");
     barrier.observe(0, 2, false);
     require(barrier.paused(room, 130, 7), "Combat resumed before every guest finished");
     barrier.observe(2, 2, false);
@@ -355,6 +396,9 @@ void introBarrier() {
     barrier.start(room, 5, 900, 3);
     barrier.clear();
     require(!barrier.paused(room, 901, 3), "Session reset retained an intro");
+    barrier.start(other, 6, 1000, 2);
+    require(!barrier.observe(0, 6, false) && barrier.observe(1, 6, false) == other,
+            "Guest-only intro completed controls for an unrelated host");
 }
 void automationInput() {
     using isaac::input::botConsoleArguments;

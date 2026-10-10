@@ -147,7 +147,7 @@ IntroSimulationScope::IntroSimulationScope(bool advance) {
         using Update = void(__attribute__((thiscall))*)(void*);
         // Game::Update otherwise advances this screen and returns before ANY
         // Room::Update. Advance it once, then let the room scheduler run.
-        rooms::withPlayer(0, [&] {
+        rooms::withRoomPlayers(0, [&] {
             reinterpret_cast<Update>(image + 0x4318a0)(reinterpret_cast<void*>(target));
         });
         waiting.observe(0, hostIntro, at<int>(target, 0) != 0);
@@ -207,10 +207,25 @@ unsigned playedIntro() {
 }
 bool introActive() {
     const auto transition = at<std::uintptr_t>(image, 0x871678) + 0x1b83c;
-    return at<int>(transition, 0) == 2 && at<int>(transition, 0x238) != 0;
+    const auto mode = at<int>(transition, 0);
+    return (mode == 2 || mode == 3) && at<int>(transition, 0x238) != 0;
 }
 void observeIntro(unsigned slot, unsigned id, bool active) {
-    waiting.observe(slot, id, active);
+    const auto completed = waiting.observe(slot, id, active);
+    if (!completed || runtime::ending())
+        return;
+    // A guest-only versus screen never runs on the authority. Complete its
+    // native control restoration once, after that guest finished both phases,
+    // using only its actors in the room where the event originated.
+    rooms::withPlayer(slot, [&] {
+        const auto game = at<std::uintptr_t>(image, 0x871678);
+        const std::array room{at<int>(game, 0), at<int>(game, 4), at<int>(game, 0x1830c),
+                              at<int>(game, 0x18304)};
+        if (room != *completed || at<int>(game, 0x26614) >= 2)
+            return;
+        using Controls = void(__attribute__((thiscall))*)(void*, bool);
+        reinterpret_cast<Controls>(image + 0x5bea10)(reinterpret_cast<void*>(game + 0x1baa8), true);
+    });
 }
 bool roomPaused() {
     const auto game = at<std::uintptr_t>(image, 0x871678);

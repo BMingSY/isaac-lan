@@ -12,6 +12,8 @@ local checkPresentation
 local textEvents, textSerial = {}, 0
 local soundBaselines = {}
 local soundObserved = {}
+local continuousMusic, continuityChecks = nil, 0
+local continuityObserved = {}
 local function soundCount(id)
     return string.unpack(">I4", native.audio_state(id), 21)
 end
@@ -23,9 +25,15 @@ local function checkText(bytes)
     for _ = 1, count do
         local serial, _, _, _, _, kind
         serial, _, _, _, _, kind, pos = string.unpack(">I4I4I4I1I1I1", bytes, pos)
-        if kind == 3 then
+        if kind == 3 or kind == 4 then
             local title, subtitle
             title, subtitle, pos = string.unpack(">s2s2", bytes, pos)
+            if kind == 4 then
+                for _ = 1, 4 do
+                    local ignored
+                    ignored, pos = string.unpack(">s2", bytes, pos)
+                end
+            end
             if serial > textSerial then
                 textSerial = serial
                 textEvents[title] = true
@@ -104,6 +112,7 @@ function _IsaacLanFrame()
     if status.prepared and tick >= 1420 and not ended then
         ended = true
         assert(musicChecks > 30 and soundChecks > 2, "Room audio was not checked")
+        assert(continuityChecks == 2, "Same-track room changes were not checked")
         report(
             "COUNTS uses="
                 .. uses
@@ -192,6 +201,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             move(1, boss)
         elseif t == 810 then
             move(1, other)
+        elseif t == 840 then
+            move(1, origin)
+        elseif t == 880 then
+            move(1, other)
         elseif t == 920 then
             move(0, boss)
         elseif t == 1060 then
@@ -276,13 +289,33 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     end, present, beginFloor)
 end
 function checkPresentation(t)
+    if t >= 820 and t < 840 then
+        continuousMusic = string.unpack(">I4", native.audio_state(), 21)
+    end
+    for _, checkpoint in ipairs({ 860, 900 }) do
+        if t >= checkpoint and t < checkpoint + 10 and not continuityObserved[checkpoint] then
+            local plays = string.unpack(">I4", native.audio_state(), 21)
+            assert(plays == continuousMusic, "Same-track room change restarted native music")
+            continuityObserved[checkpoint] = true
+            continuityChecks = continuityChecks + 1
+            report("MUSIC_CONTINUOUS tick=" .. t .. " native_plays=" .. plays)
+        end
+    end
     if t >= 650 and (t < 660 or t >= 950 and t < 980 or t >= 1240 and t < 1270) then
         local inBoss = t < 670 and not host or t >= 950 and host
         local expected = Music.MUSIC_BASEMENT
         local audible = audio()
+        local bossOver = false
+        if inBoss and Game():GetRoom():IsClear() then
+            for name, id in pairs(Music) do
+                if name:match("^MUSIC_BOSS_OVER") and id == audible then
+                    bossOver = true
+                end
+            end
+        end
         assert(
             inBoss
-                    and (audible == Music.MUSIC_BOSS or audible == Music.MUSIC_BOSS2 or audible == Music.MUSIC_BOSS3)
+                    and (audible == Music.MUSIC_BOSS or audible == Music.MUSIC_BOSS2 or audible == Music.MUSIC_BOSS3 or bossOver)
                 or not inBoss and audible == expected,
             "Wrong audible room music tick="
                 .. t

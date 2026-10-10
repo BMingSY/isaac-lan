@@ -46,6 +46,7 @@ MusicCall originalMusicPlay = nullptr, originalMusicFade = nullptr;
 unsigned scopeDepth = 0;
 std::array<unsigned, 2> audibleIDs{};
 unsigned playedSounds = 0, filteredSounds = 0;
+unsigned playedMusic = 0, fadedMusic = 0;
 int lastSoundID = 0;
 std::map<int, unsigned> playedSoundIDs;
 void musicCall(void* manager, int id, float parameter, unsigned mode, MusicCall original) {
@@ -65,6 +66,7 @@ void musicCall(void* manager, int id, float parameter, unsigned mode, MusicCall 
             return;
         played = std::pair{roomKey(), music[roomKey()]};
     }
+    (mode == 1 ? playedMusic : fadedMusic)++;
     original(manager, id, parameter);
 }
 void __attribute__((fastcall)) musicPlay(void* manager, void*, int id, float volume) {
@@ -138,6 +140,8 @@ int status(lua_State* L) {
         const auto found = playedSoundIDs.find(id);
         w.u32(found == playedSoundIDs.end() ? 0 : found->second);
     }
+    w.u32(playedMusic);
+    w.u32(fadedMusic);
     lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1), w.bytes.size() - 1);
     return 1;
 }
@@ -249,6 +253,7 @@ void reset() {
     music.clear();
     played.reset();
     playedSounds = filteredSounds = 0;
+    playedMusic = fadedMusic = 0;
     lastSoundID = 0;
     playedSoundIDs.clear();
 }
@@ -284,17 +289,25 @@ void present() {
     const auto manager = at<std::uintptr_t>(image, 0x87169c) + 0x29fbc;
     const auto& m = found->second;
     const std::array virtualIDs = {at<unsigned>(manager, 0x30c), at<unsigned>(manager, 0x310)};
+    const auto channels = scopeDepth ? audibleIDs : virtualIDs;
+    if (played && continueRoomTrack(played->first, key, m.id, channels)) {
+        played = next;
+        return;
+    }
     if (scopeDepth) {
         at<unsigned>(manager, 0x30c) = audibleIDs[0];
         at<unsigned>(manager, 0x310) = audibleIDs[1];
     }
     // Entering another room must not wait for the preceding room's queued
     // jingle/crossfade. Changes within one room retain native fading.
-    if (!played || played->first != key)
+    if (!played || played->first != key) {
+        ++playedMusic;
         originalMusicPlay(reinterpret_cast<void*>(manager), m.id, at<float>(manager, 0x398));
-    else
+    } else {
+        (m.mode == 1 ? playedMusic : fadedMusic)++;
         (m.mode == 1 ? originalMusicPlay : originalMusicFade)(reinterpret_cast<void*>(manager),
                                                               m.id, m.parameter);
+    }
     if (scopeDepth) {
         audibleIDs = {at<unsigned>(manager, 0x30c), at<unsigned>(manager, 0x310)};
         at<unsigned>(manager, 0x30c) = virtualIDs[0];

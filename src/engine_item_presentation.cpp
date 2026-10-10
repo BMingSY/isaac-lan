@@ -3,6 +3,7 @@
 #include "runtime_net.h"
 #include "net_protocol.h"
 #include "localized_text.h"
+#include "home_scene.h"
 #include <MinHook.h>
 #include <algorithm>
 #include <array>
@@ -40,7 +41,36 @@ ItemText originalItemText;
 CustomText originalCustomText;
 LookupText originalLookupText;
 Call originalRender;
+Call originalSceneUpdate;
+using SceneShow = void(__attribute__((thiscall)) *)(void*, int);
+SceneShow originalSceneShow;
 std::string configuration = "resources/giantbook.xml";
+HomeSleep homeSleep;
+void __attribute__((fastcall)) sceneUpdate(void* scene, void*) {
+    // Boss overlays and the TV sequence contain native route markers. Replicas
+    // render the authoritative pose instead of firing those markers again.
+    if (runtime::replica() && !runtime::ending())
+        return;
+    originalSceneUpdate(scene);
+}
+void __attribute__((fastcall)) sceneShow(void* scene, void*, int id) {
+    if (!runtime::replica() && rooms::virtualized() && id == 3 && at<int>(game(), 0) == 13 &&
+        at<int>(game(), 4) == 1) {
+        // Dogma's shutdown starts the run-wide Beast cinematic. Gather its
+        // native roster in the triggering living room so
+        // the foreground room cannot replace the guest's route context.
+        if (rooms::gatherForTransition([=] {
+                // Native TV disables the room roster before calling Show.
+                // Include peers gathered from other rooms in that same lock.
+                for (auto entry = at<Address>(game(), 0x1baa8);
+                     entry < at<Address>(game(), 0x1baac); entry += 4)
+                    at<bool>(at<Address>(entry, 0), 0x410) = false;
+                originalSceneShow(scene, id);
+            }))
+            return;
+    }
+    originalSceneShow(scene, id);
+}
 
 // J460 constructs these native ANM2/config objects in Game's constructor.
 // Each player needs a separate overlay: skipping Show would break Mega Mush's
@@ -189,6 +219,7 @@ void __attribute__((fastcall)) show(void* overlay, void*, int id, int delay, voi
                         enqueue(std::move(e));
                     }
                 originalShow(reinterpret_cast<void*>(game() + 0x1c034), id, delay, nullptr);
+                ++homeSleep.serial;
             }))
             return;
     }
@@ -360,6 +391,92 @@ int pose(lua_State* L) {
         return 1;
     }
 }
+int scenePose(lua_State* L) {
+    try {
+        const auto scene = game() + 0x1d2ec;
+        if (!lua.getTop(L)) {
+            lan::Writer w(lan::Message::world);
+            w.u8(at<unsigned>(scene, 0));
+            w.u8(at<unsigned>(scene, 4));
+            w.u32(homeSleep.serial);
+            const auto manager = at<Address>(image, 0x87169c);
+            w.u8(at<bool>(manager, 0x21c10));
+            w.u32(at<unsigned>(manager, 0x219c8));
+            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                           w.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas apply Home scene pose");
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 1, &size);
+        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        const auto state = r.u8(), id = r.u8();
+        const auto sleep = r.u32();
+        const auto dreamHome = r.u8();
+        const auto dreamIndex = static_cast<int>(r.u32());
+        r.finish();
+        if (state > 1 || id > 4 || dreamHome > 1 || dreamIndex < -3 || dreamIndex > 1000)
+            throw std::runtime_error("Invalid Home scene pose");
+        // Sprite loading below supplies this process's own native resources.
+        // Do not call Show/Update, which also emit music and route effects.
+        at<unsigned>(scene, 0) = state;
+        at<unsigned>(scene, 4) = id;
+        const auto manager = at<Address>(image, 0x87169c);
+        at<bool>(manager, 0x21c10) = dreamHome;
+        at<int>(manager, 0x219c8) = dreamIndex;
+        if (homeSleep.observe(sleep, at<int>(game(), 0), at<int>(game(), 4))) {
+            using Dream = void(__attribute__((thiscall))*)(void*, bool);
+            // This native UI scene owns its sprites and timing. Use the host's
+            // selected dream; Show has no route completion effects.
+            rooms::withView(
+                [&] { engine<Dream>(0x521ce0)(reinterpret_cast<void*>(manager + 0x21628), true); },
+                true);
+            at<int>(manager, 0xc) = at<int>(manager, 8);
+            at<int>(manager, 8) = 5;
+        }
+        lua.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& e) {
+        runtime::abort(e.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+}
+int sceneSprite(lua_State* L) {
+    auto sample = static_cast<Address*>(lua.toUserdata(L, 1));
+    const auto scene = game() + 0x1d2ec;
+    if (!sample || lua.rawLength(L, 1) != 8 ||
+        (!runtime::replica() && (!at<unsigned>(scene, 0) || !at<bool>(scene, 0x111)))) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
+    wrapper[0] = sample[0];
+    wrapper[1] = scene + 8;
+    lua.getMetatable(L, 1);
+    lua.setMetatable(L, -2);
+    return 1;
+}
+int dreamSprite(lua_State* L) {
+    auto sample = static_cast<Address*>(lua.toUserdata(L, 1));
+    const auto manager = at<Address>(image, 0x87169c);
+    if (!sample || lua.rawLength(L, 1) != 8 || at<int>(manager, 8) != 5) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto part = lua.checkInteger(L, 2);
+    if (part < 0 || part > 1) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
+    wrapper[0] = sample[0];
+    wrapper[1] = manager + 0x21628 + (part ? 0x134 : 0x20);
+    lua.getMetatable(L, 1);
+    lua.setMetatable(L, -2);
+    return 1;
+}
 int synchronize(lua_State* L) {
     try {
         if (!runtime::replica()) {
@@ -512,6 +629,11 @@ int status(lua_State* L) {
     integer("overlays", played[0]);
     integer("items", played[1]);
     integer("texts", played[2]);
+    integer("sceneState", at<unsigned>(game() + 0x1d2ec, 0));
+    integer("sceneID", at<unsigned>(game() + 0x1d2ec, 4));
+    const auto manager = at<Address>(image, 0x87169c);
+    integer("dreamActive", at<int>(manager, 8) == 5);
+    integer("dreamHome", at<bool>(manager + 0x21628, 0x5e8));
     return 1;
 }
 } // namespace
@@ -521,7 +643,11 @@ bool install(Address base) {
         const auto target = reinterpret_cast<void*>(image + offset);
         return MH_CreateHook(target, callback, original) == MH_OK && MH_EnableHook(target) == MH_OK;
     };
-    return hook(0x626af0, reinterpret_cast<void*>(lookupText),
+    return hook(0x212c0, reinterpret_cast<void*>(sceneUpdate),
+                reinterpret_cast<void**>(&originalSceneUpdate)) &&
+           hook(0x214b0, reinterpret_cast<void*>(sceneShow),
+                reinterpret_cast<void**>(&originalSceneShow)) &&
+           hook(0x626af0, reinterpret_cast<void*>(lookupText),
                 reinterpret_cast<void**>(&originalLookupText)) &&
            hook(0x5aca90, reinterpret_cast<void*>(update),
                 reinterpret_cast<void**>(&originalUpdate)) &&
@@ -565,6 +691,12 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "item_presentation_sprite");
     lua.pushClosure(L, pose, 0);
     lua.setField(L, -2, "item_presentation_pose");
+    lua.pushClosure(L, scenePose, 0);
+    lua.setField(L, -2, "home_scene_pose");
+    lua.pushClosure(L, sceneSprite, 0);
+    lua.setField(L, -2, "home_scene_sprite");
+    lua.pushClosure(L, dreamSprite, 0);
+    lua.setField(L, -2, "home_dream_sprite");
     return true;
 }
 void advance() {
@@ -582,6 +714,7 @@ void advance() {
             rooms::withPlayer(slot, [&] { originalUpdate(owned[slot]->storage.data(), false); });
 }
 void reset() {
+    homeSleep = {};
     owned = {};
     events.clear();
     lookups.clear();

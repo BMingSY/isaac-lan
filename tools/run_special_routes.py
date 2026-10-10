@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from build_special_suite import CASES, build
+from build_special_suite import CASES, DIAGNOSTICS, build
 from run_endings import hashes, idle
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,12 +20,14 @@ def main():
     parser.add_argument("--build", type=Path, default=ROOT / "build-win32")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--mod", type=Path, action="append", default=[])
-    parser.add_argument("--case", choices=CASES, action="append")
+    parser.add_argument("--case", choices=CASES + DIAGNOSTICS, action="append")
     parser.add_argument("--port", type=int, default=30220)
     args = parser.parse_args()
     cases = args.case or CASES
     if len(set(cases)) != len(cases):
         parser.error("Each case must appear once")
+    if "home" in cases and cases[-1] != "home":
+        parser.error("The native ending diagnostic must run last")
     labs = [args.host.resolve(), args.client.resolve()]
     if labs[0] == labs[1] or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
         parser.error("Two distinct marked isolated labs are required")
@@ -93,6 +95,11 @@ def main():
                         for line in text.splitlines()
                         if (
                             "SIDE " + name + " " in line
+                            or name == "home"
+                            and "ENDINGS ascent " in line
+                            or name == "audio"
+                            and "LAN_NETWORK " in line
+                            and "SIDE " not in line
                             or name == "lazarus"
                             and "LAN_NETWORK " in line
                             and "SIDE " not in line

@@ -226,6 +226,7 @@ struct Request {
     int door;
     bool teleport;
     bool animateDeparture;
+    int animation;
 };
 std::vector<Request> pending;
 std::set<unsigned> pendingItemRevival;
@@ -836,7 +837,7 @@ bool remoteCommand(Address player, int index, int dimension, bool teleport) {
          static_cast<std::int16_t>(target->index), teleport});
 }
 bool queue(Address player, int index, int dimension, int door, bool teleport = false,
-           bool animateDeparture = true) {
+           bool animateDeparture = true, int animation = 0) {
     for (auto head : participants) {
         const auto actors = controlledActors(head);
         if (std::find(actors.begin(), actors.end(), player) != actors.end()) {
@@ -856,7 +857,7 @@ bool queue(Address player, int index, int dimension, int door, bool teleport = f
     if (std::any_of(pending.begin(), pending.end(),
                     [player](const auto& r) { return r.player == player; }))
         return true;
-    pending.push_back({player, key, door, teleport, animateDeparture});
+    pending.push_back({player, key, door, teleport, animateDeparture, animation});
     if (teleport && animateDeparture) {
         using Animate = void(__attribute__((thiscall))*)(void*, bool);
         for (auto p : controlledActors(player))
@@ -919,7 +920,7 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
     // Portal effects start their native Trapdoor animation after this call.
     // Transfer at the frame boundary and apply the arrival there, rather than
     // waiting for a TeleportUp animation which the effect will overwrite.
-    if (!queue(who, index, dimension, teleport ? -1 : enter, teleport, animation == 3))
+    if (!queue(who, index, dimension, teleport ? -1 : enter, teleport, animation == 3, animation))
         logger("room_transition=REJECTED actor_unresolved");
 }
 void __attribute__((fastcall)) change(void* g, void*, int index, int dimension) {
@@ -1841,6 +1842,20 @@ bool update(void*, RoomCall original) {
         if (runtime::replica())
             interceptReplicaEntities(*room);
         original(reinterpret_cast<void*>(room->pointer));
+        if (!runtime::replica() && at<int>(game(), 0) == 13 && at<int>(game(), 4) == 1 &&
+            (soundAudience() & connectedMask) != connectedMask) {
+            // TV proximity creates Dogma after room initialization. Observe
+            // the native encounter during updates, then gather at the frame
+            // boundary before its process-wide TV and Beast sequences.
+            bool dogma = false;
+            for (std::size_t offset : {0x20u, 0x40u, 0x70u}) {
+                const auto list = room->pointer + 0x1218 + offset;
+                for (unsigned i = 0; i < at<unsigned>(list, 12); ++i)
+                    dogma |= at<unsigned>(at<Address>(at<Address>(list, 4), i * 4), 0x28) == 950;
+            }
+            if (gatherHomeCombat(13, 1, dogma, soundAudience(), connectedMask))
+                gatherForTransition([] {});
+        }
         ++room->updates;
     }
     return true;
@@ -2100,6 +2115,15 @@ bool withPlayer(unsigned slot, const std::function<void()>& call) {
     if (!enabled || depth || !room || !(connectedMask & (1u << slot)))
         return false;
     Scope scope(*room, controlledActors(head));
+    call();
+    return true;
+}
+bool withRoomPlayers(unsigned slot, const std::function<void()>& call) {
+    const auto head = slot < 4 ? participant(slot) : 0;
+    const auto room = head ? findRoom(head) : nullptr;
+    if (!enabled || depth || !room || !(connectedMask & (1u << slot)))
+        return false;
+    Scope scope(*room);
     call();
     return true;
 }
@@ -2411,14 +2435,14 @@ void finishFrame() {
                 using Animate = void(__attribute__((thiscall))*)(void*, bool);
                 for (auto p : actors) {
                     engine<Animate>(0x3abcc0)(reinterpret_cast<void*>(p), false);
-                    // Womb/portal effects disable ControlsEnabled themselves.
-                    // Native RoomTransition releases it at completion, which
-                    // our per-player transfer replaces. Keep its extra sprite
-                    // animation, but release only the arriving portal actors.
-                    if (!request.animateDeparture)
-                        at<bool>(p, 0x410) = true;
                 }
             }
+            // The native minecart (animation 19) also disables controls. Only
+            // its arriving actors receive the native completion; residents in
+            // another room keep their own control and animation state.
+            for (auto p : actors)
+                completeArrivalControls(request.animation, at<bool>(p, 0x410),
+                                        at<int>(game(), 0x26614));
         }
         canonical();
         logger("room_transfer slot=" + std::to_string(slotOf(request.player)) +
