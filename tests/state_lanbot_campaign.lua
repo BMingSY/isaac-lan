@@ -12,7 +12,8 @@ local visited, bosses, shots, motion, previous = {}, {}, { 0, 0 }, { 0, 0 }, {}
 local fought, floorShots = {}, {}
 local snapshots, floorEvents, moveInputs, shootInputs = 0, 0, 0, 0
 local stage, stageAt, destination = nil, 0, nil
-local winCallback, exitCallback, tearCallback
+local winCallback, exitCallback, tearCallback, chestCallback
+local chestContacts = 0
 local function report(text)
     Isaac.DebugString("LAN_NETWORK LANBOT_CAMPAIGN " .. text)
 end
@@ -111,6 +112,42 @@ local function botStep()
                         and e.Variant == EffectVariant.HEAVEN_LIGHT_DOOR
                 then
                     readyExit = true
+                    if host and renders % 120 == 0 and e:ToPickup() then
+                        local pickup = e:ToPickup()
+                        local sprite = pickup:GetSprite()
+                        report(
+                            "CHEST_STATE stage="
+                                .. Game():GetLevel():GetStage()
+                                .. " state="
+                                .. pickup.State
+                                .. " wait="
+                                .. pickup.Wait
+                                .. " collision="
+                                .. pickup.EntityCollisionClass
+                                .. " animation="
+                                .. sprite:GetAnimation()
+                                .. " frame="
+                                .. sprite:GetFrame()
+                                .. " touched="
+                                .. tostring(pickup.Touched)
+                        )
+                        for slot = 0, 1 do
+                            actor(slot, function(p)
+                                report(
+                                    "CHEST_ACTOR slot="
+                                        .. slot
+                                        .. " distance="
+                                        .. p.Position:Distance(pickup.Position)
+                                        .. " collision="
+                                        .. p.EntityCollisionClass
+                                        .. " animation="
+                                        .. p:GetSprite():GetAnimation()
+                                        .. " extra_done="
+                                        .. tostring(p:IsExtraAnimationFinished())
+                                )
+                            end)
+                        end
+                    end
                 end
             end
         end
@@ -127,6 +164,28 @@ local function botStep()
     end
     if renders % 120 == 0 then
         command("status")
+    end
+end
+chestCallback = function(_, pickup, collider)
+    local p = collider:ToPlayer()
+    if host and p and chestContacts < 30 then
+        chestContacts = chestContacts + 1
+        report(
+            "CHEST_CONTACT stage="
+                .. Game():GetLevel():GetStage()
+                .. " state="
+                .. pickup.State
+                .. " wait="
+                .. pickup.Wait
+                .. " controller="
+                .. p.ControllerIndex
+                .. " distance="
+                .. p.Position:Distance(pickup.Position)
+                .. " animation="
+                .. p:GetSprite():GetAnimation()
+                .. " extra_done="
+                .. tostring(p:IsExtraAnimationFinished())
+        )
     end
 end
 tearCallback = function(_, tear)
@@ -189,6 +248,12 @@ exitCallback = function()
     report("EXIT_CALLBACK won=" .. tostring(won))
 end
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)
+Isaac.AddCallback(
+    owner,
+    ModCallbacks.MC_PRE_PICKUP_COLLISION,
+    chestCallback,
+    PickupVariant.PICKUP_BIGCHEST
+)
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)
 Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)
 function _IsaacLanFrame()

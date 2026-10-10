@@ -16,11 +16,26 @@ for _, host in ipairs({ true, false }) do
             end,
         }
     end
+    local function sprite()
+        return {
+            GetAnimation = function()
+                return "Idle"
+            end,
+            GetFrame = function()
+                return 0
+            end,
+        }
+    end
     local players = {}
     for slot = 0, 1 do
         local index = slot
         local methods = {
             ControllerIndex = slot + 1,
+            EntityCollisionClass = 4,
+            GetSprite = sprite,
+            IsExtraAnimationFinished = function()
+                return true
+            end,
             SetMinDamageCooldown = function() end,
             HasCollectible = function(_, id)
                 return items[index .. ":" .. id]
@@ -176,7 +191,12 @@ for _, host in ipairs({ true, false }) do
             COLLECTIBLE_POLAROID = 57,
             COLLECTIBLE_NEGATIVE = 78,
         },
-        ModCallbacks = { MC_POST_FIRE_TEAR = 1, MC_POST_GAME_END = 2, MC_PRE_GAME_EXIT = 3 },
+        ModCallbacks = {
+            MC_POST_FIRE_TEAR = 1,
+            MC_POST_GAME_END = 2,
+            MC_PRE_GAME_EXIT = 3,
+            MC_PRE_PICKUP_COLLISION = 4,
+        },
         Isaac = {
             AddCallback = function(_, id, fn)
                 callbacks[id] = fn
@@ -198,7 +218,14 @@ for _, host in ipairs({ true, false }) do
                             Type = 5,
                             Variant = 340,
                             ToPickup = function()
-                                return { Wait = 0 }
+                                return {
+                                    Wait = 0,
+                                    State = 0,
+                                    EntityCollisionClass = 4,
+                                    Touched = false,
+                                    Position = vec(320, 280),
+                                    GetSprite = sprite,
+                                }
                             end,
                             ToNPC = function() end,
                         },
