@@ -2,7 +2,7 @@
 -- This verifies bot behavior, not Isaac's native physics or enemy AI.
 return function(root)
     local modules = {}
-    for _, name in ipairs({ "navigation", "combat", "planner" }) do
+    for _, name in ipairs({ "navigation", "hazards", "combat", "planner" }) do
         modules["lanbot/" .. name] = dofile(root .. "/src/bridge/lanbot/" .. name .. ".lua")
     end
     local create = dofile(root .. "/src/bridge/lanbot.lua")

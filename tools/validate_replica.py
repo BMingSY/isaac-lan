@@ -31,6 +31,7 @@ CASES = {
     "motion": ("state_motion.lua", "continuous local movement"),
     "input-response": ("state_input_response.lua", "immediate native input response"),
     "local-movement": ("state_local_movement.lua", "local movement and door arrival"),
+    "lanbot": ("state_lanbot.lua", "lanbot behavior suite"),
     "visuals": ("state_guest_visuals.lua", "guest native revival visuals"),
     "mod-ui": ("state_mod_ui.lua", "local Mod map and room request"),
     "special-doors": ("state_special_doors.lua", "special door slots and raw-input Devil entry"),
@@ -154,6 +155,14 @@ def main():
                     cmd += ["--native-record-view", "0", "--frame-ms", "50"]
                 if case in ("item-presentation", "item-text"):
                     cmd += ["--native-record-both", "--frame-ms", "50"]
+                if case == "lanbot":
+                    cmd += [
+                        "--native-record-both",
+                        "--frame-ms",
+                        "100",
+                        "--scenario-timeout",
+                        "180",
+                    ]
                 if case in ("hourglass", "weapon-charge"):
                     cmd += ["--native-record-view", "1", "--frame-ms", "50"]
                 if case == "mirror-camera":

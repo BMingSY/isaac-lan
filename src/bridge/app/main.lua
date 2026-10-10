@@ -29,8 +29,12 @@ end
 local function log(s)
     Isaac.DebugString("ISAAC_LAN " .. s)
 end
-local observation =
-    _IsaacLanModules["lanbot/observe"](native, integration, _IsaacLanModules["lanbot/navigation"])
+local observation = _IsaacLanModules["lanbot/observe"](
+    native,
+    integration,
+    _IsaacLanModules["lanbot/navigation"],
+    _IsaacLanModules["lanbot/terrain"]
+)
 local bot = _IsaacLanModules["lanbot"]({
     info = native.api_info,
     input = function(active, buttons)

@@ -29,6 +29,8 @@ api/lifecycle
 api/actions
 api/public
 lanbot/navigation
+lanbot/hazards
+lanbot/terrain
 lanbot/combat
 lanbot/planner
 lanbot/observe

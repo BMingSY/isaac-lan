@@ -1,4 +1,4 @@
-return function(nav)
+return function(nav, hazards)
     local combat = {}
     combat.styles = {
         aggressive = { risk = 1900, margin = 5, distance = 0.55 },
@@ -16,13 +16,16 @@ return function(nav)
         { -0.7071, 0.7071, 9 },
         { 0.7071, 0.7071, 10 },
     }
-    function combat.target(obs, style)
+    function combat.target(obs, style, previous)
         local target, best
         for _, enemy in ipairs(obs.enemies) do
             if enemy.attackable then
                 local score = nav.distance(obs.actor, enemy) - (enemy.threat or 0) * 25
                 if style == "aggressive" then
                     score = score - (enemy.threat or 0) * 40
+                end
+                if enemy.id == previous then
+                    score = score - 40
                 end
                 if not best or score < best then
                     target, best = enemy, score
@@ -31,7 +34,7 @@ return function(nav)
         end
         return target
     end
-    function combat.goal(obs, target, style, available)
+    function combat.goal(obs, target, style, available, previous)
         local p, settings = obs.actor, combat.styles[style]
         local distance = math.max(p.radius + target.radius + 18, p.range * settings.distance)
         local best, score
@@ -45,7 +48,19 @@ return function(nav)
                     y = target.y + direction[2] * range,
                     id = "aim:" .. target.id .. ":" .. i .. ":" .. j,
                 }
-                local value = nav.distance(p, goal) + (distance - range) * 0.7
+                local value = nav.distance(p, goal)
+                    + (distance - range) * 0.7
+                    + hazards.risk(obs, goal, goal, 0, 0.35, settings)
+                if goal.id == previous then
+                    value = value - 20
+                end
+                for _, delta in ipairs({ { -40, 0 }, { 40, 0 }, { 0, -40 }, { 0, 40 } }) do
+                    if
+                        not nav.passable(obs.map, goal.x + delta[1], goal.y + delta[2], p.radius)
+                    then
+                        value = value + 25
+                    end
+                end
                 if
                     (not available or available(goal.id))
                     and nav.passable(obs.map, goal.x, goal.y, p.radius)
@@ -58,47 +73,23 @@ return function(nav)
         end
         return best
     end
-    local function risk(obs, x, y, t, settings)
-        local value = 0
-        for _, danger in ipairs(obs.dangers) do
-            if not danger.at or t >= danger.at then
-                local distance
-                if danger.bx then
-                    distance = nav.segmentDistance(x, y, danger.x, danger.y, danger.bx, danger.by)
-                else
-                    distance = math.sqrt(
-                        (x - danger.x - (danger.vx or 0) * t) ^ 2
-                            + (y - danger.y - (danger.vy or 0) * t) ^ 2
-                    )
-                end
-                local radius = obs.actor.radius
-                    + danger.radius
-                    + settings.margin
-                    + (obs.age or 0) * 30
-                if distance < radius then
-                    value = value + settings.risk * (1 + (radius - distance) / radius)
-                elseif distance < radius + 25 then
-                    value = value + settings.risk * 0.04 * (1 - (distance - radius) / 25)
-                end
-            end
-        end
-        return value
-    end
-    function combat.move(obs, goal, style, previous, door)
+    function combat.move(obs, goal, style, previous, door, entering)
         local p, settings = obs.actor, combat.styles[style]
         local best, bestScore, evaluated = 0, math.huge, 0
         local gx, gy = goal and goal.x - p.x or 0, goal and goal.y - p.y or 0
         for _, direction in ipairs(directions) do
             local x, y, vx, vy = p.x, p.y, p.vx, p.vy
-            local score, valid = 0, true
+            local score, valid, arrived = 0, true, false
+            local progressX, progressY = x, y
             for step = 1, 10 do
                 local dt, retain = 1 / 30, 0.775
-                vx = vx * retain + direction[1] * p.speed * (1 - retain)
-                vy = vy * retain + direction[2] * p.speed * (1 - retain)
+                vx = vx * retain + (arrived and 0 or direction[1]) * p.speed * (1 - retain)
+                vy = vy * retain + (arrived and 0 or direction[2]) * p.speed * (1 - retain)
                 local nextX, nextY = x + vx * dt, y + vy * dt
                 local reached = false
                 if
                     goal
+                    and not arrived
                     and gx * gx + gy * gy > 0.001
                     and (nextX - goal.x) * gx + (nextY - goal.y) * gy >= 0
                 then
@@ -108,7 +99,8 @@ return function(nav)
                             0,
                             math.min(1, ((goal.x - x) * gx + (goal.y - y) * gy) / along)
                         )
-                        nextX, nextY = x + (nextX - x) * fraction, y + (nextY - y) * fraction
+                        progressX, progressY =
+                            x + (nextX - x) * fraction, y + (nextY - y) * fraction
                         reached = true
                     end
                 end
@@ -118,27 +110,59 @@ return function(nav)
                         { x = x, y = y },
                         { x = nextX, y = nextY },
                         p.radius,
-                        door
+                        door,
+                        (step - 1) * dt,
+                        step * dt
                     )
                 then
-                    valid = false
-                    break
+                    if not arrived then
+                        valid = false
+                        break
+                    end
+                    -- Past a turning waypoint the next decision can turn;
+                    -- walls stop drift, but protected exits never act as walls.
+                    if
+                        not nav.zonesAllow(
+                            obs.map,
+                            nextX,
+                            nextY,
+                            p.radius,
+                            step * dt,
+                            { x = x, y = y }
+                        )
+                    then
+                        valid = false
+                        break
+                    end
+                    nextX, nextY, vx, vy = x, y, 0, 0
                 end
+                score = score
+                    + hazards.risk(
+                        obs,
+                        { x = x, y = y },
+                        { x = nextX, y = nextY },
+                        (step - 1) * dt,
+                        step * dt,
+                        settings
+                    )
                 x, y = nextX, nextY
-                score = score + risk(obs, x, y, step * dt, settings)
-                if door and (x - door.x) * door.dx + (y - door.y) * door.dy >= 0 then
+                if not arrived and not reached then
+                    progressX, progressY = x, y
+                end
+                if
+                    door
+                    and not entering
+                    and (x - door.x) * door.dx + (y - door.y) * door.dy >= 0
+                then
                     break -- Crossing commits a room transfer; this room ends here.
                 end
                 if reached then
-                    -- Replan at the waypoint plane. Predicting past a turn
-                    -- can reject safe progress, while a fixed early tolerance
-                    -- can bias scores toward sideways motion at low speeds.
-                    break
+                    arrived = true -- Continue predicting braking and hazards through the full horizon.
                 end
             end
             if valid then
                 if goal then
-                    score = score + nav.distance({ x = x, y = y }, goal) * 2
+                    score = score + nav.distance({ x = progressX, y = progressY }, goal) * 2
                 end
                 -- Prefer continuity, not a fixed left/right tie break every frame.
                 if direction[3] ~= previous then

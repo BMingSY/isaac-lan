@@ -7,7 +7,9 @@ return function(nav)
     end
     function methods:cancel()
         self.goal, self.path, self.pathAt, self.stuckAt, self.lastPosition = nil, nil, nil, nil, nil
-        self.advance, self.pendingPickup = false, nil
+        self.advance, self.pendingPickup, self.entry, self.buttonWait = false, nil, nil, nil
+        self.waitingTrap = nil
+        self.needsArrival = true
     end
     function methods:observe(obs)
         if self.world ~= obs.world then
@@ -15,6 +17,8 @@ return function(nav)
             self:cancel()
             self.world, self.room = obs.world, nil
         end
+        local changed = self.room ~= obs.room
+        local previousRoom = self.room
         local node = self.nodes[obs.room] or { visits = 0, edges = {} }
         self.nodes[obs.room] = node
         if self.room ~= obs.room then
@@ -27,10 +31,25 @@ return function(nav)
                 end
             end
             self.goal, self.path, self.lastPosition, self.stuckAt = nil, nil, nil, nil
+            self.waitingTrap = nil
             node.visits = node.visits + 1
             self.room = obs.room
         end
+        if changed or self.needsArrival then
+            self.entry, self.needsArrival, self.buttonWait = nil, false, nil
+            for _, door in ipairs(obs.doors) do
+                local inward = -(
+                    (obs.actor.x - door.x) * door.dx + (obs.actor.y - door.y) * door.dy
+                )
+                local across =
+                    math.abs((obs.actor.x - door.x) * door.dy - (obs.actor.y - door.y) * door.dx)
+                if inward < 70 and across < 28 and (not self.entry or door.to == previousRoom) then
+                    self.entry = door
+                end
+            end
+        end
         node.clear, node.exit = obs.clear, obs.exit
+        node.edges = {}
         for _, door in ipairs(obs.doors) do
             node.edges[door.slot] = door
         end
@@ -60,7 +79,30 @@ return function(nav)
         end
     end
     function methods:available(id, frame)
-        return not self.blocked[id] or self.blocked[id] <= frame
+        local untilFrame = self.blocked[(self.room or "") .. "/" .. id]
+        return not untilFrame or untilFrame <= frame
+    end
+    function methods:block(id, frame)
+        self.blocked[self.room .. "/" .. id] = frame
+    end
+    function methods:arrival(obs)
+        local door = self.entry
+        if not door then
+            return nil
+        end
+        local inward = -((obs.actor.x - door.x) * door.dx + (obs.actor.y - door.y) * door.dy)
+        if inward >= 70 then
+            self.entry = nil
+            return nil
+        end
+        return {
+            x = door.x - door.dx * 84,
+            y = door.y - door.dy * 84,
+            id = "arrival:" .. door.slot,
+            door = door,
+            entering = true,
+            task = "leave_door",
+        }
     end
     function methods:nextExit()
         for _, node in pairs(self.nodes) do
@@ -83,13 +125,13 @@ return function(nav)
     end
     function methods:routes(obs, style, exitOnly)
         local queue, seen = { { room = obs.room, distance = 0 } }, { [obs.room] = true }
-        local best, bestScore, resourceBlocked
+        local best, bestScore, resourceBlocked, pending
         local cursor = 1
         while cursor <= #queue and cursor <= 512 do
             local entry = queue[cursor]
             cursor = cursor + 1
             local node = self.nodes[entry.room]
-            if node and node.exit and entry.first and (exitOnly or self.mode == "run") then
+            if node and node.exit and entry.first and exitOnly then
                 local score = 2000 - entry.distance * 20
                 if not bestScore or score > bestScore then
                     best, bestScore = goalForDoor(entry.first), score
@@ -103,7 +145,14 @@ return function(nav)
                         local id = "door:" .. first.slot .. ":" .. first.to
                         if edge.locked and obs.actor.keys < 1 then
                             resourceBlocked = true
-                        elseif self:available(id, obs.frame) then
+                        elseif
+                            self:available(id, obs.frame)
+                            and (
+                                not self.blocked[entry.room .. "/door:" .. edge.slot .. ":" .. edge.to]
+                                or self.blocked[entry.room .. "/door:" .. edge.slot .. ":" .. edge.to]
+                                    <= obs.frame
+                            )
+                        then
                             local nextNode = self.nodes[edge.to]
                             if not nextNode then
                                 if not exitOnly then
@@ -115,6 +164,9 @@ return function(nav)
                                     if style == "cautious" and edge.cost then
                                         score = score - 300
                                     end
+                                    if self.goal and self.goal.id == id then
+                                        score = score + 20
+                                    end
                                     if not bestScore or score > bestScore then
                                         best, bestScore = goalForDoor(first), score
                                     end
@@ -124,15 +176,46 @@ return function(nav)
                                 queue[#queue + 1] =
                                     { room = edge.to, first = first, distance = entry.distance + 1 }
                             end
+                        else
+                            pending = true
                         end
                     end
                 end
             end
         end
-        return best, resourceBlocked
+        return best, resourceBlocked, pending
     end
     function methods:choose(obs, mode, style)
         self.mode = mode
+        if mode ~= "hold" then
+            local button, distance
+            for _, candidate in ipairs(obs.buttons or {}) do
+                if self:available(candidate.id, obs.frame) then
+                    local value = nav.distance(obs.actor, candidate)
+                        - (self.goal and self.goal.id == candidate.id and 25 or 0)
+                    if not distance or value < distance then
+                        button, distance = candidate, value
+                    end
+                end
+            end
+            if button then
+                if nav.distance(obs.actor, button) <= 8 then
+                    if not self.buttonWait or self.buttonWait.id ~= button.id then
+                        self.buttonWait = { id = button.id, at = obs.frame }
+                    elseif obs.frame - self.buttonWait.at > 90 then
+                        self:block(button.id, obs.frame + 300)
+                        self.buttonWait = nil
+                        return nil, "button_not_activated"
+                    end
+                else
+                    self.buttonWait = nil
+                end
+                return { x = button.x, y = button.y, id = button.id, task = "press_button" }
+            elseif #(obs.buttons or {}) > 0 then
+                return nil, "button_not_activated"
+            end
+            self.buttonWait = nil
+        end
         if not obs.clear then
             return nil, "room_not_clear"
         end
@@ -173,18 +256,39 @@ return function(nav)
         if mode == "hold" then
             return nil, "room_clear"
         end
-        if obs.exit and (mode == "run" or self.advance) then
+        local function exitGoal()
             if not self.advance and not obs.partyReady then
                 return nil, "wait_for_party"
             end
             if not self:available("exit", obs.frame) then
                 return nil, "route_blocked"
             end
-            return { x = obs.exit.x, y = obs.exit.y, id = "exit", task = "move_to_exit" }
+            return {
+                x = obs.exit.x,
+                y = obs.exit.y,
+                id = "exit",
+                exit = obs.exit,
+                task = "move_to_exit",
+            }
         end
-        local route, resourceBlocked = self:routes(obs, style, self.advance)
+        if self.advance and obs.exit then
+            return exitGoal()
+        end
+        local route, resourceBlocked, pending = self:routes(obs, style, self.advance)
         if route then
             return route
+        end
+        if pending then
+            return nil, "route_blocked"
+        end
+        if mode == "run" or self.advance then
+            if obs.exit then
+                return exitGoal()
+            end
+            route = self:routes(obs, style, true)
+            if route then
+                return route
+            end
         end
         return nil,
             resourceBlocked and "resource_missing"
@@ -199,22 +303,29 @@ return function(nav)
         local p, door = obs.actor, goal.door
         if not self.goal or self.goal.id ~= goal.id then
             self.goal, self.path, self.lastPosition, self.stuckAt = goal, nil, nil, nil
+            self.waitingTrap = nil
+        end
+        if self.waitingTrap then
+            self.stuckAt = obs.frame
         end
         if self.lastPosition and nav.distance(p, self.lastPosition) >= 5 then
             self.lastPosition, self.stuckAt = { x = p.x, y = p.y }, obs.frame
         elseif not self.lastPosition then
             self.lastPosition, self.stuckAt = { x = p.x, y = p.y }, obs.frame
         elseif obs.frame - self.stuckAt > 120 and nav.distance(p, goal) > 16 then
-            self.blocked[goal.id] = obs.frame + 300
+            self:block(goal.id, obs.frame + 300)
             self.goal, self.path, self.lastPosition = nil, nil, nil
             return nil, "route_blocked"
         end
-        if door and nav.distance(p, door) < 45 then
+        if door and not goal.entering and nav.distance(p, door) < 45 then
             return goal
         end
-        local destination = door and { x = door.x - door.dx * 32, y = door.y - door.dy * 32 }
+        local destination = door
+                and not goal.entering
+                and { x = door.x - door.dx * 32, y = door.y - door.dy * 32 }
             or goal
         if nav.line(obs.map, p, destination, p.radius, door) then
+            self.waitingTrap = nil
             return destination
         end
         if
@@ -222,15 +333,33 @@ return function(nav)
             or self.goal.id ~= goal.id
             or not self.path
             or obs.frame - (self.pathAt or 0) >= 30
+            or not nav.line(obs.map, p, self.path[1], p.radius, door)
         then
             self.goal, self.pathAt = goal, obs.frame
             self.path = nav.path(obs.map, p, destination, p.radius, 640, door)
         end
         if not self.path then
-            self.blocked[goal.id] = obs.frame + 180
+            local spatial = obs.map.timed
+                and nav.path(obs.map, p, destination, p.radius, 640, door, true)
+            if spatial then
+                self.waitingTrap = self.waitingTrap or obs.frame
+                self.stuckAt = obs.frame
+                if obs.frame - self.waitingTrap > 1200 then
+                    return nil, "needs_manual"
+                end
+                return nav.approachTimed(obs.map, p, spatial, p.radius, door), "wait_for_trap"
+            end
+            self:block(goal.id, obs.frame + 180)
             return nil, "route_blocked"
         end
-        while #self.path > 1 and nav.distance(p, self.path[1]) < 14 do
+        self.waitingTrap = nil
+        while
+            #self.path > 1
+            and (
+                nav.distance(p, self.path[1]) < 14
+                or nav.line(obs.map, p, self.path[2], p.radius, door)
+            )
+        do
             table.remove(self.path, 1)
         end
         return self.path[1]
