@@ -18,6 +18,12 @@ if(BUILD_TESTING)
         NAMES lua5.3 lua
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
+        add_test(NAME bridge.entity-codec
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/entity_codec.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.layers
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/layer_contracts.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
         add_test(NAME bridge.api
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_api.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -66,6 +72,8 @@ if(BUILD_TESTING)
             COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_resources.lua"
                     "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(
+            bridge.entity-codec
+            bridge.layers
             bridge.api
             bridge.goodtrip
             bridge.prediction
@@ -109,6 +117,7 @@ if(BUILD_TESTING)
         intro-barrier
         room-map
         room-transition-context
+        compatibility-targets
         truncated-packets
         hashes
         progression
@@ -126,54 +135,33 @@ endif()
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The native engine adapter requires a 32-bit Windows toolchain")
 endif()
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/main.lua" ISAAC_LAN_BRIDGE)
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/state.lua" ISAAC_LAN_STATE)
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/prediction.lua" ISAAC_LAN_PREDICTION)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/main.lua" ISAAC_LAN_BRIDGE)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/world.lua" ISAAC_LAN_STATE)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/presentation/prediction.lua" ISAAC_LAN_PREDICTION)
 set_property(
     DIRECTORY
     APPEND
-    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/prediction.lua")
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/presentation/prediction.lua")
 set_property(
     DIRECTORY
     APPEND
-    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/state.lua")
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/app/world.lua")
 set_property(
     DIRECTORY
     APPEND
-    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/main.lua")
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/menu.lua" ISAAC_LAN_MENU)
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/app/main.lua")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/presentation/menu.lua" ISAAC_LAN_MENU)
 set_property(
     DIRECTORY
     APPEND
-    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/menu.lua")
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/presentation/menu.lua")
 set(ISAAC_LAN_INTEGRATION_MODULES "")
-foreach(
-    module
-    state/codec
-    state/inventory
-    state/entities
-    state/grids
-    state/presentation
-    state/floor
-    state/npc
-    state/forms
-    state/poop
-    api/codec
-    api/lifecycle
-    api/actions
-    api/public
-    lanbot/navigation
-    lanbot/combat
-    lanbot/planner
-    lanbot/observe
-    lanbot
-    compat/wrapping
-    compat/observation
-    compat/registry
-    compat/stats_plus
-    compat/eid
-    compat/goodtrip/authority
-    compat/goodtrip/client)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/modules.txt" ISAAC_LAN_MODULE_NAMES)
+set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/modules.txt")
+foreach(module IN LISTS ISAAC_LAN_MODULE_NAMES)
     set(source_file "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/${module}.lua")
     file(READ "${source_file}" module_source)
     set_property(
@@ -187,20 +175,20 @@ endforeach()
 configure_file(src/bridge/embedded.h.in generated/embedded_bridge.h @ONLY)
 add_library(
     isaac_lan_probe SHARED
-    src/probe.cpp
-    src/runtime_log.cpp
-    src/runtime_net.cpp
-    src/engine_rooms.cpp
-    src/engine_visuals.cpp
-    src/engine_input.cpp
-    src/engine_save.cpp
-    src/engine_audio.cpp
-    src/engine_presentation.cpp
-    src/engine_item_presentation.cpp
-    src/engine_rewind.cpp
-    src/frontend.cpp
-    src/lab_capture.cpp)
-add_library(isaac_lan_build STATIC src/game_build.cpp)
+    src/app/bootstrap.cpp
+    src/diagnostics/runtime_log.cpp
+    src/runtime/session.cpp
+    src/engine/versions/j460/rooms.cpp
+    src/engine/versions/j460/visuals.cpp
+    src/engine/versions/j460/input.cpp
+    src/engine/versions/j460/save.cpp
+    src/engine/versions/j460/audio.cpp
+    src/engine/versions/j460/presentation.cpp
+    src/engine/versions/j460/item_presentation.cpp
+    src/engine/versions/j460/rewind.cpp
+    src/presentation/frontend.cpp
+    src/diagnostics/lab_capture.cpp)
+add_library(isaac_lan_build STATIC src/engine/build.cpp)
 target_include_directories(isaac_lan_build PUBLIC src)
 target_compile_definitions(isaac_lan_build PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_executable(isaac_lan_check tools/game_check.cpp)
@@ -223,7 +211,7 @@ add_library(
     "${IMGUI_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp")
 target_include_directories(isaac_lan_ui PUBLIC "${IMGUI_SOURCE_DIR}" "${IMGUI_SOURCE_DIR}/backends")
 target_link_libraries(isaac_lan_ui PUBLIC opengl32 gdi32 dwmapi)
-add_library(isaac_lan_net STATIC src/lan_session.cpp src/state_compression.cpp)
+add_library(isaac_lan_net STATIC src/net/session.cpp src/net/compression.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt)
@@ -270,7 +258,7 @@ target_link_libraries(isaac_lan_probe PRIVATE bcrypt iphlpapi gdiplus minhook is
                                               isaac_lan_ui)
 add_executable(isaac_lan_lab tools/lab_runner.cpp)
 if(BUILD_TESTING)
-    add_executable(isaac_lan_log_test tests/runtime_log_test.cpp src/runtime_log.cpp)
+    add_executable(isaac_lan_log_test tests/runtime_log_test.cpp src/diagnostics/runtime_log.cpp)
     target_include_directories(isaac_lan_log_test PRIVATE src)
     target_compile_definitions(isaac_lan_log_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     if(MINGW)
@@ -280,8 +268,9 @@ if(BUILD_TESTING)
     add_test(NAME log.path-and-records COMMAND isaac_lan_log_test path-and-records)
     set_tests_properties(log.path-and-records PROPERTIES TIMEOUT 30 LABELS "offline;logging")
 endif()
-add_library(isaac_lan_loader SHARED src/loader.cpp src/loader.def)
+add_library(isaac_lan_loader SHARED src/app/loader.cpp src/app/loader.def)
 set_target_properties(isaac_lan_loader PROPERTIES PREFIX "" OUTPUT_NAME "winmm")
+target_include_directories(isaac_lan_loader PRIVATE src)
 target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_definitions(isaac_lan_lab PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(MINGW)

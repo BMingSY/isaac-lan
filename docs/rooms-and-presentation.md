@@ -6,7 +6,7 @@
 
 房间键为 `(dimension, roomIndex)`。镜像层和其他维度不能只按房间索引区分。
 
-[`engine_rooms.cpp`](../src/engine_rooms.cpp) 中的 `Scope` 临时切换房间指针、相关标量、房间玩家名单、伏击状态、渲染资源和音频上下文，退出时恢复外层上下文。
+[`engine/versions/j460/rooms.cpp`](../src/engine/versions/j460/rooms.cpp) 中的 `Scope` 临时切换房间指针、相关标量、房间玩家名单、伏击状态、渲染资源和音频上下文，退出时恢复外层上下文。
 
 ## 所有权与更新
 
@@ -71,4 +71,4 @@ Good Trip 等本机界面发起原生换房时，客机发送 `RoomRequest`，�
 
 依赖全局换房回调的第三方玩法 Mod 在队友房间可能效果不完整。当前没有复制任意 Mod 私有状态的机制，也不为每个 Mod 改写内部逻辑。
 
-相关源码入口：[`engine_rooms.cpp`](../src/engine_rooms.cpp)、[`engine_input.cpp`](../src/engine_input.cpp)、[`frontend.cpp`](../src/frontend.cpp)、[`engine_visuals.cpp`](../src/engine_visuals.cpp)、[`engine_audio.cpp`](../src/engine_audio.cpp)、[`engine_presentation.cpp`](../src/engine_presentation.cpp)、[`engine_item_presentation.cpp`](../src/engine_item_presentation.cpp)。
+相关源码入口：[`engine/versions/j460/rooms.cpp`](../src/engine/versions/j460/rooms.cpp)、[`engine/versions/j460/input.cpp`](../src/engine/versions/j460/input.cpp)、[`frontend.cpp`](../src/presentation/frontend.cpp)、[`engine/versions/j460/visuals.cpp`](../src/engine/versions/j460/visuals.cpp)、[`engine/versions/j460/audio.cpp`](../src/engine/versions/j460/audio.cpp)、[`engine/versions/j460/presentation.cpp`](../src/engine/versions/j460/presentation.cpp)、[`engine/versions/j460/item_presentation.cpp`](../src/engine/versions/j460/item_presentation.cpp)。

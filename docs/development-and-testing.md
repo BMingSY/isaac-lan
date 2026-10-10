@@ -6,7 +6,7 @@
 README.md        用户说明与构建命令
 AGENTS.md        仓库协作、测试与发布文案约定
 docs/            架构和开发文档
-src/             原生扩展、传输与嵌入 Lua
+src/             按 app／net／runtime／engine／compat／presentation 分层的原生代码与嵌入 Lua
 cmake/           32 位 Windows 工具链配置
 package/         安装脚本
 tests/           传输测试、引擎场景与测试夹具
@@ -32,7 +32,7 @@ third_party/     第三方许可证
 
 安装器校验目标是所支持版本的 32 位 PE，避免以整个 EXE 的哈希排除无关补丁。运行时在安装挂钩前核对所用入口的特征；关键入口确实变化时，不能继续使用旧布局。
 
-新增原生接口时需要核对 RVA、调用约定、结构尺寸、分配／释放责任和角色生命周期。地址特征集中在 [`game_signatures.inc`](../src/game_signatures.inc)。新游戏版本需要重新验证这些条件，不只修改版本字符串。
+新增原生接口时需要核对 RVA、调用约定、结构尺寸、分配／释放责任和角色生命周期。入口地址与特征分别集中在 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h) 与 [`signatures.inc`](../src/engine/versions/j460/signatures.inc)，共同使用具名地址常量。模块边界与扩展方式见[分层与玩法兼容](layers-and-compatibility.md)。新游戏版本需要重新验证这些条件，不只修改版本字符串。
 
 安装与卸载由 [`package/install.ps1`](../package/install.ps1) 管理本扩展的 DLL 和安装记录，操作在同卷暂存并支持失败回滚。扩展不直接修改磁盘上的游戏 EXE。
 

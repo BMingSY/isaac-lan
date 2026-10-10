@@ -99,7 +99,7 @@ def main():
                             "SIDE " + name + " " in line
                             or name in ("home", "home-debug", "endings")
                             and "ENDINGS " in line
-                            or name == "audio"
+                            or name in ("audio", "motion", "floor-items", "mod-integrations")
                             and "LAN_NETWORK " in line
                             and "SIDE " not in line
                             or name == "lazarus"

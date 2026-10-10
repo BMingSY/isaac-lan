@@ -1,5 +1,5 @@
 local root = assert(arg[1])
-local reconcile = dofile(root .. "/src/bridge/state/grids.lua")
+local reconcile = dofile(root .. "/src/bridge/sync/grids.lua")
 local grids, events = {}, {}
 local function grid(kind)
     return {

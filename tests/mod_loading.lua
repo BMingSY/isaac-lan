@@ -21,7 +21,7 @@ env.require = function(name)
 end
 local inspection =
     { getinfo = debug.getinfo, getupvalue = debug.getupvalue, setupvalue = debug.setupvalue }
-local observe = assert(loadfile(root .. "/src/bridge/compat/observation.lua", "t", env))()
+local observe = assert(loadfile(root .. "/src/bridge/compat/mods/observation.lua", "t", env))()
 local mods = observe({
     observeMod = function(mod, source)
         observed.mod, observed.source = mod, source
@@ -40,7 +40,7 @@ assert(env.debug == nil and observed.name == "dependency", "Sandbox changed or M
 local ok, reason = pcall(env.require, "bad")
 assert(not ok and reason == "original module failure", "Original require failure changed")
 env._IsaacLan = { debug = inspection }
-local wrapping = assert(loadfile(root .. "/src/bridge/compat/wrapping.lua", "t", env))()
+local wrapping = assert(loadfile(root .. "/src/bridge/compat/mods/wrapping.lua", "t", env))()
 local captured = { identity = "private upvalue" }
 local function closure()
     return captured

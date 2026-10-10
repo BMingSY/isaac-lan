@@ -109,7 +109,7 @@ host.env.Isaac.GetRoomEntities = function()
     return entities
 end
 local authority =
-    assert(loadfile(root .. "/src/bridge/compat/goodtrip/authority.lua", "t", host.env))()
+    assert(loadfile(root .. "/src/bridge/compat/mods/goodtrip/authority.lua", "t", host.env))()
 authority.install(host.api)
 local lan = guest.api:RegisterMod({}, { id = authority.id, integrationVersion = 1 })
 resetRooms()

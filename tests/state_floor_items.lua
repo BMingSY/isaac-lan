@@ -1,11 +1,16 @@
 -- One LAN game: host/guest Forget Me Now, native five-pip floor, guest R Key.
 local native = assert(_IsaacLan)
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port
+if _IsaacLanTest then
+    host, port = _IsaacLanTest.host, _IsaacLanTest.port
+else
+    local f = assert(io.open("./lan-test-role.txt", "r"))
+    host = f:read("*l") == "host"
+    f:close()
+    f = assert(io.open("./lan-test-menu-port.txt", "r"))
+    port = f:read("*l")
+    f:close()
+end
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end

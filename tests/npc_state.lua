@@ -1,6 +1,6 @@
 local root = assert(arg[1])
-local codec = dofile(root .. "/src/bridge/state/codec.lua")
-local state = dofile(root .. "/src/bridge/state/npc.lua")
+local codec = dofile(root .. "/src/bridge/sync/codec.lua")
+local state = dofile(root .. "/src/bridge/sync/npc.lua")
 function Vector(x, y)
     return { X = x, Y = y }
 end

@@ -1,6 +1,6 @@
 # 第三方 Mod 接入 API v1
 
-Isaac LAN 提供本机视图、生命周期通知、主机动作和自动兼容注册。实现位于 [`src/bridge/api/`](../src/bridge/api/public.lua) 与 [`src/bridge/compat/`](../src/bridge/compat/registry.lua)，随 DLL 嵌入，在第三方 Mod 初始化前发布全局 `IsaacLAN`。
+Isaac LAN 提供本机视图、生命周期通知、主机动作和自动兼容注册。实现位于 [`src/bridge/api/`](../src/bridge/api/public.lua) 与 [`src/bridge/compat/`](../src/bridge/compat/mods/registry.lua)，随 DLL 嵌入，在第三方 Mod 初始化前发布全局 `IsaacLAN`。
 
 本版实现原设计的阶段 A（本机视图）和 B（玩法请求）。阶段 C 的补充状态、实体元数据、存档扩展和必需内容声明尚未提供；不会自动复制 `GetData()`、Mod 源码、配置或资源。动作传输使用协议 21，原生视图 schema 为 5，各端需要同一扩展构建。
 
@@ -246,7 +246,7 @@ end
 
 ### GoodTrip
 
-[`client.lua`](../src/bridge/compat/goodtrip/client.lua) 只处理原版界面入口、本机缓存和请求结果；[`authority.lua`](../src/bridge/compat/goodtrip/authority.lua) 负责清房、已访问目标、隐藏地图、封闭挑战／小 Boss 房、追逐战、Mom 限制、挑战房血量、诅咒房代价及秘密房路径。
+[`client.lua`](../src/bridge/compat/mods/goodtrip/client.lua) 只处理原版界面入口、本机缓存和请求结果；[`authority.lua`](../src/bridge/compat/mods/goodtrip/authority.lua) 负责清房、已访问目标、隐藏地图、封闭挑战／小 Boss 房、追逐战、Mom 限制、挑战房血量、诅咒房代价及秘密房路径。
 
 主机从实际请求角色读取数据，记录权威房间门提供的秘密房入口。无法确认所需秘密路径时明确拒绝 `secret_path_unknown`，不猜测入口。路径按原生迁移逐段完成，代价只在初始迁移接受后扣一次。死亡或路径中断有单独结果。固定目标迁移不会使用迷宫随机选房，也不在另一玩家模拟期间全局删除／恢复迷宫诅咒。
 
