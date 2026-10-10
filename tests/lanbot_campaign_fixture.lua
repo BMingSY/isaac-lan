@@ -26,7 +26,7 @@ for _, host in ipairs({ true, false }) do
             end,
         }
     end
-    local players = {}
+    local players, viewing = {}, false
     for slot = 0, 1 do
         local index = slot
         local methods = {
@@ -96,6 +96,7 @@ for _, host in ipairs({ true, false }) do
             return { ["0"] = 0, ["1"] = 1 }
         end,
         rooms_with_player = function(slot, fn)
+            assert(not viewing, "Nested player scope inside render view")
             fn()
             return true
         end,
@@ -168,7 +169,9 @@ for _, host in ipairs({ true, false }) do
                     return phase == 3
                 end,
                 withView = function(fn)
+                    viewing = true
                     fn()
+                    viewing = false
                 end,
             },
         },

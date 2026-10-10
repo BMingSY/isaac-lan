@@ -112,42 +112,6 @@ local function botStep()
                         and e.Variant == EffectVariant.HEAVEN_LIGHT_DOOR
                 then
                     readyExit = true
-                    if host and renders % 120 == 0 and e:ToPickup() then
-                        local pickup = e:ToPickup()
-                        local sprite = pickup:GetSprite()
-                        report(
-                            "CHEST_STATE stage="
-                                .. Game():GetLevel():GetStage()
-                                .. " state="
-                                .. pickup.State
-                                .. " wait="
-                                .. pickup.Wait
-                                .. " collision="
-                                .. pickup.EntityCollisionClass
-                                .. " animation="
-                                .. sprite:GetAnimation()
-                                .. " frame="
-                                .. sprite:GetFrame()
-                                .. " touched="
-                                .. tostring(pickup.Touched)
-                        )
-                        for slot = 0, 1 do
-                            actor(slot, function(p)
-                                report(
-                                    "CHEST_ACTOR slot="
-                                        .. slot
-                                        .. " distance="
-                                        .. p.Position:Distance(pickup.Position)
-                                        .. " collision="
-                                        .. p.EntityCollisionClass
-                                        .. " animation="
-                                        .. p:GetSprite():GetAnimation()
-                                        .. " extra_done="
-                                        .. tostring(p:IsExtraAnimationFinished())
-                                )
-                            end)
-                        end
-                    end
                 end
             end
         end
@@ -324,6 +288,35 @@ local function advance(t)
                 end
             end
             previous[slot] = Vector(p.Position.X, p.Position.Y)
+            if current >= 10 and t % 60 == 0 then
+                for _, e in ipairs(Isaac.GetRoomEntities()) do
+                    local pickup = e.Type == EntityType.ENTITY_PICKUP and e:ToPickup()
+                    if pickup and e.Variant == PickupVariant.PICKUP_BIGCHEST then
+                        report(
+                            "CHEST_STATE slot="
+                                .. slot
+                                .. " stage="
+                                .. current
+                                .. " state="
+                                .. pickup.State
+                                .. " wait="
+                                .. pickup.Wait
+                                .. " collision="
+                                .. pickup.EntityCollisionClass
+                                .. " animation="
+                                .. pickup:GetSprite():GetAnimation()
+                                .. " distance="
+                                .. p.Position:Distance(pickup.Position)
+                                .. " player_collision="
+                                .. p.EntityCollisionClass
+                                .. " player_animation="
+                                .. p:GetSprite():GetAnimation()
+                                .. " extra_done="
+                                .. tostring(p:IsExtraAnimationFinished())
+                        )
+                    end
+                end
+            end
             if not p:HasCollectible(CollectibleType.COLLECTIBLE_SPOON_BENDER) then
                 p:AddCollectible(CollectibleType.COLLECTIBLE_SPOON_BENDER)
                 p:AddCollectible(CollectibleType.COLLECTIBLE_POLAROID)
