@@ -96,6 +96,11 @@ def main():
         help="With --progress-fixture, unlock A Secret Exit only on the owned host and lock Dross",
     )
     parser.add_argument(
+        "--ascent-fixture",
+        action="store_true",
+        help="Unlock only Womb, Polaroid and A Strange Door on the owned host",
+    )
+    parser.add_argument(
         "--endings-fixture",
         action="store_true",
         help="Unlock routes only on the owned host and lock the owned guest before joining",
@@ -218,7 +223,7 @@ def main():
         parser.error("Scenario timeout must be between 10 and 3600 seconds")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
-    if args.endings_fixture or args.hush_fixture:
+    if args.endings_fixture or args.hush_fixture or args.ascent_fixture:
         args.progress_fixture = True
     if args.alt_path_fixture and not args.progress_fixture:
         parser.error("--alt-path-fixture requires --progress-fixture")
@@ -564,6 +569,8 @@ def main():
                         fixture.append("-AltPathFixture")
                     if args.endings_fixture:
                         fixture.append("-EndingsFixture")
+                    if args.ascent_fixture:
+                        fixture.append("-AscentFixture")
                     if args.hush_fixture:
                         fixture.append("-HushFixture")
                     print(execute(*fixture), flush=True)

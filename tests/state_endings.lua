@@ -20,6 +20,16 @@ local appeared = {}
 local scratchReported = {}
 local homeOnly = _IsaacLanTest.homeOnly
 local debug10 = _IsaacLanTest.debug10
+local dogmaWarning = _IsaacLanTest.dogmaWarning
+local warningFrames, attackFrames, warningAt = 0, 0, nil
+local dogmaAngelSeen = false
+local crawlspaceTest = _IsaacLanTest.crawlspace
+local crawlspaceReturns, crawlspaceSource, crawlspaceBoss = 0, nil, nil
+local crawlspaceEntrance, crawlspaceExit, crawlspaceDirection, crawlspaceAction
+local returnContext = crawlspaceTest
+    and _IsaacLanModules["compat/routes/crawlspace"](function()
+        return Game():GetLevel()
+    end, Vector)
 local debug10Enabled = false
 local debug10BeastWalking = false
 local homeVisuals = { sleep = 0, television = 0 }
@@ -264,7 +274,40 @@ local function fight(t)
     local clear = false
     actor(1, function(p)
         protect(p)
-        for _, e in ipairs(Isaac.GetRoomEntities()) do
+        local entities = Isaac.GetRoomEntities()
+        if dogmaWarning and not dogmaAngelSeen then
+            for _, e in ipairs(entities) do
+                if e.Type == 950 and e.Variant == 2 then
+                    dogmaAngelSeen = true
+                    -- Million-damage phase-one tears must not end phase two
+                    -- before its native warning and beam can be observed.
+                    for _, tear in ipairs(entities) do
+                        if tear.Type == EntityType.ENTITY_TEAR then
+                            tear:Remove()
+                        end
+                    end
+                    report("DOGMA_WAIT_FOR_WARNING tick=" .. t)
+                    break
+                end
+            end
+        end
+        for _, e in ipairs(entities) do
+            if dogmaWarning and e.Type == 1000 and e.Variant == 172 then
+                if e.SubType == 1 then
+                    local x, y = e.TargetPosition.X, e.TargetPosition.Y
+                    if e:Exists() and x * x + y * y > 1 and e.Visible then
+                        warningFrames, warningAt = warningFrames + 1, warningAt or t
+                        if warningFrames == 1 then
+                            report("DOGMA_WARNING tick=" .. t .. " x=" .. x .. " y=" .. y)
+                        end
+                    end
+                elseif e.SubType == 2 and e:Exists() and e.Visible then
+                    attackFrames = attackFrames + 1
+                    if attackFrames == 1 then
+                        report("DOGMA_ATTACK tick=" .. t)
+                    end
+                end
+            end
             if
                 e:ToNPC()
                 and (e:IsBoss() or e:IsActiveEnemy(false) or e.Type == 950 or e.Type == 951)
@@ -323,9 +366,11 @@ local function fight(t)
                 local warmup = e.Type == 950 and 200 or 30
                 if
                     not terminalWalking
+                    and (not dogmaWarning or e.Type ~= 950 or not dogmaAngelSeen or warningAt and t - warningAt > 150 and attackFrames > 0)
                     and t % 10 == 0
                     and t - appeared[key] >= warmup
                     and not e:IsDead()
+                    and e.HitPoints > 0
                 then
                     if e.Type == 950 or e.Type == 951 then
                         -- These bosses have non-damageable companion/intro
@@ -387,6 +432,14 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, function(_, gameOver)
     assert(not gameOver, "Ending route ended in a defeat")
     assert(wins == caseIndex - 1, "Duplicate native win callback")
     assert(bosses[terminal[cases[caseIndex]]], "Win callback without the expected terminal Boss")
+    if dogmaWarning then
+        assert(warningFrames > 5, "Dogma pre-attack warning was not observed")
+        assert(attackFrames > 0, "Dogma actual beam attack was not observed")
+        report("DOGMA_WARNING_PASS warnings=" .. warningFrames .. " attacks=" .. attackFrames)
+    end
+    if crawlspaceTest then
+        assert(crawlspaceReturns == 2, "Native Ascent crawlspace returns were not checked")
+    end
     if homeOnly then
         assert(
             host and homeVisuals.sleep > 10 or not host and homeVisuals.sleep == 0,
@@ -628,7 +681,7 @@ local function advance(t)
             report("PREREQUISITE_FIXTURE knife_pieces=626,627")
         end
         prepare(
-            name == "ascent" and (homeOnly and 13 or 1)
+            name == "ascent" and (homeOnly and 13 or crawlspaceTest and 6 or 1)
                 or name == "mother" and 2
                 or name == "delirium" and 8
                 or 6,
@@ -858,6 +911,136 @@ local function advance(t)
             move(destination, t)
             mark(old == "strange-door" and "entrance" or "boss-enter", t)
             report("NATIVE_ROUTE_DOOR opened=" .. destination)
+        end
+    elseif
+        step == "ascent-first"
+        and crawlspaceTest
+        and crawlspaceReturns < 2
+        and t - stepAt > 110
+        and findRoom(function(d)
+            return d.Data.Type == RoomType.ROOM_TREASURE
+        end)
+        and findRoom(function(d)
+            return d.Data.Type == RoomType.ROOM_BOSS
+        end)
+    then
+        crawlspaceSource = assert(
+            findRoom(function(d)
+                return d.Data.Type == RoomType.ROOM_TREASURE
+            end),
+            "Missing native Ascent item room"
+        )
+        crawlspaceBoss = assert(
+            findRoom(function(d)
+                return d.Data.Type == RoomType.ROOM_BOSS
+            end),
+            "Missing native Ascent Boss room"
+        )
+        assert(crawlspaceSource ~= crawlspaceBoss)
+        move(crawlspaceBoss, t, 0, 0)
+        move(crawlspaceSource, t)
+        mark("crawlspace-ready", t)
+    elseif step == "crawlspace-ready" and t - stepAt > 110 then
+        actor(1, function(p)
+            assert(level:GetCurrentRoomIndex() == crawlspaceSource)
+            local room = Game():GetRoom()
+            crawlspaceEntrance = room:FindFreePickupSpawnPosition(Vector(160, 220), 0, true)
+            local index = room:GetGridIndex(crawlspaceEntrance)
+            room:RemoveGridEntity(index, 0, false)
+            assert(room:SpawnGridEntity(index, GridEntityType.GRID_STAIRS, 0, 1234, 0))
+            crawlspaceEntrance = room:GetGridPosition(index)
+            p.Position = crawlspaceEntrance + Vector(60, 0)
+        end)
+        mark("crawlspace-enter", t)
+    elseif step == "crawlspace-enter" then
+        if native.rooms_positions()["1"].index == -4 then
+            actor(1, function()
+                assert(
+                    level.DungeonReturnRoomIndex == crawlspaceSource,
+                    "Crawlspace lost its item-room origin"
+                )
+                local room = Game():GetRoom()
+                local kinds = {}
+                crawlspaceExit, crawlspaceDirection, crawlspaceAction = nil, Vector(-1, 0), 0
+                local ladder
+                for i = 0, room:GetGridSize() - 1 do
+                    local g = room:GetGridEntity(i)
+                    if g then
+                        kinds[#kinds + 1] = g:GetType() .. ":" .. g:GetVariant()
+                        if g:GetType() == GridEntityType.GRID_STAIRS then
+                            crawlspaceExit = g.Position
+                        elseif
+                            g:GetType() == GridEntityType.GRID_DECORATION
+                            and g:GetVariant() == 10
+                            and (not ladder or g.Position.Y < ladder.Y)
+                        then
+                            ladder = g.Position
+                        end
+                    end
+                end
+                if not crawlspaceExit and ladder then
+                    crawlspaceExit, crawlspaceDirection, crawlspaceAction = ladder, Vector(0, -1), 1
+                end
+                for slot = 0, 7 do
+                    local door = room:GetDoor(slot)
+                    if door and door.TargetRoomIndex == crawlspaceSource then
+                        crawlspaceExit = door.Position
+                        crawlspaceDirection = ({
+                            Vector(-1, 0),
+                            Vector(0, -1),
+                            Vector(1, 0),
+                            Vector(0, 1),
+                        })[door.Direction + 1]
+                        crawlspaceAction = door.Direction
+                    end
+                end
+                report(
+                    "CRAWLSPACE_ENTER origin="
+                        .. crawlspaceSource
+                        .. " grids="
+                        .. table.concat(kinds, ",")
+                )
+                -- The dungeon's decoration-10 ladder exits through its top.
+                -- Climb the actual ladder; there is no horizontal room door.
+                assert(crawlspaceExit, "Missing native dungeon ladder or exit")
+            end)
+            mark("crawlspace-return", t)
+        else
+            actor(1, function(p)
+                local away = (t - stepAt) % 60 < 20
+                p.Position = crawlspaceEntrance + Vector(away and 60 or 4, 0)
+                p.Velocity = Vector(away and -1 or 1, 0)
+            end)
+        end
+    elseif step == "crawlspace-return" then
+        assert(native.rooms_positions()["0"].index == crawlspaceBoss)
+        if native.rooms_positions()["1"].index ~= -4 then
+            assert(
+                native.rooms_positions()["1"].index == crawlspaceSource,
+                "Guest returned to the host Boss room"
+            )
+            crawlspaceReturns = crawlspaceReturns + 1
+            shoot = -1
+            report(
+                "ASCENT_RETURN count="
+                    .. crawlspaceReturns
+                    .. " guest="
+                    .. crawlspaceSource
+                    .. " host="
+                    .. crawlspaceBoss
+            )
+            mark(crawlspaceReturns == 2 and "ascent-first" or "crawlspace-ready", t)
+        elseif t - stepAt > 110 then
+            actor(1, function(p)
+                assert(
+                    level.DungeonReturnRoomIndex == crawlspaceSource,
+                    "Host scope overwrote the return origin"
+                )
+                local away = (t - stepAt) % 60 < 20
+                p.Position = crawlspaceExit + crawlspaceDirection * (away and -60 or 4)
+                p.Velocity = crawlspaceDirection * (away and -1 or 1)
+            end)
+            shoot = crawlspaceAction
         end
     elseif step == "ascent-first" and t - stepAt > 110 then
         local exit = findRoom(function(d)
@@ -1107,7 +1290,7 @@ local function advance(t)
         end
     end)
     assert(
-        t - stepAt < (step == "beast-fight" and 3500 or 1500),
+        t - stepAt < (step == "beast-fight" and (dogmaWarning and 10000 or 3500) or 1500),
         "Route stalled at " .. step .. " stage=" .. stage .. ":" .. kind
     )
 end
@@ -1153,6 +1336,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     homeWalking,
                     terminalWalking,
                     debug10BeastWalking,
+                    crawlspaceReturns,
                 })
         end,
         function(bytes, t, ack)
@@ -1162,8 +1346,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             if ok == false then
                 return false
             end
+            if crawlspaceTest then
+                assert(native.api_with_local_view(function()
+                    assert(
+                        returnContext.capture() == _IsaacLanState.decode(body)[11][7],
+                        "Replica crawlspace return context differs"
+                    )
+                end))
+            end
             assert(meta[1] == caseIndex, "Ending case changed without a native win")
             terminalWalking = meta[5]
+            crawlspaceReturns = meta[7]
             if meta[6] and not debug10BeastWalking then
                 debug10BeastWalking = true
                 homeOrigin, homeDistance, homeMovement = nil, 0, false
@@ -1219,9 +1412,50 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 end
             end
             assert(native.api_with_local_view(function()
+                local warnings, replicasByID = {}, {}
+                if dogmaWarning then
+                    for _, v in ipairs(_IsaacLanState.decode(body)[11][3]) do
+                        if v[2] == 1000 and v[3] == 172 and (v[4] == 1 or v[4] == 2) then
+                            warnings[v[1]] = v
+                        end
+                    end
+                end
                 for _, e in ipairs(Isaac.GetRoomEntities()) do
-                    if e:ToNPC() then
-                        observeBoss(e)
+                    if e:Exists() then
+                        local identifier = e:GetData().__isaac_lan_replica
+                        if identifier then
+                            replicasByID[identifier] = e
+                        end
+                        if e:ToNPC() then
+                            observeBoss(e)
+                        end
+                    end
+                end
+                -- Native Remove marks an entity before EntityList sweeps it.
+                -- Check every current snapshot entity, excluding retired ones.
+                for identifier, v in pairs(warnings) do
+                    local e = assert(replicasByID[identifier], "Replica Dogma effect missing")
+                    assert(e.Visible == v[8][4], "Replica Dogma effect visibility differs")
+                    if v[4] == 1 then
+                        local expected = v[24]
+                        assert(
+                            string.pack(">ff", e.TargetPosition.X, e.TargetPosition.Y) == expected,
+                            "Replica Dogma warning direction differs"
+                        )
+                        local x, y = string.unpack(">ff", expected)
+                        if x * x + y * y > 1 and e.Visible then
+                            warningFrames = warningFrames + 1
+                            if warningFrames == 1 then
+                                report(
+                                    "DOGMA_WARNING_REPLICA tick=" .. t .. " x=" .. x .. " y=" .. y
+                                )
+                            end
+                        end
+                    elseif e.Visible then
+                        attackFrames = attackFrames + 1
+                        if attackFrames == 1 then
+                            report("DOGMA_ATTACK_REPLICA tick=" .. t)
+                        end
                     end
                 end
             end))

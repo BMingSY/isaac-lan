@@ -45,6 +45,14 @@ local function stateEnvironment()
             ["presentation/items"] = dofile(root .. "/src/bridge/presentation/items.lua"),
             ["runtime/floor"] = dofile(root .. "/src/bridge/runtime/floor.lua"),
             ["sync/npc"] = dofile(root .. "/src/bridge/sync/npc.lua"),
+            ["sync/curses"] = dofile(root .. "/src/bridge/sync/curses.lua"),
+            ["compat/items/black_candle"] = dofile(
+                root .. "/src/bridge/compat/items/black_candle.lua"
+            ),
+            ["compat/routes/crawlspace"] = dofile(
+                root .. "/src/bridge/compat/routes/crawlspace.lua"
+            ),
+            ["compat/bosses/dogma"] = dofile(root .. "/src/bridge/compat/bosses/dogma.lua"),
             ["compat/characters/lazarus"] = dofile(
                 root .. "/src/bridge/compat/characters/lazarus.lua"
             ),

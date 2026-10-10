@@ -18,6 +18,10 @@ sync/grids
 presentation/items
 runtime/floor
 sync/npc
+sync/curses
+compat/items/black_candle
+compat/routes/crawlspace
+compat/bosses/dogma
 compat/characters/lazarus
 compat/characters/blue_baby
 api/codec

@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][int]$GameProcessId, [switch]$HostFixture, [switch]$AltPathFixture, [switch]$EndingsFixture, [switch]$HushFixture)
+param([Parameter(Mandatory = $true)][int]$GameProcessId, [switch]$HostFixture, [switch]$AltPathFixture, [switch]$EndingsFixture, [switch]$HushFixture, [switch]$AscentFixture)
 $ErrorActionPreference = 'Stop'
 $process = Get-Process -Id $GameProcessId
 if ($process.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') {
@@ -38,6 +38,17 @@ try {
         throw 'Cannot set counter fixture.'
     }
     Write-Output "Fixture achievement640=$($achievement[0]) counter522=$counter"
+    if ($AscentFixture -and $HostFixture) {
+        # Womb, Polaroid and A Strange Door are the Ascent prerequisites.
+        # Keep the remaining pool and character unlocks at the lab baseline.
+        [byte[]]$unlocked = @(1)
+        foreach ($id in @(4, 57, 635)) {
+            if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + $id), $unlocked, [UIntPtr]([uint32]1), [ref]$count)) {
+                throw 'Cannot set Ascent prerequisite fixture.'
+            }
+        }
+        Write-Output 'Fixture Ascent prerequisites achievement4=1 achievement57=1 achievement635=1'
+    }
     if ($EndingsFixture) {
         if ($HostFixture) {
             [byte[]]$routes = New-Object byte[] 642

@@ -12,8 +12,19 @@ local env = setmetatable({
     EntityGridCollisionClass = { GRIDCOLL_NONE = 0 },
 }, { __index = _G })
 local laserReads, laserWrites = 0, 0
+local geometry = string.pack(">ff", 520, -180)
+local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(env.Vector)
 local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "t", env))()(
     {
+        entity_prepare = function()
+            return true
+        end,
+        entity_shadow = function()
+            return ""
+        end,
+        sprite_state = function(_, bytes)
+            return bytes and {} or ""
+        end,
         laser_path = function(_, bytes)
             if bytes then
                 assert(bytes == "native laser path")
@@ -29,7 +40,8 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
         capture = function()
             return false
         end,
-    }
+    },
+    dogma
 )
 local function entity(kind, flags)
     local e = {
@@ -71,6 +83,9 @@ local function entity(kind, flags)
     function e:ToNPC()
         return nil
     end
+    function e:ToEffect()
+        return self
+    end
     function e:GetSprite()
         return self.sprite
     end
@@ -98,6 +113,33 @@ assert(target.DepthOffset == -9990, "Repeated snapshots must not accumulate the 
 local actor, replica = entity(1, 1), entity(1, 128)
 component.apply(replica, component.capture(actor, false))
 assert(replica.flags == 129, "Replica actor must retain its native lifecycle flags")
+local warning, beam = entity(1000, 1), entity(1000, 0)
+warning.Variant, warning.SubType, warning.TargetPosition = 172, 1, env.Vector(520, -180)
+for _, e in ipairs({ warning, beam }) do
+    local s = e.sprite
+    s.Scale, s.Offset, s.Color = e.SpriteScale, e.SpriteOffset, e.Color
+    s.FlipX, s.FlipY, s.Rotation = false, false, 0
+    for _, name in ipairs({ "GetFilename", "GetAnimation", "GetOverlayAnimation" }) do
+        s[name] = function()
+            return ""
+        end
+    end
+    for _, name in ipairs({ "GetFrame", "GetOverlayFrame" }) do
+        s[name] = function()
+            return 0
+        end
+    end
+    function s:RemoveOverlay() end
+end
+local wire = dofile(root .. "/src/bridge/sync/codec.lua")
+local value = wire.decode(wire.encode(component.capture(warning)))
+assert(value[24] == geometry)
+component.apply(beam, value)
+assert(
+    beam.Variant == 172
+        and beam.SubType == 1
+        and string.pack(">ff", beam.TargetPosition.X, beam.TargetPosition.Y) == geometry
+)
 source.MaxDistance = {}
 assert(not pcall(component.capture, source, false), "Unsupported userdata scalar must be rejected")
 source.MaxDistance = math.huge

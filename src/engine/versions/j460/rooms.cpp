@@ -89,8 +89,11 @@ struct Key {
 };
 // Only scalar fields are virtualized. Engine containers, sprites and cameras
 // retain their native owners; no MSVC STL object is copied through MinGW.
-constexpr std::array<std::size_t, 32> contextOffsets = {
+constexpr std::array<std::size_t, 35> contextOffsets = {
     0x18304, 0x18308, 0x1830c, 0x18310, 0x18318, 0x1831c, 0x182c8, 0x1ad90,
+    // Native special-room exits and arrival positioning consume this origin.
+    // It belongs to the selected room, not the host's canonical viewport.
+    0x18320, 0x18324, 0x18328,
     // EntityList::Update writes these HUD boss-health caches for its room.
     0x22e94, 0x22e98, 0x22e9c,
     // Room::Init resets the global color modifier. Every occupied room must
