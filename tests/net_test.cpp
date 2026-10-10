@@ -1,6 +1,6 @@
-#include "lan_session.h"
-#include "progression.h"
-#include "state_compression.h"
+#include "net/session.h"
+#include "runtime/progression.h"
+#include "net/compression.h"
 #include "test_support.h"
 #include <windows.h>
 #include <algorithm>

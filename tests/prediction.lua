@@ -20,7 +20,7 @@ end
 local function close(a, b)
     assert(math.abs(a.X - b.X) < 0.00001 and math.abs(a.Y - b.Y) < 0.00001)
 end
-local prediction = assert(loadfile(root .. "/src/bridge/prediction.lua"))()
+local prediction = assert(loadfile(root .. "/src/bridge/presentation/prediction.lua"))()
 local right, left, stop = Vector(1, 0), Vector(-1, 0), Vector(0, 0)
 local origin, speed, dt = Vector(100, 200), 264.705882, 1 / 60
 local p = prediction.new(origin)

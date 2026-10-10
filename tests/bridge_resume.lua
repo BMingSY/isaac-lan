@@ -56,9 +56,9 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     }
     _IsaacLanState = { reset = noop }
     _IsaacLanModules = {
-        ["compat/observation"] = dofile(root .. "/src/bridge/compat/observation.lua"),
+        ["compat/mods/observation"] = dofile(root .. "/src/bridge/compat/mods/observation.lua"),
         ["api/public"] = { poll = noop, commit = noop, reset = noop, actions = { step = noop } },
-        ["compat/registry"] = { observeMod = noop, observeRequire = noop },
+        ["compat/mods/registry"] = { observeMod = noop, observeRequire = noop },
         ["lanbot/observe"] = function()
             return { read = noop }
         end,
@@ -68,7 +68,7 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
         end,
     }
     RegisterMod, require = originalRegisterMod, originalRequire
-    dofile(root .. "/src/bridge/main.lua")
+    dofile(root .. "/src/bridge/app/main.lua")
     _IsaacLanFrame()
     callbacks[ModCallbacks.MC_POST_GAME_STARTED](nil, true)
     assert(assigned[1] == 1 and assigned[2] == 2, "Continue lost or duplicated a LAN slot")

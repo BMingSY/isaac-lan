@@ -254,7 +254,7 @@ local target = {
         end,
     },
 }
-local wrapping = host.env._IsaacLanModules["compat/wrapping"]
+local wrapping = host.env._IsaacLanModules["compat/mods/wrapping"]
 wrapping.callbacks(target, function(record, ...)
     return record.original(...)
 end)
@@ -401,8 +401,8 @@ for _, build in ipairs({
         end,
     }
     p.env.EID = eid
-    local adapter = assert(loadfile(root .. "/src/bridge/compat/eid.lua", "t", p.env))()
-    local r = p.env._IsaacLanModules["compat/registry"]
+    local adapter = assert(loadfile(root .. "/src/bridge/compat/mods/eid.lua", "t", p.env))()
+    local r = p.env._IsaacLanModules["compat/mods/registry"]
     r.observeMod(eid, "eid-source")
     r.poll()
     assert(r.status()[1].state == "active", "Supported EID adapter was not installed")
@@ -499,8 +499,8 @@ do
                 or lifecycle
         end,
     }
-    assert(loadfile(root .. "/src/bridge/compat/stats_plus.lua", "t", p.env))()
-    local r = p.env._IsaacLanModules["compat/registry"]
+    assert(loadfile(root .. "/src/bridge/compat/mods/stats_plus.lua", "t", p.env))()
+    local r = p.env._IsaacLanModules["compat/mods/registry"]
     r.observeRequire("stats-source", "services.PlayerService", { PlayerService = playerClass })
     r.observeRequire("stats-source", "services.extension.API", { API = apiClass })
     r.observeRequire(
@@ -560,7 +560,7 @@ do
     }
     local id = "isaac-lan.compat.goodtrip"
     local lan = p.api:RegisterMod({}, { id = id, integrationVersion = 1 })
-    p.env._IsaacLanModules["compat/goodtrip/authority"] = {
+    p.env._IsaacLanModules["compat/mods/goodtrip/authority"] = {
         id = id,
         install = function()
             return function() end
@@ -597,8 +597,8 @@ do
         end,
     }
     p.env.gt = gt
-    assert(loadfile(root .. "/src/bridge/compat/goodtrip/client.lua", "t", p.env))()
-    p.env._IsaacLanModules["compat/registry"].observeMod(gt, "goodtrip-source")
+    assert(loadfile(root .. "/src/bridge/compat/mods/goodtrip/client.lua", "t", p.env))()
+    p.env._IsaacLanModules["compat/mods/registry"].observeMod(gt, "goodtrip-source")
     gt:AddCallback(p.env.ModCallbacks.MC_POST_RENDER, gt.step)
     p.bridge.commit()
     player = nil

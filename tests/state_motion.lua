@@ -1,17 +1,24 @@
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated authoritative state regression" }
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port
+if _IsaacLanTest then
+    host, port = _IsaacLanTest.host, _IsaacLanTest.port
+else
+    local f = assert(io.open("./lan-test-role.txt", "r"))
+    host = f:read("*l") == "host"
+    f:close()
+    f = assert(io.open("./lan-test-menu-port.txt", "r"))
+    port = f:read("*l")
+    f:close()
+end
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end
 local renders, linked, chosen, finished = 0, false, false, false
-local motionFile, moveSign, motionSamples =
-    host and nil or assert(io.open("./lan-test-digest-motion.csv", "w")), 0, 0
+local motionFile, moveSign, motionSamples = nil, 0, 0
+if not host and io then
+    motionFile = assert(io.open("./lan-test-digest-motion.csv", "w"))
+end
 local lastAuthority, wallFrames, settledFrames = nil, 0, 0
 local originalFrame = _IsaacLanFrame
 local ticks, corrected, samples = 0, 0, 0
@@ -104,7 +111,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, function(slot, t)
         local bytes = collect(slot, t)
-        if t == 150 or t == 300 then
+        if io and (t == 150 or t == 300) then
             local out = assert(io.open("./authority-" .. t .. ".bin", "wb"))
             out:write(bytes)
             out:close()
@@ -154,7 +161,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
 end
 
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
-    if host or not _IsaacLanStatus().prepared or not motionFile then
+    if host or finished or not _IsaacLanStatus().prepared then
         return
     end
     local p
@@ -169,17 +176,19 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
         return
     end
     motionSamples = motionSamples + 1
-    motionFile:write(
-        string.format(
-            "%.3f,%d,%d,%.6f,%.6f,%d\n",
-            Isaac.GetTime() / 1000,
-            _IsaacLanStatus().verified,
-            samples,
-            p.Position.X,
-            p.Position.Y,
-            moveSign
+    if motionFile then
+        motionFile:write(
+            string.format(
+                "%.3f,%d,%d,%.6f,%.6f,%d\n",
+                Isaac.GetTime() / 1000,
+                _IsaacLanStatus().verified,
+                samples,
+                p.Position.X,
+                p.Position.Y,
+                moveSign
+            )
         )
-    )
+    end
     if samples >= 650 and samples < 710 then
         assert(p.Position.X < 540, "Prediction crossed the rock barrier")
         wallFrames = wallFrames + 1

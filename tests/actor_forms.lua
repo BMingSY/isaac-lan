@@ -1,5 +1,5 @@
 local root = assert(arg[1])
-local module = dofile(root .. "/src/bridge/state/forms.lua")
+local module = dofile(root .. "/src/bridge/compat/characters/lazarus.lua")
 local function body(kind, controller)
     return {
         ControllerIndex = controller or 2,

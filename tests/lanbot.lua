@@ -790,15 +790,15 @@ test("embedded console entry dispatches lanbot and returns nil", function()
         return true
     end
     bridge.reset = function() end
-    modules["api/public"], modules["compat/registry"] = bridge, {}
-    modules["compat/observation"] = dofile(root .. "/src/bridge/compat/observation.lua")
+    modules["api/public"], modules["compat/mods/registry"] = bridge, {}
+    modules["compat/mods/observation"] = dofile(root .. "/src/bridge/compat/mods/observation.lua")
     _IsaacLan, _IsaacLanModules = native, modules
     RegisterMod = function()
         return {}
     end
     ModCallbacks =
         { MC_EXECUTE_CMD = 1, MC_POST_GAME_STARTED = 2, MC_POST_UPDATE = 3, MC_PRE_GAME_EXIT = 4 }
-    dofile(root .. "/src/bridge/main.lua")
+    dofile(root .. "/src/bridge/app/main.lua")
     assert(callbacks[1](nil, "another_command", "on") == nil and #output == 0)
     assert(callbacks[1](nil, "lanbot", "on") == nil and output[1]:find("running"))
     _IsaacLanBotFrame(1)

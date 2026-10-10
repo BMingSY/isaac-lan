@@ -42,16 +42,17 @@ flowchart LR
 
 | 模块 | 职责 |
 | --- | --- |
-| [`loader.cpp`](../src/loader.cpp)、[`probe.cpp`](../src/probe.cpp) | 自动加载、启动校验、原生挂钩与 Lua API 绑定 |
-| [`game_build.cpp`](../src/game_build.cpp) | 游戏版本、PE 布局和挂钩入口校验 |
-| [`lan_session.cpp`](../src/lan_session.cpp)、[`net_protocol.h`](../src/net_protocol.h) | 连接、协议、消息队列、输入、状态和可靠事务 |
-| [`runtime_net.cpp`](../src/runtime_net.cpp) | 将网络会话接到游戏更新、状态桥接、换层和存档生命周期 |
-| [`bridge/state.lua`](../src/bridge/state.lua) | 状态字段、序列化、实体视图应用与移动预测 |
-| [`engine_rooms.cpp`](../src/engine_rooms.cpp) | 原生房间上下文、分房更新、角色迁移与本机视图 |
-| [`engine_input.cpp`](../src/engine_input.cpp) | 控制器归属、网络输入、按键边沿与本机 UI 输入 |
-| [`engine_visuals.cpp`](../src/engine_visuals.cpp)、[`engine_audio.cpp`](../src/engine_audio.cpp)、[`engine_presentation.cpp`](../src/engine_presentation.cpp) | 原生精灵、音效、音乐及 Boss 播报的同步与归属 |
-| [`engine_save.cpp`](../src/engine_save.cpp)、[`engine_rewind.cpp`](../src/engine_rewind.cpp) | 原生存档序列化和全队回退 |
-| [`frontend.cpp`](../src/frontend.cpp)、[`bridge/menu.lua`](../src/bridge/menu.lua) | 官方／局域网入口、原生风格菜单、本机 HUD 和 Ping 显示 |
+| [`app/`](../src/app/bootstrap.cpp) | 自动加载与启动装配 |
+| [`engine/build.cpp`](../src/engine/build.cpp)、[`engine/versions/j460/`](../src/engine/versions/j460/entrypoints.h) | 游戏版本、PE 布局、入口校验及 J460 原生能力实现 |
+| [`net/`](../src/net/session.cpp) | 连接、协议、消息队列、输入、状态与可靠事务传输 |
+| [`runtime/`](../src/runtime/session.cpp) | 网络与游戏更新、换层、存档和会话生命周期协调 |
+| [`bridge/app/world.lua`](../src/bridge/app/world.lua) | 组合状态组件、兼容规则和本机表现，维护视图身份与确认记录 |
+| [`bridge/sync/`](../src/bridge/sync/world_schema.lua) | 显式字段、编码、库存及实体／网格同步组件 |
+| [`compat/`](../src/compat/bosses/encounters.h)、[`bridge/compat/`](../src/bridge/compat/transitions.lua) | Boss、角色、道具、路线与第三方 Mod 适配 |
+| [`presentation/`](../src/presentation/frontend.cpp)、[`bridge/presentation/`](../src/bridge/presentation/motion.lua) | 原生菜单、预测、镜头、角色外观与音画表现 |
+| [`core/`](../src/core/intro_barrier.h)、[`diagnostics/`](../src/diagnostics/runtime_log.cpp) | 可移植规则、运行日志和隔离画面采集 |
+
+具体依赖、所有权、原生后端尚存的耦合及新增兼容流程见[分层与玩法兼容](layers-and-compatibility.md)。
 
 游戏对象、Lua 调用和网络轮询都在游戏主线程处理。
 

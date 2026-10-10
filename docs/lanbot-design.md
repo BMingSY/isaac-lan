@@ -192,9 +192,9 @@ flowchart TD
 | --- | --- |
 | `src/bridge/lanbot.lua` | 命令、状态机、模式与风格配置，协调各决策模块 |
 | `src/bridge/lanbot/` | 本机观察、房间与楼层规划、网格寻路、实时危险评估及武器策略 |
-| `src/bridge/main.lua` | 接入控制台命令、本机决策和会话清理 |
-| `src/engine_input.cpp` 与 `.h` | 合成人工／人机输入，统一采集与预测入口，清理边沿 |
-| `src/runtime_net.cpp` | 按需要接入输入刷新时序、玩法可用状态及控制台可见性，不新增消息类型 |
+| `src/bridge/app/main.lua` | 接入控制台命令、本机决策和会话清理 |
+| `src/engine/versions/j460/input.cpp` 与 `.h` | 合成人工／人机输入，统一采集与预测入口，清理边沿 |
+| `src/runtime/session.cpp` | 按需要接入输入刷新时序、玩法可用状态及控制台可见性，不新增消息类型 |
 | `CMakeLists.txt` 与嵌入桥接配置 | 将人机模块随 DLL 打包，登记必要测试 |
 | `tests/` | 命令、观察适配、规划、战斗与输入契约测试；真实双实例场景另行验收 |
 

@@ -64,7 +64,7 @@ Hypothesis 可以额外运行缓存失败样例并执行缩减；表中是生成
 | `tests/offline/lua_worker.lua` | 持续运行的 Lua 5.3 进程，执行生产模块 |
 | `tests/fixtures/offline_*.lua` | 小型玩家、实体和运动模型，明确支持的接口 |
 
-生产环境和测试共用 `src/bridge/state/codec.lua`、`inventory.lua`、`entities.lua`。原有协议格式保持不变；状态桥接负责原生读写、精灵、楼层及呈现，共用模块负责编解码、资源应用和实体分配／关系恢复。
+生产环境和测试共用 `src/bridge/sync/codec.lua`、`inventory.lua`、`entities.lua`。原有协议格式保持不变；状态桥接负责原生读写、精灵、楼层及呈现，共用模块负责编解码、资源应用和实体分配／关系恢复。
 
 第一阶段覆盖：
 

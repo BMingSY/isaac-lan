@@ -1,6 +1,6 @@
 -- Deliberately small player/config contract. Unknown methods fail immediately.
 return function(root, sharedResources)
-    local module = dofile(root .. "/src/bridge/state/inventory.lua")
+    local module = dofile(root .. "/src/bridge/sync/inventory.lua")
     local fixture = {}
     local methods = {}
     local function active(id)

@@ -6,7 +6,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ("lazarus", "poop", "knife", "hush")
-DIAGNOSTICS = ("audio", "rewind", "home-debug", "home", "endings")
+DIAGNOSTICS = (
+    "audio",
+    "rewind",
+    "home-debug",
+    "home",
+    "endings",
+    "motion",
+    "floor-items",
+    "mod-integrations",
+)
 
 
 def build(output, cases=CASES):
@@ -19,6 +28,9 @@ def build(output, cases=CASES):
             "home-debug": "state_endings.lua",
             "rewind": "state_hourglass.lua",
             "endings": "state_endings.lua",
+            "motion": "state_motion.lua",
+            "floor-items": "state_floor_items.lua",
+            "mod-integrations": "state_mod_integrations.lua",
         }.get(name, "state_side_routes.lua")
         source = (ROOT / "tests" / filename).read_text()
         if name in ("home", "home-debug"):
@@ -26,6 +38,12 @@ def build(output, cases=CASES):
                 'local cases = { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }',
                 'local cases = { "ascent" }',
             )
+        cleanup = ""
+        if name == "motion":
+            cleanup = "if motionFile then motionFile:close(); motionFile = nil end\n"
+        elif name == "mod-integrations":
+            cleanup = "native.api_send, native.api_receive = send, receive\nlan:Unregister()\n"
+        complete = "ended" if name == "audio" else "finished"
         fixtures.append(
             'function() _IsaacLanTest.route = "'
             + name
@@ -37,8 +55,12 @@ def build(output, cases=CASES):
             + ("true" if name == "rewind" else "false")
             + "\n"
             + source
-            + "\nreturn function() return "
-            + ("ended" if name == "audio" else "finished")
+            + "\nlocal cleanedUp = false\nreturn function()\nif "
+            + complete
+            + " and not cleanedUp then\ncleanedUp = true\n"
+            + cleanup
+            + "native.test_gamepad(0)\nend\nreturn "
+            + complete
             + " end end"
         )
     driver = (ROOT / "tests/special_suite_driver.lua").read_text()

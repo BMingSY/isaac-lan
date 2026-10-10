@@ -40,6 +40,8 @@ def main():
         special = Path(temporary) / "special.lua"
         build_special(special)
         subprocess.run([LUAC, "-p", str(special)], check=True)
+        build_special(special, ["motion", "floor-items", "mod-integrations"])
+        subprocess.run([LUAC, "-p", str(special)], check=True)
     print("PASS Python, Lua and bundled gameplay syntax")
 
 

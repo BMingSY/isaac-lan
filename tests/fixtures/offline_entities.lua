@@ -1,6 +1,6 @@
 -- Allocations differ from authoritative IDs; only selected-room entities are enumerated.
 return function(root)
-    local reconcile = dofile(root .. "/src/bridge/state/entities.lua")
+    local reconcile = dofile(root .. "/src/bridge/sync/entities.lua")
     local fixture, allocations, refs, spawned, removed, room = {}, {}, {}, 0, 0, "0:1"
     local function new(id, kind, variant, subtype, selectedRoom)
         local e = {

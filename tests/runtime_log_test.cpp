@@ -1,4 +1,4 @@
-#include "runtime_log.h"
+#include "diagnostics/runtime_log.h"
 #include "test_support.h"
 #include <windows.h>
 #include <filesystem>
