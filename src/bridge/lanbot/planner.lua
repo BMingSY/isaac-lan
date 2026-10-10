@@ -190,9 +190,10 @@ return function(nav)
     local function retreatFromClosedExit(obs, contact)
         local best, distance, waiting
         for _, zone in ipairs(obs.map.zones or {}) do
-            local radius = (contact == zone.id and zone.contactRadius or zone.radius)
-                + obs.actor.radius
-                + 12
+            -- Retreat beyond the observed contact boundary: braking near a
+            -- waypoint must not leave an actor inside the wait-clear region.
+            local radius = contact == zone.id and zone.contactRadius + obs.actor.radius + 24
+                or zone.radius + obs.actor.radius + 12
             if
                 zone.exit
                 and (zone.closed or contact == zone.id)

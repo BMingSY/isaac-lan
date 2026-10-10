@@ -1024,82 +1024,91 @@ test("closed Boss exit retreats, waits for native opening and then contacts it",
     room.GetGridEntity, player.Position, player.Velocity = getGrid, oldPosition, oldVelocity
 end)
 test("both actors leave a chest so native collision delay can expire before re-entry", function()
-    local bots, sources, observations = {}, {}, {}
-    local bodies = { { x = 200, y = 160, vx = 0, vy = 0 }, { x = 225, y = 190, vx = 0, vy = 0 } }
-    local delay, opened, away, sawContact = 10, false, false, false
-    for slot = 1, 2 do
-        local bot, source, obs = fixture()
-        bots[slot], sources[slot], observations[slot] = bot, source, obs
-        obs.actor = bodies[slot]
-        for key, value in pairs(snapshot().actor) do
-            if obs.actor[key] == nil then
-                obs.actor[key] = value
+    for _, boundary in ipairs({ 0, 81 }) do
+        local bots, sources, observations = {}, {}, {}
+        local bodies =
+            { { x = 200, y = 160, vx = 0, vy = 0 }, { x = 225, y = 190, vx = 0, vy = 0 } }
+        if boundary > 0 then
+            bodies = {
+                { x = 200 + boundary, y = 160, vx = 0, vy = 0 },
+                { x = 200, y = 160 + boundary, vx = 0, vy = 0 },
+            }
+        end
+        local delay, opened, away, sawContact = 10, false, false, false
+        for slot = 1, 2 do
+            local bot, source, obs = fixture()
+            bots[slot], sources[slot], observations[slot] = bot, source, obs
+            obs.actor = bodies[slot]
+            for key, value in pairs(snapshot().actor) do
+                if obs.actor[key] == nil then
+                    obs.actor[key] = value
+                end
             end
+            obs.exit = {
+                id = "native-chest",
+                x = 200,
+                y = 160,
+                radius = 24,
+                contactRadius = 60,
+                contactWait = true,
+                exit = true,
+            }
+            obs.map.zones = { obs.exit }
+            bot.command("on")
         end
-        obs.exit = {
-            id = "native-chest",
-            x = 200,
-            y = 160,
-            radius = 24,
-            contactRadius = 60,
-            contactWait = true,
-            exit = true,
-        }
-        obs.map.zones = { obs.exit }
-        bot.command("on")
-    end
-    for frame = 1, 360 do
-        -- Independent native collision/update model: Lua Wait remains zero,
-        -- but overlap while DropDelay is positive refreshes it to ten updates.
-        local blocked, overlap = false, false
-        for _, body in ipairs(bodies) do
-            local distance = nav.distance(body, { x = 200, y = 160 })
-            blocked = blocked or distance < 82
-            overlap = overlap or distance < 55
-        end
-        if overlap then
-            sawContact = true
-            if delay > 0 then
-                delay = 10
+        for frame = 1, 360 do
+            -- Independent native collision/update model: Lua Wait remains zero,
+            -- but overlap while DropDelay is positive refreshes it to ten updates.
+            local blocked, overlap = false, false
+            for _, body in ipairs(bodies) do
+                local distance = nav.distance(body, { x = 200, y = 160 })
+                blocked = blocked or distance < 82
+                overlap = overlap or distance < 55
+            end
+            if overlap then
+                sawContact = true
+                if delay > 0 then
+                    delay = 10
+                else
+                    opened = true
+                end
             else
-                opened = true
+                delay = math.max(0, delay - 1)
+                away = true
             end
-        else
-            delay = math.max(0, delay - 1)
-            away = true
-        end
-        if opened then
-            break
-        end
-        for slot, bot in ipairs(bots) do
-            local obs = observations[slot]
-            obs.frame, obs.simulationTick = frame, frame
-            obs.exit.contactBlocked = blocked
-            bot.step(frame)
-            assert(bot.state == "running", bot.reason)
-            if frame == 1 then
-                local status = bot.command("next")
-                assert(not status:find("error=", 1, true), status)
+            if opened then
+                break
+            end
+            for slot, bot in ipairs(bots) do
+                local obs = observations[slot]
+                obs.frame, obs.simulationTick = frame, frame
+                obs.exit.contactBlocked = blocked
+                bot.step(frame)
+                assert(bot.state == "running", bot.reason)
+                if frame == 1 then
+                    local status = bot.command("next")
+                    assert(not status:find("error=", 1, true), status)
+                end
+            end
+            for slot, body in ipairs(bodies) do
+                local buttons = sources[slot].mask
+                local dx = ((buttons & 2) ~= 0 and 1 or 0) - ((buttons & 1) ~= 0 and 1 or 0)
+                local dy = ((buttons & 8) ~= 0 and 1 or 0) - ((buttons & 4) ~= 0 and 1 or 0)
+                if dx ~= 0 and dy ~= 0 then
+                    dx, dy = dx * 0.7071, dy * 0.7071
+                end
+                body.vx, body.vy =
+                    body.vx * 0.775 + dx * 260 * 0.225, body.vy * 0.775 + dy * 260 * 0.225
+                body.x, body.y = body.x + body.vx / 30, body.y + body.vy / 30
             end
         end
-        for slot, body in ipairs(bodies) do
-            local buttons = sources[slot].mask
-            local dx = ((buttons & 2) ~= 0 and 1 or 0) - ((buttons & 1) ~= 0 and 1 or 0)
-            local dy = ((buttons & 8) ~= 0 and 1 or 0) - ((buttons & 4) ~= 0 and 1 or 0)
-            if dx ~= 0 and dy ~= 0 then
-                dx, dy = dx * 0.7071, dy * 0.7071
-            end
-            body.vx, body.vy =
-                body.vx * 0.775 + dx * 260 * 0.225, body.vy * 0.775 + dy * 260 * 0.225
-            body.x, body.y = body.x + body.vx / 30, body.y + body.vy / 30
+        assert(
+            sawContact and away and opened and delay == 0,
+            "Chest overlap kept native drop delay alive"
+        )
+        for _, bot in ipairs(bots) do
+            bot.command("off")
         end
-    end
-    assert(
-        sawContact and away and opened and delay == 0,
-        "Chest overlap kept native drop delay alive"
-    )
-    for _, bot in ipairs(bots) do
-        bot.command("off")
     end
 end)
 test("only a selected exit task authorizes its contact zone", function()
