@@ -157,7 +157,9 @@ def main():
                     cmd += ["--native-record-both", "--frame-ms", "50"]
                 if case == "lanbot":
                     cmd += [
-                        "--native-record-both",
+                        "--automatic",
+                        "--native-record-view",
+                        "0",
                         "--frame-ms",
                         "100",
                         "--scenario-timeout",

@@ -6,7 +6,7 @@
 
 `tools/test.py` 完整通过：43 项 CTest、94 项 pytest、15 项 subtest。其中 `tests/lanbot.lua` 有 45 项检查，`tests/offline/test_behavior.py` 有 46 项持续行为场景，覆盖四向岔路、先探索再换层、来源房间冷却、门边惯性、多个出口、按钮状态、不同速度与短窗口尖刺、连续弹幕碰撞及充能松开。闭环夹具单独执行物理碰撞和房间切换，不用寻路结果代替世界结果。
 
-Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-20261010-173717-43897/`；目录按 UTC 命名，本次本地日期为 2026-10-11。模拟运动不能单独证明游戏物理、实战或通关。
+Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-20261010-175237-88651/`；目录按 UTC 命名，本次本地日期为 2026-10-11。模拟运动不能单独证明游戏物理、实战或通关。
 
 ## 实机安排
 
@@ -14,11 +14,11 @@ Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-2026
 
 最终场景为：出口后方回血且不误下层、门边带惯性留房、双普通按钮、清房后收起尖刺、未清房交替尖刺、交叉弹幕，以及实际过门后离开门口。交替尖刺要求记录至少三次真实状态变化；仅摆放已收起的尖刺不算开合验收。所有按钮以 State=3 判定，伤害按本机角色 InitSeed 记录。
 
-`tests/state_lanbot.lua` 已加入 `tools/validate_replica.py --cases lanbot`。直接运行 `tools/run_network_engine.py` 时可以指定自己的隔离主客机目录，使用 `--automatic --frontend --menu-start --virtual-input --script tests/state_lanbot.lua --completion 'LAN_NETWORK PASS lanbot behavior suite' --native-record-both --frame-ms 100 --scenario-timeout 180`。首次实验配置的游戏欢迎提示需通过普通菜单确认。
+`tests/state_lanbot.lua` 已加入 `tools/validate_replica.py --cases lanbot`。直接运行 `tools/run_network_engine.py` 时可以指定自己的隔离主客机目录，使用 `--automatic --frontend --menu-start --script tests/state_lanbot.lua --completion 'LAN_NETWORK PASS lanbot behavior suite' --native-record-view 0 --frame-ms 100 --scenario-timeout 180`。首次实验配置的游戏欢迎提示需通过普通菜单确认。
 
 ## 复验履历
 
-产物前缀为 `artifacts/lanbot-native-20261011`。每轮保存冻结 DLL、夹具源码、双方日志、帧图、宿主位置／血量轨迹及独立进程退出码。
+产物前缀为 `artifacts/lanbot-native-20261011`。每轮保存冻结 DLL、夹具源码、双方日志、宿主帧图、位置／血量轨迹及独立进程退出码；早期轮次同时录制客机。
 
 | 轮次 | 结果与处理 | 再启动原因 |
 | --- | --- | --- |
@@ -31,12 +31,34 @@ Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-2026
 | `-07` | 客机进入开场前异常退出，未执行场景 | 启动异常后重新建立进程 |
 | `-08` | 客机启动 Lua 异常，未执行场景 | 换用现有自动加载路径 |
 | `-09` | 自动加载成功；夹具尝试写入只读的 RoomDescriptor.Clear 导致桥接失败，不算通过 | 改回支持的 Room:SetClear API |
-
 | `-10` | 出口保护通过；双方在 tick 340 停止响应，无法在当前进程恢复，超时后隔离工具关闭进程 | 为恢复验收重新启动；减少录制与启动输入，保留相同 DLL |
+| `-11` | 最终 DLL 的 6 项通过、双方正常退出；占位敌人保持房间未清理，但之前按钮留下的持久标记仍关闭尖刺计时 | 清理 FLAG_PRESSURE_PLATES_TRIGGERED |
+| `-12` | 4 项通过后，夹具写房间数组的只读 Flags 代理失败，主动正常关闭双方进程 | 改为生产世界适配已使用的 GetRoomByIdx 可写查询 |
+| `-13` | 6 项通过、双方正常退出；尖刺完成 6 次真实开合，占位敌人干扰按钮任务 | 占位敌人标记不可选中，补充目标筛选回归并加载新 DLL |
+| `-14` | 6 项通过、双方正常退出；仅设置冻结标记没有持续时间，占位 Host 又会打开并移除不可选中标记 | 改用 AddFreeze 的持续冻结状态，仅调整启动夹具 |
+| `-15` | 7 项全部通过、双方正常退出；尖刺完成三次真实开合后穿越并按下按钮，无伤害 | 集中验收完成，停止重复启动 |
 
-## 当前验收状态
+## 最终验收结果
 
-离线与构建全部通过；`-06` 中 6 项原生场景通过，未清房交替尖刺未完成。最终修订正在 `-11` 复验，完整原生验收暂未通过。启动异常与停止响应的原因尚未确定，未据此修改原生后端。
+离线与构建全部通过，最终 `-15` 一对主客机完成七项检查，`scenario_pass=true`、`clean_exit=true`，双方退出码均为 `00000000`。启动异常与停止响应的原因尚未确定，未据此修改原生后端；最后一轮成功不能证明间歇启动／稳定性问题已修复。
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 出口旁回血 | 血量 6→8，离出口最小距离 37.9449，留在房间 84 |
+| 门边带惯性出生 | 留在房间 84，最后离门 109.1243 |
+| 双按钮 | 两个 State 均为 3 |
+| 清房后收起尖刺 | 穿过唯一缺口，血量 8→10，伤害次数 0 |
+| 未清房交替尖刺 | 记录三次开合，等完整收起周期后穿过缺口，按钮 State=3，伤害次数 0 |
+| 交叉弹幕 | 伤害次数 0 |
+| 实际过门后离门 | 从 84 到 85 并留房，最近门距离 106.2135 |
+
+最终主机帧图人工查看了出口拾取、按钮完成、尖刺穿越、按下按钮及换房离门；没有欢迎提示遮挡。交替尖刺在 tick 960 开始第二个收起窗口，玩家位置从 x=236.018（tick 960）到 x=358.416（tick 978），安全穿过 x=320 的尖刺。对应帧图 `host/frames/485.png`（tick 977）、`498.png`（tick 1020）和 `621.png`（tick 1429）。本轮 status 观察与决策最高耗时为 3 ms，2 ms 设计目标未作为实时保证。
+
+产物：`artifacts/lanbot-native-20261011-15/`。SHA-256 与当前 DLL、夹具文件一致：
+
+- DLL：`56a1bb7b49911db2b71df77fda8c272b38e637e58e33dccf7b9fcf814657389b`
+- 夹具：`cc0948c6ca974485a8846dd7cffc0f295fd09f591b6c32a69cdc7fc82e007804`
+- 自动加载器：`0c0786cc269f650c912a9bca209d90ec4808dcc98efaefcbbbdf6b4415f04beb`
 
 ## 尚未覆盖
 

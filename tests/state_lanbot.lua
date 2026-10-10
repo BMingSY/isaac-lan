@@ -7,7 +7,7 @@ local renders, linked, chosen, done = 0, false, false, false
 local ownerSeed
 local origin, center, selectedDoor, arrivedRoom, damage = nil, nil, nil, nil, 0
 local baseline, exitPosition, minimumExit, spikeDamage, dodgeDamage, spikes, timedPlate
-local spikeTransitions, spikeState = 0, nil
+local spikeTransitions, spikeState, occupant = 0, nil, nil
 local plates, spawned, results = {}, {}, {}
 local trace = host and assert(io.open("./lan-test-digest-lanbot.csv", "w"))
 if trace then
@@ -17,7 +17,15 @@ local function report(value)
     Isaac.DebugString("LAN_NETWORK " .. value)
 end
 local function command(value)
+    local output = Isaac.ConsoleOutput
+    if value == "status" then
+        Isaac.ConsoleOutput = function(message)
+            report((message:gsub("\n", "")))
+            output(message)
+        end
+    end
     Isaac.ExecuteCommand("lanbot " .. value)
+    Isaac.ConsoleOutput = output
 end
 local function check(name, passed, detail)
     results[#results + 1] = { name = name, passed = passed, detail = detail }
@@ -242,19 +250,29 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         elseif t == 810 then
             player.Position, player.Velocity = center - Vector(120, 0), Vector.Zero
             spikeDamage = damage
+            local level = Game():GetLevel()
+            local location = native.rooms_positions()["0"]
+            -- GetCurrentRoomDesc and the room array expose const proxies.
+            -- Use the same writable lookup as the production world adapter.
+            local descriptor = level:GetRoomByIdx(location.index, location.dimension)
+            -- Earlier button fixtures set this persistent flag, which keeps
+            -- retracting spikes disabled independently of Room:IsClear().
+            descriptor.Flags = descriptor.Flags & ~RoomDescriptor.FLAG_PRESSURE_PLATES_TRIGGERED
             -- Keep the room genuinely uncleared: an empty starting room is
             -- cleared again by the game even after Room:SetClear(false).
-            local closedHost = Isaac.Spawn(
+            occupant = Isaac.Spawn(
                 EntityType.ENTITY_HOST,
                 0,
                 0,
                 center - Vector(120, 160),
                 Vector.Zero,
                 nil
-            ):ToNPC()
-            closedHost.State = NpcState.STATE_IDLE
-            closedHost:GetSprite():Play("Idle", true)
-            closedHost:AddEntityFlags(EntityFlag.FLAG_FREEZE)
+            )
+                :ToNPC()
+            occupant.State = NpcState.STATE_IDLE
+            occupant:GetSprite():Play("Idle", true)
+            occupant:AddFreeze(EntityRef(player), 60)
+            occupant:AddEntityFlags(EntityFlag.FLAG_NO_TARGET)
             room:SetClear(false)
             spikeWall(room)
             -- Runtime grid spawns default to a disabled timer. Start one
@@ -271,6 +289,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             command("mode explore")
             command("on")
         elseif t > 810 and t < 1180 then
+            -- Refresh the status duration: setting FLAG_FREEZE alone expires
+            -- immediately, and the Host can remove NO_TARGET when opening.
+            occupant:AddFreeze(EntityRef(player), 60)
+            occupant:AddEntityFlags(EntityFlag.FLAG_NO_TARGET)
             if spikes.State ~= spikeState then
                 spikeTransitions, spikeState = spikeTransitions + 1, spikes.State
             end

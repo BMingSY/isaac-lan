@@ -259,7 +259,8 @@ return function(native, bridge, nav, terrain)
                     local value = entity(e)
                     local npc, pickup, laser = e:ToNPC(), e:ToPickup(), e:ToLaser()
                     if npc and e:IsActiveEnemy(false) and e.HitPoints > 0 and not friendly(e) then
-                        value.attackable = not e:IsInvincible()
+                        value.attackable = (e:GetEntityFlags() & EntityFlag.FLAG_NO_TARGET) == 0
+                            and not e:IsInvincible()
                             and (info.authority == 0 or e:IsVulnerableEnemy())
                         value.threat = e:IsBoss() and 2 or 1
                         result.enemies[#result.enemies + 1] = value

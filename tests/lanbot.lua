@@ -589,7 +589,7 @@ test("firing lanes avoid danger and targets remain stable for similar distances"
 end)
 
 -- Exercise the game adapter with documented API-shaped fakes. No game process.
-EntityFlag = { FLAG_FRIENDLY = 1, FLAG_CHARM = 2 }
+EntityFlag = { FLAG_FRIENDLY = 1, FLAG_CHARM = 2, FLAG_NO_TARGET = 4 }
 EntityType = { ENTITY_PLAYER = 1, ENTITY_FAMILIAR = 3, ENTITY_PROJECTILE = 9, ENTITY_EFFECT = 1000 }
 PlayerType = { PLAYER_AZAZEL = 7 }
 WeaponType = { WEAPON_BRIMSTONE = 4, WEAPON_KNIFE = 3, WEAPON_TECH_X = 9 }
@@ -901,6 +901,9 @@ test("client replicas remain targets; friendly OR charmed entities excluded", fu
     localInfo.authority = 1
     assert(not observe.read(2, localInfo).enemies[1].attackable)
     localInfo.authority = 0
+    entities = { fakeEntity(20, EntityFlag.FLAG_NO_TARGET) }
+    obs = observe.read(3, localInfo)
+    assert(#obs.enemies == 1 and not obs.enemies[1].attackable and #obs.dangers == 1)
 end)
 test("free useful soul heart picked with full red health; paid pickup excluded", function()
     local heart, paid = fakeEntity(5), fakeEntity(5)
