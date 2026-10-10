@@ -38,7 +38,7 @@ return function(native, bridge, nav, terrain)
         if info.ready ~= 1 or not bridge.ready() then
             return nil, "view_not_ready"
         end
-        local actors, localPlayers = native.api_actors(), {}
+        local actors, localPlayers, roomPlayers = native.api_actors(), {}, {}
         local locations = native.rooms_positions()
         local position = locations[tostring(info.slot)]
         if not position then
@@ -49,6 +49,7 @@ return function(native, bridge, nav, terrain)
             local player = Isaac.GetPlayer(actor.index)
             if actor.owner == info.slot + 1 then
                 localPlayers[#localPlayers + 1] = player
+                roomPlayers[#roomPlayers + 1] = player
             elseif
                 (info.connected & (1 << (actor.owner - 1))) ~= 0
                 and not player:IsCoopGhost()
@@ -57,6 +58,8 @@ return function(native, bridge, nav, terrain)
                 local at = locations[tostring(actor.owner - 1)]
                 if not at or at.index ~= position.index or at.dimension ~= position.dimension then
                     partyReady = false
+                else
+                    roomPlayers[#roomPlayers + 1] = player
                 end
             end
         end
@@ -156,6 +159,7 @@ return function(native, bridge, nav, terrain)
             }
             terrain:reset(result.world, result.room, p.id)
             local tick = room:GetFrameCount()
+            result.simulationTick = info.tick
             local function addExit(value, usable)
                 value.id = value.id or "exit:" .. tostring(value.cell)
                 value.radius = math.max(24, value.radius or 0)
@@ -305,6 +309,24 @@ return function(native, bridge, nav, terrain)
                         end
                     elseif pickup and pickup.Variant == PickupVariant.PICKUP_BIGCHEST then
                         value.cell = nav.cell(map, value.x, value.y)
+                        -- Vanilla has a separate collision drop delay that its
+                        -- Lua Wait property does not expose. Contact during the
+                        -- delay refreshes it: let every nearby actor leave first.
+                        value.contactWait = pickup.State == 0
+                        value.contactRadius = math.max(60, value.radius * 2)
+                        for _, candidate in ipairs(roomPlayers) do
+                            if
+                                not candidate:IsCoopGhost()
+                                and not candidate:IsDead()
+                                and nav.distance(
+                                        { x = candidate.Position.X, y = candidate.Position.Y },
+                                        value
+                                    )
+                                    < value.contactRadius + candidate.Size + 12
+                            then
+                                value.contactBlocked = true
+                            end
+                        end
                         addExit(value, result.clear and pickup.Wait <= 0)
                     elseif pickup and pickup.Price == 0 and pickup.Wait <= 0 then
                         local variant = pickup.Variant

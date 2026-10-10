@@ -9,6 +9,7 @@ return function(nav)
         self.goal, self.path, self.pathAt, self.stuckAt, self.lastPosition = nil, nil, nil, nil, nil
         self.advance, self.pendingPickup, self.entry, self.buttonWait = false, nil, nil, nil
         self.waitingTrap = nil
+        self.exitContact = nil
         self.needsArrival = true
     end
     function methods:observe(obs)
@@ -32,6 +33,7 @@ return function(nav)
             end
             self.goal, self.path, self.lastPosition, self.stuckAt = nil, nil, nil, nil
             self.waitingTrap = nil
+            self.exitContact = nil
             node.visits = node.visits + 1
             self.room = obs.room
         end
@@ -185,11 +187,17 @@ return function(nav)
         end
         return best, resourceBlocked, pending
     end
-    local function retreatFromClosedExit(obs)
+    local function retreatFromClosedExit(obs, contact)
         local best, distance, waiting
         for _, zone in ipairs(obs.map.zones or {}) do
-            local radius = zone.radius + obs.actor.radius + 12
-            if zone.exit and zone.closed and nav.distance(obs.actor, zone) < radius - 2 then
+            local radius = (contact == zone.id and zone.contactRadius or zone.radius)
+                + obs.actor.radius
+                + 12
+            if
+                zone.exit
+                and (zone.closed or contact == zone.id)
+                and nav.distance(obs.actor, zone) < radius - 2
+            then
                 waiting = true
                 for direction = 0, 7 do
                     local angle = direction * math.pi / 4
@@ -292,6 +300,34 @@ return function(nav)
             end
             if not self:available("exit", obs.frame) then
                 return nil, "route_blocked"
+            end
+            local exit = obs.exit
+            if exit.contactWait then
+                local frame = assert(obs.simulationTick, "Missing authoritative simulation clock")
+                local contact = self.exitContact
+                if not contact or contact.id ~= exit.id then
+                    contact = { id = exit.id }
+                    self.exitContact = contact
+                end
+                if contact.armed and exit.contactBlocked and frame - contact.armed > 90 then
+                    contact.armed, contact.clearAt = nil, nil
+                end
+                if not contact.armed then
+                    if exit.contactBlocked then
+                        contact.clearAt = nil
+                    else
+                        contact.clearAt = contact.clearAt or frame
+                        if frame - contact.clearAt >= 15 then
+                            contact.armed = frame
+                        end
+                    end
+                    if not contact.armed then
+                        local retreat = retreatFromClosedExit(obs, exit.id)
+                        return retreat, retreat and nil or "wait_for_exit_contact"
+                    end
+                end
+            else
+                self.exitContact = nil
             end
             return {
                 x = obs.exit.x,
