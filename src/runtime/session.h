@@ -19,6 +19,7 @@ void halfStarted();
 void halfCompleted();
 int localViewSlot();
 bool replica();
+unsigned difficulty();
 bool ending();
 void present();
 void refreshAutomation(std::uint32_t renderFrame);

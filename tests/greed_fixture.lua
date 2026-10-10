@@ -1,7 +1,8 @@
 -- Reproduce deferred native room transfers in the actual engine fixture.
 local root = assert(arg[1])
 for _, difficulty in ipairs({ 2, 3 }) do
-    local main, shop, exit, active = 84, 70, 98, 84
+    local main, shop, exit, active, terminal = 84, 70, 98, 84, 58
+    local stage, ready = 1, true
     local positions = { ["0"] = { index = main }, ["1"] = { index = main } }
     local pending, hooks, wave, clear, enemy, coins, bought, spawned =
         {}, nil, 0, false, true, 0, false, 0
@@ -49,18 +50,45 @@ for _, difficulty in ipairs({ 2, 3 }) do
             end,
         }
     end
+    local function spawnData(kind, entity)
+        return {
+            Type = kind,
+            SpawnCount = 1,
+            Spawns = {
+                Get = function()
+                    return {
+                        EntryCount = 1,
+                        Entries = {
+                            Get = function()
+                                return { Type = entity }
+                            end,
+                        },
+                    }
+                end,
+            },
+        }
+    end
     local descriptors = {
         { SafeGridIndex = shop, Data = { Type = 2 } },
         { SafeGridIndex = exit, Data = { Type = 23 } },
     }
     local level = {
         GetStage = function()
-            return 1
+            return stage
+        end,
+        SetStage = function(_, value)
+            stage = value
         end,
         GetStartingRoomIndex = function()
             return main
         end,
         GetRooms = function()
+            if stage == 7 then
+                descriptors = {
+                    { SafeGridIndex = 71, Data = spawnData(5, 50) },
+                    { SafeGridIndex = terminal, Data = spawnData(difficulty == 3 and 5 or 1, 406) },
+                }
+            end
             return {
                 Size = #descriptors,
                 Get = function(_, i)
@@ -77,6 +105,10 @@ for _, difficulty in ipairs({ 2, 3 }) do
         GetLevel = function()
             return level
         end,
+        StartStageTransition = function(_, same, animation, player)
+            assert(same and animation == 0 and player == players[1])
+            ready = false
+        end,
         GetRoom = function()
             return {
                 IsClear = function()
@@ -92,6 +124,9 @@ for _, difficulty in ipairs({ 2, 3 }) do
         end,
     }
     local native = {
+        rooms_ready = function()
+            return ready
+        end,
         rooms_move = function(slot, index)
             pending[slot] = index
             return true
@@ -136,7 +171,7 @@ for _, difficulty in ipairs({ 2, 3 }) do
         GridEntityType = { GRID_PRESSURE_PLATE = 20, GRID_TRAPDOOR = 17 },
         DamageFlag = { DAMAGE_IGNORE_ARMOR = 1 },
         CollectibleType = { COLLECTIBLE_SAD_ONION = 1 },
-        EntityType = { ENTITY_PICKUP = 5 },
+        EntityType = { ENTITY_PICKUP = 5, ENTITY_ULTRA_GREED = 406 },
         PickupVariant = { PICKUP_COIN = 20, PICKUP_COLLECTIBLE = 100 },
         Game = function()
             return game
@@ -151,6 +186,9 @@ for _, difficulty in ipairs({ 2, 3 }) do
                 return players[slot]
             end,
             GetRoomEntities = function()
+                if active == terminal then
+                    return { { Type = 406 } }
+                end
                 if active ~= main then
                     return {}
                 end
@@ -243,5 +281,18 @@ for _, difficulty in ipairs({ 2, 3 }) do
     arrive()
     tick(t + 41)
     assert(players[1].Position == trapdoor.Position, "Exit setup did not use the arrived room")
+    stage = 2
+    positions["0"].index, positions["1"].index = main, main
+    tick(t + 80, 0)
+    assert(stage == 7 and not ready, "Terminal preparation bypassed the native floor transaction")
+    tick(t + 81)
+    assert(pending[1] == nil, "Terminal lookup ran before floor initialization")
+    ready = true
+    tick(t + 82)
+    assert(pending[1] == terminal, "Terminal fixture chose the preceding Greed miniboss room")
+    arrive()
+    positions["0"].index = terminal -- Native finalCombat gathering has its own C++ coverage.
+    tick(t + 173)
+    tick(t + 264)
 end
-print("PASS Greed fixture waits for native shop/exit transfers and button readiness")
+print("PASS Greed fixture waits for native transfers, buttons and the generated Ultra Greed arena")

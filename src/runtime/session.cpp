@@ -1279,6 +1279,9 @@ bool halfAllowed() {
 bool replica() {
     return gated && session && !session->isHost();
 }
+unsigned difficulty() {
+    return session ? session->settings().difficulty : 0;
+}
 bool ending() {
     return playingEnding;
 }

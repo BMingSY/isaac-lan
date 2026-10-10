@@ -29,6 +29,23 @@ local function find(kind)
         end
     end
 end
+local function terminalRoom()
+    local rooms = Game():GetLevel():GetRooms()
+    for i = 0, rooms.Size - 1 do
+        local d = rooms:Get(i)
+        if d.Data and d.SafeGridIndex >= 0 then
+            for j = 0, d.Data.SpawnCount - 1 do
+                local spawn = d.Data.Spawns:Get(j)
+                for k = 0, spawn.EntryCount - 1 do
+                    if spawn.Entries:Get(k).Type == EntityType.ENTITY_ULTRA_GREED then
+                        report("TERMINAL_ROOM index=" .. d.SafeGridIndex .. " type=" .. d.Data.Type)
+                        return d.SafeGridIndex
+                    end
+                end
+            end
+        end
+    end
+end
 local function move(slot, index)
     assert(native.rooms_move(slot, index, 0, -1))
     actor(slot, function(p)
@@ -288,9 +305,10 @@ local function advance(t)
         game:StartStageTransition(true, 0, Isaac.GetPlayer(assert(native.rooms_heads()["1"])))
         mark("terminal-floor", t)
     elseif step == "terminal-floor" and level:GetStage() == 7 and native.rooms_ready() then
-        -- Ultra Greed is in the final shop. ROOM_BOSS is the preceding
-        -- ordinary Greed miniboss room and must not trigger team gathering.
-        local boss = assert(find(RoomType.ROOM_SHOP), "Missing generated Ultra Greed shop")
+        -- Preceding Greed minibosses can share the final arena's room type.
+        -- Select the generated Ultra Greed spawn, as in the existing
+        -- ending-route fixtures, instead of assuming a shop/Boss room index.
+        local boss = assert(terminalRoom(), "Missing generated Ultra Greed arena")
         move(1, boss)
         mark("terminal", t)
     elseif step == "terminal" then
