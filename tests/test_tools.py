@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import struct
 import sys
 import tempfile
 import time
@@ -14,15 +15,106 @@ from zipfile import ZIP_DEFLATED, ZipFile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 from build_gameplay_suite import CASES, CHECKPOINTS, build as build_suite
+from build_special_suite import build as build_special_suite
 from build_package import build
 from build_release import release
 from check_release import FILES, check
 from delayed_relay import DelayedRelay
-from game_logs import probe_path
+from game_logs import freeze_probe_logs, probe_path, probe_text
+from check_performance import summarize
 from run_network_engine import finalize_result
+from progress_fixture import MAGIC, PROFILE, checksum, patch, prepare
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARIES = ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe")
+
+
+def test_greed_suite_keeps_both_modes_in_one_process_pair(tmp_path):
+    script = tmp_path / "greed.lua"
+    build_special_suite(script, ["greed", "greedier"])
+    source = script.read_text()
+    assert '_IsaacLanTest.route = "greed"' in source
+    assert '_IsaacLanTest.route = "greedier"' in source
+    assert source.count("PASS native Greed gameplay") == 2
+    assert source.count("local originalFrame, originalGate") == 1
+    assert source.count("return finished end end") == 2
+    assert source.count("_IsaacLanTest.greedCampaign = true") == 2
+    assert "MC_POST_GAME_END" in source and "LOCAL_PROGRESS_RESTORED" in source
+
+
+class ProgressFixtureTests(unittest.TestCase):
+    def baseline(self):
+        source = (
+            MAGIC
+            + struct.pack("<4I", 0x10203040, 1, 642, 642)
+            + bytes(i % 2 for i in range(642))
+            + struct.pack("<3I", 2, 523 * 4, 523)
+            + struct.pack("<523I", *range(523))
+            + b"opaque native sections" * 30
+            + struct.pack("<I", 17)
+        )
+        return source + struct.pack("<I", checksum(source[16:]))
+
+    def test_checksum_matches_native_table_vector(self):
+        self.assertEqual(checksum(b""), 0xFEDCBA76)
+        self.assertEqual(checksum(bytes(range(256))), 0xE3797CD9)
+
+    def test_host_unlocks_are_ready_before_native_menu_initialization(self):
+        source = self.baseline()
+        result = patch(source, host=True, endings=True, alt_path=True, hush=True)
+        expected = bytearray([1] * 642)
+        expected[412] = 0
+        self.assertEqual(result[32:674], expected)
+        self.assertEqual(struct.unpack_from("<I", result, 686 + 522 * 4)[0], 98765)
+        self.assertEqual(struct.unpack_from("<I", result, 686 + 158 * 4)[0], 3)
+        self.assertEqual(result[:32], source[:32])
+        self.assertEqual(result[2778:-4], source[2778:-4])
+        self.assertEqual(
+            struct.unpack_from("<I", result, len(result) - 4)[0], checksum(result[16:-4])
+        )
+
+    def test_guest_history_and_ascent_pool_are_preserved(self):
+        source = self.baseline()
+        guest = patch(source, host=False, endings=True, alt_path=True, hush=True)
+        flags = bytearray(source[32:674])
+        for identifier in (640, 407, 412, 320):
+            flags[identifier] = 0
+        self.assertEqual(guest[32:674], flags)
+        self.assertEqual(guest[2778:-4], source[2778:-4])
+        ascent = patch(source, host=True, ascent=True)
+        flags = bytearray(source[32:674])
+        for identifier in (4, 57, 635, 640):
+            flags[identifier] = 1
+        self.assertEqual(ascent[32:674], flags)
+
+    def test_invalid_baselines_are_rejected_before_writing(self):
+        source = self.baseline()
+        corrupted = bytearray(source)
+        corrupted[33] ^= 1
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            patch(corrupted, host=True)
+        for offset, value in ((20, 3), (24, 641), (674, 7), (32, 2)):
+            with self.subTest(offset=offset):
+                invalid = bytearray(source)
+                struct.pack_into("<I", invalid, offset, value)
+                struct.pack_into("<I", invalid, len(invalid) - 4, checksum(invalid[16:-4]))
+                with self.assertRaises(ValueError):
+                    patch(invalid, host=True)
+
+    def test_only_marked_lab_file_is_prepared(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lab = Path(directory)
+            path = lab / PROFILE / "persistentgamedata1.dat"
+            path.parent.mkdir(parents=True)
+            source = self.baseline()
+            path.write_bytes(source)
+            with self.assertRaisesRegex(ValueError, "owned"):
+                prepare(lab, host=True)
+            self.assertEqual(path.read_bytes(), source)
+            (lab / ".isaac-lan-lab").touch()
+            prepare(lab, host=True, endings=True)
+            self.assertEqual(path.read_bytes(), patch(source, host=True, endings=True))
+            self.assertEqual(list(path.parent.glob(".lan-progress-*")), [])
 
 
 class EngineExitTests(unittest.TestCase):
@@ -60,6 +152,34 @@ class EngineExitTests(unittest.TestCase):
 
 
 class GameLogTests(unittest.TestCase):
+    def test_launch_run_merge_and_pid_isolation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lab = Path(directory)
+            base = lab / "profile/Documents/My Games/Binding of Isaac Repentance+/isaac-lan/logs"
+            launch = base / "20261011-120000-000-p42"
+            game = launch / "001-YV039KQF-host"
+            game.mkdir(parents=True)
+            (launch / "startup.log").write_text(
+                "[2026-10-11 12:00:00] startup\n[2026-10-11 12:02:00] shutdown\n"
+            )
+            (game / "runtime.log").write_text("[2026-10-11 12:01:00] game\n")
+            (game / "performance.jsonl").write_text("{}\n")
+            newer = base / "20261011-130000-000-p43"
+            newer.mkdir()
+            (newer / "startup.log").write_text("other peer")
+            text = probe_text(lab, 42)
+            self.assertLess(text.index("startup"), text.index("game"))
+            self.assertLess(text.index("game"), text.index("shutdown"))
+            self.assertNotIn("other peer", text)
+            self.assertEqual(probe_text(lab, 44), "")
+            destination = lab / "frozen"
+            freeze_probe_logs(lab, destination, 42)
+            self.assertEqual((destination / "probe.log").read_text(), text)
+            self.assertEqual(
+                (destination / "logs" / launch.name / game.name / "performance.jsonl").read_text(),
+                "{}\n",
+            )
+
     def test_profile_and_frozen_build_log_locations(self):
         with tempfile.TemporaryDirectory() as directory:
             lab = Path(directory)
@@ -236,6 +356,38 @@ class PackagingTests(unittest.TestCase):
         self.rewrite_archive(archive, lambda files: files.update({name: b"tampered"}))
         with self.assertRaisesRegex(ValueError, "file hash"):
             check(archive, self.tag)
+
+
+class PerformanceReportTests(unittest.TestCase):
+    def test_weighted_costs_and_resource_ranges(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "performance.jsonl"
+            samples = [
+                {
+                    "elapsed_ms": 1000,
+                    "private_bytes": 1024,
+                    "handles": 10,
+                    "costs": {
+                        "apply": {"count": 10, "mean_ms": 2, "max_ms": 3, "p95_ms": 3, "p99_ms": 3}
+                    },
+                    "counters": {"lua_heap_bytes": 512},
+                },
+                {
+                    "elapsed_ms": 1000,
+                    "private_bytes": 1024,
+                    "handles": 10,
+                    "costs": {
+                        "apply": {"count": 30, "mean_ms": 4, "max_ms": 8, "p95_ms": 7, "p99_ms": 8}
+                    },
+                    "counters": {"lua_heap_bytes": 768},
+                },
+            ]
+            path.write_text("\n".join(json.dumps(sample) for sample in samples))
+            report = summarize(path)
+            self.assertEqual(report["costs"]["apply"]["mean_ms"], 3.5)
+            self.assertEqual(report["costs"]["apply"]["worst_window_p95_ms"], 7)
+            self.assertEqual(report["private_bytes"]["first"], report["private_bytes"]["last"])
+            self.assertEqual(report["counters"]["lua_heap_bytes"]["max"], 768)
 
 
 class GameplaySuiteTests(unittest.TestCase):

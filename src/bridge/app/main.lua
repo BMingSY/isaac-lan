@@ -102,6 +102,13 @@ local function prepareCheckpoint()
 end
 callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
     game = Game()
+    if native.diagnostics_begin then
+        native.diagnostics_begin(
+            game:GetSeeds():GetStartSeedString(),
+            started and (status.hosting == 1 and "host" or "client") or "solo",
+            continued and 1 or 0
+        )
+    end
     _IsaacLanState.reset()
     continuedRun = continued
     if started then
@@ -163,6 +170,9 @@ callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
         native.net_close(1)
         started, prepared, engineStarted = false, false, false
         players = {}
+    end
+    if native.diagnostics_end then
+        native.diagnostics_end()
     end
 end)
 function _IsaacLanCommand(action, value)

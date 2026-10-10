@@ -11,6 +11,8 @@
 #include "engine/save.h"
 #include "runtime/session_archive.h"
 #include "runtime/progression.h"
+#include "diagnostics/runtime_log.h"
+#include "diagnostics/performance.h"
 #include <MinHook.h>
 #include <cstring>
 #include <filesystem>
@@ -211,13 +213,16 @@ struct StateCost {
     unsigned samples = 0;
     double total = 0, maximum = 0;
     void sample(InputClock::time_point start, const char* operation) {
+        if (!logging::enabled(logging::Level::debug) && !diagnostics::enabled())
+            return;
         const double ms =
             std::chrono::duration<double, std::milli>(InputClock::now() - start).count();
+        diagnostics::sample(operation, ms);
         ++samples;
         total += ms;
         maximum = std::max(maximum, ms);
         if (samples == 300) {
-            if (logger)
+            if (logger && logging::enabled(logging::Level::debug))
                 logger(std::string("state_cost operation=") + operation + " mean_ms=" +
                        std::to_string(total / samples) + " max_ms=" + std::to_string(maximum));
             samples = 0;
@@ -443,7 +448,10 @@ bool captureNextInput() {
 }
 void updateReplica(void* game) {
     const auto g = reinterpret_cast<std::uintptr_t>(game);
-    if (auto transition = session->takeStage()) {
+    // A faster host can finish another floor while this replica is still
+    // initializing the previous one. Leave the reliable event in the session
+    // until the native roster is ready; keep updating the loading floor below.
+    if (auto transition = rooms::stateReady() ? session->takeStage() : std::nullopt) {
         replicaPending.reset();
         authoritative.reset();
         // A returning client may still have its actor parked according to the
@@ -708,7 +716,9 @@ int host(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(logger);
+    session = std::make_unique<lan::Session>(logger,
+                                             diagnostics::enabled() ? diagnostics::sample : nullptr,
+                                             logging::enabled(logging::Level::debug));
     sessionFingerprint = fingerprint;
     lua.pushBoolean(L, session->host(static_cast<std::uint16_t>(port), fingerprint, mods));
     return 1;
@@ -722,7 +732,9 @@ int join(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(logger);
+    session = std::make_unique<lan::Session>(logger,
+                                             diagnostics::enabled() ? diagnostics::sample : nullptr,
+                                             logging::enabled(logging::Level::debug));
     sessionFingerprint = fingerprint;
     try {
         const auto path = archivePath().parent_path() / L"player-id.txt";
@@ -760,6 +772,14 @@ int poll(lua_State* L) {
     }
     if (session)
         session->poll();
+    if (session && diagnostics::enabled()) {
+        const auto resource = session->resources();
+        diagnostics::counter("connections", resource.connections);
+        diagnostics::counter("queued_bytes", resource.queuedBytes);
+        diagnostics::counter("receive_capacity_bytes", resource.receiveCapacity);
+        diagnostics::counter("pending_world_capacity_bytes", resource.worldBytes);
+        diagnostics::counter("retiring_sessions", retiring.size());
+    }
     if (rejoinAt && InputClock::now() >= *rejoinAt) {
         rejoinAt.reset();
         if (session && !gated) {
@@ -1275,6 +1295,9 @@ bool halfAllowed() {
 }
 bool replica() {
     return gated && session && !session->isHost();
+}
+unsigned difficulty() {
+    return session ? session->settings().difficulty : 0;
 }
 bool ending() {
     return playingEnding;

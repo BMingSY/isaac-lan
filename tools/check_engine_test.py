@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
-from game_logs import probe_path
+from game_logs import probe_text
 
 
 def main():
@@ -17,7 +17,7 @@ def main():
     root = args.lab.resolve()
     if not (root / ".isaac-lan-lab").is_file():
         raise SystemExit("Only a marked isolated lab is supported")
-    probe = probe_path(root).read_text(errors="replace")
+    probe = probe_text(root)
     probe = "bootstrap=" + probe.rsplit("bootstrap=", 1)[-1]
     game = (root / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt").read_text(
         errors="replace"

@@ -1847,7 +1847,8 @@ bool finalCombat() {
             // its own update. Gather before that call, including debug damage,
             // so the original intro starts with the complete room roster.
             if (compat::bosses::finalCombat(at<int>(game(), 0), at<int>(game(), 4),
-                                            at<unsigned>(entity, 0x28), at<unsigned>(entity, 0x2c)))
+                                            at<unsigned>(entity, 0x28), at<unsigned>(entity, 0x2c),
+                                            runtime::difficulty()))
                 return true;
         }
     }

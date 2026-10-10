@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <functional>
 #include <memory>
+#include <psapi.h>
 using namespace isaac::lan;
 namespace {
 template <class F> void until(F f) {
@@ -20,7 +21,7 @@ template <class F> void until(F f) {
 struct Group {
     std::array<std::unique_ptr<Session>, 4> peers;
     unsigned count;
-    explicit Group(unsigned n) : count(n) {
+    explicit Group(unsigned n, std::uint8_t difficulty = 0) : count(n) {
         for (unsigned i = 0; i < n; ++i)
             peers[i] = std::make_unique<Session>();
         require(peers[0]->host(0, "state-test", "host-mods"), "Host failed");
@@ -34,6 +35,7 @@ struct Group {
         });
         Start start;
         start.seed = "YV039KQF";
+        start.difficulty = difficulty;
         require(peers[0]->start(start), "Start failed");
         until([&] {
             poll();
@@ -77,6 +79,65 @@ struct Group {
             require(peers[0]->publish(slot, state), "Publish failed");
     }
 };
+void greedSettings() {
+    for (std::uint8_t difficulty : {2, 3}) {
+        Group g(2, difficulty);
+        for (unsigned i = 0; i < g.count; ++i)
+            require(g.peers[i]->settings().difficulty == difficulty,
+                    "Greed lobby start lost its difficulty");
+        g.ready();
+        g.step(0);
+        Stage first{1, 2, 0, 0, false, {}, {}};
+        require(g.peers[0]->beginStage(first), "Greed first floor event failed");
+        std::optional<Stage> event;
+        until([&] {
+            g.poll();
+            event = g.peers[1]->takeStage();
+            return event.has_value();
+        });
+        require(*event == first, "Greed first floor event changed");
+        // The native client is still loading floor 2 when the host prepares
+        // floor 7. Polling and reading world views must leave its event intact
+        // until runtime can consume it with a ready native roster.
+        Stage terminal{2, 7, 0, 0, true, {}, {}};
+        terminal.seeds.fill(0x12345678);
+        require(g.peers[0]->beginStage(terminal), "Greed consecutive floor event failed");
+        g.step(1);
+        g.publish(1);
+        std::optional<WorldState> world;
+        until([&] {
+            g.poll();
+            world = g.peers[1]->takeState();
+            return world.has_value();
+        });
+        require(g.peers[1]->worldEpoch() == terminal.epoch,
+                "Delayed Greed floor event lost its epoch");
+        event = g.peers[1]->takeStage();
+        require(event && *event == terminal && !g.peers[1]->takeStage(),
+                "Delayed Greed floor event was lost or replayed during loading");
+        const auto identity = g.peers[1]->identity();
+        g.peers[1]->close();
+        g.poll();
+        g.step(2);
+        g.peers[1] = std::make_unique<Session>();
+        require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity),
+                "Greed guest could not rejoin");
+        until([&] {
+            g.poll();
+            return g.peers[1]->phase() == Phase::waiting;
+        });
+        Start checkpoint = g.peers[0]->settings();
+        checkpoint.snapshot.assign(4097, difficulty);
+        require(g.peers[0]->checkpoint(checkpoint, 3), "Greed checkpoint failed");
+        until([&] {
+            g.poll();
+            return g.peers[1]->phase() == Phase::running;
+        });
+        require(g.peers[1]->settings().difficulty == difficulty &&
+                    g.peers[1]->settings().snapshot == checkpoint.snapshot,
+                "Greed rejoin lost its mode or current-floor checkpoint");
+    }
+}
 void codec() {
     StateCompression compression;
     std::vector<std::uint8_t> plain(512000, 42);
@@ -840,6 +901,58 @@ void hostDisconnect() {
             "Host departure did not end guest simulation");
 }
 } // namespace
+void resourceLifecycle() {
+    const auto retained = [] {
+        PROCESS_MEMORY_COUNTERS_EX value{};
+        value.cb = sizeof(value);
+        require(GetProcessMemoryInfo(GetCurrentProcess(),
+                                     reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&value),
+                                     sizeof(value)),
+                "Cannot inspect private memory");
+        return value.PrivateUsage;
+    };
+    const auto handles = [] {
+        DWORD value = 0;
+        require(GetProcessHandleCount(GetCurrentProcess(), &value), "Cannot inspect handle count");
+        return value;
+    };
+    const auto cycle = [] {
+        Group g(2);
+        g.ready();
+        for (unsigned tick = 0; tick < 128; ++tick) {
+            g.step(tick);
+            g.publish(tick, 65536);
+            if (tick % 16 == 0) {
+                g.poll();
+                g.peers[1]->takeState();
+            }
+            const auto resources = g.peers[0]->resources();
+            require(resources.queuedBytes <= 262144 * 4 &&
+                        resources.worldBytes <= 2 * maxWorldSize * 4,
+                    "Slow consumer accumulated unbounded queues or views");
+        }
+        for (auto& peer : g.peers) {
+            if (!peer)
+                continue;
+            peer->close();
+            require(peer->resources().connections == 0 && peer->resources().queuedBytes == 0,
+                    "Closed transport retained sockets or queued messages");
+        }
+    };
+    for (unsigned warm = 0; warm < 5; ++warm)
+        cycle();
+    const auto beforeHandles = handles();
+    const auto beforeMemory = retained();
+    for (unsigned i = 0; i < 40; ++i)
+        cycle();
+    require(handles() <= beforeHandles + 2, "Repeated sessions leaked process handles");
+    require(retained() <= beforeMemory + 8 * 1024 * 1024,
+            "Warm repeated sessions retained over 8 MiB; inspect the resource report");
+    std::printf("RESOURCE cycles=45 snapshots=5760 private_before=%llu private_after=%llu "
+                "handles_before=%lu handles_after=%lu\n",
+                static_cast<unsigned long long>(beforeMemory),
+                static_cast<unsigned long long>(retained()), beforeHandles, handles());
+}
 int main(int argc, char** argv) {
     const auto result = runTests(argc, argv,
                                  {{"codec", codec},
@@ -862,7 +975,9 @@ int main(int argc, char** argv) {
                                   {"commands", commands},
                                   {"publication-limits", publicationLimits},
                                   {"integrations", integrations},
-                                  {"host-disconnect", hostDisconnect}});
+                                  {"greed-settings", greedSettings},
+                                  {"host-disconnect", hostDisconnect},
+                                  {"resource-lifecycle", resourceLifecycle}});
     if (!result)
         std::puts("ALL STATE TRANSPORT TESTS PASSED");
     return result;
