@@ -170,7 +170,9 @@ return function(native, bridge, nav, terrain)
                 end
                 if usable then
                     result.exits[#result.exits + 1] = value
-                    result.exit = result.exit or value
+                    if not result.exit or value.kind == "bigchest" then
+                        result.exit = value
+                    end
                 end
             end
             for index = 0, room:GetGridSize() - 1 do
@@ -308,6 +310,7 @@ return function(native, bridge, nav, terrain)
                             map.zones[#map.zones + 1] = value
                         end
                     elseif pickup and pickup.Variant == PickupVariant.PICKUP_BIGCHEST then
+                        value.kind = "bigchest"
                         value.cell = nav.cell(map, value.x, value.y)
                         -- Vanilla has a separate collision drop delay that its
                         -- Lua Wait property does not expose. Contact during the

@@ -1132,6 +1132,82 @@ test("only a selected exit task authorizes its contact zone", function()
     assert(not observed.map.walk[57] and bot.task == "move_to_exit")
     assert(observed.map.allowedExit == "exit:57" and nav.passable(observed.map, 320, 160, 10))
 end)
+test("touch a big chest from the side without entering its overlapping Void portal", function()
+    local bot, source, obs = fixture()
+    local chest = {
+        id = "chest",
+        kind = "bigchest",
+        x = 200,
+        y = 160,
+        radius = 24,
+        contactRadius = 60,
+        contactWait = true,
+        exit = true,
+    }
+    local portal = { id = "void", x = 200, y = 160, radius = 24, exit = true }
+    obs.exit, obs.map.zones = chest, { portal, chest }
+    obs.actor.x, obs.actor.y = 300, 240
+    local opened, entered, delay = false, false, 10
+    bot.command("on")
+    for frame = 1, 360 do
+        local body = obs.actor
+        -- Native chest collision is a wide ellipse, while the portal activates
+        -- near its center. This world model independently performs contact.
+        local overlap = ((body.x - 200) / 55) ^ 2 + ((body.y - 160) / 30) ^ 2 < 1
+        entered = entered or nav.distance(body, portal) < 22
+        if overlap then
+            if delay > 0 then
+                delay = 10
+            else
+                opened = true
+            end
+        else
+            delay = math.max(0, delay - 1)
+        end
+        if opened or entered then
+            break
+        end
+        obs.frame, obs.simulationTick = frame, frame
+        chest.contactBlocked = nav.distance(body, chest) < 82
+        bot.step(frame)
+        assert(bot.state == "running", bot.reason)
+        if bot.task == "move_to_exit" then
+            assert(obs.map.allowedExit == "chest")
+            assert(not nav.passable(obs.map, portal.x, portal.y, body.radius))
+        end
+        local buttons = source.mask
+        local dx = ((buttons & 2) ~= 0 and 1 or 0) - ((buttons & 1) ~= 0 and 1 or 0)
+        local dy = ((buttons & 8) ~= 0 and 1 or 0) - ((buttons & 4) ~= 0 and 1 or 0)
+        if dx ~= 0 and dy ~= 0 then
+            dx, dy = dx * 0.7071, dy * 0.7071
+        end
+        body.vx, body.vy = body.vx * 0.775 + dx * 260 * 0.225, body.vy * 0.775 + dy * 260 * 0.225
+        body.x, body.y = body.x + body.vx / 30, body.y + body.vy / 30
+    end
+    assert(opened and not entered, "BOT failed native chest contact or entered the Void")
+end)
+test("observer selects the big chest before an optional Void trapdoor", function()
+    local oldGrid = room.GetGridEntity
+    local chest = fakeEntity(5)
+    chest.Position, chest.Variant, chest.Wait, chest.State =
+        Vector(160, 160), PickupVariant.PICKUP_BIGCHEST, 0, 0
+    room.GetGridEntity = function(_, index)
+        if index == 52 then
+            return {
+                State = 1,
+                GetType = function()
+                    return GridEntityType.GRID_TRAPDOOR
+                end,
+            }
+        end
+    end
+    entities = { chest }
+    local obs = observe.read(1, localInfo)
+    assert(#obs.exits == 2 and obs.exit.kind == "bigchest")
+    obs.map.allowedExit = obs.exit.id
+    assert(not nav.passable(obs.map, 160, 160, 10), "Void protection was removed")
+    entities, room.GetGridEntity = {}, oldGrid
+end)
 test("adapter observes ordinary unpressed buttons without treating rewards as puzzles", function()
     local getGrid, isClear = room.GetGridEntity, room.IsClear
     local plate = {

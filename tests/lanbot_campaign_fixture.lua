@@ -4,6 +4,7 @@ local root = assert(arg[1])
 for _, host in ipairs({ true, false }) do
     local hooks, callbacks, messages = nil, {}, {}
     local clock, stage, roomIndex, clear, phase, scene, tick = 0, 1, 84, false, 0, 1, 0
+    local paused = false
     local points, items, moves, nextCalls, confirms = { 0, 0 }, {}, {}, 0, 0
     local positions =
         { ["0"] = { index = 84, dimension = 0 }, ["1"] = { index = 84, dimension = 0 } }
@@ -89,6 +90,7 @@ for _, host in ipairs({ true, false }) do
                     "Menu confirmation outside native terminal reward/ending"
                 )
                 confirms = confirms + 1
+                paused = false
             end
         end,
         net_progress = function()
@@ -119,6 +121,9 @@ for _, host in ipairs({ true, false }) do
         end,
     }
     local game = {
+        IsPaused = function()
+            return paused
+        end,
         GetLevel = function()
             return {
                 GetStage = function()
@@ -259,7 +264,7 @@ for _, host in ipairs({ true, false }) do
     env._IsaacLanBotCommand = function(args)
         if args == "next" then
             nextCalls = nextCalls + 1
-            if nextCalls % 2 == 1 then
+            if paused or nextCalls % 2 == 1 then
                 env.Isaac.ConsoleOutput("LANBOT error=no_known_exit\n")
                 return
             end
@@ -338,6 +343,9 @@ for _, host in ipairs({ true, false }) do
                 end
             end
             if offset > 120 then
+                if host and floor == 11 and not clear then
+                    paused = true
+                end
                 clear = true
             end
             env._IsaacLanFrame()
@@ -351,6 +359,11 @@ for _, host in ipairs({ true, false }) do
         host and confirms > 0 or not host and confirms == 0,
         "Victory Lap default No was not confirmed only by the authority"
     )
+    stage = 12
+    assert(not pcall(hooks[4], "snapshot", tick, 0), "Unexpected Void route was accepted")
+    stage = 1
+    assert(not pcall(hooks[4], "snapshot", tick, 0), "Victory Lap/repeated floors were accepted")
+    stage = 11
     assert(not pcall(callbacks[2], nil, true), "Defeat was accepted")
     coverage[5] = nil
     assert(not pcall(callbacks[2], nil, false), "A skipped campaign floor was accepted")

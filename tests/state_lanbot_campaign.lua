@@ -8,10 +8,12 @@ local bridge = assert(_IsaacLanModules["api/public"])
 local owner = { Name = "LANBOT native campaign" }
 local renders, linked, chosen, finished, won = 0, false, false, false, false
 local endedAt, localProgress, epoch, advanced, modeChanged
+local terminalReward = false
 local visited, bosses, shots, motion, previous = {}, {}, { 0, 0 }, { 0, 0 }, {}
 local fought, floorShots = {}, {}
 local snapshots, floorEvents, moveInputs, shootInputs = 0, 0, 0, 0
 local stage, stageAt, destination = nil, 0, nil
+local lastFloor = 0
 local winCallback, exitCallback, tearCallback, chestCallback
 local chestContacts = 0
 local function report(text)
@@ -60,6 +62,12 @@ local function bossRoom()
 end
 local function observeFloor()
     local current = Game():GetLevel():GetStage()
+    assert(
+        current >= 1 and current <= 11 and current ~= 9,
+        "Campaign entered an unintended floor " .. current
+    )
+    assert(current >= lastFloor, "Campaign repeated floors or started a Victory Lap")
+    lastFloor = current
     if not visited[current] then
         visited[current] = true
         report("FLOOR stage=" .. current)
@@ -117,6 +125,7 @@ local function botStep()
         end
     end)
     if readyExit and not advanced then
+        terminalReward = Game():GetLevel():GetStage() == 11 and next(bosses) ~= nil
         if not modeChanged then
             command("mode run")
             modeChanged = true
@@ -171,6 +180,7 @@ tearCallback = function(_, tear)
 end
 winCallback = function(_, gameOver)
     assert(not gameOver and not won, "Campaign requires exactly one native win")
+    assert(Game():GetLevel():GetStage() == 11, "Campaign won outside its native terminal floor")
     for i = 1, 8 do
         assert(visited[i], "Campaign skipped floor " .. i)
     end
@@ -240,10 +250,11 @@ function _IsaacLanFrame()
         _IsaacLanCommand("start", "YV039KQF:0:0:0:0:0")
     end
     -- The native Lamb reward asks about a Victory Lap before the ending.
-    -- Confirm its default No after BOT exit contact has been requested; this
+    -- Its prompt can pause before the BOT observes a usable exit. Confirm
+    -- the default No only while the native terminal reward is paused; this
     -- ordinary menu input neither opens the chest nor synthesizes victory.
     local confirm = won and s.scene == 3
-        or host and not won and s.scene == 2 and stage == 11 and advanced and next(bosses)
+        or host and not won and s.scene == 2 and terminalReward and Game():IsPaused()
     native.test_gamepad(confirm and renders % 30 < 5 and 4096 or 0)
     botStep()
     if

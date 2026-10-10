@@ -330,9 +330,30 @@ return function(nav)
             else
                 self.exitContact = nil
             end
+            local x, y = exit.x, exit.y
+            if exit.kind == "bigchest" then
+                -- Big chests have a wide horizontal collision shape. Touch
+                -- from the side while preserving a co-located Void portal's
+                -- protected center, rather than steering into that portal.
+                local offset = exit.radius + obs.actor.radius + 6
+                local distance
+                for _, side in ipairs({ -1, 1 }) do
+                    local candidate = { x = exit.x + side * offset, y = exit.y }
+                    local travel = nav.distance(obs.actor, candidate)
+                    if
+                        nav.passable(obs.map, candidate.x, candidate.y, obs.actor.radius)
+                        and (not distance or travel < distance)
+                    then
+                        x, y, distance = candidate.x, candidate.y, travel
+                    end
+                end
+                if not distance then
+                    return nil, "exit_unreachable"
+                end
+            end
             return {
-                x = obs.exit.x,
-                y = obs.exit.y,
+                x = x,
+                y = y,
                 id = "exit",
                 exit = obs.exit,
                 task = "move_to_exit",
