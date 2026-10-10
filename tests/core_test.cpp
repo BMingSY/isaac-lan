@@ -10,6 +10,9 @@
 #include "audio_ownership.h"
 #include "localized_text.h"
 #include "laser_state.h"
+#include "actor_roster.h"
+#include "log_record.h"
+#include "poop_state.h"
 #include "test_support.h"
 #include <algorithm>
 #include <limits>
@@ -17,6 +20,123 @@
 using namespace isaac::lan;
 
 namespace {
+void roomTransitionContext() {
+    using namespace isaac::rooms;
+    require(validRoomRequest(-100, -1) && validRoomRequest(-101, 0),
+            "Native mirror/mineshaft aliases were rejected before descriptor lookup");
+    require(!validRoomRequest(-21, 0) && !validRoomRequest(-102, 0) && !validRoomRequest(169, 0) &&
+                !validRoomRequest(84, 3),
+            "Invalid native room request was accepted");
+    for (const auto& args :
+         {std::array{-100, 84, 1}, std::array{-100, 84, 0}, std::array{-101, 162, 1},
+          std::array{-101, 55, 0}, std::array{85, 84, 0}}) {
+        const auto key = canonicalRoomDestination(args[0], args[1], args[2]);
+        require(key && (*key)[0] == args[2] && (*key)[1] == args[1],
+                "Native descriptor dimension/canonical grid cell was lost");
+    }
+    require(canonicalRoomDestination(-9, -1, 0) == std::array{0, -9},
+            "An ordinary off-grid room lost its native index");
+    require(!canonicalRoomDestination(-101, -1, 1) && !canonicalRoomDestination(84, -1, 0) &&
+                !canonicalRoomDestination(-100, 169, 1) && !canonicalRoomDestination(-100, 84, 3),
+            "A missing or invalid alias descriptor became a wire destination");
+    const std::array<std::uint32_t, 3> source{0xaabb, 0x12340000, 1};
+    std::array<std::uint32_t, 3> fresh{0xccdd, 0, 0};
+    // Native Mines II transition checks the OLD descriptor before Room::Init.
+    // Its blank descriptor reproduces the null read from the captured crash.
+    require(fresh[1] == 0, "Room constructor fixture must begin without a descriptor");
+    prepareDepartureMetadata(fresh, source);
+    require(fresh[0] == 0xccdd && fresh[1] == source[1] && fresh[2] == 1 &&
+                source == std::array<std::uint32_t, 3>{0xaabb, 0x12340000, 1},
+            "Cross-dimension init lost departure metadata or changed native ownership");
+}
+void poopState() {
+    auto packet = [](unsigned mana, unsigned spell) {
+        Writer writer(Message::world);
+        writer.u32(mana);
+        for (unsigned i = 0; i < 6; ++i)
+            writer.u8(i == 2 ? spell : i);
+        writer.bytes.erase(writer.bytes.begin());
+        return writer.bytes;
+    };
+    for (auto mana : {0u, 12u, 99u}) {
+        const auto bytes = packet(mana, 11);
+        Reader reader(bytes);
+        const auto value = isaac::actors::readPoopState(reader);
+        require(value.mana == mana && value.queue == std::array<std::uint8_t, 6>{0, 1, 11, 3, 4, 5},
+                "Poop mana or queue lost its absolute state");
+    }
+    for (const auto& bytes : {packet(0xffffffff, 1), packet(5, 12)})
+        rejects(
+            [&] {
+                Reader reader(bytes);
+                isaac::actors::readPoopState(reader);
+            },
+            "Malformed poop state accepted");
+    const auto bytes = packet(5, 7);
+    for (unsigned n = 0; n < bytes.size(); ++n)
+        rejects(
+            [&] {
+                Reader reader{std::span(bytes).first(n)};
+                isaac::actors::readPoopState(reader);
+            },
+            "Truncated poop queue accepted");
+}
+void logRecord() {
+    using namespace isaac::logging;
+    require(level("game_compatibility=PASS build=J460") == Level::info,
+            "Startup record lost its info level");
+    require(level("network_failure=Cannot apply replica") == Level::error &&
+                level("native_exception code=0xc0000005") == Level::error &&
+                level("frontend_error=Lua callback failed") == Level::error &&
+                level("audit=FAIL native entry point") == Level::error &&
+                level("integration_error=Mod callback failed") == Level::error,
+            "An actionable failure was not marked as an error");
+    require(level("startup_lab_environment=IGNORED foreign_executable") == Level::warning &&
+                level("network_stall ticks=90") == Level::warning,
+            "Recoverable diagnostics lost their warning level");
+    require(level("state_cost capture=0.3 apply=0.2") == Level::debug &&
+                level("state_transfer slot=1 tick=42") == Level::debug,
+            "Per-frame telemetry flooded the info level");
+    require(record("2026-10-10 12:34:56.789+08:00", 123, Level::error,
+                   "network_failure=one\r\n[INFO] two") ==
+                "[2026-10-10 12:34:56.789+08:00] [ERROR] [pid=123] "
+                "network_failure=one\\r\\n[INFO] two\r\n",
+            "A record lost its metadata or a multiline error forged another record");
+}
+void actorRoster() {
+    using isaac::actors::reconcile;
+    using isaac::actors::replacementView;
+    require(replacementView<int>({11, 32, 22, 14}, {22, 32}, 22, 32) == std::vector{32, 22},
+            "Birthright replacement lost the global permutation or included another room");
+    require(replacementView<int>({11, 32, 14}, {22}, 22, 32) == std::vector{32},
+            "An unlisted replacement left its old body in the scoped view");
+    auto owner = [](int actor) { return actor % 10; };
+    auto same = [&](int old, int next) { return owner(old) == owner(next); };
+    const std::vector<int> all{11, 12, 13, 14};
+    require(reconcile(all, std::vector<int>{13, 11}, std::vector<int>{13, 11}, same) == all,
+            "An unchanged UI view reordered the canonical gameplay roster");
+    require(reconcile(all, std::vector<int>{11}, std::vector<int>{21}, same) ==
+                std::vector<int>({21, 12, 13, 14}),
+            "Host Flip reordered the guest's native roster index");
+    require(reconcile(all, std::vector<int>{12}, std::vector<int>{22}, same) ==
+                std::vector<int>({11, 22, 13, 14}),
+            "Guest Flip lost the active native actor position");
+    require(reconcile(all, std::vector<int>{11, 13}, std::vector<int>{21, 23}, same) ==
+                std::vector<int>({21, 12, 23, 14}),
+            "Separate-room transformations crossed another room's roster positions");
+    require(reconcile(all, std::vector<int>{12}, std::vector<int>{12, 22}, same) ==
+                std::vector<int>({11, 12, 13, 14, 22}),
+            "A new companion replaced its living owner");
+    require(reconcile(all, std::vector<int>{12}, std::vector<int>{}, same) ==
+                std::vector<int>({11, 13, 14}),
+            "A removed actor remained in the native roster");
+    require(reconcile(all, all, std::vector<int>{11, 22, 13, 14}, same) ==
+                std::vector<int>({11, 22, 13, 14}),
+            "Complete-roster native replacement did not converge");
+    require(reconcile(all, std::vector<int>{11, 13}, std::vector<int>{13, 11}, same) ==
+                std::vector<int>({13, 12, 11, 14}),
+            "Listed form swap lost its native order or moved another room's actor");
+}
 void laserState() {
     using isaac::presentation::readLaserPath;
     auto packet = [](unsigned sample, float coordinate = 1.25f, unsigned count = 2) {
@@ -587,9 +707,13 @@ int main(int argc, char** argv) {
                      {"audio-ownership", audioOwnership},
                      {"localized-text", localizedText},
                      {"laser-state", laserState},
+                     {"actor-roster", actorRoster},
+                     {"log-record", logRecord},
+                     {"poop-state", poopState},
                      {"bootstrap-profile", bootstrapProfile},
                      {"intro-barrier", introBarrier},
                      {"room-map", roomMap},
+                     {"room-transition-context", roomTransitionContext},
                      {"truncated-packets", truncatedPackets},
                      {"hashes", hashes},
                      {"progression", progression},

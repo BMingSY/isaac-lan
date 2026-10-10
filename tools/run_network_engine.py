@@ -10,6 +10,7 @@ import shutil
 import signal
 import subprocess
 import time
+from game_logs import probe_path
 
 
 def windows(path):
@@ -80,6 +81,11 @@ def main():
         "--endings-fixture",
         action="store_true",
         help="Unlock routes only on the owned host and lock the owned guest before joining",
+    )
+    parser.add_argument(
+        "--hush-fixture",
+        action="store_true",
+        help="Prepare prior Hush kills and the Void unlock only on the owned host",
     )
     parser.add_argument(
         "--automatic",
@@ -194,7 +200,7 @@ def main():
         parser.error("Scenario timeout must be between 10 and 1800 seconds")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
-    if args.endings_fixture:
+    if args.endings_fixture or args.hush_fixture:
         args.progress_fixture = True
     if args.alt_path_fixture and not args.progress_fixture:
         parser.error("--alt-path-fixture requires --progress-fixture")
@@ -540,6 +546,8 @@ def main():
                         fixture.append("-AltPathFixture")
                     if args.endings_fixture:
                         fixture.append("-EndingsFixture")
+                    if args.hush_fixture:
+                        fixture.append("-HushFixture")
                     print(execute(*fixture), flush=True)
                     hold.unlink()
             if args.exercise_menu or (args.capture_ui and role == "host"):
@@ -570,7 +578,7 @@ def main():
                         control(
                             pid, "Capture", windows(args.output.resolve() / "official-online.png")
                         )
-                        native = (lab / "probe.log").read_text().rsplit("bootstrap=PASS", 1)[-1]
+                        native = probe_path(lab).read_text().rsplit("bootstrap=PASS", 1)[-1]
                         assert "native_online_entry=OFFICIAL" in native
                         entry = native.split("native_online_entry=OFFICIAL", 1)[0]
                         assert (
@@ -749,9 +757,7 @@ def main():
                 if "LAN_NETWORK FAILED" in line or "Error in" in line or "Caught exception" in line
             ]
             for lab in labs:
-                native = (
-                    (lab / "probe.log").read_text(errors="replace").rsplit("bootstrap=PASS", 1)[-1]
-                )
+                native = probe_path(lab).read_text(errors="replace").rsplit("bootstrap=PASS", 1)[-1]
                 errors.extend(
                     line
                     for line in native.splitlines()
@@ -881,9 +887,17 @@ def main():
                     result.setdefault("close_errors", []).append(
                         f"{role} recording cleanup: {error}"
                     )
-            for path in [log_path(lab), lab / "probe.log"]:
+            for path in [log_path(lab), probe_path(lab)]:
                 if path.exists():
                     shutil.copy2(path, out / path.name)
+            # Protected runners restore the entire isolated profile afterward.
+            # Preserve native diagnostics for this owned PID before that restore.
+            if len(processes) > roles.index(role):
+                pid = processes[roles.index(role)]
+                for dump in (log_path(lab).parent / "crash_dumps").glob(f"*-{pid}-*.dmp"):
+                    frozen_dumps = out / "crash_dumps"
+                    frozen_dumps.mkdir(exist_ok=True)
+                    shutil.copy2(dump, frozen_dumps / dump.name)
             for suffix in ("txt", "csv"):
                 for path in (lab / "game").glob("lan-test-digest-*." + suffix):
                     shutil.copy2(path, out / path.name)

@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][int]$GameProcessId, [switch]$HostFixture, [switch]$AltPathFixture, [switch]$EndingsFixture)
+param([Parameter(Mandatory = $true)][int]$GameProcessId, [switch]$HostFixture, [switch]$AltPathFixture, [switch]$EndingsFixture, [switch]$HushFixture)
 $ErrorActionPreference = 'Stop'
 $process = Get-Process -Id $GameProcessId
 if ($process.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') {
@@ -57,6 +57,17 @@ try {
             }
         }
         Write-Output "Fixture ending routes host_unlocked=$($HostFixture.IsPresent) guest_prior_progress_retained=True"
+    }
+    if ($HushFixture) {
+        [byte[]]$voidUnlock = @([byte][int]$HostFixture.IsPresent)
+        [int]$hushKills = 0
+        if ($HostFixture) { $hushKills = 3 }
+        $bytes = [BitConverter]::GetBytes($hushKills)
+        if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + 320), $voidUnlock, [UIntPtr]([uint32]1), [ref]$count) -or
+            -not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x2bc + 158 * 4), $bytes, [UIntPtr]([uint32]4), [ref]$count)) {
+            throw 'Cannot set Hush continuation fixture.'
+        }
+        Write-Output "Fixture achievement320=$($voidUnlock[0]) counter158=$hushKills"
     }
     if ($AltPathFixture) {
         # A Secret Exit is unlocked only on the host. Keep Dross locked on both

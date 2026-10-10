@@ -48,6 +48,19 @@ if(BUILD_TESTING)
         add_test(NAME bridge.npc-state
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/npc_state.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.actor-forms
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/actor_forms.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.poop
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/poop.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(
+            NAME bridge.special-coordinator
+            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/special_coordinator.lua"
+                    "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.special-menu
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/special_menu.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
         add_test(
             NAME bridge.shared-resources
             COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_resources.lua"
@@ -63,6 +76,10 @@ if(BUILD_TESTING)
             bridge.presentation
             bridge.floor
             bridge.npc-state
+            bridge.actor-forms
+            bridge.poop
+            bridge.special-coordinator
+            bridge.special-menu
             bridge.shared-resources
             PROPERTIES TIMEOUT 30 LABELS "offline;lua")
     endif()
@@ -85,9 +102,13 @@ if(BUILD_TESTING)
         audio-ownership
         localized-text
         laser-state
+        actor-roster
+        log-record
+        poop-state
         bootstrap-profile
         intro-barrier
         room-map
+        room-transition-context
         truncated-packets
         hashes
         progression
@@ -135,6 +156,8 @@ foreach(
     state/presentation
     state/floor
     state/npc
+    state/forms
+    state/poop
     api/codec
     api/lifecycle
     api/actions
@@ -165,6 +188,7 @@ configure_file(src/bridge/embedded.h.in generated/embedded_bridge.h @ONLY)
 add_library(
     isaac_lan_probe SHARED
     src/probe.cpp
+    src/runtime_log.cpp
     src/runtime_net.cpp
     src/engine_rooms.cpp
     src/engine_visuals.cpp
@@ -245,6 +269,17 @@ target_compile_definitions(isaac_lan_probe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_probe PRIVATE bcrypt iphlpapi gdiplus minhook isaac_lan_net
                                               isaac_lan_ui)
 add_executable(isaac_lan_lab tools/lab_runner.cpp)
+if(BUILD_TESTING)
+    add_executable(isaac_lan_log_test tests/runtime_log_test.cpp src/runtime_log.cpp)
+    target_include_directories(isaac_lan_log_test PRIVATE src)
+    target_compile_definitions(isaac_lan_log_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    if(MINGW)
+        target_compile_options(isaac_lan_log_test PRIVATE -Wall -Wextra -Werror)
+        target_link_options(isaac_lan_log_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME log.path-and-records COMMAND isaac_lan_log_test path-and-records)
+    set_tests_properties(log.path-and-records PROPERTIES TIMEOUT 30 LABELS "offline;logging")
+endif()
 add_library(isaac_lan_loader SHARED src/loader.cpp src/loader.def)
 set_target_properties(isaac_lan_loader PROPERTIES PREFIX "" OUTPUT_NAME "winmm")
 target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)

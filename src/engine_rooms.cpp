@@ -9,6 +9,8 @@
 #include "net_protocol.h"
 #include "laser_state.h"
 #include "room_map.h"
+#include "actor_roster.h"
+#include "poop_state.h"
 #include <MinHook.h>
 #include <algorithm>
 #include <array>
@@ -286,10 +288,13 @@ struct Scope {
     std::optional<audio::RoomScope> audioScope;
     bool reconcilePlayers;
     std::vector<Address> originalPlayers;
+    std::map<Address, int> originalControllers;
     Scope(Room& target, const std::vector<Address>& players, bool reconcile = true)
         : room(target), parent(active), previousShared(sharedOwner),
           previousRoom(at<Address>(game(), 0x18300)), previousRoster(roster()),
           reconcilePlayers(reconcile), originalPlayers(players) {
+        for (auto player : players)
+            originalControllers[player] = at<int>(player, 0x1618);
         for (unsigned i = 0; i < previous.size(); ++i)
             previous[i] = at<std::uint32_t>(game(), contextOffsets[i]);
         previousRefresh = at<bool>(game(), 0x26534);
@@ -317,19 +322,31 @@ struct Scope {
         // those changes into the full roster instead of writing into a slice of
         // the game's original allocation.
         if (reconcilePlayers) {
-            auto all = values(roster());
+            auto all = actors::reconcile(
+                values(roster()), originalPlayers, current, [&](Address old, Address candidate) {
+                    return originalControllers.at(old) == at<int>(candidate, 0x1618);
+                });
             for (auto player : originalPlayers)
                 if (std::find(current.begin(), current.end(), player) == current.end()) {
-                    std::erase(all, player);
                     location.erase(player);
                 }
             for (auto player : current)
-                if (std::find(all.begin(), all.end(), player) == all.end()) {
-                    all.push_back(player);
+                if (std::find(originalPlayers.begin(), originalPlayers.end(), player) ==
+                    originalPlayers.end())
                     location[player] = &room;
-                }
             if (all != values(roster()))
                 assign(roster(), all);
+            for (unsigned i = 0; i < all.size(); ++i)
+                if (std::find(originalPlayers.begin(), originalPlayers.end(), all[i]) ==
+                        originalPlayers.end() &&
+                    std::find(current.begin(), current.end(), all[i]) != current.end())
+                    logger("actor_replaced index=" + std::to_string(i) +
+                           " type=" + std::to_string(at<int>(all[i], 0x13c0)) +
+                           " controller=" + std::to_string(at<int>(all[i], 0x1618)) +
+                           " parent=" + std::to_string(at<Address>(all[i], 0x3bc)) +
+                           " twin=" + std::to_string(at<Address>(all[i], 0x1e68)));
+            if (depth == 1)
+                participants = logicalPlayers();
         }
         at<Address>(game(), 0x18300) = previousRoom;
         for (unsigned i = 0; i < previous.size(); ++i)
@@ -358,6 +375,32 @@ struct TeamScope {
         }
     }
 };
+using ReplacePlayer = bool(__attribute__((thiscall)) *)(void*, void*, void*);
+ReplacePlayer originalReplacePlayer;
+bool __attribute__((fastcall)) replacePlayer(void* manager, void*, void* oldPlayer,
+                                             void* nextPlayer) {
+    const auto old = reinterpret_cast<Address>(oldPlayer),
+               next = reinterpret_cast<Address>(nextPlayer);
+    // Birthright's listed Lazarus bodies are swapped by their GLOBAL indices.
+    // A room-local roster can contain both bodies at different indices.
+    if (!enabled || !teamRoster || !at<bool>(next, 0x170))
+        return originalReplacePlayer(manager, oldPlayer, nextPlayer);
+    const auto scoped = values(roster());
+    const auto oldIndex = at<unsigned>(old, 0x161c), nextIndex = at<unsigned>(next, 0x161c);
+    if (oldIndex < scoped.size() && nextIndex < scoped.size() && scoped[oldIndex] == old &&
+        scoped[nextIndex] == next)
+        return originalReplacePlayer(manager, oldPlayer, nextPlayer);
+    bool replaced;
+    std::vector<Address> all;
+    {
+        TeamScope team;
+        replaced = originalReplacePlayer(manager, oldPlayer, nextPlayer);
+        all = values(roster());
+    }
+    if (replaced)
+        assign(roster(), actors::replacementView(all, scoped, old, next));
+    return replaced;
+}
 using AddResource = void(__attribute__((thiscall)) *)(void*, int);
 using SyncResources = void(__attribute__((thiscall)) *)(void*, unsigned);
 using CopyResources = void(__attribute__((thiscall)) *)(void*, void*, unsigned);
@@ -754,6 +797,28 @@ Address currentActor(void* explicitActor = nullptr) {
     }
     return 0;
 }
+std::optional<Key> destination(Room& source, int index, int dimension) {
+    if (!validRoomRequest(index, dimension))
+        return std::nullopt;
+    const auto resolve = [&]() -> std::optional<Key> {
+        using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+        const auto desc = reinterpret_cast<Address>(
+            engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), index,
+                                   dimension < 0 ? source.key.dimension : dimension));
+        if (!desc || !at<Address>(desc, 0x10))
+            return std::nullopt;
+        const auto key = canonicalRoomDestination(index, at<int>(desc, 4), at<int>(desc, 0xc));
+        if (!key)
+            return std::nullopt;
+        return Key{(*key)[0], (*key)[1]};
+    };
+    if (active == &source || (index != -100 && index != -101))
+        return resolve();
+    // Only aliases depend on the current room. Descriptor lookup cannot
+    // replace actors; avoid mutating a caller's participant iteration.
+    Scope scope(source, occupants(source), false);
+    return resolve();
+}
 bool remoteCommand(Address player, int index, int dimension, bool teleport) {
     if (player != participant(runtime::localViewSlot()))
         return false;
@@ -761,13 +826,14 @@ bool remoteCommand(Address player, int index, int dimension, bool teleport) {
     if (from == location.end())
         return false;
     const auto source = from->second->key;
-    if (index < -20 || index >= 169 || dimension < -1 || dimension > 2)
+    const auto target = destination(*from->second, index, dimension);
+    if (!target)
         return false;
     return runtime::requestRoom(
         {static_cast<std::uint8_t>(at<int>(game(), 0)),
          static_cast<std::uint8_t>(at<int>(game(), 4)), static_cast<std::uint8_t>(source.dimension),
-         static_cast<std::uint8_t>(dimension < 0 ? source.dimension : dimension),
-         static_cast<std::int16_t>(source.index), static_cast<std::int16_t>(index), teleport});
+         static_cast<std::uint8_t>(target->dimension), static_cast<std::int16_t>(source.index),
+         static_cast<std::int16_t>(target->index), teleport});
 }
 bool queue(Address player, int index, int dimension, int door, bool teleport = false,
            bool animateDeparture = true) {
@@ -779,19 +845,12 @@ bool queue(Address player, int index, int dimension, int door, bool teleport = f
         }
     }
     auto it = location.find(player);
-    if (!enabled || it == location.end() || index < -20 || index >= 169 || dimension < -1 ||
-        dimension > 2)
+    if (!enabled || it == location.end())
         return false;
-    Key key{dimension < 0 ? it->second->key.dimension : dimension, index};
-    using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-    const auto desc = reinterpret_cast<Address>(
-        engine<Desc>(0x340bc0)(reinterpret_cast<void*>(game()), key.index, key.dimension));
-    if (!desc || !at<Address>(desc, 0x10))
+    const auto target = destination(*it->second, index, dimension);
+    if (!target)
         return false;
-    // Multiple grid cells of a large room refer to the same descriptor. Keep
-    // one native Room instance even when players enter through different cells.
-    if (key.index >= 0 && at<int>(desc, 4) >= 0)
-        key.index = at<int>(desc, 4);
+    const auto key = *target;
     if (key == it->second->key)
         return true;
     if (std::any_of(pending.begin(), pending.end(),
@@ -1488,6 +1547,123 @@ int actorSprites(lua_State* L) {
         push(address);
     return 1;
 }
+int actorForm(lua_State* L) {
+    const auto index = lua.checkInteger(L, 1), desired = lua.checkInteger(L, 2);
+    const auto controller = lua.getTop(L) >= 3 ? lua.checkInteger(L, 3) : -1;
+    const auto all = values(roster());
+    if (!runtime::replica() || !enabled || depth || index < 0 ||
+        static_cast<std::size_t>(index) > all.size() || (desired != 29 && desired != 38)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    if (static_cast<std::size_t>(index) == all.size()) {
+        // Native Player's Birthright update promotes its existing raw backup
+        // into a listed twin. Replicas skip gameplay Update, so restore that
+        // ownership only when the authority actually includes the extra body.
+        for (auto owner : all) {
+            const auto kind = at<int>(owner, 0x13c0);
+            const auto backup = at<Address>(owner, 0x1e6c);
+            auto room = findRoom(owner);
+            if ((kind != 29 && kind != 38) || at<int>(owner, 0x1618) != controller || !room ||
+                !backup || at<unsigned>(backup, 0x28) != 1 || at<int>(backup, 0x13c0) != desired ||
+                at<Address>(backup, 0x1e6c) != owner ||
+                std::find(all.begin(), all.end(), backup) != all.end())
+                continue;
+            using AssignPtr = void*(__attribute__((thiscall))*)(void*, void*);
+            using AddPlayer = void(__attribute__((thiscall))*)(void*, void*);
+            {
+                Scope scope(*room, all);
+                engine<AssignPtr>(0xcf1d0)(reinterpret_cast<void*>(owner + 0x1e68),
+                                           reinterpret_cast<void*>(backup));
+                engine<AssignPtr>(0xcf1d0)(reinterpret_cast<void*>(backup + 0x1e68),
+                                           reinterpret_cast<void*>(owner));
+                at<Address>(owner, 0x1e6c) = at<Address>(backup, 0x1e6c) = 0;
+                at<int>(backup, 0x1618) = controller;
+                at<bool>(backup, 0x170) = at<bool>(backup, 0x172) = true;
+                at<Vec2>(backup, 0x33c) = at<Vec2>(owner, 0x33c);
+                engine<AddPlayer>(0x5b9f60)(reinterpret_cast<void*>(game() + 0x1baa8),
+                                            reinterpret_cast<void*>(backup));
+            }
+            participants = logicalPlayers();
+            logger("actor_form=LISTED index=" + std::to_string(index) +
+                   " type=" + std::to_string(desired));
+            lua.pushBoolean(L, true);
+            return 1;
+        }
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto old = all[index];
+    if (controller >= 0 && at<int>(old, 0x1618) != controller) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto kind = at<int>(old, 0x13c0);
+    if (kind == desired) {
+        lua.pushBoolean(L, true);
+        return 1;
+    }
+    auto room = findRoom(old);
+    if (!room || (kind != 29 && kind != 38)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    Address replacement = 0;
+    for (auto offset : {0x1e68u, 0x1e6cu}) {
+        const auto candidate = at<Address>(old, offset);
+        if (candidate && at<unsigned>(candidate, 0x28) == 1 &&
+            at<int>(candidate, 0x13c0) == desired) {
+            replacement = candidate;
+            break;
+        }
+    }
+    if (!replacement) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    using Replace = bool(__attribute__((thiscall))*)(void*, void*, void*);
+    bool replaced;
+    {
+        // Birthright's two listed bodies use their global native roster indices.
+        // Keep that complete roster while selecting only this actor's room.
+        Scope scope(*room, all);
+        replaced = engine<Replace>(0x5bee80)(reinterpret_cast<void*>(game() + 0x1baa8),
+                                             reinterpret_cast<void*>(old),
+                                             reinterpret_cast<void*>(replacement));
+    }
+    participants = logicalPlayers();
+    const auto current = values(roster());
+    const bool ready = replaced && static_cast<std::size_t>(index) < current.size() &&
+                       at<int>(current[index], 0x13c0) == desired;
+    if (ready)
+        logger("actor_form=REPLACED index=" + std::to_string(index) +
+               " type=" + std::to_string(desired));
+    lua.pushBoolean(L, ready);
+    return 1;
+}
+int actorPoop(lua_State* L) {
+    auto sprite = static_cast<Address*>(lua.toUserdata(L, 1));
+    if (!runtime::replica() || !sprite || lua.rawLength(L, 1) != 8 || sprite[1] < 0x48 ||
+        at<unsigned>(sprite[1] - 0x48, 0x28) != 1 || at<int>(sprite[1] - 0x48, 0x13c0) != 25) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    try {
+        std::size_t size;
+        const auto bytes = lua.checkString(L, 2, &size);
+        lan::Reader reader({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        const auto value = actors::readPoopState(reader);
+        const auto player = sprite[1] - 0x48;
+        at<int>(player, 0x1f54) = value.mana;
+        for (unsigned i = 0; i < value.queue.size(); ++i)
+            at<std::uint8_t>(player, 0x1f58 + i) = value.queue[i];
+        lua.pushBoolean(L, true);
+    } catch (const std::exception& e) {
+        runtime::abort(e.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
 int actorGhost(lua_State* L) {
     const auto index = lua.checkInteger(L, 1), ghost = lua.checkInteger(L, 2);
     const auto all = values(roster());
@@ -2155,6 +2331,11 @@ void finishFrame() {
                 to->context = from->context;
         }
         const bool protect = !created && occupiedCombat(*to, request.player);
+        if (created)
+            prepareDepartureMetadata(
+                std::span<std::uint32_t, 3>(reinterpret_cast<std::uint32_t*>(to->pointer), 3),
+                std::span<const std::uint32_t, 3>(
+                    reinterpret_cast<const std::uint32_t*>(from->pointer), 3));
         to->replicaShell = false;
         const auto actors = controlledActors(request.player);
         std::vector<Address> companions;
@@ -2408,6 +2589,8 @@ bool install(Address base, void (*log)(const std::string&)) {
     };
     return hook(0x359400, reinterpret_cast<void*>(addCoins),
                 reinterpret_cast<void**>(&originalCoins)) &&
+           hook(0x5bee80, reinterpret_cast<void*>(replacePlayer),
+                reinterpret_cast<void**>(&originalReplacePlayer)) &&
            hook(0x3597e0, reinterpret_cast<void*>(syncResources),
                 reinterpret_cast<void**>(&originalResources)) &&
            hook(0x2f9770, reinterpret_cast<void*>(endGame),
@@ -2501,6 +2684,8 @@ bool bind(lua_State* L, HMODULE module) {
     function("map_pickups", mapPickups);
     function("map_refresh", refreshMap);
     function("actor_sprites", actorSprites);
+    function("actor_form", actorForm);
+    function("actor_poop", actorPoop);
     function("actor_ghost", actorGhost);
     function("laser_path", laserPath);
     function("rooms_set_connected", setConnections);

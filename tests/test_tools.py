@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import socket
 import sys
@@ -17,9 +18,30 @@ from build_package import build
 from build_release import release
 from check_release import FILES, check
 from delayed_relay import DelayedRelay
+from game_logs import probe_path
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARIES = ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe")
+
+
+class GameLogTests(unittest.TestCase):
+    def test_profile_and_frozen_build_log_locations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lab = Path(directory)
+            current = (
+                lab / "profile/Documents/My Games/Binding of Isaac Repentance+/isaac-lan/probe.log"
+            )
+            self.assertEqual(probe_path(lab), current)
+            current.parent.mkdir(parents=True)
+            current.write_text("new")
+            self.assertEqual(probe_path(lab), current)
+            old = lab / "probe.log"
+            old.write_text("baseline")
+            os.utime(old, ns=(200, 200))
+            os.utime(current, ns=(100, 100))
+            self.assertEqual(probe_path(lab), old)
+            os.utime(current, ns=(300, 300))
+            self.assertEqual(probe_path(lab), current)
 
 
 class PackagingTests(unittest.TestCase):

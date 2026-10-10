@@ -2,6 +2,7 @@
 // launches require the installer marker, J460 layout and compatible entry points.
 #include <windows.h>
 #include <MinHook.h>
+#include <shlobj.h>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -19,6 +20,7 @@
 #include "frontend.h"
 #include "game_build.h"
 #include "bootstrap_profile.h"
+#include "runtime_log.h"
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* L);
 
@@ -42,15 +44,49 @@ using GetProc = FARPROC(WINAPI*)(HMODULE, LPCSTR);
 GetProc originalGetProc = GetProcAddress;
 
 void log(const std::string& line) {
-    const auto file = root + L"\\probe.log";
-    HANDLE out = CreateFileW(file.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                             nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (out == INVALID_HANDLE_VALUE)
-        return;
-    DWORD written = 0;
-    const auto text = line + "\r\n";
-    WriteFile(out, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
-    CloseHandle(out);
+    isaac::logging::write(line);
+}
+
+void observeNativeLog(const char* name) {
+    const auto error = GetLastError();
+    try {
+        if (name) {
+            const auto length = MultiByteToWideChar(CP_ACP, 0, name, -1, nullptr, 0);
+            if (length > 0) {
+                std::wstring path(length, L'\0');
+                MultiByteToWideChar(CP_ACP, 0, name, -1, path.data(), length);
+                isaac::logging::nativeFileOpened(path.c_str());
+            }
+        }
+    } catch (...) {
+        // Observing a log path must never alter a successful native file open.
+    }
+    SetLastError(error);
+}
+HANDLE WINAPI nativeOpenFile(LPCSTR name, DWORD access, DWORD sharing,
+                             LPSECURITY_ATTRIBUTES attributes, DWORD creation, DWORD flags,
+                             HANDLE templateFile) {
+    const auto handle =
+        CreateFileA(name, access, sharing, attributes, creation, flags, templateFile);
+    if (handle != INVALID_HANDLE_VALUE && (access & (GENERIC_WRITE | FILE_APPEND_DATA)))
+        observeNativeLog(name);
+    return handle;
+}
+using NativeFopen = void*(__cdecl*)(const char*, const char*);
+using NativeFiopen = void*(__cdecl*)(const char*, int, int);
+NativeFopen originalFopen;
+NativeFiopen originalFiopen;
+void* __cdecl nativeFopen(const char* name, const char* mode) {
+    const auto file = originalFopen(name, mode);
+    if (file && mode && std::strpbrk(mode, "wa+"))
+        observeNativeLog(name);
+    return file;
+}
+void* __cdecl nativeFiopen(const char* name, int mode, int protection) {
+    const auto file = originalFiopen(name, mode, protection);
+    if (file && (mode & (2 | 8)))
+        observeNativeLog(name);
+    return file;
 }
 
 std::string utf8(const std::wstring& s) {
@@ -97,7 +133,7 @@ bool __cdecl noSteamRelaunch(unsigned int) {
     return false;
 }
 
-bool replaceImport(const char* name, void* replacement) {
+bool replaceImport(const char* name, void* replacement, void** original = nullptr) {
     const auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
     const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(image + dos->e_lfanew);
     auto imports = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(
@@ -115,6 +151,8 @@ bool replaceImport(const char* name, void* replacement) {
             DWORD before;
             if (!VirtualProtect(&addresses->u1.Function, sizeof(void*), PAGE_READWRITE, &before))
                 return false;
+            if (original)
+                *original = reinterpret_cast<void*>(addresses->u1.Function);
             addresses->u1.Function = reinterpret_cast<ULONG_PTR>(replacement);
             DWORD ignored;
             VirtualProtect(&addresses->u1.Function, sizeof(void*), before, &ignored);
@@ -541,6 +579,18 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     if (selected == isaac::bootstrap::Profile::missingMarker)
         return 12;
     isolated = selected == isaac::bootstrap::Profile::isolated;
+    wchar_t documents[MAX_PATH]{};
+    std::filesystem::path logDirectory;
+    if (isolated)
+        logDirectory =
+            std::filesystem::path(env) / L"profile/Documents/My Games/Binding of Isaac Repentance+";
+    else if (SUCCEEDED(
+                 SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documents)))
+        logDirectory = std::filesystem::path(documents) / L"My Games/Binding of Isaac Repentance+";
+    else
+        return 14;
+    if (!isaac::logging::initialize(logDirectory))
+        return 14;
     if (isolated) {
         root = env;
     } else {
@@ -575,6 +625,16 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
             return 14;
     }
     if (!replaceImport("GetProcAddress", reinterpret_cast<void*>(privateGetProc)))
+        return 15;
+    if (!replaceImport("CreateFileA", reinterpret_cast<void*>(nativeOpenFile)))
+        return 15;
+    // Native loggers use both CRT stdio and C++ streams. Preserve the game's
+    // own CRT file objects; observe their successful opens without borrowing
+    // or closing them from this DLL's different runtime.
+    if (!replaceImport("fopen", reinterpret_cast<void*>(nativeFopen),
+                       reinterpret_cast<void**>(&originalFopen)) ||
+        !replaceImport("?_Fiopen@std@@YAPAU_iobuf@@PBDHH@Z", reinterpret_cast<void*>(nativeFiopen),
+                       reinterpret_cast<void**>(&originalFiopen)))
         return 15;
     if (isolated)
         replaceImport("SteamAPI_RestartAppIfNecessary", reinterpret_cast<void*>(noSteamRelaunch));

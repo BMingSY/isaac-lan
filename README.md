@@ -53,4 +53,4 @@ python3 tools/build_package.py --build build-win32 --output dist/Isaac-LAN-J460
 
 ## 问题与建议
 
-请提交到 [Issues](https://github.com/BMingSY/isaac-lan/issues)，写明游戏版本、主客机、复现步骤和使用的其他 Mod；遇到联机异常时可以附上游戏目录中的 `isaac-lan/probe.log`。
+请提交到 [Issues](https://github.com/BMingSY/isaac-lan/issues)，写明游戏版本、主客机、复现步骤和使用的其他 Mod；遇到联机异常时可以附上原版 `log.txt` 同级目录下的 `isaac-lan/probe.log`。每条日志包含本地时间、时区、日志等级和进程 ID。

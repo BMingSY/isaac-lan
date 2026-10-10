@@ -8,6 +8,10 @@ local modules = assert(_IsaacLanModules)
 local codec = assert(modules["state/codec"])
 local encode, decode = codec.encode, codec.decode
 local npcState = assert(modules["state/npc"])
+local forms = assert(modules["state/forms"])(native, function(index)
+    return Isaac.GetPlayer(index)
+end)
+local poop = assert(modules["state/poop"])(native)
 state.encode, state.decode = encode, decode
 function _IsaacLanRoomEntered()
     local room = Game():GetRoom()
@@ -500,7 +504,15 @@ function state.capture(slot, tick)
         local p = Isaac.GetPlayer(index)
         local base = captureActors[index]
         if not base then
-            base = { index, p.ControllerIndex, entity(p, false), inventory(p), {}, false }
+            base = {
+                index,
+                p.ControllerIndex,
+                entity(p, false),
+                inventory(p),
+                {},
+                false,
+                poop.capture(p),
+            }
             captureActors[index] = base
         end
         local position = locations[tostring(p.ControllerIndex - 1)]
@@ -525,6 +537,7 @@ function state.capture(slot, tick)
                     base[4],
                     visuals,
                     assert(native.actor_pose(p:GetSprite())),
+                    base[7],
                 }
                 captureVisuals[index] = full
             end
@@ -563,7 +576,7 @@ function state.capture(slot, tick)
         end
     end
     return encode({
-        9,
+        10,
         tick,
         game:GetFrameCount(),
         level:GetStage(),
@@ -685,7 +698,7 @@ function state.apply(bytes, tick, ack)
         return false
     end
     local value = decode(bytes)
-    assert(value[1] == 9 and value[2] == tick, "Invalid state schema")
+    assert(value[1] == 10 and value[2] == tick, "Invalid state schema")
     local game = Game()
     local level = game:GetLevel()
     if not floor.ready(level, value[14], value[4], value[5]) then
@@ -717,8 +730,20 @@ function state.apply(bytes, tick, ack)
     assert(native.net_progress(value[13]))
     local now = Isaac.GetTime() / 1000
     for _, actor in ipairs(value[9]) do
-        local p = Isaac.GetPlayer(actor[1])
-        assert(p and p.ControllerIndex == actor[2], "Replica actor roster differs")
+        local p = forms.resolve(actor[1], actor[4], actor[2])
+        assert(
+            p and p.ControllerIndex == actor[2],
+            "Replica actor roster differs: index="
+                .. actor[1]
+                .. " expectedController="
+                .. actor[2]
+                .. " actualController="
+                .. (p and p.ControllerIndex or -1)
+                .. " expectedType="
+                .. actor[4][1]
+                .. " actualType="
+                .. (p and p:GetPlayerType() or -1)
+        )
         if p:IsCoopGhost() ~= actor[4][9] then
             assert(native.actor_ghost(actor[1], actor[4][9] and 1 or 0))
         end
@@ -732,7 +757,9 @@ function state.apply(bytes, tick, ack)
         lastInventory[actor[3][1]] = encoded
         applyEntity(p, actor[3], now)
         applyActorVisuals(p, actor)
+        poop.apply(p, actor[7])
     end
+    forms.prune(replicas, motion, lastInventory, value[9])
     actorVisuals = value[9]
     local mapChanged = roomChanged
     for _, d in ipairs(value[8]) do
