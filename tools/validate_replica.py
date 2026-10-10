@@ -162,16 +162,6 @@ def main():
                     cmd += ["--native-record-view", "0", "--frame-ms", "50"]
                 if case in ("item-presentation", "item-text"):
                     cmd += ["--native-record-both", "--frame-ms", "50"]
-                if case == "lanbot":
-                    cmd += [
-                        "--automatic",
-                        "--native-record-view",
-                        "0",
-                        "--frame-ms",
-                        "100",
-                        "--scenario-timeout",
-                        "180",
-                    ]
                 if case in ("hourglass", "weapon-charge"):
                     cmd += ["--native-record-view", "1", "--frame-ms", "50"]
                 if case == "mirror-camera":
@@ -188,7 +178,7 @@ def main():
                         "150",
                     ]
                 report = output / "result.json"
-                if case == "greed":
+                if case in ("greed", "lanbot"):
                     # Full native endings need the owned profile/progress
                     # backup and restoration supplied by the route wrapper.
                     cmd = [
@@ -203,9 +193,9 @@ def main():
                         "--output",
                         str(output),
                         "--case",
-                        "greed",
+                        "greed" if case == "greed" else "lanbot",
                         "--case",
-                        "greedier",
+                        "greedier" if case == "greed" else "lanbot-campaign",
                         "--port",
                         str(29536 + index * 10),
                         "--latency-ms",
@@ -219,10 +209,10 @@ def main():
             if result.returncode:
                 raise RuntimeError(case + " failed; inspect its frozen logs")
             value = summary["cases"][case]
-            if case == "greed":
+            if case in ("greed", "lanbot"):
                 restoration = json.loads((output / "report.json").read_text())
                 if not restoration["passed"] or not restoration["restored"]:
-                    raise RuntimeError("Greed campaign failed or did not restore owned saves")
+                    raise RuntimeError(case + " campaign failed or did not restore owned saves")
             if value["dll_sha256"] != expected or not value.get(
                 "pass", value.get("completed", False)
             ):

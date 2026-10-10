@@ -44,6 +44,8 @@ def main():
             special, ["motion", "floor-items", "mod-integrations", "shared-curses", "ascent-compat"]
         )
         subprocess.run([LUAC, "-p", str(special)], check=True)
+        build_special(special, ["lanbot", "lanbot-campaign"])
+        subprocess.run([LUAC, "-p", str(special)], check=True)
         build_special(special, ["greed", "greedier"])
         subprocess.run([LUAC, "-p", str(special)], check=True)
     print("PASS Python, Lua and bundled gameplay syntax")

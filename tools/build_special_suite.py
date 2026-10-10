@@ -21,6 +21,8 @@ DIAGNOSTICS = (
     "greed",
     "greedier",
     "campaign",
+    "lanbot",
+    "lanbot-campaign",
 )
 
 
@@ -43,6 +45,8 @@ def build(output, cases=CASES):
             "dogma-warning": "state_endings.lua",
             "ascent-compat": "state_endings.lua",
             "campaign": "state_endings.lua",
+            "lanbot": "state_lanbot.lua",
+            "lanbot-campaign": "state_lanbot_campaign.lua",
         }.get(name, "state_side_routes.lua")
         source = (ROOT / "tests" / filename).read_text()
         if name in ("home", "home-debug", "dogma-warning", "ascent-compat"):
@@ -62,7 +66,11 @@ def build(output, cases=CASES):
             cleanup = "native.api_send, native.api_receive = send, receive\nlan:Unregister()\n"
         elif name in ("greed", "greedier"):
             cleanup = "Isaac.RemoveCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)\n"
-        complete = "ended" if name == "audio" else "finished"
+        elif name == "lanbot":
+            cleanup = 'command("off")\nIsaac.RemoveCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)\n'
+        elif name == "lanbot-campaign":
+            cleanup = 'command("off")\nnative.input_bot = baseInput\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)\n'
+        complete = {"audio": "ended", "lanbot": "done"}.get(name, "finished")
         fixtures.append(
             'function() _IsaacLanTest.route = "'
             + name

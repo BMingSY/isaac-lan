@@ -14,7 +14,7 @@ Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-2026
 
 最终场景为：出口后方回血且不误下层、门边带惯性留房、双普通按钮、清房后收起尖刺、未清房交替尖刺、交叉弹幕，以及实际过门后离开门口。交替尖刺要求记录至少三次真实状态变化；仅摆放已收起的尖刺不算开合验收。所有按钮以 State=3 判定，伤害按本机角色 InitSeed 记录。
 
-`tests/state_lanbot.lua` 已加入 `tools/validate_replica.py --cases lanbot`。直接运行 `tools/run_network_engine.py` 时可以指定自己的隔离主客机目录，使用 `--automatic --frontend --menu-start --script tests/state_lanbot.lua --completion 'LAN_NETWORK PASS lanbot behavior suite' --native-record-view 0 --frame-ms 100 --scenario-timeout 180`。首次实验配置的游戏欢迎提示需通过普通菜单确认。
+`tools/validate_replica.py --cases lanbot` 现在委托保护包装器，在同一对进程中执行原行为检查及完整 LANBOT 通关，核对受测 DLL 与存档恢复。单独定向诊断时直接运行 `tools/run_network_engine.py` 时可以指定自己的隔离主客机目录，使用 `--automatic --frontend --menu-start --script tests/state_lanbot.lua --completion 'LAN_NETWORK PASS lanbot behavior suite' --native-record-view 0 --frame-ms 100 --scenario-timeout 180`。首次实验配置的游戏欢迎提示需通过普通菜单确认。
 
 ## 复验履历
 
@@ -63,3 +63,17 @@ Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-2026
 ## 尚未覆盖
 
 本次没有验收完整种子通关、客机托管、高延迟、四人同时托管、全部 Boss 预兆、复杂武器组合和特殊路线解谜。奖励、贪婪、轨道等特殊按钮继续等待人工处理。周期未确认或窗口不足的陷阱会等待，不将不确定状态当作安全。
+
+## 合并主线后的集中验收
+
+本轮在合并 #32、#30 后的最终主线上验证。`tools/run_special_routes.py --case lanbot --case lanbot-campaign` 在同一对隔离进程中先执行七项行为检查，再由共享退出回菜单重建正常模式；不重启游戏。原有七项结果属于历史定向检查，不能代替本轮完整结局和客机托管证据。
+
+完整流程使用固定种子 `YV039KQF`、两名 Isaac、单向延迟 75 ms。显式加速夹具只进入各层原版生成的 Boss 房，提供角色保护、资源、固定 Spoon Bender／Polaroid／Negative，并把原版 `MC_POST_FIRE_TEAR` 的泪弹伤害设为 100；移除 Boss 道具底座以保持武器条件一致。两端都开启真实 LANBOT，战斗时用 hold；清场及原版出口准备后切 run 并调用公开 `lanbot next`。移动、射击、碰撞出口、换层与胜利由真实输入和原版流程完成；夹具不得改角色位置／速度、合成泪弹、强制清场、跳层或合成胜利。
+
+状态断言要求依次观察正常路线 1–8、10、11 层，每层确有原生 Boss 战斗与实际射击，终点 Boss 出现，两端各收到一次原版胜利。房主记录两名角色实际泪弹及位置变化，客机核对自身真实移动／射击输入、权威快照及可靠换层。回到菜单核对本机原有进度／私有计数器，结束后检查正常退出、堆异常转储和隔离存档散列恢复。默认无截图／录像；需要显示检查时可显式 `--record`。
+
+离线执行实际通关夹具的异步原生生命周期模型：角色代理禁止写位置／速度；手动射击、强制清场、跳层和直接结局均失败。缺层、缺终点 Boss、某层没有 Boss 战斗或真实射击、败局、重复胜利及私有计数器变化均拒绝。模型不代替实机物理和真实 LANBOT 运行结果。
+
+这项流程验收属于用户允许的加速 Boss 房夹具，不能声称无辅助探索整张随机地图、随机武器无保护通关、所有 Boss 预兆、高延迟或四人托管已覆盖；探索、门口、普通按钮、尖刺与弹幕另由原有七项定向夹具及离线闭环检查覆盖。
+
+合并主线后的离线检查通过：50 项 CTest、104 项 pytest、19 项子测试；格式／语法与 Windows x86 Release 构建通过。完整集中实机尚待执行，不以离线结果或历史七项记录代替。

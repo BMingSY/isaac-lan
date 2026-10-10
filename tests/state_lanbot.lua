@@ -121,19 +121,19 @@ function _IsaacLanFrame()
                 passed = passed and result.passed
             end
         end
-        report((passed and "PASS " or "FAILED ") .. "lanbot behavior suite")
+        assert(passed, "LANBOT behavior checks failed; inspect LANBOT_CASE records")
+        report("PASS lanbot behavior suite")
     end
     return s
 end
-Isaac.AddCallback(
-    { Name = "LANBOT damage observer" },
-    ModCallbacks.MC_ENTITY_TAKE_DMG,
-    function(_, e)
-        if host and e:ToPlayer() and e.InitSeed == ownerSeed then
-            damage = damage + 1
-        end
+local owner = { Name = "LANBOT damage observer" }
+local damageCallback = function(_, e)
+    if host and e:ToPlayer() and e.InitSeed == ownerSeed then
+        damage = damage + 1
     end
-)
+end
+Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)
+
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(capture, function(t, n, b)
