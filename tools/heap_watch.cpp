@@ -11,6 +11,19 @@ std::filesystem::path fullPath(const wchar_t* source) {
     const auto size = GetFullPathNameW(source, 32768, buffer, nullptr);
     return size && size < 32768 ? std::filesystem::path(buffer) : std::filesystem::path{};
 }
+std::filesystem::path existingPath(const wchar_t* source) {
+    // Process image names can retain an 8.3 spelling or a junction alias.
+    // Compare final paths, while keeping the lab/game directory boundary.
+    const auto file = CreateFileW(source, FILE_READ_ATTRIBUTES,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                  OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return {};
+    wchar_t path[32768]{};
+    const auto size = GetFinalPathNameByHandleW(file, path, 32768, FILE_NAME_NORMALIZED);
+    CloseHandle(file);
+    return size && size < 32768 ? std::filesystem::path(path) : std::filesystem::path{};
+}
 bool dump(HANDLE process, isaac::diagnostics::CrashSignal signal,
           const std::filesystem::path& output, unsigned ordinal) {
     const auto path =
@@ -66,9 +79,17 @@ int wmain(int argc, wchar_t** argv) {
         PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_DUP_HANDLE | SYNCHRONIZE, FALSE, pid);
     wchar_t actual[32768]{};
     DWORD size = 32768;
-    const bool owned = target && QueryFullProcessImageNameW(target, 0, actual, &size) &&
-                       !_wcsicmp(actual, game.c_str());
+    const auto expected = existingPath(game.c_str());
+    const auto gameDirectory = existingPath((lab / L"game").c_str());
+    const auto labDirectory = existingPath(lab.c_str());
+    const bool queried = target && QueryFullProcessImageNameW(target, 0, actual, &size);
+    const auto observed = queried ? existingPath(actual) : std::filesystem::path{};
+    const bool owned =
+        !expected.empty() && !observed.empty() && !_wcsicmp(observed.c_str(), expected.c_str()) &&
+        expected.parent_path() == gameDirectory && gameDirectory.parent_path() == labDirectory;
     if (!owned) {
+        std::printf("heap_watch_ownership=FAIL pid=%lu expected=%ls actual=%ls error=%lu\n", pid,
+                    game.c_str(), actual, GetLastError());
         if (target)
             CloseHandle(target);
         return 2;

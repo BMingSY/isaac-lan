@@ -1,4 +1,4 @@
-// Synthetic debugger regression, not a game or a heap-corruption reproduction.
+// Synthetic observer regression, not a game or a heap-corruption reproduction.
 #include "diagnostics/crash_signal.h"
 #include <cstdio>
 #include <filesystem>
