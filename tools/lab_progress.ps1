@@ -61,7 +61,9 @@ try {
     if ($HushFixture) {
         [byte[]]$voidUnlock = @([byte][int]$HostFixture.IsPresent)
         [int]$hushKills = 0
-        if ($HostFixture) { $hushKills = 3 }
+        if ($HostFixture) {
+            $hushKills = 3
+        }
         $bytes = [BitConverter]::GetBytes($hushKills)
         if (-not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x38 + 320), $voidUnlock, [UIntPtr]([uint32]1), [ref]$count) -or
             -not [LanProgressFixture]::WriteProcessMemory($handle, [IntPtr]($progress + 0x2bc + 158 * 4), $bytes, [UIntPtr]([uint32]4), [ref]$count)) {
