@@ -87,8 +87,19 @@ local function botStep()
         if room:GetType() == RoomType.ROOM_BOSS and room:IsClear() then
             for index = 0, room:GetGridSize() - 1 do
                 local grid = room:GetGridEntity(index)
-                if grid and grid:GetType() == GridEntityType.GRID_TRAPDOOR and grid.State == 1 then
+                if grid and grid:GetType() == GridEntityType.GRID_TRAPDOOR then
                     readyExit = true
+                    if renders % 120 == 0 then
+                        local sprite = grid.GetSprite and grid:GetSprite()
+                        report(
+                            "NATIVE_EXIT_OBSERVED stage="
+                                .. Game():GetLevel():GetStage()
+                                .. " state="
+                                .. grid.State
+                                .. " animation="
+                                .. (sprite and sprite:GetAnimation() or "-")
+                        )
+                    end
                 end
             end
             for _, e in ipairs(Isaac.GetRoomEntities()) do
@@ -124,8 +135,14 @@ tearCallback = function(_, tear)
         if p and (p.ControllerIndex == 1 or p.ControllerIndex == 2) then
             shots[p.ControllerIndex] = shots[p.ControllerIndex] + 1
             local floor = Game():GetLevel():GetStage()
-            floorShots[floor] = (floorShots[floor] or 0) + 1
-            tear.CollisionDamage = 100
+            local evidence = floorShots[floor] or { 0, 0 }
+            floorShots[floor] = evidence
+            evidence[p.ControllerIndex] = evidence[p.ControllerIndex] + 1
+            -- Preserve the native intro: do not let the guest fixture kill
+            -- the Boss before the host has even received ordinary input.
+            if evidence[1] > 0 and evidence[2] > 0 then
+                tear.CollisionDamage = 100
+            end
         end
     end
 end
@@ -140,7 +157,10 @@ winCallback = function(_, gameOver)
     if host then
         for _, floor in ipairs({ 1, 2, 3, 4, 5, 6, 7, 8, 10, 11 }) do
             assert(
-                fought[floor] and (floorShots[floor] or 0) > 0,
+                fought[floor]
+                    and floorShots[floor]
+                    and floorShots[floor][1] > 0
+                    and floorShots[floor][2] > 0,
                 "Campaign did not fight native Boss floor " .. floor
             )
         end

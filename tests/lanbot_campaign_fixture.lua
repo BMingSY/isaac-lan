@@ -129,7 +129,7 @@ for _, host in ipairs({ true, false }) do
                 end,
                 GetGridEntity = function()
                     return {
-                        State = clear and 1 or 0,
+                        State = 0, -- A usable native exit need not share the Greed fixture state.
                         GetType = function()
                             return 17
                         end,
@@ -294,9 +294,9 @@ for _, host in ipairs({ true, false }) do
             end
             if roomIndex == 100 then
                 for slot = 0, 1 do
-                    local tear = { SpawnerEntity = players[slot] }
+                    local tear = { SpawnerEntity = players[slot], CollisionDamage = 3.5 }
                     callbacks[1](nil, tear)
-                    assert(not host or tear.CollisionDamage == 100)
+                    assert(not host or tear.CollisionDamage == 3.5 or tear.CollisionDamage == 100)
                 end
             end
             if offset > 120 then
@@ -318,7 +318,7 @@ for _, host in ipairs({ true, false }) do
         local savedFight, savedShots = fights[5], firing[5]
         fights[5] = nil
         assert(not pcall(callbacks[2], nil, false), "Missing native floor Boss fight was accepted")
-        fights[5], firing[5] = savedFight, 0
+        fights[5], firing[5] = savedFight, { 0, 1 }
         assert(not pcall(callbacks[2], nil, false), "Floor without real firing was accepted")
         firing[5] = savedShots
     end
