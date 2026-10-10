@@ -5,6 +5,7 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
     local callbacks, clock, tears, terminalVariant = {}, 0, {}, 0
     local main, shop, exit, active, terminal = 84, 70, 98, 84, 58
     local stage, ready = 1, true
+    local exitEnemy = false
     local positions = { ["0"] = { index = main }, ["1"] = { index = main } }
     local pending, hooks, wave, clear, enemy, coins, bought, spawned =
         {}, nil, 0, false, true, 0, false, 0
@@ -217,6 +218,18 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
                 return players[slot]
             end,
             GetRoomEntities = function()
+                if active == exit then
+                    return {
+                        {
+                            IsActiveEnemy = function()
+                                return exitEnemy
+                            end,
+                            TakeDamage = function()
+                                exitEnemy = false
+                            end,
+                        },
+                    }
+                end
                 if active == terminal then
                     if campaign and clear then
                         return {
@@ -349,13 +362,17 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
     assert(positions["1"].index == shop)
     arrive()
     trapdoor.State = 0
+    exitEnemy = true
     tick(t + 41)
     assert(
         players[1].Position.X == trapdoor.Position.X + 160 and stage == 1,
         "Closed native exit was contacted before its opening animation"
     )
-    trapdoor.State = 1
-    t = t + 1
+    local killTick = math.ceil((t + 42) / 15) * 15
+    tick(killTick)
+    assert(not exitEnemy, "Generated exit enemies were never fought")
+    trapdoor.State = 1 -- Original grid update opens only after exit-room combat.
+    t = killTick - 40
     tick(t + 41)
     assert(players[1].Position == trapdoor.Position, "Exit setup did not use the arrived room")
     if campaign then

@@ -60,7 +60,6 @@ function _IsaacLanViewCommitted()
 end
 function _IsaacLanActionStep()
     if native.api_info().ready == 1 then
-        _IsaacLanState.stepRoutes()
         _IsaacLanModules["compat/mods/goodtrip/authority"].observe()
     end
     integration.actions.step()

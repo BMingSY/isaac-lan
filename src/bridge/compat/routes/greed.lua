@@ -15,44 +15,6 @@ return function(game)
         end
     end
     return {
-        authority = function(native, exitType)
-            local current = game()
-            if not current:IsGreedMode() then
-                return
-            end
-            local level = current:GetLevel()
-            local bossWave = current.Difficulty == 3 and 11 or 10
-            if level:GetStage() >= 7 or level.GreedModeWave < bossWave then
-                return
-            end
-            local arena = level:GetRoomByIdx(level:GetStartingRoomIndex(), 0)
-            if not arena.Clear then
-                return
-            end
-            local visited = {}
-            for slot, position in pairs(native.rooms_positions()) do
-                local key = position.dimension .. ":" .. position.index
-                local descriptor = level:GetRoomByIdx(position.index, position.dimension)
-                if
-                    not visited[key]
-                    and descriptor.Data
-                    and descriptor.Data.Type == exitType
-                    and not descriptor.Clear
-                then
-                    visited[key] = true
-                    assert(native.rooms_with_player(tonumber(slot), function()
-                        local room = current:GetRoom()
-                        -- Independent room entry can retain the exit's locked
-                        -- clear flag after the arena finishes its Boss waves.
-                        -- Restore only an empty Greed exit on a completed floor;
-                        -- native grid update still owns opening and collision.
-                        if room:GetAliveEnemiesCount() == 0 then
-                            room:SetClear(true)
-                        end
-                    end))
-                end
-            end
-        end,
         capture = function()
             local current = game()
             return current:IsGreedMode() and wave(current:GetLevel().GreedModeWave) or false

@@ -384,6 +384,9 @@ local function advance(t)
         and t - stepAt >= 15
         and native.rooms_positions()["1"].index == find(RoomType.ROOM_GREED_EXIT)
     then
+        -- Generated exit rooms may contain native enemies (e.g. Caves).
+        -- Complete their combat before waiting for the native trapdoor.
+        enemies(1, t % 15 == 0)
         actor(1, function(p)
             local room = game:GetRoom()
             for i = 0, room:GetGridSize() - 1 do
