@@ -275,7 +275,7 @@ void __attribute__((fastcall)) mapCache(void* config, void*) {
             reinterpret_cast<Flush>(image + 0x619180)(reinterpret_cast<void*>(image + 0x8798e0),
                                                       false);
         }
-        originalMapCache(config);
+        rooms::withMapPickups([&] { originalMapCache(config); });
     });
 }
 MenuUpdate originalHudUpdate = nullptr, originalHudPostUpdate = nullptr,
@@ -884,6 +884,20 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         manifest();
         if (bindNative(state) != 1)
             throw std::runtime_error("Cannot bind native game interfaces");
+        // Ordinary launches omit the global debug library. Keep the sandbox
+        // intact and expose only our source/upvalue inspection functions.
+        const auto openDebug =
+            std::bit_cast<int(__cdecl*)(lua_State*)>(GetProcAddress(module, "luaopen_debug"));
+        if (!openDebug)
+            throw std::runtime_error("Cannot initialize private Mod introspection");
+        openDebug(state);
+        lua.createTable(state, 0, 3);
+        for (const auto name : {"getinfo", "getupvalue", "setupvalue"}) {
+            lua.getField(state, -2, name);
+            lua.setField(state, -2, name);
+        }
+        lua.setField(state, -3, "debug");
+        lua.setTop(state, lua.getTop(state) - 1);
         lua.pushClosure(state, integrationNonce, 0);
         lua.setField(state, -2, "api_nonce");
         lua.pushClosure(state, integrationSetting, 0);

@@ -1,4 +1,5 @@
 local wrapping = {}
+local debug = (_IsaacLan and _IsaacLan.debug) or debug
 function wrapping.patch(cleanups, object, name, makeWrapper)
     local original = assert(object[name], "missing_method:" .. name)
     local wrapper = makeWrapper(original)

@@ -7,7 +7,35 @@ _IsaacLanState = state
 local modules = assert(_IsaacLanModules)
 local codec = assert(modules["state/codec"])
 local encode, decode = codec.encode, codec.decode
+local npcState = assert(modules["state/npc"])
+local forms = assert(modules["state/forms"])(native, function(index)
+    return Isaac.GetPlayer(index)
+end)
+local poop = assert(modules["state/poop"])(native)
 state.encode, state.decode = encode, decode
+function _IsaacLanRoomEntered()
+    local room = Game():GetRoom()
+    if room:IsClear() then
+        return
+    end
+    -- Joining a resident room bypasses the global native door transition.
+    -- Reapply its combat entry boundary without regenerating its contents.
+    for slot = 0, 7 do
+        local door = room:GetDoor(slot)
+        if door then
+            door:Close(true)
+        end
+    end
+    if room:GetType() == RoomType.ROOM_BOSS then
+        for index = 0, room:GetGridSize() - 1 do
+            local grid = room:GetGridEntity(index)
+            if grid and grid:GetType() == GridEntityType.GRID_TRAPDOOR then
+                grid.State = 0
+                grid:GetSprite():Play("Closed", true)
+            end
+        end
+    end
+end
 local pack, unpack = string.pack, string.unpack
 local function vector(v)
     return { v.X, v.Y }
@@ -174,6 +202,19 @@ local function fields(object, names)
                     .. type(v)
             )
         end
+        if type(v) == "number" then
+            assert(
+                v == v and math.abs(v) < math.huge,
+                "Non-finite entity field "
+                    .. object.Type
+                    .. "."
+                    .. object.Variant
+                    .. "."
+                    .. object.SubType
+                    .. "."
+                    .. name
+            )
+        end
         result[i] = v
     end
     return result
@@ -228,11 +269,17 @@ local function applySprite(s, v)
         s:LoadGraphics()
     end
 end
+local itemPresentation = assert(modules["state/presentation"])(native, function()
+    return Isaac.GetPlayer(0):GetSprite()
+end, sprite, applySprite)
 local function entity(e, visual)
     if visual == nil then
         visual = true
     end
     local object, names = typed(e)
+    if visual then
+        assert(native.entity_prepare(e:GetSprite()))
+    end
     return {
         id(e),
         e.Type,
@@ -256,6 +303,7 @@ local function entity(e, visual)
         e.Type == 7 and assert(native.laser_path(e:GetSprite())) or false,
         e.Type == 7 and vector(e:ToLaser().EndPoint) or false,
         visual and assert(native.entity_shadow(e:GetSprite())) or false,
+        npcState.capture(e:ToNPC()),
     }
 end
 local inventoryState = assert(modules["state/inventory"])({
@@ -316,9 +364,9 @@ local function applyActorVisuals(p, actor)
     applySprite(p:GetSprite(), actor[3][10])
     local used = {}
     for i, v in ipairs(actor[5]) do
-        if i <= 10 then
+        if i <= 3 then
             applySprite(sprites[i], v)
-        else
+        elseif i > 10 then
             for j = 11, #sprites do
                 if not used[j] and sprites[j]:GetFilename() == v[1] then
                     applySprite(sprites[j], v)
@@ -328,6 +376,10 @@ local function applyActorVisuals(p, actor)
             end
         end
     end
+    -- Charge bars (4..10) are local UI. An offscreen authority does not render
+    -- their Charging/Charged layers; copying those stale layers every frame
+    -- erases the replica's own charge display after players separate rooms.
+    -- Native Render derives them from the replicated weapon charge below.
     assert(native.actor_pose(p:GetSprite(), actor[6]))
 end
 local hostLoops, replicaLoops, lastSound = {}, {}, 0
@@ -452,7 +504,15 @@ function state.capture(slot, tick)
         local p = Isaac.GetPlayer(index)
         local base = captureActors[index]
         if not base then
-            base = { index, p.ControllerIndex, entity(p, false), inventory(p), {}, false }
+            base = {
+                index,
+                p.ControllerIndex,
+                entity(p, false),
+                inventory(p),
+                {},
+                false,
+                poop.capture(p),
+            }
             captureActors[index] = base
         end
         local position = locations[tostring(p.ControllerIndex - 1)]
@@ -477,6 +537,7 @@ function state.capture(slot, tick)
                     base[4],
                     visuals,
                     assert(native.actor_pose(p:GetSprite())),
+                    base[7],
                 }
                 captureVisuals[index] = full
             end
@@ -507,14 +568,15 @@ function state.capture(slot, tick)
                     d.ClearCount,
                     d.Flags,
                     dimension,
+                    native.map_pickups(d.SafeGridIndex, dimension),
+                    native.room_layout(d.SafeGridIndex, dimension),
                 }
                 break
             end
         end
     end
-    local mega = native.item_presentation_sprite(slot, Isaac.GetPlayer(0):GetSprite())
     return encode({
-        5,
+        10,
         tick,
         game:GetFrameCount(),
         level:GetStage(),
@@ -529,7 +591,7 @@ function state.capture(slot, tick)
         native.net_progress(),
         native.net_floor_epoch(),
         native.presentation_events(slot),
-        { native.item_presentation_events(slot), mega and sprite(mega) or false },
+        itemPresentation.capture(slot),
     })
 end
 local replicas, motion = {}, {}
@@ -564,6 +626,10 @@ local function applyEntity(e, v, now)
     end
     if v[22] then
         assert(native.entity_shadow(e:GetSprite(), v[22]))
+    end
+    if v[23] then
+        local npc = assert(e:ToNPC())
+        npcState.apply(npc, v[23])
     end
     -- Floor/wall flags tell EntityList::Update to bake and retire a sprite.
     -- Replicas instead keep receiving its pose/lifetime from the host. Baking
@@ -604,16 +670,18 @@ local function applyEntity(e, v, now)
         doorway = prior and prior.doorway,
     }
 end
-local replicaEpoch, awaitingFloor = nil, false
-function state.beginFloor(epoch, stage, stageType, animation, same, rewind, rKey)
-    if replicaEpoch and epoch <= replicaEpoch then
+local floor = assert(modules["state/floor"])(native)
+function state.beginFloor(epoch, stage, stageType, animation, same, rewind, rKey, cinematic)
+    if not floor.begin(epoch) then
         return
     end
-    replicaEpoch = epoch
-    awaitingFloor = true
     motion = {}
     actorVisuals = {}
     replicaRoom = nil
+    if cinematic == 25 then
+        assert(native.rooms_begin_cinematic(), "Native Dogma interlude failed")
+        return
+    end
     if rewind and #rewind > 0 then
         assert(native.rewind_begin(rewind), "Native hourglass rewind failed")
         return
@@ -622,46 +690,25 @@ function state.beginFloor(epoch, stage, stageType, animation, same, rewind, rKey
         assert(native.r_key_begin(), "Native R Key restart failed")
         return
     end
-    local localIndex = assert(native.rooms_heads()[tostring(native.net_poll().slot)])
     Game():GetLevel():SetStage(stage, stageType)
-    Game():StartStageTransition(same, animation, Isaac.GetPlayer(localIndex))
+    assert(native.rooms_begin_floor(same and 1 or 0, animation), "Native floor event failed")
 end
 function state.apply(bytes, tick, ack)
-    if awaitingFloor and not native.rooms_ready() then
+    if floor.waiting() then
         return false
     end
     local value = decode(bytes)
-    assert(value[1] == 5 and value[2] == tick, "Invalid state schema")
+    assert(value[1] == 10 and value[2] == tick, "Invalid state schema")
     local game = Game()
     local level = game:GetLevel()
-    local floorDiffers = level:GetStage() ~= value[4] or level:GetStageType() ~= value[5]
-    if replicaEpoch == nil and not floorDiffers then
-        replicaEpoch = value[14]
-    end
-    if value[14] ~= replicaEpoch then
-        if not native.rooms_ready() then
-            return false
-        end
-        level:SetStage(value[4], value[5])
-        local localIndex = assert(native.rooms_heads()[tostring(value[10])])
-        game:StartStageTransition(true, 0, Isaac.GetPlayer(localIndex))
-        replicaEpoch = value[14]
-        awaitingFloor = true
-        motion = {}
-        actorVisuals = {}
-        replicaRoom = nil
+    if not floor.ready(level, value[14], value[4], value[5]) then
         return false
     end
-    if awaitingFloor then
-        if not native.rooms_ready() then
-            return false
-        end
-        awaitingFloor = false
+    -- Register every generated descriptor before room transfer or map caching.
+    -- Offscreen red rooms must also have a valid native list/cell index.
+    for _, d in ipairs(value[8]) do
+        assert(native.room_layout(d[9]))
     end
-    assert(
-        level:GetStage() == value[4] and level:GetStageType() == value[5],
-        "Replica floor initialization failed"
-    )
     assert(native.room_layout(value[11][6]))
     local parts = { pack(">BB", value[6], #value[7]) }
     for _, p in ipairs(value[7]) do
@@ -683,20 +730,42 @@ function state.apply(bytes, tick, ack)
     assert(native.net_progress(value[13]))
     local now = Isaac.GetTime() / 1000
     for _, actor in ipairs(value[9]) do
-        local p = Isaac.GetPlayer(actor[1])
-        assert(p and p.ControllerIndex == actor[2], "Replica actor roster differs")
+        local p = forms.resolve(actor[1], actor[4], actor[2])
+        assert(
+            p and p.ControllerIndex == actor[2],
+            "Replica actor roster differs: index="
+                .. actor[1]
+                .. " expectedController="
+                .. actor[2]
+                .. " actualController="
+                .. (p and p.ControllerIndex or -1)
+                .. " expectedType="
+                .. actor[4][1]
+                .. " actualType="
+                .. (p and p:GetPlayerType() or -1)
+        )
         if p:IsCoopGhost() ~= actor[4][9] then
             assert(native.actor_ghost(actor[1], actor[4][9] and 1 or 0))
         end
         local encoded = encode({ actor[4][1], actor[4][2], actor[4][6] })
-        applyInventory(p, actor[4], lastInventory[actor[3][1]] ~= encoded or tick % 30 == 0)
+        -- Item/health setters and familiars stay in this actor's room. The
+        -- native resource broadcast restores the whole team's shared pool;
+        -- subsequent actor snapshots see the same count and apply no delta.
+        assert(native.rooms_with_player(actor[2] - 1, function()
+            applyInventory(p, actor[4], lastInventory[actor[3][1]] ~= encoded or tick % 30 == 0)
+        end, 1))
         lastInventory[actor[3][1]] = encoded
         applyEntity(p, actor[3], now)
         applyActorVisuals(p, actor)
+        poop.apply(p, actor[7])
     end
+    forms.prune(replicas, motion, lastInventory, value[9])
     actorVisuals = value[9]
     local mapChanged = roomChanged
     for _, d in ipairs(value[8]) do
+        local ok, pickupsChanged = native.map_pickups(d[8])
+        assert(ok)
+        mapChanged = mapChanged or pickupsChanged
         local descriptor = level:GetRoomByIdx(d[1], d[7])
         if descriptor and descriptor.Data then
             mapChanged = mapChanged
@@ -725,24 +794,25 @@ function state.apply(bytes, tick, ack)
             end,
             entities = Isaac.GetRoomEntities,
         })
-        local present = {}
         assert(native.door_slot(-1))
-        for _, v in ipairs(data[4]) do
-            local grid = room:GetGridEntity(v[1])
-            present[v[1]] = true
-            if grid and grid:GetType() ~= v[2] then
-                room:RemoveGridEntity(v[1], 0, false)
-                grid = nil
-            end
-            if not grid then
+        modules["state/grids"](data[4], {
+            get = function(index)
+                return room:GetGridEntity(index)
+            end,
+            size = function()
+                return room:GetGridSize()
+            end,
+            remove = function(index)
+                assert(native.grid_remove(index))
+            end,
+            spawn = function(v)
                 if v[9] then
                     assert(native.door_slot(v[9][1], v[1]))
                 else
                     room:SpawnGridEntity(v[1], v[2], v[3], v[8] ~= 0 and v[8] or 1, v[6])
                 end
-                grid = room:GetGridEntity(v[1])
-            end
-            if grid then
+            end,
+            apply = function(grid, v)
                 -- Door variants change when locks/bars change. Preserve the
                 -- native door-slot pointer instead of destroying that door.
                 if grid:GetVariant() ~= v[3] then
@@ -764,13 +834,8 @@ function state.apply(bytes, tick, ack)
                 end
                 grid.State, grid.CollisionClass, grid.VarData = v[4], v[5], v[6]
                 applySprite(grid:GetSprite(), v[7])
-            end
-        end
-        for i = 0, room:GetGridSize() - 1 do
-            if not present[i] and room:GetGridEntity(i) then
-                room:RemoveGridEntity(i, 0, false)
-            end
-        end
+            end,
+        })
         room:SetClear(data[1])
         assert(native.music_state(data[5]))
         if mapChanged then
@@ -790,15 +855,11 @@ function state.apply(bytes, tick, ack)
         end
     end
     receivedAt, receivedTick = now, tick
-    applySound(value[12], tick)
+    assert(native.rooms_with_player(value[10], function()
+        applySound(value[12], tick)
+    end))
     assert(native.presentation_events(value[15]))
-    assert(native.item_presentation_events(value[16][1]))
-    if value[16][2] then
-        applySprite(
-            assert(native.item_presentation_sprite(value[10], Isaac.GetPlayer(0):GetSprite())),
-            value[16][2]
-        )
-    end
+    itemPresentation.apply(value[10], value[16])
     state.lastTick = tick
     return true
 end
@@ -944,8 +1005,7 @@ function state.reset()
     replicaRoom = nil
     receivedTick = -1
     lastRender = nil
-    replicaEpoch = nil
-    awaitingFloor = false
+    floor.reset()
     captureTick = nil
     captureActors = {}
     captureVisuals = {}

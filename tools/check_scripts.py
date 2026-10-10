@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 
 from build_gameplay_suite import build
+from build_ending_suite import build as build_endings
+from build_special_suite import build as build_special
 
 ROOT = Path(__file__).resolve().parents[1]
 LUAC = shutil.which("luac5.3") or "luac"
@@ -30,6 +32,14 @@ def main():
         suite = Path(temporary) / "gameplay.lua"
         build(suite)
         subprocess.run([LUAC, "-p", str(suite)], check=True)
+        endings = Path(temporary) / "endings.lua"
+        build_endings(endings)
+        subprocess.run([LUAC, "-p", str(endings)], check=True)
+        build_endings(endings, ["ascent"])
+        subprocess.run([LUAC, "-p", str(endings)], check=True)
+        special = Path(temporary) / "special.lua"
+        build_special(special)
+        subprocess.run([LUAC, "-p", str(special)], check=True)
     print("PASS Python, Lua and bundled gameplay syntax")
 
 

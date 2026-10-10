@@ -51,8 +51,16 @@ return function(env)
             p:GetEffects():GetNullEffectNum(env.curse),
         }
     end
+    local function applyResources(p, v)
+        -- Resources are shared by native co-op, including its hidden ghost
+        -- inventory. Conversion alone cannot restore a newer authority value.
+        for _, pair in ipairs({ { "Coins", 1 }, { "Bombs", 2 }, { "Keys", 3 } }) do
+            p["Add" .. pair[1]](p, v[5][pair[2]] - p["GetNum" .. pair[1]](p))
+        end
+    end
     local function applyInventory(p, v, refreshItems)
         if v[9] then
+            applyResources(p, v)
             return
         end -- Native ghost conversion owns its hidden inventory.
         if p:GetPlayerType() ~= v[1] then
@@ -120,9 +128,7 @@ return function(env)
                 break
             end
         end
-        for _, pair in ipairs({ { "Coins", 1 }, { "Bombs", 2 }, { "Keys", 3 } }) do
-            p["Add" .. pair[1]](p, v[5][pair[2]] - p["GetNum" .. pair[1]](p))
-        end
+        applyResources(p, v)
         p:AddSoulCharge(v[5][4] - p:GetSoulCharge())
         p:AddBloodCharge(v[5][5] - p:GetBloodCharge())
         for i, name in ipairs(heartTypes) do

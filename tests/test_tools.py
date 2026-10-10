@@ -2,10 +2,12 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import socket
 import sys
 import tempfile
+import time
 import unittest
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -16,9 +18,65 @@ from build_package import build
 from build_release import release
 from check_release import FILES, check
 from delayed_relay import DelayedRelay
+from game_logs import probe_path
+from run_network_engine import finalize_result
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARIES = ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe")
+
+
+class EngineExitTests(unittest.TestCase):
+    def test_completed_scenario_with_heap_crash_fails_acceptance(self):
+        result = {
+            "pass": True,
+            "process_exit": {
+                "host": {"exit_code": -1073740940, "exit_hex": "C0000374"},
+                "client": {"exit_code": 0, "exit_hex": "00000000"},
+            },
+        }
+        finalize_result(result, ("host", "client"))
+        self.assertTrue(result["scenario_pass"])
+        self.assertFalse(result["clean_exit"])
+        self.assertFalse(result["pass"])
+        self.assertIn("host: process exited with C0000374", result["close_errors"])
+
+    def test_normal_exit_and_missing_exit_evidence(self):
+        for status in ({"exit_code": 0, "exit_hex": "00000000"}, None):
+            with self.subTest(status=status):
+                result = {"pass": True, "process_exit": {"host": status} if status else {}}
+                finalize_result(result, ("host",))
+                self.assertEqual(result["pass"], status is not None)
+                self.assertEqual(result["clean_exit"], status is not None)
+
+    def test_cleanup_errors_and_earlier_failures_remain_failures(self):
+        for result in (
+            {"pass": False, "error": "scenario failed"},
+            {"pass": True, "close_errors": ["owned cleanup failed"]},
+        ):
+            with self.subTest(result=result):
+                finalize_result(result, ())
+                self.assertFalse(result["pass"])
+                self.assertTrue(result["clean_exit"])
+
+
+class GameLogTests(unittest.TestCase):
+    def test_profile_and_frozen_build_log_locations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lab = Path(directory)
+            current = (
+                lab / "profile/Documents/My Games/Binding of Isaac Repentance+/isaac-lan/probe.log"
+            )
+            self.assertEqual(probe_path(lab), current)
+            current.parent.mkdir(parents=True)
+            current.write_text("new")
+            self.assertEqual(probe_path(lab), current)
+            old = lab / "probe.log"
+            old.write_text("baseline")
+            os.utime(old, ns=(200, 200))
+            os.utime(current, ns=(100, 100))
+            self.assertEqual(probe_path(lab), old)
+            os.utime(current, ns=(300, 300))
+            self.assertEqual(probe_path(lab), current)
 
 
 class PackagingTests(unittest.TestCase):
@@ -205,6 +263,28 @@ class GameplaySuiteTests(unittest.TestCase):
 
 
 class RelayTests(unittest.TestCase):
+    def test_guest_arrives_before_recreated_host_listener(self):
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.settimeout(5)
+            relay = DelayedRelay(0, listener.getsockname()[1], 1)
+            try:
+                with socket.create_connection(relay.listener.getsockname(), timeout=5) as client:
+                    client.sendall(b"next lobby")
+                    time.sleep(0.1)
+                    self.assertIsNone(relay.error)
+                    listener.listen()
+                    host, _ = listener.accept()
+                    with host:
+                        host.settimeout(5)
+                        self.assertEqual(host.recv(64), b"next lobby")
+                        host.sendall(b"ready")
+                        self.assertEqual(client.recv(64), b"ready")
+            finally:
+                relay.close()
+            self.assertIsNone(relay.error)
+            self.assertFalse(relay.thread.is_alive())
+
     def test_bidirectional_bytes_and_clean_half_close(self):
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))

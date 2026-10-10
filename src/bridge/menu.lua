@@ -488,7 +488,9 @@ function _IsaacLanMenuRender(
     end
     local footerY = message ~= "" and 235 or 243
     if phase == 2 then
-        text(host and ("房主 IP：" .. addresses) or ("房主 IP：" .. ip), 25, footerY - 12, 10)
+        if not host then
+            text("房主 IP：" .. ip, 25, footerY - 12, 10)
+        end
         text("TCP 端口：" .. (host and status.port or port), 25, footerY, 10)
     elseif phase == 3 then
         text("共同楼层 · 分头探索", 25, footerY, 10)

@@ -791,6 +791,7 @@ test("embedded console entry dispatches lanbot and returns nil", function()
     end
     bridge.reset = function() end
     modules["api/public"], modules["compat/registry"] = bridge, {}
+    modules["compat/observation"] = dofile(root .. "/src/bridge/compat/observation.lua")
     _IsaacLan, _IsaacLanModules = native, modules
     RegisterMod = function()
         return {}

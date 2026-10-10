@@ -21,6 +21,20 @@ class DelayedRelay:
         self.thread = threading.Thread(target=self.run, daemon=True)
         self.thread.start()
 
+    def connect(self):
+        # Consecutive native endings reuse the game processes, but close the
+        # old host listener before creating the next lobby. Keep an accepted
+        # guest connection alive while that loopback listener returns.
+        deadline = time.monotonic() + 30
+        while not self.stop.is_set():
+            try:
+                return socket.create_connection(("127.0.0.1", self.target), timeout=2)
+            except ConnectionRefusedError:
+                if time.monotonic() >= deadline:
+                    raise
+                self.stop.wait(0.05)
+        return None
+
     def run(self):
         routes, pending = {}, {}
         eof, shutdown = set(), set()
@@ -32,7 +46,14 @@ class DelayedRelay:
                 for source in readable:
                     if source is self.listener:
                         client, _ = self.listener.accept()
-                        host = socket.create_connection(("127.0.0.1", self.target), timeout=2)
+                        try:
+                            host = self.connect()
+                        except Exception:
+                            client.close()
+                            raise
+                        if host is None:
+                            client.close()
+                            break
                         for sock in (client, host):
                             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                             sock.setblocking(False)

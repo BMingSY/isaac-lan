@@ -10,6 +10,7 @@ import shutil
 import signal
 import subprocess
 import time
+from game_logs import probe_path
 
 
 def windows(path):
@@ -33,6 +34,24 @@ def read_log(lab):
     return path.read_text(errors="replace") if path.exists() else ""
 
 
+def finalize_result(result, expected_roles):
+    result["scenario_pass"] = bool(result["pass"])
+    exits = result.get("process_exit", {})
+    errors = []
+    for role in expected_roles:
+        status = exits.get(role)
+        if status is None:
+            errors.append(f"{role}: process exit report is missing")
+        elif status.get("exit_code") != 0:
+            errors.append(f"{role}: process exited with {status.get('exit_hex', 'unknown')}")
+    result["clean_exit"] = not errors
+    if errors:
+        result.setdefault("close_errors", []).extend(errors)
+    result["pass"] = result["scenario_pass"] and not result.get("close_errors")
+    if result.get("close_errors") and not result.get("error"):
+        result["error"] = "; ".join(result["close_errors"])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
@@ -45,6 +64,11 @@ def main():
         "--virtual-input",
         action="store_true",
         help="Enumerate virtual pads during isolated engine startup",
+    )
+    parser.add_argument(
+        "--no-luadebug",
+        action="store_true",
+        help="Validate the ordinary Lua sandbox without debug globals",
     )
     parser.add_argument(
         "--frontend",
@@ -65,6 +89,21 @@ def main():
         "--solo-fixture",
         action="store_true",
         help="Verify native solo save bytes before and after a LAN session in each owned lab",
+    )
+    parser.add_argument(
+        "--alt-path-fixture",
+        action="store_true",
+        help="With --progress-fixture, unlock A Secret Exit only on the owned host and lock Dross",
+    )
+    parser.add_argument(
+        "--endings-fixture",
+        action="store_true",
+        help="Unlock routes only on the owned host and lock the owned guest before joining",
+    )
+    parser.add_argument(
+        "--hush-fixture",
+        action="store_true",
+        help="Prepare prior Hush kills and the Void unlock only on the owned host",
     )
     parser.add_argument(
         "--automatic",
@@ -149,6 +188,11 @@ def main():
         help="Send physical move/fire input only to the owned client window",
     )
     parser.add_argument(
+        "--keyboard-pause",
+        action="store_true",
+        help="Send real Escape events requested by the concentrated pause fixture",
+    )
+    parser.add_argument(
         "--mod",
         type=Path,
         action="append",
@@ -170,10 +214,14 @@ def main():
         help="Enable an additional fixture only on the host",
     )
     args = parser.parse_args()
-    if not 10 <= args.scenario_timeout <= 1800:
-        parser.error("Scenario timeout must be between 10 and 1800 seconds")
+    if not 10 <= args.scenario_timeout <= 3600:
+        parser.error("Scenario timeout must be between 10 and 3600 seconds")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
+    if args.endings_fixture or args.hush_fixture:
+        args.progress_fixture = True
+    if args.alt_path_fixture and not args.progress_fixture:
+        parser.error("--alt-path-fixture requires --progress-fixture")
     if not 16 <= args.frame_ms <= 1000:
         parser.error("frame-ms must be 16..1000")
     if args.exercise_official and not args.exercise_menu:
@@ -232,6 +280,7 @@ def main():
             (args.output / "tested-loader.dll").read_bytes()
         ).hexdigest()
     installed_labs = []
+    process_watchers = []
     package = args.output / "installed-package"
     if args.installed:
         package.mkdir()
@@ -255,6 +304,7 @@ def main():
         result["installed_branch"] = True
         result["automatic_loading"] = args.automatic or args.installed
     fixtures = []
+    original_mod_states = {}
     fixture_roles = {}
     for mod, enabled_roles in (
         [(mod, roles) for mod in args.mod]
@@ -393,6 +443,11 @@ def main():
                 if (old / ".lan-compat-fixture").is_file():
                     (old / "disable.it").touch()
             for fixture in fixtures:
+                original = lab / "game/mods" / fixture.name.removeprefix("lan_compat_")
+                if original.is_dir() and original not in original_mod_states:
+                    disabled = original / "disable.it"
+                    original_mod_states[original] = disabled.exists()
+                    disabled.touch()
                 if role not in fixture_roles[fixture.name]:
                     continue
                 destination = lab / "game/mods" / fixture.name
@@ -404,7 +459,19 @@ def main():
             if args.frontend:
                 (lab / "frontend.test").write_text("Internal frontend test only.\n")
                 (internal / "disable.it").touch()
-                shutil.copy2(tested_script, lab / "frontend-scenario.lua")
+                scenario_config = {
+                    "host": role == "host",
+                    "port": str(args.menu_port + (1 if args.latency_ms and role != "host" else 0)),
+                }
+                result.setdefault("scenario_config", {})[role] = scenario_config
+                (lab / "frontend-scenario.lua").write_text(
+                    "_IsaacLanTest = { host = "
+                    + ("true" if scenario_config["host"] else "false")
+                    + ', port = "'
+                    + scenario_config["port"]
+                    + '" }\n'
+                    + tested_script.read_text()
+                )
             else:
                 (lab / "frontend.test").unlink(missing_ok=True)
                 (lab / "frontend-scenario.lua").unlink(missing_ok=True)
@@ -416,6 +483,9 @@ def main():
                 file.unlink()
             (lab / "game/lan-test-pad.txt").unlink(missing_ok=True)
             (lab / "game/lan-test-role.txt").write_text(role + "\n")
+            (lab / "game/lan-test-solo-fixture.txt").write_text(
+                ("1" if args.solo_fixture else "0") + "\n"
+            )
             (lab / "game/lan-test-player-count.txt").write_text(str(len(labs)) + "\n")
             (lab / "game/lan-test-menu-port.txt").write_text(
                 str(args.menu_port + (1 if args.latency_ms and role != "host" else 0)) + "\n"
@@ -435,12 +505,31 @@ def main():
                 str(lab / "isaac_lan_lab.exe"),
                 windows(lab),
                 *(["--automatic"] if args.automatic or args.installed else []),
+                *(["--no-luadebug"] if args.no_luadebug else []),
             )
             match = re.search(r"(?:bootstrap_status=0|autoload_started=1) pid=(\d+)", response)
             if not match:
                 raise RuntimeError(response)
             pid = int(match[1])
             processes.append(pid)
+            exit_report = args.output.resolve() / (role + "-exit.json")
+            watcher = subprocess.Popen(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    windows(source / "tools/lab_process_watch.ps1"),
+                    "-GameProcessId",
+                    str(pid),
+                    "-OutputFile",
+                    windows(exit_report),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            process_watchers.append((role, watcher, exit_report))
             result["runs"].append({"role": role, "pid": pid})
             print(f"Started isolated {role}: {pid}", flush=True)
             result["runs"][-1]["game_sha256"] = hashlib.sha256(
@@ -471,6 +560,12 @@ def main():
                     ]
                     if role == "host":
                         fixture.append("-HostFixture")
+                    if args.alt_path_fixture:
+                        fixture.append("-AltPathFixture")
+                    if args.endings_fixture:
+                        fixture.append("-EndingsFixture")
+                    if args.hush_fixture:
+                        fixture.append("-HushFixture")
                     print(execute(*fixture), flush=True)
                     hold.unlink()
             if args.exercise_menu or (args.capture_ui and role == "host"):
@@ -501,7 +596,7 @@ def main():
                         control(
                             pid, "Capture", windows(args.output.resolve() / "official-online.png")
                         )
-                        native = (lab / "probe.log").read_text().rsplit("bootstrap=PASS", 1)[-1]
+                        native = probe_path(lab).read_text().rsplit("bootstrap=PASS", 1)[-1]
                         assert "native_online_entry=OFFICIAL" in native
                         entry = native.split("native_online_entry=OFFICIAL", 1)[0]
                         assert (
@@ -601,12 +696,27 @@ def main():
             menu_control(pid, "{ENTER}")  # start through UI
         deadline = time.monotonic() + args.scenario_timeout
         exercised = False
+        pause_keys = set()
         recorded = False
         solo_saved, solo_continued, solo_hashes = set(), set(), {}
         while time.monotonic() < deadline:
+            for role, _, path in process_watchers:
+                if path.exists():
+                    exit_status = json.loads(path.read_text(encoding="utf-8-sig"))
+                    raise RuntimeError(f"Owned {role} game exited: {exit_status}")
             if relay and relay.error:
                 raise RuntimeError("Latency relay: " + relay.error)
             logs = [read_log(lab) for lab in labs]
+            if args.keyboard_pause:
+                for number, role in re.findall(
+                    r"LAN_NETWORK KEYBOARD_PAUSE_REQUEST (\d+) (host|client)", logs[0]
+                ):
+                    if number not in pause_keys:
+                        control(processes[roles.index(role)], "PostKeys", "{ESC}")
+                        pause_keys.add(number)
+                        result.setdefault("keyboard_pause", []).append(
+                            {"request": int(number), "role": role, "key": "Escape"}
+                        )
             if args.solo_fixture:
                 for lab, role, pid, log in zip(labs, roles, processes, logs):
                     saved_file = log_path(lab).parent / "gamestate1.dat"
@@ -665,13 +775,13 @@ def main():
                 if "LAN_NETWORK FAILED" in line or "Error in" in line or "Caught exception" in line
             ]
             for lab in labs:
-                native = (
-                    (lab / "probe.log").read_text(errors="replace").rsplit("bootstrap=PASS", 1)[-1]
-                )
+                native = probe_path(lab).read_text(errors="replace").rsplit("bootstrap=PASS", 1)[-1]
                 errors.extend(
                     line
                     for line in native.splitlines()
-                    if "frontend_error=" in line or "native_exception" in line
+                    if "frontend_error=" in line
+                    or "native_exception" in line
+                    or "integration_error=_IsaacLanRoomEntered" in line
                 )
             if errors:
                 raise RuntimeError("\n".join(errors))
@@ -770,6 +880,15 @@ def main():
                 result.setdefault("close_errors", []).append(str(error))
         if relay:
             relay.close()
+        for role, watcher, path in process_watchers:
+            try:
+                watcher.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                watcher.terminate()
+            if path.exists():
+                result.setdefault("process_exit", {})[role] = json.loads(
+                    path.read_text(encoding="utf-8-sig")
+                )
         for lab, role in zip(labs, roles):
             out = args.output / role
             out.mkdir()
@@ -786,9 +905,17 @@ def main():
                     result.setdefault("close_errors", []).append(
                         f"{role} recording cleanup: {error}"
                     )
-            for path in [log_path(lab), lab / "probe.log"]:
+            for path in [log_path(lab), probe_path(lab)]:
                 if path.exists():
                     shutil.copy2(path, out / path.name)
+            # Protected runners restore the entire isolated profile afterward.
+            # Preserve native diagnostics for this owned PID before that restore.
+            if len(processes) > roles.index(role):
+                pid = processes[roles.index(role)]
+                for dump in (log_path(lab).parent / "crash_dumps").glob(f"*-{pid}-*.dmp"):
+                    frozen_dumps = out / "crash_dumps"
+                    frozen_dumps.mkdir(exist_ok=True)
+                    shutil.copy2(dump, frozen_dumps / dump.name)
             for suffix in ("txt", "csv"):
                 for path in (lab / "game").glob("lan-test-digest-*." + suffix):
                     shutil.copy2(path, out / path.name)
@@ -803,6 +930,10 @@ def main():
                 if (destination / ".lan-compat-fixture").is_file():
                     (destination / "disable.it").touch()
             (lab / "game/lan-test-mod-advisory.txt").unlink(missing_ok=True)
+        for original, was_disabled in original_mod_states.items():
+            if not was_disabled:
+                (original / "disable.it").unlink(missing_ok=True)
+        finalize_result(result, roles[: len(processes)])
         result["seconds"] = time.monotonic() - started
         (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
