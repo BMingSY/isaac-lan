@@ -127,6 +127,9 @@ local function environment(difficulty)
     local env = setmetatable({
         _IsaacLan = native,
         _IsaacLanPrediction = {},
+        _IsaacLanStatus = function()
+            return { pause = 1 }
+        end,
         _IsaacLanModules = {},
         ItemType = { ITEM_ACTIVE = 2 },
         NullItemID = { ID_LOST_CURSE = 1 },
@@ -192,6 +195,13 @@ for difficulty = 0, 3 do
             "Replica Greed HUD retained a local wave"
         )
         assert(guest.state.apply(bytes, tick, 0), "Repeated snapshots must be safe")
+        -- Reproduce native room presentation after apply, before the HUD.
+        guest.level.GreedModeWave = 6
+        guest.state.present("", tick)
+        assert(
+            guest.level.GreedModeWave == (difficulty >= 2 and wave or 6),
+            "Native update replaced the authoritative wave before HUD rendering"
+        )
         host.move(tick % 2 == 0 and 85 or 84)
     end
     -- A future-floor snapshot must neither regenerate the floor nor write its wave.
@@ -202,6 +212,8 @@ for difficulty = 0, 3 do
     assert(not guest.state.apply(bytes, 30, 0))
     assert(guest.level.GreedModeWave == 8)
     assert(guest.state.beginFloor(2, 2, 0, 0, false))
+    guest.state.present("", 30)
+    assert(guest.level.GreedModeWave == 8, "Old HUD state crossed the floor begin barrier")
     assert(not guest.state.apply(bytes, 30, 0))
     guest.floor(2, 2, true)
     assert(guest.state.apply(bytes, 30, 0))
@@ -212,6 +224,9 @@ for difficulty = 0, 3 do
     host.level.GreedModeWave = 12
     assert(not guest.state.apply(host.state.capture(1, 31), 31, 0))
     guest.state.reset()
+    guest.level.GreedModeWave = 5
+    guest.state.present("", 32)
+    assert(guest.level.GreedModeWave == 5, "A new run retained the previous HUD wave")
     guest.floor(1, 1, true)
     assert(guest.state.apply(host.state.capture(1, 32), 32, 0))
 end

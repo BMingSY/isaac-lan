@@ -7,6 +7,7 @@ local frame, gate = _IsaacLanFrame, native.net_gate
 local linked, chosen, finished, renders = false, false, false, 0
 local step, stepAt, main, shop, button, pressedAt = "init", 0, nil, nil, nil, nil
 local lastWave, waveChanges, snapshots, splitSnapshots, floorEvents = 0, 0, 0, 0, 0
+local expectedWave, renderChecks, renderCorrections = nil, 0, 0
 local stopWave, shopItem, initialCoins, bossSeen = nil, nil, nil, false
 local function report(text)
     Isaac.DebugString("LAN_NETWORK GREED mode=" .. difficulty .. " " .. text)
@@ -335,75 +336,84 @@ local function advance(t)
     assert(t - stepAt < 1800, "Greed fixture stalled at " .. step)
 end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
-    return gate(
-        capture,
-        function(t, n, b)
-            before(t, n, b)
-            if not finished then
-                advance(t)
-            end
-        end,
-        function(slot, t)
-            local bytes = collect(slot, t)
-            return string.pack(">s4", bytes) .. _IsaacLanState.encode({ step })
-        end,
-        function(packet, t, ack)
-            local bytes, offset = string.unpack(">s4", packet)
-            local phase = _IsaacLanState.decode(packet:sub(offset))[1]
-            if restore(bytes, t, ack) == false then
-                return false
-            end
-            local value = _IsaacLanState.decode(bytes)
-            assert(Game():IsGreedMode() and Game().Difficulty == difficulty)
-            assert(Game():GetLevel().GreedModeWave == value[18], "Replica Greed wave HUD differs")
-            snapshots = snapshots + 1
-            local locations = value[7]
-            if #locations == 2 and locations[1][3] ~= locations[2][3] then
-                splitSnapshots = splitSnapshots + 1
-            end
-            for _, a in ipairs(value[9]) do
-                assert(
-                    Isaac.GetPlayer(a[1]):GetNumCoins() == a[4][5][1],
-                    "Replica Greed coins differ"
-                )
-            end
-            assert(native.rooms_with_player(value[10], function()
-                local room = Game():GetRoom()
-                assert(room:IsClear() == value[11][1], "Replica Greed room-clear state differs")
-                for _, grid in ipairs(value[11][4]) do
-                    local actual = assert(room:GetGridEntity(grid[1]), "Replica Greed grid missing")
-                    assert(
-                        actual.State == grid[4] and actual.VarData == grid[6],
-                        "Replica Greed button/door state differs"
-                    )
-                end
-            end))
-            assert(restore(bytes, t, ack) ~= false, "Repeated Greed state failed")
-            for _, a in ipairs(value[9]) do
-                assert(
-                    Isaac.GetPlayer(a[1]):GetNumCoins() == a[4][5][1],
-                    "Repeated Greed state changed resources"
-                )
-            end
-            if not finished and phase == "done" then
-                assert(
-                    snapshots > 60 and splitSnapshots > 20 and floorEvents >= 2,
-                    "Greed replica coverage incomplete"
-                )
-                finished = true
-                report(
-                    "PASS replica Greed gameplay snapshots="
-                        .. snapshots
-                        .. " split="
-                        .. splitSnapshots
-                )
-            end
-            return true
-        end,
-        present,
-        function(...)
-            floorEvents = floorEvents + 1
-            return beginFloor(...)
+    return gate(capture, function(t, n, b)
+        before(t, n, b)
+        if not finished then
+            advance(t)
         end
-    )
+    end, function(slot, t)
+        local bytes = collect(slot, t)
+        return string.pack(">s4", bytes) .. _IsaacLanState.encode({ step })
+    end, function(packet, t, ack)
+        local bytes, offset = string.unpack(">s4", packet)
+        local phase = _IsaacLanState.decode(packet:sub(offset))[1]
+        if restore(bytes, t, ack) == false then
+            return false
+        end
+        local value = _IsaacLanState.decode(bytes)
+        assert(Game():IsGreedMode() and Game().Difficulty == difficulty)
+        assert(Game():GetLevel().GreedModeWave == value[18], "Replica Greed wave HUD differs")
+        expectedWave = value[18]
+        snapshots = snapshots + 1
+        local locations = value[7]
+        if #locations == 2 and locations[1][3] ~= locations[2][3] then
+            splitSnapshots = splitSnapshots + 1
+        end
+        for _, a in ipairs(value[9]) do
+            assert(Isaac.GetPlayer(a[1]):GetNumCoins() == a[4][5][1], "Replica Greed coins differ")
+        end
+        assert(native.rooms_with_player(value[10], function()
+            local room = Game():GetRoom()
+            assert(room:IsClear() == value[11][1], "Replica Greed room-clear state differs")
+            for _, grid in ipairs(value[11][4]) do
+                local actual = assert(room:GetGridEntity(grid[1]), "Replica Greed grid missing")
+                assert(
+                    actual.State == grid[4] and actual.VarData == grid[6],
+                    "Replica Greed button/door state differs"
+                )
+            end
+        end))
+        assert(restore(bytes, t, ack) ~= false, "Repeated Greed state failed")
+        for _, a in ipairs(value[9]) do
+            assert(
+                Isaac.GetPlayer(a[1]):GetNumCoins() == a[4][5][1],
+                "Repeated Greed state changed resources"
+            )
+        end
+        if not finished and phase == "done" then
+            assert(
+                snapshots > 60 and splitSnapshots > 20 and floorEvents >= 2 and renderChecks > 60,
+                "Greed replica coverage incomplete"
+            )
+            finished = true
+            report(
+                "PASS replica Greed gameplay snapshots="
+                    .. snapshots
+                    .. " split="
+                    .. splitSnapshots
+                    .. " renders="
+                    .. renderChecks
+                    .. " corrected="
+                    .. renderCorrections
+            )
+        end
+        return true
+    end, function(...)
+        local before = Game():GetLevel().GreedModeWave
+        present(...)
+        if expectedWave ~= nil then
+            assert(
+                Game():GetLevel().GreedModeWave == expectedWave,
+                "Native presentation advanced the replica Greed HUD"
+            )
+            renderChecks = renderChecks + 1
+            if before ~= expectedWave then
+                renderCorrections = renderCorrections + 1
+            end
+        end
+    end, function(...)
+        expectedWave = nil
+        floorEvents = floorEvents + 1
+        return beginFloor(...)
+    end)
 end

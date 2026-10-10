@@ -272,6 +272,7 @@ local transitions = assert(modules["compat/transitions"])({
 state.beginFloor = assert(modules["runtime/transitions"])(native, floor, transitions, function()
     return Game():GetLevel()
 end, function()
+    greed.reset()
     motion = {}
     actorVisuals = {}
     replicaRoom = nil
@@ -451,6 +452,7 @@ function state.apply(bytes, tick, ack)
     return true
 end
 function state.present(input, sequence)
+    greed.present()
     return motionPresentation.present(input, sequence, actorVisuals, motion, ref, receivedTick)
 end
 function state.reset()
@@ -467,6 +469,7 @@ function state.reset()
     replicaRoom = nil
     receivedTick = -1
     motionPresentation.reset()
+    greed.reset()
     floor.reset()
     captureTick = nil
     captureActors = {}
