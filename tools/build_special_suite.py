@@ -18,6 +18,8 @@ DIAGNOSTICS = (
     "shared-curses",
     "dogma-warning",
     "ascent-compat",
+    "greed",
+    "greedier",
 )
 
 
@@ -35,6 +37,8 @@ def build(output, cases=CASES):
             "floor-items": "state_floor_items.lua",
             "mod-integrations": "state_mod_integrations.lua",
             "shared-curses": "state_shared_curses.lua",
+            "greed": "state_greed.lua",
+            "greedier": "state_greed.lua",
             "dogma-warning": "state_endings.lua",
             "ascent-compat": "state_endings.lua",
         }.get(name, "state_side_routes.lua")

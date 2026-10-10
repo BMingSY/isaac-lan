@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 from build_gameplay_suite import build as build_suite
+from build_special_suite import build as build_special_suite
 from capture_suite_checkpoints import capture as capture_checkpoints
 from archive_gameplay import archive
 
@@ -48,9 +49,11 @@ CASES = {
     "item-text": ("state_item_text.lua", "native guest pickup text"),
     "mirror-camera": ("state_mirror_camera.lua", "native mirror direction and large room camera"),
     "floor-items": ("state_floor_items.lua", "native Forget Me Now five-pip and R Key"),
+    "greed": ("state_greed.lua", "native Greed and Greedier gameplay"),
 }
 DEFAULT_CASES = [
     "gameplay",
+    "greed",
     "projection",
     "reconnect",
     "reconnect-stage",
@@ -119,6 +122,10 @@ def main():
                     script = a.output / "gameplay-suite.lua"
                     summary["gameplay_phases"] = build_suite(script)
                     completion = "continuous gameplay suite"
+                elif case == "greed":
+                    script = a.output / "greed-suite.lua"
+                    build_special_suite(script, ["greed", "greedier"])
+                    completion = "all selected character and side routes"
                 else:
                     filename, completion = CASES[case]
                     script = SOURCE / "tests" / filename
@@ -160,6 +167,14 @@ def main():
                     cmd += ["--native-record-view", "1", "--frame-ms", "16"]
                 if case == "gameplay":
                     cmd += ["--native-record-both", "--frame-ms", "50", "--scenario-timeout", "660"]
+                if case == "greed":
+                    cmd += [
+                        "--native-record-both",
+                        "--frame-ms",
+                        "250",
+                        "--scenario-timeout",
+                        "600",
+                    ]
                 if case == "floor-items":
                     cmd += [
                         "--native-record-view",

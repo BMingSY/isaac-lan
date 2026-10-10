@@ -21,6 +21,7 @@ sync/npc
 sync/curses
 compat/items/black_candle
 compat/routes/crawlspace
+compat/routes/greed
 compat/bosses/dogma
 compat/characters/lazarus
 compat/characters/blue_baby

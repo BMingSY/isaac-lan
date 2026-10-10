@@ -9,6 +9,9 @@ local codec = assert(modules["sync/codec"])
 local encode, decode = codec.encode, codec.decode
 local npcState = assert(modules["sync/npc"])
 local curses = assert(modules["sync/curses"])
+local greed = assert(modules["compat/routes/greed"])(function()
+    return Game()
+end)
 local crawlspace = assert(modules["compat/routes/crawlspace"])(function()
     return Game():GetLevel()
 end, Vector)
@@ -226,6 +229,7 @@ function state.capture(slot, tick)
         presentation = native.presentation_events(slot),
         items = itemPresentation.capture(slot),
         curses = curses.capture(level),
+        greed = greed.capture(),
     }))
 end
 local replicas, motion = {}, {}
@@ -342,6 +346,7 @@ function state.apply(bytes, tick, ack)
     -- Inventory setters can clear local curses. The shared authoritative mask
     -- must win after those native side effects, before map/HUD caching.
     local cursesChanged = curses.apply(level, value.curses)
+    greed.apply(value.greed)
     local mapChanged = roomChanged or cursesChanged
     for _, d in ipairs(value.map) do
         local ok, pickupsChanged = native.map_pickups(d[8])

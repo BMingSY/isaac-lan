@@ -1,6 +1,6 @@
 # 分层与玩法兼容
 
-这次整理把传输、运行协调、状态组件、表现和版本后端分开，并抽离现有特殊玩法规则。房主继续运行权威玩法，客机显示权威状态；协议为 24，世界视图为 schema 11。已有联机指纹检查仍要求两端使用相同扩展。
+这次整理把传输、运行协调、状态组件、表现和版本后端分开，并抽离现有特殊玩法规则。房主继续运行权威玩法，客机显示权威状态；协议为 24，世界视图为 schema 12。已有联机指纹检查仍要求两端使用相同扩展。
 
 ## 目录与职责
 
@@ -28,7 +28,7 @@ Lua 按同样的职责组织在 `src/bridge/`：
 | `compat/bosses/` | Boss 房进房补充规则、教条光束预警几何状态 |
 | `compat/characters/` | 里拉撒路对象替换、里小蓝人消耗品队列 |
 | `compat/items/` | 沙漏和 R 键的转场选择、全队黑蜡烛的诅咒清除规则 |
-| `compat/routes/` | Home 昼夜与教条过场规则、特殊房间返回上下文 |
+| `compat/routes/` | Home 昼夜与教条过场规则、特殊房间返回上下文、贪婪波次 |
 | `compat/mods/` | Stats+、GoodTrip、EID 及第三方自动适配注册机制 |
 | `api/` | 对第三方 Mod 公开的本机视图、生命周期和主机动作接口 |
 
@@ -98,7 +98,7 @@ flowchart TD
 
 ## 字段与版本定义
 
-[`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，维护包含共享楼层诅咒的 17 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
+[`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，维护包含共享楼层诅咒与贪婪波次的 18 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
 
 已验证的 133 个原生入口定义在 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h)，启动特征校验与调用点引用同一组常量。游戏版本、版本标记地址和所需 PE 区段放在 [`profile.h`](../src/engine/versions/j460/profile.h)。对象字段偏移仍需在对应 J460 实现中结合所有权与调用约定维护。
 
@@ -113,6 +113,12 @@ flowchart TD
 `compat/bosses/dogma.lua` 仅匹配 `DOGMA_ORB` 的预警子类型，同步原生绘制依赖的二维几何参数。通用实体组件通过注入的兼容组件携带该字段，不执行 Boss AI。适配通过原版 `Entity.TargetPosition` 属性读写二维参数；既有攻击特效不进入此适配，不新增原生接口。
 
 这些字段增加后世界视图升为 schema 11。TCP 消息布局不变，协议维持 24；扩展 DLL 指纹变化，两端仍须使用相同构建。
+
+## 贪婪模式
+
+`compat/routes/greed.lua` 通过原版 `Game:IsGreedMode()` 和 `Level.GreedModeWave` 采集与应用楼层波次；普通／困难模式传 `false`，贪婪／超级贪婪传 0–12 的整数。波次属于共享楼层，玩家在商店等其他房间也接收同一计数。应用位于楼层代次校验和库存应用之后，不触发波次生成、奖励或按钮伤害。房间按钮、门与敌人继续使用既有网格／实体同步。
+
+该字段追加到顶层第 18 项，世界视图升为 schema 12；传输协议维持 24，旧 schema 被拒绝，扩展指纹仍要求两端使用相同 DLL。`compat/bosses/encounters.h` 接收难度普通值，在贪婪两种难度的第七层匹配 Ultra Greed 的两种形态并汇合队伍；普通波次与商店 Greed 不强制汇合。原生后端只读取 J460 的难度标量并调用该策略，所有权和 Hook 不变。测试与原生校验边界见[贪婪模式验证记录](greed-mode-validation.md)。
 
 ## 增加一个兼容机制
 

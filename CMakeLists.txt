@@ -74,6 +74,9 @@ if(BUILD_TESTING)
         add_test(NAME bridge.shared-curses
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_curses.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.greed
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/greed.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
         add_test(NAME bridge.special-visuals
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/special_visuals.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -96,6 +99,7 @@ if(BUILD_TESTING)
             bridge.special-menu
             bridge.shared-resources
             bridge.shared-curses
+            bridge.greed
             bridge.special-visuals
             PROPERTIES TIMEOUT 30 LABELS "offline;lua")
     endif()
@@ -248,6 +252,7 @@ if(BUILD_TESTING)
         commands
         publication-limits
         integrations
+        greed-settings
         host-disconnect)
         add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
         set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;network")
