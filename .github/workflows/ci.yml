@@ -59,7 +59,12 @@ jobs:
             -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
           cmake --build build-core --parallel 2
       - name: Test protocol and saved sessions
-        run: ctest --test-dir build-core --output-on-failure
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          mkdir -p test-runs/ci/sanitizers
+          ctest --test-dir build-core --output-on-failure --output-junit "$PWD/test-runs/ci/sanitizers/ctest.xml"
       - name: Preserve offline test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

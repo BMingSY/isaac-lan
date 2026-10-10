@@ -69,7 +69,9 @@ jobs:
           .deps/packaging/bin/python tools/check_release.py \
             "dist/Isaac-LAN-$RELEASE_TAG-windows-x86.zip" --tag "$RELEASE_TAG"
           mkdir ci
-          cp build-win32/isaac_lan_core_test.exe build-win32/isaac_lan_net_test.exe ci/
+          cp build-win32/isaac_lan_core_test.exe build-win32/isaac_lan_net_test.exe \
+            build-win32/isaac_lan_log_test.exe build-win32/isaac_lan_diagnostics_test.exe ci/
+          cp build-win32/isaac_lan_heap_watch.exe build-win32/isaac_lan_heap_fixture.exe ci/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-x86-release
@@ -100,10 +102,30 @@ jobs:
       - name: Test protocol and saved sessions
         shell: pwsh
         run: |
-          & ./ci/isaac_lan_core_test.exe
+          New-Item -ItemType Directory -Force test-runs/windows | Out-Null
+          & ./ci/isaac_lan_core_test.exe 2>&1 | Tee-Object test-runs/windows/core.log
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
       - name: Test state transport
         shell: pwsh
         run: |
-          & ./ci/isaac_lan_net_test.exe
+          & ./ci/isaac_lan_net_test.exe 2>&1 | Tee-Object test-runs/windows/transport-resources.log
           if ($LASTEXITCODE -ne 0) { throw 'State transport tests failed' }
+      - name: Test configuration and launch/run log isolation
+        shell: pwsh
+        run: |
+          & ./ci/isaac_lan_diagnostics_test.exe 2>&1 | Tee-Object test-runs/windows/config.log
+          if ($LASTEXITCODE -ne 0) { throw 'Configuration tests failed' }
+          & ./ci/isaac_lan_log_test.exe 2>&1 | Tee-Object test-runs/windows/log-metric-resources.log
+          if ($LASTEXITCODE -ne 0) { throw 'Log isolation tests failed' }
+      - name: Test full dump observer without the game
+        shell: pwsh
+        run: |
+          python tools/check_heap_watch.py --build ci --output test-runs/windows/heap-observer
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic dump capture failed' }
+      - name: Preserve Windows resource reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-resource-reports
+          path: test-runs/windows/
+          if-no-files-found: ignore
