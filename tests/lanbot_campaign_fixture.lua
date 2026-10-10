@@ -334,3 +334,36 @@ for _, host in ipairs({ true, false }) do
     assert(table.concat(messages, "\n"):find("PASS full LANBOT campaign", 1, true))
 end
 print("PASS LANBOT campaign native lifecycle, both actor shots, exit retry and cleanup guards")
+
+-- Focused behavior diagnostics must also initialize in the Release sandbox
+-- without io/LuaDebug; a missing set of behavior results cannot finish as PASS.
+do
+    local env = setmetatable({
+        _IsaacLanTest = { host = true, port = "30000" },
+        _IsaacLan = {
+            net_gate = function()
+                return true
+            end,
+            test_gamepad = function() end,
+        },
+        _IsaacLanFrame = function()
+            return { verified = 1510, phase = 0 }
+        end,
+        Isaac = {
+            AddCallback = function() end,
+            DebugString = function() end,
+            ConsoleOutput = function() end,
+            ExecuteCommand = function() end,
+        },
+        ModCallbacks = { MC_ENTITY_TAKE_DMG = 1 },
+    }, {
+        __index = function(_, key)
+            if key ~= "io" then
+                return _G[key]
+            end
+        end,
+    })
+    assert(loadfile(root .. "/tests/state_lanbot.lua", "t", env))()
+    assert(not pcall(env._IsaacLanFrame), "Incomplete behavior checks were accepted")
+end
+print("PASS Release behavior fixture initializes without io and rejects missing results")

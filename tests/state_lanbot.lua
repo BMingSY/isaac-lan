@@ -9,7 +9,7 @@ local origin, center, selectedDoor, arrivedRoom, damage = nil, nil, nil, nil, 0
 local baseline, exitPosition, minimumExit, spikeDamage, dodgeDamage, spikes, timedPlate
 local spikeTransitions, spikeState, occupant = 0, nil, nil
 local plates, spawned, results = {}, {}, {}
-local trace = host and assert(io.open("./lan-test-digest-lanbot.csv", "w"))
+local trace = host and io and assert(io.open("./lan-test-digest-lanbot.csv", "w"))
 if trace then
     trace:write("time_ms,tick,room,x,y,health,damage\n")
 end
@@ -99,7 +99,7 @@ function _IsaacLanFrame()
     if s.verified >= 1510 and not done then
         done = true
         command("off")
-        if host then
+        if trace then
             trace:flush()
             trace:close()
             local file = assert(io.open("./lan-test-digest-lanbot.txt", "w"))
@@ -142,18 +142,20 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             return
         end
         local room, player = Game():GetRoom(), Isaac.GetPlayer(native.rooms_heads()["0"])
-        trace:write(
-            string.format(
-                "%.3f,%d,%d,%.3f,%.3f,%d,%d\n",
-                Isaac.GetTime(),
-                t,
-                Game():GetLevel():GetCurrentRoomIndex(),
-                player.Position.X,
-                player.Position.Y,
-                health(player),
-                damage
+        if trace then
+            trace:write(
+                string.format(
+                    "%.3f,%d,%d,%.3f,%.3f,%d,%d\n",
+                    Isaac.GetTime(),
+                    t,
+                    Game():GetLevel():GetCurrentRoomIndex(),
+                    player.Position.X,
+                    player.Position.Y,
+                    health(player),
+                    damage
+                )
             )
-        )
+        end
         if t == 0 then
             ownerSeed = player.InitSeed
             clean()
