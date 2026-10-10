@@ -6,6 +6,7 @@ from pathlib import Path
 import socket
 import sys
 import tempfile
+import time
 import unittest
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -205,6 +206,28 @@ class GameplaySuiteTests(unittest.TestCase):
 
 
 class RelayTests(unittest.TestCase):
+    def test_guest_arrives_before_recreated_host_listener(self):
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.settimeout(5)
+            relay = DelayedRelay(0, listener.getsockname()[1], 1)
+            try:
+                with socket.create_connection(relay.listener.getsockname(), timeout=5) as client:
+                    client.sendall(b"next lobby")
+                    time.sleep(0.1)
+                    self.assertIsNone(relay.error)
+                    listener.listen()
+                    host, _ = listener.accept()
+                    with host:
+                        host.settimeout(5)
+                        self.assertEqual(host.recv(64), b"next lobby")
+                        host.sendall(b"ready")
+                        self.assertEqual(client.recv(64), b"ready")
+            finally:
+                relay.close()
+            self.assertIsNone(relay.error)
+            self.assertFalse(relay.thread.is_alive())
+
     def test_bidirectional_bytes_and_clean_half_close(self):
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))

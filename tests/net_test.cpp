@@ -227,6 +227,126 @@ void floorRejoin() {
     std::puts("PASS rejoin loads current checkpoint then latest state; host continues during "
               "loading; no input-history replay");
 }
+void endingEvents() {
+    Group g(4);
+    g.ready();
+    g.step(0);
+    g.publish(0, 40000);
+    require(!g.peers[1]->beginEnding(8), "Client could choose the shared ending");
+    for (auto invalid : {0u, 1u, 15u, 255u})
+        require(!g.peers[0]->beginEnding(invalid), "Invalid ending was accepted");
+    Progress progress;
+    progress.achievements[7] = 1;
+    progress.counters[21] = 5;
+    require(g.peers[0]->beginEnding(8, progress), "Ending broadcast failed");
+    require(g.peers[0]->beginEnding(8), "Duplicate native ending was not idempotent");
+    require(!g.peers[0]->beginEnding(13), "A terminal event changed its ending");
+    require(!g.peers[0]->beginStage({1, 2, 0, 0, false, {}, {}}),
+            "A floor change followed the terminal event");
+    WorldState obsolete;
+    obsolete.tick = 0;
+    obsolete.bytes = {1};
+    require(!g.peers[0]->publish(1, obsolete), "World publication continued after the ending");
+    // The engine closes immediately after its native exit callback. Every
+    // replica must retain the ending even if finish and EOF arrive together.
+    g.peers[0]->finish();
+    until([&] {
+        g.poll();
+        return g.peers[1]->phase() == Phase::closed && g.peers[2]->phase() == Phase::closed &&
+               g.peers[3]->phase() == Phase::closed;
+    });
+    for (unsigned slot = 1; slot < 4; ++slot) {
+        require(g.peers[slot]->takeEnding() == Ending{8, progress},
+                "Finish/EOF lost the native ending or its earned progress");
+        require(!g.peers[slot]->takeEnding(), "A replica received the ending twice");
+        require(!g.peers[slot]->takeState(), "Old world state survived the terminal event");
+    }
+    std::puts(
+        "PASS authoritative ending survives immediate finish/EOF and plays once on all peers");
+}
+void cinematicEvents() {
+    Group g(4);
+    g.ready();
+    const auto frame = g.step(0);
+    g.publish(frame.tick, 300000);
+    Stage movie;
+    movie.epoch = 1;
+    movie.level = 13;
+    movie.type = 1;
+    movie.animation = 1;
+    movie.cinematic = 25;
+    require(!g.peers[1]->beginStage(movie), "Client initiated the shared cinematic");
+    for (const auto field : {0, 1, 2, 3, 4, 5}) {
+        auto invalid = movie;
+        switch (field) {
+        case 0:
+            invalid.cinematic = 24;
+            break;
+        case 1:
+            invalid.level = 12;
+            break;
+        case 2:
+            invalid.type = 0;
+            break;
+        case 3:
+            invalid.animation = 2;
+            break;
+        case 4:
+            invalid.same = true;
+            break;
+        case 5:
+            invalid.rewind = {1};
+            break;
+        }
+        require(!g.peers[0]->beginStage(invalid), "Invalid native cinematic accepted");
+    }
+    require(g.peers[0]->beginStage(movie), "Native cinematic broadcast failed");
+    for (unsigned slot = 1; slot < g.count; ++slot) {
+        std::optional<Stage> received;
+        until([&] {
+            g.poll();
+            received = g.peers[slot]->takeStage();
+            return received.has_value();
+        });
+        require(*received == movie && g.peers[slot]->cinematicActive(),
+                "Replica lost the native cinematic or its barrier");
+        require(!g.peers[slot]->takeState(), "Old world crossed the cinematic boundary");
+    }
+    require(!g.peers[0]->beginStage(movie), "Overlapping cinematic accepted");
+    require(!g.peers[0]->take(), "Simulation advanced during a shared cinematic");
+    WorldState obsolete;
+    obsolete.tick = frame.tick;
+    obsolete.bytes = {1};
+    require(!g.peers[0]->publish(1, obsolete), "World advanced during a shared cinematic");
+    // Native videos stop input and world frames. Reliable heartbeats must keep
+    // the connection alive beyond both normal simulation timeout deadlines.
+    const auto wait = std::chrono::steady_clock::now() + std::chrono::seconds(21);
+    while (std::chrono::steady_clock::now() < wait) {
+        g.poll();
+        Sleep(10);
+    }
+    require(g.peers[0]->cinematicReady(), "Host could not finish its native movie");
+    require(g.peers[1]->cinematicReady() && g.peers[1]->cinematicReady(),
+            "Local cinematic readiness was not idempotent");
+    require(g.peers[2]->cinematicReady(), "Third player readiness failed");
+    g.poll();
+    require(g.peers[0]->cinematicActive(), "Faster peers skipped the slow player's movie");
+    require(g.peers[3]->cinematicReady(), "Last player readiness failed");
+    until([&] {
+        g.poll();
+        return std::all_of(g.peers.begin(), g.peers.end(),
+                           [](const auto& p) { return !p->cinematicActive(); });
+    });
+    require(!g.peers[0]->cinematicReady(), "Readiness accepted outside a cinematic");
+    const auto resumed = g.step(1);
+    g.publish(resumed.tick);
+    until([&] {
+        g.poll();
+        return g.peers[1]->takeState().has_value();
+    });
+    std::puts(
+        "PASS native shared cinematic preserves heartbeat, ordering and all-player readiness");
+}
 void stageEvents() {
     Group g(2);
     g.ready();
@@ -729,6 +849,8 @@ int main(int argc, char** argv) {
                                   {"inputs-4", [] { inputsAndStates(4); }},
                                   {"floor-rejoin", floorRejoin},
                                   {"stage-events", stageEvents},
+                                  {"ending-events", endingEvents},
+                                  {"cinematic-events", cinematicEvents},
                                   {"stage-during-rejoin", stageDuringRejoin},
                                   {"rewind", rewindTransaction},
                                   {"progression", progression},

@@ -77,6 +77,11 @@ def main():
         help="With --progress-fixture, unlock A Secret Exit only on the owned host and lock Dross",
     )
     parser.add_argument(
+        "--endings-fixture",
+        action="store_true",
+        help="Unlock routes only on the owned host and lock the owned guest before joining",
+    )
+    parser.add_argument(
         "--automatic",
         action="store_true",
         help="Use the automatically loaded DLL instead of remote-thread injection",
@@ -189,6 +194,8 @@ def main():
         parser.error("Scenario timeout must be between 10 and 1800 seconds")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
+    if args.endings_fixture:
+        args.progress_fixture = True
     if args.alt_path_fixture and not args.progress_fixture:
         parser.error("--alt-path-fixture requires --progress-fixture")
     if not 16 <= args.frame_ms <= 1000:
@@ -249,6 +256,7 @@ def main():
             (args.output / "tested-loader.dll").read_bytes()
         ).hexdigest()
     installed_labs = []
+    process_watchers = []
     package = args.output / "installed-package"
     if args.installed:
         package.mkdir()
@@ -480,6 +488,24 @@ def main():
                 raise RuntimeError(response)
             pid = int(match[1])
             processes.append(pid)
+            exit_report = args.output.resolve() / (role + "-exit.json")
+            watcher = subprocess.Popen(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    windows(source / "tools/lab_process_watch.ps1"),
+                    "-GameProcessId",
+                    str(pid),
+                    "-OutputFile",
+                    windows(exit_report),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            process_watchers.append((role, watcher, exit_report))
             result["runs"].append({"role": role, "pid": pid})
             print(f"Started isolated {role}: {pid}", flush=True)
             result["runs"][-1]["game_sha256"] = hashlib.sha256(
@@ -512,6 +538,8 @@ def main():
                         fixture.append("-HostFixture")
                     if args.alt_path_fixture:
                         fixture.append("-AltPathFixture")
+                    if args.endings_fixture:
+                        fixture.append("-EndingsFixture")
                     print(execute(*fixture), flush=True)
                     hold.unlink()
             if args.exercise_menu or (args.capture_ui and role == "host"):
@@ -646,6 +674,10 @@ def main():
         recorded = False
         solo_saved, solo_continued, solo_hashes = set(), set(), {}
         while time.monotonic() < deadline:
+            for role, _, path in process_watchers:
+                if path.exists():
+                    exit_status = json.loads(path.read_text(encoding="utf-8-sig"))
+                    raise RuntimeError(f"Owned {role} game exited: {exit_status}")
             if relay and relay.error:
                 raise RuntimeError("Latency relay: " + relay.error)
             logs = [read_log(lab) for lab in labs]
@@ -824,6 +856,15 @@ def main():
                 result.setdefault("close_errors", []).append(str(error))
         if relay:
             relay.close()
+        for role, watcher, path in process_watchers:
+            try:
+                watcher.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                watcher.terminate()
+            if path.exists():
+                result.setdefault("process_exit", {})[role] = json.loads(
+                    path.read_text(encoding="utf-8-sig")
+                )
         for lab, role in zip(labs, roles):
             out = args.output / role
             out.mkdir()

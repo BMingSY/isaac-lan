@@ -468,6 +468,16 @@ LONG CALLBACK recordException(EXCEPTION_POINTERS* exception) {
              static_cast<unsigned long>(exception->ExceptionRecord->ExceptionInformation[0]),
              static_cast<unsigned long>(exception->ExceptionRecord->ExceptionInformation[1]));
     log(line);
+    HMODULE faultModule = nullptr;
+    if (GetModuleHandleExA(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<const char*>(exception->ContextRecord->Eip), &faultModule)) {
+        char path[MAX_PATH]{};
+        GetModuleFileNameA(faultModule, path, MAX_PATH);
+        snprintf(line, sizeof(line), "native_exception_module=%s rva=%08lx", path,
+                 exception->ContextRecord->Eip - reinterpret_cast<DWORD>(faultModule));
+        log(line);
+    }
     std::string stack = "native_exception_stack=";
     for (unsigned i = 0; i < 48; ++i) {
         DWORD address = 0;

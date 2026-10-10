@@ -7,6 +7,7 @@
 #include "engine_item_presentation.h"
 #include "runtime_net.h"
 #include "net_protocol.h"
+#include "laser_state.h"
 #include "room_map.h"
 #include <MinHook.h>
 #include <algorithm>
@@ -232,7 +233,20 @@ struct StageRequest {
     Address player;
 };
 std::optional<StageRequest> pendingStage;
+struct TeamTransition {
+    Key room;
+    std::function<void()> begin;
+};
+std::optional<TeamTransition> pendingTeamTransition;
 bool pendingRKey = false;
+std::optional<Address> pendingDogma;
+RoomCall originalNativeRoomChange;
+void __attribute__((fastcall)) nativeRoomChange(void* transition, void*) {
+    // Dogma immediately calls ChangeRoom after StartRoomTransition. Defer both
+    // halves until the source room scope has unwound.
+    if (!pendingDogma)
+        originalNativeRoomChange(transition);
+}
 using RKey = void(__cdecl*)();
 RKey originalRKey;
 std::optional<bool> pendingExit;
@@ -344,6 +358,38 @@ struct TeamScope {
         }
     }
 };
+using AddResource = void(__attribute__((thiscall)) *)(void*, int);
+using SyncResources = void(__attribute__((thiscall)) *)(void*, unsigned);
+using CopyResources = void(__attribute__((thiscall)) *)(void*, void*, unsigned);
+AddResource originalCoins;
+SyncResources originalResources;
+void __attribute__((fastcall)) addCoins(void* player, void*, int delta) {
+    // Deep Pockets' cap is a team property across occupied rooms.
+    TeamScope team;
+    originalCoins(player, delta);
+}
+void __attribute__((fastcall)) syncResources(void* player, void*, unsigned mask) {
+    // Pickups, purchases and bomb placement also write counts directly, then
+    // call this native broadcast. Restore its complete co-op audience.
+    const auto shared = mask & 0x5f;
+    if (!enabled || !shared) {
+        originalResources(player, mask);
+        return;
+    }
+    {
+        TeamScope team;
+        originalResources(player, shared);
+    }
+    // The same native helper also broadcasts Hourglass charges and other
+    // actor state. Keep those scoped to their original room audience.
+    if (mask & ~0x5fu)
+        originalResources(player, mask & ~0x5fu);
+    for (const auto& [slot, saved] : dormant) {
+        (void)slot;
+        for (const auto actor : saved.actors)
+            engine<CopyResources>(0x3596a0)(player, reinterpret_cast<void*>(actor), shared);
+    }
+}
 // Native floor loading has no per-room Scope. Presentation still needs the
 // local actor first, without changing the roster used by gameplay/loading.
 struct ViewRoster {
@@ -466,6 +512,26 @@ void __attribute__((fastcall)) reviveAll(void* manager, void*) {
 }
 using Exit = void(__stdcall*)(bool);
 Exit originalExit;
+using End = void(__attribute__((thiscall)) *)(void*, int);
+End originalEnd;
+void __attribute__((fastcall)) endGame(void* target, void*, int ending) {
+    if (runtime::localViewSlot() < 0 || ending < 2 || ending > 14) {
+        originalEnd(target, ending);
+        return;
+    }
+    // Native pickups/NPCs can call End while this actor's room is scoped. Keep
+    // that native roster and ending semantics, then include earned progress.
+    if (runtime::replica())
+        return;
+    const auto state = at<int>(game(), 0x26614);
+    if (state < 2 || state == 6) {
+        runtime::prepareEnding();
+        originalEnd(target, ending);
+        runtime::beginEnding(ending);
+        return;
+    }
+    originalEnd(target, ending);
+}
 using Save = RoomCall;
 Save originalSave;
 using PostUpdate = void(__cdecl*)();
@@ -661,7 +727,7 @@ PlayerUpdate originalPlayerUpdate;
 void __attribute__((fastcall)) playerUpdate(void* player, void*) {
     // Native stage loading waits for player departure/arrival animations.
     // Those updates must advance while room replication is suspended.
-    if (runtime::replica() && enabled) {
+    if (runtime::replica() && enabled && !runtime::ending()) {
         // Gameplay stays authoritative. Charge-bar overlays are local UI and
         // need the native animation update after Render changes their pose.
         using UpdateSprite = void(__attribute__((thiscall))*)(void*);
@@ -745,6 +811,13 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
         originalTransition(g, index, direction, animation, player, dimension);
         return;
     }
+    const auto manager = at<Address>(image, 0x87169c);
+    if (!runtime::replica() && index == -10 && direction == -1 && animation == 1 && !player &&
+        dimension == -1 && at<int>(game(), 0) == 13 && at<int>(game(), 4) == 1 &&
+        at<bool>(manager, 0x21618) && at<int>(manager, 0x2161c) == 25) {
+        pendingDogma = at<Address>(game(), 0x18300);
+        return;
+    }
     const auto who = currentActor(player);
     const bool teleport = animation == 3 || animation == 11 || animation == 16;
     if (runtime::replica()) {
@@ -809,6 +882,8 @@ void __attribute__((fastcall)) stageTransition(void* g, void*, bool same, int an
         originalStage(g, same, animation, player);
         return;
     }
+    if (runtime::replica())
+        return;
     // A floor transaction has precedence over room transfers in the same tick.
     // The first actor in deterministic room-update order owns the transaction.
     if (!pendingStage)
@@ -1048,6 +1123,25 @@ int beginRKey(lua_State* L) {
     const bool ready = runtime::replica() && enabled && !depth;
     if (ready)
         pendingRKey = true;
+    lua.pushBoolean(L, ready);
+    return 1;
+}
+int beginCinematic(lua_State* L) {
+    const bool ready = runtime::replica() && enabled && !depth && at<int>(game(), 0) == 13 &&
+                       at<int>(game(), 4) == 1;
+    if (ready)
+        pendingDogma = at<Address>(game(), 0x18300);
+    lua.pushBoolean(L, ready);
+    return 1;
+}
+int beginFloor(lua_State* L) {
+    const auto same = lua.checkInteger(L, 1), animation = lua.checkInteger(L, 2);
+    const auto head = participant(runtime::localViewSlot());
+    const bool ready = runtime::replica() && enabled && !depth && head &&
+                       (same == 0 || same == 1) && animation >= 0 && animation <= 6;
+    if (ready && !pendingStage) {
+        pendingStage = StageRequest{same != 0, static_cast<int>(animation), head};
+    }
     lua.pushBoolean(L, ready);
     return 1;
 }
@@ -1433,7 +1527,7 @@ int laserPath(lua_State* L) {
     try {
         if (lua.getTop(L) == 1) {
             lan::Writer bytes(lan::Message::world);
-            bytes.u8(at<bool>(entity, 0x45d));
+            bytes.u8(at<std::uint8_t>(entity, 0x45d));
             for (auto offset : floats)
                 bytes.u32(at<std::uint32_t>(entity, offset));
             bytes.u32(at<unsigned>(entity, 0x47c));
@@ -1457,37 +1551,13 @@ int laserPath(lua_State* L) {
         std::size_t size = 0;
         const auto data = lua.checkString(L, 2, &size);
         lan::Reader bytes({reinterpret_cast<const std::uint8_t*>(data), size});
-        const auto sample = bytes.u8();
-        if (sample > 1)
-            throw std::runtime_error("Invalid laser type");
-        std::array<std::uint32_t, 6> values{};
-        auto number = [&]() {
-            const auto bits = bytes.u32();
-            if (!std::isfinite(std::bit_cast<float>(bits)))
-                throw std::runtime_error("Invalid laser coordinate");
-            return bits;
-        };
-        for (auto& value : values)
-            value = number();
-        const auto samples = bytes.u32();
-        if (samples > 2048)
-            throw std::runtime_error("Invalid laser sample count");
-        std::array<std::vector<Address>, 2> paths;
-        for (auto& path : paths) {
-            const auto count = bytes.u16();
-            if (count > 2048)
-                throw std::runtime_error("Laser path too long");
-            path.resize(count * 2);
-            for (auto& value : path)
-                value = number();
-        }
-        bytes.finish();
-        at<bool>(entity, 0x45d) = sample != 0;
+        const auto path = presentation::readLaserPath(bytes);
+        at<std::uint8_t>(entity, 0x45d) = path.sampleState;
         for (unsigned i = 0; i < floats.size(); ++i)
-            at<std::uint32_t>(entity, floats[i]) = values[i];
-        at<unsigned>(entity, 0x47c) = samples;
-        assign(at<Vector>(entity, 0x480), paths[0]);
-        assign(at<Vector>(entity, 0x48c), paths[1]);
+            at<std::uint32_t>(entity, floats[i]) = path.values[i];
+        at<unsigned>(entity, 0x47c) = path.samples;
+        assign(at<Vector>(entity, 0x480), path.paths[0]);
+        assign(at<Vector>(entity, 0x48c), path.paths[1]);
         lua.pushBoolean(L, true);
     } catch (const std::exception& e) {
         runtime::abort(e.what());
@@ -1602,7 +1672,7 @@ bool update(void*, RoomCall original) {
 bool half(void (*original)()) {
     if (!enabled || depth || transferring)
         return false;
-    if (runtime::replica())
+    if (runtime::replica() && !runtime::ending())
         return true;
     presentation::IntroSimulationScope intro;
     for (auto& [key, room] : loaded) {
@@ -1857,6 +1927,13 @@ bool withPlayer(unsigned slot, const std::function<void()>& call) {
     call();
     return true;
 }
+bool gatherForTransition(const std::function<void()>& begin) {
+    if (!enabled || runtime::replica() || !active)
+        return false;
+    if (!pendingTeamTransition)
+        pendingTeamTransition = TeamTransition{active->key, begin};
+    return true;
+}
 bool restoreLocations(const std::vector<SavedLocation>& saved) {
     if (!enabled || depth || saved.size() != participants.size())
         return false;
@@ -1914,6 +1991,37 @@ void finishFrame() {
     }
     if (!enabled)
         return;
+    if (pendingDogma) {
+        const auto source = *pendingDogma;
+        pendingDogma.reset();
+        for (auto& [key, room] : loaded) {
+            (void)key;
+            if (room->pointer == source) {
+                room->activate();
+                break;
+            }
+        }
+        if (!runtime::replica())
+            runtime::beginStage(false, 1, false, 25);
+        beforeStart();
+        resumeStage = true;
+        if (runtime::replica()) {
+            using Movie = void(__stdcall*)(unsigned, bool, unsigned);
+            engine<Movie>(0x558e60)(25, false, 1);
+        }
+        originalTransition(reinterpret_cast<void*>(game()), -10, -1, 1, nullptr, -1);
+        originalNativeRoomChange(reinterpret_cast<void*>(game() + 0x1b83c));
+        logger("cinematic_transaction=BEGIN dogma_beast");
+        return;
+    }
+    std::function<void()> beginTeamTransition;
+    if (pendingTeamTransition) {
+        auto transition = std::move(*pendingTeamTransition);
+        pendingTeamTransition.reset();
+        for (auto head : participants)
+            queue(head, transition.room.index, transition.room.dimension, -1, false, false);
+        beginTeamTransition = std::move(transition.begin);
+    }
     // Transformations may replace the player object while keeping its native
     // controller. Resolve that controller again before dereferencing a head.
     const auto currentParticipants = logicalPlayers();
@@ -1949,11 +2057,22 @@ void finishFrame() {
                     rewind::remember(slot, -1, locations);
             });
         }
-        runtime::beginStage(request.same, request.animation);
         beforeStart();
         resumeStage = true;
+        // A Big Chest either changes floors or ends the run. Only the host
+        // evaluates that native decision; a terminal chest must not also send
+        // a speculative floor event before the reliable ending event. Evaluate
+        // with the same complete roster that native departure will use.
+        using ChestEnding = int(__stdcall*)(bool);
+        if (request.animation != 4 || runtime::replica() ||
+            engine<ChestEnding>(0x2f9d20)(false) == 0)
+            runtime::beginStage(request.same, request.animation);
         logger("floor_transaction=BEGIN same=" + std::to_string(request.same));
-        originalStage(reinterpret_cast<void*>(game()), request.same, request.animation,
+        // Replicas never simulate the chest collector or its grid markers.
+        // Use native fade/loading rather than waiting for those local markers
+        // and re-evaluating the chest against the replica's unlocks/inventory.
+        const auto animation = runtime::replica() && request.animation == 4 ? 1 : request.animation;
+        originalStage(reinterpret_cast<void*>(game()), request.same, animation,
                       reinterpret_cast<void*>(request.player));
         return;
     }
@@ -1981,6 +2100,8 @@ void finishFrame() {
     }
     if (pending.empty() && pendingItemRevival.empty()) {
         preparedDepartures.clear();
+        if (beginTeamTransition)
+            beginTeamTransition();
         return;
     }
     auto requests = std::move(pending);
@@ -2124,6 +2245,8 @@ void finishFrame() {
                " created=" + std::to_string(created));
     }
     preparedDepartures.clear();
+    if (beginTeamTransition)
+        beginTeamTransition();
     for (auto slot : pendingItemRevival)
         if (const auto head = participant(slot)) {
             for (auto player : controlledActors(head)) {
@@ -2168,6 +2291,23 @@ void requestExit(bool save) {
     engine<Transition>(0x60f550)(reinterpret_cast<void*>(manager + 0x4b290), -1);
     at<bool>(manager, 0x4b288) = true;
 }
+void playEnding(unsigned ending) {
+    // Native local co-op can wait for every roster member to enter the chest.
+    // The host has already accepted this terminal event for the whole run.
+    auto head = participant(runtime::localViewSlot());
+    if (!head) {
+        const auto players = logicalPlayers();
+        const auto slot = static_cast<unsigned>(runtime::localViewSlot());
+        if (slot < players.size())
+            head = players[slot];
+    }
+    if (!head) {
+        runtime::abort("Native ending player is missing");
+        return;
+    }
+    const ViewRoster view(controlledActors(head));
+    originalEnd(reinterpret_cast<void*>(game()), static_cast<int>(ending));
+}
 void beforeStart() {
     presentation::items::reset();
     replicaMapEntities.clear();
@@ -2181,15 +2321,28 @@ void beforeStart() {
     // Additional room destruction must happen before that native cleanup.
     resumeStage = false;
     pendingStage.reset();
+    pendingTeamTransition.reset();
     pendingRKey = false;
+    pendingDogma.reset();
     resumeLocations.clear();
     if (!enabled || depth)
         return;
     // Native floor changes and saves own the complete player roster. Reattach
     // dormant actors for that transaction, then park them again on the new
     // floor if their controllers are still offline.
+    // A guest may enter a chest while the host is in another room. Restoring
+    // dormant actors canonicalizes the viewport; native departure must still
+    // use the initiating room, including its chest and arrival animation.
+    const auto source = at<Address>(game(), 0x18300);
     const auto mask = connectedMask;
     setConnected(15);
+    for (auto& [key, room] : loaded) {
+        (void)key;
+        if (room->pointer == source) {
+            room->activate();
+            break;
+        }
+    }
     connectedMask = mask;
     enabled = false;
     pending.clear();
@@ -2253,9 +2406,17 @@ bool install(Address base, void (*log)(const std::string&)) {
                    MH_OK &&
                MH_EnableHook(reinterpret_cast<void*>(image + rva)) == MH_OK;
     };
-    return hook(0x3efa50, reinterpret_cast<void*>(save), reinterpret_cast<void**>(&originalSave)) &&
+    return hook(0x359400, reinterpret_cast<void*>(addCoins),
+                reinterpret_cast<void**>(&originalCoins)) &&
+           hook(0x3597e0, reinterpret_cast<void*>(syncResources),
+                reinterpret_cast<void**>(&originalResources)) &&
+           hook(0x2f9770, reinterpret_cast<void*>(endGame),
+                reinterpret_cast<void**>(&originalEnd)) &&
+           hook(0x3efa50, reinterpret_cast<void*>(save), reinterpret_cast<void**>(&originalSave)) &&
            hook(0x33fc80, reinterpret_cast<void*>(change),
                 reinterpret_cast<void**>(&originalChange)) &&
+           hook(0x4318a0, reinterpret_cast<void*>(nativeRoomChange),
+                reinterpret_cast<void**>(&originalNativeRoomChange)) &&
            hook(0x2fd7c0, reinterpret_cast<void*>(transition),
                 reinterpret_cast<void**>(&originalTransition)) &&
            hook(0x2fdc10, reinterpret_cast<void*>(stageTransition),
@@ -2344,6 +2505,8 @@ bool bind(lua_State* L, HMODULE module) {
     function("laser_path", laserPath);
     function("rooms_set_connected", setConnections);
     function("rooms_connected", connections);
+    function("rooms_begin_floor", beginFloor);
+    function("rooms_begin_cinematic", beginCinematic);
     return visuals::bind(L, module);
 }
 } // namespace isaac::rooms

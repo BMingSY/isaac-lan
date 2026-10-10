@@ -8,6 +8,8 @@
 #include "intro_barrier.h"
 #include "room_map.h"
 #include "audio_ownership.h"
+#include "localized_text.h"
+#include "laser_state.h"
 #include "test_support.h"
 #include <algorithm>
 #include <limits>
@@ -15,6 +17,93 @@
 using namespace isaac::lan;
 
 namespace {
+void laserState() {
+    using isaac::presentation::readLaserPath;
+    auto packet = [](unsigned sample, float coordinate = 1.25f, unsigned count = 2) {
+        Writer w(Message::world);
+        w.u8(sample);
+        for (unsigned i = 0; i < 6; ++i)
+            w.u32(std::bit_cast<std::uint32_t>(coordinate));
+        w.u32(2);
+        for (unsigned path = 0; path < 2; ++path) {
+            w.u16(count);
+            for (unsigned i = 0; i < count * 2; ++i)
+                w.u32(std::bit_cast<std::uint32_t>(-3.5f));
+        }
+        w.bytes.erase(w.bytes.begin());
+        return w.bytes;
+    };
+    for (unsigned sample : {0u, 1u, 255u}) {
+        const auto bytes = packet(sample);
+        Reader r(bytes);
+        const auto restored = readLaserPath(r);
+        require(restored.sampleState == sample && restored.samples == 2 &&
+                    restored.paths[0].size() == 4 && restored.paths[1].size() == 4 &&
+                    std::bit_cast<float>(restored.paths[1][3]) == -3.5f &&
+                    std::bit_cast<float>(restored.values[0]) == 1.25f,
+                "New native laser sentinel or sampled path was lost");
+    }
+    for (const auto& bytes :
+         {packet(2), packet(254), packet(255, INFINITY), packet(255, NAN), packet(255, 1, 2049)})
+        rejects(
+            [&] {
+                Reader r(bytes);
+                readLaserPath(r);
+            },
+            "Malformed laser path accepted");
+    const auto bytes = packet(255);
+    for (unsigned length = 0; length < bytes.size(); ++length)
+        rejects(
+            [&] {
+                Reader r{std::span(bytes).first(length)};
+                readLaserPath(r);
+            },
+            "Truncated laser path accepted");
+}
+void localizedText() {
+    using namespace isaac::presentation;
+    TextSources sources;
+    sources.record(7, "0 - 愚者", {"PocketItems", "THE_FOOL_NAME"});
+    sources.record(7, "冒险由此开始", {"PocketItems", "THE_FOOL_DESCRIPTION"});
+    require(sources.find(7, "0 - 愚者").key == "THE_FOOL_NAME", "Localized title lost its key");
+    require(sources.find(8, "0 - 愚者").key.empty() && sources.find(7, "愚者").key.empty(),
+            "Unrelated or stale custom text was translated");
+    Writer w(Message::world);
+    sources.find(7, "0 - 愚者").write(w);
+    sources.find(7, "冒险由此开始").write(w);
+    Reader r(w.bytes);
+    require(r.u8() == static_cast<unsigned>(Message::world), "Wrong text event container");
+    const auto title = TextSource::read(r), subtitle = TextSource::read(r);
+    r.finish();
+    auto english = [](const TextSource& source) -> std::optional<std::string> {
+        if (source.section != "PocketItems")
+            return std::nullopt;
+        return source.key == "THE_FOOL_NAME" ? "0 - The Fool" : "Where journey begins";
+    };
+    require(translateText("0 - 愚者", title, english) == "0 - The Fool" &&
+                translateText("冒险由此开始", subtitle, english) == "Where journey begins",
+            "Client received glyphs for the host's language instead of its own");
+    require(translateText("Mod title", {}, english) == "Mod title" &&
+                translateText("Fallback", {"Missing", "Key"}, english) == "Fallback",
+            "Custom or unavailable translations lost their fallback");
+    sources.clear();
+    require(sources.find(7, "0 - 愚者").key.empty(), "Session retained old text sources");
+    for (unsigned i = 0; i < 70; ++i)
+        sources.record(8, std::to_string(i), {"PocketItems", std::to_string(i)});
+    require(sources.find(8, "0").key.empty() && sources.find(8, "69").key == "69",
+            "Native lookup history was unbounded or lost its latest entry");
+    for (const auto& invalid : {TextSource{"", "Key"}, TextSource{std::string(129, 'x'), "Key"}}) {
+        Writer bad(Message::world);
+        invalid.write(bad);
+        rejects(
+            [&] {
+                Reader input(bad.bytes);
+                input.u8();
+                TextSource::read(input);
+            },
+            "Malformed localization key accepted");
+    }
+}
 void audioOwnership() {
     using namespace isaac::audio;
     require(audible(0, 1), "Solo/menu audio was filtered");
@@ -496,6 +585,8 @@ int main(int argc, char** argv) {
                      {"keyboard-pause", keyboardPause},
                      {"transition-charge", transitionCharge},
                      {"audio-ownership", audioOwnership},
+                     {"localized-text", localizedText},
+                     {"laser-state", laserState},
                      {"bootstrap-profile", bootstrapProfile},
                      {"intro-barrier", introBarrier},
                      {"room-map", roomMap},

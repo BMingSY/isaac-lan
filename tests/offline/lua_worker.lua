@@ -28,6 +28,8 @@ local function stateEnvironment()
             ["state/entities"] = dofile(root .. "/src/bridge/state/entities.lua"),
             ["state/grids"] = dofile(root .. "/src/bridge/state/grids.lua"),
             ["state/presentation"] = dofile(root .. "/src/bridge/state/presentation.lua"),
+            ["state/floor"] = dofile(root .. "/src/bridge/state/floor.lua"),
+            ["state/npc"] = dofile(root .. "/src/bridge/state/npc.lua"),
         },
         ItemType = { ITEM_ACTIVE = 2 },
         NullItemID = { ID_LOST_CURSE = 1 },

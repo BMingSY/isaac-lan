@@ -39,6 +39,10 @@ class Session {
     std::optional<WorldState> takeState();
     bool beginStage(const Stage&);
     std::optional<Stage> takeStage();
+    bool cinematicReady();
+    bool cinematicActive() const;
+    bool beginEnding(unsigned ending, const Progress& progress = {});
+    std::optional<Ending> takeEnding();
     bool requestRoom(const RoomRequest&);
     std::array<std::optional<RoomRequest>, maxPlayers> takeRoomRequests();
     bool sendIntegration(unsigned destination, const std::string& bytes);

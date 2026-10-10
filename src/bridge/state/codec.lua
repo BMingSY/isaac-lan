@@ -15,7 +15,10 @@ local function encode(value)
                     pieces[#pieces + 1] = pack(">Bi8", 3, v)
                 end
             else
-                assert(v == v and math.abs(v) < math.huge, "Non-finite state value")
+                assert(
+                    v == v and math.abs(v) < math.huge,
+                    "Non-finite state value at [" .. table.concat(path, "][") .. "]"
+                )
                 pieces[#pieces + 1] = pack(">Bf", 4, v)
             end
         elseif t == "string" then

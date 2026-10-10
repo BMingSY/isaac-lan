@@ -188,6 +188,8 @@ lan::InputFrame localInput;
 std::optional<lan::InputRoom> lastInputRoom;
 std::optional<lan::WorldState> authoritative;
 bool gated = false, pendingHalf = false;
+bool playingEnding = false;
+bool playingCinematic = false, cinematicReady = false;
 std::uint32_t nextInputTick = 0;
 using InputClock = std::chrono::steady_clock;
 InputClock::time_point nextCaptureAt{};
@@ -256,7 +258,7 @@ void __attribute__((fastcall)) consoleUpdate(void* console, void*) {
         originalConsoleUpdate(console);
 }
 void __cdecl controls() {
-    if (!gated)
+    if (!gated || playingEnding || playingCinematic)
         originalControls();
 }
 struct SeedValue {
@@ -379,7 +381,8 @@ void publishState() {
     session->poll();
 }
 bool captureNextInput() {
-    if (!gated || !session || session->phase() != lan::Phase::running)
+    if (!gated || !session || playingEnding || playingCinematic ||
+        session->phase() != lan::Phase::running)
         return false;
     const auto now = InputClock::now();
     if (now < nextCaptureAt)
@@ -449,12 +452,21 @@ void updateReplica(void* game) {
         lua.pushLString(state, reinterpret_cast<const char*>(transition->rewind.data()),
                         transition->rewind.size());
         lua.pushBoolean(state, transition->rKey);
-        if (!call(stageRef, 7, 0, top))
+        lua.pushInteger(state, transition->cinematic);
+        playingCinematic = transition->cinematic != 0;
+        cinematicReady = false;
+        if (playingCinematic) {
+            input::reset();
+            pendingHalf = false;
+        }
+        if (!call(stageRef, 8, 0, top))
             return;
         rooms::finishFrame();
         if (logger)
             logger("floor_event=RECEIVED epoch=" + std::to_string(floorEpoch));
     }
+    if (playingCinematic)
+        return;
     bool committedView = false;
     if (auto packet = session->takeState())
         replicaPending = std::move(packet);
@@ -517,6 +529,45 @@ void updateOne(void* game) {
     if (!gated) {
         originalUpdate(game);
         rooms::finishFrame();
+        return;
+    }
+    if (replica() && session)
+        if (const auto ending = session->takeEnding()) {
+            playingEnding = true;
+            input::reset();
+            authoritative.reset();
+            replicaPending.reset();
+            rooms::playEnding(ending->id);
+            writeProgress(ending->progress);
+            if (logger)
+                logger("ending_event=RECEIVED id=" + std::to_string(ending->id));
+            return;
+        }
+    if (playingEnding) {
+        // Keep the native cinematic/exit state machine alive after finish.
+        // Returning directly to the lobby would skip the guest's ending.
+        originalUpdate(game);
+        rooms::finishFrame();
+        return;
+    }
+    if (playingCinematic && session && session->phase() == lan::Phase::running) {
+        session->poll();
+        const auto manager = *reinterpret_cast<std::uintptr_t*>(executableImage + 0x87169c);
+        if (!cinematicReady) {
+            originalUpdate(game);
+            rooms::finishFrame();
+            if (!*reinterpret_cast<bool*>(manager + 0x21618) &&
+                *reinterpret_cast<int*>(manager + 8) == 2 && rooms::stateReady()) {
+                cinematicReady = session->cinematicReady();
+                if (logger)
+                    logger("cinematic_event=READY");
+            }
+        }
+        if (!session->cinematicActive()) {
+            playingCinematic = cinematicReady = false;
+            if (logger)
+                logger("cinematic_event=COMPLETE");
+        }
         return;
     }
     // Finish each accepted frame's interpolation/player phase exactly once,
@@ -622,7 +673,7 @@ void updateOne(void* game) {
     }
     presentation::items::advance();
     rooms::finishFrame();
-    pendingHalf = gated;
+    pendingHalf = gated && !playingCinematic;
 }
 void __attribute__((fastcall)) update(void* game, void*) {
     updateOne(game);
@@ -718,6 +769,8 @@ int poll(lua_State* L) {
     integer("port", session ? session->port() : 0);
     integer("tick", nextTick);
     integer("verified", session && session->verifiedTick() ? *session->verifiedTick() : -1ll);
+    const auto manager = *reinterpret_cast<std::uintptr_t*>(executableImage + 0x87169c);
+    integer("scene", manager ? *reinterpret_cast<int*>(manager + 8) : -1);
     lua.pushString(L, session ? session->error().c_str() : "");
     lua.setField(L, -2, "error");
     lua.pushString(L, session ? session->settings().seed.c_str() : "");
@@ -740,7 +793,7 @@ int poll(lua_State* L) {
 }
 int integrationInfo(lua_State* L) {
     lua.createTable(L, 0, 9);
-    const bool active = session && session->phase() == lan::Phase::running;
+    const bool active = !playingEnding && session && session->phase() == lan::Phase::running;
     auto integer = [&](const char* key, long long value) {
         lua.pushInteger(L, value);
         lua.setField(L, -2, key);
@@ -918,6 +971,8 @@ int gate(lua_State* L) {
     nextCaptureAt = InputClock::now();
     pendingHalf = false;
     gated = true;
+    playingEnding = false;
+    playingCinematic = cinematicReady = false;
     session->ready();
     if (logger)
         logger(session->isHost() ? "state_authority=HOST" : "state_authority=REPLICA");
@@ -947,6 +1002,8 @@ int close(lua_State* L) {
             session->close();
     }
     gated = pendingHalf = false;
+    playingEnding = false;
+    playingCinematic = cinematicReady = false;
     for (int reference :
          {captureRef, applyRef, captureStateRef, restoreStateRef, presentRef, stageRef})
         if (reference >= 0)
@@ -1182,12 +1239,15 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
            MH_EnableHook(reinterpret_cast<void*>(image + 0x2fa540)) == MH_OK;
 }
 bool halfAllowed() {
-    // The native floor animation completes in half updates. A replica skips
-    // entity half simulation while playing, but still advances that loader.
-    return !gated || pendingHalf || (replica() && !rooms::stateReady());
+    // Retain native arrival interpolation while room replication is suspended.
+    return !gated || playingEnding || playingCinematic || pendingHalf ||
+           (replica() && !rooms::stateReady());
 }
 bool replica() {
     return gated && session && !session->isHost();
+}
+bool ending() {
+    return playingEnding;
 }
 std::uint32_t worldEpoch() {
     return floorEpoch;
@@ -1240,7 +1300,7 @@ void pollLocalConsole() {
     if (game)
         originalConsoleUpdate(reinterpret_cast<void*>(game + 0x68d78));
 }
-void beginStage(bool same, int animation, bool rKey) {
+void beginStage(bool same, int animation, bool rKey, unsigned cinematic) {
     if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
         return;
     const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + 0x871678);
@@ -1259,9 +1319,33 @@ void beginStage(bool same, int animation, bool rKey) {
     std::memcpy(value.seeds.data(), reinterpret_cast<void*>(game + 0x1bb84), sizeof(value.seeds));
     std::memcpy(value.stateFlags.data(), reinterpret_cast<void*>(game + 0x26548),
                 sizeof(value.stateFlags));
-    session->beginStage(value);
+    value.cinematic = cinematic;
+    if (!session->beginStage(value)) {
+        fail("Native floor transaction rejected");
+        return;
+    }
+    playingCinematic = cinematic != 0;
+    cinematicReady = false;
+    if (playingCinematic) {
+        input::reset();
+        pendingHalf = false;
+    }
     if (logger)
         logger("floor_event=SENT epoch=" + std::to_string(floorEpoch));
+}
+void prepareEnding() {
+    playingEnding = true;
+    input::reset();
+    pendingHalf = false;
+}
+bool beginEnding(unsigned ending) {
+    if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running ||
+        !session->beginEnding(ending, readProgress()))
+        return false;
+    prepareEnding();
+    if (logger)
+        logger("ending_event=SENT id=" + std::to_string(ending));
+    return true;
 }
 void beginRewind(std::span<const std::uint8_t> bytes) {
     if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
@@ -1312,7 +1396,7 @@ void halfStarted() {
         input::finishUpdate();
 }
 void halfCompleted() {
-    if (!gated || !pendingHalf)
+    if (!gated || !pendingHalf || playingEnding)
         return;
     pendingHalf = false;
     if (session)

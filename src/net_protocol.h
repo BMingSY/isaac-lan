@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace isaac::lan {
-constexpr std::uint16_t protocolVersion = 23;
+constexpr std::uint16_t protocolVersion = 24;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -37,7 +37,9 @@ enum class Message : std::uint8_t {
     ping,
     pong,
     latency,
-    integration
+    integration,
+    ending,
+    cinematic
 };
 constexpr std::size_t maxIntegrationSize = 2048;
 constexpr std::size_t maxIntegrationQueue = 32;
@@ -99,6 +101,11 @@ struct Progress {
     std::array<std::uint32_t, 523> counters{};
     bool operator==(const Progress&) const = default;
 };
+struct Ending {
+    unsigned id = 0;
+    Progress progress;
+    bool operator==(const Ending&) const = default;
+};
 struct Start {
     std::uint32_t firstTick = 0;
     std::uint8_t connected = 0;
@@ -130,6 +137,8 @@ struct Stage {
     // Native GameStateFlag bits select the next route. Replica players do not
     // simulate the trapdoor that sets STATE_SECRET_PATH before an alt entrance.
     std::array<std::uint32_t, 2> stateFlags{};
+    // Native Dogma interlude changes to the Beast arena on the same floor.
+    std::uint8_t cinematic = 0;
     bool operator==(const Stage&) const = default;
 };
 // A local Mod's native room command, not a client-authored world snapshot.

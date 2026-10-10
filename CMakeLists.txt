@@ -42,6 +42,16 @@ if(BUILD_TESTING)
         add_test(NAME bridge.presentation
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/presentation.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.floor
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/floor.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.npc-state
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/npc_state.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(
+            NAME bridge.shared-resources
+            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_resources.lua"
+                    "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(
             bridge.api
             bridge.goodtrip
@@ -51,6 +61,9 @@ if(BUILD_TESTING)
             bridge.resume
             bridge.mod-loading
             bridge.presentation
+            bridge.floor
+            bridge.npc-state
+            bridge.shared-resources
             PROPERTIES TIMEOUT 30 LABELS "offline;lua")
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
@@ -70,6 +83,8 @@ if(BUILD_TESTING)
         keyboard-pause
         transition-charge
         audio-ownership
+        localized-text
+        laser-state
         bootstrap-profile
         intro-barrier
         room-map
@@ -118,6 +133,8 @@ foreach(
     state/entities
     state/grids
     state/presentation
+    state/floor
+    state/npc
     api/codec
     api/lifecycle
     api/actions
@@ -198,6 +215,8 @@ if(BUILD_TESTING)
         inputs-4
         floor-rejoin
         stage-events
+        ending-events
+        cinematic-events
         stage-during-rejoin
         rewind
         progression
