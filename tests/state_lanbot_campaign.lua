@@ -239,7 +239,12 @@ function _IsaacLanFrame()
     if host and s.phase == 2 and s.players == 2 and s.ready0 == 1 and s.ready1 == 1 then
         _IsaacLanCommand("start", "YV039KQF:0:0:0:0:0")
     end
-    native.test_gamepad(won and s.scene == 3 and renders % 30 < 5 and 4096 or 0)
+    -- The native Lamb reward asks about a Victory Lap before the ending.
+    -- Confirm its default No after BOT exit contact has been requested; this
+    -- ordinary menu input neither opens the chest nor synthesizes victory.
+    local confirm = won and s.scene == 3
+        or host and not won and s.scene == 2 and stage == 11 and advanced and next(bosses)
+    native.test_gamepad(confirm and renders % 30 < 5 and 4096 or 0)
     botStep()
     if
         won

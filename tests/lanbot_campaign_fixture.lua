@@ -4,7 +4,7 @@ local root = assert(arg[1])
 for _, host in ipairs({ true, false }) do
     local hooks, callbacks, messages = nil, {}, {}
     local clock, stage, roomIndex, clear, phase, scene, tick = 0, 1, 84, false, 0, 1, 0
-    local points, items, moves, nextCalls = { 0, 0 }, {}, {}, 0
+    local points, items, moves, nextCalls, confirms = { 0, 0 }, {}, {}, 0, 0
     local positions =
         { ["0"] = { index = 84, dimension = 0 }, ["1"] = { index = 84, dimension = 0 } }
     local vec = function(x, y)
@@ -82,7 +82,15 @@ for _, host in ipairs({ true, false }) do
         input_bot = function()
             return true
         end,
-        test_gamepad = function() end,
+        test_gamepad = function(buttons)
+            if buttons == 4096 then
+                assert(
+                    host and stage == 11 and clear or scene == 3,
+                    "Menu confirmation outside native terminal reward/ending"
+                )
+                confirms = confirms + 1
+            end
+        end,
         net_progress = function()
             return progress
         end,
@@ -336,6 +344,13 @@ for _, host in ipairs({ true, false }) do
         end
         assert(roomIndex == 100 and nextCalls >= 2, "Native exit selection was never retried")
     end
+    for _ = 1, 30 do
+        env._IsaacLanFrame()
+    end
+    assert(
+        host and confirms > 0 or not host and confirms == 0,
+        "Victory Lap default No was not confirmed only by the authority"
+    )
     assert(not pcall(callbacks[2], nil, true), "Defeat was accepted")
     coverage[5] = nil
     assert(not pcall(callbacks[2], nil, false), "A skipped campaign floor was accepted")
