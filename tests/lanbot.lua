@@ -1,11 +1,11 @@
 local root = assert(arg[1], "repository root required")
 local modules = {}
-for _, name in ipairs({ "navigation", "combat", "planner", "observe" }) do
+for _, name in ipairs({ "navigation", "hazards", "terrain", "combat", "planner", "observe" }) do
     modules["lanbot/" .. name] = dofile(root .. "/src/bridge/lanbot/" .. name .. ".lua")
 end
 modules.lanbot = dofile(root .. "/src/bridge/lanbot.lua")
 local nav = modules["lanbot/navigation"]
-local combat = modules["lanbot/combat"](nav)
+local combat = modules["lanbot/combat"](nav, modules["lanbot/hazards"](nav))
 local planner = modules["lanbot/planner"](nav)
 local count = 0
 local function test(name, fn)
@@ -423,9 +423,174 @@ test("charge hold/release and aim/line/range checks", function()
     assert(combat.shoot(obs, target, memory) == 0)
 end)
 
+test("run finishes reachable branches before selecting a known exit", function()
+    local plan, obs = planner.new(), snapshot()
+    obs.exit = { id = "floor-exit", x = 240, y = 160 }
+    obs.doors = { door(2, "0:2"), door(1, "0:3") }
+    plan:observe(obs)
+    assert(plan:choose(obs, "run", "balanced").task == "move_to_door")
+    obs.room, obs.exit, obs.doors = "0:2", nil, { door(0, "0:1") }
+    plan:observe(obs)
+    assert(plan:choose(obs, "run", "balanced").door.to == "0:1")
+    obs.room, obs.doors = "0:3", { door(0, "0:1") }
+    plan:observe(obs)
+    assert(plan:choose(obs, "run", "balanced").door.to == "0:1")
+    obs.room, obs.exit, obs.doors =
+        "0:1", plan.nodes["0:1"].exit, { door(2, "0:2"), door(1, "0:3") }
+    obs.partyReady = false
+    plan:observe(obs)
+    local goal, reason = plan:choose(obs, "run", "balanced")
+    assert(not goal and reason == "wait_for_party")
+    assert(plan:nextExit())
+    assert(plan:choose(obs, "run", "balanced").task == "move_to_exit")
+end)
+test("next uses the current exit when several rooms have exits", function()
+    local plan, obs = planner.new(), snapshot()
+    obs.exit, obs.doors = { x = 200, y = 160 }, { door(2, "0:2") }
+    plan:observe(obs)
+    obs.room, obs.doors = "0:2", { door(0, "0:1") }
+    plan:observe(obs)
+    assert(plan:nextExit())
+    assert(plan:choose(obs, "explore", "balanced").task == "move_to_exit")
+end)
+test("observed doors replace stale edges and failures belong to their source room", function()
+    local plan, obs = planner.new(), snapshot()
+    obs.doors = { door(2, "0:2"), door(1, "0:3") }
+    plan:observe(obs)
+    plan:block("door:2:0:2", 300)
+    assert(not plan:available("door:2:0:2", 1))
+    obs.room, obs.doors = "0:3", { door(2, "0:2") }
+    plan:observe(obs)
+    assert(plan:available("door:2:0:2", 1))
+    obs.doors = {}
+    plan:observe(obs)
+    assert(not next(plan.nodes["0:3"].edges))
+end)
+test("buttons are attempted before room clear and need actual activation", function()
+    local plan, obs = planner.new(), snapshot()
+    obs.clear = false
+    obs.buttons = { { id = "one", x = 160, y = 160 }, { id = "two", x = 300, y = 160 } }
+    plan:observe(obs)
+    assert(plan:choose(obs, "explore", "balanced").id == "one")
+    obs.frame = 40
+    assert(plan:choose(obs, "explore", "balanced").id == "one")
+    obs.buttons = { obs.buttons[2] }
+    assert(plan:choose(obs, "explore", "balanced").id == "two")
+    obs.actor.x, obs.frame = 300, 41
+    plan:choose(obs, "explore", "balanced")
+    obs.frame = 140
+    local goal, reason = plan:choose(obs, "explore", "balanced")
+    assert(not goal and reason == "button_not_activated")
+    obs.buttons, obs.clear = {}, true
+    plan:observe(obs)
+    goal, reason = plan:choose(obs, "explore", "balanced")
+    assert(not goal and reason == "exploration_complete")
+end)
+test("exit contact circles protect every exit and allow outward recovery", function()
+    local obs = snapshot()
+    local first = { id = "a", x = 200, y = 160, radius = 24, exit = true }
+    local second = { id = "b", x = 320, y = 160, radius = 24, exit = true }
+    obs.map.zones = { first, second }
+    assert(not nav.passable(obs.map, 170, 160, 10))
+    assert(not nav.line(obs.map, obs.actor, { x = 250, y = 160 }, 10))
+    obs.map.allowedExit = "a"
+    assert(nav.passable(obs.map, 200, 160, 10))
+    assert(not nav.passable(obs.map, 320, 160, 10))
+    obs.map.allowedExit = nil
+    assert(nav.line(obs.map, { x = 180, y = 160 }, { x = 150, y = 160 }, 10))
+    assert(not nav.line(obs.map, { x = 180, y = 160 }, { x = 190, y = 160 }, 10))
+end)
+test("timed traps wait for a sufficient window without cooling down a valid route", function()
+    local plan, obs = planner.new(), snapshot()
+    for i = 1, 120 do
+        obs.map.walk[i] = false
+    end
+    for col = 2, 9 do
+        obs.map.walk[4 * 12 + col + 1] = true
+    end
+    obs.actor.x, obs.actor.y, obs.actor.radius = 120, 160, 6
+    obs.map.timed, obs.map.speed = true, 200
+    local spike = { id = "spike", x = 200, y = 160, radius = 19, timed = true, safeFor = 0 }
+    obs.map.zones = { spike }
+    local goal = { id = "button", x = 280, y = 160 }
+    plan:observe(obs)
+    local point, reason = plan:waypoint(obs, goal)
+    assert(
+        point
+            and point.x > obs.actor.x
+            and point.x < 175
+            and reason == "wait_for_trap"
+            and plan:available(goal.id, obs.frame)
+    )
+    obs.frame = 200
+    assert(select(2, plan:waypoint(obs, goal)) == "wait_for_trap")
+    spike.safeFor = 0.1
+    assert(not nav.path(obs.map, obs.actor, goal, 6))
+    spike.safeFor = 2
+    assert(plan:waypoint(obs, goal))
+    spike.timed, obs.map.timed = false, false
+    assert(select(2, plan:waypoint(obs, goal)) == "route_blocked")
+end)
+test("complete spike cycles use simulation ticks and reset at identity boundaries", function()
+    local terrain = modules["lanbot/terrain"]()
+    terrain:reset("w", "r", "p")
+    assert(terrain:spikes(1, 1, 0) == 0)
+    for tick = 1, 9 do
+        terrain:spikes(1, 1, tick)
+    end
+    for tick = 10, 19 do
+        terrain:spikes(1, 0, tick)
+    end
+    for tick = 20, 49 do
+        terrain:spikes(1, 1, tick)
+    end
+    for tick = 50, 59 do
+        terrain:spikes(1, 0, tick)
+    end
+    assert(terrain:spikes(1, 1, 60) > 0.8)
+    assert(terrain:spikes(1, 1, 60) == terrain:spikes(1, 1, 60))
+    for tick = 61, 88 do
+        terrain:spikes(1, 1, tick)
+    end
+    assert(terrain:spikes(1, 1, 88) == 0)
+    assert(terrain:spikes(1, 1, 200) == 0) -- Missed observations invalidate the learned phase.
+    terrain:reset("w", "next", "p")
+    assert(terrain:spikes(1, 1, 60) == 0)
+    terrain:reset("w", "next", "replacement")
+    assert(terrain:spikes(1, 1, 60) == 0)
+end)
+test("continuous danger checks catch fast crossings and compensate view age", function()
+    local obs = snapshot()
+    local hazards = modules["lanbot/hazards"](nav)
+    obs.dangers = { { x = 100, y = 160, vx = 6000, radius = 4 } }
+    assert(hazards.risk(obs, obs.actor, obs.actor, 0, 1 / 30, combat.styles.balanced) > 2800)
+    obs.dangers = { { x = 100, y = 160, vx = 300, radius = 4 } }
+    obs.age = 0.2
+    assert(hazards.risk(obs, obs.actor, obs.actor, 0, 0.01, combat.styles.balanced) > 2800)
+    obs.dangers = { { x = 160, y = 160, at = 1, radius = 85 } }
+    assert(hazards.risk(obs, obs.actor, obs.actor, 0, 0.3, combat.styles.balanced) == 0)
+end)
+test("nearby waypoints do not truncate danger prediction", function()
+    local obs = snapshot()
+    obs.dangers = { { x = 260, y = 160, vx = -300, radius = 5 } }
+    local move = combat.move(obs, { x = 162, y = 160 }, "balanced", 2)
+    assert((move & (4 | 8)) ~= 0)
+end)
+test("firing lanes avoid danger and targets remain stable for similar distances", function()
+    local obs = snapshot()
+    local enemy = { id = "a", x = 400, y = 160, radius = 12, attackable = true }
+    local ordinary = assert(combat.goal(obs, enemy, "balanced"))
+    obs.dangers = { { x = ordinary.x, y = ordinary.y, radius = 30 } }
+    assert(combat.goal(obs, enemy, "balanced").id ~= ordinary.id)
+    obs.enemies = { enemy, { id = "b", x = 380, y = 160, radius = 12, attackable = true } }
+    assert(combat.target(obs, "balanced", "a").id == "a")
+    enemy.attackable = false
+    assert(combat.target(obs, "balanced", "a").id == "b")
+end)
+
 -- Exercise the game adapter with documented API-shaped fakes. No game process.
-EntityFlag = { FLAG_FRIENDLY = 1, FLAG_CHARM = 2 }
-EntityType = { ENTITY_PLAYER = 1, ENTITY_FAMILIAR = 3, ENTITY_PROJECTILE = 9 }
+EntityFlag = { FLAG_FRIENDLY = 1, FLAG_CHARM = 2, FLAG_NO_TARGET = 4 }
+EntityType = { ENTITY_PLAYER = 1, ENTITY_FAMILIAR = 3, ENTITY_PROJECTILE = 9, ENTITY_EFFECT = 1000 }
 PlayerType = { PLAYER_AZAZEL = 7 }
 WeaponType = { WEAPON_BRIMSTONE = 4, WEAPON_KNIFE = 3, WEAPON_TECH_X = 9 }
 CollectibleType = { COLLECTIBLE_CHOCOLATE_MILK = 69 }
@@ -435,7 +600,21 @@ GridCollisionClass = {
     COLLISION_OBJECT = 2,
     COLLISION_WALL_EXCEPT_PLAYER = 5,
 }
-GridEntityType = { GRID_TRAPDOOR = 17, GRID_SPIKES = 8, GRID_SPIKES_ONOFF = 9 }
+GridEntityType = {
+    GRID_TRAPDOOR = 17,
+    GRID_STAIRS = 18,
+    GRID_PRESSURE_PLATE = 20,
+    GRID_SPIKES = 8,
+    GRID_SPIKES_ONOFF = 9,
+}
+EffectVariant = {
+    HEAVEN_LIGHT_DOOR = 39,
+    CREEP_RED = 22,
+    CREEP_GREEN = 23,
+    CREEP_YELLOW = 24,
+    CREEP_WHITE = 25,
+    CREEP_BLACK = 26,
+}
 RoomType = {
     ROOM_BOSS = 5,
     ROOM_TREASURE = 4,
@@ -535,6 +714,9 @@ local room = {
     GetGridPosition = function(_, i)
         return Vector(i % 12 * 40, math.floor(i / 12) * 40)
     end,
+    GetFrameCount = function()
+        return 0
+    end,
     GetGridWidth = function()
         return 12
     end,
@@ -616,7 +798,7 @@ Isaac = {
         output[#output + 1] = message
     end,
 }
-local observe = modules["lanbot/observe"](native, bridge, nav)
+local observe = modules["lanbot/observe"](native, bridge, nav, modules["lanbot/terrain"])
 local localInfo = {
     ready = 1,
     active = 1,
@@ -662,6 +844,63 @@ test("client observation ages, goes neutral when stale, then recovers", function
     assert(observe.read(3, localInfo).age == 0)
     localInfo.nowMs = 0
 end)
+test("accepted actor pose ignores prediction, expires and follows cache clearing", function()
+    local pose = dofile(root .. "/src/bridge/sync/actor_pose.lua")
+    local motion = {}
+    local player = {
+        ControllerIndex = 2,
+        Position = Vector(198, 277),
+    }
+    motion[42] = {
+        actor = true,
+        controller = 2,
+        at = 1,
+        target = Vector(244, 277),
+        velocity = Vector(-1, 0),
+        display = player.Position,
+    }
+    local value = assert(pose(motion, 42, player.ControllerIndex, 1.1))
+    assert(value.x == 244 and value.vx == -60 and player.Position.X == 198)
+    value.x = 0
+    assert(pose(motion, 42, player.ControllerIndex, 1.1).x == 244, "Borrowed pose was mutated")
+    assert(not pose(motion, 42, player.ControllerIndex, 1.3), "Expired pose used for input")
+    player.ControllerIndex = 1
+    assert(not pose(motion, 42, player.ControllerIndex, 1.1), "Replacement actor inherited pose")
+    assert(not pose({}, 42, player.ControllerIndex, 1.1), "Cleared room cache retained pose")
+end)
+test(
+    "client observation uses accepted positions when prediction is already outside chest",
+    function()
+        local old = roster[2].Position
+        roster[2].Position = Vector(198, 277)
+        local reader = modules["lanbot/observe"](
+            native,
+            bridge,
+            nav,
+            modules["lanbot/terrain"],
+            function(p)
+                if p == roster[2] then
+                    return { x = 244, y = 277, vx = 0, vy = 0 }
+                end
+                return { x = p.Position.X, y = p.Position.Y, vx = 0, vy = 0 }
+            end
+        )
+        local obs = assert(reader.read(1, localInfo))
+        assert(obs.actor.x == 244 and roster[2].Position.X == 198)
+        local waiting = modules["lanbot/observe"](
+            native,
+            bridge,
+            nav,
+            modules["lanbot/terrain"],
+            function()
+                return nil
+            end
+        )
+        local missing, reason = waiting.read(1, localInfo)
+        assert(not missing and reason == "view_not_ready")
+        roster[2].Position = old
+    end
+)
 local function fakeEntity(kind, flags)
     local e = {
         InitSeed = 10 + kind,
@@ -719,6 +958,9 @@ test("client replicas remain targets; friendly OR charmed entities excluded", fu
     localInfo.authority = 1
     assert(not observe.read(2, localInfo).enemies[1].attackable)
     localInfo.authority = 0
+    entities = { fakeEntity(20, EntityFlag.FLAG_NO_TARGET) }
+    obs = observe.read(3, localInfo)
+    assert(#obs.enemies == 1 and not obs.enemies[1].attackable and #obs.dangers == 1)
 end)
 test("free useful soul heart picked with full red health; paid pickup excluded", function()
     local heart, paid = fakeEntity(5), fakeEntity(5)
@@ -737,6 +979,7 @@ test("observer protects exits and unselected doorways from ordinary movement", f
                 GetType = function()
                     return GridEntityType.GRID_TRAPDOOR
                 end,
+                State = 1,
             }
         end
     end
@@ -761,13 +1004,178 @@ test("observer protects exits and unselected doorways from ordinary movement", f
     assert(nav.passable(obs.map, 440, 160, 10, obs.doors[1]))
     room.GetGridEntity, room.GetDoor = getGrid, getDoor
 end)
-test("only a selected exit task unlocks its navigation cell", function()
+test("closed Boss exit retreats, waits for native opening and then contacts it", function()
+    local getGrid, player = room.GetGridEntity, roster[2]
+    local oldPosition, oldVelocity = player.Position, player.Velocity
+    local trapdoor = {
+        State = 0,
+        GetType = function()
+            return GridEntityType.GRID_TRAPDOOR
+        end,
+    }
+    room.GetGridEntity = function(_, index)
+        return index == 52 and trapdoor or nil
+    end
+    player.Position, player.Velocity = Vector(160, 160), Vector(0, 0)
+    local bot, source, _, _, env = fixture()
+    local observed, opened, contacted, retreat, awaySince = nil, false, false, 0, nil
+    env.observe = function(frame)
+        observed = assert(observe.read(frame, localInfo))
+        return observed
+    end
+    bot.command("mode hold")
+    bot.command("on")
+    for frame = 1, 360 do
+        bot.step(frame)
+        assert(bot.state == "running", bot.reason)
+        if not opened then
+            assert(
+                not observed.exit and bot.task ~= "move_to_exit",
+                "Closed trapdoor became a route"
+            )
+        end
+        local dx = ((source.mask & 2) ~= 0 and 1 or 0) - ((source.mask & 1) ~= 0 and 1 or 0)
+        local dy = ((source.mask & 8) ~= 0 and 1 or 0) - ((source.mask & 4) ~= 0 and 1 or 0)
+        if dx ~= 0 and dy ~= 0 then
+            dx, dy = dx * 0.7071, dy * 0.7071
+        end
+        local velocity = player.Velocity
+        velocity.X, velocity.Y =
+            velocity.X * 0.775 + dx * (260 / 30) * 0.225,
+            velocity.Y * 0.775 + dy * (260 / 30) * 0.225
+        player.Position.X = player.Position.X + velocity.X
+        player.Position.Y = player.Position.Y + velocity.Y
+        local distance = nav.distance(
+            { x = player.Position.X, y = player.Position.Y },
+            { x = 160, y = 160 }
+        )
+        retreat = math.max(retreat, distance)
+        -- Independent native model; production can only observe this state.
+        if not opened and distance > 50 then
+            awaySince = awaySince or frame
+            if frame - awaySince >= 30 then
+                opened, trapdoor.State = true, 1
+                bot.command("mode run")
+            end
+        elseif opened and distance < 20 then
+            contacted = true
+            break
+        end
+    end
+    assert(
+        opened and contacted and retreat > 50,
+        "Closed exit did not open/contact: opened="
+            .. tostring(opened)
+            .. " contacted="
+            .. tostring(contacted)
+            .. " retreat="
+            .. retreat
+            .. " task="
+            .. bot.task
+            .. " reason="
+            .. tostring(bot.reason)
+            .. " mask="
+            .. source.mask
+    )
+    bot.command("off")
+    room.GetGridEntity, player.Position, player.Velocity = getGrid, oldPosition, oldVelocity
+end)
+test("both actors leave a chest so native collision delay can expire before re-entry", function()
+    for _, boundary in ipairs({ 0, 81 }) do
+        local bots, sources, observations = {}, {}, {}
+        local bodies =
+            { { x = 200, y = 160, vx = 0, vy = 0 }, { x = 225, y = 190, vx = 0, vy = 0 } }
+        if boundary > 0 then
+            bodies = {
+                { x = 200 + boundary, y = 160, vx = 0, vy = 0 },
+                { x = 200, y = 160 + boundary, vx = 0, vy = 0 },
+            }
+        end
+        local delay, opened, away, sawContact = 10, false, false, false
+        for slot = 1, 2 do
+            local bot, source, obs = fixture()
+            bots[slot], sources[slot], observations[slot] = bot, source, obs
+            obs.actor = bodies[slot]
+            for key, value in pairs(snapshot().actor) do
+                if obs.actor[key] == nil then
+                    obs.actor[key] = value
+                end
+            end
+            obs.exit = {
+                id = "native-chest",
+                x = 200,
+                y = 160,
+                radius = 24,
+                contactRadius = 60,
+                contactWait = true,
+                exit = true,
+            }
+            obs.map.zones = { obs.exit }
+            bot.command("on")
+        end
+        for frame = 1, 360 do
+            -- Independent native collision/update model: Lua Wait remains zero,
+            -- but overlap while DropDelay is positive refreshes it to ten updates.
+            local blocked, overlap = false, false
+            for _, body in ipairs(bodies) do
+                local distance = nav.distance(body, { x = 200, y = 160 })
+                blocked = blocked or distance < 82
+                overlap = overlap or distance < 55
+            end
+            if overlap then
+                sawContact = true
+                if delay > 0 then
+                    delay = 10
+                else
+                    opened = true
+                end
+            else
+                delay = math.max(0, delay - 1)
+                away = true
+            end
+            if opened then
+                break
+            end
+            for slot, bot in ipairs(bots) do
+                local obs = observations[slot]
+                obs.frame, obs.simulationTick = frame, frame
+                obs.exit.contactBlocked = blocked
+                bot.step(frame)
+                assert(bot.state == "running", bot.reason)
+                if frame == 1 then
+                    local status = bot.command("next")
+                    assert(not status:find("error=", 1, true), status)
+                end
+            end
+            for slot, body in ipairs(bodies) do
+                local buttons = sources[slot].mask
+                local dx = ((buttons & 2) ~= 0 and 1 or 0) - ((buttons & 1) ~= 0 and 1 or 0)
+                local dy = ((buttons & 8) ~= 0 and 1 or 0) - ((buttons & 4) ~= 0 and 1 or 0)
+                if dx ~= 0 and dy ~= 0 then
+                    dx, dy = dx * 0.7071, dy * 0.7071
+                end
+                body.vx, body.vy =
+                    body.vx * 0.775 + dx * 260 * 0.225, body.vy * 0.775 + dy * 260 * 0.225
+                body.x, body.y = body.x + body.vx / 30, body.y + body.vy / 30
+            end
+        end
+        assert(
+            sawContact and away and opened and delay == 0,
+            "Chest overlap kept native drop delay alive"
+        )
+        for _, bot in ipairs(bots) do
+            bot.command("off")
+        end
+    end
+end)
+test("only a selected exit task authorizes its contact zone", function()
     local bot, _, _, _, env = fixture()
     local observed
     env.observe = function(frame)
         observed = snapshot()
         observed.frame = frame
-        observed.exit = { x = 320, y = 160, cell = 57 }
+        observed.exit = { id = "exit:57", x = 320, y = 160, cell = 57, radius = 24, exit = true }
+        observed.map.zones, observed.map.exitCells = { observed.exit }, { [57] = true }
         observed.map.walk[57] = false
         return observed
     end
@@ -778,9 +1186,256 @@ test("only a selected exit task unlocks its navigation cell", function()
     assert(not observed.map.walk[57])
     bot.command("mode run")
     bot.step(3)
-    assert(observed.map.walk[57] and bot.task == "move_to_exit")
+    assert(not observed.map.walk[57] and bot.task == "move_to_exit")
+    assert(observed.map.allowedExit == "exit:57" and nav.passable(observed.map, 320, 160, 10))
 end)
+test("touch a big chest from the side without entering its overlapping Void portal", function()
+    local bot, source, obs = fixture()
+    local chest = {
+        id = "chest",
+        kind = "bigchest",
+        x = 200,
+        y = 160,
+        radius = 24,
+        contactRadius = 60,
+        contactWait = true,
+        exit = true,
+    }
+    local portal = { id = "void", x = 200, y = 160, radius = 24, exit = true }
+    obs.exit, obs.map.zones = chest, { portal, chest }
+    obs.actor.x, obs.actor.y = 300, 240
+    local opened, entered, delay = false, false, 10
+    bot.command("on")
+    for frame = 1, 360 do
+        local body = obs.actor
+        -- Native chest collision is a wide ellipse, while the portal activates
+        -- near its center. This world model independently performs contact.
+        local overlap = ((body.x - 200) / 55) ^ 2 + ((body.y - 160) / 30) ^ 2 < 1
+        entered = entered or nav.distance(body, portal) < 22
+        if overlap then
+            if delay > 0 then
+                delay = 10
+            else
+                opened = true
+            end
+        else
+            delay = math.max(0, delay - 1)
+        end
+        if opened or entered then
+            break
+        end
+        obs.frame, obs.simulationTick = frame, frame
+        chest.contactBlocked = nav.distance(body, chest) < 82
+        bot.step(frame)
+        assert(bot.state == "running", bot.reason)
+        if bot.task == "move_to_exit" then
+            assert(obs.map.allowedExit == "chest")
+            assert(not nav.passable(obs.map, portal.x, portal.y, body.radius))
+        end
+        local buttons = source.mask
+        local dx = ((buttons & 2) ~= 0 and 1 or 0) - ((buttons & 1) ~= 0 and 1 or 0)
+        local dy = ((buttons & 8) ~= 0 and 1 or 0) - ((buttons & 4) ~= 0 and 1 or 0)
+        if dx ~= 0 and dy ~= 0 then
+            dx, dy = dx * 0.7071, dy * 0.7071
+        end
+        body.vx, body.vy = body.vx * 0.775 + dx * 260 * 0.225, body.vy * 0.775 + dy * 260 * 0.225
+        body.x, body.y = body.x + body.vx / 30, body.y + body.vy / 30
+    end
+    assert(opened and not entered, "BOT failed native chest contact or entered the Void")
+end)
+test("replica retreats its actual body when prediction already left the chest", function()
+    local oldLocal, oldRemote = roster[2].Position, roster[0].Position
+    local chest = fakeEntity(5)
+    chest.Position, chest.Variant, chest.Wait, chest.State =
+        Vector(320, 160), PickupVariant.PICKUP_BIGCHEST, 0, 0
+    entities = { chest }
+    local actual, velocity = 244, 0
+    roster[2].Position, roster[0].Position = Vector(199, 160), Vector(430, 160)
+    local reader = modules["lanbot/observe"](
+        native,
+        bridge,
+        nav,
+        modules["lanbot/terrain"],
+        function(p)
+            return {
+                x = p == roster[2] and actual or 430,
+                y = 160,
+                vx = p == roster[2] and velocity or 0,
+                vy = 0,
+            }
+        end
+    )
+    local bot, source, _, _, env = fixture()
+    env.info, env.observe = function()
+        return localInfo
+    end, reader.read
+    bot.command("on")
+    local left
+    for frame = 1, 12 do
+        localInfo.tick = frame
+        roster[2].Position = Vector(actual - 45, 160)
+        bot.step(frame)
+        if frame == 2 then
+            assert(
+                (source.mask & 1) ~= 0,
+                "Predicted clearance stopped actual retreat: "
+                    .. bot.status()
+                    .. " mask="
+                    .. source.mask
+            )
+        end
+        velocity = velocity * 0.775 + ((source.mask & 1) ~= 0 and -260 or 0) * 0.225
+        actual = actual + velocity / 30
+        left = left or actual < 238
+    end
+    assert(left, "Actual body never left the contact boundary")
+    bot.command("off")
+    roster[2].Position, roster[0].Position, entities = oldLocal, oldRemote, {}
+end)
+test("observer selects the big chest before an optional Void trapdoor", function()
+    local oldGrid = room.GetGridEntity
+    local chest = fakeEntity(5)
+    chest.Position, chest.Variant, chest.Wait, chest.State =
+        Vector(160, 160), PickupVariant.PICKUP_BIGCHEST, 0, 0
+    room.GetGridEntity = function(_, index)
+        if index == 52 then
+            return {
+                State = 1,
+                GetType = function()
+                    return GridEntityType.GRID_TRAPDOOR
+                end,
+            }
+        end
+    end
+    entities = { chest }
+    local obs = observe.read(1, localInfo)
+    assert(#obs.exits == 2 and obs.exit.kind == "bigchest")
+    obs.map.allowedExit = obs.exit.id
+    assert(not nav.passable(obs.map, 160, 160, 10), "Void protection was removed")
+    entities, room.GetGridEntity = {}, oldGrid
+end)
+test("adapter observes ordinary unpressed buttons without treating rewards as puzzles", function()
+    local getGrid, isClear = room.GetGridEntity, room.IsClear
+    local plate = {
+        State = 0,
+        GetType = function()
+            return GridEntityType.GRID_PRESSURE_PLATE
+        end,
+        GetVariant = function()
+            return 0
+        end,
+    }
+    room.GetGridEntity = function(_, index)
+        return index == 52 and plate or nil
+    end
+    room.IsClear = function()
+        return false
+    end
+    local obs = observe.read(1, localInfo)
+    assert(not obs.clear and #obs.buttons == 1)
+    plate.State = 1
+    assert(#observe.read(2, localInfo).buttons == 1)
+    plate.State = 3
+    assert(#observe.read(3, localInfo).buttons == 0)
+    plate.State, plate.GetVariant = 0, function()
+        return 1
+    end
+    assert(#observe.read(4, localInfo).buttons == 0)
+    room.GetGridEntity, room.IsClear = getGrid, isClear
+end)
+test("adapter guards multiple trapdoors and stairs even before clear", function()
+    local getGrid, isClear = room.GetGridEntity, room.IsClear
+    room.GetGridEntity = function(_, index)
+        if index == 52 or index == 56 or index == 80 then
+            return {
+                GetType = function()
+                    return index == 80 and GridEntityType.GRID_STAIRS
+                        or GridEntityType.GRID_TRAPDOOR
+                end,
+                State = 1,
+            }
+        end
+    end
+    local obs = observe.read(1, localInfo)
+    assert(#obs.exits == 2 and #obs.map.zones == 3)
+    obs.map.allowedExit = obs.exit.id
+    assert(nav.passable(obs.map, obs.exit.x, obs.exit.y, 10))
+    assert(not nav.passable(obs.map, 320, 160, 10))
+    room.IsClear = function()
+        return false
+    end
+    obs = observe.read(2, localInfo)
+    assert(not obs.exit and #obs.map.zones == 3)
+    room.GetGridEntity, room.IsClear = getGrid, isClear
+end)
+test("adapter avoids hostile creep and respects flight and friendly ownership", function()
+    local creep = fakeEntity(EntityType.ENTITY_EFFECT)
+    creep.Variant = EffectVariant.CREEP_RED
+    entities = { creep }
+    local obs = observe.read(1, localInfo)
+    assert(#obs.dangers == 1 and not nav.passable(obs.map, 300, 160, 10))
+    roster[2].CanFly = true
+    assert(#observe.read(2, localInfo).dangers == 0)
+    roster[2].CanFly = false
+    creep.SpawnerType = EntityType.ENTITY_PLAYER
+    assert(#observe.read(3, localInfo).dangers == 0)
+    entities = {}
+end)
+test("cleared retracted spikes pass; unknown and active spikes still block", function()
+    local getGrid, isClear = room.GetGridEntity, room.IsClear
+    local spike = { State = 1, Timeout = -1 }
+    spike.GetType = function()
+        return GridEntityType.GRID_SPIKES_ONOFF
+    end
+    spike.ToSpikes = function()
+        return spike
+    end
+    room.GetGridEntity = function(_, index)
+        return index == 52 and spike or nil
+    end
+    local obs = observe.read(1, localInfo)
+    assert(nav.passable(obs.map, 160, 160, 10))
+    room.IsClear = function()
+        return false
+    end
+    assert(not nav.passable(observe.read(2, localInfo).map, 160, 160, 10))
+    room.IsClear = isClear
+    spike.State = 0
+    assert(not nav.passable(observe.read(3, localInfo).map, 160, 160, 10))
+    room.GetGridEntity = getGrid
+end)
+test(
+    "entity exits are protected before clear, during pickup wait and regardless of ownership",
+    function()
+        local isClear = room.IsClear
+        local chest = fakeEntity(5)
+        chest.Variant, chest.Wait = PickupVariant.PICKUP_BIGCHEST, 10
+        entities = { chest }
+        room.IsClear = function()
+            return false
+        end
+        local obs = observe.read(1, localInfo)
+        assert(not obs.exit and not nav.passable(obs.map, 300, 160, 10))
+        room.IsClear = isClear
+        assert(not observe.read(2, localInfo).exit)
+        chest.Wait, chest.State = 0, 0
+        obs = observe.read(3, localInfo)
+        assert(obs.exit and obs.exit.contactWait and not nav.passable(obs.map, 300, 160, 10))
+        local previous = roster[0].Position
+        roster[0].Position = Vector(300, 160)
+        obs = observe.read(4, localInfo)
+        assert(obs.exit.contactBlocked, "A remote actor near the chest was omitted")
+        roster[0].Position = previous
+        local light = fakeEntity(EntityType.ENTITY_EFFECT, EntityFlag.FLAG_FRIENDLY)
+        light.Variant = EffectVariant.HEAVEN_LIGHT_DOOR
+        entities = { light }
+        obs = observe.read(4, localInfo)
+        assert(obs.exit and not nav.passable(obs.map, 300, 160, 10))
+        entities = {}
+    end
+)
 test("embedded console entry dispatches lanbot and returns nil", function()
+    _IsaacLanState = { actorPose = function() end }
     local source = { active = false, mask = 0 }
     native.api_info = function()
         return localInfo
