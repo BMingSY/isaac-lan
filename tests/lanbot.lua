@@ -922,6 +922,7 @@ test("observer protects exits and unselected doorways from ordinary movement", f
                 GetType = function()
                     return GridEntityType.GRID_TRAPDOOR
                 end,
+                State = 1,
             }
         end
     end
@@ -945,6 +946,82 @@ test("observer protects exits and unselected doorways from ordinary movement", f
     assert(not nav.passable(obs.map, 440, 160, 10))
     assert(nav.passable(obs.map, 440, 160, 10, obs.doors[1]))
     room.GetGridEntity, room.GetDoor = getGrid, getDoor
+end)
+test("closed Boss exit retreats, waits for native opening and then contacts it", function()
+    local getGrid, player = room.GetGridEntity, roster[2]
+    local oldPosition, oldVelocity = player.Position, player.Velocity
+    local trapdoor = {
+        State = 0,
+        GetType = function()
+            return GridEntityType.GRID_TRAPDOOR
+        end,
+    }
+    room.GetGridEntity = function(_, index)
+        return index == 52 and trapdoor or nil
+    end
+    player.Position, player.Velocity = Vector(160, 160), Vector(0, 0)
+    local bot, source, _, _, env = fixture()
+    local observed, opened, contacted, retreat, awaySince = nil, false, false, 0, nil
+    env.observe = function(frame)
+        observed = assert(observe.read(frame, localInfo))
+        return observed
+    end
+    bot.command("mode hold")
+    bot.command("on")
+    for frame = 1, 360 do
+        bot.step(frame)
+        assert(bot.state == "running", bot.reason)
+        if not opened then
+            assert(
+                not observed.exit and bot.task ~= "move_to_exit",
+                "Closed trapdoor became a route"
+            )
+        end
+        local dx = ((source.mask & 2) ~= 0 and 1 or 0) - ((source.mask & 1) ~= 0 and 1 or 0)
+        local dy = ((source.mask & 8) ~= 0 and 1 or 0) - ((source.mask & 4) ~= 0 and 1 or 0)
+        if dx ~= 0 and dy ~= 0 then
+            dx, dy = dx * 0.7071, dy * 0.7071
+        end
+        local velocity = player.Velocity
+        velocity.X, velocity.Y =
+            velocity.X * 0.775 + dx * (260 / 30) * 0.225,
+            velocity.Y * 0.775 + dy * (260 / 30) * 0.225
+        player.Position.X = player.Position.X + velocity.X
+        player.Position.Y = player.Position.Y + velocity.Y
+        local distance = nav.distance(
+            { x = player.Position.X, y = player.Position.Y },
+            { x = 160, y = 160 }
+        )
+        retreat = math.max(retreat, distance)
+        -- Independent native model; production can only observe this state.
+        if not opened and distance > 50 then
+            awaySince = awaySince or frame
+            if frame - awaySince >= 30 then
+                opened, trapdoor.State = true, 1
+                bot.command("mode run")
+            end
+        elseif opened and distance < 20 then
+            contacted = true
+            break
+        end
+    end
+    assert(
+        opened and contacted and retreat > 50,
+        "Closed exit did not open/contact: opened="
+            .. tostring(opened)
+            .. " contacted="
+            .. tostring(contacted)
+            .. " retreat="
+            .. retreat
+            .. " task="
+            .. bot.task
+            .. " reason="
+            .. tostring(bot.reason)
+            .. " mask="
+            .. source.mask
+    )
+    bot.command("off")
+    room.GetGridEntity, player.Position, player.Velocity = getGrid, oldPosition, oldVelocity
 end)
 test("only a selected exit task authorizes its contact zone", function()
     local bot, _, _, _, env = fixture()
@@ -1005,6 +1082,7 @@ test("adapter guards multiple trapdoors and stairs even before clear", function(
                     return index == 80 and GridEntityType.GRID_STAIRS
                         or GridEntityType.GRID_TRAPDOOR
                 end,
+                State = 1,
             }
         end
     end

@@ -181,10 +181,17 @@ return function(native, bridge, nav, terrain)
                         kind == GridEntityType.GRID_TRAPDOOR
                         or kind == GridEntityType.GRID_STAIRS
                     then
-                        addExit(
-                            { x = pos.X, y = pos.Y, cell = index + 1 },
-                            result.clear and kind == GridEntityType.GRID_TRAPDOOR
-                        )
+                        local usable, radius = false, 24
+                        if kind == GridEntityType.GRID_TRAPDOOR then
+                            usable, radius = terrain:trapdoor(grid, result.clear)
+                        end
+                        addExit({
+                            x = pos.X,
+                            y = pos.Y,
+                            cell = index + 1,
+                            radius = radius,
+                            closed = kind == GridEntityType.GRID_TRAPDOOR and not usable,
+                        }, usable)
                     elseif kind == GridEntityType.GRID_PRESSURE_PLATE and terrain:button(grid) then
                         result.buttons[#result.buttons + 1] = {
                             id = "button:" .. index,

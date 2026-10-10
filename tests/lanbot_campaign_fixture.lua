@@ -129,7 +129,7 @@ for _, host in ipairs({ true, false }) do
                 end,
                 GetGridEntity = function()
                     return {
-                        State = 0, -- A usable native exit need not share the Greed fixture state.
+                        State = clear and 1 or 0,
                         GetType = function()
                             return 17
                         end,

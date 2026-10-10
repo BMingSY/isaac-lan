@@ -185,6 +185,32 @@ return function(nav)
         end
         return best, resourceBlocked, pending
     end
+    local function retreatFromClosedExit(obs)
+        local best, distance, waiting
+        for _, zone in ipairs(obs.map.zones or {}) do
+            local radius = zone.radius + obs.actor.radius + 12
+            if zone.exit and zone.closed and nav.distance(obs.actor, zone) < radius - 2 then
+                waiting = true
+                for direction = 0, 7 do
+                    local angle = direction * math.pi / 4
+                    local goal = {
+                        x = zone.x + math.cos(angle) * radius,
+                        y = zone.y + math.sin(angle) * radius,
+                        id = "exit-wait:" .. zone.id,
+                        task = "wait_for_exit",
+                    }
+                    local travel = nav.distance(obs.actor, goal)
+                    if
+                        nav.line(obs.map, obs.actor, goal, obs.actor.radius)
+                        and (not distance or travel < distance)
+                    then
+                        best, distance = goal, travel
+                    end
+                end
+            end
+        end
+        return best, waiting
+    end
     function methods:choose(obs, mode, style)
         self.mode = mode
         if mode ~= "hold" then
@@ -218,6 +244,10 @@ return function(nav)
         end
         if not obs.clear then
             return nil, "room_not_clear"
+        end
+        local retreat, waiting = retreatFromClosedExit(obs)
+        if waiting then
+            return retreat, retreat and nil or "exit_closed"
         end
         local pickup, score
         for _, item in ipairs(obs.pickups) do

@@ -30,6 +30,13 @@ return function()
         end
         return 0
     end
+    function terrain:trapdoor(grid, clear)
+        -- Boss exits reopen only after nearby actors leave. Keep a closed
+        -- exit out of the route and retreat beyond the native 50 px guard;
+        -- the actor radius adds room to wait, without forcing the grid open.
+        local open = clear and grid.State == 1
+        return open, open and 24 or 50
+    end
     function terrain:button(grid)
         -- Vanilla states: ordinary plate pressed=3, reward plate pressed=4.
         -- Reward/Greed/rail plates are deliberately not ordinary room puzzles.

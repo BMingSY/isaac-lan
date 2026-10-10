@@ -87,7 +87,7 @@ local function botStep()
         if room:GetType() == RoomType.ROOM_BOSS and room:IsClear() then
             for index = 0, room:GetGridSize() - 1 do
                 local grid = room:GetGridEntity(index)
-                if grid and grid:GetType() == GridEntityType.GRID_TRAPDOOR then
+                if grid and grid:GetType() == GridEntityType.GRID_TRAPDOOR and grid.State == 1 then
                     readyExit = true
                     if renders % 120 == 0 then
                         local sprite = grid.GetSprite and grid:GetSprite()
