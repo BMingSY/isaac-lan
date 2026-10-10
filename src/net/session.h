@@ -4,6 +4,9 @@
 #include <optional>
 
 namespace isaac::lan {
+struct TransportResources {
+    std::size_t connections = 0, queuedBytes = 0, receiveCapacity = 0, worldBytes = 0;
+};
 // Main-thread, nonblocking TCP transport. No external server and no Lua calls on
 // worker threads. TCP_NODELAY is set on every connected socket.
 class Session {
@@ -11,7 +14,9 @@ class Session {
     std::unique_ptr<Impl> impl;
 
   public:
-    explicit Session(void (*logger)(const std::string&) = nullptr);
+    using Observer = void (*)(std::string_view, double);
+    explicit Session(void (*logger)(const std::string&) = nullptr, Observer observer = nullptr,
+                     bool debugLogs = false);
     ~Session();
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
@@ -64,5 +69,6 @@ class Session {
     const Start& settings() const;
     std::optional<std::uint32_t> verifiedTick() const;
     std::uint16_t port() const;
+    TransportResources resources() const;
 };
 } // namespace isaac::lan

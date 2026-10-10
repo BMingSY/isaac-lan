@@ -18,6 +18,7 @@ DIAGNOSTICS = (
     "shared-curses",
     "dogma-warning",
     "ascent-compat",
+    "campaign",
 )
 
 
@@ -37,12 +38,18 @@ def build(output, cases=CASES):
             "shared-curses": "state_shared_curses.lua",
             "dogma-warning": "state_endings.lua",
             "ascent-compat": "state_endings.lua",
+            "campaign": "state_endings.lua",
         }.get(name, "state_side_routes.lua")
         source = (ROOT / "tests" / filename).read_text()
         if name in ("home", "home-debug", "dogma-warning", "ascent-compat"):
             source = source.replace(
                 'local cases = { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }',
                 'local cases = { "ascent" }',
+            )
+        elif name == "campaign":
+            source = source.replace(
+                'local cases = { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }',
+                'local cases = { "lamb" }',
             )
         cleanup = ""
         if name == "motion":
@@ -63,6 +70,8 @@ def build(output, cases=CASES):
             + ("true" if name == "home-debug" else "false")
             + "\n_IsaacLanTest.consoleRewind = "
             + ("true" if name == "rewind" else "false")
+            + "\n_IsaacLanTest.campaign = "
+            + ("true" if name == "campaign" else "false")
             + "\n"
             + source
             + "\nlocal cleanedUp = false\nreturn function()\nif "
