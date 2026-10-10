@@ -33,6 +33,7 @@ function definition.probe(target)
 end
 function definition.install(target, api)
     local cleanups, eid = {}, target.mod
+    target.pendingLifecycle = {}
     target.addCleanup(function()
         wrapping.cleanup(cleanups)
     end)
@@ -66,8 +67,16 @@ function definition.install(target, api)
     cleanups[#cleanups + 1] = lan:On("LocalRoomChanged", clear)
     cleanups[#cleanups + 1] = lan:On("ViewUpdated", function()
         eid:setPlayer()
+        -- Native floor/rewind entry runs before the rebuilt viewport commits.
+        -- EID needs those entry callbacks to initialize its hourglass cache.
+        local pending = target.pendingLifecycle
+        target.pendingLifecycle = {}
+        for _, callback in ipairs(pending) do
+            callback.record.original(table.unpack(callback.args, 1, callback.args.n))
+        end
     end)
     return function()
+        target.pendingLifecycle = {}
         wrapping.cleanup(cleanups)
         lan:Unregister()
         clear()
@@ -79,6 +88,9 @@ function definition.dispatch(target, record, ...)
         return record.original(...)
     end
     local callbacks = ModCallbacks
+    local lifecycle = record.id == callbacks.MC_POST_NEW_ROOM
+        or record.id == callbacks.MC_POST_NEW_LEVEL
+        or record.id == callbacks.MC_POST_GAME_STARTED
     if
         record.id == callbacks.MC_POST_RENDER
         or record.id == callbacks.MC_POST_UPDATE
@@ -87,6 +99,16 @@ function definition.dispatch(target, record, ...)
         or record.id == callbacks.MC_POST_GAME_STARTED
     then
         if not lan:IsReady() then
+            if lifecycle then
+                local pending, args = target.pendingLifecycle, table.pack(...)
+                for _, callback in ipairs(pending) do
+                    if callback.record == record then
+                        callback.args = args
+                        return
+                    end
+                end
+                pending[#pending + 1] = { record = record, args = args }
+            end
             return
         end
         local args = table.pack(...)

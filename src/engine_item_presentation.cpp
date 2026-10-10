@@ -3,7 +3,6 @@
 #include "runtime_net.h"
 #include "net_protocol.h"
 #include "localized_text.h"
-#include "home_scene.h"
 #include <MinHook.h>
 #include <algorithm>
 #include <array>
@@ -45,7 +44,7 @@ Call originalSceneUpdate;
 using SceneShow = void(__attribute__((thiscall)) *)(void*, int);
 SceneShow originalSceneShow;
 std::string configuration = "resources/giantbook.xml";
-HomeSleep homeSleep;
+unsigned homeSleepSerial = 0;
 void __attribute__((fastcall)) sceneUpdate(void* scene, void*) {
     // Boss overlays and the TV sequence contain native route markers. Replicas
     // render the authoritative pose instead of firing those markers again.
@@ -219,7 +218,7 @@ void __attribute__((fastcall)) show(void* overlay, void*, int id, int delay, voi
                         enqueue(std::move(e));
                     }
                 originalShow(reinterpret_cast<void*>(game() + 0x1c034), id, delay, nullptr);
-                ++homeSleep.serial;
+                ++homeSleepSerial;
             }))
             return;
     }
@@ -398,7 +397,7 @@ int scenePose(lua_State* L) {
             lan::Writer w(lan::Message::world);
             w.u8(at<unsigned>(scene, 0));
             w.u8(at<unsigned>(scene, 4));
-            w.u32(homeSleep.serial);
+            w.u32(homeSleepSerial);
             const auto manager = at<Address>(image, 0x87169c);
             w.u8(at<bool>(manager, 0x21c10));
             w.u32(at<unsigned>(manager, 0x219c8));
@@ -425,16 +424,11 @@ int scenePose(lua_State* L) {
         const auto manager = at<Address>(image, 0x87169c);
         at<bool>(manager, 0x21c10) = dreamHome;
         at<int>(manager, 0x219c8) = dreamIndex;
-        if (homeSleep.observe(sleep, at<int>(game(), 0), at<int>(game(), 4))) {
-            using Dream = void(__attribute__((thiscall))*)(void*, bool);
-            // This native UI scene owns its sprites and timing. Use the host's
-            // selected dream; Show has no route completion effects.
-            rooms::withView(
-                [&] { engine<Dream>(0x521ce0)(reinterpret_cast<void*>(manager + 0x21628), true); },
-                true);
-            at<int>(manager, 0xc) = at<int>(manager, 8);
-            at<int>(manager, 8) = 5;
-        }
+        // The host's NightmareScene stops gameplay snapshot capture. Replaying
+        // it when the nighttime snapshot arrives would start a second, delayed
+        // dream on the guest. Keep the host's native dream and resume the guest
+        // directly in the nighttime room instead.
+        homeSleepSerial = sleep;
         lua.pushBoolean(L, true);
         return 1;
     } catch (const std::exception& e) {
@@ -714,7 +708,7 @@ void advance() {
             rooms::withPlayer(slot, [&] { originalUpdate(owned[slot]->storage.data(), false); });
 }
 void reset() {
-    homeSleep = {};
+    homeSleepSerial = 0;
     owned = {};
     events.clear();
     lookups.clear();

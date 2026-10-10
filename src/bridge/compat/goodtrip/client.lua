@@ -40,6 +40,32 @@ function definition.install(target)
     -- UI and authority share the built-in action namespace, on either peer.
     local lan = assert(bridge.handles[authority.id])
     local pending, initialized = false, false
+    local playerIndex
+    for i = 1, 64 do
+        local name = debug.getupvalue(gt.step, i)
+        if not name then
+            break
+        end
+        if name == "player" then
+            playerIndex = i
+            break
+        end
+    end
+    assert(playerIndex, "missing_goodtrip_player_cache")
+    target.preparePlayer = function(localView)
+        local expected = localView and lan:GetLocalPlayers()[1] or Isaac.GetPlayer(0)
+        if not expected then
+            return false
+        end
+        local _, cached = debug.getupvalue(gt.step, playerIndex)
+        if not cached or GetPtrHash(cached) ~= GetPtrHash(expected) then
+            -- Loading may overwrite the native upvalue after the lifecycle
+            -- notification. Repair it in the committed local view before UI
+            -- callbacks use it; leave valid minimap caches untouched.
+            gt:prep()
+        end
+        return true
+    end
     wrapping.patch(cleanups, gt, "teleport_to_grid_index", function(original)
         return function(self, index)
             if not lan:IsActive() then
@@ -113,16 +139,23 @@ function definition.install(target)
         gt:new_room()
     end)
     return function()
+        target.preparePlayer = nil
         wrapping.cleanup(cleanups)
         pending = false
     end
 end
 function definition.dispatch(target, record, ...)
     local lan = bridge.handles[authority.id]
+    local callbacks = ModCallbacks
+    local ticking = record.id == callbacks.MC_POST_RENDER or record.id == callbacks.MC_POST_UPDATE
     if not lan or not lan:IsActive() then
+        -- Failed startup can return to native gameplay before any committed
+        -- LAN view prepared Goodtrip. Recover its ordinary player-zero cache.
+        if ticking and target.preparePlayer and not target.preparePlayer(false) then
+            return
+        end
         return record.original(...)
     end
-    local callbacks = ModCallbacks
     if
         record.id == callbacks.MC_POST_RENDER
         or record.id == callbacks.MC_POST_UPDATE
@@ -135,6 +168,9 @@ function definition.dispatch(target, record, ...)
         end
         local args = table.pack(...)
         return lan:WithLocalView(function()
+            if ticking and not target.preparePlayer(true) then
+                return
+            end
             return record.original(table.unpack(args, 1, args.n))
         end)
     end

@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+LevelStateFlag = { STATE_MINESHAFT_ESCAPE = 22 }
 for _, route in ipairs({ "poop", "knife", "hush" }) do
     for _, host in ipairs({ true, false }) do
         local commands, ready = {}, 0

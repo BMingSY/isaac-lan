@@ -34,6 +34,24 @@ def read_log(lab):
     return path.read_text(errors="replace") if path.exists() else ""
 
 
+def finalize_result(result, expected_roles):
+    result["scenario_pass"] = bool(result["pass"])
+    exits = result.get("process_exit", {})
+    errors = []
+    for role in expected_roles:
+        status = exits.get(role)
+        if status is None:
+            errors.append(f"{role}: process exit report is missing")
+        elif status.get("exit_code") != 0:
+            errors.append(f"{role}: process exited with {status.get('exit_hex', 'unknown')}")
+    result["clean_exit"] = not errors
+    if errors:
+        result.setdefault("close_errors", []).extend(errors)
+    result["pass"] = result["scenario_pass"] and not result.get("close_errors")
+    if result.get("close_errors") and not result.get("error"):
+        result["error"] = "; ".join(result["close_errors"])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
@@ -196,8 +214,8 @@ def main():
         help="Enable an additional fixture only on the host",
     )
     args = parser.parse_args()
-    if not 10 <= args.scenario_timeout <= 1800:
-        parser.error("Scenario timeout must be between 10 and 1800 seconds")
+    if not 10 <= args.scenario_timeout <= 3600:
+        parser.error("Scenario timeout must be between 10 and 3600 seconds")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
     if args.endings_fixture or args.hush_fixture:
@@ -915,6 +933,7 @@ def main():
         for original, was_disabled in original_mod_states.items():
             if not was_disabled:
                 (original / "disable.it").unlink(missing_ok=True)
+        finalize_result(result, roles[: len(processes)])
         result["seconds"] = time.monotonic() - started
         (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

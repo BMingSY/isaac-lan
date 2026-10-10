@@ -8,7 +8,6 @@
 #include "intro_barrier.h"
 #include "room_map.h"
 #include "audio_ownership.h"
-#include "home_scene.h"
 #include "localized_text.h"
 #include "laser_state.h"
 #include "actor_roster.h"
@@ -72,13 +71,23 @@ void roomTransitionContext() {
                 !gatherHomeCombat(13, 0, true, 2, 3) && !gatherHomeCombat(12, 1, true, 2, 3) &&
                 !gatherHomeCombat(13, 1, false, 2, 3),
             "Home combat failed to gather a split roster or gathered outside the native encounter");
-    isaac::presentation::HomeSleep sleep;
-    require(!sleep.observe(1, 13, 0) && !sleep.observe(1, 13, 0) && sleep.observe(1, 13, 1) &&
-                !sleep.observe(1, 13, 1),
-            "Home sleep failed to wait for night or replayed a duplicate snapshot");
-    isaac::presentation::HomeSleep late;
-    require(!late.observe(1, 13, 1) && !late.observe(1, 13, 1) && !late.observe(2, 12, 0),
-            "A late join or another floor replayed the Home dream");
+    for (const auto& encounter :
+         {std::array{11, 0, 102}, std::array{11, 1, 273}, std::array{11, 0, 274},
+          std::array{11, 1, 275}, std::array{12, 0, 412}, std::array{8, 4, 912},
+          std::array{8, 5, 912}, std::array{13, 1, 950}, std::array{13, 1, 951},
+          std::array{9, 0, 406}, std::array{9, 0, 407}})
+        require(finalCombat(encounter[0], encounter[1], encounter[2]),
+                "A terminal encounter would retain a split roster");
+    require(!finalCombat(6, 0, 102) && !finalCombat(8, 0, 912) && !finalCombat(13, 0, 950) &&
+                !finalCombat(12, 0, 20) && !finalCombat(11, 0, 5),
+            "An ordinary, transformed or cleared room would force unrelated actors to join");
+    require(finalCombat(13, 1, 960, 4) && !finalCombat(13, 0, 960, 4) &&
+                !finalCombat(13, 1, 960, 3),
+            "Home gathers after TV-created Dogma's first update or gathers ordinary furniture");
+    require(escapeFollower(867, 1, true, true) && !escapeFollower(867, 1, false, true) &&
+                !escapeFollower(867, 0, true, true) && !escapeFollower(866, 1, true, true) &&
+                !escapeFollower(867, 1, true, false),
+            "Escape transfers a dormant Shadow or takes the chase away from a resident player");
 }
 void poopState() {
     auto packet = [](unsigned mana, unsigned spell) {
@@ -402,6 +411,12 @@ void introBarrier() {
 }
 void automationInput() {
     using isaac::input::botConsoleArguments;
+    using isaac::input::consoleArguments;
+    require(consoleArguments("rewind", "rewind") == std::string_view{} &&
+                consoleArguments("rewind\t ", "rewind") == " " &&
+                !consoleArguments("rewindsomething", "rewind") &&
+                !consoleArguments("lua rewind", "rewind"),
+            "Console rewind dispatch confused a prefix or Lua expression with the native command");
     require(botConsoleArguments("lanbot") == std::string_view{} &&
                 botConsoleArguments("lanbot on") == "on" &&
                 botConsoleArguments("lanbot\tmode hold") == "mode hold",

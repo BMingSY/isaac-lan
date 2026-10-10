@@ -44,6 +44,21 @@ inline bool gatherHomeCombat(int stage, int kind, bool dogma, unsigned audience,
                              unsigned connected) {
     return stage == 13 && kind == 1 && dogma && (audience & connected) != connected;
 }
+inline bool finalCombat(int stage, int kind, unsigned entityType, unsigned variant = 0) {
+    if (stage == 11 && (kind == 0 || kind == 1))
+        return entityType == 102 || entityType == 273 || entityType == 274 || entityType == 275;
+    if (stage == 12)
+        return entityType == 412;
+    if (stage == 9 && kind == 0)
+        return entityType == 406 || entityType == 407;
+    if (stage == 8 && (kind == 4 || kind == 5))
+        return entityType == 912;
+    return stage == 13 && kind == 1 &&
+           (entityType == 950 || entityType == 951 || (entityType == 960 && variant == 4));
+}
+inline bool escapeFollower(unsigned entityType, int dimension, bool escaping, bool lastOccupant) {
+    return entityType == 867 && dimension == 1 && escaping && lastOccupant;
+}
 inline void registerMapRoom(std::span<int, 507> offsets, unsigned& count, int dimension, int index,
                             int listIndex, std::span<const unsigned> cells) {
     if (dimension < 0 || dimension > 2 || index < 0 || index >= 169 || listIndex < 0 ||

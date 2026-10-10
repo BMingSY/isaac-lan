@@ -11,6 +11,7 @@ namespace isaac::lan {
 struct RoomRequest;
 }
 namespace isaac::rooms {
+bool finalCombat();
 using RoomCall = void(__attribute__((thiscall)) *)(void*);
 bool install(std::uintptr_t image, void (*logger)(const std::string&));
 bool bind(lua_State*, HMODULE);

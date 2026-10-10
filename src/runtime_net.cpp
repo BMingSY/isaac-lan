@@ -4,6 +4,7 @@
 #include "frontend.h"
 #include "lan_session.h"
 #include "engine_rooms.h"
+#include "engine_rewind.h"
 #include "engine_input.h"
 #include "lanbot_console.h"
 #include "menu_input.h"
@@ -235,7 +236,20 @@ void __attribute__((fastcall)) consoleCommand(void* console, void*, const void* 
     const auto capacity = *reinterpret_cast<const unsigned*>(address + 20);
     const auto data =
         capacity < 16 ? static_cast<const char*>(text) : *static_cast<const char* const*>(text);
-    const auto args = input::botConsoleArguments(std::string_view(data, size));
+    const auto command = std::string_view(data, size);
+    if (const auto args = input::consoleArguments(command, "rewind");
+        args && gated && session && session->phase() == lan::Phase::running) {
+        // Native console rewind restores its process-wide room buffer. LAN
+        // suppresses that buffer in favor of controller checkpoints, so the
+        // native command would end the session and restart with an empty seed.
+        const bool queued = session->isHost() && rooms::stateReady() &&
+                            args->find_first_not_of(" \t\r\n") == std::string_view::npos &&
+                            rewind::request(0);
+        if (logger)
+            logger(queued ? "console_rewind=QUEUED" : "console_rewind=IGNORED unavailable");
+        return;
+    }
+    const auto args = input::botConsoleArguments(command);
     if (args && state) {
         const int top = lua.getTop(state);
         if (lua.getGlobal(state, "_IsaacLanBotCommand") == 6) {

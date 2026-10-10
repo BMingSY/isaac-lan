@@ -19,9 +19,44 @@ from build_release import release
 from check_release import FILES, check
 from delayed_relay import DelayedRelay
 from game_logs import probe_path
+from run_network_engine import finalize_result
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARIES = ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe")
+
+
+class EngineExitTests(unittest.TestCase):
+    def test_completed_scenario_with_heap_crash_fails_acceptance(self):
+        result = {
+            "pass": True,
+            "process_exit": {
+                "host": {"exit_code": -1073740940, "exit_hex": "C0000374"},
+                "client": {"exit_code": 0, "exit_hex": "00000000"},
+            },
+        }
+        finalize_result(result, ("host", "client"))
+        self.assertTrue(result["scenario_pass"])
+        self.assertFalse(result["clean_exit"])
+        self.assertFalse(result["pass"])
+        self.assertIn("host: process exited with C0000374", result["close_errors"])
+
+    def test_normal_exit_and_missing_exit_evidence(self):
+        for status in ({"exit_code": 0, "exit_hex": "00000000"}, None):
+            with self.subTest(status=status):
+                result = {"pass": True, "process_exit": {"host": status} if status else {}}
+                finalize_result(result, ("host",))
+                self.assertEqual(result["pass"], status is not None)
+                self.assertEqual(result["clean_exit"], status is not None)
+
+    def test_cleanup_errors_and_earlier_failures_remain_failures(self):
+        for result in (
+            {"pass": False, "error": "scenario failed"},
+            {"pass": True, "close_errors": ["owned cleanup failed"]},
+        ):
+            with self.subTest(result=result):
+                finalize_result(result, ())
+                self.assertFalse(result["pass"])
+                self.assertTrue(result["clean_exit"])
 
 
 class GameLogTests(unittest.TestCase):

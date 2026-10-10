@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ("lazarus", "poop", "knife", "hush")
-DIAGNOSTICS = ("audio", "home")
+DIAGNOSTICS = ("audio", "rewind", "home-debug", "home", "endings")
 
 
 def build(output, cases=CASES):
@@ -16,9 +16,12 @@ def build(output, cases=CASES):
             "lazarus": "state_lazarus_mines.lua",
             "audio": "state_guest_presentation_audio.lua",
             "home": "state_endings.lua",
+            "home-debug": "state_endings.lua",
+            "rewind": "state_hourglass.lua",
+            "endings": "state_endings.lua",
         }.get(name, "state_side_routes.lua")
         source = (ROOT / "tests" / filename).read_text()
-        if name == "home":
+        if name in ("home", "home-debug"):
             source = source.replace(
                 'local cases = { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }',
                 'local cases = { "ascent" }',
@@ -27,7 +30,11 @@ def build(output, cases=CASES):
             'function() _IsaacLanTest.route = "'
             + name
             + '"\n_IsaacLanTest.homeOnly = '
-            + ("true" if name == "home" else "false")
+            + ("true" if name in ("home", "home-debug") else "false")
+            + "\n_IsaacLanTest.debug10 = "
+            + ("true" if name == "home-debug" else "false")
+            + "\n_IsaacLanTest.consoleRewind = "
+            + ("true" if name == "rewind" else "false")
             + "\n"
             + source
             + "\nreturn function() return "

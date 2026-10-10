@@ -689,6 +689,12 @@ std::vector<Address> followers(Address player, const Room& room) {
         }
         return false;
     };
+    const bool lastOccupant =
+        std::none_of(participants.begin(), participants.end(), [&](Address other) {
+            const auto found = location.find(other);
+            return slotOf(other) != slotOf(player) && (connectedMask & (1u << slotOf(other))) &&
+                   found != location.end() && found->second == &room;
+        });
     std::vector<Address> jacobs;
     for (auto occupant : occupants(room))
         if (at<int>(occupant, 0x13c0) == 37 || at<int>(occupant, 0x13c0) == 39)
@@ -715,7 +721,9 @@ std::vector<Address> followers(Address player, const Room& room) {
         if ((type == 3 && at<Address>(entity, 0x410) == player) ||
             (type == 8 &&
              (owned(at<Address>(entity, 0x3bc)) || owned(at<Address>(entity, 0x3c8)))) ||
-            darkEsau)
+            darkEsau ||
+            escapeFollower(type, room.key.dimension,
+                           (at<unsigned>(game(), 0x1839c) & (1u << 22)) != 0, lastOccupant))
             result.push_back(entity);
     }
     return result;
@@ -750,7 +758,8 @@ void arrival(Address player, const Room& room, int door, const std::vector<Addre
         position.y += inward[door % 4].y;
         place(player, position);
         for (auto entity : companions)
-            place(entity, position);
+            if (at<unsigned>(entity, 0x28) != 867)
+                place(entity, position);
     }
     if (protect) {
         using Cooldown = void(__attribute__((thiscall))*)(void*, int);
@@ -1809,6 +1818,24 @@ void interceptReplicaEntities(Room& room) {
 }
 } // namespace
 
+bool finalCombat() {
+    if (!enabled || !active || runtime::replica())
+        return false;
+    const auto room = active->pointer;
+    for (std::size_t offset : {0x20u, 0x40u, 0x70u}) {
+        const auto list = room + 0x1218 + offset;
+        for (unsigned i = 0; i < at<unsigned>(list, 12); ++i) {
+            const auto entity = at<Address>(at<Address>(list, 4), i * 4);
+            // Nighttime Home's TV spawns and immediately updates Dogma inside
+            // its own update. Gather before that call, including debug damage,
+            // so the original intro starts with the complete room roster.
+            if (finalCombat(at<int>(game(), 0), at<int>(game(), 4), at<unsigned>(entity, 0x28),
+                            at<unsigned>(entity, 0x2c)))
+                return true;
+        }
+    }
+    return false;
+}
 bool update(void*, RoomCall original) {
     if (!enabled || depth || transferring)
         return false;
@@ -1823,6 +1850,13 @@ bool update(void*, RoomCall original) {
                 continue;
         }
         Scope scope(*room);
+        if (!runtime::replica() && (soundAudience() & connectedMask) != connectedMask &&
+            finalCombat()) {
+            // Terminal encounters own global cinematics and control locks.
+            // Complete the team arrival before advancing their native AI.
+            gatherForTransition([] {});
+            continue;
+        }
         if (!runtime::replica() && presentation::roomPaused())
             continue;
         restorePositions(room->pointer);
@@ -1842,20 +1876,9 @@ bool update(void*, RoomCall original) {
         if (runtime::replica())
             interceptReplicaEntities(*room);
         original(reinterpret_cast<void*>(room->pointer));
-        if (!runtime::replica() && at<int>(game(), 0) == 13 && at<int>(game(), 4) == 1 &&
-            (soundAudience() & connectedMask) != connectedMask) {
-            // TV proximity creates Dogma after room initialization. Observe
-            // the native encounter during updates, then gather at the frame
-            // boundary before its process-wide TV and Beast sequences.
-            bool dogma = false;
-            for (std::size_t offset : {0x20u, 0x40u, 0x70u}) {
-                const auto list = room->pointer + 0x1218 + offset;
-                for (unsigned i = 0; i < at<unsigned>(list, 12); ++i)
-                    dogma |= at<unsigned>(at<Address>(at<Address>(list, 4), i * 4), 0x28) == 950;
-            }
-            if (gatherHomeCombat(13, 1, dogma, soundAudience(), connectedMask))
-                gatherForTransition([] {});
-        }
+        if (!runtime::replica() && (soundAudience() & connectedMask) != connectedMask &&
+            finalCombat())
+            gatherForTransition([] {});
         ++room->updates;
     }
     return true;
@@ -2387,8 +2410,17 @@ void finishFrame() {
             // A fresh native Room::Init discards ordinary NPCs already in its
             // entity list. Insert Dark Esau after initialization, while the
             // source room still owns him; familiars retain their normal path.
-            if (!created || at<unsigned>(entity, 0x28) != 866)
+            if (!created || at<unsigned>(entity, 0x28) != 866) {
                 moveEntity(entity, *from, *to);
+                if (at<unsigned>(entity, 0x28) == 867) {
+                    // The original Shadow explicitly enters the persistence
+                    // list without FLAG_PERSISTENT. Preserve that native list
+                    // membership so Room::Init keeps the existing chase AI.
+                    using Persistent = void(__attribute__((thiscall))*)(void*, void*);
+                    engine<Persistent>(0x1b4f0)(reinterpret_cast<void*>(to->pointer + 0x1218),
+                                                reinterpret_cast<void*>(entity));
+                }
+            }
         {
             Scope scope(*to, actors);
             if (created) {
@@ -2417,6 +2449,17 @@ void finishFrame() {
                 for (auto entity : companions)
                     if (at<unsigned>(entity, 0x28) == 3)
                         engine<RoomCall>(0x22c8a0)(reinterpret_cast<void*>(entity));
+                    else if (at<unsigned>(entity, 0x28) == 867) {
+                        const auto previousIndex = at<int>(game(), 0x18308);
+                        const auto previousDimension = at<int>(game(), 0x18310);
+                        at<int>(game(), 0x18308) = from->key.index;
+                        at<int>(game(), 0x18310) = from->key.dimension;
+                        // Native NPC entry translates the chasing Shadow into
+                        // the destination's coordinates, away from the actor.
+                        engine<RoomCall>(0x2d6d80)(reinterpret_cast<void*>(entity));
+                        at<int>(game(), 0x18308) = previousIndex;
+                        at<int>(game(), 0x18310) = previousDimension;
+                    }
             }
             arrival(request.player, *to, request.door, companions, protect);
             for (auto player : actors)

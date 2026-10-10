@@ -19,6 +19,9 @@ local bosses = {}
 local appeared = {}
 local scratchReported = {}
 local homeOnly = _IsaacLanTest.homeOnly
+local debug10 = _IsaacLanTest.debug10
+local debug10Enabled = false
+local debug10BeastWalking = false
 local homeVisuals = { sleep = 0, television = 0 }
 local homeWalking, homeMovement, homeOrigin = false, false, nil
 local homeWakeMovement = false
@@ -27,6 +30,8 @@ local homeWalkReadyAt, homeWalkPrevious, homeWalkMotion = nil, nil, 0
 local replicaWakeOrigin, replicaWakePrevious, replicaWakeDistance, replicaWakeMotion =
     nil, nil, 0, 0
 local dreamFrames = {}
+local terminalWalking, terminalVerified, terminalWalkStart = false, false, nil
+local terminalWalk = {}
 local function checkHomeVisual(value)
     assert(native.home_scene_pose() == value[5], "Home scene state differs from authority")
     if value[6] then
@@ -63,9 +68,66 @@ local function protect(p)
     p:SetMinDamageCooldown(10000)
     p:AddEntityFlags(EntityFlag.FLAG_NO_DAMAGE_BLINK)
 end
-local function move(index, t, dimension)
-    assert(native.rooms_move(1, index, dimension or 0, -1))
-    actor(1, function(p)
+local function terminalMovement(t)
+    local positions = native.rooms_positions()
+    assert(
+        positions["0"].index == positions["1"].index
+            and positions["0"].dimension == positions["1"].dimension,
+        "Terminal Boss entry did not gather both players"
+    )
+    local ready = not native.presentation_active()
+    for slot = 0, 1 do
+        actor(slot, function(p)
+            ready = ready
+                and p.ControlsEnabled
+                and p:AreControlsEnabled()
+                and p:IsExtraAnimationFinished()
+        end)
+    end
+    if not ready then
+        terminalWalkStart = nil
+        return
+    end
+    terminalWalkStart = terminalWalkStart or t
+    for slot = 0, 1 do
+        actor(slot, function(p)
+            protect(p)
+            local sample = terminalWalk[slot]
+            if not sample then
+                sample = { origin = p.Position, previous = p.Position, motion = 0, distance = 0 }
+                terminalWalk[slot] = sample
+            end
+            local delta = p.Position:Distance(sample.previous)
+            if delta > 0.01 and delta < 20 then
+                sample.motion = sample.motion + 1
+            end
+            sample.previous = p.Position
+            sample.distance = math.max(sample.distance, p.Position:Distance(sample.origin))
+            if t - terminalWalkStart > 100 then
+                assert(
+                    sample.motion > 20 and sample.distance > 10,
+                    "Terminal Boss actor cannot move"
+                )
+                report(
+                    "TERMINAL_MOVEMENT slot="
+                        .. slot
+                        .. " distance="
+                        .. sample.distance
+                        .. " walking_ticks="
+                        .. sample.motion
+                )
+            end
+        end)
+    end
+    if t - terminalWalkStart > 100 then
+        terminalWalking, terminalVerified = false, true
+    end
+end
+local bossEntrySlot = 1
+local function move(index, t, dimension, slot)
+    slot = slot or 1
+    assert(native.rooms_move(slot, index, dimension or 0, -1))
+    actor(slot, function(p)
         protect(p)
         p.Position, p.Velocity = Vector(160, 220), Vector.Zero
         report("ROOM index=" .. index .. " type=" .. Game():GetRoom():GetType())
@@ -102,7 +164,14 @@ local function boss(t, target)
             return d.Data.Type == RoomType.ROOM_BOSS and d.SafeGridIndex >= 0
         end)
     assert(index, "Missing native Boss room")
-    move(index, t)
+    local level = Game():GetLevel()
+    bossEntrySlot = cases[caseIndex] == "mother"
+            and level:GetStage() == 8
+            and level:GetStageType() >= 4
+            and 0
+        or 1
+    move(index, t, nil, bossEntrySlot)
+    report("BOSS_ENTRY slot=" .. bossEntrySlot)
     mark("boss-enter", t)
 end
 local function pick(variant, subtype)
@@ -175,12 +244,15 @@ local function specialEntrance(index, t)
     move(index, t)
     mark("entrance", t)
 end
+local function terminalBoss(e)
+    local name = cases[caseIndex]
+    return e.Type == terminal[name]
+        and (name ~= "blue-baby" or e.Variant == 1)
+        and (name ~= "ascent" or e.Variant == 0)
+end
 local function observeBoss(e)
     local name = cases[caseIndex]
-    if
-        name == "blue-baby" and e.Type == 102 and e.Variant ~= 1
-        or name == "ascent" and e.Type == 951 and e.Variant ~= 0
-    then
+    if e.Type == terminal[name] and not terminalBoss(e) then
         return
     end
     if e.Type == terminal[name] and not bosses[e.Type] then
@@ -199,6 +271,13 @@ local function fight(t)
             then
                 seenBoss = true
                 observeBoss(e)
+                if
+                    not homeOnly
+                    and not terminalVerified
+                    and (terminalBoss(e) or cases[caseIndex] == "mega-satan" and e.Type == 274)
+                then
+                    terminalWalking = true
+                end
                 local key = e.Type .. ":" .. e.Variant .. ":" .. e.InitSeed
                 if not appeared[key] then
                     report(
@@ -242,7 +321,12 @@ local function fight(t)
                     )
                 end
                 local warmup = e.Type == 950 and 200 or 30
-                if t % 10 == 0 and t - appeared[key] >= warmup and not e:IsDead() then
+                if
+                    not terminalWalking
+                    and t % 10 == 0
+                    and t - appeared[key] >= warmup
+                    and not e:IsDead()
+                then
                     if e.Type == 950 or e.Type == 951 then
                         -- These bosses have non-damageable companion/intro
                         -- entities. Native tear collision must choose targets;
@@ -263,6 +347,10 @@ local function fight(t)
         end
         clear = Game():GetRoom():IsClear()
     end)
+    if terminalWalking then
+        terminalMovement(t)
+        assert(t - stepAt < 1200, "Terminal Boss movement check stalled")
+    end
     return clear and seenBoss
 end
 local function prepare(stage, kind, t)
@@ -293,18 +381,28 @@ Isaac.AddCallback(owner, ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, picku
     end
 end, PickupVariant.PICKUP_BIGCHEST)
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, function(_, gameOver)
+    if finished then
+        return
+    end
     assert(not gameOver, "Ending route ended in a defeat")
     assert(wins == caseIndex - 1, "Duplicate native win callback")
     assert(bosses[terminal[cases[caseIndex]]], "Win callback without the expected terminal Boss")
     if homeOnly then
-        assert(homeVisuals.sleep > 10, "Native Home sleep animation was not displayed")
+        assert(
+            host and homeVisuals.sleep > 10 or not host and homeVisuals.sleep == 0,
+            "Home dream was missing on the host or replayed late on the guest"
+        )
         local frames = 0
         for _ in pairs(dreamFrames) do
             frames = frames + 1
         end
-        assert(frames > 10, "Native Home dream sprite did not animate")
+        assert(not host or frames > 10, "Native Home dream sprite did not animate")
         assert(homeVisuals.television > 10, "Native TV animation was not displayed")
-        assert(homeMovement, "Guest did not move after entering the Dogma arena")
+        assert(homeMovement, "Guest did not move after the native Home boss transition")
+        assert(
+            not debug10 or debug10BeastWalking,
+            "Debug damage never reached the native Beast arena"
+        )
         assert(homeWakeMovement, "Guest did not move after waking at Home")
         report(
             "HOME_VISUALS sleep=" .. homeVisuals.sleep .. " television=" .. homeVisuals.television
@@ -312,9 +410,17 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, function(_, gameOver)
     end
     wins, lastExit = wins + 1, renders
     lastExitMs = native.api_info().nowMs
+    if host and debug10Enabled then
+        Isaac.ExecuteCommand("debug 10")
+        debug10Enabled = false
+        report("DEBUG10_DISABLED")
+    end
     report("NATIVE_WIN callback=MC_POST_GAME_END game_over=false")
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
+    if finished then
+        return
+    end
     lastExit = renders
     lastExitMs = native.api_info().nowMs
     report("NATIVE_EXIT_CALLBACK wins=" .. wins)
@@ -327,6 +433,10 @@ function _IsaacLanFrame()
     local s = frame()
     if homeOnly and s.prepared then
         local visual = native.item_presentation_state()
+        assert(
+            host or visual.dreamActive == 0 or visual.dreamHome ~= 1,
+            "Guest started a delayed Home dream"
+        )
         if host and visual.sceneState == 1 and (visual.sceneID == 2 or visual.sceneID == 3) then
             local sprite = native.home_scene_sprite(Isaac.GetPlayer(0):GetSprite())
             if sprite and sprite:GetFilename() ~= "" then
@@ -431,6 +541,8 @@ function _IsaacLanFrame()
                 lastExit = 0
                 snapshots, floorEvents, observed, bosses = 0, 0, {}, {}
                 appeared = {}
+                terminalWalking, terminalVerified, terminalWalkStart = false, false, nil
+                terminalWalk = {}
                 scratchReported = {}
                 -- Menu rendering is throttled differently in each window.
                 -- Schedule lobbies in wall time rather than render counts.
@@ -473,6 +585,31 @@ local function advance(t)
     end
     local level, name = Game():GetLevel(), cases[caseIndex]
     local stage, kind = level:GetStage(), level:GetStageType()
+    if homeOnly and debug10 and not debug10BeastWalking and level:GetCurrentRoomIndex() == -10 then
+        local beast
+        actor(1, function()
+            for _, e in ipairs(Isaac.GetRoomEntities()) do
+                if e.Type == 951 then
+                    beast = true
+                end
+            end
+        end)
+        if beast then
+            assert(
+                native.rooms_positions()["0"].index == -10,
+                "Debug Dogma left the host outside Beast"
+            )
+            -- Keep debug damage enabled throughout Dogma's native death and
+            -- scene change. Pause it only in the resulting Beast arena to
+            -- measure actual controls before the next boss can die.
+            Isaac.ExecuteCommand("debug 10")
+            debug10Enabled, debug10BeastWalking = false, true
+            homeWalking, homeMovement, homeOrigin = true, false, nil
+            homeDistance, homeWalkReadyAt = 0, nil
+            mark("dogma-walk", t)
+            report("NATIVE_DEBUG10_BEAST_ARENA both_peers=-10 damage_paused_for_movement=true")
+        end
+    end
     if step == "init" and t > 30 then
         for slot = 0, 1 do
             actor(slot, protect)
@@ -609,7 +746,7 @@ local function advance(t)
         and kind >= 4
         and t - stepAt > 40
     then
-        actor(1, function(p)
+        actor(bossEntrySlot, function(p)
             -- Corpse II's Boss room contains the native hole into the arena.
             -- Contact it after Room::Init has placed the entering player.
             p.Position, p.Velocity = Game():GetRoom():GetCenterPos(), Vector(1, 0)
@@ -752,6 +889,11 @@ local function advance(t)
             mark("dogma-tv", t)
         end
     elseif step == "dogma-tv" then
+        if host and debug10 and not debug10Enabled then
+            Isaac.ExecuteCommand("debug 10")
+            debug10Enabled = true
+            report("DEBUG10_ENABLED")
+        end
         actor(0, protect)
         local found
         actor(1, function(p)
@@ -832,6 +974,7 @@ local function advance(t)
                 report(
                     (
                         step == "home-walk" and "NATIVE_HOME_WAKE_MOVEMENT distance="
+                        or debug10BeastWalking and "NATIVE_BEAST_AFTER_DEBUG10_MOVEMENT distance="
                         or "NATIVE_DOGMA_MOVEMENT distance="
                     )
                         .. homeDistance
@@ -843,6 +986,11 @@ local function advance(t)
                     homeWakeMovement = true
                 else
                     homeMovement = true
+                    if debug10BeastWalking then
+                        Isaac.ExecuteCommand("debug 10")
+                        debug10Enabled = true
+                        report("DEBUG10_RESUMED")
+                    end
                     mark("beast-fight", t)
                 end
             end
@@ -967,13 +1115,16 @@ local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(
         function()
-            if not host and (shoot >= 0 or homeWalking) then
+            if terminalWalking or not host and (shoot >= 0 or homeWalking) then
                 local values = {}
                 local direction = ({ 0, 2, 1, 3 })[math.floor(native.api_info().tick / 12) % 4 + 1]
                 for action = 0, 15 do
                     values[#values + 1] = string.pack(
                         ">I2",
-                        (homeWalking and action == direction or not homeWalking and action == shoot)
+                        (
+                            (homeWalking or terminalWalking) and action == direction
+                            or not homeWalking and not terminalWalking and action == shoot
+                        )
                                 and 65535
                             or 0
                     )
@@ -995,7 +1146,14 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 checkHomeVisual(_IsaacLanState.decode(bytes)[16])
             end
             return string.pack(">s4", bytes)
-                .. _IsaacLanState.encode({ caseIndex, step, shoot, homeWalking })
+                .. _IsaacLanState.encode({
+                    caseIndex,
+                    step,
+                    shoot,
+                    homeWalking,
+                    terminalWalking,
+                    debug10BeastWalking,
+                })
         end,
         function(bytes, t, ack)
             local body, pos = string.unpack(">s4", bytes)
@@ -1005,6 +1163,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 return false
             end
             assert(meta[1] == caseIndex, "Ending case changed without a native win")
+            terminalWalking = meta[5]
+            if meta[6] and not debug10BeastWalking then
+                debug10BeastWalking = true
+                homeOrigin, homeDistance, homeMovement = nil, 0, false
+            end
             snapshots = snapshots + 1
             if homeOnly then
                 checkHomeVisual(_IsaacLanState.decode(body)[16])

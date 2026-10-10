@@ -59,6 +59,9 @@ local step, stepAt, origin, other, boss = "init", 0
 local firstMana, seenHush, exitPosition, cartRoom, cartPosition = nil, false
 local rooms, roomNumber, buttons, visited = {}, 0, 0, {}
 local knife, shadow = false, false
+-- Escape belongs to the current Level, rather than the run-wide Game flags.
+local escapeFlag = LevelStateFlag.STATE_MINESHAFT_ESCAPE
+local chaseRooms, chaseMotion = {}, 0
 local walkOrigin, walkDistance, walkSamples = nil, 0, 0
 local walkPrevious, walkMotion = nil, 0
 local function mark(name, t)
@@ -285,6 +288,53 @@ local function hush(t)
     end
 end
 local function mines(t)
+    if knife then
+        actor(1, function()
+            local position = native.rooms_positions()["1"]
+            if position.dimension ~= 1 then
+                return
+            end
+            assert(
+                Game():GetLevel():GetStateFlag(escapeFlag),
+                "Knife pickup did not start the native mineshaft escape"
+            )
+            local tracked
+            for _, e in ipairs(Isaac.GetRoomEntities()) do
+                if e.Type == 867 and not e:IsDead() then
+                    tracked = e
+                    break
+                end
+            end
+            local sample = chaseRooms[position.index]
+            if not sample then
+                sample = { start = t, previous = nil, motion = 0 }
+                chaseRooms[position.index] = sample
+            end
+            if tracked then
+                if not sample.previous then
+                    report(
+                        "CHASE_SHADOW room="
+                            .. position.index
+                            .. " state="
+                            .. tracked:ToNPC().State
+                            .. " persistent="
+                            .. tostring(tracked:HasEntityFlags(EntityFlag.FLAG_PERSISTENT))
+                    )
+                else
+                    local delta = tracked.Position:Distance(sample.previous)
+                    if delta > 0.01 and delta < 40 then
+                        sample.motion = sample.motion + 1
+                        chaseMotion = chaseMotion + 1
+                    end
+                end
+                sample.previous = tracked.Position
+            end
+            if t - sample.start > 50 then
+                assert(tracked, "Mother's Shadow disappeared after leaving the knife room")
+                assert(sample.motion > 10, "Mother's Shadow did not chase in this room")
+            end
+        end)
+    end
     if step == "init" and t >= 30 then
         actor(1, function(p)
             p:AddCollectible(CollectibleType.COLLECTIBLE_KNIFE_PIECE_1)
@@ -403,6 +453,13 @@ local function mines(t)
                     mark("tunnel", t)
                     report("CHECKED guest direction input after minecart entrance")
                 else
+                    local count = 0
+                    for _, sample in pairs(chaseRooms) do
+                        assert(sample.motion > 10, "Escape room lacked actual Shadow movement")
+                        count = count + 1
+                    end
+                    assert(count >= 2 and chaseMotion > 20, "Shadow did not chase across rooms")
+                    report("CHECKED chase_rooms=" .. count .. " movement_ticks=" .. chaseMotion)
                     checkpoint.complete = true
                     mark("done", t)
                     report("CHECKED knife piece chase and original floor return with movement")
@@ -446,15 +503,35 @@ local function mines(t)
             end
         end)
     elseif step == "knife-wait" then
-        local acquired = false
+        local acquired, escaping = false, false
         actor(1, function(p)
             acquired = p:HasCollectible(627)
+            escaping = Game():GetLevel():GetStateFlag(escapeFlag)
+            if (t - stepAt) % 60 == 1 then
+                for _, e in ipairs(Isaac.GetRoomEntities()) do
+                    if e.Type == 867 then
+                        report(
+                            "KNIFE_TRIGGER state="
+                                .. e:ToNPC().State
+                                .. " animation="
+                                .. e:GetSprite():GetAnimation()
+                                .. " acquired="
+                                .. tostring(acquired)
+                                .. " escape="
+                                .. tostring(escaping)
+                        )
+                    end
+                end
+            end
             if t - stepAt > 180 then
                 assert(acquired, "Native knife collision did not grant piece 2")
             end
+            assert(t - stepAt < 600, "Mother's Shadow never started the native escape")
         end)
         -- Native collectible pickup grants the item after its lift animation.
-        if acquired then
+        -- The original Shadow also waits for every scoped pickup queue and
+        -- its wake-up animation before changing the escape rooms.
+        if acquired and escaping then
             knife = true
             visited = {}
             mark("tunnel", t)

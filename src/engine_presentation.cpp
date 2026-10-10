@@ -2,6 +2,7 @@
 #include "engine_item_presentation.h"
 #include "engine_rooms.h"
 #include "intro_barrier.h"
+#include "room_map.h"
 #include "runtime_net.h"
 #include "net_protocol.h"
 #include <MinHook.h>
@@ -52,6 +53,17 @@ void __attribute__((fastcall)) startIntro(void* transition, void*, unsigned firs
     if (runtime::replica())
         return;
     const auto game = at<std::uintptr_t>(image, 0x871678);
+    const bool terminal =
+        rooms::finalCombat() || rooms::gatherHomeCombat(at<int>(game, 0), at<int>(game, 4),
+                                                        first == 99, audience, rooms::connected());
+    if (terminal && (audience & rooms::connected()) != rooms::connected()) {
+        // Gather before the native versus screen. The complete roster then
+        // shares its control lock and the encounter's cinematics.
+        if (rooms::gatherForTransition([=] {
+                rooms::withRoomPlayers(0, [&] { startIntro(transition, nullptr, first, second); });
+            }))
+            return;
+    }
     intros.push_back({++serial, runtime::tick(), audience, at<int>(game, 0), at<int>(game, 4),
                       at<int>(game, 0x1830c), at<int>(game, 0x18304), first, second});
     const auto& event = intros.back();

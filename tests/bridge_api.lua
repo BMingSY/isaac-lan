@@ -372,18 +372,28 @@ for _, build in ipairs({
     { "5.24", 5.25, "d7aab88", "705a61422ffc09c683d4250dedf2a569b6d76d4eee884dec70b705eedfa898f5" },
 }) do
     local p = peer(1)
+    p.env.ModCallbacks = {
+        MC_POST_RENDER = 2,
+        MC_POST_UPDATE = 1,
+        MC_POST_NEW_ROOM = 19,
+        MC_POST_NEW_LEVEL = 18,
+        MC_POST_GAME_STARTED = 15,
+    }
     p.modInfo = {
         workshopId = "836319872",
         metadataVersion = build[1],
         sourceHash = build[4],
         directory = "eid",
     }
+    local callbacks = {}
     local eid = {
         Name = "External Item Descriptions",
         ModVersion = build[2],
         ModVersionCommit = build[3],
         OnRender = function() end,
-        AddCallback = function() end,
+        AddCallback = function(_, id, fn)
+            callbacks[id] = fn
+        end,
         AddPriorityCallback = function() end,
         RemoveCallback = function() end,
         setPlayer = function(self)
@@ -403,6 +413,27 @@ for _, build in ipairs({
     p.bridge.commit()
     eid:setPlayer()
     assert(eid.player == actor2, "EID retained the other room's actor")
+    local entries, updates, previous = 0, 0, nil
+    eid:AddCallback(p.env.ModCallbacks.MC_POST_NEW_ROOM, function(self, marker, gap, tail)
+        assert(self == eid and marker == 12 and gap == nil and tail == "entry")
+        assert(p.scope == 1 and self.player == actor2, "Deferred EID entry used the remote room")
+        previous = { player = self.player }
+        entries = entries + 1
+    end)
+    eid:AddCallback(p.env.ModCallbacks.MC_POST_UPDATE, function()
+        updates = updates + 1
+    end)
+    p.ready, p.epoch = 0, p.epoch + 1
+    callbacks[19](eid, 11, nil, "old")
+    callbacks[19](eid, 12, nil, "entry")
+    callbacks[1](eid)
+    p.bridge.commit()
+    assert(entries == 0 and updates == 0 and previous == nil)
+    p.ready = 1
+    p.bridge.commit()
+    assert(entries == 1 and previous.player == actor2, "Rewind lost EID's native entry cache")
+    p.bridge.commit()
+    assert(entries == 1 and updates == 0, "EID replayed an entry or stale update twice")
     eid.ModVersion = 0
     assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "unsupported")
 end
@@ -509,5 +540,84 @@ do
     p.active = 0
     players = { { entityPlayer = actor1, index = 0 }, { entityPlayer = actor2, index = 1 } }
     assert(#service:getPlayers() == 2, "Stats adapter changed inactive native co-op")
+end
+-- Goodtrip's native callbacks can arrive after its cached actor was cleared
+-- during loading, while the committed view and lifecycle identity are unchanged.
+do
+    local p = peer(1)
+    p.env.ModCallbacks = {
+        MC_POST_RENDER = 2,
+        MC_POST_UPDATE = 1,
+        MC_POST_NEW_ROOM = 19,
+        MC_POST_NEW_LEVEL = 18,
+        MC_POST_GAME_STARTED = 15,
+    }
+    p.modInfo = {
+        workshopId = "1630477831",
+        metadataVersion = "1.2.8",
+        sourceHash = "57a2525436aac726053e9f465667090a9b4a68e150c19285a51dc035a6397858",
+        directory = "goodtrip",
+    }
+    local id = "isaac-lan.compat.goodtrip"
+    local lan = p.api:RegisterMod({}, { id = id, integrationVersion = 1 })
+    p.env._IsaacLanModules["compat/goodtrip/authority"] = {
+        id = id,
+        install = function()
+            return function() end
+        end,
+    }
+    local callbacks, player, preparations = {}, nil, 0
+    local gt = {
+        Name = "goodtrip",
+        AddCallback = function(_, cb, fn)
+            callbacks[cb] = fn
+        end,
+        AddPriorityCallback = function() end,
+        RemoveCallback = function() end,
+        teleport_to_grid_index = function() end,
+        tab_action = function() end,
+        prep = function()
+            player = p.env.Isaac.GetPlayer(0)
+            preparations = preparations + 1
+        end,
+        new_room = function() end,
+        new_level = function() end,
+        step = function()
+            if p.active == 1 then
+                assert(
+                    p.scope == 1 and player == actor2,
+                    "Goodtrip rendered a missing or remote actor"
+                )
+            else
+                assert(
+                    p.scope == nil and player == actor1,
+                    "Goodtrip retained a missing LAN actor after disconnect"
+                )
+            end
+        end,
+    }
+    p.env.gt = gt
+    assert(loadfile(root .. "/src/bridge/compat/goodtrip/client.lua", "t", p.env))()
+    p.env._IsaacLanModules["compat/registry"].observeMod(gt, "goodtrip-source")
+    gt:AddCallback(p.env.ModCallbacks.MC_POST_RENDER, gt.step)
+    p.bridge.commit()
+    player = nil
+    local before = preparations
+    callbacks[2](gt)
+    assert(preparations == before + 1, "Goodtrip did not repair its loading-time actor cache")
+    callbacks[2](gt)
+    assert(preparations == before + 1, "Goodtrip rebuilt a valid cache every render")
+    player = actor1
+    callbacks[2](gt)
+    assert(player == actor2 and preparations == before + 2)
+    p.ready = 0
+    player = nil
+    callbacks[2](gt)
+    assert(player == nil and not lan:IsReady(), "Uncommitted Goodtrip viewport accessed an actor")
+    -- A disconnect before the first viewport commit must restore ordinary UI,
+    -- even though the skipped game-start callback never prepared this cache.
+    p.active = 0
+    callbacks[2](gt)
+    assert(player == actor1, "Partial LAN startup left the native Goodtrip UI uninitialized")
 end
 print("PASS bridge codec, views, lifecycle, action authority, receipts, dedupe and compatibility")

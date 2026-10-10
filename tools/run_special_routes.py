@@ -26,8 +26,8 @@ def main():
     cases = args.case or CASES
     if len(set(cases)) != len(cases):
         parser.error("Each case must appear once")
-    if "home" in cases and cases[-1] != "home":
-        parser.error("The native ending diagnostic must run last")
+    if "endings" in cases and cases[-1] != "endings":
+        parser.error("The six-route ending diagnostic must run last")
     labs = [args.host.resolve(), args.client.resolve()]
     if labs[0] == labs[1] or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
         parser.error("Two distinct marked isolated labs are required")
@@ -75,8 +75,10 @@ def main():
         "--menu-port",
         str(args.port),
         "--scenario-timeout",
-        "900",
+        "3600" if "endings" in cases else "900",
     ]
+    if "endings" in cases:
+        command.append("--endings-fixture")
     for mod in args.mod:
         command += ["--mod", str(mod.resolve())]
     report = {"passed": False, "restored": False, "cases": {}, "command": command}
@@ -95,12 +97,15 @@ def main():
                         for line in text.splitlines()
                         if (
                             "SIDE " + name + " " in line
-                            or name == "home"
-                            and "ENDINGS ascent " in line
+                            or name in ("home", "home-debug", "endings")
+                            and "ENDINGS " in line
                             or name == "audio"
                             and "LAN_NETWORK " in line
                             and "SIDE " not in line
                             or name == "lazarus"
+                            and "LAN_NETWORK " in line
+                            and "SIDE " not in line
+                            or name == "rewind"
                             and "LAN_NETWORK " in line
                             and "SIDE " not in line
                         )
