@@ -448,7 +448,10 @@ bool captureNextInput() {
 }
 void updateReplica(void* game) {
     const auto g = reinterpret_cast<std::uintptr_t>(game);
-    if (auto transition = session->takeStage()) {
+    // A faster host can finish another floor while this replica is still
+    // initializing the previous one. Leave the reliable event in the session
+    // until the native roster is ready; keep updating the loading floor below.
+    if (auto transition = rooms::stateReady() ? session->takeStage() : std::nullopt) {
         replicaPending.reset();
         authoritative.reset();
         // A returning client may still have its actor parked according to the
@@ -1292,6 +1295,9 @@ bool halfAllowed() {
 }
 bool replica() {
     return gated && session && !session->isHost();
+}
+unsigned difficulty() {
+    return session ? session->settings().difficulty : 0;
 }
 bool ending() {
     return playingEnding;

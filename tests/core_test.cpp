@@ -115,6 +115,17 @@ void roomTransitionContext() {
     require(finalCombat(13, 1, 960, 4) && !finalCombat(13, 0, 960, 4) &&
                 !finalCombat(13, 1, 960, 3),
             "Home gathers after TV-created Dogma's first update or gathers ordinary furniture");
+    for (unsigned difficulty : {2u, 3u}) {
+        for (unsigned variant : {0u, 1u})
+            require(finalCombat(7, 0, 406, variant, difficulty),
+                    "Ultra Greed/Greedier would start with a split roster");
+        require(!finalCombat(6, 0, 406, 0, difficulty) && !finalCombat(7, 0, 50, 0, difficulty) &&
+                    !finalCombat(7, 0, 407, 0, difficulty) &&
+                    !finalCombat(11, 0, 102, 0, difficulty),
+                "Greed waves, shop minibosses or another route forced a terminal gathering");
+    }
+    require(!finalCombat(7, 0, 406, 0, 0) && !finalCombat(7, 0, 406, 0, 1),
+            "A normal-mode Ultra Greed transformation forced a Greed-route gathering");
     require(escapeFollower(867, 1, true, true) && !escapeFollower(867, 1, false, true) &&
                 !escapeFollower(867, 0, true, true) && !escapeFollower(866, 1, true, true) &&
                 !escapeFollower(867, 1, true, false),
@@ -695,24 +706,27 @@ Archive sample(unsigned players = 4) {
 
 void archiveRoundTrip() {
     for (unsigned players = 2; players <= 4; ++players) {
-        auto value = sample(players);
-        if (players == 2)
-            value.settings.progress.reset();
-        const auto decoded = Archive::decode(value.encode());
-        require(decoded.fingerprint == value.fingerprint &&
-                    decoded.settings.seed == value.settings.seed &&
-                    decoded.settings.difficulty == value.settings.difficulty &&
-                    decoded.settings.characters == value.settings.characters &&
-                    decoded.settings.progress == value.settings.progress &&
-                    decoded.game == value.game,
-                "Saved session round trip failed");
-        require(decoded.locations.size() == players, "Saved roster differs");
-        for (unsigned i = 0; i < players; ++i) {
-            const auto& actual = decoded.locations[i];
-            const auto& expected = value.locations[i];
-            require(actual.dimension == expected.dimension && actual.index == expected.index &&
-                        actual.x == expected.x && actual.y == expected.y,
-                    "Saved player location differs");
+        for (unsigned difficulty = 0; difficulty <= 3; ++difficulty) {
+            auto value = sample(players);
+            value.settings.difficulty = static_cast<std::uint8_t>(difficulty);
+            if (players == 2)
+                value.settings.progress.reset();
+            const auto decoded = Archive::decode(value.encode());
+            require(decoded.fingerprint == value.fingerprint &&
+                        decoded.settings.seed == value.settings.seed &&
+                        decoded.settings.difficulty == value.settings.difficulty &&
+                        decoded.settings.characters == value.settings.characters &&
+                        decoded.settings.progress == value.settings.progress &&
+                        decoded.game == value.game,
+                    "Saved session round trip failed");
+            require(decoded.locations.size() == players, "Saved roster differs");
+            for (unsigned i = 0; i < players; ++i) {
+                const auto& actual = decoded.locations[i];
+                const auto& expected = value.locations[i];
+                require(actual.dimension == expected.dimension && actual.index == expected.index &&
+                            actual.x == expected.x && actual.y == expected.y,
+                        "Saved player location differs");
+            }
         }
     }
 }

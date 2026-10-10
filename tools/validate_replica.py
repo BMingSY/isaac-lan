@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 from build_gameplay_suite import build as build_suite
+from build_special_suite import build as build_special_suite
 from capture_suite_checkpoints import capture as capture_checkpoints
 from archive_gameplay import archive
 
@@ -48,9 +49,11 @@ CASES = {
     "item-text": ("state_item_text.lua", "native guest pickup text"),
     "mirror-camera": ("state_mirror_camera.lua", "native mirror direction and large room camera"),
     "floor-items": ("state_floor_items.lua", "native Forget Me Now five-pip and R Key"),
+    "greed": ("state_greed.lua", "native Greed and Greedier gameplay"),
 }
 DEFAULT_CASES = [
     "gameplay",
+    "greed",
     "projection",
     "reconnect",
     "reconnect-stage",
@@ -119,6 +122,10 @@ def main():
                     script = a.output / "gameplay-suite.lua"
                     summary["gameplay_phases"] = build_suite(script)
                     completion = "continuous gameplay suite"
+                elif case == "greed":
+                    script = a.output / "greed-suite.lua"
+                    build_special_suite(script, ["greed", "greedier"])
+                    completion = "all selected character and side routes"
                 else:
                     filename, completion = CASES[case]
                     script = SOURCE / "tests" / filename
@@ -170,6 +177,30 @@ def main():
                         "150",
                     ]
                 report = output / "result.json"
+                if case == "greed":
+                    # Full native endings need the owned profile/progress
+                    # backup and restoration supplied by the route wrapper.
+                    cmd = [
+                        sys.executable,
+                        str(SOURCE / "tools/run_special_routes.py"),
+                        "--host",
+                        str(LAB / "host-001"),
+                        "--client",
+                        str(LAB / "client-001"),
+                        "--build",
+                        str(build),
+                        "--output",
+                        str(output),
+                        "--case",
+                        "greed",
+                        "--case",
+                        "greedier",
+                        "--port",
+                        str(29536 + index * 10),
+                        "--latency-ms",
+                        str(a.latency_ms),
+                    ]
+                    report = output / "engine" / "result.json"
             print("Validating " + case, flush=True)
             result = subprocess.run(cmd)
             if report.exists():
@@ -177,6 +208,10 @@ def main():
             if result.returncode:
                 raise RuntimeError(case + " failed; inspect its frozen logs")
             value = summary["cases"][case]
+            if case == "greed":
+                restoration = json.loads((output / "report.json").read_text())
+                if not restoration["passed"] or not restoration["restored"]:
+                    raise RuntimeError("Greed campaign failed or did not restore owned saves")
             if value["dll_sha256"] != expected or not value.get(
                 "pass", value.get("completed", False)
             ):

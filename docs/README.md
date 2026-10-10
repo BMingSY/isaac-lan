@@ -8,6 +8,7 @@
 | [分层与玩法兼容](layers-and-compatibility.md) | 目录边界、状态所有权、Boss／角色／道具适配与扩展流程 |
 | [分层重构验证记录](layer-refactor-validation.md) | 离线、Windows 构建与集中实机验收的范围和结果 |
 | [共享状态修复验证](shared-state-bugfix-validation.md) | 共享诅咒、回溯地下室返回、教条预警的实现边界与回归结果 |
+| [贪婪模式验证](greed-mode-validation.md) | 贪婪／超级贪婪波次、购物、换层与终点汇合的离线覆盖和实机记录 |
 | [网络与状态同步](synchronization.md) | 输入、状态包、可靠事件、预测、校验与延迟 |
 | [分房模拟与本机显示](rooms-and-presentation.md) | 房间上下文、实体归属、镜头、UI、音效与 Mod 回调 |
 | [会话与状态恢复](session-lifecycle.md) | 开局、换层、暂停、存档、重连与回退事务 |

@@ -15,6 +15,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 from build_gameplay_suite import CASES, CHECKPOINTS, build as build_suite
+from build_special_suite import build as build_special_suite
 from build_package import build
 from build_release import release
 from check_release import FILES, check
@@ -26,6 +27,19 @@ from progress_fixture import MAGIC, PROFILE, checksum, patch, prepare
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARIES = ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe")
+
+
+def test_greed_suite_keeps_both_modes_in_one_process_pair(tmp_path):
+    script = tmp_path / "greed.lua"
+    build_special_suite(script, ["greed", "greedier"])
+    source = script.read_text()
+    assert '_IsaacLanTest.route = "greed"' in source
+    assert '_IsaacLanTest.route = "greedier"' in source
+    assert source.count("PASS native Greed gameplay") == 2
+    assert source.count("local originalFrame, originalGate") == 1
+    assert source.count("return finished end end") == 2
+    assert source.count("_IsaacLanTest.greedCampaign = true") == 2
+    assert "MC_POST_GAME_END" in source and "LOCAL_PROGRESS_RESTORED" in source
 
 
 class ProgressFixtureTests(unittest.TestCase):
