@@ -26,7 +26,30 @@ local function corridor(door, x, y, radius)
     local across = math.abs(dx * door.dy - dy * door.dx)
     return along > -48 and along < 48 and across + radius <= 22
 end
-function nav.passable(map, x, y, radius, door)
+function nav.zonesAllow(map, x, y, radius, time, from, ignoreTimed)
+    for _, zone in ipairs(map.zones or {}) do
+        if (not zone.exit or zone.id ~= map.allowedExit) and not (ignoreTimed and zone.timed) then
+            local blocked = not zone.timed or (time or 0) >= (zone.safeFor or 0)
+            local distance = nav.distance({ x = x, y = y }, zone)
+            if blocked and distance < radius + zone.radius then
+                -- A resumed bot may already overlap a hazard/exit. Permit only
+                -- outward movement, including its first still-overlapping step.
+                if
+                    not from
+                    or distance <= nav.distance(from, zone)
+                    or (x - from.x) * (from.x - zone.x) + (y - from.y) * (from.y - zone.y) < 0
+                then
+                    return false
+                end
+            end
+        end
+    end
+    return true
+end
+function nav.passable(map, x, y, radius, door, time, from, ignoreTimed)
+    if not nav.zonesAllow(map, x, y, radius, time, from, ignoreTimed) then
+        return false
+    end
     if corridor(door, x, y, radius) then
         return true
     end
@@ -37,16 +60,18 @@ function nav.passable(map, x, y, radius, door)
         or not b
         or not c
         or not d
-        or not map.walk[a]
-        or not map.walk[b]
-        or not map.walk[c]
-        or not map.walk[d]
+        or not (map.walk[a] or map.exitCells and map.exitCells[a])
+        or not (map.walk[b] or map.exitCells and map.exitCells[b])
+        or not (map.walk[c] or map.exitCells and map.exitCells[c])
+        or not (map.walk[d] or map.exitCells and map.exitCells[d])
     then
         return false
     end
     return true
 end
-function nav.line(map, from, to, radius, door)
+function nav.line(map, from, to, radius, door, t0, t1, ignoreTimed)
+    t0 = t0 or 0
+    t1 = t1 or t0 + nav.distance(from, to) / (map.speed or 200) + 0.15
     local steps = math.max(1, math.ceil(nav.distance(from, to) / 8))
     for i = 1, steps do
         local t = i / steps
@@ -56,13 +81,43 @@ function nav.line(map, from, to, radius, door)
                 from.x + (to.x - from.x) * t,
                 from.y + (to.y - from.y) * t,
                 radius,
-                door
+                door,
+                t0 + (t1 - t0) * t,
+                from,
+                ignoreTimed
             )
         then
             return false
         end
     end
     return true
+end
+function nav.approachTimed(map, from, path, radius, door)
+    local previous, safe = from, from
+    local braking = (map.speed or 200) * 0.13 + 4
+    for _, point in ipairs(path) do
+        local count = math.max(1, math.ceil(nav.distance(previous, point) / 8))
+        for i = 1, count do
+            local nextPoint = {
+                x = previous.x + (point.x - previous.x) * i / count,
+                y = previous.y + (point.y - previous.y) * i / count,
+            }
+            for _, zone in ipairs(map.zones or {}) do
+                if
+                    zone.timed
+                    and nav.distance(nextPoint, zone) < radius + zone.radius + braking
+                then
+                    return nav.distance(from, safe) > 8 and safe or nil
+                end
+            end
+            if not nav.line(map, safe, nextPoint, radius, door) then
+                return nav.distance(from, safe) > 8 and safe or nil
+            end
+            safe = nextPoint
+        end
+        previous = point
+    end
+    return nil
 end
 local function push(heap, item)
     local i = #heap + 1
@@ -93,11 +148,11 @@ local function pop(heap)
     end
     return first
 end
-function nav.path(map, from, to, radius, limit, door)
-    if not nav.passable(map, to.x, to.y, radius, door) then
+function nav.path(map, from, to, radius, limit, door, ignoreTimed)
+    if not nav.passable(map, to.x, to.y, radius, door, 0, nil, ignoreTimed) then
         return nil
     end
-    if nav.line(map, from, to, radius, door) then
+    if nav.line(map, from, to, radius, door, nil, nil, ignoreTimed) then
         return { to }
     end
     local start, target = nav.cell(map, from.x, from.y), nav.cell(map, to.x, to.y)
@@ -128,7 +183,16 @@ function nav.path(map, from, to, radius, limit, door)
                 if
                     nextCell
                     and not closed[nextCell]
-                    and nav.line(map, cell == start and from or p, { x = x, y = y }, radius, door)
+                    and nav.line(
+                        map,
+                        cell == start and from or p,
+                        { x = x, y = y },
+                        radius,
+                        door,
+                        cost[cell] / (map.speed or 200),
+                        (cost[cell] + map.step) / (map.speed or 200) + 0.15,
+                        ignoreTimed
+                    )
                 then
                     local nextCost = cost[cell] + map.step
                     if not cost[nextCell] or nextCost < cost[nextCell] then

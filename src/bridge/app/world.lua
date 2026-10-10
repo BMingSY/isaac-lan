@@ -479,6 +479,21 @@ function state.present(input, sequence)
     greed.present()
     return motionPresentation.present(input, sequence, actorVisuals, motion, ref, receivedTick)
 end
+function state.actorPose(player)
+    local hash = GetPtrHash(player)
+    for _, actor in ipairs(actorVisuals) do
+        local id = actor[3][1]
+        local current = ref(id)
+        if current and GetPtrHash(current) == hash then
+            return modules["sync/actor_pose"](
+                motion,
+                id,
+                player.ControllerIndex,
+                Isaac.GetTime() / 1000
+            )
+        end
+    end
+end
 function state.reset()
     native.sound_reset()
     native.presentation_reset()

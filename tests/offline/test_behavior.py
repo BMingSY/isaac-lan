@@ -85,6 +85,53 @@ def test_pause_resume_and_new_session_release_held_input(lua):
     assert changed[0] == "off" and not changed[1] and changed[2] == 0
 
 
+@pytest.mark.parametrize("side", range(4))
+@pytest.mark.parametrize("mode", ["run", "explore"])
+def test_explores_room_graph_without_bouncing_or_premature_exit(lua, side, mode):
+    lua.call("bot_rooms_reset", "graph", mode, side, 260)
+    result = lua.call("bot_rooms_step", 1800)
+    assert result[10:12] == [True, True], result
+    assert result[0] == (4 if mode == "run" else 3), result  # No extra room transfers.
+    assert result[1] == (1 if mode == "run" else 0), result
+
+
+@pytest.mark.parametrize("side", range(4))
+@pytest.mark.parametrize("speed", [160, 400])
+def test_arrival_brakes_outward_inertia_and_leaves_door_in_hold(lua, side, speed):
+    lua.call("bot_rooms_reset", "arrival", "hold", side, speed)
+    result = lua.call("bot_rooms_step", 300)
+    assert result[0] == 0 and result[5] == "a", result
+    assert result[6] == "wait" and result[7] == "room_clear", result
+
+
+def test_completes_multiple_buttons_in_an_uncleared_room(lua):
+    lua.call("bot_rooms_reset", "buttons", "explore", 2, 260)
+    result = lua.call("bot_rooms_step", 600)
+    assert result[2] == 2 and result[7] == "exploration_complete", result
+
+
+@pytest.mark.parametrize("speed", [160, 260, 400])
+@pytest.mark.parametrize("scenario", ["timed", "timed-short"])
+def test_learns_spike_window_and_crosses_without_damage(lua, speed, scenario):
+    lua.call("bot_rooms_reset", scenario, "explore", 2, speed)
+    result = lua.call("bot_rooms_step", 1200)
+    assert result[2] == 1 and result[3] == 0, result
+
+
+@pytest.mark.parametrize("mode", ["hold", "explore"])
+def test_avoids_exit_contact_while_waiting_or_collecting(lua, mode):
+    lua.call("bot_rooms_reset", "exit-pickup", mode, 2, 260)
+    result = lua.call("bot_rooms_step", 600)
+    assert result[1] == 0, result
+    assert result[4] == (1 if mode == "explore" else 0), result
+
+
+def test_incoming_projectile_is_avoided_over_many_frames(lua):
+    lua.call("bot_rooms_reset", "dodge", "hold", 2, 260)
+    result = lua.call("bot_rooms_step", 120)
+    assert result[3] == 0, result
+
+
 @pytest.mark.property
 def test_bot_command_and_frame_sequences(lua):
     class BotMachine(RuleBasedStateMachine):

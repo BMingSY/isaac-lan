@@ -32,6 +32,7 @@ CASES = {
     "motion": ("state_motion.lua", "continuous local movement"),
     "input-response": ("state_input_response.lua", "immediate native input response"),
     "local-movement": ("state_local_movement.lua", "local movement and door arrival"),
+    "lanbot": ("state_lanbot.lua", "lanbot behavior suite"),
     "visuals": ("state_guest_visuals.lua", "guest native revival visuals"),
     "mod-ui": ("state_mod_ui.lua", "local Mod map and room request"),
     "special-doors": ("state_special_doors.lua", "special door slots and raw-input Devil entry"),
@@ -177,7 +178,7 @@ def main():
                         "150",
                     ]
                 report = output / "result.json"
-                if case == "greed":
+                if case in ("greed", "lanbot"):
                     # Full native endings need the owned profile/progress
                     # backup and restoration supplied by the route wrapper.
                     cmd = [
@@ -192,9 +193,9 @@ def main():
                         "--output",
                         str(output),
                         "--case",
-                        "greed",
+                        "greed" if case == "greed" else "lanbot",
                         "--case",
-                        "greedier",
+                        "greedier" if case == "greed" else "lanbot-campaign",
                         "--port",
                         str(29536 + index * 10),
                         "--latency-ms",
@@ -208,10 +209,10 @@ def main():
             if result.returncode:
                 raise RuntimeError(case + " failed; inspect its frozen logs")
             value = summary["cases"][case]
-            if case == "greed":
+            if case in ("greed", "lanbot"):
                 restoration = json.loads((output / "report.json").read_text())
                 if not restoration["passed"] or not restoration["restored"]:
-                    raise RuntimeError("Greed campaign failed or did not restore owned saves")
+                    raise RuntimeError(case + " campaign failed or did not restore owned saves")
             if value["dll_sha256"] != expected or not value.get(
                 "pass", value.get("completed", False)
             ):

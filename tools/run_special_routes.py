@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run selected character, route and Greed fixtures with one protected native pair."""
+"""Run selected character, route, Greed and LANBOT fixtures with one protected native pair."""
 
 import argparse
 import json
@@ -13,6 +13,27 @@ from run_endings import hashes, idle
 from run_network_engine import log_path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def lanbot_behavior_passed(checkpoints):
+    expected = {
+        "exit-pickup",
+        "arrival",
+        "buttons",
+        "cleared-spikes",
+        "timed-spikes",
+        "crossing-projectiles",
+        "door-transfer",
+    }
+    checks = [
+        re.search(r"LANBOT_CASE (\S+) passed=(true|false)(?: |$)", line) for line in checkpoints
+    ]
+    checks = [check for check in checks if check]
+    return (
+        len(checks) == len(expected)
+        and {check[1] for check in checks} == expected
+        and all(check[2] == "true" for check in checks)
+    )
 
 
 def main():
@@ -50,6 +71,8 @@ def main():
         parser.error("The six-route ending diagnostic must run last")
     if "campaign" in cases and cases[-1] != "campaign":
         parser.error("The first-floor campaign must run last")
+    if "lanbot-campaign" in cases and cases[-1] != "lanbot-campaign":
+        parser.error("The LANBOT first-floor campaign must run last")
     labs = [args.host.resolve(), args.client.resolve()]
     if labs[0] == labs[1] or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
         parser.error("Two distinct marked isolated labs are required")
@@ -96,13 +119,23 @@ def main():
         "--scenario-timeout",
         "3600"
         if any(
-            name in cases for name in ("endings", "ascent-compat", "campaign", "greed", "greedier")
+            name in cases
+            for name in (
+                "endings",
+                "ascent-compat",
+                "campaign",
+                "greed",
+                "greedier",
+                "lanbot-campaign",
+            )
         )
         else "900",
     ]
     if "ascent-compat" in cases:
         command.append("--ascent-fixture")
-    if any(name in cases for name in ("endings", "campaign", "greed", "greedier")):
+    if any(
+        name in cases for name in ("endings", "campaign", "greed", "greedier", "lanbot-campaign")
+    ):
         command.append("--endings-fixture")
     for option in ("heap-check", "performance"):
         if getattr(args, option.replace("-", "_")):
@@ -115,7 +148,14 @@ def main():
     try:
         if any(
             name in cases
-            for name in ("ascent-compat", "dogma-warning", "campaign", "greed", "greedier")
+            for name in (
+                "ascent-compat",
+                "dogma-warning",
+                "campaign",
+                "greed",
+                "greedier",
+                "lanbot-campaign",
+            )
         ):
             # Prerequisite unlocks can queue native achievement screens and
             # pause world updates. This owned profile is restored in finally.
@@ -152,6 +192,10 @@ def main():
                                 "campaign",
                             )
                             and "ENDINGS " in line
+                            or name == "lanbot"
+                            and "LANBOT_CASE " in line
+                            or name == "lanbot-campaign"
+                            and "LANBOT_CAMPAIGN " in line
                             or name == "shared-curses"
                             and "SHARED_CURSES " in line
                             or name in ("greed", "greedier")
@@ -171,7 +215,12 @@ def main():
         report["passed"] = result.returncode == 0 and all(
             peer["passed"] for case in report["cases"].values() for peer in case.values()
         )
-        if all(name in ("greed", "greedier") for name in cases):
+        if "lanbot" in cases:
+            report["lanbot_behavior_passed"] = lanbot_behavior_passed(
+                report["cases"]["lanbot"]["host"]["checkpoints"]
+            )
+            report["passed"] = report["passed"] and report["lanbot_behavior_passed"]
+        if all(name in ("greed", "greedier", "lanbot", "lanbot-campaign") for name in cases):
             report["native_game_starts"] = {}
             for role in ("host", "client"):
                 probe = output / "engine" / role / "probe.log"

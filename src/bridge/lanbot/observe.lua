@@ -1,5 +1,6 @@
-return function(native, bridge, nav)
+return function(native, bridge, nav, terrain, actorPose)
     local observe = {}
+    terrain = terrain()
     local observedTick, observedAt
     local outward = { { -1, 0 }, { 0, -1 }, { 1, 0 }, { 0, 1 } }
     local function entity(e)
@@ -37,7 +38,7 @@ return function(native, bridge, nav)
         if info.ready ~= 1 or not bridge.ready() then
             return nil, "view_not_ready"
         end
-        local actors, localPlayers = native.api_actors(), {}
+        local actors, localPlayers, roomPlayers = native.api_actors(), {}, {}
         local locations = native.rooms_positions()
         local position = locations[tostring(info.slot)]
         if not position then
@@ -48,6 +49,7 @@ return function(native, bridge, nav)
             local player = Isaac.GetPlayer(actor.index)
             if actor.owner == info.slot + 1 then
                 localPlayers[#localPlayers + 1] = player
+                roomPlayers[#roomPlayers + 1] = player
             elseif
                 (info.connected & (1 << (actor.owner - 1))) ~= 0
                 and not player:IsCoopGhost()
@@ -56,6 +58,8 @@ return function(native, bridge, nav)
                 local at = locations[tostring(actor.owner - 1)]
                 if not at or at.index ~= position.index or at.dimension ~= position.dimension then
                     partyReady = false
+                else
+                    roomPlayers[#roomPlayers + 1] = player
                 end
             end
         end
@@ -99,6 +103,13 @@ return function(native, bridge, nav)
             -- Players integrate movement at 60 Hz; NPC/projectile velocities
             -- belong to the ordinary 30 Hz simulation updates.
             p.vx, p.vy = player.Velocity.X * 60, player.Velocity.Y * 60
+            if info.authority == 0 and actorPose then
+                local pose = actorPose(player)
+                if not pose then
+                    return
+                end
+                p.x, p.y, p.vx, p.vy = pose.x, pose.y, pose.vx, pose.vy
+            end
             p.speed = math.max(0.1, player.MoveSpeed) * 264.705882
             p.keys, p.items = player:GetNumKeys(), player:GetCollectibleCount()
             p.health = player:GetHearts() + player:GetSoulHearts()
@@ -122,6 +133,9 @@ return function(native, bridge, nav)
                 width = room:GetGridWidth(),
                 height = math.ceil(room:GetGridSize() / room:GetGridWidth()),
                 walk = {},
+                zones = {},
+                exitCells = {},
+                speed = p.speed * 0.7,
             }
             result = {
                 frame = frame,
@@ -136,6 +150,8 @@ return function(native, bridge, nav)
                 dangers = {},
                 pickups = {},
                 doors = {},
+                buttons = {},
+                exits = {},
                 partyReady = partyReady,
                 shotLine = function(from, to)
                     return room:CheckLine(
@@ -148,6 +164,24 @@ return function(native, bridge, nav)
                     )
                 end,
             }
+            terrain:reset(result.world, result.room, p.id)
+            local tick = room:GetFrameCount()
+            result.simulationTick = info.tick
+            local function addExit(value, usable)
+                value.id = value.id or "exit:" .. tostring(value.cell)
+                value.radius = math.max(24, value.radius or 0)
+                value.exit = true
+                map.zones[#map.zones + 1] = value
+                if value.cell then
+                    map.walk[value.cell], map.exitCells[value.cell] = false, true
+                end
+                if usable then
+                    result.exits[#result.exits + 1] = value
+                    if not result.exit or value.kind == "bigchest" then
+                        result.exit = value
+                    end
+                end
+            end
             for index = 0, room:GetGridSize() - 1 do
                 local grid, collision = room:GetGridEntity(index), room:GetGridCollision(index)
                 map.walk[index + 1] = collision == GridCollisionClass.COLLISION_NONE
@@ -155,20 +189,54 @@ return function(native, bridge, nav)
                     or player.CanFly
                         and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT)
                 if grid then
-                    if grid:GetType() == GridEntityType.GRID_TRAPDOOR and result.clear then
-                        local pos = room:GetGridPosition(index)
-                        result.exit = { x = pos.X, y = pos.Y, cell = index + 1 }
-                    elseif
-                        grid:GetType() == GridEntityType.GRID_SPIKES
-                        or grid:GetType() == GridEntityType.GRID_SPIKES_ONOFF
+                    local kind, pos = grid:GetType(), room:GetGridPosition(index)
+                    if
+                        kind == GridEntityType.GRID_TRAPDOOR
+                        or kind == GridEntityType.GRID_STAIRS
                     then
-                        -- Alternating spikes are blocked throughout their cycle;
-                        -- crossing them needs timing beyond this planner.
-                        if not player.CanFly then
-                            local pos = room:GetGridPosition(index)
+                        local usable, radius = false, 24
+                        if kind == GridEntityType.GRID_TRAPDOOR then
+                            usable, radius = terrain:trapdoor(grid, result.clear)
+                        end
+                        addExit({
+                            x = pos.X,
+                            y = pos.Y,
+                            cell = index + 1,
+                            radius = radius,
+                            closed = kind == GridEntityType.GRID_TRAPDOOR and not usable,
+                        }, usable)
+                    elseif kind == GridEntityType.GRID_PRESSURE_PLATE and terrain:button(grid) then
+                        result.buttons[#result.buttons + 1] = {
+                            id = "button:" .. index,
+                            x = pos.X,
+                            y = pos.Y,
+                            radius = 12,
+                        }
+                    elseif
+                        (
+                            kind == GridEntityType.GRID_SPIKES
+                            or kind == GridEntityType.GRID_SPIKES_ONOFF
+                        ) and not player.CanFly
+                    then
+                        local timed = kind == GridEntityType.GRID_SPIKES_ONOFF
+                        local spikes = timed and grid:ToSpikes()
+                        -- Cleared vanilla rooms leave alternating spikes down
+                        -- with no scheduled transition; no cycle can be learned.
+                        local disabled = result.clear and spikes and spikes.Timeout < 0
+                        local safeFor = timed and terrain:spikes(index, grid.State, tick, disabled)
+                            or 0
+                        map.zones[#map.zones + 1] = {
+                            id = "spikes:" .. index,
+                            x = pos.X,
+                            y = pos.Y,
+                            radius = 19,
+                            timed = timed,
+                            safeFor = safeFor,
+                        }
+                        map.timed = map.timed or timed
+                        if safeFor <= 0 then
                             result.dangers[#result.dangers + 1] =
-                                { x = pos.X, y = pos.Y, radius = 17 }
-                            map.walk[index + 1] = false
+                                { x = pos.X, y = pos.Y, radius = 19 }
                         end
                     end
                 end
@@ -194,7 +262,8 @@ return function(native, bridge, nav)
                         cost = door:IsLocked(),
                         boss = targetType == RoomType.ROOM_BOSS,
                         treasure = targetType == RoomType.ROOM_TREASURE,
-                        skip = targetType == RoomType.ROOM_CURSE
+                        skip = door.TargetRoomIndex < 0
+                            or targetType == RoomType.ROOM_CURSE
                             or targetType == RoomType.ROOM_SACRIFICE
                             or targetType == RoomType.ROOM_SECRET
                             or targetType == RoomType.ROOM_SUPERSECRET
@@ -210,7 +279,8 @@ return function(native, bridge, nav)
                     local value = entity(e)
                     local npc, pickup, laser = e:ToNPC(), e:ToPickup(), e:ToLaser()
                     if npc and e:IsActiveEnemy(false) and e.HitPoints > 0 and not friendly(e) then
-                        value.attackable = not e:IsInvincible()
+                        value.attackable = (e:GetEntityFlags() & EntityFlag.FLAG_NO_TARGET) == 0
+                            and not e:IsInvincible()
                             and (info.authority == 0 or e:IsVulnerableEnemy())
                         value.threat = e:IsBoss() and 2 or 1
                         result.enemies[#result.enemies + 1] = value
@@ -226,6 +296,52 @@ return function(native, bridge, nav)
                         value.at, value.radius =
                             math.max(0, e:ToBomb().ExplosionCountdown / 30 - 0.15), 85
                         result.dangers[#result.dangers + 1] = value
+                    elseif e.Type == EntityType.ENTITY_EFFECT then
+                        local variant = e.Variant
+                        if variant == EffectVariant.HEAVEN_LIGHT_DOOR then
+                            value.cell = nav.cell(map, value.x, value.y)
+                            addExit(value, result.clear)
+                        elseif
+                            not friendly(e)
+                            and not player.CanFly
+                            and (
+                                variant == EffectVariant.CREEP_RED
+                                or variant == EffectVariant.CREEP_GREEN
+                                or variant == EffectVariant.CREEP_YELLOW
+                                or variant == EffectVariant.CREEP_WHITE
+                                or variant == EffectVariant.CREEP_BLACK
+                            )
+                        then
+                            value.radius = math.max(20, value.radius)
+                            result.dangers[#result.dangers + 1] = value
+                            map.zones[#map.zones + 1] = value
+                        end
+                    elseif pickup and pickup.Variant == PickupVariant.PICKUP_BIGCHEST then
+                        value.kind = "bigchest"
+                        value.cell = nav.cell(map, value.x, value.y)
+                        -- Vanilla has a separate collision drop delay that its
+                        -- Lua Wait property does not expose. Contact during the
+                        -- delay refreshes it: let every nearby actor leave first.
+                        value.contactWait = pickup.State == 0
+                        value.contactRadius = math.max(60, value.radius * 2)
+                        for _, candidate in ipairs(roomPlayers) do
+                            local accepted = info.authority == 0 and actorPose
+                            local pose = accepted and actorPose(candidate)
+                                or not accepted
+                                    and { x = candidate.Position.X, y = candidate.Position.Y }
+                            if
+                                not candidate:IsCoopGhost()
+                                and not candidate:IsDead()
+                                and (
+                                    not pose
+                                    or nav.distance(pose, value)
+                                        < value.contactRadius + candidate.Size + 12
+                                )
+                            then
+                                value.contactBlocked = true
+                            end
+                        end
+                        addExit(value, result.clear and pickup.Wait <= 0)
                     elseif pickup and pickup.Price == 0 and pickup.Wait <= 0 then
                         local variant = pickup.Variant
                         value.id = "pickup:" .. value.id
@@ -238,10 +354,7 @@ return function(native, bridge, nav)
                             or variant == PickupVariant.PICKUP_KEY and p.keys < 99
                             or variant == PickupVariant.PICKUP_BOMB
                                 and player:GetNumBombs() < 99
-                        if variant == PickupVariant.PICKUP_BIGCHEST and result.clear then
-                            result.exit =
-                                { x = value.x, y = value.y, cell = nav.cell(map, value.x, value.y) }
-                        elseif useful then
+                        if useful then
                             result.pickups[#result.pickups + 1] = value
                         end
                     end
@@ -270,13 +383,8 @@ return function(native, bridge, nav)
             table.sort(result.pickups, function(a, b)
                 return a.id < b.id
             end)
-            if result.exit and result.exit.cell then
-                -- Ordinary paths and evasive movements must not accidentally
-                -- advance the floor. Only a selected exit task unlocks it.
-                map.walk[result.exit.cell] = false
-            end
         end)
-        return result
+        return result, not result and "view_not_ready" or nil
     end
     return observe
 end

@@ -24,6 +24,7 @@ from game_logs import freeze_probe_logs, probe_path, probe_text
 from check_performance import summarize
 from run_network_engine import finalize_result
 from progress_fixture import MAGIC, PROFILE, checksum, patch, prepare
+from run_special_routes import lanbot_behavior_passed
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARIES = ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe")
@@ -40,6 +41,42 @@ def test_greed_suite_keeps_both_modes_in_one_process_pair(tmp_path):
     assert source.count("return finished end end") == 2
     assert source.count("_IsaacLanTest.greedCampaign = true") == 2
     assert "MC_POST_GAME_END" in source and "LOCAL_PROGRESS_RESTORED" in source
+
+
+def test_lanbot_suite_reuses_pair_and_cleans_owned_callbacks(tmp_path):
+    script = tmp_path / "lanbot.lua"
+    build_special_suite(script, ["lanbot", "lanbot-campaign"])
+    source = script.read_text()
+    assert source.count("local originalFrame, originalGate") == 1
+    assert "return done end end" in source and "return finished end end" in source
+    assert "native.input_bot = baseInput" in source
+    for callback in (
+        "MC_ENTITY_TAKE_DMG",
+        "MC_POST_FIRE_TEAR",
+        "MC_POST_GAME_END",
+        "MC_PRE_GAME_EXIT",
+    ):
+        assert "Isaac.RemoveCallback(owner, ModCallbacks." + callback in source
+
+
+def test_lanbot_behavior_requires_all_seven_successes():
+    names = [
+        "exit-pickup",
+        "arrival",
+        "buttons",
+        "cleared-spikes",
+        "timed-spikes",
+        "crossing-projectiles",
+        "door-transfer",
+    ]
+    checks = ["LANBOT_CASE " + name + " passed=true detail" for name in names]
+    assert lanbot_behavior_passed(checks)
+    assert not lanbot_behavior_passed(checks[:-1])
+    assert not lanbot_behavior_passed(checks[:-1] + [checks[0]])
+    assert not lanbot_behavior_passed(
+        [line.replace("passed=true", "passed=false") for line in checks]
+    )
+    assert not lanbot_behavior_passed(checks + [checks[0]])
 
 
 class ProgressFixtureTests(unittest.TestCase):

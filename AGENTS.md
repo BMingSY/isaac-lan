@@ -11,6 +11,7 @@
 | Boss、道具、角色、路线的特殊规则 | `src/compat/{bosses,items,characters,routes}/`、`src/bridge/compat/` 对应分类 | C++ 策略接收普通值；Lua 适配使用游戏 API 和具名原生能力 |
 | 第三方 Mod 的探测、注册、接入与卸载 | `src/bridge/compat/mods/` | 保留目标版本／源码探测和清理边界，不修改上游 Mod 源码 |
 | 对第三方公开的接口、动作与生命周期通知 | `src/bridge/api/` | 更新接口契约与接入文档，不暴露原生指针或任意内存读写 |
+| 联机人机托管、观察、探索、寻路与避险 | `src/bridge/lanbot.lua`、`src/bridge/lanbot/` | 读取现有视图并合成正常输入；不改权威玩法或同步规则，验收夹具放 `tests/` 和 `tools/` |
 | 菜单、预测、插值、镜头、外观、音效与本机演出 | `src/presentation/`、`src/bridge/presentation/` | 不决定权威伤害、拾取、道具效果或房间目的地 |
 | 与游戏版本无关的可移植数据规则 | `src/core/` | 保持可离线执行，不引入 Hook 或游戏内存布局 |
 | 原生能力声明、版本检测与游戏后端 | `src/engine/`、`src/engine/versions/<版本>/` | ABI、布局、原生调用、Hook 与对象所有权限定在版本后端 |

@@ -1,6 +1,6 @@
 return function(env, modules)
     local nav = modules["lanbot/navigation"]
-    local combat = modules["lanbot/combat"](nav)
+    local combat = modules["lanbot/combat"](nav, modules["lanbot/hazards"](nav))
     local planner = modules["lanbot/planner"](nav)
     local bot = {
         state = "off",
@@ -13,10 +13,12 @@ return function(env, modules)
     local modes = { run = true, explore = true, hold = true }
     local function release()
         bot.lastFrame, bot.previous, bot.charging, bot.releasing = nil, 0, nil, nil
+        bot.targetId, bot.aimId = nil, nil
         env.input(false, 0)
     end
     local function neutral()
         bot.previous, bot.charging, bot.releasing = 0, nil, nil
+        bot.targetId, bot.aimId = nil, nil
         -- A boundary discards queued press edges as well as held controls.
         env.input(false, 0)
         env.input(true, 0)
@@ -166,19 +168,24 @@ return function(env, modules)
             bot.stats.hits = bot.stats.hits + 1
         end
         bot.health = obs.actor.health
-        local target = combat.target(obs, bot.style)
-        local goal
-        if target then
+        obs.map.allowedExit = nil
+        local target = combat.target(obs, bot.style, bot.targetId)
+        bot.targetId = target and target.id
+        local goal = bot.plan:arrival(obs)
+        if goal then
+            bot.task, bot.reason = goal.task, nil
+        elseif target then
             goal = combat.goal(obs, target, bot.style, function(id)
                 return bot.plan:available(id, frame)
-            end)
+            end, bot.aimId)
+            bot.aimId = goal and goal.id
             bot.task, bot.reason = "attack", nil
         else
             goal, reason = bot.plan:choose(obs, bot.mode, bot.style)
             bot.task, bot.reason = goal and goal.task or "wait", reason
         end
-        if goal and goal.task == "move_to_exit" and obs.exit.cell then
-            obs.map.walk[obs.exit.cell] = true
+        if goal and goal.exit then
+            obs.map.allowedExit = goal.exit.id
         end
         local waypoint, blocked = bot.plan:waypoint(obs, goal)
         if blocked then
@@ -186,7 +193,14 @@ return function(env, modules)
             bot.reason = blocked
         end
         local previous = goal and bot.previous or 0
-        local move = combat.move(obs, waypoint, bot.style, previous, goal and goal.door)
+        local move = combat.move(
+            obs,
+            waypoint,
+            bot.style,
+            previous,
+            waypoint and goal and goal.door,
+            goal and goal.entering
+        )
         bot.previous = move
         local shoot = combat.shoot(obs, target, bot)
         env.input(true, move | shoot)

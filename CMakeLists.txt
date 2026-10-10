@@ -49,6 +49,11 @@ if(BUILD_TESTING)
         add_test(NAME bridge.lanbot
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(
+            NAME bridge.lanbot-campaign
+            COMMAND
+                "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot_campaign_fixture.lua"
+                "${CMAKE_CURRENT_SOURCE_DIR}")
         add_test(NAME bridge.grids
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/grids.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -104,6 +109,7 @@ if(BUILD_TESTING)
             bridge.goodtrip
             bridge.prediction
             bridge.lanbot
+            bridge.lanbot-campaign
             bridge.grids
             bridge.resume
             bridge.mod-loading
