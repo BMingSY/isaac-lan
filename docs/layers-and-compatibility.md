@@ -1,6 +1,6 @@
 # 分层与玩法兼容
 
-这次整理把传输、运行协调、状态组件、表现和版本后端分开，并抽离现有特殊玩法规则。房主继续运行权威玩法，客机显示权威状态；协议仍为 24，世界视图仍为 schema 10。已有联机指纹检查仍要求两端使用相同扩展。
+这次整理把传输、运行协调、状态组件、表现和版本后端分开，并抽离现有特殊玩法规则。房主继续运行权威玩法，客机显示权威状态；协议为 24，世界视图为 schema 11。已有联机指纹检查仍要求两端使用相同扩展。
 
 ## 目录与职责
 
@@ -25,10 +25,10 @@ Lua 按同样的职责组织在 `src/bridge/`：
 | `sync/` | 数据编解码、字段 schema、库存／实体／网格的通用同步组件 |
 | `runtime/` | 楼层代次屏障、可靠转场和进房边界 |
 | `presentation/` | 精灵、角色外观、音效、插值、移动预测、道具演出和菜单 |
-| `compat/bosses/` | Boss 房进房补充规则 |
+| `compat/bosses/` | Boss 房进房补充规则、教条光束预警几何状态 |
 | `compat/characters/` | 里拉撒路对象替换、里小蓝人消耗品队列 |
-| `compat/items/` | 沙漏和 R 键的转场选择 |
-| `compat/routes/` | Home 昼夜与教条过场规则 |
+| `compat/items/` | 沙漏和 R 键的转场选择、全队黑蜡烛的诅咒清除规则 |
+| `compat/routes/` | Home 昼夜与教条过场规则、特殊房间返回上下文 |
 | `compat/mods/` | Stats+、GoodTrip、EID 及第三方自动适配注册机制 |
 | `api/` | 对第三方 Mod 公开的本机视图、生命周期和主机动作接口 |
 
@@ -98,11 +98,21 @@ flowchart TD
 
 ## 字段与版本定义
 
-[`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，保留原来的 16 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
+[`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，维护包含共享楼层诅咒的 17 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
 
 已验证的 133 个原生入口定义在 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h)，启动特征校验与调用点引用同一组常量。游戏版本、版本标记地址和所需 PE 区段放在 [`profile.h`](../src/engine/versions/j460/profile.h)。对象字段偏移仍需在对应 J460 实现中结合所有权与调用约定维护。
 
 增加新版本需要新的校验、地址、布局、Lua ABI 和实机证据；不能仅换版本字符串。当前仍只支持 J460，此次分层没有新增 REPENTOGON 支持。
+
+## 共享诅咒与特殊房间表现
+
+`sync/curses.lua` 同步楼层的完整诅咒位掩码。Amnesia、？？？胶囊及忏悔机继续由房主运行原版效果；客机在应用库存的原生副作用之后，按差异恢复房主的掩码，并刷新地图缓存。`compat/items/black_candle.lua` 从全队库存判断保护，避免分房名单隐藏另一名玩家的黑蜡烛。
+
+`compat/routes/crawlspace.lua` 采集与应用当前房间的返回入口坐标和房间索引。J460 的三个标量同时纳入现有房间上下文保存／恢复，防止主机视口或其他房间覆盖它们。Lua 适配通过原版 `DungeonReturnPosition` 与 `DungeonReturnRoomIndex` 属性访问状态，校验完整载荷后才写入客机当前作用域，不新增原生读写接口。
+
+`compat/bosses/dogma.lua` 仅匹配 `DOGMA_ORB` 的预警子类型，同步原生绘制依赖的二维几何参数。通用实体组件通过注入的兼容组件携带该字段，不执行 Boss AI。适配通过原版 `Entity.TargetPosition` 属性读写二维参数；既有攻击特效不进入此适配，不新增原生接口。
+
+这些字段增加后世界视图升为 schema 11。TCP 消息布局不变，协议维持 24；扩展 DLL 指纹变化，两端仍须使用相同构建。
 
 ## 增加一个兼容机制
 

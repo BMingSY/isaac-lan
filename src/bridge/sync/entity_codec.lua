@@ -1,5 +1,5 @@
 -- Engine values become explicit portable fields; this component owns no room or transport.
-return function(native, schemas, npcState)
+return function(native, schemas, npcState, visualCompatibility)
     local function vector(v)
         return { v.X, v.Y }
     end
@@ -166,6 +166,7 @@ return function(native, schemas, npcState)
             e.Type == 7 and vector(e:ToLaser().EndPoint) or false,
             visual and assert(native.entity_shadow(e:GetSprite())) or false,
             npcState.capture(e:ToNPC()),
+            visual and visualCompatibility and visualCompatibility.capture(e) or false,
         }
     end
     local function applyEntity(e, v)
@@ -211,6 +212,9 @@ return function(native, schemas, npcState)
         if e.Type == 7 then
             assert(native.laser_path(e:GetSprite(), v[20]))
             e:ToLaser().EndPoint = vec(v[21])
+        end
+        if visualCompatibility then
+            visualCompatibility.apply(e, v[24])
         end
         e.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
         e.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE

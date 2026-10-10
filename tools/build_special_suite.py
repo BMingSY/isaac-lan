@@ -15,6 +15,9 @@ DIAGNOSTICS = (
     "motion",
     "floor-items",
     "mod-integrations",
+    "shared-curses",
+    "dogma-warning",
+    "ascent-compat",
 )
 
 
@@ -31,9 +34,12 @@ def build(output, cases=CASES):
             "motion": "state_motion.lua",
             "floor-items": "state_floor_items.lua",
             "mod-integrations": "state_mod_integrations.lua",
+            "shared-curses": "state_shared_curses.lua",
+            "dogma-warning": "state_endings.lua",
+            "ascent-compat": "state_endings.lua",
         }.get(name, "state_side_routes.lua")
         source = (ROOT / "tests" / filename).read_text()
-        if name in ("home", "home-debug"):
+        if name in ("home", "home-debug", "dogma-warning", "ascent-compat"):
             source = source.replace(
                 'local cases = { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }',
                 'local cases = { "ascent" }',
@@ -48,7 +54,11 @@ def build(output, cases=CASES):
             'function() _IsaacLanTest.route = "'
             + name
             + '"\n_IsaacLanTest.homeOnly = '
-            + ("true" if name in ("home", "home-debug") else "false")
+            + ("true" if name in ("home", "home-debug", "dogma-warning") else "false")
+            + "\n_IsaacLanTest.dogmaWarning = "
+            + ("true" if name in ("dogma-warning", "ascent-compat") else "false")
+            + "\n_IsaacLanTest.crawlspace = "
+            + ("true" if name == "ascent-compat" else "false")
             + "\n_IsaacLanTest.debug10 = "
             + ("true" if name == "home-debug" else "false")
             + "\n_IsaacLanTest.consoleRewind = "

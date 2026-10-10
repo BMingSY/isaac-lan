@@ -8,13 +8,21 @@ local modules = assert(_IsaacLanModules)
 local codec = assert(modules["sync/codec"])
 local encode, decode = codec.encode, codec.decode
 local npcState = assert(modules["sync/npc"])
+local curses = assert(modules["sync/curses"])
+local crawlspace = assert(modules["compat/routes/crawlspace"])(function()
+    return Game():GetLevel()
+end, Vector)
 local forms = assert(modules["compat/characters/lazarus"])(native, function(index)
     return Isaac.GetPlayer(index)
 end)
 local poop = assert(modules["compat/characters/blue_baby"])(native)
 state.encode, state.decode = encode, decode
-local entityCodec =
-    assert(modules["sync/entity_codec"])(native, assert(modules["sync/entity_schema"]), npcState)
+local entityCodec = assert(modules["sync/entity_codec"])(
+    native,
+    assert(modules["sync/entity_schema"]),
+    npcState,
+    assert(modules["compat/bosses/dogma"])(Vector)
+)
 local entity, sprite, applySprite, vec =
     entityCodec.capture, entityCodec.sprite, entityCodec.applySprite, entityCodec.vec
 function _IsaacLanRoomEntered()
@@ -107,6 +115,7 @@ local function roomState(slot)
             grids,
             native.music_state(),
             native.room_layout(),
+            crawlspace.capture(),
         }
     end))
     return value
@@ -177,6 +186,7 @@ function state.capture(slot, tick)
             loc[#loc + 1] = { player, at.dimension, at.index, position.X, position.Y }
         end
     end
+    modules["compat/items/black_candle"](level, actors, CollectibleType.COLLECTIBLE_BLACK_CANDLE)
     local map = {}
     local rooms = level:GetRooms()
     for i = 0, rooms.Size - 1 do
@@ -215,6 +225,7 @@ function state.capture(slot, tick)
         epoch = native.net_floor_epoch(),
         presentation = native.presentation_events(slot),
         items = itemPresentation.capture(slot),
+        curses = curses.capture(level),
     }))
 end
 local replicas, motion = {}, {}
@@ -328,7 +339,10 @@ function state.apply(bytes, tick, ack)
     end
     forms.prune(replicas, motion, lastInventory, value.actors)
     actorVisuals = value.actors
-    local mapChanged = roomChanged
+    -- Inventory setters can clear local curses. The shared authoritative mask
+    -- must win after those native side effects, before map/HUD caching.
+    local cursesChanged = curses.apply(level, value.curses)
+    local mapChanged = roomChanged or cursesChanged
     for _, d in ipairs(value.map) do
         local ok, pickupsChanged = native.map_pickups(d[8])
         assert(ok)
@@ -350,6 +364,7 @@ function state.apply(bytes, tick, ack)
     assert(native.rooms_with_player(value.slot, function()
         local room = game:GetRoom()
         local data = value.room
+        crawlspace.apply(data[7])
         modules["sync/entities"](data[3], {
             ref = ref,
             spawn = function(v, spawner, subtype)

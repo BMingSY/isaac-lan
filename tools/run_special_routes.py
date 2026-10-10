@@ -4,11 +4,13 @@
 import argparse
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 from build_special_suite import CASES, DIAGNOSTICS, build
 from run_endings import hashes, idle
+from run_network_engine import log_path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -75,14 +77,28 @@ def main():
         "--menu-port",
         str(args.port),
         "--scenario-timeout",
-        "3600" if "endings" in cases else "900",
+        "3600" if any(name in cases for name in ("endings", "ascent-compat")) else "900",
     ]
+    if "ascent-compat" in cases:
+        command.append("--ascent-fixture")
     if "endings" in cases:
         command.append("--endings-fixture")
     for mod in args.mod:
         command += ["--mod", str(mod.resolve())]
     report = {"passed": False, "restored": False, "cases": {}, "command": command}
     try:
+        if any(name in cases for name in ("ascent-compat", "dogma-warning")):
+            # Prerequisite unlocks can queue native achievement screens and
+            # pause world updates. This owned profile is restored in finally.
+            for lab in labs:
+                options = log_path(lab).parent / "options.ini"
+                text = options.read_text()
+                if re.search(r"(?m)^PopUps=", text):
+                    text = re.sub(r"(?m)^PopUps=.*$", "PopUps=0", text)
+                else:
+                    text += "\nPopUps=0\n"
+                options.write_text(text)
+            report["native_options"] = {"PopUps": 0}
         with (output / "engine.log").open("w") as log:
             result = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         for index, name in enumerate(cases, 1):
@@ -97,8 +113,11 @@ def main():
                         for line in text.splitlines()
                         if (
                             "SIDE " + name + " " in line
-                            or name in ("home", "home-debug", "endings")
+                            or name
+                            in ("home", "home-debug", "endings", "dogma-warning", "ascent-compat")
                             and "ENDINGS " in line
+                            or name == "shared-curses"
+                            and "SHARED_CURSES " in line
                             or name in ("audio", "motion", "floor-items", "mod-integrations")
                             and "LAN_NETWORK " in line
                             and "SIDE " not in line
