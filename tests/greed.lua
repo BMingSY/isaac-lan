@@ -232,6 +232,80 @@ for difficulty = 0, 3 do
 end
 -- Invalid or cross-mode state must not mutate the counter.
 local factory = dofile(root .. "/src/bridge/compat/routes/greed.lua")
+-- A completed arena can leave the independently entered exit locked. Repair
+-- that room's clear flag without opening a grid or skipping a native floor.
+for difficulty = 2, 3 do
+    local stage, enemies, calls = 2, 0, 0
+    local isGreed = true
+    local arena, exit = { Clear = false }, { Clear = false, Data = { Type = 23 } }
+    local level = {
+        GreedModeWave = difficulty == 3 and 11 or 10,
+        GetStage = function()
+            return stage
+        end,
+        GetStartingRoomIndex = function()
+            return 84
+        end,
+        GetRoomByIdx = function(_, index)
+            return index == 84 and arena or exit
+        end,
+    }
+    local room = {
+        GetAliveEnemiesCount = function()
+            return enemies
+        end,
+        SetClear = function(_, value)
+            assert(value == true)
+            exit.Clear = value
+        end,
+    }
+    local game = {
+        Difficulty = difficulty,
+        IsGreedMode = function()
+            return isGreed
+        end,
+        GetLevel = function()
+            return level
+        end,
+        GetRoom = function()
+            return room
+        end,
+    }
+    local native = {
+        rooms_positions = function()
+            return { ["0"] = { index = 98, dimension = 0 }, ["1"] = { index = 98, dimension = 0 } }
+        end,
+        rooms_with_player = function(_, fn)
+            calls = calls + 1
+            fn()
+            return true
+        end,
+    }
+    local adapter = factory(function()
+        return game
+    end)
+    adapter.authority(native, 23)
+    assert(not exit.Clear and calls == 0, "Unfinished Boss arena unlocked the exit")
+    arena.Clear = true
+    level.GreedModeWave = level.GreedModeWave - 1
+    adapter.authority(native, 23)
+    assert(not exit.Clear and calls == 0, "Ordinary waves unlocked the exit")
+    level.GreedModeWave = level.GreedModeWave + 1
+    enemies = 1
+    adapter.authority(native, 23)
+    assert(not exit.Clear and calls == 1, "Living exit enemies were bypassed")
+    enemies = 0
+    adapter.authority(native, 23)
+    assert(exit.Clear and calls == 2, "Completed split-room exit stayed locked")
+    adapter.authority(native, 23)
+    assert(calls == 2, "Repeated route step reran clear repair")
+    exit.Clear, stage = false, 7
+    adapter.authority(native, 23)
+    assert(not exit.Clear and calls == 2, "Final Boss exit opened early")
+    stage, isGreed = 2, false
+    adapter.authority(native, 23)
+    assert(not exit.Clear and calls == 2, "Normal mode was treated as Greed")
+end
 for difficulty = 0, 3 do
     local level = { GreedModeWave = 5 }
     local adapter = factory(function()

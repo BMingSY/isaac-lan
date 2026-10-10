@@ -167,14 +167,6 @@ def main():
                     cmd += ["--native-record-view", "1", "--frame-ms", "16"]
                 if case == "gameplay":
                     cmd += ["--native-record-both", "--frame-ms", "50", "--scenario-timeout", "660"]
-                if case == "greed":
-                    cmd += [
-                        "--native-record-both",
-                        "--frame-ms",
-                        "250",
-                        "--scenario-timeout",
-                        "600",
-                    ]
                 if case == "floor-items":
                     cmd += [
                         "--native-record-view",
@@ -185,6 +177,30 @@ def main():
                         "150",
                     ]
                 report = output / "result.json"
+                if case == "greed":
+                    # Full native endings need the owned profile/progress
+                    # backup and restoration supplied by the route wrapper.
+                    cmd = [
+                        sys.executable,
+                        str(SOURCE / "tools/run_special_routes.py"),
+                        "--host",
+                        str(LAB / "host-001"),
+                        "--client",
+                        str(LAB / "client-001"),
+                        "--build",
+                        str(build),
+                        "--output",
+                        str(output),
+                        "--case",
+                        "greed",
+                        "--case",
+                        "greedier",
+                        "--port",
+                        str(29536 + index * 10),
+                        "--latency-ms",
+                        str(a.latency_ms),
+                    ]
+                    report = output / "engine" / "result.json"
             print("Validating " + case, flush=True)
             result = subprocess.run(cmd)
             if report.exists():
@@ -192,6 +208,10 @@ def main():
             if result.returncode:
                 raise RuntimeError(case + " failed; inspect its frozen logs")
             value = summary["cases"][case]
+            if case == "greed":
+                restoration = json.loads((output / "report.json").read_text())
+                if not restoration["passed"] or not restoration["restored"]:
+                    raise RuntimeError("Greed campaign failed or did not restore owned saves")
             if value["dll_sha256"] != expected or not value.get(
                 "pass", value.get("completed", False)
             ):

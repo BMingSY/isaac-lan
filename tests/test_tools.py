@@ -38,6 +38,8 @@ def test_greed_suite_keeps_both_modes_in_one_process_pair(tmp_path):
     assert source.count("PASS native Greed gameplay") == 2
     assert source.count("local originalFrame, originalGate") == 1
     assert source.count("return finished end end") == 2
+    assert source.count("_IsaacLanTest.greedCampaign = true") == 2
+    assert "MC_POST_GAME_END" in source and "LOCAL_PROGRESS_RESTORED" in source
 
 
 class ProgressFixtureTests(unittest.TestCase):
