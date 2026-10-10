@@ -34,6 +34,7 @@ local function stateEnvironment()
             ["compat/items/hourglass"] = dofile(root .. "/src/bridge/compat/items/hourglass.lua"),
             ["compat/items/r_key"] = dofile(root .. "/src/bridge/compat/items/r_key.lua"),
             ["compat/routes/home"] = dofile(root .. "/src/bridge/compat/routes/home.lua"),
+            ["compat/routes/greed"] = dofile(root .. "/src/bridge/compat/routes/greed.lua"),
             ["compat/bosses/room_entry"] = dofile(
                 root .. "/src/bridge/compat/bosses/room_entry.lua"
             ),

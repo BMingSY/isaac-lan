@@ -5,7 +5,10 @@ inline bool gatherHomeCombat(int stage, int kind, bool dogma, unsigned audience,
                              unsigned connected) {
     return stage == 13 && kind == 1 && dogma && (audience & connected) != connected;
 }
-inline bool finalCombat(int stage, int kind, unsigned entityType, unsigned variant = 0) {
+inline bool finalCombat(int stage, int kind, unsigned entityType, unsigned variant = 0,
+                        unsigned difficulty = 0) {
+    if (difficulty == 2 || difficulty == 3)
+        return stage == 7 && entityType == 406;
     if (stage == 11 && (kind == 0 || kind == 1))
         return entityType == 102 || entityType == 273 || entityType == 274 || entityType == 275;
     if (stage == 12)

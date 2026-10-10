@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Lazarus, poop, knife chase and Hush with one protected native pair."""
+"""Run selected character, route and Greed fixtures with one protected native pair."""
 
 import argparse
 import json
@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--mod", type=Path, action="append", default=[])
     parser.add_argument("--case", choices=CASES + DIAGNOSTICS, action="append")
     parser.add_argument("--port", type=int, default=30220)
+    parser.add_argument("--latency-ms", type=int, default=75)
     parser.add_argument(
         "--heap-check",
         action="store_true",
@@ -41,6 +42,8 @@ def main():
     )
     args = parser.parse_args()
     cases = args.case or CASES
+    if not 0 <= args.latency_ms <= 5000:
+        parser.error("Latency must be between 0 and 5000 ms")
     if len(set(cases)) != len(cases):
         parser.error("Each case must appear once")
     if "endings" in cases and cases[-1] != "endings":
@@ -87,17 +90,19 @@ def main():
         "--alt-path-fixture",
         "--hush-fixture",
         "--latency-ms",
-        "75",
+        str(args.latency_ms),
         "--menu-port",
         str(args.port),
         "--scenario-timeout",
         "3600"
-        if any(name in cases for name in ("endings", "ascent-compat", "campaign"))
+        if any(
+            name in cases for name in ("endings", "ascent-compat", "campaign", "greed", "greedier")
+        )
         else "900",
     ]
     if "ascent-compat" in cases:
         command.append("--ascent-fixture")
-    if "endings" in cases or "campaign" in cases:
+    if any(name in cases for name in ("endings", "campaign", "greed", "greedier")):
         command.append("--endings-fixture")
     for option in ("heap-check", "performance"):
         if getattr(args, option.replace("-", "_")):
@@ -108,7 +113,10 @@ def main():
         command += ["--mod", str(mod.resolve())]
     report = {"passed": False, "restored": False, "cases": {}, "command": command}
     try:
-        if any(name in cases for name in ("ascent-compat", "dogma-warning", "campaign")):
+        if any(
+            name in cases
+            for name in ("ascent-compat", "dogma-warning", "campaign", "greed", "greedier")
+        ):
             # Prerequisite unlocks can queue native achievement screens and
             # pause world updates. This owned profile is restored in finally.
             for lab in labs:
@@ -146,6 +154,8 @@ def main():
                             and "ENDINGS " in line
                             or name == "shared-curses"
                             and "SHARED_CURSES " in line
+                            or name in ("greed", "greedier")
+                            and ("GREED mode=" + ("3" if name == "greedier" else "2") + " ") in line
                             or name in ("audio", "motion", "floor-items", "mod-integrations")
                             and "LAN_NETWORK " in line
                             and "SIDE " not in line
@@ -161,6 +171,16 @@ def main():
         report["passed"] = result.returncode == 0 and all(
             peer["passed"] for case in report["cases"].values() for peer in case.values()
         )
+        if all(name in ("greed", "greedier") for name in cases):
+            report["native_game_starts"] = {}
+            for role in ("host", "client"):
+                probe = output / "engine" / role / "probe.log"
+                text = probe.read_text(errors="replace") if probe.exists() else ""
+                starts = text.rsplit("bootstrap=PASS", 1)[-1].count(
+                    "network_engine_start=REQUESTED"
+                )
+                report["native_game_starts"][role] = starts
+                report["passed"] = report["passed"] and starts == len(cases)
     finally:
         try:
             idle(labs)

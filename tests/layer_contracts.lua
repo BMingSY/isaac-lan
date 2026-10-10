@@ -3,16 +3,16 @@ local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
 local codec, schema = module("sync/codec"), module("sync/world_schema")
--- The shared curse mask extends the portable world view to schema 11.
-local tuple = { 11, 42, 80, 6, 4, 3, {}, {}, {}, 1, {}, {}, "progress", 7, "events", {}, 5 }
+-- Shared curses and Greed waves extend the portable world view to schema 12.
+local tuple = { 12, 42, 80, 6, 4, 3, {}, {}, {}, 1, {}, {}, "progress", 7, "events", {}, 5, false }
 local view = schema.unpack(tuple, 42)
 assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses == 5)
 assert(codec.encode(schema.pack(view)) == codec.encode(tuple))
 assert(not pcall(schema.unpack, tuple, 41))
 local malformed = { table.unpack(tuple) }
-malformed[1] = 10
+malformed[1] = 11
 assert(not pcall(schema.unpack, malformed, 42))
-malformed[1], malformed[18] = 11, true
+malformed[1], malformed[19] = 12, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))

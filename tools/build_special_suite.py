@@ -18,6 +18,8 @@ DIAGNOSTICS = (
     "shared-curses",
     "dogma-warning",
     "ascent-compat",
+    "greed",
+    "greedier",
     "campaign",
 )
 
@@ -36,6 +38,8 @@ def build(output, cases=CASES):
             "floor-items": "state_floor_items.lua",
             "mod-integrations": "state_mod_integrations.lua",
             "shared-curses": "state_shared_curses.lua",
+            "greed": "state_greed.lua",
+            "greedier": "state_greed.lua",
             "dogma-warning": "state_endings.lua",
             "ascent-compat": "state_endings.lua",
             "campaign": "state_endings.lua",
@@ -56,6 +60,8 @@ def build(output, cases=CASES):
             cleanup = "if motionFile then motionFile:close(); motionFile = nil end\n"
         elif name == "mod-integrations":
             cleanup = "native.api_send, native.api_receive = send, receive\nlan:Unregister()\n"
+        elif name in ("greed", "greedier"):
+            cleanup = "Isaac.RemoveCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)\n"
         complete = "ended" if name == "audio" else "finished"
         fixtures.append(
             'function() _IsaacLanTest.route = "'
@@ -72,6 +78,8 @@ def build(output, cases=CASES):
             + ("true" if name == "rewind" else "false")
             + "\n_IsaacLanTest.campaign = "
             + ("true" if name == "campaign" else "false")
+            + "\n_IsaacLanTest.greedCampaign = "
+            + ("true" if name in ("greed", "greedier") else "false")
             + "\n"
             + source
             + "\nlocal cleanedUp = false\nreturn function()\nif "
