@@ -36,6 +36,8 @@ lanbot/navigation
 lanbot/hazards
 lanbot/terrain
 lanbot/combat
+lanbot/items
+lanbot/greed
 lanbot/planner
 lanbot/observe
 lanbot

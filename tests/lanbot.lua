@@ -1,12 +1,21 @@
 local root = assert(arg[1], "repository root required")
 local modules = {}
-for _, name in ipairs({ "navigation", "hazards", "terrain", "combat", "planner", "observe" }) do
+for _, name in ipairs({
+    "navigation",
+    "hazards",
+    "terrain",
+    "combat",
+    "items",
+    "greed",
+    "planner",
+    "observe",
+}) do
     modules["lanbot/" .. name] = dofile(root .. "/src/bridge/lanbot/" .. name .. ".lua")
 end
 modules.lanbot = dofile(root .. "/src/bridge/lanbot.lua")
 local nav = modules["lanbot/navigation"]
 local combat = modules["lanbot/combat"](nav, modules["lanbot/hazards"](nav))
-local planner = modules["lanbot/planner"](nav)
+local planner = modules["lanbot/planner"](nav, modules["lanbot/greed"], modules["lanbot/items"])
 local count = 0
 local function test(name, fn)
     local ok, reason = pcall(fn)
@@ -590,10 +599,19 @@ end)
 
 -- Exercise the game adapter with documented API-shaped fakes. No game process.
 EntityFlag = { FLAG_FRIENDLY = 1, FLAG_CHARM = 2, FLAG_NO_TARGET = 4 }
-EntityType = { ENTITY_PLAYER = 1, ENTITY_FAMILIAR = 3, ENTITY_PROJECTILE = 9, ENTITY_EFFECT = 1000 }
+EntityType = {
+    ENTITY_PLAYER = 1,
+    ENTITY_FAMILIAR = 3,
+    ENTITY_SLOT = 6,
+    ENTITY_PROJECTILE = 9,
+    ENTITY_FIREPLACE = 33,
+    ENTITY_EFFECT = 1000,
+}
 PlayerType = { PLAYER_AZAZEL = 7 }
 WeaponType = { WEAPON_BRIMSTONE = 4, WEAPON_KNIFE = 3, WEAPON_TECH_X = 9 }
 CollectibleType = { COLLECTIBLE_CHOCOLATE_MILK = 69 }
+ItemType = { ITEM_PASSIVE = 1, ITEM_ACTIVE = 3 }
+CacheFlag = { CACHE_DAMAGE = 1, CACHE_FIREDELAY = 2 }
 GridCollisionClass = {
     COLLISION_NONE = 0,
     COLLISION_PIT = 1,
@@ -601,6 +619,7 @@ GridCollisionClass = {
     COLLISION_WALL_EXCEPT_PLAYER = 5,
 }
 GridEntityType = {
+    GRID_POOP = 14,
     GRID_TRAPDOOR = 17,
     GRID_STAIRS = 18,
     GRID_PRESSURE_PLATE = 20,
@@ -616,6 +635,8 @@ EffectVariant = {
     CREEP_BLACK = 26,
 }
 RoomType = {
+    ROOM_SHOP = 2,
+    ROOM_GREED_EXIT = 24,
     ROOM_BOSS = 5,
     ROOM_TREASURE = 4,
     ROOM_CURSE = 10,
@@ -681,6 +702,9 @@ local function fakePlayer(seed)
             GetSoulHearts = function()
                 return 0
             end,
+            GetEffectiveMaxHearts = function()
+                return 8
+            end,
             GetPlayerType = function()
                 return 0
             end,
@@ -710,6 +734,8 @@ local function fakePlayer(seed)
 end
 local roster = { [0] = fakePlayer(100), [2] = fakePlayer(200) }
 local entities, paused, viewed = {}, false, false
+local greed, greedStage, greedWave, difficulty, challenge = false, 1, 0, 2, 0
+local aliases = {}
 local room = {
     GetGridPosition = function(_, i)
         return Vector(i % 12 * 40, math.floor(i / 12) * 40)
@@ -751,9 +777,22 @@ Game = function()
             return paused
         end,
         IsGreedMode = function()
-            return false
+            return greed
         end,
-        Challenge = 0,
+        Challenge = challenge,
+        Difficulty = difficulty,
+        GetLevel = function()
+            assert(viewed)
+            return {
+                GreedModeWave = greedWave,
+                GetStage = function()
+                    return greedStage
+                end,
+                GetRoomByIdx = function(_, index)
+                    return { Data = {}, SafeGridIndex = aliases[index] or index }
+                end,
+            }
+        end,
         GetRoom = function()
             assert(viewed)
             return room
@@ -781,6 +820,13 @@ local bridge = {
 }
 local callbacks, output = {}, {}
 Isaac = {
+    GetItemConfig = function()
+        return {
+            GetCollectible = function()
+                return { Type = ItemType.ITEM_PASSIVE }
+            end,
+        }
+    end,
     GetPlayer = function(index)
         assert(not viewed, "global roster read inside local view")
         return assert(roster[index])
@@ -801,7 +847,13 @@ Isaac = {
         output[#output + 1] = message
     end,
 }
-local observe = modules["lanbot/observe"](native, bridge, nav, modules["lanbot/terrain"])
+local observe = modules["lanbot/observe"](
+    native,
+    bridge,
+    nav,
+    modules["lanbot/terrain"],
+    modules["lanbot/items"]
+)
 local localInfo = {
     ready = 1,
     active = 1,
@@ -855,6 +907,237 @@ test("observer handles gameplay gate and pause", function()
     assert(not obs and reason == "interface_or_transition")
     paused = false
 end)
+test(
+    "Greed observer drives native start and Boss buttons, protects live and bonus buttons",
+    function()
+        local original = room.GetGridEntity
+        local animation = "Off"
+        local plate = {
+            State = 0,
+            GetType = function()
+                return GridEntityType.GRID_PRESSURE_PLATE
+            end,
+            GetVariant = function()
+                return 2
+            end,
+            GetSprite = function()
+                return {
+                    GetAnimation = function()
+                        return animation
+                    end,
+                }
+            end,
+        }
+        room.GetGridEntity = function(_, index)
+            return index == 52 and plate or nil
+        end
+        greed = true
+        local obs = assert(observe.read(1, localInfo))
+        assert(obs.greed.stage == 1 and obs.greed.wave == 0 and obs.greed.bossWave == 10)
+        assert(#obs.buttons == 1 and obs.buttons[1].greed)
+        local plan = planner.new()
+        plan:observe(obs)
+        assert(plan:choose(obs, "run", "balanced").task == "press_button")
+        obs.partyReady = false
+        assert(select(2, plan:choose(obs, "run", "balanced")) == "wait_for_party")
+        greedWave, animation = 1, "OffRed"
+        obs = assert(observe.read(2, localInfo))
+        assert(#obs.buttons == 0 and #obs.dangers == 1 and #obs.map.zones == 1)
+        local zone = obs.map.zones[1]
+        assert(
+            not nav.line(
+                obs.map,
+                { x = zone.x - 80, y = zone.y },
+                { x = zone.x + 80, y = zone.y },
+                10
+            )
+        )
+        greedWave, animation = 8, "OffSkull"
+        assert(#observe.read(3, localInfo).buttons == 1)
+        greedWave, animation = 10, "OffPentagram"
+        assert(#observe.read(4, localInfo).buttons == 0)
+        difficulty, greedWave, animation = 3, 9, "OffSkull"
+        obs = assert(observe.read(5, localInfo))
+        assert(obs.greed.bossWave == 11 and #obs.buttons == 1)
+        greedWave = 11
+        assert(#observe.read(6, localInfo).buttons == 0)
+        greedStage, greedWave, animation = 7, 0, "Off"
+        assert(#observe.read(7, localInfo).buttons == 0)
+        greed, greedStage, greedWave, difficulty = false, 1, 0, 2
+        obs = assert(observe.read(8, localInfo))
+        assert(not obs.greed and #obs.buttons == 0 and #obs.map.zones == 0)
+        challenge = 1
+        local missing, reason = observe.read(9, localInfo)
+        assert(not missing and reason == "unsupported_run")
+        challenge, room.GetGridEntity = 0, original
+    end
+)
+test("Greed run prioritizes its real exit door over optional treasure exploration", function()
+    local plan, obs = planner.new(), snapshot()
+    obs.doors = { door(0, "0:2", { treasure = true }), door(2, "0:3", { greedExit = true }) }
+    plan:observe(obs)
+    assert(plan:choose(obs, "run", "balanced").door.to == "0:3")
+    assert(plan:choose(obs, "explore", "balanced").door.to == "0:2")
+end)
+test(
+    "blocked route shoots a real poop and resumes only after the grid is actually broken",
+    function()
+        local bot, source, obs = fixture()
+        obs.doors = { door(2, "0:2") }
+        obs.breakables = {}
+        for row = 0, 9 do
+            local cell = row * 12 + 6
+            obs.map.walk[cell] = false
+            obs.breakables[#obs.breakables + 1] = {
+                id = "poop:" .. cell,
+                cell = cell,
+                x = 200,
+                y = row * 40,
+                radius = 20,
+                attackable = true,
+                breakable = true,
+            }
+        end
+        bot.command("on")
+        bot.step(1)
+        bot.step(2)
+        assert(bot.task == "clear_obstacle" and source.mask & 240 ~= 0)
+        local broken = assert(bot.plan.breaking)
+        for frame = 3, 10 do
+            bot.step(frame)
+            assert(bot.plan.breaking == broken and source.mask & 240 ~= 0)
+            for _, poop in ipairs(obs.breakables) do
+                assert(not obs.map.walk[poop.cell])
+            end
+        end
+        -- Supply the native tear collision result; the bot never changes this map.
+        for i, poop in ipairs(obs.breakables) do
+            if poop.id == broken then
+                obs.map.walk[poop.cell] = true
+                table.remove(obs.breakables, i)
+                break
+            end
+        end
+        bot.step(250)
+        assert(not bot.plan.breaking and bot.task == "move_to_door" and source.mask & 15 ~= 0)
+        obs.world = "run:2"
+        bot.step(251)
+        assert(not bot.plan.breaking and source.mask == 0)
+    end
+)
+test(
+    "poop route identification leaves rock walls and all original grid collisions intact",
+    function()
+        local plan, obs = planner.new(), snapshot()
+        for row = 0, 9 do
+            obs.map.walk[row * 12 + 6] = false
+        end
+        obs.breakables = { { id = "poop:1", cell = 1, x = 0, y = 0, radius = 20 } }
+        plan:observe(obs)
+        assert(not plan:obstacle(obs, { x = 320, y = 160 }))
+        for row = 0, 9 do
+            assert(not obs.map.walk[row * 12 + 6])
+        end
+    end
+)
+test("a free healing goal behind one poop gap in a rock wall triggers normal shooting", function()
+    local bot, source, obs = fixture()
+    obs.actor.x, obs.actor.y, obs.actor.radius = 200, 280, 12
+    obs.pickups = { { id = "heart", x = 440, y = 280, radius = 10, heal = true } }
+    for row = 0, 9 do
+        obs.map.walk[row * 12 + 9] = false
+    end
+    obs.breakables = {
+        {
+            id = "poop",
+            x = 320,
+            y = 280,
+            cell = 93,
+            radius = 20,
+            breakable = true,
+            attackable = true,
+        },
+    }
+    bot.command("mode hold")
+    bot.command("on")
+    bot.step(1)
+    bot.step(2)
+    assert(bot.task == "clear_obstacle" and source.mask & 240 ~= 0)
+end)
+test("observer accepts a native first hit on its poop but rejects another blocking grid", function()
+    local grid, collision, line, gridIndex =
+        room.GetGridEntity, room.GetGridCollision, room.CheckLine, room.GetGridIndex
+    local state = 0
+    room.GetGridEntity = function(_, index)
+        if index == 52 then
+            return {
+                State = state,
+                GetType = function()
+                    return GridEntityType.GRID_POOP
+                end,
+            }
+        end
+    end
+    room.GetGridCollision = function(_, index)
+        return index == 52 and state < 1000 and GridCollisionClass.COLLISION_OBJECT or 0
+    end
+    local traceEnd, aheadBlocked = nil, false
+    room.CheckLine = function(_, _, to)
+        traceEnd = to
+        return false, { X = 136, Y = 160 }
+    end
+    room.GetGridIndex = function(_, position)
+        return position.X < 140 and 51 or 52
+    end
+    room.GetGridCollision = function(_, index)
+        return (index == 52 and state < 1000 or index == 51 and aheadBlocked)
+                and GridCollisionClass.COLLISION_OBJECT
+            or 0
+    end
+    local obs = assert(observe.read(1, localInfo))
+    assert(#obs.breakables == 1 and not obs.map.walk[53])
+    assert(obs.shotLine({ x = 80, y = 160 }, obs.breakables[1]))
+    assert(traceEnd.X == 160 and traceEnd.Y == 160)
+    aheadBlocked = true
+    assert(not obs.shotLine({ x = 80, y = 160 }, obs.breakables[1]))
+    state = 1000
+    obs = assert(observe.read(2, localInfo))
+    assert(#obs.breakables == 0 and obs.map.walk[53])
+    room.GetGridEntity, room.GetGridCollision, room.CheckLine, room.GetGridIndex =
+        grid, collision, line, gridIndex
+end)
+test(
+    "known Greed shops are revisited for affordable missing resources and then stop attracting routes",
+    function()
+        local plan, obs = planner.new(), snapshot()
+        obs.greed, obs.actor.keys, obs.actor.coins = { stage = 1, wave = 0, bossWave = 10 }, 0, 0
+        obs.doors = { door(0, "0:shop", { shop = true }), door(2, "0:exit", { greedExit = true }) }
+        plan:observe(obs)
+        obs.room, obs.shop, obs.doors = "0:shop", true, { door(0, "0:1") }
+        obs.shopOffers = { { key = true, price = 5 }, { recovery = true, price = 3 } }
+        plan:observe(obs)
+        obs.room, obs.shop, obs.doors =
+            "0:1",
+            false,
+            { door(0, "0:shop", { shop = true }), door(2, "0:exit", { greedExit = true }) }
+        obs.actor.coins = 27
+        plan:observe(obs)
+        assert(plan:choose(obs, "run", "balanced").door.to == "0:shop")
+        obs.actor.keys, obs.actor.needsHeal = 1, true
+        assert(plan:choose(obs, "run", "balanced").door.to == "0:shop")
+        obs.actor.needsHeal = false
+        assert(plan:choose(obs, "run", "balanced").door.to == "0:exit")
+        obs.actor.keys, obs.room, obs.shop, obs.doors, obs.shopOffers =
+            0, "0:shop", true, { door(0, "0:1") }, {}
+        plan:observe(obs)
+        obs.room, obs.shop, obs.doors =
+            "0:1",
+            false,
+            { door(0, "0:shop", { shop = true }), door(2, "0:exit", { greedExit = true }) }
+        plan:observe(obs)
+        assert(plan:choose(obs, "run", "balanced").door.to == "0:exit")
+    end
+)
 test("client observation ages, goes neutral when stale, then recovers", function()
     localInfo.nowMs = 100
     assert(observe.read(1, localInfo).age == 0.1)
@@ -899,6 +1182,7 @@ test(
             bridge,
             nav,
             modules["lanbot/terrain"],
+            modules["lanbot/items"],
             function(p)
                 if p == roster[2] then
                     return { x = 244, y = 277, vx = 0, vy = 0 }
@@ -913,6 +1197,7 @@ test(
             bridge,
             nav,
             modules["lanbot/terrain"],
+            modules["lanbot/items"],
             function()
                 return nil
             end
@@ -992,6 +1277,106 @@ test("free useful soul heart picked with full red health; paid pickup excluded",
     assert(#obs.pickups == 1 and obs.pickups[1].heal)
     entities = {}
 end)
+test(
+    "Greed shopping requires funds and need; poor-value items and heart deals stay excluded",
+    function()
+        local player = roster[2]
+        local coins, keys, heal, kind =
+            player.GetNumCoins, player.GetNumKeys, player.CanPickRedHearts, room.GetType
+        local wallet, keyCount, hurt = 4, 0, false
+        player.GetNumCoins = function()
+            return wallet
+        end
+        player.GetNumKeys = function()
+            return keyCount
+        end
+        player.CanPickRedHearts = function()
+            return hurt
+        end
+        room.GetType = function()
+            return RoomType.ROOM_SHOP
+        end
+        local key, heart, item, deal = fakeEntity(5), fakeEntity(5), fakeEntity(5), fakeEntity(5)
+        key.Variant, key.Price, key.Wait = PickupVariant.PICKUP_KEY, 5, 0
+        heart.Variant, heart.SubType, heart.Price, heart.Wait =
+            PickupVariant.PICKUP_HEART, HeartSubType.HEART_SOUL, 3, 0
+        item.Variant, item.SubType, item.Price, item.Wait =
+            PickupVariant.PICKUP_COLLECTIBLE, 1, 15, 0
+        deal.Variant, deal.SubType, deal.Price, deal.Wait =
+            PickupVariant.PICKUP_COLLECTIBLE, 1, -1, 0
+        entities, greed = { key, heart, item, deal }, true
+        local obs = assert(observe.read(1, localInfo))
+        assert(#obs.pickups == 0 and #obs.shopOffers == 3)
+        wallet = 27
+        obs = assert(observe.read(2, localInfo))
+        assert(#obs.pickups == 1 and obs.pickups[1].key and obs.pickups[1].price == 5)
+        keyCount, hurt = 1, true
+        obs = assert(observe.read(3, localInfo))
+        assert(#obs.pickups == 1 and obs.pickups[1].heal and obs.pickups[1].price == 3)
+        hurt = false
+        assert(#observe.read(4, localInfo).pickups == 0)
+        greed = false
+        assert(#observe.read(5, localInfo).pickups == 0)
+        entities = {}
+        player.GetNumCoins, player.GetNumKeys, player.CanPickRedHearts, room.GetType =
+            coins, keys, heal, kind
+    end
+)
+test(
+    "only the selected purchase can be crossed and the permission expires with its goal",
+    function()
+        local bot, source, obs = fixture()
+        local key = { id = "shop:key", x = 280, y = 160, price = 5, paid = true }
+        obs.pickups = { key }
+        obs.map.zones = {
+            { id = key.id, x = key.x, y = key.y, radius = 30, purchase = true },
+            { id = "shop:collectible", x = 320, y = 280, radius = 30, purchase = true },
+        }
+        bot.command("on")
+        bot.step(1)
+        bot.step(2)
+        assert(bot.task == "pickup" and source.mask & 15 ~= 0 and obs.map.allowedPickup == key.id)
+        assert(nav.line(obs.map, obs.actor, key, obs.actor.radius))
+        assert(not nav.passable(obs.map, 320, 280, obs.actor.radius))
+        obs.pickups = {}
+        bot.step(3)
+        assert(
+            not obs.map.allowedPickup and not nav.passable(obs.map, key.x, key.y, obs.actor.radius)
+        )
+    end
+)
+test(
+    "free active items never cause repeated swaps when a primary active is already equipped",
+    function()
+        local config, active = Isaac.GetItemConfig, roster[2].GetActiveItem
+        local equipped = 105
+        Isaac.GetItemConfig = function()
+            return {
+                GetCollectible = function()
+                    return { Type = ItemType.ITEM_ACTIVE }
+                end,
+            }
+        end
+        roster[2].GetActiveItem = function()
+            return equipped
+        end
+        local item = fakeEntity(5)
+        item.Variant, item.SubType, item.Price, item.Wait =
+            PickupVariant.PICKUP_COLLECTIBLE, 706, 0, 0
+        entities = { item }
+        local obs = assert(observe.read(1, localInfo))
+        assert(#obs.pickups == 0 and #obs.map.zones == 1 and obs.map.zones[1].purchase)
+        assert(not nav.passable(obs.map, item.Position.X, item.Position.Y, obs.actor.radius))
+        equipped = 0
+        obs = assert(observe.read(2, localInfo))
+        assert(#obs.pickups == 1 and #obs.map.zones == 0)
+        equipped = 706
+        item.SubType = 105
+        assert(#observe.read(3, localInfo).pickups == 0)
+        entities = {}
+        Isaac.GetItemConfig, roster[2].GetActiveItem = config, active
+    end
+)
 test("observer protects exits and unselected doorways from ordinary movement", function()
     local getGrid, getDoor = room.GetGridEntity, room.GetDoor
     room.GetGridEntity = function(_, index)
@@ -1277,6 +1662,7 @@ test("replica retreats its actual body when prediction already left the chest", 
         bridge,
         nav,
         modules["lanbot/terrain"],
+        modules["lanbot/items"],
         function(p)
             return {
                 x = p == roster[2] and actual or 430,
@@ -1610,6 +1996,7 @@ test("observer preserves contact mobility through stops and resets on room chang
         bridge,
         nav,
         modules["lanbot/terrain"],
+        modules["lanbot/items"],
         nil,
         function()
             return { ping1 = 150 }
@@ -1623,7 +2010,753 @@ test("observer preserves contact mobility through stops and resets on room chang
     positions["1"].index = 3
     assert(watched.read(3, localInfo).dangers[1].chaseSpeed < 300)
     npc.CollisionDamage = 0
-    assert(not watched.read(4, localInfo).dangers[1].contact)
+    local harmless = assert(watched.read(4, localInfo))
+    assert(not harmless.enemies[1].contact and #harmless.dangers == 0)
     positions["1"].index, entities = 2, {}
+end)
+test("large-room aliases share one exploration node and one party room", function()
+    local getDoor, first, second = room.GetDoor, positions["0"].index, positions["1"].index
+    aliases[71], aliases[85] = 70, 84
+    room.GetDoor = function(_, slot)
+        if slot == 1 then
+            return {
+                Position = Vector(240, 0),
+                TargetRoomIndex = 71,
+                TargetRoomType = RoomType.ROOM_SHOP,
+                IsOpen = function()
+                    return true
+                end,
+                IsLocked = function()
+                    return false
+                end,
+            }
+        end
+    end
+    positions["0"].index, positions["1"].index = 84, 85
+    local obs = assert(observe.read(20, localInfo))
+    assert(obs.room == "0:84" and obs.partyReady and obs.doors[1].to == "0:70")
+    local plan = planner.new()
+    plan:observe(obs)
+    positions["1"].index = 70
+    plan:observe(assert(observe.read(21, localInfo)))
+    positions["1"].index = 85
+    obs = assert(observe.read(22, localInfo))
+    plan:observe(obs)
+    assert(
+        not plan:choose(obs, "run", "balanced"),
+        "An already visited shop was treated as unexplored"
+    )
+    room.GetDoor, positions["0"].index, positions["1"].index = getDoor, first, second
+    aliases = {}
+end)
+test("Greed workflow supplies once, gathers at its exit and resets on the next floor", function()
+    local plan, obs = planner.new(), snapshot()
+    obs.greed = { stage = 1, wave = 5, bossWave = 10 }
+    obs.actor.keys, obs.actor.coins, obs.actor.needsHeal = 0, 27, true
+    obs.doors = { door(0, "0:shop", { shop = true }), door(2, "0:exit", { greedExit = true }) }
+    plan:observe(obs)
+    plan:choose(obs, "run", "balanced")
+    assert(plan.flow.phase == "fight")
+    obs.greed.wave = 10
+    assert(plan:choose(obs, "run", "balanced").door.to == "0:shop" and plan.flow.phase == "supply")
+    obs.room, obs.shop, obs.doors = "0:shop", true, { door(0, "0:1") }
+    obs.pickups = { { id = "key", paid = true, key = true, price = 5, x = 240, y = 160 } }
+    plan:observe(obs)
+    assert(plan:choose(obs, "run", "balanced").id == "key")
+    obs.actor.keys, obs.actor.needsHeal, obs.pickups = 1, false, {}
+    plan:choose(obs, "run", "balanced")
+    assert(plan.flow.phase == "gather")
+    obs.room, obs.shop, obs.doors =
+        "0:1",
+        false,
+        { door(0, "0:shop", { shop = true }), door(2, "0:exit", { greedExit = true }) }
+    obs.actor.needsHeal = true -- Damage cannot undo the completed floor phase.
+    plan:observe(obs)
+    assert(plan:choose(obs, "run", "balanced").door.to == "0:exit")
+    obs.room, obs.doors, obs.exit, obs.partyReady =
+        "0:exit", {}, { id = "stairs", x = 280, y = 160 }, false
+    plan:observe(obs)
+    local goal, reason = plan:choose(obs, "run", "balanced")
+    assert(not goal and reason == "wait_for_party" and plan.flow.phase == "gather")
+    obs.partyReady = true
+    assert(plan:choose(obs, "run", "balanced").exit and plan.flow.phase == "leave")
+    obs.greed.stage, obs.greed.wave, obs.exit = 2, 0, nil
+    plan:choose(obs, "run", "balanced")
+    assert(plan.flow.phase == "fight" and not plan.flow.enteredShop)
+end)
+test("Greed supply has a bounded wait for an unreachable paid pickup", function()
+    local flow, obs = modules["lanbot/greed"].new(), snapshot()
+    obs.greed, obs.shop = { stage = 1, wave = 10, bossWave = 10 }, true
+    obs.pickups = { { paid = true } }
+    flow:update(obs, "run")
+    assert(flow.phase == "supply")
+    obs.frame = 1201
+    flow:update(obs, "run")
+    assert(flow.phase == "loot" and flow.reason == "supply_unreachable")
+    flow:update(obs, "hold")
+    assert(not flow.phase)
+end)
+test("a direct poop blocker is chosen immediately even when a detour exists", function()
+    local bot, source, obs = fixture()
+    obs.doors = { door(2, "0:2") }
+    obs.map.walk[54] = false
+    obs.breakables = {
+        {
+            id = "poop",
+            x = 200,
+            y = 160,
+            cell = 54,
+            radius = 20,
+            breakable = true,
+            attackable = true,
+        },
+    }
+    assert(nav.path(obs.map, obs.actor, { x = 400, y = 160 }, obs.actor.radius))
+    bot.command("on")
+    bot.step(1)
+    bot.step(2)
+    assert(bot.task == "clear_obstacle" and source.mask & 240 ~= 0)
+end)
+test("fireplaces are avoided; only brown and red live flames can be shot clear", function()
+    local fires = {}
+    for variant = 0, 3 do
+        local fire = fakeEntity(20)
+        fire.Type, fire.Variant, fire.HitPoints = EntityType.ENTITY_FIREPLACE, variant, 10
+        fire.IsActiveEnemy = function()
+            return false
+        end
+        fire.Position = Vector(200 + variant * 40, 160)
+        fires[#fires + 1] = fire
+    end
+    entities = fires
+    local obs = assert(observe.read(30, localInfo))
+    assert(#obs.enemies == 0 and #obs.breakables == 2 and #obs.map.zones == 4)
+    assert(obs.breakables[1].attackable and obs.breakables[2].attackable)
+    assert(not nav.passable(obs.map, 280, 160, 10))
+    fires[1].HitPoints = 1 -- Native ash survives with positive HP and no target.
+    obs = assert(observe.read(31, localInfo))
+    assert(#obs.breakables == 1 and #obs.map.zones == 3)
+    entities = {}
+end)
+test("a blocking fireplace is cleared with ordinary input without granting zone access", function()
+    local bot, source, obs = fixture()
+    obs.pickups = { { id = "heart", x = 320, y = 160, heal = true } }
+    local fire = { id = "fire", x = 200, y = 160, radius = 18, clearable = true, attackable = true }
+    obs.breakables, obs.map.zones = { fire }, { fire }
+    bot.command("mode hold")
+    bot.command("on")
+    bot.step(1)
+    bot.step(2)
+    assert(bot.task == "clear_obstacle" and source.mask & 240 ~= 0)
+    assert(not nav.passable(obs.map, fire.x, fire.y, 10))
+    obs.breakables, obs.map.zones = {}, {}
+    bot.step(3)
+    assert(bot.task == "pickup")
+end)
+test("distant contact enemies do not monopolize combat with an orbit", function()
+    local obs, memory = snapshot(), {}
+    obs.actor.x, obs.actor.y, obs.actor.range = 80, 80, 100
+    for i = 1, 3 do
+        obs.dangers[i] = { x = 400, y = 300, radius = 10, contact = true }
+    end
+    assert(not combat.kite(obs, "balanced", memory))
+end)
+test("unproductive orbit seeks a firing lane and resumes after a real opportunity", function()
+    local obs, memory = snapshot(), {}
+    local enemy = { id = "a", x = 360, y = 260, radius = 10, attackable = true }
+    assert(combat.engagement(obs, enemy, memory))
+    obs.frame = 100
+    assert(not combat.engagement(obs, enemy, memory) and memory.engagement.phase == "seek")
+    enemy.y = 160
+    assert(combat.engagement(obs, enemy, memory) and memory.engagement.phase == "orbit")
+end)
+test("homing tears fire off axis but retain range, walls and precise obstacle aim", function()
+    local obs = snapshot()
+    local enemy = { x = 320, y = 260, radius = 10, attackable = true }
+    assert(combat.shoot(obs, enemy, {}) == 0)
+    obs.actor.homing = true
+    assert(combat.shoot(obs, enemy, {}) == 32)
+    enemy.breakable = true
+    assert(combat.shoot(obs, enemy, {}) == 0)
+    enemy.breakable, enemy.x = nil, 600
+    assert(combat.shoot(obs, enemy, {}) == 0)
+    enemy.x, obs.shotLine = 320, function()
+        return false
+    end
+    assert(combat.shoot(obs, enemy, {}) == 0)
+end)
+test("target selection favors an actual firing opportunity", function()
+    local obs = snapshot()
+    obs.enemies = {
+        { id = "near", x = 230, y = 230, radius = 10, attackable = true },
+        { id = "lane", x = 350, y = 160, radius = 10, attackable = true },
+    }
+    assert(combat.target(obs, "balanced").id == "lane")
+end)
+test("stationary distant crowd is approached and fired on through normal inputs", function()
+    local bot, source, obs = fixture()
+    obs.clear, obs.actor.range = false, 140
+    for i = 1, 3 do
+        obs.enemies[i] = {
+            id = "stationary:" .. i,
+            x = 380,
+            y = 250 + i * 15,
+            radius = 10,
+            attackable = true,
+            contact = true,
+            health = 30,
+        }
+    end
+    obs.dangers = obs.enemies
+    bot.command("on")
+    local fired = false
+    for frame = 1, 600 do
+        bot.step(frame)
+        fired = fired or source.mask & 240 ~= 0
+        local dx = ((source.mask & 2) ~= 0 and 1 or 0) - ((source.mask & 1) ~= 0 and 1 or 0)
+        local dy = ((source.mask & 8) ~= 0 and 1 or 0) - ((source.mask & 4) ~= 0 and 1 or 0)
+        local scale = dx ~= 0 and dy ~= 0 and 0.7071 or 1
+        local p = obs.actor
+        p.vx, p.vy = p.vx * 0.88 + dx * scale * 260 * 0.12, p.vy * 0.88 + dy * scale * 260 * 0.12
+        local x, y = p.x + p.vx / 60, p.y + p.vy / 60
+        if x > 30 and x < 420 and y > 30 and y < 350 then
+            p.x, p.y = x, y
+        end
+        if fired then
+            break
+        end
+    end
+    assert(fired, "The bot moved indefinitely without approaching a firing lane")
+end)
+test("wall-mounted enemy bodies are shootable while a fully hidden enemy stays blocked", function()
+    local original = room.CheckLine
+    room.CheckLine = function(_, from, to)
+        return to.X >= 80
+    end
+    local obs = assert(observe.read(200, localInfo))
+    local target = { x = 65, y = 160, radius = 12, attackable = true }
+    assert(obs.shotLine({ x = 200, y = 160 }, target), "The body protrudes in front of the wall")
+    target.x = 20
+    assert(not obs.shotLine({ x = 200, y = 160 }, target), "A hidden body must not bypass a wall")
+    target.x, target.clearable = 65, true
+    assert(
+        not obs.shotLine({ x = 200, y = 160 }, target),
+        "Fire/grid targets keep their own clearance"
+    )
+    room.CheckLine = original
+end)
+test("native bombs without a readable countdown stay dangerous without a decision error", function()
+    local bomb = fakeEntity(4)
+    bomb.ToNPC = function() end
+    bomb.ToBomb = function()
+        return { RadiusMultiplier = 1.5 }
+    end
+    entities = { bomb }
+    local obs = assert(observe.read(201, localInfo))
+    assert(#obs.dangers == 1 and obs.dangers[1].at == 0 and obs.dangers[1].radius == 127.5)
+    entities = {}
+end)
+test("clear room and native ending ignore positive-health replica boss statues", function()
+    local statue, chest = fakeEntity(20), fakeEntity(5)
+    statue.HitPoints = 4025
+    chest.Variant, chest.State, chest.Wait = PickupVariant.PICKUP_BIGCHEST, 1, 0
+    entities = { statue, chest }
+    local obs = assert(observe.read(202, localInfo))
+    assert(obs.clear and obs.exit and not obs.enemies[1].attackable)
+    assert(
+        obs.dangers[1].contact and obs.dangers[1].chaseSpeed == 0,
+        "Inert bodies retain contact avoidance without a fictitious charge"
+    )
+    local original = room.IsClear
+    room.IsClear = function()
+        return false
+    end
+    obs = assert(observe.read(203, localInfo))
+    assert(not obs.exit and obs.enemies[1].attackable, "An unfinished fight must remain active")
+    room.IsClear, entities = original, {}
+end)
+test("machines are obstacles even when replica entity collisions are disabled", function()
+    local machine = fakeEntity(6)
+    machine.EntityCollisionClass = 0
+    entities = { machine }
+    local obs = assert(observe.read(204, localInfo))
+    assert(#obs.map.zones == 1 and obs.map.zones[1].id:find("machine:", 1, true))
+    assert(not nav.passable(obs.map, machine.Position.X, machine.Position.Y, obs.actor.radius))
+    entities = {}
+end)
+test("ending chest routes around a machine blocking the nearest contact side", function()
+    local bot, source, obs = fixture()
+    local chest = { id = "chest", kind = "bigchest", x = 200, y = 160, radius = 24, exit = true }
+    local machine = { id = "machine", x = 240, y = 160, radius = 32 }
+    obs.exit, obs.map.zones = chest, { chest, machine }
+    obs.actor.x, obs.actor.y = 320, 160
+    bot.command("on")
+    local opened, contact = false, false
+    for frame = 1, 600 do
+        bot.step(frame)
+        local p, buttons = obs.actor, source.mask
+        local dx = ((buttons & 2) ~= 0 and 1 or 0) - ((buttons & 1) ~= 0 and 1 or 0)
+        local dy = ((buttons & 8) ~= 0 and 1 or 0) - ((buttons & 4) ~= 0 and 1 or 0)
+        local scale = dx ~= 0 and dy ~= 0 and 0.7071 or 1
+        p.vx, p.vy = p.vx * 0.88 + dx * scale * 260 * 0.12, p.vy * 0.88 + dy * scale * 260 * 0.12
+        local x, y = p.x + p.vx / 60, p.y + p.vy / 60
+        if nav.distance({ x = x, y = y }, machine) < 28 + p.radius then
+            contact = true
+        else
+            p.x, p.y = x, y
+        end
+        opened = ((p.x - 200) / 55) ^ 2 + ((p.y - 160) / 30) ^ 2 < 1
+        if opened then
+            break
+        end
+    end
+    assert(opened and not contact, "BOT stalled against a machine before reaching the ending chest")
+end)
+test("zero-damage native statues do not prevent normal ending chest contact", function()
+    local statue, chest = fakeEntity(20), fakeEntity(5)
+    statue.HitPoints, statue.CollisionDamage, statue.Size = 4025, 0, 25
+    statue.Position = Vector(292, 346.6)
+    chest.Position, chest.Size = Vector(292, 386.6), 18
+    chest.Variant, chest.State, chest.Wait = PickupVariant.PICKUP_BIGCHEST, 1, 0
+    entities = { statue, chest }
+    local observed = assert(observe.read(205, localInfo))
+    assert(#observed.dangers == 0, "A zero-damage statue creates fictitious collision damage")
+    local bot, source, obs = fixture()
+    obs.enemies, obs.dangers, obs.exit = observed.enemies, observed.dangers, observed.exit
+    obs.map.height, obs.map.zones = 20, { observed.exit }
+    for i = 1, obs.map.width * obs.map.height do
+        obs.map.walk[i] = true
+    end
+    obs.actor.x, obs.actor.y, obs.actor.radius = 367.2, 404.9, 12
+    bot.command("on")
+    local opened, bodyContact = false, false
+    for frame = 1, 600 do
+        bot.step(frame)
+        local p, buttons = obs.actor, source.mask
+        local dx = ((buttons & 2) ~= 0 and 1 or 0) - ((buttons & 1) ~= 0 and 1 or 0)
+        local dy = ((buttons & 8) ~= 0 and 1 or 0) - ((buttons & 4) ~= 0 and 1 or 0)
+        local scale = dx ~= 0 and dy ~= 0 and 0.7071 or 1
+        p.vx, p.vy = p.vx * 0.88 + dx * scale * 260 * 0.12, p.vy * 0.88 + dy * scale * 260 * 0.12
+        local x, y = p.x + p.vx / 60, p.y + p.vy / 60
+        if nav.distance({ x = x, y = y }, observed.enemies[1]) < 25 + p.radius then
+            bodyContact = true
+        else
+            p.x, p.y = x, y
+        end
+        opened = ((p.x - 292) / 48) ^ 2 + ((p.y - 386.6) / 27) ^ 2 < 1
+        if opened then
+            break
+        end
+    end
+    assert(
+        opened and not bodyContact,
+        "BOT never touched the ending chest beside a harmless statue"
+    )
+    entities = {}
+end)
+test(
+    "normal inputs recover from conservative grid overlap without entering another wall",
+    function()
+        local bot, source, obs = fixture()
+        obs.actor.x, obs.actor.y, obs.actor.radius = 212.1, 174.1, 12
+        local rock = nav.cell(obs.map, 200, 160)
+        obs.map.walk[rock] = false
+        assert(not nav.passable(obs.map, obs.actor.x, obs.actor.y, obs.actor.radius))
+        assert(not nav.line(obs.map, obs.actor, { x = 240, y = 200 }, 12))
+        obs.map.gridRecovery = true
+        assert(nav.line(obs.map, obs.actor, { x = 240, y = 200 }, 12))
+        assert(not nav.line(obs.map, obs.actor, { x = 160, y = 160 }, 12))
+        local nextWall = nav.cell(obs.map, 240, 200)
+        obs.map.walk[nextWall] = false
+        assert(not nav.line(obs.map, obs.actor, { x = 240, y = 200 }, 12))
+        obs.map.walk[nextWall] = true
+        obs.map.zones = { { id = "closed-exit", x = 240, y = 200, radius = 20, exit = true } }
+        assert(not nav.line(obs.map, obs.actor, { x = 240, y = 200 }, 12))
+        obs.map.zones = {}
+        obs.pickups = { { id = "coin", x = 320, y = 240, radius = 10 } }
+        bot.command("on")
+        local picked, moved = false, false
+        for frame = 1, 600 do
+            bot.step(frame)
+            local p, buttons = obs.actor, source.mask
+            moved = moved or buttons & 15 ~= 0
+            local dx = ((buttons & 2) ~= 0 and 1 or 0) - ((buttons & 1) ~= 0 and 1 or 0)
+            local dy = ((buttons & 8) ~= 0 and 1 or 0) - ((buttons & 4) ~= 0 and 1 or 0)
+            local scale = dx ~= 0 and dy ~= 0 and 0.7071 or 1
+            p.vx, p.vy =
+                p.vx * 0.88 + dx * scale * 260 * 0.12, p.vy * 0.88 + dy * scale * 260 * 0.12
+            local x, y = p.x + p.vx / 60, p.y + p.vy / 60
+            assert(nav.distance({ x = x, y = y }, { x = 200, y = 160 }) >= 18)
+            p.x, p.y = x, y
+            picked = nav.distance(p, obs.pickups[1]) < 20
+            if picked then
+                break
+            end
+        end
+        assert(
+            moved and picked,
+            "All movement candidates stayed rejected at a legal native position"
+        )
+    end
+)
+test("restocked shop circles can be escaped without buying the new item", function()
+    local bot, source, obs = fixture()
+    local p = obs.actor
+    p.x, p.y, p.radius = 235.9, 160.3, 12
+    obs.map.zones = { { id = "restock", x = 240, y = 160, radius = 32, purchase = true } }
+    for i, delta in ipairs({ { -80, 0 }, { 80, 0 }, { 0, -80 }, { 0, 80 } }) do
+        obs.map.zones[#obs.map.zones + 1] = {
+            id = "neighbor:" .. i,
+            x = 240 + delta[1],
+            y = 160 + delta[2],
+            radius = 32,
+            purchase = true,
+        }
+    end
+    obs.doors = { door(2, "0:exit") }
+    local zone = obs.map.zones[1]
+    for _, delta in ipairs({ { -40, 0 }, { 40, 0 }, { 0, -40 }, { 0, 40 } }) do
+        assert(not nav.passable(obs.map, zone.x + delta[1], zone.y + delta[2], p.radius))
+    end
+    assert(not nav.path(obs.map, p, { x = 400, y = 160 }, p.radius))
+    bot.command("on")
+    bot.step(1)
+    local departed, closest = false, nav.distance(p, zone)
+    for frame = 2, 600 do
+        bot.step(frame)
+        assert(bot.state == "running" and not obs.map.allowedPickup)
+        local dt, retain = 1 / 60, math.sqrt(0.775)
+        local dx = ((source.mask & 2) ~= 0 and 1 or 0) - ((source.mask & 1) ~= 0 and 1 or 0)
+        local dy = ((source.mask & 8) ~= 0 and 1 or 0) - ((source.mask & 4) ~= 0 and 1 or 0)
+        local scale = dx ~= 0 and dy ~= 0 and 0.7071 or 1
+        p.vx, p.vy =
+            p.vx * retain + dx * scale * p.speed * (1 - retain),
+            p.vy * retain + dy * scale * p.speed * (1 - retain)
+        p.x, p.y = p.x + p.vx * dt, p.y + p.vy * dt
+        local distance = nav.distance(p, zone)
+        assert(distance >= closest - 0.01, "Recovery steered back into a protected purchase")
+        closest = math.min(distance, zone.radius + p.radius)
+        if p.x > 420 then
+            departed = true
+            break
+        end
+    end
+    assert(departed, "Shop restock left every movement input neutral")
+end)
+test("native shop boundary permits a turn before the predictive wall contact", function()
+    for _, speed in ipairs({ 260, 340, 400 }) do
+        local bot, source, obs = fixture()
+        local p = obs.actor
+        p.x, p.y, p.radius, p.speed = 397.943, 361.972, 10, speed
+        obs.map = {
+            x = 40,
+            y = 120,
+            width = 28,
+            height = 9,
+            step = 40,
+            walk = {},
+            zones = {},
+            speed = 185,
+        }
+        for row = 0, 8 do
+            for col = 0, 27 do
+                obs.map.walk[row * 28 + col + 1] = row > 0 and row < 8 and col > 0 and col < 27
+            end
+        end
+        for i, point in ipairs({
+            { 400, 320 },
+            { 280, 320 },
+            { 520, 320 },
+            { 640, 320 },
+            { 760, 320 },
+            { 880, 320 },
+        }) do
+            obs.map.zones[i] =
+                { id = "shop:" .. i, x = point[1], y = point[2], radius = 32, purchase = true }
+        end
+        local exit = door(7, "0:84", { x = 840, y = 440, dx = 0, dy = 1 })
+        obs.doors = { exit }
+        assert(
+            nav.path(obs.map, p, { x = 840, y = 408 }, p.radius, 640, exit),
+            "Native route itself is reachable"
+        )
+        bot.command("on")
+        bot.step(1)
+        local departed = false
+        for frame = 2, 900 do
+            bot.step(frame)
+            assert(bot.state == "running" and not obs.map.allowedPickup)
+            local retain, dt = math.sqrt(0.775), 1 / 60
+            local dx = ((source.mask & 2) ~= 0 and 1 or 0) - ((source.mask & 1) ~= 0 and 1 or 0)
+            local dy = ((source.mask & 8) ~= 0 and 1 or 0) - ((source.mask & 4) ~= 0 and 1 or 0)
+            local scale = dx ~= 0 and dy ~= 0 and 0.7071 or 1
+            p.vx, p.vy =
+                p.vx * retain + dx * scale * p.speed * (1 - retain),
+                p.vy * retain + dy * scale * p.speed * (1 - retain)
+            local x, y = p.x + p.vx * dt, p.y + p.vy * dt
+            if not nav.line(obs.map, p, { x = x, y = p.y }, p.radius, exit) then
+                x, p.vx = p.x, 0
+            end
+            if not nav.line(obs.map, { x = x, y = p.y }, { x = x, y = y }, p.radius, exit) then
+                y, p.vy = p.y, 0
+            end
+            p.x, p.y = x, y
+            for _, zone in ipairs(obs.map.zones) do
+                assert(
+                    nav.distance(p, zone) >= zone.radius + p.radius - 0.01,
+                    "Recovery crossed an unselected product"
+                )
+            end
+            if p.y > exit.y then
+                departed = true
+                break
+            end
+        end
+        assert(
+            departed,
+            "Long predictions discarded every safe short step out of the shop at speed " .. speed
+        )
+    end
+end)
+test("fast client leaves the shop doorway without coasting into adjacent products", function()
+    for _, delayedFrames in ipairs({ 0, 2 }) do
+        local bot, source, obs, info = fixture()
+        local p = obs.actor
+        p.x, p.y, p.radius, p.speed = 840, 395.3, 10, 264.705882 * 1.3
+        obs.controlDelay = 1 / 30 + delayedFrames / 60
+        obs.map = {
+            x = 40,
+            y = 120,
+            width = 28,
+            height = 9,
+            step = 40,
+            walk = {},
+            zones = {},
+            speed = p.speed * 0.7,
+        }
+        for row = 0, 8 do
+            for col = 0, 27 do
+                obs.map.walk[row * 28 + col + 1] = row > 0 and row < 8 and col > 0 and col < 27
+            end
+        end
+        for i, x in ipairs({ 760, 880 }) do
+            obs.map.zones[i] =
+                { id = "product:" .. i, x = x, y = 320, radius = 32, purchase = true }
+        end
+        local entry = door(7, "0:84", { x = 840, y = 440, dx = 0, dy = 1 })
+        obs.doors = { entry }
+        local physical = {}
+        for key, value in pairs(obs.map) do
+            physical[key] = value
+        end
+        physical.zones = {} -- Native physics has no invisible purchase-protection wall.
+        local inputs, arrived = {}, false
+        bot.command("mode hold")
+        bot.command("on")
+        bot.step(1)
+        for frame = 2, 240 do
+            info.nowMs = frame * 1000 / 60
+            bot.step(frame)
+            inputs[frame] = source.mask
+            local mask = inputs[frame - delayedFrames] or 0
+            local dx = ((mask & 2) ~= 0 and 1 or 0) - ((mask & 1) ~= 0 and 1 or 0)
+            local dy = ((mask & 8) ~= 0 and 1 or 0) - ((mask & 4) ~= 0 and 1 or 0)
+            local retain, dt = math.sqrt(0.775), 1 / 60
+            local scale = dx ~= 0 and dy ~= 0 and 0.7071 or 1
+            p.vx, p.vy =
+                p.vx * retain + dx * scale * p.speed * (1 - retain),
+                p.vy * retain + dy * scale * p.speed * (1 - retain)
+            local x, y = p.x + p.vx * dt, p.y + p.vy * dt
+            if not nav.line(physical, p, { x = x, y = p.y }, p.radius, entry) then
+                x, p.vx = p.x, 0
+            end
+            if not nav.line(physical, { x = x, y = p.y }, { x = x, y = y }, p.radius, entry) then
+                y, p.vy = p.y, 0
+            end
+            p.x, p.y = x, y
+            for _, zone in ipairs(obs.map.zones) do
+                assert(
+                    nav.distance(p, zone) >= zone.radius + p.radius - 0.01,
+                    "Delayed coast crossed an ignored product"
+                )
+            end
+            arrived = arrived or not bot.plan.entry
+        end
+        assert(arrived and p.y <= 370, "Arrival kept rejecting all moves near the shop products")
+    end
+end)
+test("item value preserves key and recovery budgets and discounts redundant purchases", function()
+    local items = modules["lanbot/items"]
+    local actor = { keys = 0, coins = 25, needsHeal = true, redDeficit = 4 }
+    local value = items.score(
+        { quality = 3, damage = true, maxHearts = 0, hearts = 0, soulHearts = 0 },
+        actor
+    )
+    assert(value == 90 and items.reserve(actor) == 11)
+    assert(not items.affordable(value, 15, actor))
+    actor.coins = 26
+    assert(items.affordable(value, 15, actor))
+    assert(not items.affordable(value, -1, actor))
+    local duplicate =
+        items.score({ quality = 3, owned = true, maxHearts = 0, hearts = 0, soulHearts = 0 }, actor)
+    assert(not items.affordable(duplicate, 15, actor))
+    assert(not items.score({ quality = 4, active = true, maxHearts = 0 }, actor))
+    assert(not items.score({ quality = 4, maxHearts = -2 }, actor))
+end)
+test("team items balance equipment, benefit and budgets with stable ownership", function()
+    local items = modules["lanbot/items"]
+    local meta = { quality = 3, maxHearts = 0, hearts = 2, soulHearts = 0 }
+    local host = { id = "1:0", items = 8, keys = 1, coins = 20 }
+    local client = { id = "2:1", items = 5, keys = 1, coins = 20 }
+    assert(items.recipient(meta, { host, client }, 0) == client)
+    assert(items.recipient(meta, { client, host }, 0) == client)
+    host.items = 5
+    assert(items.recipient(meta, { client, host }, 0) == host)
+    client.needsHeal = true
+    assert(items.recipient(meta, { host, client }, 0) == client)
+    client.needsHeal, client.owned = false, true
+    assert(items.recipient(meta, { host, client }, 0) == host)
+    client.owned, client.items, client.coins = false, 3, 0
+    assert(items.recipient(meta, { host, client }, 15) == host)
+    client.coins, client.available = 20, false
+    assert(items.recipient(meta, { host, client }, 0) == host)
+    assert(not items.recipient({ active = true }, { host, client }, 0))
+end)
+test("Greed reserves a free item across rooms and releases stale or departed claims", function()
+    local host, client = roster[0], roster[2]
+    local hostCount, clientCount, dead =
+        host.GetCollectibleCount, client.GetCollectibleCount, host.IsDead
+    host.GetCollectibleCount, client.GetCollectibleCount =
+        function()
+            return 5
+        end, function()
+            return 8
+        end
+    local item = fakeEntity(5)
+    item.Variant, item.SubType, item.Price, item.Wait = PickupVariant.PICKUP_COLLECTIBLE, 1, 0, 0
+    local oldTick = localInfo.tick
+    localInfo.tick, entities, greed = 100, { item }, true
+    local reader = modules["lanbot/observe"](
+        native,
+        bridge,
+        nav,
+        modules["lanbot/terrain"],
+        modules["lanbot/items"]
+    )
+    local obs = assert(reader.read(1, localInfo))
+    assert(#obs.pickups == 0 and #obs.map.zones == 1)
+    assert(not nav.passable(obs.map, item.Position.X, item.Position.Y, obs.actor.radius))
+    -- Both owners independently choose the same actor even from different rooms.
+    local hostInfo = {
+        slot = 0,
+        authority = 1,
+        connected = 3,
+        ready = 1,
+        runId = "run",
+        worldEpoch = 1,
+        tick = 100,
+    }
+    local hostView = modules["lanbot/observe"](
+        native,
+        bridge,
+        nav,
+        modules["lanbot/terrain"],
+        modules["lanbot/items"]
+    )
+    local offered = assert(hostView.read(1, hostInfo))
+    assert(#offered.pickups == 1 and offered.pickups[1].recipient == "1:0")
+    localInfo.tick = 700
+    assert(#reader.read(2, localInfo).pickups == 1, "Unreachable reservation never expired")
+    entities = {}
+    reader.read(3, localInfo)
+    entities = { item }
+    assert(#reader.read(4, localInfo).pickups == 0, "Removed pickup retained expired ownership")
+    host.IsDead = function()
+        return true
+    end
+    assert(#reader.read(5, localInfo).pickups == 1)
+    host.IsDead = dead
+    localInfo.worldEpoch = localInfo.worldEpoch + 1
+    assert(#reader.read(6, localInfo).pickups == 0, "New floor retained reservation expiry")
+    localInfo.worldEpoch = localInfo.worldEpoch - 1
+    host.GetCollectibleCount, client.GetCollectibleCount, localInfo.tick =
+        hostCount, clientCount, oldTick
+    entities, greed = {}, false
+end)
+test("an affordable Greed damage item is selected through native pickup planning", function()
+    local player = roster[2]
+    local getConfig, getCoins, getKeys, getType =
+        Isaac.GetItemConfig, player.GetNumCoins, player.GetNumKeys, room.GetType
+    local wallet = 30
+    Isaac.GetItemConfig = function()
+        return {
+            GetCollectible = function()
+                return {
+                    Type = ItemType.ITEM_PASSIVE,
+                    Quality = 3,
+                    CacheFlags = CacheFlag.CACHE_DAMAGE,
+                }
+            end,
+        }
+    end
+    player.GetNumCoins, player.GetNumKeys =
+        function()
+            return wallet
+        end, function()
+            return 0
+        end
+    room.GetType = function()
+        return RoomType.ROOM_SHOP
+    end
+    local item = fakeEntity(5)
+    item.Variant, item.SubType, item.Price, item.Wait = PickupVariant.PICKUP_COLLECTIBLE, 1, 15, 0
+    entities, greed = { item }, true
+    local obs = assert(observe.read(206, localInfo))
+    assert(#obs.pickups == 1 and obs.pickups[1].paid and obs.pickups[1].itemScore == 90)
+    local plan = planner.new()
+    plan:observe(obs)
+    local goal = assert(plan:choose(obs, "run", "balanced"))
+    assert(goal.id == obs.pickups[1].id and goal.paid)
+    wallet = 19 -- Reserve the missing key rather than spend all remaining coins.
+    obs = assert(observe.read(207, localInfo))
+    assert(#obs.pickups == 0 and obs.map.zones[1].purchase)
+    Isaac.GetItemConfig, player.GetNumCoins, player.GetNumKeys, room.GetType =
+        getConfig, getCoins, getKeys, getType
+    entities, greed = {}, false
+end)
+test("Greed visits a keyed treasure room before gathering at the exit", function()
+    local plan, obs = planner.new(), snapshot()
+    obs.greed = { stage = 1, wave = 10, bossWave = 10 }
+    obs.actor.keys, obs.actor.coins = 1, 0
+    obs.doors = {
+        door(0, "0:gold", { treasure = true, locked = true, open = false }),
+        door(3, "0:exit", { greedExit = true }),
+    }
+    plan:observe(obs)
+    assert(plan:choose(obs, "run", "balanced").door.to == "0:gold" and plan.flow.phase == "loot")
+    obs.room, obs.doors = "0:gold", { door(0, "0:1") }
+    obs.pickups = { { id = "free-item", x = 240, y = 160, collectible = true, itemScore = 90 } }
+    plan:observe(obs)
+    assert(plan:choose(obs, "run", "balanced").id == "free-item")
+    obs.pickups, obs.actor.keys, obs.actor.items = {}, 0, 1
+    local goal = assert(plan:choose(obs, "run", "balanced"))
+    assert(plan.flow.phase == "gather" and goal.door.to == "0:1")
+    obs.room, obs.doors =
+        "0:1", { door(0, "0:gold", { treasure = true }), door(3, "0:exit", { greedExit = true }) }
+    plan:observe(obs)
+    local exitGoal, reason = plan:choose(obs, "run", "balanced")
+    assert(exitGoal.door.to == "0:exit" and not reason, "A valid route was reported unreachable")
+end)
+test("Greed bounds a shop that cannot be reached and its following loot phase", function()
+    local flow, obs = modules["lanbot/greed"].new(), snapshot()
+    obs.greed, obs.actor.keys, obs.actor.coins = { stage = 1, wave = 10, bossWave = 10 }, 0, 27
+    flow:update(obs, "run")
+    assert(flow.phase == "supply")
+    obs.frame = 1201
+    flow:update(obs, "run")
+    assert(flow.phase == "loot" and flow.reason == "shop_unreachable")
+    obs.frame = 3001
+    flow:update(obs, "run")
+    assert(flow.phase == "gather" and flow.reason == "loot_unreachable")
 end)
 print("lanbot: " .. count .. " checks passed")

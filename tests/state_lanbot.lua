@@ -8,6 +8,9 @@ local ownerSeed
 local origin, center, selectedDoor, arrivedRoom, damage = nil, nil, nil, nil, 0
 local baseline, exitPosition, minimumExit, spikeDamage, dodgeDamage, spikes, timedPlate
 local spikeTransitions, spikeState, occupant = 0, nil, nil
+local poop, tears, poopTears = nil, 0, 0
+local obstacleAt, firstObstacleShot, fire = nil, nil, nil
+local fireDamage
 local plates, spawned, results = {}, {}, {}
 local trace = host and io and assert(io.open("./lan-test-digest-lanbot.csv", "w"))
 if trace then
@@ -67,8 +70,7 @@ local function heart(position)
     ):ToPickup()
     pickup.Wait = 0
 end
-local function spikeWall(room)
-    spikes = grid(center, GridEntityType.GRID_SPIKES_ONOFF)
+local function rockWall(room)
     for index = 0, room:GetGridSize() - 1 do
         local position = room:GetGridPosition(index)
         if
@@ -79,6 +81,10 @@ local function spikeWall(room)
             grid(position, GridEntityType.GRID_ROCK)
         end
     end
+end
+local function spikeWall(room)
+    spikes = grid(center, GridEntityType.GRID_SPIKES_ONOFF)
+    rockWall(room)
 end
 function _IsaacLanFrame()
     renders = renders + 1
@@ -96,7 +102,7 @@ function _IsaacLanFrame()
         _IsaacLanCommand("start", "YV039KQF:0:0:0:0:0")
     end
     native.test_gamepad(0)
-    if s.verified >= 1510 and not done then
+    if s.verified >= 2370 and not done then
         done = true
         command("off")
         if trace then
@@ -115,7 +121,7 @@ function _IsaacLanFrame()
             end
             file:close()
         end
-        local passed = not host or #results == 7
+        local passed = not host or #results == 10
         if host then
             for _, result in ipairs(results) do
                 passed = passed and result.passed
@@ -133,6 +139,16 @@ local damageCallback = function(_, e)
     end
 end
 Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)
+local tearCallback = function(_, tear)
+    local player = tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer()
+    if host and player and player.InitSeed == ownerSeed then
+        tears = tears + 1
+        if obstacleAt and not firstObstacleShot then
+            firstObstacleShot = Game():GetFrameCount() - obstacleAt
+        end
+    end
+end
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)
 
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
@@ -378,6 +394,118 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     and minimumDoor >= 60,
                 "arrived=" .. tostring(arrivedRoom) .. " minimum_door=" .. minimumDoor
             )
+            clean()
+            center, origin = room:GetCenterPos(), Game():GetLevel():GetCurrentRoomIndex()
+            for index = 0, room:GetGridSize() - 1 do
+                local value = room:GetGridEntity(index)
+                if
+                    value
+                    and value:GetType() ~= GridEntityType.GRID_WALL
+                    and value:GetType() ~= GridEntityType.GRID_DOOR
+                then
+                    room:RemoveGridEntity(index, 0, false)
+                end
+            end
+        elseif t == 1510 then
+            -- Let queued removals from the newly entered room settle before
+            -- spawning the wall; otherwise they can remove the replacement.
+            player.Position, player.Velocity = center - Vector(120, 0), Vector.Zero
+            baseline, poopTears = health(player), tears
+            obstacleAt, firstObstacleShot = Game():GetFrameCount(), nil
+            -- A single breakable gap: the bot must shoot it normally before
+            -- collecting the heart. Rocks cannot be crossed or torn down.
+            poop = grid(center, GridEntityType.GRID_POOP)
+            rockWall(room)
+            heart(center + Vector(120, 0))
+            command("mode hold")
+            command("on")
+        elseif t == 1530 or t == 1590 then
+            local index = room:GetGridIndex(center)
+            local actual = room:GetGridEntity(index)
+            local clear, hit = room:CheckLine(player.Position, center, 3, 0, false, false)
+            report(
+                "LANBOT_POOP tick="
+                    .. t
+                    .. " grid="
+                    .. (actual and actual:GetType() or -1)
+                    .. " state="
+                    .. (actual and actual.State or -1)
+                    .. " collision="
+                    .. room:GetGridCollision(index)
+                    .. " x="
+                    .. player.Position.X
+                    .. " y="
+                    .. player.Position.Y
+                    .. " shot_clear="
+                    .. tostring(clear)
+                    .. " first_hit="
+                    .. (hit and room:GetGridIndex(hit) or -1)
+                    .. " target_index="
+                    .. index
+                    .. " hit_x="
+                    .. (hit and hit.X or -1)
+                    .. " hit_y="
+                    .. (hit and hit.Y or -1)
+            )
+            command("status")
+        elseif t == 1810 then
+            check(
+                "poop-obstacle",
+                poop.State >= 1000
+                    and tears > poopTears
+                    and firstObstacleShot
+                    and firstObstacleShot <= 10
+                    and health(player) > baseline
+                    and Game():GetLevel():GetCurrentRoomIndex() == origin,
+                "state="
+                    .. poop.State
+                    .. " tears="
+                    .. (tears - poopTears)
+                    .. " health="
+                    .. health(player)
+                    .. " shot_delay_frames="
+                    .. (firstObstacleShot or -1)
+            )
+            obstacleAt = nil
+            clean()
+        elseif t == 1840 or t == 2110 then
+            player.Position, player.Velocity = center - Vector(120, 0), Vector.Zero
+            baseline, poopTears = health(player), tears
+            obstacleAt, firstObstacleShot = Game():GetFrameCount(), nil
+            fireDamage = damage
+            rockWall(room)
+            fire = Isaac.Spawn(
+                EntityType.ENTITY_FIREPLACE,
+                t == 1840 and 0 or 1,
+                0,
+                center,
+                Vector.Zero,
+                nil
+            )
+                :ToNPC()
+            heart(center + Vector(120, 0))
+            command("mode hold")
+            command("on")
+        elseif t == 2080 or t == 2350 then
+            check(
+                t == 2080 and "brown-fire-obstacle" or "red-fire-obstacle",
+                (fire:IsDead() or fire.HitPoints <= 1)
+                    and tears > poopTears
+                    and health(player) > baseline
+                    and damage == fireDamage
+                    and Game():GetLevel():GetCurrentRoomIndex() == origin,
+                "hp="
+                    .. fire.HitPoints
+                    .. " tears="
+                    .. (tears - poopTears)
+                    .. " health="
+                    .. health(player)
+                    .. " shot_delay_frames="
+                    .. (firstObstacleShot or -1)
+                    .. " damage="
+                    .. (damage - fireDamage)
+            )
+            obstacleAt = nil
             clean()
         end
     end, collect, restore, present, beginFloor)

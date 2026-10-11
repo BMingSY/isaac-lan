@@ -24,6 +24,9 @@ def lanbot_behavior_passed(checkpoints):
         "timed-spikes",
         "crossing-projectiles",
         "door-transfer",
+        "poop-obstacle",
+        "brown-fire-obstacle",
+        "red-fire-obstacle",
     }
     checks = [
         re.search(r"LANBOT_CASE (\S+) passed=(true|false)(?: |$)", line) for line in checkpoints
@@ -34,6 +37,31 @@ def lanbot_behavior_passed(checkpoints):
         and {check[1] for check in checks} == expected
         and all(check[2] == "true" for check in checks)
     )
+
+
+def lanbot_greed_result(checkpoints):
+    results = [
+        line.split("LANBOT_GREED RESULT ", 1)[1]
+        for line in checkpoints
+        if "LANBOT_GREED RESULT " in line
+    ]
+    if len(results) != 1:
+        raise ValueError("Expected exactly one authoritative LANBOT Greed result")
+    values = dict(word.split("=", 1) for word in results[0].split())
+    if values.get("outcome") not in {"win", "death", "stalled", "timeout", "bot_error"}:
+        raise ValueError("Unknown LANBOT Greed outcome")
+    won = values["outcome"] == "win"
+    if values.get("cleared") != str(won).lower():
+        raise ValueError("Greed outcome disagrees with the cleared flag")
+    for name in ("stage", "wave", "shots0", "shots1", "hits0", "hits1"):
+        values[name] = int(values[name])
+    for name in ("wall_s", "simulation_s"):
+        values[name] = float(values[name])
+    values["cleared"] = won
+    values["native_ending"] = values.get("native_ending") == "true"
+    if won and (values["stage"] != 7 or not values["native_ending"]):
+        raise ValueError("Greed win requires a native final-floor ending")
+    return values
 
 
 def main():
@@ -79,6 +107,8 @@ def main():
         parser.error("The first-floor campaign must run last")
     if "lanbot-campaign" in cases and cases[-1] != "lanbot-campaign":
         parser.error("The LANBOT first-floor campaign must run last")
+    if "lanbot-greed" in cases and cases[-1] != "lanbot-greed":
+        parser.error("The LANBOT Greed challenge must run last")
     labs = [args.host.resolve(), args.client.resolve()]
     if labs[0] == labs[1] or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
         parser.error("Two distinct marked isolated labs are required")
@@ -133,6 +163,7 @@ def main():
                 "greed",
                 "greedier",
                 "lanbot-campaign",
+                "lanbot-greed",
             )
         )
         else "900",
@@ -140,7 +171,8 @@ def main():
     if "ascent-compat" in cases:
         command.append("--ascent-fixture")
     if any(
-        name in cases for name in ("endings", "campaign", "greed", "greedier", "lanbot-campaign")
+        name in cases
+        for name in ("endings", "campaign", "greed", "greedier", "lanbot-campaign", "lanbot-greed")
     ):
         command.append("--endings-fixture")
     for option in ("heap-check", "performance"):
@@ -163,6 +195,7 @@ def main():
                 "greed",
                 "greedier",
                 "lanbot-campaign",
+                "lanbot-greed",
             )
         ):
             # Prerequisite unlocks can queue native achievement screens and
@@ -206,6 +239,8 @@ def main():
                             and "LANBOT_CAMPAIGN " in line
                             or name == "lanbot-spiders"
                             and "LANBOT_SPIDERS " in line
+                            or name == "lanbot-greed"
+                            and "LANBOT_GREED " in line
                             or name == "shared-curses"
                             and "SHARED_CURSES " in line
                             or name == "shared-deals"
@@ -232,8 +267,20 @@ def main():
                 report["cases"]["lanbot"]["host"]["checkpoints"]
             )
             report["passed"] = report["passed"] and report["lanbot_behavior_passed"]
+        if "lanbot-greed" in cases:
+            try:
+                report["lanbot_greed"] = lanbot_greed_result(
+                    report["cases"]["lanbot-greed"]["host"]["checkpoints"]
+                )
+                report["passed"] = (
+                    report["passed"] and report["lanbot_greed"]["outcome"] != "bot_error"
+                )
+            except (ValueError, KeyError) as error:
+                report["passed"] = False
+                report["lanbot_greed_error"] = str(error)
         if all(
-            name in ("greed", "greedier", "lanbot", "lanbot-campaign", "lanbot-spiders")
+            name
+            in ("greed", "greedier", "lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed")
             for name in cases
         ):
             report["native_game_starts"] = {}

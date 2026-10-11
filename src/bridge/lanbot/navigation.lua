@@ -28,7 +28,11 @@ local function corridor(door, x, y, radius)
 end
 function nav.zonesAllow(map, x, y, radius, time, from, ignoreTimed)
     for _, zone in ipairs(map.zones or {}) do
-        if (not zone.exit or zone.id ~= map.allowedExit) and not (ignoreTimed and zone.timed) then
+        if
+            (not zone.exit or zone.id ~= map.allowedExit)
+            and (not zone.purchase or zone.id ~= map.allowedPickup)
+            and not (ignoreTimed and zone.timed)
+        then
             local blocked = not zone.timed or (time or 0) >= (zone.safeFor or 0)
             local distance = nav.distance({ x = x, y = y }, zone)
             if blocked and distance < radius + zone.radius then
@@ -69,26 +73,79 @@ function nav.passable(map, x, y, radius, door, time, from, ignoreTimed)
     end
     return true
 end
+local function penetration(map, x, y, radius)
+    local score, cells = 0, {}
+    local half = map.step / 2
+    local left = math.floor((x - radius - map.x + half) / map.step)
+    local right = math.floor((x + radius - map.x + half) / map.step)
+    local top = math.floor((y - radius - map.y + half) / map.step)
+    local bottom = math.floor((y + radius - map.y + half) / map.step)
+    for row = top, bottom do
+        for col = left, right do
+            local cell = row * map.width + col + 1
+            local inside = col >= 0 and col < map.width and row >= 0 and row < map.height
+            if not inside or not (map.walk[cell] or map.exitCells and map.exitCells[cell]) then
+                local cx, cy = map.x + col * map.step, map.y + row * map.step
+                local depth = math.min(
+                    x - (cx - half - radius),
+                    cx + half + radius - x,
+                    y - (cy - half - radius),
+                    cy + half + radius - y
+                )
+                if depth >= 0 then
+                    score = score + depth + 0.000001
+                    cells[col .. ":" .. row] = true
+                end
+            end
+        end
+    end
+    return score, cells
+end
+local function escapingGrid(map, from, x, y, radius, time, ignoreTimed)
+    if not nav.zonesAllow(map, x, y, radius, time, from, ignoreTimed) then
+        return false
+    end
+    local old, cells = penetration(map, from.x, from.y, radius)
+    if old <= 0 then
+        return false
+    end
+    local nextScore, nextCells = penetration(map, x, y, radius)
+    if nextScore >= old - 0.0000001 then
+        return false
+    end
+    for cell in pairs(nextCells) do
+        if not cells[cell] then
+            return false
+        end
+    end
+    return true
+end
 function nav.line(map, from, to, radius, door, t0, t1, ignoreTimed)
     t0 = t0 or 0
     t1 = t1 or t0 + nav.distance(from, to) / (map.speed or 200) + 0.15
     local steps = math.max(1, math.ceil(nav.distance(from, to) / 8))
+    local previousX, previousY = from.x, from.y
     for i = 1, steps do
         local t = i / steps
+        local x, y = from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t
         if
-            not nav.passable(
-                map,
-                from.x + (to.x - from.x) * t,
-                from.y + (to.y - from.y) * t,
-                radius,
-                door,
-                t0 + (t1 - t0) * t,
-                from,
-                ignoreTimed
+            not nav.passable(map, x, y, radius, door, t0 + (t1 - t0) * t, from, ignoreTimed)
+            and (
+                not map.gridRecovery
+                or not escapingGrid(
+                    map,
+                    { x = previousX, y = previousY },
+                    x,
+                    y,
+                    radius,
+                    t0 + (t1 - t0) * t,
+                    ignoreTimed
+                )
             )
         then
             return false
         end
+        previousX, previousY = x, y
     end
     return true
 end
@@ -177,9 +234,22 @@ function nav.path(map, from, to, radius, limit, door, ignoreTimed)
         if not closed[cell] then
             closed[cell] = true
             local p = nav.position(map, cell)
-            for _, delta in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }) do
+            local deltas = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }
+            if map.gridRecovery then
+                -- Restocking can leave the actor inside a protected purchase
+                -- circle. All four adjacent grid centers may still overlap it
+                -- even though a normal diagonal step safely leaves the circle.
+                -- Clear-room paths also need diagonals between adjacent shop
+                -- circles. Every segment still obeys all collision guards.
+                for _, delta in ipairs({ { -1, -1 }, { -1, 1 }, { 1, -1 }, { 1, 1 } }) do
+                    deltas[#deltas + 1] = delta
+                end
+            end
+            for _, delta in ipairs(deltas) do
                 local x, y = p.x + delta[1] * map.step, p.y + delta[2] * map.step
                 local nextCell = nav.cell(map, x, y)
+                local travel = cell == start and nav.distance(from, { x = x, y = y })
+                    or map.step * (delta[1] ~= 0 and delta[2] ~= 0 and math.sqrt(2) or 1)
                 if
                     nextCell
                     and not closed[nextCell]
@@ -190,16 +260,20 @@ function nav.path(map, from, to, radius, limit, door, ignoreTimed)
                         radius,
                         door,
                         cost[cell] / (map.speed or 200),
-                        (cost[cell] + map.step) / (map.speed or 200) + 0.15,
+                        (cost[cell] + travel) / (map.speed or 200) + 0.15,
                         ignoreTimed
                     )
                 then
-                    local nextCost = cost[cell] + map.step
+                    local nextCost = cost[cell] + travel
                     if not cost[nextCell] or nextCost < cost[nextCell] then
                         prior[nextCell], cost[nextCell] = cell, nextCost
+                        local hx, hy = math.abs(x - to.x), math.abs(y - to.y)
+                        local heuristic = hx
+                            + hy
+                            + (map.gridRecovery and (math.sqrt(2) - 2) * math.min(hx, hy) or 0)
                         push(heap, {
                             cell = nextCell,
-                            score = nextCost + math.abs(x - to.x) + math.abs(y - to.y),
+                            score = nextCost + heuristic,
                         })
                     end
                 end

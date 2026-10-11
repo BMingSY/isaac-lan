@@ -479,6 +479,7 @@ def main():
                 (internal / "disable.it").touch()
                 scenario_config = {
                     "host": role == "host",
+                    "players": len(labs),
                     "port": str(args.menu_port + (1 if args.latency_ms and role != "host" else 0)),
                 }
                 result.setdefault("scenario_config", {})[role] = scenario_config
@@ -487,7 +488,9 @@ def main():
                     + ("true" if scenario_config["host"] else "false")
                     + ', port = "'
                     + scenario_config["port"]
-                    + '" }\n'
+                    + '", players = '
+                    + str(scenario_config["players"])
+                    + " }\n"
                     + tested_script.read_text()
                 )
             else:

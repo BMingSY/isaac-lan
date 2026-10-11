@@ -447,7 +447,7 @@ do
             test_gamepad = function() end,
         },
         _IsaacLanFrame = function()
-            return { verified = 1510, phase = 0 }
+            return { verified = 2370, phase = 0 }
         end,
         Isaac = {
             AddCallback = function() end,
