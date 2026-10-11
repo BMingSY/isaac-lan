@@ -5,6 +5,7 @@ for _, host in ipairs({ true, false }) do
     local hooks, callbacks, messages = nil, {}, {}
     local clock, stage, roomIndex, clear, phase, scene, tick = 0, 1, 84, false, 0, 1, 0
     local paused = false
+    local flags, extraAnimation = host and { 0, 1 } or { 1, 1 }, "Idle"
     local points, items, moves, nextCalls, confirms = { 0, 0 }, {}, {}, 0, 0
     local positions =
         { ["0"] = { index = 84, dimension = 0 }, ["1"] = { index = 84, dimension = 0 } }
@@ -33,9 +34,19 @@ for _, host in ipairs({ true, false }) do
         local methods = {
             ControllerIndex = slot + 1,
             EntityCollisionClass = 4,
+            Visible = true,
+            GetEntityFlags = function()
+                return flags[index + 1]
+            end,
+            AddEntityFlags = function(_, bits)
+                flags[index + 1] = flags[index + 1] | bits
+            end,
+            ClearEntityFlags = function(_, bits)
+                flags[index + 1] = flags[index + 1] & ~bits
+            end,
             GetSprite = sprite,
             IsExtraAnimationFinished = function()
-                return true
+                return extraAnimation == "Idle"
             end,
             SetMinDamageCooldown = function() end,
             HasCollectible = function(_, id)
@@ -77,8 +88,22 @@ for _, host in ipairs({ true, false }) do
         .. string.pack(">I4", host and 98765 or 321)
     local baseline = progress
     local native = {
+        actor_sprites = function()
+            local value = {
+                GetAnimation = function()
+                    return extraAnimation
+                end,
+            }
+            return { value, value, value }
+        end,
         api_info = function()
-            return { ready = phase == 3 and 1 or 0, runId = 1, worldEpoch = stage, nowMs = clock }
+            return {
+                ready = phase == 3 and 1 or 0,
+                slot = host and 0 or 1,
+                runId = 1,
+                worldEpoch = stage,
+                nowMs = clock,
+            }
         end,
         input_bot = function()
             return true
@@ -121,6 +146,9 @@ for _, host in ipairs({ true, false }) do
         end,
     }
     local game = {
+        GetNumPlayers = function()
+            return 2
+        end,
         IsPaused = function()
             return paused
         end,
@@ -128,6 +156,9 @@ for _, host in ipairs({ true, false }) do
             return {
                 GetStage = function()
                     return stage
+                end,
+                GetCurrentRoomIndex = function()
+                    return roomIndex
                 end,
                 SetStage = function()
                     error("Campaign skipped native floors")
@@ -198,6 +229,7 @@ for _, host in ipairs({ true, false }) do
             ENTITY_PICKUP = 5,
             ENTITY_EFFECT = 1000,
         },
+        EntityFlag = { FLAG_NO_DAMAGE_BLINK = 1 },
         PickupVariant = { PICKUP_BIGCHEST = 340, PICKUP_COLLECTIBLE = 100 },
         EffectVariant = { HEAVEN_LIGHT_DOOR = 39 },
         GridEntityType = { GRID_TRAPDOOR = 17 },
@@ -326,8 +358,10 @@ for _, host in ipairs({ true, false }) do
             points[1], points[2] = points[1] + 2, points[2] + 2
             if host then
                 hooks[2](tick, 2, {})
+                assert(flags[1] == 1 and flags[2] == 1)
             else
                 hooks[4]("snapshot", tick, 0)
+                flags = { 1, 1 } -- Authority-provided blink flags.
             end
             if host and moves[0] and moves[1] or not host and offset > 91 then
                 roomIndex = 100
@@ -347,6 +381,11 @@ for _, host in ipairs({ true, false }) do
                     paused = true
                 end
                 clear = true
+            end
+            if not host and floor == 11 and offset == 1 then
+                extraAnimation = "Pickup"
+                assert(not pcall(env._IsaacLanFrame), "Unexpected Dark Room pickup was accepted")
+                extraAnimation = "Idle"
             end
             env._IsaacLanFrame()
         end
@@ -383,6 +422,9 @@ for _, host in ipairs({ true, false }) do
     callbacks[2](nil, false)
     assert(not pcall(callbacks[2], nil, false), "Duplicate victory was accepted")
     callbacks[3]()
+    if host then
+        assert(flags[1] == 0 and flags[2] == 1, "Fixture changed the original blink overrides")
+    end
     phase, scene, clock = 0, 1, clock + 4000
     progress = baseline:sub(1, -5) .. string.pack(">I4", 1)
     assert(not pcall(env._IsaacLanFrame), "Changed private progress counter was accepted")

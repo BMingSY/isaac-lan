@@ -34,7 +34,10 @@ local observation = _IsaacLanModules["lanbot/observe"](
     integration,
     _IsaacLanModules["lanbot/navigation"],
     _IsaacLanModules["lanbot/terrain"],
-    _IsaacLanState.actorPose
+    _IsaacLanState.actorPose,
+    function()
+        return status
+    end
 )
 local bot = _IsaacLanModules["lanbot"]({
     info = native.api_info,

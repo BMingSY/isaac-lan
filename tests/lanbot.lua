@@ -729,6 +729,9 @@ local room = {
     GetGridCollision = function()
         return 0
     end,
+    IsPositionInRoom = function()
+        return true
+    end,
     IsClear = function()
         return true
     end,
@@ -823,6 +826,24 @@ test("observer binds owning actor before scoping room; waits for remote party", 
     local missing, reason = observe.read(4, localInfo)
     assert(not missing and reason == "dead")
     roster[2] = fakePlayer(200)
+end)
+test("observer excludes empty grid outside room walls and L-shaped cutouts", function()
+    local inside = room.IsPositionInRoom
+    room.IsPositionInRoom = function(_, pos, margin)
+        assert(viewed and margin == 0)
+        return pos.X >= 40
+            and pos.X <= 400
+            and pos.Y >= 40
+            and pos.Y <= 320
+            and not (pos.X >= 240 and pos.Y < 160)
+    end
+    local obs = assert(observe.read(1, localInfo))
+    assert(not nav.passable(obs.map, 0, 80, 0))
+    assert(not nav.passable(obs.map, 440, 80, 0))
+    assert(not nav.passable(obs.map, 280, 80, 0))
+    assert(nav.passable(obs.map, 80, 80, 0))
+    assert(nav.passable(obs.map, 280, 200, 0))
+    room.IsPositionInRoom = inside
 end)
 test("observer handles gameplay gate and pause", function()
     localInfo.ready = 0
@@ -1470,5 +1491,139 @@ test("embedded console entry dispatches lanbot and returns nil", function()
     assert(source.active and output[#output]:find("running"))
     callbacks[4]()
     assert(not source.active)
+end)
+test("resting contact enemies retain pressure outside the collision radius", function()
+    local obs = snapshot()
+    local hazards = modules["lanbot/hazards"](nav)
+    obs.controlDelay = 0.18
+    obs.dangers = { { x = 280, y = 160, vx = 0, vy = 0, radius = 10 } }
+    assert(hazards.risk(obs, obs.actor, obs.actor, 0, 0.1, combat.styles.balanced) == 0)
+    obs.dangers[1].contact, obs.dangers[1].chaseSpeed = true, 300
+    assert(hazards.risk(obs, obs.actor, obs.actor, 0, 0.1, combat.styles.balanced) > 0)
+end)
+test("crowd clears the arrival doorway before starting an orbit", function()
+    local bot, source, obs = fixture()
+    obs.actor.x, obs.actor.y, obs.clear = 430, 160, false
+    obs.doors = { door(2, "0:2") }
+    for i = 1, 3 do
+        obs.enemies[i] = {
+            id = "enemy:" .. i,
+            x = 200,
+            y = 160,
+            vx = 0,
+            vy = 0,
+            radius = 10,
+            contact = true,
+            attackable = true,
+        }
+    end
+    obs.dangers = obs.enemies
+    bot.command("mode hold")
+    bot.command("on")
+    bot.step(1)
+    bot.step(2)
+    assert(bot.task == "leave_door" and not bot.kite and (source.mask & 1) ~= 0)
+    obs.actor.x = 320
+    bot.step(3)
+    assert(bot.task == "kite" and bot.kite)
+end)
+test("crowd orbit keeps direction and advances before delayed arrival", function()
+    local obs, memory = snapshot(), {}
+    obs.actor.x, obs.actor.y, obs.controlDelay = 80, 180, 0.18
+    for i = 1, 9 do
+        obs.dangers[i] = { x = 240, y = 180, radius = 10, contact = true, chaseSpeed = 200 }
+    end
+    local goal = assert(combat.kite(obs, "balanced", memory))
+    assert(goal.task == "kite" and nav.line(obs.map, obs.actor, goal, obs.actor.radius))
+    local sign, index = memory.kite.sign, memory.kite.index
+    -- Reordering moving enemies cannot reverse the established route.
+    obs.dangers[1].x, obs.dangers[2].y = 270, 150
+    assert(combat.kite(obs, "balanced", memory).id == goal.id)
+    assert(memory.kite.sign == sign)
+    obs.actor.x, obs.actor.y = goal.x, goal.y
+    assert(combat.kite(obs, "balanced", memory).id ~= goal.id)
+    assert(memory.kite.index ~= index and memory.kite.sign == sign)
+end)
+test("crowd route drops blocked segments and disappears with contact enemies", function()
+    local obs, memory = snapshot(), {}
+    obs.actor.x, obs.actor.y = 80, 180
+    for i = 1, 3 do
+        obs.dangers[i] = { x = 240, y = 180, radius = 10, contact = true }
+    end
+    local goal = assert(combat.kite(obs, "balanced", memory))
+    obs.map.zones = { { id = "protected", x = goal.x, y = goal.y, radius = 30, exit = true } }
+    assert(not combat.kite(obs, "balanced", memory) and not memory.kite)
+    obs.map.zones, obs.dangers = {}, {}
+    assert(not combat.kite(obs, "balanced", memory) and not memory.kite)
+end)
+test("crowd routing respects planner cooldowns", function()
+    local obs, memory = snapshot(), {}
+    obs.actor.x, obs.actor.y = 80, 180
+    for i = 1, 3 do
+        obs.dangers[i] = { x = 240, y = 180, radius = 10, contact = true }
+    end
+    local goal = assert(combat.kite(obs, "balanced", memory))
+    local function available(id)
+        return id ~= goal.id
+    end
+    assert(not combat.kite(obs, "balanced", memory, available) and not memory.kite)
+    assert(combat.kite(obs, "balanced", memory, available).id ~= goal.id)
+end)
+test("latency forecast replays controls rather than extending the latest key", function()
+    local obs, first = snapshot(), nil
+    local measured = modules["lanbot/combat"](nav, {
+        risk = function(_, from)
+            first = first or from.x
+            return 0
+        end,
+    })
+    obs.now, obs.controlDelay = 1, 0.18
+    obs.inputHistory = { { at = 0.8, buttons = 1 }, { at = 0.95, buttons = 2 } }
+    measured.move(obs, nil, "balanced", 2)
+    assert(first < obs.actor.x, "Pending left input was replaced by the latest right key")
+    first, obs.inputHistory = nil, nil
+    measured.move(obs, nil, "balanced", 2)
+    assert(first > obs.actor.x)
+end)
+test("input history remains bounded at high FPS and clears at boundaries", function()
+    local bot, _, obs, info = fixture()
+    bot.command("mode hold")
+    bot.command("on")
+    for frame = 1, 1000 do
+        info.nowMs = frame * 1.25
+        bot.step(frame)
+    end
+    assert(#bot.inputs <= 32 and bot.inputs[1].at <= info.nowMs / 1000 - 0.25)
+    bot.kite = { index = 1, sign = 1 }
+    obs.room = "next"
+    bot.step(1001)
+    assert(#bot.inputs == 0 and not bot.kite)
+    bot.command("off")
+    assert(#bot.inputs == 0)
+end)
+test("observer preserves contact mobility through stops and resets on room change", function()
+    local npc = fakeEntity(20)
+    npc.CollisionDamage, npc.EntityCollisionClass, npc.Velocity = 1, 0, Vector(10, 0)
+    entities = { npc }
+    local watched = modules["lanbot/observe"](
+        native,
+        bridge,
+        nav,
+        modules["lanbot/terrain"],
+        nil,
+        function()
+            return { ping1 = 150 }
+        end
+    )
+    local obs = assert(watched.read(1, localInfo))
+    assert(obs.dangers[1].contact and obs.dangers[1].chaseSpeed == 300)
+    assert(math.abs(obs.controlDelay - (0.15 + 1 / 30)) < 0.001)
+    npc.Velocity = Vector(0, 0)
+    assert(watched.read(2, localInfo).dangers[1].chaseSpeed == 300)
+    positions["1"].index = 3
+    assert(watched.read(3, localInfo).dangers[1].chaseSpeed < 300)
+    npc.CollisionDamage = 0
+    assert(not watched.read(4, localInfo).dangers[1].contact)
+    positions["1"].index, entities = 2, {}
 end)
 print("lanbot: " .. count .. " checks passed")

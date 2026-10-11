@@ -11,6 +11,7 @@
 #include "runtime/room_map.h"
 #include "compat/bosses/encounters.h"
 #include "compat/routes/mines.h"
+#include "compat/routes/curses.h"
 #include "compat/characters/traits.h"
 #include "runtime/actor_roster.h"
 #include "core/poop_state.h"
@@ -2311,11 +2312,14 @@ void finishFrame() {
         if (request.animation != 4 || runtime::replica() ||
             engine<ChestEnding>(j460::entry::gameGetChestEnding)(false) == 0)
             runtime::beginStage(request.same, request.animation);
-        logger("floor_transaction=BEGIN same=" + std::to_string(request.same));
         // Replicas never simulate the chest collector or its grid markers.
-        // Use native fade/loading rather than waiting for those local markers
-        // and re-evaluating the chest against the replica's unlocks/inventory.
-        const auto animation = runtime::replica() && request.animation == 4 ? 1 : request.animation;
+        // Use the ordinary floor entry rather than waiting for local markers
+        // and re-evaluating the chest against replica unlocks/inventory. J460
+        // animation 1 plays Forget Me Now's collectible pickup, not a fade.
+        const auto animation = runtime::replica() && request.animation == 4 ? 0 : request.animation;
+        logger("floor_transaction=BEGIN same=" + std::to_string(request.same) +
+               " received_animation=" + std::to_string(request.animation) +
+               " native_animation=" + std::to_string(animation));
         originalStage(reinterpret_cast<void*>(game()), request.same, animation,
                       reinterpret_cast<void*>(request.player));
         return;
@@ -2456,8 +2460,22 @@ void finishFrame() {
                 // Arrival below applies our explicit entry door afterward.
                 at<int>(game(), 0x18318) = -1;
                 at<int>(game(), 0x1831c) = request.door;
-                originalChange(reinterpret_cast<void*>(game()), request.destination.index,
-                               request.destination.dimension);
+                const auto curseBase = at<std::uint32_t>(game(), 0xc);
+                const auto curseSeeds = at<std::uint32_t>(game(), 0x26550);
+                {
+                    // J460 ChangeRoom combines these existing level/seed curse
+                    // masks before its Maze routing branch. Replica entry uses
+                    // the received destination; its native Room::Init still
+                    // needs the rest of the authoritative room context.
+                    compat::routes::ResolvedRoomCurses curses(at<std::uint32_t>(game(), 0xc),
+                                                              at<std::uint32_t>(game(), 0x26550),
+                                                              runtime::replica());
+                    originalChange(reinterpret_cast<void*>(game()), request.destination.index,
+                                   request.destination.dimension);
+                }
+                logger("room_change requested=" + std::to_string(request.destination.index) +
+                       " actual=" + std::to_string(at<int>(game(), 0x18304)) + " curse_base=" +
+                       std::to_string(curseBase) + " curse_seeds=" + std::to_string(curseSeeds));
                 if (!runtime::replica())
                     engine<RoomCall>(j460::entry::roomUpdateMusic)(
                         reinterpret_cast<void*>(to->pointer));

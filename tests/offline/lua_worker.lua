@@ -6,6 +6,7 @@ local inventory = dofile(root .. "/tests/fixtures/offline_inventory.lua")(root)
 local entities = dofile(root .. "/tests/fixtures/offline_entities.lua")(root)
 local bot = dofile(root .. "/tests/fixtures/offline_bot.lua")(root)
 local botRooms = dofile(root .. "/tests/fixtures/offline_bot_rooms.lua")(root)
+local chasers = dofile(root .. "/tests/fixtures/offline_bot_chasers.lua")(root)
 local function unhex(value)
     assert(#value % 2 == 0 and not value:find("[^0-9a-f]"), "Invalid request hex")
     return (value:gsub("..", function(pair)
@@ -103,6 +104,8 @@ local actions = {
     bot_session = bot.session,
     bot_rooms_reset = botRooms.reset,
     bot_rooms_step = botRooms.step,
+    bot_chasers_reset = chasers.reset,
+    bot_chasers_step = chasers.step,
     state_init = function()
         local env = stateEnvironment()
         local state = assert(env._IsaacLanState)

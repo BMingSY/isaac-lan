@@ -132,6 +132,24 @@ def test_incoming_projectile_is_avoided_over_many_frames(lua):
     assert result[3] == 0, result
 
 
+@pytest.mark.parametrize("latency", [0, 75])
+@pytest.mark.parametrize("seed", [1, 7, 19])
+def test_survives_bursting_contact_crowd_without_firing(lua, latency, seed):
+    lua.call("bot_chasers_reset", latency, seed, False)
+    for _ in range(12):
+        result = lua.call("bot_chasers_step", 600)
+    assert result[0] == 120 and result[3] == -1, result
+    assert result[4] >= 5, result
+    assert result[1] == -1 or result[1] >= 30, result
+    assert result[9] == "running" and result[10] == "kite", result
+
+
+def test_contact_world_damages_an_immobile_player(lua):
+    lua.call("bot_chasers_reset", 75, 1, True)
+    result = lua.call("bot_chasers_step", 1200)
+    assert result[2] == 6 and 0 < result[3] < 20 and result[4] == 0, result
+
+
 @pytest.mark.property
 def test_bot_command_and_frame_sequences(lua):
     class BotMachine(RuleBasedStateMachine):

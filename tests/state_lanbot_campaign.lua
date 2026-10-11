@@ -16,6 +16,7 @@ local stage, stageAt, destination = nil, 0, nil
 local lastFloor = 0
 local winCallback, exitCallback, tearCallback, chestCallback
 local chestContacts = 0
+local protectedBlink, darkEntrySamples, visibleSamples = {}, 0, 0
 local function report(text)
     Isaac.DebugString("LAN_NETWORK LANBOT_CAMPAIGN " .. text)
 end
@@ -92,6 +93,11 @@ local function botStep()
     end
     local readyExit = false
     bridge.withView(function()
+        local location = assert(native.rooms_positions()[tostring(info.slot)])
+        assert(
+            Game():GetLevel():GetCurrentRoomIndex() == location.index,
+            "Native room differs from the authoritative LAN room"
+        )
         local room = Game():GetRoom()
         if room:GetType() == RoomType.ROOM_BOSS and room:IsClear() then
             for index = 0, room:GetGridSize() - 1 do
@@ -238,6 +244,15 @@ winCallback = function(_, gameOver)
     report("NATIVE_WIN first_floor=1 movement=lanbot firing=lanbot exits=lanbot")
 end
 exitCallback = function()
+    if host and next(protectedBlink) then
+        for index = 0, Game():GetNumPlayers() - 1 do
+            local p = Isaac.GetPlayer(index)
+            if protectedBlink[p.ControllerIndex] == false then
+                p:ClearEntityFlags(EntityFlag.FLAG_NO_DAMAGE_BLINK)
+            end
+        end
+        protectedBlink = {}
+    end
     endedAt = native.api_info().nowMs
     report("EXIT_CALLBACK won=" .. tostring(won))
 end
@@ -262,6 +277,33 @@ function _IsaacLanFrame()
     end
     local s = baseFrame()
     assert(s.phase ~= 4 and s.phase ~= 9, s.error)
+    if not host and not won and s.phase == 3 and s.scene == 2 then
+        if bridge.ready() then
+            for index = 0, Game():GetNumPlayers() - 1 do
+                local p = Isaac.GetPlayer(index)
+                assert(
+                    p.Visible and (p:GetEntityFlags() & EntityFlag.FLAG_NO_DAMAGE_BLINK) ~= 0,
+                    "Protected campaign actor is hidden or missing blink override"
+                )
+                visibleSamples = visibleSamples + 1
+            end
+        end
+        if Game():GetLevel():GetStage() == 11 and darkEntrySamples < 600 then
+            for index = 0, Game():GetNumPlayers() - 1 do
+                local p = Isaac.GetPlayer(index)
+                if not p:IsExtraAnimationFinished() then
+                    local sprites = assert(native.actor_sprites(index, p:GetSprite()))
+                    for i = 1, 3 do
+                        assert(
+                            sprites[i]:GetAnimation() ~= "Pickup",
+                            "Dark Room entry played an unrequested collectible animation"
+                        )
+                    end
+                end
+                darkEntrySamples = darkEntrySamples + 1
+            end
+        end
+    end
     if s.phase == 2 and not chosen then
         chosen = true
         _IsaacLanCommand("choose", "0:1")
@@ -295,6 +337,19 @@ function _IsaacLanFrame()
         assert(progress:sub(-4) == localProgress:sub(-4), "Replaced private progress counter")
         finished = true
         report("LOCAL_PROGRESS_RESTORED")
+        if not host then
+            assert(
+                visibleSamples > 100 and darkEntrySamples > 0,
+                "Campaign did not check protected actors and Dark Room entry"
+            )
+            report(
+                "VISUAL_CHECKS protected_samples="
+                    .. visibleSamples
+                    .. " dark_entry_samples="
+                    .. darkEntrySamples
+                    .. " pickup_animation=false"
+            )
+        end
         report(
             "PASS full LANBOT campaign move_inputs="
                 .. moveInputs
@@ -315,6 +370,12 @@ local function advance(t)
     end
     for slot = 0, 1 do
         actor(slot, function(p)
+            if protectedBlink[p.ControllerIndex] == nil then
+                protectedBlink[p.ControllerIndex] = (
+                    p:GetEntityFlags() & EntityFlag.FLAG_NO_DAMAGE_BLINK
+                ) ~= 0
+            end
+            p:AddEntityFlags(EntityFlag.FLAG_NO_DAMAGE_BLINK)
             p:SetMinDamageCooldown(10000)
             local sample = previous[slot]
             if sample then
