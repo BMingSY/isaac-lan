@@ -1,14 +1,20 @@
--- Honest two-bot Greed attempt. Preparation grants only the requested initial
+-- Honest two-to-four-bot Greed attempt. Preparation grants only the requested initial
 -- collectibles. All combat, pickups, buttons, doors and endings are native.
 local native = assert(_IsaacLan)
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
+local playerCount = _IsaacLanTest.players or 2
+assert(playerCount >= 2 and playerCount <= 4)
 local baseFrame, baseGate, baseInput = _IsaacLanFrame, native.net_gate, native.input_bot
 local bridge = assert(_IsaacLanModules["api/public"])
 local owner = { Name = "LANBOT Greed challenge" }
 local renders, linked, chosen, finished, equipped, started = 0, false, false, false, false, false
 local outcome, beganAt, beganTick, seenGame, epoch, lastKey, progressedAt
 local stage, wave, terminalBoss, endingObserved = 1, 0, false, false
-local floors, completed, shots, hits, lastHealth, lastDead = {}, {}, { 0, 0 }, { 0, 0 }, {}, {}
+local floors, completed, shots, hits, lastHealth, lastDead = {}, {}, {}, {}, {}, {}
+local lastRooms = {}
+for i = 1, playerCount do
+    shots[i], hits[i] = 0, 0
+end
 local observedRooms = {}
 local moveInputs, shootInputs, snapshots = 0, 0, 0
 local winCallback, damageCallback, tearCallback
@@ -50,19 +56,21 @@ result = function(reason)
         return
     end
     outcome = reason
+    local statistics = {}
+    for i = 1, playerCount do
+        statistics[#statistics + 1] =
+            string.format("shots%d=%d hits%d=%d", i - 1, shots[i], i - 1, hits[i])
+    end
     report(
         string.format(
-            "RESULT outcome=%s cleared=%s stage=%d wave=%d wall_s=%.3f simulation_s=%.3f shots0=%d shots1=%d hits0=%d hits1=%d native_ending=%s",
+            "RESULT outcome=%s cleared=%s stage=%d wave=%d wall_s=%.3f simulation_s=%.3f %s native_ending=%s",
             reason,
             tostring(reason == "win"),
             stage,
             wave,
             (native.api_info().nowMs - beganAt) / 1000,
             (Game():GetFrameCount() - beganTick) / 30,
-            shots[1],
-            shots[2],
-            hits[1],
-            hits[2],
+            table.concat(statistics, " "),
             tostring(endingObserved)
         )
     )
@@ -82,7 +90,9 @@ winCallback = function(_, gameOver)
             assert(floors[i], "Challenge skipped native floor " .. i)
             assert(i == 7 or completed[i], "Challenge skipped native Boss waves on floor " .. i)
         end
-        assert(shots[1] > 0 and shots[2] > 0, "Both bots must supply native shots")
+        for i = 1, playerCount do
+            assert(shots[i] > 0, "Each bot must supply native shots")
+        end
     end
     result(gameOver and "death" or "win")
 end
@@ -104,7 +114,7 @@ end
 tearCallback = function(_, tear)
     if host then
         local p = tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer()
-        if p and (p.ControllerIndex == 1 or p.ControllerIndex == 2) then
+        if p and (p.ControllerIndex >= 1 and p.ControllerIndex <= playerCount) then
             shots[p.ControllerIndex] = shots[p.ControllerIndex] + 1
         end
     end
@@ -118,6 +128,10 @@ local function advance()
     end
     local game, level = Game(), Game():GetLevel()
     assert(game:IsGreedMode() and game.Difficulty == 2, "Expected ordinary Greed mode")
+    if game:IsPaused() then
+        progressedAt = native.api_info().nowMs
+        return
+    end
     if not equipped then
         assert(
             level:GetStage() == 1 and level.GreedModeWave == 0,
@@ -125,7 +139,7 @@ local function advance()
         )
         beganAt, beganTick, progressedAt =
             native.api_info().nowMs, game:GetFrameCount(), native.api_info().nowMs
-        for slot = 0, 1 do
+        for slot = 0, playerCount - 1 do
             actor(slot, function(p)
                 assert(p:GetPlayerType() == PlayerType.PLAYER_ISAAC)
                 local before = p:GetCollectibleCount()
@@ -162,8 +176,38 @@ local function advance()
     end
     local key = stage .. ":" .. wave
     local deadCount = 0
-    for slot = 0, 1 do
+    for slot = 0, playerCount - 1 do
         actor(slot, function(p)
+            local room = game:GetRoom()
+            local index = level:GetCurrentRoomIndex()
+            local roomKey = stage .. ":" .. index
+            if lastRooms[slot] ~= roomKey then
+                local collision = room:GetGridCollision(room:GetGridIndex(p.Position))
+                report(
+                    "ENTRY slot="
+                        .. slot
+                        .. " stage="
+                        .. stage
+                        .. " room="
+                        .. index
+                        .. " x="
+                        .. p.Position.X
+                        .. " y="
+                        .. p.Position.Y
+                        .. " collision="
+                        .. collision
+                )
+                if room:GetType() == RoomType.ROOM_SHOP then
+                    assert(
+                        collision == GridCollisionClass.COLLISION_NONE
+                            or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
+                            or p.CanFly
+                                and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT),
+                        "Shop arrival landed in blocked terrain for slot " .. slot
+                    )
+                end
+                lastRooms[slot] = roomKey
+            end
             local health, dead = p:GetHearts() + p:GetSoulHearts(), p:IsDead() or p:IsCoopGhost()
             deadCount = deadCount + (dead and 1 or 0)
             if lastHealth[slot] and health < lastHealth[slot] then
@@ -210,7 +254,7 @@ local function advance()
             end
         end)
     end
-    if deadCount == 2 then
+    if deadCount == playerCount then
         result("death")
         return
     end
@@ -240,13 +284,11 @@ function _IsaacLanFrame()
         chosen = true
         _IsaacLanCommand("choose", "0:1")
     end
-    if
-        host
-        and status.phase == 2
-        and status.players == 2
-        and status.ready0 == 1
-        and status.ready1 == 1
-    then
+    local allReady = status.players == playerCount
+    for slot = 0, playerCount - 1 do
+        allReady = allReady and status["ready" .. slot] == 1
+    end
+    if host and status.phase == 2 and allReady then
         _IsaacLanCommand("start", "YV039KQF:2:0:0:0:0")
     end
     native.test_gamepad(outcome and status.scene == 3 and renders % 30 < 5 and 4096 or 0)

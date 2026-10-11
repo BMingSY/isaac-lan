@@ -1,18 +1,22 @@
 -- Exercise the actual challenge lifecycle with native events supplied by the
 -- model. Reject gameplay writes, extra grants and synthesized damage/shots.
 local root = assert(arg[1])
-for _, host in ipairs({ true, false }) do
+for _, ownerCase in ipairs({ { 2, 0 }, { 2, 1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, { 4, 3 } }) do
+    local playerCount, localSlot = table.unpack(ownerCase)
+    local host = localSlot == 0
     for _, ending in ipairs({ "win", "death", "stalled", "bot_error" }) do
         local phase, scene, clock, tick, stage, wave = 0, 1, 0, 0, 1, 0
         local hooks, callbacks, logs, commands, players = nil, {}, {}, {}, {}
         local grants, inputCalls, entities = 0, 0, {}
-        local botFault = false
-        local health = { 6, 6 }
-        local counts = { {}, {} }
+        local botFault, paused, shop, collision = false, false, false, 0
+        local health, counts = {}, {}
+        for i = 1, playerCount do
+            health[i], counts[i] = 6, {}
+        end
         local function forbidden()
             error("Challenge changed native gameplay")
         end
-        for slot = 0, 1 do
+        for slot = 0, playerCount - 1 do
             local index = slot
             local methods = {
                 ControllerIndex = index + 1,
@@ -76,7 +80,7 @@ for _, host in ipairs({ true, false }) do
             players[index] = setmetatable({}, { __index = methods, __newindex = forbidden })
         end
         if not host then
-            for i = 1, 2 do
+            for i = 1, playerCount do
                 counts[i] = { [182] = 1, [32] = 3 }
                 health[i] = 8
             end
@@ -87,10 +91,10 @@ for _, host in ipairs({ true, false }) do
                 return 1
             end,
             GetGridCollision = function()
-                return 0
+                return collision
             end,
             GetType = function()
-                return 1
+                return shop and 2 or 1
             end,
             GetDoor = function() end,
             IsClear = function()
@@ -108,7 +112,7 @@ for _, host in ipairs({ true, false }) do
                 return 84
             end,
             GetCurrentRoomIndex = function()
-                return 84
+                return shop and 70 or 84
             end,
             SetStage = forbidden,
         }
@@ -122,6 +126,9 @@ for _, host in ipairs({ true, false }) do
         })
         local game = {
             Difficulty = 2,
+            IsPaused = function()
+                return paused
+            end,
             IsGreedMode = function()
                 return true
             end,
@@ -140,23 +147,35 @@ for _, host in ipairs({ true, false }) do
             api_info = function()
                 return {
                     ready = phase == 3 and 1 or 0,
-                    slot = host and 0 or 1,
+                    slot = localSlot,
                     runId = 1,
                     worldEpoch = stage,
                     nowMs = clock,
                 }
             end,
             api_actors = function()
-                return { { index = 0, owner = 1 }, { index = 1, owner = 2 } }
+                local roster = {}
+                for i = 0, playerCount - 1 do
+                    roster[#roster + 1] = { index = i, owner = i + 1 }
+                end
+                return roster
             end,
             rooms_ready = function()
                 return phase == 3
             end,
             rooms_positions = function()
-                return { ["0"] = { index = 84 }, ["1"] = { index = 84 } }
+                local positions = {}
+                for i = 0, playerCount - 1 do
+                    positions[tostring(i)] = { index = 84 }
+                end
+                return positions
             end,
             rooms_heads = function()
-                return { ["0"] = 0, ["1"] = 1 }
+                local heads = {}
+                for i = 0, playerCount - 1 do
+                    heads[tostring(i)] = i
+                end
+                return heads
             end,
             rooms_with_player = function(_, fn)
                 fn()
@@ -186,15 +205,17 @@ for _, host in ipairs({ true, false }) do
                 end,
             },
         }
-        _IsaacLanTest = { host = host, port = 30990 }
+        _IsaacLanTest = { host = host, port = 30990, players = playerCount }
         _IsaacLanFrame = function()
             return {
                 phase = phase,
                 scene = scene,
                 prepared = false,
-                players = 2,
+                players = playerCount,
                 ready0 = 1,
                 ready1 = 1,
+                ready2 = 1,
+                ready3 = 1,
             }
         end
         _IsaacLanCommand = function(command, args)
@@ -217,6 +238,13 @@ for _, host in ipairs({ true, false }) do
         ModCallbacks = { MC_POST_GAME_END = 1, MC_ENTITY_TAKE_DMG = 2, MC_POST_FIRE_TEAR = 3 }
         EntityType = { ENTITY_PLAYER = 1, ENTITY_ULTRA_GREED = 406 }
         PlayerType = { PLAYER_ISAAC = 0 }
+        RoomType = { ROOM_SHOP = 2 }
+        GridCollisionClass = {
+            COLLISION_NONE = 0,
+            COLLISION_WALL_EXCEPT_PLAYER = 2,
+            COLLISION_PIT = 1,
+            COLLISION_OBJECT = 3,
+        }
         CollectibleType = { COLLECTIBLE_SACRED_HEART = 182, COLLECTIBLE_WIRE_COAT_HANGER = 32 }
         Vector = function(x, y)
             return { X = x, Y = y }
@@ -259,14 +287,32 @@ for _, host in ipairs({ true, false }) do
         end
         frame()
         frame()
-        assert(inputCalls > 0 and (not host or grants == 8))
+        assert(inputCalls > 0 and (not host or grants == playerCount * 4))
         assert(callbacks[2](nil, players[0], 1, 0, { Type = 20 }) == nil, "Damage was suppressed")
         local tear = setmetatable({}, {
             __index = { SpawnerEntity = players[0], CollisionDamage = 9.1 },
             __newindex = forbidden,
         })
         callbacks[3](nil, tear)
-        callbacks[3](nil, { SpawnerEntity = players[1] })
+        for i = 1, playerCount - 1 do
+            callbacks[3](nil, { SpawnerEntity = players[i] })
+        end
+        if host then
+            shop, collision = true, 3
+            local ok, err = pcall(frame)
+            assert(
+                not ok and tostring(err):find("Shop arrival landed in blocked terrain", 1, true),
+                "A blocked shop arrival was accepted"
+            )
+            shop, collision = false, 0
+            frame()
+        end
+        paused = true
+        clock = clock + 180001
+        frame()
+        assert(not table.concat(logs, "\n"):find("RESULT", 1, true), "Pause counted as a stall")
+        paused = false
+        frame()
         if ending == "win" then
             for floor = 1, 7 do
                 stage, wave = floor, floor < 7 and 10 or 0
@@ -288,7 +334,9 @@ for _, host in ipairs({ true, false }) do
             end
             callbacks[1](nil, false)
         elseif ending == "death" then
-            health[1], health[2] = 0, 0
+            for i = 1, playerCount do
+                health[i] = 0
+            end
             frame()
             callbacks[1](nil, true)
         elseif ending == "bot_error" then
@@ -300,7 +348,11 @@ for _, host in ipairs({ true, false }) do
             -- Repeated arena/shop transitions must not restart the stall clock.
             local position = 84
             _IsaacLan.rooms_positions = function()
-                return { ["0"] = { index = 84 }, ["1"] = { index = position } }
+                local locations = {}
+                for slot = 0, playerCount - 1 do
+                    locations[tostring(slot)] = { index = slot == 1 and position or 84 }
+                end
+                return locations
             end
             for i = 1, 20 do
                 position = i % 2 == 0 and 84 or 70
@@ -322,11 +374,18 @@ for _, host in ipairs({ true, false }) do
                 text
             )
         end
-        assert(not host or grants == 8, "Preparation was repeated during progression")
+        assert(not host or grants == playerCount * 4, "Preparation was repeated during progression")
+        if host and ending == "win" then
+            for i = 0, playerCount - 1 do
+                assert(text:find("shots" .. i .. "=1", 1, true), "Missing actor shot statistics")
+            end
+        end
         assert(
             not host or ending ~= "win" or inputCalls == 7,
             "Bot did not refresh across native floors"
         )
     end
 end
-print("lanbot Greed fixture: host/client native win, death, stall, bot error; no gameplay cheats")
+print(
+    "lanbot Greed fixture: two/four owners, native win, death, stall, bot error; no gameplay cheats"
+)
