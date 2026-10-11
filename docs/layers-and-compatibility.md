@@ -14,7 +14,7 @@
 | `src/compat/` | 可离线执行的原生玩法策略 | Boss 汇合、角色特征、沙漏目标、矿二追逐 |
 | `src/presentation/` | 原生菜单与界面接入 | `frontend.cpp` |
 | `src/core/` | 可移植的输入、表现及日志数据规则 | 输入边沿、激光路径、音效归属等 |
-| `src/diagnostics/` | 运行日志与隔离画面采集 | `runtime_log.cpp`、`lab_capture.cpp` |
+| `src/diagnostics/` | 运行日志、性能测量与隔离异常／画面采集 | `runtime_log.cpp`、`performance.cpp`、`crash_signal.cpp`、`lab_capture.cpp` |
 
 Lua 按同样的职责组织在 `src/bridge/`：
 
@@ -31,6 +31,8 @@ Lua 按同样的职责组织在 `src/bridge/`：
 | `compat/routes/` | Home 昼夜与教条过场规则、特殊房间返回上下文、贪婪波次 |
 | `compat/mods/` | Stats+、GoodTrip、EID 及第三方自动适配注册机制 |
 | `api/` | 对第三方 Mod 公开的本机视图、生命周期和主机动作接口 |
+| `diagnostics/` | Lua 同步阶段计时与资源采样 |
+| `lanbot.lua`、`lanbot/` | 本机托管、观察、阶段规划、道具决策、寻路与避险；通过正常输入执行 |
 
 ## 依赖与装配
 
@@ -114,13 +116,13 @@ flowchart TD
 
 `compat/bosses/dogma.lua` 仅匹配 `DOGMA_ORB` 的预警子类型，同步原生绘制依赖的二维几何参数。通用实体组件通过注入的兼容组件携带该字段，不执行 Boss AI。适配通过原版 `Entity.TargetPosition` 属性读写二维参数；既有攻击特效不进入此适配，不新增原生接口。
 
-这些字段增加后世界视图升为 schema 11。TCP 消息布局不变，协议维持 24；扩展 DLL 指纹变化，两端仍须使用相同构建。
+共享诅咒、特殊房间返回与教条预警加入时，世界视图由 schema 10 升为 11；后续贪婪波次与整队概率字段使当前版本升为 13。TCP 消息布局不变，协议维持 24；扩展 DLL 指纹变化，两端仍须使用相同构建。
 
 ## 贪婪模式
 
 `compat/routes/greed.lua` 通过原版 `Game:IsGreedMode()` 和 `Level.GreedModeWave` 采集与应用楼层波次；普通／困难模式传 `false`，贪婪／超级贪婪传 0–12 的整数。波次属于共享楼层，玩家在商店等其他房间也接收同一计数。应用位于楼层代次校验和库存应用之后，不触发波次生成、奖励或按钮伤害。房间按钮、门与敌人继续使用既有网格／实体同步。
 
-该字段追加到顶层第 18 项，世界视图升为 schema 12；传输协议维持 24，旧 schema 被拒绝，扩展指纹仍要求两端使用相同 DLL。`compat/bosses/encounters.h` 接收难度普通值，在贪婪两种难度的第七层匹配 Ultra Greed 的两种形态并汇合队伍；普通波次与商店 Greed 不强制汇合。原生后端通过运行协调器取得已确认的会话难度并调用该策略，没有新增原生布局依赖，所有权和 Hook 不变。测试与原生校验边界见[贪婪模式验证记录](greed-mode-validation.md)。
+该字段追加到顶层第 18 项，当时世界视图由 schema 11 升为 12；整队概率随后追加第 19 项，当前 schema 为 13。传输协议维持 24，旧 schema 被拒绝，扩展指纹仍要求两端使用相同 DLL。`compat/bosses/encounters.h` 接收难度普通值，在贪婪两种难度的第七层匹配 Ultra Greed 的两种形态并汇合队伍；普通波次与商店 Greed 不强制汇合。原生后端通过运行协调器取得已确认的会话难度并调用该策略，没有新增原生布局依赖，所有权和 Hook 不变。测试与原生校验边界见[贪婪模式验证记录](greed-mode-validation.md)。
 
 ## 增加一个兼容机制
 
@@ -138,4 +140,4 @@ flowchart TD
 
 既有离线库存、实体关系、预测、第三方 API、楼层及角色回归继续运行。Windows 构建验证所有原生入口与嵌入模块，Winsock 测试验证真实传输。原生角色替换、Boss 控制、回退、音乐与画面仍需要实机验收。
 
-既有启动／退出堆错误的根因尚未确定，参见[侧路线回归记录](side-route-regressions.md)。本次分层不把这一问题登记为修复。
+分层重构验收时，启动／退出堆错误的根因尚未确定，历史失败保留在[侧路线回归记录](side-route-regressions.md)。后续已定位并修复启动后解锁测试夹具造成的菜单越界写入，见[堆损坏回归记录](heap-corruption-regression.md)。修复限定于已定位的夹具触发链路，不据此认定所有同码异常或原生 Hook 的内存问题均已排除。
