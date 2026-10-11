@@ -13,6 +13,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(CTest)
 option(ISAAC_LAN_BUILD_ENGINE "Build the Windows x86 engine adapter and tools" ON)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_delta_test tests/snapshot_delta_test.cpp)
+    target_include_directories(isaac_lan_delta_test PRIVATE src)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_delta_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    if(MINGW)
+        target_link_options(isaac_lan_delta_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    foreach(test_case changes validation)
+        add_test(NAME core.delta-${test_case} COMMAND isaac_lan_delta_test ${test_case})
+        set_tests_properties(core.delta-${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    endforeach()
     add_executable(isaac_lan_diagnostics_test tests/diagnostics_test.cpp src/app/configuration.cpp)
     target_include_directories(isaac_lan_diagnostics_test PRIVATE src)
     if(MINGW)
@@ -31,6 +43,19 @@ if(BUILD_TESTING)
         NAMES lua5.3 lua
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
+        add_test(NAME bridge.codec-fragments
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/codec_fragments.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.codec-fragments PROPERTIES TIMEOUT 30 LABELS "offline;lua")
+        add_test(NAME bridge.room-capture
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/room_capture.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.room-capture PROPERTIES TIMEOUT 30 LABELS "offline;lua")
+        add_test(
+            NAME bridge.motion-intervals
+            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/motion_intervals.lua"
+                    "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.motion-intervals PROPERTIES TIMEOUT 30 LABELS "offline;lua")
         add_test(NAME bridge.entity-codec
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/entity_codec.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -276,6 +301,12 @@ add_library(isaac_lan_net STATIC src/net/session.cpp src/net/compression.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt)
+add_executable(isaac_lan_replay_world tools/replay_world_states.cpp)
+target_link_libraries(isaac_lan_replay_world PRIVATE isaac_lan_net)
+if(MINGW)
+    target_link_options(isaac_lan_replay_world PRIVATE -static-libgcc -static-libstdc++)
+    target_compile_options(isaac_lan_replay_world PRIVATE -Wall -Wextra -Werror)
+endif()
 if(BUILD_TESTING)
     add_executable(isaac_lan_net_test tests/net_test.cpp)
     target_link_libraries(isaac_lan_net_test PRIVATE isaac_lan_net winmm psapi)
@@ -283,6 +314,8 @@ if(BUILD_TESTING)
         test_case
         codec
         compression-limits
+        world-deltas
+        delta-floor-boundary
         inputs-2
         inputs-3
         inputs-4

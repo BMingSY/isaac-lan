@@ -778,6 +778,14 @@ int poll(lua_State* L) {
         diagnostics::counter("queued_bytes", resource.queuedBytes);
         diagnostics::counter("receive_capacity_bytes", resource.receiveCapacity);
         diagnostics::counter("pending_world_capacity_bytes", resource.worldBytes);
+        diagnostics::counter("cached_world_bytes", resource.cachedWorldBytes);
+        diagnostics::counter("world_in_flight_bytes", resource.inFlightBytes);
+        diagnostics::counter("world_in_flight_states", resource.inFlightStates);
+        diagnostics::counter("world_snapshots_total", resource.worldSnapshots);
+        diagnostics::counter("world_delta_snapshots_total", resource.deltaSnapshots);
+        diagnostics::counter("world_raw_bytes_total", resource.rawWorldBytes);
+        diagnostics::counter("world_wire_bytes_total", resource.wireWorldBytes);
+        diagnostics::counter("world_full_wire_bytes_total", resource.fullWorldBytes);
         diagnostics::counter("retiring_sessions", retiring.size());
     }
     if (rejoinAt && InputClock::now() >= *rejoinAt) {

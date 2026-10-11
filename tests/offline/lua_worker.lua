@@ -44,6 +44,7 @@ local function stateEnvironment()
             ["runtime/room_entry"] = dofile(root .. "/src/bridge/runtime/room_entry.lua"),
             ["sync/inventory"] = dofile(root .. "/src/bridge/sync/inventory.lua"),
             ["sync/entities"] = dofile(root .. "/src/bridge/sync/entities.lua"),
+            ["sync/room"] = dofile(root .. "/src/bridge/sync/room.lua"),
             ["sync/grids"] = dofile(root .. "/src/bridge/sync/grids.lua"),
             ["presentation/items"] = dofile(root .. "/src/bridge/presentation/items.lua"),
             ["runtime/floor"] = dofile(root .. "/src/bridge/runtime/floor.lua"),

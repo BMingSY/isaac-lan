@@ -1,4 +1,5 @@
 #include "net/session.h"
+#include "core/snapshot_delta.h"
 #include "net/compression.h"
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -62,6 +63,15 @@ void configure(SOCKET s) {
         throw std::runtime_error("Cannot disable TCP buffering");
 }
 struct Socket {
+    struct CachedWorld {
+        std::uint32_t tick;
+        std::shared_ptr<const std::vector<std::uint8_t>> bytes;
+        std::size_t wireBytes = 0;
+        bool complete = false;
+    };
+    static constexpr std::size_t maxCachedBytes = 8 * maxWorldSize;
+    static constexpr std::size_t maxInFlightBytes = 65536;
+    static constexpr std::size_t maxInFlightStates = 16;
     SOCKET handle = INVALID_SOCKET;
     std::vector<std::uint8_t> received;
     std::deque<std::vector<std::uint8_t>> outgoing;
@@ -78,6 +88,11 @@ struct Socket {
     std::size_t worldSent = 0;
     std::uint32_t inputSequence = 0;
     std::optional<std::uint32_t> acknowledged;
+    std::optional<CachedWorld> baseline;
+    std::deque<CachedWorld> flight, decoded;
+    bool sendingDelta = false;
+    std::uint32_t sendingBase = 0;
+    int minimumLatency = -1;
     std::size_t snapshotSent = 0;
     Clock::time_point packetAt = Clock::now();
     Clock::time_point connectedAt = Clock::now();
@@ -86,9 +101,34 @@ struct Socket {
     std::uint32_t pingSequence = 0;
     bool pingPending = false;
     explicit Socket(SOCKET value = INVALID_SOCKET) : handle(value) {}
+    void resetWorldCache() {
+        baseline.reset();
+        flight.clear();
+        decoded.clear();
+    }
+    std::size_t cachedBytes() const {
+        std::size_t bytes = baseline ? baseline->bytes->capacity() : 0;
+        for (const auto& value : flight)
+            bytes += value.bytes->capacity();
+        for (const auto& value : decoded)
+            bytes += value.bytes->capacity();
+        return bytes;
+    }
+    std::size_t inFlightBytes() const {
+        std::size_t bytes = 0;
+        for (const auto& value : flight)
+            bytes += value.wireBytes;
+        return bytes;
+    }
+    std::size_t window() const {
+        // Use the uncongested RTT, not queue-inflated ping, to size the window.
+        return std::clamp<std::size_t>((std::max(0, minimumLatency) + 32) / 33 + 2, 4,
+                                       maxInFlightStates);
+    }
     void beginStage(const Stage& value) {
         sending.reset();
         pending.reset();
+        resetWorldCache();
         sendingStage = value;
         stageSent = 0;
     }
@@ -205,6 +245,10 @@ struct Session::Impl {
     std::array<unsigned, maxPlayers> integrationCounts{};
     Clock::time_point integrationWindow = Clock::now();
     std::size_t worldSize = 0, snapshotSize = 0;
+    bool assemblingDelta = false;
+    std::uint32_t assemblingBase = 0, takenWorldEpoch = 0;
+    std::uint64_t worldSnapshots = 0, deltaSnapshots = 0, rawWorldBytes = 0, wireWorldBytes = 0,
+                  fullWorldBytes = 0;
     std::uint64_t snapshotChecksum = 0;
     Clock::time_point progress = Clock::now();
 
@@ -401,6 +445,8 @@ struct Session::Impl {
                     std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - p.pingAt)
                         .count()));
                 p.pingPending = false;
+                if (p.minimumLatency < 0 || latency[slot] < p.minimumLatency)
+                    p.minimumLatency = latency[slot];
             }
             return;
         }
@@ -536,9 +582,24 @@ struct Session::Impl {
             }
             if (type == Message::applied &&
                 (state == Phase::running || state == Phase::finishing)) {
+                const auto epoch = r.u32();
                 const auto tick = r.u32();
+                // A receipt sent before a reliable floor boundary may arrive
+                // after its caches were retired. It cannot establish a new base.
+                if (epoch < integrationEpoch)
+                    return;
+                if (epoch != integrationEpoch)
+                    throw std::runtime_error("Invalid state receipt epoch");
                 if (tick >= nextConsume || (p.acknowledged && tick <= *p.acknowledged))
                     throw std::runtime_error("Invalid state receipt");
+                const auto found =
+                    std::find_if(p.flight.begin(), p.flight.end(), [tick](const auto& value) {
+                        return value.tick == tick && value.complete;
+                    });
+                if (found == p.flight.end())
+                    throw std::runtime_error("Receipt for an unsent state");
+                p.baseline = *found;
+                p.flight.erase(p.flight.begin(), std::next(found));
                 p.acknowledged = tick;
                 p.advancedAt = Clock::now();
                 return;
@@ -696,6 +757,7 @@ struct Session::Impl {
                 stageSize = total;
                 receivedState.reset();
                 assembling.reset();
+                p.resetWorldCache();
             }
             if (!assemblingStage || assemblingStage->epoch != value.epoch ||
                 assemblingStage->level != value.level || assemblingStage->type != value.type ||
@@ -734,6 +796,12 @@ struct Session::Impl {
                     throw std::runtime_error("Invalid world state header");
                 assembling = WorldState{};
                 assembling->tick = tick;
+                assembling->epoch = r.u32();
+                const auto mode = r.u8();
+                assemblingBase = r.u32();
+                if (assembling->epoch != integrationEpoch || mode > 1 || (!mode && assemblingBase))
+                    throw std::runtime_error("Invalid world encoding header");
+                assemblingDelta = mode != 0;
                 assembling->connected = r.u8();
                 assembling->pauseOwner = r.u8();
                 const auto paused = r.u8();
@@ -754,10 +822,25 @@ struct Session::Impl {
             if (assembling->bytes.size() == total) {
                 const auto began = observer ? Clock::now() : Clock::time_point{};
                 assembling->bytes = compression.expand(assembling->bytes);
+                if (assemblingDelta) {
+                    const auto base =
+                        std::find_if(p.decoded.begin(), p.decoded.end(), [&](const auto& value) {
+                            return value.tick == assemblingBase;
+                        });
+                    if (base == p.decoded.end())
+                        throw std::runtime_error("World delta baseline is unavailable");
+                    assembling->bytes = core::SnapshotDelta::apply(*base->bytes, assembling->bytes);
+                }
                 if (observer)
                     observer(
                         "decompress",
                         std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+                p.decoded.push_back(
+                    {assembling->tick,
+                     std::make_shared<const std::vector<std::uint8_t>>(assembling->bytes)});
+                while (p.decoded.size() > 2 * Socket::maxInFlightStates ||
+                       p.cachedBytes() > Socket::maxCachedBytes)
+                    p.decoded.pop_front();
                 receivedState = std::move(assembling);
                 assembling.reset();
             }
@@ -800,12 +883,45 @@ struct Session::Impl {
                         continue;
                 }
                 if (!p.sending && p.pending) {
+                    if (p.flight.size() >= p.window() ||
+                        p.inFlightBytes() >= Socket::maxInFlightBytes ||
+                        p.cachedBytes() + p.pending->bytes.capacity() > Socket::maxCachedBytes)
+                        continue;
                     p.sending = std::move(p.pending);
                     p.pending.reset();
                     p.worldSent = 0;
                     const auto size = p.sending->bytes.size();
                     const auto began = observer ? Clock::now() : Clock::time_point{};
-                    p.sending->bytes = compression.compress(p.sending->bytes);
+                    auto raw = std::make_shared<const std::vector<std::uint8_t>>(
+                        std::move(p.sending->bytes));
+                    auto full = compression.compress(*raw);
+                    const auto fullSize = full.size();
+                    p.sendingDelta = false;
+                    p.sendingBase = 0;
+                    if (p.baseline) {
+                        const auto deltaBegan = observer ? Clock::now() : Clock::time_point{};
+                        if (const auto patch =
+                                core::SnapshotDelta::encode(*p.baseline->bytes, *raw)) {
+                            auto delta = compression.compress(*patch);
+                            if (delta.size() < full.size()) {
+                                full = std::move(delta);
+                                p.sendingDelta = true;
+                                p.sendingBase = p.baseline->tick;
+                            }
+                        }
+                        if (observer)
+                            observer("delta.encode", std::chrono::duration<double, std::milli>(
+                                                         Clock::now() - deltaBegan)
+                                                         .count());
+                    }
+                    p.sending->bytes = std::move(full);
+                    p.sending->epoch = integrationEpoch;
+                    p.flight.push_back({p.sending->tick, std::move(raw), p.sending->bytes.size()});
+                    ++worldSnapshots;
+                    deltaSnapshots += p.sendingDelta;
+                    rawWorldBytes += size;
+                    wireWorldBytes += p.sending->bytes.size();
+                    fullWorldBytes += fullSize;
                     if (observer)
                         observer("compress",
                                  std::chrono::duration<double, std::milli>(Clock::now() - began)
@@ -813,7 +929,10 @@ struct Session::Impl {
                     if (logger && debugLogs && p.sending->tick % 300 == 0)
                         logger("state_transfer slot=" + std::to_string(slot) + " tick=" +
                                std::to_string(p.sending->tick) + " raw=" + std::to_string(size) +
-                               " wire=" + std::to_string(p.sending->bytes.size()));
+                               " wire=" + std::to_string(p.sending->bytes.size()) +
+                               " full_wire=" + std::to_string(fullSize) +
+                               " delta=" + std::to_string(p.sendingDelta) +
+                               " base=" + std::to_string(p.sendingBase));
                 }
                 if (!p.sending)
                     continue;
@@ -826,6 +945,9 @@ struct Session::Impl {
                     w.u32(p.worldSent);
                     w.u32(value.bytes.size());
                     if (!p.worldSent) {
+                        w.u32(value.epoch);
+                        w.u8(p.sendingDelta);
+                        w.u32(p.sendingBase);
                         w.u8(value.connected);
                         w.u8(value.pauseOwner);
                         w.u8(value.paused);
@@ -836,8 +958,10 @@ struct Session::Impl {
                     p.sendMessage(w);
                     p.worldSent += n;
                 }
-                if (p.worldSent == value.bytes.size())
+                if (p.worldSent == value.bytes.size()) {
+                    p.flight.back().complete = true;
                     p.sending.reset();
+                }
             }
     }
     void receiveReturning() {
@@ -1474,6 +1598,7 @@ std::optional<WorldState> Session::takeState() {
     auto value = std::move(impl->receivedState);
     impl->receivedState.reset();
     impl->activeMask = value->connected;
+    impl->takenWorldEpoch = value->epoch;
     return value;
 }
 void Session::applied(std::uint32_t tick) {
@@ -1483,6 +1608,7 @@ void Session::applied(std::uint32_t tick) {
     impl->verified = tick;
     impl->nextConsume = tick + 1;
     Writer w(Message::applied);
+    w.u32(impl->takenWorldEpoch);
     w.u32(tick);
     impl->peers[0]->sendMessage(w);
 }
@@ -1533,6 +1659,11 @@ std::uint16_t Session::port() const {
 }
 TransportResources Session::resources() const {
     TransportResources out;
+    out.worldSnapshots = impl->worldSnapshots;
+    out.deltaSnapshots = impl->deltaSnapshots;
+    out.rawWorldBytes = impl->rawWorldBytes;
+    out.wireWorldBytes = impl->wireWorldBytes;
+    out.fullWorldBytes = impl->fullWorldBytes;
     out.connections = impl->listener != INVALID_SOCKET;
     const auto observe = [&out](const auto& p) {
         if (!p)
@@ -1540,6 +1671,9 @@ TransportResources Session::resources() const {
         ++out.connections;
         out.queuedBytes += p->queued;
         out.receiveCapacity += p->received.capacity();
+        out.cachedWorldBytes += p->cachedBytes();
+        out.inFlightBytes += p->inFlightBytes();
+        out.inFlightStates += p->flight.size();
         for (const auto* state : {&p->sending, &p->pending})
             if (*state)
                 out.worldBytes += (*state)->bytes.capacity();

@@ -1,9 +1,12 @@
 -- Portable state wire format; shared by the engine and offline tests.
 local pack, unpack = string.pack, string.unpack
-local function encode(value)
+-- Optional memo entries explicitly mark immutable shared tuples with false;
+-- after validation, their complete encoded fragments can be reused this tick.
+local function encode(value, memo)
     local pieces, path = {}, {}
     local function put(v, depth)
         assert(depth < 12, "State nesting exceeded")
+        local deepest = depth
         local t = type(v)
         if t == "boolean" then
             pieces[#pieces + 1] = v and "\1" or "\0"
@@ -25,16 +28,35 @@ local function encode(value)
             assert(#v <= 65535)
             pieces[#pieces + 1] = pack(">Bs2", 5, v)
         elseif t == "table" then
+            local cached = memo and memo[v]
+            if type(cached) == "table" then
+                assert(depth + cached.depth < 12, "State nesting exceeded")
+                pieces[#pieces + 1] = cached.bytes
+                return depth + cached.depth
+            end
             assert(#v <= 65535)
+            local first = #pieces + 1
             pieces[#pieces + 1] = pack(">BI2", 6, #v)
             for i = 1, #v do
                 path[depth + 1] = i
-                put(v[i], depth + 1)
+                local childDepth = put(v[i], depth + 1)
+                if childDepth > deepest then
+                    deepest = childDepth
+                end
                 path[depth + 1] = nil
+            end
+            if cached == false then
+                local fragment = table.concat(pieces, "", first)
+                for index = #pieces, first, -1 do
+                    pieces[index] = nil
+                end
+                pieces[first] = fragment
+                memo[v] = { bytes = fragment, depth = deepest - depth }
             end
         else
             error("Unsupported state value: " .. t .. " at [" .. table.concat(path, "][") .. "]")
         end
+        return deepest
     end
     put(value, 0)
     return table.concat(pieces)

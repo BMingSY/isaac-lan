@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <psapi.h>
+#include <random>
 using namespace isaac::lan;
 namespace {
 template <class F> void until(F f) {
@@ -900,6 +901,105 @@ void hostDisconnect() {
     require(!g.peers[1]->error().empty() && !g.peers[1]->take(),
             "Host departure did not end guest simulation");
 }
+void worldDeltas() {
+    Group g(4);
+    g.ready();
+    std::mt19937 random(73);
+    std::array<std::vector<std::uint8_t>, 4> expected;
+    for (unsigned slot = 1; slot < 4; ++slot) {
+        expected[slot].resize(140000);
+        for (auto& byte : expected[slot])
+            byte = static_cast<std::uint8_t>(random());
+    }
+    std::array<unsigned, 4> received{};
+    received.fill(UINT32_MAX);
+    for (unsigned tick = 0; tick < 100; ++tick) {
+        g.step(tick);
+        for (unsigned slot = 1; slot < 4; ++slot) {
+            expected[slot][200 + tick] ^= static_cast<std::uint8_t>(tick + slot);
+            if (tick == 30)
+                expected[slot].insert(expected[slot].begin() + 4000, 913, 0x42);
+            if (tick == 60)
+                expected[slot].erase(expected[slot].begin() + 7000, expected[slot].begin() + 8013);
+            WorldState state;
+            state.tick = tick;
+            state.connected = 15;
+            state.bytes = expected[slot];
+            require(g.peers[0]->publish(slot, state), "Delta publication failed");
+        }
+        // Leave one guest unacknowledged while other players keep consuming.
+        until([&] {
+            g.poll();
+            for (unsigned slot = 1; slot < 3; ++slot)
+                if (auto state = g.peers[slot]->takeState()) {
+                    require(state->bytes == expected[slot], "Delta changed a complete view");
+                    g.peers[slot]->applied(state->tick);
+                    received[slot] = state->tick;
+                }
+            return received[1] == tick && received[2] == tick;
+        });
+        const auto resources = g.peers[0]->resources();
+        require(resources.inFlightStates <= 3 * 16 &&
+                    resources.cachedWorldBytes <= 3 * 8 * maxWorldSize,
+                "Unacknowledged peer grew an unbounded delta cache");
+    }
+    until([&] {
+        g.poll();
+        if (auto state = g.peers[3]->takeState()) {
+            g.peers[3]->applied(state->tick);
+            received[3] = state->tick;
+            if (state->tick == 99)
+                require(state->bytes == expected[3], "Coalescing lost the latest full view");
+        }
+        return received[3] == 99;
+    });
+    const auto resources = g.peers[0]->resources();
+    require(resources.deltaSnapshots > 180 &&
+                resources.wireWorldBytes < resources.fullWorldBytes / 8,
+            "Confirmed sparse snapshots did not reduce actual compressed traffic");
+    std::printf("DELTA snapshots=%llu deltas=%llu full_wire=%llu actual_wire=%llu\n",
+                static_cast<unsigned long long>(resources.worldSnapshots),
+                static_cast<unsigned long long>(resources.deltaSnapshots),
+                static_cast<unsigned long long>(resources.fullWorldBytes),
+                static_cast<unsigned long long>(resources.wireWorldBytes));
+}
+void deltaFloorBoundary() {
+    Group g(2);
+    g.ready();
+    g.step(0);
+    g.publish(0);
+    until([&] {
+        g.poll();
+        if (auto state = g.peers[1]->takeState()) {
+            g.peers[1]->applied(state->tick);
+            return true;
+        }
+        return false;
+    });
+    require(g.peers[0]->beginStage({2, 2, 0, 0, false, {}, {}}), "Delta floor reset failed");
+    g.step(1);
+    g.publish(1);
+    until([&] {
+        g.poll();
+        if (auto state = g.peers[1]->takeState()) {
+            require(state->epoch == 2 && state->tick == 1, "An old delta crossed a floor boundary");
+            g.peers[1]->applied(state->tick);
+            return true;
+        }
+        return false;
+    });
+    require(g.peers[0]->resources().deltaSnapshots == 0, "New floor reused a retired baseline");
+    g.step(2);
+    g.publish(2);
+    until([&] {
+        g.poll();
+        if (auto state = g.peers[1]->takeState()) {
+            g.peers[1]->applied(state->tick);
+            return state->tick == 2;
+        }
+        return false;
+    });
+}
 } // namespace
 void resourceLifecycle() {
     const auto retained = [] {
@@ -928,15 +1028,19 @@ void resourceLifecycle() {
             }
             const auto resources = g.peers[0]->resources();
             require(resources.queuedBytes <= 262144 * 4 &&
-                        resources.worldBytes <= 2 * maxWorldSize * 4,
+                        resources.worldBytes <= 2 * maxWorldSize * 4 &&
+                        resources.cachedWorldBytes <= 8 * maxWorldSize * 4,
                     "Slow consumer accumulated unbounded queues or views");
         }
         for (auto& peer : g.peers) {
             if (!peer)
                 continue;
             peer->close();
-            require(peer->resources().connections == 0 && peer->resources().queuedBytes == 0,
-                    "Closed transport retained sockets or queued messages");
+            const auto closed = peer->resources();
+            require(closed.connections == 0 && closed.queuedBytes == 0 &&
+                        closed.cachedWorldBytes == 0 && closed.inFlightBytes == 0 &&
+                        closed.inFlightStates == 0,
+                    "Closed transport retained sockets, queues or delta history");
         }
     };
     for (unsigned warm = 0; warm < 5; ++warm)
@@ -956,6 +1060,8 @@ void resourceLifecycle() {
 int main(int argc, char** argv) {
     const auto result = runTests(argc, argv,
                                  {{"codec", codec},
+                                  {"world-deltas", worldDeltas},
+                                  {"delta-floor-boundary", deltaFloorBoundary},
                                   {"compression-limits", compressionLimits},
                                   {"inputs-2", [] { inputsAndStates(2); }},
                                   {"inputs-3", [] { inputsAndStates(3); }},
