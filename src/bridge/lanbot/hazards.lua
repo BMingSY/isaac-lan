@@ -41,6 +41,16 @@ return function(nav)
                     )
                 end
                 local radius = obs.actor.radius + danger.radius + settings.margin + age * 30
+                if danger.contact then
+                    -- A resting contact enemy can start or redirect a charge.
+                    -- Remember observed mobility instead of treating zero
+                    -- instantaneous velocity as a promise to remain still.
+                    local speed = danger.chaseSpeed or obs.actor.speed * 0.6
+                    local reaction = (obs.controlDelay or 1 / 30) + age
+                    local padding = speed * (0.3 + reaction) + 40
+                    local pressure = math.max(0, 1 - (distance - radius) / padding)
+                    value = value + settings.risk * 0.05 * pressure * pressure
+                end
                 if distance < radius then
                     value = value + settings.risk * (1 + (radius - distance) / radius)
                 elseif distance < radius + 25 then

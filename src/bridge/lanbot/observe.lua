@@ -1,7 +1,8 @@
-return function(native, bridge, nav, terrain, actorPose)
+return function(native, bridge, nav, terrain, actorPose, networkStatus)
     local observe = {}
     terrain = terrain()
     local observedTick, observedAt
+    local contactWorld, contactRoom, contactSpeeds = nil, nil, {}
     local outward = { { -1, 0 }, { 0, -1 }, { 1, 0 }, { 0, 1 } }
     local function entity(e)
         return {
@@ -140,6 +141,7 @@ return function(native, bridge, nav, terrain, actorPose)
             result = {
                 frame = frame,
                 age = age,
+                controlDelay = 1 / 30,
                 world = info.runId .. ":" .. info.worldEpoch,
                 room = position.dimension .. ":" .. position.index,
                 clear = room:IsClear(),
@@ -164,6 +166,16 @@ return function(native, bridge, nav, terrain, actorPose)
                     )
                 end,
             }
+            if info.authority == 0 then
+                local status = networkStatus and networkStatus() or {}
+                local ping = status["ping" .. info.slot]
+                result.controlDelay = result.controlDelay
+                    + math.min(0.25, math.max(0, ping and ping >= 0 and ping / 1000 or 0.1))
+            end
+            if contactWorld ~= result.world or contactRoom ~= result.room then
+                contactWorld, contactRoom, contactSpeeds = result.world, result.room, {}
+            end
+            local nextSpeeds = {}
             terrain:reset(result.world, result.room, p.id)
             local tick = room:GetFrameCount()
             result.simulationTick = info.tick
@@ -184,10 +196,15 @@ return function(native, bridge, nav, terrain, actorPose)
             end
             for index = 0, room:GetGridSize() - 1 do
                 local grid, collision = room:GetGridEntity(index), room:GetGridCollision(index)
-                map.walk[index + 1] = collision == GridCollisionClass.COLLISION_NONE
-                    or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
-                    or player.CanFly
-                        and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT)
+                -- Empty grid cells can sit outside the physical room (including
+                -- cutouts of L-shaped rooms). Collision alone is not a boundary.
+                map.walk[index + 1] = room:IsPositionInRoom(room:GetGridPosition(index), 0)
+                    and (
+                        collision == GridCollisionClass.COLLISION_NONE
+                        or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
+                        or player.CanFly
+                            and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT)
+                    )
                 if grid then
                     local kind, pos = grid:GetType(), room:GetGridPosition(index)
                     if
@@ -283,6 +300,13 @@ return function(native, bridge, nav, terrain, actorPose)
                             and not e:IsInvincible()
                             and (info.authority == 0 or e:IsVulnerableEnemy())
                         value.threat = e:IsBoss() and 2 or 1
+                        -- Replica collision classes are deliberately disabled;
+                        -- the synchronized damage value still describes danger.
+                        value.contact = (e.CollisionDamage or 1) > 0
+                        local speed = math.sqrt(value.vx ^ 2 + value.vy ^ 2)
+                        local peak = math.max(speed, contactSpeeds[value.id] or 0)
+                        nextSpeeds[value.id] = peak
+                        value.chaseSpeed = math.min(p.speed * 1.5, math.max(p.speed * 0.6, peak))
                         result.enemies[#result.enemies + 1] = value
                         result.dangers[#result.dangers + 1] = value
                     elseif e.Type == EntityType.ENTITY_PROJECTILE and not friendly(e) then
@@ -360,6 +384,7 @@ return function(native, bridge, nav, terrain, actorPose)
                     end
                 end
             end
+            contactSpeeds = nextSpeeds -- Bound history to enemies still in this view.
             table.sort(result.dangers, function(a, b)
                 local function distance(danger)
                     if danger.bx then

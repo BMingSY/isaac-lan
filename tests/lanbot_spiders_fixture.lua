@@ -181,6 +181,18 @@ for _, host in ipairs({ true, false }) do
                         GetCenterPos = function()
                             return vec(320, 280)
                         end,
+                        GetGridPosition = function(_, i)
+                            return vec(40 + i % 15 * 40, 120 + math.floor(i / 15) * 40)
+                        end,
+                        GetGridSize = function()
+                            return 135
+                        end,
+                        GetTopLeftPos = function()
+                            return vec(60, 140)
+                        end,
+                        GetBottomRightPos = function()
+                            return vec(580, 420)
+                        end,
                         GetDoor = function(_, slot)
                             return slot == 0 and { TargetRoomIndex = 85, Close = function() end }
                                 or nil
