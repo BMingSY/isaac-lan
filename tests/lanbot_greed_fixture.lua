@@ -2,10 +2,11 @@
 -- model. Reject gameplay writes, extra grants and synthesized damage/shots.
 local root = assert(arg[1])
 for _, host in ipairs({ true, false }) do
-    for _, ending in ipairs({ "win", "death", "stalled" }) do
+    for _, ending in ipairs({ "win", "death", "stalled", "bot_error" }) do
         local phase, scene, clock, tick, stage, wave = 0, 1, 0, 0, 1, 0
         local hooks, callbacks, logs, commands, players = nil, {}, {}, {}, {}
         local grants, inputCalls, entities = 0, 0, {}
+        local botFault = false
         local health = { 6, 6 }
         local counts = { {}, {} }
         local function forbidden()
@@ -81,6 +82,13 @@ for _, host in ipairs({ true, false }) do
             end
         end
         local room = {
+            GetGridIndex = function(_, position)
+                assert(position.X and position.Y)
+                return 1
+            end,
+            GetGridCollision = function()
+                return 0
+            end,
             GetType = function()
                 return 1
             end,
@@ -202,12 +210,17 @@ for _, host in ipairs({ true, false }) do
             if args == "on" then
                 _IsaacLan.input_bot(1, 255)
             end
-            Isaac.ConsoleOutput("LANBOT running\n")
+            Isaac.ConsoleOutput(
+                botFault and "LANBOT paused reason=decision_error\n" or "LANBOT running\n"
+            )
         end
         ModCallbacks = { MC_POST_GAME_END = 1, MC_ENTITY_TAKE_DMG = 2, MC_POST_FIRE_TEAR = 3 }
         EntityType = { ENTITY_PLAYER = 1, ENTITY_ULTRA_GREED = 406 }
         PlayerType = { PLAYER_ISAAC = 0 }
         CollectibleType = { COLLECTIBLE_SACRED_HEART = 182, COLLECTIBLE_WIRE_COAT_HANGER = 32 }
+        Vector = function(x, y)
+            return { X = x, Y = y }
+        end
         Game = function()
             return game
         end
@@ -278,6 +291,11 @@ for _, host in ipairs({ true, false }) do
             health[1], health[2] = 0, 0
             frame()
             callbacks[1](nil, true)
+        elseif ending == "bot_error" then
+            botFault = true
+            for _ = 1, 120 do
+                frame()
+            end
         elseif host then
             -- Repeated arena/shop transitions must not restart the stall clock.
             local position = 84
@@ -311,4 +329,4 @@ for _, host in ipairs({ true, false }) do
         )
     end
 end
-print("lanbot Greed fixture: host/client native win, death, stall; no gameplay cheats")
+print("lanbot Greed fixture: host/client native win, death, stall, bot error; no gameplay cheats")

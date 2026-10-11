@@ -27,6 +27,9 @@ return function(nav, hazards)
                 if enemy.id == previous then
                     score = score - 40
                 end
+                if combat.aimed(obs, enemy) then
+                    score = score - 100
+                end
                 if not best or score < best then
                     target, best = enemy, score
                 end
@@ -76,7 +79,7 @@ return function(nav, hazards)
     function combat.kite(obs, style, memory, available)
         local count = 0
         for _, danger in ipairs(obs.dangers) do
-            if danger.contact then
+            if danger.contact and nav.distance(obs.actor, danger) < obs.actor.range + 80 then
                 count = count + 1
             end
         end
@@ -142,6 +145,25 @@ return function(nav, hazards)
             return nil -- Irregular or obstructed rooms use ordinary routing.
         end
         return goal
+    end
+    function combat.engagement(obs, target, memory)
+        local state = memory.engagement
+        if not state then
+            state = { at = obs.frame, lastShot = obs.frame, phase = "orbit" }
+            memory.engagement = state
+        end
+        if not target then
+            state.phase = "seek"
+            return false
+        end
+        if combat.aimed(obs, target) then
+            state.lastShot, state.phase = obs.frame, "orbit"
+            return true
+        end
+        if obs.frame - state.lastShot >= 90 then
+            state.phase = "seek"
+        end
+        return state.phase == "orbit"
     end
     function combat.move(obs, goal, style, previous, door, entering)
         local p, settings = obs.actor, combat.styles[style]
@@ -256,9 +278,11 @@ return function(nav, hazards)
                     then
                         return nil
                     end
-                    if contact then
+                    if contact or obs.clear then
                         -- Solid walls stop the blocked axis. A protected exit
                         -- or active trap above still invalidates the movement.
+                        -- Clear-room turns next to products must not reject a
+                        -- safe first step because a longer prediction hits a wall.
                         if
                             not nav.line(
                                 obs.map,
@@ -359,21 +383,53 @@ return function(nav, hazards)
             end
             evaluated = evaluated + 1
         end
+        if obs.clear and goal and best == 0 and nav.distance(p, goal) > 8 then
+            -- A fast actor near shop products can have a safe short step but
+            -- no safe sustained direction. Verify that step AND its full coast
+            -- with released input, then reconsider on the next render frame.
+            -- This does not shorten hazard checks or allow crossing a guard.
+            for i = 2, #directions do
+                local direction = directions[i]
+                local prefix = trajectory(initial, direction, 2)
+                local stopped = prefix and trajectory(prefix, directions[1], 12)
+                if stopped then
+                    local score = value(stopped) + (direction[3] ~= previous and 3 or 0)
+                    if score < bestScore then
+                        best, bestScore = direction[3], score
+                    end
+                end
+                evaluated = evaluated + 1
+            end
+        end
         return best, bestScore, evaluated
     end
-    function combat.shoot(obs, target, memory)
+    function combat.aimed(obs, target)
         if not target or not target.attackable then
-            memory.charging, memory.releasing = nil, nil
-            return 0
+            return false
         end
         local p = obs.actor
         local dx, dy = target.x - p.x, target.y - p.y
         local horizontal = math.abs(dx) >= math.abs(dy)
         local across = math.abs(horizontal and dy or dx)
         local distance = nav.distance(p, target)
-        local clear = obs.shotLine(p, target)
-        local aimed = across < target.radius + 16 and distance <= p.range + target.radius and clear
+        local tolerance = target.radius + 16
+        if p.homing and not target.breakable and not target.clearable then
+            tolerance = math.max(tolerance, distance * 0.65)
+        end
+        local clear = across < tolerance
+            and distance <= p.range + target.radius
+            and obs.shotLine(p, target)
+        local aimed = clear == true
         local button = horizontal and (dx < 0 and 16 or 32) or (dy < 0 and 64 or 128)
+        return aimed, button, clear, distance, across
+    end
+    function combat.shoot(obs, target, memory)
+        local aimed, button = combat.aimed(obs, target)
+        if not target or not target.attackable then
+            memory.charging, memory.releasing = nil, nil
+            return 0
+        end
+        local p = obs.actor
         if not p.charge then
             memory.charging, memory.releasing = nil, nil
             return aimed and button or 0

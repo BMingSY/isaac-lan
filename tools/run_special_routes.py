@@ -48,7 +48,7 @@ def lanbot_greed_result(checkpoints):
     if len(results) != 1:
         raise ValueError("Expected exactly one authoritative LANBOT Greed result")
     values = dict(word.split("=", 1) for word in results[0].split())
-    if values.get("outcome") not in {"win", "death", "stalled", "timeout"}:
+    if values.get("outcome") not in {"win", "death", "stalled", "timeout", "bot_error"}:
         raise ValueError("Unknown LANBOT Greed outcome")
     won = values["outcome"] == "win"
     if values.get("cleared") != str(won).lower():
@@ -271,6 +271,9 @@ def main():
             try:
                 report["lanbot_greed"] = lanbot_greed_result(
                     report["cases"]["lanbot-greed"]["host"]["checkpoints"]
+                )
+                report["passed"] = (
+                    report["passed"] and report["lanbot_greed"]["outcome"] != "bot_error"
                 )
             except (ValueError, KeyError) as error:
                 report["passed"] = False

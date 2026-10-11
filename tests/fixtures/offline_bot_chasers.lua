@@ -3,7 +3,7 @@
 -- collision, walls, damage and enemy steering belong to the world.
 return function(root)
     local modules = {}
-    for _, name in ipairs({ "navigation", "hazards", "combat", "greed", "planner" }) do
+    for _, name in ipairs({ "navigation", "hazards", "combat", "items", "greed", "planner" }) do
         modules["lanbot/" .. name] = dofile(root .. "/src/bridge/lanbot/" .. name .. ".lua")
     end
     local create = dofile(root .. "/src/bridge/lanbot.lua")

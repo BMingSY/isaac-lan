@@ -1,4 +1,4 @@
-return function(nav, greed)
+return function(nav, greed, items)
     local planner = {}
     local methods = {}
     methods.__index = methods
@@ -138,7 +138,7 @@ return function(nav, greed)
         }
     end
     local wantsShop = greed.needsShop
-    function methods:routes(obs, style, exitOnly)
+    function methods:routes(obs, style, exitOnly, treasureOnly)
         local queue, seen = { { room = obs.room, distance = 0 } }, { [obs.room] = true }
         local best, bestScore, resourceBlocked, pending
         local cursor = 1
@@ -152,13 +152,22 @@ return function(nav, greed)
                     best, bestScore = goalForDoor(entry.first), score
                 end
             end
-            if node and node.shop and entry.first and not exitOnly and wantsShop(obs) then
+            if
+                node
+                and node.shop
+                and entry.first
+                and not exitOnly
+                and not treasureOnly
+                and wantsShop(obs)
+            then
                 for _, pickup in ipairs(node.resources or {}) do
                     if
                         pickup.price <= obs.actor.coins
                         and (
                             pickup.key and obs.actor.keys < 1
                             or pickup.recovery and obs.actor.needsHeal
+                            or pickup.itemScore
+                                and items.affordable(pickup.itemScore, pickup.price, obs.actor)
                         )
                     then
                         local score = 800 - entry.distance * 20
@@ -186,7 +195,10 @@ return function(nav, greed)
                         then
                             local nextNode = self.nodes[edge.to]
                             if not nextNode then
-                                if not exitOnly or obs.greed and edge.greedExit then
+                                if
+                                    (not exitOnly or obs.greed and edge.greedExit)
+                                    and (not treasureOnly or edge.treasure)
+                                then
                                     local score = 100 - entry.distance * 20 - slot * 0.01
                                     if exitOnly then
                                         score = 2000 - entry.distance * 20
@@ -385,14 +397,21 @@ return function(nav, greed)
         end
         local retreat, waiting = retreatFromClosedExit(obs)
         if waiting then
-            return retreat, retreat and nil or "exit_closed"
+            return retreat, not retreat and "exit_closed" or nil
         end
         local pickup, score
         for _, item in ipairs(obs.pickups) do
             if
                 self:available(item.id, obs.frame)
                 and (mode ~= "hold" or item.heal)
-                and not (item.paid and (self.flow.phase == "gather" or self.flow.phase == "leave"))
+                and not (
+                    item.paid
+                    and (
+                        self.flow.phase == "loot"
+                        or self.flow.phase == "gather"
+                        or self.flow.phase == "leave"
+                    )
+                )
             then
                 local allowed = not (
                     obs.boss
@@ -401,6 +420,7 @@ return function(nav, greed)
                 )
                 local value = nav.distance(obs.actor, item)
                     - (item.heal and 400 or item.collectible and 200 or 0)
+                    - (item.itemScore or 0)
                 if allowed and (not score or value < score) then
                     pickup, score = item, value
                 end
@@ -463,7 +483,7 @@ return function(nav, greed)
                     end
                     if not contact.armed then
                         local retreat = retreatFromClosedExit(obs, exit.id)
-                        return retreat, retreat and nil or "wait_for_exit_contact"
+                        return retreat, not retreat and "wait_for_exit_contact" or nil
                     end
                 end
             else
@@ -501,12 +521,19 @@ return function(nav, greed)
         if self.advance and obs.exit then
             return exitGoal()
         end
+        if self.flow.phase == "loot" then
+            local route = self:routes(obs, style, false, true)
+            if route then
+                return route
+            end
+            self.flow:transition("gather", "loot_complete")
+        end
         if self.flow.phase == "gather" or self.flow.phase == "leave" then
             if obs.exit then
                 return exitGoal()
             end
             local route = self:routes(obs, style, true)
-            return route, route and nil or "exit_unreachable"
+            return route, not route and "exit_unreachable" or nil
         end
         local route, resourceBlocked, pending = self:routes(obs, style, self.advance)
         if route then

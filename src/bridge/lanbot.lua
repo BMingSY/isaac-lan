@@ -1,7 +1,7 @@
 return function(env, modules)
     local nav = modules["lanbot/navigation"]
     local combat = modules["lanbot/combat"](nav, modules["lanbot/hazards"](nav))
-    local planner = modules["lanbot/planner"](nav, modules["lanbot/greed"])
+    local planner = modules["lanbot/planner"](nav, modules["lanbot/greed"], modules["lanbot/items"])
     local bot = {
         state = "off",
         mode = "run",
@@ -16,6 +16,7 @@ return function(env, modules)
         bot.targetId, bot.aimId = nil, nil
         bot.inputs = {}
         bot.kite = nil
+        bot.engagement = nil
         env.input(false, 0)
     end
     local function neutral()
@@ -23,6 +24,7 @@ return function(env, modules)
         bot.targetId, bot.aimId = nil, nil
         bot.inputs = {}
         bot.kite = nil
+        bot.engagement = nil
         -- A boundary discards queued press edges as well as held controls.
         env.input(false, 0)
         env.input(true, 0)
@@ -67,6 +69,15 @@ return function(env, modules)
         end
         if bot.plan.goal then
             message = message .. " goal=" .. bot.plan.goal.id
+        end
+        if bot.engagement then
+            message = message .. " combat=" .. bot.engagement.phase
+        end
+        if bot.targetId then
+            message = message .. " target=" .. bot.targetId
+        end
+        if bot.stats.candidates then
+            message = message .. " move=" .. bot.previous .. " candidates=" .. bot.stats.candidates
         end
         return message
             .. string.format(
@@ -186,12 +197,14 @@ return function(env, modules)
         bot.health = obs.actor.health
         obs.map.allowedExit = nil
         obs.map.allowedPickup = nil
+        obs.map.gridRecovery = obs.clear == true
         local breaking = bot.plan:obstacle(obs)
         local target = breaking or combat.target(obs, bot.style, bot.targetId)
         bot.targetId = target and target.id
         local goal = bot.plan:arrival(obs)
         local kite = not goal
             and not breaking
+            and combat.engagement(obs, target, bot)
             and combat.kite(obs, bot.style, bot, function(id)
                 return bot.plan:available(id, frame)
             end)
@@ -246,7 +259,7 @@ return function(env, modules)
             bot.reason = blocked
         end
         local previous = goal and bot.previous or 0
-        local move = combat.move(
+        local move, _, candidates = combat.move(
             obs,
             waypoint,
             bot.style,
@@ -254,6 +267,7 @@ return function(env, modules)
             waypoint and goal and goal.door,
             goal and goal.entering
         )
+        bot.stats.candidates = candidates
         bot.previous = move
         local inputs = bot.inputs or {}
         bot.inputs = inputs

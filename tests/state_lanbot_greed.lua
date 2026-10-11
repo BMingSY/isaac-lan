@@ -12,6 +12,7 @@ local floors, completed, shots, hits, lastHealth, lastDead = {}, {}, { 0, 0 }, {
 local observedRooms = {}
 local moveInputs, shootInputs, snapshots = 0, 0, 0
 local winCallback, damageCallback, tearCallback
+local result
 local function report(text)
     Isaac.DebugString("LAN_NETWORK LANBOT_GREED " .. text)
 end
@@ -22,11 +23,12 @@ local function command(args)
     end
     local ok, err = pcall(_IsaacLanBotCommand, args)
     Isaac.ConsoleOutput = output
-    assert(ok, err)
-    assert(
-        not response:find("error=", 1, true) and not response:find("LANBOT paused", 1, true),
-        response
-    )
+    if not ok or response:find("error=", 1, true) or response:find("LANBOT paused", 1, true) then
+        assert(beganAt, err or response)
+        report("BOT_ERROR detail=" .. tostring(err or response):gsub("\n", " "))
+        result("bot_error")
+        return false
+    end
     if args == "status" then
         report(response:gsub("\n", ""))
     end
@@ -43,7 +45,7 @@ native.input_bot = function(active, buttons)
     end
     return baseInput(active, buttons)
 end
-local function result(reason)
+result = function(reason)
     if outcome then
         return
     end
@@ -320,16 +322,139 @@ function _IsaacLanFrame()
                     local pose = not host and _IsaacLanState and _IsaacLanState.actorPose(p)
                     report(
                         string.format(
-                            "ACTOR_STATE room=%d x=%.1f y=%.1f keys=%d coins=%d health=%d items=%d",
+                            "ACTOR_STATE room=%d x=%.1f y=%.1f keys=%d coins=%d health=%d items=%d speed=%.3f",
                             native.rooms_positions()[tostring(info.slot)].index,
                             pose and pose.x or p.Position.X,
                             pose and pose.y or p.Position.Y,
                             p:GetNumKeys(),
                             p:GetNumCoins(),
                             p:GetHearts() + p:GetSoulHearts(),
-                            p:GetCollectibleCount()
+                            p:GetCollectibleCount(),
+                            p.MoveSpeed
                         )
                     )
+                    if renders % 600 == 0 then
+                        bridge.withView(function()
+                            local room = Game():GetRoom()
+                            local x, y =
+                                pose and pose.x or p.Position.X, pose and pose.y or p.Position.Y
+                            local radius, corners = p.Size or 12, {}
+                            for _, offset in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
+                                local cell = room:GetGridIndex(
+                                    Vector(x + offset[1] * radius, y + offset[2] * radius)
+                                )
+                                corners[#corners + 1] = cell .. ":" .. room:GetGridCollision(cell)
+                            end
+                            report("MOBILITY grid_corners=" .. table.concat(corners, ","))
+                            local count = 0
+                            for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                                if
+                                    count < 16
+                                    and (entity:ToPickup() or entity.Type == EntityType.ENTITY_SLOT)
+                                then
+                                    local pickup = entity:ToPickup()
+                                    report(
+                                        string.format(
+                                            "NAV_OBJECT type=%d variant=%d x=%.1f y=%.1f size=%.1f price=%d wait=%d",
+                                            entity.Type,
+                                            entity.Variant,
+                                            entity.Position.X,
+                                            entity.Position.Y,
+                                            entity.Size or 0,
+                                            pickup and pickup.Price or 0,
+                                            pickup and pickup.Wait or 0
+                                        )
+                                    )
+                                    count = count + 1
+                                end
+                            end
+                            for slot = 0, 7 do
+                                local door = room:GetDoor(slot)
+                                if door then
+                                    report(
+                                        string.format(
+                                            "NAV_DOOR slot=%d x=%.1f y=%.1f open=%s locked=%s",
+                                            slot,
+                                            door.Position.X,
+                                            door.Position.Y,
+                                            tostring(door:IsOpen()),
+                                            tostring(door:IsLocked())
+                                        )
+                                    )
+                                end
+                            end
+                            report(
+                                "COMBAT_CONTEXT range="
+                                    .. p.TearRange
+                                    .. " shoot_inputs="
+                                    .. shootInputs
+                                    .. " clear="
+                                    .. tostring(Game():GetRoom():IsClear())
+                            )
+                            local count = 0
+                            for _, enemy in ipairs(Isaac.GetRoomEntities()) do
+                                if
+                                    stage == 7
+                                    and (
+                                        enemy.Type == EntityType.ENTITY_SLOT
+                                        or enemy.Type == EntityType.ENTITY_PICKUP
+                                            and enemy.Variant == PickupVariant.PICKUP_BIGCHEST
+                                    )
+                                then
+                                    report(
+                                        string.format(
+                                            "ENDING_OBJECT type=%d variant=%d x=%.1f y=%.1f radius=%.1f collision=%s state=%s wait=%s",
+                                            enemy.Type,
+                                            enemy.Variant,
+                                            enemy.Position.X,
+                                            enemy.Position.Y,
+                                            enemy.Size,
+                                            tostring(enemy.EntityCollisionClass),
+                                            tostring(enemy:ToPickup() and enemy:ToPickup().State),
+                                            tostring(enemy:ToPickup() and enemy:ToPickup().Wait)
+                                        )
+                                    )
+                                end
+                                if
+                                    enemy.ToNPC
+                                    and enemy:ToNPC()
+                                    and enemy:IsActiveEnemy(false)
+                                    and not enemy:IsDead()
+                                then
+                                    count = count + 1
+                                    if count <= 12 then
+                                        report(
+                                            string.format(
+                                                "FOE id=%s:%d:%d hp=%.1f x=%.1f y=%.1f vx=%.1f vy=%.1f invincible=%s vulnerable=%s line=%s radius=%.1f damage=%s",
+                                                tostring(enemy.InitSeed),
+                                                enemy.Type,
+                                                enemy.Variant,
+                                                enemy.HitPoints,
+                                                enemy.Position.X,
+                                                enemy.Position.Y,
+                                                enemy.Velocity.X,
+                                                enemy.Velocity.Y,
+                                                tostring(enemy:IsInvincible()),
+                                                tostring(enemy:IsVulnerableEnemy()),
+                                                tostring(
+                                                    Game():GetRoom():CheckLine(
+                                                        p.Position,
+                                                        enemy.Position,
+                                                        3,
+                                                        0,
+                                                        false,
+                                                        false
+                                                    )
+                                                ),
+                                                enemy.Size,
+                                                tostring(enemy.CollisionDamage)
+                                            )
+                                        )
+                                    end
+                                end
+                            end
+                        end)
+                    end
                 end
             end
         end

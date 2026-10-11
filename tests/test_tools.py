@@ -84,7 +84,7 @@ def test_lanbot_behavior_requires_all_ten_successes():
     assert not lanbot_behavior_passed(checks + [checks[0]])
 
 
-@pytest.mark.parametrize("outcome", ["win", "death", "stalled", "timeout"])
+@pytest.mark.parametrize("outcome", ["win", "death", "stalled", "timeout", "bot_error"])
 def test_lanbot_greed_distinguishes_valid_attempt_from_victory(outcome):
     line = (
         f"LAN_NETWORK LANBOT_GREED RESULT outcome={outcome} cleared={str(outcome == 'win').lower()} "

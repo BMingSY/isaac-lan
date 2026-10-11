@@ -6,13 +6,14 @@ function greed.needsShop(obs)
         and (
             (actor.keys < 1 and (actor.coins or 0) >= 5)
             or actor.needsHeal and (actor.coins or 0) >= 3
+            or (actor.coins or 0) >= 15
         )
 end
 function greed.new()
     local flow = { revision = 0 }
     function flow:reset()
-        self.floor, self.phase, self.reason, self.enteredShop, self.supplyAt =
-            nil, nil, nil, nil, nil
+        self.floor, self.phase, self.reason, self.enteredShop, self.supplyAt, self.lootAt =
+            nil, nil, nil, nil, nil, nil
         self.revision = self.revision + 1
     end
     function flow:transition(phase, reason)
@@ -36,22 +37,30 @@ function greed.new()
         end
         if self.phase == "fight" and obs.clear and obs.greed.wave >= obs.greed.bossWave then
             self:transition("supply", "boss_waves_complete")
+            self.supplyAt = obs.frame
         end
         if self.phase == "supply" then
             if obs.shop then
                 self.enteredShop = true
-                self.supplyAt = self.supplyAt or obs.frame
                 local resource
                 for _, pickup in ipairs(obs.pickups) do
                     resource = resource or pickup.paid
                 end
                 if not resource then
-                    self:transition("gather", "supply_complete")
+                    self:transition("loot", "supply_complete")
                 elseif obs.frame - self.supplyAt >= 1200 then
-                    self:transition("gather", "supply_unreachable")
+                    self:transition("loot", "supply_unreachable")
                 end
             elseif self.enteredShop or not greed.needsShop(obs) then
-                self:transition("gather", self.enteredShop and "shop_left" or "no_supply_needed")
+                self:transition("loot", self.enteredShop and "shop_left" or "no_supply_needed")
+            elseif obs.frame - self.supplyAt >= 1200 then
+                self:transition("loot", "shop_unreachable")
+            end
+        end
+        if self.phase == "loot" then
+            self.lootAt = self.lootAt or obs.frame
+            if obs.frame - self.lootAt >= 1800 then
+                self:transition("gather", "loot_unreachable")
             end
         end
         if self.phase == "gather" and obs.exit and obs.partyReady then
