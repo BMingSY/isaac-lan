@@ -14,6 +14,8 @@ local linked, chosen, started, finished = false, false, false, false
 local step, stepAt, floorAt, seenBoss, photo, contact, shoot = "init", 0, 0, false, nil, nil, -1
 local previousStage, previousType, lastFloor, bedroom, living
 local exitContact
+local chestMove = -1
+local lastChestInput = -1
 local observed, snapshots, floorEvents = {}, 0, 0
 local bosses = {}
 local appeared = {}
@@ -24,7 +26,10 @@ local dogmaWarning = _IsaacLanTest.dogmaWarning
 local warningFrames, attackFrames, warningAt = 0, 0, nil
 local dogmaAngelSeen = false
 local crawlspaceTest = _IsaacLanTest.crawlspace
-local campaign = _IsaacLanTest.campaign
+local function campaignRoute()
+    return _IsaacLanTest.campaign or _IsaacLanTest.firstFloor and cases[caseIndex] == "lamb"
+end
+local campaign = campaignRoute()
 local visitedFloors = {}
 local crawlspaceReturns, crawlspaceSource, crawlspaceBoss = 0, nil, nil
 local crawlspaceEntrance, crawlspaceExit, crawlspaceDirection, crawlspaceAction
@@ -42,7 +47,7 @@ local homeWalkReadyAt, homeWalkPrevious, homeWalkMotion = nil, nil, 0
 local replicaWakeOrigin, replicaWakePrevious, replicaWakeDistance, replicaWakeMotion =
     nil, nil, 0, 0
 local dreamFrames = {}
-local terminalWalking, terminalVerified, terminalWalkStart = false, false, nil
+local terminalWalking, terminalVerified, terminalWalkStart, terminalWalkAt = false, false, nil, nil
 local terminalWalk = {}
 local function checkHomeVisual(value)
     assert(native.home_scene_pose() == value[5], "Home scene state differs from authority")
@@ -283,6 +288,7 @@ local function observeBoss(e)
 end
 local function fight(t)
     local clear = false
+    local boundedTears = campaign or cases[caseIndex] == "ascent" and not homeOnly
     actor(1, function(p)
         protect(p)
         local entities = Isaac.GetRoomEntities()
@@ -330,6 +336,9 @@ local function fight(t)
                     and not terminalVerified
                     and (terminalBoss(e) or cases[caseIndex] == "mega-satan" and e.Type == 274)
                 then
+                    if not terminalWalking then
+                        terminalWalkAt = t
+                    end
                     terminalWalking = true
                 end
                 local key = e.Type .. ":" .. e.Variant .. ":" .. e.InitSeed
@@ -381,9 +390,9 @@ local function fight(t)
                     and t % 10 == 0
                     and t - appeared[key] >= warmup
                     and not e:IsDead()
-                    and (campaign or e.HitPoints > 0)
+                    and (boundedTears or e.Type == 918 or e.HitPoints > 0)
                 then
-                    if campaign or e.Type == 950 or e.Type == 951 then
+                    if boundedTears or e.Type == 918 or e.Type == 950 or e.Type == 951 then
                         -- These bosses have non-damageable companion/intro
                         -- entities. Native tear collision must choose targets;
                         -- direct TakeDamage can bypass their phase protection.
@@ -394,9 +403,11 @@ local function fight(t)
                             true,
                             false
                         )
-                        -- The campaign uses bounded tear damage so native
-                        -- multi-phase bosses finish their own phase changes.
-                        tear.CollisionDamage = campaign and 100 or 1000000
+                        -- Keep attacking living native targets, including
+                        -- linked segments with non-positive displayed HP.
+                        -- First-floor routes use bounded collision damage
+                        -- so bosses complete their own death/loot sequence.
+                        tear.CollisionDamage = (boundedTears or e.Type == 918) and 100 or 1000000
                     else
                         e:TakeDamage(1000000, DamageFlag.DAMAGE_IGNORE_ARMOR, EntityRef(p), 0)
                     end
@@ -407,7 +418,7 @@ local function fight(t)
     end)
     if terminalWalking then
         terminalMovement(t)
-        assert(t - stepAt < 1200, "Terminal Boss movement check stalled")
+        assert(t - terminalWalkAt < 1200, "Terminal Boss movement check stalled")
     end
     return clear and seenBoss
 end
@@ -609,12 +620,17 @@ function _IsaacLanFrame()
                 end
             else
                 caseIndex = caseIndex + 1
+                campaign, visitedFloors = campaignRoute(), {}
+                chestContacts = 0
+                chestMove = -1
+                lastChestInput = -1
                 linked, chosen, started = false, false, false
                 step, stepAt, lastFloor, contact, shoot = "init", 0, nil, nil, -1
                 lastExit = 0
                 snapshots, floorEvents, observed, bosses = 0, 0, {}, {}
                 appeared = {}
-                terminalWalking, terminalVerified, terminalWalkStart = false, false, nil
+                terminalWalking, terminalVerified, terminalWalkStart, terminalWalkAt =
+                    false, false, nil, nil
                 terminalWalk = {}
                 scratchReported = {}
                 -- Menu rendering is throttled differently in each window.
@@ -859,6 +875,9 @@ local function advance(t)
         elseif stage == 11 or stage == 12 or name == "mother" and stage == 8 and kind >= 4 then
             if pick(PickupVariant.PICKUP_BIGCHEST) then
                 mark("ending-chest", t)
+                actor(1, function(p)
+                    p.Position, p.Velocity = contact.Ref.Position + Vector(60, 0), Vector.Zero
+                end)
             end
         elseif name == "delirium" and stage == 8 then
             specialEntrance(GridRooms.ROOM_BLUE_WOOM_IDX, t)
@@ -1242,6 +1261,7 @@ local function advance(t)
         mark("floor-arrived", t)
         report("NATIVE_DADS_NOTE_ASCENT")
     end
+    chestMove = -1
     if contact then
         local e = contact.Ref
         if not e or not e:Exists() or e:IsDead() then
@@ -1269,8 +1289,24 @@ local function advance(t)
                             .. pickup.InitSeed
                             .. " player_collision="
                             .. p.EntityCollisionClass
+                            .. " player_controller="
+                            .. p.ControllerIndex
                             .. " cooldown="
                             .. p.ControlsCooldown
+                            .. " controls="
+                            .. tostring(p.ControlsEnabled)
+                            .. " effective_controls="
+                            .. tostring(p:AreControlsEnabled())
+                            .. " extra_done="
+                            .. tostring(p:IsExtraAnimationFinished())
+                            .. " player_x="
+                            .. p.Position.X
+                            .. " player_y="
+                            .. p.Position.Y
+                            .. " player_animation="
+                            .. p:GetSprite():GetAnimation()
+                            .. " presentation="
+                            .. tostring(native.presentation_active())
                     )
                     for _, other in ipairs(Isaac.GetRoomEntities()) do
                         if other.Type == 5 and other.Variant == 340 then
@@ -1291,12 +1327,18 @@ local function advance(t)
                         end
                     end
                 end
-                -- Re-enter a terminal chest after its native Victory Lap
-                -- prompt, approaching from the side to avoid a Void portal. A stationary overlap before Appear finishes is not
-                -- a new contact with the unlocked chest.
-                local away = step == "ending-chest" and t % 90 < 20
-                p.Position = e.Position + (away and Vector(60, 0) or Vector(4, 0))
-                p.Velocity = Vector(away and -1 or 1, 0)
+                if step == "ending-chest" then
+                    -- Approach through normal guest input. Teleporting into
+                    -- the solid chest can leave the actor pushed outside its
+                    -- trigger, even after Appear has completed.
+                    if t % 90 < 20 then
+                        p.Position, p.Velocity = e.Position + Vector(60, 0), Vector.Zero
+                    else
+                        chestMove = 0
+                    end
+                else
+                    p.Position, p.Velocity = e.Position + Vector(4, 0), Vector(1, 0)
+                end
             end)
         end
     end
@@ -1317,7 +1359,12 @@ local function advance(t)
         end
     end)
     assert(
-        t - stepAt < (step == "beast-fight" and (dogmaWarning and 10000 or 3500) or 1500),
+        t - stepAt
+            < (
+                step == "beast-fight"
+                    and ((dogmaWarning or name == "ascent" and not homeOnly) and 10000 or 3500)
+                or 1500
+            ),
         "Route stalled at " .. step .. " stage=" .. stage .. ":" .. kind
     )
 end
@@ -1325,22 +1372,33 @@ local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(
         function()
-            if terminalWalking or not host and (shoot >= 0 or homeWalking) then
+            if terminalWalking or not host and (shoot >= 0 or homeWalking or chestMove >= 0) then
                 local values = {}
+                local triggered = not host
+                        and chestMove >= 0
+                        and lastChestInput ~= chestMove
+                        and (1 << chestMove)
+                    or 0
+                lastChestInput = chestMove
                 local direction = ({ 0, 2, 1, 3 })[math.floor(native.api_info().tick / 12) % 4 + 1]
                 for action = 0, 15 do
                     values[#values + 1] = string.pack(
                         ">I2",
                         (
                             (homeWalking or terminalWalking) and action == direction
-                            or not homeWalking and not terminalWalking and action == shoot
+                            or not homeWalking and not terminalWalking and chestMove >= 0 and action == chestMove
+                            or not homeWalking
+                                and not terminalWalking
+                                and chestMove < 0
+                                and action == shoot
                         )
                                 and 65535
                             or 0
                     )
                 end
-                return table.concat(values) .. string.pack(">I2", 0)
+                return table.concat(values) .. string.pack(">I2", triggered)
             end
+            lastChestInput = -1
             return capture()
         end,
         function(t, n, bytes)
@@ -1364,6 +1422,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     terminalWalking,
                     debug10BeastWalking,
                     crawlspaceReturns,
+                    chestMove,
                 })
         end,
         function(bytes, t, ack)
@@ -1384,6 +1443,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             assert(meta[1] == caseIndex, "Ending case changed without a native win")
             terminalWalking = meta[5]
             crawlspaceReturns = meta[7]
+            chestMove = meta[8]
             if meta[6] and not debug10BeastWalking then
                 debug10BeastWalking = true
                 homeOrigin, homeDistance, homeMovement = nil, 0, false

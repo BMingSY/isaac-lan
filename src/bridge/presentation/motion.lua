@@ -58,7 +58,8 @@ return function(native, actorsPresentation, view)
             local e = ref(identifier)
             if e then
                 local age = math.max(0, now - m.at)
-                local fraction = math.min(age * 30, 1)
+                local interval = math.max(1, m.tick - m.previousTick) / 30
+                local fraction = math.min(age / interval, 1)
                 local position = m.from + (m.target - m.from) * fraction
                 if m.actor and m.controller == status.slot + 1 then
                     local p = e:ToPlayer()
@@ -126,8 +127,8 @@ return function(native, actorsPresentation, view)
                     end))
                     m.prediction:clip(position)
                     m.display = position
-                elseif age > 1 / 30 then
-                    position = position + m.velocity * math.min(age - 1 / 30, 0.1) * 30
+                elseif age > interval then
+                    position = position + m.velocity * math.min(age - interval, 0.1) * 30
                 end
                 e.Position = position
             end

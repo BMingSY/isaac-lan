@@ -91,69 +91,21 @@ local motionPresentation = assert(modules["presentation/motion"])(native, actors
 local audioPresentation = assert(modules["presentation/audio"])(native, function()
     return SFXManager()
 end)
-local function roomState(slot)
-    local value
-    assert(native.rooms_with_player(slot, function()
-        local room = Game():GetRoom()
-        local entities, grids = {}, {}
-        for _, e in ipairs(Isaac.GetRoomEntities()) do
-            if e:Exists() and e.Type ~= 1 then
-                entities[#entities + 1] = entity(e)
-            end
-        end
-        for index = 0, room:GetGridSize() - 1 do
-            local grid = room:GetGridEntity(index)
-            if grid then
-                local door = grid:ToDoor()
-                local extra = door
-                        and {
-                            door.Slot,
-                            door.TargetRoomIndex,
-                            door.CurrentRoomType,
-                            door.TargetRoomType,
-                            door.Direction,
-                            door:IsLocked(),
-                            door.Busted,
-                            door.ExtraVisible,
-                            sprite(assert(native.door_sprite(door:GetSprite()))),
-                        }
-                    or false
-                grids[#grids + 1] = {
-                    index,
-                    grid:GetType(),
-                    grid:GetVariant(),
-                    grid.State,
-                    grid.CollisionClass,
-                    grid.VarData,
-                    sprite(grid:GetSprite()),
-                    grid:GetSaveState().SpawnSeed,
-                    extra,
-                }
-            end
-        end
-        value = {
-            room:IsClear(),
-            room:GetFrameCount(),
-            entities,
-            grids,
-            native.music_state(),
-            native.room_layout(),
-            crawlspace.capture(),
-        }
-    end))
-    return value
-end
-local captureTick, captureActors, captureVisuals = nil, {}, {}
+local roomState = assert(modules["sync/room"])(native, entity, sprite, crawlspace)
+local captureTick, captureEpoch, captureActors, captureVisuals = nil, nil, {}, {}
+local captureEncoded = {}
 function state.capture(slot, tick)
     performance.resources()
     local game = Game()
     local level = game:GetLevel()
+    local epoch = native.net_floor_epoch()
     local locations = native.rooms_positions()
     local loc = {}
-    if captureTick ~= tick then
-        captureTick = tick
+    if captureTick ~= tick or captureEpoch ~= epoch then
+        captureTick, captureEpoch = tick, epoch
         captureActors = {}
         captureVisuals = {}
+        captureEncoded = {}
     end
     local actors = {}
     local view = assert(locations[tostring(slot)])
@@ -202,6 +154,10 @@ function state.capture(slot, tick)
         else
             actors[#actors + 1] = base
         end
+        local shared = actors[#actors]
+        if captureEncoded[shared] == nil then
+            captureEncoded[shared] = false
+        end
     end
     for player = 0, 3 do
         local at = locations[tostring(player)]
@@ -233,26 +189,33 @@ function state.capture(slot, tick)
             end
         end
     end
-    return encode(worldSchema.pack({
-        tick = tick,
-        frame = game:GetFrameCount(),
-        stage = level:GetStage(),
-        stageType = level:GetStageType(),
-        connected = native.rooms_connected(),
-        locations = loc,
-        map = map,
-        actors = actors,
-        slot = slot,
-        room = roomState(slot),
-        sound = audioPresentation.capture(slot),
-        progress = native.net_progress(),
-        epoch = native.net_floor_epoch(),
-        presentation = native.presentation_events(slot),
-        items = itemPresentation.capture(slot),
-        curses = curses.capture(level),
-        greed = greed.capture(),
-        deals = deals.capture(),
-    }))
+    local room = roomState(slot, tick, epoch, view)
+    if captureEncoded[room] == nil then
+        captureEncoded[room] = false
+    end
+    return encode(
+        worldSchema.pack({
+            tick = tick,
+            frame = game:GetFrameCount(),
+            stage = level:GetStage(),
+            stageType = level:GetStageType(),
+            connected = native.rooms_connected(),
+            locations = loc,
+            map = map,
+            actors = actors,
+            slot = slot,
+            room = room,
+            sound = audioPresentation.capture(slot),
+            progress = native.net_progress(),
+            epoch = epoch,
+            presentation = native.presentation_events(slot),
+            items = itemPresentation.capture(slot),
+            curses = curses.capture(level),
+            greed = greed.capture(),
+            deals = deals.capture(),
+        }),
+        captureEncoded
+    )
 end
 local replicas, motion = {}, {}
 local replicaRoom, receivedTick = nil, -1
@@ -268,7 +231,7 @@ local function discard(e)
     e.Visible = false
     e:Remove()
 end
-local function applyEntity(e, v, now)
+local function applyEntity(e, v, now, tick)
     entityCodec.apply(e, v)
     -- Preserve ownership through EntityPtr; local allocation indices are never IDs.
     replicas[v[1]] = EntityPtr(e)
@@ -279,6 +242,8 @@ local function applyEntity(e, v, now)
         display = prior and prior.display or vec(v[6]),
         velocity = vec(v[7]),
         at = now,
+        tick = tick,
+        previousTick = prior and prior.tick or tick - 1,
         actor = e.Type == 1,
         controller = e.Type == 1 and e:ToPlayer().ControllerIndex or -1,
         prediction = e.Type == 1 and (prior and prior.prediction or prediction.new(vec(v[6]))),
@@ -362,7 +327,7 @@ function state.apply(bytes, tick, ack)
             applyInventory(p, actor[4], lastInventory[actor[3][1]] ~= encoded or tick % 30 == 0)
         end, 1))
         lastInventory[actor[3][1]] = encoded
-        applyEntity(p, actor[3], now)
+        applyEntity(p, actor[3], now, tick)
         actorsPresentation.apply(p, actor)
         poop.apply(p, actor[7])
     end
@@ -403,7 +368,7 @@ function state.apply(bytes, tick, ack)
             end,
             discard = discard,
             apply = function(e, v)
-                applyEntity(e, v, now)
+                applyEntity(e, v, now, tick)
             end,
             entities = Isaac.GetRoomEntities,
         })
@@ -515,7 +480,9 @@ function state.reset()
     greed.reset()
     deals.reset()
     floor.reset()
-    captureTick = nil
+    roomState = assert(modules["sync/room"])(native, entity, sprite, crawlspace)
+    captureTick, captureEpoch = nil, nil
     captureActors = {}
     captureVisuals = {}
+    captureEncoded = {}
 end
