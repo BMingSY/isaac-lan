@@ -18,8 +18,9 @@ local names = {
     "items",
     "curses",
     "greed",
+    "deals",
 }
-local version = 12
+local version = 13
 return {
     VERSION = version,
     pack = function(view)

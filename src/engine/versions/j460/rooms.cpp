@@ -12,6 +12,7 @@
 #include "compat/bosses/encounters.h"
 #include "compat/routes/mines.h"
 #include "compat/routes/curses.h"
+#include "compat/items/deal_chances.h"
 #include "compat/characters/traits.h"
 #include "runtime/actor_roster.h"
 #include "core/poop_state.h"
@@ -26,6 +27,7 @@
 #include <vector>
 #include <bit>
 #include <cmath>
+#include <limits>
 
 #include "engine/versions/j460/entrypoints.h"
 namespace j460 = isaac::engine::j460;
@@ -386,6 +388,96 @@ struct TeamScope {
         }
     }
 };
+struct DealChances {
+    float total, angel;
+};
+std::optional<DealChances> replicaDeals;
+using DealTotal = float(__attribute__((thiscall)) *)(void*);
+DealTotal originalDealTotal;
+// The internal J460 conditional Angel query returns in XMM0, unlike public
+// Lua float getters (x87). Keep that ABI confined to this version backend.
+void* originalAngelShare;
+__attribute__((target("sse2"))) float queryAngelShare(void* query) {
+    float result;
+    __asm__ __volatile__("call *%1\n\tmovss %%xmm0, %0"
+                         : "=m"(result)
+                         : "r"(query)
+                         : "eax", "ecx", "edx", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5",
+                           "xmm6", "xmm7", "memory", "cc");
+    return result;
+}
+// The native total query applies an extra penalty only while its current
+// descriptor is the final boss room. Borrow that room for this read so moving
+// to a different room cannot hide a teammate's boss-room red-heart damage.
+struct DealRoomScope {
+    Address previousRoom = at<Address>(game(), 0x18300);
+    int previousIndex = at<int>(game(), 0x18304);
+    int previousDimension = at<int>(game(), 0x1830c);
+    DealRoomScope() {
+        if (!enabled)
+            return;
+        using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+        for (const auto& [key, room] : loaded) {
+            if (room->replicaShell)
+                continue;
+            const auto descriptor =
+                reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
+                    reinterpret_cast<void*>(game()), key.index, key.dimension));
+            if (descriptor && at<int>(descriptor, 8) == at<int>(game(), 0x18314)) {
+                at<Address>(game(), 0x18300) = room->pointer;
+                at<int>(game(), 0x18304) = key.index;
+                at<int>(game(), 0x1830c) = key.dimension;
+                break;
+            }
+        }
+    }
+    ~DealRoomScope() {
+        at<Address>(game(), 0x18300) = previousRoom;
+        at<int>(game(), 0x18304) = previousIndex;
+        at<int>(game(), 0x1830c) = previousDimension;
+    }
+};
+float __attribute__((fastcall)) dealTotal(void* room, void*) {
+    if (enabled && runtime::replica() && replicaDeals)
+        return replicaDeals->total;
+    TeamScope team;
+    if (!enabled)
+        return originalDealTotal(room);
+    DealRoomScope context;
+    auto total = originalDealTotal(reinterpret_cast<void*>(at<Address>(game(), 0x18300)));
+    // Temporary native deal guarantees are held by a Room, rather than an
+    // inventory. Include those in other loaded rooms once, without copying
+    // effects/items, stacking duplicates, or changing their native lifetime.
+    for (const auto& [key, candidate] : loaded)
+        if (!candidate->replicaShell)
+            total = compat::items::sharedRoomDealChance(
+                total, originalDealTotal(reinterpret_cast<void*>(candidate->pointer)));
+    return total;
+}
+extern "C" __attribute__((used)) float __cdecl isaac_lan_angel_share() {
+    if (enabled && runtime::replica() && replicaDeals)
+        return replicaDeals->angel;
+    TeamScope team;
+    return queryAngelShare(originalAngelShare);
+}
+extern "C" __attribute__((naked)) void isaac_lan_angel_share_thunk() {
+    __asm__ __volatile__("subl $12, %esp\n\tcall _isaac_lan_angel_share\n\tfstps (%esp)\n\t"
+                         "movss (%esp), %xmm0\n\taddl $12, %esp\n\tret");
+}
+using InitializeDeals = void(__attribute__((thiscall)) *)(void*, bool, bool);
+InitializeDeals originalInitializeDeals;
+void __attribute__((fastcall)) initializeDeals(void* level, void*, bool angel, bool devil) {
+    TeamScope team;
+    originalInitializeDeals(level, angel, devil);
+}
+using SpawnDeals = bool(__attribute__((thiscall)) *)(void*, bool, bool);
+SpawnDeals originalSpawnDeals;
+bool __attribute__((fastcall)) spawnDeals(void* room, void*, bool animate, bool force) {
+    if (enabled && runtime::replica())
+        return false;
+    TeamScope team;
+    return originalSpawnDeals(room, animate, force);
+}
 using ReplacePlayer = bool(__attribute__((thiscall)) *)(void*, void*, void*);
 ReplacePlayer originalReplacePlayer;
 bool __attribute__((fastcall)) replacePlayer(void* manager, void*, void* oldPlayer,
@@ -1020,6 +1112,8 @@ struct API {
     void(__cdecl* setField)(lua_State*, int, const char*);
     void(__cdecl* pushBoolean)(lua_State*, int);
     void(__cdecl* pushInteger)(lua_State*, long long);
+    void(__cdecl* pushNumber)(lua_State*, double);
+    double(__cdecl* checkNumber)(lua_State*, int);
     void(__cdecl* createTable)(lua_State*, int, int);
     long long(__cdecl* checkInteger)(lua_State*, int);
     const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
@@ -1035,6 +1129,28 @@ struct API {
     int(__cdecl* pcall)(lua_State*, int, int, int, std::intptr_t, void*);
     int(__cdecl* error)(lua_State*);
 } lua{};
+int dealChances(lua_State* L) {
+    if (!lua.getTop(L)) {
+        lua.pushNumber(L, engine<DealTotal>(j460::entry::roomGetDevilRoomChance)(
+                              reinterpret_cast<void*>(at<Address>(game(), 0x18300))));
+        // Use the same detours/return ABI as the actual HUD and room generator.
+        lua.pushNumber(
+            L, queryAngelShare(reinterpret_cast<void*>(image + j460::entry::dealAngelShare)));
+        return 2;
+    }
+    const auto total = lua.checkNumber(L, 1), angel = lua.checkNumber(L, 2);
+    const bool valid = enabled && runtime::replica() && std::isfinite(total) && total >= 0 &&
+                       total <= std::numeric_limits<float>::max() && std::isfinite(angel) &&
+                       angel >= 0 && angel <= 1;
+    if (valid)
+        replicaDeals = DealChances{static_cast<float>(total), static_cast<float>(angel)};
+    lua.pushBoolean(L, valid);
+    return 1;
+}
+int resetDealChances(lua_State*) {
+    replicaDeals.reset();
+    return 0;
+}
 bool adopt() {
     if (enabled || depth)
         return false;
@@ -2606,6 +2722,7 @@ void playEnding(unsigned ending) {
     originalEnd(reinterpret_cast<void*>(game()), static_cast<int>(ending));
 }
 void beforeStart() {
+    replicaDeals.reset();
     presentation::items::reset();
     replicaMapEntities.clear();
     for (const auto& [entry, original] : entityUpdates) {
@@ -2706,6 +2823,15 @@ bool install(Address base, void (*log)(const std::string&)) {
     };
     return hook(j460::entry::entityPlayerAddCoins, reinterpret_cast<void*>(addCoins),
                 reinterpret_cast<void**>(&originalCoins)) &&
+           hook(j460::entry::roomGetDevilRoomChance, reinterpret_cast<void*>(dealTotal),
+                reinterpret_cast<void**>(&originalDealTotal)) &&
+           hook(j460::entry::dealAngelShare, reinterpret_cast<void*>(isaac_lan_angel_share_thunk),
+                &originalAngelShare) &&
+           hook(j460::entry::levelInitializeDevilAngelRoom,
+                reinterpret_cast<void*>(initializeDeals),
+                reinterpret_cast<void**>(&originalInitializeDeals)) &&
+           hook(j460::entry::roomTrySpawnDevilRoomDoor, reinterpret_cast<void*>(spawnDeals),
+                reinterpret_cast<void**>(&originalSpawnDeals)) &&
            hook(j460::entry::playerManagerReplacePlayer, reinterpret_cast<void*>(replacePlayer),
                 reinterpret_cast<void**>(&originalReplacePlayer)) &&
            hook(j460::entry::entityPlayerSyncResources, reinterpret_cast<void*>(syncResources),
@@ -2767,6 +2893,8 @@ bool bind(lua_State* L, HMODULE module) {
     IMPORT(setField, "lua_setfield");
     IMPORT(pushBoolean, "lua_pushboolean");
     IMPORT(pushInteger, "lua_pushinteger");
+    IMPORT(pushNumber, "lua_pushnumber");
+    IMPORT(checkNumber, "luaL_checknumber");
     IMPORT(createTable, "lua_createtable");
     IMPORT(checkInteger, "luaL_checkinteger");
     IMPORT(checkString, "luaL_checklstring");
@@ -2792,6 +2920,8 @@ bool bind(lua_State* L, HMODULE module) {
     function("api_actors", actorIdentities);
     function("api_with_owner", withOwner);
     function("rooms_enable", enable);
+    function("deal_chances", dealChances);
+    function("deal_chances_reset", resetDealChances);
     function("rooms_move", request);
     function("rooms_with_player", withPlayer);
     function("rooms_positions", positions);

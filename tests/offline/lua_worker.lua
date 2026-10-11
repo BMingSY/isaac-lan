@@ -49,6 +49,7 @@ local function stateEnvironment()
             ["runtime/floor"] = dofile(root .. "/src/bridge/runtime/floor.lua"),
             ["sync/npc"] = dofile(root .. "/src/bridge/sync/npc.lua"),
             ["sync/curses"] = dofile(root .. "/src/bridge/sync/curses.lua"),
+            ["sync/deals"] = dofile(root .. "/src/bridge/sync/deals.lua"),
             ["compat/items/black_candle"] = dofile(
                 root .. "/src/bridge/compat/items/black_candle.lua"
             ),
