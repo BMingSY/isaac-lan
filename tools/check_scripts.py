@@ -48,6 +48,8 @@ def main():
         subprocess.run([LUAC, "-p", str(special)], check=True)
         build_special(special, ["greed", "greedier"])
         subprocess.run([LUAC, "-p", str(special)], check=True)
+        build_special(special, ["greed", "greedier", "endings"], first_floor=True)
+        subprocess.run([LUAC, "-p", str(special)], check=True)
         build_special(special, ["room-entry"])
         subprocess.run([LUAC, "-p", str(special)], check=True)
     print("PASS Python, Lua and bundled gameplay syntax")

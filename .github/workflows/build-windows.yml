@@ -71,6 +71,7 @@ jobs:
           mkdir ci
           cp build-win32/isaac_lan_core_test.exe build-win32/isaac_lan_net_test.exe \
             build-win32/isaac_lan_log_test.exe build-win32/isaac_lan_diagnostics_test.exe ci/
+          cp build-win32/isaac_lan_delta_test.exe ci/
           cp build-win32/isaac_lan_heap_watch.exe build-win32/isaac_lan_heap_fixture.exe ci/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -105,6 +106,8 @@ jobs:
           New-Item -ItemType Directory -Force test-runs/windows | Out-Null
           & ./ci/isaac_lan_core_test.exe 2>&1 | Tee-Object test-runs/windows/core.log
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+          & ./ci/isaac_lan_delta_test.exe 2>&1 | Tee-Object test-runs/windows/delta.log
+          if ($LASTEXITCODE -ne 0) { throw 'Delta tests failed' }
       - name: Test state transport
         shell: pwsh
         run: |

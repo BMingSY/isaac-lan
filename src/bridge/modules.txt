@@ -16,6 +16,7 @@ runtime/room_entry
 sync/codec
 sync/inventory
 sync/entities
+sync/room
 sync/grids
 presentation/items
 runtime/floor

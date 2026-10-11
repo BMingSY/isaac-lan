@@ -28,6 +28,10 @@ isaac-lan/logs/20261011-120000-123-p1234/
 - 渲染回调间隔；完整采集／应用、编码／解码、库存、实体、网格、精灵及压缩／解压耗时。
 - 本机 Lua 堆大小、实体／网格／地图规模、网络连接、发送队列及接收／待发状态容量、退休会话数量。
 
+世界视图增量另记录 `cached_world_bytes`、`world_in_flight_bytes`、`world_in_flight_states`，分别表示历史视图分配容量、未确认压缩载荷和未确认视图数量。`world_snapshots_total`、`world_delta_snapshots_total`、`world_raw_bytes_total`、`world_wire_bytes_total`、`world_full_wire_bytes_total` 是当前会话累计发送计数；字节计数只包含视图载荷，最后一项是同一批状态采用完整压缩时的对照量，不含 TCP、frp 或可靠存档流量。`compress` 是完整编码选择总成本，`delta.encode` 是其中的增量生成及压缩成本，不能将两者相加。
+
+DEBUG 的 `state_transfer` 包含 `raw`、`wire`、`full_wire`、`delta`、`base`，便于核对基线和实际传输收益。这些统计开关不控制增量、发送窗口或玩法。
+
 耗时记录数量、平均值、最大值及 p50／p95／p99；百分位使用每个窗口最近 512 个样本，均值及最大值使用该窗口全部样本。成本名和计数器各最多 64 个，窗口重置，避免诊断本身无限积累数据。Lua 堆测量只读 `collectgarbage("count")`，不强制游戏 GC。关闭统计时 Lua 直接调用原函数，不包装返回值。
 
 ```sh

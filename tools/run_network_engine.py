@@ -59,6 +59,9 @@ def main():
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--extra-client", type=Path, action="append", default=[])
+    parser.add_argument(
+        "--record-relay", action="store_true", help="Archive owned host TCP streams"
+    )
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--script", type=Path, required=True, help="State-sync Lua scenario")
@@ -128,6 +131,9 @@ def main():
         help="Enable metrics in the owned lab config (use a protected runner)",
     )
     parser.add_argument(
+        "--debug-logs", action="store_true", help="Enable DEBUG in the owned lab config"
+    )
+    parser.add_argument(
         "--installed",
         action="store_true",
         help="Install/uninstall the frozen package in the marked lab; retain profile isolation",
@@ -195,6 +201,9 @@ def main():
         help="Added one-way loopback delay; scenario reads lan-test-menu-port.txt",
     )
     parser.add_argument(
+        "--relay-control", type=Path, help="Owned JSON control file: downstream_bytes_per_second"
+    )
+    parser.add_argument(
         "--exercise-official",
         action="store_true",
         help="Enter the original Online flow, return, then exercise LAN",
@@ -251,6 +260,8 @@ def main():
         parser.error(
             "Latency fixture requires a scripted menu, delay 1..1000 and an available following port"
         )
+    if args.relay_control and not args.latency_ms:
+        parser.error("--relay-control requires the isolated latency relay")
     labs = [args.host.resolve(), args.client.resolve(), *(p.resolve() for p in args.extra_client)]
     roles = ["host", "client", "client2", "client3"][: len(labs)]
     if (
@@ -425,7 +436,12 @@ def main():
         if args.latency_ms:
             from delayed_relay import DelayedRelay
 
-            relay = DelayedRelay(args.menu_port + 1, args.menu_port, args.latency_ms)
+            relay = DelayedRelay(
+                args.menu_port + 1,
+                args.menu_port,
+                args.latency_ms,
+                args.output / "relay" if args.record_relay else None,
+            )
             result["one_way_latency_ms"] = args.latency_ms
         for lab, role in zip(labs, roles):
             # Windows refuses replacement if an older process still has the DLL
@@ -526,11 +542,15 @@ def main():
                 *(["--automatic"] if args.automatic or args.installed else []),
                 *(["--no-luadebug"] if args.no_luadebug else []),
             ]
-            if args.performance:
+            if args.performance or args.debug_logs:
                 config = lab / "game/isaac-lan/config.ini"
                 config.parent.mkdir(parents=True, exist_ok=True)
                 config.write_text(
-                    "[logging]\nlevel=INFO\n[diagnostics]\nperformance=true\nsample_interval_ms=1000\n"
+                    "[logging]\nlevel="
+                    + ("DEBUG" if args.debug_logs else "INFO")
+                    + "\n[diagnostics]\nperformance="
+                    + str(args.performance).lower()
+                    + "\nsample_interval_ms=1000\n"
                 )
             if args.progress_fixture:
                 prepare_progress_fixture(
@@ -760,7 +780,24 @@ def main():
         pause_keys = set()
         recorded = False
         solo_saved, solo_continued, solo_hashes = set(), set(), {}
+        relay_samples, next_relay_sample = [], 0
         while time.monotonic() < deadline:
+            if relay and time.monotonic() >= next_relay_sample:
+                next_relay_sample = time.monotonic() + 1
+                relay_samples.append(
+                    {
+                        "utc_ms": int(time.time() * 1000),
+                        "downstream_bytes": relay.downstream_bytes,
+                        "upstream_bytes": relay.upstream_bytes,
+                        "connections": relay.connections,
+                        "rate_limit": relay.downstream_bytes_per_second,
+                    }
+                )
+            if relay and args.relay_control:
+                rate = json.loads(args.relay_control.read_text())["downstream_bytes_per_second"]
+                if not isinstance(rate, int) or rate < 0:
+                    raise ValueError("Invalid owned relay bandwidth")
+                relay.downstream_bytes_per_second = rate
             for role, _, path in process_watchers:
                 if path.exists():
                     exit_status = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -957,6 +994,8 @@ def main():
                 result.setdefault("close_errors", []).append(str(error))
         if relay:
             relay.close()
+            if "relay_samples" in locals():
+                (args.output / "relay-samples.json").write_text(json.dumps(relay_samples, indent=2))
         for role, watcher, path in process_watchers:
             try:
                 watcher.wait(timeout=10)

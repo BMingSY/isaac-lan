@@ -72,6 +72,11 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--mod", type=Path, action="append", default=[])
     parser.add_argument("--case", choices=CASES + DIAGNOSTICS, action="append")
+    parser.add_argument(
+        "--first-floor",
+        action="store_true",
+        help="Start the Lamb ending on the first floor within the six-route suite",
+    )
     parser.add_argument("--port", type=int, default=30220)
     parser.add_argument("--latency-ms", type=int, default=75)
     parser.add_argument(
@@ -103,6 +108,8 @@ def main():
         parser.error("Each case must appear once")
     if "endings" in cases and cases[-1] != "endings":
         parser.error("The six-route ending diagnostic must run last")
+    if args.first_floor and "endings" not in cases:
+        parser.error("First-floor coverage requires --case endings")
     if "campaign" in cases and cases[-1] != "campaign":
         parser.error("The first-floor campaign must run last")
     if "lanbot-campaign" in cases and cases[-1] != "lanbot-campaign":
@@ -116,7 +123,7 @@ def main():
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     script = output / "suite.lua"
-    build(script, cases)
+    build(script, cases, first_floor=args.first_floor)
     protected = []
     for role, lab in zip(("host", "client"), labs):
         for folder in ("profile", "game/data", "game/isaac-lan"):

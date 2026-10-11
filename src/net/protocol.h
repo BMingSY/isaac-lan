@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace isaac::lan {
-constexpr std::uint16_t protocolVersion = 24;
+constexpr std::uint16_t protocolVersion = 25;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -154,6 +154,7 @@ struct RoomRequest {
 // not deterministic simulation frames. Older unsent views may be replaced.
 struct WorldState {
     std::uint32_t tick = 0;
+    std::uint32_t epoch = 0;
     std::uint8_t connected = 1;
     std::uint8_t pauseOwner = 0;
     bool paused = false;

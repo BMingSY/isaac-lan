@@ -6,6 +6,9 @@
 namespace isaac::lan {
 struct TransportResources {
     std::size_t connections = 0, queuedBytes = 0, receiveCapacity = 0, worldBytes = 0;
+    std::size_t cachedWorldBytes = 0, inFlightBytes = 0, inFlightStates = 0;
+    std::uint64_t worldSnapshots = 0, deltaSnapshots = 0, rawWorldBytes = 0, wireWorldBytes = 0,
+                  fullWorldBytes = 0;
 };
 // Main-thread, nonblocking TCP transport. No external server and no Lua calls on
 // worker threads. TCP_NODELAY is set on every connected socket.
