@@ -44,7 +44,7 @@ def main():
             special, ["motion", "floor-items", "mod-integrations", "shared-curses", "ascent-compat"]
         )
         subprocess.run([LUAC, "-p", str(special)], check=True)
-        build_special(special, ["lanbot", "lanbot-campaign"])
+        build_special(special, ["lanbot", "lanbot-campaign", "lanbot-spiders"])
         subprocess.run([LUAC, "-p", str(special)], check=True)
         build_special(special, ["greed", "greedier"])
         subprocess.run([LUAC, "-p", str(special)], check=True)

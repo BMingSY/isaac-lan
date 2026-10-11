@@ -61,10 +61,16 @@ def main():
         action="store_true",
         help="Opt in to native frame archives for visual regressions",
     )
+    parser.add_argument("--record-client", action="store_true", help="Record only the guest view")
+    parser.add_argument(
+        "--frame-ms", type=int, default=250, help="Recording interval (16..1000 ms)"
+    )
     args = parser.parse_args()
     cases = args.case or CASES
     if not 0 <= args.latency_ms <= 5000:
         parser.error("Latency must be between 0 and 5000 ms")
+    if not 16 <= args.frame_ms <= 1000 or args.record and args.record_client:
+        parser.error("Choose one recording mode and a frame interval of 16..1000 ms")
     if len(set(cases)) != len(cases):
         parser.error("Each case must appear once")
     if "endings" in cases and cases[-1] != "endings":
@@ -141,7 +147,9 @@ def main():
         if getattr(args, option.replace("-", "_")):
             command.append("--" + option)
     if args.record:
-        command += ["--native-record-both", "--frame-ms", "250"]
+        command += ["--native-record-both", "--frame-ms", str(args.frame_ms)]
+    elif args.record_client:
+        command += ["--native-record-view", "1", "--frame-ms", str(args.frame_ms)]
     for mod in args.mod:
         command += ["--mod", str(mod.resolve())]
     report = {"passed": False, "restored": False, "cases": {}, "command": command}
@@ -196,6 +204,8 @@ def main():
                             and "LANBOT_CASE " in line
                             or name == "lanbot-campaign"
                             and "LANBOT_CAMPAIGN " in line
+                            or name == "lanbot-spiders"
+                            and "LANBOT_SPIDERS " in line
                             or name == "shared-curses"
                             and "SHARED_CURSES " in line
                             or name in ("greed", "greedier")
@@ -220,7 +230,10 @@ def main():
                 report["cases"]["lanbot"]["host"]["checkpoints"]
             )
             report["passed"] = report["passed"] and report["lanbot_behavior_passed"]
-        if all(name in ("greed", "greedier", "lanbot", "lanbot-campaign") for name in cases):
+        if all(
+            name in ("greed", "greedier", "lanbot", "lanbot-campaign", "lanbot-spiders")
+            for name in cases
+        ):
             report["native_game_starts"] = {}
             for role in ("host", "client"):
                 probe = output / "engine" / role / "probe.log"

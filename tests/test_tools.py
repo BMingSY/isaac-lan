@@ -45,7 +45,7 @@ def test_greed_suite_keeps_both_modes_in_one_process_pair(tmp_path):
 
 def test_lanbot_suite_reuses_pair_and_cleans_owned_callbacks(tmp_path):
     script = tmp_path / "lanbot.lua"
-    build_special_suite(script, ["lanbot", "lanbot-campaign"])
+    build_special_suite(script, ["lanbot", "lanbot-campaign", "lanbot-spiders"])
     source = script.read_text()
     assert source.count("local originalFrame, originalGate") == 1
     assert "return done end end" in source and "return finished end end" in source
@@ -55,6 +55,7 @@ def test_lanbot_suite_reuses_pair_and_cleans_owned_callbacks(tmp_path):
         "MC_POST_FIRE_TEAR",
         "MC_POST_GAME_END",
         "MC_PRE_GAME_EXIT",
+        "MC_PRE_NPC_UPDATE",
     ):
         assert "Isaac.RemoveCallback(owner, ModCallbacks." + callback in source
 
