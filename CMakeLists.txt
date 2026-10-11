@@ -97,6 +97,9 @@ if(BUILD_TESTING)
         add_test(NAME bridge.shared-curses
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_curses.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.shared-deals
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_deals.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
         add_test(NAME bridge.greed
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/greed.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -128,6 +131,7 @@ if(BUILD_TESTING)
             bridge.special-menu
             bridge.shared-resources
             bridge.shared-curses
+            bridge.shared-deals
             bridge.greed
             bridge.special-visuals
             bridge.resource-lifecycle
@@ -161,6 +165,7 @@ if(BUILD_TESTING)
         room-transition-context
         compatibility-targets
         resolved-room-curses
+        shared-deal-chances
         truncated-packets
         hashes
         progression

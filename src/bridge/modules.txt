@@ -21,6 +21,7 @@ presentation/items
 runtime/floor
 sync/npc
 sync/curses
+sync/deals
 compat/items/black_candle
 compat/routes/crawlspace
 compat/routes/greed

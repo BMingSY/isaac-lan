@@ -52,7 +52,18 @@ local function environment(difficulty)
         end,
     }
     local position, ready, epoch = 84, true, 1
+    local chances, appliedChances = { 1, 0.5 }, nil
     local native = {
+        deal_chances = function(total, angel)
+            if total then
+                appliedChances = { total, angel }
+                return true
+            end
+            return table.unpack(appliedChances or chances)
+        end,
+        deal_chances_reset = function()
+            appliedChances = nil
+        end,
         rooms_positions = function()
             return { ["1"] = { index = position, dimension = 0 } }
         end,
@@ -170,6 +181,12 @@ local function environment(difficulty)
     return {
         state = env._IsaacLanState,
         level = level,
+        chances = function(total, angel)
+            chances = { total, angel }
+        end,
+        appliedChances = function()
+            return appliedChances
+        end,
         move = function(index)
             position = index
         end,
@@ -182,14 +199,18 @@ for difficulty = 0, 3 do
     local host, guest = environment(difficulty), environment(difficulty)
     for tick, wave in ipairs({ 0, 1, 1, 8, 9, 10, 11, 12, 0 }) do
         host.level.GreedModeWave = wave
+        host.chances(tick / 16, (tick % 4) / 4)
         local bytes = host.state.capture(1, tick)
         local view = host.state.decode(bytes)
+        assert(view[19][1] == tick / 16 and view[19][2] == (tick % 4) / 4)
         assert(
             view[18] == (difficulty >= 2 and wave or false),
             "Host omitted authoritative Greed wave"
         )
         guest.level.GreedModeWave = 4
         assert(guest.state.apply(bytes, tick, 0))
+        local applied = guest.appliedChances()
+        assert(applied[1] == tick / 16 and applied[2] == (tick % 4) / 4)
         assert(
             guest.level.GreedModeWave == (difficulty >= 2 and wave or 4),
             "Replica Greed HUD retained a local wave"
@@ -209,9 +230,15 @@ for difficulty = 0, 3 do
     host.level.GreedModeWave = 0
     local bytes = host.state.capture(1, 30)
     guest.level.GreedModeWave = 8
+    local oldChances = guest.appliedChances()
     assert(not guest.state.apply(bytes, 30, 0))
+    assert(
+        guest.appliedChances() == oldChances,
+        "Future floor wrote deal chances before its barrier"
+    )
     assert(guest.level.GreedModeWave == 8)
     assert(guest.state.beginFloor(2, 2, 0, 0, false))
+    assert(guest.appliedChances() == nil, "Old deal chances crossed the floor begin barrier")
     guest.state.present("", 30)
     assert(guest.level.GreedModeWave == 8, "Old HUD state crossed the floor begin barrier")
     assert(not guest.state.apply(bytes, 30, 0))

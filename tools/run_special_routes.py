@@ -208,6 +208,8 @@ def main():
                             and "LANBOT_SPIDERS " in line
                             or name == "shared-curses"
                             and "SHARED_CURSES " in line
+                            or name == "shared-deals"
+                            and "SHARED_DEALS " in line
                             or name in ("greed", "greedier")
                             and ("GREED mode=" + ("3" if name == "greedier" else "2") + " ") in line
                             or name in ("audio", "motion", "floor-items", "mod-integrations")
