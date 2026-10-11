@@ -12,6 +12,7 @@
 #include "compat/routes/curses.h"
 #include "compat/characters/traits.h"
 #include "compat/items/rewind_targets.h"
+#include "compat/items/deal_chances.h"
 #include "core/audio_ownership.h"
 #include "core/localized_text.h"
 #include "core/laser_state.h"
@@ -25,6 +26,19 @@
 using namespace isaac::lan;
 
 namespace {
+void sharedDealChances() {
+    using isaac::compat::items::sharedRoomDealChance;
+    require(sharedRoomDealChance(0.36f, 0.36f) == 0.36f,
+            "Sharing two room views counted the same floor modifiers twice");
+    require(sharedRoomDealChance(0.36f, 66.1f) == 66.1f &&
+                sharedRoomDealChance(66.1f, 66.1f) == 66.1f,
+            "Remote temporary guarantee was lost or stacked twice");
+    require(sharedRoomDealChance(0.01f, 0.01f) == 0.01f &&
+                sharedRoomDealChance(0.35f, 0.35f) == 0.35f,
+            "A previous guarantee survived damage/effect removal or a new floor");
+    require(sharedRoomDealChance(1.5f, 1.5f) == 1.5f,
+            "The native multi-Pentagram result was capped or summed across rooms");
+}
 void compatibilityTargets() {
     using namespace isaac::compat;
     require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
@@ -858,6 +872,7 @@ int main(int argc, char** argv) {
                      {"room-transition-context", roomTransitionContext},
                      {"compatibility-targets", compatibilityTargets},
                      {"resolved-room-curses", resolvedRoomCurses},
+                     {"shared-deal-chances", sharedDealChances},
                      {"truncated-packets", truncatedPackets},
                      {"hashes", hashes},
                      {"progression", progression},

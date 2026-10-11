@@ -1,6 +1,6 @@
 # 分层与玩法兼容
 
-这次整理把传输、运行协调、状态组件、表现和版本后端分开，并抽离现有特殊玩法规则。房主继续运行权威玩法，客机显示权威状态；协议为 24，世界视图为 schema 12。已有联机指纹检查仍要求两端使用相同扩展。
+这次整理把传输、运行协调、状态组件、表现和版本后端分开，并抽离现有特殊玩法规则。房主继续运行权威玩法，客机显示权威状态；协议为 24，世界视图为 schema 13。已有联机指纹检查仍要求两端使用相同扩展。
 
 ## 目录与职责
 
@@ -98,7 +98,7 @@ flowchart TD
 
 ## 字段与版本定义
 
-[`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，维护包含共享楼层诅咒与贪婪波次的 18 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
+[`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，维护包含共享楼层诅咒、贪婪波次与整队恶魔／天使房概率的 19 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
 
 已验证的 133 个原生入口定义在 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h)，启动特征校验与调用点引用同一组常量。游戏版本、版本标记地址和所需 PE 区段放在 [`profile.h`](../src/engine/versions/j460/profile.h)。对象字段偏移仍需在对应 J460 实现中结合所有权与调用约定维护。
 
@@ -107,6 +107,8 @@ flowchart TD
 ## 共享诅咒与特殊房间表现
 
 `sync/curses.lua` 同步楼层的完整诅咒位掩码。Amnesia、？？？胶囊及忏悔机继续由房主运行原版效果；客机在应用库存的原生副作用之后，按差异恢复房主的掩码，并刷新地图缓存。`compat/items/black_candle.lua` 从全队库存判断保护，避免分房名单隐藏另一名玩家的黑蜡烛。
+
+`sync/deals.lua` 同步整队的原版总开门概率和条件天使概率，客机库存应用后写入概率缓存，原版 HUD 查询直接使用该缓存。实际概率及房间类型仍由房主按完整队伍执行原版计算。额外的后端上下文、SSE 返回 ABI、楼层清理和专项测试边界见[共享恶魔／天使房概率](shared-deal-chances.md)。
 
 `compat/routes/crawlspace.lua` 采集与应用当前房间的返回入口坐标和房间索引。J460 的三个标量同时纳入现有房间上下文保存／恢复，防止主机视口或其他房间覆盖它们。Lua 适配通过原版 `DungeonReturnPosition` 与 `DungeonReturnRoomIndex` 属性访问状态，校验完整载荷后才写入客机当前作用域，不新增原生读写接口。
 

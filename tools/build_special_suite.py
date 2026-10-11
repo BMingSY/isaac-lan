@@ -16,6 +16,7 @@ DIAGNOSTICS = (
     "floor-items",
     "mod-integrations",
     "shared-curses",
+    "shared-deals",
     "dogma-warning",
     "ascent-compat",
     "greed",
@@ -41,6 +42,7 @@ def build(output, cases=CASES):
             "floor-items": "state_floor_items.lua",
             "mod-integrations": "state_mod_integrations.lua",
             "shared-curses": "state_shared_curses.lua",
+            "shared-deals": "state_shared_deals.lua",
             "greed": "state_greed.lua",
             "greedier": "state_greed.lua",
             "dogma-warning": "state_endings.lua",
@@ -74,6 +76,10 @@ def build(output, cases=CASES):
             cleanup = 'command("off")\nnative.input_bot = baseInput\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_PICKUP_COLLISION, chestCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)\n'
         elif name == "lanbot-spiders":
             cleanup = 'command("off")\nnative.input_bot = baseInput\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_NPC_UPDATE, freezeCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\n'
+        elif name == "shared-deals":
+            cleanup = (
+                "Isaac.RemoveCallback(owner, ModCallbacks.MC_PRE_NPC_UPDATE, freezeCallback)\n"
+            )
         complete = {"audio": "ended", "lanbot": "done"}.get(name, "finished")
         fixtures.append(
             'function() _IsaacLanTest.route = "'

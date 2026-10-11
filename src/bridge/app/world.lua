@@ -23,6 +23,7 @@ local reconcileEntities = performance.wrap("apply.entities", modules["sync/entit
 local reconcileGrids = performance.wrap("apply.grids", modules["sync/grids"])
 local npcState = assert(modules["sync/npc"])
 local curses = assert(modules["sync/curses"])
+local deals = assert(modules["sync/deals"])(native)
 local greed = assert(modules["compat/routes/greed"])(function()
     return Game()
 end)
@@ -250,6 +251,7 @@ function state.capture(slot, tick)
         items = itemPresentation.capture(slot),
         curses = curses.capture(level),
         greed = greed.capture(),
+        deals = deals.capture(),
     }))
 end
 local replicas, motion = {}, {}
@@ -293,6 +295,7 @@ state.beginFloor = assert(modules["runtime/transitions"])(native, floor, transit
     return Game():GetLevel()
 end, function()
     greed.reset()
+    deals.reset()
     motion = {}
     actorVisuals = {}
     replicaRoom = nil
@@ -369,6 +372,7 @@ function state.apply(bytes, tick, ack)
     -- must win after those native side effects, before map/HUD caching.
     local cursesChanged = curses.apply(level, value.curses)
     greed.apply(value.greed)
+    deals.apply(value.deals)
     local mapChanged = roomChanged or cursesChanged
     for _, d in ipairs(value.map) do
         local ok, pickupsChanged = native.map_pickups(d[8])
@@ -509,6 +513,7 @@ function state.reset()
     receivedTick = -1
     motionPresentation.reset()
     greed.reset()
+    deals.reset()
     floor.reset()
     captureTick = nil
     captureActors = {}
