@@ -30,7 +30,9 @@ DIAGNOSTICS = (
 )
 
 
-def build(output, cases=CASES):
+def build(output, cases=CASES, *, first_floor=False):
+    if first_floor and "endings" not in cases:
+        raise ValueError("First-floor coverage requires the six ending routes")
     fixtures = []
     for name in cases:
         filename = {
@@ -104,6 +106,8 @@ def build(output, cases=CASES):
             + ("true" if name == "rewind" else "false")
             + "\n_IsaacLanTest.campaign = "
             + ("true" if name == "campaign" else "false")
+            + "\n_IsaacLanTest.firstFloor = "
+            + ("true" if first_floor and name == "endings" else "false")
             + "\n_IsaacLanTest.greedCampaign = "
             + ("true" if name in ("greed", "greedier") else "false")
             + "\n"
@@ -125,5 +129,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--case", choices=CASES + DIAGNOSTICS, action="append")
+    parser.add_argument("--first-floor", action="store_true")
     args = parser.parse_args()
-    build(args.output, args.case or CASES)
+    build(args.output, args.case or CASES, first_floor=args.first_floor)

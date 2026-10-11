@@ -44,6 +44,20 @@ def test_greed_suite_keeps_both_modes_in_one_process_pair(tmp_path):
     assert "MC_POST_GAME_END" in source and "LOCAL_PROGRESS_RESTORED" in source
 
 
+def test_endings_suite_combines_first_floor_and_both_greed_modes(tmp_path):
+    script = tmp_path / "all-endings.lua"
+    build_special_suite(script, ["greed", "greedier", "endings"], first_floor=True)
+    source = script.read_text()
+    assert source.count("local originalFrame, originalGate") == 1
+    assert source.count("_IsaacLanTest.firstFloor = true") == 1
+    assert source.count("_IsaacLanTest.firstFloor = false") == 2
+    assert 'cases[caseIndex] == "lamb"' in source
+    assert "campaign, visitedFloors = campaignRoute(), {}" in source
+    assert "CAMPAIGN_PASS first_floor=1 terminal=lamb native_win=true" in source
+    with pytest.raises(ValueError, match="requires the six ending routes"):
+        build_special_suite(script, ["greed"], first_floor=True)
+
+
 def test_lanbot_suite_reuses_pair_and_cleans_owned_callbacks(tmp_path):
     script = tmp_path / "lanbot.lua"
     build_special_suite(script, ["lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed"])

@@ -8,7 +8,7 @@
 - 主机测试解锁全部开放，客机保留原进度并关闭支线入口解锁；退出后恢复各自原进度。只修改带 `.isaac-lan-lab` 标记的测试目录和其游戏内存。
 - 75 ms 单向延迟，普通 Lua 沙箱；双方同时开启指定版本的 Stats+、EID、GoodTrip。
 - 客机操作路线入口、Boss 房、掉落物和终点，主机留在其他房间；回溯睡觉需要全队进入同一原生过场。
-- 定位实际生成的房间，并给予无敌和致死伤害以缩短战斗。使用实际生成的 Boss、照片、入口、下一层出口和终点宝箱。脚本不能用 `Game:End()`、直接生成终点 Boss 或手动设置路线旗标代替成功。
+- 定位实际生成的房间，并给予免伤和加速攻击以缩短战斗。使用实际生成的 Boss、照片、入口、下一层出口和终点宝箱。终点宝箱由客机实际方向输入走入；从第一层开始的羔羊／回溯，以及水下分段 Boss Turdlet 使用伤害 100 的原版泪弹；仍存活的分段实体即使显示非正血量也继续接受碰撞攻击，死亡与出口生成由游戏决定。脚本不能用 `Game:End()`、直接生成终点 Boss 或手动设置路线旗标代替成功。
 - 必须观察到预期终点 Boss、两端原生 `MC_POST_GAME_END(false)`，然后清理联机会话。仅出现宝箱、Boss 死亡或主机结算均不算通过。
 - 退出后检查每个原有解锁仍保留，死亡证明、Dead God、每日在线胜利等主机独有标记和用于隔离检查的私有计数未被另一端覆盖；记录新增解锁，本局击杀计数派生的正常解锁允许保留。工具最后恢复测试前的隔离存档，并校验文件哈希。
 
@@ -39,6 +39,24 @@ python3 tools/run_endings.py \
 排查单条路线时可追加 `--route ascent`（可重复指定）。完整验收仍使用默认六条。
 
 `report.json` 逐条保存两端的原生胜利、会话清理和检查点。任一缺失返回失败；部分通过不能标为六条通过。原生回调语义参考 [Lua API 回调文档](https://wofsauge.github.io/IsaacDocs/rep/enums/ModCallbacks.html#mc_post_game_end)。
+
+### 与逐层贪婪模式合并执行
+
+增量同步的完整结局验收可以复用一对进程，依次完成贪婪、超级贪婪和六条普通结局路线。在集中工具中添加 `--first-floor`，羔羊路线从第一层开始，以原生出口经过全部必要楼层到达结局；其余五条仍使用上表的路线前置。每次原生结算后回到菜单再建局，双方保留自己的既有成就和私有计数，最终检查正常退出并按文件哈希恢复隔离存档。
+
+```sh
+python3 tools/run_special_routes.py \
+  --host /mnt/d/isaac-lan-lab/host-001 \
+  --client /mnt/d/isaac-lan-lab/client-001 \
+  --build build-win32 --output artifacts/endings-delta-验收编号 \
+  --case greed --case greedier --case endings --first-floor \
+  --latency-ms 75 --performance --record --frame-ms 500 \
+  --mod '/mnt/d/steam/steamapps/common/The Binding of Isaac Rebirth/mods/stats-plus_2729900570' \
+  --mod '/mnt/d/steam/steamapps/common/The Binding of Isaac Rebirth/mods/external item descriptions_836319872' \
+  --mod '/mnt/d/steam/steamapps/common/The Binding of Isaac Rebirth/mods/goodtrip_1630477831'
+```
+
+贪婪两种难度都从第一层完成七层原生流程，超级贪婪必须观察最终 Boss 的黄金阶段；详见 [贪婪模式验证](greed-mode-validation.md)。原版房间定位、免伤和加速攻击属于验收夹具，这不是普通输入无辅助通关，也不代表覆盖所有随机种子或每段结局动画的解锁变体。
 
 ## 本轮验收
 
