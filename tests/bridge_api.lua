@@ -365,8 +365,8 @@ assert(registry.status()[1].state == "error" and installs == 2)
 isolated.api:SetCompatibilityEnabled("test.authority-error", false)
 local enabled, enableCode = isolated.api:SetCompatibilityEnabled("test.authority-error", true)
 assert(not enabled and enableCode == "authority_install_failed" and authorityAttempts == 2)
--- Both pinned EID builds select the guest from its local view, including after
--- a room notification. A metadata/runtime mismatch must keep the adapter off.
+-- Both pinned EID builds preserve native single-player callbacks and select
+-- the guest from its LAN view. Metadata/runtime mismatches keep the adapter off.
 for _, build in ipairs({
     { "5.23", 5.24, "980bb0b", "8f2614a6a4cd58d60345dd0a33072a0bc7822ecf06ad9106234a6a9b2380b3fc" },
     { "5.24", 5.25, "d7aab88", "705a61422ffc09c683d4250dedf2a569b6d76d4eee884dec70b705eedfa898f5" },
@@ -406,7 +406,28 @@ for _, build in ipairs({
     r.observeMod(eid, "eid-source")
     r.poll()
     assert(r.status()[1].state == "active", "Supported EID adapter was not installed")
+    -- An installed adapter is also present before entering LAN. With no LAN
+    -- view, native startup, continued games and drawing must still run.
+    p.active, p.ready = 0, 0
+    local soloCalls = {}
+    for _, id in ipairs({ 15, 18, 19, 1, 2 }) do
+        eid:AddCallback(id, function(self, marker, gap, tail)
+            assert(self == eid and marker == id and gap == nil and tail == "solo")
+            assert(p.scope == nil, "Solo EID callback borrowed a LAN view")
+            self:setPlayer()
+            assert(self.player == actor1, "Solo EID did not use its native player")
+            soloCalls[id] = (soloCalls[id] or 0) + 1
+            return marker, nil, tail
+        end)
+        local first, gap, tail = callbacks[id](eid, id, nil, "solo")
+        assert(first == id and gap == nil and tail == "solo", "Solo EID callback was blocked")
+        assert(soloCalls[id] == 1, "Solo EID callback did not run exactly once")
+    end
+    p.active, p.ready = 1, 1
     p.bridge.commit()
+    for _, count in pairs(soloCalls) do
+        assert(count == 1, "Solo EID lifecycle was replayed after joining LAN")
+    end
     eid:setPlayer()
     assert(eid.player == actor2 and p.scope == nil, "EID selected a remote actor")
     p.positions["1"].index = 71
@@ -434,6 +455,20 @@ for _, build in ipairs({
     assert(entries == 1 and previous.player == actor2, "Rewind lost EID's native entry cache")
     p.bridge.commit()
     assert(entries == 1 and updates == 0, "EID replayed an entry or stale update twice")
+    -- Returning from LAN clears its cached view, then a native continued game
+    -- and render callback must recover player zero without readiness checks.
+    local continuedGames = 0
+    eid:AddCallback(15, function(self, continued)
+        assert(self == eid and continued == true and p.scope == nil)
+        self:setPlayer()
+        assert(self.player == actor1, "Continued solo game retained the LAN player")
+        continuedGames = continuedGames + 1
+        return "continued"
+    end)
+    p.active, p.ready = 0, 0
+    p.bridge.poll()
+    assert(callbacks[15](eid, true) == "continued" and continuedGames == 1)
+    assert(callbacks[2](eid, 2, nil, "solo") == 2 and soloCalls[2] == 2)
     eid.ModVersion = 0
     assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "unsupported")
 end

@@ -84,7 +84,7 @@ function definition.install(target, api)
 end
 function definition.dispatch(target, record, ...)
     local lan = bridge.handles[definition.id]
-    if not lan then
+    if not lan or not lan:IsActive() then
         return record.original(...)
     end
     local callbacks = ModCallbacks
