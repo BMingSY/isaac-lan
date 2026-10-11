@@ -14,11 +14,15 @@ return function(env, modules)
     local function release()
         bot.lastFrame, bot.previous, bot.charging, bot.releasing = nil, 0, nil, nil
         bot.targetId, bot.aimId = nil, nil
+        bot.inputs = {}
+        bot.kite = nil
         env.input(false, 0)
     end
     local function neutral()
         bot.previous, bot.charging, bot.releasing = 0, nil, nil
         bot.targetId, bot.aimId = nil, nil
+        bot.inputs = {}
+        bot.kite = nil
         -- A boundary discards queued press edges as well as held controls.
         env.input(false, 0)
         env.input(true, 0)
@@ -153,6 +157,7 @@ return function(env, modules)
             neutral()
             return
         end
+        obs.now, obs.inputHistory = (info.nowMs or env.clock()) / 1000, bot.inputs or {}
         if bot.world ~= obs.world or bot.room ~= obs.room or bot.actor ~= obs.actor.id then
             if bot.world == obs.world and bot.room == obs.room then
                 bot.plan:cancel()
@@ -172,8 +177,15 @@ return function(env, modules)
         local target = combat.target(obs, bot.style, bot.targetId)
         bot.targetId = target and target.id
         local goal = bot.plan:arrival(obs)
+        local kite = not goal
+            and combat.kite(obs, bot.style, bot, function(id)
+                return bot.plan:available(id, frame)
+            end)
         if goal then
+            bot.kite = nil
             bot.task, bot.reason = goal.task, nil
+        elseif kite then
+            goal, bot.task, bot.reason = kite, "kite", nil
         elseif target then
             goal = combat.goal(obs, target, bot.style, function(id)
                 return bot.plan:available(id, frame)
@@ -202,6 +214,18 @@ return function(env, modules)
             goal and goal.entering
         )
         bot.previous = move
+        local inputs = bot.inputs or {}
+        bot.inputs = inputs
+        local bucket = math.floor(obs.now * 60 + 0.0001)
+        local input = { at = obs.now, buttons = move, bucket = bucket }
+        if inputs[#inputs] and inputs[#inputs].bucket == bucket then
+            inputs[#inputs] = input
+        else
+            inputs[#inputs + 1] = input
+        end
+        while #inputs > 32 or #inputs > 1 and inputs[2].at < obs.now - 0.4 do
+            table.remove(inputs, 1)
+        end
         local shoot = combat.shoot(obs, target, bot)
         env.input(true, move | shoot)
         bot.stats.frames = bot.stats.frames + 1

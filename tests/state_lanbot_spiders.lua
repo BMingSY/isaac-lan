@@ -99,6 +99,22 @@ local function advance(t, bytes)
             assert(p:GetSoulHearts() == 0 and p:GetCollectibleCount() <= 1)
             assert(math.abs(p.MoveSpeed - 1) < 0.001, "Fixture must preserve default Isaac speed")
             local room, center = Game():GetRoom(), Game():GetRoom():GetCenterPos()
+            local first, last =
+                room:GetGridPosition(0), room:GetGridPosition(room:GetGridSize() - 1)
+            local top, bottom = room:GetTopLeftPos(), room:GetBottomRightPos()
+            report(
+                string.format(
+                    "ROOM_BOUNDS physical=%.1f,%.1f:%.1f,%.1f grid=%.1f,%.1f:%.1f,%.1f",
+                    top.X,
+                    top.Y,
+                    bottom.X,
+                    bottom.Y,
+                    first.X,
+                    first.Y,
+                    last.X,
+                    last.Y
+                )
+            )
             p.Position, p.Velocity = center - Vector(180, 0), Vector.Zero
             for row = -1, 1 do
                 for col = -1, 1 do

@@ -9,6 +9,7 @@
 #include "runtime/room_map.h"
 #include "compat/bosses/encounters.h"
 #include "compat/routes/mines.h"
+#include "compat/routes/curses.h"
 #include "compat/characters/traits.h"
 #include "compat/items/rewind_targets.h"
 #include "core/audio_ownership.h"
@@ -419,6 +420,43 @@ void roomMap() {
                 "Invalid map aliases partially changed the floor");
     }
 }
+void resolvedRoomCurses() {
+    constexpr unsigned maze = 1u << 5, darkness = 1, blind = 1u << 6, unknown = 1u << 3;
+    for (bool replica : {false, true}) {
+        unsigned base = maze | darkness, seeds = maze | blind;
+        unsigned randomCalls = 0;
+        auto nativeEntry = [&] {
+            require((base & darkness) && (seeds & blind), "Entry lost unrelated curses");
+            if ((base | seeds) & maze) {
+                ++randomCalls;
+                return 148;
+            }
+            return 135;
+        };
+        {
+            isaac::compat::routes::ResolvedRoomCurses scope(base, seeds, replica);
+            require(nativeEntry() == (replica ? 135 : 148),
+                    "Replica re-routed a resolved room or host lost native Maze");
+            base |= unknown; // A separate native entry effect must survive.
+            {
+                isaac::compat::routes::ResolvedRoomCurses nested(base, seeds, replica);
+                require(nativeEntry() == (replica ? 135 : 148), "Nested entry lost its policy");
+            }
+            require(nativeEntry() == (replica ? 135 : 148), "Nested entry restored Maze too soon");
+        }
+        require(base == (maze | darkness | unknown) && seeds == (maze | blind),
+                "Room entry lost the shared curse or an unrelated native effect");
+        require(randomCalls == (replica ? 0u : 3u), "Replica consumed Maze RNG");
+    }
+    unsigned base = 1, seeds = maze;
+    try {
+        isaac::compat::routes::ResolvedRoomCurses scope(base, seeds, true);
+        base |= blind;
+        throw std::runtime_error("entry failed");
+    } catch (const std::runtime_error&) {
+    }
+    require(base == (1 | blind) && seeds == maze, "Failed entry did not restore shared curses");
+}
 void introBarrier() {
     isaac::presentation::IntroBarrier barrier;
     const std::array room{1, 0, 0, 84}, other{1, 0, 0, 85};
@@ -819,6 +857,7 @@ int main(int argc, char** argv) {
                      {"room-map", roomMap},
                      {"room-transition-context", roomTransitionContext},
                      {"compatibility-targets", compatibilityTargets},
+                     {"resolved-room-curses", resolvedRoomCurses},
                      {"truncated-packets", truncatedPackets},
                      {"hashes", hashes},
                      {"progression", progression},

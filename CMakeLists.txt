@@ -160,6 +160,7 @@ if(BUILD_TESTING)
         room-map
         room-transition-context
         compatibility-targets
+        resolved-room-curses
         truncated-packets
         hashes
         progression
