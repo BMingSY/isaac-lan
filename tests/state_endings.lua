@@ -47,7 +47,7 @@ local homeWalkReadyAt, homeWalkPrevious, homeWalkMotion = nil, nil, 0
 local replicaWakeOrigin, replicaWakePrevious, replicaWakeDistance, replicaWakeMotion =
     nil, nil, 0, 0
 local dreamFrames = {}
-local terminalWalking, terminalVerified, terminalWalkStart = false, false, nil
+local terminalWalking, terminalVerified, terminalWalkStart, terminalWalkAt = false, false, nil, nil
 local terminalWalk = {}
 local function checkHomeVisual(value)
     assert(native.home_scene_pose() == value[5], "Home scene state differs from authority")
@@ -336,6 +336,9 @@ local function fight(t)
                     and not terminalVerified
                     and (terminalBoss(e) or cases[caseIndex] == "mega-satan" and e.Type == 274)
                 then
+                    if not terminalWalking then
+                        terminalWalkAt = t
+                    end
                     terminalWalking = true
                 end
                 local key = e.Type .. ":" .. e.Variant .. ":" .. e.InitSeed
@@ -415,7 +418,7 @@ local function fight(t)
     end)
     if terminalWalking then
         terminalMovement(t)
-        assert(t - stepAt < 1200, "Terminal Boss movement check stalled")
+        assert(t - terminalWalkAt < 1200, "Terminal Boss movement check stalled")
     end
     return clear and seenBoss
 end
@@ -626,7 +629,8 @@ function _IsaacLanFrame()
                 lastExit = 0
                 snapshots, floorEvents, observed, bosses = 0, 0, {}, {}
                 appeared = {}
-                terminalWalking, terminalVerified, terminalWalkStart = false, false, nil
+                terminalWalking, terminalVerified, terminalWalkStart, terminalWalkAt =
+                    false, false, nil, nil
                 terminalWalk = {}
                 scratchReported = {}
                 -- Menu rendering is throttled differently in each window.
