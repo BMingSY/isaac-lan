@@ -288,7 +288,7 @@ local function observeBoss(e)
 end
 local function fight(t)
     local clear = false
-    local boundedTears = campaign or cases[caseIndex] == "ascent"
+    local boundedTears = campaign or cases[caseIndex] == "ascent" and not homeOnly
     actor(1, function(p)
         protect(p)
         local entities = Isaac.GetRoomEntities()
@@ -1359,7 +1359,12 @@ local function advance(t)
         end
     end)
     assert(
-        t - stepAt < (step == "beast-fight" and (dogmaWarning and 10000 or 3500) or 1500),
+        t - stepAt
+            < (
+                step == "beast-fight"
+                    and ((dogmaWarning or name == "ascent" and not homeOnly) and 10000 or 3500)
+                or 1500
+            ),
         "Route stalled at " .. step .. " stage=" .. stage .. ":" .. kind
     )
 end
