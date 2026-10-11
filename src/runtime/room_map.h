@@ -24,6 +24,22 @@ canonicalRoomDestination(int requestedIndex, int descriptorIndex, int descriptor
         return std::nullopt;
     return std::array<int, 2>{descriptorDimension, index};
 }
+inline int resolveEntranceDoor(int hint, int sourceIndex, std::span<const int, 8> neighbors) {
+    // Native EnterDoor belongs to a room context, not to an arriving actor.
+    // Keep a matching hint, but repair a stale one when the destination has
+    // one unambiguous door back to this actor's actual departure room.
+    if (hint < 0 || hint >= 8 || sourceIndex < 0 || sourceIndex >= 169 ||
+        neighbors[hint] == sourceIndex)
+        return hint;
+    int matched = -1;
+    for (int slot = 0; slot < 8; ++slot)
+        if (neighbors[slot] == sourceIndex) {
+            if (matched >= 0)
+                return hint; // Do not invent a door when several links match.
+            matched = slot;
+        }
+    return matched >= 0 ? matched : hint;
+}
 inline void prepareDepartureMetadata(std::span<std::uint32_t, 3> destination,
                                      std::span<const std::uint32_t, 3> source) {
     // Level::ChangeRoom reads the departure descriptor/type before Room::Init

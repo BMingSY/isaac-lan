@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+import pytest
 from zipfile import ZIP_DEFLATED, ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
@@ -24,7 +25,7 @@ from game_logs import freeze_probe_logs, probe_path, probe_text
 from check_performance import summarize
 from run_network_engine import finalize_result
 from progress_fixture import MAGIC, PROFILE, checksum, patch, prepare
-from run_special_routes import lanbot_behavior_passed
+from run_special_routes import lanbot_behavior_passed, lanbot_greed_result
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARIES = ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe")
@@ -45,7 +46,7 @@ def test_greed_suite_keeps_both_modes_in_one_process_pair(tmp_path):
 
 def test_lanbot_suite_reuses_pair_and_cleans_owned_callbacks(tmp_path):
     script = tmp_path / "lanbot.lua"
-    build_special_suite(script, ["lanbot", "lanbot-campaign", "lanbot-spiders"])
+    build_special_suite(script, ["lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed"])
     source = script.read_text()
     assert source.count("local originalFrame, originalGate") == 1
     assert "return done end end" in source and "return finished end end" in source
@@ -60,7 +61,7 @@ def test_lanbot_suite_reuses_pair_and_cleans_owned_callbacks(tmp_path):
         assert "Isaac.RemoveCallback(owner, ModCallbacks." + callback in source
 
 
-def test_lanbot_behavior_requires_all_seven_successes():
+def test_lanbot_behavior_requires_all_ten_successes():
     names = [
         "exit-pickup",
         "arrival",
@@ -69,6 +70,9 @@ def test_lanbot_behavior_requires_all_seven_successes():
         "timed-spikes",
         "crossing-projectiles",
         "door-transfer",
+        "poop-obstacle",
+        "brown-fire-obstacle",
+        "red-fire-obstacle",
     ]
     checks = ["LANBOT_CASE " + name + " passed=true detail" for name in names]
     assert lanbot_behavior_passed(checks)
@@ -78,6 +82,30 @@ def test_lanbot_behavior_requires_all_seven_successes():
         [line.replace("passed=true", "passed=false") for line in checks]
     )
     assert not lanbot_behavior_passed(checks + [checks[0]])
+
+
+@pytest.mark.parametrize("outcome", ["win", "death", "stalled", "timeout", "bot_error"])
+def test_lanbot_greed_distinguishes_valid_attempt_from_victory(outcome):
+    line = (
+        f"LAN_NETWORK LANBOT_GREED RESULT outcome={outcome} cleared={str(outcome == 'win').lower()} "
+        "stage=7 wave=0 wall_s=123.5 simulation_s=120.0 shots0=500 shots1=450 hits0=3 hits1=5 native_ending=true"
+    )
+    result = lanbot_greed_result([line, "LAN_NETWORK LANBOT_GREED PASS challenge observed"])
+    assert result["cleared"] == (outcome == "win")
+    assert result["outcome"] == outcome and result["shots1"] == 450
+    assert result["wall_s"] == 123.5 and result["native_ending"]
+    with pytest.raises(ValueError):
+        lanbot_greed_result([line, line])
+    with pytest.raises(ValueError):
+        lanbot_greed_result([])
+    if outcome == "win":
+        for invalid in (
+            line.replace("stage=7", "stage=1"),
+            line.replace("native_ending=true", "native_ending=false"),
+            line.replace("cleared=true", "cleared=false"),
+        ):
+            with pytest.raises(ValueError):
+                lanbot_greed_result([invalid])
 
 
 class ProgressFixtureTests(unittest.TestCase):

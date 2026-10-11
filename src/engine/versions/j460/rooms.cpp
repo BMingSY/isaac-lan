@@ -971,6 +971,32 @@ bool queue(Address player, int index, int dimension, int door, bool teleport = f
     if (std::any_of(pending.begin(), pending.end(),
                     [player](const auto& r) { return r.player == player; }))
         return true;
+    if (!teleport && door >= 0 && door < 8 && key.dimension == it->second->key.dimension) {
+        using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+        const auto targetDesc =
+            reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
+                reinterpret_cast<void*>(game()), key.index, key.dimension));
+        if (targetDesc && at<Address>(targetDesc, 0x10)) {
+            std::array<int, 8> neighbors;
+            neighbors.fill(-1);
+            for (int slot = 0; slot < 8; ++slot) {
+                const int index = at<int>(targetDesc, 0x1c + slot * 4);
+                if (index < 0 || index >= 169)
+                    continue;
+                const auto neighbor =
+                    reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
+                        reinterpret_cast<void*>(game()), index, key.dimension));
+                if (neighbor && at<Address>(neighbor, 0x10))
+                    neighbors[slot] = at<int>(neighbor, 4);
+            }
+            const int resolved = resolveEntranceDoor(door, it->second->key.index, neighbors);
+            if (resolved != door)
+                logger("room_entry_resolved slot=" + std::to_string(slotOf(player)) + " from=" +
+                       std::to_string(it->second->key.index) + " to=" + std::to_string(key.index) +
+                       " hint=" + std::to_string(door) + " entry=" + std::to_string(resolved));
+            door = resolved;
+        }
+    }
     pending.push_back({player, key, door, teleport, animateDeparture, animation});
     if (teleport && animateDeparture) {
         using Animate = void(__attribute__((thiscall))*)(void*, bool);
@@ -2653,7 +2679,9 @@ void finishFrame() {
         canonical();
         logger("room_transfer slot=" + std::to_string(slotOf(request.player)) +
                " from=" + std::to_string(from->key.index) + " to=" + std::to_string(to->key.index) +
-               " created=" + std::to_string(created));
+               " created=" + std::to_string(created) + " entry=" + std::to_string(request.door) +
+               " x=" + std::to_string(at<float>(request.player, 0x33c)) +
+               " y=" + std::to_string(at<float>(request.player, 0x340)));
     }
     preparedDepartures.clear();
     if (beginTeamTransition)

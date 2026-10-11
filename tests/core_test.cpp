@@ -85,6 +85,24 @@ void roomTransitionContext() {
     require(!canonicalRoomDestination(-101, -1, 1) && !canonicalRoomDestination(84, -1, 0) &&
                 !canonicalRoomDestination(-100, 169, 1) && !canonicalRoomDestination(-100, 84, 3),
             "A missing or invalid alias descriptor became a wire destination");
+    // Greed's wide shop links its left lower door to the curse room and its
+    // right lower door to the arena. A fourth arrival can inherit EnterDoor=1
+    // from another actor's return to the arena; that is not the shop entrance.
+    const std::array<int, 8> shopNeighbors{-1, -1, -1, 83, -1, -1, -1, 84};
+    for (int hint : {7, 7, 7, 1})
+        require(resolveEntranceDoor(hint, 84, shopNeighbors) == 7,
+                "A later shop arrival reused another actor's native EnterDoor");
+    require(resolveEntranceDoor(1, 83, shopNeighbors) == 3 &&
+                resolveEntranceDoor(3, 83, shopNeighbors) == 3,
+            "Shop entry ignored the actual departure room or replaced a valid door");
+    const std::array<int, 8> multiple{-1, -1, -1, 84, -1, -1, -1, 84};
+    require(resolveEntranceDoor(7, 84, multiple) == 7 && resolveEntranceDoor(1, 84, multiple) == 1,
+            "Entry resolution guessed between multiple doors to the same room");
+    require(resolveEntranceDoor(-1, 84, shopNeighbors) == -1 &&
+                resolveEntranceDoor(8, 84, shopNeighbors) == 8 &&
+                resolveEntranceDoor(1, 85, shopNeighbors) == 1 &&
+                resolveEntranceDoor(1, -9, shopNeighbors) == 1,
+            "Entry resolution changed a teleport, non-adjacent or off-grid transfer");
     const std::array<std::uint32_t, 3> source{0xaabb, 0x12340000, 1};
     std::array<std::uint32_t, 3> fresh{0xccdd, 0, 0};
     // Native Mines II transition checks the OLD descriptor before Room::Init.
