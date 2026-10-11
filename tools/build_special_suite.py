@@ -23,6 +23,7 @@ DIAGNOSTICS = (
     "campaign",
     "lanbot",
     "lanbot-campaign",
+    "lanbot-spiders",
 )
 
 
@@ -47,6 +48,7 @@ def build(output, cases=CASES):
             "campaign": "state_endings.lua",
             "lanbot": "state_lanbot.lua",
             "lanbot-campaign": "state_lanbot_campaign.lua",
+            "lanbot-spiders": "state_lanbot_spiders.lua",
         }.get(name, "state_side_routes.lua")
         source = (ROOT / "tests" / filename).read_text()
         if name in ("home", "home-debug", "dogma-warning", "ascent-compat"):
@@ -70,6 +72,8 @@ def build(output, cases=CASES):
             cleanup = 'command("off")\nIsaac.RemoveCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)\n'
         elif name == "lanbot-campaign":
             cleanup = 'command("off")\nnative.input_bot = baseInput\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_PICKUP_COLLISION, chestCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)\n'
+        elif name == "lanbot-spiders":
+            cleanup = 'command("off")\nnative.input_bot = baseInput\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_NPC_UPDATE, freezeCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\n'
         complete = {"audio": "ended", "lanbot": "done"}.get(name, "finished")
         fixtures.append(
             'function() _IsaacLanTest.route = "'
