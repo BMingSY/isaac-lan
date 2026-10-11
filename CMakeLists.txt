@@ -59,6 +59,10 @@ if(BUILD_TESTING)
             COMMAND
                 "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot_spiders_fixture.lua"
                 "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(
+            NAME bridge.lanbot-greed
+            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot_greed_fixture.lua"
+                    "${CMAKE_CURRENT_SOURCE_DIR}")
         add_test(NAME bridge.grids
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/grids.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -119,6 +123,7 @@ if(BUILD_TESTING)
             bridge.lanbot
             bridge.lanbot-campaign
             bridge.lanbot-spiders
+            bridge.lanbot-greed
             bridge.grids
             bridge.resume
             bridge.mod-loading

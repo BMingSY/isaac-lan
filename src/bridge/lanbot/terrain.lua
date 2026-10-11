@@ -37,11 +37,22 @@ return function()
         local open = clear and grid.State == 1
         return open, open and 24 or 50
     end
-    function terrain:button(grid)
+    function terrain:button(grid, greed, clear)
         -- Vanilla states: ordinary plate pressed=3, reward plate pressed=4.
-        -- Reward/Greed/rail plates are deliberately not ordinary room puzzles.
+        -- Reward/rail plates are deliberately not ordinary room puzzles.
         if grid:GetVariant() == 0 then
             return grid.State ~= 3
+        end
+        if grid:GetVariant() == 2 and greed then
+            -- OffRed is the stop button: touching it costs health and pauses
+            -- waves. Start/resume ordinary waves and then the Boss round;
+            -- leave the optional Devil round to human input.
+            local animation = grid:GetSprite():GetAnimation()
+            return clear
+                and greed.stage < 7
+                and greed.wave < greed.bossWave
+                and grid.State == 0
+                and (animation == "Off" or animation == "OffSkull")
         end
         return false
     end

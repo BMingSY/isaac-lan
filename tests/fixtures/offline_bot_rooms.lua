@@ -2,7 +2,7 @@
 -- enforces collisions independently of navigation; no native physics claim.
 return function(root)
     local modules = {}
-    for _, name in ipairs({ "navigation", "hazards", "combat", "planner" }) do
+    for _, name in ipairs({ "navigation", "hazards", "combat", "greed", "planner" }) do
         modules["lanbot/" .. name] = dofile(root .. "/src/bridge/lanbot/" .. name .. ".lua")
     end
     local create = dofile(root .. "/src/bridge/lanbot.lua")

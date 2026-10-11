@@ -39,7 +39,7 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
         if info.ready ~= 1 or not bridge.ready() then
             return nil, "view_not_ready"
         end
-        local actors, localPlayers, roomPlayers = native.api_actors(), {}, {}
+        local actors, localPlayers, roomPlayers, remotePlayers = native.api_actors(), {}, {}, {}
         local locations = native.rooms_positions()
         local position = locations[tostring(info.slot)]
         if not position then
@@ -57,10 +57,10 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
                 and not player:IsDead()
             then
                 local at = locations[tostring(actor.owner - 1)]
-                if not at or at.index ~= position.index or at.dimension ~= position.dimension then
+                if not at or at.dimension ~= position.dimension then
                     partyReady = false
                 else
-                    roomPlayers[#roomPlayers + 1] = player
+                    remotePlayers[#remotePlayers + 1] = { player = player, index = at.index }
                 end
             end
         end
@@ -83,7 +83,7 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
         then
             return nil, "interface_or_transition"
         end
-        if game:IsGreedMode() or game.Challenge ~= 0 then
+        if game.Challenge ~= 0 then
             return nil, "unsupported_run"
         end
         local age = 0
@@ -113,6 +113,9 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
             end
             p.speed = math.max(0.1, player.MoveSpeed) * 264.705882
             p.keys, p.items = player:GetNumKeys(), player:GetCollectibleCount()
+            p.coins = player:GetNumCoins()
+            p.needsHeal = player:CanPickRedHearts()
+                and player:GetHearts() < player:GetEffectiveMaxHearts()
             p.health = player:GetHearts() + player:GetSoulHearts()
             p.range = math.max(60, math.min(600, player.TearRange))
             if player:GetPlayerType() == PlayerType.PLAYER_AZAZEL then
@@ -127,6 +130,20 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
                 p.charge = math.max(30, math.ceil((player.MaxFireDelay + 1) * 6))
             end
             local origin = room:GetGridPosition(0)
+            local level = game:GetLevel()
+            local function roomKey(index)
+                local descriptor = index >= 0 and level:GetRoomByIdx(index, position.dimension)
+                return position.dimension
+                    .. ":"
+                    .. (descriptor and descriptor.Data and descriptor.SafeGridIndex or index)
+            end
+            for _, entry in ipairs(remotePlayers) do
+                if roomKey(entry.index) == roomKey(position.index) then
+                    roomPlayers[#roomPlayers + 1] = entry.player
+                else
+                    partyReady = false
+                end
+            end
             local map = {
                 x = origin.X,
                 y = origin.Y,
@@ -143,7 +160,7 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
                 age = age,
                 controlDelay = 1 / 30,
                 world = info.runId .. ":" .. info.worldEpoch,
-                room = position.dimension .. ":" .. position.index,
+                room = roomKey(position.index),
                 clear = room:IsClear(),
                 boss = room:GetType() == RoomType.ROOM_BOSS,
                 actor = p,
@@ -151,21 +168,52 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
                 enemies = {},
                 dangers = {},
                 pickups = {},
+                shopOffers = {},
                 doors = {},
                 buttons = {},
+                breakables = {},
                 exits = {},
                 partyReady = partyReady,
                 shotLine = function(from, to)
-                    return room:CheckLine(
-                        Vector(from.x, from.y),
-                        Vector(to.x, to.y),
-                        3,
-                        0,
-                        false,
-                        false
-                    )
+                    local origin, destination = Vector(from.x, from.y), Vector(to.x, to.y)
+                    local clear, hit = room:CheckLine(origin, destination, 3, 0, false, false)
+                    if not to.breakable or clear or not hit then
+                        return clear
+                    end
+                    -- J460 can return the final free position just before the
+                    -- blocked cell. Inspect at most the next cell along that
+                    -- ray; never skip a rock or another poop to reach a target.
+                    local dx, dy = to.x - hit.X, to.y - hit.Y
+                    local length = math.sqrt(dx ^ 2 + dy ^ 2)
+                    local reach = math.min(map.step, length)
+                    local steps = math.max(1, math.ceil(reach / 4))
+                    for i = 0, steps do
+                        local distance = reach * i / steps
+                        local index = room:GetGridIndex(
+                            Vector(
+                                hit.X + (length > 0 and dx / length * distance or 0),
+                                hit.Y + (length > 0 and dy / length * distance or 0)
+                            )
+                        )
+                        local collision = room:GetGridCollision(index)
+                        if
+                            collision ~= GridCollisionClass.COLLISION_NONE
+                            and collision ~= GridCollisionClass.COLLISION_PIT
+                        then
+                            return index == to.cell - 1
+                        end
+                    end
+                    return false
                 end,
             }
+            if game:IsGreedMode() then
+                result.greed = {
+                    stage = level:GetStage(),
+                    wave = level.GreedModeWave,
+                    bossWave = game.Difficulty == 3 and 11 or 10,
+                }
+            end
+            result.shop = room:GetType() == RoomType.ROOM_SHOP
             if info.authority == 0 then
                 local status = networkStatus and networkStatus() or {}
                 local ping = status["ping" .. info.slot]
@@ -207,7 +255,17 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
                     )
                 if grid then
                     local kind, pos = grid:GetType(), room:GetGridPosition(index)
-                    if
+                    if kind == GridEntityType.GRID_POOP and grid.State < 1000 then
+                        result.breakables[#result.breakables + 1] = {
+                            id = "poop:" .. index,
+                            x = pos.X,
+                            y = pos.Y,
+                            radius = 20,
+                            cell = index + 1,
+                            breakable = true,
+                            attackable = true,
+                        }
+                    elseif
                         kind == GridEntityType.GRID_TRAPDOOR
                         or kind == GridEntityType.GRID_STAIRS
                     then
@@ -222,13 +280,18 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
                             radius = radius,
                             closed = kind == GridEntityType.GRID_TRAPDOOR and not usable,
                         }, usable)
-                    elseif kind == GridEntityType.GRID_PRESSURE_PLATE and terrain:button(grid) then
-                        result.buttons[#result.buttons + 1] = {
-                            id = "button:" .. index,
-                            x = pos.X,
-                            y = pos.Y,
-                            radius = 12,
-                        }
+                    elseif kind == GridEntityType.GRID_PRESSURE_PLATE then
+                        local value = { id = "button:" .. index, x = pos.X, y = pos.Y, radius = 12 }
+                        if terrain:button(grid, result.greed, result.clear) then
+                            value.greed = result.greed ~= nil and grid:GetVariant() == 2
+                            result.buttons[#result.buttons + 1] = value
+                        elseif result.greed and grid:GetVariant() == 2 then
+                            -- Avoid accidentally stopping a live wave or
+                            -- starting the optional bonus round while kiting.
+                            value.radius = 24
+                            map.zones[#map.zones + 1] = value
+                            result.dangers[#result.dangers + 1] = value
+                        end
                     elseif
                         (
                             kind == GridEntityType.GRID_SPIKES
@@ -273,12 +336,14 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
                         y = door.Position.Y,
                         dx = direction[1],
                         dy = direction[2],
-                        to = position.dimension .. ":" .. door.TargetRoomIndex,
+                        to = roomKey(door.TargetRoomIndex),
                         open = door:IsOpen(),
                         locked = door:IsLocked(),
                         cost = door:IsLocked(),
                         boss = targetType == RoomType.ROOM_BOSS,
                         treasure = targetType == RoomType.ROOM_TREASURE,
+                        shop = targetType == RoomType.ROOM_SHOP,
+                        greedExit = result.greed ~= nil and targetType == RoomType.ROOM_GREED_EXIT,
                         skip = door.TargetRoomIndex < 0
                             or targetType == RoomType.ROOM_CURSE
                             or targetType == RoomType.ROOM_SACRIFICE
@@ -295,7 +360,26 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
                 if e:Exists() and not e:IsDead() then
                     local value = entity(e)
                     local npc, pickup, laser = e:ToNPC(), e:ToPickup(), e:ToLaser()
-                    if npc and e:IsActiveEnemy(false) and e.HitPoints > 0 and not friendly(e) then
+                    if npc and e.Type == EntityType.ENTITY_FIREPLACE then
+                        -- Vanilla keeps the extinguished fireplace at 1 HP;
+                        -- replica collision flags cannot distinguish its ash.
+                        if e.HitPoints > 1 then
+                            value.id = "fire:" .. value.id
+                            value.radius = math.max(18, value.radius)
+                            value.clearable = e.Variant == 0 or e.Variant == 1
+                            value.attackable = value.clearable
+                            map.zones[#map.zones + 1] = value
+                            result.dangers[#result.dangers + 1] = value
+                            if value.clearable then
+                                result.breakables[#result.breakables + 1] = value
+                            end
+                        end
+                    elseif
+                        npc
+                        and e:IsActiveEnemy(false)
+                        and e.HitPoints > 0
+                        and not friendly(e)
+                    then
                         value.attackable = (e:GetEntityFlags() & EntityFlag.FLAG_NO_TARGET) == 0
                             and not e:IsInvincible()
                             and (info.authority == 0 or e:IsVulnerableEnemy())
@@ -366,19 +450,60 @@ return function(native, bridge, nav, terrain, actorPose, networkStatus)
                             end
                         end
                         addExit(value, result.clear and pickup.Wait <= 0)
-                    elseif pickup and pickup.Price == 0 and pickup.Wait <= 0 then
+                    elseif pickup then
                         local variant = pickup.Variant
                         value.id = "pickup:" .. value.id
                         value.collectible = variant == PickupVariant.PICKUP_COLLECTIBLE
+                        local config = value.collectible
+                            and pickup.SubType > 0
+                            and Isaac.GetItemConfig():GetCollectible(pickup.SubType)
+                        local activeSwap = config
+                            and config.Type == ItemType.ITEM_ACTIVE
+                            and player:GetActiveItem() ~= 0
+                        value.key = variant == PickupVariant.PICKUP_KEY
+                        value.recovery = variant == PickupVariant.PICKUP_HEART
+                            and pickup.SubType ~= HeartSubType.HEART_GOLDEN
+                            and pickup.SubType ~= HeartSubType.HEART_ETERNAL
                         value.heal = variant == PickupVariant.PICKUP_HEART
                             and usefulHeart(player, pickup.SubType)
                         local useful = value.heal
-                            or value.collectible and pickup.SubType > 0 and player:CanPickupItem()
+                            or value.collectible and not activeSwap and pickup.SubType > 0 and player:CanPickupItem()
                             or variant == PickupVariant.PICKUP_COIN and player:GetNumCoins() < 99
                             or variant == PickupVariant.PICKUP_KEY and p.keys < 99
                             or variant == PickupVariant.PICKUP_BOMB
                                 and player:GetNumBombs() < 99
-                        if useful then
+                        if
+                            result.greed
+                            and result.shop
+                            and pickup.Wait <= 0
+                            and pickup.Price > 0
+                            and (value.key or value.recovery)
+                        then
+                            value.price = pickup.Price
+                            result.shopOffers[#result.shopOffers + 1] = value
+                        end
+                        local paid = result.greed
+                            and result.shop
+                            and pickup.Price > 0
+                            and pickup.Price <= p.coins
+                            and (
+                                value.key and p.keys < 1
+                                or value.recovery and value.heal and p.needsHeal
+                            )
+                        if pickup.Price ~= 0 or activeSwap then
+                            -- Walking across an ignored item still purchases
+                            -- or swaps it natively. Open only the chosen paid
+                            -- resource's zone, while protecting other pickups.
+                            map.zones[#map.zones + 1] = {
+                                id = value.id,
+                                x = value.x,
+                                y = value.y,
+                                radius = math.max(20, value.radius) + 12,
+                                purchase = true,
+                            }
+                        end
+                        if useful and pickup.Wait <= 0 and (pickup.Price == 0 or paid) then
+                            value.paid, value.price = pickup.Price > 0, pickup.Price
                             result.pickups[#result.pickups + 1] = value
                         end
                     end

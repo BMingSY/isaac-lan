@@ -1,7 +1,7 @@
 return function(env, modules)
     local nav = modules["lanbot/navigation"]
     local combat = modules["lanbot/combat"](nav, modules["lanbot/hazards"](nav))
-    local planner = modules["lanbot/planner"](nav)
+    local planner = modules["lanbot/planner"](nav, modules["lanbot/greed"])
     local bot = {
         state = "off",
         mode = "run",
@@ -32,6 +32,7 @@ return function(env, modules)
         bot.state, bot.mode, bot.style, bot.task, bot.reason = "off", "run", "balanced", "idle", nil
         bot.plan, bot.world, bot.room, bot.actor, bot.health, bot.runId =
             planner.new(), nil, nil, nil, nil, nil
+        bot.flowRevision = nil
         bot.stats = { frames = 0, maxMs = 0, blocked = 0, hits = 0 }
     end
     function bot.poll()
@@ -56,6 +57,16 @@ return function(env, modules)
             .. bot.task
         if bot.reason then
             message = message .. " reason=" .. bot.reason
+        end
+        if bot.plan.flow.phase then
+            message = message
+                .. " phase="
+                .. bot.plan.flow.phase
+                .. " phase_reason="
+                .. bot.plan.flow.reason
+        end
+        if bot.plan.goal then
+            message = message .. " goal=" .. bot.plan.goal.id
         end
         return message
             .. string.format(
@@ -174,10 +185,13 @@ return function(env, modules)
         end
         bot.health = obs.actor.health
         obs.map.allowedExit = nil
-        local target = combat.target(obs, bot.style, bot.targetId)
+        obs.map.allowedPickup = nil
+        local breaking = bot.plan:obstacle(obs)
+        local target = breaking or combat.target(obs, bot.style, bot.targetId)
         bot.targetId = target and target.id
         local goal = bot.plan:arrival(obs)
         local kite = not goal
+            and not breaking
             and combat.kite(obs, bot.style, bot, function(id)
                 return bot.plan:available(id, frame)
             end)
@@ -191,15 +205,42 @@ return function(env, modules)
                 return bot.plan:available(id, frame)
             end, bot.aimId)
             bot.aimId = goal and goal.id
-            bot.task, bot.reason = "attack", nil
+            bot.task, bot.reason = breaking and "clear_obstacle" or "attack", nil
         else
             goal, reason = bot.plan:choose(obs, bot.mode, bot.style)
             bot.task, bot.reason = goal and goal.task or "wait", reason
         end
+        if goal and goal.task and not breaking then
+            breaking = bot.plan:obstacle(obs, goal, true)
+            if breaking then
+                target, bot.kite = breaking, nil
+                goal, bot.task = combat.goal(obs, breaking, bot.style), "clear_obstacle"
+            end
+        end
+        local flow = bot.plan.flow
+        if flow.phase and bot.flowRevision ~= flow.revision then
+            bot.flowRevision = flow.revision
+            env.log(
+                "flow phase=" .. flow.phase .. " reason=" .. flow.reason .. " floor=" .. flow.floor
+            )
+        end
         if goal and goal.exit then
             obs.map.allowedExit = goal.exit.id
         end
+        if goal and goal.paid then
+            obs.map.allowedPickup = goal.id
+        end
         local waypoint, blocked = bot.plan:waypoint(obs, goal)
+        if not waypoint and not breaking then
+            breaking = bot.plan:obstacle(obs, goal or target)
+            if breaking then
+                target, bot.kite = breaking, nil
+                obs.map.allowedPickup, obs.map.allowedExit = nil, nil
+                goal = combat.goal(obs, breaking, bot.style)
+                bot.task = "clear_obstacle"
+                waypoint, blocked = bot.plan:waypoint(obs, goal)
+            end
+        end
         if blocked then
             bot.stats.blocked = bot.stats.blocked + 1
             bot.reason = blocked

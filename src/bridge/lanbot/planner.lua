@@ -1,15 +1,20 @@
-return function(nav)
+return function(nav, greed)
     local planner = {}
     local methods = {}
     methods.__index = methods
     function planner.new()
-        return setmetatable({ nodes = {}, blocked = {}, mode = "run", bossClaims = {} }, methods)
+        return setmetatable(
+            { nodes = {}, blocked = {}, mode = "run", bossClaims = {}, flow = greed.new() },
+            methods
+        )
     end
     function methods:cancel()
         self.goal, self.path, self.pathAt, self.stuckAt, self.lastPosition = nil, nil, nil, nil, nil
         self.advance, self.pendingPickup, self.entry, self.buttonWait = false, nil, nil, nil
         self.waitingTrap = nil
         self.exitContact = nil
+        self.breaking = nil
+        self.flow:reset()
         self.needsArrival = true
     end
     function methods:observe(obs)
@@ -34,6 +39,7 @@ return function(nav)
             self.goal, self.path, self.lastPosition, self.stuckAt = nil, nil, nil, nil
             self.waitingTrap = nil
             self.exitContact = nil
+            self.breaking = nil
             node.visits = node.visits + 1
             self.room = obs.room
         end
@@ -50,7 +56,13 @@ return function(nav)
                 end
             end
         end
-        node.clear, node.exit = obs.clear, obs.exit
+        node.clear, node.exit, node.shop = obs.clear, obs.exit, obs.shop
+        node.resources = {}
+        if obs.shop then
+            for _, pickup in ipairs(obs.shopOffers or {}) do
+                node.resources[#node.resources + 1] = pickup
+            end
+        end
         node.edges = {}
         for _, door in ipairs(obs.doors) do
             node.edges[door.slot] = door
@@ -125,6 +137,7 @@ return function(nav)
             task = "move_to_door",
         }
     end
+    local wantsShop = greed.needsShop
     function methods:routes(obs, style, exitOnly)
         local queue, seen = { { room = obs.room, distance = 0 } }, { [obs.room] = true }
         local best, bestScore, resourceBlocked, pending
@@ -137,6 +150,22 @@ return function(nav)
                 local score = 2000 - entry.distance * 20
                 if not bestScore or score > bestScore then
                     best, bestScore = goalForDoor(entry.first), score
+                end
+            end
+            if node and node.shop and entry.first and not exitOnly and wantsShop(obs) then
+                for _, pickup in ipairs(node.resources or {}) do
+                    if
+                        pickup.price <= obs.actor.coins
+                        and (
+                            pickup.key and obs.actor.keys < 1
+                            or pickup.recovery and obs.actor.needsHeal
+                        )
+                    then
+                        local score = 800 - entry.distance * 20
+                        if not bestScore or score > bestScore then
+                            best, bestScore = goalForDoor(entry.first), score
+                        end
+                    end
                 end
             end
             if node then
@@ -157,11 +186,16 @@ return function(nav)
                         then
                             local nextNode = self.nodes[edge.to]
                             if not nextNode then
-                                if not exitOnly then
+                                if not exitOnly or obs.greed and edge.greedExit then
                                     local score = 100 - entry.distance * 20 - slot * 0.01
+                                    if exitOnly then
+                                        score = 2000 - entry.distance * 20
+                                    end
                                     if self.mode == "run" then
                                         score = score
                                             + (edge.boss and 350 or edge.treasure and 250 or 0)
+                                            + (edge.greedExit and 500 or 0)
+                                            + (edge.shop and wantsShop(obs) and 700 or 0)
                                     end
                                     if style == "cautious" and edge.cost then
                                         score = score - 300
@@ -186,6 +220,97 @@ return function(nav)
             end
         end
         return best, resourceBlocked, pending
+    end
+    function methods:obstacle(obs, goal, direct)
+        for _, value in ipairs(obs.breakables or {}) do
+            if value.id == self.breaking then
+                return value
+            end
+        end
+        self.breaking = nil
+        if not goal or #(obs.breakables or {}) == 0 then
+            return nil
+        end
+        local door = goal.door
+        local destination = door
+                and not goal.entering
+                and { x = door.x - door.dx * 32, y = door.y - door.dy * 32 }
+            or goal
+        if direct then
+            local best, distance
+            for _, value in ipairs(obs.breakables) do
+                local travel = nav.distance(obs.actor, value)
+                if
+                    (not value.cell or not obs.map.walk[value.cell])
+                    and travel <= obs.actor.range + value.radius
+                    and nav.segmentDistance(
+                        value.x,
+                        value.y,
+                        obs.actor.x,
+                        obs.actor.y,
+                        destination.x,
+                        destination.y
+                    ) < value.radius + obs.actor.radius
+                    and travel < nav.distance(obs.actor, destination) + value.radius
+                    and obs.shotLine(obs.actor, value)
+                    and (not distance or travel < distance)
+                then
+                    best, distance = value, travel
+                end
+            end
+            if best then
+                self.breaking = best.id
+            end
+            return best
+        end
+        -- The speculative map identifies a blocker; movement keeps using the
+        -- real map until normal tears actually destroy that grid entity.
+        local map = {}
+        for key, value in pairs(obs.map) do
+            map[key] = value
+        end
+        map.walk = {}
+        for key, value in pairs(obs.map.walk) do
+            map.walk[key] = value
+        end
+        local clearable = {}
+        for _, value in ipairs(obs.breakables) do
+            if value.cell then
+                map.walk[value.cell] = true
+            end
+            clearable[value.id] = true
+        end
+        map.zones = {}
+        for _, zone in ipairs(obs.map.zones or {}) do
+            if not (zone.clearable and clearable[zone.id]) then
+                map.zones[#map.zones + 1] = zone
+            end
+        end
+        local path = nav.path(map, obs.actor, destination, obs.actor.radius, 640, door)
+        if not path then
+            return nil
+        end
+        local previous = obs.actor
+        for _, point in ipairs(path) do
+            local best, distance
+            for _, value in ipairs(obs.breakables) do
+                if
+                    nav.segmentDistance(value.x, value.y, previous.x, previous.y, point.x, point.y)
+                    < value.radius + obs.actor.radius
+                then
+                    local travel = nav.distance(previous, value)
+                    if not distance or travel < distance then
+                        best, distance = value, travel
+                    end
+                end
+            end
+            if best then
+                self.breaking = best.id
+                return best
+            end
+            previous = point
+        end
+        return nil
     end
     local function retreatFromClosedExit(obs, contact)
         local best, distance, waiting
@@ -222,6 +347,7 @@ return function(nav)
     end
     function methods:choose(obs, mode, style)
         self.mode = mode
+        self.flow:update(obs, mode)
         if mode ~= "hold" then
             local button, distance
             for _, candidate in ipairs(obs.buttons or {}) do
@@ -234,6 +360,9 @@ return function(nav)
                 end
             end
             if button then
+                if button.greed and not obs.partyReady then
+                    return nil, "wait_for_party"
+                end
                 if nav.distance(obs.actor, button) <= 8 then
                     if not self.buttonWait or self.buttonWait.id ~= button.id then
                         self.buttonWait = { id = button.id, at = obs.frame }
@@ -260,7 +389,11 @@ return function(nav)
         end
         local pickup, score
         for _, item in ipairs(obs.pickups) do
-            if self:available(item.id, obs.frame) and (mode ~= "hold" or item.heal) then
+            if
+                self:available(item.id, obs.frame)
+                and (mode ~= "hold" or item.heal)
+                and not (item.paid and (self.flow.phase == "gather" or self.flow.phase == "leave"))
+            then
                 local allowed = not (
                     obs.boss
                     and item.collectible
@@ -290,7 +423,13 @@ return function(nav)
                     self.pendingPickup.near = true
                 end
             end
-            return { x = pickup.x, y = pickup.y, id = pickup.id, task = "pickup" }
+            return {
+                x = pickup.x,
+                y = pickup.y,
+                id = pickup.id,
+                task = "pickup",
+                paid = pickup.paid,
+            }
         end
         if mode == "hold" then
             return nil, "room_clear"
@@ -361,6 +500,13 @@ return function(nav)
         end
         if self.advance and obs.exit then
             return exitGoal()
+        end
+        if self.flow.phase == "gather" or self.flow.phase == "leave" then
+            if obs.exit then
+                return exitGoal()
+            end
+            local route = self:routes(obs, style, true)
+            return route, route and nil or "exit_unreachable"
         end
         local route, resourceBlocked, pending = self:routes(obs, style, self.advance)
         if route then

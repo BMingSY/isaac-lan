@@ -28,7 +28,11 @@ local function corridor(door, x, y, radius)
 end
 function nav.zonesAllow(map, x, y, radius, time, from, ignoreTimed)
     for _, zone in ipairs(map.zones or {}) do
-        if (not zone.exit or zone.id ~= map.allowedExit) and not (ignoreTimed and zone.timed) then
+        if
+            (not zone.exit or zone.id ~= map.allowedExit)
+            and (not zone.purchase or zone.id ~= map.allowedPickup)
+            and not (ignoreTimed and zone.timed)
+        then
             local blocked = not zone.timed or (time or 0) >= (zone.safeFor or 0)
             local distance = nav.distance({ x = x, y = y }, zone)
             if blocked and distance < radius + zone.radius then

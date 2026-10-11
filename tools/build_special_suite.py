@@ -25,6 +25,7 @@ DIAGNOSTICS = (
     "lanbot",
     "lanbot-campaign",
     "lanbot-spiders",
+    "lanbot-greed",
 )
 
 
@@ -51,6 +52,7 @@ def build(output, cases=CASES):
             "lanbot": "state_lanbot.lua",
             "lanbot-campaign": "state_lanbot_campaign.lua",
             "lanbot-spiders": "state_lanbot_spiders.lua",
+            "lanbot-greed": "state_lanbot_greed.lua",
         }.get(name, "state_side_routes.lua")
         source = (ROOT / "tests" / filename).read_text()
         if name in ("home", "home-debug", "dogma-warning", "ascent-compat"):
@@ -71,11 +73,13 @@ def build(output, cases=CASES):
         elif name in ("greed", "greedier"):
             cleanup = "Isaac.RemoveCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)\n"
         elif name == "lanbot":
-            cleanup = 'command("off")\nIsaac.RemoveCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)\n'
+            cleanup = 'command("off")\nIsaac.RemoveCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\n'
         elif name == "lanbot-campaign":
             cleanup = 'command("off")\nnative.input_bot = baseInput\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_PICKUP_COLLISION, chestCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)\n'
         elif name == "lanbot-spiders":
             cleanup = 'command("off")\nnative.input_bot = baseInput\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_NPC_UPDATE, freezeCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\n'
+        elif name == "lanbot-greed":
+            cleanup = 'command("off")\nnative.input_bot = baseInput\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\n'
         elif name == "shared-deals":
             cleanup = (
                 "Isaac.RemoveCallback(owner, ModCallbacks.MC_PRE_NPC_UPDATE, freezeCallback)\n"
