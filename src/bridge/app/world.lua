@@ -36,6 +36,7 @@ local forms = assert(modules["compat/characters/lazarus"])(native, function(inde
     return Isaac.GetPlayer(index)
 end, PlayerType)
 local poop = assert(modules["compat/characters/blue_baby"])(native, PlayerType)
+local craftingBag = assert(modules["compat/items/crafting_bag"])(native, CollectibleType)
 local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
 local entityCodec = assert(modules["sync/entity_codec"])(
@@ -130,6 +131,7 @@ function state.capture(slot, tick)
                 {},
                 false,
                 poop.capture(p),
+                craftingBag.capture(p),
             }
             captureActors[index] = base
         end
@@ -156,6 +158,7 @@ function state.capture(slot, tick)
                     visuals,
                     assert(native.actor_pose(p:GetSprite())),
                     base[7],
+                    base[8],
                 }
                 captureVisuals[index] = full
             end
@@ -343,6 +346,7 @@ function state.apply(bytes, tick, ack)
         applyEntity(p, actor[3], now, tick)
         actorsPresentation.apply(p, actor)
         poop.apply(p, actor[7])
+        craftingBag.apply(p, actor[8])
     end
     forms.prune(replicas, motion, lastInventory, value.actors)
     pills.apply(value.pills)

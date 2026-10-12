@@ -14,6 +14,7 @@
 #include "compat/routes/curses.h"
 #include "compat/items/deal_chances.h"
 #include "compat/items/death_certificate.h"
+#include "compat/items/crafting_bag.h"
 #include "compat/items/team_effects.h"
 #include "compat/characters/traits.h"
 #include "compat/characters/keeper.h"
@@ -1953,6 +1954,63 @@ int actorPockets(lua_State* L) {
         return 1;
     }
 }
+int actorCraftingBag(lua_State* L) {
+    try {
+        auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
+        if (!wrapper || lua.rawLength(L, 1) != 8 || wrapper[1] < 0x48)
+            throw std::runtime_error("Invalid crafting bag actor wrapper");
+        const auto player = wrapper[1] - 0x48;
+        const auto all = values(teamRoster ? *teamRoster : roster());
+        if (std::find(all.begin(), all.end(), player) == all.end() ||
+            at<unsigned>(player, 0x28) != 1)
+            throw std::runtime_error("Crafting bag state requires a listed player");
+        if (lua.getTop(L) == 1) {
+            lan::Writer w(lan::Message::world);
+            for (unsigned i = 0; i < 8; ++i)
+                w.u8(at<std::uint8_t>(player, 0x1f44 + i));
+            w.u32(at<unsigned>(player, 0x1f4c));
+            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                           w.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas restore crafting bag state");
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 2, &size);
+        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        compat::items::CraftingBagState value;
+        for (auto& material : value.materials)
+            material = r.u8();
+        value.preview = r.u32();
+        r.finish();
+        if (!compat::items::validCraftingBagState(value))
+            throw std::runtime_error("Invalid crafting bag state");
+        bool changed = at<unsigned>(player, 0x1f4c) != value.preview;
+        for (unsigned i = 0; i < value.materials.size(); ++i)
+            changed |= at<std::uint8_t>(player, 0x1f44 + i) != value.materials[i];
+        if (changed) {
+            for (unsigned i = 0; i < value.materials.size(); ++i)
+                at<std::uint8_t>(player, 0x1f44 + i) = value.materials[i];
+            at<unsigned>(player, 0x1f4c) = value.preview;
+            // Vanilla acquisition marks only this actor's owned HUD cache dirty.
+            // Repeated snapshots leave its native animation/cache intact.
+            using GetHUD = void*(__attribute__((thiscall))*)(void*);
+            const auto hud = reinterpret_cast<Address>(
+                engine<GetHUD>(j460::entry::engineRoomsGetHUD)(reinterpret_cast<void*>(game())));
+            for (unsigned i = 0; i < 8; ++i) {
+                const auto part = hud + i * 0x6dc;
+                if (at<Address>(part, 0) == player)
+                    at<bool>(part, 0x6ad) = true;
+            }
+        }
+        lua.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& e) {
+        runtime::abort(e.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+}
 int actorForm(lua_State* L) {
     const auto index = lua.checkInteger(L, 1), desired = lua.checkInteger(L, 2);
     const auto controller = lua.getTop(L) >= 3 ? lua.checkInteger(L, 3) : -1;
@@ -3247,6 +3305,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("map_refresh", refreshMap);
     function("actor_sprites", actorSprites);
     function("actor_pockets", actorPockets);
+    function("actor_crafting_bag", actorCraftingBag);
     function("actor_form", actorForm);
     function("actor_poop", actorPoop);
     function("actor_ghost", actorGhost);

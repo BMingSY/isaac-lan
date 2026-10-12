@@ -158,6 +158,9 @@ inline constexpr std::uint32_t itemPoolPillEffect = 0x334a80;
 inline constexpr std::uint32_t itemPoolIdentifyPill = 0x318ea0;
 inline constexpr std::uint32_t itemPoolPillIdentified = 0x43c490;
 inline constexpr std::uint32_t playerGetPocketItem = 0x353900;
+inline constexpr std::uint32_t craftingBagMaterialQuery = 0x44a1f6;
+inline constexpr std::uint32_t craftingBagPreviewQuery = 0x443b06;
+inline constexpr std::uint32_t craftingBagMaterialCount = 0x3d54e2;
 inline constexpr std::uint32_t playerSetPocketActiveItem = 0x3d41d0;
 inline constexpr std::uint32_t playerGetActiveItem = 0x2a2f0;
 } // namespace entry

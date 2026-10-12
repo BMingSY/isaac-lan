@@ -4,9 +4,9 @@ local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
 local codec, schema = module("sync/codec"), module("sync/world_schema")
--- Shared pills append to the schema 14 world view.
+-- Schema 15 adds per-actor crafting bag state; top-level fields retain their order.
 local tuple = {
-    14,
+    15,
     42,
     80,
     6,
@@ -32,9 +32,9 @@ assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses ==
 assert(codec.encode(schema.pack(view)) == codec.encode(tuple))
 assert(not pcall(schema.unpack, tuple, 41))
 local malformed = { table.unpack(tuple) }
-malformed[1] = 12
+malformed[1] = 14
 assert(not pcall(schema.unpack, malformed, 42))
-malformed[1], malformed[21] = 14, true
+malformed[1], malformed[21] = 15, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))

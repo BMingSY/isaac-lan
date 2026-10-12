@@ -160,6 +160,9 @@ if(BUILD_TESTING)
             NAME bridge.pocket-inventory
             COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/pocket_inventory.lua"
                     "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.crafting-bag
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/crafting_bag.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
         add_test(NAME bridge.keeper
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/keeper.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -199,6 +202,7 @@ if(BUILD_TESTING)
             bridge.shared-deals
             bridge.pills
             bridge.pocket-inventory
+            bridge.crafting-bag
             bridge.keeper
             bridge.greed
             bridge.special-visuals

@@ -14,6 +14,7 @@
 #include "compat/items/rewind_targets.h"
 #include "compat/items/deal_chances.h"
 #include "compat/items/death_certificate.h"
+#include "compat/items/crafting_bag.h"
 #include "compat/items/team_effects.h"
 #include "compat/characters/keeper.h"
 #include "compat/characters/team_effects.h"
@@ -45,6 +46,16 @@ void sharedDealChances() {
 }
 void compatibilityTargets() {
     using namespace isaac::compat;
+    require(items::validCraftingBagState({}) &&
+                items::validCraftingBagState({{1, 29, 8, 0, 0, 0, 0, 0}, 0}) &&
+                items::validCraftingBagState({{1, 2, 3, 4, 5, 6, 7, 8}, 65535}),
+            "Valid empty, partial or full crafting bags were rejected");
+    for (const auto value : {items::CraftingBagState{{30, 0, 0, 0, 0, 0, 0, 0}, 0},
+                             items::CraftingBagState{{1, 0, 8, 0, 0, 0, 0, 0}, 0},
+                             items::CraftingBagState{{1, 2, 3, 4, 5, 6, 7, 8}, 65536},
+                             items::CraftingBagState{{1, 2, 0, 0, 0, 0, 0, 0}, 25}})
+        require(!items::validCraftingBagState(value),
+                "Invalid material, hole or preview in a partial crafting bag was accepted");
     require(
         characters::sharedCharacterEffect(ids::player::lostB,
                                           characters::TeamEffect::randomCollectibles) &&

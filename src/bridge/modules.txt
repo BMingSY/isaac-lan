@@ -26,6 +26,7 @@ sync/npc
 sync/curses
 sync/deals
 compat/items/black_candle
+compat/items/crafting_bag
 compat/routes/crawlspace
 compat/routes/greed
 compat/bosses/dogma

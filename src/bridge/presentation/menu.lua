@@ -206,8 +206,8 @@ function _IsaacLanMenuRender(
                     local ping = status["ping" .. slot] or -1
                     assets[10]:DrawStringScaledUTF8(
                         "P" .. (slot + 1) .. " " .. (ping < 0 and "—" or ping .. " ms"),
-                        origin.X + 320,
-                        origin.Y + 62 + line * 8,
+                        origin.X + 210,
+                        origin.Y + 28 + line * 8,
                         0.6,
                         0.6,
                         white,
