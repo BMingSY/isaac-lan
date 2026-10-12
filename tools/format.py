@@ -19,7 +19,7 @@ def main():
         .decode()
         .split("\0")
     )
-    files = sorted(set(path for path in tracked if path))
+    files = sorted(set(path for path in tracked if path and not path.startswith("vendor/miniz/")))
     groups = [
         (
             ["clang-format", "--dry-run", "--Werror"] if args.check else ["clang-format", "-i"],

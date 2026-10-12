@@ -1,5 +1,6 @@
 #include "engine/presentation.h"
 #include "engine/item_presentation.h"
+#include "engine/input.h"
 #include "engine/rooms.h"
 #include "core/intro_barrier.h"
 #include "runtime/room_map.h"
@@ -29,6 +30,48 @@ std::deque<Intro> intros;
 unsigned serial = 0, seen = 0;
 unsigned played = 0;
 unsigned hostIntro = 0;
+using PromptCall = void(__attribute__((thiscall)) *)(void*);
+PromptCall originalPromptControls, originalPromptRender;
+bool promptIdle(std::uintptr_t prompt) {
+    const auto animation = at<std::uintptr_t>(prompt, 0x34);
+    if (!animation || !at<bool>(prompt, 0x44) || at<unsigned>(animation, 0x10) != 4)
+        return false;
+    const auto name =
+        at<unsigned>(animation, 0x14) >= 16 ? at<std::uintptr_t>(animation, 0) : animation;
+    return std::memcmp(reinterpret_cast<void*>(name), "Idle", 4) == 0;
+}
+bool partyPrompt(void* prompt) {
+    return runtime::localViewSlot() >= 0 &&
+           reinterpret_cast<std::uintptr_t>(prompt) ==
+               at<std::uintptr_t>(image, j460::globals::game) + 0x26778;
+}
+void __attribute__((fastcall)) promptControls(void* prompt, void*) {
+    if (!partyPrompt(prompt)) {
+        originalPromptControls(prompt);
+        return;
+    }
+    if (runtime::replica())
+        return;
+    // This party uses the host's decision and our reliable floor event.
+    // The native Steam-vote mode would keep waiting for unrelated votes.
+    at<bool>(reinterpret_cast<std::uintptr_t>(prompt), 0x130) = false;
+    // Native press edges last one render; this modal runs at simulation rate.
+    // Use only the host's accepted, latched physical edges, preserving the
+    // native selection, result and Hide animation.
+    const auto address = reinterpret_cast<std::uintptr_t>(prompt);
+    const auto promptLeft = input::hostMenuTriggered(20) || input::hostMenuTriggered(21);
+    const auto promptConfirm = input::hostMenuTriggered(14);
+    if (promptLeft)
+        at<int>(address, 0x128) = (at<int>(address, 0x128) - 1) & 1;
+    if (promptConfirm && promptIdle(address)) {
+        at<int>(address, 0x12c) = at<int>(address, 0x128) == 0 ? 2 : 1;
+        reinterpret_cast<PromptCall>(image + j460::entry::victoryPromptHide)(prompt);
+    }
+}
+void __attribute__((fastcall)) promptRender(void* prompt, void*) {
+    if (!partyPrompt(prompt) || runtime::localViewSlot() == 0)
+        originalPromptRender(prompt);
+}
 IntroBarrier waiting;
 using StartIntro = void(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 StartIntro originalIntro;
@@ -89,6 +132,7 @@ struct API {
     const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
     const char*(__cdecl* pushString)(lua_State*, const char*, std::size_t);
     void(__cdecl* pushBoolean)(lua_State*, int);
+    void(__cdecl* pushInteger)(lua_State*, long long);
     void(__cdecl* pushClosure)(lua_State*, int(__cdecl*)(lua_State*), int);
     void(__cdecl* setField)(lua_State*, int, const char*);
 } lua{};
@@ -151,6 +195,18 @@ int active(lua_State* L) {
     lua.pushBoolean(L, introActive());
     return 1;
 }
+int victoryPrompt(lua_State* L) {
+    const auto game = at<std::uintptr_t>(image, j460::globals::game);
+    const auto prompt = game ? game + 0x26778 : 0;
+    const auto animation = prompt ? at<std::uintptr_t>(prompt, 0x34) : 0;
+    const bool playing = prompt && at<bool>(prompt, 0x44);
+    lua.pushBoolean(L, animation && playing);
+    lua.pushInteger(L, prompt ? at<int>(prompt, 0x128) : -1);
+    lua.pushInteger(L, prompt ? at<int>(prompt, 0x12c) : 0);
+    lua.pushBoolean(L, prompt && at<bool>(prompt, 0x130));
+    lua.pushBoolean(L, prompt && promptIdle(prompt));
+    return 5;
+}
 } // namespace
 IntroSimulationScope::IntroSimulationScope(bool advance) {
     if (runtime::replica() || !hostIntro || !rooms::stateReady())
@@ -184,6 +240,16 @@ IntroSimulationScope::~IntroSimulationScope() {
 bool install(std::uintptr_t base) {
     image = base;
     return items::install(base) &&
+           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::victoryPromptControls),
+                         reinterpret_cast<void*>(promptControls),
+                         reinterpret_cast<void**>(&originalPromptControls)) == MH_OK &&
+           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::victoryPromptControls)) ==
+               MH_OK &&
+           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::victoryPromptRender),
+                         reinterpret_cast<void*>(promptRender),
+                         reinterpret_cast<void**>(&originalPromptRender)) == MH_OK &&
+           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::victoryPromptRender)) ==
+               MH_OK &&
            MH_CreateHook(reinterpret_cast<void*>(image + 0x42f1c0),
                          reinterpret_cast<void*>(startIntro),
                          reinterpret_cast<void**>(&originalIntro)) == MH_OK &&
@@ -202,6 +268,7 @@ bool bind(lua_State* L, HMODULE module) {
     IMPORT(checkString, "luaL_checklstring");
     IMPORT(pushString, "lua_pushlstring");
     IMPORT(pushBoolean, "lua_pushboolean");
+    IMPORT(pushInteger, "lua_pushinteger");
     IMPORT(pushClosure, "lua_pushcclosure");
     IMPORT(setField, "lua_setfield");
 #undef IMPORT
@@ -211,6 +278,8 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "presentation_reset");
     lua.pushClosure(L, active, 0);
     lua.setField(L, -2, "presentation_active");
+    lua.pushClosure(L, victoryPrompt, 0);
+    lua.setField(L, -2, "victory_lap_prompt");
     return items::bind(L, module);
 }
 void reset() {

@@ -43,6 +43,7 @@ def inventory_value(resources=None, passive=None, actives=None, souls=0, black=0
         [0, 0],
         False,
         0,
+        False,
     ]
 
 
@@ -94,6 +95,42 @@ def test_production_codec_round_trip(lua, value):
 )
 def test_production_decoder_rejects_invalid_state(lua, payload):
     assert lua.call("decode", payload.hex())[0] is False
+
+
+def test_familiar_growth_survives_native_data_invalidation(lua):
+    lua.call("entities_reset")
+    first = [entity(i, kind=3, variant=1) for i in range(1, 65)]
+    lua.call("entities_apply", "0:1", first)
+    grown = first + [entity(65, kind=3, variant=1)]
+    result = lua.call("entities_apply", "0:1", grown, False, True)
+    assert len([value for value in result[0] if value[1] == 3]) == 65
+    assert result[2] == 0
+    assert lua.call("entities_apply", "0:1", grown) == result
+    lua.call("entities_apply", "0:1", [])
+    assert not any(value[1] == 3 for value in lua.call("entities_read")[0])
+
+
+def test_familiar_pool_releases_obsolete_entities_before_spawning(lua):
+    lua.call("entities_reset")
+    first = [entity(i, kind=3, variant=1) for i in range(1, 65)]
+    lua.call("entities_apply", "0:1", first, False, False, 64)
+    for start in (2, 65, 129):
+        # The new entity arrives first on the wire; its native allocation must
+        # not overwrite an old entity that still belongs to this snapshot.
+        current = [entity(i, kind=3, variant=1) for i in range(start, start + 64)][::-1]
+        result = lua.call("entities_apply", "0:1", current, False, False, 64)
+        assert {v[0] for v in result[0] if v[1] == 3} == set(range(start, start + 64))
+        assert lua.call("entities_apply", "0:1", current, False, False, 64) == result
+
+
+def test_native_effect_pool_eviction_during_view_does_not_abort(lua):
+    lua.call("entities_reset")
+    values = [entity(i, kind=1000, variant=15) for i in range(1, 66)]
+    result = lua.call("entities_apply", "0:1", values, False, False, 64)
+    assert len([v for v in result[0] if v[1] == 1000]) == 64
+    retained = values[-64:]
+    stable = lua.call("entities_apply", "0:1", retained, False, False, 64)
+    assert lua.call("entities_apply", "0:1", retained, False, False, 64) == stable
 
 
 @pytest.mark.property

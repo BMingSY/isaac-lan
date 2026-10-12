@@ -126,6 +126,15 @@ local function environment(difficulty)
             return false
         end,
         state_clock = function() end,
+        pill_state = function(value)
+            return value and true or string.rep(string.pack(">i4B", 0, 0), 15)
+        end,
+        api_info = function()
+            return { ready = 0 }
+        end,
+        actor_pockets = function(_, value)
+            return value and true or string.rep(string.pack(">I4I4", 0, 1), 4)
+        end,
         door_slot = function()
             return true
         end,

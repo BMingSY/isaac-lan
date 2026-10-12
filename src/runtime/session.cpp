@@ -480,7 +480,7 @@ void updateReplica(void* game) {
         lua.pushBoolean(state, transition->same);
         lua.pushLString(state, reinterpret_cast<const char*>(transition->rewind.data()),
                         transition->rewind.size());
-        lua.pushBoolean(state, transition->rKey);
+        lua.pushInteger(state, transition->restart);
         lua.pushInteger(state, transition->cinematic);
         playingCinematic = transition->cinematic != 0;
         cinematicReady = false;
@@ -1307,6 +1307,15 @@ bool replica() {
 unsigned difficulty() {
     return session ? session->settings().difficulty : 0;
 }
+bool startingPartyHasCharacter(int kind) {
+    if (!session || gated || session->phase() != lan::Phase::running)
+        return false;
+    for (unsigned slot = 0; slot < session->players(); ++slot)
+        if ((session->connectedMask() & (1u << slot)) &&
+            session->settings().characters[slot] == kind)
+            return true;
+    return false;
+}
 bool ending() {
     return playingEnding;
 }
@@ -1361,7 +1370,7 @@ void pollLocalConsole() {
     if (game)
         originalConsoleUpdate(reinterpret_cast<void*>(game + 0x68d78));
 }
-void beginStage(bool same, int animation, bool rKey, unsigned cinematic) {
+void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) {
     if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
         return;
     const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
@@ -1372,8 +1381,8 @@ void beginStage(bool same, int animation, bool rKey, unsigned cinematic) {
     value.type = *reinterpret_cast<int*>(game + 4);
     value.same = same;
     value.animation = animation;
-    value.rKey = rKey;
-    if (rKey) {
+    value.restart = restart;
+    if (restart) {
         value.level = 1;
         value.type = 0;
     }

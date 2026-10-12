@@ -1,6 +1,6 @@
 -- Reliable events enter through one epoch barrier before any native operation.
 return function(native, floor, compatibility, level, resetView)
-    return function(epoch, stage, stageType, animation, same, rewind, rKey, cinematic)
+    return function(epoch, stage, stageType, animation, same, rewind, restart, cinematic)
         if not floor.begin(epoch) then
             return false
         end
@@ -12,7 +12,7 @@ return function(native, floor, compatibility, level, resetView)
             animation = animation,
             same = same,
             rewind = rewind,
-            rKey = rKey,
+            restart = restart,
             cinematic = cinematic,
         }
         if compatibility.begin(native, event) then

@@ -7,6 +7,10 @@ local owner = { Name = "Isaac LAN native extension" }
 local function callback(id, fn)
     Isaac.AddCallback(owner, id, fn)
 end
+local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
+callback(ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, pickup, collider)
+    keeper.collide(pickup, collider)
+end)
 local status, started, prepared, engineStarted, tick = {}, false, false, false, 0
 local players = {}
 local continuedRun = false
@@ -137,6 +141,7 @@ callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
     end
 end)
 callback(ModCallbacks.MC_POST_UPDATE, function()
+    keeper.update()
     if not engineStarted or prepared or game:GetRoom():GetFrameCount() < 10 then
         return
     end
@@ -193,7 +198,7 @@ function _IsaacLanCommand(action, value)
         native.net_close()
         started, prepared = false, false
         assert(native.input_virtual())
-        local ip, port = value:match("^([%d%.]+):(%d+)$")
+        local ip, port = value:match("^([a-zA-Z0-9%.%-]+):(%d+)$")
         assert(ip and native.net_join(ip, tonumber(port), _IsaacLanFingerprint, modFingerprint()))
     elseif action == "start" then
         local seed, difficulty, a, b, c, d = value:match("^([%w]+):(%d+):(%d+):(%d+):(%d+):(%d+)$")

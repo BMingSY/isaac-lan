@@ -1,5 +1,5 @@
 -- Deliberately small player/config contract. Unknown methods fail immediately.
-return function(root, sharedResources)
+return function(root, sharedResources, pockets)
     local module = dofile(root .. "/src/bridge/sync/inventory.lua")
     local fixture = {}
     local methods = {}
@@ -21,6 +21,7 @@ return function(root, sharedResources)
         end,
         activeType = 2,
         curse = 1,
+        pockets = pockets,
     })
     local player
     function fixture.reset(ghost)

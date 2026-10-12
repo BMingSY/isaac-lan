@@ -36,6 +36,9 @@ local function stateEnvironment()
             ["compat/transitions"] = dofile(root .. "/src/bridge/compat/transitions.lua"),
             ["compat/items/hourglass"] = dofile(root .. "/src/bridge/compat/items/hourglass.lua"),
             ["compat/items/r_key"] = dofile(root .. "/src/bridge/compat/items/r_key.lua"),
+            ["compat/routes/victory_lap"] = dofile(
+                root .. "/src/bridge/compat/routes/victory_lap.lua"
+            ),
             ["compat/routes/home"] = dofile(root .. "/src/bridge/compat/routes/home.lua"),
             ["compat/routes/greed"] = dofile(root .. "/src/bridge/compat/routes/greed.lua"),
             ["compat/bosses/room_entry"] = dofile(
@@ -52,8 +55,15 @@ local function stateEnvironment()
             ["sync/npc"] = dofile(root .. "/src/bridge/sync/npc.lua"),
             ["sync/curses"] = dofile(root .. "/src/bridge/sync/curses.lua"),
             ["sync/deals"] = dofile(root .. "/src/bridge/sync/deals.lua"),
+            ["sync/pills"] = dofile(root .. "/src/bridge/sync/pills.lua"),
+            ["compat/characters/keeper"] = dofile(
+                root .. "/src/bridge/compat/characters/keeper.lua"
+            ),
             ["compat/items/black_candle"] = dofile(
                 root .. "/src/bridge/compat/items/black_candle.lua"
+            ),
+            ["compat/items/crafting_bag"] = dofile(
+                root .. "/src/bridge/compat/items/crafting_bag.lua"
             ),
             ["compat/routes/crawlspace"] = dofile(
                 root .. "/src/bridge/compat/routes/crawlspace.lua"
