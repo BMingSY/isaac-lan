@@ -18,7 +18,7 @@
 
 ### Linux／Steam Deck（Proton）
 
-在 Steam 中为游戏启用 Proton，使用 Windows 版 J460。以 Proton 11.0-2 为适配基准，Linux 实机验收待完成。
+在 Steam 中为游戏启用 Proton，使用 Windows 版 J460。以 Proton 11.0-2 为适配基准。
 
 关闭游戏后，在完整安装包目录运行（需要 Python 3）：
 
