@@ -5,8 +5,13 @@ local originalRegisterMod, originalRequire = RegisterMod, require
 for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     local callbacks, assigned = {}, {}
     local players = { { ControllerIndex = controllers[1] }, { ControllerIndex = controllers[2] } }
-    ModCallbacks =
-        { MC_EXECUTE_CMD = 1, MC_POST_GAME_STARTED = 2, MC_POST_UPDATE = 3, MC_PRE_GAME_EXIT = 4 }
+    ModCallbacks = {
+        MC_EXECUTE_CMD = 1,
+        MC_POST_GAME_STARTED = 2,
+        MC_POST_UPDATE = 3,
+        MC_PRE_GAME_EXIT = 4,
+        MC_PRE_PICKUP_COLLISION = 5,
+    }
     Isaac = {
         AddCallback = function(_, id, fn)
             callbacks[id] = fn
@@ -56,6 +61,7 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     }
     _IsaacLanState = { reset = noop }
     _IsaacLanModules = {
+        ["compat/characters/keeper"] = dofile(root .. "/src/bridge/compat/characters/keeper.lua"),
         ["compat/mods/observation"] = dofile(root .. "/src/bridge/compat/mods/observation.lua"),
         ["api/public"] = { poll = noop, commit = noop, reset = noop, actions = { step = noop } },
         ["compat/mods/registry"] = { observeMod = noop, observeRequire = noop },

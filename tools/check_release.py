@@ -16,10 +16,13 @@ FILES = BINARIES | {
     "Install.cmd",
     "Uninstall.cmd",
     "install.ps1",
+    "install.py",
+    "game-profile.json",
     "README.md",
     "payload.json",
     "licenses/MinHook-LICENSE.txt",
     "licenses/imgui-LICENSE.txt",
+    "licenses/miniz-LICENSE.txt",
 }
 SYSTEM_DLLS = {
     "bcrypt.dll",
@@ -96,6 +99,11 @@ def check(archive, tag):
                 imports[name] = required
             finally:
                 pe.close()
+        if set(payload.get("linux_files", {})) != {"install.py", "game-profile.json"}:
+            raise ValueError("Linux installer manifest differs")
+        for name, expected in payload["linux_files"].items():
+            if hashlib.sha256(zipped.read(prefix + name)).hexdigest() != expected:
+                raise ValueError(f"Package file hash differs: {name}")
         for name in ("Install.cmd", "Uninstall.cmd"):
             contents = zipped.read(prefix + name)
             if b"\r\n" not in contents or b"install.ps1" not in contents:

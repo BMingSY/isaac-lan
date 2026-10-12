@@ -4,9 +4,9 @@ local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
 local codec, schema = module("sync/codec"), module("sync/world_schema")
--- Shared curses, Greed waves and deal chances form the schema 13 world view.
+-- Shared pills append to the schema 14 world view.
 local tuple = {
-    13,
+    14,
     42,
     80,
     6,
@@ -25,6 +25,7 @@ local tuple = {
     5,
     false,
     { 1, 0.5 },
+    string.rep(string.pack(">i4B", 0, 0), 15),
 }
 local view = schema.unpack(tuple, 42)
 assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses == 5)
@@ -33,7 +34,7 @@ assert(not pcall(schema.unpack, tuple, 41))
 local malformed = { table.unpack(tuple) }
 malformed[1] = 12
 assert(not pcall(schema.unpack, malformed, 42))
-malformed[1], malformed[20] = 13, true
+malformed[1], malformed[21] = 14, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))
@@ -56,6 +57,10 @@ local native = {
         order[#order + 1] = "r-key"
         return true
     end,
+    victory_lap_begin = function()
+        order[#order + 1] = "victory-lap"
+        return true
+    end,
     rooms_begin_cinematic = function()
         order[#order + 1] = "cinematic"
         return true
@@ -75,7 +80,12 @@ local level = {
 }
 local home = module("compat/routes/home")(enums.LevelStage, enums.StageType)
 local floor = module("runtime/floor")(native, home)
-local adapters = { home, module("compat/items/hourglass"), module("compat/items/r_key") }
+local adapters = {
+    home,
+    module("compat/items/hourglass"),
+    module("compat/items/r_key"),
+    module("compat/routes/victory_lap"),
+}
 local compatibility = module("compat/transitions")(adapters)
 assert(not pcall(module("compat/transitions"), { home, home }))
 local begin = module("runtime/transitions")(native, floor, compatibility, function()
@@ -85,7 +95,7 @@ end, function()
 end)
 assert(begin(8, 4, 4, 0, false))
 assert(table.concat(order, ",") == "reset,set-stage,floor:0:0")
-assert(not begin(8, 1, 0, 0, false, false, true) and #order == 3)
+assert(not begin(8, 1, 0, 0, false, false, 1) and #order == 3)
 assert(not begin(7, 1, 0, 0, false) and #order == 3)
 ready = false
 assert(floor.waiting() and not floor.ready(level, 8, 4, 4))
@@ -93,11 +103,12 @@ ready = true
 assert(floor.ready(level, 8, 4, 4))
 for index, event in ipairs({
     { "native checkpoint", false, 0, "rewind" },
-    { false, true, 0, "r-key" },
-    { false, false, 25, "cinematic" },
+    { false, 1, 0, "r-key" },
+    { false, 2, 0, "victory-lap" },
+    { false, 0, 25, "cinematic" },
     -- Preserve the existing precedence for an event carrying overlapping flags.
-    { "native checkpoint", true, 25, "cinematic" },
-    { "native checkpoint", true, 0, "rewind" },
+    { "native checkpoint", 1, 25, "cinematic" },
+    { "native checkpoint", 1, 0, "rewind" },
 }) do
     order = {}
     assert(begin(8 + index, 1, 0, 12, true, event[1], event[2], event[3]))

@@ -52,6 +52,10 @@ def main():
         subprocess.run([LUAC, "-p", str(special)], check=True)
         build_special(special, ["room-entry"])
         subprocess.run([LUAC, "-p", str(special)], check=True)
+        build_special(
+            special, ["party-compat", "item-generation", "victory-lap", "victory-no", "campaign"]
+        )
+        subprocess.run([LUAC, "-p", str(special)], check=True)
     print("PASS Python, Lua and bundled gameplay syntax")
 
 

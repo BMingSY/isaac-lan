@@ -295,7 +295,7 @@ function _IsaacLanMenuRender(
                 command("host", port)
             end
         end)
-        row(ip == "" and "输入房主 IP" or ip, function()
+        row(ip == "" and "输入房主 IP 或域名" or ip, function()
             editing = "ip"
             _IsaacLan.menu_text_begin(ip, "ip")
         end, true, nil, "ip")
@@ -405,7 +405,7 @@ function _IsaacLanMenuRender(
     local gap = #rows > 6 and 19 or 23
     if editing then
         if editing == "ip" then
-            ip = typed:gsub("[^%d%.]", ""):sub(1, 15)
+            ip = typed:gsub("[^a-zA-Z0-9%.%-]", ""):sub(1, 253)
         elseif editing == "port" then
             port = typed:gsub("[^%d]", ""):sub(1, 5)
         else
@@ -489,7 +489,7 @@ function _IsaacLanMenuRender(
     local footerY = message ~= "" and 235 or 243
     if phase == 2 then
         if not host then
-            text("房主 IP：" .. ip, 25, footerY - 12, 10)
+            text("房主地址：" .. ip, 25, footerY - 12, 10)
         end
         text("TCP 端口：" .. (host and status.port or port), 25, footerY, 10)
     elseif phase == 3 then

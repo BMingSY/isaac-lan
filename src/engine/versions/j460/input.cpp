@@ -24,6 +24,8 @@ template <class T> T& at(std::uintptr_t p, unsigned offset) {
 std::atomic<bool> virtualDevices{false};
 std::atomic<int> labButtons{-1};
 std::atomic<int> labLeftTrigger{0}, labRightTrigger{0};
+std::atomic<int> labThumbX{0}, labThumbY{0};
+std::atomic<unsigned> labPacket{1};
 bool labInput = false;
 bool enabled = false;
 bool menuConfirm = false;
@@ -89,10 +91,12 @@ SetState originalVibration = nullptr;
 DWORD WINAPI state(DWORD index, XINPUT_STATE* result) {
     if (labInput && labButtons >= 0 && index == 0 && result) {
         *result = {};
-        result->dwPacketNumber = static_cast<DWORD>(labButtons.load() + 1);
+        result->dwPacketNumber = labPacket.load();
         result->Gamepad.wButtons = static_cast<WORD>(labButtons.load());
         result->Gamepad.bLeftTrigger = static_cast<BYTE>(labLeftTrigger.load());
         result->Gamepad.bRightTrigger = static_cast<BYTE>(labRightTrigger.load());
+        result->Gamepad.sThumbLX = static_cast<SHORT>(labThumbX.load());
+        result->Gamepad.sThumbLY = static_cast<SHORT>(labThumbY.load());
         return ERROR_SUCCESS;
     }
     if (!virtualDevices)
@@ -301,9 +305,20 @@ int spawn(lua_State* L) {
     return 1;
 }
 int testGamepad(lua_State* L) {
-    labButtons = static_cast<int>(lua.checkInteger(L, 1));
-    labLeftTrigger = lua.getTop(L) > 1 ? static_cast<int>(lua.checkInteger(L, 2)) : 0;
-    labRightTrigger = lua.getTop(L) > 2 ? static_cast<int>(lua.checkInteger(L, 3)) : 0;
+    const auto buttons = static_cast<int>(lua.checkInteger(L, 1));
+    const auto left = lua.getTop(L) > 1 ? static_cast<int>(lua.checkInteger(L, 2)) : 0;
+    const auto right = lua.getTop(L) > 2 ? static_cast<int>(lua.checkInteger(L, 3)) : 0;
+    const auto x = lua.getTop(L) > 3 ? static_cast<int>(lua.checkInteger(L, 4)) : 0;
+    const auto y = lua.getTop(L) > 4 ? static_cast<int>(lua.checkInteger(L, 5)) : 0;
+    if (buttons != labButtons || left != labLeftTrigger || right != labRightTrigger ||
+        x != labThumbX || y != labThumbY) {
+        labButtons = buttons;
+        labLeftTrigger = std::clamp(left, 0, 255);
+        labRightTrigger = std::clamp(right, 0, 255);
+        labThumbX = std::clamp(x, -32767, 32767);
+        labThumbY = std::clamp(y, -32767, 32767);
+        ++labPacket;
+    }
     return 0;
 }
 int botInput(lua_State* L) {
@@ -513,6 +528,9 @@ bool menuTriggered(int action) {
            originalQuery(reinterpret_cast<void*>(image + 0x857b18), -1,
                          reinterpret_cast<void*>(image + j460::entry::inputTriggered), &action,
                          nullptr, nullptr);
+}
+bool hostMenuTriggered(int action) {
+    return enabled && menuActionTriggered(accepted.inputs[0], action);
 }
 bool bind(lua_State* L, HMODULE module) {
 #define IMPORT(field, name)                                                                        \

@@ -13,6 +13,10 @@
 #include "compat/characters/traits.h"
 #include "compat/items/rewind_targets.h"
 #include "compat/items/deal_chances.h"
+#include "compat/items/death_certificate.h"
+#include "compat/items/team_effects.h"
+#include "compat/characters/keeper.h"
+#include "compat/characters/team_effects.h"
 #include "core/audio_ownership.h"
 #include "core/localized_text.h"
 #include "core/laser_state.h"
@@ -41,6 +45,31 @@ void sharedDealChances() {
 }
 void compatibilityTargets() {
     using namespace isaac::compat;
+    require(
+        characters::sharedCharacterEffect(ids::player::lostB,
+                                          characters::TeamEffect::randomCollectibles) &&
+            characters::sharedCharacterEffect(ids::player::lostB,
+                                              characters::TeamEffect::randomCards) &&
+            !characters::sharedCharacterEffect(ids::player::lostB, characters::TeamEffect::shop) &&
+            !characters::sharedCharacterEffect(0, characters::TeamEffect::randomCards),
+        "Global character effects leaked into another trait or player type");
+    for (int item : {21, 54, 64, 246, 260, 376, 691})
+        require(items::sharedCollectibleEffect(item), "A public passive effect became personal");
+    for (int item : {0, 1, 105, 622, 628})
+        require(!items::sharedCollectibleEffect(item), "A personal inventory query became shared");
+    require(characters::sharedKeeperShopSubtype(4, true) == 104 &&
+                characters::sharedKeeperShopSubtype(104, true) == 104 &&
+                characters::sharedKeeperShopSubtype(4, false) == 4 &&
+                characters::sharedKeeperShopSubtype(-1, true) == -1,
+            "Keeper shop upgrade stacked, changed another subtype or outlived its owner");
+    require(
+        items::deathCertificateTransfer(20, 0, 2) && items::deathCertificateTransfer(20, 2, 0) &&
+            !items::deathCertificateTransfer(0, 2, 2) && !items::deathCertificateTransfer(20, 0, 0),
+        "Death Certificate gathering captured an internal door/card or ordinary room");
+    require(items::deathCertificateTeleport(3, 2) && items::deathCertificateTeleport(11, 2) &&
+                items::deathCertificateTeleport(16, 2) && !items::deathCertificateTeleport(20, 2) &&
+                !items::deathCertificateTeleport(0, 2) && !items::deathCertificateTeleport(3, 0),
+            "Death Certificate card confinement captured its native return or a normal teleport");
     require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
             "Lazarus form matching crossed another character");
     require(characters::taintedJacob(37) && characters::taintedJacob(39) &&
@@ -428,6 +457,21 @@ void keyboardPause() {
     isaac::input::keyboardPause(menu, false);
     require(menu.triggered == 0 && menu.values[12] == 0,
             "Held Escape created a repeated pause edge");
+    auto modal = original;
+    modal.values[14] = 0; // Released during the render before the accepted step.
+    modal.triggered = 1u << 14;
+    require(isaac::input::menuActionTriggered(modal, 14),
+            "An already released physical confirm was lost at the modal simulation step");
+    modal.triggered = 1u << 4;
+    require(isaac::input::menuActionTriggered(modal, 20) &&
+                !isaac::input::menuActionTriggered(modal, 21),
+            "Native menu direction did not retain the corresponding fire direction");
+    modal.triggered = 0;
+    modal.values[14] = 65535;
+    require(!isaac::input::menuActionTriggered(modal, 14) &&
+                !isaac::input::menuActionTriggered(modal, -1) &&
+                !isaac::input::menuActionTriggered(modal, 32),
+            "Held or invalid modal controls became repeated selection/confirm edges");
 }
 void roomMap() {
     std::array<int, 507> offsets;

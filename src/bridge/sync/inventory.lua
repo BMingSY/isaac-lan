@@ -49,6 +49,7 @@ return function(env)
             { p:GetPill(0), p:GetPill(1) },
             p:IsCoopGhost(),
             p:GetEffects():GetNullEffectNum(env.curse),
+            env.pockets and env.pockets(p) or false,
         }
     end
     local function applyResources(p, v)
@@ -156,6 +157,9 @@ return function(env)
             if v[7][slot + 1] == 0 and p:GetPill(slot) ~= v[8][slot + 1] then
                 p:SetPill(slot, v[8][slot + 1])
             end
+        end
+        if v[11] then
+            assert(env.pockets and env.pockets(p, v[11]), "Cannot restore ordered pocket items")
         end
     end
     return { capture = inventory, apply = applyInventory }

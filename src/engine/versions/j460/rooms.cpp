@@ -13,7 +13,11 @@
 #include "compat/routes/mines.h"
 #include "compat/routes/curses.h"
 #include "compat/items/deal_chances.h"
+#include "compat/items/death_certificate.h"
+#include "compat/items/team_effects.h"
 #include "compat/characters/traits.h"
+#include "compat/characters/keeper.h"
+#include "compat/characters/team_effects.h"
 #include "runtime/actor_roster.h"
 #include "core/poop_state.h"
 #include <MinHook.h>
@@ -253,7 +257,7 @@ struct TeamTransition {
     std::function<void()> begin;
 };
 std::optional<TeamTransition> pendingTeamTransition;
-bool pendingRKey = false;
+unsigned pendingRestart = 0;
 std::optional<Address> pendingDogma;
 RoomCall originalNativeRoomChange;
 void __attribute__((fastcall)) nativeRoomChange(void* transition, void*) {
@@ -264,6 +268,8 @@ void __attribute__((fastcall)) nativeRoomChange(void* transition, void*) {
 }
 using RKey = void(__cdecl*)();
 RKey originalRKey;
+using VictoryLap = void(__attribute__((thiscall)) *)(void*);
+VictoryLap originalVictoryLap;
 std::optional<bool> pendingExit;
 bool resumeStage = false;
 std::vector<SavedLocation> resumeLocations;
@@ -388,6 +394,79 @@ struct TeamScope {
         }
     }
 };
+using FindCollectible = void*(__attribute__((thiscall)) *)(void*, int, void*, bool);
+using CollectibleCount = int(__attribute__((thiscall)) *)(void*, int);
+using FindPlayerType = void*(__attribute__((thiscall)) *)(void*, int);
+FindCollectible originalFindCollectible;
+CollectibleCount originalCollectibleCount;
+FindPlayerType originalFindPlayerType;
+void* __attribute__((fastcall)) findCollectible(void* manager, void*, int item, void* excluded,
+                                                bool backup) {
+    if (!compat::items::sharedCollectibleEffect(item))
+        return originalFindCollectible(manager, item, excluded, backup);
+    TeamScope team;
+    return originalFindCollectible(manager, item, excluded, backup);
+}
+int __attribute__((fastcall)) collectibleCount(void* manager, void*, int item) {
+    if (!compat::items::sharedCollectibleEffect(item))
+        return originalCollectibleCount(manager, item);
+    TeamScope team;
+    return originalCollectibleCount(manager, item);
+}
+void* __attribute__((fastcall)) findPlayerType(void* manager, void*, int kind) {
+    const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
+    // Share only the native shop and random collectible checks. Personal
+    // character checks, including Devil buyers, keep their room/actor scope.
+    using compat::characters::TeamEffect;
+    const bool keeper = compat::characters::sharedCharacterEffect(kind, TeamEffect::shop) &&
+                        (caller == 0x34a684 || caller == 0x41554c);
+    const bool lost =
+        compat::characters::sharedCharacterEffect(kind, TeamEffect::randomCollectibles) &&
+        caller == j460::entry::itemPoolTaintedLostQuery + 13;
+    if (!keeper && !lost)
+        return originalFindPlayerType(manager, kind);
+    TeamScope team;
+    return originalFindPlayerType(manager, kind);
+}
+using GetCardEx = int(__stdcall*)(unsigned, unsigned, unsigned, unsigned, bool);
+GetCardEx originalGetCardEx;
+int __stdcall getCardEx(unsigned seed, unsigned special, unsigned rune, unsigned suit,
+                        bool nonCards) {
+    // J460 inlines its Tainted Lost lookup here rather than FindPlayerType.
+    // Temporarily expose the team only when that shared trait is present.
+    bool shared = false;
+    {
+        TeamScope team;
+        shared = compat::characters::sharedCharacterEffect(
+                     compat::ids::player::lostB, compat::characters::TeamEffect::randomCards) &&
+                 originalFindPlayerType(reinterpret_cast<void*>(game() + 0x1baa8),
+                                        compat::ids::player::lostB) != nullptr;
+    }
+    if (!shared)
+        return originalGetCardEx(seed, special, rune, suit, nonCards);
+    TeamScope team;
+    return originalGetCardEx(seed, special, rune, suit, nonCards);
+}
+using RandomRoom = void*(__attribute__((thiscall)) *)(void*, unsigned, bool, int, int, int, int,
+                                                      int, int, int, void*, int, int);
+RandomRoom originalRandomRoom;
+void* __attribute__((fastcall)) randomRoom(void* config, void*, unsigned seed, bool reduce,
+                                           int stage, int type, int shape, int minimum, int maximum,
+                                           int difficultyLow, int difficultyHigh, void* doors,
+                                           int subtype, int mode) {
+    const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
+    if (type == 2 && caller == 0x33a20a) {
+        bool keeper = runtime::startingPartyHasCharacter(compat::ids::player::keeperB);
+        if (enabled) {
+            TeamScope team;
+            keeper = originalFindPlayerType(reinterpret_cast<void*>(game() + 0x1baa8),
+                                            compat::ids::player::keeperB) != nullptr;
+        }
+        subtype = compat::characters::sharedKeeperShopSubtype(subtype, keeper);
+    }
+    return originalRandomRoom(config, seed, reduce, stage, type, shape, minimum, maximum,
+                              difficultyLow, difficultyHigh, doors, subtype, mode);
+}
 struct DealChances {
     float total, angel;
 };
@@ -1019,7 +1098,31 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
         return;
     }
     const auto who = currentActor(player);
+    if (!runtime::replica() &&
+        compat::items::deathCertificateTransfer(animation, at<int>(game(), 0x1830c), dimension)) {
+        // Game::EnterDeathCertificate and its Game::Update return both pass a
+        // null player. The latter runs outside Player::Update, so resolving a
+        // current actor would reject the native return and strand the party.
+        for (const auto head : participants)
+            if (connectedMask & (1u << slotOf(head)))
+                if (!queue(head, index, dimension, -1, false, false, animation))
+                    runtime::abort("Cannot transfer the Death Certificate party");
+        return;
+    }
     const bool teleport = animation == 3 || animation == 11 || animation == 16;
+    if (!runtime::replica() && who)
+        if (auto it = location.find(who);
+            it != location.end() &&
+            compat::items::deathCertificateTeleport(animation, it->second->key.dimension)) {
+            // The card's ordinary-floor index can have no annex descriptor.
+            // Resolve within the annex, falling back to its native entry.
+            auto target = destination(*it->second, index, 2);
+            if (!target || target->dimension != 2)
+                target = destination(*it->second, 80, 2);
+            if (!target || !queue(who, target->index, 2, -1, true))
+                runtime::abort("Cannot resolve the Death Certificate teleport");
+            return;
+        }
     if (runtime::replica()) {
         if (!remoteCommand(who, index, dimension, teleport))
             logger("mod_room_command=REJECTED local_actor_unresolved");
@@ -1098,7 +1201,15 @@ void __cdecl rKey() {
     // J460's R Key timer calls TriggerRKey directly. Defer it until the room
     // scope is gone so its native cleanup sees the complete co-op roster.
     if (!runtime::replica())
-        pendingRKey = true;
+        pendingRestart = 1;
+}
+void __attribute__((fastcall)) victoryLap(void* g, void*) {
+    if (!enabled) {
+        originalVictoryLap(g);
+        return;
+    }
+    if (!runtime::replica())
+        pendingRestart = 2;
 }
 Room* findRoom(Address player) {
     auto it = location.find(player);
@@ -1176,6 +1287,79 @@ int dealChances(lua_State* L) {
 int resetDealChances(lua_State*) {
     replicaDeals.reset();
     return 0;
+}
+int pickupPrice(lua_State* L) {
+    auto pickupWrapper = static_cast<Address*>(lua.toUserdata(L, 1));
+    auto playerWrapper = static_cast<Address*>(lua.toUserdata(L, 2));
+    if (!enabled || !pickupWrapper || !playerWrapper || lua.rawLength(L, 1) != 8 ||
+        lua.rawLength(L, 2) != 8) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto pickup = pickupWrapper[1] - 0x48, player = playerWrapper[1] - 0x48;
+    if (at<unsigned>(pickup, 0x28) != 5 || at<unsigned>(player, 0x28) != 1 ||
+        !at<bool>(pickup, 0x172) || !at<bool>(player, 0x172)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto room = findRoom(player);
+    if (!room || room->replicaShell || at<int>(room->pointer, 8) != 14) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    Scope scope(*room, {player}, false);
+    using Price = int(__attribute__((thiscall))*)(void*, int, int, int, int);
+    using Discount = int(__attribute__((thiscall))*)(void*, int, int, int);
+    const auto base = engine<Price>(j460::entry::roomPickupPrice)(
+        reinterpret_cast<void*>(room->pointer), at<int>(pickup, 0x2c), at<int>(pickup, 0x30),
+        at<int>(pickup, 0x53c), 0);
+    const auto price = engine<Discount>(j460::entry::roomDiscountedPrice)(
+        reinterpret_cast<void*>(room->pointer), at<int>(pickup, 0x53c), base, 0);
+    lua.pushInteger(L, price);
+    return 1;
+}
+int pillState(lua_State* L) {
+    try {
+        // Game::GetItemPool returns Game + 0x1a740. GetPillEffect reads
+        // its 15 color assignments at 0x7a4; Identify/IsPillIdentified mask
+        // horse-pill colors and access the 15 identification bytes at 0x7e0.
+        const auto pool = game() + 0x1a740;
+        std::array<int, 15> effects;
+        std::array<unsigned char, 15> known;
+        const bool applying = lua.getTop(L) != 0;
+        if (applying) {
+            if (!enabled || !runtime::replica())
+                throw std::runtime_error("Only replicas restore pill state");
+            std::size_t size = 0;
+            const auto bytes = lua.checkString(L, 1, &size);
+            lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
+            for (unsigned i = 0; i < effects.size(); ++i) {
+                effects[i] = static_cast<int>(r.u32());
+                known[i] = r.u8();
+                if (effects[i] < -1 || effects[i] >= 4096 || known[i] > 1)
+                    throw std::runtime_error("Invalid pill state");
+            }
+            r.finish();
+            for (unsigned i = 0; i < effects.size(); ++i) {
+                at<int>(pool, 0x7a4 + i * 4) = effects[i];
+                at<unsigned char>(pool, 0x7e0 + i) = known[i];
+            }
+            lua.pushBoolean(L, true);
+        } else {
+            lan::Writer w(lan::Message::world);
+            for (unsigned i = 0; i < effects.size(); ++i) {
+                w.u32(at<int>(pool, 0x7a4 + i * 4));
+                w.u8(at<bool>(pool, 0x7e0 + i));
+            }
+            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                           w.bytes.size() - 1);
+        }
+        return 1;
+    } catch (const std::exception& e) {
+        runtime::abort(e.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
 }
 bool adopt() {
     if (enabled || depth)
@@ -1342,13 +1526,20 @@ int positions(lua_State* L) {
     return 1;
 }
 int ready(lua_State* L) {
-    lua.pushBoolean(L, enabled && !resumeStage && !pendingStage && !pendingRKey);
+    lua.pushBoolean(L, enabled && !resumeStage && !pendingStage && !pendingRestart);
     return 1;
 }
 int beginRKey(lua_State* L) {
     const bool ready = runtime::replica() && enabled && !depth;
     if (ready)
-        pendingRKey = true;
+        pendingRestart = 1;
+    lua.pushBoolean(L, ready);
+    return 1;
+}
+int beginVictoryLap(lua_State* L) {
+    const bool ready = runtime::replica() && enabled && !depth;
+    if (ready)
+        pendingRestart = 2;
     lua.pushBoolean(L, ready);
     return 1;
 }
@@ -1714,6 +1905,53 @@ int actorSprites(lua_State* L) {
     for (auto address = costumes.begin; address < costumes.end; address += 0x130)
         push(address);
     return 1;
+}
+int actorPockets(lua_State* L) {
+    try {
+        auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
+        if (!wrapper || lua.rawLength(L, 1) != 8 || !wrapper[1])
+            throw std::runtime_error("Invalid actor pocket wrapper");
+        const auto player = wrapper[1] - 0x48;
+        const auto all = values(teamRoster ? *teamRoster : roster());
+        if (std::find(all.begin(), all.end(), player) == all.end() ||
+            at<unsigned>(player, 0x28) != 1)
+            throw std::runtime_error("Pocket state requires a listed player");
+        if (lua.getTop(L) == 1) {
+            lan::Writer w(lan::Message::world);
+            for (unsigned i = 0; i < 4; ++i) {
+                w.u32(at<unsigned>(player, 0x17a0 + i * 8));
+                w.u32(at<unsigned>(player, 0x17a4 + i * 8));
+            }
+            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                           w.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas restore pocket state");
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 2, &size);
+        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        std::array<std::array<unsigned, 2>, 4> pockets;
+        for (auto& value : pockets) {
+            value = {r.u32(), r.u32()};
+            if (value[0] > 65535 || value[1] > 2 ||
+                (value[1] == 2 && (value[0] < 3 || value[0] > 4)))
+                throw std::runtime_error("Invalid ordered pocket state");
+        }
+        r.finish();
+        // Only scalar pocket ID/kind records move. The active-item objects,
+        // item acquisition and gameplay remain with inventory reconciliation.
+        for (unsigned i = 0; i < pockets.size(); ++i) {
+            at<unsigned>(player, 0x17a0 + i * 8) = pockets[i][0];
+            at<unsigned>(player, 0x17a4 + i * 8) = pockets[i][1];
+        }
+        lua.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& e) {
+        runtime::abort(e.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
 }
 int actorForm(lua_State* L) {
     const auto index = lua.checkInteger(L, 1), desired = lua.checkInteger(L, 2);
@@ -2120,13 +2358,14 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     draw();
 }
 bool checkpointReady() {
-    return enabled && !depth && !resumeStage && !pendingStage && !pendingRKey && loaded.size() == 1;
+    return enabled && !depth && !resumeStage && !pendingStage && !pendingRestart &&
+           loaded.size() == 1;
 }
 bool stateReady() {
-    return enabled && !depth && !resumeStage && !pendingStage && !pendingRKey;
+    return enabled && !depth && !resumeStage && !pendingStage && !pendingRestart;
 }
 bool viewReady() {
-    return enabled && !transferring && !resumeStage && !pendingStage && !pendingRKey;
+    return enabled && !transferring && !resumeStage && !pendingStage && !pendingRestart;
 }
 bool virtualized() {
     return enabled;
@@ -2415,7 +2654,18 @@ void finishFrame() {
     participants = currentParticipants;
     if (rewind::executePending())
         return;
-    if (pendingRKey) {
+    if (pendingRestart == 2) {
+        // The host's native confirmation changes Seeds, lap counters, players
+        // and the floor directly. Run it once with the complete roster, after
+        // scoped room callbacks have finished, on both sides of the barrier.
+        runtime::beginStage(false, 0, 2);
+        beforeStart();
+        resumeStage = true;
+        originalVictoryLap(reinterpret_cast<void*>(game()));
+        logger("floor_transaction=VICTORY_LAP");
+        return;
+    }
+    if (pendingRestart == 1) {
         if (!runtime::replica()) {
             const auto locations = captureLocations();
             withCheckpointRoster([&] {
@@ -2596,6 +2846,24 @@ void finishFrame() {
             if (created) {
                 transferring = true;
                 skipSave = to->pointer;
+                if (runtime::replica()) {
+                    if (from->key.dimension != 2 && request.destination.dimension == 2) {
+                        // Replicas enter from a resolved room view, without
+                        // Game::EnterDeathCertificate. Its five scalar origin
+                        // fields are nevertheless consumed by ChangeRoom on
+                        // return (J460 0x33fd70); preserve the native context.
+                        at<int>(game(), 0x18900) = from->key.index;
+                        at<unsigned char>(game(), 0x18904) = from->key.dimension;
+                        at<int>(game(), 0x18908) = at<int>(game(), 0x18308);
+                        at<unsigned char>(game(), 0x1890c) = at<int>(game(), 0x18310);
+                        at<int>(game(), 0x188fc) = at<int>(game(), 0x18318);
+                    } else if (from->key.dimension == 2 && request.destination.dimension != 2) {
+                        // The activating player may have been in another
+                        // normal room. The authority's resolved return wins.
+                        at<int>(game(), 0x18900) = request.destination.index;
+                        at<unsigned char>(game(), 0x18904) = request.destination.dimension;
+                    }
+                }
                 // The request already resolves a destination. J460 otherwise
                 // reuses LeaveDoor from the preceding transition and replaces
                 // that destination with the old room's neighbor (0x340432).
@@ -2764,7 +3032,7 @@ void beforeStart() {
     resumeStage = false;
     pendingStage.reset();
     pendingTeamTransition.reset();
-    pendingRKey = false;
+    pendingRestart = 0;
     pendingDogma.reset();
     resumeLocations.clear();
     if (!enabled || depth)
@@ -2851,6 +3119,17 @@ bool install(Address base, void (*log)(const std::string&)) {
     };
     return hook(j460::entry::entityPlayerAddCoins, reinterpret_cast<void*>(addCoins),
                 reinterpret_cast<void**>(&originalCoins)) &&
+           hook(j460::entry::playerManagerFindCollectible, reinterpret_cast<void*>(findCollectible),
+                reinterpret_cast<void**>(&originalFindCollectible)) &&
+           hook(j460::entry::playerManagerCollectibleCount,
+                reinterpret_cast<void*>(collectibleCount),
+                reinterpret_cast<void**>(&originalCollectibleCount)) &&
+           hook(j460::entry::playerManagerFindPlayerType, reinterpret_cast<void*>(findPlayerType),
+                reinterpret_cast<void**>(&originalFindPlayerType)) &&
+           hook(j460::entry::itemPoolGetCardEx, reinterpret_cast<void*>(getCardEx),
+                reinterpret_cast<void**>(&originalGetCardEx)) &&
+           hook(j460::entry::roomConfigRandomRoom, reinterpret_cast<void*>(randomRoom),
+                reinterpret_cast<void**>(&originalRandomRoom)) &&
            hook(j460::entry::roomGetDevilRoomChance, reinterpret_cast<void*>(dealTotal),
                 reinterpret_cast<void**>(&originalDealTotal)) &&
            hook(j460::entry::dealAngelShare, reinterpret_cast<void*>(isaac_lan_angel_share_thunk),
@@ -2878,6 +3157,8 @@ bool install(Address base, void (*log)(const std::string&)) {
                 reinterpret_cast<void**>(&originalStage)) &&
            hook(j460::entry::gameTriggerRKey, reinterpret_cast<void*>(rKey),
                 reinterpret_cast<void**>(&originalRKey)) &&
+           hook(j460::entry::gameNextVictoryLap, reinterpret_cast<void*>(victoryLap),
+                reinterpret_cast<void**>(&originalVictoryLap)) &&
            hook(j460::entry::engineRoomsIsCoop, reinterpret_cast<void*>(isCoop),
                 reinterpret_cast<void**>(&originalIsCoop)) &&
            hook(j460::entry::engineRoomsLiving, reinterpret_cast<void*>(living),
@@ -2950,10 +3231,13 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_enable", enable);
     function("deal_chances", dealChances);
     function("deal_chances_reset", resetDealChances);
+    function("pickup_price", pickupPrice);
+    function("pill_state", pillState);
     function("rooms_move", request);
     function("rooms_with_player", withPlayer);
     function("rooms_positions", positions);
     function("r_key_begin", beginRKey);
+    function("victory_lap_begin", beginVictoryLap);
     function("rooms_ready", ready);
     function("rooms_heads", heads);
     function("rooms_sync", syncLocations);
@@ -2962,6 +3246,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("map_pickups", mapPickups);
     function("map_refresh", refreshMap);
     function("actor_sprites", actorSprites);
+    function("actor_pockets", actorPockets);
     function("actor_form", actorForm);
     function("actor_poop", actorPoop);
     function("actor_ghost", actorGhost);

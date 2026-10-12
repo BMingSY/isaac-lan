@@ -22,14 +22,14 @@ template <class F> void until(F f) {
 struct Group {
     std::array<std::unique_ptr<Session>, 4> peers;
     unsigned count;
-    explicit Group(unsigned n, std::uint8_t difficulty = 0) : count(n) {
+    explicit Group(unsigned n, std::uint8_t difficulty = 0, const char* address = "127.0.0.1")
+        : count(n) {
         for (unsigned i = 0; i < n; ++i)
             peers[i] = std::make_unique<Session>();
         require(peers[0]->host(0, "state-test", "host-mods"), "Host failed");
         for (unsigned i = 1; i < n; ++i)
-            require(
-                peers[i]->join("127.0.0.1", peers[0]->port(), "state-test", {}, "cosmetic-mods"),
-                "Join failed");
+            require(peers[i]->join(address, peers[0]->port(), "state-test", {}, "cosmetic-mods"),
+                    "Join failed");
         until([&] {
             poll();
             return peers[0]->players() == n && peers[n - 1]->players() == n;
@@ -547,33 +547,41 @@ void progression() {
     std::puts("PASS local progression remains isolated");
 }
 void rKeyTransaction() {
-    Group g(2);
-    g.ready();
-    g.step(0);
-    Stage value;
-    value.epoch = 1;
-    value.level = 1;
-    value.rKey = true;
-    for (unsigned i = 0; i < value.seeds.size(); ++i)
-        value.seeds[i] = 0x12345600 + i;
-    require(g.peers[0]->beginStage(value), "R Key event failed");
-    g.step(1);
-    g.publish(1);
-    std::optional<Stage> event;
-    until([&] {
-        g.poll();
-        event = g.peers[1]->takeStage();
-        return event.has_value();
-    });
-    require(*event == value, "Native R Key mode or pre-restart Seeds changed");
-    std::optional<WorldState> world;
-    until([&] {
-        g.poll();
-        world = g.peers[1]->takeState();
-        return world.has_value();
-    });
-    require(world->tick == 1, "R Key event did not precede its new floor state");
-    std::puts("PASS native R Key event preserves pre-restart seeds and precedes world state");
+    for (unsigned restart : {1u, 2u}) {
+        Group g(2);
+        g.ready();
+        g.step(0);
+        Stage value;
+        value.epoch = 1;
+        value.level = 1;
+        value.restart = restart;
+        for (unsigned i = 0; i < value.seeds.size(); ++i)
+            value.seeds[i] = 0x12345600 + i;
+        require(g.peers[0]->beginStage(value), "R Key event failed");
+        g.step(1);
+        g.publish(1);
+        std::optional<Stage> event;
+        until([&] {
+            g.poll();
+            event = g.peers[1]->takeStage();
+            return event.has_value();
+        });
+        require(*event == value, "Native R Key mode or pre-restart Seeds changed");
+        std::optional<WorldState> world;
+        until([&] {
+            g.poll();
+            world = g.peers[1]->takeState();
+            return world.has_value();
+        });
+        require(world->tick == 1, "R Key event did not precede its new floor state");
+        auto invalid = value;
+        invalid.restart = 3;
+        require(!g.peers[0]->beginStage(invalid), "Unbounded native restart kind was accepted");
+        invalid = value;
+        invalid.same = true;
+        require(!g.peers[0]->beginStage(invalid), "Native restart mixed with same-floor animation");
+    }
+    std::puts("PASS native restart kinds preserve pre-restart seeds and precede world state");
 }
 void roomCommands() {
     Group g(2);
@@ -752,9 +760,43 @@ void handshake() {
         return host.players() == 2 && guest.phase() == Phase::lobby;
     });
     Session badAddress, badIdentity;
-    require(!badAddress.join("invalid", host.port(), "supported"), "Invalid IPv4 accepted");
+    require(!badAddress.join("not a host", host.port(), "supported"),
+            "Invalid host address accepted");
     require(!badIdentity.join("127.0.0.1", host.port(), "supported", "not-an-identity"),
             "Invalid identity accepted");
+}
+void hostNames() {
+    Group g(2, 0, "localhost");
+    g.ready();
+    g.step(0);
+    const auto identity = g.peers[1]->identity();
+    g.peers[1]->abort("hostname reconnection test");
+    until([&] {
+        g.peers[0]->poll();
+        return g.peers[0]->connectedMask() == 1;
+    });
+    require(g.peers[1]->reconnect(), "Host name reconnect failed");
+    until([&] {
+        g.poll();
+        return g.peers[1]->phase() == Phase::waiting;
+    });
+    require(g.peers[1]->identity() == identity, "Host name reconnect changed identity");
+    Session missing;
+    require(missing.join("isaac-lan-does-not-exist.invalid", g.peers[0]->port(), "state-test"),
+            "Valid host name syntax rejected");
+    until([&] {
+        missing.poll();
+        return missing.phase() == Phase::failed;
+    });
+    require(missing.error().find("resolve") != std::string::npos,
+            "DNS failure lost its explanation");
+    Session cancelled;
+    require(cancelled.join("localhost", g.peers[0]->port(), "state-test"),
+            "DNS cancellation setup failed");
+    cancelled.close();
+    cancelled.poll();
+    require(cancelled.phase() == Phase::closed && cancelled.resources().connections == 0,
+            "A cancelled DNS request reopened the session");
 }
 void commands() {
     Group g(2);
@@ -1078,6 +1120,7 @@ int main(int argc, char** argv) {
                                   {"input-rooms", inputRooms},
                                   {"lobby", lobby},
                                   {"handshake", handshake},
+                                  {"host-names", hostNames},
                                   {"commands", commands},
                                   {"publication-limits", publicationLimits},
                                   {"integrations", integrations},

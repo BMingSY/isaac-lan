@@ -30,6 +30,8 @@ lan::InputFrame previewPhysicalInput();
 unsigned menuOwner();
 void setMenuOwner(unsigned slot);
 bool menuTriggered(int action);
+// Modal authority controls use the host's latched simulation-step edges.
+bool hostMenuTriggered(int action);
 void confirmOriginalMenu(void* menu, void(__attribute__((thiscall)) * update)(void*));
 void leaveLan();
 } // namespace isaac::input

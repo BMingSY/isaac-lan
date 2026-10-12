@@ -30,6 +30,8 @@ local function campaignRoute()
     return _IsaacLanTest.campaign or _IsaacLanTest.firstFloor and cases[caseIndex] == "lamb"
 end
 local campaign = campaignRoute()
+local victoryLapTest, promptFrames = _IsaacLanTest.victoryLap, 0
+local victoryNoTest = _IsaacLanTest.victoryNo
 local visitedFloors = {}
 local crawlspaceReturns, crawlspaceSource, crawlspaceBoss = 0, nil, nil
 local crawlspaceEntrance, crawlspaceExit, crawlspaceDirection, crawlspaceAction
@@ -187,7 +189,9 @@ end
 local function boss(t, target)
     local index = target
         or findRoom(function(d)
-            return d.Data.Type == RoomType.ROOM_BOSS and d.SafeGridIndex >= 0
+            return d.Data.Type == RoomType.ROOM_BOSS
+                and d.SafeGridIndex >= 0
+                and (not (victoryLapTest or victoryNoTest) or hasSpawn(d.Data, terminal.lamb))
         end)
     assert(index, "Missing native Boss room")
     local level = Game():GetLevel()
@@ -288,7 +292,10 @@ local function observeBoss(e)
 end
 local function fight(t)
     local clear = false
-    local boundedTears = campaign or cases[caseIndex] == "ascent" and not homeOnly
+    local boundedTears = campaign
+        or victoryLapTest
+        or victoryNoTest
+        or cases[caseIndex] == "ascent" and not homeOnly
     actor(1, function(p)
         protect(p)
         local entities = Isaac.GetRoomEntities()
@@ -431,7 +438,7 @@ local function prepare(stage, kind, t)
     report("SOURCE_FIXTURE stage=" .. stage .. " type=" .. kind)
 end
 local chestContacts = 0
-Isaac.AddCallback(owner, ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, pickup, collider)
+local function chestCallback(_, pickup, collider)
     if host and collider:ToPlayer() and chestContacts < 12 then
         chestContacts = chestContacts + 1
         local p = collider:ToPlayer()
@@ -448,12 +455,23 @@ Isaac.AddCallback(owner, ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, picku
                 .. tostring(p:IsExtraAnimationFinished())
         )
     end
-end, PickupVariant.PICKUP_BIGCHEST)
-Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, function(_, gameOver)
+end
+Isaac.AddCallback(
+    owner,
+    ModCallbacks.MC_PRE_PICKUP_COLLISION,
+    chestCallback,
+    PickupVariant.PICKUP_BIGCHEST
+)
+local function winCallback(_, gameOver)
     if finished then
         return
     end
     assert(not gameOver, "Ending route ended in a defeat")
+    assert(not victoryLapTest, "Host Yes ended the run instead of starting a Victory Lap")
+    if victoryNoTest then
+        assert(Game():GetVictoryLap() == 0, "Host No started a Victory Lap")
+        report("VICTORY_NO_PASS host_decision=true lap=0 native_win=true")
+    end
     assert(wins == caseIndex - 1, "Duplicate native win callback")
     assert(bosses[terminal[cases[caseIndex]]], "Win callback without the expected terminal Boss")
     if campaign then
@@ -500,15 +518,17 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, function(_, gameOver)
         report("DEBUG10_DISABLED")
     end
     report("NATIVE_WIN callback=MC_POST_GAME_END game_over=false")
-end)
-Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
+end
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)
+local function exitCallback()
     if finished then
         return
     end
     lastExit = renders
     lastExitMs = native.api_info().nowMs
     report("NATIVE_EXIT_CALLBACK wins=" .. wins)
-end)
+end
+Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)
 function _IsaacLanFrame()
     renders = renders + 1
     if EID and EID.Config then
@@ -557,8 +577,67 @@ function _IsaacLanFrame()
         lastExit == 0 or wins == caseIndex or now - lastExitMs < 10000,
         "Session exited without the native win callback on this peer"
     )
-    -- The native Lamb reward asks whether to start a Victory Lap. Its default
-    -- selection is No; confirm that prompt rather than leaving the run paused.
+    -- Observe the real prompt rather than guessing its default selection.
+    local promptActive, promptSelection, promptResult, promptOnline, promptReady =
+        native.victory_lap_prompt()
+    if victoryLapTest and native.api_info().ready == 1 and Game():GetVictoryLap() > 0 then
+        assert(Game():GetLevel():GetStage() == 1, "Victory Lap did not restart on the first floor")
+        assert(native.rooms_connected() == 3, "Victory Lap lost a participant")
+        if host or floorEvents > 0 then
+            finished = true
+            native.test_gamepad(0)
+            report("VICTORY_LAP_PASS host_decision=true lap=" .. Game():GetVictoryLap())
+            return s
+        end
+    end
+    if victoryLapTest and promptActive then
+        promptFrames = promptFrames + 1
+        -- Guest inputs must not decide. Keep the modal open long enough for
+        -- recorded views, then let the host select Yes and confirm physically.
+        if promptFrames == 120 then
+            assert(Game():GetVictoryLap() == 0, "Guest input decided the Victory Lap")
+            report("VICTORY_LAP_GUEST_INPUT_IGNORED")
+            report(
+                "VICTORY_PROMPT selected="
+                    .. promptSelection
+                    .. " result="
+                    .. promptResult
+                    .. " online="
+                    .. tostring(promptOnline)
+                    .. " ready="
+                    .. tostring(promptReady)
+            )
+            assert(not host or not promptOnline, "Host prompt retained native Steam voting")
+        end
+        assert(
+            promptResult ~= 0 or promptFrames < 200 or promptReady,
+            "Native Victory Lap prompt never became interactive"
+        )
+        local buttons = host
+                and (promptFrames >= 200 and renders % 30 < 5 and (promptSelection == 1 and 4096 or 4) or 0)
+            or (promptFrames < 100 and renders % 30 < 5 and 4096 or 0)
+        native.test_gamepad(buttons, 0, 0, buttons == 4 and -32767 or 0)
+        return s
+    end
+    if promptActive and host and cases[caseIndex] == "lamb" then
+        promptFrames = promptFrames + 1
+        if promptFrames % 120 == 0 then
+            report(
+                "VICTORY_NO_PROMPT selected="
+                    .. promptSelection
+                    .. " result="
+                    .. promptResult
+                    .. " online="
+                    .. tostring(promptOnline)
+                    .. " ready="
+                    .. tostring(promptReady)
+            )
+        end
+        local buttons = promptReady and renders % 30 < 5 and (promptSelection == 0 and 4096 or 4)
+            or 0
+        native.test_gamepad(buttons, 0, 0, buttons == 4 and -32767 or 0)
+        return s
+    end
     local confirm = (wins == caseIndex and s.scene == 3)
         or (s.scene == 3 and cases[caseIndex] == "ascent")
         or (
@@ -723,7 +802,8 @@ local function advance(t)
             report("CAMPAIGN_START first_floor=1 boss_entry=fixture transitions=native")
         else
             prepare(
-                name == "ascent" and (homeOnly and 13 or crawlspaceTest and 6 or 1)
+                (victoryLapTest or victoryNoTest) and 11
+                    or name == "ascent" and (homeOnly and 13 or crawlspaceTest and 6 or 1)
                     or name == "mother" and 2
                     or name == "delirium" and 8
                     or 6,

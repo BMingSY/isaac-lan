@@ -1,6 +1,7 @@
 #include "net/session.h"
 #include "core/snapshot_delta.h"
 #include "net/compression.h"
+#include "net/host_address.h"
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <bcrypt.h>
@@ -8,6 +9,7 @@
 #include <chrono>
 #include <deque>
 #include <map>
+#include <atomic>
 
 namespace isaac::lan {
 namespace {
@@ -26,7 +28,7 @@ Writer stageMessage(const Stage& value, std::size_t offset = 0) {
         w.u32(seed);
     for (auto flags : value.stateFlags)
         w.u32(flags);
-    w.u8(value.rKey);
+    w.u8(value.restart);
     w.u8(value.cinematic);
     w.u32(value.rewind.size());
     w.u32(offset);
@@ -52,6 +54,48 @@ bool validIdentity(const std::string& value) {
 }
 bool wouldBlock() {
     return WSAGetLastError() == WSAEWOULDBLOCK;
+}
+struct HostResolution {
+    std::atomic<bool> ready{false};
+    std::vector<sockaddr_in> addresses;
+    int error = 0;
+};
+struct ResolveRequest {
+    std::shared_ptr<HostResolution> result;
+    std::string address;
+    std::uint16_t port;
+};
+DWORD WINAPI resolveHost(void* argument) {
+    const std::unique_ptr<ResolveRequest> request(static_cast<ResolveRequest*>(argument));
+    auto& result = *request->result;
+    WSADATA data{};
+    result.error = WSAStartup(MAKEWORD(2, 2), &data);
+    if (!result.error) {
+        addrinfo hints{};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        addrinfo* found = nullptr;
+        result.error = getaddrinfo(request->address.c_str(), nullptr, &hints, &found);
+        if (!result.error) {
+            for (auto entry = found; entry && result.addresses.size() < 16;
+                 entry = entry->ai_next) {
+                if (entry->ai_family != AF_INET || entry->ai_addrlen != sizeof(sockaddr_in))
+                    continue;
+                auto address = *reinterpret_cast<const sockaddr_in*>(entry->ai_addr);
+                address.sin_port = htons(request->port);
+                if (std::none_of(result.addresses.begin(), result.addresses.end(),
+                                 [&](const auto& prior) {
+                                     return prior.sin_addr.s_addr == address.sin_addr.s_addr;
+                                 }))
+                    result.addresses.push_back(address);
+            }
+            freeaddrinfo(found);
+        }
+        WSACleanup();
+    }
+    result.ready.store(true, std::memory_order_release);
+    return 0;
 }
 void configure(SOCKET s) {
     u_long mode = 1;
@@ -213,6 +257,10 @@ struct Session::Impl {
          initialStarted = false;
     Phase state = Phase::idle;
     std::string failure, fingerprint, identity, mods, hostIP;
+    std::shared_ptr<HostResolution> resolving;
+    std::vector<sockaddr_in> hostAddresses;
+    std::size_t nextHostAddress = 0;
+    Clock::time_point joinAt;
     bool modMismatch = false, lobbyDirty = false, choicesRequired = false;
     std::array<std::string, maxPlayers> identities;
     unsigned localSlot = 0, playerCount = 1, activeMask = 1;
@@ -263,6 +311,10 @@ struct Session::Impl {
             WSACleanup();
     }
     void shutdown() {
+        // A DNS worker owns its result and its own Winsock reference. Closing
+        // a session never waits for DNS or lets that worker touch a new one.
+        resolving.reset();
+        hostAddresses.clear();
         if (listener != INVALID_SOCKET) {
             closesocket(listener);
             listener = INVALID_SOCKET;
@@ -270,6 +322,25 @@ struct Session::Impl {
         for (auto& peer : peers)
             peer.reset();
         incoming.clear();
+    }
+    void connectNextAddress() {
+        peers[0].reset();
+        while (nextHostAddress < hostAddresses.size()) {
+            const auto& address = hostAddresses[nextHostAddress++];
+            const auto socketHandle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            if (socketHandle == INVALID_SOCKET)
+                throw std::runtime_error("Cannot create LAN socket");
+            peers[0] = std::make_unique<Socket>(socketHandle);
+            configure(socketHandle);
+            if (!connect(socketHandle, reinterpret_cast<const sockaddr*>(&address),
+                         sizeof(address)) ||
+                wouldBlock()) {
+                connecting = true;
+                return;
+            }
+            peers[0].reset();
+        }
+        throw std::runtime_error("Cannot connect to host");
     }
     void fail(const std::string& reason) {
         if (state == Phase::failed)
@@ -738,17 +809,17 @@ struct Session::Impl {
                 seed = r.u32();
             for (auto& flags : value.stateFlags)
                 flags = r.u32();
-            const auto rKey = r.u8();
-            value.rKey = rKey != 0;
+            const auto restart = r.u8();
+            value.restart = restart;
             value.cinematic = r.u8();
             const auto total = r.u32(), offset = r.u32();
             auto bytes = r.blob(3000);
             if (!value.epoch || value.level < 1 || value.level > 13 || value.type > 5 || same > 1 ||
-                total > maxWorldSize + 5 || rKey > 1 ||
+                total > maxWorldSize + 5 || restart > 2 ||
                 (value.cinematic &&
                  (value.cinematic != 25 || value.level != 13 || value.type != 1 ||
-                  value.animation != 1 || same || rKey || total)) ||
-                (rKey && (total || value.animation || value.level != 1 || value.type)) ||
+                  value.animation != 1 || same || restart || total)) ||
+                (restart && (total || value.animation || same || value.level != 1 || value.type)) ||
                 (total ? value.animation != 12 : value.animation > 6))
                 throw std::runtime_error("Invalid floor transition");
             value.same = same != 0;
@@ -764,7 +835,8 @@ struct Session::Impl {
                 assemblingStage->animation != value.animation ||
                 assemblingStage->same != value.same ||
                 assemblingStage->stateFlags != value.stateFlags ||
-                assemblingStage->seeds != value.seeds || assemblingStage->rKey != value.rKey ||
+                assemblingStage->seeds != value.seeds ||
+                assemblingStage->restart != value.restart ||
                 assemblingStage->cinematic != value.cinematic || total != stageSize ||
                 offset != assemblingStage->rewind.size() || offset > total ||
                 bytes.size() > total - offset || (total && bytes.empty()))
@@ -1061,24 +1133,30 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
         impl->identity = identity.empty() ? randomIdentity() : identity;
         if (!validIdentity(impl->identity))
             throw std::runtime_error("Invalid player identity");
-        sockaddr_in a{};
-        a.sin_family = AF_INET;
-        a.sin_port = htons(port);
-        if (InetPtonA(AF_INET, ip.c_str(), &a.sin_addr) != 1)
-            throw std::runtime_error("Enter a valid IPv4 address");
-        SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (s == INVALID_SOCKET)
-            throw std::runtime_error("Cannot create LAN socket");
-        impl->peers[0] = std::make_unique<Socket>(s);
-        configure(s);
-        if (connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)) && !wouldBlock())
-            throw std::runtime_error("Cannot connect to host");
-        impl->connecting = true;
+        if (!validHostAddress(ip))
+            throw std::runtime_error("Enter a valid IPv4 address or host name");
         impl->fingerprint = fingerprint;
         impl->mods = mods;
         impl->hostIP = ip;
         impl->boundPort = port;
         impl->state = Phase::connecting;
+        impl->joinAt = Clock::now();
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_port = htons(port);
+        if (InetPtonA(AF_INET, ip.c_str(), &address.sin_addr) == 1) {
+            impl->hostAddresses.push_back(address);
+            impl->connectNextAddress();
+        } else {
+            impl->resolving = std::make_shared<HostResolution>();
+            auto request =
+                std::make_unique<ResolveRequest>(ResolveRequest{impl->resolving, ip, port});
+            const auto worker = CreateThread(nullptr, 0, resolveHost, request.get(), 0, nullptr);
+            if (!worker)
+                throw std::runtime_error("Cannot start host name resolution");
+            request.release();
+            CloseHandle(worker);
+        }
         return true;
     } catch (const std::exception& e) {
         impl->fail(e.what());
@@ -1102,10 +1180,13 @@ bool Session::reconnect() {
 bool Session::beginStage(const Stage& value) {
     if (!impl->hosting || impl->state != Phase::running || impl->ending)
         return false;
-    if (impl->cinematicEpoch ||
+    if (value.restart > 2 ||
+        (value.restart && (value.same || value.animation || value.level != 1 || value.type ||
+                           !value.rewind.empty() || value.cinematic)) ||
+        impl->cinematicEpoch ||
         (value.cinematic &&
          (value.cinematic != 25 || value.level != 13 || value.type != 1 || value.animation != 1 ||
-          value.same || value.rKey || !value.rewind.empty())))
+          value.same || value.restart || !value.rewind.empty())))
         return false;
     if (value.cinematic) {
         impl->cinematicEpoch = value.epoch;
@@ -1256,6 +1337,18 @@ void Session::poll() {
     if (impl->state == Phase::failed || impl->state == Phase::closed || impl->state == Phase::idle)
         return;
     try {
+        if (impl->resolving) {
+            if (!impl->resolving->ready.load(std::memory_order_acquire)) {
+                if (Clock::now() - impl->joinAt > std::chrono::seconds(10))
+                    throw std::runtime_error("Host name resolution timed out");
+                return;
+            }
+            if (impl->resolving->error || impl->resolving->addresses.empty())
+                throw std::runtime_error("Cannot resolve host name to an IPv4 address");
+            impl->hostAddresses = std::move(impl->resolving->addresses);
+            impl->resolving.reset();
+            impl->connectNextAddress();
+        }
         if (impl->listener != INVALID_SOCKET) {
             SOCKET s = accept(impl->listener, nullptr, nullptr);
             if (s != INVALID_SOCKET) {
@@ -1284,18 +1377,23 @@ void Session::poll() {
             FD_SET(p.handle, &write);
             FD_SET(p.handle, &error);
             timeval timeout{};
-            if (select(0, nullptr, &write, &error, &timeout) == SOCKET_ERROR ||
-                FD_ISSET(p.handle, &error))
+            if (select(0, nullptr, &write, &error, &timeout) == SOCKET_ERROR)
                 throw std::runtime_error("Host connection refused");
+            if (FD_ISSET(p.handle, &error)) {
+                impl->connectNextAddress();
+                return;
+            }
             if (!FD_ISSET(p.handle, &write)) {
-                if (Clock::now() - p.connectedAt > std::chrono::seconds(10))
+                if (Clock::now() - impl->joinAt > std::chrono::seconds(10))
                     throw std::runtime_error("Host connection timed out");
                 return;
             }
             int status = 0, size = sizeof(status);
             getsockopt(p.handle, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&status), &size);
-            if (status)
-                throw std::runtime_error("Host connection failed");
+            if (status) {
+                impl->connectNextAddress();
+                return;
+            }
             impl->connecting = false;
             Writer hello(Message::hello);
             hello.u16(protocolVersion);

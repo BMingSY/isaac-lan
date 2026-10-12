@@ -7,6 +7,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ("lazarus", "poop", "knife", "hush")
 DIAGNOSTICS = (
+    "item-generation",
+    "party-compat",
+    "victory-lap",
+    "victory-no",
     "audio",
     "rewind",
     "home-debug",
@@ -47,6 +51,10 @@ def build(output, cases=CASES, *, first_floor=False):
             "mod-integrations": "state_mod_integrations.lua",
             "shared-curses": "state_shared_curses.lua",
             "shared-deals": "state_shared_deals.lua",
+            "party-compat": "state_party_compat.lua",
+            "item-generation": "state_item_generation.lua",
+            "victory-lap": "state_endings.lua",
+            "victory-no": "state_endings.lua",
             "greed": "state_greed.lua",
             "greedier": "state_greed.lua",
             "dogma-warning": "state_endings.lua",
@@ -64,7 +72,7 @@ def build(output, cases=CASES, *, first_floor=False):
                 'local cases = { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }',
                 'local cases = { "ascent" }',
             )
-        elif name == "campaign":
+        elif name in ("campaign", "victory-lap", "victory-no"):
             source = source.replace(
                 'local cases = { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }',
                 'local cases = { "lamb" }',
@@ -74,8 +82,10 @@ def build(output, cases=CASES, *, first_floor=False):
             cleanup = "if motionFile then motionFile:close(); motionFile = nil end\n"
         elif name == "mod-integrations":
             cleanup = "native.api_send, native.api_receive = send, receive\nlan:Unregister()\n"
-        elif name in ("greed", "greedier"):
+        elif name in ("greed", "greedier", "victory-lap", "victory-no"):
             cleanup = "Isaac.RemoveCallback(owner, ModCallbacks.MC_POST_GAME_END, winCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)\n"
+            if name in ("victory-lap", "victory-no"):
+                cleanup += "Isaac.RemoveCallback(owner, ModCallbacks.MC_PRE_PICKUP_COLLISION, chestCallback)\n"
         elif name == "lanbot":
             cleanup = 'command("off")\nIsaac.RemoveCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, damageCallback)\nIsaac.RemoveCallback(owner, ModCallbacks.MC_POST_FIRE_TEAR, tearCallback)\n'
         elif name == "lanbot-campaign":
@@ -106,6 +116,10 @@ def build(output, cases=CASES, *, first_floor=False):
             + ("true" if name == "rewind" else "false")
             + "\n_IsaacLanTest.campaign = "
             + ("true" if name == "campaign" else "false")
+            + "\n_IsaacLanTest.victoryLap = "
+            + ("true" if name == "victory-lap" else "false")
+            + "\n_IsaacLanTest.victoryNo = "
+            + ("true" if name == "victory-no" else "false")
             + "\n_IsaacLanTest.firstFloor = "
             + ("true" if first_floor and name == "endings" else "false")
             + "\n_IsaacLanTest.greedCampaign = "

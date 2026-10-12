@@ -12,7 +12,27 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(CTest)
 option(ISAAC_LAN_BUILD_ENGINE "Build the Windows x86 engine adapter and tools" ON)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/miniz_export.h"
+     "#pragma once\n#define MINIZ_EXPORT\n")
+add_library(isaac_lan_miniz STATIC vendor/miniz/miniz.c vendor/miniz/miniz_tdef.c
+                                   vendor/miniz/miniz_tinfl.c)
+target_include_directories(isaac_lan_miniz PUBLIC vendor/miniz
+                                                  "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_compile_definitions(isaac_lan_miniz PUBLIC MINIZ_NO_ARCHIVE_APIS MINIZ_NO_STDIO
+                                                  MINIZ_NO_TIME MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
+add_library(isaac_lan_deflate STATIC src/core/deflate.cpp)
+target_include_directories(isaac_lan_deflate PUBLIC src)
+target_link_libraries(isaac_lan_deflate PUBLIC isaac_lan_miniz)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_deflate_test tests/deflate_test.cpp)
+    target_link_libraries(isaac_lan_deflate_test PRIVATE isaac_lan_deflate)
+    if(MINGW)
+        target_link_options(isaac_lan_deflate_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    foreach(test_case interoperability bounds)
+        add_test(NAME core.deflate-${test_case} COMMAND isaac_lan_deflate_test ${test_case})
+        set_tests_properties(core.deflate-${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    endforeach()
     add_executable(isaac_lan_delta_test tests/snapshot_delta_test.cpp)
     target_include_directories(isaac_lan_delta_test PRIVATE src)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -133,6 +153,16 @@ if(BUILD_TESTING)
         add_test(NAME bridge.shared-deals
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_deals.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.pills
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/pills.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(
+            NAME bridge.pocket-inventory
+            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/pocket_inventory.lua"
+                    "${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME bridge.keeper
+                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/keeper.lua"
+                         "${CMAKE_CURRENT_SOURCE_DIR}")
         add_test(NAME bridge.greed
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/greed.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -167,6 +197,9 @@ if(BUILD_TESTING)
             bridge.shared-resources
             bridge.shared-curses
             bridge.shared-deals
+            bridge.pills
+            bridge.pocket-inventory
+            bridge.keeper
             bridge.greed
             bridge.special-visuals
             bridge.resource-lifecycle
@@ -300,7 +333,7 @@ target_link_libraries(isaac_lan_ui PUBLIC opengl32 gdi32 dwmapi)
 add_library(isaac_lan_net STATIC src/net/session.cpp src/net/compression.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt)
+target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate)
 add_executable(isaac_lan_replay_world tools/replay_world_states.cpp)
 target_link_libraries(isaac_lan_replay_world PRIVATE isaac_lan_net)
 if(MINGW)
@@ -331,6 +364,7 @@ if(BUILD_TESTING)
         input-rooms
         lobby
         handshake
+        host-names
         commands
         publication-limits
         integrations

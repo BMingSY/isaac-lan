@@ -10,6 +10,9 @@ local env = {
     ref = function(id)
         return refs[id]
     end,
+    key = function(e)
+        return e
+    end,
     spawn = function(v)
         local e = { Type = v[2], Variant = v[3], SubType = v[4], data = {}, alive = true }
         function e:Exists()
@@ -24,6 +27,7 @@ local env = {
         return e
     end,
     apply = function() end,
+    reclaim = function() end,
     entities = function()
         local all = {}
         for e in pairs(live) do

@@ -5,9 +5,31 @@
 #include <cstdint>
 #include <cwchar>
 
+namespace {
+[[noreturn]] void unavailableExport(const char* name, unsigned ordinal) {
+    wchar_t message[256]{};
+    if (*name)
+        swprintf(message, 256,
+                 L"The system winmm.dll does not provide %hs.\nPlease check the "
+                 L"Windows or Proton version.",
+                 name);
+    else
+        swprintf(message, 256,
+                 L"The system winmm.dll does not provide ordinal %u.\nPlease check the "
+                 L"Windows or Proton version.",
+                 ordinal);
+    MessageBoxW(nullptr, message, L"Isaac LAN", MB_OK | MB_ICONERROR);
+    TerminateProcess(GetCurrentProcess(), ERROR_PROC_NOT_FOUND);
+    __builtin_unreachable();
+}
+} // namespace
+
 extern "C" {
 FARPROC lan_winmm_functions[193]{};
 #define WINMM_EXPORT(index, ordinal, name)                                                         \
+    void lan_winmm_missing_##index() {                                                             \
+        unavailableExport(name, ordinal);                                                          \
+    }                                                                                              \
     __attribute__((naked)) void lan_winmm_##index() {                                              \
         __asm__ volatile("jmp *_lan_winmm_functions+" #index "*4");                                \
     }
@@ -70,8 +92,10 @@ bool forwardExports() {
 #define WINMM_EXPORT(index, ordinal, name)                                                         \
     lan_winmm_functions[index] =                                                                   \
         GetProcAddress(system, *(name) ? (name) : MAKEINTRESOURCEA(ordinal));                      \
-    if (!lan_winmm_functions[index])                                                               \
-        return false;
+    if (!lan_winmm_functions[index]) {                                                             \
+        auto missing = lan_winmm_missing_##index;                                                  \
+        memcpy(&lan_winmm_functions[index], &missing, sizeof(missing));                            \
+    }
 #include "app/loader_exports.inc"
 #undef WINMM_EXPORT
     return true;

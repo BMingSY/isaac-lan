@@ -2,6 +2,15 @@
 #include "net/protocol.h"
 
 namespace isaac::input {
+inline bool menuActionTriggered(const lan::InputFrame& input, int action) {
+    if (action >= 0 && action < 16)
+        return (input.triggered & (1u << action)) != 0;
+    if (action >= 20 && action <= 23) {
+        const auto direction = static_cast<unsigned>(action - 20);
+        return (input.triggered & ((1u << direction) | (1u << (direction + 4)))) != 0;
+    }
+    return false;
+}
 inline lan::InputFrame transitionInput(const lan::InputFrame& input, bool sameFloor) {
     auto result = lan::menuInput(input);
     // Stop stale movement/items until the guest sees the destination. Releasing

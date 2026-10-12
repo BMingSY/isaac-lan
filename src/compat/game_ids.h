@@ -21,11 +21,23 @@ inline constexpr unsigned beast = 951;
 inline constexpr unsigned genericProp = 960;
 } // namespace entity
 namespace player {
+inline constexpr int keeper = 14;
+inline constexpr int keeperB = 33;
+inline constexpr int lostB = 31;
 inline constexpr int lazarusB = 29;
 inline constexpr int jacobB = 37;
 inline constexpr int lazarusSecondB = 38;
 inline constexpr int jacobSecondB = 39;
 } // namespace player
+namespace collectible {
+inline constexpr int compass = 21;
+inline constexpr int treasureMap = 54;
+inline constexpr int steamSale = 64;
+inline constexpr int blueMap = 246;
+inline constexpr int blackCandle = 260;
+inline constexpr int restock = 376;
+inline constexpr int sacredOrb = 691;
+} // namespace collectible
 namespace stage {
 inline constexpr int greedFinal = 7;
 inline constexpr int chapterFourSecond = 8;

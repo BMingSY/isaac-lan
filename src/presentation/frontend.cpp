@@ -6,6 +6,7 @@
 #include "runtime/session.h"
 #include "engine/rooms.h"
 #include "engine/input.h"
+#include "net/host_address.h"
 #include "embedded_bridge.h"
 #include "diagnostics/lab_capture.h"
 #include "diagnostics/performance.h"
@@ -253,10 +254,13 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
         menuText.assign(value, read<unsigned>(base, 0x1c));
         std::string filtered;
         const bool seed = chatField == ChatField::seed;
-        const auto limit = seed ? 8u : chatField == ChatField::port ? 5u : 15u;
+        const auto limit = seed                           ? 8u
+                           : chatField == ChatField::port ? 5u
+                                                          : lan::maxHostAddressLength;
         for (unsigned char c : menuText) {
             if (seed ? (c < 128 && std::isalnum(c))
-                     : ((c >= '0' && c <= '9') || (chatField == ChatField::ip && c == '.')))
+                     : (chatField == ChatField::ip ? lan::hostAddressCharacter(c)
+                                                   : (c >= '0' && c <= '9')))
                 filtered += seed ? static_cast<char>(std::toupper(c)) : static_cast<char>(c);
             if (filtered.size() == limit)
                 break;

@@ -25,6 +25,7 @@ local reconcileGrids = performance.wrap("apply.grids", modules["sync/grids"])
 local npcState = assert(modules["sync/npc"])
 local curses = assert(modules["sync/curses"])
 local deals = assert(modules["sync/deals"])(native)
+local pills = assert(modules["sync/pills"])(native)
 local greed = assert(modules["compat/routes/greed"])(function()
     return Game()
 end)
@@ -35,6 +36,7 @@ local forms = assert(modules["compat/characters/lazarus"])(native, function(inde
     return Isaac.GetPlayer(index)
 end, PlayerType)
 local poop = assert(modules["compat/characters/blue_baby"])(native, PlayerType)
+local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
 local entityCodec = assert(modules["sync/entity_codec"])(
     native,
@@ -67,6 +69,12 @@ local inventoryState = assert(modules["sync/inventory"])({
     end,
     activeType = ItemType.ITEM_ACTIVE,
     curse = NullItemID.ID_LOST_CURSE,
+    pockets = function(player, value)
+        if value == nil then
+            return native.actor_pockets(player:GetSprite())
+        end
+        return native.actor_pockets(player:GetSprite(), value)
+    end,
 })
 local inventory = performance.wrap("capture.inventory", inventoryState.capture)
 local applyInventory = performance.wrap("apply.inventory", inventoryState.apply)
@@ -214,6 +222,7 @@ function state.capture(slot, tick)
             curses = curses.capture(level),
             greed = greed.capture(),
             deals = deals.capture(),
+            pills = pills.capture(),
         }),
         captureEncoded
     )
@@ -258,6 +267,7 @@ local transitions = assert(modules["compat/transitions"])({
     home,
     assert(modules["compat/items/hourglass"]),
     assert(modules["compat/items/r_key"]),
+    assert(modules["compat/routes/victory_lap"]),
 })
 state.beginFloor = assert(modules["runtime/transitions"])(native, floor, transitions, function()
     return Game():GetLevel()
@@ -335,6 +345,7 @@ function state.apply(bytes, tick, ack)
         poop.apply(p, actor[7])
     end
     forms.prune(replicas, motion, lastInventory, value.actors)
+    pills.apply(value.pills)
     actorVisuals = value.actors
     -- Inventory setters can clear local curses. The shared authoritative mask
     -- must win after those native side effects, before map/HUD caching.
@@ -366,10 +377,14 @@ function state.apply(bytes, tick, ack)
         crawlspace.apply(data[7])
         reconcileEntities(data[3], {
             ref = ref,
+            key = GetPtrHash,
             spawn = function(v, spawner, subtype)
                 return game:Spawn(v[2], v[3], vec(v[6]), vec(v[7]), spawner, subtype, v[5])
             end,
             discard = discard,
+            reclaim = function()
+                room:Update()
+            end,
             apply = function(e, v)
                 applyEntity(e, v, now, tick)
             end,
@@ -449,6 +464,10 @@ function state.apply(bytes, tick, ack)
 end
 function state.present(input, sequence)
     greed.present()
+    local status = _IsaacLanStatus()
+    if native.api_info().ready == 1 then
+        keeper.present(status.slot)
+    end
     return motionPresentation.present(input, sequence, actorVisuals, motion, ref, receivedTick)
 end
 function state.actorPose(player)

@@ -179,7 +179,16 @@ def main():
         command.append("--ascent-fixture")
     if any(
         name in cases
-        for name in ("endings", "campaign", "greed", "greedier", "lanbot-campaign", "lanbot-greed")
+        for name in (
+            "endings",
+            "campaign",
+            "victory-lap",
+            "victory-no",
+            "greed",
+            "greedier",
+            "lanbot-campaign",
+            "lanbot-greed",
+        )
     ):
         command.append("--endings-fixture")
     for option in ("heap-check", "performance"):
@@ -199,6 +208,8 @@ def main():
                 "ascent-compat",
                 "dogma-warning",
                 "campaign",
+                "victory-lap",
+                "victory-no",
                 "greed",
                 "greedier",
                 "lanbot-campaign",
@@ -238,6 +249,8 @@ def main():
                                 "dogma-warning",
                                 "ascent-compat",
                                 "campaign",
+                                "victory-lap",
+                                "victory-no",
                             )
                             and "ENDINGS " in line
                             or name == "lanbot"
@@ -252,6 +265,10 @@ def main():
                             and "SHARED_CURSES " in line
                             or name == "shared-deals"
                             and "SHARED_DEALS " in line
+                            or name == "party-compat"
+                            and "PARTY_COMPAT " in line
+                            or name == "item-generation"
+                            and "ITEM_GENERATION " in line
                             or name in ("greed", "greedier")
                             and ("GREED mode=" + ("3" if name == "greedier" else "2") + " ") in line
                             or name in ("audio", "motion", "floor-items", "mod-integrations")
@@ -269,6 +286,27 @@ def main():
         report["passed"] = result.returncode == 0 and all(
             peer["passed"] for case in report["cases"].values() for peer in case.values()
         )
+        if "victory-lap" in cases:
+            lap = report["cases"]["victory-lap"]
+            report["victory_lap_passed"] = all(
+                any(
+                    "VICTORY_LAP_PASS host_decision=true lap=1" in line
+                    for line in peer["checkpoints"]
+                )
+                for peer in lap.values()
+            ) and any(
+                "VICTORY_LAP_GUEST_INPUT_IGNORED" in line for line in lap["host"]["checkpoints"]
+            )
+            report["passed"] = report["passed"] and report["victory_lap_passed"]
+        if "victory-no" in cases:
+            report["victory_no_passed"] = all(
+                any(
+                    "VICTORY_NO_PASS host_decision=true lap=0 native_win=true" in line
+                    for line in peer["checkpoints"]
+                )
+                for peer in report["cases"]["victory-no"].values()
+            )
+            report["passed"] = report["passed"] and report["victory_no_passed"]
         if "lanbot" in cases:
             report["lanbot_behavior_passed"] = lanbot_behavior_passed(
                 report["cases"]["lanbot"]["host"]["checkpoints"]

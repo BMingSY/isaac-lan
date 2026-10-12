@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace isaac::lan {
-constexpr std::uint16_t protocolVersion = 25;
+constexpr std::uint16_t protocolVersion = 26;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -132,8 +132,8 @@ struct Stage {
     // Pointer-free native Seeds fields: start seed, RNG, floor seeds and
     // player-init seed. Regeneration items alter them before the transition.
     std::array<std::uint32_t, 21> seeds{};
-    // R Key runs a native immediate restart, not a stage animation.
-    bool rKey = false;
+    // Opaque bounded native restart kind, interpreted by game compatibility.
+    std::uint8_t restart = 0;
     // Native GameStateFlag bits select the next route. Replica players do not
     // simulate the trapdoor that sets STATE_SECRET_PATH before an alt entrance.
     std::array<std::uint32_t, 2> stateFlags{};
