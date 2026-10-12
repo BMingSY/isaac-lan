@@ -16,6 +16,22 @@
 
 所有玩家需要使用相同游戏版本和同一份联机扩展。
 
+### Linux／Steam Deck（Proton）
+
+需要 Windows 版 J460、Proton 11.0-2 及以上。
+
+```sh
+python3 install.py --game-directory "/path/to/Binding of Isaac Rebirth"
+```
+
+Steam 启动选项设为：
+
+```text
+WINEDLLOVERRIDES="winmm=n,b" %command%
+```
+
+升级时从新安装包重新运行安装命令。卸载使用同一命令加 `--mode Uninstall`，并删除上述启动选项；配置、联机存档和历史日志会保留。
+
 ## 配置与日志
 
 首次启动会在游戏目录生成 `isaac-lan/config.ini`，修改后重启游戏生效：
@@ -35,8 +51,8 @@ sample_interval_ms = 1000
 
 ## 创建与加入
 
-1. 房主设置端口，点击“创建房间”，把自己的局域网 IPv4 地址和端口告诉队友。
-2. 队友填写房主 IP 和端口，点击“加入房间”。
+1. 房主设置端口，点击“创建房间”，把自己的 IPv4 地址或域名和端口告诉队友。
+2. 队友填写房主 IP／域名和端口，点击“加入房间”。
 3. 所有人选择角色并准备，由房主开始游戏。
 
 使用 **TCP**，默认端口为 **29506**，可以在界面中修改。

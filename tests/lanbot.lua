@@ -1842,6 +1842,7 @@ test(
     end
 )
 test("embedded console entry dispatches lanbot and returns nil", function()
+    modules["compat/characters/keeper"] = dofile(root .. "/src/bridge/compat/characters/keeper.lua")
     _IsaacLanState = { actorPose = function() end }
     local source = { active = false, mask = 0 }
     native.api_info = function()
@@ -1858,8 +1859,13 @@ test("embedded console entry dispatches lanbot and returns nil", function()
     RegisterMod = function()
         return {}
     end
-    ModCallbacks =
-        { MC_EXECUTE_CMD = 1, MC_POST_GAME_STARTED = 2, MC_POST_UPDATE = 3, MC_PRE_GAME_EXIT = 4 }
+    ModCallbacks = {
+        MC_EXECUTE_CMD = 1,
+        MC_POST_GAME_STARTED = 2,
+        MC_POST_UPDATE = 3,
+        MC_PRE_GAME_EXIT = 4,
+        MC_PRE_PICKUP_COLLISION = 5,
+    }
     dofile(root .. "/src/bridge/app/main.lua")
     assert(callbacks[1](nil, "another_command", "on") == nil and #output == 0)
     assert(callbacks[1](nil, "lanbot", "on") == nil and output[1]:find("running"))

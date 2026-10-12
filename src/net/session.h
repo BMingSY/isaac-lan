@@ -24,7 +24,7 @@ class Session {
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
     bool host(std::uint16_t port, const std::string& fingerprint, const std::string& mods = {});
-    bool join(const std::string& ipv4, std::uint16_t port, const std::string& fingerprint,
+    bool join(const std::string& address, std::uint16_t port, const std::string& fingerprint,
               const std::string& identity = {}, const std::string& mods = {});
     bool reconnect();
     void poll();

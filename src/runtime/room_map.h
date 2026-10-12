@@ -53,7 +53,7 @@ inline void completeArrivalControls(int animation, bool& controlsEnabled, int na
     // Native RoomTransition releases portal and minecart controls after
     // arrival. Per-actor transfers replace that process-wide completion.
     if ((animation == 0 && nativeState < 2) || animation == 11 || animation == 16 ||
-        animation == 19)
+        animation == 19 || animation == 20)
         controlsEnabled = true;
 }
 inline void registerMapRoom(std::span<int, 507> offsets, unsigned& count, int dimension, int index,

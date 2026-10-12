@@ -66,6 +66,9 @@ for _, host in ipairs({ true, false }) do
             return string.rep("\0", 700)
         end,
         test_gamepad = function() end,
+        victory_lap_prompt = function()
+            return false, 0, 0, false, false
+        end,
         net_gate = function() end,
     }
     _IsaacLanFrame = function()

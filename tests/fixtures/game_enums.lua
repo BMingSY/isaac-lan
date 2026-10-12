@@ -14,6 +14,7 @@ return {
         ENTITY_MOTHERS_SHADOW = 867,
         ENTITY_EFFECT = 1000,
     },
+    EntityFlag = { FLAG_DONT_OVERWRITE = 2097152 },
     PickupVariant = { PICKUP_COLLECTIBLE = 100 },
     PlayerType = {
         PLAYER_BLUEBABY_B = 25,
@@ -37,5 +38,6 @@ return {
         COLLECTIBLE_BLACK_CANDLE = 260,
         COLLECTIBLE_ISAACS_HEART = 276,
         COLLECTIBLE_TOOTH_AND_NAIL = 663,
+        COLLECTIBLE_BAG_OF_CRAFTING = 710,
     },
 }

@@ -11,7 +11,9 @@ return function(root)
             SubType = subtype,
             room = selectedRoom,
             data = { __isaac_lan_replica = id },
+            identifier = id,
             alive = true,
+            allocated = true,
         }
         function e:Exists()
             return self.alive
@@ -27,7 +29,7 @@ return function(root)
         return e and e.alive and e or nil
     end
     local function identifier(e)
-        return e and e.data.__isaac_lan_replica or 0
+        return e and e.identifier or 0
     end
     function fixture.reset()
         allocations, refs, spawned, removed, room = {}, {}, 0, 0, "0:1"
@@ -35,12 +37,31 @@ return function(root)
         new(-1, 1, 0, 0, room)
         refs[900] = new(900, 10, 0, 0, "0:2")
     end
-    function fixture.apply(selectedRoom, values, implicitSegments)
+    function fixture.apply(selectedRoom, values, implicitSegments, invalidateData, factoryLimit)
         room = selectedRoom
         reconcile(values, {
             ref = ref,
+            key = function(e)
+                return e
+            end,
             spawn = function(v, _, subtype)
                 spawned = spawned + 1
+                if factoryLimit then
+                    local active = {}
+                    for _, existing in ipairs(allocations) do
+                        if existing.allocated and existing.Type == v[2] then
+                            active[#active + 1] = existing
+                        end
+                    end
+                    if #active >= factoryLimit then
+                        active[1].alive, active[1].allocated = false, false
+                    end
+                end
+                if invalidateData then
+                    for _, existing in ipairs(allocations) do
+                        existing.data = {}
+                    end
+                end
                 local e = new(v[1], v[2], v[3], subtype, room)
                 e.spawnSubtype = subtype
                 if implicitSegments and v[2] == 62 and subtype == 0 then
@@ -56,8 +77,16 @@ return function(root)
                 e.alive = false
                 removed = removed + 1
             end,
+            reclaim = function()
+                for _, existing in ipairs(allocations) do
+                    if not existing.alive then
+                        existing.allocated = false
+                    end
+                end
+            end,
             apply = function(e, v)
                 e.Variant, e.SubType, e.room = v[3], v[4], room
+                e.identifier = v[1]
                 refs[v[1]] = e
             end,
             entities = function()

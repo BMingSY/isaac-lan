@@ -2,7 +2,7 @@
 
 Isaac LAN 提供本机视图、生命周期通知、主机动作和自动兼容注册。实现位于 [`src/bridge/api/`](../src/bridge/api/public.lua) 与 [`src/bridge/compat/mods/`](../src/bridge/compat/mods/registry.lua)，随 DLL 嵌入，在第三方 Mod 初始化前发布全局 `IsaacLAN`。
 
-本版实现原设计的阶段 A（本机视图）和 B（玩法请求）。阶段 C 的补充状态、实体元数据、存档扩展和必需内容声明尚未提供；不会自动复制 `GetData()`、Mod 源码、配置或资源。当前传输协议为 24，世界视图 schema 为 13，各端需要同一扩展构建；公开 API 版本仍为 1，与传输和视图版本分别维护，见[网络与状态同步](synchronization.md)。
+本版实现原设计的阶段 A（本机视图）和 B（玩法请求）。阶段 C 的补充状态、实体元数据、存档扩展和必需内容声明尚未提供；不会自动复制 `GetData()`、Mod 源码、配置或资源。当前传输协议为 26，世界视图 schema 为 15，各端需要同一扩展构建；公开 API 版本仍为 1，与传输和视图版本分别维护，见[网络与状态同步](synchronization.md)。
 
 ## 安装与责任
 

@@ -1,6 +1,6 @@
 # 分层与玩法兼容
 
-这次整理把传输、运行协调、状态组件、表现和版本后端分开，并抽离现有特殊玩法规则。房主继续运行权威玩法，客机显示权威状态；当前协议为 25，世界视图为 schema 13。已有联机指纹检查仍要求两端使用相同扩展。
+这次整理把传输、运行协调、状态组件、表现和版本后端分开，并抽离现有特殊玩法规则。房主继续运行权威玩法，客机显示权威状态；当前协议为 26，世界视图为 schema 15。已有联机指纹检查仍要求两端使用相同扩展。
 
 ## 目录与职责
 
@@ -104,9 +104,9 @@ flowchart TD
 
 可移植 C++ 策略实际用到的游戏 ID 集中在 [`compat/game_ids.h`](../src/compat/game_ids.h)，按实体、角色、楼层、楼层类型、难度和维度分组，保持既有整数接口。特定机制的预警子类型、电视变种与过场 ID 在所属兼容模块就近命名；原生对象偏移仍由版本后端维护，网络消息标签仍由网络层定义。命名整理不改变协议、schema、原生布局或对象所有权。
 
-[`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，维护包含共享楼层诅咒、贪婪波次与整队恶魔／天使房概率的 19 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
+[`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，维护包含共享楼层诅咒、贪婪波次、整队恶魔／天使房概率和药丸信息的 20 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
 
-已验证的 133 个原生入口定义在 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h)，启动特征校验与调用点引用同一组常量。游戏版本、版本标记地址和所需 PE 区段放在 [`profile.h`](../src/engine/versions/j460/profile.h)。对象字段偏移仍需在对应 J460 实现中结合所有权与调用约定维护。
+已验证的 159 个原生入口／布局校验位置定义在 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h)，启动特征校验与调用点引用同一组常量。游戏版本、版本标记地址和所需 PE 区段放在 [`profile.h`](../src/engine/versions/j460/profile.h)。对象字段偏移仍需在对应 J460 实现中结合所有权与调用约定维护。本批共享道具、商店、口袋槽、合成袋与药丸能力的边界见[队伍兼容修复](party-compatibility.md)。
 
 增加新版本需要新的校验、地址、布局、Lua ABI 和实机证据；不能仅换版本字符串。当前仍只支持 J460，此次分层没有新增 REPENTOGON 支持。
 
@@ -120,13 +120,13 @@ flowchart TD
 
 `compat/bosses/dogma.lua` 仅匹配 `DOGMA_ORB` 的预警子类型，同步原生绘制依赖的二维几何参数。通用实体组件通过注入的兼容组件携带该字段，不执行 Boss AI。适配通过原版 `Entity.TargetPosition` 属性读写二维参数；既有攻击特效不进入此适配，不新增原生接口。
 
-共享诅咒、特殊房间返回与教条预警加入时，世界视图由 schema 10 升为 11；后续贪婪波次与整队概率字段使当前版本升为 13。这些字段当时保持 TCP 协议 24；后续无损字节增量将传输协议升为 25，Lua schema 仍为 13。扩展 DLL 指纹变化，两端仍须使用相同构建。
+共享诅咒、特殊房间返回与教条预警加入时，世界视图由 schema 10 升为 11；后续贪婪波次与整队概率字段使版本升为 13。这些字段当时保持 TCP 协议 24；后续无损字节增量将传输协议升为 25，Lua schema 当时仍为 13。本批药丸和口袋槽信息将 schema 升为 14，合成袋材料与预览随后升为 15，原生重开事务将协议升为 26。扩展 DLL 指纹变化，两端仍须使用相同构建。
 
 ## 贪婪模式
 
 `compat/routes/greed.lua` 通过原版 `Game:IsGreedMode()` 和 `Level.GreedModeWave` 采集与应用楼层波次；普通／困难模式传 `false`，贪婪／超级贪婪传 0–12 的整数。波次属于共享楼层，玩家在商店等其他房间也接收同一计数。应用位于楼层代次校验和库存应用之后，不触发波次生成、奖励或按钮伤害。房间按钮、门与敌人继续使用既有网格／实体同步。
 
-该字段追加到顶层第 18 项，当时世界视图由 schema 11 升为 12；整队概率随后追加第 19 项，当前 schema 为 13。该字段没有修改传输协议；当前字节增量使用协议 25，旧 schema 被拒绝，扩展指纹仍要求两端使用相同 DLL。`compat/bosses/encounters.h` 接收难度普通值，在贪婪两种难度的第七层匹配 Ultra Greed 的两种形态并汇合队伍；普通波次与商店 Greed 不强制汇合。原生后端通过运行协调器取得已确认的会话难度并调用该策略，没有新增原生布局依赖，所有权和 Hook 不变。测试与原生校验边界见[贪婪模式验证记录](greed-mode-validation.md)。
+该字段追加到顶层第 18 项，当时世界视图由 schema 11 升为 12；整队概率随后追加第 19 项，当时 schema 为 13，药丸字段随后升为 14。该字段没有修改传输协议；当前字节增量使用协议 26，旧 schema 被拒绝，扩展指纹仍要求两端使用相同 DLL。`compat/bosses/encounters.h` 接收难度普通值，在贪婪两种难度的第七层匹配 Ultra Greed 的两种形态并汇合队伍；普通波次与商店 Greed 不强制汇合。原生后端通过运行协调器取得已确认的会话难度并调用该策略，没有新增原生布局依赖，所有权和 Hook 不变。测试与原生校验边界见[贪婪模式验证记录](greed-mode-validation.md)。
 
 ## 增加一个兼容机制
 

@@ -5,8 +5,9 @@
 #include <vector>
 
 namespace isaac::lan {
-// Windows' bounded buffer-mode XPRESS codec; packets remain independent so a
+// Bounded portable DEFLATE; packets remain independent so a
 // newly joined client never needs previous snapshots to decode current state.
+// The native XPRESS reader remains for previous Windows trace archives.
 class StateCompression {
     struct Impl;
     std::unique_ptr<Impl> impl;

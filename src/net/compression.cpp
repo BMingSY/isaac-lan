@@ -1,5 +1,6 @@
 #include "net/compression.h"
 #include "net/protocol.h"
+#include "core/deflate.h"
 #include <windows.h>
 #include <cstring>
 #include <string>
@@ -55,17 +56,15 @@ StateCompression::~StateCompression() = default;
 std::vector<std::uint8_t> StateCompression::compress(std::span<const std::uint8_t> bytes) {
     if (bytes.empty() || bytes.size() > maxWorldSize)
         throw std::runtime_error("Invalid state compression size");
-    impl->initialize();
     std::vector<std::uint8_t> result(bytes.size() + 5);
     result[0] = 0;
     for (unsigned i = 0; i < 4; ++i)
         result[1 + i] = static_cast<std::uint8_t>(bytes.size() >> (24 - i * 8));
-    SIZE_T written = 0;
-    if (impl->compress(impl->compressor, bytes.data(), bytes.size(), result.data() + 5,
-                       bytes.size(), &written) &&
-        written < bytes.size()) {
-        result[0] = 1;
-        result.resize(written + 5);
+    const auto compressed = compression::deflate(bytes, maxWorldSize);
+    if (compressed.size() < bytes.size()) {
+        result[0] = 2;
+        result.resize(compressed.size() + 5);
+        std::memcpy(result.data() + 5, compressed.data(), compressed.size());
     } else
         std::memcpy(result.data() + 5, bytes.data(), bytes.size());
     return result;
@@ -74,13 +73,15 @@ std::vector<std::uint8_t> StateCompression::expand(std::span<const std::uint8_t>
     Reader reader(bytes);
     const auto mode = reader.u8();
     const auto size = reader.u32();
-    if (mode > 1 || !size || size > maxWorldSize || bytes.size() < 6)
+    if (mode > 2 || !size || size > maxWorldSize || bytes.size() < 6)
         throw std::runtime_error("Invalid compressed state header");
     if (!mode) {
         if (bytes.size() - 5 != size)
             throw std::runtime_error("Invalid plain state size");
         return {bytes.begin() + 5, bytes.end()};
     }
+    if (mode == 2)
+        return compression::inflate(bytes.subspan(5), size, maxWorldSize);
     impl->initialize();
     std::vector<std::uint8_t> result(size);
     SIZE_T written = 0;
