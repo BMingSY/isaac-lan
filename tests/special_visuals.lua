@@ -1,10 +1,15 @@
 local root = assert(arg[1])
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local stored = string.pack(">ff", 520, -180)
 local function vector(x, y)
     return { X = x, Y = y }
 end
-local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(vector)
+local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
+    vector,
+    enums.EntityType,
+    enums.EffectVariant
+)
 local function geometry(entity)
     return string.pack(">ff", entity.TargetPosition.X, entity.TargetPosition.Y)
 end

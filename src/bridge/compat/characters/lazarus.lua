@@ -1,8 +1,8 @@
 -- Tainted Lazarus replaces a player allocation; changing its type in place
 -- creates another backup body and leaves presentation attached to the old one.
-return function(native, player)
+return function(native, player, types)
     local function lazarus(kind)
-        return kind == 29 or kind == 38
+        return kind == types.PLAYER_LAZARUS_B or kind == types.PLAYER_LAZARUS2_B
     end
     return {
         resolve = function(index, inventory, controller)

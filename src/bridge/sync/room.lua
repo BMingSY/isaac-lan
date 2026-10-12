@@ -1,5 +1,5 @@
 -- Complete, immutable room views shared by peers in the same room/tick.
-return function(native, entity, sprite, crawlspace)
+return function(native, entity, sprite, crawlspace, types)
     local captureTick, captureEpoch, rooms
     local function collect(slot)
         local value
@@ -7,7 +7,7 @@ return function(native, entity, sprite, crawlspace)
             local room = Game():GetRoom()
             local entities, grids = {}, {}
             for _, e in ipairs(Isaac.GetRoomEntities()) do
-                if e:Exists() and e.Type ~= 1 then
+                if e:Exists() and e.Type ~= types.ENTITY_PLAYER then
                     entities[#entities + 1] = entity(e)
                 end
             end

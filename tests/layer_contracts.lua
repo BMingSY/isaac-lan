@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
@@ -72,7 +73,7 @@ local level = {
         order[#order + 1] = "set-stage"
     end,
 }
-local home = module("compat/routes/home")
+local home = module("compat/routes/home")(enums.LevelStage, enums.StageType)
 local floor = module("runtime/floor")(native, home)
 local adapters = { home, module("compat/items/hourglass"), module("compat/items/r_key") }
 local compatibility = module("compat/transitions")(adapters)
