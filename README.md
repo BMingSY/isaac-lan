@@ -18,9 +18,7 @@
 
 ### Linux／Steam Deck（Proton）
 
-在 Steam 中为游戏启用 Proton，使用 Windows 版 J460。以 Proton 11.0-2 为适配基准。
-
-关闭游戏后，在完整安装包目录运行（需要 Python 3）：
+需要 Windows 版 J460、Proton 11.0-2 及以上。
 
 ```sh
 python3 install.py --game-directory "/path/to/Binding of Isaac Rebirth"
