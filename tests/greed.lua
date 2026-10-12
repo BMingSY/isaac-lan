@@ -1,5 +1,6 @@
 -- Exercise the production world capture/apply chain, including floor barriers.
 local root = assert(arg[1])
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local function environment(difficulty)
     local level = {
         GreedModeWave = 0,
@@ -144,7 +145,6 @@ local function environment(difficulty)
         _IsaacLanModules = {},
         ItemType = { ITEM_ACTIVE = 2 },
         NullItemID = { ID_LOST_CURSE = 1 },
-        CollectibleType = { COLLECTIBLE_BLACK_CANDLE = 260 },
         Vector = function(x, y)
             return { X = x, Y = y }
         end,
@@ -171,6 +171,9 @@ local function environment(difficulty)
             return game
         end,
     }, { __index = _G })
+    for name, values in pairs(enums) do
+        env[name] = values
+    end
     for name in io.lines(root .. "/src/bridge/modules.txt") do
         if name ~= "api/public" and not name:match("^compat/mods/") then
             env._IsaacLanModules[name] =

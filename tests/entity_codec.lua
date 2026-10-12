@@ -1,5 +1,6 @@
 local root = assert(arg[1])
-local schemas = dofile(root .. "/src/bridge/sync/entity_schema.lua")
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
+local schemas = dofile(root .. "/src/bridge/sync/entity_schema.lua")(enums.EntityType)
 local env = setmetatable({
     Vector = function(x, y)
         return { X = x, Y = y }
@@ -13,7 +14,11 @@ local env = setmetatable({
 }, { __index = _G })
 local laserReads, laserWrites = 0, 0
 local geometry = string.pack(">ff", 520, -180)
-local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(env.Vector)
+local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
+    env.Vector,
+    enums.EntityType,
+    enums.EffectVariant
+)
 local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "t", env))()(
     {
         entity_prepare = function()

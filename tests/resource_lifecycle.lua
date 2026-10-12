@@ -1,5 +1,7 @@
 local root = assert(arg[1])
-local reconcile = dofile(root .. "/src/bridge/sync/entities.lua")
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
+local reconcile =
+    dofile(root .. "/src/bridge/sync/entities.lua")(enums.EntityType, enums.PickupVariant)
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local refs, live = {}, {}
 local observed = setmetatable({}, { __mode = "v" })

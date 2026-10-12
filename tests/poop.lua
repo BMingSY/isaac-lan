@@ -1,12 +1,14 @@
 local root = assert(arg[1])
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local received, count
-local module = dofile(root .. "/src/bridge/compat/characters/blue_baby.lua")({
+local create = dofile(root .. "/src/bridge/compat/characters/blue_baby.lua")
+local module = create({
     actor_poop = function(sprite, value)
         assert(sprite == "sprite")
         received, count = value, (count or 0) + 1
         return true
     end,
-})
+}, enums.PlayerType)
 local kind, ghost = 0, false
 local player = {
     GetPlayerType = function()
@@ -34,6 +36,8 @@ kind = 25
 local value = module.capture(player)
 assert(#value == 10)
 assert(value == string.pack(">I4BBBBBB", 12, 1, 11, 7, 0, 5, 9))
+local legacy = create({}, { PLAYER_XXX_B = 25 })
+assert(legacy.capture(player) == value, "Legacy vanilla enum spelling changed the poop queue")
 module.apply(player, value)
 module.apply(player, value)
 assert(received == value and count == 2)

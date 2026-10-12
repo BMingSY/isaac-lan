@@ -1,5 +1,6 @@
 -- Test-only pipe protocol: no native extension, game files or window input.
 local root = assert(arg[1])
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 assert(_VERSION == "Lua 5.3", "Offline tests require the game's Lua 5.3 language version")
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local inventory = dofile(root .. "/tests/fixtures/offline_inventory.lua")(root)
@@ -71,6 +72,9 @@ local function stateEnvironment()
             return { X = x, Y = y }
         end,
     }, { __index = _G })
+    for name, values in pairs(enums) do
+        env[name] = values
+    end
     assert(loadfile(root .. "/src/bridge/app/world.lua", "t", env))()
     return env
 end

@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local nativeReady, stage, stageType, changes = true, 6, 4, 0
 local native = {
     rooms_ready = function()
@@ -18,7 +19,7 @@ local level = {
 }
 local floor = dofile(root .. "/src/bridge/runtime/floor.lua")(
     native,
-    dofile(root .. "/src/bridge/compat/routes/home.lua")
+    dofile(root .. "/src/bridge/compat/routes/home.lua")(enums.LevelStage, enums.StageType)
 )
 assert(floor.ready(level, 7, 6, 4))
 -- A new Ascent snapshot can arrive before its reliable native transition.

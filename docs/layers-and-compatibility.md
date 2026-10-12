@@ -100,6 +100,10 @@ flowchart TD
 
 ## 字段与版本定义
 
+游戏实体、房间、角色、楼层和变种匹配使用具名枚举。Lua 游戏适配层读取 `EntityType`、`RoomType`、`PlayerType`、`LevelStage`、`StageType` 等原版定义；可独立加载的同步和兼容组件通过工厂参数接收所需定义，模块加载时不读取游戏枚举。实体 schema 由注入的 `EntityType` 建立数字键，编码仍携带原始 ID，字段顺序保持不变。离线夹具集中在 `tests/fixtures/game_enums.lua`，场景输入与预期值保留独立的数字，便于发现 ID 或编码漂移。
+
+可移植 C++ 策略实际用到的游戏 ID 集中在 [`compat/game_ids.h`](../src/compat/game_ids.h)，按实体、角色、楼层、楼层类型、难度和维度分组，保持既有整数接口。特定机制的预警子类型、电视变种与过场 ID 在所属兼容模块就近命名；原生对象偏移仍由版本后端维护，网络消息标签仍由网络层定义。命名整理不改变协议、schema、原生布局或对象所有权。
+
 [`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，维护包含共享楼层诅咒、贪婪波次与整队恶魔／天使房概率的 19 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
 
 已验证的 133 个原生入口定义在 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h)，启动特征校验与调用点引用同一组常量。游戏版本、版本标记地址和所需 PE 区段放在 [`profile.h`](../src/engine/versions/j460/profile.h)。对象字段偏移仍需在对应 J460 实现中结合所有权与调用约定维护。

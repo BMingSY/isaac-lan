@@ -1,4 +1,5 @@
 local root = arg[1] or "."
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local runtime = assert(loadfile(root .. "/tests/fixtures/api_runtime.lua"))()(root)
 local host, guest = runtime.peer(0), runtime.peer(1)
 local native = host.env._IsaacLan
@@ -33,6 +34,7 @@ local function resetRooms()
     }
     curses, stage, doors, entities = 0, 1, {}, {}
     actor.damage, actor.hp, actor.dead, actor.flat, actor.flying = 0, 6, false, false, false
+    actor.collectible = nil
     host.positions["1"].index, guest.positions["1"].index = 84, 84
     host.queuedMove = nil
 end
@@ -54,11 +56,11 @@ end
 function actor:IsFlying()
     return self.flying
 end
-function actor:HasTrinket()
-    return self.flat
+function actor:HasTrinket(id)
+    return self.flat and id == 151
 end
-function actor:HasCollectible()
-    return false
+function actor:HasCollectible(id)
+    return self.collectible == id
 end
 function actor:TakeDamage(amount)
     self.damage = self.damage + amount
@@ -107,6 +109,9 @@ host.env.Game = function()
 end
 host.env.Isaac.GetRoomEntities = function()
     return entities
+end
+for name, values in pairs(enums) do
+    host.env[name] = values
 end
 local authority =
     assert(loadfile(root .. "/src/bridge/compat/mods/goodtrip/authority.lua", "t", host.env))()
@@ -244,6 +249,16 @@ rooms[84].Data.Type = 10
 actor.flat = true
 result = execute()
 assert(result.status == "applied" and actor.damage == 0, "Flat File charged curse damage")
+for _, id in ipairs({ 276, 663, 260 }) do
+    resetRooms()
+    rooms[84].Data.Type = 10
+    actor.collectible = id
+    result = execute()
+    assert(
+        result.status == "applied" and actor.damage == (id == 260 and 1 or 0),
+        "GoodTrip curse protection matched the wrong collectible ID"
+    )
+end
 resetRooms()
 rooms[84].Data.Type = 10
 curses = 2

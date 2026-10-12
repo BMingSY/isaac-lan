@@ -1,8 +1,11 @@
 -- DOGMA_ORB subtype 1 draws its warning beam from Entity.TargetPosition.
 -- Its sprite alone is insufficient, and replicas do not run the effect's AI.
-return function(vector)
+local WARNING_SUBTYPE = 1
+return function(vector, types, effects)
     local function matches(entity)
-        return entity.Type == 1000 and entity.Variant == 172 and entity.SubType == 1
+        return entity.Type == types.ENTITY_EFFECT
+            and entity.Variant == effects.DOGMA_ORB
+            and entity.SubType == WARNING_SUBTYPE
     end
     return {
         capture = function(entity)

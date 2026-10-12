@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local module = dofile(root .. "/src/bridge/compat/characters/lazarus.lua")
 local function body(kind, controller)
     return {
@@ -22,7 +23,7 @@ local forms = module({
     end,
 }, function(index)
     return roster[index + 1]
-end)
+end, enums.PlayerType)
 local function inventory(kind, ghost)
     return { kind, {}, {}, {}, {}, {}, {}, {}, ghost or false }
 end
@@ -43,7 +44,7 @@ local birthright = module({
 }, function(index)
     -- Native Isaac.GetPlayer returns player zero for an absent index.
     return roster[index + 1] or roster[1]
-end)
+end, enums.PlayerType)
 assert(birthright.resolve(2, inventory(38), 2) == dead and listed == 1)
 assert(birthright.resolve(2, inventory(38), 2) == dead and listed == 1)
 assert(birthright.resolve(0, inventory(0), 1) == other and listed == 1)
@@ -65,7 +66,7 @@ local broken = module({
     end,
 }, function()
     return alive
-end)
+end, enums.PlayerType)
 assert(not pcall(broken.resolve, 0, inventory(38)))
 print(
     "PASS Tainted Lazarus replacement, Birthright backup listing, idempotence and redirected motion cleanup"

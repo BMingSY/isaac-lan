@@ -1,13 +1,14 @@
 #pragma once
+#include "compat/game_ids.h"
 
 namespace isaac::compat::characters {
-inline constexpr int lazarusLiving = 29;
-inline constexpr int lazarusDead = 38;
-inline constexpr unsigned darkEsau = 866;
+inline constexpr int lazarusLiving = ids::player::lazarusB;
+inline constexpr int lazarusDead = ids::player::lazarusSecondB;
+inline constexpr unsigned darkEsau = ids::entity::darkEsau;
 inline bool lazarus(int kind) {
     return kind == lazarusLiving || kind == lazarusDead;
 }
 inline bool taintedJacob(int kind) {
-    return kind == 37 || kind == 39;
+    return kind == ids::player::jacobB || kind == ids::player::jacobSecondB;
 }
 } // namespace isaac::compat::characters

@@ -1,5 +1,6 @@
 -- Exercise shared room capture with separate rooms, dimensions and floor reuse.
 local root = assert(arg[1])
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local active, calls = 0, 0
 local entity = {
     Type = 10,
@@ -52,7 +53,7 @@ end, {
     capture = function()
         return "return"
     end,
-})
+}, enums.EntityType)
 local one = capture(1, 10, 0, { dimension = 0, index = 84 })
 assert(one == capture(2, 10, 0, { dimension = 0, index = 84 }) and calls == 1)
 assert(one[3][1][1] == 1)
@@ -70,6 +71,6 @@ end, {
     capture = function()
         return "return"
     end,
-})
+}, enums.EntityType)
 assert(fresh(1, 11, 1, { dimension = 0, index = 84 }) ~= nextTick and calls == 6)
 print("PASS room views capture once per room/tick and clear on tick/floor changes")
