@@ -1,8 +1,9 @@
 -- Queue restoration must not invoke UsePoopSpell or consume another spell.
-return function(native)
+return function(native, types)
+    local blueBaby = assert(types.PLAYER_BLUEBABY_B or types.PLAYER_XXX_B)
     return {
         capture = function(p)
-            if p:GetPlayerType() ~= 25 or p:IsCoopGhost() then
+            if p:GetPlayerType() ~= blueBaby or p:IsCoopGhost() then
                 return false
             end
             local queue = {}

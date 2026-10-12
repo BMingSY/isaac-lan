@@ -25,25 +25,26 @@ return function(native, schemas, npcState, visualCompatibility)
         return d.__isaac_lan_entity
     end
     local common, schema = schemas.common, schemas.byType
+    local types = schemas.types
     local function typed(e)
-        if e.Type == 1 then
-            return e:ToPlayer(), schema[1]
-        elseif e.Type == 2 then
-            return e:ToTear(), schema[2]
-        elseif e.Type == 3 then
-            return e:ToFamiliar(), schema[3]
-        elseif e.Type == 4 then
-            return e:ToBomb(), schema[4]
-        elseif e.Type == 5 then
-            return e:ToPickup(), schema[5]
-        elseif e.Type == 7 then
-            return e:ToLaser(), schema[7]
-        elseif e.Type == 8 then
-            return e:ToKnife(), schema[8]
-        elseif e.Type == 9 then
-            return e:ToProjectile(), schema[9]
-        elseif e.Type == 1000 then
-            return e:ToEffect(), schema[1000]
+        if e.Type == types.ENTITY_PLAYER then
+            return e:ToPlayer(), schema[types.ENTITY_PLAYER]
+        elseif e.Type == types.ENTITY_TEAR then
+            return e:ToTear(), schema[types.ENTITY_TEAR]
+        elseif e.Type == types.ENTITY_FAMILIAR then
+            return e:ToFamiliar(), schema[types.ENTITY_FAMILIAR]
+        elseif e.Type == types.ENTITY_BOMB then
+            return e:ToBomb(), schema[types.ENTITY_BOMB]
+        elseif e.Type == types.ENTITY_PICKUP then
+            return e:ToPickup(), schema[types.ENTITY_PICKUP]
+        elseif e.Type == types.ENTITY_LASER then
+            return e:ToLaser(), schema[types.ENTITY_LASER]
+        elseif e.Type == types.ENTITY_KNIFE then
+            return e:ToKnife(), schema[types.ENTITY_KNIFE]
+        elseif e.Type == types.ENTITY_PROJECTILE then
+            return e:ToProjectile(), schema[types.ENTITY_PROJECTILE]
+        elseif e.Type == types.ENTITY_EFFECT then
+            return e:ToEffect(), schema[types.ENTITY_EFFECT]
         elseif e:ToNPC() then
             return e:ToNPC(), schema.npc
         end
@@ -162,8 +163,8 @@ return function(native, schemas, npcState, visualCompatibility)
             color(e.Color),
             e.FrameCount,
             e:GetEntityFlags(),
-            e.Type == 7 and assert(native.laser_path(e:GetSprite())) or false,
-            e.Type == 7 and vector(e:ToLaser().EndPoint) or false,
+            e.Type == types.ENTITY_LASER and assert(native.laser_path(e:GetSprite())) or false,
+            e.Type == types.ENTITY_LASER and vector(e:ToLaser().EndPoint) or false,
             visual and assert(native.entity_shadow(e:GetSprite())) or false,
             npcState.capture(e:ToNPC()),
             visual and visualCompatibility and visualCompatibility.capture(e) or false,
@@ -195,7 +196,7 @@ return function(native, schemas, npcState, visualCompatibility)
         -- Replicas instead keep receiving its pose/lifetime from the host. Baking
         -- an earlier death pose leaves a permanent silhouette in their backdrop.
         local floor, wall = EntityFlag.FLAG_RENDER_FLOOR, EntityFlag.FLAG_RENDER_WALL
-        if e.Type == 1 then
+        if e.Type == types.ENTITY_PLAYER then
             -- Actor lifecycle/persistence flags belong to this native allocation.
             -- Copying the authority's lifecycle bits can retire a live actor when
             -- temporary forms change. Only the visual blink override is replicated.
@@ -209,7 +210,7 @@ return function(native, schemas, npcState, visualCompatibility)
         if (v[19] & floor) ~= 0 then
             e.DepthOffset = e.DepthOffset - 10000
         end
-        if e.Type == 7 then
+        if e.Type == types.ENTITY_LASER then
             assert(native.laser_path(e:GetSprite(), v[20]))
             e:ToLaser().EndPoint = vec(v[21])
         end

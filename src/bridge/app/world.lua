@@ -19,7 +19,8 @@ local performance = modules["diagnostics/performance"]
     }
 local encode = performance.wrap("encode", codec.encode)
 local decode = performance.wrap("decode", codec.decode)
-local reconcileEntities = performance.wrap("apply.entities", modules["sync/entities"])
+local reconcileEntities =
+    performance.wrap("apply.entities", modules["sync/entities"](EntityType, PickupVariant))
 local reconcileGrids = performance.wrap("apply.grids", modules["sync/grids"])
 local npcState = assert(modules["sync/npc"])
 local curses = assert(modules["sync/curses"])
@@ -32,14 +33,14 @@ local crawlspace = assert(modules["compat/routes/crawlspace"])(function()
 end, Vector)
 local forms = assert(modules["compat/characters/lazarus"])(native, function(index)
     return Isaac.GetPlayer(index)
-end)
-local poop = assert(modules["compat/characters/blue_baby"])(native)
+end, PlayerType)
+local poop = assert(modules["compat/characters/blue_baby"])(native, PlayerType)
 state.encode, state.decode = encode, decode
 local entityCodec = assert(modules["sync/entity_codec"])(
     native,
-    assert(modules["sync/entity_schema"]),
+    assert(modules["sync/entity_schema"])(EntityType),
     npcState,
-    assert(modules["compat/bosses/dogma"])(Vector)
+    assert(modules["compat/bosses/dogma"])(Vector, EntityType, EffectVariant)
 )
 local entity, sprite, applySprite, vec =
     entityCodec.capture, entityCodec.sprite, entityCodec.applySprite, entityCodec.vec
@@ -91,7 +92,7 @@ local motionPresentation = assert(modules["presentation/motion"])(native, actors
 local audioPresentation = assert(modules["presentation/audio"])(native, function()
     return SFXManager()
 end)
-local roomState = assert(modules["sync/room"])(native, entity, sprite, crawlspace)
+local roomState = assert(modules["sync/room"])(native, entity, sprite, crawlspace, EntityType)
 local captureTick, captureEpoch, captureActors, captureVisuals = nil, nil, {}, {}
 local captureEncoded = {}
 function state.capture(slot, tick)
@@ -244,15 +245,17 @@ local function applyEntity(e, v, now, tick)
         at = now,
         tick = tick,
         previousTick = prior and prior.tick or tick - 1,
-        actor = e.Type == 1,
-        controller = e.Type == 1 and e:ToPlayer().ControllerIndex or -1,
-        prediction = e.Type == 1 and (prior and prior.prediction or prediction.new(vec(v[6]))),
+        actor = e.Type == EntityType.ENTITY_PLAYER,
+        controller = e.Type == EntityType.ENTITY_PLAYER and e:ToPlayer().ControllerIndex or -1,
+        prediction = e.Type == EntityType.ENTITY_PLAYER
+            and (prior and prior.prediction or prediction.new(vec(v[6]))),
         doorway = prior and prior.doorway,
     }
 end
-local floor = assert(modules["runtime/floor"])(native, assert(modules["compat/routes/home"]))
+local home = assert(modules["compat/routes/home"])(LevelStage, StageType)
+local floor = assert(modules["runtime/floor"])(native, home)
 local transitions = assert(modules["compat/transitions"])({
-    assert(modules["compat/routes/home"]),
+    home,
     assert(modules["compat/items/hourglass"]),
     assert(modules["compat/items/r_key"]),
 })
@@ -480,7 +483,7 @@ function state.reset()
     greed.reset()
     deals.reset()
     floor.reset()
-    roomState = assert(modules["sync/room"])(native, entity, sprite, crawlspace)
+    roomState = assert(modules["sync/room"])(native, entity, sprite, crawlspace, EntityType)
     captureTick, captureEpoch = nil, nil
     captureActors = {}
     captureVisuals = {}

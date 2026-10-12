@@ -36,7 +36,7 @@ function authority.observe()
                     if
                         old
                         and old.Data
-                        and (old.Data.Type == 7 or (old.Data.Type == 8 and Game():IsGreedMode()))
+                        and (old.Data.Type == RoomType.ROOM_SECRET or (old.Data.Type == RoomType.ROOM_SUPERSECRET and Game():IsGreedMode()))
                         and not known[prior.index]
                     then
                         for _, neighbor in ipairs({
@@ -57,15 +57,16 @@ function authority.observe()
                 if
                     current.Data
                     and (
-                        current.Data.Type == 7 or (current.Data.Type == 8 and Game():IsGreedMode())
+                        current.Data.Type == RoomType.ROOM_SECRET
+                        or (current.Data.Type == RoomType.ROOM_SUPERSECRET and Game():IsGreedMode())
                     )
                 then
                     for doorSlot = 0, 7 do
                         local door = room:GetDoor(doorSlot)
-                        if door and door.Desc.Variant == 8 then
+                        if door and door.Desc.Variant == DoorVariant.DOOR_UNLOCKED then
                             local target = level:GetRoomByIdx(door.TargetRoomIndex, dimension)
                             if target and target.Data then
-                                if door.TargetRoomType == 10 then
+                                if door.TargetRoomType == RoomType.ROOM_CURSE then
                                     known[current.GridIndex] = known[current.GridIndex]
                                         or door.TargetRoomIndex
                                 else
@@ -77,10 +78,14 @@ function authority.observe()
                             end
                         end
                     end
-                elseif current.Data and current.Data.Type == 10 then
+                elseif current.Data and current.Data.Type == RoomType.ROOM_CURSE then
                     for doorSlot = 0, 7 do
                         local door = room:GetDoor(doorSlot)
-                        if door and door.Desc.Variant == 8 and door.TargetRoomType == 7 then
+                        if
+                            door
+                            and door.Desc.Variant == DoorVariant.DOOR_UNLOCKED
+                            and door.TargetRoomType == RoomType.ROOM_SECRET
+                        then
                             known[current.GridIndex] = door.TargetRoomIndex
                             if
                                 known[door.TargetRoomIndex]
@@ -140,7 +145,10 @@ function authority.install(api)
             then
                 return reject("destination_unavailable")
             end
-            if source.Data.Type == 6 or source.Data.Type == 11 then
+            if
+                source.Data.Type == RoomType.ROOM_MINIBOSS
+                or source.Data.Type == RoomType.ROOM_CHALLENGE
+            then
                 local open = false
                 for slot = 0, 7 do
                     local door = room:GetDoor(slot)
@@ -153,17 +161,17 @@ function authority.install(api)
                 end
             end
             for _, entity in ipairs(Isaac.GetRoomEntities()) do
-                if entity.Type == 867 then
+                if entity.Type == EntityType.ENTITY_MOTHERS_SHADOW then
                     return reject("chase_active")
                 end
             end
             if source.Data.Name == "Mom" then
                 return reject("mom_locked")
             end
-            if target.Data.Type == 11 and not target.ChallengeDone then
+            if target.Data.Type == RoomType.ROOM_CHALLENGE and not target.ChallengeDone then
                 local health = player:GetHearts() + player:GetSoulHearts() + player:GetBlackHearts()
                 local stage = level:GetStage()
-                if stage % 2 == 0 and stage ~= 10 then
+                if stage % 2 == 0 and stage ~= LevelStage.STAGE5 then
                     if health > 2 then
                         return reject("challenge_health")
                     end
@@ -173,9 +181,9 @@ function authority.install(api)
             end
             local known = entrances[payload.dimension] or {}
             local sourceIndex, destinationIndex = source.GridIndex, payload.index
-            local flat = player:HasTrinket(151)
-                or player:HasCollectible(276)
-                or player:HasCollectible(663)
+            local flat = player:HasTrinket(TrinketType.TRINKET_FLAT_FILE)
+                or player:HasCollectible(CollectibleType.COLLECTIBLE_ISAACS_HEART)
+                or player:HasCollectible(CollectibleType.COLLECTIBLE_TOOTH_AND_NAIL)
             local damage, route = 0, {}
             local function safeCurse(index, other)
                 return known[index]
@@ -185,10 +193,13 @@ function authority.install(api)
                     )
             end
             if not flat then
-                if source.Data.Type == 10 and not safeCurse(sourceIndex, destinationIndex) then
+                if
+                    source.Data.Type == RoomType.ROOM_CURSE
+                    and not safeCurse(sourceIndex, destinationIndex)
+                then
                     damage = damage + 1
                 elseif
-                    target.Data.Type == 10
+                    target.Data.Type == RoomType.ROOM_CURSE
                     and not player:IsFlying()
                     and not safeCurse(destinationIndex, sourceIndex)
                 then
@@ -205,21 +216,26 @@ function authority.install(api)
                 end
                 return true
             end
-            if source.Data.Type == 7 then
+            if source.Data.Type == RoomType.ROOM_SECRET then
                 local entrance = known[sourceIndex]
                 if not entrance or not rooms[entrance] then
                     return reject("secret_path_unknown")
                 end
                 if rooms[entrance].ListIndex == target.ListIndex then
                     destinationIndex = entrance
-                elseif not (target.Data.Type == 10 and known[destinationIndex] == sourceIndex) then
-                    if rooms[entrance].Data.Type == 10 and not flat then
+                elseif
+                    not (
+                        target.Data.Type == RoomType.ROOM_CURSE
+                        and known[destinationIndex] == sourceIndex
+                    )
+                then
+                    if rooms[entrance].Data.Type == RoomType.ROOM_CURSE and not flat then
                         damage = damage + 1
                     end
                     intermediate(entrance)
                 end
             end
-            if target.Data.Type == 7 and known[destinationIndex] then
+            if target.Data.Type == RoomType.ROOM_SECRET and known[destinationIndex] then
                 local entrance = known[destinationIndex]
                 if not rooms[entrance] then
                     return reject("secret_path_unknown")
@@ -228,8 +244,17 @@ function authority.install(api)
                     if source.Data.Shape > 3 then
                         intermediate(entrance)
                     end
-                elseif not (source.Data.Type == 10 and known[sourceIndex] == destinationIndex) then
-                    if rooms[entrance].Data.Type == 10 and not player:IsFlying() and not flat then
+                elseif
+                    not (
+                        source.Data.Type == RoomType.ROOM_CURSE
+                        and known[sourceIndex] == destinationIndex
+                    )
+                then
+                    if
+                        rooms[entrance].Data.Type == RoomType.ROOM_CURSE
+                        and not player:IsFlying()
+                        and not flat
+                    then
                         damage = damage + 1
                     end
                     intermediate(entrance)
