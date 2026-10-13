@@ -172,11 +172,15 @@ inline constexpr std::uint32_t craftingBagPreviewQuery = 0x443b06;
 inline constexpr std::uint32_t craftingBagMaterialCount = 0x3d54e2;
 inline constexpr std::uint32_t playerSetPocketActiveItem = 0x3d41d0;
 inline constexpr std::uint32_t playerGetActiveItem = 0x2a2f0;
+inline constexpr std::uint32_t menuCharacterAvailable = 0x546cd0;
+inline constexpr std::uint32_t menuCharacterModEnumeration = 0x54919e;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t game = 0x871678;
 inline constexpr std::uint32_t manager = 0x87169c;
 inline constexpr std::uint32_t logicalWidth = 0x878dc4;
 inline constexpr std::uint32_t logicalHeight = 0x878edc;
+inline constexpr std::uint32_t characterMenuPages = 0x724120;
+inline constexpr std::uint32_t characterMenuEntries = 0x724140;
 } // namespace globals
 } // namespace isaac::engine::j460

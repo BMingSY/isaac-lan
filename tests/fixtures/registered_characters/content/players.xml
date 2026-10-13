@@ -1,0 +1,13 @@
+<players root="gfx/characters/costumes/" portraitroot="gfx/ui/boss/" nameimageroot="gfx/ui/boss/">
+    <player name="LAN Catalog Probe" skin="Character_001_Isaac.png" hp="6"
+            skinColor="-1" portrait="PlayerPortrait_01_Isaac.png" nameimage="PlayerName_01_Isaac.png"/>
+    <player name="LAN Catalog Probe" bSkinParent="LAN Catalog Probe"
+            skin="Character_001_Isaac.png" hp="8" skinColor="-1"
+            portrait="PlayerPortrait_01_Isaac.png" nameimage="PlayerName_01_Isaac.png"/>
+    <player name="LAN Achievement Probe" achievement="475"
+            skin="Character_001_Isaac.png" hp="10" skinColor="-1"
+            portrait="PlayerPortrait_01_Isaac.png" nameimage="PlayerName_01_Isaac.png"/>
+    <player name="LAN Hidden Probe" hidden="true"
+            skin="Character_001_Isaac.png" hp="6" skinColor="-1"
+            portrait="PlayerPortrait_01_Isaac.png" nameimage="PlayerName_01_Isaac.png"/>
+</players>

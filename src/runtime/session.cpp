@@ -1,6 +1,6 @@
 #include "runtime/session.h"
 #include "compat/challenges/catalog.h"
-#include "compat/characters/unlocks.h"
+#include "engine/characters.h"
 #include "engine/item_presentation.h"
 #include "engine/presentation.h"
 #include "presentation/frontend.h"
@@ -175,7 +175,7 @@ lan::Progress readProgress() {
 }
 lan::LobbyAccess personalAccess() {
     // Embedded modules load during Lua initialization, before the native save
-    // manager exists. The catalogue is still readable; access is unavailable.
+    // manager exists. Access is unavailable until that initialization finishes.
     if (!executableImage ||
         !*reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager))
         return {};
@@ -183,11 +183,14 @@ lan::LobbyAccess personalAccess() {
     // always comes from this player's save, captured before that substitution.
     const auto progress = localProgress ? *localProgress : readProgress();
     lan::LobbyAccess access;
-    access.characters = compat::characters::availableCharacters(
-        progress.achievements, progress.counters[compat::characters::edenTokensCounter]);
-    for (const auto& entry : compat::characters::characterUnlocks)
-        if (compat::characters::characterUnlocked(entry.type, progress.achievements))
+    for (const auto& entry : characters::catalogue(executableImage, progress).entries) {
+        if (entry.selectable)
+            access.characters.push_back(entry.type);
+        if (entry.unlocked)
             access.unlockedCharacters.push_back(entry.type);
+    }
+    std::sort(access.characters.begin(), access.characters.end());
+    std::sort(access.unlockedCharacters.begin(), access.unlockedCharacters.end());
     for (const auto& definition : compat::challenges::definitions)
         if (compat::challenges::available(definition, progress.achievements))
             access.rules.push_back({definition.id, definition.version});
@@ -978,13 +981,34 @@ int challengeList(lua_State* L) {
     return 1;
 }
 int characterList(lua_State* L) {
-    const auto access = session ? session->localAccess() : personalAccess();
-    lua.createTable(L, access.characters.size(), 0);
-    for (std::size_t i = 0; i < access.characters.size(); ++i) {
-        lua.pushInteger(L, access.characters[i]);
-        lua.rawSetI(L, -2, i + 1);
+    characters::Catalogue catalogue;
+    if (executableImage &&
+        *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager))
+        catalogue =
+            characters::catalogue(executableImage, localProgress ? *localProgress : readProgress());
+    lua.createTable(L, catalogue.entries.size(), 0);
+    unsigned index = 0;
+    for (const auto& entry : catalogue.entries) {
+        if (session ? !session->localAccess().allowsCharacter(entry.type) : !entry.selectable)
+            continue;
+        lua.pushInteger(L, entry.type);
+        lua.rawSetI(L, -2, ++index);
     }
-    return 1;
+    lua.createTable(L, 0, catalogue.entries.size());
+    for (const auto& entry : catalogue.entries) {
+        lua.createTable(L, 0, 5);
+        for (const auto& [key, value] :
+             {std::pair{"name", &entry.name}, std::pair{"animation", &entry.animation},
+              std::pair{"portraitPath", &entry.portraitPath},
+              std::pair{"portraitAnm2Path", &entry.portraitAnm2Path}}) {
+            lua.pushLString(L, value->data(), value->size());
+            lua.setField(L, -2, key);
+        }
+        lua.pushBoolean(L, entry.tainted);
+        lua.setField(L, -2, "tainted");
+        lua.setField(L, -2, std::to_string(entry.type).c_str());
+    }
+    return 2;
 }
 int selectChallenge(lua_State* L) {
     const auto id = lua.checkInteger(L, 1);

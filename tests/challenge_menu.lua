@@ -1,5 +1,7 @@
 local root = assert(arg[1])
 local labels, commands = {}, {}
+local renderedPortraits = {}
+local scaledLabels = {}
 local noop = function() end
 local vector = {}
 vector.__index = vector
@@ -25,7 +27,29 @@ KColor = function(r, g, b, a)
 end
 Color = KColor
 Sprite = function()
-    return { Load = noop, SetFrame = noop, Render = noop, RenderLayer = noop, SetLayerFrame = noop }
+    return {
+        Load = function(self, path)
+            self.path = path
+        end,
+        Play = function(self, animation)
+            if animation ~= "missing" then
+                self.animation = animation
+            end
+        end,
+        GetAnimation = function(self)
+            return self.animation
+        end,
+        SetFrame = function(self, animation)
+            self.animation = animation
+        end,
+        Render = function(self)
+            if self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
+                renderedPortraits[#renderedPortraits + 1] = { self.path, self.animation }
+            end
+        end,
+        RenderLayer = noop,
+        SetLayerFrame = noop,
+    }
 end
 Font = function()
     return {
@@ -39,8 +63,9 @@ Font = function()
         DrawStringUTF8 = function(_, text, _, _, color)
             labels[text] = color
         end,
-        DrawStringScaledUTF8 = function(_, text)
-            labels[text] = true
+        DrawStringScaledUTF8 = function(_, text, x, y, scale, _, color)
+            labels[text] = color
+            scaledLabels[#scaledLabels + 1] = { text = text, x = x, y = y, scale = scale }
         end,
     }
 end
@@ -70,13 +95,27 @@ local status = {
 }
 local available = true
 local characters = { 0, 23 }
+local catalog = {
+    ["0"] = {
+        name = "以撒",
+        animation = "01_Isaac",
+        portraitAnm2Path = "native-normal.anm2",
+        tainted = false,
+    },
+    ["23"] = {
+        name = "该隐",
+        animation = "03_Cain",
+        portraitAnm2Path = "native-tainted.anm2",
+        tainted = true,
+    },
+}
 _IsaacLanStatus = function()
     return status
 end
 _IsaacLan = {
     menu_text_end = noop,
     net_characters = function()
-        return characters
+        return characters, catalog
     end,
     net_challenges = function()
         return {
@@ -109,6 +148,8 @@ end
 dofile(root .. "/src/bridge/presentation/menu.lua")
 local function draw(key, visible)
     labels = {}
+    renderedPortraits = {}
+    scaledLabels = {}
     return _IsaacLanMenuRender(true, visible ~= false, key or 0, "", -100, -100, false, "", "")
 end
 _IsaacLanMenuOpen(true)
@@ -142,11 +183,54 @@ status.choice0 = 0
 draw(39)
 draw()
 assert(status.choice0 == 23 and labels["里·该隐"])
+assert(renderedPortraits[1][1] == "native-tainted.anm2" and renderedPortraits[1][2] == "03_Cain")
 draw(39)
 assert(status.choice0 == 0)
 characters = { 0 }
 draw(39)
 assert(status.choice0 == 0)
+characters = { 0, 23 }
+-- Native metadata and ordering include dynamically registered Mod roles.
+local longName = "LAN Extremely Long Mod Character Name"
+catalog["4096"] = {
+    name = longName,
+    animation = "目录角色",
+    portraitAnm2Path = "mod-menu.anm2",
+    tainted = false,
+}
+catalog["41"] = {
+    name = "无菜单画像",
+    animation = "missing",
+    portraitAnm2Path = "mod-menu.anm2",
+    tainted = true,
+}
+characters = { 0, 4096, 23, 41 }
+draw(39)
+draw()
+assert(status.choice0 == 4096 and labels[longName])
+local nameRenders = 0
+for _, label in ipairs(scaledLabels) do
+    if label.text == longName then
+        nameRenders = nameRenders + 1
+        local width = utf8.len(longName) * 8 * label.scale
+        assert(label.scale > 0 and label.scale < 1)
+        assert(width <= (label.x == 49 and 138 or 92))
+    end
+end
+assert(nameRenders == 2, "Long Mod name did not fit both the row and player card")
+assert(renderedPortraits[1][1] == "mod-menu.anm2" and renderedPortraits[1][2] == "目录角色")
+draw(39)
+assert(status.choice0 == 23)
+draw(39)
+draw()
+assert(status.choice0 == 41 and labels["里·无菜单画像"])
+assert(renderedPortraits[1][2] == "00_Random")
+draw(39)
+assert(status.choice0 == 0)
+characters = {}
+count = #commands
+draw(39)
+assert(#commands == count)
 characters = { 0, 23 }
 -- An unavailable challenge stays visible and cannot be selected.
 available = false

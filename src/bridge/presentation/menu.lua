@@ -14,89 +14,29 @@ function _IsaacLanMenuOpen(returning)
 end
 local previousMouse = Vector(-1000, -1000)
 local errorText = ""
-local characterCatalog = {
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    13,
-    14,
-    15,
-    16,
-    18,
-    19,
-    21,
-    22,
-    23,
-    24,
-    25,
-    26,
-    27,
-    28,
-    29,
-    30,
-    31,
-    32,
-    33,
-    34,
-    35,
-    36,
-    37,
-}
-local names = {
-    "以撒",
-    "抹大拉",
-    "该隐",
-    "犹大",
-    "小蓝人",
-    "夏娃",
-    "参孙",
-    "阿撒泻勒",
-    "拉撒路",
-    "伊甸",
-    "游魂",
-    "莉莉丝",
-    "店主",
-    "亚玻伦",
-    "遗骸",
-    "伯大尼",
-    "雅各与以扫",
-}
-local portraits = {
-    "01_Isaac",
-    "02_Magdalene",
-    "03_Cain",
-    "04_Judas",
-    "06_Bluebaby",
-    "05_Eve",
-    "07_Samson",
-    "08_Azazel",
-    "09_Lazarus",
-    "10_Eden",
-    "11_TheLost",
-    "12_Lilith",
-    "13_Keeper",
-    "15_Apollyon",
-    "16_TheForgotten",
-    "17_Bethany",
-    "18_JacobEsau",
-}
+local characterChoices, characterCatalog = {}, {}
 local function character(id)
-    for i, v in ipairs(characterCatalog) do
-        if id == v then
-            return (i > 17 and "里·" or "") .. names[(i - 1) % 17 + 1],
-                portraits[(i - 1) % 17 + 1],
-                i > 17
+    local entry = characterCatalog[tostring(id)]
+    return entry and ((entry.tainted and "里·" or "") .. entry.name) or ("角色 " .. id)
+end
+local function portrait(id)
+    local entry = characterCatalog[tostring(id)]
+    if entry and entry.portraitAnm2Path ~= "" and entry.animation ~= "" then
+        local path = entry.portraitAnm2Path
+        local sprite = assets.characterPortraits[path]
+        if not sprite then
+            sprite = Sprite()
+            sprite:Load(path, true)
+            assets.characterPortraits[path] = sprite
+        end
+        sprite:Play(entry.animation, true)
+        if sprite:GetAnimation() == entry.animation then
+            sprite:SetFrame(entry.animation, 0)
+            return sprite
         end
     end
-    return "自定义角色", "00_Random", false
+    assets.portraits:SetFrame("00_Random", 0)
+    return assets.portraits
 end
 local ink = KColor(0.18, 0.14, 0.14, 1)
 local faded = KColor(0.47, 0.42, 0.41, 1)
@@ -106,7 +46,7 @@ local function load()
     if assets then
         return
     end
-    assets = {}
+    assets = { characterPortraits = {} }
     local function sprite(name, path, animation)
         local s = Sprite()
         s:Load(path, true)
@@ -119,7 +59,6 @@ local function load()
     sprite("online", root .. "onlinemenu.anm2", "Idle")
     sprite("sketches", root .. "charactermenubg.anm2", "Idle")
     sprite("portraits", root .. "characterportraits.anm2", "01_Isaac")
-    sprite("altPortraits", root .. "characterportraitsalt.anm2", "01_Isaac")
     sprite("fill", "gfx/ui/bossoverlay_whiteout.anm2", "Fade")
     assets.fill:SetFrame("Fade", 15)
     for _, size in ipairs({ 10, 12, 16 }) do
@@ -143,8 +82,6 @@ function _IsaacLanMenuRender(
 )
     local status = _IsaacLanStatus()
     local phase = status.phase or 0
-    challenges = _IsaacLan.net_challenges()
-    local challenge = challenges[tostring(status.challenge or 0)]
     if not visible and not available and not status.prepared and phase ~= 9 then
         return false
     end
@@ -157,19 +94,30 @@ function _IsaacLanMenuRender(
     local function pos(x, y)
         return origin + Vector(x, y)
     end
-    local function text(value, x, y, size, color)
-        assets[size or 12]:DrawStringUTF8(
-            tostring(value),
-            origin.X + x,
-            origin.Y + y,
-            color or ink,
-            0,
-            false
-        )
-    end
-    local function centered(value, x, y, size, color)
+    local function text(value, x, y, size, color, maxWidth)
         local font = assets[size or 12]
-        text(value, x - font:GetStringWidthUTF8(value) / 2, y, size, color)
+        value = tostring(value)
+        local width = font:GetStringWidthUTF8(value)
+        if maxWidth and width > maxWidth then
+            local scale = maxWidth / width
+            font:DrawStringScaledUTF8(
+                value,
+                origin.X + x,
+                origin.Y + y,
+                scale,
+                scale,
+                color or ink,
+                0,
+                false
+            )
+            return
+        end
+        font:DrawStringUTF8(value, origin.X + x, origin.Y + y, color or ink, 0, false)
+    end
+    local function centered(value, x, y, size, color, maxWidth)
+        local font = assets[size or 12]
+        local width = font:GetStringWidthUTF8(value)
+        text(value, x - math.min(width, maxWidth or width) / 2, y, size, color, maxWidth)
     end
     local function layer(sprite, id, x, y)
         sprite:RenderLayer(id, pos(x, y))
@@ -239,6 +187,10 @@ function _IsaacLanMenuRender(
         end
         return false
     end
+    characterChoices, characterCatalog = _IsaacLan.net_characters()
+    characterCatalog = characterCatalog or {}
+    challenges = _IsaacLan.net_challenges()
+    local challenge = challenges[tostring(status.challenge or 0)]
     assets.fill.Scale = Vector(width / 480, height / 270)
     assets.fill.Color = Color(0, 0, 0, 1, -0.20, -0.25, -0.26)
     assets.fill:Render(Vector.Zero)
@@ -346,7 +298,7 @@ function _IsaacLanMenuRender(
             centered("全员需解锁底片与里该隐", 240, 250, 10, red)
         end
     elseif phase == 2 then
-        local choices = _IsaacLan.net_characters()
+        local choices = characterChoices
         local function cycle(delta)
             if #choices == 0 then
                 return
@@ -512,7 +464,7 @@ function _IsaacLanMenuRender(
                 .. "_"
         end
         local size = assets[12]:GetStringWidthUTF8(label) > 138 and 10 or 12
-        text(label, 49 + shift, y, size, item.color or (item.enabled and ink or faded))
+        text(label, 49 + shift, y, size, item.color or (item.enabled and ink or faded), 138)
         if i == selection then
             pointer(37 + shift, y + 5)
         end
@@ -523,11 +475,9 @@ function _IsaacLanMenuRender(
         assets.cards:SetLayerFrame(36, i)
         layer(assets.cards, 36, x, y)
         if i < count then
-            local name, animation, alt = character(status["choice" .. i] or 0)
-            local portrait = alt and assets.altPortraits or assets.portraits
-            portrait:SetFrame(animation, 0)
-            portrait:Render(pos(x + 51, y + 44))
-            centered(name, x + 51, y + 60, 10)
+            local id = status["choice" .. i] or 0
+            portrait(id):Render(pos(x + 51, y + 44))
+            centered(character(id), x + 51, y + 60, 10, nil, 92)
             if phase == 2 and status["ready" .. i] == 1 then
                 layer(assets.cards, 5, x, y)
                 centered("已准备", x + 51, y + 77, 10, ink)

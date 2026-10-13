@@ -251,7 +251,6 @@ if(BUILD_TESTING)
         hashes
         progression
         archive-round-trip
-        character-unlocks
         challenge-rules
         archive-integrity
         archive-settings
@@ -320,6 +319,7 @@ add_library(
     src/engine/versions/j460/presentation.cpp
     src/engine/versions/j460/crafting_hud.cpp
     src/engine/versions/j460/challenge_hud.cpp
+    src/engine/versions/j460/characters.cpp
     src/engine/versions/j460/item_presentation.cpp
     src/engine/versions/j460/rewind.cpp
     src/presentation/frontend.cpp
@@ -421,6 +421,16 @@ if(BUILD_TESTING)
     set_tests_properties(native.challenge-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_test(NAME native.crafting-hud COMMAND isaac_lan_crafting_hud_test)
     set_tests_properties(native.crafting-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_character_catalog_test tests/character_catalog_test.cpp
+                                                    src/engine/versions/j460/characters.cpp)
+    target_include_directories(isaac_lan_character_catalog_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_character_catalog_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+        target_compile_options(isaac_lan_character_catalog_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.character-catalog COMMAND isaac_lan_character_catalog_test)
+    set_tests_properties(native.character-catalog PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 endif()
 
 set_target_properties(isaac_lan_probe PROPERTIES PREFIX "")

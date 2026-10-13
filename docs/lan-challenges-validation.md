@@ -12,7 +12,7 @@
 
 ## 审阅修复
 
-- **资格与角色选择。** 挑战 1001 定义版本提升为 2，要求每名玩家本机存档的底片成就 `78` 和里该隐成就 `476`；共享主机进度不参与资格判断。普通角色列表保持原版 34 名可选角色顺序，使用各自存档的解锁条件。伊甸与里伊甸的新开局还检查令牌计数，续玩／重连只检查角色永久解锁，避免已消耗的令牌阻止恢复。
+- **资格与角色选择。** 挑战 1001 定义版本提升为 2，要求每名玩家本机存档的底片成就 `78` 和里该隐成就 `476`；共享主机进度不参与资格判断。普通角色列表现复用原生菜单目录及可选判定，按各自存档读取并包含原生收录的角色 Mod；旧的固定 34 人名单与解锁成就表已删除。伊甸与里伊甸的新开局还检查令牌计数，续玩／重连只检查角色永久解锁，避免已消耗的令牌阻止恢复。
 - **路线保持原版。** 保留可推进路线的原版楼层入口，Dark Room 羔羊房清场后改为奖杯；其他终局箱碰撞、原生结局和跑圈入口受挑战规则阻止；删除自动改目的层、`onEnding`、`routeEnding` 和挑战模块中的 `StartStageTransition`。早先针对虚空结局箱补目的地的修复已被这一简化替代。[原 Void 回归](../artifacts/pr64-native-offline-20261013/void-chest-regression.json)只保留为历史记录，不再代表当前行为或待实机要求。
 - **明确区分挑战完成与普通结局。** 原生 ending `6` 本身是羔羊结局，不能仅凭该编号认定领取了挑战奖杯。可靠结束事件增加通用 `completed` 标记；只有权威奖杯完成请求使用 `Game::FinishChallenge`，普通局结局继续走原生结束流程，挑战仅允许奖杯完成。网络回归和第 14 轮 2／3／4 人通关实机均通过。
 - **启动期目录查询。** 内嵌 Lua 模块初始化会查询挑战目录，早于原生 `Manager` 全局指针发布。新增个人资格读取最初直接解引用该指针，导致第 10 轮启动崩溃；现于管理器不可用时返回空资格，保留静态目录，待菜单与存档可用后重新读取，不缓存启动期空结果。
@@ -152,3 +152,21 @@ HUD 偏移需按实际值记录。第 06 轮尝试通过 Lua 写入 `1` 时，�
 可直接复核最终四端画面：[主机](/mnt/d/isaac-lan-lab/pr64-challenges-20261013-15/engine/host/frames/246.png)、[P2](/mnt/d/isaac-lan-lab/pr64-challenges-20261013-15/engine/client/frames/211.png)、[P3](/mnt/d/isaac-lan-lab/pr64-challenges-20261013-15/engine/client2/frames/174.png)、[P4](/mnt/d/isaac-lan-lab/pr64-challenges-20261013-15/engine/client3/frames/135.png)。材料／预览依次为下一位的 key343、bomb123、heart45、coin177，自己卡药仍在右下，其他 HUD 不显示袋子。
 
 后续按用户要求撤销挑战对 EID 百宝袋配方面板的屏蔽，删除相应用例和验收断言；EID 兼容适配恢复为主分支原实现。挑战仅调整原版 HUD，第三方 Mod 的配方显示不受挑战干预。上述旧轮次 EID_RECIPE_RESTRICTED 标记记录当时构建，不再代表当前行为。
+
+
+## 原生角色目录选角的后续验收
+
+按用户要求，固定 34 人目录、中文名称／动画映射和角色解锁成就表均已删除。菜单通过具名后端接口读取游戏的两页原生目录、Mod 普通／里配对、名称与画像；原版资格调用游戏自己的菜单可选函数，并使用本机进度。未新增要求各端启用完全相同 Mod 的门禁，网络沿用原有个人角色资格和兼容性契约。第三方 Mod 自身的菜单或玩法限制不由联机菜单重新定义。
+
+当前离线结果在 `artifacts/pr64-catalog-offline-20261013/`：格式与脚本语法通过，Windows 构建通过；74 项 C++／Lua CTest、28 项网络、3 项原生 x86 ABI、37 项工具／入口 Python 测试（含 19 个子用例）及 4 项角色目录 runner 测试通过。测试数量减少是删除固定角色表和 EID 屏蔽用例，原生目录 ABI 回归改为 Windows 专项，Windows CI 同步执行该回归。原生测试覆盖 thiscall/ret4、字符串表 ret16、随机占位、Mod 配对／隐藏、个人进度与 scene 完整恢复、伊甸新局／续玩、动态目录刷新与异常范围拒绝。完整 Python 既有 doorway 失败仍以上文历史结果为准，本轮没有重新宣称全仓库测试全绿。
+
+实机使用 XML-only `registered_characters` 夹具，由 `Isaac.GetPlayerTypeByName` 取得动态 ID。四端实际分别注册普通 `41`、里 `42`、带未解锁 achievement 字段的 `43` 和隐藏 `44`；普通、里和 `43` 被原生菜单收录，`44` 不出现在可选列表或目录中，锁住的原版里抹大拉也被拒绝。这些 ID 是运行结果，夹具和生产菜单不硬编码 Mod ID。画像夹具未提供菜单 ANM2，随机头像回退符合预期；Mod 自定义画像路径与动画另外由原生 ABI／Lua 菜单回归覆盖，不据此宣称所有角色 Mod 的玩法兼容性。
+
+专用 runner 显式拒绝用户手动测试目录 `host-001/client-001`，实际使用空闲 `host-002/client-002/client-003/client-party-parallel-20261012`。每轮四端只启动一次，依次复用进程完成两人普通 Mod、三人普通／里／achievement 混选和四人里 Mod；菜单通过左右选择推进，实际角色、权威序列化和副本还原在同房与分房持续核对，普通存退后重新读取个人目录。两轮都完整恢复受保护资料，用户正在玩的两个实例没有被控制或重启。
+
+| 轮次 | 逻辑与画面结果 | 退出与资料恢复 |
+| --- | --- | --- |
+| [目录 01](/mnt/d/isaac-lan-lab/pr64-character-catalog-20261014-01/report.json) | 2／3／4 人角色、菜单选择与同步逻辑通过；画面审阅发现较长 Mod 名称挤到相邻卡片，整体显示验收未通过，保留 `visual-review.json` | 四端退出 0、无 heap dump，`restored=true`；133.34 秒 |
+| [目录 02](/mnt/d/isaac-lan-lab/pr64-character-catalog-20261014-02/report.json) | 名称按行和卡片宽度缩放后，所有逻辑与画面通过；重新启动仅为加载修订后的生产 DLL | 四端退出 0、无 heap dump，`restored=true`；130.51 秒 |
+
+最终三人主机／客机／第三端画面为 [host142](/mnt/d/isaac-lan-lab/pr64-character-catalog-20261014-02/engine/host/frames/142.png)、[client117](/mnt/d/isaac-lan-lab/pr64-character-catalog-20261014-02/engine/client/frames/117.png)、[client2-92](/mnt/d/isaac-lan-lab/pr64-character-catalog-20261014-02/engine/client2/frames/92.png)，第四端里 Mod 菜单为 [client3-111](/mnt/d/isaac-lan-lab/pr64-character-catalog-20261014-02/engine/client3/frames/111.png)。所有名称保持原生值，长名称不覆盖邻卡。本轮只针对选角改动，未重复已由 11／14／15 轮验证的羔羊路线和百宝袋机制，也没有关闭上文已有沙漏问题。
