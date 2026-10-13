@@ -1,6 +1,6 @@
 # 贪婪模式验证
 
-> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](../README.md)。
+> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/README.md)。
 
 增加贪婪（Greed）和超级贪婪（Greedier）覆盖。合并主线 `484f857` 后，保留分局日志、资源回归和启动前存档夹具；解决了测试注册、网络用例、Python 工具用例及套件列表的四处冲突。后续集成使用自己的分支、构建和 `host-001`／`client-001` 隔离进程，不改动原有其他工作区和进程。
 
@@ -14,7 +14,7 @@
 
 ## 修复与职责
 
-- 客机世界视图此前缺少 `Level.GreedModeWave`，导致波次 HUD 保留本地值。`compat/routes/greed.lua` 使用原版 Lua API 恢复房主的楼层波次，包含商店等分房视图；普通模式使用 `false`。原生更新位于快照应用之后，还会改变本地计数，因此在原生绘制前再次恢复最后已应用的值；可靠换层开始和新局清空缓存。顶层元组追加第 18 项，schema 11 → 12，协议仍为 24，扩展 DLL 指纹要求同构建。
+- 客机世界视图此前缺少 `Level.GreedModeWave`，导致波次 HUD 保留本地值。[`compat/routes/greed.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/routes/greed.lua) 使用原版 Lua API 恢复房主的楼层波次，包含商店等分房视图；普通模式使用 `false`。原生更新位于快照应用之后，还会改变本地计数，因此在原生绘制前再次恢复最后已应用的值；可靠换层开始和新局清空缓存。顶层元组追加第 18 项，schema 11 → 12，协议仍为 24，扩展 DLL 指纹要求同构建。
 - 完整逐层检查发现第二层出口房在全部竞技场波次结束后仍为 `IsClear=false`，原版出口保持 `Closed`。进一步记录确认出口房本身另有 4 个活敌人；此前夹具只处理竞技场战斗。夹具现在同时完成生成的出口房战斗，再等待原版网格 `State=1`，不写清场标记／网格状态或直接换层。曾尝试的空出口清场补偿未能处理此场景，已撤回生产代码，避免加入无依据的规则。
 - 终点汇合此前未匹配贪婪第七层。可移植 Boss 策略按难度 2／3、楼层 7 和实体 406 匹配 Ultra Greed／Ultra Greedier，排除普通波次、商店 Greed 和普通模式误匹配。
 - 连续换层时主机可能先完成第二次转场，客机还在初始化第一次转场。会话协调器在 `rooms::stateReady()` 前保留可靠楼层事件，同时继续原生加载，避免提前改写 Seeds／楼层并调用尚未就绪的 `rooms_begin_floor`。不改变传输协议或原生对象所有权。
@@ -22,9 +22,9 @@
 
 ## 离线覆盖
 
-- `tests/greed.lua`：执行生产 `world.lua` 的 capture／apply／present，覆盖难度 0–3，波次 0–12、重复快照、房间切换、未来楼层等待、可靠换层、旧层拒绝和新局清理；模拟快照应用后的本地原生更新并检查绘制前恢复；非法／跨模式波次拒绝且不写入计数；普通 Lua 沙箱内主客机大厅选择。
+- [`tests/greed.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/greed.lua)：执行生产 `world.lua` 的 capture／apply／present，覆盖难度 0–3，波次 0–12、重复快照、房间切换、未来楼层等待、可靠换层、旧层拒绝和新局清理；模拟快照应用后的本地原生更新并检查绘制前恢复；非法／跨模式波次拒绝且不写入计数；普通 Lua 沙箱内主客机大厅选择。
 - 出口夹具回归包含生成的出口房内另有活敌人的情况，要求真正完成该战斗，等待原版出口 `State=1` 后才接触；不会写网格状态或自行触发换层。
-- `tests/greed_fixture.lua`：驱动实际实机夹具，验证敌人死亡后仍等待清场、按钮复位，以及商店／出口换房确认；即使等待时间已到，未到目的地也不得布置夹具。终点按配置中的实体 406 选择，覆盖普通／Boss 房型候选、前置 Boss 房只有 Greed，以及原生新层尚未就绪的情况。
+- [`tests/greed_fixture.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/greed_fixture.lua)：驱动实际实机夹具，验证敌人死亡后仍等待清场、按钮复位，以及商店／出口换房确认；即使等待时间已到，未到目的地也不得布置夹具。终点按配置中的实体 406 选择，覆盖普通／Boss 房型候选、前置 Boss 房只有 Greed，以及原生新层尚未就绪的情况。
 - C++ 终点策略：贪婪两种难度、两种 Boss 形态及误匹配；存档往返扩展到四种难度与 2–4 人。
 - `net.greed-settings`：真实 Winsock 上两种难度的开局、延迟消费连续换层事件、掉线、当前层检查点重连与模式保持，不启动游戏。延迟消费检查验证传输仍保留完整事件；原生加载与消费时机另由实机连续换层检查验证。
 - Python／语法：组合贪婪与超级贪婪场景，复用现有套件协调器在同一对游戏进程中换局。
@@ -52,21 +52,21 @@
 
 ```sh
 python tools/run_special_routes.py \
-  --host /mnt/d/isaac-lan-lab/greed-host \
-  --client /mnt/d/isaac-lan-lab/greed-client \
-  --build build-win32 --output artifacts/greed-验收编号 \
+  --host "$ISAAC_HOST_LAB" \
+  --client "$ISAAC_CLIENT_LAB" \
+  --build build-win32 --output "$ISAAC_RUN_OUTPUT" \
   --case greed --case greedier --heap-check --performance --port 30810
 ```
 
-固定默认隔离客户端也可使用 `tools/validate_replica.py --cases greed --output artifacts/greed-验收编号`。此入口委托同一个保护包装器，在同一对进程中执行两种难度，核对受测 DLL 和存档恢复；`--latency-ms` 保持调用者选择。新流程默认使用状态断言，集中包装器可显式添加 `--record` 录制两端画面。实机入口不属于 `tools/test.py` 的离线流程。
+固定默认隔离客户端也可使用 `tools/validate_replica.py --cases greed --output "$ISAAC_RUN_OUTPUT"`。此入口委托同一个保护包装器，在同一对进程中执行两种难度，核对受测 DLL 和存档恢复；`--latency-ms` 保持调用者选择。新流程默认使用状态断言，集中包装器可显式添加 `--record` 录制两端画面。实机入口不属于 [`tools/test.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/test.py) 的离线流程。
 
 ## 结果
 
-- 2026-10-11：`tools/test.py --profile full --report-dir test-runs/greed-offline-render` 通过。格式、脚本语法、44 项 CTest、69 项 Python 测试及 15 项子测试均通过。
+- 2026-10-11：`tools/test.py --profile full --report-dir "$ISAAC_RUN_OUTPUT"` 通过。格式、脚本语法、44 项 CTest、69 项 Python 测试及 15 项子测试均通过。
 - 独立 MinGW Windows x86 Release 构建通过；Windows 核心 24 项、传输 22 项和日志 1 项通过。连续换层回归补充后，`greed-settings`、`stage-events`、`stage-during-rejoin` 再次通过。
-- 最终组合实机 `artifacts/greed-engine-r17/report.json`：`passed=true`、`restored=true`。主机 PID 39696、客机 PID 38200 各启动一次，依次运行超级贪婪和贪婪，共约 174 秒；两端各有两次原生开局，均以 `00000000` 正常退出。
+- 最终组合实机 `report.json`：`passed=true`、`restored=true`。主机 PID 39696、客机 PID 38200 各启动一次，依次运行超级贪婪和贪婪，共约 174 秒；两端各有两次原生开局，均以 `00000000` 正常退出。
 - 超级贪婪：1,136 份客机快照，其中 949 份分房；2,282 次绘制前检查，纠正 11 次本地波次推进。贪婪：1,055 份快照，其中 866 份分房；2,112 次绘制前检查，纠正 10 次本地波次推进。
-- 连续帧：主机 653 帧、客机 597 帧，均无录制丢帧。抽查普通／额外波次、分房商店和最终 Boss；第二局的主机 `host/frames/427.png`、客机 `client/frames/370.png` 均在 tick 284 显示波次 `4/10`。完整帧和日志保留在实机目录，不提交录像或隔离存档。
+- 连续帧：主机 653 帧、客机 597 帧，均无录制丢帧。抽查普通／额外波次、分房商店和最终 Boss；第二局的主机 `427.png`、客机 客机第 370 帧画面 均在 tick 284 显示波次 `4/10`。完整帧和日志保留在实机目录，不提交录像或隔离存档。
 - 受测 DLL SHA-256：`8d2a6d4a3ea674905b6975d9facb7ffa31dfef7c86c591231efcb93794044e0f`。GitHub Linux 检查、Windows x86 构建与传输测试均通过。
 
 ### 夹具调试与重启记录
@@ -112,7 +112,7 @@ r2–r4 的隔离画面被原生 beta 提示遮挡，不能作为画面验收证
 
 ### 最终完整通关结果（campaign-r6）
 
-2026-10-11，`artifacts/pr30-greed-campaign-r6-20261011/report.json` 为 `passed=true`、`restored=true`；原生报告 `scenario_pass=true`、`clean_exit=true`。主机 PID 35920、客机 PID 27584 各启动一次，同一连接套件先贪婪、后超级贪婪，共 707.2 秒；两端各有两次原生开局，退出码均为 `00000000`，堆观察器正常结束且转储数均为 0。
+2026-10-11，`report.json` 为 `passed=true`、`restored=true`；原生报告 `scenario_pass=true`、`clean_exit=true`。主机 PID 35920、客机 PID 27584 各启动一次，同一连接套件先贪婪、后超级贪婪，共 707.2 秒；两端各有两次原生开局，退出码均为 `00000000`，堆观察器正常结束且转储数均为 0。
 
 | 检查项 | 贪婪 | 超级贪婪 |
 | --- | --- | --- |

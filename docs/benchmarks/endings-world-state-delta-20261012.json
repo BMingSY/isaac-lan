@@ -19,7 +19,7 @@
   "routes": {
     "lamb": {
       "host": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true,
@@ -37,7 +37,7 @@
         ]
       },
       "client": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true,
@@ -57,13 +57,13 @@
     },
     "blue-baby": {
       "host": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true
       },
       "client": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true
@@ -71,13 +71,13 @@
     },
     "delirium": {
       "host": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true
       },
       "client": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true
@@ -85,13 +85,13 @@
     },
     "mega-satan": {
       "host": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true
       },
       "client": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true
@@ -99,13 +99,13 @@
     },
     "mother": {
       "host": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true
       },
       "client": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true
@@ -113,7 +113,7 @@
     },
     "ascent": {
       "host": {
-        "artifact": "artifacts/endings-delta-ascent-20261012-r3",
+        "acceptance_record": "2026-10-12 回溯补验第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true,
@@ -126,7 +126,7 @@
         ]
       },
       "client": {
-        "artifact": "artifacts/endings-delta-ascent-20261012-r3",
+        "acceptance_record": "2026-10-12 回溯补验第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true
@@ -134,7 +134,7 @@
     },
     "greed": {
       "host": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true,
@@ -160,7 +160,7 @@
         ]
       },
       "client": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true,
@@ -180,7 +180,7 @@
     },
     "greedier": {
       "host": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true,
@@ -207,7 +207,7 @@
         ]
       },
       "client": {
-        "artifact": "artifacts/endings-delta-20261012-r3",
+        "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
         "native_victories": 1,
         "session_cleanup": true,
         "local_progress_retained": true,
@@ -228,7 +228,7 @@
     }
   },
   "dross_mother_supplement": {
-    "artifact": "artifacts/endings-delta-dross-20261012-r3",
+    "acceptance_record": "2026-10-12 浊水补验第 3 轮",
     "peers": {
       "host": {
         "native_victories": 1,
@@ -244,7 +244,7 @@
   },
   "run_records": [
     {
-      "artifact": "artifacts/endings-delta-20261012-r3",
+      "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
       "whole_run_passed": false,
       "fixture_sha256": "8af36e6a900af859cf3e21612a7e91d40aabd917ca68889e1e76d16ab218fa39",
       "isolated_saves_restored_by_file_hash": true,
@@ -276,7 +276,7 @@
       "seconds": 1946.6098525470006
     },
     {
-      "artifact": "artifacts/endings-delta-ascent-20261012-r3",
+      "acceptance_record": "2026-10-12 回溯补验第 3 轮",
       "whole_run_passed": true,
       "fixture_sha256": "4ebfd0a5e3b61e04b3c602997de2bbfa2bbac3944314ac302360ca2f3296f599",
       "isolated_saves_restored_by_file_hash": true,
@@ -308,7 +308,7 @@
       "seconds": 603.3052184429998
     },
     {
-      "artifact": "artifacts/endings-delta-dross-20261012-r3",
+      "acceptance_record": "2026-10-12 浊水补验第 3 轮",
       "whole_run_passed": true,
       "fixture_sha256": "78c74f7d2ae3a278686466caee02ee7d390418dc841b48e3ff4b7241614e8336",
       "isolated_saves_restored_by_file_hash": true,
@@ -342,43 +342,43 @@
   ],
   "previous_failed_attempts": [
     {
-      "artifact": "artifacts/endings-delta-20261011-r1",
+      "acceptance_record": "2026-10-11 集中结局验收第 1 轮",
       "reason": "Mega Satan terminal chest contact timeout",
       "passed": false,
       "restored": true
     },
     {
-      "artifact": "artifacts/endings-delta-20261011-r2",
+      "acceptance_record": "2026-10-11 集中结局验收第 2 轮",
       "reason": "Turdlet stayed alive after direct one-million-damage hits; helper stopped attacking non-positive HP",
       "passed": false,
       "restored": true
     },
     {
-      "artifact": "artifacts/endings-delta-dross-20261012-r1",
+      "acceptance_record": "2026-10-12 浊水补验第 1 轮",
       "reason": "Bounded Turdlet tears still stopped at non-positive HP before native death",
       "passed": false,
       "restored": true
     },
     {
-      "artifact": "artifacts/endings-delta-dross-20261012-r2",
+      "acceptance_record": "2026-10-12 浊水补验第 2 轮",
       "reason": "Turdlet cleared; Mother terminal chest timed out without synthetic input press events",
       "passed": false,
       "restored": true
     },
     {
-      "artifact": "artifacts/endings-delta-20261012-r3",
+      "acceptance_record": "2026-10-12 集中结局验收第 3 轮",
       "reason": "Seven routes completed; Ascent first-floor boss cleared without native loot/exit after direct damage",
       "passed": false,
       "restored": true
     },
     {
-      "artifact": "artifacts/endings-delta-ascent-20261012-r1",
+      "acceptance_record": "2026-10-12 回溯补验第 1 轮",
       "reason": "Dogma completed; movement deadline incorrectly included the earlier bounded-damage Dogma fight",
       "passed": false,
       "restored": true
     },
     {
-      "artifact": "artifacts/endings-delta-ascent-20261012-r2",
+      "acceptance_record": "2026-10-12 回溯补验第 2 轮",
       "reason": "Both actors moved in the Beast arena; the previous total fight budget expired at the third horseman with bounded tear damage",
       "passed": false,
       "restored": true
@@ -390,7 +390,7 @@
     "Terminal movement deadline starts when the terminal boss appears, independently of earlier fight duration; bounded-damage Ascent has a 10000-tick fight budget."
   ],
   "legacy_mega_comparison": {
-    "artifact": "artifacts/endings-baseline-mega-20261012-r1",
+    "acceptance_record": "2026-10-12 超级撒旦基线第 1 轮",
     "protocol": 24,
     "dll_sha256": "9de53d6cc1651adc989f445492cadf0d352061127ef58c7a6d20e33b0f41d4a4",
     "passed": true,

@@ -1,6 +1,6 @@
 # 共享恶魔／天使房概率验收
 
-记录共享概率引入时的验收；当时协议 24、schema 13。结果只适用于所列构建和夹具，当前实现见[共享概率](../shared-deal-chances.md)。
+记录共享概率引入时的验收；当时协议 24、schema 13。结果只适用于所列构建和夹具，当前实现见[共享概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md)。
 
 ## 验证
 
@@ -8,7 +8,7 @@
 
 `tools/run_special_routes.py --case shared-deals` 在一组隔离主客机中逐项检查：异房五芒星与原版叠加、移除道具、客机在普通房和 Boss 房实际红心受击、忏悔书、交易历史、异房钥匙碎片与去重、美德之书、正负楼层天使修正、异房羊头与去重、原版 Boss 死亡生成恶魔门、换层后异房圣体生成天使门。客机对每份已应用状态核对公开总概率查询和内部条件查询。可在同一次进程启动后继续 `--case campaign` 检查原版换层与结局，并启用 `--heap-check` 检查干净退出。
 
-专项夹具冻结在 `artifacts/shared-deals-native-r4-20261011/`，被测 DLL SHA-256 为 `349e6c24c7bc1b0c8044a3a3613c2e99622ba6b795162bd975cf28e0eab9b661`。主客机共享概率专项已通过，实际门类型在房主清 Boss 后检查，客机逐份快照检查概率一致。下表是原版查询的原始浮点数，HUD 仍将总概率限制到 100%。
+专项夹具冻结在验收归档（2026-10-11，第 4 轮），被测 DLL SHA-256 为 `349e6c24c7bc1b0c8044a3a3613c2e99622ba6b795162bd975cf28e0eab9b661`。主客机共享概率专项已通过，实际门类型在房主清 Boss 后检查，客机逐份快照检查概率一致。下表是原版查询的原始浮点数，HUD 仍将总概率限制到 100%。
 
 | 实机检查 | 结果 |
 | --- | --- |
@@ -25,4 +25,4 @@
 
 最终 `report.json` 的 `shared-deals`、`campaign` 两项在主客机均通过，`passed=true`、`restored=true`。通关记录覆盖第一层至第八层、阴间（10）、暗室（11），两端收到原版 `MC_POST_GAME_END(game_over=false)`，客机应用了 6311 份通关快照。复用同一组进程（房主 5232、客机 36760），总耗时 449.78 秒；两端正常退出 `00000000`，堆监视退出码均为 0、新增转储均为 0，冻结日志无 `Caught exception`、`Error in` 或 `LAN_NETWORK FAILED`。被测 DLL 与当前构建哈希一致。
 
-本轮堆监视证明该流程未检测到堆异常，不代表排除了所有泄漏。结果以冻结的 `engine/host/log.txt`、`engine/client/log.txt` 和 `engine/result.json` 为准；工具结束后会恢复旧的 lab 日志，不用恢复后的 live 日志判断这次测试。
+本轮堆监视证明该流程未检测到堆异常，不代表排除了所有泄漏。结果以冻结的 `log.txt`、`log.txt` 和 `result.json` 为准；工具结束后会恢复旧的 lab 日志，不用恢复后的 live 日志判断这次测试。

@@ -6,10 +6,10 @@
 
 ## 模块与同步契约
 
-- `src/bridge/sync/deals.lua` 采集、校验和应用整队概率；`app/world.lua` 仅装配组件。顶层第 19 项为 `deals = { total, angel }`。`total` 是原版总开门概率，可超过 1；`angel` 是原版条件天使房概率，范围 0–1。通常显示的恶魔／天使概率分别为 `min(total, 1) * (1 - angel)`、`min(total, 1) * angel`；原版仍处理不允许开门的楼层和双重性显示。
-- `src/compat/items/deal_chances.h` 接收各原版查询的普通浮点数，合并跨房间效果；同一份全队库存与楼层惩罚不会因查询多个房间而被重复累加。
+- [`src/bridge/sync/deals.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/deals.lua) 采集、校验和应用整队概率；[`app/world.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/app/world.lua) 仅装配组件。顶层第 19 项为 `deals = { total, angel }`。`total` 是原版总开门概率，可超过 1；`angel` 是原版条件天使房概率，范围 0–1。通常显示的恶魔／天使概率分别为 `min(total, 1) * (1 - angel)`、`min(total, 1) * angel`；原版仍处理不允许开门的楼层和双重性显示。
+- [`src/compat/items/deal_chances.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/deal_chances.h) 接收各原版查询的普通浮点数，合并跨房间效果；同一份全队库存与楼层惩罚不会因查询多个房间而被重复累加。
 - 客机在库存应用后保存该结果。原版 HUD 的两个概率查询读取同一份已应用结果，客机不因本地受击记录或道具恢复副作用自行重算。楼层屏障、新局和原生楼层清理清空缓存；旧代次状态不能应用到新楼层。
-- 只同步两个浮点数，不逐个同步概率道具或复制道具给房主。当前协议、schema 和指纹要求统一见[同步契约](synchronization.md#传输压缩与积压)。
+- 只同步两个浮点数，不逐个同步概率道具或复制道具给房主。当前协议、schema 和指纹要求统一见[同步契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#传输压缩与积压)。
 
 ## 必要的原生能力
 
@@ -38,4 +38,4 @@ API 仅允许客机写有限、非负且可表示为 float 的总概率和 0–1
 
 ## 验证
 
-测试命令见[开发与测试](development-and-testing.md)，既有结果、失败轮次和未覆盖项见[专项验收记录](history/shared-deal-chances-validation.md)。
+测试命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)，既有结果、失败轮次和未覆盖项见[专项验收记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/shared-deal-chances-validation.md)。

@@ -1,8 +1,8 @@
 # LANBOT 九蜘蛛纯走位演示
 
-> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](../README.md)。
+> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/README.md)。
 
-本页保留单向 75 ms 的原算法基线。后续按用户要求降低模拟延迟的演示使用 `--latency-ms 10`；走位调整、22.063 秒的低延迟录像、各轮结果及完整回归记录见[走位优化记录](lanbot-dodge-optimization.md)。两种延迟下的存活时间不能直接当作算法收益比较。
+本页保留单向 75 ms 的原算法基线。后续按用户要求降低模拟延迟的演示使用 `--latency-ms 10`；走位调整、22.063 秒的低延迟录像、各轮结果及完整回归记录见[走位优化记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/lanbot-dodge-optimization.md)。两种延迟下的存活时间不能直接当作算法收益比较。
 
 本场景观察关闭射击后的现有 LANBOT 走位。生产 LANBOT 的目标选择、站位和避险策略保持原样；只在测试夹具的 `native.input_bot` 包装器中保留四个移动位，屏蔽射击。它不是新增的纯避险模式，也没有为这次演示调整生产策略。
 
@@ -34,19 +34,19 @@ ctest --test-dir build-offline -R 'bridge.lanbot' --output-on-failure
 
 ```sh
 python tools/run_special_routes.py \
-  --host /mnt/d/isaac-lan-lab/host-001 \
-  --client /mnt/d/isaac-lan-lab/client-001 \
+  --host "$ISAAC_HOST_LAB" \
+  --client "$ISAAC_CLIENT_LAB" \
   --build build-win32 \
-  --output artifacts/lanbot-spiders-new-run \
+  --output "$ISAAC_RUN_OUTPUT" \
   --case lanbot-spiders --port 30990 --latency-ms 75 --heap-check \
   --record-client --frame-ms 50
 ```
 
-双方日志中的 `LANBOT_SPIDERS` 保存夹具就绪、释放、实际受击、存活时间和输入证据。结果摘要为 `report.json`，进程／DLL／夹具指纹、异常转储与原生退出结果为 `engine/result.json`。录制只读取客机帧缓冲，不依赖截图判定通过。
+双方日志中的 `LANBOT_SPIDERS` 保存夹具就绪、释放、实际受击、存活时间和输入证据。结果摘要为 `report.json`，进程／DLL／夹具指纹、异常转储与原生退出结果为 `result.json`。录制只读取客机帧缓冲，不依赖截图判定通过。
 
 ## 2026-10-11 实测
 
-当前主线生产 DLL（基于 `30633fa`）在 `artifacts/lanbot-spiders-r2-20261011/` 完成一轮实测。主机 PID 12808、客机 PID 5800，各启动一次、各开局一次；同机双开并加入单向 75 ms 延迟。客机默认 `balanced` 风格，记录到 1,018 次移动输入采样；原生角色实际移动 464 个权威观察间隔。
+当前主线生产 DLL（基于 `30633fa`）在验收归档（2026-10-11，第 2 轮）完成一轮实测。主机 PID 12808、客机 PID 5800，各启动一次、各开局一次；同机双开并加入单向 75 ms 延迟。客机默认 `balanced` 风格，记录到 1,018 次移动输入采样；原生角色实际移动 464 个权威观察间隔。
 
 **从蜘蛛释放至死亡为 15.531 秒**，对应 15.533 秒权威模拟时间。实际受击时间如下，每次损失半颗红心：
 

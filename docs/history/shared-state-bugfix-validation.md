@@ -1,15 +1,15 @@
 # 共享诅咒、回溯地下室与教条预警验证
 
-> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](../README.md)。
+> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/README.md)。
 
 基于 `16732bf`（分层重构合并后的 main）修复同机双开中报告的四项客机问题。传输协议保持 24，世界视图升为 schema 11，两端扩展指纹必须一致。
 
 ## 实现与原生边界
 
-- `sync/curses.lua` 携带完整楼层诅咒掩码，在库存的原生副作用之后按差异应用，再刷新地图缓存。原版胶囊与忏悔机效果仍由房主执行。
-- `compat/items/black_candle.lua` 查看全队权威库存，处理分房时另一名玩家的黑蜡烛；之后新增的共享诅咒也会被清除。
-- `compat/routes/crawlspace.lua` 使用原版 `Level.DungeonReturnPosition` 与 `DungeonReturnRoomIndex` 同步返回上下文。有效长度、有限坐标和房间索引全部校验后才写入。
-- `compat/bosses/dogma.lua` 仅匹配 `1000.172.1`，同步原版 `Entity.TargetPosition`，通用实体组件通过注入的适配携带该字段。光球及攻击后的其他子类型保持既有同步路径。
+- [`sync/curses.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/curses.lua) 携带完整楼层诅咒掩码，在库存的原生副作用之后按差异应用，再刷新地图缓存。原版胶囊与忏悔机效果仍由房主执行。
+- [`compat/items/black_candle.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/black_candle.lua) 查看全队权威库存，处理分房时另一名玩家的黑蜡烛；之后新增的共享诅咒也会被清除。
+- [`compat/routes/crawlspace.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/routes/crawlspace.lua) 使用原版 `Level.DungeonReturnPosition` 与 `DungeonReturnRoomIndex` 同步返回上下文。有效长度、有限坐标和房间索引全部校验后才写入。
+- [`compat/bosses/dogma.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/bosses/dogma.lua) 仅匹配 `1000.172.1`，同步原版 `Entity.TargetPosition`，通用实体组件通过注入的适配携带该字段。光球及攻击后的其他子类型保持既有同步路径。
 
 原版属性定义见 [Level](https://wofsauge.github.io/IsaacDocs/rep/Level.html) 与 [Entity](https://wofsauge.github.io/IsaacDocs/rep/Entity.html)。在本机 J460 中核对 Lua 属性注册与读写函数，确认 `TargetPosition` 使用实体 `0x334/0x338`，返回坐标及索引使用 Game `0x18320/0x18324/0x18328`。
 
@@ -27,7 +27,7 @@
 
 新增用例覆盖共享掩码、重复快照、无重复音效、分房黑蜡烛、库存副作用之后恢复、无效载荷不发生部分写入、教条子类型筛选，以及生产实体编解码携带预警方向。
 
-最终完整离线记录：`artifacts/shared-bugs-offline-20261011-verified/`；Windows 测试：`D:/isaac-lan-lab/shared-bugs-offline-20261010/`；只读属性核对：`artifacts/shared-bugs-native-api-audit-20261010.json`。
+最终完整离线记录：验收归档（2026-10-11）；Windows 测试：验收归档（2026-10-10）；只读属性核对：`shared-bugs-native-api-audit-20261010.json`。
 
 ## 集中实机验收
 
@@ -49,13 +49,13 @@
 
 `r12` 保留已完成的诅咒和地下室证据；整轮随后在教条检查夹具中失败，不记为整轮通过。修正夹具后，剩余教条与换层检查集中在 `r15` 完成：主机 PID 4624、客机 PID 24788，总耗时约 265 秒，两个进程退出码均为 `00000000`，隔离 profile、游戏 data 和会话目录逐文件哈希恢复一致。
 
-画面抽查确认客机预警细光束可见：`r15` 客机 `frames/308.png`（tick 1641）与 `frames/320.png`（tick 1731）；主机对应采样为 `frames/416.png`（tick 1639）与 `frames/428.png`（tick 1729）。250 ms 采样不代表逐渲染帧验收。
+画面抽查确认客机预警细光束可见：`r15` 客机 `308.png`（tick 1641）与 `320.png`（tick 1731）；主机对应采样为 `416.png`（tick 1639）与 `428.png`（tick 1729）。250 ms 采样不代表逐渲染帧验收。
 
-上述两轮使用同一个生产 DLL，SHA-256 为 `96455f3a8486c7a662c1ddeb7f17971460102749233b0f5c2bf2544f935146e9`。日志、DLL、集中脚本、连续帧和 JSON 报告保留于本地 `artifacts/shared-bugs-engine-20261011-r12/`、`artifacts/shared-bugs-engine-20261011-r15/`，不加入源码仓库。
+上述两轮使用同一个生产 DLL，SHA-256 为 `96455f3a8486c7a662c1ddeb7f17971460102749233b0f5c2bf2544f935146e9`。日志、DLL、集中脚本、连续帧和 JSON 报告保留于本地验收归档（2026-10-11，第 12 轮）、验收归档（2026-10-11，第 15 轮），不加入源码仓库。
 
 ## 中断与重新启动记录
 
-夹具在游戏初始化时加载，失败回调或终止的会话无法通过现有工具恢复为下一项验收。每次重启均先收回本轮自有进程并恢复隔离文件；正常场景切换只保存退出并重建会话，不重启游戏。详细退出码、构建哈希和原因记录在 `artifacts/shared-bugs-attempts-20261010.json`。
+夹具在游戏初始化时加载，失败回调或终止的会话无法通过现有工具恢复为下一项验收。每次重启均先收回本轮自有进程并恢复隔离文件；正常场景切换只保存退出并重建会话，不重启游戏。详细退出码、构建哈希和原因记录在 `shared-bugs-attempts-20261010.json`。
 
 | 轮次 | 中断或重启原因 |
 | --- | --- |
@@ -71,4 +71,4 @@
 | r14 | 已核对预警方向和双端画面，但夹具错误比对退役实体；改为核对每个当前权威实体，并增加自然技能等待预算 |
 | r15 | 剩余两项集中通过，同一对进程正常退出，文件恢复一致 |
 
-本轮验收时，堆损坏问题 [#25](https://github.com/BMingSY/isaac-lan/issues/25) 尚未解决，因此不计入这次共享状态修复。后续已定位并修复启动后解锁测试夹具造成的菜单越界写入，issue 已关闭；根因、修复边界与后续通关／正常退出证据见[堆损坏回归记录](heap-corruption-regression.md)。本页的失败轮次及当时的 schema 版本保持原记录，不将后续成功追记为早期验收通过。
+本轮验收时，堆损坏问题 [#25](https://github.com/BMingSY/isaac-lan/issues/25) 尚未解决，因此不计入这次共享状态修复。后续已定位并修复启动后解锁测试夹具造成的菜单越界写入，issue 已关闭；根因、修复边界与后续通关／正常退出证据见[堆损坏回归记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/heap-corruption-regression.md)。本页的失败轮次及当时的 schema 版本保持原记录，不将后续成功追记为早期验收通过。

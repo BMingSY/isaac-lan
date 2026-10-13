@@ -6,7 +6,7 @@
 
 ## 已发生的场景和证据
 
-归档目录：`D:\isaac-lan-lab\pr64-challenges-20261013-08\engine`。
+第 08 轮完整验收记录已归档。
 J460 原生程序 SHA-256：
 `7122ac28779925b24e23e2416f231322b1470388bd25e2c08665ad8d53b3ea4f`。
 
@@ -16,14 +16,14 @@ J460 原生程序 SHA-256：
 
 | 证据 | 内容 |
 | --- | --- |
-| `host/log.txt:1039` | tick 916 使用沙漏，进入 `hourglass-wait` |
-| `host/probe.log` | 21:22:07.339，`hourglass_event=SENT epoch=1` |
-| `host/log.txt:1042` | 原生 Frame 927 开始 stage transition，类型为 6 |
-| `host/log.txt:1044` | 原生初始化 stage 13、stageType 0，随后加载 Home |
-| `client/probe.log:48` | 21:22:07.564，收到可靠 floor event，epoch 1 |
-| `client/probe.log:50` | 21:22:08.478，回溯完成，stage 1 |
-| `host/probe.log:53` | 21:22:18.827，原生事务完成，stage 13 |
-| `client/probe.log:51` | 21:22:18.870，`Replica floor initialization failed` |
+| 主机 `log.txt` 第 1039 行 | tick 916 使用沙漏，进入 `hourglass-wait` |
+| 主机 `probe.log` | 21:22:07.339，`hourglass_event=SENT epoch=1` |
+| 主机 `log.txt` 第 1042 行 | 原生 Frame 927 开始 stage transition，类型为 6 |
+| 主机 `log.txt` 第 1044 行 | 原生初始化 stage 13、stageType 0，随后加载 Home |
+| 客机 `probe.log` 第 48 行 | 21:22:07.564，收到可靠 floor event，epoch 1 |
+| 客机 `probe.log` 第 50 行 | 21:22:08.478，回溯完成，stage 1 |
+| 主机 `probe.log` 第 53 行 | 21:22:18.827，原生事务完成，stage 13 |
+| 客机 `probe.log` 第 51 行 | 21:22:18.870，`Replica floor initialization failed` |
 
 夹具在 tick 1097 才请求使用 R Key。主机记录没有 `floor_transaction=R_KEY`，
 也没有为 Home 发送新的可靠楼层事件。故该次失败不能归因于 R Key 的楼层重置；
@@ -46,7 +46,7 @@ J460 原生程序 SHA-256：
 6. 主机在 84 满足 Home 条件，客机在 97 不满足。此时 `beforeStart()` 已令
    `enabled=false`，`stageTransition()` 因而直接调用原生函数，不经过可靠楼层
    事件。两端仍共用 epoch 1，但主机变为 stage 13、客机仍为 stage 1。
-7. `src/bridge/runtime/floor.lua` 在相同 epoch 下发现实际楼层与权威快照不符，
+7. [`src/bridge/runtime/floor.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/floor.lua) 在相同 epoch 下发现实际楼层与权威快照不符，
    正确地暴露错误并终止会话；不能放宽这个断言来掩盖分歧。
 
 涉及的原生读取为 Game `+0x18300`（当前 Room）、`+0x18304`（当前房间索引）、
@@ -72,7 +72,7 @@ J460 原生程序 SHA-256：
    随后报告相同楼层初始化错误。
 
 持有道具的步骤用于覆盖普通玩家操作，不用于规避 Home 分支。旧
-`tests/state_hourglass.lua` 在首次使用沙漏前已将 P1 移出起始房间，因此没有覆盖
+[`tests/state_hourglass.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_hourglass.lua) 在首次使用沙漏前已将 P1 移出起始房间，因此没有覆盖
 “P1 留在起始房、P2 分房使用”这一上下文组合。
 
 ## 后续修复边界和验证要求
@@ -95,6 +95,6 @@ J460 原生程序 SHA-256：
 离线回归应覆盖真实触发链：请求来自 P2 房间 97，延迟执行时主机视口为首次进入
 的 84；其他客机视口也可能为 84，使用者房间则仅为 shell。断言权威路线只选一次、
 可靠回溯执行不再次读取视口路线条件，并覆盖重复事件、清理、非法使用者以及真正
-起始房 Home 的分支。既有 `tests/floor.lua` 的同 epoch 错层报错应保留。
+起始房 Home 的分支。既有 [`tests/floor.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/floor.lua) 的同 epoch 错层报错应保留。
 最终实机再复用同一组进程验证该最小场景、真正的 Home 路径、普通分房／跨层回溯
 及三／四人含远端 shell 的情况。

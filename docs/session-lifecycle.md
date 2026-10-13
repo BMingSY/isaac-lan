@@ -24,9 +24,9 @@ sequenceDiagram
     end
 ```
 
-网络状态机定义在 [`net/protocol.h`](../src/net/protocol.h)。`loading` 表示收到的检查点尚未传完；传完后仍需原生加载与 `ready`，不能只凭网络状态为 `running` 就参与战斗。
+网络状态机定义在 [`net/protocol.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/net/protocol.h)。`loading` 表示收到的检查点尚未传完；传完后仍需原生加载与 `ready`，不能只凭网络状态为 `running` 就参与战斗。
 
-桥接启动由 [`bridge/runtime/session.lua`](../src/bridge/runtime/session.lua) 集中管理，`app/main.lua` 仅接入游戏回调与原生能力。阶段为 `idle → starting → initializing → preparing → ready`：网络通知只请求一次原生启动；游戏启动回调进入初始化；创建或重新绑定角色后，按顺序启用房间、建立同步门、恢复房间，成功后才设置桥接状态 `prepared`。普通开局仍等待房间第 10 帧，当前层检查点恢复仍可在启动回调内立即准备。原生同步门内部发送网络 `ready` 的既有时机保持不变，桥接 `prepared` 与网络 `ready` 是不同边界。
+桥接启动由 [`bridge/runtime/session.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/session.lua) 集中管理，[`app/main.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/app/main.lua) 仅接入游戏回调与原生能力。阶段为 `idle → starting → initializing → preparing → ready`：网络通知只请求一次原生启动；游戏启动回调进入初始化；创建或重新绑定角色后，按顺序启用房间、建立同步门、恢复房间，成功后才设置桥接状态 `prepared`。普通开局仍等待房间第 10 帧，当前层检查点恢复仍可在启动回调内立即准备。原生同步门内部发送网络 `ready` 的既有时机保持不变，桥接 `prepared` 与网络 `ready` 是不同边界。
 
 关闭先使当前准备代次失效，再调用原生关闭；未准备完便退出也会清理启动状态。即使原生调用同步触发关闭回调，旧准备流程也不会继续下一步或把新会话标记为就绪。准备出错进入 `failed` 并传播原始错误，后续帧不自动重试半完成操作，关闭后才能开始下一会话。原生游戏退出统一传递 `gameExit=1`，让存档和进度保护覆盖退出尾部，菜单关闭则不传参数。楼层屏障与网络传输状态各自保留职责，不以桥接启动状态替代它们。
 
@@ -68,7 +68,7 @@ sequenceDiagram
 
 客机不需要从第一层重放输入，也不必等下一层。已离线栏位通过 `player-id.txt` 识别；它用于匹配运行中的原角色。当前没有中途增加新玩家或房主迁移流程。
 
-[`runtime/session.cpp`](../src/runtime/session.cpp) 在所有已加载房间完成原生保存后采集检查点，临时把停放角色放入存档名单。这个名单只用于序列化，不让离线角色重新参加战斗。
+[`runtime/session.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session.cpp) 在所有已加载房间完成原生保存后采集检查点，临时把停放角色放入存档名单。这个名单只用于序列化，不让离线角色重新参加战斗。
 
 加载期间房主继续推进。客机发送 `ready` 前不提交有效玩法输入，也不计入在线人数。准备完成后接收最新视图，使用保留的原角色及状态回到房主当前房间。
 
@@ -78,15 +78,15 @@ sequenceDiagram
 
 ## 联机存档与续玩
 
-[`session_archive.h`](../src/runtime/session_archive.h) 的存档包含扩展指纹、开局设置、全队房间与位置、原生 GameState 数据和完整性哈希。格式标识为 `IsaacLAN/save/3`，包含运行规则描述符；旧格式不再加载。
+[`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 的存档包含扩展指纹、开局设置、全队房间与位置、原生 GameState 数据和完整性哈希。格式标识为 `IsaacLAN/save/3`，包含运行规则描述符；旧格式不再加载。
 
-房主三个存档栏分别使用游戏目录下的 `isaac-lan/session-1.bin`、`session-2.bin`、`session-3.bin`。联机会话保存与原有单机 Continue 状态分别管理。临时挑战退出时不写入或删除已有联机存档，仍恢复受保护的单机 Continue；运行中检查点保留规则与固定栏位，支持原客机重连。挑战模式没有整场续玩入口，详见[联机挑战](lan-challenges.md)。
+房主三个存档栏分别使用游戏目录下的 第一存档栏的 `session-1.bin`、`session-2.bin`、`session-3.bin`。联机会话保存与原有单机 Continue 状态分别管理。临时挑战退出时不写入或删除已有联机存档，仍恢复受保护的单机 Continue；运行中检查点保留规则与固定栏位，支持原客机重连。挑战模式没有整场续玩入口，详见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。
 
 整场关闭后的续玩仍要求原房主使用原存档栏，并按原人数、原加入顺序集合。运行中重连的玩家标识匹配与整场续玩的栏位顺序是两套不同条件。
 
 ## 全队回退
 
-发光沙漏使用 [`engine/versions/j460/rewind.cpp`](../src/engine/versions/j460/rewind.cpp) 保存的每个控制器上一次进房检查点。检查点记录当时全队的原生状态与各自位置。
+发光沙漏使用 [`engine/versions/j460/rewind.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rewind.cpp) 保存的每个控制器上一次进房检查点。检查点记录当时全队的原生状态与各自位置。
 
 房主接受使用请求后发布带回退载荷的可靠 `Stage` 事务，两端使用原生沙漏恢复路径，再恢复各玩家当时的房间。回退可能跨层；网络状态序号继续递增，楼层代次推进，不能重新接纳回退前的旧视图。
 

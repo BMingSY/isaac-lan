@@ -1,16 +1,16 @@
 # LANBOT 优化验收记录
 
-> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](../README.md)。
+> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/README.md)。
 
 本次针对提前换层、门口折返、普通按钮与陷阱、动态避险进行修改，并补充正常路线双端 LANBOT 通关夹具。通关中发现的闭合出口、大宝箱接触、虚空入口选择和客机预测坐标问题在 LANBOT 观察／规划及现有快照的只读适配中修复；没有新增网络字段或原生布局。以下先保留原分支的定向历史记录，主线合入后的完整集中结果见后半部分。
 
-本页范围为普通路线优化及加速通关。后续近身避险与九蜘蛛纯走位结果见[走位优化记录](lanbot-dodge-optimization.md)，双人／四人指定配装的普通贪婪完整通关及入口纠正专项见[贪婪模式挑战](lanbot-greed-challenge.md)。后续结果不改变本页未覆盖场景和历史失败的判定。
+本页范围为普通路线优化及加速通关。后续近身避险与九蜘蛛纯走位结果见[走位优化记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/lanbot-dodge-optimization.md)，双人／四人指定配装的普通贪婪完整通关及入口纠正专项见[贪婪模式挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/lanbot-greed-challenge.md)。后续结果不改变本页未覆盖场景和历史失败的判定。
 
 ## 原分支离线与构建（历史）
 
-`tools/test.py` 完整通过：43 项 CTest、94 项 pytest、15 项 subtest。其中 `tests/lanbot.lua` 有 45 项检查，`tests/offline/test_behavior.py` 有 46 项持续行为场景，覆盖四向岔路、先探索再换层、来源房间冷却、门边惯性、多个出口、按钮状态、不同速度与短窗口尖刺、连续弹幕碰撞及充能松开。闭环夹具单独执行物理碰撞和房间切换，不用寻路结果代替世界结果。
+[`tools/test.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/test.py) 完整通过：43 项 CTest、94 项 pytest、15 项 subtest。其中 [`tests/lanbot.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/lanbot.lua) 有 45 项检查，[`tests/offline/test_behavior.py`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/test_behavior.py) 有 46 项持续行为场景，覆盖四向岔路、先探索再换层、来源房间冷却、门边惯性、多个出口、按钮状态、不同速度与短窗口尖刺、连续弹幕碰撞及充能松开。闭环夹具单独执行物理碰撞和房间切换，不用寻路结果代替世界结果。
 
-Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-20261010-175237-88651/`；目录按 UTC 命名，本次本地日期为 2026-10-11。模拟运动不能单独证明游戏物理、实战或通关。
+Windows x86 Release 构建通过。离线报告已按轮次归档（2026-10-10）；目录按 UTC 命名，本次本地日期为 2026-10-11。模拟运动不能单独证明游戏物理、实战或通关。
 
 ## 原分支定向实机安排（历史）
 
@@ -18,11 +18,11 @@ Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-2026
 
 最终场景为：出口后方回血且不误下层、门边带惯性留房、双普通按钮、清房后收起尖刺、未清房交替尖刺、交叉弹幕，以及实际过门后离开门口。交替尖刺要求记录至少三次真实状态变化；仅摆放已收起的尖刺不算开合验收。所有按钮以 State=3 判定，伤害按本机角色 InitSeed 记录。
 
-`tools/validate_replica.py --cases lanbot` 现在委托保护包装器，在同一对进程中执行原行为检查及完整 LANBOT 通关，核对受测 DLL 与存档恢复。单独定向诊断时直接运行 `tools/run_network_engine.py` 时可以指定自己的隔离主客机目录，使用 `--automatic --frontend --menu-start --script tests/state_lanbot.lua --completion 'LAN_NETWORK PASS lanbot behavior suite' --native-record-view 0 --frame-ms 100 --scenario-timeout 180`。首次实验配置的游戏欢迎提示需通过普通菜单确认。
+`tools/validate_replica.py --cases lanbot` 现在委托保护包装器，在同一对进程中执行原行为检查及完整 LANBOT 通关，核对受测 DLL 与存档恢复。单独定向诊断时直接运行 [`tools/run_network_engine.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_network_engine.py) 时可以指定自己的隔离主客机目录，使用 `--automatic --frontend --menu-start --script tests/state_lanbot.lua --completion 'LAN_NETWORK PASS lanbot behavior suite' --native-record-view 0 --frame-ms 100 --scenario-timeout 180`。首次实验配置的游戏欢迎提示需通过普通菜单确认。
 
 ## 复验履历
 
-产物前缀为 `artifacts/lanbot-native-20261011`。每轮保存冻结 DLL、夹具源码、双方日志、宿主帧图、位置／血量轨迹及独立进程退出码；早期轮次同时录制客机。
+产物前缀为验收归档（2026-10-11）。每轮保存冻结 DLL、夹具源码、双方日志、宿主帧图、位置／血量轨迹及独立进程退出码；早期轮次同时录制客机。
 
 | 轮次 | 结果与处理 | 再启动原因 |
 | --- | --- | --- |
@@ -56,9 +56,9 @@ Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-2026
 | 交叉弹幕 | 伤害次数 0 |
 | 实际过门后离门 | 从 84 到 85 并留房，最近门距离 106.2135 |
 
-最终主机帧图人工查看了出口拾取、按钮完成、尖刺穿越、按下按钮及换房离门；没有欢迎提示遮挡。交替尖刺在 tick 960 开始第二个收起窗口，玩家位置从 x=236.018（tick 960）到 x=358.416（tick 978），安全穿过 x=320 的尖刺。对应帧图 `host/frames/485.png`（tick 977）、`498.png`（tick 1020）和 `621.png`（tick 1429）。本轮 status 观察与决策最高耗时为 3 ms，2 ms 设计目标未作为实时保证。
+最终主机帧图人工查看了出口拾取、按钮完成、尖刺穿越、按下按钮及换房离门；没有欢迎提示遮挡。交替尖刺在 tick 960 开始第二个收起窗口，玩家位置从 x=236.018（tick 960）到 x=358.416（tick 978），安全穿过 x=320 的尖刺。对应帧图 `485.png`（tick 977）、`498.png`（tick 1020）和 `621.png`（tick 1429）。本轮 status 观察与决策最高耗时为 3 ms，2 ms 设计目标未作为实时保证。
 
-产物：`artifacts/lanbot-native-20261011-15/`。SHA-256 与当前 DLL、夹具文件一致：
+产物：验收归档（2026-10-11）。SHA-256 与当前 DLL、夹具文件一致：
 
 - DLL：`56a1bb7b49911db2b71df77fda8c272b38e637e58e33dccf7b9fcf814657389b`
 - 夹具：`cc0948c6ca974485a8846dd7cffc0f295fd09f591b6c32a69cdc7fc82e007804`
@@ -112,7 +112,7 @@ Windows x86 Release 构建通过。离线报告保存在 `test-runs/offline-2026
 
 ### 最终集中结果：campaign-r10
 
-2026-10-11，`artifacts/pr31-lanbot-campaign-r10-20261011/report.json` 为 `passed=true`、`restored=true`、`lanbot_behavior_passed=true`；`engine/result.json` 为 `scenario_pass=true`、`clean_exit=true`。受测源提交 `c6fd942`。主机 PID 35100、客机 PID 36824 各启动一次，同一对进程先执行七项行为，再从菜单开始完整正常路线，两端各两次原生开局；整轮 371.510 秒，没有人工菜单或移动输入，没有截图／录像。最终正常关闭并完成恢复，停止继续启动。
+2026-10-11，`report.json` 为 `passed=true`、`restored=true`、`lanbot_behavior_passed=true`；`result.json` 为 `scenario_pass=true`、`clean_exit=true`。受测源提交 `c6fd942`。主机 PID 35100、客机 PID 36824 各启动一次，同一对进程先执行七项行为，再从菜单开始完整正常路线，两端各两次原生开局；整轮 371.510 秒，没有人工菜单或移动输入，没有截图／录像。最终正常关闭并完成恢复，停止继续启动。
 
 | 检查 | 结果 |
 | --- | --- |

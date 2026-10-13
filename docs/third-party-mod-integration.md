@@ -1,8 +1,8 @@
 # 第三方 Mod 接入 API v1
 
-Isaac LAN 提供本机视图、生命周期通知、主机动作和自动兼容注册。实现位于 [`src/bridge/api/`](../src/bridge/api/public.lua) 与 [`src/bridge/compat/mods/`](../src/bridge/compat/mods/registry.lua)，随 DLL 嵌入，在第三方 Mod 初始化前发布全局 `IsaacLAN`。
+Isaac LAN 提供本机视图、生命周期通知、主机动作和自动兼容注册。实现位于 [`src/bridge/api/`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/api/public.lua) 与 [`src/bridge/compat/mods/`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/mods/registry.lua)，随 DLL 嵌入，在第三方 Mod 初始化前发布全局 `IsaacLAN`。
 
-本版实现原设计的阶段 A（本机视图）和 B（玩法请求）。阶段 C 的补充状态、实体元数据、存档扩展和必需内容声明尚未提供；不会自动复制 `GetData()`、Mod 源码、配置或资源。当前传输协议为 26，世界视图 schema 为 15，各端需要同一扩展构建；公开 API 版本仍为 1，与传输和视图版本分别维护，见[网络与状态同步](synchronization.md)。
+本版实现原设计的阶段 A（本机视图）和 B（玩法请求）。阶段 C 的补充状态、实体元数据、存档扩展和必需内容声明尚未提供；不会自动复制 `GetData()`、Mod 源码、配置或资源。当前传输协议为 26，世界视图 schema 为 15，各端需要同一扩展构建；公开 API 版本仍为 1，与传输和视图版本分别维护，见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)。
 
 ## 安装与责任
 
@@ -226,7 +226,7 @@ end
 
 `IsaacLAN:GetCompatibilityStatus()` 返回各模块的 `id`、版本、状态、原因、目标身份和是否注册独立主机能力。状态为 `not_detected`、`pending`、`active`、`unsupported`、`disabled`、`error`；`active` 表示指纹、运行时探测和安装完成，功能验证范围见下表。
 
-独立开关通过 `IsaacLAN:SetCompatibilityEnabled(id, enabled)` 保存到游戏目录的 `isaac-lan/integrations.ini`，默认允许。主机要保留自己的 GoodTrip UI 并禁止所有人传送，可调用 `IsaacLAN:SetActionEnabled("isaac-lan.compat.goodtrip", "travel", false)`；该动作开关只在当前 Lua 环境生效，永久关闭内置主机能力可关闭对应兼容模块。
+独立开关通过 `IsaacLAN:SetCompatibilityEnabled(id, enabled)` 保存到游戏目录的 Mod 接入配置文件 `integrations.ini`，默认允许。主机要保留自己的 GoodTrip UI 并禁止所有人传送，可调用 `IsaacLAN:SetActionEnabled("isaac-lan.compat.goodtrip", "travel", false)`；该动作开关只在当前 Lua 环境生效，永久关闭内置主机能力可关闭对应兼容模块。
 
 ## 内置模块
 
@@ -246,7 +246,7 @@ end
 
 ### GoodTrip
 
-[`client.lua`](../src/bridge/compat/mods/goodtrip/client.lua) 只处理原版界面入口、本机缓存和请求结果；[`authority.lua`](../src/bridge/compat/mods/goodtrip/authority.lua) 负责清房、已访问目标、隐藏地图、封闭挑战／小 Boss 房、追逐战、Mom 限制、挑战房血量、诅咒房代价及秘密房路径。
+[`client.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/mods/goodtrip/client.lua) 只处理原版界面入口、本机缓存和请求结果；[`authority.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/mods/goodtrip/authority.lua) 负责清房、已访问目标、隐藏地图、封闭挑战／小 Boss 房、追逐战、Mom 限制、挑战房血量、诅咒房代价及秘密房路径。
 
 主机从实际请求角色读取数据，记录权威房间门提供的秘密房入口。无法确认所需秘密路径时明确拒绝 `secret_path_unknown`，不猜测入口。路径按原生迁移逐段完成，代价只在初始迁移接受后扣一次。死亡或路径中断有单独结果。固定目标迁移不会使用迷宫随机选房，也不在另一玩家模拟期间全局删除／恢复迷宫诅咒。
 
@@ -262,13 +262,13 @@ Flip 隐藏事实、动态 `EID_Description`、合成与随机预测没有新增
 
 ## 验证
 
-无需游戏的 [`tests/bridge_api.lua`](../tests/bridge_api.lua) 验证独立编码、视图返回值与异常恢复、身份、事件顺序与错误隔离、能力撤销、实际完成回执、去重／重复 ID、失效源房间、超时，以及自动安装和原生接入优先。CMake 在找到 Lua 5.3 时将其加入 CTest；Linux CI 会运行。
+无需游戏的 [`tests/bridge_api.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/bridge_api.lua) 验证独立编码、视图返回值与异常恢复、身份、事件顺序与错误隔离、能力撤销、实际完成回执、去重／重复 ID、失效源房间、超时，以及自动安装和原生接入优先。CMake 在找到 Lua 5.3 时将其加入 CTest；Linux CI 会运行。
 
-[`tests/goodtrip_rules.lua`](../tests/goodtrip_rules.lua) 通过模拟权威环境验证特殊房间规则、诅咒代价只扣一次、死亡取消、迷宫下的固定目标，以及秘密房分段到达。
+[`tests/goodtrip_rules.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/goodtrip_rules.lua) 通过模拟权威环境验证特殊房间规则、诅咒代价只扣一次、死亡取消、迷宫下的固定目标，以及秘密房分段到达。
 
-[`tests/net_test.cpp`](../tests/net_test.cpp) 的 `integrations` 用例验证真实 Winsock 通道、发送者绑定、消息顺序、不合并请求、结果接收范围、限额、整局身份和重连代次。
+[`tests/net_test.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/tests/net_test.cpp) 的 `integrations` 用例验证真实 Winsock 通道、发送者绑定、消息顺序、不合并请求、结果接收范围、限额、整局身份和重连代次。
 
-真实游戏使用原版文件的隔离拷贝：[`state_mod_ui.lua`](../tests/state_mod_ui.lua) 走地图与原生手柄输入；[`state_mod_integrations.lua`](../tests/state_mod_integrations.lua) 核对真实 Stats+ 玩家缓存及布局序号、EID 本机名单、客机 GoodTrip 请求、重复请求和最终到达。用 `--mod`、`--client-mod`、`--host-mod` 构造安装组合，见[开发与测试](development-and-testing.md)。
+真实游戏使用原版文件的隔离拷贝：[`state_mod_ui.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_ui.lua) 走地图与原生手柄输入；[`state_mod_integrations.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_integrations.lua) 核对真实 Stats+ 玩家缓存及布局序号、EID 本机名单、客机 GoodTrip 请求、重复请求和最终到达。用 `--mod`、`--client-mod`、`--host-mod` 构造安装组合，见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 
 2026-10-08 的双实例游戏验证通过以下组合，均使用单向 75 ms 人工延迟：仅客机安装三个 Mod；两端均安装三个 Mod 并使用原生地图输入；两端均安装三个 Mod 且角色为雅各和以扫。双角色场景将测试脚本的 `character` 设为 `19`，验证两端各自两人的缓存、显示序号和逻辑 ID，以及客机传送后主机仍留在原房间。
 

@@ -20,8 +20,10 @@
 
 需要 Windows 版 J460、Proton 11.0-2 及以上。
 
+将 `ISAAC_GAME_DIRECTORY` 设为游戏安装位置后执行：
+
 ```sh
-python3 install.py --game-directory "/path/to/Binding of Isaac Rebirth"
+python3 install.py --game-directory "$ISAAC_GAME_DIRECTORY"
 ```
 
 Steam 启动选项设为：
@@ -34,7 +36,7 @@ WINEDLLOVERRIDES="winmm=n,b" %command%
 
 ## 配置与日志
 
-首次启动会在游戏目录生成 `isaac-lan/config.ini`，修改后重启游戏生效：
+首次启动会生成扩展配置文件 `config.ini`，修改后重启游戏生效：
 
 ```ini
 [logging]
@@ -47,7 +49,7 @@ sample_interval_ms = 1000
 
 `level` 支持 `DEBUG`、`INFO`、`WARN`、`ERROR`，默认不写 DEBUG 日志。需要排查卡顿时，可将 `performance` 改为 `true`；采样间隔支持 100–60000 毫秒。
 
-日志位于原版 `log.txt` 同级目录下的 `isaac-lan/logs/`，通常在 `文档/My Games/Binding of Isaac Repentance+/`。每次启动单独建目录，每局再按序号、种子和主客机分目录：启动及退出记录在 `startup.log`，局内记录在 `runtime.log`；开启性能统计后，同目录还有 `performance.jsonl`。历史日志一直保留，需要时可手动删除旧目录。升级和卸载会保留配置、联机存档及历史日志。
+日志随原版 `log.txt` 保存在当前游戏的数据目录。每次启动单独建目录，每局再按序号、种子和主客机分目录：启动及退出记录在 `startup.log`，局内记录在 `runtime.log`；开启性能统计后，同目录还有 `performance.jsonl`。历史日志一直保留，需要时可手动删除旧目录。升级和卸载会保留配置、联机存档及历史日志。
 
 ## 创建与加入
 
@@ -74,16 +76,18 @@ sample_interval_ms = 1000
 
 需要 CMake、Ninja、32 位 MinGW-w64，以及 Dear ImGui v1.92.6、MinHook v1.3.4 的源码。
 
+将 `ISAAC_IMGUI_SOURCE` 和 `ISAAC_MINHOOK_SOURCE` 设为对应依赖源码位置后执行：
+
 ```sh
 cmake -S . -B build-win32 -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86.cmake \
   -DCMAKE_BUILD_TYPE=Release \
-  -DIMGUI_SOURCE_DIR=/path/to/imgui \
-  -DMINHOOK_SOURCE_DIR=/path/to/minhook
+  -DIMGUI_SOURCE_DIR="$ISAAC_IMGUI_SOURCE" \
+  -DMINHOOK_SOURCE_DIR="$ISAAC_MINHOOK_SOURCE"
 cmake --build build-win32
 python3 tools/build_package.py --build build-win32 --output dist/Isaac-LAN-J460
 ```
 
 ## 问题与建议
 
-请提交到 [Issues](https://github.com/BMingSY/isaac-lan/issues)，写明游戏版本、主客机、复现步骤和使用的其他 Mod；遇到联机异常时可以附上 `isaac-lan/logs/` 中对应启动的完整目录。
+请提交到 [Issues](https://github.com/BMingSY/isaac-lan/issues)，写明游戏版本、主客机、复现步骤和使用的其他 Mod；遇到联机异常时可以附上对应启动的完整日志归档。

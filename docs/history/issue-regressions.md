@@ -1,6 +1,6 @@
 # Issue 回归记录
 
-> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](../README.md)。
+> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/README.md)。
 
 分支：`fix/host-client-state-sync`，基于 `main` 的 `5f2041b`。本记录是开发验收记录，不是发布文案。
 
@@ -47,10 +47,10 @@
 | 金币／炸弹／钥匙 | 13／7／5 | 27／11／9 |
 | 联机前后 `gamestate1.dat` SHA-256 | `870a2f3bee9c60bb3caaea24c6efae3732296325d3b2dc541c4f6a7486176d71` | `5329ed3411bd2878a106d02c4fe40e70d35e8bf1449b41e6294056e345aa17f1` |
 
-最终产物与日志保存在 `artifacts/state-sync-engine-20261009-r15/`：
+最终产物与日志已按轮次归档（2026-10-09，第 15 轮）：
 
 - `result.json`、`test-harness.lua`、`tested-probe.dll`、两端 `log.txt`／`probe.log`，以及四份单人存档前后副本。
-- 主机 1262 帧、客机 1183 帧，150 ms 采样，两端丢帧计数均为 0。小地图示例为 `host/frames/300.png`、`client/frames/224.png`；Pin／Needle 身体示例为 `client/frames/258.png`。
+- 主机 1262 帧、客机 1183 帧，150 ms 采样，两端丢帧计数均为 0。小地图示例为 `300.png`、客机第 224 帧画面；Pin／Needle 身体示例为 客机第 258 帧画面。
 - 百变怪分房间击杀窗口各 96 帧、同房间窗口主机 105 帧／客机 106 帧；`visual-review.json` 记录中心区域白色像素比例。此采样用于检查持续白屏，不代表覆盖每个渲染帧。
 - DLL SHA-256：`2e010996bcd26dd9b07b05419ff84742d9bba830d35448a27460a90f349cb971`。
 - 集中脚本 SHA-256：`f6fccd4ea696491bb24e5655c89063cdfebe6de29953d2c6c5704764246f1b9b`。
@@ -59,12 +59,12 @@
 
 ```sh
 python tools/run_network_engine.py \
-  --host /mnt/d/isaac-lan-lab/host-001 \
-  --client /mnt/d/isaac-lan-lab/client-001 \
+  --host "$ISAAC_HOST_LAB" \
+  --client "$ISAAC_CLIENT_LAB" \
   --build build-win32 --frontend --solo-fixture \
   --script tests/state_reported_bugs.lua \
   --completion 'LAN_NETWORK PASS reported issue synchronization and saved progress' \
-  --output artifacts/state-sync-engine-20261009-r15 \
+  --output "$ISAAC_RUN_OUTPUT" \
   --scenario-timeout 400 --menu-port 29544 --latency-ms 75 \
   --native-record-both --frame-ms 150
 ```
@@ -77,17 +77,17 @@ python tools/run_network_engine.py \
 
 ## 离线与构建检查
 
-- 最终 `tools/test.py --profile full`：59 个 Python 用例和 11 个子用例、19 项 C++／Lua 检查全部通过；格式与脚本语法检查通过。报告：`artifacts/state-sync-offline-20261009-r8/`。
+- 最终 `tools/test.py --profile full`：59 个 Python 用例和 11 个子用例、19 项 C++／Lua 检查全部通过；格式与脚本语法检查通过。报告：验收归档（2026-10-09，第 8 轮）。
 - Windows 构建通过，`ctest --test-dir build-win32 --output-on-failure -L network` 的 19 项协议／传输检查通过。
 - `isaac_lan_check.exe --code` 对隔离 J460 游戏的原生入口签名检查通过。
 - 新增离线回归覆盖网格即时替换、继续游戏控制器重绑、原版 Sprite 接口的战斗入口、入场确认等待、地图格注册、菜单输入跨房间及多节怪引用恢复。
 
-本地测试包位于 `artifacts/Isaac-LAN-state-sync-J460.zip`。未修改版本号，未推送分支或发布 Release／创意工坊更新。
+本地测试包位于 `Isaac-LAN-state-sync-J460.zip`。未修改版本号，未推送分支或发布 Release／创意工坊更新。
 
 
 ## 用户手动测试反馈补测
 
-针对用户在双开测试中补充的问题，增加 `tests/state_manual_feedback.lua`，同一连接检查真实键盘 Esc、Az 的原生蓄力 UI、主机 Boss 入场动画及各房间同步耗时。三个 Mod 在主客机均开启：Stats+ 2.1.3、EID 5.25（metadata 5.24，d7aab88）、GoodTrip 1.2.8。
+针对用户在双开测试中补充的问题，增加 [`tests/state_manual_feedback.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_manual_feedback.lua)，同一连接检查真实键盘 Esc、Az 的原生蓄力 UI、主机 Boss 入场动画及各房间同步耗时。三个 Mod 在主客机均开启：Stats+ 2.1.3、EID 5.25（metadata 5.24，d7aab88）、GoodTrip 1.2.8。
 
 - Esc：键盘的原生 Back（15）在未暂停时补发 Pause（12）边沿，适配 LAN 的控制器 1..4；菜单中的 Back 保持原生行为。此前 #17 的手柄 Start 检查没有覆盖真实键盘 Esc，本轮补充两端各自打开和关闭菜单的四次按键。
 - 蓄力条：武器类型、蓄力与最大蓄力仍由主机同步；七个蓄力 UI Sprite 根据客机本地渲染推进，避免主机离开该角色所在房间后，把未渲染的旧 UI 层覆盖到客机。
@@ -97,9 +97,9 @@ python tools/run_network_engine.py \
 
 ### 已完成补测
 
-`artifacts/manual-feedback-engine-20261009-r4/` 通过一次集中联机运行：
+验收归档（2026-10-09，第 4 轮）通过一次集中联机运行：
 
-- 两端收到真实窗口键盘 Esc，均记录四次暂停／恢复边沿；录制画面中均出现原生暂停菜单，最后恢复游戏。菜单画面示例：`host/frames/390.png`、`client/frames/291.png`、`client/frames/338.png`。
+- 两端收到真实窗口键盘 Esc，均记录四次暂停／恢复边沿；录制画面中均出现原生暂停菜单，最后恢复游戏。菜单画面示例：`390.png`、客机第 291 帧画面、客机第 338 帧画面。
 - Az 在普通房、商店、道具房、返回普通房与 Boss 房均保留武器蓄力和本地蓄力 UI，包括 Charging、StartCharged、Charged；过房后重新蓄满。
 - 主机原生入场动画播放期间记录 100 次状态采样，另一个房间的客机权威位置移动约 307.88 像素。
 - 三个 Mod 的适配状态在两端均为 active；画面中的 Stats+ 显示客机 Az 的属性。
@@ -108,14 +108,14 @@ python tools/run_network_engine.py \
 
 ### 本轮重启原因
 
-原手动双开进程在开始补测时已经退出，只保留独立的原 Steam 游戏进程；隔离配置的当前存档已备份至 `artifacts/manual-feedback-user-backup-20261009/`。前两轮验收夹具分别因启动标记与角色选择不一致而未进入游戏，第三轮把原生 StartCharged 动画误判为缺失；第五轮发现性能场景没有道具台。工具在失败时关闭其拥有的隔离进程；修正启动夹具后重新加载。一轮中的各房间、动画与暂停检查复用同一对进程。移除启动夹具、停止录制并恢复手动测试时需要重新启动这两个隔离进程。
+原手动双开进程在开始补测时已经退出，只保留独立的原 Steam 游戏进程；隔离配置的当前存档已备份至验收归档（2026-10-09）。前两轮验收夹具分别因启动标记与角色选择不一致而未进入游戏，第三轮把原生 StartCharged 动画误判为缺失；第五轮发现性能场景没有道具台。工具在失败时关闭其拥有的隔离进程；修正启动夹具后重新加载。一轮中的各房间、动画与暂停检查复用同一对进程。移除启动夹具、停止录制并恢复手动测试时需要重新启动这两个隔离进程。
 
-补测离线报告 `artifacts/manual-feedback-offline-20261009-r4/`：59 个 Python 用例和 11 个子用例、20 项 C++／Lua 检查通过；Windows 构建、19 项协议／传输检查和 J460 原生入口检查通过。
+补测离线报告验收归档（2026-10-09，第 4 轮）：59 个 Python 用例和 11 个子用例、20 项 C++／Lua 检查通过；Windows 构建、19 项协议／传输检查和 J460 原生入口检查通过。
 
 
 ### 加长集中验收结果
 
-最终 `artifacts/manual-feedback-engine-20261009-r6/` 全部通过，用时 155.66 秒；同一主机／客机连接完成以上检查和新增的持续移动比较，没有在用例之间重启。四种新增场景均保留道具台，各采样 300 次快照恢复与 600 次渲染，单场景持续 10 秒：
+最终验收归档（2026-10-09，第 6 轮）全部通过，用时 155.66 秒；同一主机／客机连接完成以上检查和新增的持续移动比较，没有在用例之间重启。四种新增场景均保留道具台，各采样 300 次快照恢复与 600 次渲染，单场景持续 10 秒：
 
 | 客机房间／主客机位置 | 快照恢复平均／最大（ms） | 渲染间隔平均／最大（ms） |
 | --- | --- | --- |
@@ -124,7 +124,7 @@ python tools/run_network_engine.py \
 | 带道具的已清理 Boss 房，分房，持续移动 | 1.60／4 | 16.67／23 |
 | 同一 Boss 房，同房，持续移动 | 1.35／2 | 16.67／21 |
 
-`performance.json` 保留完整统计，`performance-summary.json` 保留分房／同房比较。适配回调已分别记录 EID、Stats+ 与 GoodTrip，没有观察到该组场景中的持续帧率下降。该结论只适用于本机双实例、当前种子、角色与道具；用户反馈的持续卡顿仍待用其实际游戏状态复现。新 DLL 的 SHA-256 为 `81149799dc07669ee22cc5c62536da8f03a121758eb802afa698bb6930d61526`，本地安装包为 `artifacts/manual-feedback-package-20261009/Isaac-LAN-v0.2.0-windows-x86.zip`，包内容与 x86 运行依赖检查通过。版本号仍未修改；未推送或发布。
+`performance.json` 保留完整统计，`performance-summary.json` 保留分房／同房比较。适配回调已分别记录 EID、Stats+ 与 GoodTrip，没有观察到该组场景中的持续帧率下降。该结论只适用于本机双实例、当前种子、角色与道具；用户反馈的持续卡顿仍待用其实际游戏状态复现。新 DLL 的 SHA-256 为 `81149799dc07669ee22cc5c62536da8f03a121758eb802afa698bb6930d61526`，本地安装包为 `Isaac-LAN-v0.2.0-windows-x86.zip`，包内容与 x86 运行依赖检查通过。版本号仍未修改；未推送或发布。
 
 ### Steam 启动错误 11
 
@@ -134,7 +134,7 @@ python tools/run_network_engine.py \
 - 本轮只检查启动、隔离范围和构建指纹，没有注入游戏操作或自动创建房间。Steam 版在带有外部隔离变量的环境下记录 `startup_lab_environment=IGNORED`、`isolation=installed` 与前端 READY；隔离实例保持 `isolation=profile_redirect`。两端构建指纹一致。
 - 重启原因：Steam 原进程初始化失败并退出，需要安装修复后重开；随后隔离实例需要重新加载相同 DLL，否则强制构建指纹会拒绝连接。更新隔离实例时保留 Steam 进程。
 
-报告和本地包：`artifacts/manual-steam-pair-20261009-233535/`。新 DLL SHA-256：`358dd9dc8ba5222b7fb73e4627e29a9652670778ed0758fcf4ae5c97888464f0`。
+报告和本地包：验收归档（2026-10-09）。新 DLL SHA-256：`358dd9dc8ba5222b7fb73e4627e29a9652670778ed0758fcf4ae5c97888464f0`。
 
 ### 单人 Mod、过房蓄力与 Stats+ 玩家缓存
 
@@ -144,20 +144,20 @@ python tools/run_network_engine.py \
 - 客机硫磺火过房自动发射有两条输入过滤路径：主机拒绝来源房间不匹配的输入；客机在原生房间加载期间没有完整的房间上下文。两处都会清零射击值，合成一次松键。现在同层换房保留持续射击值，并在加载期间沿用最后有效的同层房间上下文；移动、道具与射击边沿仍过滤。真实松键正常传递，换层不沿用旧房间输入。新增 `core.transition-charge` 覆盖这两条路径、真实松键与换层隔离。
 - Stats+ 在联机视口就绪前可能缓存两名玩家，补充数值的渲染继续读取旧缓存。现在过滤缓存中的远端玩家，等待容器与生命周期模块加载完整，再按本机玩家与逻辑索引 0 重建缓存。通过 `GetPtrHash` 比较原生角色身份，避免新 Lua 包装对象造成逐帧重建。离线覆盖旧缓存、延迟导出、角色包装变化与未联机的原版双人行为。
 
-最终离线报告 `artifacts/feedback-solo-charge-stats-offline-20261010-r4/` 全部通过：23 项 C++／Lua 检查、59 个 Python 用例和 11 个子用例，以及格式和脚本语法检查。Windows 构建、Windows 版 `core.transition-charge` 与 `net.input-rooms` 通过。
+最终离线报告验收归档（2026-10-10，第 4 轮）全部通过：23 项 C++／Lua 检查、59 个 Python 用例和 11 个子用例，以及格式和脚本语法检查。Windows 构建、Windows 版 `core.transition-charge` 与 `net.input-rooms` 通过。
 
-最终集中实机运行 `artifacts/feedback-solo-charge-stats-engine-20261010-r6/` 通过，用时 122.03 秒。两端采用普通沙箱启动（没有 `--luadebug`），开启原版 Stats+ 2.1.3、EID 5.25、GoodTrip 1.2.8，使用 75 ms 单向延迟。同一对进程依次完成单人、联机与继续原单人存档，场景间没有重启：
+最终集中实机运行验收归档（2026-10-10，第 6 轮）通过，用时 122.03 秒。两端采用普通沙箱启动（没有 `--luadebug`），开启原版 Stats+ 2.1.3、EID 5.25、GoodTrip 1.2.8，使用 75 ms 单向延迟。同一对进程依次完成单人、联机与继续原单人存档，场景间没有重启：
 
 | 检查 | 结果 |
 | --- | --- |
 | 普通启动的单人 Mod | 两端三个 Mod 均加载，适配状态为 active；单人 Stats+ 实际渲染通过。全局 `debug` 保持 nil。 |
 | 客机硫磺火蓄满后过房 | 初始蓄力 32；550 次权威采样保持蓄力，覆盖四次客机换房、一次主机换房及同房／分房。真正松键后检测到原生激光。 |
-| Stats+ 补充数值的角色归属 | 主机 1841 次、客机 1833 次实际渲染检查，玩家列表仅含本机角色且逻辑索引为 0。tick 700 的录制画面中，主机显示 Az 的伤害 5.25／×1.50，客机显示 Isaac 的 3.50／×1.00。样本：`host/frames/1035.png`、`client/frames/602.png`。 |
+| Stats+ 补充数值的角色归属 | 主机 1841 次、客机 1833 次实际渲染检查，玩家列表仅含本机角色且逻辑索引为 0。tick 700 的录制画面中，主机显示 Az 的伤害 5.25／×1.50，客机显示 Isaac 的 3.50／×1.00。样本：`1035.png`、客机第 602 帧画面。 |
 | 联机结束后继续单人 | 两端原单人 `gamestate1.dat` 字节不变，实际继续原种子并恢复单人 Stats+。主机种子 `0KFR TAD4`，客机种子 `9BN8 3AES`；哈希保存在 `result.json` 与存档前后副本中。 |
 
 前轮重启原因已记录：r1 的启动夹具依赖普通沙箱禁用的 `io`，并重复启用了原版与复制版 Mod；r2 在 Stats+ 首次填充缓存前开始渲染断言；r3 在发放硫磺火之前采样该武器。修正启动脚本后需要重新加载。r4／r5 实际复现 tick 246 的自动发射：客机原始射击值仍为 65535，主机收到的值却变成 0；补充加载期输入修复后重新加载原生 DLL，最终 r6 通过。每轮失败均由工具关闭其拥有的隔离进程，没有操作真实 Steam 游戏进程。
 
-测试后按备份恢复并逐文件校验 77 个隔离配置／存档／Mod 数据文件，清理测试新增的 6 个存档文件及启动脚本；原版三个 Mod 保持开启。验证通过的 DLL 同步至 Steam 安装目录和两个双开目录，安装前已备份正式配置与存档，安装后校验保存数据未变化。本地包：`artifacts/feedback-solo-charge-stats-package-20261010-final/Isaac-LAN-v0.2.0-windows-x86/`；DLL SHA-256：`55746e2ae3db975b264906c105e7ed0ee52c93cfc3e097af7acda1cb0faf8a56`。未更改版本号、推送分支或发布更新。
+测试后按备份恢复并逐文件校验 77 个隔离配置／存档／Mod 数据文件，清理测试新增的 6 个存档文件及启动脚本；原版三个 Mod 保持开启。验证通过的 DLL 同步至 Steam 安装目录和两个双开目录，安装前已备份正式配置与存档，安装后校验保存数据未变化。本地包：`Isaac-LAN-v0.2.0-windows-x86`；DLL SHA-256：`55746e2ae3db975b264906c105e7ed0ee52c93cfc3e097af7acda1cb0faf8a56`。未更改版本号、推送分支或发布更新。
 
 ### 客机动画、房间音频与 Steam 控制台
 
@@ -165,50 +165,50 @@ python tools/run_network_engine.py \
 
 - 客机 ItemOverlay 同步完整的普通／Mega Sprite、图层、贴图、帧、状态与延时，保留去重后的触发事件。客机不再运行会治疗、换房或触发音效的原生 ItemOverlay Update，动画标记的玩法效果只执行在主机。快照格式更新为 8。
 - 客机重放音效时使用自己的房间作用域，本地原生音效也按房间观看者过滤；同房间的两端都能播放该房间声音。音乐缓存加入楼层 epoch，允许本机房间的原生音乐调用，并补采集开局和相同曲目未触发 Play 的房间。
-- Steam 控制台是配置残留：已禁用的 `szx_chinese_console_3001774454/main.lua:39` 曾设置 `Options.DebugConsoleEnabled = false`，退出时写入 `EnableDebugConsole=0`。备份正式 `options.ini` 后仅恢复该开关为 1，保留用户已禁用该 Mod 的选择；不在联机代码中强制覆盖控制台偏好。
+- Steam 控制台是配置残留：已禁用的 中文控制台 Mod 的 `main.lua` 第 39 行 曾设置 `Options.DebugConsoleEnabled = false`，退出时写入 `EnableDebugConsole=0`。备份正式 `options.ini` 后仅恢复该开关为 1，保留用户已禁用该 Mod 的选择；不在联机代码中强制覆盖控制台偏好。
 
-集中实机 `artifacts/guest-presentation-audio-console-engine-20261010-r8/` 通过，用时 127.73 秒。采用独立的 `client-002`／`client-003` 隔离目录作为主客机，普通沙箱、75 ms 单向延迟、Stats+ 2.1.3、EID 5.25 和 GoodTrip 1.2.8。同一对进程、同一连接完成所有检查，没有在用例之间重新启动，也没有注入用户正式存档。
+集中实机验收归档（2026-10-10，第 8 轮）通过，用时 127.73 秒。采用独立的 `client-002`／`client-003` 隔离目录作为主客机，普通沙箱、75 ms 单向延迟、Stats+ 2.1.3、EID 5.25 和 GoodTrip 1.2.8。同一对进程、同一连接完成所有检查，没有在用例之间重新启动，也没有注入用户正式存档。
 
 | 检查 | 结果与证据 |
 | --- | --- |
-| 愚者卡文字与女皇卡全屏动画 | 客机收到完整标题 `0 - The Fool` 和副标题 `Where journey begins`；录制中均完整显示。样本：`client/frames/183.png`、`client/frames/270.png`。 |
-| 主动道具、分房及同时使用 | 客机 166 次恢复核对完整原生 Sprite 字节，318 次采样有效演出；主机 148 次采样。怪物图鉴同房、分房及同时使用均显示完整图层，样本 `client/frames/320.png`、`client/frames/521.png`、`client/frames/705.png`。 |
+| 愚者卡文字与女皇卡全屏动画 | 客机收到完整标题 `0 - The Fool` 和副标题 `Where journey begins`；录制中均完整显示。样本：客机第 183 帧画面、客机第 270 帧画面。 |
+| 主动道具、分房及同时使用 | 客机 166 次恢复核对完整原生 Sprite 字节，318 次采样有效演出；主机 148 次采样。怪物图鉴同房、分房及同时使用均显示完整图层，样本 客机第 320 帧画面、客机第 521 帧画面、客机第 705 帧画面。 |
 | 演出与玩法分离 | 主机恰好执行 2 次卡牌与 5 次图鉴使用，客机执行次数为 0；Mega Mush 动画结束后原生角色可见性恢复。 |
 | 分房／同房音效 | 两轮分房，主机 Beep 次数依次为 1、2，Button 为 0；客机 Button 依次为 1、2，Beep 为 0。汇合后双方 Beep 各增加一次。检查实际播放次数，排除其他正常音效覆盖最后音效 ID 的干扰。 |
 | 房间音乐 | 两端各 140 次检查实际播放通道：客机进入 Boss 房时切到 Boss 曲目，返回普通房恢复 Basement；主机进入 Boss 房时不改变另一房间的客机音乐。楼层缓存隔离另有离线用例，未单独做换层音乐实机验收。 |
 
-离线 `artifacts/guest-presentation-audio-console-offline-20261010-r2/` 通过：25 项 C++／Lua 检查、59 个 Python 用例和 11 个子用例，格式与语法检查通过。Windows 构建、J460 原生入口检查、本地包内容与 x86 系统依赖检查通过。
+离线验收归档（2026-10-10，第 2 轮）通过：25 项 C++／Lua 检查、59 个 Python 用例和 11 个子用例，格式与语法检查通过。Windows 构建、J460 原生入口检查、本地包内容与 x86 系统依赖检查通过。
 
 前轮的重启原因：r1 启动夹具漏报 MENU_READY，r2 把呈现回调的输入字节当作 tick；r3 未考虑 Boss 曲目变体，r4 夹具跟班提前击杀 Boss 后误判胜利音乐；r5 使用“最后音效”断言被正常声音覆盖，r6 用主机确认 tick 采样已播放事件的基线，r7 把仍在 Boss 房的主机曲目误判为普通房曲目。失败会话由工具关闭其拥有的隔离进程，修正夹具后重新加载；r6 另因新增按 ID 的音效播放计数需要重载原生 DLL。各轮的全部场景始终共用一对进程。
 
 验收后恢复并逐文件校验 26 个测试目录配置／存档文件，清理 19 个测试新增文件。安装前备份 409 个文件，安装后核对 401 个保存／配置／Mod 数据文件没有变化；控制台开关恢复在该备份之前完成。Steam 通过正式安装器更新，两个有隔离标记的双开目录按已知旧构建哈希校验后同步 DLL；三个 Mod 保持开启。测试后的手动进程启动只加载菜单，不自动创建房间。
 
-正式 Steam 进程重新启动后，只读检查原生 `DebugConsoleEnabled=1`，前端与渲染器均 READY，日志未发现启动错误；报告 `artifacts/guest-presentation-audio-console-20261010/steam-console-state.json`。未在正式存档内自动开局或发送控制台命令，实际按键弹出留给用户进入游戏后验收。Steam URI 没有创建正式游戏进程，随后从 Steam 安装目录直接启动，并设置该子进程的 Steam App ID；隔离主机保持原进程。
+正式 Steam 进程重新启动后，只读检查原生 `DebugConsoleEnabled=1`，前端与渲染器均 READY，日志未发现启动错误；报告 `steam-console-state.json`。未在正式存档内自动开局或发送控制台命令，实际按键弹出留给用户进入游戏后验收。Steam URI 没有创建正式游戏进程，随后从 Steam 安装目录直接启动，并设置该子进程的 Steam App ID；隔离主机保持原进程。
 
-本地包：`artifacts/guest-presentation-audio-console-package-20261010-final/Isaac-LAN-v0.2.0-windows-x86/`；DLL SHA-256：`2a618b5c1f62966f7387f7ea65a3bb62bdd0aa885e8daed3412dce70a10066bf`。版本号未更改，未推送或发布。
+本地包：`Isaac-LAN-v0.2.0-windows-x86`；DLL SHA-256：`2a618b5c1f62966f7387f7ea65a3bb62bdd0aa885e8daed3412dce70a10066bf`。版本号未更改，未推送或发布。
 
 ### 原生支线入口的换层同步
 
-2026-10-10 用户再次反馈进入下水道时客机退出。保留的两端日志位于 `artifacts/downpour-floor-20261010/`：主机初始化 `stage=2,type=4,seed=298737635`，客机却初始化 `stage=3,type=0`，种子相同；随后出现 `Replica floor initialization failed` 并返回大厅。本次没有新增原生崩溃转储。此前支线测试通过 `SetStage` 指定目标楼层，没有覆盖踩原生支线活板门的路径。
+2026-10-10 用户再次反馈进入下水道时客机退出。保留的两端日志已归档（2026-10-10）：主机初始化 `stage=2,type=4,seed=298737635`，客机却初始化 `stage=3,type=0`，种子相同；随后出现 `Replica floor initialization failed` 并返回大厅。本次没有新增原生崩溃转储。此前支线测试通过 `SetStage` 指定目标楼层，没有覆盖踩原生支线活板门的路径。
 
 J460 的原生活板门在进入支线时设置 `GameStateFlag.STATE_SECRET_PATH`（44）。该标记属于 `Game+0x26548` 的 53 位游戏状态，原生 GetStateFlag／SetStateFlag 与活板门反汇编确认了位置。客机不模拟活板门的玩法逻辑，旧换层事件只发送当前楼层、动画与 Seeds，导致客机用自己的路径标记选择下一层。
 
 现在换层可靠事件携带两字的游戏状态标记，客机在调用原生换层前恢复这些标记；普通出口清除路径标记时同样同步。沙漏仍使用其完整原生回滚存档，避免额外标记覆盖回滚结果。协议更新为 23，分块接收同时核对楼层、动画与状态标记的一致性。
 
-离线报告 `artifacts/downpour-floor-offline-20261010-r1/` 通过：25 项 C++／Lua 检查、59 个 Python 用例和 11 个子用例、19 项 Windows 协议／传输检查、格式与脚本语法、Windows 构建及 J460 原生入口检查。新增传输回归在修复前失败于 `Native floor event lost alternate-route and ascent flags`，修复后覆盖可靠换层、重连加载期间的最新事件与大沙漏分块。
+离线报告验收归档（2026-10-10，第 1 轮）通过：25 项 C++／Lua 检查、59 个 Python 用例和 11 个子用例、19 项 Windows 协议／传输检查、格式与脚本语法、Windows 构建及 J460 原生入口检查。新增传输回归在修复前失败于 `Native floor event lost alternate-route and ascent flags`，修复后覆盖可靠换层、重连加载期间的最新事件与大沙漏分块。
 
-最终集中实机 `artifacts/downpour-floor-engine-20261010-r4/` 通过，用时 215.18 秒。同一主客机进程、同一连接完成六次换层，采用普通沙箱、75 ms 单向延迟、Stats+ 2.1.3、EID 5.25 和 GoodTrip 1.2.8。种子与本次用户日志一致。隔离进度夹具把主机的 A Secret Exit 解锁设为 1、客机设为 0，双方 Dross 设为未解锁，以固定入口结果；成就编号 407／412 参见 [REPENTOGON 枚举](https://repentogon.com/enums/Achievement.html)。
+最终集中实机验收归档（2026-10-10，第 4 轮）通过，用时 215.18 秒。同一主客机进程、同一连接完成六次换层，采用普通沙箱、75 ms 单向延迟、Stats+ 2.1.3、EID 5.25 和 GoodTrip 1.2.8。种子与本次用户日志一致。隔离进度夹具把主机的 A Secret Exit 解锁设为 1、客机设为 0，双方 Dross 设为未解锁，以固定入口结果；成就编号 407／412 参见 [REPENTOGON 枚举](https://repentogon.com/enums/Achievement.html)。
 
 | 检查 | 结果与证据 |
 | --- | --- |
 | 客机从地下室 II 进入下水道 II | 击败 Boss 后原生生成 `-10` 入口，客机踩该房间的原生活板门。两端均初始化 `stage=2,type=4,seed=298737635`；客机换层前路径标记为 true。 |
 | 下水道普通出口 | 主机踩普通活板门，两端均进入 `stage=4,type=0`，客机路径标记为 false。 |
 | 主机触发下水道入口 | 使用第二次原生 Boss 死亡生成的入口，两端同样进入 `stage=2,type=4`。 |
-| 客机继续进入矿井 | 原生 Boss 死亡生成矿井入口，客机踩其活板门后，两端均进入 `stage=3,type=4`。客机画面：`client/frames/1935.png`。 |
+| 客机继续进入矿井 | 原生 Boss 死亡生成矿井入口，客机踩其活板门后，两端均进入 `stage=3,type=4`。客机画面：客机第 1935 帧画面。 |
 | 解锁进度恢复 | 联机前分别记录 `secret_exit=1/0`；保存退出后两端再次记录 `LOCAL_UNLOCK_RESTORED secret_exit=1/0`，客机没有永久继承主机的支线解锁。 |
 
 重启原因：r1 的测试脚本尝试用控制台生成入口但失败；r2 将普通出口应清除的路径标记误判为 true；r3 在换层检查的同一个 tick 主动让客机进入下一项的 Boss 房，误判为换层后角色未汇合。修正夹具后重新加载，原生修复代码与 DLL 在四轮中未变化。失败会话仅由工具关闭其拥有的 `client-002`／`client-003` 进程；用户正式游戏与手动双开进程在开始本轮工作前已退出。每轮各场景复用同一对进程。
 
-验收后恢复并校验 105 个隔离目录配置／存档文件，清理 18 个测试新增文件。正式 Steam 使用安装器更新，手动双开及测试目录按隔离标记和已知构建哈希更新 DLL。正式安装前后核对 346 个存档／配置／Mod 数据等保留文件一致；Steam 与手动双开目录的 Stats+、EID、GoodTrip 保持启用。报告：`artifacts/downpour-floor-20261010/installed-verified.json`。
+验收后恢复并校验 105 个隔离目录配置／存档文件，清理 18 个测试新增文件。正式 Steam 使用安装器更新，手动双开及测试目录按隔离标记和已知构建哈希更新 DLL。正式安装前后核对 346 个存档／配置／Mod 数据等保留文件一致；Steam 与手动双开目录的 Stats+、EID、GoodTrip 保持启用。报告：`installed-verified.json`。
 
-本地包：`artifacts/downpour-floor-package-20261010/Isaac-LAN-v0.2.0-windows-x86/`，包内容、校验和与 x86 系统依赖检查通过。DLL SHA-256：`4613261b6c516669713f2b59a09f7cbe1bb31d31c0dd8e63727c5185b89d40d9`。版本号未更改，未推送或发布。
+本地包：`Isaac-LAN-v0.2.0-windows-x86`，包内容、校验和与 x86 系统依赖检查通过。DLL SHA-256：`4613261b6c516669713f2b59a09f7cbe1bb31d31c0dd8e63727c5185b89d40d9`。版本号未更改，未推送或发布。

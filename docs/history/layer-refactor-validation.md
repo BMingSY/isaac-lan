@@ -1,20 +1,20 @@
 # 分层重构验证记录
 
-> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](../README.md)。
+> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/README.md)。
 
-2026-10-10，基于 `50e45c0`（v0.2.1）验证分层重构。设计与当前仍保留的原生耦合见[分层与玩法兼容](../layers-and-compatibility.md)。协议保持 24，世界视图保持 schema 10，仅支持 Repentance+ J460。
+2026-10-10，基于 `50e45c0`（v0.2.1）验证分层重构。设计与当前仍保留的原生耦合见[分层与玩法兼容](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md)。协议保持 24，世界视图保持 schema 10，仅支持 Repentance+ J460。
 
 ## 离线检查
 
 | 项目 | 结果 | 本地记录 |
 | --- | --- | --- |
-| 重构前完整离线基线 | 38 项 C++／Lua、64 项 Python 及 15 个子用例通过 | `artifacts/layers-baseline-offline-20261010/` |
-| 重构后完整离线检查 | 41 项 C++／Lua、68 项 Python 及 15 个子用例通过 | `artifacts/layers-offline-20261010-final/` |
-| 集中夹具修正后的离线检查 | 相同测试数通过，新增普通沙箱初始化断言通过 | `artifacts/layers-offline-20261010-fixture-fix/` |
-| AddressSanitizer／UndefinedBehaviorSanitizer | 24 项 C++ 测试通过 | `build-sanitized/Testing/Temporary/LastTest.log` |
-| Windows x86 Release | 原生 DLL、加载器、校验器与测试程序构建成功 | `build-win32/` |
-| Windows 真实进程离线测试 | 24 项 C++、21 项 Winsock、1 项日志检查通过 | `D:/isaac-lan-lab/layers-offline-20261010/` |
-| Windows 安装器 | 安装、重装、卸载、存档及外来／修改文件保留通过；错误版本、架构、截断文件及入口变更按预期拒绝 | `D:/isaac-lan-lab/layers-installer-20261010-final/result.json` |
+| 重构前完整离线基线 | 38 项 C++／Lua、64 项 Python 及 15 个子用例通过 | 验收归档（2026-10-10） |
+| 重构后完整离线检查 | 41 项 C++／Lua、68 项 Python 及 15 个子用例通过 | 验收归档（2026-10-10） |
+| 集中夹具修正后的离线检查 | 相同测试数通过，新增普通沙箱初始化断言通过 | 验收归档（2026-10-10） |
+| AddressSanitizer／UndefinedBehaviorSanitizer | 24 项 C++ 测试通过 | `LastTest.log` |
+| Windows x86 Release | 原生 DLL、加载器、校验器与测试程序构建成功 | Windows x86 构建产物 |
+| Windows 真实进程离线测试 | 24 项 C++、21 项 Winsock、1 项日志检查通过 | 验收归档（2026-10-10） |
+| Windows 安装器 | 安装、重装、卸载、存档及外来／修改文件保留通过；错误版本、架构、截断文件及入口变更按预期拒绝 | `result.json` |
 
 完整离线检查使用 `tools/test.py --profile full`。提取移动表现时的依赖注入问题先在离线场景中复现并修正；集中实机夹具的普通沙箱初始化也有无需启动游戏的回归断言。
 
@@ -45,6 +45,6 @@ Home 睡醒移动记录位移 146.81、94 个行走 tick，教条入场后记录
 
 本轮实机 DLL 的 SHA-256 为 `5d8e5b045f399e7b0f54ae09291fc48cc1139837863cb66d317016453360a417`，与最终安装器检查使用的 DLL 相同。
 
-记录位于 `artifacts/layers-engine-20261010-r1/` 与 `artifacts/layers-engine-20261010-r2/`。日志、DLL、集中脚本、两端连续帧和逐项结果保留在本地，不加入源码仓库。
+记录已归档（2026-10-10，第 1 轮）与验收归档（2026-10-10，第 2 轮）。日志、DLL、集中脚本、两端连续帧和逐项结果保留在本地，不加入源码仓库。
 
-本轮分层重构验收时，启动／退出堆错误的根因仍未确定，不计入这次重构修复。后续已定位并修复启动后解锁测试夹具造成的菜单越界写入，见[堆损坏回归记录](heap-corruption-regression.md)。本页保留重构当时的构建、schema 与验收结果；修复结论限定于后续已定位的夹具触发链路。
+本轮分层重构验收时，启动／退出堆错误的根因仍未确定，不计入这次重构修复。后续已定位并修复启动后解锁测试夹具造成的菜单越界写入，见[堆损坏回归记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/heap-corruption-regression.md)。本页保留重构当时的构建、schema 与验收结果；修复结论限定于后续已定位的夹具触发链路。
