@@ -173,6 +173,10 @@ inline constexpr std::uint32_t craftingBagMaterialCount = 0x3d54e2;
 inline constexpr std::uint32_t playerSetPocketActiveItem = 0x3d41d0;
 inline constexpr std::uint32_t playerGetActiveItem = 0x2a2f0;
 inline constexpr std::uint32_t menuCharacterAvailable = 0x546cd0;
+inline constexpr std::uint32_t pauseMenuControls = 0x5b5d20;
+inline constexpr std::uint32_t pauseMenuShow = 0x5b7680;
+inline constexpr std::uint32_t pauseMenuHide = 0x5b7500;
+inline constexpr std::uint32_t optionsSave = 0x524d10;
 inline constexpr std::uint32_t menuCharacterModEnumeration = 0x54919e;
 } // namespace entry
 namespace globals {

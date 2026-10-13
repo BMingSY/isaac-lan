@@ -74,7 +74,8 @@ jobs:
           cp build-win32/isaac_lan_delta_test.exe ci/
           cp build-win32/isaac_lan_crafting_hud_test.exe \
             build-win32/isaac_lan_challenge_hud_test.exe \
-            build-win32/isaac_lan_character_catalog_test.exe ci/
+            build-win32/isaac_lan_character_catalog_test.exe \
+            build-win32/isaac_lan_pause_menu_test.exe ci/
           cp build-win32/isaac_lan_heap_watch.exe build-win32/isaac_lan_heap_fixture.exe ci/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -125,6 +126,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Challenge HUD ABI tests failed' }
           & ./ci/isaac_lan_character_catalog_test.exe 2>&1 | Tee-Object test-runs/windows/character-catalog.log
           if ($LASTEXITCODE -ne 0) { throw 'Character catalogue ABI tests failed' }
+          & ./ci/isaac_lan_pause_menu_test.exe 2>&1 | Tee-Object test-runs/windows/pause-menu.log
+          if ($LASTEXITCODE -ne 0) { throw 'Pause menu ABI tests failed' }
       - name: Test configuration and launch/run log isolation
         shell: pwsh
         run: |

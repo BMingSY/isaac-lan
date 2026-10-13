@@ -1,4 +1,5 @@
 #include "engine/rooms.h"
+#include "engine/pause_menu.h"
 #include "engine/visuals.h"
 #include "engine/audio.h"
 #include "engine/input.h"
@@ -2429,10 +2430,12 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
                           [&](Address p) { return at<int>(p, 0x1618) == slot + 1; });
     if (!room) {
         ViewRoster view(players);
+        pause_menu::ViewScope pauseView(image, slot);
         draw();
         return;
     }
     Scope scope(*room, players, false);
+    pause_menu::ViewScope pauseView(image, slot);
     draw();
 }
 bool checkpointReady() {

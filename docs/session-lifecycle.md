@@ -44,6 +44,10 @@ sequenceDiagram
 
 任何在线玩家可以请求全队暂停，由发起者恢复。暂停状态与发起者随视图同步；退出或掉线本身不会发起全队暂停。
 
+暂停菜单的光标、Items 和 Options 由各端本机输入操作；Items 读取本机玩家，设置只修改本机配置。恢复、客机离队与房主保存退出仍转换为可靠会话命令，避免原生菜单直接结束单个联网进程。暂停期间不转发菜单方向和确认输入；发起者离队后由房主恢复。
+
+J460 后端通过具名的 `pauseMenuShow`、`pauseMenuHide`、`pauseMenuControls` 和 `optionsSave` 复用原版界面。现有整段 Game::Controls 会同时处理游戏操作与退出，不能在客机重放；菜单控制因此单独调用，关闭状态按权威暂停边沿处理，避免原生消失动画造成重复切换。原生菜单索引临时映射到现有本机视图角色列表，返回时恢复，不分配或释放角色和菜单。队友恢复时本机仍停留在 Options 的情况，先调用原生配置保存，再关闭菜单。原版 Switch Controller 会改写联机绑定，只有该设置的确认被拦截。入口签名、角色列表与 Options 索引范围均受校验；具体边界和验收见[暂停菜单验证](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/pause-menu-validation.md)。
+
 只有房主可以保存并结束会话。客机单独离开时，房主移出其活动角色，保留道具和主要状态。离线角色不参与战斗和奖励人数计算。
 
 退出、换层和房间迁移在安全的更新边界执行，避免原生函数返回到已释放的房间、角色或镜头对象。
@@ -80,7 +84,7 @@ sequenceDiagram
 
 [`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 的存档包含扩展指纹、开局设置、全队房间与位置、原生 GameState 数据和完整性哈希。格式标识为 `IsaacLAN/save/3`，包含运行规则描述符；旧格式不再加载。
 
-房主三个存档栏分别使用游戏目录下的 第一存档栏的 `session-1.bin`、`session-2.bin`、`session-3.bin`。联机会话保存与原有单机 Continue 状态分别管理。临时挑战退出时不写入或删除已有联机存档，仍恢复受保护的单机 Continue；运行中检查点保留规则与固定栏位，支持原客机重连。挑战模式没有整场续玩入口，详见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。
+房主三个存档栏分别使用 `session-1.bin`、`session-2.bin`、`session-3.bin`。联机会话保存与原有单机 Continue 状态分别管理。临时挑战退出时不写入或删除已有联机存档，仍恢复受保护的单机 Continue；运行中检查点保留规则与固定栏位，支持原客机重连。挑战模式没有整场续玩入口，详见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。
 
 整场关闭后的续玩仍要求原房主使用原存档栏，并按原人数、原加入顺序集合。运行中重连的玩家标识匹配与整场续玩的栏位顺序是两套不同条件。
 

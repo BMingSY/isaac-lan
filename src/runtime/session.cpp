@@ -321,8 +321,21 @@ void __attribute__((fastcall)) consoleUpdate(void* console, void*) {
         originalConsoleUpdate(console);
 }
 void __cdecl controls() {
-    if (!gated || playingEnding || playingCinematic)
+    if (!gated || playingEnding || playingCinematic) {
         originalControls();
+        return;
+    }
+    const auto g = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
+    if (!session || session->phase() != lan::Phase::running || !g ||
+        *reinterpret_cast<int*>(g + 0x23a74) == 0)
+        return;
+    input::PauseScope inputScope(session->slot());
+    rooms::withView([&] { pause_menu::controls(executableImage); }, true);
+    const auto request = inputScope.intent();
+    if (request == pause_menu::Intent::resume && session->slot() == input::menuOwner())
+        session->command(lan::Command::resume);
+    else if (request == pause_menu::Intent::exit)
+        session->command(session->isHost() ? lan::Command::saveExit : lan::Command::leave);
 }
 struct SeedValue {
     std::array<std::uint32_t, 23> words;
@@ -471,6 +484,9 @@ bool captureNextInput() {
     lan::Reader reader{std::span(reinterpret_cast<const std::uint8_t*>(data), size)};
     localInput = reader.input();
     lua.setTop(state, top);
+    const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
+    if (game && *reinterpret_cast<int*>(game + 0x23a74) != 0)
+        localInput = input::pausedInput(localInput);
     std::optional<lan::InputRoom> inputRoom;
     const auto locations = rooms::captureLocations();
     if (rooms::stateReady() && session->slot() < locations.size()) {
@@ -572,15 +588,16 @@ void updateReplica(void* game) {
             return;
         }
         input::setMenuOwner(packet->pauseOwner);
-        if ((*reinterpret_cast<int*>(g + 0x23a74) != 0) != packet->paused) {
-            lan::Frame toggle;
-            toggle.players = session->players();
-            toggle.connected = packet->connected;
-            toggle.inputs[packet->pauseOwner].values[12] = 65535;
-            toggle.inputs[packet->pauseOwner].triggered = 1u << 12;
-            input::apply(toggle);
-            originalControls();
-        }
+        pause_menu::selectPlayer(executableImage, session->slot());
+        if (packet->paused != (authoritative && authoritative->paused))
+            rooms::withView(
+                [&] {
+                    if (packet->paused)
+                        pause_menu::show(executableImage);
+                    else
+                        pause_menu::hide(executableImage);
+                },
+                true);
         authoritative = std::move(packet);
         replicaPending.reset();
         session->applied(currentTick);
@@ -722,13 +739,15 @@ void updateOne(void* game) {
         else
             presentation::observeIntro(slot, context->introSerial, context->introActive);
     }
+    bool resumePause = false;
     for (unsigned slot = 0; slot < frame->players; ++slot) {
         const auto command = frame->commands[slot];
         const bool paused = *reinterpret_cast<int*>(g + 0x23a74) != 0;
-        if ((command == lan::Command::pause && !paused) ||
-            (command == lan::Command::resume && paused && slot == input::menuOwner())) {
+        if (command == lan::Command::pause && !paused) {
             frame->inputs[slot].values[12] = 65535;
             frame->inputs[slot].triggered |= 1u << 12;
+        } else if (command == lan::Command::resume && paused && slot == input::menuOwner()) {
+            resumePause = true;
         } else if (command == lan::Command::saveExit && slot == 0) {
             authorizedExit = true;
             rooms::requestExit(!session->settings().rules.transient);
@@ -751,7 +770,23 @@ void updateOne(void* game) {
     }
     currentTick = frame->tick;
     ++nextTick;
-    originalControls();
+    const bool paused = *reinterpret_cast<int*>(g + 0x23a74) != 0;
+    bool openPause = false;
+    if (!paused)
+        for (unsigned slot = 0; slot < frame->players; ++slot)
+            if ((frame->connected & (1u << slot)) && (frame->inputs[slot].triggered & (1u << 12)))
+                openPause = true;
+    if (openPause || resumePause)
+        rooms::withView(
+            [&] {
+                if (openPause)
+                    pause_menu::show(executableImage);
+                else
+                    pause_menu::hide(executableImage);
+            },
+            true);
+    else if (!paused)
+        originalControls();
     if (!gated) {
         return;
     }
@@ -1332,6 +1367,17 @@ int sharedCommand(lua_State* L) {
                            session->command(static_cast<lan::Command>(command)));
     return 1;
 }
+int pauseMenuState(lua_State* L) {
+    const auto value = pause_menu::state(executableImage);
+    lua.createTable(L, 0, 4);
+    for (const auto& [key, field] :
+         {std::pair{"page", value.page}, std::pair{"selection", value.selection},
+          std::pair{"controller", value.controller}, std::pair{"optionId", value.optionId}}) {
+        lua.pushInteger(L, field);
+        lua.setField(L, -2, key);
+    }
+    return 1;
+}
 using ExecuteMenu = void(__attribute__((thiscall)) *)(void*);
 ExecuteMenu originalExecuteMenu;
 void __attribute__((fastcall)) executeMenu(void* manager, void*) {
@@ -1731,6 +1777,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_poll", poll);
     function("net_challenges", challengeList);
     function("net_characters", characterList);
+    function("pause_menu_state", pauseMenuState);
     function("net_challenge", selectChallenge);
     function("net_finish_challenge", finishChallenge);
     function("net_start", start);

@@ -13,6 +13,7 @@
 | [共享开门概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/shared-deal-chances-validation.md) | 原生概率、门类型、跨房／换层与通关证据 |
 | [队伍兼容与合成袋](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md) | 跟班、商店、公共效果、口袋／药丸、死亡证明、跑圈、安装器及合成袋覆盖边界 |
 | [Issue 回归](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/issue-regressions.md) | 用户反馈、定向补测与各批次验收范围 |
+| [暂停菜单](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/pause-menu-validation.md) | 本机菜单与设置、暂停恢复、离队重连和保存续玩 |
 | [角色与支线](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/side-route-regressions.md) | 特殊角色、矿车／追逐、回溯与最终 Boss 汇合 |
 | [贪婪模式](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/greed-mode-validation.md) | 波次、购物、七层流程、最终战及夹具调试 |
 | [六条结局](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/ending-regressions.md) | 六路线固定条件、原生结局与增量同步验收 |

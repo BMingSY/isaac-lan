@@ -29,6 +29,8 @@ std::atomic<unsigned> labPacket{1};
 bool labInput = false;
 bool enabled = false;
 bool menuConfirm = false;
+bool localPauseInput = false;
+pause_menu::Intent pauseIntent = pause_menu::Intent::none;
 int viewSlot = -1;
 struct DeviceId {
     std::uintptr_t device;
@@ -147,6 +149,26 @@ Query originalQuery = nullptr;
 bool __attribute__((fastcall)) query(void* manager, void*, int controller, void* callback,
                                      const int* action, void* result, int* source) {
     const auto kind = reinterpret_cast<std::uintptr_t>(callback) - image;
+    if (localPauseInput && enabled && action &&
+        (kind == j460::entry::inputValue || kind == 0x620940 ||
+         kind == j460::entry::inputTriggered)) {
+        if (pauseIntent != pause_menu::Intent::none) {
+            if (kind == j460::entry::inputValue && result)
+                *static_cast<float*>(result) = 0;
+            return false;
+        }
+        const bool pressed = originalQuery(manager, -1, callback, action, result, source);
+        if (pressed && kind == j460::entry::inputTriggered) {
+            const auto request = pause_menu::intent(image, *action);
+            if (request != pause_menu::Intent::none) {
+                pauseIntent = request;
+                return false;
+            }
+            if (pause_menu::changesController(image, *action))
+                return false;
+        }
+        return pressed;
+    }
     if (menuConfirm && kind == j460::entry::inputTriggered && action && *action == 14)
         return true;
     // Map is a local interface action, including queries during Game::Controls
@@ -400,6 +422,18 @@ ViewScope::ViewScope(int slot) : previous(viewSlot) {
 ViewScope::~ViewScope() {
     viewSlot = previous;
 }
+PauseScope::PauseScope(int slot)
+    : view(slot), previous(localPauseInput), previousIntent(pauseIntent) {
+    localPauseInput = true;
+    pauseIntent = pause_menu::Intent::none;
+}
+PauseScope::~PauseScope() {
+    localPauseInput = previous;
+    pauseIntent = previousIntent;
+}
+pause_menu::Intent PauseScope::intent() const {
+    return pauseIntent;
+}
 void install(std::uintptr_t base, void (*log)(const std::string&), bool installed) {
     image = base;
     logger = log;
@@ -462,14 +496,8 @@ void apply(const lan::Frame& frame) {
                 break;
             }
     }
-    if (enabled && g) {
-        const auto begin = at<std::uintptr_t>(g, 0x1baa8), end = at<std::uintptr_t>(g, 0x1baac);
-        for (auto p = begin; p != end; p += 4)
-            if (at<int>(at<std::uintptr_t>(p, 0), 0x1618) == static_cast<int>(pauseOwner + 1)) {
-                at<int>(g, 0x23a74 + 0xfac) = (p - begin) / 4;
-                break;
-            }
-    }
+    if (enabled)
+        pause_menu::selectPlayer(image, runtime::localViewSlot());
 }
 void reset() {
     automation.clear();

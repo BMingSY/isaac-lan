@@ -320,6 +320,7 @@ add_library(
     src/engine/versions/j460/crafting_hud.cpp
     src/engine/versions/j460/challenge_hud.cpp
     src/engine/versions/j460/characters.cpp
+    src/engine/versions/j460/pause_menu.cpp
     src/engine/versions/j460/item_presentation.cpp
     src/engine/versions/j460/rewind.cpp
     src/presentation/frontend.cpp
@@ -431,6 +432,16 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME native.character-catalog COMMAND isaac_lan_character_catalog_test)
     set_tests_properties(native.character-catalog PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_pause_menu_test tests/pause_menu_test.cpp
+                                             src/engine/versions/j460/pause_menu.cpp)
+    target_include_directories(isaac_lan_pause_menu_test PRIVATE src)
+    target_link_libraries(isaac_lan_pause_menu_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_pause_menu_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_pause_menu_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.pause-menu COMMAND isaac_lan_pause_menu_test)
+    set_tests_properties(native.pause-menu PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 endif()
 
 set_target_properties(isaac_lan_probe PROPERTIES PREFIX "")
