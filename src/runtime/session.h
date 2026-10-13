@@ -21,7 +21,6 @@ void halfCompleted();
 int localViewSlot();
 bool replica();
 bool challengeActive();
-bool interceptChallengeEnding();
 std::array<int, 2> challengeDestination();
 bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimension, int room,
                     bool teleport);
@@ -34,7 +33,7 @@ void refreshAutomation(std::uint32_t renderFrame);
 void pollLocalConsole();
 void beginStage(bool same, int animation, unsigned restart = 0, unsigned cinematic = 0);
 void prepareEnding();
-bool beginEnding(unsigned ending);
+bool beginEnding(unsigned ending, bool completed = false);
 void beginRewind(std::span<const std::uint8_t> bytes);
 bool requestRoom(const lan::RoomRequest&);
 std::uint32_t tick();

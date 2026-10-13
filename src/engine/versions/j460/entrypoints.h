@@ -68,6 +68,7 @@ inline constexpr std::uint32_t managerDeleteSave = 0x559130;
 inline constexpr std::uint32_t managerSaveRerun = 0x559180;
 inline constexpr std::uint32_t managerExecuteStart = 0x559720;
 inline constexpr std::uint32_t managerExecuteMenu = 0x559d00;
+inline constexpr std::uint32_t managerResetButtonPrompts = 0x239b0;
 inline constexpr std::uint32_t menuGameUpdate = 0x581140;
 inline constexpr std::uint32_t menuManagerRender = 0x58a040;
 inline constexpr std::uint32_t minimapCache = 0x58b5e0;
@@ -164,6 +165,8 @@ inline constexpr std::uint32_t hUDChallengeParamsReturn = 0x5a54e8;
 inline constexpr std::uint32_t gameFinishChallenge = 0x304f20;
 inline constexpr std::uint32_t gameGetChallengeParams = 0x306940;
 inline constexpr std::uint32_t craftingBagHudRender = 0x449510;
+inline constexpr std::uint32_t playerHudPocketRender = 0x4471c0;
+inline constexpr std::uint32_t playerHudPocketPosition = 0x5a73ef;
 inline constexpr std::uint32_t craftingBagMaterialQuery = 0x44a1f6;
 inline constexpr std::uint32_t craftingBagPreviewQuery = 0x443b06;
 inline constexpr std::uint32_t craftingBagMaterialCount = 0x3d54e2;
@@ -173,5 +176,7 @@ inline constexpr std::uint32_t playerGetActiveItem = 0x2a2f0;
 namespace globals {
 inline constexpr std::uint32_t game = 0x871678;
 inline constexpr std::uint32_t manager = 0x87169c;
+inline constexpr std::uint32_t logicalWidth = 0x878dc4;
+inline constexpr std::uint32_t logicalHeight = 0x878edc;
 } // namespace globals
 } // namespace isaac::engine::j460

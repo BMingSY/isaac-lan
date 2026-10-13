@@ -23,9 +23,11 @@ class Session {
     ~Session();
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
-    bool host(std::uint16_t port, const std::string& fingerprint, const std::string& mods = {});
+    bool host(std::uint16_t port, const std::string& fingerprint, const std::string& mods = {},
+              const LobbyAccess& access = {});
     bool join(const std::string& address, std::uint16_t port, const std::string& fingerprint,
-              const std::string& identity = {}, const std::string& mods = {});
+              const std::string& identity = {}, const std::string& mods = {},
+              const LobbyAccess& access = {});
     bool reconnect();
     void poll();
     void close();
@@ -38,6 +40,9 @@ class Session {
     bool checkpointNeeded() const;
     bool choose(Choice choice);
     bool configureRules(const RunRules& rules);
+    bool rulesAvailable(const RunRules& rules) const;
+    const LobbyAccess& localAccess() const;
+    const std::array<LobbyAccess, maxPlayers>& access() const;
     const RunRules& rules() const;
     bool command(Command command);
     const std::array<Choice, maxPlayers>& choices() const;
@@ -51,7 +56,7 @@ class Session {
     std::optional<Stage> takeStage();
     bool cinematicReady();
     bool cinematicActive() const;
-    bool beginEnding(unsigned ending, const Progress& progress = {});
+    bool beginEnding(unsigned ending, const Progress& progress = {}, bool completed = false);
     std::optional<Ending> takeEnding();
     bool requestRoom(const RoomRequest&);
     std::array<std::optional<RoomRequest>, maxPlayers> takeRoomRequests();

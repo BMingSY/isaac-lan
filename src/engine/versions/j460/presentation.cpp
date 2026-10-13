@@ -54,7 +54,8 @@ void __attribute__((fastcall)) promptControls(void* prompt, void*) {
     }
     if (runtime::challengeActive()) {
         if (promptIdle(reinterpret_cast<std::uintptr_t>(prompt))) {
-            at<int>(reinterpret_cast<std::uintptr_t>(prompt), 0x12c) = 1;
+            // Native result 2 declines; result 1 immediately starts a lap.
+            at<int>(reinterpret_cast<std::uintptr_t>(prompt), 0x12c) = 2;
             reinterpret_cast<PromptCall>(image + j460::entry::victoryPromptHide)(prompt);
         }
         return;

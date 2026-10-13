@@ -482,6 +482,18 @@ void reset() {
 void clearAutomation() {
     automation.clear();
 }
+void resetMenuPrompts() {
+    if (!image)
+        return;
+    const auto manager = at<std::uintptr_t>(image, j460::globals::manager);
+    if (!manager)
+        return;
+    // J460 embeds this group in Manager. The native reset hides the previous
+    // menu's BACK/SELECT papers without replacing widgets or their ownership.
+    using ResetPrompts = void(__attribute__((thiscall))*)(void*, bool);
+    reinterpret_cast<ResetPrompts>(image + j460::entry::managerResetButtonPrompts)(
+        reinterpret_cast<void*>(manager + 0x4a950), false);
+}
 void finishUpdate() {
     // A network input covers one full update and its interpolation update.
     // The native input manager clears press edges between those two renders;

@@ -2,6 +2,7 @@
 #include "runtime/progression.h"
 #include "net/compression.h"
 #include "test_support.h"
+#include <winsock2.h>
 #include <windows.h>
 #include <algorithm>
 #include <chrono>
@@ -12,6 +13,9 @@
 #include <random>
 using namespace isaac::lan;
 namespace {
+LobbyAccess testAccess() {
+    return {{0, 1, 2, 3, 7, 23}, {{1001, 2}, {1001, 3}}, {0, 1, 2, 3, 7, 23}};
+}
 template <class F> void until(F f) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(8);
     while (!f()) {
@@ -27,9 +31,10 @@ struct Group {
         : count(n) {
         for (unsigned i = 0; i < n; ++i)
             peers[i] = std::make_unique<Session>();
-        require(peers[0]->host(0, "state-test", "host-mods"), "Host failed");
+        require(peers[0]->host(0, "state-test", "host-mods", testAccess()), "Host failed");
         for (unsigned i = 1; i < n; ++i)
-            require(peers[i]->join(address, peers[0]->port(), "state-test", {}, "cosmetic-mods"),
+            require(peers[i]->join(address, peers[0]->port(), "state-test", {}, "cosmetic-mods",
+                                   testAccess()),
                     "Join failed");
         until([&] {
             poll();
@@ -140,7 +145,8 @@ void greedSettings() {
         g.poll();
         g.step(2);
         g.peers[1] = std::make_unique<Session>();
-        require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity),
+        require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {},
+                                 testAccess()),
                 "Greed guest could not rejoin");
         until([&] {
             g.poll();
@@ -273,7 +279,8 @@ void floorRejoin() {
     g.poll();
     require(g.step(1).connected == 1, "Departure did not remove guest from active roster");
     g.peers[1] = std::make_unique<Session>();
-    require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, "other-mods"),
+    require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, "other-mods",
+                             testAccess()),
             "Returning connection failed");
     until([&] {
         g.poll();
@@ -309,6 +316,31 @@ void floorRejoin() {
               "loading; no input-history replay");
 }
 void endingEvents() {
+    for (unsigned count = 2; count <= 4; ++count)
+        for (unsigned scenario = 0; scenario < 3; ++scenario) {
+            const RunRules rules = scenario ? RunRules{1001, 2, 23, 0, true} : RunRules{};
+            const bool completed = scenario == 2;
+            Group group(count, 0, "127.0.0.1", rules);
+            group.ready();
+            group.step(0);
+            if (!scenario)
+                require(!group.peers[0]->beginEnding(6, {}, true),
+                        "Ordinary run declared explicit rule completion");
+            require(group.peers[0]->beginEnding(6, {}, completed), "Terminal event rejected");
+            require(group.peers[0]->beginEnding(6, {}, completed), "Terminal replay rejected");
+            require(!group.peers[0]->beginEnding(6, {}, !completed),
+                    "Same ending ID changed native ending into explicit completion");
+            for (unsigned slot = 1; slot < count; ++slot) {
+                std::optional<Ending> event;
+                until([&] {
+                    group.poll();
+                    event = group.peers[slot]->takeEnding();
+                    return event.has_value();
+                });
+                require(event == Ending{6, {}, completed},
+                        "Native ending and explicit completion were conflated on a replica");
+            }
+        }
     Group g(4);
     g.ready();
     g.step(0);
@@ -487,8 +519,9 @@ void stageDuringRejoin() {
     g.poll();
     g.step(1);
     g.peers[1] = std::make_unique<Session>();
-    require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity),
-            "Returning connection failed");
+    require(
+        g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {}, testAccess()),
+        "Returning connection failed");
     until([&] {
         g.poll();
         return g.peers[1]->phase() == Phase::waiting;
@@ -715,11 +748,11 @@ void lobby() {
     Session host, guest;
     require(!host.ready() && !host.submit(0, {}) && !host.command(Command::pause),
             "Idle session accepted gameplay");
-    require(host.host(0, "test", "mods"), "Host failed");
+    require(host.host(0, "test", "mods", testAccess()), "Host failed");
     Start start;
     start.seed = "YV039KQF";
     require(!host.start(start), "Single-player lobby started");
-    require(guest.join("127.0.0.1", host.port(), "test", {}, "mods"), "Join failed");
+    require(guest.join("127.0.0.1", host.port(), "test", {}, "mods", testAccess()), "Join failed");
     auto poll = [&] {
         host.poll();
         guest.poll();
@@ -761,10 +794,10 @@ void lobby() {
     require(!host.choose({}) && !guest.choose({}), "Running session changed lobby choice");
 }
 void runRules() {
-    const RunRules rules{1001, 1, 23, 0, true};
+    const RunRules rules{1001, 2, 23, 0, true};
     Session host, guest;
-    require(host.host(0, "test"), "Host failed");
-    require(guest.join("127.0.0.1", host.port(), "test"), "Join failed");
+    require(host.host(0, "test", {}, testAccess()), "Host failed");
+    require(guest.join("127.0.0.1", host.port(), "test", {}, {}, testAccess()), "Join failed");
     auto poll = [&] {
         host.poll();
         guest.poll();
@@ -785,7 +818,7 @@ void runRules() {
     require(guest.choose({23, true}) && host.choose({23, true}), "Ready failed");
     guest.poll(); // Old ready packet is now on the wire, before the host changes rules.
     auto revised = rules;
-    revised.version = 2;
+    revised.version = 3;
     require(host.configureRules(revised), "Revision failed");
     until([&] {
         poll();
@@ -827,7 +860,8 @@ void runRules() {
         const auto mask = ((1u << n) - 1) & ~(1u << slot);
         require(g.step(1).connected == mask, "Disconnected seat remained active");
         g.peers[slot] = std::make_unique<Session>();
-        require(g.peers[slot]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity),
+        require(g.peers[slot]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {},
+                                    testAccess()),
                 "Challenge rejoin failed");
         until([&] {
             g.poll();
@@ -854,10 +888,462 @@ void runRules() {
         });
     }
 }
+struct WireSocket {
+    SOCKET value = INVALID_SOCKET;
+    ~WireSocket() {
+        if (value != INVALID_SOCKET)
+            closesocket(value);
+    }
+    void send(const Writer& message) {
+        std::vector<std::uint8_t> framed{static_cast<std::uint8_t>(message.bytes.size() >> 8),
+                                         static_cast<std::uint8_t>(message.bytes.size())};
+        framed.insert(framed.end(), message.bytes.begin(), message.bytes.end());
+        require(::send(value, reinterpret_cast<const char*>(framed.data()), framed.size(), 0) ==
+                    static_cast<int>(framed.size()),
+                "Wire fixture send failed");
+    }
+};
+void wireRules(Writer& writer, const RunRules& rules) {
+    writer.u16(rules.id);
+    writer.u16(rules.version);
+    writer.u16(rules.character);
+    writer.u8(rules.difficulty);
+    writer.u8(rules.transient);
+}
+void accessWireValidation() {
+    const LobbyAccess basic{{0}, {}, {0}};
+    // Bypass Session::choose to exercise the authority's untrusted wire boundary.
+    {
+        Session host;
+        require(host.host(0, "wire-access", {}, testAccess()), "Wire host failed");
+        WireSocket remote;
+        remote.value = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_port = htons(host.port());
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        require(connect(remote.value, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0,
+                "Wire client connect failed");
+        Writer hello(Message::hello);
+        hello.u16(protocolVersion);
+        hello.string("wire-access");
+        hello.string(std::string(32, 'a'));
+        hello.string("");
+        hello.access(basic);
+        remote.send(hello);
+        until([&] {
+            host.poll();
+            return host.players() == 2;
+        });
+        const auto choose = [&](std::uint16_t character) {
+            Writer choice(Message::choice);
+            choice.u32(0);
+            choice.u16(character);
+            choice.u8(1);
+            remote.send(choice);
+            Writer marker(Message::integration);
+            const std::array<std::uint8_t, 1> bytes{1};
+            marker.blob(bytes);
+            remote.send(marker);
+            until([&] {
+                host.poll();
+                return host.takeIntegration().has_value();
+            });
+        };
+        choose(23);
+        require(host.choices()[1] == Choice{}, "Raw choice bypassed local character access");
+        choose(0);
+        require(host.choices()[1] == Choice{0, true}, "Raw allowed choice rejected");
+    }
+    // A host cannot replace this peer's declaration or force an inaccessible start.
+    for (unsigned scenario = 0; scenario < 5; ++scenario) {
+        Session guest;
+        WireSocket listener, remote;
+        listener.value = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        require(bind(listener.value, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0 &&
+                    listen(listener.value, 1) == 0,
+                "Wire listener failed");
+        int length = sizeof(address);
+        require(getsockname(listener.value, reinterpret_cast<sockaddr*>(&address), &length) == 0,
+                "Wire listener address failed");
+        u_long nonblocking = 1;
+        require(ioctlsocket(listener.value, FIONBIO, &nonblocking) == 0,
+                "Wire listener setup failed");
+        require(guest.join("127.0.0.1", ntohs(address.sin_port), "wire-access", {}, {}, basic),
+                "Wire guest failed");
+        until([&] {
+            guest.poll();
+            remote.value = accept(listener.value, nullptr, nullptr);
+            return remote.value != INVALID_SOCKET;
+        });
+        Writer welcome(Message::welcome);
+        welcome.u8(1);
+        remote.send(welcome);
+        const RunRules rules = scenario == 1 ? RunRules{1001, 2, 23, 0, true} : RunRules{};
+        Writer lobby(Message::lobby);
+        lobby.u8(2);
+        lobby.u8(1);
+        lobby.u32(0);
+        wireRules(lobby, rules);
+        for (unsigned i = 0; i < maxPlayers; ++i) {
+            lobby.u16(0);
+            lobby.u8(0);
+        }
+        lobby.access(testAccess());
+        lobby.access(scenario == 2 ? testAccess() : basic);
+        lobby.access({});
+        lobby.access({});
+        remote.send(lobby);
+        if (scenario != 2) {
+            Writer start(Message::start);
+            wireRules(start, rules);
+            start.string("YV039KQF");
+            start.u8(0);
+            for (unsigned i = 0; i < maxPlayers; ++i)
+                start.u16(i == 1 && scenario < 3 ? 23 : 0);
+            start.progress(std::nullopt);
+            start.string(std::string(32, 'b'));
+            start.u32(0);
+            start.u32(0);
+            start.u8(3);
+            start.u32(0);
+            start.u64(snapshotHash({}));
+            remote.send(start);
+            if (scenario >= 3) {
+                Writer ending(Message::ending);
+                ending.u8(6);
+                ending.u8(scenario == 3 ? 1 : 2);
+                ending.progress(Progress{});
+                remote.send(ending);
+            }
+        }
+        until([&] {
+            guest.poll();
+            return guest.phase() == Phase::failed;
+        });
+        require(guest.error().find(scenario >= 3   ? "Invalid authoritative ending"
+                                   : scenario == 2 ? "changed local"
+                                                   : "unavailable") != std::string::npos,
+                "Client rejected forged access for an unrelated reason");
+    }
+}
+void lobbyAccess() {
+    accessWireValidation();
+    const RunRules rules{1001, 2, 23, 0, true};
+    const LobbyAccess basic{{0}, {}, {0}};
+    require(LobbyAccess{}.valid() && !LobbyAccess{}.allowsCharacter(0) &&
+                !LobbyAccess{}.allowsRules(rules),
+            "Empty profile declaration granted access");
+    LobbyAccess maximum;
+    for (unsigned i = 0; i < 256; ++i)
+        maximum.characters.push_back(i);
+    maximum.unlockedCharacters = maximum.characters;
+    for (unsigned i = 1; i <= 64; ++i)
+        maximum.rules.push_back({static_cast<std::uint16_t>(i), 1});
+    Writer encoded(Message::lobby);
+    for (unsigned i = 0; i < maxPlayers; ++i)
+        encoded.access(maximum);
+    require(encoded.bytes.size() + 64 <= maxMessageSize, "Access roster exceeds message bound");
+    Reader roundtrip(encoded.bytes);
+    roundtrip.u8();
+    for (unsigned i = 0; i < maxPlayers; ++i)
+        require(roundtrip.access() == maximum, "Access round trip changed IDs");
+    roundtrip.finish();
+    Writer single(Message::hello);
+    single.access(testAccess());
+    for (std::size_t length = 1; length < single.bytes.size(); ++length)
+        rejects(
+            [&] {
+                Reader shortRead(std::span(single.bytes).first(length));
+                shortRead.u8();
+                shortRead.access();
+            },
+            "Truncated access declaration accepted");
+    const std::vector<LobbyAccess> invalidAccess{
+        {{0, 0}, {}, {0}},
+        {{1, 0}, {}, {0, 1}},
+        {{65535}, {}, {65535}},
+        {{0}, {{0, 1}}, {0}},
+        {{0}, {{1, 0}}, {0}},
+        {{0}, {{2, 1}, {1, 1}}, {0}},
+        {{0}, {{1, 1}, {1, 1}}, {0}},
+        {{0}, {}, {}},
+        {{0}, {}, {0, 0}},
+    };
+    for (const auto& invalid : invalidAccess) {
+        require(!invalid.valid(), "Invalid access IDs accepted");
+        rejects([&] { single.access(invalid); }, "Invalid access encoded");
+        Session rejected;
+        require(!rejected.host(0, "access-test", {}, invalid), "Host accepted invalid access");
+    }
+    maximum.characters.push_back(256);
+    require(!maximum.valid(), "Oversized character list accepted");
+    maximum.characters.pop_back();
+    maximum.rules.push_back({65, 1});
+    require(!maximum.valid(), "Oversized rule list accepted");
+    for (const auto& bytes : std::vector<std::vector<std::uint8_t>>{{1, 1},
+                                                                    {0, 0, 65},
+                                                                    {0, 2, 0, 0, 0, 0, 0, 0},
+                                                                    {0, 0, 1, 0, 0, 0, 1},
+                                                                    {0, 1, 0, 0, 2, 0}})
+        rejects(
+            [&] {
+                Reader invalid(bytes);
+                invalid.access();
+            },
+            "Malformed access wire data accepted");
+
+    struct Lobby {
+        std::vector<std::unique_ptr<Session>> peers;
+        explicit Lobby(const std::vector<LobbyAccess>& profiles) {
+            peers.push_back(std::make_unique<Session>());
+            require(peers[0]->host(0, "access-test", {}, profiles[0]), "Access host failed");
+            for (std::size_t i = 1; i < profiles.size(); ++i)
+                add(profiles[i]);
+        }
+        void poll() {
+            for (auto& peer : peers)
+                if (peer) {
+                    peer->poll();
+                    require(peer->phase() != Phase::failed, peer->error().c_str());
+                }
+        }
+        void add(const LobbyAccess& profile) {
+            peers.push_back(std::make_unique<Session>());
+            require(
+                peers.back()->join("127.0.0.1", peers[0]->port(), "access-test", {}, {}, profile),
+                "Access guest failed");
+            until([&] {
+                poll();
+                return peers[0]->players() == peers.size() &&
+                       peers.back()->players() == peers.size();
+            });
+        }
+        void chooseAll(std::uint16_t character) {
+            for (auto& peer : peers)
+                require(peer->choose({character, true}), "Allowed choice rejected");
+            until([&] {
+                poll();
+                for (unsigned i = 0; i < peers.size(); ++i)
+                    if (!peers[0]->choices()[i].ready)
+                        return false;
+                return true;
+            });
+        }
+    };
+    // No participant may borrow the host's access, including saved-seat Resume.
+    for (unsigned n = 2; n <= 4; ++n) {
+        for (unsigned locked = 0; locked < n; ++locked) {
+            std::vector<LobbyAccess> profiles(n, testAccess());
+            profiles[locked] = basic;
+            Lobby lobby(profiles);
+            for (unsigned i = 0; i < n; ++i) {
+                require(lobby.peers[i]->localAccess() == profiles[i], "Local access changed");
+                require(!lobby.peers[i]->rulesAvailable(rules), "Shared unlock leaked to a peer");
+                for (unsigned j = 0; j < n; ++j)
+                    require(lobby.peers[i]->access()[j] == profiles[j], "Roster access mismatch");
+            }
+            require(!lobby.peers[0]->configureRules(rules), "Locked participant entered rules");
+            require(!lobby.peers[locked]->choose({23, false}) &&
+                        !lobby.peers[locked]->choose({23, true}),
+                    "Locked local character could be selected or readied");
+            lobby.chooseAll(0);
+            Start start;
+            start.seed = "YV039KQF";
+            start.characters[locked] = 23;
+            require(!lobby.peers[0]->start(start), "Host started a locked character");
+            start.snapshot.resize(123, 42);
+            require(!lobby.peers[0]->start(start), "Resume bypassed saved character access");
+            start.characters[locked] = 0;
+            require(lobby.peers[0]->start(start), "Allowed ordinary Resume rejected");
+            until([&] {
+                lobby.poll();
+                return lobby.peers.back()->phase() == Phase::running;
+            });
+        }
+        // A permitted forced character is insufficient without its rule key.
+        auto missingRule = testAccess();
+        missingRule.rules.clear();
+        std::vector<LobbyAccess> profiles(n, testAccess());
+        profiles.back() = missingRule;
+        Lobby noRule(profiles);
+        require(!noRule.peers[0]->configureRules(rules), "Missing rule key ignored");
+    }
+    // Empty declarations are fail-closed even through a direct start call.
+    {
+        Lobby empty({{}, {}});
+        Start start;
+        start.seed = "YV039KQF";
+        require(!empty.peers[0]->choose({0, true}) && !empty.peers[0]->start(start),
+                "Missing profile declaration granted an implicit default character");
+    }
+    // A consumed new-run resource must not lock an already unlocked saved actor.
+    {
+        const LobbyAccess noResource{{0}, {}, {0, 9}};
+        Lobby lobby({basic, noResource});
+        lobby.chooseAll(0);
+        Start start;
+        start.seed = "YV039KQF";
+        start.characters[1] = 9;
+        require(!lobby.peers[1]->choose({9, true}) && !lobby.peers[0]->start(start),
+                "Unavailable new-run character was selected");
+        start.snapshot.resize(123, 42);
+        require(lobby.peers[0]->start(start), "Resume consumed new-run availability again");
+        until([&] {
+            lobby.poll();
+            return lobby.peers[1]->phase() == Phase::running;
+        });
+        require(lobby.peers[0]->ready() && lobby.peers[1]->ready(), "Resume ready failed");
+        until([&] {
+            lobby.poll();
+            return lobby.peers[0]->connectedMask() == 3;
+        });
+        const auto identity = lobby.peers[1]->identity();
+        lobby.peers[1]->close();
+        lobby.peers[1].reset();
+        until([&] {
+            lobby.poll();
+            return lobby.peers[0]->connectedMask() == 1;
+        });
+        lobby.peers[1] = std::make_unique<Session>();
+        require(lobby.peers[1]->join("127.0.0.1", lobby.peers[0]->port(), "access-test", identity,
+                                     {}, noResource),
+                "Unlocked rejoin failed");
+        until([&] {
+            lobby.poll();
+            return lobby.peers[1]->phase() == Phase::waiting;
+        });
+        require(lobby.peers[0]->checkpoint(start, 0), "Unlocked rejoin checkpoint failed");
+        until([&] {
+            lobby.poll();
+            return lobby.peers[1]->phase() == Phase::running;
+        });
+        require(lobby.peers[1]->settings().characters[1] == 9,
+                "Rejoin replaced an unlocked saved actor");
+    }
+    // An ineligible late arrival can enter the lobby, but invalidates readiness.
+    for (unsigned n = 2; n <= 4; ++n) {
+        Lobby lobby(std::vector<LobbyAccess>(n - 1, testAccess()));
+        require(lobby.peers[0]->configureRules(rules), "Eligible rule setup failed");
+        until([&] {
+            lobby.poll();
+            return lobby.peers.back()->rules() == rules;
+        });
+        lobby.chooseAll(23);
+        lobby.add(basic);
+        for (unsigned i = 0; i < n; ++i) {
+            require(!lobby.peers[0]->choices()[i].ready, "Late locked arrival retained readiness");
+            require(!lobby.peers[i]->choose({23, true}), "Locked lobby accepted ready");
+        }
+        Start start;
+        start.seed = "YV039KQF";
+        start.rules = rules;
+        start.characters.fill(23);
+        require(!lobby.peers[0]->start(start), "Late locked arrival started rules");
+        require(lobby.peers[0]->configureRules({}), "Cannot return to ordinary rules");
+        until([&] {
+            lobby.poll();
+            return lobby.peers.back()->rules().id == 0;
+        });
+        require(lobby.peers[0]->choices()[n - 1].character == 0 &&
+                    lobby.peers.back()->choices()[n - 1].character == 0,
+                "Returning to ordinary rules retained a locked character");
+        lobby.chooseAll(0);
+    }
+    // Compaction must carry the profile with its identity, and erase departed data.
+    {
+        const LobbyAccess other{{0, 7}, {}, {0, 7}};
+        Lobby lobby({testAccess(), basic, other, testAccess()});
+        lobby.peers[1]->close();
+        lobby.peers[1].reset();
+        until([&] {
+            lobby.poll();
+            return lobby.peers[0]->players() == 3 && lobby.peers[2]->slot() == 1 &&
+                   lobby.peers[3]->slot() == 2;
+        });
+        require(lobby.peers[0]->access()[1] == other &&
+                    lobby.peers[0]->access()[2] == testAccess() &&
+                    lobby.peers[0]->access()[3] == LobbyAccess{},
+                "Lobby compaction moved or retained the wrong profile");
+        require(lobby.peers[2]->localAccess() == other && lobby.peers[2]->choose({7, true}),
+                "Compacted peer lost its local choice access");
+        require(!lobby.peers[2]->choose({23, true}), "Compacted peer inherited departed access");
+    }
+    // A new connection with the original identity must still qualify for its
+    // saved character and rules; an unchanged Session reconnect preserves access.
+    for (unsigned n = 2; n <= 4; ++n) {
+        Group group(n, 0, "127.0.0.1", rules);
+        group.ready();
+        group.step(0);
+        const auto slot = n - 1;
+        const auto identity = group.peers[slot]->identity();
+        group.peers[slot]->close();
+        group.peers[slot].reset();
+        group.poll();
+        require(group.step(1).connected == (((1u << n) - 1) & ~(1u << slot)),
+                "Access rejoin fixture did not disconnect");
+        for (unsigned missing = 0; missing < 2; ++missing) {
+            auto denied = testAccess();
+            if (missing)
+                denied.rules.clear();
+            else {
+                denied.characters.pop_back();
+                denied.unlockedCharacters.pop_back();
+            }
+            Session rejected;
+            require(rejected.join("127.0.0.1", group.peers[0]->port(), "state-test", identity, {},
+                                  denied),
+                    "Denied rejoin did not connect");
+            until([&] {
+                group.poll();
+                rejected.poll();
+                return rejected.phase() == Phase::failed;
+            });
+            require(rejected.error().find("unavailable") != std::string::npos,
+                    "Rejoin failed for an unrelated reason");
+        }
+        group.peers[slot] = std::make_unique<Session>();
+        require(group.peers[slot]->join("127.0.0.1", group.peers[0]->port(), "state-test", identity,
+                                        {}, testAccess()),
+                "Eligible rejoin failed");
+        until([&] {
+            group.poll();
+            return group.peers[slot]->phase() == Phase::waiting;
+        });
+        auto checkpoint = group.peers[0]->settings();
+        checkpoint.snapshot.resize(123, 42);
+        require(group.peers[0]->checkpoint(checkpoint, 2), "Eligible rejoin checkpoint failed");
+        until([&] {
+            group.poll();
+            return group.peers[slot]->phase() == Phase::running;
+        });
+        require(group.peers[slot]->localAccess() == testAccess(), "Rejoin changed local access");
+        require(group.peers[slot]->ready(), "Eligible rejoined engine rejected");
+        until([&] {
+            group.poll();
+            return group.peers[0]->connectedMask() == (1u << n) - 1;
+        });
+        group.peers[slot]->abort("fixture disconnect");
+        until([&] {
+            group.peers[0]->poll();
+            return group.peers[0]->connectedMask() != (1u << n) - 1;
+        });
+        require(group.peers[slot]->reconnect(), "Reconnect failed");
+        until([&] {
+            group.poll();
+            return group.peers[slot]->phase() == Phase::waiting;
+        });
+        require(group.peers[slot]->localAccess() == testAccess(), "Reconnect lost local access");
+    }
+}
 void handshake() {
     Session host, rejected;
-    require(host.host(0, "supported"), "Host failed");
-    require(rejected.join("127.0.0.1", host.port(), "incompatible"), "Connection failed");
+    require(host.host(0, "supported", {}, testAccess()), "Host failed");
+    require(rejected.join("127.0.0.1", host.port(), "incompatible", {}, {}, testAccess()),
+            "Connection failed");
     until([&] {
         host.poll();
         rejected.poll();
@@ -866,16 +1352,18 @@ void handshake() {
     require(host.phase() == Phase::lobby && host.players() == 1 && !rejected.error().empty(),
             "Rejected handshake damaged host");
     Session guest;
-    require(guest.join("127.0.0.1", host.port(), "supported"), "Valid join after rejection failed");
+    require(guest.join("127.0.0.1", host.port(), "supported", {}, {}, testAccess()),
+            "Valid join after rejection failed");
     until([&] {
         host.poll();
         guest.poll();
         return host.players() == 2 && guest.phase() == Phase::lobby;
     });
     Session badAddress, badIdentity;
-    require(!badAddress.join("not a host", host.port(), "supported"),
+    require(!badAddress.join("not a host", host.port(), "supported", {}, {}, testAccess()),
             "Invalid host address accepted");
-    require(!badIdentity.join("127.0.0.1", host.port(), "supported", "not-an-identity"),
+    require(!badIdentity.join("127.0.0.1", host.port(), "supported", "not-an-identity", {},
+                              testAccess()),
             "Invalid identity accepted");
 }
 void hostNames() {
@@ -895,7 +1383,8 @@ void hostNames() {
     });
     require(g.peers[1]->identity() == identity, "Host name reconnect changed identity");
     Session missing;
-    require(missing.join("isaac-lan-does-not-exist.invalid", g.peers[0]->port(), "state-test"),
+    require(missing.join("isaac-lan-does-not-exist.invalid", g.peers[0]->port(), "state-test", {},
+                         {}, testAccess()),
             "Valid host name syntax rejected");
     until([&] {
         missing.poll();
@@ -904,7 +1393,7 @@ void hostNames() {
     require(missing.error().find("resolve") != std::string::npos,
             "DNS failure lost its explanation");
     Session cancelled;
-    require(cancelled.join("localhost", g.peers[0]->port(), "state-test"),
+    require(cancelled.join("localhost", g.peers[0]->port(), "state-test", {}, {}, testAccess()),
             "DNS cancellation setup failed");
     cancelled.close();
     cancelled.poll();
@@ -1028,8 +1517,9 @@ void integrations() {
         return g.peers[0]->connectedMask() == 3;
     });
     g.peers[2] = std::make_unique<Session>();
-    require(g.peers[2]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity),
-            "Integration rejoin failed");
+    require(
+        g.peers[2]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {}, testAccess()),
+        "Integration rejoin failed");
     until([&] {
         g.poll();
         return g.peers[2]->phase() == Phase::waiting;
@@ -1233,6 +1723,7 @@ int main(int argc, char** argv) {
                                   {"input-rooms", inputRooms},
                                   {"lobby", lobby},
                                   {"run-rules", runRules},
+                                  {"lobby-access", lobbyAccess},
                                   {"handshake", handshake},
                                   {"host-names", hostNames},
                                   {"commands", commands},

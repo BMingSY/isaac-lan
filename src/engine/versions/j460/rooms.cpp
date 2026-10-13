@@ -740,9 +740,9 @@ Exit originalExit;
 using End = void(__attribute__((thiscall)) *)(void*, int);
 End originalEnd;
 void __attribute__((fastcall)) endGame(void* target, void*, int ending) {
-    // Challenge completion is requested by its authority rule and executed at
-    // the next runtime boundary. Native route endings cannot bypass the trophy.
-    if (ending >= 2 && ending <= 14 && runtime::interceptChallengeEnding())
+    // LAN challenges complete through their explicit reward transaction.
+    // Native terminal routes cannot publish a second completion path.
+    if (runtime::challengeActive() && ending >= 2 && ending <= 14)
         return;
     if (runtime::localViewSlot() < 0 || ending < 2 || ending > 14) {
         originalEnd(target, ending);
@@ -1214,6 +1214,8 @@ void __attribute__((fastcall)) victoryLap(void* g, void*) {
         originalVictoryLap(g);
         return;
     }
+    if (runtime::challengeActive())
+        return;
     if (!runtime::replica())
         pendingRestart = 2;
 }
@@ -1543,10 +1545,23 @@ int beginRKey(lua_State* L) {
     return 1;
 }
 int beginVictoryLap(lua_State* L) {
-    const bool ready = runtime::replica() && enabled && !scopes.depth();
+    const bool ready =
+        runtime::replica() && enabled && !scopes.depth() && !runtime::challengeActive();
     if (ready)
         pendingRestart = 2;
     lua.pushBoolean(L, ready);
+    return 1;
+}
+int chestEnding(lua_State* L) {
+    int ending = -1;
+    if (enabled && game()) {
+        // Match the native departure decision's complete roster while retaining
+        // the caller's room. Borrowed roster scope restores itself before return.
+        TeamScope team;
+        using ChestEnding = int(__stdcall*)(bool);
+        ending = engine<ChestEnding>(j460::entry::gameGetChestEnding)(false);
+    }
+    lua.pushInteger(L, ending);
     return 1;
 }
 int beginCinematic(lua_State* L) {
@@ -3308,6 +3323,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_positions", positions);
     function("r_key_begin", beginRKey);
     function("victory_lap_begin", beginVictoryLap);
+    function("rooms_chest_ending", chestEnding);
     function("rooms_ready", ready);
     function("rooms_heads", heads);
     function("rooms_sync", syncLocations);

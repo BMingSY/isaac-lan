@@ -251,6 +251,7 @@ if(BUILD_TESTING)
         hashes
         progression
         archive-round-trip
+        character-unlocks
         challenge-rules
         archive-integrity
         archive-settings
@@ -379,6 +380,7 @@ if(BUILD_TESTING)
         room-commands
         input-rooms
         lobby
+        lobby-access
         run-rules
         handshake
         host-names

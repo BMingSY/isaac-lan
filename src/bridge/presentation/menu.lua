@@ -14,7 +14,7 @@ function _IsaacLanMenuOpen(returning)
 end
 local previousMouse = Vector(-1000, -1000)
 local errorText = ""
-local choices = {
+local characterCatalog = {
     0,
     1,
     2,
@@ -89,7 +89,7 @@ local portraits = {
     "18_JacobEsau",
 }
 local function character(id)
-    for i, v in ipairs(choices) do
+    for i, v in ipairs(characterCatalog) do
         if id == v then
             return (i > 17 and "里·" or "") .. names[(i - 1) % 17 + 1],
                 portraits[(i - 1) % 17 + 1],
@@ -143,6 +143,7 @@ function _IsaacLanMenuRender(
 )
     local status = _IsaacLanStatus()
     local phase = status.phase or 0
+    challenges = _IsaacLan.net_challenges()
     local challenge = challenges[tostring(status.challenge or 0)]
     if not visible and not available and not status.prepared and phase ~= 9 then
         return false
@@ -204,16 +205,6 @@ function _IsaacLanMenuRender(
     if not visible then
         if status.prepared and phase == 3 then
             local white = KColor(1, 1, 1, 1)
-            if challenge then
-                local label = "挑战 " .. challenge.id .. " " .. challenge.name
-                if challenge.nextBag == 1 then
-                    local target = ((status.slot or 0) + 1) % status.players
-                    local suffix = ((status.connected or 0) & (1 << target)) == 0 and "（离线）"
-                        or ""
-                    label = label .. " · 查看 P" .. (target + 1) .. " 的百宝袋" .. suffix
-                end
-                centered(label, 240, 254, 10, white)
-            end
             local line = 0
             for slot = 1, (status.players or 1) - 1 do
                 if ((status.connected or 0) & (1 << slot)) ~= 0 then
@@ -315,7 +306,7 @@ function _IsaacLanMenuRender(
                 command("host", port)
             end
         end)
-        row(ip == "" and "输入房主 IP 或域名" or ip, function()
+        row(ip == "" and "输入房主的 IP" or ip, function()
             editing = "ip"
             _IsaacLan.menu_text_begin(ip, "ip")
         end, true, nil, "ip")
@@ -345,7 +336,7 @@ function _IsaacLanMenuRender(
                     difficulty = definition.difficulty
                     page, selection = "lan", 3
                 end
-            end, true, nil, nil, amber)
+            end, definition.team_available, nil, nil, amber)
         end
         row("返回", function()
             page, selection = "lan", 3
@@ -356,8 +347,15 @@ function _IsaacLanMenuRender(
             centered(value, 110, 176 + line * 17, 10)
             line = line + 1
         end
+        if preview and not preview.team_available then
+            centered("全员需解锁底片与里该隐", 240, 250, 10, red)
+        end
     elseif phase == 2 then
+        local choices = _IsaacLan.net_characters()
         local function cycle(delta)
+            if #choices == 0 then
+                return
+            end
             local index = 1
             for i, v in ipairs(choices) do
                 if v == choice then
@@ -369,10 +367,10 @@ function _IsaacLanMenuRender(
         end
         row(character(choice), function()
             cycle(1)
-        end, not ready and not challenge, cycle)
+        end, not ready and not challenge and #choices > 0, cycle)
         row(ready and "取消准备" or "准备", function()
             command("choose", choice .. (ready and ":0" or ":1"))
-        end)
+        end, ready or status["eligible" .. localSlot] == true)
         if host then
             local function changeMode(delta)
                 local nextMode = ((challenge and 4 or difficulty) + delta) % 5
@@ -403,7 +401,9 @@ function _IsaacLanMenuRender(
             end, true, nil, "seed")
             local allReady = count >= 2
             for i = 0, count - 1 do
-                allReady = allReady and status["ready" .. i] == 1
+                allReady = allReady
+                    and status["ready" .. i] == 1
+                    and status["eligible" .. i] == true
             end
             row("开始游戏", function()
                 local settings = (seed == "" and "RANDOM" or seed)
@@ -551,6 +551,17 @@ function _IsaacLanMenuRender(
     end
     local message = errorText ~= "" and errorText or networkError
     local messageColor = red
+    if message == "" and phase == 2 and challenge then
+        local missing = {}
+        for i = 0, count - 1 do
+            if status["eligible" .. i] ~= true then
+                missing[#missing + 1] = "P" .. (i + 1)
+            end
+        end
+        if #missing > 0 then
+            message = table.concat(missing, "、") .. " 需解锁底片与里该隐"
+        end
+    end
     if message == "" and status.modMismatch == 1 then
         message = "Mod 不一致或无法核对，可能会造成未知的影响"
         messageColor = amber

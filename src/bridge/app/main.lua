@@ -15,9 +15,13 @@ local challenge = _IsaacLanModules["runtime/challenges"]({
         lamb = _IsaacLanModules["compat/routes/challenge_lamb"]({
             game = Game,
             finish = native.net_finish_challenge,
+            chestEnding = native.rooms_chest_ending,
+            entities = Isaac.GetRoomEntities,
             enums = {
                 pickup = PickupVariant,
                 entity = EntityType,
+                grid = GridEntityType,
+                effect = EffectVariant,
                 stage = LevelStage,
                 stageType = StageType,
                 room = RoomType,
@@ -39,9 +43,6 @@ end)
 callback(ModCallbacks.MC_POST_NEW_LEVEL, function()
     challenge.level()
 end)
-function _IsaacLanChallengeRouteEnding()
-    challenge.routeEnding()
-end
 function _IsaacLanCanEnterRoom(...)
     return challenge.canEnter(...)
 end

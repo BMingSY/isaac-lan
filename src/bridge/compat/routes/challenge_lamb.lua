@@ -29,9 +29,40 @@ return function(deps)
         return lambRoom() and game():GetRoom():IsClear()
     end
     local function reward(p)
-        if p.Variant == pickup.PICKUP_BIGCHEST and eligible() then
+        if
+            (p.Variant ~= pickup.PICKUP_BIGCHEST and p.Variant ~= pickup.PICKUP_TROPHY)
+            or not eligible()
+        then
+            return
+        end
+        if p.Variant == pickup.PICKUP_BIGCHEST then
             p:Morph(enums.entity.ENTITY_PICKUP, pickup.PICKUP_TROPHY, 0, true, true, false)
             p.Wait = 30
+        end
+        -- A native Void portal can appear after the reward is initialized.
+        -- Pickup updates run in this reward's room, including remote rooms and
+        -- restored trophies. Keep only the trophy as the endpoint's floor exit.
+        local room = game():GetRoom()
+        for index = 0, room:GetGridSize() - 1 do
+            local grid = room:GetGridEntity(index)
+            if
+                grid
+                and (
+                    grid:GetType() == enums.grid.GRID_TRAPDOOR
+                    or grid:GetType() == enums.grid.GRID_STAIRS
+                )
+            then
+                room:RemoveGridEntity(index, 0, false)
+            end
+        end
+        for _, entity in ipairs(deps.entities()) do
+            if
+                entity:Exists()
+                and entity.Type == enums.entity.ENTITY_EFFECT
+                and entity.Variant == enums.effect.HEAVEN_LIGHT_DOOR
+            then
+                entity:Remove()
+            end
         end
     end
     return {
@@ -59,40 +90,10 @@ return function(deps)
                 reward(p)
                 return true
             end
-            -- Ordinary progression may stop at Mom/Heart/Satan on this save.
-            -- A challenge goal must remain reachable without granting inventory.
-            local level = game():GetLevel()
-            local stage = level:GetStage()
-            local target
-            if stage == enums.stage.STAGE3_2 then
-                target = enums.stage.STAGE4_1
-            elseif stage == enums.stage.STAGE4_2 or stage == enums.stage.STAGE4_3 then
-                target = enums.stage.STAGE5
-            elseif stage == enums.stage.STAGE5 then
-                target = enums.stage.STAGE6
-            end
-            if target and p.Wait <= 0 and not player:IsCoopGhost() and not player:IsDead() then
-                level:SetStage(target, enums.stageType.STAGETYPE_ORIGINAL)
-                game():StartStageTransition(true, 0, player)
-            end
-            return true
-        end,
-        onEnding = function()
-            -- An optional terminal route (e.g. Mega Satan/Beast) cannot win this
-            -- challenge or strand the party after its native exit is intercepted.
-            game():GetLevel():SetStage(enums.stage.STAGE6, enums.stageType.STAGETYPE_ORIGINAL)
-            game():StartStageTransition(true, 0)
-        end,
-        level = function()
-            local level = game():GetLevel()
-            local stage = level:GetStage()
-            -- The final two ordinary floors follow Sheol -> Dark Room.
-            if
-                (stage == enums.stage.STAGE5 or stage == enums.stage.STAGE6)
-                and level:GetStageType() == enums.stageType.STAGETYPE_WOTL
-            then
-                level:SetStage(stage, enums.stageType.STAGETYPE_ORIGINAL)
-                game():StartStageTransition(true, 0)
+            -- Keep native floor progression, but stop terminal chests before
+            -- their collector animation changes the room/session lifecycle.
+            if deps.chestEnding() ~= 0 then
+                return true
             end
         end,
     }

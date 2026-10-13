@@ -1,5 +1,6 @@
 #pragma once
 #include "core/run_rules.h"
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <span>
@@ -10,7 +11,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 27;
+constexpr std::uint16_t protocolVersion = 28;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -106,6 +107,7 @@ struct Progress {
 struct Ending {
     unsigned id = 0;
     Progress progress;
+    bool completed = false;
     bool operator==(const Ending&) const = default;
 };
 struct Start {
@@ -122,6 +124,46 @@ struct Choice {
     std::uint16_t character = 0;
     bool ready = false;
     bool operator==(const Choice&) const = default;
+};
+struct RuleKey {
+    std::uint16_t id = 0, version = 0;
+    bool operator==(const RuleKey&) const = default;
+    bool operator<(const RuleKey& other) const {
+        return id < other.id || (id == other.id && version < other.version);
+    }
+};
+// Bounded, immutable declarations from each participant's local profile. The
+// transport only compares IDs; game-specific unlock rules live above it.
+struct LobbyAccess {
+    std::vector<std::uint16_t> characters;
+    std::vector<RuleKey> rules;
+    std::vector<std::uint16_t> unlockedCharacters;
+    bool operator==(const LobbyAccess&) const = default;
+    bool valid() const {
+        if (characters.size() > 256 || unlockedCharacters.size() > 256 || rules.size() > 64)
+            return false;
+        for (const auto* list : {&characters, &unlockedCharacters})
+            for (std::size_t i = 0; i < list->size(); ++i)
+                if ((*list)[i] == 65535 || (i && (*list)[i - 1] >= (*list)[i]))
+                    return false;
+        if (!std::includes(unlockedCharacters.begin(), unlockedCharacters.end(), characters.begin(),
+                           characters.end()))
+            return false;
+        for (std::size_t i = 0; i < rules.size(); ++i)
+            if (!rules[i].id || !rules[i].version || (i && !(rules[i - 1] < rules[i])))
+                return false;
+        return true;
+    }
+    bool allowsCharacter(std::uint16_t character, bool continuing = false) const {
+        const auto& values = continuing ? unlockedCharacters : characters;
+        return std::binary_search(values.begin(), values.end(), character);
+    }
+    bool allowsRules(const RunRules& value, bool continuing = false) const {
+        return value.valid() &&
+               (!value.id ||
+                std::binary_search(rules.begin(), rules.end(), RuleKey{value.id, value.version})) &&
+               (value.character == 65535 || allowsCharacter(value.character, continuing));
+    }
 };
 // Begin the game's native transition, rather than discovering a floor change
 // in a snapshot after the host has finished loading it.
@@ -212,6 +254,27 @@ class Writer {
                 u32(n);
         }
     }
+    void access(const LobbyAccess& value) {
+        if (!value.valid())
+            throw std::runtime_error("Invalid lobby access");
+        u16(value.unlockedCharacters.size());
+        for (auto id : value.unlockedCharacters)
+            u16(id);
+        // New-run availability is a subset of unlocked IDs. A bit per ID
+        // keeps the maximum four-seat lobby within maxMessageSize.
+        for (std::size_t i = 0; i < value.unlockedCharacters.size(); i += 8) {
+            std::uint8_t available = 0;
+            for (unsigned bit = 0; bit < 8 && i + bit < value.unlockedCharacters.size(); ++bit)
+                if (value.allowsCharacter(value.unlockedCharacters[i + bit]))
+                    available |= 1u << bit;
+            u8(available);
+        }
+        u8(value.rules.size());
+        for (auto rule : value.rules) {
+            u16(rule.id);
+            u16(rule.version);
+        }
+    }
 };
 
 class Reader {
@@ -275,6 +338,32 @@ class Reader {
         for (auto& n : out.counters)
             n = u32();
         return out;
+    }
+    LobbyAccess access() {
+        LobbyAccess value;
+        const auto characters = u16();
+        if (characters > 256)
+            throw std::runtime_error("Too many lobby characters");
+        for (unsigned i = 0; i < characters; ++i)
+            value.unlockedCharacters.push_back(u16());
+        for (unsigned i = 0; i < characters; i += 8) {
+            const auto available = u8();
+            if (characters - i < 8 && (available >> (characters - i)))
+                throw std::runtime_error("Invalid lobby availability bits");
+            for (unsigned bit = 0; bit < 8 && i + bit < characters; ++bit)
+                if (available & (1u << bit))
+                    value.characters.push_back(value.unlockedCharacters[i + bit]);
+        }
+        const auto rules = u8();
+        if (rules > 64)
+            throw std::runtime_error("Too many lobby rules");
+        for (unsigned i = 0; i < rules; ++i) {
+            const auto id = u16();
+            value.rules.push_back({id, u16()});
+        }
+        if (!value.valid())
+            throw std::runtime_error("Invalid lobby access");
+        return value;
     }
     void finish() const {
         if (cursor != bytes.size())

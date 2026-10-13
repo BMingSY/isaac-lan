@@ -11,6 +11,7 @@
 #include "compat/routes/mines.h"
 #include "compat/routes/curses.h"
 #include "compat/characters/traits.h"
+#include "compat/characters/unlocks.h"
 #include "compat/items/rewind_targets.h"
 #include "compat/items/deal_chances.h"
 #include "compat/items/death_certificate.h"
@@ -903,12 +904,70 @@ void archiveRoundTrip() {
     }
 }
 
+void characterUnlocks() {
+    using namespace isaac::compat::characters;
+    std::array<std::uint8_t, 642> achievements{};
+    require(availableCharacters(achievements, 0) == std::vector<std::uint16_t>{0},
+            "Fresh save exposed locked starting characters");
+    require(availableCharacters({}, 1) == std::vector<std::uint16_t>{0},
+            "Missing unlock data exposed a locked character");
+    achievements[476] = 1;
+    require(availableCharacters(achievements, 0) == std::vector<std::uint16_t>{0, 23} &&
+                !characterUnlocked(2, achievements),
+            "Tainted unlock inherited its normal character or wrong achievement");
+    achievements[81] = achievements[483] = 1;
+    require(characterUnlocked(9, achievements) && characterUnlocked(30, achievements) &&
+                !characterAvailable(9, achievements, 0) &&
+                !characterAvailable(30, achievements, 0) &&
+                characterAvailable(9, achievements, 1) && characterAvailable(30, achievements, 1),
+            "Eden start tokens leaked into permanent unlock or resume eligibility");
+    require(!characterUnlocked(23, std::span(achievements).first(476)),
+            "Truncated achievement data exposed Tainted Cain");
+    achievements.fill(1);
+    const std::vector<std::uint16_t> expected{0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 13,
+                                              14, 15, 16, 18, 19, 21, 22, 23, 24, 25, 26, 27,
+                                              28, 29, 30, 31, 32, 33, 34, 35, 36, 37};
+    require(availableCharacters(achievements, 1) == expected,
+            "Unlocked character menu order changed or included an alternate form");
+    auto withoutEden = expected;
+    std::erase(withoutEden, 9);
+    std::erase(withoutEden, 30);
+    require(availableCharacters(achievements, 0) == withoutEden,
+            "Spent Eden token remained selectable or hid another character");
+    for (const auto type : {11, 12, 17, 20, 38, 39, 40, 65535})
+        require(!characterUnlocked(type, achievements) &&
+                    !characterAvailable(type, achievements, 1),
+                "Unknown or transformed character became selectable");
+    achievements.fill(0);
+    require(availableCharacters(achievements, 1) == std::vector<std::uint16_t>{0},
+            "Switching to a locked save retained another save's unlocks");
+}
+
 void challengeRules() {
     const auto* definition = isaac::compat::challenges::find(1001);
     require(definition && definition->character == 23 && definition->difficulty == 0 &&
                 definition->transient && definition->nextBag,
             "Challenge definition changed");
     require(!isaac::compat::challenges::find(1002), "Unknown challenge accepted");
+    std::array<std::uint8_t, 642> achievements{};
+    require(!isaac::compat::challenges::available(*definition, achievements),
+            "Locked save entered the challenge");
+    achievements[78] = 1;
+    require(!isaac::compat::challenges::available(*definition, achievements),
+            "Negative unlock bypassed the required Tainted Cain unlock");
+    achievements[78] = 0;
+    achievements[476] = 1;
+    require(!isaac::compat::challenges::available(*definition, achievements),
+            "Tainted Cain unlock bypassed the required Negative unlock");
+    achievements[78] = 1;
+    require(isaac::compat::challenges::available(*definition, achievements),
+            "Qualified save required unrelated unlocks to enter the challenge");
+    for (const auto size : {0u, 78u, 476u})
+        require(
+            !isaac::compat::challenges::available(*definition, std::span(achievements).first(size)),
+            "Missing challenge achievement was read beyond supplied progress");
+    require(isaac::compat::challenges::available(*definition, std::span(achievements).first(477)),
+            "Challenge eligibility required unrelated trailing achievement data");
     for (unsigned n = 2; n <= 4; ++n) {
         for (unsigned slot = 0; slot < n; ++slot) {
             const int target = isaac::compat::challenges::nextSeat(slot, n);
@@ -1026,6 +1085,7 @@ int main(int argc, char** argv) {
                      {"hashes", hashes},
                      {"progression", progression},
                      {"archive-round-trip", archiveRoundTrip},
+                     {"character-unlocks", characterUnlocks},
                      {"challenge-rules", challengeRules},
                      {"archive-integrity", archiveIntegrity},
                      {"archive-settings", archiveSettings},

@@ -3,9 +3,13 @@ local routeFactory = dofile(root .. "/src/bridge/compat/routes/challenge_lamb.lu
 local coordinator = dofile(root .. "/src/bridge/runtime/challenges.lua")
 local stage, kind, clear, enemy = 11, 0, true, 273
 local finish, morphs, transitions, layouts = 0, 0, {}, 0
+local chestEnding = 0
+local grids, effects, pendingRemoval, gridRemovals = {}, {}, {}, 0
 local enums = {
-    entity = { ENTITY_PICKUP = 5, ENTITY_THE_LAMB = 273 },
+    entity = { ENTITY_PICKUP = 5, ENTITY_THE_LAMB = 273, ENTITY_EFFECT = 1000 },
     pickup = { PICKUP_BIGCHEST = 340, PICKUP_TROPHY = 370 },
+    grid = { GRID_TRAPDOOR = 17, GRID_STAIRS = 18 },
+    effect = { HEAVEN_LIGHT_DOOR = 39 },
     room = { ROOM_BOSS = 5 },
     stage = { STAGE3_2 = 6, STAGE4_1 = 7, STAGE4_2 = 8, STAGE4_3 = 9, STAGE5 = 10, STAGE6 = 11 },
     stageType = { STAGETYPE_ORIGINAL = 0, STAGETYPE_WOTL = 1 },
@@ -49,9 +53,25 @@ local game = {
             IsClear = function()
                 return clear
             end,
+            GetGridSize = function()
+                return 12
+            end,
+            GetGridEntity = function(_, index)
+                return grids[index]
+            end,
+            RemoveGridEntity = function(_, index, trail, decoration)
+                assert(trail == 0 and decoration == false and grids[index])
+                gridRemovals = gridRemovals + 1
+                pendingRemoval[index] = true
+            end,
         }
     end,
     StartStageTransition = function(_, same, animation, player)
+        assert(
+            player and player.IsCoopGhost and player.IsDead,
+            "Stage transition requires a player"
+        )
+        assert(same == true and animation == 0)
         transitions[#transitions + 1] = { stage, kind, same, animation, player }
     end,
 }
@@ -60,7 +80,7 @@ local info = {
     ready = 1,
     authority = 1,
     challenge = 1001,
-    challengeVersion = 1,
+    challengeVersion = 2,
     players = 4,
     connected = 15,
     runId = "first",
@@ -93,7 +113,7 @@ local function chest()
 end
 local native = {
     net_challenges = function()
-        return { ["1001"] = { version = 1, id = 1001, route = "lamb" } }
+        return { ["1001"] = { version = 2, id = 1001, route = "lamb" } }
     end,
     api_info = function()
         return info
@@ -103,10 +123,20 @@ local route = routeFactory({
     game = function()
         return game
     end,
+    player = function(index)
+        assert(index == 0)
+        return player
+    end,
     enums = enums,
     finish = function()
         finish = finish + 1
         return true
+    end,
+    chestEnding = function()
+        return chestEnding
+    end,
+    entities = function()
+        return effects
     end,
 })
 local rule = coordinator({
@@ -192,13 +222,20 @@ clear = false
 rule.collide(restored, collider)
 assert(finish == 5)
 clear = true
--- Low-unlock native terminal chests continue toward the configured objective.
-for _, pair in ipairs({ { 6, 7 }, { 8, 10 }, { 9, 10 }, { 10, 11 } }) do
-    stage, kind = pair[1], 0
+-- Native progression is preserved; terminal chests cannot replace the trophy.
+for _, source in ipairs({ 6, 8, 9, 10, 11, 12, 13 }) do
+    stage, kind, enemy = source, 0, 412
     local p = chest()
-    rule.collide(p, collider)
-    assert(stage == pair[2] and kind == 0 and transitions[#transitions][5] == player)
+    assert(rule.collide(p, collider) == nil)
+    assert(stage == source and p.Variant == 340 and #transitions == 0)
+    chestEnding = 6
+    assert(rule.collide(p, collider) == true)
+    assert(stage == source and p.Variant == 340 and #transitions == 0 and finish == 5)
+    chestEnding = -1
+    assert(rule.collide(p, collider) == true, "Unavailable native decision must fail closed")
+    chestEnding = 0
 end
+enemy = 273
 -- No recursive native transition inside the new-level callback.
 rule = coordinator({
     native = native,
@@ -217,49 +254,130 @@ rule = coordinator({
         },
     },
 })
-stage, kind = 10, 1
-local count = #transitions
-rule.level()
-assert(#transitions == count)
-info.ready = 0
-rule.step()
-assert(#transitions == count)
-info.ready = 1
-rule.step()
-rule.step()
-assert(stage == 10 and kind == 0 and #transitions == count + 1 and layouts == 1)
--- Other native endings must return to the objective, at a ready authority step.
-stage, kind = 13, 1
-count = #transitions
-rule.routeEnding()
-rule.routeEnding()
-assert(#transitions == count)
-info.ready = 0
-rule.step()
-assert(#transitions == count)
-info.ready = 1
-rule.step()
-rule.step()
-assert(stage == 11 and kind == 0 and #transitions == count + 1)
+for _, source in ipairs({ 10, 11 }) do
+    stage, kind = source, 1
+    local count, previousLayouts = #transitions, layouts
+    rule.level()
+    assert(#transitions == count)
+    info.ready = 0
+    rule.step()
+    assert(#transitions == count)
+    info.ready = 1
+    rule.step()
+    rule.step()
+    assert(stage == source and kind == 1 and #transitions == count)
+    assert(layouts == previousLayouts + 1)
+end
 assert(not rule.canEnter(1, 0, 1, 0, 42, false) and not rule.canEnter(1, 0, 1, 0, 42, true))
 assert(rule.canEnter(0, 0, 1, 0, 42, false) and rule.canEnter(1, 0, 1, 0, 43, false))
--- Pending route work cannot leak into a new challenge or ordinary run.
-rule.routeEnding()
+-- A new run resets layout work; ordinary runs do not apply challenge maps.
+local previousLayouts = layouts
 info.runId = "second"
-count = #transitions
 rule.step()
-assert(#transitions == count)
-rule.routeEnding()
+assert(layouts == previousLayouts + 1 and #transitions == 0)
 info.challenge = 0
 rule.step()
+assert(layouts == previousLayouts + 1)
 info.challenge = 1001
 rule.step()
-assert(#transitions == count)
-info.challengeVersion = 2
-assert(not pcall(rule.step))
+assert(layouts == previousLayouts + 2)
 info.challengeVersion = 1
+assert(not pcall(rule.step))
+info.challengeVersion = 2
 info.challenge = 0
 assert(rule.canEnter(1, 0, 1, 0, 42, false))
+-- The trophy's native room callbacks remove alternate floor exits, including
+-- portals appearing after INIT. Lua grid removal commits on the next update.
+local function grid(kind, variant, data)
+    return {
+        GetType = function()
+            return kind
+        end,
+        GetVariant = function()
+            return variant
+        end,
+        VarData = data,
+    }
+end
+local function effect(kind, variant)
+    return {
+        Type = kind,
+        Variant = variant,
+        Exists = function(self)
+            return not self.removed
+        end,
+        Remove = function(self)
+            assert(not self.removed)
+            self.removed = true
+        end,
+    }
+end
+local function commitRemoval()
+    for index in pairs(pendingRemoval) do
+        grids[index] = nil
+    end
+    pendingRemoval = {}
+end
+grids = {
+    [1] = grid(17, 1, 1), -- Native Void portal.
+    [2] = grid(17, 0, 0), -- Ordinary floor trapdoor.
+    [3] = grid(18, 0, 0), -- Stairs/crawlspace entry.
+    [4] = grid(2, 0, 0), -- Rock.
+    [5] = grid(16, 0, 0), -- Room door remains usable.
+    [6] = grid(7, 0, 0), -- Pit.
+}
+effects = { effect(1000, 39), effect(1000, 161), effect(306, 0) }
+stage, kind, clear, enemy = 11, 0, true, 273
+local reward = chest()
+for _, state in ipairs({ { 0, 1, 1 }, { 1001, 0, 1 }, { 1001, 1, 0 } }) do
+    info.challenge, info.authority, info.ready = table.unpack(state)
+    rule.pickup(reward)
+    assert(gridRemovals == 0 and not effects[1].removed and reward.Variant == 340)
+end
+info.challenge, info.authority, info.ready = 1001, 1, 1
+for _, state in ipairs({
+    { 10, 0, true, 273 },
+    { 11, 1, true, 273 },
+    { 11, 0, false, 273 },
+    { 11, 0, true, 102 },
+}) do
+    stage, kind, clear, enemy = table.unpack(state)
+    rule.pickup(reward)
+    assert(gridRemovals == 0 and not effects[1].removed and reward.Variant == 340)
+end
+stage, kind, clear, enemy = 11, 0, true, 273
+rule.pickup({ Variant = 100 })
+assert(gridRemovals == 0, "Unrelated pickups must not trigger endpoint cleanup")
+local beforeMorphs, beforeFinish = morphs, finish
+rule.pickup(reward)
+assert(morphs == beforeMorphs + 1 and reward.Variant == 370 and reward.Wait == 30)
+assert(gridRemovals == 3 and pendingRemoval[1] and pendingRemoval[2] and pendingRemoval[3])
+assert(effects[1].removed and not effects[2].removed and not effects[3].removed)
+commitRemoval()
+rule.pickup(reward)
+assert(gridRemovals == 3 and morphs == beforeMorphs + 1)
+assert(grids[4] and grids[5] and grids[6] and #transitions == 0 and finish == beforeFinish)
+-- A later portal and a restored trophy need no run-local completion marker.
+grids[7], effects[4] = grid(17, 1, 1), effect(1000, 39)
+rule = coordinator({ native = native, routes = { lamb = route } })
+local restoredReward = { Variant = 370, Wait = 0 }
+rule.pickup(restoredReward)
+assert(pendingRemoval[7] and effects[4].removed)
+commitRemoval()
+rule.pickup(restoredReward)
+assert(gridRemovals == 4 and finish == beforeFinish and #transitions == 0)
+-- Room contexts are supplied by native pickup callbacks: an uncleared or
+-- unrelated room keeps its exits even when another room has a trophy.
+grids[8] = grid(17, 1, 1)
+clear = false
+rule.pickup(restoredReward)
+assert(not pendingRemoval[8] and gridRemovals == 4)
+clear, enemy = true, 102
+rule.pickup(restoredReward)
+assert(not pendingRemoval[8] and gridRemovals == 4)
+enemy = 273
+rule.pickup(restoredReward)
+assert(pendingRemoval[8] and gridRemovals == 5)
 print(
-    "PASS challenge authority, Lamb trophy, all collectors, rollback/reconnect, routes and map hooks"
+    "PASS challenge authority, Lamb trophy/exits, all collectors, rollback/reconnect, vanilla routes and map hooks"
 )

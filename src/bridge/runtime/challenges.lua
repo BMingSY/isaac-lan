@@ -2,17 +2,17 @@
 return function(deps)
     local native, definitions = deps.native, deps.native.net_challenges()
     local routes = deps.routes
-    local pendingLayout, pendingEnding, lastRun = true, false, nil
+    local pendingLayout, lastRun = true, nil
     local function current()
         local info = native.api_info()
         if info.active ~= 1 or not info.challenge or info.challenge == 0 then
-            pendingEnding, lastRun = false, nil
+            lastRun = nil
             return
         end
         local definition = assert(definitions[tostring(info.challenge)], "Unknown LAN challenge")
         assert(definition.version == info.challengeVersion, "LAN challenge version mismatch")
         if lastRun ~= info.runId then
-            lastRun, pendingLayout, pendingEnding = info.runId, true, false
+            lastRun, pendingLayout = info.runId, true
         end
         return definition, info
     end
@@ -58,16 +58,10 @@ return function(deps)
         if not definition then
             return
         end
-        if pendingEnding then
-            pendingEnding = false
-            routes[definition.route].onEnding()
-            return
-        end
         if not pendingLayout then
             return
         end
         pendingLayout = false
-        routes[definition.route].level()
         -- Deferred until the native floor is usable, before this authority
         -- step releases player input. A callback never recursively loads a floor.
         local map = deps.maps and deps.maps[definition.id]
@@ -100,8 +94,5 @@ return function(deps)
         level = level,
         step = step,
         canEnter = canEnter,
-        routeEnding = function()
-            pendingEnding = true
-        end,
     }
 end

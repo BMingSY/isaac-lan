@@ -282,6 +282,8 @@ struct Session::Impl {
     Clock::time_point joinAt;
     bool modMismatch = false, lobbyDirty = false, choicesRequired = false;
     std::array<std::string, maxPlayers> identities;
+    LobbyAccess localAccess;
+    std::array<LobbyAccess, maxPlayers> access;
     unsigned localSlot = 0, playerCount = 1, activeMask = 1;
     std::uint16_t boundPort = 0;
     SOCKET listener = INVALID_SOCKET;
@@ -304,6 +306,7 @@ struct Session::Impl {
     std::optional<std::uint32_t> cinematicEpoch;
     unsigned cinematicReadyMask = 0;
     std::optional<unsigned> ending;
+    bool endingCompleted = false;
     std::optional<Ending> receivedEnding;
     std::optional<Stage> assemblingStage;
     std::size_t stageSize = 0;
@@ -422,6 +425,20 @@ struct Session::Impl {
         w.u8(different);
         broadcast(w);
     }
+    bool rulesAvailable(const RunRules& rules, bool continuing = false) const {
+        if (!localAccess.allowsRules(rules, continuing))
+            return false;
+        if (hosting) {
+            for (unsigned i = 1; i < maxPlayers; ++i)
+                if (peers[i] && peers[i]->accepted && !access[i].allowsRules(rules, continuing))
+                    return false;
+        } else {
+            for (unsigned i = 0; i < playerCount; ++i)
+                if (!access[i].allowsRules(rules, continuing))
+                    return false;
+        }
+        return true;
+    }
     void lobby() {
         unsigned next = 1;
         for (unsigned i = 1; i < maxPlayers; ++i)
@@ -430,13 +447,22 @@ struct Session::Impl {
                     std::swap(peers[i], peers[next]);
                     std::swap(choices[i], choices[next]);
                     std::swap(identities[i], identities[next]);
+                    std::swap(access[i], access[next]);
                 }
                 ++next;
             }
         playerCount = next;
-        for (auto& choice : choices)
+        for (unsigned i = 0; i < playerCount; ++i) {
+            auto& choice = choices[i];
             if (runRules.character != 65535)
                 choice.character = runRules.character;
+            else if (!access[i].allowsCharacter(choice.character) && !access[i].characters.empty())
+                choice.character = access[i].characters.front();
+        }
+        const bool allowed = rulesAvailable(runRules);
+        for (unsigned i = 0; i < playerCount; ++i)
+            if (!allowed || !access[i].allowsCharacter(choices[i].character))
+                choices[i].ready = false;
         for (unsigned i = 1; i < playerCount; ++i) {
             Writer w(Message::lobby);
             w.u8(playerCount);
@@ -447,6 +473,8 @@ struct Session::Impl {
                 w.u16(choice.character);
                 w.u8(choice.ready);
             }
+            for (const auto& value : access)
+                w.access(value);
             peers[i]->sendMessage(w);
         }
         lobbyDirty = false;
@@ -488,6 +516,12 @@ struct Session::Impl {
         commands[slot] = Command::none;
         roomRequests[slot].reset();
         peers[slot].reset();
+        if (state == Phase::lobby) {
+            choices[slot] = {};
+            identities[slot].clear();
+            access[slot] = {};
+            lobbyDirty = true;
+        }
         if (logger)
             logger("network_departure slot=" + std::to_string(slot));
     }
@@ -497,11 +531,18 @@ struct Session::Impl {
         const auto id = r.string();
         auto& p = *peers[slot];
         p.mods = r.string();
+        const auto declaredAccess = r.access();
         if (!validIdentity(id) ||
             std::find(identities.begin(), identities.end(), id) != identities.end())
             throw std::runtime_error("Invalid or duplicate player identity");
         identities[slot] = id;
+        access[slot] = declaredAccess;
         p.accepted = true;
+        if (!rulesAvailable(runRules)) {
+            for (auto& choice : choices)
+                choice.ready = false;
+            ++rulesRevision;
+        }
         Writer welcome(Message::welcome);
         welcome.u8(slot);
         p.sendMessage(welcome);
@@ -583,6 +624,8 @@ struct Session::Impl {
                 if (revision != rulesRevision)
                     return; // Choice from the previous lobby rules.
                 if (runRules.character != 65535 && c != runRules.character)
+                    return;
+                if (!access[slot].allowsCharacter(c) || (ready && !rulesAvailable(runRules)))
                     return;
                 choices[slot] = {c, ready != 0};
                 choicesRequired = true;
@@ -743,13 +786,15 @@ struct Session::Impl {
         }
         if (type == Message::ending && state == Phase::running) {
             const auto value = r.u8();
-            if (value < 2 || value > 14 || ending)
+            const auto completed = r.u8();
+            if (value < 2 || value > 14 || ending || completed > 1 || (completed && !runRules.id))
                 throw std::runtime_error("Invalid authoritative ending");
             const auto progress = r.progress();
             if (!progress)
                 throw std::runtime_error("Missing ending progression");
             ending = value;
-            receivedEnding = Ending{value, *progress};
+            endingCompleted = completed != 0;
+            receivedEnding = Ending{value, *progress, endingCompleted};
             receivedState.reset();
             assembling.reset();
             receivedStage.reset();
@@ -771,6 +816,10 @@ struct Session::Impl {
                     throw std::runtime_error("Invalid ready flag");
                 c.ready = n != 0;
             }
+            for (auto& value : access)
+                value = r.access();
+            if (access[localSlot] != localAccess)
+                throw std::runtime_error("Lobby changed local profile access");
             return;
         }
         if (type == Message::waitFloor) {
@@ -803,6 +852,12 @@ struct Session::Impl {
             if (value.seed.size() != 8 || value.difficulty > 3 || !(value.connected & 1) ||
                 value.connected >= (1u << playerCount) || snapshotSize > maxSnapshotSize)
                 throw std::runtime_error("Invalid start state");
+            if (!localAccess.allowsRules(value.rules, snapshotSize != 0) ||
+                !localAccess.allowsCharacter(value.characters[localSlot], snapshotSize != 0) ||
+                (value.rules.character != 65535 &&
+                 value.characters[localSlot] != value.rules.character) ||
+                (value.rules.difficulty != 255 && value.difficulty != value.rules.difficulty))
+                throw std::runtime_error("Start is unavailable for the local profile");
             localReady = false;
             receivedState.reset();
             assembling.reset();
@@ -1076,6 +1131,7 @@ struct Session::Impl {
         for (auto it = incoming.begin(); it != incoming.end();) {
             auto& p = **it;
             std::optional<unsigned> slot;
+            std::optional<LobbyAccess> returnedAccess;
             bool rejected = false;
             try {
                 if (Clock::now() - p.connectedAt > std::chrono::seconds(10))
@@ -1086,6 +1142,7 @@ struct Session::Impl {
                         throw std::runtime_error("Game, extension or protocol mismatch");
                     const auto id = r.string();
                     p.mods = r.string();
+                    const auto declaredAccess = r.access();
                     const auto found =
                         std::find(identities.begin() + 1, identities.begin() + playerCount, id);
                     if (!validIdentity(id) || found == identities.begin() + playerCount)
@@ -1093,6 +1150,10 @@ struct Session::Impl {
                     const auto i = static_cast<unsigned>(found - identities.begin());
                     if (peers[i] || (activeMask & (1u << i)))
                         throw std::runtime_error("Player already connected");
+                    if (!declaredAccess.allowsRules(runRules, true) ||
+                        !declaredAccess.allowsCharacter(startSettings.characters[i], true))
+                        throw std::runtime_error("Saved seat is unavailable for the local profile");
+                    returnedAccess = declaredAccess;
                     slot = i;
                 });
             } catch (const std::exception& e) {
@@ -1106,6 +1167,7 @@ struct Session::Impl {
                 rejected = true;
             }
             if (slot && !rejected) {
+                access[*slot] = std::move(*returnedAccess);
                 peers[*slot] = std::move(*it);
                 auto& q = *peers[*slot];
                 q.accepted = true;
@@ -1129,8 +1191,9 @@ struct Session::Impl {
 Session::Session(void (*logger)(const std::string&), Observer observer, bool debugLogs)
     : impl(std::make_unique<Impl>(logger, observer, debugLogs)) {}
 Session::~Session() = default;
-bool Session::host(std::uint16_t port, const std::string& fingerprint, const std::string& mods) {
-    if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty())
+bool Session::host(std::uint16_t port, const std::string& fingerprint, const std::string& mods,
+                   const LobbyAccess& access) {
+    if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty() || !access.valid())
         return false;
     try {
         impl->listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -1154,6 +1217,7 @@ bool Session::host(std::uint16_t port, const std::string& fingerprint, const std
         impl->hosting = true;
         impl->fingerprint = fingerprint;
         impl->mods = mods;
+        impl->localAccess = impl->access[0] = access;
         impl->state = Phase::lobby;
         return true;
     } catch (const std::exception& e) {
@@ -1162,8 +1226,9 @@ bool Session::host(std::uint16_t port, const std::string& fingerprint, const std
     }
 }
 bool Session::join(const std::string& ip, std::uint16_t port, const std::string& fingerprint,
-                   const std::string& identity, const std::string& mods) {
-    if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty())
+                   const std::string& identity, const std::string& mods,
+                   const LobbyAccess& access) {
+    if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty() || !access.valid())
         return false;
     try {
         impl->identity = identity.empty() ? randomIdentity() : identity;
@@ -1173,6 +1238,7 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
             throw std::runtime_error("Enter a valid IPv4 address or host name");
         impl->fingerprint = fingerprint;
         impl->mods = mods;
+        impl->localAccess = access;
         impl->hostIP = ip;
         impl->boundPort = port;
         impl->state = Phase::connecting;
@@ -1209,9 +1275,10 @@ bool Session::reconnect() {
     const auto observer = impl->observer;
     const auto debug = impl->debugLogs;
     const auto choices = impl->choices;
+    const auto access = impl->localAccess;
     impl = std::make_unique<Impl>(logger, observer, debug);
     impl->choices = choices;
-    return join(ip, port, fingerprint, identity, mods);
+    return join(ip, port, fingerprint, identity, mods, access);
 }
 bool Session::beginStage(const Stage& value) {
     if (!impl->hosting || impl->state != Phase::running || impl->ending)
@@ -1284,14 +1351,17 @@ bool Session::cinematicReady() {
     }
     return true;
 }
-bool Session::beginEnding(unsigned ending, const Progress& progress) {
-    if (!impl->hosting || impl->state != Phase::running || ending < 2 || ending > 14)
+bool Session::beginEnding(unsigned ending, const Progress& progress, bool completed) {
+    if (!impl->hosting || impl->state != Phase::running || ending < 2 || ending > 14 ||
+        (completed && !impl->runRules.id))
         return false;
     if (impl->ending)
-        return *impl->ending == ending;
+        return *impl->ending == ending && impl->endingCompleted == completed;
     impl->ending = ending;
+    impl->endingCompleted = completed;
     Writer w(Message::ending);
     w.u8(static_cast<std::uint8_t>(ending));
+    w.u8(completed);
     w.progress(progress);
     for (unsigned slot = 1; slot < impl->playerCount; ++slot)
         if (auto& p = impl->peers[slot]; p && p->accepted && p->ready && !p->waiting) {
@@ -1436,6 +1506,7 @@ void Session::poll() {
             hello.string(impl->fingerprint);
             hello.string(impl->identity);
             hello.string(impl->mods);
+            hello.access(impl->localAccess);
             p.sendMessage(hello);
         }
         for (unsigned i = 0; i < maxPlayers; ++i)
@@ -1545,7 +1616,8 @@ void Session::abort(const std::string& reason) {
 bool Session::start(const Start& settings) {
     if (!impl->hosting || impl->state != Phase::lobby || impl->playerCount < 2 ||
         settings.seed.size() != 8 || settings.difficulty > 3 ||
-        settings.snapshot.size() > maxSnapshotSize || settings.rules != impl->runRules)
+        settings.snapshot.size() > maxSnapshotSize || settings.rules != impl->runRules ||
+        !impl->rulesAvailable(settings.rules, !settings.snapshot.empty()))
         return false;
     for (unsigned i = 1; i < maxPlayers; ++i)
         if ((i < impl->playerCount && (!impl->peers[i] || !impl->peers[i]->accepted)) ||
@@ -1559,8 +1631,9 @@ bool Session::start(const Start& settings) {
     if ((settings.rules.difficulty != 255 && settings.difficulty != settings.rules.difficulty))
         return false;
     for (unsigned i = 0; i < impl->playerCount; ++i)
-        if (settings.snapshot.empty() && settings.rules.character != 65535 &&
-            settings.characters[i] != settings.rules.character)
+        if (!impl->access[i].allowsCharacter(settings.characters[i], !settings.snapshot.empty()) ||
+            (settings.rules.character != 65535 &&
+             settings.characters[i] != settings.rules.character))
             return false;
     impl->integrationRun = randomIdentity();
     impl->integrationEpoch = 0;
@@ -1615,7 +1688,9 @@ bool Session::checkpointNeeded() const {
 }
 bool Session::choose(Choice choice) {
     if (impl->state != Phase::lobby ||
-        (impl->runRules.character != 65535 && choice.character != impl->runRules.character))
+        (impl->runRules.character != 65535 && choice.character != impl->runRules.character) ||
+        !impl->localAccess.allowsCharacter(choice.character) ||
+        (choice.ready && !impl->rulesAvailable(impl->runRules)))
         return false;
     if (impl->hosting) {
         impl->choices[0] = choice;
@@ -1631,20 +1706,33 @@ bool Session::choose(Choice choice) {
     return true;
 }
 bool Session::configureRules(const RunRules& rules) {
-    if (!impl->hosting || impl->state != Phase::lobby || !rules.valid())
+    if (!impl->hosting || impl->state != Phase::lobby || !impl->rulesAvailable(rules))
         return false;
     if (rules == impl->runRules)
         return true;
     impl->runRules = rules;
     ++impl->rulesRevision;
-    for (auto& choice : impl->choices) {
+    for (unsigned i = 0; i < maxPlayers; ++i) {
+        auto& choice = impl->choices[i];
         choice.ready = false;
         if (rules.character != 65535)
             choice.character = rules.character;
+        else if (!impl->access[i].allowsCharacter(choice.character) &&
+                 !impl->access[i].characters.empty())
+            choice.character = impl->access[i].characters.front();
     }
     impl->choicesRequired = true;
     impl->lobbyDirty = true;
     return true;
+}
+bool Session::rulesAvailable(const RunRules& rules) const {
+    return impl->rulesAvailable(rules);
+}
+const LobbyAccess& Session::localAccess() const {
+    return impl->localAccess;
+}
+const std::array<LobbyAccess, maxPlayers>& Session::access() const {
+    return impl->access;
 }
 const RunRules& Session::rules() const {
     return impl->runRules;

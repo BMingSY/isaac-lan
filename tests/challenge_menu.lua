@@ -65,20 +65,29 @@ local status = {
     connected = 3,
     port = 29506,
     savedPlayers = 2,
+    eligible0 = true,
+    eligible1 = true,
 }
+local available = true
+local characters = { 0, 23 }
 _IsaacLanStatus = function()
     return status
 end
 _IsaacLan = {
     menu_text_end = noop,
+    net_characters = function()
+        return characters
+    end,
     net_challenges = function()
         return {
             ["1001"] = {
                 id = 1001,
-                name = "盲袋接力",
+                name = "恶魔形态",
                 character = 23,
                 difficulty = 0,
                 nextBag = 1,
+                available = available,
+                team_available = available,
             },
         }
     end,
@@ -91,6 +100,10 @@ _IsaacLanCommand = function(name, value)
         if status.challenge ~= 0 then
             status.choice0, status.choice1 = 23, 23
         end
+    elseif name == "choose" then
+        local character, ready = value:match("^(%d+):(%d+)$")
+        status["choice" .. status.slot], status["ready" .. status.slot] =
+            tonumber(character), tonumber(ready)
     end
 end
 dofile(root .. "/src/bridge/presentation/menu.lua")
@@ -106,11 +119,11 @@ for _ = 1, 4 do
     draw(39)
 end
 draw()
-assert(labels["1001 盲袋接力"] and labels["返回"])
+assert(labels["1001 恶魔形态"] and labels["返回"])
 draw(13)
 draw()
 assert(status.challenge == 1001 and status.choice0 == 23 and status.ready0 == 0)
-local accent = assert(labels["挑战：1001 盲袋接力"])
+local accent = assert(labels["挑战：1001 恶魔形态"])
 assert(accent[1] == 0.45 and not labels["继续上次联机"])
 -- Character row is locked, even when unready; mode row can return to normal.
 draw(38)
@@ -123,24 +136,56 @@ draw(40)
 draw(39)
 draw()
 assert(status.challenge == 0 and labels["普通"] and labels["继续上次联机"])
+-- Ordinary character cycling uses the personal save's list, with catalog names.
+_IsaacLanMenuOpen(true)
+status.choice0 = 0
+draw(39)
+draw()
+assert(status.choice0 == 23 and labels["里·该隐"])
+draw(39)
+assert(status.choice0 == 0)
+characters = { 0 }
+draw(39)
+assert(status.choice0 == 0)
+characters = { 0, 23 }
+-- An unavailable challenge stays visible and cannot be selected.
+available = false
+draw(40)
+draw(40)
+for _ = 1, 4 do
+    draw(39)
+end
+draw()
+count = #commands
+draw(13)
+assert(#commands == count and status.challenge == 0)
+available = true
 -- Guest sees selected rules but has no mode-changing action.
 status.challenge, status.hosting, status.slot = 1001, 0, 1
 _IsaacLanMenuOpen(true)
 draw()
-assert(labels["挑战：1001 盲袋接力"])
+assert(labels["挑战：1001 恶魔形态"])
+status.eligible1 = false
+draw(40)
+count = #commands
+draw(13)
+assert(#commands == count and labels["P2 需解锁底片与里该隐"])
+status.eligible1 = true
+_IsaacLanMenuOpen(true)
+draw()
 count = #commands
 draw(39)
 assert(#commands == count)
--- Fixed seat ring is shown for all supported roster sizes.
+-- Gameplay has no challenge title or next-seat text overlay.
 status.phase, status.prepared = 3, true
 for n = 2, 4 do
     status.players, status.connected = n, (1 << n) - 1
     for slot = 0, n - 1 do
         status.slot = slot
         draw(0, false)
-        assert(
-            labels["挑战 1001 盲袋接力 · 查看 P" .. ((slot + 1) % n + 1) .. " 的百宝袋"]
-        )
+        for label in pairs(labels) do
+            assert(not label:find("挑战") and not label:find("百宝袋"))
+        end
     end
 end
 status.hosting, status.slot = 1, 0
@@ -149,6 +194,4 @@ assert(labels["结束挑战（不保存）"] and not labels["保存并结束联�
 status.challenge = 0
 draw()
 assert(labels["保存并结束联机"])
-print(
-    "PASS challenge list, colored selection, role lock, guest view, cyclic labels and transient exit"
-)
+print("PASS challenge list, colored selection, role lock, guest view, clean HUD and transient exit")

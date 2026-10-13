@@ -1,5 +1,6 @@
 #include "runtime/session.h"
 #include "compat/challenges/catalog.h"
+#include "compat/characters/unlocks.h"
 #include "engine/item_presentation.h"
 #include "engine/presentation.h"
 #include "presentation/frontend.h"
@@ -47,6 +48,7 @@ struct API {
     int(__cdecl* ref)(lua_State*, int);
     void(__cdecl* unref)(lua_State*, int, int);
     int(__cdecl* rawGetI)(lua_State*, int, long long);
+    void(__cdecl* rawSetI)(lua_State*, int, long long);
     int(__cdecl* pcall)(lua_State*, int, int, int, std::intptr_t, void*);
 } lua{};
 std::unique_ptr<lan::Session> session;
@@ -55,12 +57,12 @@ std::uintptr_t executableImage = 0;
 void (*logger)(const std::string&) = nullptr;
 bool launchRequested = false;
 bool resumeLaunch = false;
+bool menuPromptsPending = false;
 bool authorizedExit = false;
 std::string sessionFingerprint;
 std::optional<lan::Archive> exitingArchive, resumingArchive;
 bool exitingHost = false, exitingTransient = false;
 std::optional<unsigned> pendingChallengeFinish;
-bool pendingChallengeRouteEnd = false;
 bool networkRun = false, soloContinueAvailable = false;
 std::vector<std::uint8_t> soloState;
 lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
@@ -170,6 +172,26 @@ lan::Progress readProgress() {
     std::memcpy(value.counters.data(), reinterpret_cast<void*>(base + 0x2bc),
                 value.counters.size() * 4);
     return value;
+}
+lan::LobbyAccess personalAccess() {
+    // Embedded modules load during Lua initialization, before the native save
+    // manager exists. The catalogue is still readable; access is unavailable.
+    if (!executableImage ||
+        !*reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager))
+        return {};
+    // During a shared run native progress contains the host's values. Access
+    // always comes from this player's save, captured before that substitution.
+    const auto progress = localProgress ? *localProgress : readProgress();
+    lan::LobbyAccess access;
+    access.characters = compat::characters::availableCharacters(
+        progress.achievements, progress.counters[compat::characters::edenTokensCounter]);
+    for (const auto& entry : compat::characters::characterUnlocks)
+        if (compat::characters::characterUnlocked(entry.type, progress.achievements))
+            access.unlockedCharacters.push_back(entry.type);
+    for (const auto& definition : compat::challenges::definitions)
+        if (compat::challenges::available(definition, progress.achievements))
+            access.rules.push_back({definition.id, definition.version});
+    return access;
 }
 void writeProgress(const lan::Progress& value) {
     const auto base = progressionAddress();
@@ -325,6 +347,11 @@ void __attribute__((fastcall)) executeStart(void* manager, void*) {
         }
     }
     originalExecuteStart(manager);
+    // Manager invokes ExecuteStart every frame, even without a queued launch.
+    // Reset only after an actual new/continued run, preserving later prompts.
+    if ((menuPromptsPending || resume) && session && session->phase() == lan::Phase::running)
+        input::resetMenuPrompts();
+    menuPromptsPending = false;
     if (resume) {
         // Continue restores players before our controller assignment callback.
         // Clear the native reconnect/pause screen once every controller is
@@ -353,6 +380,8 @@ void __attribute__((fastcall)) startGame(void* game, void*, int type, int challe
     // forwarding copy has no destructor; ownership is consumed exactly once by
     // the original function. Its verified stack cleanup is 0x68 bytes.
     originalStart(game, type, challenge, seeds, difficulty);
+    if (networkStart)
+        menuPromptsPending = true;
 }
 
 void fail(const std::string& error) {
@@ -566,10 +595,8 @@ void updateReplica(void* game) {
     // use the presentation callback instead of running that native simulation.
     pendingHalf = false;
 }
-void playSessionEnding(unsigned ending) {
-    const auto* definition =
-        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
-    if (definition && definition->ending == ending)
+void playSessionEnding(unsigned ending, bool completed) {
+    if (completed)
         rooms::finishChallenge();
     else
         rooms::playEnding(ending);
@@ -586,21 +613,18 @@ void updateOne(void* game) {
             input::reset();
             authoritative.reset();
             replicaPending.reset();
-            playSessionEnding(ending->id);
+            playSessionEnding(ending->id, ending->completed);
             writeProgress(ending->progress);
             if (logger)
-                logger("ending_event=RECEIVED id=" + std::to_string(ending->id));
+                logger("ending_event=RECEIVED id=" + std::to_string(ending->id) +
+                       " completed=" + std::to_string(ending->completed));
             return;
         }
-    if (pendingChallengeRouteEnd && session && session->isHost()) {
-        pendingChallengeRouteEnd = false;
-        integrationCallback("_IsaacLanChallengeRouteEnding");
-    }
     if (pendingChallengeFinish && session && session->isHost()) {
         const auto ending = *pendingChallengeFinish;
         pendingChallengeFinish.reset();
-        if (beginEnding(ending))
-            playSessionEnding(ending);
+        if (beginEnding(ending, true))
+            playSessionEnding(ending, true);
         return;
     }
     if (playingEnding) {
@@ -751,7 +775,8 @@ int host(lua_State* L) {
                                              diagnostics::enabled() ? diagnostics::sample : nullptr,
                                              logging::enabled(logging::Level::debug));
     sessionFingerprint = fingerprint;
-    lua.pushBoolean(L, session->host(static_cast<std::uint16_t>(port), fingerprint, mods));
+    lua.pushBoolean(
+        L, session->host(static_cast<std::uint16_t>(port), fingerprint, mods, personalAccess()));
     return 1;
 }
 int join(lua_State* L) {
@@ -773,8 +798,8 @@ int join(lua_State* L) {
         std::ifstream file(path);
         if (file)
             file >> identity;
-        const bool joined =
-            session->join(ip, static_cast<std::uint16_t>(port), fingerprint, identity, mods);
+        const bool joined = session->join(ip, static_cast<std::uint16_t>(port), fingerprint,
+                                          identity, mods, personalAccess());
         if (joined && identity.empty()) {
             std::filesystem::create_directories(path.parent_path());
             std::ofstream out(path, std::ios::trunc);
@@ -872,6 +897,9 @@ int poll(lua_State* L) {
         integer(("ready" + std::to_string(i)).c_str(),
                 session && session->choices()[i].ready ? 1 : 0);
         integer(("ping" + std::to_string(i)).c_str(), session ? session->latency()[i] : -1);
+        lua.pushBoolean(L, session && i < session->players() &&
+                               session->access()[i].allowsRules(session->rules()));
+        lua.setField(L, -2, ("eligible" + std::to_string(i)).c_str());
     }
     return 1;
 }
@@ -923,6 +951,7 @@ int integrationReceive(lua_State* L) {
     return 0;
 }
 int challengeList(lua_State* L) {
+    const auto access = session ? session->localAccess() : personalAccess();
     lua.createTable(L, 0, compat::challenges::definitions.size());
     for (const auto& def : compat::challenges::definitions) {
         lua.createTable(L, 0, 8);
@@ -935,6 +964,11 @@ int challengeList(lua_State* L) {
         integer("character", def.character);
         integer("difficulty", def.difficulty);
         integer("nextBag", def.nextBag);
+        lua.pushBoolean(L, access.allowsRules(rulesFor(&def)));
+        lua.setField(L, -2, "available");
+        lua.pushBoolean(L, session ? session->rulesAvailable(rulesFor(&def))
+                                   : access.allowsRules(rulesFor(&def)));
+        lua.setField(L, -2, "team_available");
         lua.pushString(L, def.name.data());
         lua.setField(L, -2, "name");
         lua.pushString(L, def.route.data());
@@ -942,6 +976,15 @@ int challengeList(lua_State* L) {
         lua.pushString(L, def.description.data());
         lua.setField(L, -2, "description");
         lua.setField(L, -2, std::to_string(def.id).c_str());
+    }
+    return 1;
+}
+int characterList(lua_State* L) {
+    const auto access = session ? session->localAccess() : personalAccess();
+    lua.createTable(L, access.characters.size(), 0);
+    for (std::size_t i = 0; i < access.characters.size(); ++i) {
+        lua.pushInteger(L, access.characters[i]);
+        lua.rawSetI(L, -2, i + 1);
     }
     return 1;
 }
@@ -1112,7 +1155,6 @@ int gate(lua_State* L) {
     gated = true;
     playingEnding = false;
     pendingChallengeFinish.reset();
-    pendingChallengeRouteEnd = false;
     playingCinematic = cinematicReady = false;
     session->ready();
     if (logger)
@@ -1145,7 +1187,6 @@ int close(lua_State* L) {
     gated = pendingHalf = false;
     playingEnding = false;
     pendingChallengeFinish.reset();
-    pendingChallengeRouteEnd = false;
     playingCinematic = cinematicReady = false;
     for (int reference :
          {captureRef, applyRef, captureStateRef, restoreStateRef, presentRef, stageRef})
@@ -1163,6 +1204,7 @@ int close(lua_State* L) {
     state = nullptr;
     launchRequested = false;
     resumeLaunch = false;
+    menuPromptsPending = false;
     return 0;
 }
 int exitEngine(lua_State* L) {
@@ -1420,13 +1462,6 @@ bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimensio
     lua.setTop(state, top);
     return allowed;
 }
-bool interceptChallengeEnding() {
-    if (!challengeActive())
-        return false;
-    if (session->isHost() && !playingEnding)
-        pendingChallengeRouteEnd = true;
-    return true;
-}
 std::array<int, 2> challengeDestination() {
     const auto* definition =
         challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
@@ -1547,13 +1582,14 @@ void prepareEnding() {
     input::reset();
     pendingHalf = false;
 }
-bool beginEnding(unsigned ending) {
+bool beginEnding(unsigned ending, bool completed) {
     if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running ||
-        !session->beginEnding(ending, readProgress()))
+        !session->beginEnding(ending, readProgress(), completed))
         return false;
     prepareEnding();
     if (logger)
-        logger("ending_event=SENT id=" + std::to_string(ending));
+        logger("ending_event=SENT id=" + std::to_string(ending) +
+               " completed=" + std::to_string(completed));
     return true;
 }
 void beginRewind(std::span<const std::uint8_t> bytes) {
@@ -1657,6 +1693,7 @@ bool bind(lua_State* L, HMODULE module) {
     IMPORT(ref, "luaL_ref");
     IMPORT(unref, "luaL_unref");
     IMPORT(rawGetI, "lua_rawgeti");
+    IMPORT(rawSetI, "lua_rawseti");
     IMPORT(pcall, "lua_pcallk");
     IMPORT(boolean, "lua_toboolean");
 #undef IMPORT
@@ -1671,6 +1708,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_join", join);
     function("net_poll", poll);
     function("net_challenges", challengeList);
+    function("net_characters", characterList);
     function("net_challenge", selectChallenge);
     function("net_finish_challenge", finishChallenge);
     function("net_start", start);
