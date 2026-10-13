@@ -342,11 +342,6 @@ function _IsaacLanMenuRender(
             page, selection = "lan", 3
         end)
         local preview = challenges[tostring(ids[selection] or ids[1])]
-        local line = 0
-        for value in ((preview and preview.description or "") .. "\n"):gmatch("(.-)\n") do
-            centered(value, 110, 176 + line * 17, 10)
-            line = line + 1
-        end
         if preview and not preview.team_available then
             centered("全员需解锁底片与里该隐", 240, 250, 10, red)
         end
