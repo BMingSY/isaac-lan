@@ -10,7 +10,7 @@ struct Definition {
     std::uint16_t id, version, character;
     std::uint8_t difficulty;
     bool transient;
-    std::string_view name, route, description;
+    std::string_view name, route;
     unsigned ending;
     int goalStage, goalStageType;
     bool nextBag;
@@ -24,8 +24,6 @@ inline constexpr std::array definitions{
                true,
                "恶魔形态",
                "lamb",
-               "2～4 人 · 全员里该隐\n只能看下一位的材料与预览\n羔羊奖杯 · "
-               "需解锁底片与里该隐\n不支持续玩 · 支持掉线重连",
                6,
                ids::stage::chestOrDarkRoom,
                ids::stageType::original,

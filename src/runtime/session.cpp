@@ -954,7 +954,7 @@ int challengeList(lua_State* L) {
     const auto access = session ? session->localAccess() : personalAccess();
     lua.createTable(L, 0, compat::challenges::definitions.size());
     for (const auto& def : compat::challenges::definitions) {
-        lua.createTable(L, 0, 8);
+        lua.createTable(L, 0, 9);
         auto integer = [&](const char* key, long long value) {
             lua.pushInteger(L, value);
             lua.setField(L, -2, key);
@@ -973,8 +973,6 @@ int challengeList(lua_State* L) {
         lua.setField(L, -2, "name");
         lua.pushString(L, def.route.data());
         lua.setField(L, -2, "route");
-        lua.pushString(L, def.description.data());
-        lua.setField(L, -2, "description");
         lua.setField(L, -2, std::to_string(def.id).c_str());
     }
     return 1;
