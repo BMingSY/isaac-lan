@@ -37,6 +37,8 @@ class Session {
     bool checkpoint(const Start& settings, std::uint32_t firstTick);
     bool checkpointNeeded() const;
     bool choose(Choice choice);
+    bool configureRules(const RunRules& rules);
+    const RunRules& rules() const;
     bool command(Command command);
     const std::array<Choice, maxPlayers>& choices() const;
     bool submit(std::uint32_t tick, const InputFrame& input, std::optional<InputRoom> room = {});

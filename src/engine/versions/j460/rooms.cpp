@@ -740,6 +740,10 @@ Exit originalExit;
 using End = void(__attribute__((thiscall)) *)(void*, int);
 End originalEnd;
 void __attribute__((fastcall)) endGame(void* target, void*, int ending) {
+    // Challenge completion is requested by its authority rule and executed at
+    // the next runtime boundary. Native route endings cannot bypass the trophy.
+    if (ending >= 2 && ending <= 14 && runtime::interceptChallengeEnding())
+        return;
     if (runtime::localViewSlot() < 0 || ending < 2 || ending > 14) {
         originalEnd(target, ending);
         return;
@@ -1046,6 +1050,9 @@ bool queue(Address player, int index, int dimension, int door, bool teleport = f
     const auto key = *target;
     if (key == it->second->key)
         return true;
+    if (!runtime::allowRoomEntry(slotOf(player), it->second->key.dimension, it->second->key.index,
+                                 key.dimension, key.index, teleport))
+        return false;
     if (std::any_of(pending.begin(), pending.end(),
                     [player](const auto& r) { return r.player == player; }))
         return true;
@@ -3055,6 +3062,13 @@ void requestExit(bool save) {
     engine<Transition>(j460::entry::engineRoomsTransition_60f550)(
         reinterpret_cast<void*>(manager + 0x4b290), -1);
     at<bool>(manager, 0x4b288) = true;
+}
+void finishChallenge() {
+    // LAN challenges keep Game::Challenge at zero: use the original fade/menu
+    // flow while skipping native challenge unlocks. Existing save guards cover
+    // FinishChallenge's attempt to remove the single-player Continue file.
+    reinterpret_cast<RoomCall>(image +
+                               j460::entry::gameFinishChallenge)(reinterpret_cast<void*>(game()));
 }
 void playEnding(unsigned ending) {
     // Native local co-op can wait for every roster member to enter the chest.

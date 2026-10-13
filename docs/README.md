@@ -19,6 +19,7 @@
 | 开局、换层、存档、重连与回退 | [会话与状态恢复](session-lifecycle.md) |
 | 房间上下文、迁移、HUD、音画与 Mod 回调 | [分房与本机显示](rooms-and-presentation.md) |
 | 跟班、公共道具、角色、口袋槽、合成袋与重开 | [队伍兼容](party-compatibility.md) |
+| 挑战定义、终点、循环观察与扩展接口 | [联机挑战](lan-challenges.md) |
 | 全队开门概率及原生查询 ABI | [共享恶魔／天使房概率](shared-deal-chances.md) |
 | 里 Lost 的原版生成规则与反汇编依据 | [生成特性参考](tainted-lost-item-generation.md) |
 | 第三方本机视图、生命周期和主机动作 | [Mod 接入 API v1](third-party-mod-integration.md) |

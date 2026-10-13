@@ -1,4 +1,5 @@
 #pragma once
+#include "core/run_rules.h"
 #include <array>
 #include <cstdint>
 #include <span>
@@ -8,7 +9,8 @@
 #include <vector>
 
 namespace isaac::lan {
-constexpr std::uint16_t protocolVersion = 26;
+using RunRules = isaac::RunRules;
+constexpr std::uint16_t protocolVersion = 27;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -107,6 +109,7 @@ struct Ending {
     bool operator==(const Ending&) const = default;
 };
 struct Start {
+    RunRules rules;
     std::uint32_t firstTick = 0;
     std::uint8_t connected = 0;
     std::string seed;

@@ -13,6 +13,25 @@
 
 namespace isaac::lan {
 namespace {
+void writeRules(Writer& w, const RunRules& rules) {
+    w.u16(rules.id);
+    w.u16(rules.version);
+    w.u16(rules.character);
+    w.u8(rules.difficulty);
+    w.u8(rules.transient);
+}
+RunRules readRules(Reader& r) {
+    RunRules value;
+    value.id = r.u16();
+    value.version = r.u16();
+    value.character = r.u16();
+    value.difficulty = r.u8();
+    const auto transient = r.u8();
+    value.transient = transient != 0;
+    if (transient > 1 || !value.valid())
+        throw std::runtime_error("Invalid run rules");
+    return value;
+}
 using Clock = std::chrono::steady_clock;
 struct ConnectionLost : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -269,6 +288,8 @@ struct Session::Impl {
     std::array<std::unique_ptr<Socket>, maxPlayers> peers;
     std::vector<std::unique_ptr<Socket>> incoming;
     Start startSettings;
+    RunRules runRules;
+    std::uint32_t rulesRevision = 0;
     std::array<Choice, maxPlayers> choices{};
     std::array<Command, maxPlayers> commands{};
     std::array<InputFrame, maxPlayers> latest{};
@@ -413,10 +434,15 @@ struct Session::Impl {
                 ++next;
             }
         playerCount = next;
+        for (auto& choice : choices)
+            if (runRules.character != 65535)
+                choice.character = runRules.character;
         for (unsigned i = 1; i < playerCount; ++i) {
             Writer w(Message::lobby);
             w.u8(playerCount);
             w.u8(i);
+            w.u32(rulesRevision);
+            writeRules(w, runRules);
             for (auto choice : choices) {
                 w.u16(choice.character);
                 w.u8(choice.ready);
@@ -428,6 +454,7 @@ struct Session::Impl {
     }
     Writer startMessage(Message type, const Start& value) {
         Writer w(type);
+        writeRules(w, value.rules);
         w.string(value.seed);
         w.u8(value.difficulty);
         for (auto c : value.characters)
@@ -549,9 +576,14 @@ struct Session::Impl {
                 return;
             }
             if (type == Message::choice && state == Phase::lobby) {
+                const auto revision = r.u32();
                 const auto c = r.u16(), ready = static_cast<std::uint16_t>(r.u8());
                 if (ready > 1)
                     throw std::runtime_error("Invalid ready flag");
+                if (revision != rulesRevision)
+                    return; // Choice from the previous lobby rules.
+                if (runRules.character != 65535 && c != runRules.character)
+                    return;
                 choices[slot] = {c, ready != 0};
                 choicesRequired = true;
                 lobbyDirty = true;
@@ -727,6 +759,8 @@ struct Session::Impl {
         if (type == Message::lobby && state == Phase::lobby) {
             playerCount = r.u8();
             localSlot = r.u8();
+            rulesRevision = r.u32();
+            runRules = readRules(r);
             if (playerCount < 2 || playerCount > maxPlayers || !localSlot ||
                 localSlot >= playerCount)
                 throw std::runtime_error("Invalid lobby");
@@ -751,6 +785,7 @@ struct Session::Impl {
         }
         if (type == Message::start && (state == Phase::lobby || state == Phase::waiting)) {
             Start value;
+            value.rules = readRules(r);
             value.seed = r.string();
             value.difficulty = r.u8();
             for (auto& c : value.characters)
@@ -772,6 +807,7 @@ struct Session::Impl {
             receivedState.reset();
             assembling.reset();
             startSettings = value;
+            runRules = value.rules;
             activeMask = value.connected;
             nextConsume = value.firstTick;
             nextInput = 0;
@@ -1509,7 +1545,7 @@ void Session::abort(const std::string& reason) {
 bool Session::start(const Start& settings) {
     if (!impl->hosting || impl->state != Phase::lobby || impl->playerCount < 2 ||
         settings.seed.size() != 8 || settings.difficulty > 3 ||
-        settings.snapshot.size() > maxSnapshotSize)
+        settings.snapshot.size() > maxSnapshotSize || settings.rules != impl->runRules)
         return false;
     for (unsigned i = 1; i < maxPlayers; ++i)
         if ((i < impl->playerCount && (!impl->peers[i] || !impl->peers[i]->accepted)) ||
@@ -1520,6 +1556,12 @@ bool Session::start(const Start& settings) {
             if (!impl->choices[i].ready ||
                 (settings.snapshot.empty() && impl->choices[i].character != settings.characters[i]))
                 return false;
+    if ((settings.rules.difficulty != 255 && settings.difficulty != settings.rules.difficulty))
+        return false;
+    for (unsigned i = 0; i < impl->playerCount; ++i)
+        if (settings.snapshot.empty() && settings.rules.character != 65535 &&
+            settings.characters[i] != settings.rules.character)
+            return false;
     impl->integrationRun = randomIdentity();
     impl->integrationEpoch = 0;
     impl->integrationQueue.clear();
@@ -1538,7 +1580,8 @@ bool Session::start(const Start& settings) {
 }
 bool Session::checkpoint(const Start& settings, std::uint32_t tick) {
     if (!impl->hosting || impl->state != Phase::running || settings.snapshot.empty() ||
-        settings.snapshot.size() > maxSnapshotSize || tick != impl->committed)
+        settings.snapshot.size() > maxSnapshotSize || tick != impl->committed ||
+        settings.rules != impl->runRules)
         return false;
     auto saved = std::make_shared<Start>(settings);
     saved->firstTick = tick;
@@ -1571,7 +1614,8 @@ bool Session::checkpointNeeded() const {
                        [](const auto& p) { return p && p->accepted && p->waiting; });
 }
 bool Session::choose(Choice choice) {
-    if (impl->state != Phase::lobby)
+    if (impl->state != Phase::lobby ||
+        (impl->runRules.character != 65535 && choice.character != impl->runRules.character))
         return false;
     if (impl->hosting) {
         impl->choices[0] = choice;
@@ -1579,11 +1623,31 @@ bool Session::choose(Choice choice) {
         impl->lobbyDirty = true;
     } else {
         Writer w(Message::choice);
+        w.u32(impl->rulesRevision);
         w.u16(choice.character);
         w.u8(choice.ready);
         impl->peers[0]->sendMessage(w);
     }
     return true;
+}
+bool Session::configureRules(const RunRules& rules) {
+    if (!impl->hosting || impl->state != Phase::lobby || !rules.valid())
+        return false;
+    if (rules == impl->runRules)
+        return true;
+    impl->runRules = rules;
+    ++impl->rulesRevision;
+    for (auto& choice : impl->choices) {
+        choice.ready = false;
+        if (rules.character != 65535)
+            choice.character = rules.character;
+    }
+    impl->choicesRequired = true;
+    impl->lobbyDirty = true;
+    return true;
+}
+const RunRules& Session::rules() const {
+    return impl->runRules;
 }
 const std::array<Choice, maxPlayers>& Session::choices() const {
     return impl->choices;

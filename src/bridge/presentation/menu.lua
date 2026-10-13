@@ -3,6 +3,7 @@ local assets
 local ip, port, seed, difficulty = "", "29506", "", 0
 local selection, editing, lastPhase = 1, nil, -1
 local page = "modes"
+local challenges = _IsaacLan.net_challenges()
 local function idle(phase)
     return phase == 0 or phase == 4 or phase == 5
 end
@@ -142,6 +143,7 @@ function _IsaacLanMenuRender(
 )
     local status = _IsaacLanStatus()
     local phase = status.phase or 0
+    local challenge = challenges[tostring(status.challenge or 0)]
     if not visible and not available and not status.prepared and phase ~= 9 then
         return false
     end
@@ -189,6 +191,8 @@ function _IsaacLanMenuRender(
             editing = nil
             _IsaacLan.menu_text_end()
             key = 0
+        elseif page == "challenges" then
+            page, selection, key = "lan", 3, 0
         elseif page == "lan" and idle(phase) then
             page = "modes"
             selection = 2
@@ -200,6 +204,16 @@ function _IsaacLanMenuRender(
     if not visible then
         if status.prepared and phase == 3 then
             local white = KColor(1, 1, 1, 1)
+            if challenge then
+                local label = "挑战 " .. challenge.id .. " " .. challenge.name
+                if challenge.nextBag == 1 then
+                    local target = ((status.slot or 0) + 1) % status.players
+                    local suffix = ((status.connected or 0) & (1 << target)) == 0 and "（离线）"
+                        or ""
+                    label = label .. " · 查看 P" .. (target + 1) .. " 的百宝袋" .. suffix
+                end
+                centered(label, 240, 254, 10, white)
+            end
             local line = 0
             for slot = 1, (status.players or 1) - 1 do
                 if ((status.connected or 0) & (1 << slot)) ~= 0 then
@@ -241,15 +255,21 @@ function _IsaacLanMenuRender(
     local modes = page == "modes"
     local shift = modes and 128 or 0
     layer(assets.lobby, 9, 9 + shift, 39)
-    centered(modes and "联机模式" or "局域网联机", 110 + shift, 58, 16)
+    centered(
+        modes and "联机模式" or page == "challenges" and "联机挑战" or "局域网联机",
+        110 + shift,
+        58,
+        16
+    )
     local rows = {}
-    local function row(label, action, enabled, change, field)
+    local function row(label, action, enabled, change, field, color)
         rows[#rows + 1] = {
             label = label,
             action = action,
             enabled = enabled ~= false,
             change = change,
             field = field,
+            color = color,
         }
     end
     local function command(action, value)
@@ -312,6 +332,30 @@ function _IsaacLanMenuRender(
             page = "modes"
             selection = 2
         end)
+    elseif phase == 2 and page == "challenges" and host then
+        local ids = {}
+        for id in pairs(challenges) do
+            ids[#ids + 1] = tonumber(id)
+        end
+        table.sort(ids)
+        for _, id in ipairs(ids) do
+            local definition = challenges[tostring(id)]
+            row(id .. " " .. definition.name, function()
+                if command("challenge", tostring(id)) then
+                    difficulty = definition.difficulty
+                    page, selection = "lan", 3
+                end
+            end, true, nil, nil, amber)
+        end
+        row("返回", function()
+            page, selection = "lan", 3
+        end)
+        local preview = challenges[tostring(ids[selection] or ids[1])]
+        local line = 0
+        for value in ((preview and preview.description or "") .. "\n"):gmatch("(.-)\n") do
+            centered(value, 110, 176 + line * 17, 10)
+            line = line + 1
+        end
     elseif phase == 2 then
         local function cycle(delta)
             local index = 1
@@ -325,20 +369,33 @@ function _IsaacLanMenuRender(
         end
         row(character(choice), function()
             cycle(1)
-        end, not ready, cycle)
+        end, not ready and not challenge, cycle)
         row(ready and "取消准备" or "准备", function()
             command("choose", choice .. (ready and ":0" or ":1"))
         end)
         if host then
+            local function changeMode(delta)
+                local nextMode = ((challenge and 4 or difficulty) + delta) % 5
+                if nextMode == 4 then
+                    page, selection = "challenges", 1
+                elseif command("challenge", "0") then
+                    difficulty = nextMode
+                end
+            end
             row(
-                ({ "普通", "困难", "贪婪", "贪婪加强" })[difficulty + 1],
+                challenge and ("挑战：" .. challenge.id .. " " .. challenge.name)
+                    or ({ "普通", "困难", "贪婪", "贪婪加强" })[difficulty + 1],
                 function()
-                    difficulty = (difficulty + 1) % 4
+                    if challenge then
+                        page, selection = "challenges", 1
+                    else
+                        changeMode(1)
+                    end
                 end,
                 true,
-                function(d)
-                    difficulty = (difficulty + d) % 4
-                end
+                changeMode,
+                nil,
+                challenge and amber
             )
             row(seed == "" and "种子：随机" or seed, function()
                 editing = "seed"
@@ -349,7 +406,9 @@ function _IsaacLanMenuRender(
                 allReady = allReady and status["ready" .. i] == 1
             end
             row("开始游戏", function()
-                local settings = (seed == "" and "RANDOM" or seed) .. ":" .. difficulty
+                local settings = (seed == "" and "RANDOM" or seed)
+                    .. ":"
+                    .. (challenge and challenge.difficulty or difficulty)
                 for i = 0, 3 do
                     settings = settings .. ":" .. (status["choice" .. i] or 0)
                 end
@@ -357,13 +416,23 @@ function _IsaacLanMenuRender(
                     visible = false
                 end
             end, allReady)
-            if (status.savedPlayers or 0) >= 2 then
+            if not challenge and (status.savedPlayers or 0) >= 2 then
                 row("继续上次联机", function()
                     if command("resume") then
                         visible = false
                     end
                 end, allReady and count == status.savedPlayers)
             end
+        end
+        if not host and challenge then
+            row(
+                "挑战：" .. challenge.id .. " " .. challenge.name,
+                function() end,
+                false,
+                nil,
+                nil,
+                amber
+            )
         end
         row("离开房间", function()
             command("close")
@@ -381,7 +450,7 @@ function _IsaacLanMenuRender(
             end, localSlot == status.pauseOwner)
         end
         if host then
-            row("保存并结束联机", function()
+            row(challenge and "结束挑战（不保存）" or "保存并结束联机", function()
                 command("control", "3")
             end)
         else
@@ -448,7 +517,7 @@ function _IsaacLanMenuRender(
                 .. "_"
         end
         local size = assets[12]:GetStringWidthUTF8(label) > 138 and 10 or 12
-        text(label, 49 + shift, y, size, item.enabled and ink or faded)
+        text(label, 49 + shift, y, size, item.color or (item.enabled and ink or faded))
         if i == selection then
             pointer(37 + shift, y + 5)
         end
@@ -487,7 +556,7 @@ function _IsaacLanMenuRender(
         messageColor = amber
     end
     local footerY = message ~= "" and 235 or 243
-    if phase == 2 then
+    if phase == 2 and page ~= "challenges" then
         if not host then
             text("房主地址：" .. ip, 25, footerY - 12, 10)
         end

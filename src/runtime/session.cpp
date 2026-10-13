@@ -1,4 +1,5 @@
 #include "runtime/session.h"
+#include "compat/challenges/catalog.h"
 #include "engine/item_presentation.h"
 #include "engine/presentation.h"
 #include "presentation/frontend.h"
@@ -57,9 +58,20 @@ bool resumeLaunch = false;
 bool authorizedExit = false;
 std::string sessionFingerprint;
 std::optional<lan::Archive> exitingArchive, resumingArchive;
-bool exitingHost = false;
+bool exitingHost = false, exitingTransient = false;
+std::optional<unsigned> pendingChallengeFinish;
+bool pendingChallengeRouteEnd = false;
 bool networkRun = false, soloContinueAvailable = false;
 std::vector<std::uint8_t> soloState;
+lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
+    return definition ? lan::RunRules{definition->id, definition->version, definition->character,
+                                      definition->difficulty, definition->transient}
+                      : lan::RunRules{};
+}
+bool validRules(const lan::RunRules& rules) {
+    const auto* definition = compat::challenges::find(rules.id);
+    return (!rules.id || definition) && rules == rulesFor(definition);
+}
 bool beginNetworkRun() {
     if (networkRun)
         return true;
@@ -554,6 +566,14 @@ void updateReplica(void* game) {
     // use the presentation callback instead of running that native simulation.
     pendingHalf = false;
 }
+void playSessionEnding(unsigned ending) {
+    const auto* definition =
+        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    if (definition && definition->ending == ending)
+        rooms::finishChallenge();
+    else
+        rooms::playEnding(ending);
+}
 void updateOne(void* game) {
     if (!gated) {
         originalUpdate(game);
@@ -566,12 +586,23 @@ void updateOne(void* game) {
             input::reset();
             authoritative.reset();
             replicaPending.reset();
-            rooms::playEnding(ending->id);
+            playSessionEnding(ending->id);
             writeProgress(ending->progress);
             if (logger)
                 logger("ending_event=RECEIVED id=" + std::to_string(ending->id));
             return;
         }
+    if (pendingChallengeRouteEnd && session && session->isHost()) {
+        pendingChallengeRouteEnd = false;
+        integrationCallback("_IsaacLanChallengeRouteEnding");
+    }
+    if (pendingChallengeFinish && session && session->isHost()) {
+        const auto ending = *pendingChallengeFinish;
+        pendingChallengeFinish.reset();
+        if (beginEnding(ending))
+            playSessionEnding(ending);
+        return;
+    }
     if (playingEnding) {
         // Keep the native cinematic/exit state machine alive after finish.
         // Returning directly to the lobby would skip the guest's ending.
@@ -673,7 +704,7 @@ void updateOne(void* game) {
             frame->inputs[slot].triggered |= 1u << 12;
         } else if (command == lan::Command::saveExit && slot == 0) {
             authorizedExit = true;
-            rooms::requestExit(true);
+            rooms::requestExit(!session->settings().rules.transient);
         }
     }
     if (!(frame->connected & (1u << session->slot())))
@@ -827,6 +858,8 @@ int poll(lua_State* L) {
     lua.pushString(L, session ? session->settings().seed.c_str() : "");
     lua.setField(L, -2, "seed");
     integer("difficulty", session ? session->settings().difficulty : 0);
+    integer("challenge", session ? session->rules().id : 0);
+    integer("challengeVersion", session ? session->rules().version : 0);
     const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
     integer("pause", game ? *reinterpret_cast<int*>(game + 0x23a74) : 0);
     integer("pauseOwner", input::menuOwner());
@@ -856,6 +889,9 @@ int integrationInfo(lua_State* L) {
     integer("players", session ? session->players() : 0);
     integer("connected", session ? session->connectedMask() : 0);
     integer("worldEpoch", floorEpoch);
+    integer("challenge", active ? session->settings().rules.id : 0);
+    integer("challengeVersion", active ? session->settings().rules.version : 0);
+    integer("restrictedBags", craftingBagViewTarget() != -1);
     integer("tick", currentTick);
     integer("nowMs", GetTickCount64());
     lua.pushString(L, session ? session->runId().c_str() : "");
@@ -886,6 +922,46 @@ int integrationReceive(lua_State* L) {
         }
     return 0;
 }
+int challengeList(lua_State* L) {
+    lua.createTable(L, 0, compat::challenges::definitions.size());
+    for (const auto& def : compat::challenges::definitions) {
+        lua.createTable(L, 0, 8);
+        auto integer = [&](const char* key, long long value) {
+            lua.pushInteger(L, value);
+            lua.setField(L, -2, key);
+        };
+        integer("id", def.id);
+        integer("version", def.version);
+        integer("character", def.character);
+        integer("difficulty", def.difficulty);
+        integer("nextBag", def.nextBag);
+        lua.pushString(L, def.name.data());
+        lua.setField(L, -2, "name");
+        lua.pushString(L, def.route.data());
+        lua.setField(L, -2, "route");
+        lua.pushString(L, def.description.data());
+        lua.setField(L, -2, "description");
+        lua.setField(L, -2, std::to_string(def.id).c_str());
+    }
+    return 1;
+}
+int selectChallenge(lua_State* L) {
+    const auto id = lua.checkInteger(L, 1);
+    const auto* definition = id >= 0 && id <= 65535 ? compat::challenges::find(id) : nullptr;
+    lua.pushBoolean(L, session && (id == 0 || definition) &&
+                           session->configureRules(rulesFor(definition)));
+    return 1;
+}
+int finishChallenge(lua_State* L) {
+    const auto* definition =
+        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    const bool allowed = definition && gated && session->isHost() && !playingEnding &&
+                         session->phase() == lan::Phase::running;
+    if (allowed)
+        pendingChallengeFinish = definition->ending;
+    lua.pushBoolean(L, allowed);
+    return 1;
+}
 int start(lua_State* L) {
     const char* seed = lua.checkString(L, 1, nullptr);
     const auto difficulty = lua.checkInteger(L, 2);
@@ -897,6 +973,11 @@ int start(lua_State* L) {
         return 1;
     }
     lan::Start settings;
+    settings.rules = session->rules();
+    if (!validRules(settings.rules)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
     settings.seed = seed;
     settings.difficulty = static_cast<std::uint8_t>(difficulty);
     settings.progress = readProgress();
@@ -930,6 +1011,10 @@ int progressValues(lua_State* L) {
     return 2;
 }
 int startEngine(lua_State* L) {
+    if (!session || !validRules(session->settings().rules)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
     if (!session || session->phase() != lan::Phase::running || launchRequested || gated) {
         lua.pushBoolean(L, false);
         return 1;
@@ -969,6 +1054,7 @@ int startEngine(lua_State* L) {
             if (resumingArchive->fingerprint != sessionFingerprint ||
                 resumingArchive->locations.size() != session->players() ||
                 resumingArchive->settings.seed != settings.seed ||
+                resumingArchive->settings.rules != settings.rules ||
                 !save::decode(executableImage, resumingArchive->game))
                 throw std::runtime_error("Cannot restore host saved session");
         } catch (const std::exception& error) {
@@ -1025,6 +1111,8 @@ int gate(lua_State* L) {
     pendingHalf = false;
     gated = true;
     playingEnding = false;
+    pendingChallengeFinish.reset();
+    pendingChallengeRouteEnd = false;
     playingCinematic = cinematicReady = false;
     session->ready();
     if (logger)
@@ -1056,6 +1144,8 @@ int close(lua_State* L) {
     }
     gated = pendingHalf = false;
     playingEnding = false;
+    pendingChallengeFinish.reset();
+    pendingChallengeRouteEnd = false;
     playingCinematic = cinematicReady = false;
     for (int reference :
          {captureRef, applyRef, captureStateRef, restoreStateRef, presentRef, stageRef})
@@ -1125,7 +1215,8 @@ int progressState(lua_State* L) {
 int resumeSession(lua_State* L) {
     const auto saved = readArchive();
     if (!session || !session->isHost() || !saved || saved->fingerprint != sessionFingerprint ||
-        saved->locations.size() != session->players()) {
+        saved->locations.size() != session->players() || session->rules().id != 0 ||
+        saved->settings.rules.transient) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -1195,8 +1286,9 @@ void __attribute__((fastcall)) executeMenu(void* manager, void*) {
 } // namespace
 void beforeExit(bool save) {
     exitingHost = session && session->isHost() && gated;
+    exitingTransient = session && session->settings().rules.transient;
     exitingArchive.reset();
-    if (!exitingHost || !save)
+    if (!exitingHost || !save || exitingTransient)
         return;
     lan::Archive archive;
     archive.fingerprint = sessionFingerprint;
@@ -1214,9 +1306,9 @@ void afterExit(bool save) {
     exitingHost = false;
     try {
         const auto path = archivePath();
-        if (host && !save)
+        if (host && !save && !exitingTransient)
             std::filesystem::remove(path);
-        if (host && save) {
+        if (host && save && !exitingTransient) {
             if (!exitingArchive || exitingArchive->locations.size() < 2)
                 throw std::runtime_error("No room state to save");
             exitingArchive->game = save::encode(executableImage);
@@ -1303,6 +1395,53 @@ bool halfAllowed() {
 }
 bool replica() {
     return gated && session && !session->isHost();
+}
+bool challengeActive() {
+    return session && (session->phase() == lan::Phase::running || networkRun) &&
+           session->settings().rules.id != 0;
+}
+bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimension, int room,
+                    bool teleport) {
+    if (!challengeActive() || replica())
+        return true;
+    if (!state)
+        return false;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanCanEnterRoom") != 6) {
+        lua.setTop(state, top);
+        return false;
+    }
+    for (auto value : {static_cast<int>(slot), fromDimension, fromRoom, dimension, room})
+        lua.pushInteger(state, value);
+    lua.pushBoolean(state, teleport);
+    if (!call(0, 6, 1, top))
+        return false;
+    const bool allowed = lua.type(state, -1) == 1 && lua.boolean(state, -1);
+    lua.setTop(state, top);
+    return allowed;
+}
+bool interceptChallengeEnding() {
+    if (!challengeActive())
+        return false;
+    if (session->isHost() && !playingEnding)
+        pendingChallengeRouteEnd = true;
+    return true;
+}
+std::array<int, 2> challengeDestination() {
+    const auto* definition =
+        challengeActive() ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return definition ? std::array{definition->goalStage, definition->goalStageType}
+                      : std::array{-1, -1};
+}
+int craftingBagViewTarget() {
+    if (!challengeActive())
+        return -1;
+    const auto* definition = compat::challenges::find(session->settings().rules.id);
+    if (!definition || !definition->nextBag)
+        return -1;
+    if (!gated || !rooms::viewReady() || (!session->isHost() && !authoritative))
+        return -2;
+    return compat::challenges::nextSeat(session->slot(), session->players());
 }
 unsigned difficulty() {
     return session ? session->settings().difficulty : 0;
@@ -1531,6 +1670,9 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_host", host);
     function("net_join", join);
     function("net_poll", poll);
+    function("net_challenges", challengeList);
+    function("net_challenge", selectChallenge);
+    function("net_finish_challenge", finishChallenge);
     function("net_start", start);
     function("net_choose", choose);
     function("net_engine_start", startEngine);

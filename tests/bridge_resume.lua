@@ -13,6 +13,9 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
         MC_POST_UPDATE = 3,
         MC_PRE_GAME_EXIT = 4,
         MC_PRE_PICKUP_COLLISION = 5,
+        MC_POST_PICKUP_INIT = 6,
+        MC_POST_PICKUP_UPDATE = 7,
+        MC_POST_NEW_LEVEL = 8,
     }
     Isaac = {
         AddCallback = function(_, id, fn)
@@ -46,6 +49,9 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     end
     local noop = function() end
     _IsaacLan = {
+        net_challenges = function()
+            return {}
+        end,
         api_info = function()
             return { ready = 0 }
         end,
@@ -99,6 +105,10 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     _IsaacLanState =
         { reset = noop, capture = noop, apply = noop, present = noop, beginFloor = noop }
     _IsaacLanModules = {
+        ["runtime/challenges"] = dofile(root .. "/src/bridge/runtime/challenges.lua"),
+        ["compat/routes/challenge_lamb"] = dofile(
+            root .. "/src/bridge/compat/routes/challenge_lamb.lua"
+        ),
         ["runtime/session"] = dofile(root .. "/src/bridge/runtime/session.lua"),
         ["compat/characters/keeper"] = dofile(root .. "/src/bridge/compat/characters/keeper.lua"),
         ["compat/mods/observation"] = dofile(root .. "/src/bridge/compat/mods/observation.lua"),

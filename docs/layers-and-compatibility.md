@@ -10,7 +10,7 @@
 | `src/net/` | 协议、TCP、队列、压缩和可靠传输；不访问游戏对象 |
 | `src/runtime/`、`src/bridge/runtime/` | 会话推进、存档、启动、房间／楼层生命周期及失效边界 |
 | `src/bridge/sync/` | 字段、采集代次、副本恢复、库存／实体／网格一致性 |
-| `src/compat/`、`src/bridge/compat/` | Boss、角色、道具、路线规则；C++ 策略只接收普通值，Lua 适配使用游戏 API 或具名原生能力 |
+| `src/compat/`、`src/bridge/compat/` | Boss、角色、道具、路线与挑战规则；C++ 策略只接收普通值，Lua 适配使用游戏 API 或具名原生能力 |
 | `src/bridge/compat/mods/` | 第三方 Mod 探测、接入和卸载，保留版本／源码匹配边界 |
 | `src/bridge/api/` | 第三方公开契约；不暴露原生指针或任意内存读写 |
 | `src/presentation/`、`src/bridge/presentation/` | 菜单、预测、镜头、外观和音画；不决定权威玩法 |
@@ -69,6 +69,8 @@ J460 `Scope` 按深度选择独立的临时名单，恢复原生标量与名单�
 3. 由装配层注册组件；原生重建走运行协调器。可靠转场先由 `floor.begin(epoch)` 拒绝重复／旧事件，再清理旧视图，按显式顺序选择兼容处理；失败直接传播。
 4. 字段变更同时更新采集、应用、schema、嵌入清单、版本／指纹与文档。游戏 ID 使用枚举或 [`compat/game_ids.h`](../src/compat/game_ids.h)，原生地址与特征使用 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h) 和 [`signatures.inc`](../src/engine/versions/j460/signatures.inc)。
 5. 补充实际触发链路、重复事件、跨房／跨层和清理回归，原生机制与画面列入[最终验收](development-and-testing.md#最终实机验收)。
+
+挑战目录、原版 HUD 复用和地图扩展边界见[联机挑战](lan-challenges.md)。
 
 现有例子：Boss 汇合用 `compat/bosses/encounters.h` 判断、后端排队迁移；里拉撒路用 `compat/characters/lazarus.lua` 解析原生身体；共享道具、口袋槽和特殊传送见[队伍兼容](party-compatibility.md)，概率上下文见[共享开门概率](shared-deal-chances.md)。第三方 Mod 的注册与卸载遵循独立的[公开 API 契约](third-party-mod-integration.md)。
 

@@ -22,7 +22,8 @@ template <class F> void until(F f) {
 struct Group {
     std::array<std::unique_ptr<Session>, 4> peers;
     unsigned count;
-    explicit Group(unsigned n, std::uint8_t difficulty = 0, const char* address = "127.0.0.1")
+    explicit Group(unsigned n, std::uint8_t difficulty = 0, const char* address = "127.0.0.1",
+                   RunRules rules = {})
         : count(n) {
         for (unsigned i = 0; i < n; ++i)
             peers[i] = std::make_unique<Session>();
@@ -37,6 +38,24 @@ struct Group {
         Start start;
         start.seed = "YV039KQF";
         start.difficulty = difficulty;
+        start.rules = rules;
+        if (rules.id) {
+            require(peers[0]->configureRules(rules), "Rule configuration failed");
+            until([&] {
+                poll();
+                return peers[n - 1]->rules() == rules;
+            });
+            start.characters.fill(rules.character);
+            for (unsigned i = 0; i < n; ++i)
+                require(peers[i]->choose({rules.character, true}), "Locked choice failed");
+            until([&] {
+                poll();
+                for (unsigned i = 0; i < n; ++i)
+                    if (!peers[0]->choices()[i].ready)
+                        return false;
+                return true;
+            });
+        }
         require(peers[0]->start(start), "Start failed");
         until([&] {
             poll();
@@ -741,6 +760,100 @@ void lobby() {
             "Start settings changed");
     require(!host.choose({}) && !guest.choose({}), "Running session changed lobby choice");
 }
+void runRules() {
+    const RunRules rules{1001, 1, 23, 0, true};
+    Session host, guest;
+    require(host.host(0, "test"), "Host failed");
+    require(guest.join("127.0.0.1", host.port(), "test"), "Join failed");
+    auto poll = [&] {
+        host.poll();
+        guest.poll();
+    };
+    until([&] {
+        poll();
+        return host.players() == 2 && guest.phase() == Phase::lobby;
+    });
+    require(!guest.configureRules(rules), "Guest changed run rules");
+    require(host.configureRules(rules), "Host configuration failed");
+    until([&] {
+        poll();
+        return guest.rules() == rules;
+    });
+    require(host.choices()[0].character == 23 && guest.choices()[1].character == 23,
+            "Lobby did not publish locked characters");
+    require(!guest.choose({0, true}) && !host.choose({0, true}), "Character lock bypassed");
+    require(guest.choose({23, true}) && host.choose({23, true}), "Ready failed");
+    guest.poll(); // Old ready packet is now on the wire, before the host changes rules.
+    auto revised = rules;
+    revised.version = 2;
+    require(host.configureRules(revised), "Revision failed");
+    until([&] {
+        poll();
+        return guest.rules() == revised;
+    });
+    for (int i = 0; i < 10; ++i)
+        poll();
+    require(!host.choices()[0].ready && !host.choices()[1].ready,
+            "Old ready packet accepted after rules changed");
+    Start value;
+    value.seed = "YV039KQF";
+    value.rules = revised;
+    value.characters.fill(23);
+    require(!host.start(value), "Unready rule revision started");
+    require(host.choose({23, true}) && guest.choose({23, true}), "Revised ready failed");
+    until([&] {
+        poll();
+        return host.choices()[1].ready;
+    });
+    value.difficulty = 1;
+    require(!host.start(value), "Locked difficulty bypassed");
+    value.difficulty = 0;
+    value.rules = rules;
+    require(!host.start(value), "Stale start rules accepted");
+    require(host.configureRules({}), "Cannot leave challenge mode");
+    until([&] {
+        poll();
+        return guest.rules().id == 0;
+    });
+    require(guest.choose({7, false}), "Normal character selection was not restored");
+    for (unsigned n = 2; n <= 4; ++n) {
+        Group g(n, 0, "127.0.0.1", rules);
+        g.ready();
+        g.step(0);
+        const unsigned slot = n - 1;
+        const auto identity = g.peers[slot]->identity();
+        g.peers[slot]->close();
+        g.poll();
+        const auto mask = ((1u << n) - 1) & ~(1u << slot);
+        require(g.step(1).connected == mask, "Disconnected seat remained active");
+        g.peers[slot] = std::make_unique<Session>();
+        require(g.peers[slot]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity),
+                "Challenge rejoin failed");
+        until([&] {
+            g.poll();
+            return g.peers[slot]->phase() == Phase::waiting;
+        });
+        auto checkpoint = g.peers[0]->settings();
+        checkpoint.snapshot.resize(6507, 42);
+        auto wrong = checkpoint;
+        wrong.rules = {};
+        require(!g.peers[0]->checkpoint(wrong, 2), "Rejoin changed live run rules");
+        require(g.peers[0]->checkpoint(checkpoint, 2), "Challenge checkpoint rejected");
+        until([&] {
+            g.poll();
+            return g.peers[slot]->phase() == Phase::running;
+        });
+        require(g.peers[slot]->rules() == rules && g.peers[slot]->settings().rules == rules &&
+                    g.peers[slot]->slot() == slot &&
+                    g.peers[slot]->settings().snapshot == checkpoint.snapshot,
+                "Rejoin lost challenge identity, roster or snapshot");
+        require(g.peers[slot]->ready(), "Rejoined engine rejected");
+        until([&] {
+            g.poll();
+            return g.peers[0]->connectedMask() == (1u << n) - 1;
+        });
+    }
+}
 void handshake() {
     Session host, rejected;
     require(host.host(0, "supported"), "Host failed");
@@ -1119,6 +1232,7 @@ int main(int argc, char** argv) {
                                   {"room-commands", roomCommands},
                                   {"input-rooms", inputRooms},
                                   {"lobby", lobby},
+                                  {"run-rules", runRules},
                                   {"handshake", handshake},
                                   {"host-names", hostNames},
                                   {"commands", commands},

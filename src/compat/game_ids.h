@@ -21,6 +21,7 @@ inline constexpr unsigned beast = 951;
 inline constexpr unsigned genericProp = 960;
 } // namespace entity
 namespace player {
+inline constexpr int cainB = 23;
 inline constexpr int keeper = 14;
 inline constexpr int keeperB = 33;
 inline constexpr int lostB = 31;

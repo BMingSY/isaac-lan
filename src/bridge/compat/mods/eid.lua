@@ -54,6 +54,19 @@ function definition.install(target, api)
             end)
         end
     end)
+    -- The ordinary EID recipe panel reconstructs the local player's hidden
+    -- contents. Keep normal item descriptions, and use the permitted native
+    -- teammate bag HUD during this rule instead. Never modify EID source/config.
+    if type(eid.handleBagOfCraftingRendering) == "function" then
+        wrapping.patch(cleanups, eid, "handleBagOfCraftingRendering", function(original)
+            return function(self, ...)
+                if _IsaacLan.api_info().restrictedBags == 1 then
+                    return false
+                end
+                return original(self, ...)
+            end
+        end)
+    end
     local function clear()
         eid.lastDescriptionEntity = nil
         if type(eid.ResetDescCache) == "function" then

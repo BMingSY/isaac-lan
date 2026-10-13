@@ -8,9 +8,43 @@ local function callback(id, fn)
     Isaac.AddCallback(owner, id, fn)
 end
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
+local challenge = _IsaacLanModules["runtime/challenges"]({
+    native = native,
+    game = Game,
+    routes = {
+        lamb = _IsaacLanModules["compat/routes/challenge_lamb"]({
+            game = Game,
+            finish = native.net_finish_challenge,
+            enums = {
+                pickup = PickupVariant,
+                entity = EntityType,
+                stage = LevelStage,
+                stageType = StageType,
+                room = RoomType,
+            },
+        }),
+    },
+    maps = {},
+})
+callback(ModCallbacks.MC_POST_PICKUP_INIT, function(_, pickup)
+    challenge.pickup(pickup)
+end)
+callback(ModCallbacks.MC_POST_PICKUP_UPDATE, function(_, pickup)
+    challenge.pickup(pickup)
+end)
 callback(ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, pickup, collider)
     keeper.collide(pickup, collider)
+    return challenge.collide(pickup, collider)
 end)
+callback(ModCallbacks.MC_POST_NEW_LEVEL, function()
+    challenge.level()
+end)
+function _IsaacLanChallengeRouteEnding()
+    challenge.routeEnding()
+end
+function _IsaacLanCanEnterRoom(...)
+    return challenge.canEnter(...)
+end
 local status, tick = {}, 0
 local lifecycle
 local players = {}
@@ -73,6 +107,7 @@ function _IsaacLanViewCommitted()
     integration.commit()
 end
 function _IsaacLanActionStep()
+    challenge.step()
     if native.api_info().ready == 1 then
         _IsaacLanModules["compat/mods/goodtrip/authority"].observe()
     end
@@ -206,6 +241,8 @@ function _IsaacLanCommand(action, value)
         assert(native.input_virtual())
         local ip, port = value:match("^([a-zA-Z0-9%.%-]+):(%d+)$")
         assert(ip and native.net_join(ip, tonumber(port), _IsaacLanFingerprint, modFingerprint()))
+    elseif action == "challenge" then
+        assert(native.net_challenge(assert(tonumber(value))), "无法选择联机挑战")
     elseif action == "start" then
         local seed, difficulty, a, b, c, d = value:match("^([%w]+):(%d+):(%d+):(%d+):(%d+):(%d+)$")
         if seed == "RANDOM" then

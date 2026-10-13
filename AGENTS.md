@@ -8,7 +8,7 @@
 | TCP、消息、分块、压缩、连接与协议 | `src/net/` | 不访问游戏对象，不识别 Boss、角色或道具 |
 | 状态字段、采集／应用、编码、库存、实体与网格一致性 | `src/bridge/sync/` | 负责通用同步契约，特殊玩法通过注入兼容组件处理 |
 | 会话推进、存档／恢复、换层屏障、房间与角色生命周期 | `src/runtime/`、`src/bridge/runtime/` | 协调执行时机与状态失效，原生对象的分配／释放由后端处理 |
-| Boss、道具、角色、路线的特殊规则 | `src/compat/{bosses,items,characters,routes}/`、`src/bridge/compat/` 对应分类 | C++ 策略接收普通值；Lua 适配使用游戏 API 和具名原生能力 |
+| Boss、道具、角色、路线与挑战的特殊规则 | `src/compat/{bosses,items,characters,routes,challenges}/`、`src/bridge/compat/` 对应分类 | C++ 策略接收普通值；Lua 适配使用游戏 API 和具名原生能力 |
 | 第三方 Mod 的探测、注册、接入与卸载 | `src/bridge/compat/mods/` | 保留目标版本／源码探测和清理边界，不修改上游 Mod 源码 |
 | 对第三方公开的接口、动作与生命周期通知 | `src/bridge/api/` | 更新接口契约与接入文档，不暴露原生指针或任意内存读写 |
 | 联机人机托管、观察、探索、寻路与避险 | `src/bridge/lanbot.lua`、`src/bridge/lanbot/` | 读取现有视图并合成正常输入；不改权威玩法或同步规则，验收夹具放 `tests/` 和 `tools/` |

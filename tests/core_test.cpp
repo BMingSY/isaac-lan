@@ -15,6 +15,7 @@
 #include "compat/items/deal_chances.h"
 #include "compat/items/death_certificate.h"
 #include "compat/items/crafting_bag.h"
+#include "compat/challenges/catalog.h"
 #include "compat/items/team_effects.h"
 #include "compat/characters/keeper.h"
 #include "compat/characters/team_effects.h"
@@ -902,6 +903,34 @@ void archiveRoundTrip() {
     }
 }
 
+void challengeRules() {
+    const auto* definition = isaac::compat::challenges::find(1001);
+    require(definition && definition->character == 23 && definition->difficulty == 0 &&
+                definition->transient && definition->nextBag,
+            "Challenge definition changed");
+    require(!isaac::compat::challenges::find(1002), "Unknown challenge accepted");
+    for (unsigned n = 2; n <= 4; ++n) {
+        for (unsigned slot = 0; slot < n; ++slot) {
+            const int target = isaac::compat::challenges::nextSeat(slot, n);
+            require(target != static_cast<int>(slot) && target == static_cast<int>((slot + 1) % n),
+                    "Bag ring exposed self or wrong teammate");
+        }
+        auto archive = sample(n);
+        archive.settings.rules = {1001, 1, 23, 0, true};
+        const auto decoded = Archive::decode(archive.encode());
+        require(decoded.settings.rules == archive.settings.rules,
+                "Transient reconnect checkpoint lost its rules");
+        archive.settings.rules.version = 0;
+        rejects([&] { Archive::decode(archive.encode()); }, "Unversioned challenge accepted");
+        archive.settings.rules = {0, 1, 23, 0, false};
+        rejects([&] { Archive::decode(archive.encode()); },
+                "Normal run carried challenge constraints");
+    }
+    require(isaac::compat::challenges::nextSeat(0, 1) == -1 &&
+                isaac::compat::challenges::nextSeat(4, 4) == -1,
+            "Invalid ring accepted");
+}
+
 void archiveIntegrity() {
     const auto bytes = sample().encode();
     for (std::size_t length = 0; length < bytes.size(); ++length)
@@ -928,7 +957,7 @@ void archiveIntegrity() {
     checksum.u64(snapshotHash(corrupt));
     rejects([&] { Archive::decode(checksum.bytes); }, "Invalid saved message type accepted");
     corrupt = bytes;
-    corrupt[17] = '3';
+    corrupt[17] = '9';
     corrupt.resize(corrupt.size() - 8);
     checksum.bytes = corrupt;
     checksum.u64(snapshotHash(corrupt));
@@ -997,6 +1026,7 @@ int main(int argc, char** argv) {
                      {"hashes", hashes},
                      {"progression", progression},
                      {"archive-round-trip", archiveRoundTrip},
+                     {"challenge-rules", challengeRules},
                      {"archive-integrity", archiveIntegrity},
                      {"archive-settings", archiveSettings},
                      {"archive-locations", archiveLocations}});
