@@ -17,18 +17,20 @@ struct Definition {
     std::array<unsigned, 2> requiredAchievements;
 };
 inline constexpr std::array definitions{
-    Definition{1001,
-               2,
-               ids::player::cainB,
-               0,
-               true,
-               "恶魔形态",
-               "lamb",
-               6,
-               ids::stage::chestOrDarkRoom,
-               ids::stageType::original,
-               true,
-               {78, 476}},
+    Definition{
+        1001,
+        2,
+        ids::player::cainB,
+        0,
+        true,
+        "恶魔形态",
+        "lamb",
+        6,
+        ids::stage::chestOrDarkRoom,
+        ids::stageType::original,
+        true,
+        {78, 476},
+    },
 };
 inline const Definition* find(unsigned id) {
     for (const auto& definition : definitions)
