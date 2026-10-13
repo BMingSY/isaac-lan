@@ -13,6 +13,7 @@
 #include "compat/bosses/encounters.h"
 #include "compat/routes/mines.h"
 #include "compat/routes/curses.h"
+#include "compat/routes/home.h"
 #include "compat/items/deal_chances.h"
 #include "compat/items/death_certificate.h"
 #include "compat/items/crafting_bag.h"
@@ -1136,7 +1137,24 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
         return;
     }
     if (animation == 12 && who) {
-        rewind::request(slotOf(who));
+        if (rewind::request(slotOf(who)))
+            return;
+        const auto entry = location.find(who);
+        const auto room = entry != location.end() ? entry->second : nullptr;
+        const auto source = at<Address>(game(), 0x18300);
+        if (room && !room->replicaShell && room->pointer == source &&
+            compat::routes::hourglassHomeSource(at<int>(game(), 0), at<int>(game(), 4),
+                                                at<int>(game(), 0x269c8), at<int>(game(), 0x18304),
+                                                at<int>(game(), 0x182d0), at<bool>(source, 1))) {
+            // A native first-room Home use can precede every checkpoint. Its
+            // stage hook only queues departure, so the current Scope stays
+            // valid. Do not let an empty buffer enter ordinary rewind code.
+            const bool hadStage = pendingStage.has_value();
+            originalTransition(g, index, direction, animation, player, dimension);
+            if (!hadStage && pendingStage &&
+                compat::routes::homeTransition(pendingStage->same, pendingStage->animation))
+                pendingStage->player = who;
+        }
         return;
     }
     // Native item revivals (Dead Cat, Collar, Ankh, 1up) hide the actor until
@@ -1189,6 +1207,8 @@ void __attribute__((fastcall)) change(void* g, void*, int index, int dimension) 
 }
 void __attribute__((fastcall)) stageTransition(void* g, void*, bool same, int animation,
                                                void* player) {
+    if (rewind::captureStage(same, animation))
+        return;
     if (!enabled) {
         originalStage(g, same, animation, player);
         return;
@@ -2733,6 +2753,13 @@ void finishFrame() {
     // controller. Resolve that controller again before dereferencing a head.
     const auto currentParticipants = logicalPlayers();
     participants = currentParticipants;
+    if (pendingStage &&
+        compat::routes::homeTransition(pendingStage->same, pendingStage->animation)) {
+        // Home owns the floor; a simultaneous hourglass cannot consume an old
+        // checkpoint and erase the pending native departure in beforeStart.
+        rewind::cancelPending();
+        pendingRestart = 0;
+    }
     if (rewind::executePending())
         return;
     if (pendingRestart == 2) {
@@ -2747,6 +2774,9 @@ void finishFrame() {
         return;
     }
     if (pendingRestart == 1) {
+        // Consume the queued request before checkpointing: stateReady rejects
+        // an outstanding restart, just as it rejects a pending stage request.
+        pendingRestart = 0;
         if (!runtime::replica()) {
             const auto locations = captureLocations();
             withCheckpointRoster([&] {
@@ -3104,6 +3134,18 @@ void playEnding(unsigned ending) {
     }
     const ViewRoster view(controlledActors(head));
     originalEnd(reinterpret_cast<void*>(game()), static_cast<int>(ending));
+}
+bool prepareRewind(unsigned slot) {
+    if (!enabled || scopes.depth())
+        return false;
+    const auto room = findRoom(participant(slot));
+    if (!room || room->replicaShell)
+        return false;
+    // The authority owns this initialized room. Select the item's actual
+    // source before joining/freeing rooms; never retain a Scope across cleanup.
+    room->activate();
+    beforeStart();
+    return true;
 }
 void beforeStart() {
     replicaDeals.reset();

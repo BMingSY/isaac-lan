@@ -4,11 +4,11 @@
 
 当前挑战名为 **恶魔形态**。用户要求的资格、普通存档选角、原版路线、仅羔羊奖杯通关、禁止跑圈、主客机统一右下副手及本机卡药保留，均已完成对应的离线和集中实机检查：资格第 11 轮通过；第 14 轮 2／3／4 人通关机制及可靠完成事件通过，但整轮因旧 Resume 夹具误判失败；修正夹具后的第 15 轮 HUD／重连／普通 Resume 专项整轮通过，四端退出码均为 0，受保护资料均恢复。没有把失败轮次改写为通过。
 
-仍保留两个既有问题：第 08 轮首层分房沙漏的楼层分歧未修复；Python doorway 回归在原始 PR 和主分支均失败。单机 Continue 的完整游戏内恢复及 Beast 等其他终局演出没有单独实测，因此不宣称所有历史问题或全部边界均已验收。
+第 08 轮首层分房沙漏的楼层分歧已在后续修复，2026-10-14 的 2／3／4 人回退与全队 Home 状态验收通过，详见[独立记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-hourglass-start-room-issue.md)。Python doorway 回归在原始 PR 和主分支均失败，仍保留该既有问题。单机 Continue 的完整游戏内恢复及 Beast 等其他终局演出没有单独实测，因此不宣称所有历史问题或全部边界均已验收。
 
 第 09 轮后按用户要求简化实现：全员自己的存档均须解锁底片与里该隐，普通角色按各自存档过滤，路线沿用原版，删除全部自动改道及 Lua 转场。随后改为隐藏远端小 HUD 副手信息，在本机右下角显示下一位的材料和预览，同时保留本机其他口袋道具。**01–09 轮运行的是旧规则，不能证明当前实现通过实机。** 当前规则与原生边界见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。
 
-第 08 轮首层分房沙漏的楼层分歧尚未修复；第 09／12 轮同房对照通过不关闭该问题。第 10 轮的启动期空管理器读取已修复，并经第 11 轮四端启动和资格检查确认。
+第 09／12 轮同房对照没有关闭第 08 轮首层分房沙漏问题，后续独立修复与集中验收才覆盖该触发链。第 10 轮的启动期空管理器读取已修复，并经第 11 轮四端启动和资格检查确认。
 
 ## 审阅修复
 
@@ -20,7 +20,7 @@
 - **终局跑圈。** 第 12 轮证实原先返回 `1` 代表确认跑圈；已改为原生拒绝值 `2`，同时拒绝挑战的主机／副本跑圈入口。
 - **Windows CI 漏跑新增 HUD ABI 测试。** 工作流现把 `isaac_lan_crafting_hud_test.exe` 和 `isaac_lan_challenge_hud_test.exe` 纳入上传产物，并在 Windows 作业中执行、核对退出码及保存日志。本地原生测试已通过；此处不将工作流修改记为远端 CI 已执行。
 
-第 08 轮发现的沙漏同步缺陷尚未修复。只读调用链核对表明相关延迟执行及主视口上下文代码已存在于 `origin/main`；尚未在主分支二进制上单独重跑该场景，详见[首层分房沙漏诊断](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-hourglass-start-room-issue.md)。
+第 08 轮发现的沙漏同步缺陷属于既有问题，未由 PR #64 修复。后续独立修复依据使用者实际源房选择原版路线，Home 带全队换层，普通回退在客机不再重选路线；验收与原生边界见[首层分房沙漏记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-hourglass-start-room-issue.md)。
 
 ## 初始离线与原生边界检查
 
@@ -124,7 +124,7 @@ HUD 偏移需按实际值记录。第 06 轮尝试通过 Lua 写入 `1` 时，�
 | 第三方 Mod 配方面板 | 按用户要求移除挑战对 EID 的配方面板屏蔽，保持 Mod 原行为；旧轮次的屏蔽结果仅作为历史记录 | 原版 HUD 的观察环和显示限制保持 |
 | HUD 偏移、菜单纸片清理 | 初始 1.0→0.0、多次开局、不同窗口宽度及最终全人数布局通过 | 14 轮 HUD_OFFSET 日志；无 BACK／SELECT 残留 |
 | 幽灵／复活不重排栏位 | 通过；复活由原生隔离夹具触发，未覆盖自然 Boss 复活 | 14 轮 GHOST_BAG_OMITTED／REVIVED_BAG_MATCH |
-| 沙漏回退与 R Key 保持规则 | 同房沙漏和 R Key 通过；首层分房沙漏仍有既有失败 | 14 轮 HOURGLASS_BAGS／R_KEY_BAGS；[分房诊断](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-hourglass-start-room-issue.md) |
+| 沙漏回退与 R Key 保持规则 | PR 验收时同房通过、首层分房失败；后续独立修复的 2／3／4 人状态验收通过 | 14 轮 HOURGLASS_BAGS／R_KEY_BAGS；[后续修复记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-hourglass-start-room-issue.md) |
 | 原版楼层入口、撒旦箱到暗室，不自动改道 | 2／3／4 人通过 | 14 轮 NATIVE_ROUTE_FLOOR／NATIVE_SATAN_CHEST |
 | 羔羊只留奖杯，禁跑圈及清理 Void 入口 | 2／3／4 人通过；其他终局拦截由离线回归覆盖，未单独实测 Beast 演出 | 14 轮 VOID_EXIT_REMOVED／TROPHY_READY，均 victory_lap=0 |
 | 客机领取奖杯，全队完成并返回菜单 | 2／3／4 人通过；四端 completed=1 事件数 3／3／2／1 | 14 轮各端 probe 和报告 challenge_completion |

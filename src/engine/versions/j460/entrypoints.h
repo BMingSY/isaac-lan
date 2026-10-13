@@ -140,6 +140,7 @@ inline constexpr std::uint32_t stringTableLookup = 0x626af0;
 inline constexpr std::uint32_t gameGetChestEnding = 0x2f9d20;
 inline constexpr std::uint32_t managerShowCutscene = 0x558e60;
 inline constexpr std::uint32_t roomTransitionUpdate = 0x4318a0;
+inline constexpr std::uint32_t roomTransitionStart = 0x42ee40;
 inline constexpr std::uint32_t bossOverlayUpdate = 0x212c0;
 inline constexpr std::uint32_t bossOverlayShow = 0x214b0;
 inline constexpr std::uint32_t nightmareSceneShow = 0x521ce0;

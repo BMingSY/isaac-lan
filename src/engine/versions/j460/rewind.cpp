@@ -1,5 +1,6 @@
 #include "engine/rewind.h"
 #include "compat/items/rewind_targets.h"
+#include "compat/routes/home.h"
 #include "engine/save.h"
 #include "net/protocol.h"
 #include "runtime/session.h"
@@ -30,7 +31,36 @@ struct Checkpoint {
     std::array<unsigned, 523> counters{};
     unsigned door = 0, tick = 0;
 };
+struct NativeTransition {
+    int index, direction, animation, dimension;
+};
+bool valid(const NativeTransition& value) {
+    return value.index >= -20 && value.index < 169 && value.direction >= -1 &&
+           value.direction < 8 && value.animation >= 0 && value.animation <= 22 &&
+           value.dimension >= 0 && value.dimension <= 2;
+}
+std::optional<NativeTransition> selectedTransition() {
+    const auto transition = game() + 0x1b83c;
+    if (at<int>(transition, 0) == 0)
+        return std::nullopt;
+    NativeTransition result{at<int>(transition, 0x14), at<int>(transition, 0x10),
+                            at<int>(transition, 0x1c), at<int>(transition, 0x18)};
+    if (!valid(result))
+        throw std::runtime_error("Invalid native hourglass transition");
+    return result;
+}
 compat::items::RewindTargets<Checkpoint, lan::maxPlayers> targets;
+bool* nativeHome = nullptr;
+struct RouteScope {
+    bool* previous;
+    explicit RouteScope(bool& home) : previous(nativeHome) {
+        nativeHome = &home;
+    }
+    ~RouteScope() {
+        nativeHome = previous;
+    }
+    RouteScope(const RouteScope&) = delete;
+};
 using Store = void(__stdcall*)(int);
 Store originalStore;
 void __stdcall store(int door) {
@@ -50,7 +80,8 @@ Address actor(unsigned slot) {
     }
     return 0;
 }
-std::vector<std::uint8_t> encode(const Checkpoint& checkpoint, unsigned slot) {
+std::vector<std::uint8_t> encode(const Checkpoint& checkpoint, unsigned slot,
+                                 const std::optional<NativeTransition>& transition = std::nullopt) {
     const auto user = actor(slot);
     if (!user)
         throw std::runtime_error("Hourglass user is missing");
@@ -70,6 +101,13 @@ std::vector<std::uint8_t> encode(const Checkpoint& checkpoint, unsigned slot) {
         w.u32(std::bit_cast<unsigned>(p.y));
     }
     w.blob(checkpoint.game);
+    w.u8(transition.has_value());
+    if (transition) {
+        w.u32(transition->index);
+        w.u32(transition->direction);
+        w.u32(transition->animation);
+        w.u32(transition->dimension);
+    }
     w.u64(lan::snapshotHash(w.bytes));
     return w.bytes;
 }
@@ -103,10 +141,23 @@ bool startRewind(std::span<const std::uint8_t> bytes) {
         checkpoint.locations.push_back(p);
     }
     checkpoint.game = r.blob();
+    const auto hasTransition = r.u8();
+    if (hasTransition > 1)
+        return false;
+    std::optional<NativeTransition> selected;
+    if (hasTransition) {
+        selected = NativeTransition{static_cast<int>(r.u32()), static_cast<int>(r.u32()),
+                                    static_cast<int>(r.u32()), static_cast<int>(r.u32())};
+        if (!valid(*selected))
+            return false;
+    }
     r.finish();
     // Rejoin the native complete roster before GameState restoration. The
     // original hourglass transition owns entities, inventory, RNG and effects.
-    rooms::beforeStart();
+    if (runtime::replica())
+        rooms::beforeStart();
+    else if (!rooms::prepareRewind(slot))
+        return false;
     const auto buffer = game() + bufferOffset;
     if (!save::decodeAt(image, buffer + 4, checkpoint.game))
         return false;
@@ -124,9 +175,36 @@ bool startRewind(std::span<const std::uint8_t> bytes) {
     at<unsigned>(user, 0x1dac) = floorUses;
     using Transition = void(__attribute__((thiscall))*)(void*, int, int, int, void*, int);
     const auto location = checkpoint.locations[slot];
-    reinterpret_cast<Transition>(image + j460::entry::engineRoomsTransition)(
-        reinterpret_cast<void*>(game()), location.index, 0, 12, reinterpret_cast<void*>(user),
-        location.dimension);
+    bool home = false;
+    if (!runtime::replica()) {
+        RouteScope route(home);
+        reinterpret_cast<Transition>(image + j460::entry::engineRoomsTransition)(
+            reinterpret_cast<void*>(game()), location.index, 0, 12, reinterpret_cast<void*>(user),
+            location.dimension);
+    }
+    if (home && !runtime::replica()) {
+        // Publish only the native-selected Home transaction. No rewind event
+        // or old-floor player locations may precede this global departure.
+        runtime::beginStage(false, 6);
+        using Stage = void(__attribute__((thiscall))*)(void*, bool, int, void*);
+        reinterpret_cast<Stage>(image + j460::entry::engineRoomsStageTransition)(
+            reinterpret_cast<void*>(game()), false, 6, nullptr);
+        rooms::resumeAfterTransition({});
+        return true;
+    }
+    if (runtime::replica() && selected) {
+        // Replay the authority's actual native choice, including Greed's
+        // starting-room teleport. A local viewport cannot select another route.
+        const auto transition = game() + 0x1b83c;
+        reinterpret_cast<Transition>(image + j460::entry::roomTransitionStart)(
+            reinterpret_cast<void*>(transition), selected->index, selected->direction,
+            selected->animation, reinterpret_cast<void*>(user), selected->dimension);
+        if (at<int>(transition, 0) != 0 && at<int>(transition, 0x238) != 0)
+            at<int>(game(), 0x265c0) = 0;
+        at<bool>(game(), 0x67744) = false;
+    }
+    if (!runtime::replica())
+        runtime::beginRewind(encode(checkpoint, slot, selectedTransition()));
     rooms::resumeAfterTransition(std::move(checkpoint.locations));
     return true;
 }
@@ -176,15 +254,23 @@ void remember(unsigned slot, int door, const std::vector<rooms::SavedLocation>& 
 bool request(unsigned slot) {
     return targets.request(slot);
 }
+void cancelPending() {
+    targets.take();
+}
 bool executePending() {
     const auto pending = targets.take();
     if (!pending)
         return false;
     const auto slot = *pending;
     const auto bytes = encode(targets.at(slot), slot);
-    runtime::beginRewind(bytes);
     if (!startRewind(bytes))
         throw std::runtime_error("Native hourglass rewind failed");
+    return true;
+}
+bool captureStage(bool same, int animation) {
+    if (!nativeHome || !compat::routes::homeTransition(same, animation))
+        return false;
+    *nativeHome = true;
     return true;
 }
 void reset() {

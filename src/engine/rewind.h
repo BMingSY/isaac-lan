@@ -8,6 +8,9 @@ bool install(std::uintptr_t image);
 bool bind(lua_State*, HMODULE);
 void remember(unsigned slot, int door, const std::vector<rooms::SavedLocation>& locations);
 bool request(unsigned slot);
+void cancelPending();
 bool executePending();
+// Capture the native route decision while evaluating an hourglass request.
+bool captureStage(bool same, int animation);
 void reset();
 } // namespace isaac::rewind
