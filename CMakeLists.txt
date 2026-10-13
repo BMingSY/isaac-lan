@@ -64,7 +64,7 @@ if(BUILD_TESTING)
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
         foreach(test_case session_lifecycle capture_generation replica_pipeline challenges
-                          challenge_menu challenge_eid)
+                          challenge_menu)
             add_test(
                 NAME bridge.${test_case}
                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/${test_case}.lua"

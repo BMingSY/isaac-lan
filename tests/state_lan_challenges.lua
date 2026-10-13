@@ -845,9 +845,6 @@ function _IsaacLanFrame()
         Isaac.DebugString("LAN_NETWORK MENU_READY")
     end
     native.test_gamepad(0)
-    if EID and EID.Config then
-        EID.Config.DisableStartOfRunWarnings = true
-    end
     local requested = tonumber(read(challengeCoordination .. "/case.txt"))
     if requested and requested > #cases then
         if not reported then
@@ -965,14 +962,10 @@ function _IsaacLanFrame()
                         EID.player and EID.player.ControllerIndex == info.slot + 1,
                         "EID selected the wrong local player"
                     )
-                    assert(
-                        EID:handleBagOfCraftingRendering() == false,
-                        "EID exposes hidden local recipes"
-                    )
                 end
                 eidChecked = true
                 report(
-                    "EID_RECIPE_RESTRICTED present="
+                    "EID_LOCAL_VIEW present="
                         .. tostring(EID ~= nil)
                         .. " next_slot="
                         .. ((info.slot + 1) % case.players)

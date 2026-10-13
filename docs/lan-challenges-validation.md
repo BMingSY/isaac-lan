@@ -121,7 +121,7 @@ HUD 偏移需按实际值记录。第 06 轮尝试通过 Lua 写入 `1` 时，�
 | 所有主客机仅本机右下显示下一位袋子 | 15 轮 2／3／4 人所有本机端通过；旧 compact 布局已修复 | 15 轮三人 host184/client148/client2 112；四人 host246/client211/client2 174/client3 135 |
 | 本机卡药保留、队友小 HUD 副手隐藏 | 15 轮 2／3／4 人库存断言和各端画面通过 | SAME_ROOM_POCKETS／SPLIT_ROOM_POCKETS／REPLICA_POCKETS |
 | 底部挑战文字删除、加入提示仅“输入房主的 IP” | 通过 | 13 轮主机帧 12／110、客机帧 74；14 轮对应画面 |
-| EID 不显示本机配方 | 2／3／4 人限制入口断言通过；普通说明配置未改 | 14 轮 EID_RECIPE_RESTRICTED |
+| 第三方 Mod 配方面板 | 按用户要求移除挑战对 EID 的配方面板屏蔽，保持 Mod 原行为；旧轮次的屏蔽结果仅作为历史记录 | 原版 HUD 的观察环和显示限制保持 |
 | HUD 偏移、菜单纸片清理 | 初始 1.0→0.0、多次开局、不同窗口宽度及最终全人数布局通过 | 14 轮 HUD_OFFSET 日志；无 BACK／SELECT 残留 |
 | 幽灵／复活不重排栏位 | 通过；复活由原生隔离夹具触发，未覆盖自然 Boss 复活 | 14 轮 GHOST_BAG_OMITTED／REVIVED_BAG_MATCH |
 | 沙漏回退与 R Key 保持规则 | 同房沙漏和 R Key 通过；首层分房沙漏仍有既有失败 | 14 轮 HOURGLASS_BAGS／R_KEY_BAGS；[分房诊断](lan-hourglass-start-room-issue.md) |
@@ -150,3 +150,5 @@ HUD 偏移需按实际值记录。第 06 轮尝试通过 Lua 写入 `1` 时，�
 第 15 轮最终 `passed=true`、`scenario_pass=true`、`clean_exit=true`、`restored=true`，耗时 177.03 秒，四个自有进程退出码均为 0。HUD 专项没有原生结束事件，四端 `events=[]` 与预期 0 完全一致。普通 Resume 日志 `actual=0:20:2:0;1:20:2:0 expected=0:20:2:0;1:20:2:0`，随后两端正常存退。全员资格、完整奖杯流程与最终显示分别对应 11／14／15 三组证据；最后一轮只改原生显示参数，没有重复已经完成的整条通关路线。
 
 可直接复核最终四端画面：[主机](/mnt/d/isaac-lan-lab/pr64-challenges-20261013-15/engine/host/frames/246.png)、[P2](/mnt/d/isaac-lan-lab/pr64-challenges-20261013-15/engine/client/frames/211.png)、[P3](/mnt/d/isaac-lan-lab/pr64-challenges-20261013-15/engine/client2/frames/174.png)、[P4](/mnt/d/isaac-lan-lab/pr64-challenges-20261013-15/engine/client3/frames/135.png)。材料／预览依次为下一位的 key343、bomb123、heart45、coin177，自己卡药仍在右下，其他 HUD 不显示袋子。
+
+后续按用户要求撤销挑战对 EID 百宝袋配方面板的屏蔽，删除相应用例和验收断言；EID 兼容适配恢复为主分支原实现。挑战仅调整原版 HUD，第三方 Mod 的配方显示不受挑战干预。上述旧轮次 EID_RECIPE_RESTRICTED 标记记录当时构建，不再代表当前行为。
