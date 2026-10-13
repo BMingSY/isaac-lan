@@ -1,147 +1,77 @@
 # 分层与玩法兼容
 
-这次整理把传输、运行协调、状态组件、表现和版本后端分开，并抽离现有特殊玩法规则。房主继续运行权威玩法，客机显示权威状态；当前协议为 26，世界视图为 schema 15。已有联机指纹检查仍要求两端使用相同扩展。
+按职责选择修改位置。架构选型见[架构概览](architecture.md)，具体协作约定见 [AGENTS.md](../AGENTS.md)。
 
-## 目录与职责
+## 目录与依赖
 
-| 位置 | 职责 | 主要入口 |
-| --- | --- | --- |
-| `src/app/` | 加载器与原生启动装配 | `loader.cpp`、`bootstrap.cpp` |
-| `src/net/` | 协议、TCP 会话、消息队列和压缩 | `protocol.h`、`session.cpp` |
-| `src/runtime/` | 会话推进、存档保护、纯房间／角色规则 | `session.cpp`、`actor_roster.h`、`room_map.h` |
-| `src/engine/` | 原生能力接口与版本校验 | `rooms.h`、`input.h`、`save.h`、`build.cpp` |
-| `src/engine/versions/j460/` | J460 原生调用、布局、所有权与 Hook 实现 | `entrypoints.h`、`profile.h`、`signatures.inc`、`rooms.cpp` |
-| `src/compat/` | 可离线执行的原生玩法策略 | Boss 汇合、角色特征、沙漏目标、矿二追逐 |
-| `src/presentation/` | 原生菜单与界面接入 | `frontend.cpp` |
-| `src/core/` | 可移植的输入、表现及日志数据规则 | 输入边沿、激光路径、音效归属等 |
-| `src/diagnostics/` | 运行日志、性能测量与隔离异常／画面采集 | `runtime_log.cpp`、`performance.cpp`、`crash_signal.cpp`、`lab_capture.cpp` |
-
-Lua 按同样的职责组织在 `src/bridge/`：
-
-| 位置 | 职责 |
+| 位置 | 职责与边界 |
 | --- | --- |
-| `app/main.lua` | 开局、恢复、游戏回调与第三方 API 的装配 |
-| `app/world.lua` | 按规定顺序组合状态采集、应用和本机表现；维护视图、实体引用与确认历史 |
-| `sync/` | 数据编解码、字段 schema、库存／实体／网格的通用同步组件 |
-| `runtime/` | 楼层代次屏障、可靠转场和进房边界 |
-| `presentation/` | 精灵、角色外观、音效、插值、移动预测、道具演出和菜单 |
-| `compat/bosses/` | Boss 房进房补充规则、教条光束预警几何状态 |
-| `compat/characters/` | 里拉撒路对象替换、里小蓝人消耗品队列 |
-| `compat/items/` | 沙漏和 R 键的转场选择、全队黑蜡烛的诅咒清除规则 |
-| `compat/routes/` | Home 昼夜与教条过场规则、特殊房间返回上下文、贪婪波次 |
-| `compat/mods/` | Stats+、GoodTrip、EID 及第三方自动适配注册机制 |
-| `api/` | 对第三方 Mod 公开的本机视图、生命周期和主机动作接口 |
-| `diagnostics/` | Lua 同步阶段计时与资源采样 |
-| `lanbot.lua`、`lanbot/` | 本机托管、观察、阶段规划、道具决策、寻路与避险；通过正常输入执行 |
+| `src/app/`、`src/bridge/app/` | 加载、组件注册与调用装配；玩法和状态规则交给所属组件 |
+| `src/net/` | 协议、TCP、队列、压缩和可靠传输；不访问游戏对象 |
+| `src/runtime/`、`src/bridge/runtime/` | 会话推进、存档、启动、房间／楼层生命周期及失效边界 |
+| `src/bridge/sync/` | 字段、采集代次、副本恢复、库存／实体／网格一致性 |
+| `src/compat/`、`src/bridge/compat/` | Boss、角色、道具、路线规则；C++ 策略只接收普通值，Lua 适配使用游戏 API 或具名原生能力 |
+| `src/bridge/compat/mods/` | 第三方 Mod 探测、接入和卸载，保留版本／源码匹配边界 |
+| `src/bridge/api/` | 第三方公开契约；不暴露原生指针或任意内存读写 |
+| `src/presentation/`、`src/bridge/presentation/` | 菜单、预测、镜头、外观和音画；不决定权威玩法 |
+| `src/bridge/lanbot.lua`、`src/bridge/lanbot/` | 读取已有视图并合成正常输入 |
+| `src/core/` | 可离线执行的数据规则，不依赖游戏布局或 Hook |
+| `src/engine/`、`src/engine/versions/j460/` | 能力接口、版本检测、原生调用、布局、Hook 与对象所有权 |
+| `src/diagnostics/` | 日志、性能和隔离采集；诊断开关不控制玩法 |
+| `tests/`、`tools/` | 回归夹具、构建与验收；不得成为生产玩法依赖 |
 
-## 依赖与装配
+装配层注入运行、同步、兼容与表现组件；运行协调器连接网络和原生能力。J460 Hook 仍回调协调器，`runtime/session.cpp` 和原生前端也保留部分版本相关访问。进一步拆分应先补具名能力并验证时机。
 
-```mermaid
-flowchart TD
-    A[应用装配] --> R[运行协调]
-    A --> S[状态组件]
-    A --> P[本机表现]
-    R --> N[网络会话]
-    R --> C[玩法兼容规则]
-    R --> E[原生能力接口]
-    S --> E
-    P --> E
-    E --> J[J460 后端]
-```
+Lua 嵌入清单在 [`modules.txt`](../src/bridge/modules.txt)。组件加载时只定义函数，依赖在全部组件加载后注入。`app/main.lua`、`app/world.lua`、菜单与预测入口单独装配。
 
-网络层不读取游戏对象、不识别角色或 Boss、不调用 Lua。原生兼容策略只接收普通值或自有容器，不访问游戏内存，不安装 Hook。Lua 组件通过工厂接收原生能力、字段定义或回调；`app/world.lua` 负责组合这些组件。修改表现不会使 TCP 会话知道音乐、装扮或预测规则。
-
-图表示职责关系，并不意味着所有原生依赖已经单向化。J460 Hook 仍会回调会话协调器，`runtime/session.cpp` 和原生前端仍保留部分版本相关访问与调用约定；房间上下文切换及原生所有权处理仍由版本后端统一实现。进一步拆分时先提取具名能力接口并验证调用时机，不能把这些访问直接放进通用兼容策略。
-
-嵌入组件清单集中在 [`src/bridge/modules.txt`](../src/bridge/modules.txt)，CMake 从清单读取源码，并跟踪重新配置依赖。`app/main.lua`、`app/world.lua`、菜单和预测入口单独装配。组件加载阶段仅发布函数或定义；依赖通过工厂在所有组件加载后注入。
-
-## 状态与对象所有权
+## 状态所有权
 
 | 状态 | 管理者 | 失效边界 |
 | --- | --- | --- |
-| TCP 收发队列、分块及输入消息 | 网络会话 | 连接关闭、可靠事务切换 |
+| TCP 队列、分块、视图基线 | 网络会话 | 关闭、连接或可靠事务切换 |
 | 会话身份、输入确认、楼层代次 | 运行协调器 | 新会话、换层、重建和回退 |
-| 原生房间、角色、精灵、MSVC 容器 | J460 后端与游戏 | 原生替换、卸载或销毁 |
-| 实体 ID 到 `EntityPtr` 的映射 | 世界视图装配器 | 实体删除、角色替换、新一局 |
-| 库存应用缓存、同 tick 的角色采集缓存 | 世界视图装配器 | 角色身份变化、新一局 |
-| 音效序号与循环音效缓存 | 音效表现组件 | 新一局；原生声音清理由装配器执行 |
-| 装扮 ID 缓存 | 角色表现组件 | 新一局 |
-| 渲染时间与预测轨迹 | 移动表现组件／世界视图 | 换房、新一局；转场清理旧轨迹 |
-| 每个控制器的沙漏检查点与待处理用户 | 沙漏目标策略和原生后端 | 新进房覆盖自身目标、新一局 |
+| 桥接启动阶段与准备代次 | `bridge/runtime/session.lua` | 关闭、取消；原生错误进入失败阶段 |
+| 房间绑定、深度、借用的完整名单 | `runtime/room_scope.h` 与 J460 `Scope` | 按栈顺序完成原生恢复与清理 |
+| 房间、角色、精灵与 MSVC 容器 | J460 后端与游戏 | 原生替换、卸载或销毁 |
+| 实体 `ID → EntityPtr`、库存应用缓存 | `sync/replica.lua` | 实体删除、角色替换、新一局 |
+| 公共字段、角色和编码片段缓存 | `sync/capture.lua` | tick／楼层代次变化、转场、新一局 |
+| 移动与预测轨迹 | 副本与移动表现组件 | 换房、转场、新一局 |
+| 音效序号、装扮与表现缓存 | 对应表现组件 | 新一局；楼层相关缓存另按 epoch 失效 |
+| 每名玩家的沙漏检查点 | 沙漏策略与后端 | 本人进房覆盖、新一局 |
 
-兼容模块不另建网络连接，不保存原生裸指针，不自行维护另一套楼层代次。角色身份、控制器身份和原生分配地址有不同用途；里拉撒路替换身体时仍由原生后端维护所有权，视图清理已经失效的身份与移动记录。
+角色身份、控制器身份和原生地址用途不同。角色身体替换后由后端维护名单与所有权，副本清理失效引用；兼容模块不另建连接或维护另一套楼层代次。
 
-## 三类代表性机制
+## 房间作用域
 
-### 最终 Boss 汇合
+[`ScopeStack`](../src/runtime/room_scope.h) 只管理逻辑绑定，不读取游戏内存。同房重入和跨房嵌套都增加深度，并借用最外层保存的完整名单；绑定不可复制或移动，乱序恢复／销毁会终止进程。
 
-[`compat/bosses/encounters.h`](../src/compat/bosses/encounters.h) 判断楼层、类型和实体是否属于必须聚队的战斗。J460 房间后端在原生更新边界调用该策略，检测到缺少在线玩家时排入全队迁移。实际迁移、进房清理和控制锁由后端执行，原生 Boss AI 在聚队边界之后推进。
+J460 `Scope` 按深度选择独立的临时名单，恢复原生标量与名单后先恢复父房间标识，待共享状态交换和临时分配清理完毕后再解除深度屏障。`TeamScope` 只临时切换完整名单。原生布局、Hook、MSVC 分配与释放仍在版本后端，逻辑退栈测试不能替代实机资源验收。房间迁移和渲染归属见[房间与表现](rooms-and-presentation.md)。
 
-匹配必须包含必要的楼层、维度或实体形态条件。相同实体类型可能用于不同路线，不能只按“是 Boss”强制全队汇合。普通 Boss 房仍保留分房行为。
+## 采集与副本恢复
 
-### 里拉撒路形态
+`sync/capture.lua` 以 `(epoch, tick)` 标识一次不可变采集代次；同轮发布期间不得推进玩法。公共字段采集一次，角色基础状态与完整表现分别缓存，`sync/room.lua` 按房间复用实体／网格视图。声音、演出及道具表现仍按客机采集。缓存不跨 tick，不引入低频更新或脏标记。
 
-[`compat/characters/lazarus.lua`](../src/bridge/compat/characters/lazarus.lua) 在应用角色库存之前解析或替换对应身体，并在应用后清理失效的移动身份。[`compat/characters/traits.h`](../src/compat/characters/traits.h) 提供原生后端使用的角色特征匹配。原生备用身体列入名单、`EntityPtr` 关系与名单替换仍在 J460 后端处理。
+`sync/replica.lua` 的顺序为：
 
-不能用普通 `ChangePlayerType` 代替里拉撒路的原生身体交换，也不能以显示名单下标代替稳定实体身份。
+1. 等待楼层准备，解码并核对顶层 schema、tick 与 epoch。
+2. 注册布局、同步角色房间；换房时先清理旧移动记录。
+3. 解析角色身份，在对应角色作用域内恢复库存、实体及角色附加状态。
+4. 恢复共享药丸、诅咒、波次和开门概率，覆盖库存 setter 的原生副作用。
+5. 更新地图，在本机房间作用域内恢复实体、网格和房间状态。
+6. 应用输入确认、音效和演出，成功后提交完成 tick 与角色显示记录。
 
-### 沙漏、R 键和 Home
+字段校验由 schema 和所属组件承担。该流程不提供原生回滚：失败传播给运行协调器，不提交完成 tick，已发生的写入不会自动撤销。字段和传输限制统一见[同步契约](synchronization.md)，启动及换层顺序见[会话恢复](session-lifecycle.md)。
 
-可靠转场先进入 [`runtime/transitions.lua`](../src/bridge/runtime/transitions.lua)：
+## 新增字段或兼容机制
 
-1. `floor.begin(epoch)` 拒绝重复或旧代次。
-2. 清理旧房间移动与角色显示记录。
-3. 按现有优先顺序选择 Home 过场、沙漏回退或 R 键。
-4. 未匹配特殊机制时，设置目标楼层并开始普通原生换层。
+1. 通用一致性问题放 `sync/`；特殊玩法放对应 `compat/` 分类。匹配应包含必要的角色、楼层、维度或实体形态。
+2. 优先使用现有 Lua API 和原生能力。确需新增能力时，在版本后端说明现有接口的不足、ABI、布局、校验与分配／释放责任。
+3. 由装配层注册组件；原生重建走运行协调器。可靠转场先由 `floor.begin(epoch)` 拒绝重复／旧事件，再清理旧视图，按显式顺序选择兼容处理；失败直接传播。
+4. 字段变更同时更新采集、应用、schema、嵌入清单、版本／指纹与文档。游戏 ID 使用枚举或 [`compat/game_ids.h`](../src/compat/game_ids.h)，原生地址与特征使用 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h) 和 [`signatures.inc`](../src/engine/versions/j460/signatures.inc)。
+5. 补充实际触发链路、重复事件、跨房／跨层和清理回归，原生机制与画面列入[最终验收](development-and-testing.md#最终实机验收)。
 
-[`compat/transitions.lua`](../src/bridge/compat/transitions.lua) 使用装配器给出的显式顺序，保留原有 Home → 沙漏 → R 键优先级。适配失败直接传播错误，不继续执行另一种转场；已经接受的代次不会重复执行原生操作。Home 原地昼夜变化也放在路线模块，由楼层屏障在核对视图时调用。
+现有例子：Boss 汇合用 `compat/bosses/encounters.h` 判断、后端排队迁移；里拉撒路用 `compat/characters/lazarus.lua` 解析原生身体；共享道具、口袋槽和特殊传送见[队伍兼容](party-compatibility.md)，概率上下文见[共享开门概率](shared-deal-chances.md)。第三方 Mod 的注册与卸载遵循独立的[公开 API 契约](third-party-mod-integration.md)。
 
-沙漏的原生状态载荷、解码校验及恢复过程由后端处理。可移植的 [`compat/items/rewind_targets.h`](../src/compat/items/rewind_targets.h) 只管理每个用户的目标和待处理用户，防止另一名用户替换已经排队的请求。
+## 验证入口
 
-## 字段与版本定义
-
-游戏实体、房间、角色、楼层和变种匹配使用具名枚举。Lua 游戏适配层读取 `EntityType`、`RoomType`、`PlayerType`、`LevelStage`、`StageType` 等原版定义；可独立加载的同步和兼容组件通过工厂参数接收所需定义，模块加载时不读取游戏枚举。实体 schema 由注入的 `EntityType` 建立数字键，编码仍携带原始 ID，字段顺序保持不变。离线夹具集中在 `tests/fixtures/game_enums.lua`，场景输入与预期值保留独立的数字，便于发现 ID 或编码漂移。
-
-可移植 C++ 策略实际用到的游戏 ID 集中在 [`compat/game_ids.h`](../src/compat/game_ids.h)，按实体、角色、楼层、楼层类型、难度和维度分组，保持既有整数接口。特定机制的预警子类型、电视变种与过场 ID 在所属兼容模块就近命名；原生对象偏移仍由版本后端维护，网络消息标签仍由网络层定义。命名整理不改变协议、schema、原生布局或对象所有权。
-
-[`sync/world_schema.lua`](../src/bridge/sync/world_schema.lua) 将顶层视图字段转换为具名访问，维护包含共享楼层诅咒、贪婪波次、整队恶魔／天使房概率和药丸信息的 20 项二进制元组。[`sync/entity_schema.lua`](../src/bridge/sync/entity_schema.lua) 明确列出各实体类型的字段顺序；[`sync/entity_codec.lua`](../src/bridge/sync/entity_codec.lua) 管理读取与写入、精灵状态和客机原生标志过滤。不得直接同步原生指针、userdata 或任意 Mod 私有表。
-
-已验证的 159 个原生入口／布局校验位置定义在 [`entrypoints.h`](../src/engine/versions/j460/entrypoints.h)，启动特征校验与调用点引用同一组常量。游戏版本、版本标记地址和所需 PE 区段放在 [`profile.h`](../src/engine/versions/j460/profile.h)。对象字段偏移仍需在对应 J460 实现中结合所有权与调用约定维护。本批共享道具、商店、口袋槽、合成袋与药丸能力的边界见[队伍兼容修复](party-compatibility.md)。
-
-增加新版本需要新的校验、地址、布局、Lua ABI 和实机证据；不能仅换版本字符串。当前仍只支持 J460，此次分层没有新增 REPENTOGON 支持。
-
-## 共享诅咒与特殊房间表现
-
-`sync/curses.lua` 同步楼层的完整诅咒位掩码。Amnesia、？？？胶囊及忏悔机继续由房主运行原版效果；客机在应用库存的原生副作用之后，按差异恢复房主的掩码，并刷新地图缓存。`compat/items/black_candle.lua` 从全队库存判断保护，避免分房名单隐藏另一名玩家的黑蜡烛。
-
-`sync/deals.lua` 同步整队的原版总开门概率和条件天使概率，客机库存应用后写入概率缓存，原版 HUD 查询直接使用该缓存。实际概率及房间类型仍由房主按完整队伍执行原版计算。额外的后端上下文、SSE 返回 ABI、楼层清理和专项测试边界见[共享恶魔／天使房概率](shared-deal-chances.md)。
-
-`compat/routes/crawlspace.lua` 采集与应用当前房间的返回入口坐标和房间索引。J460 的三个标量同时纳入现有房间上下文保存／恢复，防止主机视口或其他房间覆盖它们。Lua 适配通过原版 `DungeonReturnPosition` 与 `DungeonReturnRoomIndex` 属性访问状态，校验完整载荷后才写入客机当前作用域，不新增原生读写接口。
-
-`compat/bosses/dogma.lua` 仅匹配 `DOGMA_ORB` 的预警子类型，同步原生绘制依赖的二维几何参数。通用实体组件通过注入的兼容组件携带该字段，不执行 Boss AI。适配通过原版 `Entity.TargetPosition` 属性读写二维参数；既有攻击特效不进入此适配，不新增原生接口。
-
-共享诅咒、特殊房间返回与教条预警加入时，世界视图由 schema 10 升为 11；后续贪婪波次与整队概率字段使版本升为 13。这些字段当时保持 TCP 协议 24；后续无损字节增量将传输协议升为 25，Lua schema 当时仍为 13。本批药丸和口袋槽信息将 schema 升为 14，合成袋材料与预览随后升为 15，原生重开事务将协议升为 26。扩展 DLL 指纹变化，两端仍须使用相同构建。
-
-## 贪婪模式
-
-`compat/routes/greed.lua` 通过原版 `Game:IsGreedMode()` 和 `Level.GreedModeWave` 采集与应用楼层波次；普通／困难模式传 `false`，贪婪／超级贪婪传 0–12 的整数。波次属于共享楼层，玩家在商店等其他房间也接收同一计数。应用位于楼层代次校验和库存应用之后，不触发波次生成、奖励或按钮伤害。房间按钮、门与敌人继续使用既有网格／实体同步。
-
-该字段追加到顶层第 18 项，当时世界视图由 schema 11 升为 12；整队概率随后追加第 19 项，当时 schema 为 13，药丸字段随后升为 14。该字段没有修改传输协议；当前字节增量使用协议 26，旧 schema 被拒绝，扩展指纹仍要求两端使用相同 DLL。`compat/bosses/encounters.h` 接收难度普通值，在贪婪两种难度的第七层匹配 Ultra Greed 的两种形态并汇合队伍；普通波次与商店 Greed 不强制汇合。原生后端通过运行协调器取得已确认的会话难度并调用该策略，没有新增原生布局依赖，所有权和 Hook 不变。测试与原生校验边界见[贪婪模式验证记录](greed-mode-validation.md)。
-
-## 增加一个兼容机制
-
-1. 先确认通用同步是否缺失字段、身份关系或生命周期处理。属于所有实体的规则应修复通用组件。
-2. 需要特殊机制时，在对应分类增加匹配和处理代码，明确所需原生能力与执行阶段。
-3. 由应用装配器注册规则或调用能力，明确顺序。涉及重建的操作通过运行协调器。
-4. 给规则增加独立的离线输入和预期结果，覆盖误匹配、重复事件、跨房／跨层和清理。
-5. 将必须依赖原生机制的检查登记为集中实机验收项目。
-
-玩法兼容与第三方 Mod 自动适配有不同生命周期。第三方注册器保留目标版本／源码探测、安装、卸载、原生接入优先和状态查询。此次没有增加公开的玩法插件 API，也没有把所有角色或道具包装成独立插件。
-
-## 验证范围
-
-新增离线检查覆盖顶层世界字段的原始编码一致性、转场先清理后执行、重复／旧代次、特殊机制优先级、原生失败传播、沙漏用户目标隔离，以及提取后的渲染入口。实体检查覆盖激光原生路径、非法标量拒绝、客机地板／墙壁绘制标志过滤和角色原生生命周期标志保留。集中夹具还验证普通沙箱初始化，文件输出只作为可选诊断，不控制行为断言。`tests/test_layers.py` 核对模块清单与源码一致，并约束传输和可移植兼容规则的依赖。
-
-既有离线库存、实体关系、预测、第三方 API、楼层及角色回归继续运行。Windows 构建验证所有原生入口与嵌入模块，Winsock 测试验证真实传输。原生角色替换、Boss 控制、回退、音乐与画面仍需要实机验收。
-
-分层重构验收时，启动／退出堆错误的根因尚未确定，历史失败保留在[侧路线回归记录](side-route-regressions.md)。后续已定位并修复启动后解锁测试夹具造成的菜单越界写入，见[堆损坏回归记录](heap-corruption-regression.md)。修复限定于已定位的夹具触发链路，不据此认定所有同码异常或原生 Hook 的内存问题均已排除。
+`core.room-scope-ownership`、`tests/session_lifecycle.lua`、`tests/capture_generation.lua` 和 `tests/replica_pipeline.lua` 覆盖嵌套退栈、取消／失败、缓存复用与失效、恢复顺序和完成提交；`tests/test_layers.py` 检查模块清单与依赖。命令见[开发与测试](development-and-testing.md)，历次构建与实机结果见[历史记录](history/README.md)。

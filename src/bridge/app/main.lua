@@ -11,7 +11,8 @@ local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, Pi
 callback(ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, pickup, collider)
     keeper.collide(pickup, collider)
 end)
-local status, started, prepared, engineStarted, tick = {}, false, false, false, 0
+local status, tick = {}, 0
+local lifecycle
 local players = {}
 local continuedRun = false
 local savedPlayers = 0
@@ -93,35 +94,55 @@ end
 local function capture()
     return assert(native.input_capture(-1))
 end
-local function prepareCheckpoint()
-    assert(native.rooms_enable())
-    assert(
-        native.net_gate(
-            capture,
-            apply,
-            _IsaacLanState.capture,
-            _IsaacLanState.apply,
-            _IsaacLanState.present,
-            _IsaacLanState.beginFloor
+lifecycle = assert(_IsaacLanModules["runtime/session"])({
+    start = function()
+        assert(native.net_engine_start())
+    end,
+    enableRooms = function()
+        assert(native.rooms_enable())
+    end,
+    gate = function()
+        assert(
+            native.net_gate(
+                capture,
+                apply,
+                _IsaacLanState.capture,
+                _IsaacLanState.apply,
+                _IsaacLanState.present,
+                _IsaacLanState.beginFloor
+            )
         )
-    )
-    assert(native.net_restore_rooms())
-    prepared = true
-    log("READY players=" .. status.players)
+    end,
+    restoreRooms = function()
+        assert(native.net_restore_rooms())
+    end,
+    close = function(preserve)
+        if preserve == nil then
+            native.net_close()
+        else
+            native.net_close(preserve)
+        end
+        players = {}
+        continuedRun = false
+    end,
+})
+local function prepareCheckpoint()
+    if lifecycle.prepare() then
+        log("READY players=" .. status.players)
+    end
 end
 callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
     game = Game()
     if native.diagnostics_begin then
         native.diagnostics_begin(
             game:GetSeeds():GetStartSeedString(),
-            started and (status.hosting == 1 and "host" or "client") or "solo",
+            lifecycle.active() and (status.hosting == 1 and "host" or "client") or "solo",
             continued and 1 or 0
         )
     end
     _IsaacLanState.reset()
     continuedRun = continued
-    if started then
-        engineStarted = true
+    if lifecycle.gameStarted() then
         if continued then
             -- Native continue detaches unavailable physical controllers. Bind
             -- the restored heads before its first update can pause for them.
@@ -135,14 +156,14 @@ callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
         end
         math.randomseed(game:GetSeeds():GetStartSeed())
         log("GAME_STARTED " .. game:GetSeeds():GetStartSeedString())
-        if status.firstTick > 0 and not prepared then
+        if status.firstTick > 0 then
             prepareCheckpoint()
         end
     end
 end)
 callback(ModCallbacks.MC_POST_UPDATE, function()
     keeper.update()
-    if not engineStarted or prepared or game:GetRoom():GetFrameCount() < 10 then
+    if not lifecycle.initializing() or game:GetRoom():GetFrameCount() < 10 then
         return
     end
     if continuedRun then
@@ -158,28 +179,15 @@ callback(ModCallbacks.MC_POST_UPDATE, function()
             players[#players + 1] = Isaac.GetPlayer(index)
         end
     end
-    assert(native.rooms_enable())
-    assert(
-        native.net_gate(
-            capture,
-            apply,
-            _IsaacLanState.capture,
-            _IsaacLanState.apply,
-            _IsaacLanState.present,
-            _IsaacLanState.beginFloor
-        )
-    )
-    assert(native.net_restore_rooms())
-    prepared = true
-    log("READY players=" .. status.players)
+    prepareCheckpoint()
 end)
 callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
     bot.reset()
     integration.reset("session_ended")
-    if prepared then
-        native.net_close(1)
-        started, prepared, engineStarted = false, false, false
-        players = {}
+    if lifecycle.active() then
+        -- The native exit tail still owns save/progress guards, including
+        -- cancellation before the bridge has finished preparing.
+        lifecycle.close(1)
     end
     if native.diagnostics_end then
         native.diagnostics_end()
@@ -188,15 +196,13 @@ end)
 function _IsaacLanCommand(action, value)
     if action == "host" then
         bot.reset()
-        native.net_close()
-        started, prepared = false, false
+        lifecycle.close()
         assert(native.input_virtual())
         assert(native.net_host(tonumber(value), _IsaacLanFingerprint, modFingerprint()))
         savedPlayers = native.net_saved_info()
     elseif action == "join" then
         bot.reset()
-        native.net_close()
-        started, prepared = false, false
+        lifecycle.close()
         assert(native.input_virtual())
         local ip, port = value:match("^([a-zA-Z0-9%.%-]+):(%d+)$")
         assert(ip and native.net_join(ip, tonumber(port), _IsaacLanFingerprint, modFingerprint()))
@@ -230,22 +236,20 @@ function _IsaacLanCommand(action, value)
         local character, ready = value:match("^(%d+):([01])$")
         assert(character and native.net_choose(tonumber(character), tonumber(ready)))
     elseif action == "close" then
-        assert(not prepared, "A running game must exit through the shared pause menu")
-        native.net_close()
-        started = false
+        assert(not lifecycle.ready(), "A running game must exit through the shared pause menu")
+        lifecycle.close()
     end
 end
 function _IsaacLanFrame()
     status = native.net_poll()
     integration.poll()
     bot.poll()
-    if status.phase == 3 and not started then
-        started = true
-        assert(native.net_engine_start())
+    if status.phase == 3 then
+        lifecycle.launch()
     end
-    status.prepared = prepared
+    status.prepared = lifecycle.ready()
     status.savedPlayers = savedPlayers
-    if prepared then
+    if lifecycle.ready() then
         status.positions = native.rooms_positions()
     end
     return status

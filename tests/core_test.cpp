@@ -22,6 +22,9 @@
 #include "core/localized_text.h"
 #include "core/laser_state.h"
 #include "runtime/actor_roster.h"
+#include "runtime/room_scope.h"
+#include <stdexcept>
+#include <type_traits>
 #include "core/log_record.h"
 #include "core/poop_state.h"
 #include "test_support.h"
@@ -103,6 +106,49 @@ void compatibilityTargets() {
     targets.reset();
     require(!targets.take() && !targets.request(0) && !targets.request(1),
             "A new run retained old pending/checkpoint state");
+}
+void roomScopeOwnership() {
+    using Stack = isaac::rooms::ScopeStack<int, std::vector<int>>;
+    static_assert(!std::is_copy_constructible_v<Stack>);
+    static_assert(!std::is_copy_constructible_v<Stack::Binding>);
+    static_assert(!std::is_move_constructible_v<Stack::Binding>);
+    Stack stack;
+    int first = 84, second = 85;
+    std::vector<int> team{1, 2}, slice{1};
+    require(!stack.current() && !stack.teamRoster() && !stack.depth(), "Scope stack not empty");
+    {
+        Stack::Binding outer(stack, first, team);
+        require(stack.current() == &first && stack.teamRoster() == &team && stack.depth() == 1,
+                "Outer room lost full team ownership");
+        try {
+            Stack::Binding other(stack, second, slice);
+            require(stack.current() == &second && stack.teamRoster() == &team && stack.depth() == 2,
+                    "Nested room borrowed its slice as the full roster");
+            {
+                Stack::Binding same(stack, second, slice);
+                require(stack.depth() == 3 && stack.current() == &second,
+                        "Same-room render callback reused the outer scope");
+                stack.teamRoster()->push_back(3);
+            }
+            other.restoreParent();
+            require(stack.current() == &first && stack.depth() == 2 && stack.teamRoster() == &team,
+                    "Native cleanup lost its barrier or borrowed full roster");
+            throw std::runtime_error("callback failed");
+        } catch (const std::runtime_error&) {
+        }
+        require(stack.current() == &first && stack.depth() == 1 &&
+                    *stack.teamRoster() == std::vector<int>({1, 2, 3}) &&
+                    slice == std::vector<int>{1},
+                "Unwinding lost parent context or wrote a replacement into the scoped slice");
+        outer.restoreParent();
+        require(!stack.current() && stack.depth() == 1 && stack.teamRoster() == &team,
+                "Outermost native cleanup became an unscoped operation");
+    }
+    require(!stack.current() && !stack.teamRoster() && !stack.depth(),
+            "Borrowed room/roster survived the last scope");
+    Stack::Binding next(stack, second, slice);
+    require(stack.current() == &second && stack.teamRoster() == &slice && stack.depth() == 1,
+            "A new room operation retained the old full roster");
 }
 void roomTransitionContext() {
     using namespace isaac::rooms;
@@ -943,6 +989,7 @@ int main(int argc, char** argv) {
                      {"intro-barrier", introBarrier},
                      {"room-map", roomMap},
                      {"room-transition-context", roomTransitionContext},
+                     {"room-scope-ownership", roomScopeOwnership},
                      {"compatibility-targets", compatibilityTargets},
                      {"resolved-room-curses", resolvedRoomCurses},
                      {"shared-deal-chances", sharedDealChances},

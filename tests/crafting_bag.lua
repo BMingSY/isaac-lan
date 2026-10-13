@@ -164,6 +164,8 @@ local function environment()
     for _, name in ipairs({
         "sync/codec",
         "sync/world_schema",
+        "sync/capture",
+        "sync/replica",
         "runtime/floor",
         "runtime/transitions",
         "compat/transitions",
