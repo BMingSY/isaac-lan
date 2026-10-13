@@ -63,7 +63,8 @@ if(BUILD_TESTING)
         NAMES lua5.3 lua
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
-        foreach(test_case session_lifecycle capture_generation replica_pipeline)
+        foreach(test_case session_lifecycle capture_generation replica_pipeline challenges
+                          challenge_menu)
             add_test(
                 NAME bridge.${test_case}
                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/${test_case}.lua"
@@ -250,6 +251,7 @@ if(BUILD_TESTING)
         hashes
         progression
         archive-round-trip
+        challenge-rules
         archive-integrity
         archive-settings
         archive-locations)
@@ -315,6 +317,10 @@ add_library(
     src/engine/versions/j460/save.cpp
     src/engine/versions/j460/audio.cpp
     src/engine/versions/j460/presentation.cpp
+    src/engine/versions/j460/crafting_hud.cpp
+    src/engine/versions/j460/challenge_hud.cpp
+    src/engine/versions/j460/characters.cpp
+    src/engine/versions/j460/pause_menu.cpp
     src/engine/versions/j460/item_presentation.cpp
     src/engine/versions/j460/rewind.cpp
     src/presentation/frontend.cpp
@@ -375,6 +381,8 @@ if(BUILD_TESTING)
         room-commands
         input-rooms
         lobby
+        lobby-access
+        run-rules
         handshake
         host-names
         commands
@@ -394,6 +402,48 @@ if(NOT EXISTS "${MINHOOK_SOURCE_DIR}/include/MinHook.h")
     message(FATAL_ERROR "Set MINHOOK_SOURCE_DIR to a MinHook v1.3.4 checkout")
 endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
+if(BUILD_TESTING)
+    add_executable(isaac_lan_crafting_hud_test tests/crafting_hud_test.cpp
+                                               src/engine/versions/j460/crafting_hud.cpp)
+    target_include_directories(isaac_lan_crafting_hud_test PRIVATE src)
+    target_link_libraries(isaac_lan_crafting_hud_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_crafting_hud_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_crafting_hud_test PRIVATE -Wall -Wextra -Werror -msse2)
+    endif()
+    add_executable(isaac_lan_challenge_hud_test tests/challenge_hud_test.cpp)
+    target_include_directories(isaac_lan_challenge_hud_test PRIVATE src)
+    target_link_libraries(isaac_lan_challenge_hud_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_challenge_hud_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_challenge_hud_test PRIVATE -Wall -Wextra -Werror -msse2)
+    endif()
+    add_test(NAME native.challenge-hud COMMAND isaac_lan_challenge_hud_test)
+    set_tests_properties(native.challenge-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_test(NAME native.crafting-hud COMMAND isaac_lan_crafting_hud_test)
+    set_tests_properties(native.crafting-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_character_catalog_test tests/character_catalog_test.cpp
+                                                    src/engine/versions/j460/characters.cpp)
+    target_include_directories(isaac_lan_character_catalog_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_character_catalog_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+        target_compile_options(isaac_lan_character_catalog_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.character-catalog COMMAND isaac_lan_character_catalog_test)
+    set_tests_properties(native.character-catalog PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_pause_menu_test tests/pause_menu_test.cpp
+                                             src/engine/versions/j460/pause_menu.cpp)
+    target_include_directories(isaac_lan_pause_menu_test PRIVATE src)
+    target_link_libraries(isaac_lan_pause_menu_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_pause_menu_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_pause_menu_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.pause-menu COMMAND isaac_lan_pause_menu_test)
+    set_tests_properties(native.pause-menu PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+endif()
+
 set_target_properties(isaac_lan_probe PROPERTIES PREFIX "")
 target_compile_definitions(isaac_lan_probe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(

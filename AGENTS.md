@@ -1,32 +1,39 @@
 # 代码结构与修改位置
 
-先按改动的职责选择模块，不以调用入口或现有大文件的位置决定归属。整体依赖与所有权见 [docs/layers-and-compatibility.md](docs/layers-and-compatibility.md)。
+先按改动的职责选择模块，不以调用入口或现有大文件的位置决定归属。整体依赖与所有权见 [docs/layers-and-compatibility.md](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md)。
 
 | 要修改的内容 | 应修改的位置 | 边界 |
 | --- | --- | --- |
-| 自动加载、启动装配、组件注册与调用顺序 | `src/app/`、`src/bridge/app/` | 组合已有组件，不承载新的玩法规则 |
-| TCP、消息、分块、压缩、连接与协议 | `src/net/` | 不访问游戏对象，不识别 Boss、角色或道具 |
-| 状态字段、采集／应用、编码、库存、实体与网格一致性 | `src/bridge/sync/` | 负责通用同步契约，特殊玩法通过注入兼容组件处理 |
-| 会话推进、存档／恢复、换层屏障、房间与角色生命周期 | `src/runtime/`、`src/bridge/runtime/` | 协调执行时机与状态失效，原生对象的分配／释放由后端处理 |
-| Boss、道具、角色、路线的特殊规则 | `src/compat/{bosses,items,characters,routes}/`、`src/bridge/compat/` 对应分类 | C++ 策略接收普通值；Lua 适配使用游戏 API 和具名原生能力 |
-| 第三方 Mod 的探测、注册、接入与卸载 | `src/bridge/compat/mods/` | 保留目标版本／源码探测和清理边界，不修改上游 Mod 源码 |
-| 对第三方公开的接口、动作与生命周期通知 | `src/bridge/api/` | 更新接口契约与接入文档，不暴露原生指针或任意内存读写 |
-| 联机人机托管、观察、探索、寻路与避险 | `src/bridge/lanbot.lua`、`src/bridge/lanbot/` | 读取现有视图并合成正常输入；不改权威玩法或同步规则，验收夹具放 `tests/` 和 `tools/` |
-| 菜单、预测、插值、镜头、外观、音效与本机演出 | `src/presentation/`、`src/bridge/presentation/` | 不决定权威伤害、拾取、道具效果或房间目的地 |
-| 与游戏版本无关的可移植数据规则 | `src/core/` | 保持可离线执行，不引入 Hook 或游戏内存布局 |
-| 原生能力声明、版本检测与游戏后端 | `src/engine/`、`src/engine/versions/<版本>/` | ABI、布局、原生调用、Hook 与对象所有权限定在版本后端 |
-| 运行日志、诊断与隔离画面采集 | `src/diagnostics/` | 记录证据，不以诊断开关控制正常玩法 |
-| 离线回归、实机夹具与构建／安装／验收工具 | `tests/`、`tools/`、`cmake/`、`package/`、`.github/workflows/` | 按下方测试约定执行，工具不得成为生产玩法依赖 |
-| 设计、同步契约、开发与验证说明 | `docs/`；用户操作说明用 `README.md` | 文档随实际行为更新，对外发布文案遵循下方审阅约定 |
+| 自动加载、启动装配、组件注册与调用顺序 | [`src/app/`](https://github.com/BMingSY/isaac-lan/tree/main/src/app)、[`src/bridge/app/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/app) | 组合已有组件，不承载新的玩法规则 |
+| TCP、消息、分块、压缩、连接与协议 | [`src/net/`](https://github.com/BMingSY/isaac-lan/tree/main/src/net) | 不访问游戏对象，不识别 Boss、角色或道具 |
+| 状态字段、采集／应用、编码、库存、实体与网格一致性 | [`src/bridge/sync/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/sync) | 负责通用同步契约，特殊玩法通过注入兼容组件处理 |
+| 会话推进、存档／恢复、换层屏障、房间与角色生命周期 | [`src/runtime/`](https://github.com/BMingSY/isaac-lan/tree/main/src/runtime)、[`src/bridge/runtime/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/runtime) | 协调执行时机与状态失效，原生对象的分配／释放由后端处理 |
+| Boss、道具、角色、路线与挑战的特殊规则 | [`src/compat/{bosses,items,characters,routes,challenges}/`](https://github.com/BMingSY/isaac-lan/tree/main/src/compat)、[`src/bridge/compat/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat) 对应分类 | C++ 策略接收普通值；Lua 适配使用游戏 API 和具名原生能力 |
+| 第三方 Mod 的探测、注册、接入与卸载 | [`src/bridge/compat/mods/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/mods) | 保留目标版本／源码探测和清理边界，不修改上游 Mod 源码 |
+| 对第三方公开的接口、动作与生命周期通知 | [`src/bridge/api/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/api) | 更新接口契约与接入文档，不暴露原生指针或任意内存读写 |
+| 联机人机托管、观察、探索、寻路与避险 | [`src/bridge/lanbot.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot.lua)、[`src/bridge/lanbot/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/lanbot) | 读取现有视图并合成正常输入；不改权威玩法或同步规则，验收夹具放 [`tests/`](https://github.com/BMingSY/isaac-lan/tree/main/tests) 和 [`tools/`](https://github.com/BMingSY/isaac-lan/tree/main/tools) |
+| 菜单、预测、插值、镜头、外观、音效与本机演出 | [`src/presentation/`](https://github.com/BMingSY/isaac-lan/tree/main/src/presentation)、[`src/bridge/presentation/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/presentation) | 不决定权威伤害、拾取、道具效果或房间目的地 |
+| 与游戏版本无关的可移植数据规则 | [`src/core/`](https://github.com/BMingSY/isaac-lan/tree/main/src/core) | 保持可离线执行，不引入 Hook 或游戏内存布局 |
+| 原生能力声明、版本检测与游戏后端 | [`src/engine/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine)、[`src/engine/versions/<版本>/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions) | ABI、布局、原生调用、Hook 与对象所有权限定在版本后端 |
+| 运行日志、诊断与隔离画面采集 | [`src/diagnostics/`](https://github.com/BMingSY/isaac-lan/tree/main/src/diagnostics) | 记录证据，不以诊断开关控制正常玩法 |
+| 离线回归、实机夹具与构建／安装／验收工具 | [`tests/`](https://github.com/BMingSY/isaac-lan/tree/main/tests)、[`tools/`](https://github.com/BMingSY/isaac-lan/tree/main/tools)、[`cmake/`](https://github.com/BMingSY/isaac-lan/tree/main/cmake)、[`package/`](https://github.com/BMingSY/isaac-lan/tree/main/package)、[`.github/workflows/`](https://github.com/BMingSY/isaac-lan/tree/main/.github/workflows) | 按下方测试约定执行，工具不得成为生产玩法依赖 |
+| 设计、同步契约、开发与验证说明 | [`docs/`](https://github.com/BMingSY/isaac-lan/tree/main/docs)；用户操作说明用 `README.md` | 文档随实际行为更新，对外发布文案遵循下方审阅约定 |
 
-- 修复前先判断职责：通用字段与状态一致性放在 `src/bridge/sync/`，Boss、道具、角色、路线和第三方 Mod 的特殊规则放在对应的 `compat/` 分类。
-- `app/` 负责装配组件和调用顺序，`runtime/` 负责会话、房间与楼层生命周期，`presentation/` 负责本机显示；不要把新玩法规则继续堆进装配入口。
-- 优先复用现有原生接口和游戏 Lua API，尽量不修改 `engine/versions/`、网络传输、Hook 和原生所有权代码。
+- 修复前先判断职责：通用字段与状态一致性放在 [`src/bridge/sync/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/sync)，Boss、道具、角色、路线和第三方 Mod 的特殊规则放在对应的 [`compat/`](https://github.com/BMingSY/isaac-lan/tree/main/src/compat) 分类。
+- [`app/`](https://github.com/BMingSY/isaac-lan/tree/main/src/app) 负责装配组件和调用顺序，[`runtime/`](https://github.com/BMingSY/isaac-lan/tree/main/src/runtime) 负责会话、房间与楼层生命周期，[`presentation/`](https://github.com/BMingSY/isaac-lan/tree/main/src/presentation) 负责本机显示；不要把新玩法规则继续堆进装配入口。
+- 优先复用现有原生接口和游戏 Lua API，尽量不修改 [`engine/versions/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions)、网络传输、Hook 和原生所有权代码。
 - 确实缺少原生能力时，可以在版本后端补充最小、具名、范围受限的读写接口或上下文维护；玩法匹配、效果选择和同步策略仍放在上层。
 - 原生改动需在设计或 PR 中说明现有接口为何不足、涉及的布局与所有权、校验边界及验证结果。
 - 网络层不得识别 Boss、角色或道具；可移植兼容策略不得读取原生内存或安装 Hook。
 - 增加状态字段时同时更新采集、应用、schema、嵌入模块清单和相关文档，并核对协议版本与扩展指纹。
 - 回归覆盖实际触发链路、重复状态、跨房／跨层及清理边界；原生机制和画面按下方约定集中验收。
+
+# 文案与游戏内界面
+
+- 不添加用户未要求的多余说明、提示或冗余文案，尤其是游戏内。
+- 游戏内只保留必要的名称、操作、状态和错误信息；详细说明放在 `README.md` 或 [`docs/`](https://github.com/BMingSY/isaac-lan/tree/main/docs)。
+- 不添加菜单说明面板，也不在配置中预留菜单说明字段。
+- 文档中的项目文件或目录链接统一使用本仓库 GitHub `main` 分支地址；不写本机路径或未提交验收产物的地址，用文件名、日期、轮次或用途说明替代。
 
 # 发布文案约定
 

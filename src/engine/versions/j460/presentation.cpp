@@ -1,4 +1,6 @@
 #include "engine/presentation.h"
+#include "engine/crafting_hud.h"
+#include "engine/challenge_hud.h"
 #include "engine/item_presentation.h"
 #include "engine/input.h"
 #include "engine/rooms.h"
@@ -50,6 +52,14 @@ void __attribute__((fastcall)) promptControls(void* prompt, void*) {
         originalPromptControls(prompt);
         return;
     }
+    if (runtime::challengeActive()) {
+        if (promptIdle(reinterpret_cast<std::uintptr_t>(prompt))) {
+            // Native result 2 declines; result 1 immediately starts a lap.
+            at<int>(reinterpret_cast<std::uintptr_t>(prompt), 0x12c) = 2;
+            reinterpret_cast<PromptCall>(image + j460::entry::victoryPromptHide)(prompt);
+        }
+        return;
+    }
     if (runtime::replica())
         return;
     // This party uses the host's decision and our reliable floor event.
@@ -69,7 +79,7 @@ void __attribute__((fastcall)) promptControls(void* prompt, void*) {
     }
 }
 void __attribute__((fastcall)) promptRender(void* prompt, void*) {
-    if (!partyPrompt(prompt) || runtime::localViewSlot() == 0)
+    if (!partyPrompt(prompt) || (!runtime::challengeActive() && runtime::localViewSlot() == 0))
         originalPromptRender(prompt);
 }
 IntroBarrier waiting;
@@ -239,7 +249,7 @@ IntroSimulationScope::~IntroSimulationScope() {
 }
 bool install(std::uintptr_t base) {
     image = base;
-    return items::install(base) &&
+    return installCraftingHud(base) && installChallengeHud(base) && items::install(base) &&
            MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::victoryPromptControls),
                          reinterpret_cast<void*>(promptControls),
                          reinterpret_cast<void**>(&originalPromptControls)) == MH_OK &&

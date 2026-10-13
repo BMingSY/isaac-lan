@@ -1,0 +1,7 @@
+<metadata>
+    <name>LAN native character catalog fixture</name>
+    <directory>lan_compat_registered_characters</directory>
+    <id>0</id>
+    <description>Isolated XML-only character registration and selection test.</description>
+    <version>1</version>
+</metadata>

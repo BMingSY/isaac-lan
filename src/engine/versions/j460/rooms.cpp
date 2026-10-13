@@ -1,4 +1,5 @@
 #include "engine/rooms.h"
+#include "engine/pause_menu.h"
 #include "engine/visuals.h"
 #include "engine/audio.h"
 #include "engine/input.h"
@@ -740,6 +741,10 @@ Exit originalExit;
 using End = void(__attribute__((thiscall)) *)(void*, int);
 End originalEnd;
 void __attribute__((fastcall)) endGame(void* target, void*, int ending) {
+    // LAN challenges complete through their explicit reward transaction.
+    // Native terminal routes cannot publish a second completion path.
+    if (runtime::challengeActive() && ending >= 2 && ending <= 14)
+        return;
     if (runtime::localViewSlot() < 0 || ending < 2 || ending > 14) {
         originalEnd(target, ending);
         return;
@@ -1046,6 +1051,9 @@ bool queue(Address player, int index, int dimension, int door, bool teleport = f
     const auto key = *target;
     if (key == it->second->key)
         return true;
+    if (!runtime::allowRoomEntry(slotOf(player), it->second->key.dimension, it->second->key.index,
+                                 key.dimension, key.index, teleport))
+        return false;
     if (std::any_of(pending.begin(), pending.end(),
                     [player](const auto& r) { return r.player == player; }))
         return true;
@@ -1207,6 +1215,8 @@ void __attribute__((fastcall)) victoryLap(void* g, void*) {
         originalVictoryLap(g);
         return;
     }
+    if (runtime::challengeActive())
+        return;
     if (!runtime::replica())
         pendingRestart = 2;
 }
@@ -1536,10 +1546,23 @@ int beginRKey(lua_State* L) {
     return 1;
 }
 int beginVictoryLap(lua_State* L) {
-    const bool ready = runtime::replica() && enabled && !scopes.depth();
+    const bool ready =
+        runtime::replica() && enabled && !scopes.depth() && !runtime::challengeActive();
     if (ready)
         pendingRestart = 2;
     lua.pushBoolean(L, ready);
+    return 1;
+}
+int chestEnding(lua_State* L) {
+    int ending = -1;
+    if (enabled && game()) {
+        // Match the native departure decision's complete roster while retaining
+        // the caller's room. Borrowed roster scope restores itself before return.
+        TeamScope team;
+        using ChestEnding = int(__stdcall*)(bool);
+        ending = engine<ChestEnding>(j460::entry::gameGetChestEnding)(false);
+    }
+    lua.pushInteger(L, ending);
     return 1;
 }
 int beginCinematic(lua_State* L) {
@@ -2407,10 +2430,12 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
                           [&](Address p) { return at<int>(p, 0x1618) == slot + 1; });
     if (!room) {
         ViewRoster view(players);
+        pause_menu::ViewScope pauseView(image, slot);
         draw();
         return;
     }
     Scope scope(*room, players, false);
+    pause_menu::ViewScope pauseView(image, slot);
     draw();
 }
 bool checkpointReady() {
@@ -3056,6 +3081,13 @@ void requestExit(bool save) {
         reinterpret_cast<void*>(manager + 0x4b290), -1);
     at<bool>(manager, 0x4b288) = true;
 }
+void finishChallenge() {
+    // LAN challenges keep Game::Challenge at zero: use the original fade/menu
+    // flow while skipping native challenge unlocks. Existing save guards cover
+    // FinishChallenge's attempt to remove the single-player Continue file.
+    reinterpret_cast<RoomCall>(image +
+                               j460::entry::gameFinishChallenge)(reinterpret_cast<void*>(game()));
+}
 void playEnding(unsigned ending) {
     // Native local co-op can wait for every roster member to enter the chest.
     // The host has already accepted this terminal event for the whole run.
@@ -3294,6 +3326,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_positions", positions);
     function("r_key_begin", beginRKey);
     function("victory_lap_begin", beginVictoryLap);
+    function("rooms_chest_ending", chestEnding);
     function("rooms_ready", ready);
     function("rooms_heads", heads);
     function("rooms_sync", syncLocations);

@@ -1,6 +1,6 @@
 # 百变怪战斗延迟复现
 
-> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](../README.md)。
+> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/README.md)。
 
 2026-10-11 用户报告：普通房间 ping 小于 100ms，百变怪战斗中升到 4771ms；主机流畅，经过 frp 的客机明显停顿。
 
@@ -27,7 +27,7 @@
 
 正常阶段客机每秒应用约 29 份状态，限速阶段平均约 18 份、最低 14 份。限速期间客机单次状态应用最长 17.74ms，实体应用最长 13ms，渲染帧间隔最长 34.72ms；没有出现渲染线程几秒停顿。状态滞后用两端共同的 Windows 单调时钟及主机 tick 插值估算，渲染指标只统计完全落在各阶段内的性能窗口，排除启动、切层和阶段边界。
 
-原始证据在 `artifacts/delirium-native-20261011-r3/`：`report.json`、双方 `*-samples.csv`、`view-age.csv`、`native-analysis.json`、`engine/*/logs/` 和 `engine/client/frames/`。`peak-ping.png` 为客机原生画面，HUD 显示 2648ms。
+原始证据已按轮次归档（2026-10-11，第 3 轮）：`report.json`、双方 `*-samples.csv`、`view-age.csv`、`native-analysis.json`、双方原生日志 和验收归档。`peak-ping.png` 为客机原生画面，HUD 显示 2648ms。
 
 `r4` 使用相同 DLL、夹具和阶段长度，将限速降低为 160000 字节／秒（1.28Mbps）。同一对进程内再次完成全部阶段，原生日志记录 34 次变身；所有夹具、退出及恢复检查通过。
 
@@ -42,13 +42,13 @@
 
 这轮正常低血量阶段另捕获一次 628.503ms 渲染停顿。对应性能窗口中状态应用最长 8.552ms、实体应用最长 4ms、解码最长 3ms，没有记录到与这次停顿同量级的状态应用耗时。现有指标尚不能定位它发生在原生渲染、本机回调、画面采样还是外部调度等哪个环节。不能把该短停顿直接当作用户原会话持续掉帧的同一原因。
 
-`r4` 原始证据保存在 `artifacts/delirium-native-20261011-r4/` 的相同目录结构中。`delirium-5069ms.png` 是原生采样帧 `engine/client/frames/697.png` 的未修改副本，保留弹幕及 HUD 的 5069ms 读数。性能窗口与阶段对齐的两次 Windows 时钟校准相差 5ms，在所记录的 20ms 对齐容差内。
+`r4` 原始证据已按轮次归档（2026-10-11，第 4 轮）的相同目录结构中。`delirium-5069ms.png` 是原生采样帧 `697.png` 的未修改副本，保留弹幕及 HUD 的 5069ms 读数。性能窗口与阶段对齐的两次 Windows 时钟校准相差 5ms，在所记录的 20ms 对齐容差内。
 
 ## 已确认的机制与未确认部分
 
 本地已经确认：在吞吐量不足的中转上，原生百变怪战斗会造成 TCP 状态积压，主机继续正常推进，客机收到旧状态，ping 随之上升，解除限速后恢复。
 
-`src/net/session.cpp` 的状态发送会替换尚未开始发送的待处理快照，但已进入 Winsock／TCP／中转的快照仍需按顺序送完。`Message::applied` 保存客机应用 tick，优化前并未用它限制在途快照。应用发送队列只统计尚未交给 Winsock 的数据，不能代表整条链路没有积压。ping／pong 和状态复用同一条 TCP 流，因此 ping 包也会排在状态数据后面。
+[`src/net/session.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/net/session.cpp) 的状态发送会替换尚未开始发送的待处理快照，但已进入 Winsock／TCP／中转的快照仍需按顺序送完。`Message::applied` 保存客机应用 tick，优化前并未用它限制在途快照。应用发送队列只统计尚未交给 Winsock 的数据，不能代表整条链路没有积压。ping／pong 和状态复用同一条 TCP 流，因此 ping 包也会排在状态数据后面。
 
 DEBUG 样本中，低血量阶段一份压缩快照达到 18328 字节；按每秒 30 份计算，仅状态负载就约 4.4Mbps／客机，超过上述 2.56Mbps 对照容量。这个计算说明发送需求，不表示限速后实际仍成功传输了每秒 30 份。
 
@@ -58,7 +58,7 @@ DEBUG 样本中，低血量阶段一份压缩快照达到 18328 字节；按每�
 
 用户随后确认 frp 部署在 SSH 别名 `myserver`，云控制台的公网出带宽上限为 **3Mbps**。只读检查发现 `frps` 为 0.68.0；原会话对应的 Windows `frpc` 登录版本为 0.61.2，`isaac-lan` TCP 代理于 20:37:53 注册、20:40 接入，21:18:37 随客户端退出关闭。没有在战斗时间附近记录代理断开。
 
-服务器时区为 `CST +0800`，`/var/log/sysstat/sa11` 保存了约十分钟一个区间的全网卡流量。下表为区间平均值，并非瞬时峰值，也没有按代理区分。
+服务器时区为 `CST +0800`，系统活动统计记录 保存了约十分钟一个区间的全网卡流量。下表为区间平均值，并非瞬时峰值，也没有按代理区分。
 
 | 区间（2026-10-11，本地时间） | 平均出网 | 平均 CPU 空闲率 |
 | --- | ---: | ---: |
@@ -67,14 +67,14 @@ DEBUG 样本中，低血量阶段一份压缩快照达到 18328 字节；按每�
 | 21:00:34–21:10:09 | 2.48Mbps | 98.64% |
 | 21:10:09–21:20:34 | 1.78Mbps | 98.76% |
 
-原百变怪战斗的房间事件位于 21:13–21:15，落在最后一个区间内；该区间还包含 21:18:37 退出后的空闲时间。现有 `frps` 未开启 Dashboard／Prometheus，`sar` 文件未保存 TCP 重传活动，无法从这些记录确认战斗时的逐秒出口饱和、具体积压位置或重传量。原始只读证据经移除地址后保存在 `artifacts/delirium-latency-20261011/myserver-evidence.json`。
+原百变怪战斗的房间事件位于 21:13–21:15，落在最后一个区间内；该区间还包含 21:18:37 退出后的空闲时间。现有 `frps` 未开启 Dashboard／Prometheus，`sar` 文件未保存 TCP 重传活动，无法从这些记录确认战斗时的逐秒出口饱和、具体积压位置或重传量。原始只读证据经移除地址后保存在 `myserver-evidence.json`。
 
 3Mbps 的理论容量为每秒 375000 字节；本地低血量快照样本按 30Hz 计算需要每秒 549840 字节、约 4.4Mbps／客机，还未计入协议开销与其他业务。服务器出口因此是原问题的主要嫌疑，已知配置确实容不下这个发送需求；但本地单份快照的计算不能替代原战斗的瞬时流量测量。主机上传、客机接收／处理和链路丢包仍可能共同影响结果。
 
 建议按以下职责推进通用优化，不在网络层识别百变怪：
 
-1. **先防止状态积压。** 在 `src/net/` 用现有客机应用确认约束在途快照／字节，未开始发送的状态继续只保留最新；结合确认速度、压缩后大小和链路时延调整每个客机的状态发送频率。输入和主机权威 tick 继续正常推进，换层、存档、会话事件保持可靠顺序。不能只等待一个快照确认后再发送，否则高 RTT 链路会受到额外吞吐限制。
-2. **减少重复状态。** 在 `src/bridge/sync/` 为地图、布局、库存、静态资源等未变化字段设计增量或缓存契约；对实体频繁变化的字段单独计量。接收端按已确认基线恢复完整视图，切房／切层及恢复时提供完整状态，避免丢失短暂变化和清理事件。编码与 schema、模块清单、指纹／协议校验及同步文档同步更新。
+1. **先防止状态积压。** 在 [`src/net/`](https://github.com/BMingSY/isaac-lan/tree/main/src/net) 用现有客机应用确认约束在途快照／字节，未开始发送的状态继续只保留最新；结合确认速度、压缩后大小和链路时延调整每个客机的状态发送频率。输入和主机权威 tick 继续正常推进，换层、存档、会话事件保持可靠顺序。不能只等待一个快照确认后再发送，否则高 RTT 链路会受到额外吞吐限制。
+2. **减少重复状态。** 在 [`src/bridge/sync/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/sync) 为地图、布局、库存、静态资源等未变化字段设计增量或缓存契约；对实体频繁变化的字段单独计量。接收端按已确认基线恢复完整视图，切房／切层及恢复时提供完整状态，避免丢失短暂变化和清理事件。编码与 schema、模块清单、指纹／协议校验及同步文档同步更新。
 3. **固定容量与采样配合。** 用户进一步明确不提高带宽，后续以 3Mbps、四人联机为优化与验收目标。下一次采样应记录逐秒出口、状态大小／发送量、客机应用进度和真实渲染耗时，验证减少重复状态及限制在途数据后的行为。
 4. **检查 frpc 的代理限速。** 代理的 `transport.bandwidthLimit` 配置在客户端，单位为 KB／MB，不是 Mbps；仅检查 frps 的简化配置不能排除代理另有限流。参见 [frp 代理配置](https://gofrp.org/zh-cn/docs/reference/proxy/)。若另有业务共享连接，单独做连接隔离对照；QUIC／KCP 属于后续链路对照，尤其 KCP 有额外流量开销，不能替代容量与发送策略优化。参见 [frp 通信安全及优化](https://gofrp.org/zh-cn/docs/features/common/network/network/)。
 
@@ -96,9 +96,9 @@ DEBUG 样本中，低血量阶段一份压缩快照达到 18328 字节；按每�
 
 ```sh
 PATH="$PWD/.deps/checks/bin:$PATH" python3 tools/run_delirium_performance.py \
-  --host /mnt/d/isaac-lan-lab/host-001 \
-  --client /mnt/d/isaac-lan-lab/client-001 \
-  --output artifacts/delirium-native-new \
+  --host "$ISAAC_HOST_LAB" \
+  --client "$ISAAC_CLIENT_LAB" \
+  --output "$ISAAC_RUN_OUTPUT" \
   --seconds 40 --latency-ms 40 --bandwidth-low-health 320000 \
   --record-client
 ```
@@ -111,9 +111,9 @@ PATH="$PWD/.deps/checks/bin:$PATH" python3 tools/run_delirium_performance.py \
 
 ## 无损增量与四人最终验收
 
-分支 `perf/world-state-delta` 实现通用字节增量、按应用确认约束在途状态、按实际间隔插值，以及同房间同 tick 的采集与不可变元组编码复用。网络协议为 25，Lua schema 仍为 13；没有改动原生布局、接口或 Hook。设计及缓存边界见[世界视图带宽优化](world-state-bandwidth-plan.md)。
+分支 `perf/world-state-delta` 实现通用字节增量、按应用确认约束在途状态、按实际间隔插值，以及同房间同 tick 的采集与不可变元组编码复用。网络协议为 25，Lua schema 仍为 13；没有改动原生布局、接口或 Hook。设计及缓存边界见[世界视图带宽优化](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/world-state-bandwidth-plan.md)。
 
-最终轮 `artifacts/delirium-delta-four-20261011-r3/` 用一主三客、相同 12 个 Mod 与参考道具配置，三个客机共享一个 **375000 字节／秒（3Mbps）** 下行预算，单向固定延迟 40ms。高血量、低血量及限速低血量各 40 秒，随后解除限速恢复 15 秒、跨房、再次换层、保存退出；各阶段复用同一组四个进程和连接。原生日志记录 34 次变身，战斗夹具追踪到 32 次形态变化。四名角色实际移动、低血量生效、正常退出及全部隔离资料恢复检查通过；四个进程退出码均为 0。
+最终轮验收归档（2026-10-11，第 3 轮）用一主三客、相同 12 个 Mod 与参考道具配置，三个客机共享一个 **375000 字节／秒（3Mbps）** 下行预算，单向固定延迟 40ms。高血量、低血量及限速低血量各 40 秒，随后解除限速恢复 15 秒、跨房、再次换层、保存退出；各阶段复用同一组四个进程和连接。原生日志记录 34 次变身，战斗夹具追踪到 32 次形态变化。四名角色实际移动、低血量生效、正常退出及全部隔离资料恢复检查通过；四个进程退出码均为 0。
 
 每条真实主机字节流由生产解码器回放，还原的完整状态重新进行旧方式全量 XPRESS_HUFF 压缩。下表是**同一批、同一实际更新率**的状态载荷对照，不包含 TCP／frp 封装，不是将降低频率算作去重收益。
 
@@ -138,7 +138,7 @@ PATH="$PWD/.deps/checks/bin:$PATH" python3 tools/run_delirium_performance.py \
 
 最终共享限速阶段，主机平均完整 Lua 编码 **1.875ms／视图**，完整选择／压缩总成本 **0.847ms／视图**；客机平均解码与应用细项见结果文件。主机历史视图缓存总量最高 2333687 字节、未确认压缩载荷最高 42917 字节、未确认状态最高 12 份（三客机合计）；客机历史缓存最高 5318613 字节／进程。此阶段未观察到持续秒级积压。
 
-数据摘要随源码保存在 [world-state-delta-20261011.json](../benchmarks/world-state-delta-20261011.json)。最终受测 DLL SHA-256 为 `f30a74342e3884f3ed3dbb3b295b99fe3cff528aa61f1c61ffdbc5a3e3b21725`，与最终本地构建一致。完整字节流、回放表格、逐秒样本、性能窗口、原生画面和恢复清单留在本地验收目录，不打入用户安装包。正式安装和 `myserver` 没有修改。
+数据摘要随源码保存在 [world-state-delta-20261011.json](https://github.com/BMingSY/isaac-lan/blob/main/docs/benchmarks/world-state-delta-20261011.json)。最终受测 DLL SHA-256 为 `f30a74342e3884f3ed3dbb3b295b99fe3cff528aa61f1c61ffdbc5a3e3b21725`，与最终本地构建一致。完整字节流、回放表格、逐秒样本、性能窗口、原生画面和恢复清单留在本地验收目录，不打入用户安装包。正式安装和 `myserver` 没有修改。
 
 ### 迭代与未修复异常
 
@@ -152,13 +152,13 @@ PATH="$PWD/.deps/checks/bin:$PATH" python3 tools/run_delirium_performance.py \
 
 ```sh
 PATH="$PWD/.deps/checks/bin:$PATH" python3 tools/run_delirium_performance.py \
-  --host /mnt/d/isaac-lan-lab/host-001 \
-  --client /mnt/d/isaac-lan-lab/client-001 \
-  --extra-client /mnt/d/isaac-lan-lab/client-002 \
-  --extra-client /mnt/d/isaac-lan-lab/client-003 \
-  --build build-win32 --output artifacts/delirium-delta-new \
+  --host "$ISAAC_HOST_LAB" \
+  --client "$ISAAC_CLIENT_LAB" \
+  --extra-client "$ISAAC_CLIENT2_LAB" \
+  --extra-client "$ISAAC_CLIENT3_LAB" \
+  --build build-win32 --output "$ISAAC_RUN_OUTPUT" \
   --seconds 40 --latency-ms 40 --bandwidth-low-health 375000 \
   --record-relay --record-client
 ```
 
-可继续加 `--reference-log`／`--mods-directory`；不要同时用 `--installed-directory` 冻结旧 DLL 来验证新实现。Windows 回放工具对每个 `engine/relay/host-N.bin` 执行 `isaac_lan_replay_world INPUT replay-N [FIRST_TICK COUNT]`，三个输出放在同一验收目录下。`tools/analyze_delirium_performance.py OUTPUT --clock CLOCK_JSON` 生成汇总；校准 JSON 为同一台 Windows 的 `GetTickCount64()` 所得 `tick_ms` 与 `DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()` 所得 `utc_ms`，需分别在运行前后核对偏移。此处测得的是本地限速中转与同机四开的条件，不能当作原 frp 服务的现场重放或所有 Mod／弹幕规模的保证。
+可继续加 `--reference-log`／`--mods-directory`；不要同时用 `--installed-directory` 冻结旧 DLL 来验证新实现。Windows 回放工具对每个 `host-N.bin` 执行 `isaac_lan_replay_world INPUT replay-N [FIRST_TICK COUNT]`，三个输出放在同一验收目录下。`tools/analyze_delirium_performance.py OUTPUT --clock CLOCK_JSON` 生成汇总；校准 JSON 为同一台 Windows 的 `GetTickCount64()` 所得 `tick_ms` 与 `DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()` 所得 `utc_ms`，需分别在运行前后核对偏移。此处测得的是本地限速中转与同机四开的条件，不能当作原 frp 服务的现场重放或所有 Mod／弹幕规模的保证。

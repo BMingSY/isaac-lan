@@ -42,4 +42,12 @@ inline void keyboardPause(lan::InputFrame& input, bool paused) {
         input.values[12] = 65535;
     }
 }
+inline lan::InputFrame pausedInput(const lan::InputFrame& input) {
+    lan::InputFrame result;
+    // Menu navigation stays local. Keep held fire for charged weapons across
+    // the authoritative resume boundary, without forwarding item/button edges.
+    for (unsigned action = 4; action < 8; ++action)
+        result.values[action] = input.values[action];
+    return result;
+}
 } // namespace isaac::input

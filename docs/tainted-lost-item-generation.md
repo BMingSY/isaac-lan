@@ -49,7 +49,7 @@
 
 ## 联机处理边界
 
-[角色公共特性表](../src/compat/characters/team_effects.h)声明角色的公共生成／商店特性，[公共道具表](../src/compat/items/team_effects.h)声明公共道具效果。J460 后端只在已校验的调用位置借用现有 TeamScope 完整名单，并立即恢复当前房间名单：
+[角色公共特性表](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/characters/team_effects.h)声明角色的公共生成／商店特性，[公共道具表](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/team_effects.h)声明公共道具效果。J460 后端只在已校验的调用位置借用现有 TeamScope 完整名单，并立即恢复当前房间名单：
 
 - 道具生成调用点 0x330514 的角色查询看见全队，因此同时恢复攻击性筛选和品质重抽。
 - 卡牌生成函数在全队有里 Lost 时临时读取完整名单，覆盖直接遍历名单的原生检查。
@@ -81,4 +81,4 @@ for start, stop in [(0x330501, 0x33062e), (0x3346b0, 0x334766)]:
         print(hex(instruction.address), instruction.mnemonic, instruction.op_str)
 ~~~
 
-[集中实机夹具](../tests/state_item_generation.lua)分房后先记录无公共效果的种子结果，再验证远端十字圣球与里 Lost 的原生生成、禁用特殊卡的边界、神圣卡实体同步。品质概率以以上原生分支为准，夹具不以有限样本声称精确验证 20%。
+[集中实机夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_item_generation.lua)分房后先记录无公共效果的种子结果，再验证远端十字圣球与里 Lost 的原生生成、禁用特殊卡的边界、神圣卡实体同步。品质概率以以上原生分支为准，夹具不以有限样本声称精确验证 20%。

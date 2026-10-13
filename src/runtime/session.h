@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <span>
+#include <array>
 
 struct lua_State;
 namespace isaac::lan {
@@ -19,6 +20,11 @@ void halfStarted();
 void halfCompleted();
 int localViewSlot();
 bool replica();
+bool challengeActive();
+std::array<int, 2> challengeDestination();
+bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimension, int room,
+                    bool teleport);
+int craftingBagViewTarget();
 unsigned difficulty();
 bool startingPartyHasCharacter(int kind);
 bool ending();
@@ -27,7 +33,7 @@ void refreshAutomation(std::uint32_t renderFrame);
 void pollLocalConsole();
 void beginStage(bool same, int animation, unsigned restart = 0, unsigned cinematic = 0);
 void prepareEnding();
-bool beginEnding(unsigned ending);
+bool beginEnding(unsigned ending, bool completed = false);
 void beginRewind(std::span<const std::uint8_t> bytes);
 bool requestRoom(const lan::RoomRequest&);
 std::uint32_t tick();

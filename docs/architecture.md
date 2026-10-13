@@ -31,4 +31,4 @@ flowchart LR
 - 所有玩家须使用相同协议和扩展构建；Mod 差异只提示，不通用同步 Mod 私有数据。
 - 房主不能迁移。整场续玩要求原人数、原加入顺序；运行中的客机重连按保留的玩家标识恢复。
 
-按修改任务阅读[分层与所有权](layers-and-compatibility.md)、[同步契约](synchronization.md)、[会话恢复](session-lifecycle.md)或[房间与表现](rooms-and-presentation.md)。构建和检查入口见[开发与测试](development-and-testing.md)。
+按修改任务阅读[分层与所有权](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md)、[同步契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)、[会话恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)或[房间与表现](https://github.com/BMingSY/isaac-lan/blob/main/docs/rooms-and-presentation.md)。构建和检查入口见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。

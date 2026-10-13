@@ -1842,6 +1842,12 @@ test(
     end
 )
 test("embedded console entry dispatches lanbot and returns nil", function()
+    modules["runtime/challenges"] = dofile(root .. "/src/bridge/runtime/challenges.lua")
+    modules["compat/routes/challenge_lamb"] =
+        dofile(root .. "/src/bridge/compat/routes/challenge_lamb.lua")
+    native.net_challenges = function()
+        return {}
+    end
     modules["runtime/session"] = dofile(root .. "/src/bridge/runtime/session.lua")
     modules["compat/characters/keeper"] = dofile(root .. "/src/bridge/compat/characters/keeper.lua")
     _IsaacLanState = { actorPose = function() end }
@@ -1866,6 +1872,9 @@ test("embedded console entry dispatches lanbot and returns nil", function()
         MC_POST_UPDATE = 3,
         MC_PRE_GAME_EXIT = 4,
         MC_PRE_PICKUP_COLLISION = 5,
+        MC_POST_PICKUP_INIT = 6,
+        MC_POST_PICKUP_UPDATE = 7,
+        MC_POST_NEW_LEVEL = 8,
     }
     dofile(root .. "/src/bridge/app/main.lua")
     assert(callbacks[1](nil, "another_command", "on") == nil and #output == 0)

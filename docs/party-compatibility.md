@@ -1,28 +1,28 @@
 # 队伍兼容修复
 
-对应 #41、#42、#43、#44、#47、#48、#49、#51、#54。传输协议为 26，世界视图 schema 为 15；两端必须使用相同 DLL。此文记录实现边界，历次证据见[专项验收](history/party-compatibility-validation.md)。
+对应 #41、#42、#43、#44、#47、#48、#49、#51、#54。传输协议为 26，世界视图 schema 为 15；两端必须使用相同 DLL。此文记录实现边界，历次证据见[专项验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md)。
 
 ## 跟班池与实体回收
 
 J460 EntityFactory::Create 的跟班分支在 RVA `0x2f00d7` 使用 64 槽循环池（掩码 `0x3f`、对象步长 `0xf48`），按 `_valid` 检查空槽；Game::Spawn 的默认参数允许池满时覆盖旧槽。原同步先生成新实体、最后才删除旧实体，池满时会覆盖仍被当前视图引用的跟班，随后补实体关系报 `Replica identity missing`，结束客机会话。
 
-`sync/entities.lua` 先按实际对象身份保留仍在视图里的实体，删除过期对象，再调用原版 `Room:Update()` 完成回收，之后创建替换对象和补关系。`Remove()` 尚未完成回收时仍占用原生槽，不能只调整 Lua 遍历顺序。跟班初始化可产生额外烟雾并挤占效果池；这一轮被原版回收的瞬时效果跳过补关系，下份权威视图仍需要时重建，其他实体的身份缺失仍报错。原版负责清理引用和释放槽位；同步层不扩容池、不设置原生有效位或接管所有权。离线夹具模拟 64 槽、延迟释放与新实体先到的顺序，并检查重复视图、多轮替换和效果池回收。
+[`sync/entities.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entities.lua) 先按实际对象身份保留仍在视图里的实体，删除过期对象，再调用原版 `Room:Update()` 完成回收，之后创建替换对象和补关系。`Remove()` 尚未完成回收时仍占用原生槽，不能只调整 Lua 遍历顺序。跟班初始化可产生额外烟雾并挤占效果池；这一轮被原版回收的瞬时效果跳过补关系，下份权威视图仍需要时重建，其他实体的身份缺失仍报错。原版负责清理引用和释放槽位；同步层不扩容池、不设置原生有效位或接管所有权。离线夹具模拟 64 槽、延迟释放与新实体先到的顺序，并检查重复视图、多轮替换和效果池回收。
 
 ## 公共被动效果与店长
 
-`compat/items/team_effects.h` 统一声明指南针、白地图、打折、蓝地图、黑蜡烛、补货、十字圣球的公共效果。后端只在原版 PlayerManager 的道具查找／数量查询中暂时借用完整队伍名单，退出查询即恢复房间名单；库存、个人属性与主动道具仍属于原持有者。新增公共效果只需扩展此名单，保留原版叠加公式。
+[`compat/items/team_effects.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/team_effects.h) 统一声明指南针、白地图、打折、蓝地图、黑蜡烛、补货、十字圣球的公共效果。后端只在原版 PlayerManager 的道具查找／数量查询中暂时借用完整队伍名单，退出查询即恢复房间名单；库存、个人属性与主动道具仍属于原持有者。新增公共效果只需扩展此名单，保留原版叠加公式。
 
 原版商店布局生成会直接检查当前名单中的里店长，不能只修复 FindPlayerType 查询。第一层在远端玩家对象创建前生成，使用已确认的大厅角色选择升级商店 subtype；之后使用完整原生名单。RoomConfig::GetRandomRoom 保持原随机种子、12 个参数及返回对象所有权，普通商店 subtype 只加一次 100，限定已核对的商店生成调用点。商店定价的里店长查询同样限定原生调用点。
 
-恶魔房交易通过 `compat/characters/keeper.lua` 在权威拾取碰撞前按实际买家重新询问原版 Room 的基础价和折扣价。`pickup_price` 只接受存活拾取物和已列入房间的玩家精灵包装，临时借用买家名单计算价格，不创建或复制原生对象。表店长和里店长使用金币，其他角色使用血量；自定义固定价和免费道具不覆盖。本机价格显示使用本机玩家上下文。
+恶魔房交易通过 [`compat/characters/keeper.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/characters/keeper.lua) 在权威拾取碰撞前按实际买家重新询问原版 Room 的基础价和折扣价。`pickup_price` 只接受存活拾取物和已列入房间的玩家精灵包装，临时借用买家名单计算价格，不创建或复制原生对象。表店长和里店长使用金币，其他角色使用血量；自定义固定价和免费道具不覆盖。本机价格显示使用本机玩家上下文。
 
 ## 里 Lost 的公共生成特性
 
-角色公共效果统一放在 compat/characters/team_effects.h。里 Lost 的攻击性标签筛选、品质 0／1 的五分之一重抽和允许特殊卡时的十分之一神圣卡替换，都读取全队名单；原版生成算法、种子、标签与概率保持不变。卡牌生成的角色判断被原版内联为名单遍历，因而另在 GetCardEx 范围临时借用完整名单。主机生成后同步结果，分房不改变生效范围。具体反汇编地址、二进制哈希和复核方法见[原版生成证据](tainted-lost-item-generation.md)。
+角色公共效果统一放在 compat/characters/team_effects.h。里 Lost 的攻击性标签筛选、品质 0／1 的五分之一重抽和允许特殊卡时的十分之一神圣卡替换，都读取全队名单；原版生成算法、种子、标签与概率保持不变。卡牌生成的角色判断被原版内联为名单遍历，因而另在 GetCardEx 范围临时借用完整名单。主机生成后同步结果，分房不改变生效范围。具体反汇编地址、二进制哈希和复核方法见[原版生成证据](https://github.com/BMingSY/isaac-lan/blob/main/docs/tainted-lost-item-generation.md)。
 
 ## 死亡证明
 
-原版进入死亡证明与拿取后的延迟返回均使用动画 20，返回调用的玩家参数为空，原来的逐角色适配无法解析该返回。`compat/items/death_certificate.h` 根据动画与来源／目标维度选择整队传送；内部过门和卡牌仍逐人执行。传送卡只解析死亡证明维度内的目的地，缺少对应房间时回到原版入口 80，不能跳回普通层。任何玩家拿取后全队返回原版保存的来源房间。客机从权威房间视图进入时没有执行 Game::EnterDeathCertificate，需要补齐原版的 5 个标量来源字段：当前／上一房间索引和维度、离开门。返回时以权威目的地修正来源，避免原版 ChangeRoom 使用未初始化的索引 0。沿用已有房间生命周期、原版返回索引与维度，不复制或释放物品池、房间或实体；到达后恢复原版动画导致的控制锁。
+原版进入死亡证明与拿取后的延迟返回均使用动画 20，返回调用的玩家参数为空，原来的逐角色适配无法解析该返回。[`compat/items/death_certificate.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/death_certificate.h) 根据动画与来源／目标维度选择整队传送；内部过门和卡牌仍逐人执行。传送卡只解析死亡证明维度内的目的地，缺少对应房间时回到原版入口 80，不能跳回普通层。任何玩家拿取后全队返回原版保存的来源房间。客机从权威房间视图进入时没有执行 Game::EnterDeathCertificate，需要补齐原版的 5 个标量来源字段：当前／上一房间索引和维度、离开门。返回时以权威目的地修正来源，避免原版 ChangeRoom 使用未初始化的索引 0。沿用已有房间生命周期、原版返回索引与维度，不复制或释放物品池、房间或实体；到达后恢复原版动画导致的控制锁。
 
 ## 口袋槽与药丸
 
@@ -30,17 +30,17 @@ J460 EntityFactory::Create 的跟班分支在 RVA `0x2f00d7` 使用 64 槽循环
 
 里该隐的合成袋还需要独立的私有状态，口袋槽 ID 不包含袋内材料。J460 原版拾取计数（RVA `0x3d54e2`）与 HUD 材料读取（RVA `0x44a1f6`）使用 Player+0x1f44 的 8 字节材料顺序；HUD 预览读取（RVA `0x443b06`）使用 Player+0x1f4c 的道具 ID。三处代码加入启动特征校验，现有原版 Lua API 没有完整读取／恢复这些字段的接口。
 
-`compat/items/crafting_bag.lua` 匹配四个主动槽中的合成袋，给每个角色元组追加第 8 项、固定 12 字节的材料与预览；同房和分房都采集所有玩家，库存 setter 后恢复，失去道具时清空旧显示状态，合作幽灵的隐藏库存保留原生所有权。`actor_crafting_bag` 只接受列入完整名单的玩家，完整验证载荷长度、材料种类、紧凑顺序和预览范围后才写入，写入限客机。数据变化时仅标记该玩家的原版 HUD 预览缓存，重复状态不重置缓存。拾取、合成、物品池来源缓存和道具获取仍由主机执行，不复制指针、主动对象或 Mod 私有表，不增加 Hook。角色元组变化使 schema 14 升为 15；协议仍为 26，扩展指纹随 DLL 更新。
+[`compat/items/crafting_bag.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/crafting_bag.lua) 匹配四个主动槽中的合成袋，给每个角色元组追加第 8 项、固定 12 字节的材料与预览；同房和分房都采集所有玩家，库存 setter 后恢复，失去道具时清空旧显示状态，合作幽灵的隐藏库存保留原生所有权。`actor_crafting_bag` 只接受列入完整名单的玩家，完整验证载荷长度、材料种类、紧凑顺序和预览范围后才写入，写入限客机。数据变化时仅标记该玩家的原版 HUD 预览缓存，重复状态不重置缓存。拾取、合成、物品池来源缓存和道具获取仍由主机执行，不复制指针、主动对象或 Mod 私有表，不增加 Hook。角色元组变化使 schema 14 升为 15；协议仍为 26，扩展指纹随 DLL 更新。
 
-联机延迟文字原先覆盖右侧口袋 HUD 的材料格，`presentation/menu.lua` 将它移到上方中间，保留原版副手布局。
+联机延迟文字原先覆盖右侧口袋 HUD 的材料格，[`presentation/menu.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/menu.lua) 将它移到上方中间，保留原版副手布局。
 
-原版 ItemPool 是 Game+0x1a740；GetPillEffect 读取 +0x7a4 的 15 个颜色效果，IdentifyPill／IsPillIdentified 屏蔽大药丸颜色位后读取 +0x7e0 的 15 个鉴定字节。现有 Lua API 没有完整恢复颜色分配和撤销鉴定的接口，因此 `pill_state` 提供固定 75 字节读写，全部验证后才写入，写入限客机。`sync/pills.lua` 将其作为顶层第 20 项，在库存 setter 后恢复，重复状态与回退均可重放。
+原版 ItemPool 是 Game+0x1a740；GetPillEffect 读取 +0x7a4 的 15 个颜色效果，IdentifyPill／IsPillIdentified 屏蔽大药丸颜色位后读取 +0x7e0 的 15 个鉴定字节。现有 Lua API 没有完整恢复颜色分配和撤销鉴定的接口，因此 `pill_state` 提供固定 75 字节读写，全部验证后才写入，写入限客机。[`sync/pills.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/pills.lua) 将其作为顶层第 20 项，在库存 setter 后恢复，重复状态与回退均可重放。
 
 ## 主机续关决定
 
 仅针对 Game+0x26778 的原版跑圈提示，主机显示完整提示和选项，并使用主机物理菜单输入；客机不显示或处理这个提示，其他原版提示保留既有处理。主机这次提示关闭 +0x130 的 Steam 投票模式，否则原版提示／Game::Update 仍会等待内置联机票数；原版 Manager 提示还会选择原生多人输入配置，房间／显示输入作用域不足以保证主机菜单确认生效。原生按下边沿只保留一个渲染帧，提示却按联机模拟步执行，直接重读物理输入会在部分相位漏掉按键。适配使用已有采集链路缓存的主机第 0 槽输入边沿，修改原版选择／结果标量，再调用已校验的 VictoryPrompt::Hide（RVA 0x438190）播放原版退出动画；楼层处理仍通过原生 NextVictoryLap 和运行协调器。私有只读 victory_lap_prompt 返回活动、选择、结果、投票模式与可交互状态，用于验收实际的“是／否”路径。原版 Game::NextVictoryLap 会直接更新种子、圈数、玩家和楼层，不能只同步目标层数。
 
-可靠楼层事务的原生重开标记改为受限种类：0 为普通换层，1 由 R Key 适配器处理，2 由 `compat/routes/victory_lap.lua` 处理。网络层只传输并校验种类与事务边界，不访问角色、道具或游戏对象。协议升至 26。两端在同一楼层代次屏障内调用原版重开；原生调用延迟至房间作用域退出，并先恢复完整名单、清理旧房间，沿用原有重新接管流程。
+可靠楼层事务的原生重开标记改为受限种类：0 为普通换层，1 由 R Key 适配器处理，2 由 [`compat/routes/victory_lap.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/routes/victory_lap.lua) 处理。网络层只传输并校验种类与事务边界，不访问角色、道具或游戏对象。协议升至 26。两端在同一楼层代次屏障内调用原版重开；原生调用延迟至房间作用域退出，并先恢复完整名单、清理旧房间，沿用原有重新接管流程。
 
 ## 域名与 Proton
 
@@ -54,4 +54,4 @@ Linux 安装器只依赖 Python 3 标准库，复用 Windows 安装记录与归�
 
 ## 验证
 
-测试命令见[开发与测试](development-and-testing.md)，既有结果、失败轮次和未覆盖项见[专项验收记录](history/party-compatibility-validation.md)。
+测试命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)，既有结果、失败轮次和未覆盖项见[专项验收记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md)。

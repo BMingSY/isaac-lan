@@ -12,10 +12,15 @@ struct Archive {
     std::vector<std::uint8_t> game;
     std::vector<std::uint8_t> encode() const {
         Writer w(Message::snapshot);
-        w.string("IsaacLAN/save/2");
+        w.string("IsaacLAN/save/3");
         w.string(fingerprint);
         w.string(settings.seed);
         w.u8(settings.difficulty);
+        w.u16(settings.rules.id);
+        w.u16(settings.rules.version);
+        w.u16(settings.rules.character);
+        w.u8(settings.rules.difficulty);
+        w.u8(settings.rules.transient);
         for (auto c : settings.characters)
             w.u16(c);
         w.progress(settings.progress);
@@ -37,12 +42,20 @@ struct Archive {
         if (checksum.u64() != snapshotHash(bytes.first(bytes.size() - 8)))
             throw std::runtime_error("Saved session is damaged");
         Reader r(bytes.first(bytes.size() - 8));
-        if (r.u8() != static_cast<unsigned>(Message::snapshot) || r.string() != "IsaacLAN/save/2")
+        if (r.u8() != static_cast<unsigned>(Message::snapshot) || r.string() != "IsaacLAN/save/3")
             throw std::runtime_error("Unsupported saved session");
         Archive out;
         out.fingerprint = r.string();
         out.settings.seed = r.string();
         out.settings.difficulty = r.u8();
+        out.settings.rules.id = r.u16();
+        out.settings.rules.version = r.u16();
+        out.settings.rules.character = r.u16();
+        out.settings.rules.difficulty = r.u8();
+        const auto transient = r.u8();
+        out.settings.rules.transient = transient != 0;
+        if (transient > 1 || !out.settings.rules.valid())
+            throw std::runtime_error("Invalid saved run rules");
         for (auto& c : out.settings.characters)
             c = r.u16();
         out.settings.progress = r.progress();

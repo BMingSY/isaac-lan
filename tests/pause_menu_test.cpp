@@ -1,0 +1,648 @@
+// Private x86 image: exercise the real J460 menu calls and input-query hook.
+// Including input.cpp keeps the query hook under test without installing hooks
+// in a process or exposing a production API solely for tests.
+#include "test_support.h"
+#include "engine/versions/j460/input.cpp"
+#include <array>
+#include <vector>
+
+namespace {
+int localViewer = 1;
+}
+namespace isaac::runtime {
+int localViewSlot() {
+    return localViewer;
+}
+void pollLocalConsole() {}
+void refreshAutomation(std::uint32_t) {}
+} // namespace isaac::runtime
+namespace isaac::frontend {
+bool capturesInput() {
+    return false;
+}
+} // namespace isaac::frontend
+
+namespace {
+namespace menu = isaac::pause_menu;
+namespace input = isaac::input;
+namespace native = isaac::engine::j460;
+using Address = std::uintptr_t;
+static_assert(sizeof(Address) == 4);
+constexpr unsigned imageSize = 0x880000, menuOffset = 0x23a74;
+constexpr unsigned optionsOffset = menuOffset + 0x5b0, playerIndexOffset = menuOffset + 0xfac;
+template <class T> T& field(void* memory, unsigned offset = 0) {
+    return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(memory) + offset);
+}
+struct Fixture;
+Fixture* current = nullptr;
+void __attribute__((thiscall)) showFixture(void*);
+void __attribute__((thiscall)) hideFixture(void*);
+void __attribute__((thiscall)) saveOptionsFixture(void*);
+void __attribute__((thiscall)) controlsFixture(void*);
+bool __attribute__((thiscall)) queryFixture(void*, int, void*, const int*, void*, int*);
+struct QueryCall {
+    void* receiver;
+    int controller, action;
+    Address kind;
+};
+enum class NativeControls { idle, root, options };
+struct Fixture {
+    std::uint8_t* image = nullptr;
+    std::vector<std::uint8_t> game = std::vector<std::uint8_t>(0x27000, 0);
+    std::vector<std::uint8_t> manager = std::vector<std::uint8_t>(0x4ac00, 0);
+    std::array<std::array<std::uint8_t, 0x2200>, 4> players{};
+    std::array<Address, 4> roster{};
+    std::array<int, 256> entries{};
+    std::array<float, 32> physicalValues{};
+    std::uint32_t physicalEdges = 0;
+    std::vector<QueryCall> queries;
+    std::vector<char> saveHideOrder;
+    NativeControls mode = NativeControls::idle;
+    unsigned shows = 0, hides = 0, saves = 0, controls = 0, nativeExits = 0, nativeResumes = 0;
+    unsigned controllerChanges = 0, optionConfirms = 0;
+    int volume = 5, queryController = 1;
+    bool validReceiver = true;
+
+    Fixture() {
+        image = static_cast<std::uint8_t*>(
+            VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+        require(image != nullptr, "Cannot allocate private pause-menu image");
+        current = this;
+        const auto jump = [&](unsigned offset, auto destination) {
+            image[offset] = 0xe9;
+            field<std::uint32_t>(image, offset + 1) =
+                static_cast<std::uint32_t>(reinterpret_cast<Address>(destination) -
+                                           reinterpret_cast<Address>(image + offset + 5));
+        };
+        jump(native::entry::pauseMenuShow, showFixture);
+        jump(native::entry::pauseMenuHide, hideFixture);
+        jump(native::entry::optionsSave, saveOptionsFixture);
+        jump(native::entry::pauseMenuControls, controlsFixture);
+        require(FlushInstructionCache(GetCurrentProcess(), image, imageSize) != 0,
+                "Cannot publish private native-call trampolines");
+        field<Address>(image, native::globals::game) = reinterpret_cast<Address>(game.data());
+        field<Address>(image, native::globals::manager) = reinterpret_cast<Address>(manager.data());
+        for (unsigned slot = 0; slot < 4; ++slot)
+            field<int>(players[slot].data(), 0x1618) = static_cast<int>(slot + 1);
+        reorder({0, 1, 2, 3});
+        entries[0] = 4;
+        entries[1] = 0;
+        entries[2] = 1; // The controller entry's ID is not its vector index.
+        entries[3] = 5;
+        options(4);
+        input::reset();
+        input::image = base();
+        input::originalQuery = queryFixture;
+        input::localPauseInput = false;
+        input::pauseIntent = menu::Intent::none;
+        input::viewSlot = -1;
+        input::menuConfirm = false;
+        localViewer = 1;
+    }
+    ~Fixture() {
+        input::reset();
+        input::originalQuery = nullptr;
+        input::image = 0;
+        current = nullptr;
+        VirtualFree(image, 0, MEM_RELEASE);
+    }
+    Address base() const {
+        return reinterpret_cast<Address>(image);
+    }
+    void* receiver() {
+        return game.data() + menuOffset;
+    }
+    int& page() {
+        return field<int>(game.data(), menuOffset);
+    }
+    int& selection() {
+        return field<int>(game.data(), menuOffset + 8);
+    }
+    int& viewerIndex() {
+        return field<int>(game.data(), playerIndexOffset);
+    }
+    int& optionSelection() {
+        return field<int>(game.data(), optionsOffset + 8);
+    }
+    void reorder(std::array<unsigned, 4> order) {
+        for (unsigned i = 0; i < 4; ++i)
+            roster[i] = reinterpret_cast<Address>(players[order[i]].data());
+        field<Address>(game.data(), 0x1baa8) = reinterpret_cast<Address>(roster.data());
+        field<Address>(game.data(), 0x1baac) =
+            reinterpret_cast<Address>(roster.data() + roster.size());
+    }
+    void options(unsigned count) {
+        field<Address>(game.data(), optionsOffset + 0x27c) =
+            reinterpret_cast<Address>(entries.data());
+        field<Address>(game.data(), optionsOffset + 0x280) =
+            reinterpret_cast<Address>(entries.data()) + count * 4;
+        field<Address>(game.data(), optionsOffset + 0x284) =
+            reinterpret_cast<Address>(entries.data() + entries.size());
+    }
+    void accept(isaac::lan::Frame frame = {}) {
+        frame.players = 4;
+        input::apply(frame);
+    }
+    bool query(int action, unsigned kind = native::entry::inputTriggered, float* result = nullptr,
+               int* source = nullptr) {
+        return input::query(image + 0x857b18, nullptr, queryController,
+                            reinterpret_cast<void*>(base() + kind), &action, result, source);
+    }
+    void press(unsigned action) {
+        physicalValues[action] = 1;
+        physicalEdges |= 1u << action;
+    }
+    void clearPhysical() {
+        physicalValues.fill(0);
+        physicalEdges = 0;
+        queries.clear();
+    }
+    void onlyLocalQueries() const {
+        require(!queries.empty(), "Expected native physical queries");
+        for (const auto& query : queries)
+            require(query.receiver == image + 0x857b18 && query.controller == -1,
+                    "Pause input queried a peer controller instead of the local source");
+    }
+};
+
+void __attribute__((thiscall)) showFixture(void* receiver) {
+    current->validReceiver &= receiver == current->receiver();
+    ++current->shows;
+    current->page() = 1;
+}
+void __attribute__((thiscall)) hideFixture(void* receiver) {
+    current->validReceiver &= receiver == current->receiver();
+    ++current->hides;
+    current->saveHideOrder.push_back('H');
+    current->page() = 0;
+}
+void __attribute__((thiscall)) saveOptionsFixture(void* receiver) {
+    current->validReceiver &= receiver == current->manager.data() + 0x2a33c && current->page() == 2;
+    ++current->saves;
+    current->saveHideOrder.push_back('S');
+}
+bool __attribute__((thiscall)) queryFixture(void* receiver, int controller, void* callback,
+                                            const int* action, void* result, int* source) {
+    auto& f = *current;
+    const auto kind = reinterpret_cast<Address>(callback) - f.base();
+    f.queries.push_back({receiver, controller, action ? *action : -1, kind});
+    if (!action || *action < 0 || *action >= 32)
+        return false;
+    const auto value = f.physicalValues[*action];
+    if (kind == native::entry::inputValue && result)
+        *static_cast<float*>(result) = value;
+    const bool pressed = kind == native::entry::inputTriggered
+                             ? (f.physicalEdges & (1u << *action)) != 0
+                             : value != 0;
+    if (pressed && source)
+        *source = 99; // Distinguish physical attribution from accepted input.
+    return pressed;
+}
+void __attribute__((thiscall)) controlsFixture(void* receiver) {
+    auto& f = *current;
+    f.validReceiver &= receiver == f.receiver();
+    ++f.controls;
+    if (f.mode == NativeControls::root) {
+        // Native Controls changes selection before it asks about confirmation.
+        if (f.query(23))
+            ++f.selection();
+        if (f.query(14)) {
+            if (f.selection() == 3)
+                ++f.nativeExits;
+            else if (f.selection() == 2)
+                ++f.nativeResumes;
+        }
+        if (f.query(12) || f.query(15))
+            ++f.nativeResumes;
+    } else if (f.mode == NativeControls::options) {
+        if (f.query(21))
+            ++f.volume;
+        if (f.query(20))
+            --f.volume;
+        if (f.query(14)) {
+            ++f.optionConfirms;
+            if (menu::state(f.base()).optionId == 1)
+                ++f.controllerChanges;
+        }
+    }
+}
+
+void nativeCallsAndState() {
+    Fixture f;
+    const auto absent = menu::state(0);
+    require(absent.page == 0 && absent.selection == -1 && absent.controller == -1 &&
+                absent.optionId == -1,
+            "Absent menu state did not return unavailable fields");
+    menu::show(0);
+    menu::hide(0);
+    menu::controls(0);
+    menu::hide(f.base());
+    menu::controls(f.base());
+    require(f.hides == 0 && f.controls == 0, "Closed menu invoked native controls or hide");
+    menu::show(f.base());
+    menu::controls(f.base());
+    menu::hide(f.base());
+    menu::hide(f.base());
+    require(f.shows == 1 && f.controls == 1 && f.hides == 1 && f.page() == 0 && f.validReceiver,
+            "Show/Controls/Hide did not call the native thiscall receiver exactly once");
+    field<Address>(f.image, native::globals::game) = 0;
+    menu::show(f.base());
+    menu::hide(f.base());
+    menu::controls(f.base());
+    require(f.shows == 1 && f.controls == 1 && f.hides == 1 &&
+                menu::state(f.base()).controller == -1,
+            "Missing Game invoked a native menu or fabricated a controller");
+}
+
+void optionsSaveBeforeHide() {
+    Fixture f;
+    const auto managerBefore = f.manager;
+    f.page() = 2;
+    menu::hide(f.base());
+    require(f.saves == 1 && f.hides == 1 && f.page() == 0 &&
+                f.saveHideOrder == std::vector<char>{'S', 'H'} && f.validReceiver,
+            "Options close did not save Manager's configuration before native Hide");
+    menu::hide(f.base());
+    require(f.saves == 1 && f.hides == 1 && f.saveHideOrder.size() == 2,
+            "Repeated hide saved or closed an already hidden menu");
+    for (int page : {1, 3}) {
+        f.page() = page;
+        f.saveHideOrder.clear();
+        menu::hide(f.base());
+        require(f.saves == 1 && f.page() == 0 && f.saveHideOrder == std::vector<char>{'H'},
+                "Closing Root or Items spuriously saved native Options");
+    }
+    f.page() = 2;
+    f.saveHideOrder.clear();
+    field<Address>(f.image, native::globals::manager) = 0;
+    menu::hide(f.base());
+    require(f.saves == 1 && f.hides == 4 && f.page() == 0 &&
+                f.saveHideOrder == std::vector<char>{'H'} && f.validReceiver,
+            "Missing Manager was dereferenced or prevented native menu Hide");
+    require(f.manager == managerBefore, "Options close modified unrelated native Manager data");
+}
+
+void viewerScopes() {
+    Fixture f;
+    f.viewerIndex() = 2;
+    const auto beforeGame = f.game;
+    const auto beforePlayers = f.players;
+    const auto beforeRoster = f.roster;
+    for (unsigned slot = 0; slot < 4; ++slot) {
+        menu::selectPlayer(f.base(), slot);
+        require(f.viewerIndex() == static_cast<int>(slot) &&
+                    menu::state(f.base()).controller == static_cast<int>(slot + 1),
+                "Canonical menu state confused zero-based roster index and controller ID");
+    }
+    f.reorder({2, 0, 3, 1});
+    menu::selectPlayer(f.base(), 1);
+    require(f.viewerIndex() == 3 && menu::state(f.base()).controller == 2,
+            "Selected local player by slot instead of actual roster index");
+    f.reorder({1, 0, 2, 3});
+    {
+        menu::ViewScope outer(f.base(), 1);
+        require(f.viewerIndex() == 0 && menu::state(f.base()).controller == 2,
+                "Borrowed roster did not scope the local viewer to its first actor");
+        {
+            menu::ViewScope inner(f.base(), 1);
+            require(f.viewerIndex() == 0, "Nested menu view changed local roster coordinates");
+        }
+        require(f.viewerIndex() == 0, "Nested menu view failed to restore outer index");
+    }
+    require(f.viewerIndex() == 3, "Borrowed menu view failed to restore canonical index");
+    {
+        menu::ViewScope mismatch(f.base(), 0);
+        menu::ViewScope invalid(f.base(), 4);
+        require(f.viewerIndex() == 3, "Nonlocal or invalid view replaced the menu index");
+    }
+    f.reorder({0, 1, 2, 3});
+    f.viewerIndex() = 2;
+    require(f.game == beforeGame && f.players == beforePlayers && f.roster == beforeRoster,
+            "Menu view scope changed native player ownership or failed to restore its fields");
+    f.page() = 0;
+    for (localViewer = 0; localViewer < 4; ++localViewer) {
+        f.accept();
+        require(menu::state(f.base()).controller == localViewer + 1,
+                "Accepted network frame did not select this machine's local viewer");
+    }
+}
+
+void invalidRosters() {
+    Fixture f;
+    const auto begin = reinterpret_cast<Address>(f.roster.data());
+    const auto check = [&] {
+        f.viewerIndex() = 3;
+        menu::selectPlayer(f.base(), 1);
+        { menu::ViewScope scoped(f.base(), 1); }
+        require(f.viewerIndex() == 3 && menu::state(f.base()).controller == -1,
+                "Invalid roster escaped fail-closed menu selection");
+    };
+    for (const auto range : std::array<std::array<Address, 2>, 5>{{{0, 0},
+                                                                   {begin, begin},
+                                                                   {begin, begin - 4},
+                                                                   {begin, begin + 3},
+                                                                   {begin, begin + 257 * 4}}}) {
+        field<Address>(f.game.data(), 0x1baa8) = range[0];
+        field<Address>(f.game.data(), 0x1baac) = range[1];
+        check();
+    }
+    f.reorder({0, 1, 2, 3});
+    f.roster[3] = 0;
+    f.viewerIndex() = 3;
+    menu::selectPlayer(f.base(), 3);
+    require(f.viewerIndex() == 3 && menu::state(f.base()).controller == -1,
+            "Missing actor was dereferenced or assigned a controller");
+    f.viewerIndex() = -1;
+    require(menu::state(f.base()).controller == -1, "Negative player index became a controller");
+    f.viewerIndex() = 4;
+    require(menu::state(f.base()).controller == -1,
+            "Out-of-range player index became a controller");
+}
+
+void rootIntents() {
+    Fixture f;
+    require(menu::intent(0, 14) == menu::Intent::none, "Absent image produced a menu command");
+    for (int page : {0, 1, 2, 3}) {
+        f.page() = page;
+        for (int selected : {-1, 0, 1, 2, 3, 4}) {
+            f.selection() = selected;
+            const auto expected = page == 1 && selected == 2   ? menu::Intent::resume
+                                  : page == 1 && selected == 3 ? menu::Intent::exit
+                                                               : menu::Intent::none;
+            require(menu::intent(f.base(), 14) == expected,
+                    "Confirm escaped root-page selection rules");
+            for (int action : {12, 15})
+                require(menu::intent(f.base(), action) ==
+                            (page == 1 ? menu::Intent::resume : menu::Intent::none),
+                        "Pause/back became a session resume outside the root menu");
+            require(menu::intent(f.base(), 23) == menu::Intent::none,
+                    "Navigation became a session command");
+        }
+    }
+}
+
+void optionsBounds() {
+    Fixture f;
+    f.page() = 2;
+    for (int index = 0; index < 4; ++index) {
+        f.optionSelection() = index;
+        require(menu::changesController(f.base(), 14) == (index == 2),
+                "Controller guard used selection index instead of actual entry ID 1");
+        require(menu::state(f.base()).optionId == f.entries[index],
+                "Read-only options state reported the wrong entry ID");
+    }
+    const auto begin = reinterpret_cast<Address>(f.entries.data());
+    const auto check = [&] {
+        require(menu::changesController(f.base(), 14) && menu::state(f.base()).optionId == -1,
+                "Invalid options vector or selection did not fail closed");
+        require(!menu::changesController(f.base(), 20),
+                "Invalid options blocked ordinary navigation");
+    };
+    for (int selected : {-1, 4, 256}) {
+        f.optionSelection() = selected;
+        check();
+    }
+    f.optionSelection() = 0;
+    for (const auto bounds :
+         std::array<std::array<Address, 3>, 6>{{{0, 0, 0},
+                                                {begin, begin, begin},
+                                                {begin, begin - 4, begin},
+                                                {begin, begin + 16, begin + 12},
+                                                {begin, begin + 3, begin + 16},
+                                                {begin, begin + 257 * 4, begin + 257 * 4}}}) {
+        field<Address>(f.game.data(), optionsOffset + 0x27c) = bounds[0];
+        field<Address>(f.game.data(), optionsOffset + 0x280) = bounds[1];
+        field<Address>(f.game.data(), optionsOffset + 0x284) = bounds[2];
+        check();
+    }
+    f.options(256);
+    f.optionSelection() = 255;
+    f.entries[255] = 7;
+    require(!menu::changesController(f.base(), 14) && menu::state(f.base()).optionId == 7,
+            "Valid maximum options vector was rejected");
+    f.page() = 1;
+    f.optionSelection() = 2;
+    require(!menu::changesController(f.base(), 14) && menu::state(f.base()).optionId == -1,
+            "Options guard leaked into the root menu");
+}
+
+void localPauseRouting() {
+    Fixture f;
+    isaac::lan::Frame frame;
+    frame.inputs[0].triggered = (1u << 14) | (1u << 0);
+    frame.inputs[0].values[0] = 65535;
+    frame.inputs[1].values[0] = 4321;
+    f.accept(frame);
+    f.page() = 1;
+    f.selection() = 0;
+    input::physicalInput[0].triggered = 0xabcd;
+    const auto acceptedBefore = input::accepted;
+    const auto physicalBefore = input::physicalInput;
+    {
+        input::PauseScope scoped(1);
+        require(!f.query(14) && scoped.intent() == menu::Intent::none,
+                "Guest consumed the host's accepted Confirm as a local pause-menu action");
+        float value = -1;
+        require(!f.query(0, native::entry::inputValue, &value) && value == 0,
+                "Guest pause navigation read accepted host movement");
+        f.press(0);
+        f.physicalValues[0] = 0.375f;
+        int source = -1;
+        require(f.query(0, native::entry::inputValue, &value, &source) && value == 0.375f &&
+                    source == 99,
+                "Local native value/source did not survive pause routing");
+        require(f.query(0, 0x620940) && f.query(0),
+                "Local held/triggered queries were not routed to physical input");
+        f.onlyLocalQueries();
+    }
+    require(input::accepted == acceptedBefore && input::physicalInput == physicalBefore,
+            "Pause queries consumed accepted or latched physical gameplay edges");
+    require(input::viewSlot == -1 && !input::localPauseInput, "Pause scope leaked into gameplay");
+    require(input::hostMenuTriggered(14),
+            "Guest pause query cleared the host's authoritative edge");
+}
+
+void sameFrameNavigationAndExit() {
+    Fixture f;
+    f.accept();
+    f.page() = 1;
+    f.selection() = 2;
+    f.mode = NativeControls::root;
+    f.press(23);
+    f.press(14);
+    f.press(12);
+    f.press(15);
+    {
+        input::PauseScope scoped(1);
+        menu::controls(f.base());
+        require(f.selection() == 3 && scoped.intent() == menu::Intent::exit,
+                "Same-frame native Down then Confirm used the stale pre-navigation selection");
+        require(f.nativeExits == 0 && f.nativeResumes == 0,
+                "Native exit fade or resume executed before the session could coordinate it");
+        require(f.queries.size() == 2 && f.queries[0].action == 23 && f.queries[1].action == 14,
+                "A captured exit continued querying or dispatching native actions");
+        float value = 1;
+        require(!f.query(0, native::entry::inputValue, &value) && value == 0,
+                "Captured exit did not suppress subsequent native analog input");
+        require(f.queries.size() == 2, "Captured exit polled physical controls again");
+        f.onlyLocalQueries();
+    }
+    require(input::pauseIntent == menu::Intent::none && f.validReceiver,
+            "Pause intent or native ECX receiver escaped the scoped call");
+    for (int action : {12, 14, 15}) {
+        f.clearPhysical();
+        f.selection() = 2;
+        f.press(action);
+        input::PauseScope scoped(1);
+        menu::controls(f.base());
+        require(scoped.intent() == menu::Intent::resume && f.nativeResumes == 0,
+                "Root Resume/Back/Pause executed natively instead of returning an intent");
+    }
+}
+
+void nestedInputScopes() {
+    Fixture f;
+    f.accept();
+    f.page() = 1;
+    f.selection() = 3;
+    f.press(14);
+    {
+        input::ViewScope presentation(2);
+        {
+            input::PauseScope outer(1);
+            require(input::viewSlot == 1 && !f.query(14) && outer.intent() == menu::Intent::exit,
+                    "Outer pause did not capture its local exit");
+            {
+                input::PauseScope inner(3);
+                require(input::viewSlot == 3 && inner.intent() == menu::Intent::none,
+                        "Nested pause reused an outer pending intent");
+                f.selection() = 2;
+                require(!f.query(14) && inner.intent() == menu::Intent::resume,
+                        "Nested pause failed to capture its independent resume");
+            }
+            require(input::viewSlot == 1 && input::localPauseInput &&
+                        outer.intent() == menu::Intent::exit,
+                    "Nested pause did not restore the outer view and exit intent");
+        }
+        require(input::viewSlot == 2 && !input::localPauseInput &&
+                    input::pauseIntent == menu::Intent::none,
+                "Pause scope did not restore its containing presentation scope");
+        f.clearPhysical();
+        require(!f.query(0), "Presentation scope stopped using raw local input");
+        f.onlyLocalQueries();
+    }
+    require(input::viewSlot == -1 && !input::localPauseInput,
+            "Nested presentation/pause scopes leaked after destruction");
+}
+
+void ordinaryOptionsRemainLocal() {
+    Fixture f;
+    f.accept();
+    f.page() = 2;
+    f.mode = NativeControls::options;
+    f.optionSelection() = 2;
+    f.press(14);
+    {
+        input::PauseScope scoped(1);
+        menu::controls(f.base());
+        require(f.controllerChanges == 0 && f.optionConfirms == 0 &&
+                    scoped.intent() == menu::Intent::none,
+                "Controller reassignment escaped its exact native-entry guard");
+    }
+    f.optionSelection() = -1;
+    {
+        input::PauseScope scoped(1);
+        menu::controls(f.base());
+        require(f.optionConfirms == 0, "Malformed option selection reached native Confirm");
+    }
+    f.clearPhysical();
+    f.optionSelection() = 1; // Entry 0 is allowed, although its vector index is 1.
+    f.press(14);
+    f.press(21);
+    {
+        input::PauseScope scoped(1);
+        menu::controls(f.base());
+        require(f.optionConfirms == 1 && f.volume == 6 && scoped.intent() == menu::Intent::none,
+                "Ordinary native options or local volume adjustments were blocked");
+        f.onlyLocalQueries();
+    }
+    f.clearPhysical();
+    f.press(15);
+    {
+        input::PauseScope scoped(1);
+        require(f.query(15) && scoped.intent() == menu::Intent::none,
+                "Options Back became a session resume instead of native submenu navigation");
+    }
+}
+
+void gameplayRoutingUnchanged() {
+    Fixture f;
+    isaac::lan::Frame frame;
+    frame.inputs[0].values[0] = 65535;
+    frame.inputs[0].triggered = 1;
+    frame.inputs[1].values[0] = 32768;
+    frame.inputs[1].values[7] = 65535;
+    frame.inputs[1].triggered = 1u << 7;
+    frame.connected = 3;
+    f.accept(frame);
+    f.queryController = 2;
+    float value = 0;
+    int source = -1;
+    require(f.query(0, native::entry::inputValue, &value, &source) && value == 32768 / 65535.0f &&
+                source == 2,
+            "Ordinary gameplay no longer used this actor's accepted analog input");
+    require(f.query(23) && !f.query(0) && f.queries.empty(),
+            "Ordinary gameplay menu-direction edges stopped using accepted input");
+    f.queryController = 3;
+    value = 1;
+    require(!f.query(0, native::entry::inputValue, &value) && value == 0 && f.queries.empty(),
+            "Disconnected actor was allowed physical or accepted gameplay input");
+    f.queryController = 2;
+    f.press(13);
+    require(f.query(13), "Map lost its existing local input exception");
+    f.onlyLocalQueries();
+    f.clearPhysical();
+    input::enabled = false;
+    f.press(0);
+    require(f.query(0) && f.queries.back().controller == 2,
+            "Non-LAN input did not pass through its original controller unchanged");
+    f.queries.clear();
+    input::enabled = true;
+    f.queryController = 5;
+    require(f.query(0) && f.queries.back().controller == 5,
+            "Out-of-party native queries lost their ordinary passthrough");
+}
+
+void pausedInputPreservesOnlyCharge() {
+    isaac::lan::InputFrame source;
+    for (unsigned action = 0; action < source.values.size(); ++action)
+        source.values[action] = static_cast<std::uint16_t>(1234 + action * 301);
+    source.triggered = 0xffff;
+    const auto before = source;
+    const auto paused = input::pausedInput(source);
+    require(source == before && paused.triggered == 0,
+            "Paused input mutated its source or preserved item/menu trigger edges");
+    for (unsigned action = 0; action < paused.values.size(); ++action)
+        require(paused.values[action] == (action >= 4 && action < 8 ? source.values[action] : 0),
+                "Pause failed to retain held fire exclusively across the resume boundary");
+    require(input::pausedInput(paused) == paused &&
+                input::pausedInput({}) == isaac::lan::InputFrame{},
+            "Repeated/empty paused input introduced new actions");
+}
+} // namespace
+
+int main(int argc, char** argv) {
+    return runTests(argc, argv,
+                    {{"native-calls", nativeCallsAndState},
+                     {"options-save-before-hide", optionsSaveBeforeHide},
+                     {"viewer-scopes", viewerScopes},
+                     {"invalid-rosters", invalidRosters},
+                     {"root-intents", rootIntents},
+                     {"options-bounds", optionsBounds},
+                     {"local-pause-routing", localPauseRouting},
+                     {"same-frame-exit", sameFrameNavigationAndExit},
+                     {"nested-input-scopes", nestedInputScopes},
+                     {"ordinary-options", ordinaryOptionsRemainLocal},
+                     {"gameplay-routing", gameplayRoutingUnchanged},
+                     {"paused-input", pausedInputPreservesOnlyCharge}});
+}

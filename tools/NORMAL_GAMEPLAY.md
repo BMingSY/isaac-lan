@@ -1,13 +1,11 @@
 # 正常操作双客户端回归
 
-在 WSL 中运行，使用已经由 `prepare_lab.py` 创建的两个独立副本
-`D:\isaac-lan-lab\host-001` 和 `client-001`。两边必须带 `.isaac-lan-lab`
-标记；已有游戏进程时拒绝重新使用这些目录。正式游戏的存档和 Mod 不会改动。
+在 WSL 中运行，使用已由 [prepare_lab.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/prepare_lab.py) 创建、符合工具默认配置的两个独立副本。两边必须带 `.isaac-lan-lab` 标记；已有游戏进程时拒绝重新使用这些副本。示例中的 `ISAAC_RUN_OUTPUT` 与 `ISAAC_FFMPEG` 分别指定当轮输出和录像工具。
 
 ```sh
 python3 tools/manual_gameplay.py run \
-  --output artifacts/gameplay-新编号 \
-  --ffmpeg /path/to/ffmpeg
+  --output "$ISAAC_RUN_OUTPUT" \
+  --ffmpeg "$ISAAC_FFMPEG"
 ```
 
 增加 `--latency-ms 75` 可在同一流程中给 TCP 的两个方向各加入
@@ -34,7 +32,7 @@ python3 tools/manual_gameplay.py run \
 - `tested-probe.dll`、`observer.lua`、`controller.py`：冻结本轮实际使用的 DLL、观察器和操作脚本。
 - `actions.jsonl`：操作时间、按钮、持续时间和里程碑状态。
 - `*-host.png`、`*-client.png` 及同名 JSON：两端实际画面与各自房间状态。
-- `host-frames/`、`client-frames/`：连续渲染画面和 `frames.csv` 时间索引。
+- 主机与客机的连续帧归档：连续渲染画面和 `frames.csv` 时间索引。
 - `*-game-before-close.log`、`*-probe-before-close.log`：关闭任何一端前冻结的双方日志。
 - `*-probe-this-run.log`：仅本次启动的原生日志，避免把隔离目录以前的错误当作本轮错误。
 - `report.json`：流程结果、错误和验证范围；画面仍需检查。
@@ -57,21 +55,21 @@ python3 tools/manual_gameplay.py run \
 没有指定 `--ffmpeg` 时保留连续 PNG；可在关闭后分别运行
 `archive_gameplay.py` 和 `review_gameplay.py`，二者都接受 `--ffmpeg`。
 
-关闭本轮后，可用 `archive_gameplay.py 本轮目录 --ffmpeg /path/to/ffmpeg`
+关闭本轮后，可用 `archive_gameplay.py 本轮目录 --ffmpeg "$ISAAC_FFMPEG"`
 将连续 PNG 转为无损 RGB 视频，并验证帧数与第一帧像素。关键截图、
 状态和时间索引会保留，完整连续画面保存到 `*-recording.mkv`，避免每轮堆积大量 PNG。
 
 需要根据画面调整路线时，使用同一个输出目录分步操作：
 
 ```sh
-python3 tools/manual_gameplay.py launch --output /绝对路径/本轮
-python3 tools/manual_gameplay.py boot --output /绝对路径/本轮
-python3 tools/manual_gameplay.py pad client --buttons r+b --frames 30 --output /绝对路径/本轮
-python3 tools/manual_gameplay.py door host --slot 1 --output /绝对路径/本轮
-python3 tools/manual_gameplay.py fight --output /绝对路径/本轮
-python3 tools/manual_gameplay.py state --output /绝对路径/本轮
-python3 tools/manual_gameplay.py capture --name 检查点 --output /绝对路径/本轮
-python3 tools/manual_gameplay.py close --output /绝对路径/本轮
+python3 tools/manual_gameplay.py launch --output "$ISAAC_RUN_OUTPUT"
+python3 tools/manual_gameplay.py boot --output "$ISAAC_RUN_OUTPUT"
+python3 tools/manual_gameplay.py pad client --buttons r+b --frames 30 --output "$ISAAC_RUN_OUTPUT"
+python3 tools/manual_gameplay.py door host --slot 1 --output "$ISAAC_RUN_OUTPUT"
+python3 tools/manual_gameplay.py fight --output "$ISAAC_RUN_OUTPUT"
+python3 tools/manual_gameplay.py state --output "$ISAAC_RUN_OUTPUT"
+python3 tools/manual_gameplay.py capture --name 检查点 --output "$ISAAC_RUN_OUTPUT"
+python3 tools/manual_gameplay.py close --output "$ISAAC_RUN_OUTPUT"
 ```
 
 方向 `u/d/l/r`，射击 `a/b/x/y` 分别为下/右/左/上，`rb` 用卡，
@@ -82,8 +80,8 @@ python3 tools/manual_gameplay.py close --output /绝对路径/本轮
 
 ```sh
 python3 tools/validate_replica.py \
-  --output artifacts/回归-新编号 \
-  --latency-ms 75 --ffmpeg /path/to/ffmpeg
+  --output "$ISAAC_RUN_OUTPUT" \
+  --latency-ms 75 --ffmpeg "$ISAAC_FFMPEG"
 ```
 
 默认先运行 `gameplay`：一对客户端只从菜单连接并开局一次，在同一场游戏里依次完成
@@ -103,11 +101,11 @@ python3 tools/validate_replica.py \
 `check_mirror_camera.py` 检查每次渲染的
 角色位移和镜头偏移；原生动画、角色身体和蓄力条仍要查看录制画面。
 每轮固定同一 DLL 哈希，保存各项日志和总结果；画面仍需按上述要求检查。
-连续回归自动把关键画面保存到 `gameplay/checkpoints/`，索引包含实际帧号和网络时间。
+连续回归自动把关键画面保存到 检查点归档，索引包含实际帧号和网络时间。
 连续用例同时记录主客机画面；指定 `--ffmpeg` 时，两端退出后自动归档为无损 `host-recording.mkv`、`client-recording.mkv`，保留检查点和
 `frames.csv`；否则保留全部 PNG。再爽、骰子房和 R 键核对两端楼层及保留的道具、
 血量和资源；日志或录制不足会使测试失败。
 
-增加 `--goodtrip /已安装的/goodtrip目录` 会把该 Mod 原样复制到两个隔离客户端，额外检查同时操作时的地图输入／选择光标隔离、本机房间缓存及房主执行客机传送；正式安装目录不改动。这个定向夹具先准备两个已访问的清理房间，然后用原生手柄地图／射击方向输入选择目标，不直接替换 Good Trip 的传送函数。
+增加 `--goodtrip "$ISAAC_GOODTRIP_MOD"` 会把该 Mod 原样复制到两个隔离客户端，额外检查同时操作时的地图输入／选择光标隔离、本机房间缓存及房主执行客机传送；正式安装目录不改动。这个定向夹具先准备两个已访问的清理房间，然后用原生手柄地图／射击方向输入选择目标，不直接替换 Good Trip 的传送函数。
 
-定向闪屏测试使用 `run_network_engine.py --native-record-view 0 --frame-ms 16` 保存实际后缓冲画面；`check_peer_flash.py 结果目录 --ffmpeg /path/to/ffmpeg` 只检查房主未换房的游戏帧，输出亮度异常候选、采样间隔及丢帧数。它能复现原生后台房间加载导致的一帧全黑，但仍不能证明采样间隙没有更短的视觉问题。
+定向闪屏测试使用 `run_network_engine.py --native-record-view 0 --frame-ms 16` 保存实际后缓冲画面；`check_peer_flash.py 结果目录 --ffmpeg "$ISAAC_FFMPEG"` 只检查房主未换房的游戏帧，输出亮度异常候选、采样间隔及丢帧数。它能复现原生后台房间加载导致的一帧全黑，但仍不能证明采样间隙没有更短的视觉问题。

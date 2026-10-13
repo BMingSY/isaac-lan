@@ -1,24 +1,16 @@
 # 诊断与资源检查
 
-配置解析与有界统计在 `core/`，文件读写在 `app/configuration.*`，运行测量在 `diagnostics/`，Lua 阶段计时在 `bridge/diagnostics/`。诊断选项只控制记录，不控制玩法、状态字段或背压。
+配置解析与有界统计在 [`core/`](https://github.com/BMingSY/isaac-lan/tree/main/src/core)，文件读写在 [`app/configuration.*`](https://github.com/BMingSY/isaac-lan/tree/main/src/app)，运行测量在 [`diagnostics/`](https://github.com/BMingSY/isaac-lan/tree/main/src/diagnostics)，Lua 阶段计时在 [`bridge/diagnostics/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/diagnostics)。诊断选项只控制记录，不控制玩法、状态字段或背压。
 
 ## 配置与日志
 
-游戏目录 `isaac-lan/config.ini` 首次启动生成，已有文件不重写，修改后需重启。默认 INFO、关闭性能统计、采样间隔 1000 ms。
+扩展配置文件 `config.ini` 在首次启动时生成，已有文件不重写，修改后需重启。默认 INFO、关闭性能统计、采样间隔 1000 ms。
 
 - UTF-8，可带 BOM／CRLF；支持空行和 `;`／`#` 开头的注释，不支持行尾注释。
 - 键和值区分大小写，重复键取第一次；未知键和非法值写启动日志，非法项回退默认值，文件超过 64 KiB 则整份回退。
 - `[logging] level = DEBUG` 开启明细；`[diagnostics] performance = true` 开启性能窗口。安装器不覆盖用户配置。
 
-日志根目录跟随原版 `log.txt` 的实际路径，结构为：
-
-```text
-isaac-lan/logs/启动时间-p进程号/
-  startup.log
-  001-种子-host/runtime.log
-  001-种子-host/performance.jsonl
-  002-种子-client/runtime.log
-```
+日志随原版 `log.txt` 归档，按启动和局次区分。`startup.log` 记录启动与退出，`runtime.log` 记录局内事件，开启性能统计后另有 `performance.jsonl`。
 
 每局用新序号，同种子继续也不覆盖；退出后写回启动日志。记录含毫秒时间、时区、等级和 PID，消息换行转义。切换目录关闭旧句柄，错误立即刷新，路径确定前的缓存最多 256 KiB。没有自动轮转或总量限制，可手动清理旧目录。
 
@@ -38,35 +30,37 @@ isaac-lan/logs/启动时间-p进程号/
 
 均值与最大值使用窗口全部样本；p50／p95／p99 使用最近 512 个样本，成本名及计数器各最多 64 个并按窗口清理。Lua 堆为只读采样，不强制游戏 GC；关闭统计时直接调用原函数。
 
+将 `ISAAC_RUN_OUTPUT` 和 `ISAAC_PERFORMANCE_SUMMARY` 设为本轮记录与汇总输出后执行：
+
 ```sh
-python3 tools/check_performance.py artifacts/my-run --output artifacts/my-run/summary.json
+python3 tools/check_performance.py "$ISAAC_RUN_OUTPUT" --output "$ISAAC_PERFORMANCE_SUMMARY"
 ```
 
 汇总按调用次数加权平均，列出最慢窗口百分位，不把窗口百分位当全局百分位。定位卡顿应同时看渲染间隔、应用成本、网络队列和对象规模；跨层资源加载造成的内存增长不能直接判为泄漏。堆调试、并发负载和录像会干扰性能，需分开对照。
 
 ## 带宽测量
 
-`tools/delayed_relay.py` 对所有客机下行共享预算，反向输入保留固定延迟；375000 字节／秒对应十进制 3 Mbps。`run_network_engine.py --record-relay` 保存主机原始字节流和逐秒总下行。
+[`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，反向输入保留固定延迟；375000 字节／秒对应十进制 3 Mbps。`run_network_engine.py --record-relay` 保存主机原始字节流和逐秒总下行。
 
-`isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。`tools/analyze_delirium_performance.py` 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。复现命令和历史结果见[百变怪性能记录](history/delirium-performance-investigation.md)。
+`isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。复现命令和历史结果见[百变怪性能记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/delirium-performance-investigation.md)。
 
 ## 资源回归与堆检查
 
-日常命令见[开发与测试](development-and-testing.md)。CI 覆盖 sanitizer、Lua 实体反复创建／删除与弱引用释放、慢消费者下的有界传输，以及重复分局后的日志句柄清理；不据此推定游戏或未执行 Hook 的资源行为。
+日常命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。CI 覆盖 sanitizer、Lua 实体反复创建／删除与弱引用释放、慢消费者下的有界传输，以及重复分局后的日志句柄清理；不据此推定游戏或未执行 Hook 的资源行为。
 
 最终实机可复用一组隔离主客机，先运行相关专项再加 `--case campaign`：
 
 ```sh
 python3 tools/run_special_routes.py \
-  --host /mnt/d/isaac-lan-lab/host-001 \
-  --client /mnt/d/isaac-lan-lab/client-001 \
-  --case campaign --performance --output artifacts/campaign-新编号
+  --host "$ISAAC_HOST_LAB" \
+  --client "$ISAAC_CLIENT_LAB" \
+  --case campaign --performance --output "$ISAAC_RUN_OUTPUT"
 ```
 
 `campaign` 使用固定路线、Boss 房定位、保护和伤害加速，原版战斗、拾取、出口、换层及羔羊结局仍实际执行；不代表随机无辅助通关。默认不录画面，按需 `--record`。隔离资料逐文件备份／恢复，进程非零退出仍判整轮失败。
 
-前置解锁由 `tools/progress_fixture.py` 在启动前写入隔离存档，核对 J460 文件头、区段和校验算法，以临时文件原子替换；必须已有原版基线。角色菜单初始化后禁止再改内存解锁表，根因见[夹具堆损坏记录](history/heap-corruption-regression.md)。
+前置解锁由 [`tools/progress_fixture.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/progress_fixture.py) 在启动前写入隔离存档，核对 J460 文件头、区段和校验算法，以临时文件原子替换；必须已有原版基线。角色菜单初始化后禁止再改内存解锁表，根因见[夹具堆损坏记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/heap-corruption-regression.md)。
 
 `--heap-check` 用独立的 `isaac_lan_heap_watch.exe` 观察已标记目录和已校验路径的进程。异常上下文复制到实验共享区，转储完成后继续原异常链；最多前三次异常、每次最多等 30 秒，无观察器时不等待。正常关闭预留 45 秒，超时终止必须判失败。
 
-完整转储先写 Windows 临时目录，再复制到产物的 `heap-dumps/`；复制失败保留临时文件并报错，不打入安装包。观察器不改 IFEO／注册表、不附加调试器；fail-fast 或更早启动错误不保证捕获，仍检查退出结果。Windows CI 用合成进程验证转储链路，不启动游戏，也不把“未观察到异常”当作已排除所有堆损坏。
+完整转储先写 Windows 临时目录，再复制到产物的 转储归档；复制失败保留临时文件并报错，不打入安装包。观察器不改 IFEO／注册表、不附加调试器；fail-fast 或更早启动错误不保证捕获，仍检查退出结果。Windows CI 用合成进程验证转储链路，不启动游戏，也不把“未观察到异常”当作已排除所有堆损坏。

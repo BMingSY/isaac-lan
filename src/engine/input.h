@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include "net/protocol.h"
+#include "engine/pause_menu.h"
 struct lua_State;
 namespace isaac::input {
 // Read the local physical bindings while drawing native/Mod interfaces. This
@@ -15,12 +16,25 @@ class ViewScope {
     ~ViewScope();
     ViewScope(const ViewScope&) = delete;
 };
+class PauseScope {
+    ViewScope view;
+    bool previous;
+    pause_menu::Intent previousIntent;
+
+  public:
+    explicit PauseScope(int slot);
+    ~PauseScope();
+    pause_menu::Intent intent() const;
+    PauseScope(const PauseScope&) = delete;
+};
 void install(std::uintptr_t image, void (*logger)(const std::string&), bool installed = false);
 FARPROC resolve(HMODULE module, LPCSTR name, FARPROC original);
 bool bind(lua_State*, HMODULE);
 void apply(const lan::Frame& frame);
 void finishUpdate();
 void reset();
+// Clear native menu prompts after the menu has handed off to a LAN game.
+void resetMenuPrompts();
 void prepareControllers();
 void clearAutomation();
 // Latch one-render-frame button edges until the next 30 Hz network sample.

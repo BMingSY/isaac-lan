@@ -1,6 +1,6 @@
 # LANBOT 实现与约束
 
-命令和支持范围见[使用说明](lanbot.md)。LANBOT 只读取已有视图并合成正常输入；主机继续决定伤害、拾取、传送和道具效果，不直接修改坐标、碰撞或原生状态。
+命令和支持范围见[使用说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/lanbot.md)。LANBOT 只读取已有视图并合成正常输入；主机继续决定伤害、拾取、传送和道具效果，不直接修改坐标、碰撞或原生状态。
 
 ## 模块与数据流
 
@@ -16,16 +16,16 @@ flowchart LR
 
 | 模块 | 职责 |
 | --- | --- |
-| `bridge/lanbot.lua` | 命令、模式／风格、状态、决策调度、蓄力与输入清理 |
-| `lanbot/observe.lua` | 本机角色、房间、敌人、地形和武器观察 |
-| `lanbot/planner.lua`、`navigation.lua` | 已观察连通图、目标、预算与有界 A* |
-| `lanbot/terrain.lua`、`hazards.lua` | 地形／按钮适配、尖刺周期与连续碰撞预测 |
-| `lanbot/combat.lua` | 输出站位、短时轨迹评分、射击与受阻恢复 |
-| `lanbot/greed.lua`、`items.lua` | 贪婪楼层阶段、购物预算和道具分配 |
-| `engine/versions/j460/input.cpp`、`core/automation_input.h` | 本机输入来源、边沿、过期释放与预测共用 |
-| `bridge/app/main.lua`、`runtime/session.cpp` | 控制台、渲染决策与会话边界接入 |
+| [`bridge/lanbot.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot.lua) | 命令、模式／风格、状态、决策调度、蓄力与输入清理 |
+| [`lanbot/observe.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot/observe.lua) | 本机角色、房间、敌人、地形和武器观察 |
+| [`lanbot/planner.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot/planner.lua)、`navigation.lua` | 已观察连通图、目标、预算与有界 A* |
+| [`lanbot/terrain.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot/terrain.lua)、`hazards.lua` | 地形／按钮适配、尖刺周期与连续碰撞预测 |
+| [`lanbot/combat.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot/combat.lua) | 输出站位、短时轨迹评分、射击与受阻恢复 |
+| [`lanbot/greed.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot/greed.lua)、`items.lua` | 贪婪楼层阶段、购物预算和道具分配 |
+| [`engine/versions/j460/input.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/input.cpp)、[`core/automation_input.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/core/automation_input.h) | 本机输入来源、边沿、过期释放与预测共用 |
+| [`bridge/app/main.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/app/main.lua)、[`runtime/session.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session.cpp) | 控制台、渲染决策与会话边界接入 |
 
-组件由 [`modules.txt`](../src/bridge/modules.txt) 嵌入，不新增网络消息或第三方公开 API。生产输入不依赖实验目录标记或 `test_gamepad`。
+组件由 [`modules.txt`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/modules.txt) 嵌入，不新增网络消息或第三方公开 API。生产输入不依赖实验目录标记或 `test_gamepad`。
 
 ## 状态与输入
 
@@ -75,4 +75,4 @@ flowchart LR
 
 限制观察扫描、寻路展开、候选数和预测长度。规划按事件或低频更新，实时决策目标为单次 2 ms；该目标尚未普遍达到，不能以通关结果替代耗时和走位评估。当前无需外部 Agent；未来若接入，高层结果应异步返回并校验会话／任务代次，不能阻塞本地躲弹或网络轮询。
 
-离线测试覆盖命令、归属、生命周期、输入合成、持续过门、危险和受阻恢复；原生控制台、不同角色／武器、多人、延迟、连续画面与正常操作按[测试流程](development-and-testing.md)集中验收。通关夹具的保护、固定配装和加速条件必须随结果记录，历史结果见[LANBOT 验收索引](history/README.md#lanbot)。
+离线测试覆盖命令、归属、生命周期、输入合成、持续过门、危险和受阻恢复；原生控制台、不同角色／武器、多人、延迟、连续画面与正常操作按[测试流程](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)集中验收。通关夹具的保护、固定配装和加速条件必须随结果记录，历史结果见[LANBOT 验收索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/README.md#lanbot)。

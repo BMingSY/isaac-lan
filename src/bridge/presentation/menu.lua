@@ -3,6 +3,7 @@ local assets
 local ip, port, seed, difficulty = "", "29506", "", 0
 local selection, editing, lastPhase = 1, nil, -1
 local page = "modes"
+local challenges = _IsaacLan.net_challenges()
 local function idle(phase)
     return phase == 0 or phase == 4 or phase == 5
 end
@@ -13,89 +14,29 @@ function _IsaacLanMenuOpen(returning)
 end
 local previousMouse = Vector(-1000, -1000)
 local errorText = ""
-local choices = {
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    13,
-    14,
-    15,
-    16,
-    18,
-    19,
-    21,
-    22,
-    23,
-    24,
-    25,
-    26,
-    27,
-    28,
-    29,
-    30,
-    31,
-    32,
-    33,
-    34,
-    35,
-    36,
-    37,
-}
-local names = {
-    "以撒",
-    "抹大拉",
-    "该隐",
-    "犹大",
-    "小蓝人",
-    "夏娃",
-    "参孙",
-    "阿撒泻勒",
-    "拉撒路",
-    "伊甸",
-    "游魂",
-    "莉莉丝",
-    "店主",
-    "亚玻伦",
-    "遗骸",
-    "伯大尼",
-    "雅各与以扫",
-}
-local portraits = {
-    "01_Isaac",
-    "02_Magdalene",
-    "03_Cain",
-    "04_Judas",
-    "06_Bluebaby",
-    "05_Eve",
-    "07_Samson",
-    "08_Azazel",
-    "09_Lazarus",
-    "10_Eden",
-    "11_TheLost",
-    "12_Lilith",
-    "13_Keeper",
-    "15_Apollyon",
-    "16_TheForgotten",
-    "17_Bethany",
-    "18_JacobEsau",
-}
+local characterChoices, characterCatalog = {}, {}
 local function character(id)
-    for i, v in ipairs(choices) do
-        if id == v then
-            return (i > 17 and "里·" or "") .. names[(i - 1) % 17 + 1],
-                portraits[(i - 1) % 17 + 1],
-                i > 17
+    local entry = characterCatalog[tostring(id)]
+    return entry and ((entry.tainted and "里·" or "") .. entry.name) or ("角色 " .. id)
+end
+local function portrait(id)
+    local entry = characterCatalog[tostring(id)]
+    if entry and entry.portraitAnm2Path ~= "" and entry.animation ~= "" then
+        local path = entry.portraitAnm2Path
+        local sprite = assets.characterPortraits[path]
+        if not sprite then
+            sprite = Sprite()
+            sprite:Load(path, true)
+            assets.characterPortraits[path] = sprite
+        end
+        sprite:Play(entry.animation, true)
+        if sprite:GetAnimation() == entry.animation then
+            sprite:SetFrame(entry.animation, 0)
+            return sprite
         end
     end
-    return "自定义角色", "00_Random", false
+    assets.portraits:SetFrame("00_Random", 0)
+    return assets.portraits
 end
 local ink = KColor(0.18, 0.14, 0.14, 1)
 local faded = KColor(0.47, 0.42, 0.41, 1)
@@ -105,7 +46,7 @@ local function load()
     if assets then
         return
     end
-    assets = {}
+    assets = { characterPortraits = {} }
     local function sprite(name, path, animation)
         local s = Sprite()
         s:Load(path, true)
@@ -118,7 +59,6 @@ local function load()
     sprite("online", root .. "onlinemenu.anm2", "Idle")
     sprite("sketches", root .. "charactermenubg.anm2", "Idle")
     sprite("portraits", root .. "characterportraits.anm2", "01_Isaac")
-    sprite("altPortraits", root .. "characterportraitsalt.anm2", "01_Isaac")
     sprite("fill", "gfx/ui/bossoverlay_whiteout.anm2", "Fade")
     assets.fill:SetFrame("Fade", 15)
     for _, size in ipairs({ 10, 12, 16 }) do
@@ -154,19 +94,30 @@ function _IsaacLanMenuRender(
     local function pos(x, y)
         return origin + Vector(x, y)
     end
-    local function text(value, x, y, size, color)
-        assets[size or 12]:DrawStringUTF8(
-            tostring(value),
-            origin.X + x,
-            origin.Y + y,
-            color or ink,
-            0,
-            false
-        )
-    end
-    local function centered(value, x, y, size, color)
+    local function text(value, x, y, size, color, maxWidth)
         local font = assets[size or 12]
-        text(value, x - font:GetStringWidthUTF8(value) / 2, y, size, color)
+        value = tostring(value)
+        local width = font:GetStringWidthUTF8(value)
+        if maxWidth and width > maxWidth then
+            local scale = maxWidth / width
+            font:DrawStringScaledUTF8(
+                value,
+                origin.X + x,
+                origin.Y + y,
+                scale,
+                scale,
+                color or ink,
+                0,
+                false
+            )
+            return
+        end
+        font:DrawStringUTF8(value, origin.X + x, origin.Y + y, color or ink, 0, false)
+    end
+    local function centered(value, x, y, size, color, maxWidth)
+        local font = assets[size or 12]
+        local width = font:GetStringWidthUTF8(value)
+        text(value, x - math.min(width, maxWidth or width) / 2, y, size, color, maxWidth)
     end
     local function layer(sprite, id, x, y)
         sprite:RenderLayer(id, pos(x, y))
@@ -189,6 +140,8 @@ function _IsaacLanMenuRender(
             editing = nil
             _IsaacLan.menu_text_end()
             key = 0
+        elseif page == "challenges" then
+            page, selection, key = "lan", 3, 0
         elseif page == "lan" and idle(phase) then
             page = "modes"
             selection = 2
@@ -234,6 +187,10 @@ function _IsaacLanMenuRender(
         end
         return false
     end
+    characterChoices, characterCatalog = _IsaacLan.net_characters()
+    characterCatalog = characterCatalog or {}
+    challenges = _IsaacLan.net_challenges()
+    local challenge = challenges[tostring(status.challenge or 0)]
     assets.fill.Scale = Vector(width / 480, height / 270)
     assets.fill.Color = Color(0, 0, 0, 1, -0.20, -0.25, -0.26)
     assets.fill:Render(Vector.Zero)
@@ -241,15 +198,21 @@ function _IsaacLanMenuRender(
     local modes = page == "modes"
     local shift = modes and 128 or 0
     layer(assets.lobby, 9, 9 + shift, 39)
-    centered(modes and "联机模式" or "局域网联机", 110 + shift, 58, 16)
+    centered(
+        modes and "联机模式" or page == "challenges" and "联机挑战" or "局域网联机",
+        110 + shift,
+        58,
+        16
+    )
     local rows = {}
-    local function row(label, action, enabled, change, field)
+    local function row(label, action, enabled, change, field, color)
         rows[#rows + 1] = {
             label = label,
             action = action,
             enabled = enabled ~= false,
             change = change,
             field = field,
+            color = color,
         }
     end
     local function command(action, value)
@@ -295,7 +258,7 @@ function _IsaacLanMenuRender(
                 command("host", port)
             end
         end)
-        row(ip == "" and "输入房主 IP 或域名" or ip, function()
+        row(ip == "" and "输入房主的 IP" or ip, function()
             editing = "ip"
             _IsaacLan.menu_text_begin(ip, "ip")
         end, true, nil, "ip")
@@ -312,8 +275,34 @@ function _IsaacLanMenuRender(
             page = "modes"
             selection = 2
         end)
+    elseif phase == 2 and page == "challenges" and host then
+        local ids = {}
+        for id in pairs(challenges) do
+            ids[#ids + 1] = tonumber(id)
+        end
+        table.sort(ids)
+        for _, id in ipairs(ids) do
+            local definition = challenges[tostring(id)]
+            row(id .. " " .. definition.name, function()
+                if command("challenge", tostring(id)) then
+                    difficulty = definition.difficulty
+                    page, selection = "lan", 3
+                end
+            end, definition.team_available, nil, nil, amber)
+        end
+        row("返回", function()
+            page, selection = "lan", 3
+        end)
+        local preview = challenges[tostring(ids[selection] or ids[1])]
+        if preview and not preview.team_available then
+            centered("全员需解锁底片与里该隐", 240, 250, 10, red)
+        end
     elseif phase == 2 then
+        local choices = characterChoices
         local function cycle(delta)
+            if #choices == 0 then
+                return
+            end
             local index = 1
             for i, v in ipairs(choices) do
                 if v == choice then
@@ -325,20 +314,33 @@ function _IsaacLanMenuRender(
         end
         row(character(choice), function()
             cycle(1)
-        end, not ready, cycle)
+        end, not ready and not challenge and #choices > 0, cycle)
         row(ready and "取消准备" or "准备", function()
             command("choose", choice .. (ready and ":0" or ":1"))
-        end)
+        end, ready or status["eligible" .. localSlot] == true)
         if host then
+            local function changeMode(delta)
+                local nextMode = ((challenge and 4 or difficulty) + delta) % 5
+                if nextMode == 4 then
+                    page, selection = "challenges", 1
+                elseif command("challenge", "0") then
+                    difficulty = nextMode
+                end
+            end
             row(
-                ({ "普通", "困难", "贪婪", "贪婪加强" })[difficulty + 1],
+                challenge and ("挑战：" .. challenge.id .. " " .. challenge.name)
+                    or ({ "普通", "困难", "贪婪", "贪婪加强" })[difficulty + 1],
                 function()
-                    difficulty = (difficulty + 1) % 4
+                    if challenge then
+                        page, selection = "challenges", 1
+                    else
+                        changeMode(1)
+                    end
                 end,
                 true,
-                function(d)
-                    difficulty = (difficulty + d) % 4
-                end
+                changeMode,
+                nil,
+                challenge and amber
             )
             row(seed == "" and "种子：随机" or seed, function()
                 editing = "seed"
@@ -346,10 +348,14 @@ function _IsaacLanMenuRender(
             end, true, nil, "seed")
             local allReady = count >= 2
             for i = 0, count - 1 do
-                allReady = allReady and status["ready" .. i] == 1
+                allReady = allReady
+                    and status["ready" .. i] == 1
+                    and status["eligible" .. i] == true
             end
             row("开始游戏", function()
-                local settings = (seed == "" and "RANDOM" or seed) .. ":" .. difficulty
+                local settings = (seed == "" and "RANDOM" or seed)
+                    .. ":"
+                    .. (challenge and challenge.difficulty or difficulty)
                 for i = 0, 3 do
                     settings = settings .. ":" .. (status["choice" .. i] or 0)
                 end
@@ -357,13 +363,23 @@ function _IsaacLanMenuRender(
                     visible = false
                 end
             end, allReady)
-            if (status.savedPlayers or 0) >= 2 then
+            if not challenge and (status.savedPlayers or 0) >= 2 then
                 row("继续上次联机", function()
                     if command("resume") then
                         visible = false
                     end
                 end, allReady and count == status.savedPlayers)
             end
+        end
+        if not host and challenge then
+            row(
+                "挑战：" .. challenge.id .. " " .. challenge.name,
+                function() end,
+                false,
+                nil,
+                nil,
+                amber
+            )
         end
         row("离开房间", function()
             command("close")
@@ -381,7 +397,7 @@ function _IsaacLanMenuRender(
             end, localSlot == status.pauseOwner)
         end
         if host then
-            row("保存并结束联机", function()
+            row(challenge and "结束挑战（不保存）" or "保存并结束联机", function()
                 command("control", "3")
             end)
         else
@@ -448,7 +464,7 @@ function _IsaacLanMenuRender(
                 .. "_"
         end
         local size = assets[12]:GetStringWidthUTF8(label) > 138 and 10 or 12
-        text(label, 49 + shift, y, size, item.enabled and ink or faded)
+        text(label, 49 + shift, y, size, item.color or (item.enabled and ink or faded), 138)
         if i == selection then
             pointer(37 + shift, y + 5)
         end
@@ -459,11 +475,9 @@ function _IsaacLanMenuRender(
         assets.cards:SetLayerFrame(36, i)
         layer(assets.cards, 36, x, y)
         if i < count then
-            local name, animation, alt = character(status["choice" .. i] or 0)
-            local portrait = alt and assets.altPortraits or assets.portraits
-            portrait:SetFrame(animation, 0)
-            portrait:Render(pos(x + 51, y + 44))
-            centered(name, x + 51, y + 60, 10)
+            local id = status["choice" .. i] or 0
+            portrait(id):Render(pos(x + 51, y + 44))
+            centered(character(id), x + 51, y + 60, 10, nil, 92)
             if phase == 2 and status["ready" .. i] == 1 then
                 layer(assets.cards, 5, x, y)
                 centered("已准备", x + 51, y + 77, 10, ink)
@@ -482,12 +496,23 @@ function _IsaacLanMenuRender(
     end
     local message = errorText ~= "" and errorText or networkError
     local messageColor = red
+    if message == "" and phase == 2 and challenge then
+        local missing = {}
+        for i = 0, count - 1 do
+            if status["eligible" .. i] ~= true then
+                missing[#missing + 1] = "P" .. (i + 1)
+            end
+        end
+        if #missing > 0 then
+            message = table.concat(missing, "、") .. " 需解锁底片与里该隐"
+        end
+    end
     if message == "" and status.modMismatch == 1 then
         message = "Mod 不一致或无法核对，可能会造成未知的影响"
         messageColor = amber
     end
     local footerY = message ~= "" and 235 or 243
-    if phase == 2 then
+    if phase == 2 and page ~= "challenges" then
         if not host then
             text("房主地址：" .. ip, 25, footerY - 12, 10)
         end

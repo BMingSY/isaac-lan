@@ -1,6 +1,6 @@
 # 六条结局路线回归
 
-> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](../README.md)。
+> 历史记录：版本、结果和失败范围属于原验收轮次，不代表当前构建已通过。当前指南见[技术文档索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/README.md)。
 
 这是开发验收流程，不是发布文案。离线检查通过后集中使用一对隔离游戏进程；每条路线在原生结算后重新建立联机会话，不退出游戏进程。
 
@@ -29,13 +29,13 @@
 
 ```sh
 python3 tools/run_endings.py \
-  --host /mnt/d/isaac-lan-lab/client-002 \
-  --client /mnt/d/isaac-lan-lab/client-003 \
+  --host "$ISAAC_CLIENT2_LAB" \
+  --client "$ISAAC_CLIENT3_LAB" \
   --build build-win32 \
-  --output artifacts/endings-acceptance \
-  --mod '/mnt/d/steam/steamapps/common/The Binding of Isaac Rebirth/mods/stats-plus_2729900570' \
-  --mod '/mnt/d/steam/steamapps/common/The Binding of Isaac Rebirth/mods/external item descriptions_836319872' \
-  --mod '/mnt/d/steam/steamapps/common/The Binding of Isaac Rebirth/mods/goodtrip_1630477831'
+  --output "$ISAAC_RUN_OUTPUT" \
+  --mod "$ISAAC_STATS_MOD" \
+  --mod "$ISAAC_EID_MOD" \
+  --mod "$ISAAC_GOODTRIP_MOD"
 ```
 
 排查单条路线时可追加 `--route ascent`（可重复指定）。完整验收仍使用默认六条。
@@ -48,17 +48,17 @@ python3 tools/run_endings.py \
 
 ```sh
 python3 tools/run_special_routes.py \
-  --host /mnt/d/isaac-lan-lab/host-001 \
-  --client /mnt/d/isaac-lan-lab/client-001 \
-  --build build-win32 --output artifacts/endings-delta-验收编号 \
+  --host "$ISAAC_HOST_LAB" \
+  --client "$ISAAC_CLIENT_LAB" \
+  --build build-win32 --output "$ISAAC_RUN_OUTPUT" \
   --case greed --case greedier --case endings --first-floor \
   --latency-ms 75 --performance --record --frame-ms 500 \
-  --mod '/mnt/d/steam/steamapps/common/The Binding of Isaac Rebirth/mods/stats-plus_2729900570' \
-  --mod '/mnt/d/steam/steamapps/common/The Binding of Isaac Rebirth/mods/external item descriptions_836319872' \
-  --mod '/mnt/d/steam/steamapps/common/The Binding of Isaac Rebirth/mods/goodtrip_1630477831'
+  --mod "$ISAAC_STATS_MOD" \
+  --mod "$ISAAC_EID_MOD" \
+  --mod "$ISAAC_GOODTRIP_MOD"
 ```
 
-贪婪两种难度都从第一层完成七层原生流程，超级贪婪必须观察最终 Boss 的黄金阶段；详见 [贪婪模式验证](greed-mode-validation.md)。原版房间定位、免伤和加速攻击属于验收夹具，这不是普通输入无辅助通关，也不代表覆盖所有随机种子或每段结局动画的解锁变体。
+贪婪两种难度都从第一层完成七层原生流程，超级贪婪必须观察最终 Boss 的黄金阶段；详见 [贪婪模式验证](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/greed-mode-validation.md)。原版房间定位、免伤和加速攻击属于验收夹具，这不是普通输入无辅助通关，也不代表覆盖所有随机种子或每段结局动画的解锁变体。
 
 ## 增量同步结局验收（2026-10-12）
 
@@ -75,17 +75,17 @@ python3 tools/run_special_routes.py \
 | 贪婪（七层） | 通过 | 通过 |
 | 超级贪婪（七层、黄金阶段） | 通过 | 通过 |
 
-结果按路线汇总：`artifacts/endings-delta-20261012-r3` 在同一对进程中完成前七条，随后回溯第一层未生成原生出口，整轮报告为失败。回溯在修正攻击和计时夹具后由 `artifacts/endings-delta-ascent-20261012-r3` 完整补验；浊水由 `artifacts/endings-delta-dross-20261012-r3` 补验。两个补验均 `passed: true`、`restored: true`，四个进程退出码均为 0。所有轮次均按文件哈希恢复隔离资料；中断集中轮次的进程被强制关闭，记录不改为通过。
+结果按路线汇总：验收归档（2026-10-12，第 3 轮）在同一对进程中完成前七条，随后回溯第一层未生成原生出口，整轮报告为失败。回溯在修正攻击和计时夹具后由验收归档（2026-10-12，第 3 轮）完整补验；浊水由验收归档（2026-10-12，第 3 轮）补验。两个补验均 `passed: true`、`restored: true`，四个进程退出码均为 0。所有轮次均按文件哈希恢复隔离资料；中断集中轮次的进程被强制关闭，记录不改为通过。
 
 排查中修正了验收夹具的三个边界：终点宝箱从外侧通过方向输入及按下事件接触；首层路线／Turdlet 使用原版伤害 100 的泪弹，仍存活但血量非正的分段实体继续接受原生碰撞；终点移动检查从终点 Boss 出现时计时，归途有限伤害战斗采用 10000 tick 上限，保留双方控制、实际位移和移动帧数断言。源房间、Boss、照片、路线门、上下层出口、Home 过场和终局回调仍由游戏生成和执行。
 
-初轮超级撒旦宝箱停滞、Turdlet 停滞、回溯未出原生出口及旧移动／总战斗计时断言失败的日志全部保留。旧协议 24 的独立超级撒旦对照亦通过，这一对照不能单独确定初轮失败原因。生产同步代码在这些补验期间保持相同构建；完整逐路线证据、失败轮次和覆盖边界见 [验收摘要](../benchmarks/endings-world-state-delta-20261012.json)。这不是所有随机种子、无辅助通关或全部成就解锁结局动画变体的覆盖。
+初轮超级撒旦宝箱停滞、Turdlet 停滞、回溯未出原生出口及旧移动／总战斗计时断言失败的日志全部保留。旧协议 24 的独立超级撒旦对照亦通过，这一对照不能单独确定初轮失败原因。生产同步代码在这些补验期间保持相同构建；完整逐路线证据、失败轮次和覆盖边界见 [验收摘要](https://github.com/BMingSY/isaac-lan/blob/main/docs/benchmarks/endings-world-state-delta-20261012.json)。这不是所有随机种子、无辅助通关或全部成就解锁结局动画变体的覆盖。
 
 最终离线检查为 119 项 pytest 和 19 项子测试，语法与格式检查通过。此前主分支也能复现的门口惯性短暂碰壁用例改为检查按时穿门与到达后释放输入，固定路径仍保留独立无碰壁检查，生产人机代码未变。
 
 ## 2026-10-10 既有六路线验收
 
-2026-10-10 的默认六条集中验收通过：`artifacts/ending-routes-engine-20261010-r36/report.json` 为 `passed: true`、`restored: true`。整轮只使用一对游戏进程；主客机逐条满足原生胜利、会话清理与本机进度保留三项检查，最后按哈希恢复测试前的隔离存档。
+2026-10-10 的默认六条集中验收通过：`report.json` 为 `passed: true`、`restored: true`。整轮只使用一对游戏进程；主客机逐条满足原生胜利、会话清理与本机进度保留三项检查，最后按哈希恢复测试前的隔离存档。
 
 | 路线 | 主机原生胜利／清理／进度 | 客机原生胜利／清理／进度 |
 | --- | --- | --- |
@@ -106,6 +106,6 @@ python3 tools/run_special_routes.py \
 - 激光的原生 `0xff` 待初始化采样状态保留原始字节，防止腐宫／野兽场景被错误判为损坏的激光。
 - Home 睡觉和教条后的原生换房属于全队事务。两端播放教条过场，原生初始化野兽场景并共同就绪后恢复同步；等待期间检查连接心跳。
 
-排查时修正了会话重连、菜单帧率导致的等待差异、结算确认键漏入菜单、天堂光柱、百变怪房配置、超级撒旦入场线、陵墓心脏返回出口和腐宫洞口识别。重启用于重新加载修改后的 DLL／启动脚本，或恢复已失败的会话；各轮记录保存在 `artifacts/ending-routes-*`。固定流程不使用调试结算或直接生成终点 Boss。
+排查时修正了会话重连、菜单帧率导致的等待差异、结算确认键漏入菜单、天堂光柱、百变怪房配置、超级撒旦入场线、陵墓心脏返回出口和腐宫洞口识别。重启用于重新加载修改后的 DLL／启动脚本，或恢复已失败的会话；各轮记录已按轮次归档。固定流程不使用调试结算或直接生成终点 Boss。
 
-离线验证：`offline-r12/summary.json` 中完整检查通过（30 项 C++／Lua、60 项 Python 及 11 个子用例），Windows 21 项传输测试通过，其中过场用例等待超过普通输入和状态超时期限；J460 新增入口签名和可重复安装／卸载检查通过。上述离线记录位于 `artifacts/ascent-shared-resources-text-20261010/`。卡牌／药丸文字、分房间共享资源的独立实机记录为 `artifacts/ascent-shared-resources-text-engine-20261010-r3`；中文主机字符串到英文客机字体使用原生捕获的本地化键模拟跨语言接收，未覆盖实际加载中文字体的组合。
+离线验证：第 12 轮离线 `summary.json` 中完整检查通过（30 项 C++／Lua、60 项 Python 及 11 个子用例），Windows 21 项传输测试通过，其中过场用例等待超过普通输入和状态超时期限；J460 新增入口签名和可重复安装／卸载检查通过。上述离线记录已归档（2026-10-10）。卡牌／药丸文字、分房间共享资源的独立实机记录为验收归档（2026-10-10，第 3 轮）；中文主机字符串到英文客机字体使用原生捕获的本地化键模拟跨语言接收，未覆盖实际加载中文字体的组合。

@@ -48,4 +48,4 @@ LANBOT 通过正常输入接管本机玩家的移动与射击，便于“人机�
 
 已有普通路线的保护／加速通关，以及固定种子、指定开局配装的双人／四人普通贪婪通关记录。随机裸装、贪婪困难、四人高延迟和通用走位质量尚未完成同等验收；历史九蜘蛛纯走位仍以死亡结束，决策峰值也曾超过预算。
 
-实现与失效约束见[设计](lanbot-design.md)，具体构建、配装、成绩、失败和证据见[LANBOT 历史验收](history/README.md#lanbot)。
+实现与失效约束见[设计](https://github.com/BMingSY/isaac-lan/blob/main/docs/lanbot-design.md)，具体构建、配装、成绩、失败和证据见[LANBOT 历史验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/README.md#lanbot)。
