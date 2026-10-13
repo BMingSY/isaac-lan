@@ -63,6 +63,13 @@ if(BUILD_TESTING)
         NAMES lua5.3 lua
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
+        foreach(test_case session_lifecycle capture_generation replica_pipeline)
+            add_test(
+                NAME bridge.${test_case}
+                COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/${test_case}.lua"
+                        "${CMAKE_CURRENT_SOURCE_DIR}")
+            set_tests_properties(bridge.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;lua")
+        endforeach()
         add_test(NAME bridge.codec-fragments
                  COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/codec_fragments.lua"
                          "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -235,6 +242,7 @@ if(BUILD_TESTING)
         intro-barrier
         room-map
         room-transition-context
+        room-scope-ownership
         compatibility-targets
         resolved-room-curses
         shared-deal-chances

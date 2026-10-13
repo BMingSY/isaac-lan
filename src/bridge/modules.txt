@@ -53,3 +53,6 @@ compat/mods/stats_plus
 compat/mods/eid
 compat/mods/goodtrip/authority
 compat/mods/goodtrip/client
+runtime/session
+sync/capture
+sync/replica

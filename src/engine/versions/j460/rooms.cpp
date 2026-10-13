@@ -20,6 +20,7 @@
 #include "compat/characters/keeper.h"
 #include "compat/characters/team_effects.h"
 #include "runtime/actor_roster.h"
+#include "runtime/room_scope.h"
 #include "core/poop_state.h"
 #include <MinHook.h>
 #include <algorithm>
@@ -232,9 +233,7 @@ std::vector<Address> controlledActors(Address head) {
             result.push_back(player);
     return result;
 }
-Room* active = nullptr;
-unsigned depth = 0;
-Vector* teamRoster = nullptr;
+ScopeStack<Room, Vector> scopes;
 bool enabled = false, transferring = false;
 Address skipSave = 0;
 struct Request {
@@ -296,7 +295,6 @@ std::vector<Address> occupants(const Room& room) {
 }
 struct Scope {
     Room& room;
-    Room* parent;
     Room* previousShared;
     Address previousRoom;
     std::array<std::uint32_t, contextOffsets.size()> previous;
@@ -305,33 +303,32 @@ struct Scope {
     Vector previousRoster;
     Vector nestedScratch;
     Vector* storage;
+    std::optional<ScopeStack<Room, Vector>::Binding> binding;
     std::optional<audio::RoomScope> audioScope;
     bool reconcilePlayers;
     std::vector<Address> originalPlayers;
     std::map<Address, int> originalControllers;
     Scope(Room& target, const std::vector<Address>& players, bool reconcile = true)
-        : room(target), parent(active), previousShared(sharedOwner),
-          previousRoom(at<Address>(game(), 0x18300)), previousRoster(roster()),
-          reconcilePlayers(reconcile), originalPlayers(players) {
+        : room(target), previousShared(sharedOwner), previousRoom(at<Address>(game(), 0x18300)),
+          previousRoster(roster()), reconcilePlayers(reconcile), originalPlayers(players) {
         for (auto player : players)
             originalControllers[player] = at<int>(player, 0x1618);
         for (unsigned i = 0; i < previous.size(); ++i)
             previous[i] = at<std::uint32_t>(game(), contextOffsets[i]);
         previousRefresh = at<bool>(game(), 0x26534);
         previousSnapshot = at<unsigned char>(game(), 0x26540);
-        if (depth == 0)
-            teamRoster = &previousRoster;
         // A display callback can scope the same room again. Its temporary
         // roster must not overwrite an outer scope's live allocation.
-        storage = depth ? &nestedScratch : &room.scratch;
+        storage = scopes.depth() ? &nestedScratch : &room.scratch;
         assign(*storage, players);
         roster() = *storage;
         room.activate();
-        active = &room;
-        ++depth;
+        binding.emplace(scopes, room, previousRoster);
         audioScope.emplace();
     }
     explicit Scope(Room& target) : Scope(target, occupants(target)) {}
+    Scope(const Scope&) = delete;
+    Scope& operator=(const Scope&) = delete;
     ~Scope() {
         audioScope.reset();
         room.capture();
@@ -365,7 +362,7 @@ struct Scope {
                            " controller=" + std::to_string(at<int>(all[i], 0x1618)) +
                            " parent=" + std::to_string(at<Address>(all[i], 0x3bc)) +
                            " twin=" + std::to_string(at<Address>(all[i], 0x1e68)));
-            if (depth == 1)
+            if (scopes.depth() == 1)
                 participants = logicalPlayers();
         }
         at<Address>(game(), 0x18300) = previousRoom;
@@ -373,24 +370,25 @@ struct Scope {
             at<std::uint32_t>(game(), contextOffsets[i]) = previous[i];
         at<bool>(game(), 0x26534) = previousRefresh;
         at<unsigned char>(game(), 0x26540) = previousSnapshot;
-        active = parent;
+        binding->restoreParent();
         selectSharedState(previousShared);
         if (storage == &nestedScratch)
             release(nestedScratch.begin, nestedScratch.capacity - nestedScratch.begin);
-        if (--depth == 0)
-            teamRoster = nullptr;
+        binding.reset();
     }
 };
 struct TeamScope {
     Vector saved;
     bool changed;
-    TeamScope() : saved(roster()), changed(enabled && teamRoster) {
+    TeamScope() : saved(roster()), changed(enabled && scopes.teamRoster()) {
         if (changed)
-            roster() = *teamRoster;
+            roster() = *scopes.teamRoster();
     }
+    TeamScope(const TeamScope&) = delete;
+    TeamScope& operator=(const TeamScope&) = delete;
     ~TeamScope() {
         if (changed) {
-            *teamRoster = roster();
+            *scopes.teamRoster() = roster();
             roster() = saved;
         }
     }
@@ -566,7 +564,7 @@ bool __attribute__((fastcall)) replacePlayer(void* manager, void*, void* oldPlay
                next = reinterpret_cast<Address>(nextPlayer);
     // Birthright's listed Lazarus bodies are swapped by their GLOBAL indices.
     // A room-local roster can contain both bodies at different indices.
-    if (!enabled || !teamRoster || !at<bool>(next, 0x170))
+    if (!enabled || !scopes.teamRoster() || !at<bool>(next, 0x170))
         return originalReplacePlayer(manager, oldPlayer, nextPlayer);
     const auto scoped = values(roster());
     const auto oldIndex = at<unsigned>(old, 0x161c), nextIndex = at<unsigned>(next, 0x161c);
@@ -654,7 +652,7 @@ Vec2* __attribute__((fastcall)) playersCenter(void* manager, void*, Vec2* result
 // room needs that same presentation step with its own occupants, including the
 // rooms shown only on a guest. Keep the native Camera objects and smoothing.
 void __attribute__((fastcall)) cameraSmooth(void* camera, void*, bool halfFrame) {
-    if (!enabled || depth || transferring) {
+    if (!enabled || scopes.depth() || transferring) {
         originalCameraSmooth(camera, halfFrame);
         return;
     }
@@ -678,7 +676,7 @@ void __attribute__((fastcall)) cameraSmooth(void* camera, void*, bool halfFrame)
     }
 }
 void __attribute__((fastcall)) cameraDrag(void* camera, void*) {
-    if (!enabled || depth || transferring) {
+    if (!enabled || scopes.depth() || transferring) {
         originalCameraDrag(camera);
         return;
     }
@@ -765,18 +763,18 @@ using PostUpdate = void(__cdecl*)();
 PostUpdate originalPostUpdate;
 PostUpdate originalPostNewRoom;
 void __cdecl postNewRoom() {
-    if (enabled && active) {
+    if (enabled && scopes.current()) {
         const auto head = participant(runtime::localViewSlot());
         const auto it = location.find(head);
         const auto scoped = values(roster());
-        if (it == location.end() || it->second != active ||
+        if (it == location.end() || it->second != scopes.current() ||
             std::find(scoped.begin(), scoped.end(), head) == scoped.end())
             return;
     }
     originalPostNewRoom();
 }
 void __cdecl postUpdate() {
-    if (!enabled || depth || transferring) {
+    if (!enabled || scopes.depth() || transferring) {
         originalPostUpdate();
         return;
     }
@@ -796,7 +794,7 @@ void __cdecl postUpdate() {
     }
 }
 void __stdcall exitGame(bool save) {
-    if (enabled && depth) {
+    if (enabled && scopes.depth()) {
         pendingExit = save;
         return;
     }
@@ -863,7 +861,7 @@ std::vector<Address> followers(Address player, const Room& room) {
         }
     }
     auto owned = [player](Address entity) {
-        for (unsigned depth = 0; entity && depth < 8; ++depth) {
+        for (unsigned ancestor = 0; entity && ancestor < 8; ++ancestor) {
             if (entity == player)
                 return true;
             if (at<unsigned>(entity, 0x28) == 3)
@@ -985,7 +983,7 @@ Address currentActor(void* explicitActor = nullptr) {
         return actor;
     if (viewDepth)
         return participant(runtime::localViewSlot());
-    if (active) {
+    if (scopes.current()) {
         auto players = values(roster());
         if (players.size() == 1)
             return players.front();
@@ -1007,7 +1005,7 @@ std::optional<Key> destination(Room& source, int index, int dimension) {
             return std::nullopt;
         return Key{(*key)[0], (*key)[1]};
     };
-    if (active == &source || (index != -100 && index != -101))
+    if (scopes.current() == &source || (index != -100 && index != -101))
         return resolve();
     // Only aliases depend on the current room. Descriptor lookup cannot
     // replace actors; avoid mutating a caller's participant iteration.
@@ -1363,7 +1361,7 @@ int pillState(lua_State* L) {
     }
 }
 bool adopt() {
-    if (enabled || depth)
+    if (enabled || scopes.depth())
         return false;
     participants = logicalPlayers();
     if (participants.empty() || participants.size() > 4)
@@ -1405,8 +1403,8 @@ int request(lua_State* L) {
 int withPlayer(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
     Room* room = slot >= 0 && slot < 4 ? findRoom(participant(slot)) : nullptr;
-    if (depth || (!room && (enabled || slot < 0 ||
-                            static_cast<unsigned>(slot) >= values(roster()).size()))) {
+    if (scopes.depth() || (!room && (enabled || slot < 0 ||
+                                     static_cast<unsigned>(slot) >= values(roster()).size()))) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -1461,7 +1459,7 @@ int cancelIntegrationMove(lua_State* L) {
 }
 int actorIdentities(lua_State* L) {
     // The borrowed canonical roster remains available inside nested UI scopes.
-    const auto all = values(teamRoster ? *teamRoster : roster());
+    const auto all = values(scopes.teamRoster() ? *scopes.teamRoster() : roster());
     lua.createTable(L, static_cast<int>(all.size()), 0);
     unsigned entry = 0;
     for (unsigned owner = 0; owner < 4; ++owner) {
@@ -1491,7 +1489,7 @@ int withOwner(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
     const auto head = slot >= 0 && slot < 4 ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
-    if (runtime::replica() || depth || !room || !(connectedMask & (1u << slot))) {
+    if (runtime::replica() || scopes.depth() || !room || !(connectedMask & (1u << slot))) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -1531,22 +1529,22 @@ int ready(lua_State* L) {
     return 1;
 }
 int beginRKey(lua_State* L) {
-    const bool ready = runtime::replica() && enabled && !depth;
+    const bool ready = runtime::replica() && enabled && !scopes.depth();
     if (ready)
         pendingRestart = 1;
     lua.pushBoolean(L, ready);
     return 1;
 }
 int beginVictoryLap(lua_State* L) {
-    const bool ready = runtime::replica() && enabled && !depth;
+    const bool ready = runtime::replica() && enabled && !scopes.depth();
     if (ready)
         pendingRestart = 2;
     lua.pushBoolean(L, ready);
     return 1;
 }
 int beginCinematic(lua_State* L) {
-    const bool ready = runtime::replica() && enabled && !depth && at<int>(game(), 0) == 13 &&
-                       at<int>(game(), 4) == 1;
+    const bool ready = runtime::replica() && enabled && !scopes.depth() &&
+                       at<int>(game(), 0) == 13 && at<int>(game(), 4) == 1;
     if (ready)
         pendingDogma = at<Address>(game(), 0x18300);
     lua.pushBoolean(L, ready);
@@ -1555,7 +1553,7 @@ int beginCinematic(lua_State* L) {
 int beginFloor(lua_State* L) {
     const auto same = lua.checkInteger(L, 1), animation = lua.checkInteger(L, 2);
     const auto head = participant(runtime::localViewSlot());
-    const bool ready = runtime::replica() && enabled && !depth && head &&
+    const bool ready = runtime::replica() && enabled && !scopes.depth() && head &&
                        (same == 0 || same == 1) && animation >= 0 && animation <= 6;
     if (ready && !pendingStage) {
         pendingStage = StageRequest{same != 0, static_cast<int>(animation), head};
@@ -1913,7 +1911,7 @@ int actorPockets(lua_State* L) {
         if (!wrapper || lua.rawLength(L, 1) != 8 || !wrapper[1])
             throw std::runtime_error("Invalid actor pocket wrapper");
         const auto player = wrapper[1] - 0x48;
-        const auto all = values(teamRoster ? *teamRoster : roster());
+        const auto all = values(scopes.teamRoster() ? *scopes.teamRoster() : roster());
         if (std::find(all.begin(), all.end(), player) == all.end() ||
             at<unsigned>(player, 0x28) != 1)
             throw std::runtime_error("Pocket state requires a listed player");
@@ -1960,7 +1958,7 @@ int actorCraftingBag(lua_State* L) {
         if (!wrapper || lua.rawLength(L, 1) != 8 || wrapper[1] < 0x48)
             throw std::runtime_error("Invalid crafting bag actor wrapper");
         const auto player = wrapper[1] - 0x48;
-        const auto all = values(teamRoster ? *teamRoster : roster());
+        const auto all = values(scopes.teamRoster() ? *scopes.teamRoster() : roster());
         if (std::find(all.begin(), all.end(), player) == all.end() ||
             at<unsigned>(player, 0x28) != 1)
             throw std::runtime_error("Crafting bag state requires a listed player");
@@ -2015,7 +2013,7 @@ int actorForm(lua_State* L) {
     const auto index = lua.checkInteger(L, 1), desired = lua.checkInteger(L, 2);
     const auto controller = lua.getTop(L) >= 3 ? lua.checkInteger(L, 3) : -1;
     const auto all = values(roster());
-    if (!runtime::replica() || !enabled || depth || index < 0 ||
+    if (!runtime::replica() || !enabled || scopes.depth() || index < 0 ||
         static_cast<std::size_t>(index) > all.size() || (!compat::characters::lazarus(desired))) {
         lua.pushBoolean(L, false);
         return 1;
@@ -2275,9 +2273,9 @@ void interceptReplicaEntities(Room& room) {
 } // namespace
 
 bool finalCombat() {
-    if (!enabled || !active || runtime::replica())
+    if (!enabled || !scopes.current() || runtime::replica())
         return false;
-    const auto room = active->pointer;
+    const auto room = scopes.current()->pointer;
     for (std::size_t offset : {0x20u, 0x40u, 0x70u}) {
         const auto list = room + 0x1218 + offset;
         for (unsigned i = 0; i < at<unsigned>(list, 12); ++i) {
@@ -2294,7 +2292,7 @@ bool finalCombat() {
     return false;
 }
 bool update(void*, RoomCall original) {
-    if (!enabled || depth || transferring)
+    if (!enabled || scopes.depth() || transferring)
         return false;
     for (auto& [key, room] : loaded) {
         (void)key;
@@ -2341,7 +2339,7 @@ bool update(void*, RoomCall original) {
     return true;
 }
 bool half(void (*original)()) {
-    if (!enabled || depth || transferring)
+    if (!enabled || scopes.depth() || transferring)
         return false;
     if (runtime::replica() && !runtime::ending())
         return true;
@@ -2359,7 +2357,7 @@ bool half(void (*original)()) {
     return true;
 }
 bool render(void* g, RoomCall original, int slot) {
-    if (!enabled || depth || slot < 0 || slot >= 4)
+    if (!enabled || scopes.depth() || slot < 0 || slot >= 4)
         return false;
     auto room = findRoom(participant(slot));
     if (!room)
@@ -2371,7 +2369,7 @@ bool render(void* g, RoomCall original, int slot) {
     return true;
 }
 void presentCamera() {
-    if (!enabled || depth || transferring || !runtime::replica())
+    if (!enabled || scopes.depth() || transferring || !runtime::replica())
         return;
     const auto head = participant(runtime::localViewSlot());
     const auto room = findRoom(head);
@@ -2388,10 +2386,10 @@ void presentCamera() {
     originalCameraDrag(camera);
 }
 bool backgroundLoading() {
-    if (!enabled || !transferring || !active)
+    if (!enabled || !transferring || !scopes.current())
         return false;
     const auto it = location.find(participant(runtime::localViewSlot()));
-    return it == location.end() || it->second != active;
+    return it == location.end() || it->second != scopes.current();
 }
 void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     const int slot = runtime::localViewSlot();
@@ -2402,7 +2400,7 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     ViewCall call;
     const auto head = enabled && !transferring ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
-    auto players = values(teamRoster ? *teamRoster : roster());
+    auto players = values(scopes.teamRoster() ? *scopes.teamRoster() : roster());
     if (localPlayersOnly)
         std::erase_if(players, [&](Address p) { return at<int>(p, 0x1618) != slot + 1; });
     std::stable_partition(players.begin(), players.end(),
@@ -2416,11 +2414,11 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     draw();
 }
 bool checkpointReady() {
-    return enabled && !depth && !resumeStage && !pendingStage && !pendingRestart &&
+    return enabled && !scopes.depth() && !resumeStage && !pendingStage && !pendingRestart &&
            loaded.size() == 1;
 }
 bool stateReady() {
-    return enabled && !depth && !resumeStage && !pendingStage && !pendingRestart;
+    return enabled && !scopes.depth() && !resumeStage && !pendingStage && !pendingRestart;
 }
 bool viewReady() {
     return enabled && !transferring && !resumeStage && !pendingStage && !pendingRestart;
@@ -2470,7 +2468,7 @@ bool receiveRoomRequest(unsigned slot, const lan::RoomRequest& request) {
 }
 std::vector<SavedLocation> captureLocations() {
     std::vector<SavedLocation> result;
-    if (!enabled || depth)
+    if (!enabled || scopes.depth())
         return result;
     for (unsigned slot = 0; slot < 4; ++slot) {
         if (auto parked = dormant.find(slot); parked != dormant.end()) {
@@ -2490,7 +2488,7 @@ std::vector<SavedLocation> captureLocations() {
 }
 void setConnected(unsigned mask) {
     connectedMask = mask | 1u;
-    if (!enabled || depth)
+    if (!enabled || scopes.depth())
         return;
     bool changed = false;
     for (unsigned slot = 1; slot < 4; ++slot) {
@@ -2596,7 +2594,7 @@ std::uintptr_t presentationPlayer(void* explicitPlayer) {
 bool withPlayer(unsigned slot, const std::function<void()>& call) {
     const auto head = slot < 4 ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
-    if (!enabled || depth || !room || !(connectedMask & (1u << slot)))
+    if (!enabled || scopes.depth() || !room || !(connectedMask & (1u << slot)))
         return false;
     Scope scope(*room, controlledActors(head));
     call();
@@ -2605,21 +2603,21 @@ bool withPlayer(unsigned slot, const std::function<void()>& call) {
 bool withRoomPlayers(unsigned slot, const std::function<void()>& call) {
     const auto head = slot < 4 ? participant(slot) : 0;
     const auto room = head ? findRoom(head) : nullptr;
-    if (!enabled || depth || !room || !(connectedMask & (1u << slot)))
+    if (!enabled || scopes.depth() || !room || !(connectedMask & (1u << slot)))
         return false;
     Scope scope(*room);
     call();
     return true;
 }
 bool gatherForTransition(const std::function<void()>& begin) {
-    if (!enabled || runtime::replica() || !active)
+    if (!enabled || runtime::replica() || !scopes.current())
         return false;
     if (!pendingTeamTransition)
-        pendingTeamTransition = TeamTransition{active->key, begin};
+        pendingTeamTransition = TeamTransition{scopes.current()->key, begin};
     return true;
 }
 bool restoreLocations(const std::vector<SavedLocation>& saved) {
-    if (!enabled || depth || saved.size() != participants.size())
+    if (!enabled || scopes.depth() || saved.size() != participants.size())
         return false;
     // Apply saved positions to the complete restored roster before parking
     // offline actors. Otherwise their dormant position captures the native
@@ -2650,7 +2648,7 @@ bool restoreLocations(const std::vector<SavedLocation>& saved) {
     return true;
 }
 void finishFrame() {
-    if (depth)
+    if (scopes.depth())
         return;
     if (pendingExit) {
         requestExit(*pendingExit);
@@ -3093,7 +3091,7 @@ void beforeStart() {
     pendingRestart = 0;
     pendingDogma.reset();
     resumeLocations.clear();
-    if (!enabled || depth)
+    if (!enabled || scopes.depth())
         return;
     // Native floor changes and saves own the complete player roster. Reattach
     // dormant actors for that transaction, then park them again on the new

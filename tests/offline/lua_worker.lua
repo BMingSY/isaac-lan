@@ -27,6 +27,8 @@ local function stateEnvironment()
         _IsaacLanPrediction = {},
         _IsaacLanModules = {
             ["sync/codec"] = codec,
+            ["sync/capture"] = dofile(root .. "/src/bridge/sync/capture.lua"),
+            ["sync/replica"] = dofile(root .. "/src/bridge/sync/replica.lua"),
             ["sync/entity_schema"] = dofile(root .. "/src/bridge/sync/entity_schema.lua"),
             ["sync/entity_codec"] = dofile(root .. "/src/bridge/sync/entity_codec.lua"),
             ["sync/world_schema"] = dofile(root .. "/src/bridge/sync/world_schema.lua"),
