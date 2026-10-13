@@ -27,6 +27,7 @@ void requestExit(bool save);
 void playEnding(unsigned ending);
 void finishChallenge();
 void beforeStart();
+bool prepareRewind(unsigned slot);
 void resumeAfterTransition(std::vector<SavedLocation> locations);
 std::vector<SavedLocation> captureLocations();
 bool restoreLocations(const std::vector<SavedLocation>&);
