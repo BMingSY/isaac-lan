@@ -192,6 +192,8 @@ bool startRewind(std::span<const std::uint8_t> bytes) {
         rooms::resumeAfterTransition({});
         return true;
     }
+    if (!runtime::replica())
+        selected = selectedTransition();
     if (runtime::replica() && selected) {
         // Replay the authority's actual native choice, including Greed's
         // starting-room teleport. A local viewport cannot select another route.
@@ -204,8 +206,13 @@ bool startRewind(std::span<const std::uint8_t> bytes) {
         at<bool>(game(), 0x67744) = false;
     }
     if (!runtime::replica())
-        runtime::beginRewind(encode(checkpoint, slot, selectedTransition()));
-    rooms::resumeAfterTransition(std::move(checkpoint.locations));
+        runtime::beginRewind(encode(checkpoint, slot, selected));
+    // Only native animation 12 restores GameState. Greed's error-room
+    // teleport and native early returns must keep their actual landing.
+    if (selected && selected->animation == 12)
+        rooms::resumeAfterTransition(std::move(checkpoint.locations));
+    else
+        rooms::resumeAfterTransition({});
     return true;
 }
 struct API {

@@ -15,9 +15,53 @@ end
 local previousMouse = Vector(-1000, -1000)
 local errorText = ""
 local characterChoices, characterCatalog = {}, {}
+local characterNames = {
+    [PlayerType.PLAYER_ISAAC] = "以撒",
+    [PlayerType.PLAYER_MAGDALENE] = "抹大拉",
+    [PlayerType.PLAYER_CAIN] = "该隐",
+    [PlayerType.PLAYER_JUDAS] = "犹大",
+    [PlayerType.PLAYER_BLUEBABY] = "???",
+    [PlayerType.PLAYER_EVE] = "夏娃",
+    [PlayerType.PLAYER_SAMSON] = "参孙",
+    [PlayerType.PLAYER_AZAZEL] = "阿撒泻勒",
+    [PlayerType.PLAYER_LAZARUS] = "拉撒路",
+    [PlayerType.PLAYER_EDEN] = "伊甸",
+    [PlayerType.PLAYER_THELOST] = "游魂",
+    [PlayerType.PLAYER_LAZARUS2] = "拉撒路",
+    [PlayerType.PLAYER_BLACKJUDAS] = "犹大",
+    [PlayerType.PLAYER_LILITH] = "莉莉丝",
+    [PlayerType.PLAYER_KEEPER] = "店长",
+    [PlayerType.PLAYER_APOLLYON] = "亚玻伦",
+    [PlayerType.PLAYER_THEFORGOTTEN] = "遗骸",
+    [PlayerType.PLAYER_THESOUL] = "灵魂",
+    [PlayerType.PLAYER_BETHANY] = "伯大尼",
+    [PlayerType.PLAYER_JACOB] = "雅各与以扫",
+    [PlayerType.PLAYER_ESAU] = "以扫",
+    [PlayerType.PLAYER_ISAAC_B] = "以撒",
+    [PlayerType.PLAYER_MAGDALENE_B] = "抹大拉",
+    [PlayerType.PLAYER_CAIN_B] = "该隐",
+    [PlayerType.PLAYER_JUDAS_B] = "犹大",
+    [PlayerType.PLAYER_BLUEBABY_B] = "???",
+    [PlayerType.PLAYER_EVE_B] = "夏娃",
+    [PlayerType.PLAYER_SAMSON_B] = "参孙",
+    [PlayerType.PLAYER_AZAZEL_B] = "阿撒泻勒",
+    [PlayerType.PLAYER_LAZARUS_B] = "拉撒路",
+    [PlayerType.PLAYER_EDEN_B] = "伊甸",
+    [PlayerType.PLAYER_THELOST_B] = "游魂",
+    [PlayerType.PLAYER_LILITH_B] = "莉莉丝",
+    [PlayerType.PLAYER_KEEPER_B] = "店长",
+    [PlayerType.PLAYER_APOLLYON_B] = "亚玻伦",
+    [PlayerType.PLAYER_THEFORGOTTEN_B] = "遗骸",
+    [PlayerType.PLAYER_BETHANY_B] = "伯大尼",
+    [PlayerType.PLAYER_JACOB_B] = "雅各",
+    [PlayerType.PLAYER_LAZARUS2_B] = "拉撒路",
+    [PlayerType.PLAYER_JACOB2_B] = "雅各",
+    [PlayerType.PLAYER_THESOUL_B] = "灵魂",
+}
 local function character(id)
     local entry = characterCatalog[tostring(id)]
-    return entry and ((entry.tainted and "里·" or "") .. entry.name) or ("角色 " .. id)
+    return entry and ((entry.tainted and "里·" or "") .. (characterNames[id] or entry.name))
+        or ("角色 " .. id)
 end
 local function portrait(id)
     local entry = characterCatalog[tostring(id)]

@@ -181,6 +181,7 @@ inline constexpr std::uint32_t optionsSave = 0x524d10;
 inline constexpr std::uint32_t menuCharacterModEnumeration = 0x54919e;
 } // namespace entry
 namespace globals {
+inline constexpr std::uint32_t menuManager = 0x872a20;
 inline constexpr std::uint32_t game = 0x871678;
 inline constexpr std::uint32_t manager = 0x87169c;
 inline constexpr std::uint32_t logicalWidth = 0x878dc4;

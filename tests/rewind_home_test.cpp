@@ -210,8 +210,8 @@ void __attribute__((thiscall)) wrapperFixture(void* receiver, int index, int dir
     f.verifyArguments(receiver, false, index, direction, animation, player, dimension);
     ++f.wrappers;
     f.events.push_back("native-route-decision");
-    if (f.specialRoomType == 16 || f.specialRoomStage == 35) {
-        // These native room branches teleport in place and return without
+    if (f.specialRoomType == 16 && f.specialRoomStage == 35) {
+        // This native room branch teleports in place and returns without
         // starting RoomTransition. The authority must publish that absence.
         ++f.teleports;
         field<int>(f.game.data(), 0x1b83c) = 0;
@@ -413,8 +413,9 @@ void greedReplaysAuthoritySelection() {
         f.validABI();
         require(f.wrappers == 1 && f.greedCalls == 1 && f.lowerCalls == 1 && f.capturedHomes == 0 &&
                     f.stageEvents == 0 && f.nativeStages == 0 && f.rewindEvents.size() == 1 &&
-                    f.rewindEvents[0] == f.payload(rewind::NativeTransition{-2, 0, 3, 0}),
-                "Host did not publish Greed's actual teleport choice");
+                    f.rewindEvents[0] == f.payload(rewind::NativeTransition{-2, 0, 3, 0}) &&
+                    f.resumed.size() == 1 && f.resumed[0].empty(),
+                "Host did not preserve Greed's actual error-room teleport and native landing");
         const auto wire = f.rewindEvents[0];
         f.clearCalls();
         f.replica = true;
@@ -423,23 +424,42 @@ void greedReplaysAuthoritySelection() {
         f.validABI();
         require(f.wrappers == 0 && f.greedCalls == 0 && f.lowerCalls == 1 && f.stageEvents == 0 &&
                     f.nativeStages == 0 && f.rewindEvents.empty() && f.resumed.size() == 1 &&
-                    sameLocations(f.resumed[0], f.locations),
-                "Greed replica reran the native wrapper instead of replaying index -2/animation "
-                "3/dimension 0");
+                    f.resumed[0].empty(),
+                "Greed replica did not replay index -2/animation 3/dimension 0 with its native "
+                "landing preserved");
     }
 }
 void nativeEarlyReturn() {
-    for (int branch : {16, 35}) {
+    for (const auto& [roomType, roomStage] :
+         std::array<std::pair<int, int>, 4>{{{16, 35}, {16, 0}, {0, 35}, {0, 0}}}) {
         Fixture f;
-        f.specialRoomType = branch == 16 ? 16 : 0;
-        f.specialRoomStage = branch == 35 ? 35 : 0;
+        f.specialRoomType = roomType;
+        f.specialRoomStage = roomStage;
         field<int>(f.game.data(), 0x1b83c) = 1;
         require(rewind::startRewind(f.payload()), "Host native early-return route failed");
         f.validABI();
+        if (roomType != 16 || roomStage != 35) {
+            require(f.wrappers == 1 && f.teleports == 0 && f.lowerCalls == 1 &&
+                        f.rewindEvents.size() == 1 &&
+                        f.rewindEvents[0] == f.payload(f.chosenTransition()) &&
+                        f.resumed.size() == 1 && sameLocations(f.resumed[0], f.locations),
+                    "Partial special-room match suppressed ordinary native rewind");
+            const auto wire = f.rewindEvents[0];
+            f.clearCalls();
+            f.replica = true;
+            f.viewRoom = 84;
+            require(rewind::startRewind(wire),
+                    "Replica rejected ordinary rewind after a partial special-room match");
+            f.validABI();
+            require(f.wrappers == 0 && f.teleports == 0 && f.lowerCalls == 1 &&
+                        f.resumed.size() == 1 && sameLocations(f.resumed[0], f.locations),
+                    "Partial special-room match changed ordinary replica restoration");
+            continue;
+        }
         require(f.wrappers == 1 && f.teleports == 1 && f.lowerCalls == 0 &&
                     f.rewindEvents.size() == 1 && f.rewindEvents[0] == f.payload() &&
-                    f.resumed.size() == 1 && sameLocations(f.resumed[0], f.locations),
-                "Native in-place teleport became a fabricated room transition");
+                    f.resumed.size() == 1 && f.resumed[0].empty(),
+                "Native in-place teleport became a fabricated transition or restored old rooms");
         const auto wire = f.rewindEvents[0];
         f.clearCalls();
         f.replica = true;
@@ -453,12 +473,11 @@ void nativeEarlyReturn() {
         f.validABI();
         require(f.events == std::vector<std::string>{"before-start", "decode", "resume"} &&
                     f.wrappers == 0 && f.lowerCalls == 0 && f.teleports == 0 &&
-                    f.stageEvents == 0 && f.resumed.size() == 1 &&
-                    sameLocations(f.resumed[0], f.locations) &&
+                    f.stageEvents == 0 && f.resumed.size() == 1 && f.resumed[0].empty() &&
                     field<int>(f.game.data(), 0x265c0) == 0x12345678 &&
                     field<bool>(f.game.data(), 0x67744),
-                "Inactive replica choice started a transition instead of adopting the "
-                "authoritative checkpoint");
+                "Inactive replica choice started a transition or restored obsolete checkpoint "
+                "locations");
     }
 }
 void actualNativeParameters() {
@@ -468,14 +487,42 @@ void actualNativeParameters() {
     require(rewind::startRewind(requested), "Host native redirected rewind failed");
     f.validABI();
     require(f.rewindEvents.size() == 1 && f.rewindEvents[0] != requested &&
-                f.rewindEvents[0] == f.payload(f.chosenTransition()),
-            "Host republished requested arguments instead of the native selected fields");
+                f.rewindEvents[0] == f.payload(f.chosenTransition()) && f.resumed.size() == 1 &&
+                f.resumed[0].empty(),
+            "Host lost native selected fields or applied rewind locations to another animation");
     const auto wire = f.rewindEvents[0];
     f.clearCalls();
     f.replica = true;
     require(rewind::startRewind(wire), "Replica rejected the chosen native parameters");
     f.validABI();
-    require(f.wrappers == 0 && f.lowerCalls == 1, "Replica reran native parameter selection");
+    require(f.wrappers == 0 && f.lowerCalls == 1 && f.resumed.size() == 1 && f.resumed[0].empty(),
+            "Replica reselected native parameters or applied another animation's rewind locations");
+}
+void locationRestorationFollowsNativeAnimation() {
+    // Native RoomTransition.ChangeRoom restores the saved GameState only for
+    // animation 12. Teleports and other native choices must keep their actual
+    // landing, even though the initial hourglass request used animation 12.
+    for (int animation = 0; animation <= 22; ++animation) {
+        Fixture f;
+        f.lowerExpected = rewind::NativeTransition{103, 0, animation, 1};
+        require(rewind::startRewind(f.payload()), "Host native animation choice failed");
+        f.validABI();
+        require(
+            f.wrappers == 1 && f.lowerCalls == 1 && f.rewindEvents.size() == 1 &&
+                f.resumed.size() == 1 &&
+                (animation == 12 ? sameLocations(f.resumed[0], f.locations) : f.resumed[0].empty()),
+            "Host restored old locations for a non-rewind animation or lost ordinary rewind");
+        const auto wire = f.rewindEvents[0];
+        f.clearCalls();
+        f.replica = true;
+        require(rewind::startRewind(wire), "Replica rejected a valid native animation choice");
+        f.validABI();
+        require(
+            f.wrappers == 0 && f.lowerCalls == 1 && f.resumed.size() == 1 &&
+                (animation == 12 ? sameLocations(f.resumed[0], f.locations) : f.resumed[0].empty()),
+            "Replica restored old locations for a non-rewind animation or lost ordinary "
+            "rewind");
+    }
 }
 void sourcePreparationFailure() {
     Fixture f;
@@ -763,8 +810,10 @@ void selectedPayloadBounds() {
                     require(rewind::startRewind(f.payload(f.lowerExpected)),
                             "Valid boundary native parameters were rejected");
                     f.validABI();
-                    require(f.wrappers == 0 && f.lowerCalls == 1 && f.resumed.size() == 1,
-                            "Valid boundary parameters did not reach the original lower callee");
+                    require(
+                        f.wrappers == 0 && f.lowerCalls == 1 && f.resumed.size() == 1 &&
+                            f.resumed[0].empty(),
+                        "Boundary non-rewind parameters lost the native landing or lower callee");
                 }
 }
 void invalidNativeSelection() {
@@ -833,6 +882,7 @@ int main(int argc, char** argv) {
                      {"greed-authority-selection", greedReplaysAuthoritySelection},
                      {"native-early-return", nativeEarlyReturn},
                      {"native-selected-parameters", actualNativeParameters},
+                     {"native-animation-locations", locationRestorationFollowsNativeAnimation},
                      {"source-preparation-failure", sourcePreparationFailure},
                      {"nested-capture", nestedCapture},
                      {"repeat-reset", repeatAndReset},

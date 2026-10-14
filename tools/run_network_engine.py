@@ -96,6 +96,11 @@ def main():
         help="Verify native solo save bytes before and after a LAN session in each owned lab",
     )
     parser.add_argument(
+        "--release-solo-coordination",
+        type=Path,
+        help="Handle native solo GUI requests and acknowledge save hashes in an owned release suite",
+    )
+    parser.add_argument(
         "--alt-path-fixture",
         action="store_true",
         help="With --progress-fixture, unlock A Secret Exit only on the owned host and lock Dross",
@@ -244,6 +249,10 @@ def main():
         parser.error("Scenario timeout must be between 10 and 3600 seconds")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
+    if args.release_solo_coordination and (args.solo_fixture or not args.frontend):
+        parser.error("Release solo GUI checks require frontend and exclude the legacy solo fixture")
+    if args.release_solo_coordination and not args.release_solo_coordination.is_dir():
+        parser.error("Release solo coordination directory must already exist")
     if args.endings_fixture or args.hush_fixture or args.ascent_fixture:
         args.progress_fixture = True
     if args.alt_path_fixture and not args.progress_fixture:
@@ -423,6 +432,96 @@ def main():
                 str(pid),
             )
         )
+
+    def release_solo_gui(pid, action):
+        # Read native menu state and send normal key events. Never write menu
+        # fields or invoke the legacy memory-based solo fixture.
+        if action == "save-exit":
+            control(pid, "Keys", "{ESC}")
+            time.sleep(0.3)
+            for key in ("{DOWN}", "{ENTER}"):
+                control(pid, "Keys", key)
+                time.sleep(0.2)
+            return
+        lab, role = labs[processes.index(pid)], roles[processes.index(pid)]
+
+        def overlay_visible():
+            records = re.findall(
+                r"LAN_NETWORK SOLO_UI_STATE action="
+                + re.escape(action)
+                + r" visible=(true|false) ms=\d+ role="
+                + role,
+                read_log(lab),
+            )
+            return records[-1] == "true" if records else None
+
+        snapshot = menu_state(pid)
+        for _ in range(32):
+            visible = overlay_visible()
+            if snapshot["gameState"] == 1 and snapshot["menu"] == 3 and not snapshot["dialogs"]:
+                if visible is False or (action == "show-lobby" and visible is True):
+                    break
+                key = "{ESC}" if visible else None
+            else:
+                key = "{ESC}"
+                if not snapshot["dialogs"]:
+                    if snapshot["menu"] == 1:
+                        key = "{ENTER}"
+                    elif snapshot["menu"] == 2:
+                        # Read the file cursor separately from MainMenu. Select
+                        # file one and never confirm the native delete row.
+                        if snapshot["fileState"] != 0:
+                            key = None
+                        elif snapshot["fileSelected"] == 3:
+                            key = "{UP}"
+                        else:
+                            key = "{LEFT}" if snapshot["fileSelected"] else "{ENTER}"
+            if key:
+                control(pid, "Keys", key)
+            time.sleep(0.2)
+            snapshot = menu_state(pid)
+        else:
+            raise RuntimeError(
+                f"Native solo main menu was not ready: {snapshot}, overlay={visible}"
+            )
+        if action == "show-lobby" and visible:
+            time.sleep(0.5)
+            control(pid, "Capture", windows(args.output.resolve() / f"{role}-lobby-cn.png"))
+            (args.release_solo_coordination / f"solo-lobby-{role}.ack").write_text("ready")
+            return
+        # New Run is row zero, Continue row one. Read back each move instead of
+        # assuming the native cursor retained its previous session's position.
+        target = {"new-run": 0, "continue": 1, "show-lobby": 2}[action]
+        for _ in range(10):
+            if snapshot["selected"] == target:
+                break
+            control(pid, "Keys", "{UP}" if snapshot["selected"] > target else "{DOWN}")
+            time.sleep(0.2)
+            snapshot = menu_state(pid)
+        else:
+            raise RuntimeError(f"Native solo menu row was not selected: {snapshot}")
+        result.setdefault("solo_gui", []).append({"role": role, "action": action, "menu": snapshot})
+        control(pid, "Keys", "{ENTER}")
+        if action == "show-lobby":
+            for _ in range(30):
+                time.sleep(0.2)
+                if overlay_visible():
+                    break
+            else:
+                raise RuntimeError("The native Online entry did not open the LAN lobby")
+            time.sleep(0.5)
+            control(pid, "Capture", windows(args.output.resolve() / f"{role}-lobby-cn.png"))
+            (args.release_solo_coordination / f"solo-lobby-{role}.ack").write_text("ready")
+            return
+        if action == "new-run":
+            for _ in range(20):
+                time.sleep(0.2)
+                snapshot = menu_state(pid)
+                if snapshot["menu"] == 5 and not snapshot["dialogs"]:
+                    break
+            else:
+                raise RuntimeError(f"Native solo character menu was not reached: {snapshot}")
+            control(pid, "Keys", "{ENTER}")
 
     relay = None
     floor_hud = None
@@ -780,6 +879,7 @@ def main():
         pause_keys = set()
         recorded = False
         solo_saved, solo_continued, solo_hashes = set(), set(), {}
+        release_solo_requests, release_solo_files, release_solo_networks = set(), set(), set()
         relay_samples, next_relay_sample = [], 0
         while time.monotonic() < deadline:
             if relay and time.monotonic() >= next_relay_sample:
@@ -805,6 +905,50 @@ def main():
             if relay and relay.error:
                 raise RuntimeError("Latency relay: " + relay.error)
             logs = [read_log(lab) for lab in labs]
+            if args.release_solo_coordination:
+                for lab, role, pid, log in zip(labs, roles, processes, logs):
+                    for request in re.finditer(r"LAN_NETWORK SOLO_GUI_REQUEST ([^\r\n]*)", log):
+                        fields = dict(word.split("=", 1) for word in request[1].split())
+                        if fields.get("role") != role:
+                            raise RuntimeError("Solo GUI request named a different owned peer")
+                        action = fields.get("action")
+                        if action not in {"new-run", "save-exit", "continue", "show-lobby"}:
+                            raise RuntimeError("Unknown native solo GUI request")
+                        key = (role, action, fields.get("sequence", "0"))
+                        if key not in release_solo_requests:
+                            release_solo_requests.add(key)
+                            release_solo_gui(pid, action)
+                    saved = log_path(lab).parent / "gamestate1.dat"
+                    if (
+                        role not in release_solo_files
+                        and any(
+                            "LAN_NETWORK SOLO_FILE_READY " in line and f"role={role}" in line
+                            for line in log.splitlines()
+                        )
+                        and saved.is_file()
+                        and saved.stat().st_size
+                    ):
+                        solo_hashes[role] = hashlib.sha256(saved.read_bytes()).hexdigest()
+                        shutil.copy2(saved, args.output / f"{role}-solo-before.dat")
+                        release_solo_files.add(role)
+                        (args.release_solo_coordination / f"solo-file-{role}.ack").write_text(
+                            "ready"
+                        )
+                    if role not in release_solo_networks and any(
+                        "LAN_NETWORK SOLO_NETWORK_EXIT " in line and f"role={role}" in line
+                        for line in log.splitlines()
+                    ):
+                        if role not in solo_hashes or not saved.is_file():
+                            raise RuntimeError("LAN erased the native solo save")
+                        digest = hashlib.sha256(saved.read_bytes()).hexdigest()
+                        if digest != solo_hashes[role]:
+                            raise RuntimeError("LAN overwrote the native solo save")
+                        shutil.copy2(saved, args.output / f"{role}-solo-after.dat")
+                        result.setdefault("preserved_solo_sha256", {})[role] = digest
+                        release_solo_networks.add(role)
+                        (args.release_solo_coordination / f"solo-network-{role}.ack").write_text(
+                            "ready"
+                        )
             if args.keyboard_pause:
                 for number, role in re.findall(
                     r"LAN_NETWORK KEYBOARD_PAUSE_REQUEST (\d+) (host|client)", logs[0]

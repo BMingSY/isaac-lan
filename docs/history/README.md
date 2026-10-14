@@ -8,6 +8,7 @@
 
 | 记录 | 查阅内容 |
 | --- | --- |
+| [v0.4.0 发布验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/v0.4.0-release-validation.md) | 完整发布范围、已知离线失败、安装包、沙漏原生落点与集中双端检查 |
 | [分层重构](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/layer-refactor-validation.md) | 原分层批次的基线、原生入口对比和十项集中场景 |
 | [共享状态](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/shared-state-bugfix-validation.md) | 诅咒、地下室返回、教条预警及中断轮次 |
 | [共享开门概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/shared-deal-chances-validation.md) | 原生概率、门类型、跨房／换层与通关证据 |
