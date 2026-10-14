@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+PlayerType = dofile(root .. "/tests/fixtures/game_enums.lua").PlayerType
 local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels = {}
@@ -97,13 +98,13 @@ local available = true
 local characters = { 0, 23 }
 local catalog = {
     ["0"] = {
-        name = "以撒",
+        name = "Isaac",
         animation = "01_Isaac",
         portraitAnm2Path = "native-normal.anm2",
         tainted = false,
     },
     ["23"] = {
-        name = "该隐",
+        name = "Cain",
         animation = "03_Cain",
         portraitAnm2Path = "native-tainted.anm2",
         tainted = true,
@@ -186,6 +187,8 @@ assert(status.choice0 == 23 and labels["里·该隐"])
 assert(renderedPortraits[1][1] == "native-tainted.anm2" and renderedPortraits[1][2] == "03_Cain")
 draw(39)
 assert(status.choice0 == 0)
+draw()
+assert(labels["以撒"] and not labels["Isaac"])
 characters = { 0 }
 draw(39)
 assert(status.choice0 == 0)
@@ -227,6 +230,33 @@ assert(status.choice0 == 41 and labels["里·无菜单画像"])
 assert(renderedPortraits[1][2] == "00_Random")
 draw(39)
 assert(status.choice0 == 0)
+-- Mod names remain untouched even when they match a vanilla English name.
+catalog["42"] = {
+    name = "Isaac",
+    animation = "ModIsaac",
+    portraitAnm2Path = "mod-menu.anm2",
+    tainted = false,
+}
+characters, status.choice0 = { 42 }, 42
+draw()
+assert(labels["Isaac"] and not labels["以撒"])
+for _, role in ipairs({
+    { 1, "Magdalene", false, "抹大拉" },
+    { 19, "Jacob", false, "雅各与以扫" },
+    { 21, "Isaac", true, "里·以撒" },
+    { 37, "Jacob", true, "里·雅各" },
+}) do
+    catalog[tostring(role[1])] = {
+        name = role[2],
+        animation = "",
+        portraitAnm2Path = "",
+        tainted = role[3],
+    }
+    characters, status.choice0 = { role[1] }, role[1]
+    draw()
+    assert(labels[role[4]])
+end
+status.choice0 = 0
 characters = {}
 count = #commands
 draw(39)
@@ -278,4 +308,12 @@ assert(labels["结束挑战（不保存）"] and not labels["保存并结束联�
 status.challenge = 0
 draw()
 assert(labels["保存并结束联机"])
+-- Native MainMenu can remain behind the returning LAN page. Two Back presses
+-- close the LAN/mode overlay without invoking a lobby action.
+status.phase, status.prepared = 0, false
+_IsaacLanMenuOpen(true)
+count = #commands
+assert(draw(27))
+assert(not draw(27))
+assert(#commands == count)
 print("PASS challenge list, colored selection, role lock, guest view, clean HUD and transient exit")

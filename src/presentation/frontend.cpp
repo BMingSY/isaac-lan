@@ -29,6 +29,7 @@
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/menu_context.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::frontend {
@@ -164,9 +165,7 @@ template <class T> T& read(std::uintptr_t p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }
 bool menuAvailable() {
-    const auto manager = read<std::uintptr_t>(image, j460::globals::manager);
-    return manager && read<int>(manager, 8) == 1 && read<int>(manager, 0x10) >= 1 &&
-           read<int>(manager, 0x10) <= 3;
+    return j460::menu_context::ready(image);
 }
 void assignChat(const std::string& value) {
     using Assign = void*(__attribute__((thiscall))*)(void*, const char*, std::size_t);
@@ -211,7 +210,7 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
         originalGameMenuUpdate(menu);
         return;
     }
-    const auto manager = read<std::uintptr_t>(image, 0x872a20);
+    const auto manager = read<std::uintptr_t>(image, j460::globals::menuManager);
     if (!manager || read<int>(manager, 0x40) != 3) {
         originalGameMenuUpdate(menu);
         return;

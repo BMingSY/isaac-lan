@@ -29,7 +29,7 @@ try {
     $base = $process.MainModule.BaseAddress.ToInt64()
     $manager = Read32 ($base + 0x87169c)
     $menu = Read32 ($base + 0x872a20)
-    [ordered]@{gameState = (Read32 ($manager + 8)); menu = (Read32 ($menu + 0x40)); selected = (Read32 ($menu + 0xb94)); dialogs = (Read32 ($manager + 0x4d074)) } | ConvertTo-Json
+    [ordered]@{gameState = (Read32 ($manager + 8)); menu = (Read32 ($menu + 0x40)); selected = (Read32 ($menu + 0xb94)); fileState = (Read32 ($menu + 0x2f4)); fileSelected = (Read32 ($menu + 0x2f8)); dialogs = (Read32 ($manager + 0x4d074)) } | ConvertTo-Json
 } finally {
     [void][LanMenuRead]::CloseHandle($handle)
 }
