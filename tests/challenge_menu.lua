@@ -242,8 +242,10 @@ draw()
 assert(labels["Isaac"] and not labels["以撒"])
 for _, role in ipairs({
     { 1, "Magdalene", false, "抹大拉" },
+    { 4, "???", false, "???" },
     { 19, "Jacob", false, "雅各与以扫" },
     { 21, "Isaac", true, "里·以撒" },
+    { 25, "???", true, "里·???" },
     { 37, "Jacob", true, "里·雅各" },
 }) do
     catalog[tostring(role[1])] = {
