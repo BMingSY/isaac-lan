@@ -90,7 +90,13 @@ return function(native, actorsPresentation, view)
                     local p = e:ToPlayer()
                     local controls = p.ControlsEnabled
                         and p:AreControlsEnabled()
-                        and p:IsExtraAnimationFinished()
+                        and (
+                            p:IsExtraAnimationFinished()
+                            or (
+                                view.extraAnimationAllowsMovement
+                                and view.extraAnimationAllowsMovement(p)
+                            )
+                        )
                     if not controls then
                         m.prediction:reset(m.target, sequence - 1)
                         m.doorway = nil

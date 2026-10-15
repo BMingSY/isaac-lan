@@ -82,6 +82,7 @@ local actorsPresentation = assert(modules["presentation/actors"])(native, functi
     return Isaac.GetCostumeIdByPath(path)
 end, applySprite)
 local motionPresentation = assert(modules["presentation/motion"])(native, actorsPresentation, {
+    extraAnimationAllowsMovement = craftingBag.allowsMovement,
     vector = Vector,
     player = function(index)
         return Isaac.GetPlayer(index)
@@ -128,7 +129,14 @@ local captureState = assert(modules["sync/capture"])({
         )
     end,
     roomFactory = function()
-        return modules["sync/room"](native, entity, sprite, crawlspace, EntityType)
+        return modules["sync/room"](
+            native,
+            entity,
+            sprite,
+            crawlspace,
+            EntityType,
+            entityCodec.localEffect
+        )
     end,
 })
 function state.capture(slot, tick)

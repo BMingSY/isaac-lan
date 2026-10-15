@@ -1,5 +1,5 @@
 -- Complete, immutable room views shared by peers in the same room/tick.
-return function(native, entity, sprite, crawlspace, types)
+return function(native, entity, sprite, crawlspace, types, localEffect)
     local captureTick, captureEpoch, rooms
     local function collect(slot)
         local value
@@ -7,7 +7,11 @@ return function(native, entity, sprite, crawlspace, types)
             local room = Game():GetRoom()
             local entities, grids = {}, {}
             for _, e in ipairs(Isaac.GetRoomEntities()) do
-                if e:Exists() and e.Type ~= types.ENTITY_PLAYER then
+                if
+                    e:Exists()
+                    and e.Type ~= types.ENTITY_PLAYER
+                    and not (localEffect and localEffect(e))
+                then
                     entities[#entities + 1] = entity(e)
                 end
             end
@@ -41,6 +45,7 @@ return function(native, entity, sprite, crawlspace, types)
                     }
                 end
             end
+            local current = room:GetWaterCurrent()
             value = {
                 room:IsClear(),
                 room:GetFrameCount(),
@@ -49,6 +54,7 @@ return function(native, entity, sprite, crawlspace, types)
                 native.music_state(),
                 native.room_layout(),
                 crawlspace.capture(),
+                { current.X, current.Y },
             }
         end))
         return value

@@ -3,6 +3,19 @@ return function(native, items)
     local bag = assert(items.COLLECTIBLE_BAG_OF_CRAFTING)
     local empty = string.rep("\0", 12)
     return {
+        allowsMovement = function(p)
+            -- Holding the bag leaves the extra animation unfinished, but its
+            -- PickupWalk poses still allow native walking. Crafting does not.
+            if p:IsCoopGhost() or not p:GetSprite():GetAnimation():match("^PickupWalk") then
+                return false
+            end
+            for slot = 0, 3 do
+                if p:GetActiveItem(slot) == bag then
+                    return true
+                end
+            end
+            return false
+        end,
         capture = function(p)
             if p:IsCoopGhost() then
                 return false

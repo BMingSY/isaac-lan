@@ -111,4 +111,120 @@ motion.reset()
 state = {}
 accept(6, 0, 20, 0)
 close(render(6), 20)
-print("PASS immediate snapshots, continuous gaps/jitter, cadence, stops, reversal, pause and reset")
+
+-- Exercise local prediction with the actual item compatibility adapter. A held
+-- crafting bag reports an unfinished extra animation throughout PickupWalk.
+function vector:LengthSquared()
+    return self.X * self.X + self.Y * self.Y
+end
+local prediction = assert(loadfile(root .. "/src/bridge/presentation/prediction.lua", "t", {
+    Vector = Vector,
+    setmetatable = setmetatable,
+    math = math,
+    pairs = pairs,
+}))()
+local bag = dofile(root .. "/src/bridge/compat/items/crafting_bag.lua")({}, {
+    COLLECTIBLE_BAG_OF_CRAFTING = 710,
+})
+local animation, heldItem, extraFinished, enabled, ghost =
+    "PickupWalkRight", 710, false, true, false
+local player = { ControlsEnabled = true, MoveSpeed = 1, Size = 10 }
+function player:ToPlayer()
+    return self
+end
+function player:AreControlsEnabled()
+    return enabled
+end
+function player:IsExtraAnimationFinished()
+    return extraFinished
+end
+function player:IsCoopGhost()
+    return ghost
+end
+function player:GetActiveItem(slot)
+    return slot == 2 and heldItem or 0
+end
+function player:GetSprite()
+    return {
+        GetAnimation = function()
+            return animation
+        end,
+    }
+end
+local room = {
+    IsMirrorWorld = function()
+        return false
+    end,
+    GetDoor = function() end,
+    GetClampedPosition = function(_, position)
+        return position
+    end,
+    GetGridCollisionAtPos = function()
+        return 0
+    end,
+}
+local localMotion = assert(
+    loadfile(
+        root .. "/src/bridge/presentation/motion.lua",
+        "t",
+        setmetatable({ GridCollisionClass = { COLLISION_NONE = 0 } }, { __index = _G })
+    )
+)()({
+    rooms_with_player = function(_, fn)
+        fn()
+        return true
+    end,
+}, {}, {
+    vector = Vector,
+    extraAnimationAllowsMovement = bag.allowsMovement,
+    clock = function()
+        return now * 1000
+    end,
+    status = function()
+        return { pause = 0, slot = 1 }
+    end,
+    room = function()
+        return room
+    end,
+})
+local localState = {
+    actor = true,
+    controller = 2,
+    target = Vector(100, 100),
+    display = Vector(100, 100),
+    prediction = prediction.new(Vector(100, 100)),
+}
+local function localRender(sequence)
+    now = sequence / 60
+    localMotion.present(
+        string.pack(">I2I2I2I2", 0, 65535, 0, 0),
+        sequence,
+        {},
+        { [1] = localState },
+        function()
+            return player
+        end,
+        1
+    )
+    return player.Position.X
+end
+local previous = localRender(0)
+for sequence = 1, 30 do
+    local position = localRender(sequence)
+    assert(position > previous, "Held bag froze local motion between snapshots")
+    previous = position
+end
+-- The exception never enables controls during crafting, pickup, cooldown,
+-- ghost conversion, or after removing the bag. Ordinary walking still works.
+for i, blocked in ipairs({ "craft", "pickup", "cooldown", "disabled", "removed", "ghost" }) do
+    animation = blocked == "craft" and "UseItem"
+        or blocked == "pickup" and "Pickup"
+        or "PickupWalkRight"
+    enabled, player.ControlsEnabled = blocked ~= "cooldown", blocked ~= "disabled"
+    heldItem, ghost = blocked == "removed" and 0 or 710, blocked == "ghost"
+    close(localRender(30 + i), localState.target.X, blocked .. " incorrectly predicted movement")
+end
+extraFinished, enabled, player.ControlsEnabled, ghost = true, true, true, false
+animation = "WalkRight"
+assert(localRender(40) > localState.target.X, "Ordinary movement did not resume")
+print("PASS continuous motion, held crafting bag, control locks, gaps, pause and reset")

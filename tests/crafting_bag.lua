@@ -140,6 +140,9 @@ local function environment()
         room_layout = function()
             return true
         end,
+        room_water_current = function()
+            return true
+        end,
         net_progress = function()
             return "progress"
         end,
@@ -264,7 +267,7 @@ local function environment()
     end
     modules["sync/room"] = function()
         return function()
-            return { true, 20, {}, {}, false, "layout", false }
+            return { true, 20, {}, {}, false, "layout", false, { 0, 0 } }
         end
     end
     local env = setmetatable({
@@ -320,7 +323,7 @@ for tick = 1, 5 do
         local bytes = host.state.capture(slot, tick)
         local view = host.state.decode(bytes)
         assert(
-            view[1] == 15 and view[9][1][8] == first and view[9][2][8] == second,
+            view[1] == 16 and view[9][1][8] == first and view[9][2][8] == second,
             "World snapshot omitted or mixed the two players' crafting bags"
         )
         assert(guest.state.apply(bytes, tick, 0))

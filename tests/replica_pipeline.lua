@@ -2,6 +2,7 @@ local root = assert(arg[1])
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local schema = dofile(root .. "/src/bridge/sync/world_schema.lua")
 local trace, shared, scope, fail, waiting, epoch, roomIndex = {}, {}, nil, nil, false, 1, 84
+local current, restoredCurrent = { 0, 1 }, nil
 local function record(name)
     trace[#trace + 1] = name
     assert(fail ~= name, "failure at " .. name)
@@ -150,6 +151,7 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
     },
     entitiesApply = function()
         assert(scope == "room")
+        assert(restoredCurrent[1] == current[1] and restoredCurrent[2] == current[2])
         record("entities")
     end,
     gridsApply = function()
@@ -167,6 +169,11 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
         end,
     },
     native = {
+        room_water_current = function(x, y)
+            assert(scope == "room", "Current escaped the local room")
+            restoredCurrent = { x, y }
+            return record("current")
+        end,
         room_layout = function()
             return record("layout")
         end,
@@ -237,7 +244,7 @@ local function packet(tick, nextEpoch)
             },
         },
         slot = 1,
-        room = { true, 0, {}, {}, "music", "layout", false },
+        room = { true, 0, {}, {}, "music", "layout", false, current },
         sound = {},
         progress = "progress",
         epoch = nextEpoch or epoch,
@@ -250,7 +257,7 @@ local function packet(tick, nextEpoch)
     }))
 end
 local expected =
-    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,crawlspace,entities,grids,clear,music,map-refresh,confirm,audio,events,items"
+    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,entities,grids,clear,music,map-refresh,confirm,audio,events,items"
 assert(
     not replica.apply(packet(1), 1, 0, true) and #trace == 0,
     "Initial view escaped the full update boundary"
@@ -293,10 +300,12 @@ assert(not pcall(replica.apply, packet(3), 3, 0))
 assert(trace[#trace] == "music" and not scope)
 assert(replica.present("", 0) == 2)
 fail, trace, roomIndex = nil, {}, 85
+current = { -1, 0 }
 assert(replica.apply(packet(3), 3, 0))
 assert(table.concat(trace, ",") == expected)
 replica.resetView()
 epoch, roomIndex = 2, 84
+current = { 0, 0 }
 assert(not replica.apply(packet(4, 1), 4, 0))
 assert(replica.apply(packet(4), 4, 0))
 replica.reset()

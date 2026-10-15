@@ -1,5 +1,9 @@
 -- Engine values become explicit portable fields; this component owns no room or transport.
 return function(native, schemas, npcState, visualCompatibility)
+    local function localEffect(e)
+        return e.Type == schemas.types.ENTITY_EFFECT
+            and native.presentation_local_effect(e.Type, e.Variant, e.SubType)
+    end
     local function vector(v)
         return { v.X, v.Y }
     end
@@ -14,7 +18,7 @@ return function(native, schemas, npcState, visualCompatibility)
     end
     local nextID = 1
     local function id(e)
-        if not e or not e:Exists() then
+        if not e or not e:Exists() or localEffect(e) then
             return 0
         end
         local d = e:GetData()
@@ -221,6 +225,7 @@ return function(native, schemas, npcState, visualCompatibility)
         e.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE
     end
     return {
+        localEffect = localEffect,
         capture = entity,
         apply = applyEntity,
         sprite = sprite,

@@ -158,6 +158,7 @@ return function(deps)
         assert(native.rooms_with_player(value.slot, function()
             local room = game:GetRoom()
             local data = value.room
+            assert(native.room_water_current(data[8][1], data[8][2]))
             crawlspace.apply(data[7])
             reconcileEntities(data[3], {
                 ref = ref,
@@ -173,6 +174,7 @@ return function(deps)
                     applyEntity(e, v, now, tick)
                 end,
                 entities = deps.entities,
+                localEffect = entityCodec.localEffect,
             })
             assert(native.door_slot(-1))
             reconcileGrids(data[4], {
