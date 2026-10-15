@@ -1,6 +1,6 @@
 # 技术文档
 
-安装和联机操作见[项目 README](https://github.com/BMingSY/isaac-lan/blob/main/README.md)。下面按当前任务查阅；历次构建、通关轮次和失败证据统一放在[历史验收索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/README.md)。
+安装和联机操作见[项目 README](https://github.com/BMingSY/isaac-lan/blob/main/README.md)，常见疑问见[FAQ](https://github.com/BMingSY/isaac-lan/blob/main/docs/faq.md)。下面按当前任务查阅；历次构建、通关轮次和失败证据统一放在[历史验收索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/README.md)。
 
 ## 从这里开始
 
