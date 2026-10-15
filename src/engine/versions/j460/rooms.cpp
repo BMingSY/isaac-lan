@@ -11,6 +11,7 @@
 #include "core/laser_state.h"
 #include "runtime/room_map.h"
 #include "compat/bosses/encounters.h"
+#include "compat/bosses/rotgut.h"
 #include "compat/routes/mines.h"
 #include "compat/routes/curses.h"
 #include "compat/routes/home.h"
@@ -1118,6 +1119,31 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
         return;
     }
     const auto who = currentActor(player);
+    if (!runtime::replica() && !player && scopes.current() &&
+        scopes.current()->key.dimension == 0) {
+        const auto source = scopes.current();
+        const auto list = source->pointer + 0x1258;
+        bool transfer = compat::bosses::rotgutReturn(
+            source->key.index, index, at<int>(game(), 0x18328), direction, animation, dimension);
+        for (unsigned i = 0; !transfer && i < at<unsigned>(list, 12); ++i) {
+            const auto entity = at<Address>(at<Address>(list, 4), i * 4);
+            transfer = compat::bosses::rotgutSwallow(index, direction, animation, dimension,
+                                                     at<unsigned>(entity, 0x28),
+                                                     at<unsigned>(entity, 0x2c));
+        }
+        if (transfer) {
+            // Both swallowing AI and the stomach return run with the room
+            // roster, outside Player::Update. Other rooms keep running.
+            for (const auto head : participants) {
+                const auto found = location.find(head);
+                if (found != location.end() && found->second == source &&
+                    (connectedMask & (1u << slotOf(head))))
+                    if (!queue(head, index, dimension, -1, false, false, animation))
+                        runtime::abort("Cannot transfer Rotgut's players");
+            }
+            return;
+        }
+    }
     if (!runtime::replica() &&
         compat::items::deathCertificateTransfer(animation, at<int>(game(), 0x1830c), dimension)) {
         // Game::EnterDeathCertificate and its Game::Update return both pass a

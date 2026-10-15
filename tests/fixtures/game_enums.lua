@@ -13,6 +13,7 @@ return {
         ENTITY_PROJECTILE = 9,
         ENTITY_MOTHERS_SHADOW = 867,
         ENTITY_HORNFEL = 906,
+        ENTITY_HORNY_BOYS = 920,
         ENTITY_EFFECT = 1000,
     },
     EntityFlag = { FLAG_DONT_OVERWRITE = 2097152 },

@@ -1,0 +1,1150 @@
+{
+  "source": "J460 native bosses.xml, entities2.xml and special-room catalog (IDs only; no game assets)",
+  "arena": [
+    {
+      "key": "angel-271-0",
+      "name": "Uriel",
+      "room": "s.boss.1010",
+      "spawn": true,
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 271,
+      "variant": 0
+    },
+    {
+      "key": "angel-271-1",
+      "name": "Fallen Uriel",
+      "room": "s.boss.1010",
+      "spawn": true,
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 271,
+      "variant": 1
+    },
+    {
+      "key": "angel-272-0",
+      "name": "Gabriel",
+      "room": "s.boss.1010",
+      "spawn": true,
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 272,
+      "variant": 0
+    },
+    {
+      "key": "angel-272-1",
+      "name": "Fallen Gabriel",
+      "room": "s.boss.1010",
+      "spawn": true,
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 272,
+      "variant": 1
+    },
+    {
+      "key": "boss-1",
+      "name": "Monstro",
+      "boss_id": 1,
+      "room": "s.boss.1010",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 20,
+      "variant": 0
+    },
+    {
+      "key": "boss-10",
+      "name": "Pestilence",
+      "boss_id": 10,
+      "room": "s.boss.4020",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 64,
+      "variant": 0
+    },
+    {
+      "key": "boss-11",
+      "name": "War",
+      "boss_id": 11,
+      "room": "s.boss.4030",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 65,
+      "variant": 0
+    },
+    {
+      "key": "boss-12",
+      "name": "Death",
+      "boss_id": 12,
+      "room": "s.boss.4040",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 66,
+      "variant": 0
+    },
+    {
+      "key": "boss-13",
+      "name": "Duke of Flies",
+      "boss_id": 13,
+      "room": "s.boss.2010",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 67,
+      "variant": 0
+    },
+    {
+      "key": "boss-14",
+      "name": "Peep",
+      "boss_id": 14,
+      "room": "s.boss.2020",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 68,
+      "variant": 0
+    },
+    {
+      "key": "boss-15",
+      "name": "Loki",
+      "boss_id": 15,
+      "room": "s.boss.2030",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 69,
+      "variant": 0
+    },
+    {
+      "key": "boss-16",
+      "name": "Blastocyst",
+      "boss_id": 16,
+      "room": "s.boss.2040",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 74,
+      "variant": 0
+    },
+    {
+      "key": "boss-17",
+      "name": "Gemini",
+      "boss_id": 17,
+      "room": "s.boss.2050",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 79,
+      "variant": 0
+    },
+    {
+      "key": "boss-18",
+      "name": "Fistula",
+      "boss_id": 18,
+      "room": "s.boss.2060",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 71,
+      "variant": 0
+    },
+    {
+      "key": "boss-19",
+      "name": "Gish",
+      "boss_id": 19,
+      "room": "s.boss.1110",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 43,
+      "variant": 1
+    },
+    {
+      "key": "boss-2",
+      "name": "Larry Jr.",
+      "boss_id": 2,
+      "room": "s.boss.1020",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 19,
+      "variant": 0
+    },
+    {
+      "key": "boss-20",
+      "name": "Steven",
+      "boss_id": 20,
+      "room": "s.boss.2070",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 79,
+      "variant": 1
+    },
+    {
+      "key": "boss-21",
+      "name": "C.H.A.D.",
+      "boss_id": 21,
+      "room": "s.boss.1100",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 28,
+      "variant": 1
+    },
+    {
+      "key": "boss-22",
+      "name": "Headless Horseman",
+      "boss_id": 22,
+      "room": "s.boss.4050",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 82,
+      "variant": 0
+    },
+    {
+      "key": "boss-23",
+      "name": "The Fallen",
+      "boss_id": 23,
+      "room": "s.boss.3500",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 81,
+      "variant": 0
+    },
+    {
+      "key": "boss-26",
+      "name": "The Hollow",
+      "boss_id": 26,
+      "room": "s.boss.3260",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 19,
+      "variant": 1
+    },
+    {
+      "key": "boss-27",
+      "name": "The Carrion Queen",
+      "boss_id": 27,
+      "room": "s.boss.3270",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 28,
+      "variant": 2
+    },
+    {
+      "key": "boss-28",
+      "name": "Gurdy Jr.",
+      "boss_id": 28,
+      "room": "s.boss.3280",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 99,
+      "variant": 0
+    },
+    {
+      "key": "boss-29",
+      "name": "The Husk",
+      "boss_id": 29,
+      "room": "s.boss.3290",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 67,
+      "variant": 1
+    },
+    {
+      "key": "boss-3",
+      "name": "Chub",
+      "boss_id": 3,
+      "room": "s.boss.1030",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 28,
+      "variant": 0
+    },
+    {
+      "key": "boss-30",
+      "name": "The Bloat",
+      "boss_id": 30,
+      "room": "s.boss.3300",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 68,
+      "variant": 1
+    },
+    {
+      "key": "boss-31",
+      "name": "Lokii",
+      "boss_id": 31,
+      "room": "s.boss.3310",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 69,
+      "variant": 1
+    },
+    {
+      "key": "boss-32",
+      "name": "The Blighted Ovum",
+      "boss_id": 32,
+      "room": "s.boss.3320",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 79,
+      "variant": 2
+    },
+    {
+      "key": "boss-33",
+      "name": "Teratoma",
+      "boss_id": 33,
+      "room": "s.boss.3330",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 71,
+      "variant": 1
+    },
+    {
+      "key": "boss-34",
+      "name": "The Widow",
+      "boss_id": 34,
+      "room": "s.boss.3340",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 100,
+      "variant": 0
+    },
+    {
+      "key": "boss-35",
+      "name": "Mask of Infamy",
+      "boss_id": 35,
+      "room": "s.boss.3350",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 97,
+      "variant": 0
+    },
+    {
+      "key": "boss-36",
+      "name": "The Wretched",
+      "boss_id": 36,
+      "room": "s.boss.3360",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 100,
+      "variant": 1
+    },
+    {
+      "key": "boss-37",
+      "name": "Pin",
+      "boss_id": 37,
+      "room": "s.boss.3370",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 62,
+      "variant": 0
+    },
+    {
+      "key": "boss-38",
+      "name": "Conquest",
+      "boss_id": 38,
+      "room": "s.boss.4031",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 65,
+      "variant": 1
+    },
+    {
+      "key": "boss-4",
+      "name": "Gurdy",
+      "boss_id": 4,
+      "room": "s.boss.1040",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 36,
+      "variant": 0
+    },
+    {
+      "key": "boss-41",
+      "name": "Daddy Long Legs",
+      "boss_id": 41,
+      "room": "s.boss.3400",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 101,
+      "variant": 0
+    },
+    {
+      "key": "boss-42",
+      "name": "Triachnid",
+      "boss_id": 42,
+      "room": "s.boss.3410",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 101,
+      "variant": 1
+    },
+    {
+      "key": "boss-43",
+      "name": "The Haunt",
+      "boss_id": 43,
+      "room": "s.boss.3751",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 260,
+      "variant": 0
+    },
+    {
+      "key": "boss-44",
+      "name": "Dingle",
+      "boss_id": 44,
+      "room": "s.boss.3705",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 261,
+      "variant": 0
+    },
+    {
+      "key": "boss-45",
+      "name": "Mega Maw",
+      "boss_id": 45,
+      "room": "s.boss.3756",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 262,
+      "variant": 0
+    },
+    {
+      "key": "boss-46",
+      "name": "Mega Maw II",
+      "boss_id": 46,
+      "room": "s.boss.3800",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 263,
+      "variant": 0
+    },
+    {
+      "key": "boss-47",
+      "name": "Mega Fatty",
+      "boss_id": 47,
+      "room": "s.boss.3752",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 264,
+      "variant": 0
+    },
+    {
+      "key": "boss-48",
+      "name": "Mega Fatty II",
+      "boss_id": 48,
+      "room": "s.boss.3802",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 265,
+      "variant": 0
+    },
+    {
+      "key": "boss-49",
+      "name": "Mega Gurdy",
+      "boss_id": 49,
+      "room": "s.boss.5070",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 266,
+      "variant": 0
+    },
+    {
+      "key": "boss-5",
+      "name": "Monstro II",
+      "boss_id": 5,
+      "room": "s.boss.1050",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 43,
+      "variant": 0
+    },
+    {
+      "key": "boss-50",
+      "name": "Dark One",
+      "boss_id": 50,
+      "room": "s.boss.3755",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 267,
+      "variant": 0
+    },
+    {
+      "key": "boss-51",
+      "name": "Dark One II",
+      "boss_id": 51,
+      "room": "s.boss.5090",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 268,
+      "variant": 0
+    },
+    {
+      "key": "boss-52",
+      "name": "Polycephalus",
+      "boss_id": 52,
+      "room": "s.boss.3706",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 269,
+      "variant": 0
+    },
+    {
+      "key": "boss-53",
+      "name": "Mega Fred",
+      "boss_id": 53,
+      "room": "s.boss.3815",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 270,
+      "variant": 0
+    },
+    {
+      "key": "boss-56",
+      "name": "Gurglings",
+      "boss_id": 56,
+      "room": "s.boss.3708",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 237,
+      "variant": 1
+    },
+    {
+      "key": "boss-57",
+      "name": "The Stain",
+      "boss_id": 57,
+      "room": "s.boss.1106",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 401,
+      "variant": 0
+    },
+    {
+      "key": "boss-58",
+      "name": "Brownie",
+      "boss_id": 58,
+      "room": "s.boss.1097",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 402,
+      "variant": 0
+    },
+    {
+      "key": "boss-59",
+      "name": "The Forsaken",
+      "boss_id": 59,
+      "room": "s.boss.1079",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 403,
+      "variant": 0
+    },
+    {
+      "key": "boss-60",
+      "name": "Little Horn",
+      "boss_id": 60,
+      "room": "s.boss.1088",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 404,
+      "variant": 0
+    },
+    {
+      "key": "boss-61",
+      "name": "Rag Man",
+      "boss_id": 61,
+      "room": "s.boss.1019",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 405,
+      "variant": 0
+    },
+    {
+      "key": "boss-64",
+      "name": "Dangle",
+      "boss_id": 64,
+      "room": "s.boss.1117",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 261,
+      "variant": 1
+    },
+    {
+      "key": "boss-65",
+      "name": "Turdling",
+      "boss_id": 65,
+      "room": "s.boss.3717",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 237,
+      "variant": 2
+    },
+    {
+      "key": "boss-66",
+      "name": "The Frail",
+      "boss_id": 66,
+      "room": "s.boss.3384",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 62,
+      "variant": 2
+    },
+    {
+      "key": "boss-67",
+      "name": "Rag Mega",
+      "boss_id": 67,
+      "room": "s.boss.3398",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 409,
+      "variant": 0
+    },
+    {
+      "key": "boss-68",
+      "name": "Sisters Vis",
+      "boss_id": 68,
+      "room": "s.boss.3406",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 410,
+      "variant": 0
+    },
+    {
+      "key": "boss-69",
+      "name": "Big Horn",
+      "boss_id": 69,
+      "room": "s.boss.3394",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 411,
+      "variant": 0
+    },
+    {
+      "key": "boss-7",
+      "name": "Scolex",
+      "boss_id": 7,
+      "room": "s.boss.1070",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 62,
+      "variant": 1
+    },
+    {
+      "key": "boss-72",
+      "name": "The Matriarch",
+      "boss_id": 72,
+      "room": "s.boss.5152",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 413,
+      "variant": 0
+    },
+    {
+      "key": "boss-73",
+      "name": "The Pile",
+      "boss_id": 73,
+      "room": "s.boss.5240",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 269,
+      "variant": 1
+    },
+    {
+      "key": "boss-74",
+      "name": "Reap Creep",
+      "boss_id": 74,
+      "room": "s.boss.5250",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 900,
+      "variant": 0
+    },
+    {
+      "key": "boss-84",
+      "name": "Baby Plum",
+      "boss_id": 84,
+      "room": "s.boss.5160",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 908,
+      "variant": 0
+    },
+    {
+      "key": "boss-9",
+      "name": "Famine",
+      "boss_id": 9,
+      "room": "s.boss.4010",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 63,
+      "variant": 0
+    },
+    {
+      "key": "boss-94",
+      "name": "Bumbino",
+      "boss_id": 94,
+      "room": "s.boss.5270",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 916,
+      "variant": 0
+    },
+    {
+      "key": "boss-95",
+      "name": "Colostomia",
+      "boss_id": 95,
+      "room": "s.boss.5330",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 917,
+      "variant": 0
+    },
+    {
+      "key": "mini-46-0",
+      "name": "Sloth",
+      "room": "s.miniboss.2030",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 46,
+      "variant": 0
+    },
+    {
+      "key": "mini-46-1",
+      "name": "Super Sloth",
+      "room": "s.miniboss.2130",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 46,
+      "variant": 1
+    },
+    {
+      "key": "mini-46-2",
+      "name": "Ultra Pride",
+      "room": "s.miniboss.2260",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 46,
+      "variant": 2
+    },
+    {
+      "key": "mini-47-0",
+      "name": "Lust",
+      "room": "s.miniboss.2020",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 47,
+      "variant": 0
+    },
+    {
+      "key": "mini-47-1",
+      "name": "Super Lust",
+      "room": "s.miniboss.2120",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 47,
+      "variant": 1
+    },
+    {
+      "key": "mini-48-0",
+      "name": "Wrath",
+      "room": "s.miniboss.2000",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 48,
+      "variant": 0
+    },
+    {
+      "key": "mini-48-1",
+      "name": "Super Wrath",
+      "room": "s.miniboss.2100",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 48,
+      "variant": 1
+    },
+    {
+      "key": "mini-49-0",
+      "name": "Gluttony",
+      "room": "s.miniboss.2010",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 49,
+      "variant": 0
+    },
+    {
+      "key": "mini-49-1",
+      "name": "Super Gluttony",
+      "room": "s.miniboss.2110",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 49,
+      "variant": 1
+    },
+    {
+      "key": "mini-50-0",
+      "name": "Greed",
+      "room": "s.miniboss.2040",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 50,
+      "variant": 0
+    },
+    {
+      "key": "mini-50-1",
+      "name": "Super Greed",
+      "room": "s.miniboss.2140",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 50,
+      "variant": 1
+    },
+    {
+      "key": "mini-51-0",
+      "name": "Envy",
+      "room": "s.miniboss.2050",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 51,
+      "variant": 0
+    },
+    {
+      "key": "mini-51-1",
+      "name": "Super Envy",
+      "room": "s.miniboss.2150",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 51,
+      "variant": 1
+    },
+    {
+      "key": "mini-52-0",
+      "name": "Pride",
+      "room": "s.miniboss.2060",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 52,
+      "variant": 0
+    },
+    {
+      "key": "mini-52-1",
+      "name": "Super Pride",
+      "room": "s.miniboss.2160",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 52,
+      "variant": 1
+    },
+    {
+      "key": "mini-81-1",
+      "name": "Krampus",
+      "room": "s.miniboss.2300",
+      "stage": 1,
+      "stage_type": 0,
+      "entity": 81,
+      "variant": 1
+    },
+    {
+      "key": "boss-75",
+      "name": "Beelzeblub",
+      "boss_id": 75,
+      "room": "s.boss.5170",
+      "stage": 1,
+      "stage_type": 4,
+      "entity": 901,
+      "variant": 0
+    },
+    {
+      "key": "boss-76",
+      "name": "Wormwood",
+      "boss_id": 76,
+      "room": "s.boss.5180",
+      "stage": 1,
+      "stage_type": 4,
+      "entity": 62,
+      "variant": 3
+    },
+    {
+      "key": "boss-77",
+      "name": "The Rainmaker",
+      "boss_id": 77,
+      "room": "s.boss.5230",
+      "stage": 1,
+      "stage_type": 4,
+      "entity": 902,
+      "variant": 0
+    },
+    {
+      "key": "boss-91",
+      "name": "Min-Min",
+      "boss_id": 91,
+      "room": "s.boss.5280",
+      "stage": 1,
+      "stage_type": 5,
+      "entity": 913,
+      "variant": 0
+    },
+    {
+      "key": "boss-92",
+      "name": "Clog",
+      "boss_id": 92,
+      "room": "s.boss.5190",
+      "stage": 1,
+      "stage_type": 5,
+      "entity": 914,
+      "variant": 0
+    },
+    {
+      "key": "boss-97",
+      "name": "Turdlet",
+      "boss_id": 97,
+      "room": "s.boss.5320",
+      "stage": 1,
+      "stage_type": 5,
+      "entity": 918,
+      "variant": 0
+    },
+    {
+      "key": "boss-80",
+      "name": "Tuff Twins",
+      "boss_id": 80,
+      "room": "s.boss.5200",
+      "stage": 3,
+      "stage_type": 4,
+      "entity": 19,
+      "variant": 2,
+      "bombs": true
+    },
+    {
+      "key": "boss-82",
+      "name": "Hornfel",
+      "boss_id": 82,
+      "room": "s.boss.5220",
+      "stage": 3,
+      "stage_type": 4,
+      "entity": 906,
+      "variant": 0
+    },
+    {
+      "key": "boss-83",
+      "name": "Great Gideon",
+      "boss_id": 83,
+      "room": "s.boss.5210",
+      "stage": 3,
+      "stage_type": 4,
+      "entity": 907,
+      "variant": 0
+    },
+    {
+      "key": "boss-101",
+      "name": "Horny Boys",
+      "boss_id": 101,
+      "room": "s.boss.6010",
+      "stage": 3,
+      "stage_type": 5,
+      "entity": 920,
+      "variant": 0,
+      "bombs": true,
+      "held_bombs": 3,
+      "warmup": 1200
+    },
+    {
+      "key": "boss-102",
+      "name": "Clutch",
+      "boss_id": 102,
+      "room": "s.boss.6020",
+      "stage": 3,
+      "stage_type": 5,
+      "entity": 921,
+      "variant": 0
+    },
+    {
+      "key": "boss-93",
+      "name": "Singe",
+      "boss_id": 93,
+      "room": "s.boss.5260",
+      "stage": 3,
+      "stage_type": 5,
+      "entity": 915,
+      "variant": 0
+    },
+    {
+      "key": "boss-96",
+      "name": "The Shell",
+      "boss_id": 96,
+      "room": "s.boss.5310",
+      "stage": 3,
+      "stage_type": 5,
+      "entity": 19,
+      "variant": 3,
+      "bombs": true
+    },
+    {
+      "key": "boss-78",
+      "name": "The Visage",
+      "boss_id": 78,
+      "room": "s.boss.5300",
+      "stage": 5,
+      "stage_type": 4,
+      "entity": 903,
+      "variant": 0
+    },
+    {
+      "key": "boss-79",
+      "name": "The Siren",
+      "boss_id": 79,
+      "room": "s.boss.5370",
+      "stage": 5,
+      "stage_type": 4,
+      "entity": 904,
+      "variant": 0
+    },
+    {
+      "key": "boss-81",
+      "name": "The Heretic",
+      "boss_id": 81,
+      "room": "s.boss.5290",
+      "stage": 5,
+      "stage_type": 5,
+      "entity": 905,
+      "variant": 0
+    },
+    {
+      "key": "boss-6",
+      "name": "Mom",
+      "boss_id": 6,
+      "room": "s.boss.1060",
+      "stage": 6,
+      "stage_type": 0,
+      "entity": 45,
+      "variant": 0
+    },
+    {
+      "key": "boss-85",
+      "name": "The Scourge",
+      "boss_id": 85,
+      "room": "s.boss.5360",
+      "stage": 7,
+      "stage_type": 4,
+      "entity": 909,
+      "variant": 0
+    },
+    {
+      "key": "boss-86",
+      "name": "Chimera",
+      "boss_id": 86,
+      "room": "s.boss.5350",
+      "stage": 7,
+      "stage_type": 4,
+      "entity": 910,
+      "variant": 0
+    },
+    {
+      "key": "boss-87",
+      "name": "Rotgut",
+      "boss_id": 87,
+      "room": "s.boss.5340",
+      "stage": 7,
+      "stage_type": 4,
+      "entity": 911,
+      "variant": 0,
+      "hold_position": false,
+      "stomach": true
+    },
+    {
+      "key": "boss-25",
+      "name": "It Lives!",
+      "boss_id": 25,
+      "room": "s.boss.1090",
+      "stage": 8,
+      "stage_type": 0,
+      "entity": 78,
+      "variant": 1
+    },
+    {
+      "key": "boss-8",
+      "name": "Mom's Heart",
+      "boss_id": 8,
+      "room": "s.boss.1080",
+      "stage": 8,
+      "stage_type": 0,
+      "entity": 78,
+      "variant": 0
+    }
+  ],
+  "ending_routes": [
+    {
+      "boss_id": 24,
+      "name": "Satan",
+      "route": "lamb"
+    },
+    {
+      "boss_id": 39,
+      "name": "Isaac",
+      "route": "blue-baby"
+    },
+    {
+      "boss_id": 40,
+      "name": "???",
+      "route": "blue-baby"
+    },
+    {
+      "boss_id": 54,
+      "name": "The Lamb",
+      "route": "lamb"
+    },
+    {
+      "boss_id": 55,
+      "name": "Mega Satan",
+      "route": "mega-satan"
+    },
+    {
+      "boss_id": 62,
+      "name": "Ultra Greed",
+      "route": "greed"
+    },
+    {
+      "boss_id": 63,
+      "name": "Hush",
+      "route": "delirium"
+    },
+    {
+      "boss_id": 70,
+      "name": "Delirium",
+      "route": "delirium"
+    },
+    {
+      "boss_id": 71,
+      "name": "Ultra Greedier",
+      "route": "greedier"
+    },
+    {
+      "boss_id": 88,
+      "name": "Mother",
+      "route": "mother"
+    },
+    {
+      "boss_id": 89,
+      "name": "Mom (Mausoleum)",
+      "route": "mother"
+    },
+    {
+      "boss_id": 90,
+      "name": "Mom's Heart (Mausoleum)",
+      "route": "mother"
+    },
+    {
+      "boss_id": 99,
+      "name": "Dogma",
+      "route": "ascent"
+    },
+    {
+      "boss_id": 100,
+      "name": "The Beast",
+      "route": "ascent"
+    }
+  ],
+  "unavailable": [
+    {
+      "boss_id": 98,
+      "name": "Raglich",
+      "reason": "Unused vanilla entry without a playable encounter"
+    },
+    {
+      "boss_id": 103,
+      "name": "Cadavra",
+      "reason": "Unused vanilla entry without a playable encounter"
+    }
+  ]
+}

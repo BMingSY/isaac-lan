@@ -45,7 +45,7 @@ local entityCodec = assert(modules["sync/entity_codec"])(
     npcState,
     assert(modules["compat/bosses/visuals"])(
         assert(modules["compat/bosses/dogma"])(Vector, EntityType, EffectVariant),
-        assert(modules["compat/bosses/hornfel"])(native, EntityType, function()
+        assert(modules["compat/bosses/held_bombs"])(native, EntityType, function()
             return Isaac.GetRoomEntities()
         end)
     ),

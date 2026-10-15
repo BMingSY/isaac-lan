@@ -38,6 +38,7 @@ def main():
     parser.add_argument("--port", type=int, default=31120)
     parser.add_argument("--cases", nargs="+", choices=CASES, default=CASES)
     parser.add_argument("--client-input-hz", type=int, choices=(30, 60), default=60)
+    parser.add_argument("--record-view", action="store_true")
     args = parser.parse_args()
     labs = [args.host.resolve(), args.client.resolve()]
     if len(set(labs)) != 2 or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
@@ -110,6 +111,8 @@ end
         "--scenario-timeout",
         "420",
     ]
+    if args.record_view:
+        command += ["--native-record-view", "1", "--frame-ms", "500"]
     report = {
         "passed": False,
         "restored": False,

@@ -16,6 +16,40 @@ from run_lan_challenges import profile_fixture
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def build_scene_suite(output):
+    """Reuse the EID-loaded pair for steady scenes and repeated bag transitions."""
+    factories = []
+    for name in ("state_scene_performance.lua", "state_bag_transitions.lua"):
+        source = (ROOT / "tests" / name).read_text()
+        source = source.replace(
+            "eid = mod", "eid = mod; previousBagMode = eid.Config.DisplayBagOfCrafting"
+        ).replace(
+            "eid[name] = measure", "previousEidMethods[name] = eid[name]; eid[name] = measure"
+        )
+        if name == "state_bag_transitions.lua":
+            source = source.replace(
+                "lan-test-digest-scenes.csv", "lan-test-digest-bag-transitions.csv"
+            )
+        factories.append(
+            "function()\n"
+            "local previousSprite, previousPrediction = _IsaacLan.sprite_state, _IsaacLanPrediction.new\n"
+            "local previousEidMethods, previousBagMode = {}, nil\n"
+            + source
+            + "\nlocal cleaned = false\nreturn function()\n"
+            "if finished and not cleaned then\ncleaned = true\noutput:close()\n"
+            "_IsaacLan.sprite_state, _IsaacLanPrediction.new = previousSprite, previousPrediction\n"
+            "if eid then\nfor name, fn in pairs(previousEidMethods) do eid[name] = fn end\n"
+            "eid.Config.DisplayBagOfCrafting = previousBagMode end\n"
+            "native.test_gamepad(0) end\nreturn finished end end"
+        )
+    output.write_text(
+        "local fixtures = {\n"
+        + ",\n".join(factories)
+        + "\n}\n"
+        + (ROOT / "tests/special_suite_driver.lua").read_text()
+    )
+
+
 def measure_bag_transitions(path):
     rows = list(csv.DictReader(path.open()))
     report = []
@@ -86,7 +120,10 @@ def measure(path, water_only=False):
         else:
             assert all(float(r["current_y"]) != 0 for r in samples), "Missing native current"
             assert result["max_local_spray"] > 10, "Current spray disappeared"
-            assert result["max_other_entities"] < 80, "Current ambience still replicated"
+            # Other entities include ordinary rain, ripples and room decoration.
+            # Inspect the actual current spray's replica identity instead.
+            result["max_replicated_spray"] = max(int(r["replicated_spray"]) for r in samples)
+            assert result["max_replicated_spray"] == 0, "Current spray was replicated"
         report[phase] = result
     return report
 
@@ -103,6 +140,9 @@ def main():
     scenes = parser.add_mutually_exclusive_group()
     scenes.add_argument("--water-only", action="store_true", help="Only recheck current rooms")
     scenes.add_argument("--bag-transitions", action="store_true", help="Only check repeated raises")
+    scenes.add_argument(
+        "--include-bag-transitions", action="store_true", help="Check all scenes in one game pair"
+    )
     args = parser.parse_args()
     labs = [args.host.resolve(), args.client.resolve()]
     if len(set(labs)) != 2 or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
@@ -127,6 +167,8 @@ def main():
             )
         ).read_text()
     )
+    if args.include_bag_transitions:
+        build_scene_suite(script)
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
     protected = []
     for role, lab in zip(("host", "client"), labs):
@@ -149,7 +191,11 @@ def main():
         "--script",
         str(script),
         "--completion",
-        "LAN_NETWORK SCENES PASS scene observation",
+        (
+            "LAN_NETWORK PASS all selected character and side routes"
+            if args.include_bag_transitions
+            else "LAN_NETWORK SCENES PASS scene observation"
+        ),
         "--frontend",
         "--menu-start",
         "--virtual-input",
@@ -184,6 +230,10 @@ def main():
             if args.bag_transitions
             else measure(samples, args.water_only)
         )
+        if args.include_bag_transitions:
+            report["bag_transitions"] = measure_bag_transitions(
+                output / "engine/client/lan-test-digest-bag-transitions.csv"
+            )
         report["passed"] = True
     except Exception as error:
         report["error"] = str(error)

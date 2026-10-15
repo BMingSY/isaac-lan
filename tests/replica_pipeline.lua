@@ -3,6 +3,7 @@ local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local schema = dofile(root .. "/src/bridge/sync/world_schema.lua")
 local trace, shared, scope, fail, waiting, epoch, roomIndex = {}, {}, nil, nil, false, 1, 84
 local current, restoredCurrent = { 0, 1 }, nil
+local reclaimWave = false
 local function record(name)
     trace[#trace + 1] = name
     assert(fail ~= name, "failure at " .. name)
@@ -16,6 +17,9 @@ local level = {
     end,
 }
 local room = {
+    Update = function()
+        shared.greed = shared.greed + 1
+    end,
     SetClear = function()
         record("clear")
     end,
@@ -153,10 +157,13 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
             shared.deals = value
         end,
     },
-    entitiesApply = function()
+    entitiesApply = function(_, context)
         assert(scope == "room")
         assert(restoredCurrent[1] == current[1] and restoredCurrent[2] == current[2])
         record("entities")
+        if reclaimWave then
+            context.reclaim()
+        end
     end,
     gridsApply = function()
         record("grids")
@@ -265,7 +272,7 @@ local function packet(tick, nextEpoch)
     }))
 end
 local expected =
-    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,confirm,audio,events,items"
+    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,greed,confirm,audio,events,items"
 assert(
     not replica.apply(packet(1), 1, 0, true) and #trace == 0,
     "Initial view escaped the full update boundary"
@@ -316,6 +323,13 @@ epoch, roomIndex = 2, 84
 current = { 0, 0 }
 assert(not replica.apply(packet(4, 1), 4, 0))
 assert(replica.apply(packet(4), 4, 0))
+-- Reclaiming removed NPCs calls the native room update, which can advance
+-- Greed waves even during a between-update snapshot application.
+reclaimWave = true
+for _, half in ipairs({ false, true, true }) do
+    assert(replica.apply(packet(5), 5, 0, half))
+    assert(shared.greed == 2, "Native room cleanup advanced the authoritative Greed wave")
+end
 replica.reset()
 local resetTick, resetActors, resetMotion = replica.present("", 0)
 assert(resetTick == -1 and #resetActors == 0 and next(resetMotion) == nil)

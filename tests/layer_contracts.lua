@@ -4,9 +4,9 @@ local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
 local codec, schema = module("sync/codec"), module("sync/world_schema")
--- Schema 18 adds Hornfel/minecart links and rails after the existing room current.
+-- Schema 19 extends held bomb links to Horny Boys.
 local tuple = {
-    18,
+    19,
     42,
     80,
     6,
@@ -32,11 +32,11 @@ assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses ==
 assert(codec.encode(schema.pack(view)) == codec.encode(tuple))
 assert(not pcall(schema.unpack, tuple, 41))
 local malformed = { table.unpack(tuple) }
-for _, prior in ipairs({ 16, 17 }) do
+for _, prior in ipairs({ 16, 17, 18 }) do
     malformed[1] = prior
     assert(not pcall(schema.unpack, malformed, 42))
 end
-malformed[1], malformed[21] = 18, true
+malformed[1], malformed[21] = 19, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))

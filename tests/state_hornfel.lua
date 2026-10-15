@@ -262,7 +262,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                             railViews = railViews + 1
                         end
                         local first, second = string.unpack(">I4I4", v[24])
-                        local actualFirst, actualSecond = native.hornfel_bombs(boss:GetSprite())
+                        local actualFirst, actualSecond = native.boss_held_bombs(boss:GetSprite())
                         assert(
                             actualFirst == (first == 0 and -1 or assert(entities[first]).Index),
                             "First bomb differs"

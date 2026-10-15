@@ -33,6 +33,7 @@ local campaign = campaignRoute()
 local victoryLapTest, promptFrames = _IsaacLanTest.victoryLap, 0
 local victoryNoTest = _IsaacLanTest.victoryNo
 local visitedFloors = {}
+local visitedRouteFloors = {}
 local crawlspaceReturns, crawlspaceSource, crawlspaceBoss = 0, nil, nil
 local crawlspaceEntrance, crawlspaceExit, crawlspaceDirection, crawlspaceAction
 local returnContext = crawlspaceTest
@@ -79,8 +80,14 @@ local function mark(s, t)
     report("STEP " .. s .. " tick=" .. t)
 end
 local function observeFloor()
+    local level = Game():GetLevel()
+    local stage, kind = level:GetStage(), level:GetStageType()
+    local key = stage .. ":" .. kind
+    if not visitedRouteFloors[key] then
+        visitedRouteFloors[key] = true
+        report("ROUTE_FLOOR stage=" .. stage .. " type=" .. kind)
+    end
     if campaign then
-        local stage = Game():GetLevel():GetStage()
         if not visitedFloors[stage] then
             visitedFloors[stage] = true
             report("CAMPAIGN_FLOOR stage=" .. stage)
@@ -430,7 +437,8 @@ local function fight(t)
     return clear and seenBoss
 end
 local function prepare(stage, kind, t)
-    if stage ~= 1 then
+    if stage ~= 1 or kind >= 4 then
+        Game():SetStateFlag(GameStateFlag.STATE_SECRET_PATH, kind >= 4)
         Game():GetLevel():SetStage(stage, kind)
         Game():StartStageTransition(true, 0, Isaac.GetPlayer(assert(native.rooms_heads()["1"])))
     end
@@ -474,6 +482,15 @@ local function winCallback(_, gameOver)
     end
     assert(wins == caseIndex - 1, "Duplicate native win callback")
     assert(bosses[terminal[cases[caseIndex]]], "Win callback without the expected terminal Boss")
+    if cases[caseIndex] == "mother" then
+        for stage = 1, 6 do
+            assert(
+                visitedRouteFloors[stage .. ":4"] or visitedRouteFloors[stage .. ":5"],
+                "Mother route missed alternate floor " .. stage
+            )
+        end
+        report("ALT_ROUTE_PASS downpour=1,2 mines=3,4 mausoleum=5,6")
+    end
     if campaign then
         for _, stage in ipairs({ 1, 2, 3, 4, 5, 6, 7, 8, 10, 11 }) do
             assert(visitedFloors[stage], "Campaign missed generated floor " .. stage)
@@ -700,6 +717,7 @@ function _IsaacLanFrame()
             else
                 caseIndex = caseIndex + 1
                 campaign, visitedFloors = campaignRoute(), {}
+                visitedRouteFloors = {}
                 chestContacts = 0
                 chestMove = -1
                 lastChestInput = -1
@@ -804,10 +822,10 @@ local function advance(t)
             prepare(
                 (victoryLapTest or victoryNoTest) and 11
                     or name == "ascent" and (homeOnly and 13 or crawlspaceTest and 6 or 1)
-                    or name == "mother" and 2
+                    or name == "mother" and 1
                     or name == "delirium" and 8
                     or 6,
-                0,
+                name == "mother" and StageType.STAGETYPE_REPENTANCE or 0,
                 t
             )
         end

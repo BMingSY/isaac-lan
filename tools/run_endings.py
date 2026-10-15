@@ -5,15 +5,41 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 
-from build_ending_suite import build
+from build_ending_suite import CASES, build
 from run_network_engine import windows
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ("lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent")
+
+
+def route_evidence(text, name):
+    lines = [line for line in text.splitlines() if "ENDINGS " + name + " " in line]
+    floors = sorted(
+        {
+            (int(stage), int(kind))
+            for line in lines
+            for stage, kind in re.findall(r"ROUTE_FLOOR stage=(\d+) type=(\d+)", line)
+        }
+    )
+    missing = [
+        stage
+        for stage in range(1, 7)
+        if name == "mother" and not any((stage, kind) in floors for kind in (4, 5))
+    ]
+    return {
+        "win": any(
+            "NATIVE_WIN callback=MC_POST_GAME_END game_over=false" in line for line in lines
+        ),
+        "cleanup": any("PASS native ending and session cleanup" in line for line in lines),
+        "progress": any("LOCAL_PROGRESS_RESTORED" in line for line in lines),
+        "floors": floors,
+        "missing_alternate_floors": missing,
+        "checkpoints": lines,
+    }
 
 
 def idle(labs):
@@ -53,6 +79,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--mod", type=Path, action="append", default=[])
     parser.add_argument("--port", type=int, default=30120)
+    parser.add_argument("--first-floor", action="store_true")
+    parser.add_argument("--heap-check", action="store_true")
     parser.add_argument(
         "--route",
         choices=CASES,
@@ -70,7 +98,7 @@ def main():
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     script = output / "suite.lua"
-    build(script, args.route)
+    build(script, args.route, first_floor=args.first_floor)
     protected = []
     for role, lab in zip(("host", "client"), labs):
         for folder in ("profile", "game/data", "game/isaac-lan"):
@@ -111,6 +139,8 @@ def main():
         "--scenario-timeout",
         "1800",
     ]
+    if args.heap_check:
+        command.append("--heap-check")
     for mod in args.mod:
         command += ["--mod", str(mod.resolve())]
     report = {"passed": False, "restored": False, "routes": {}, "command": command}
@@ -122,21 +152,13 @@ def main():
             for role in ("host", "client"):
                 path = output / "engine" / role / "log.txt"
                 text = path.read_text(errors="replace") if path.exists() else ""
-                lines = [line for line in text.splitlines() if "ENDINGS " + name + " " in line]
-                peers[role] = {
-                    "win": any(
-                        "NATIVE_WIN callback=MC_POST_GAME_END game_over=false" in line
-                        for line in lines
-                    ),
-                    "cleanup": any(
-                        "PASS native ending and session cleanup" in line for line in lines
-                    ),
-                    "progress": any("LOCAL_PROGRESS_RESTORED" in line for line in lines),
-                    "checkpoints": lines,
-                }
+                peers[role] = route_evidence(text, name)
             report["routes"][name] = peers
         report["passed"] = result.returncode == 0 and all(
-            peer["win"] and peer["cleanup"] and peer["progress"]
+            peer["win"]
+            and peer["cleanup"]
+            and peer["progress"]
+            and not peer["missing_alternate_floors"]
             for peers in report["routes"].values()
             for peer in peers.values()
         )

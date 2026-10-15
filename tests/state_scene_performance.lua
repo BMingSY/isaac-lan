@@ -10,11 +10,12 @@ local flowFloors = {}
 local currentChecked = false
 local spraySeen, sprayExpired, oldestSpray, sprayReferences = false, false, 0, {}
 local eidCalls = 0
+local entityReports = {}
 local previousButtons, lastRender = 0, nil
 local changedLayers, seenPaths = 0, {}
 local output = assert(io.open("./lan-test-digest-scenes.csv", "w"))
 output:write(
-    "time_ms,tick,phase,interval_ms,entities,changed_layers,current_x,current_y,x,y,extra_finished,animation,local_spray,other_entities\n"
+    "time_ms,tick,phase,interval_ms,entities,changed_layers,current_x,current_y,x,y,extra_finished,animation,local_spray,other_entities,replicated_spray\n"
 )
 local function report(message)
     Isaac.DebugString("LAN_NETWORK SCENES " .. message)
@@ -153,7 +154,7 @@ function _IsaacLanFrame()
             eid.Config.DisplayBagOfCrafting = name == "bag_no_eid_render" and "never" or "hold"
         end
         local now = Isaac.GetTime()
-        local current, entities, sprayCount = Vector.Zero, {}, 0
+        local current, entities, sprayCount, replicatedSpray = Vector.Zero, {}, 0, 0
         local scoped = native.rooms_with_player(host and 0 or 1, function()
             current = Game():GetRoom():GetWaterCurrent()
             checkCurrent(current)
@@ -164,6 +165,9 @@ function _IsaacLanFrame()
                     and e.Variant == EffectVariant.WATER_SPLASH
                     and e.SubType == 1
                 then
+                    if e:GetData().__isaac_lan_replica then
+                        replicatedSpray = replicatedSpray + 1
+                    end
                     assert(
                         host or not e:GetData().__isaac_lan_replica,
                         "Current spray was replicated"
@@ -183,6 +187,31 @@ function _IsaacLanFrame()
             lastRender = nil
             return s
         end
+        if current:Length() > 0 and verified % 300 == 0 and not entityReports[verified] then
+            entityReports[verified] = true
+            local counts, summary = {}, {}
+            for _, e in ipairs(entities) do
+                local key = e.Type
+                    .. ":"
+                    .. e.Variant
+                    .. ":"
+                    .. e.SubType
+                    .. (e:GetData().__isaac_lan_replica and ":replica" or ":local")
+                counts[key] = (counts[key] or 0) + 1
+            end
+            for key, count in pairs(counts) do
+                summary[#summary + 1] = key .. "=" .. count
+            end
+            table.sort(summary)
+            report(
+                "ENTITIES phase="
+                    .. phase
+                    .. " tick="
+                    .. verified
+                    .. " "
+                    .. table.concat(summary, " ")
+            )
+        end
         for key, pointer in pairs(sprayReferences) do
             if not pointer.Ref then
                 sprayExpired, sprayReferences[key] = true, nil
@@ -191,7 +220,7 @@ function _IsaacLanFrame()
         local p = Isaac.GetPlayer(assert(native.rooms_heads()[host and "0" or "1"]))
         output:write(
             string.format(
-                "%.3f,%d,%s,%.3f,%d,%d,%.4f,%.4f,%.3f,%.3f,%s,%s,%d,%d\n",
+                "%.3f,%d,%s,%.3f,%d,%d,%.4f,%.4f,%.3f,%.3f,%s,%s,%d,%d,%d\n",
                 now,
                 verified,
                 phase,
@@ -205,7 +234,8 @@ function _IsaacLanFrame()
                 tostring(p:IsExtraAnimationFinished()),
                 p:GetSprite():GetAnimation(),
                 sprayCount,
-                #entities - sprayCount
+                #entities - sprayCount,
+                replicatedSpray
             )
         )
         lastRender, changedLayers = now, 0

@@ -574,7 +574,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end
         assert(Game():IsGreedMode() and Game().Difficulty == difficulty)
-        assert(Game():GetLevel().GreedModeWave == value[18], "Replica Greed wave HUD differs")
+        assert(
+            Game():GetLevel().GreedModeWave == value[18],
+            "Replica Greed wave HUD differs: expected="
+                .. tostring(value[18])
+                .. " actual="
+                .. tostring(Game():GetLevel().GreedModeWave)
+                .. " tick="
+                .. t
+                .. " between_updates="
+                .. tostring(betweenUpdates)
+        )
         expectedWave = value[18]
         snapshots = snapshots + 1
         local locations = value[7]

@@ -8,6 +8,8 @@ namespace isaac::compat::ids {
 namespace entity {
 inline constexpr unsigned bomb = 4;
 inline constexpr unsigned hornfel = 906;
+inline constexpr unsigned hornyBoys = 920;
+inline constexpr unsigned rotgut = 911;
 inline constexpr unsigned effect = 1000;
 inline constexpr unsigned isaac = 102;
 inline constexpr unsigned lamb = 273;
