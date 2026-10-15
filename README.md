@@ -71,6 +71,7 @@ sample_interval_ms = 1000
 
 [架构与开发文档](https://github.com/BMingSY/isaac-lan/tree/main/docs)
 
+[第三方 API](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md)
 
 ## 源码构建
 

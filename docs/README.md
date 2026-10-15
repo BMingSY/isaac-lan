@@ -22,6 +22,9 @@
 | 挑战定义、终点、循环观察与扩展接口 | [联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md) |
 | 全队开门概率及原生查询 ABI | [共享恶魔／天使房概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md) |
 | 里 Lost 的原版生成规则与反汇编依据 | [生成特性参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/tainted-lost-item-generation.md) |
+| 角色额外共享效果 | [角色兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md) |
+| 道具与效果的额外共享规则 | [道具与效果兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md) |
+| Stats+、GoodTrip、EID 清单与兼容后的效果 | [第三方 Mod 兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md) |
 | 第三方本机视图、生命周期和主机动作 | [Mod 接入 API v1](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md) |
 | 托管命令和支持范围 | [LANBOT 使用说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/lanbot.md) |
 | 托管观察、规划、战斗与输入契约 | [LANBOT 实现与约束](https://github.com/BMingSY/isaac-lan/blob/main/docs/lanbot-design.md) |
