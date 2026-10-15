@@ -660,7 +660,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             return true
         end,
         present,
-        function(epoch, stage, stageType, animation, same, rewind, restart, cinematic)
+        function(epoch, stage, stageType, animation, same, rewind, restart, cinematic, ...)
             local length = #rewind
             if restart == 1 then
                 restartEvents = restartEvents + 1
@@ -704,7 +704,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     .. " restart="
                     .. restart
             )
-            return beginFloor(epoch, stage, stageType, animation, same, rewind, restart, cinematic)
+            return beginFloor(
+                epoch,
+                stage,
+                stageType,
+                animation,
+                same,
+                rewind,
+                restart,
+                cinematic,
+                ...
+            )
         end
     )
 end

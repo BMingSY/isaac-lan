@@ -542,13 +542,14 @@ void updateReplica(void* game) {
                         transition->rewind.size());
         lua.pushInteger(state, transition->restart);
         lua.pushInteger(state, transition->cinematic);
+        lua.pushInteger(state, transition->sourceRoom);
         playingCinematic = transition->cinematic != 0;
         cinematicReady = false;
         if (playingCinematic) {
             input::reset();
             pendingHalf = false;
         }
-        if (!call(stageRef, 8, 0, top))
+        if (!call(stageRef, 9, 0, top))
             return;
         rooms::finishFrame();
         if (logger)
@@ -1632,6 +1633,7 @@ void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) 
     std::memcpy(value.stateFlags.data(), reinterpret_cast<void*>(game + 0x26548),
                 sizeof(value.stateFlags));
     value.cinematic = cinematic;
+    value.sourceRoom = rooms::floorSourceRoom();
     if (!session->beginStage(value)) {
         fail("Native floor transaction rejected");
         return;

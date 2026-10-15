@@ -181,6 +181,7 @@ def main():
         name in cases
         for name in (
             "endings",
+            "floor-sources",
             "campaign",
             "victory-lap",
             "victory-no",

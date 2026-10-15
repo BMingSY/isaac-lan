@@ -46,4 +46,5 @@ bool viewReady();
 bool virtualized();
 bool withCheckpointRoster(const std::function<void()>& capture);
 bool takeFloorChange();
+int floorSourceRoom();
 } // namespace isaac::rooms

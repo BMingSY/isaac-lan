@@ -11,7 +11,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 28;
+constexpr std::uint16_t protocolVersion = 29;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::size_t maxMessageSize = 4096;
@@ -184,6 +184,8 @@ struct Stage {
     std::array<std::uint32_t, 2> stateFlags{};
     // Native Dogma interlude changes to the Beast arena on the same floor.
     std::uint8_t cinematic = 0;
+    // Authoritative departure context for native next-floor selection.
+    std::int16_t sourceRoom = 0;
     bool operator==(const Stage&) const = default;
 };
 // A local Mod's native room command, not a client-authored world snapshot.
