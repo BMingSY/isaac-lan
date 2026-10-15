@@ -53,10 +53,15 @@ return function(native, actorsPresentation, view)
         -- Native room and Mod presentation updates run after receiving a packet.
         -- Reassert authoritative actor poses at the render boundary so local
         -- callbacks cannot replace a body or start an unrelated dance.
+        local extraAnimationMovement = {}
         for _, actor in ipairs(actorVisuals) do
             local p = view.player(actor[1])
             if p and p.ControllerIndex == actor[2] then
                 actorsPresentation.apply(p, actor)
+                if view.extraAnimationAllowsMovement then
+                    extraAnimationMovement[actor[3][1]] =
+                        view.extraAnimationAllowsMovement(p, actor)
+                end
             end
         end
         local now = view.clock() / 1000
@@ -90,13 +95,7 @@ return function(native, actorsPresentation, view)
                     local p = e:ToPlayer()
                     local controls = p.ControlsEnabled
                         and p:AreControlsEnabled()
-                        and (
-                            p:IsExtraAnimationFinished()
-                            or (
-                                view.extraAnimationAllowsMovement
-                                and view.extraAnimationAllowsMovement(p)
-                            )
-                        )
+                        and (p:IsExtraAnimationFinished() or extraAnimationMovement[identifier])
                     if not controls then
                         m.prediction:reset(m.target, sequence - 1)
                         m.doorway = nil

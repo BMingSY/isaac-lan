@@ -31,6 +31,7 @@ local function environment()
             activeSlot = 2,
             ghost = false,
             bag = empty,
+            itemState = 0,
             reads = 0,
         }
         function p:GetPlayerType()
@@ -41,6 +42,9 @@ local function environment()
         end
         function p:GetActiveItem(slot)
             return slot == self.activeSlot and 710 or 0
+        end
+        function p:GetItemState()
+            return self.itemState
         end
         function p:GetSprite()
             return self
@@ -317,15 +321,18 @@ local first = payload({ 1, 8, 12, 15, 22, 29, 2, 3 }, 25)
 local second = payload({ 12, 1, 22, 29, 0, 0, 0, 0 }, 0)
 host.players[0].bag, host.players[1].bag = first, second
 for tick = 1, 5 do
+    host.players[0].itemState = tick % 2 == 0 and 710 or 0
+    host.players[1].itemState = tick % 2 == 0 and 0 or 710
     -- Offscreen actors must carry the same private state as rendered actors.
     host.positions["1"].index = tick % 2 == 0 and 85 or 84
     for slot = 0, 1 do
         local bytes = host.state.capture(slot, tick)
         local view = host.state.decode(bytes)
         assert(
-            view[1] == 16 and view[9][1][8] == first and view[9][2][8] == second,
+            view[1] == 17 and view[9][1][8][1] == first and view[9][2][8][1] == second,
             "World snapshot omitted or mixed the two players' crafting bags"
         )
+        assert(view[9][1][8][2] == (tick % 2 == 0) and view[9][2][8][2] == (tick % 2 ~= 0))
         assert(guest.state.apply(bytes, tick, 0))
         assert(
             guest.players[0].bag == first and guest.players[1].bag == second,
@@ -372,6 +379,7 @@ host.players[1].ghost = true
 assert(adapter.capture(host.players[1]) == false)
 adapter.apply(host.players[1], false)
 assert(not pcall(adapter.apply, host.players[0], nil), "Missing schema field was accepted")
+assert(not pcall(adapter.apply, host.players[0], empty), "Old bag schema was accepted")
 -- The native fixture must select the same two characters in lobby and start settings.
 for _, isHost in ipairs({ true, false }) do
     local commands, status, input = {}, { phase = 0, verified = 0 }, nil

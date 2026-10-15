@@ -128,7 +128,7 @@ local bag = dofile(root .. "/src/bridge/compat/items/crafting_bag.lua")({}, {
 })
 local animation, heldItem, extraFinished, enabled, ghost =
     "PickupWalkRight", 710, false, true, false
-local player = { ControlsEnabled = true, MoveSpeed = 1, Size = 10 }
+local player = { ControlsEnabled = true, MoveSpeed = 1, Size = 10, ControllerIndex = 2 }
 function player:ToPlayer()
     return self
 end
@@ -163,6 +163,8 @@ local room = {
         return 0
     end,
 }
+local actor =
+    { 1, 2, { 1 }, {}, { { "body", "LiftItem" } }, false, false, { string.rep("\0", 12), true } }
 local localMotion = assert(
     loadfile(
         root .. "/src/bridge/presentation/motion.lua",
@@ -174,9 +176,14 @@ local localMotion = assert(
         fn()
         return true
     end,
-}, {}, {
+}, { apply = function() end }, {
     vector = Vector,
-    extraAnimationAllowsMovement = bag.allowsMovement,
+    extraAnimationAllowsMovement = function(p, value)
+        return bag.allowsMovement(p, value[8], value[5][1] and value[5][1][2])
+    end,
+    player = function()
+        return player
+    end,
     clock = function()
         return now * 1000
     end,
@@ -199,7 +206,7 @@ local function localRender(sequence)
     localMotion.present(
         string.pack(">I2I2I2I2", 0, 65535, 0, 0),
         sequence,
-        {},
+        { actor },
         { [1] = localState },
         function()
             return player
@@ -214,17 +221,45 @@ for sequence = 1, 30 do
     assert(position > previous, "Held bag froze local motion between snapshots")
     previous = position
 end
+-- The item-state bit arrives with the same snapshot as the extra-animation
+-- flag, while the body can still report Walk for several renders. Exercise
+-- repeated raise/lower transitions with continuous movement, not just holding.
+for sequence = 31, 90 do
+    local phase = (sequence - 31) % 20
+    animation = phase < 3 and "WalkRight" or phase < 12 and "PickupWalkRight" or "WalkRight"
+    actor[5][1][2] = phase < 8 and "LiftItem" or phase < 18 and "HideItem" or ""
+    actor[8][2], extraFinished = phase < 8, phase >= 18
+    local position = localRender(sequence)
+    assert(position > previous, "Raising/lowering the bag reset movement prediction")
+    previous = position
+end
 -- The exception never enables controls during crafting, pickup, cooldown,
 -- ghost conversion, or after removing the bag. Ordinary walking still works.
-for i, blocked in ipairs({ "craft", "pickup", "cooldown", "disabled", "removed", "ghost" }) do
+extraFinished = false
+for i, blocked in ipairs({
+    "craft",
+    "pickup",
+    "cooldown",
+    "disabled",
+    "removed",
+    "ghost",
+    "unrelated",
+    "absent",
+    "stale_pose",
+}) do
     animation = blocked == "craft" and "UseItem"
         or blocked == "pickup" and "Pickup"
+        or (blocked == "unrelated" or blocked == "absent") and "WalkRight"
         or "PickupWalkRight"
+    actor[8] = blocked ~= "absent" and { string.rep("\0", 12), blocked ~= "unrelated" }
+    actor[5][1][2] = (blocked == "craft" or blocked == "stale_pose") and "UseItem"
+        or blocked == "pickup" and "Pickup"
+        or "LiftItem"
     enabled, player.ControlsEnabled = blocked ~= "cooldown", blocked ~= "disabled"
     heldItem, ghost = blocked == "removed" and 0 or 710, blocked == "ghost"
-    close(localRender(30 + i), localState.target.X, blocked .. " incorrectly predicted movement")
+    close(localRender(90 + i), localState.target.X, blocked .. " incorrectly predicted movement")
 end
 extraFinished, enabled, player.ControlsEnabled, ghost = true, true, true, false
 animation = "WalkRight"
-assert(localRender(40) > localState.target.X, "Ordinary movement did not resume")
-print("PASS continuous motion, held crafting bag, control locks, gaps, pause and reset")
+assert(localRender(100) > localState.target.X, "Ordinary movement did not resume")
+print("PASS continuous motion, raising/holding crafting bag, control locks, gaps, pause and reset")

@@ -205,9 +205,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 "AUTHORITY tick="
                     .. t
                     .. " materials="
-                    .. count(value[9][1][8] or string.rep("\0", 12))
+                    .. count(value[9][1][8] and value[9][1][8][1] or string.rep("\0", 12))
                     .. ","
-                    .. count(value[9][2][8] or string.rep("\0", 12))
+                    .. count(value[9][2][8] and value[9][2][8][1] or string.rep("\0", 12))
             )
         end
         return bytes
@@ -221,10 +221,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         for _, a in ipairs(value[9]) do
             local p = Isaac.GetPlayer(a[1])
             assert(
-                contents(p) == (a[8] or string.rep("\0", 12)),
+                contents(p) == (a[8] and a[8][1] or string.rep("\0", 12)),
                 "Replica native bag differs from authoritative actor state"
             )
-            local size = a[8] and count(a[8]) or 0
+            local size = a[8] and count(a[8][1]) or 0
             filled = filled + (size > 0 and 1 or 0)
             if t >= 470 and t < 530 and a[2] == 1 and not a[8] then
                 removedSeen = true

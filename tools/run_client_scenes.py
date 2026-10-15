@@ -16,6 +16,41 @@ from run_lan_challenges import profile_fixture
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def measure_bag_transitions(path):
+    rows = list(csv.DictReader(path.open()))
+    report = []
+    for cycle in range(8):
+        for action, offset in (("raise", 6), ("lower", 42)):
+            start = 216 + cycle * 72 + offset
+            samples = [r for r in rows if start <= int(r["tick"]) < start + 12]
+            assert len(samples) >= 15, f"Missing bag transition {cycle}: {action}"
+            assert any((r["holding"] == "true") == (action == "raise") for r in samples)
+            intervals = sorted(float(r["interval_ms"]) for r in samples)
+            result = {
+                "cycle": cycle,
+                "action": action,
+                "moving": cycle < 6,
+                "eid": samples[-1]["phase"],
+                "samples": len(samples),
+                "prediction_resets": sum(int(r["prediction_resets"]) for r in samples),
+                "max_interval_ms": max(intervals),
+                "p95_interval_ms": intervals[int(len(intervals) * 0.95)],
+            }
+            assert result["prediction_resets"] == 0, result
+            assert result["max_interval_ms"] < 50, result
+            if cycle < 6:
+                direction = 1 if action == "raise" else -1
+                steps = [
+                    direction * (float(b["x"]) - float(a["x"]))
+                    for a, b in zip(samples, samples[1:])
+                ]
+                result["frozen_frames"] = sum(abs(step) < 0.001 for step in steps)
+                result["min_forward_step"] = min(steps)
+                assert min(steps) >= -0.01 and result["frozen_frames"] == 0, result
+            report.append(result)
+    return report
+
+
 def measure(path, water_only=False):
     rows = list(csv.DictReader(path.open()))
     report = {}
@@ -65,7 +100,9 @@ def main():
     parser.add_argument("--eid", type=Path, required=True)
     parser.add_argument("--port", type=int, default=31220)
     parser.add_argument("--record-view", action="store_true")
-    parser.add_argument("--water-only", action="store_true", help="Only recheck current rooms")
+    scenes = parser.add_mutually_exclusive_group()
+    scenes.add_argument("--water-only", action="store_true", help="Only recheck current rooms")
+    scenes.add_argument("--bag-transitions", action="store_true", help="Only check repeated raises")
     args = parser.parse_args()
     labs = [args.host.resolve(), args.client.resolve()]
     if len(set(labs)) != 2 or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
@@ -80,7 +117,15 @@ def main():
     script = output / "scenario.lua"
     script.write_text(
         ("_IsaacLanTest.waterOnly = true\n" if args.water_only else "")
-        + (ROOT / "tests/state_scene_performance.lua").read_text()
+        + (
+            ROOT
+            / "tests"
+            / (
+                "state_bag_transitions.lua"
+                if args.bag_transitions
+                else "state_scene_performance.lua"
+            )
+        ).read_text()
     )
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
     protected = []
@@ -133,8 +178,11 @@ def main():
             ).returncode
         engine = json.loads((output / "engine/result.json").read_text())
         assert engine["pass"], engine.get("error", "Native scene observation failed")
-        report["scenes"] = measure(
-            output / "engine/client/lan-test-digest-scenes.csv", args.water_only
+        samples = output / "engine/client/lan-test-digest-scenes.csv"
+        report["scenes"] = (
+            measure_bag_transitions(samples)
+            if args.bag_transitions
+            else measure(samples, args.water_only)
         )
         report["passed"] = True
     except Exception as error:

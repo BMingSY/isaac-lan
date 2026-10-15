@@ -34,6 +34,9 @@ local function environment(difficulty)
         GetGridSize = function()
             return 0
         end,
+        GetWaterCurrent = function()
+            return { X = 0, Y = 0 }
+        end,
     }
     local game = {
         IsGreedMode = function()
@@ -97,6 +100,10 @@ local function environment(difficulty)
         end,
         room_layout = function()
             return "layout"
+        end,
+        room_water_current = function(x, y)
+            assert(x == 0 and y == 0)
+            return true
         end,
         music_state = function()
             return "music"

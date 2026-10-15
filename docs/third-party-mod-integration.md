@@ -2,7 +2,7 @@
 
 Isaac LAN 提供本机视图、生命周期通知、主机动作和自动兼容注册。实现位于 [`src/bridge/api/`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/api/public.lua) 与 [`src/bridge/compat/mods/`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/mods/registry.lua)，随 DLL 嵌入，在第三方 Mod 初始化前发布全局 `IsaacLAN`。
 
-当前公开能力包括本机视图、生命周期、主机动作和自动适配器注册。补充状态、实体元数据、存档扩展和必需内容声明尚未提供；不会自动复制 `GetData()`、Mod 源码、配置或资源。当前传输协议为 28，世界视图 schema 为 16，各端需要同一扩展构建；公开 API 版本仍为 1，与传输和视图版本分别维护，见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)。
+当前公开能力包括本机视图、生命周期、主机动作和自动适配器注册。补充状态、实体元数据、存档扩展和必需内容声明尚未提供；不会自动复制 `GetData()`、Mod 源码、配置或资源。当前传输协议为 28，世界视图 schema 为 17，各端需要同一扩展构建；公开 API 版本仍为 1，与传输和视图版本分别维护，见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)。
 
 本文是接入方契约；当前 Stats+、GoodTrip、EID 清单与兼容后的效果见[第三方 Mod 兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。原版[角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)和[道具／效果](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)另有清单。
 
