@@ -126,6 +126,7 @@ python3 tools/validate_replica.py --cases gameplay normal \
 | `gameplay` | 连续运行兼容的输入、复活、蓄力、沙漏、门与镜头场景 |
 | `normal`／`tools/manual_gameplay.py run` | 从菜单和正常手柄输入验证走门、战斗、拾取、暂停与换层 |
 | `local-movement input-response motion mirror-camera` | 输入相位、持续移动、惯性、网格和镜像；首帧响应不能单独代表手感 |
+| `tools/run_response_acceptance.py` | 一对隔离进程、一条连接集中验证 60 Hz 输入、半帧应用、连续移动、过门、暂停恢复、主动边沿、蓄力与镜头；中途从零附加延迟切换到双向各 10 ms |
 | `item-presentation` | 同房、分房及同时使用时的道具／卡牌／药丸演出归属与去重 |
 | `tools/run_special_routes.py --case ...` | 特殊角色、路线、共享状态及通关夹具；可串联多个 `--case` |
 

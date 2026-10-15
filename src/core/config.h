@@ -1,5 +1,6 @@
 #pragma once
 #include "core/log_record.h"
+#include <algorithm>
 #include <charconv>
 #include <string>
 #include <string_view>
@@ -7,6 +8,7 @@
 
 namespace isaac::configuration {
 struct Settings {
+    unsigned inputHz = 60;
     logging::Level logLevel = logging::Level::info;
     bool performance = false;
     unsigned sampleIntervalMs = 1000;
@@ -14,12 +16,26 @@ struct Settings {
 struct Parsed {
     Settings settings;
     std::vector<std::string> warnings;
+    std::vector<std::string> keys{};
 };
 inline constexpr std::string_view defaults =
-    "; Isaac LAN: changes take effect after restarting the game.\n"
-    "; Logs are separated by launch and run, and are kept until manually removed.\n"
-    "[logging]\nlevel = INFO\n\n"
-    "[diagnostics]\nperformance = false\nsample_interval_ms = 1000\n";
+    "; Isaac LAN：修改后重启游戏生效。\n"
+    "[network]\n"
+    "; 客机输入发送频率：30 / 60，默认 60；各端可以不同。\n"
+    "; 30 减少输入流量，但可能多等一个渲染帧；主机模拟和本机显示频率不变。\n"
+    "input_hz = 60\n\n"
+    "[logging]\n"
+    "; 日志与原版 log.txt 位于同一游戏数据目录，按启动和局次分目录保存。\n"
+    "; startup.log 记录启动和退出，runtime.log 记录局内事件。\n"
+    "; 历史日志可手动清理。\n"
+    "; 日志等级：DEBUG / INFO / WARN / ERROR，默认 INFO。\n"
+    "level = INFO\n\n"
+    "[diagnostics]\n"
+    "; 性能统计：true / false，默认 false；排查卡顿时可开启。\n"
+    "; 开启后在同一日志目录生成 performance.jsonl。\n"
+    "performance = false\n"
+    "; 性能统计采样间隔（毫秒）：100–60000，默认 1000。\n"
+    "sample_interval_ms = 1000\n";
 inline std::string_view trim(std::string_view s) {
     const auto begin = s.find_first_not_of(" \t\r");
     return begin == s.npos ? std::string_view{}
@@ -30,7 +46,7 @@ inline Parsed parse(std::string_view source) {
     if (source.starts_with("\xef\xbb\xbf"))
         source.remove_prefix(3);
     std::string section;
-    std::vector<std::string> seen;
+    auto& seen = result.keys;
     unsigned line = 0;
     while (!source.empty()) {
         ++line;
@@ -61,7 +77,12 @@ inline Parsed parse(std::string_view source) {
             continue;
         }
         seen.push_back(key);
-        if (key == "logging.level") {
+        if (key == "network.input_hz") {
+            if (value == "30" || value == "60")
+                result.settings.inputHz = value == "30" ? 30 : 60;
+            else
+                warn("invalid_value=" + key);
+        } else if (key == "logging.level") {
             if (value == "DEBUG")
                 result.settings.logLevel = logging::Level::debug;
             else if (value == "INFO")
@@ -90,5 +111,35 @@ inline Parsed parse(std::string_view source) {
             warn("unknown_key=" + key);
     }
     return result;
+}
+// Append documented defaults only for absent keys. Existing values, including
+// invalid ones, remain the user's text; parse() supplies their runtime fallback.
+inline std::string missingDefaults(const Parsed& parsed) {
+    std::string additions, section, emittedSection, comments;
+    auto remaining = defaults;
+    while (!remaining.empty()) {
+        const auto end = remaining.find('\n');
+        const auto line = trim(remaining.substr(0, end));
+        remaining = end == remaining.npos ? std::string_view{} : remaining.substr(end + 1);
+        if (line.empty()) {
+            comments.clear();
+        } else if (line.front() == '[' && line.back() == ']') {
+            section = line.substr(1, line.size() - 2);
+            comments.clear();
+        } else if (line.front() == ';' || line.front() == '#') {
+            comments += std::string(line) + "\n";
+        } else if (const auto equal = line.find('='); equal != line.npos) {
+            const auto key = section + "." + std::string(trim(line.substr(0, equal)));
+            if (std::find(parsed.keys.begin(), parsed.keys.end(), key) == parsed.keys.end()) {
+                if (emittedSection != section) {
+                    additions += "\n[" + section + "]\n";
+                    emittedSection = section;
+                }
+                additions += comments + std::string(line) + "\n";
+            }
+            comments.clear();
+        }
+    }
+    return additions;
 }
 } // namespace isaac::configuration

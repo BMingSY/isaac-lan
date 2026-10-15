@@ -270,6 +270,46 @@ void inputsAndStates(unsigned n) {
                 "arrive once; shared finish\n",
                 n);
 }
+void renderInputs() {
+    Group g(3);
+    g.ready();
+    for (unsigned tick = 0; tick < 60; ++tick) {
+        InputFrame input;
+        input.values[tick % 2] = 65535;
+        input.triggered = tick % 3 == 0 ? 1u << 8 : 0;
+        require(g.peers[1]->submit(tick * 2, input), "Render press rejected");
+        require(g.peers[1]->submit(tick * 2 + 1, {}), "Render release rejected");
+        require(g.peers[2]->submit(tick, input), "30 Hz guest input rejected");
+        until([&] {
+            g.poll();
+            return g.peers[0]->inputSequences()[1] == tick * 2 + 1 &&
+                   g.peers[0]->inputSequences()[2] == tick;
+        });
+        const auto frame = g.step(tick);
+        require(frame.tick == tick, "Render input accelerated simulation");
+        require(frame.inputs[1].values == InputFrame{}.values &&
+                    frame.inputs[1].triggered == input.triggered,
+                "Two render samples lost a release or replayed a button edge");
+        require(frame.inputs[2] == input, "Mixed input rates changed the slower guest's input");
+        require(!g.peers[0]->take(), "A render sample advanced simulation twice");
+        g.publish(tick);
+        for (unsigned slot = 1; slot < 3; ++slot) {
+            std::optional<WorldState> state;
+            until([&] {
+                g.poll();
+                state = g.peers[slot]->takeState();
+                return state.has_value();
+            });
+            require(state->tick == tick && state->inputSequences[1] == tick * 2 + 1 &&
+                        state->inputSequences[2] == tick,
+                    "Prediction confirmation confused mixed input rates with simulation ticks");
+            g.peers[slot]->applied(tick);
+        }
+    }
+    std::puts(
+        "PASS mixed 30/60 Hz guest samples coalesce into 30 Hz host steps with one-shot edges and "
+        "acknowledgements");
+}
 void floorRejoin() {
     Group g(2);
     g.ready();
@@ -1716,6 +1756,7 @@ int main(int argc, char** argv) {
                                   {"world-deltas", worldDeltas},
                                   {"delta-floor-boundary", deltaFloorBoundary},
                                   {"compression-limits", compressionLimits},
+                                  {"render-inputs", renderInputs},
                                   {"inputs-2", [] { inputsAndStates(2); }},
                                   {"inputs-3", [] { inputsAndStates(3); }},
                                   {"inputs-4", [] { inputsAndStates(4); }},

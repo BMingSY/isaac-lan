@@ -759,8 +759,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report("CHECK 20 offscreen pickup icons")
         end
         return bytes
-    end, function(bytes, t, ack)
-        if restore(bytes, t, ack) == false then
+    end, function(bytes, t, ack, betweenUpdates)
+        if restore(bytes, t, ack, betweenUpdates) == false then
             return false
         end
         local value = _IsaacLanState.decode(bytes)

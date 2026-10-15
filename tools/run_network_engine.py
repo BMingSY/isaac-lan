@@ -139,6 +139,12 @@ def main():
         "--debug-logs", action="store_true", help="Enable DEBUG in the owned lab config"
     )
     parser.add_argument(
+        "--client-input-hz",
+        type=int,
+        choices=(30, 60),
+        help="Set guest input frequency with a 60 Hz host setting (use a protected runner)",
+    )
+    parser.add_argument(
         "--installed",
         action="store_true",
         help="Install/uninstall the frozen package in the marked lab; retain profile isolation",
@@ -206,7 +212,9 @@ def main():
         help="Added one-way loopback delay; scenario reads lan-test-menu-port.txt",
     )
     parser.add_argument(
-        "--relay-control", type=Path, help="Owned JSON control file: downstream_bytes_per_second"
+        "--relay-control",
+        type=Path,
+        help="Owned JSON control file: downstream_bytes_per_second, optional delay_ms",
     )
     parser.add_argument(
         "--exercise-official",
@@ -641,7 +649,7 @@ def main():
                 *(["--automatic"] if args.automatic or args.installed else []),
                 *(["--no-luadebug"] if args.no_luadebug else []),
             ]
-            if args.performance or args.debug_logs:
+            if args.performance or args.debug_logs or args.client_input_hz:
                 config = lab / "game/isaac-lan/config.ini"
                 config.parent.mkdir(parents=True, exist_ok=True)
                 config.write_text(
@@ -650,6 +658,11 @@ def main():
                     + "\n[diagnostics]\nperformance="
                     + str(args.performance).lower()
                     + "\nsample_interval_ms=1000\n"
+                    + (
+                        f"\n[network]\ninput_hz={60 if role == 'host' else args.client_input_hz}\n"
+                        if args.client_input_hz
+                        else ""
+                    )
                 )
             if args.progress_fixture:
                 prepare_progress_fixture(
@@ -891,13 +904,19 @@ def main():
                         "upstream_bytes": relay.upstream_bytes,
                         "connections": relay.connections,
                         "rate_limit": relay.downstream_bytes_per_second,
+                        "delay_ms": relay.delay * 1000,
                     }
                 )
             if relay and args.relay_control:
-                rate = json.loads(args.relay_control.read_text())["downstream_bytes_per_second"]
+                relay_settings = json.loads(args.relay_control.read_text())
+                rate = relay_settings["downstream_bytes_per_second"]
                 if not isinstance(rate, int) or rate < 0:
                     raise ValueError("Invalid owned relay bandwidth")
                 relay.downstream_bytes_per_second = rate
+                delay = relay_settings.get("delay_ms", args.latency_ms)
+                if not isinstance(delay, (int, float)) or not 0 <= delay <= 1000:
+                    raise ValueError("Invalid owned relay latency")
+                relay.delay = delay / 1000
             for role, _, path in process_watchers:
                 if path.exists():
                     exit_status = json.loads(path.read_text(encoding="utf-8-sig"))

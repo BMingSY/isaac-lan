@@ -1084,8 +1084,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             advance(t)
         end,
         collect,
-        function(bytes, t, ack)
-            if restore(bytes, t, ack) == false then
+        function(bytes, t, ack, betweenUpdates)
+            if restore(bytes, t, ack, betweenUpdates) == false then
                 return false
             end
             snapshots = snapshots + 1
@@ -1132,7 +1132,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     else
                         assert(
                             native.actor_crafting_bag(player:GetSprite())
-                                == (entry[8] or string.rep("\0", 12)),
+                                == (entry[8] and entry[8][1] or string.rep("\0", 12)),
                             "Replica bag differs from authoritative actor"
                         )
                         if ghostBagObserved[entry[1]] then

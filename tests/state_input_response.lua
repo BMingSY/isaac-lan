@@ -14,6 +14,7 @@ local renders, linked, chosen, finished = 0, false, false, false
 local movementRenders, captureCount = 0, 0
 local sent, preview, previewSequence = Vector(0, 0), Vector(0, 0), 0
 local beforeVelocity, afterVelocity = Vector(0, 0), Vector(0, 0)
+local fastApplies, fullApplies = 0, 0
 local makePrediction = _IsaacLanPrediction.new
 _IsaacLanPrediction.new = function(position)
     local model = makePrediction(position)
@@ -54,7 +55,7 @@ function _IsaacLanFrame()
     local buttons = 0
     if not host and s.prepared and s.verified >= 60 and s.verified < 500 then
         movementRenders = movementRenders + 1
-        -- Odd durations sweep the phase between 60 Hz rendering and 30 Hz sending.
+        -- Odd durations sweep the phase between 60 Hz input and 30 Hz simulation.
         local phases = { 8, 0, 4, 0, 2, 0, 1, 0, 8, 4, 0 }
         buttons = phases[math.floor(movementRenders / 11) % #phases + 1]
     end
@@ -63,6 +64,12 @@ function _IsaacLanFrame()
         report("FAILED " .. s.error)
     end
     if s.verified >= 550 and not finished then
+        if not host then
+            report("RESPONSE_APPLIES half=" .. fastApplies .. " full=" .. fullApplies)
+            -- Arrival phase can consistently favor either boundary. Requiring
+            -- both makes a healthy, phase-aligned connection fail at random.
+            assert(fastApplies + fullApplies > 300, "Snapshot application window was not exercised")
+        end
         finished = true
         if out then
             out:flush()
@@ -95,7 +102,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 end
                 local room = Game():GetRoom()
                 for i = 0, room:GetGridSize() - 1 do
-                    if room:GetGridCollision(i) ~= GridCollisionClass.COLLISION_WALL then
+                    local grid = room:GetGridEntity(i)
+                    if
+                        grid
+                        and grid:GetType() ~= GridEntityType.GRID_DOOR
+                        and room:GetGridCollision(i) ~= GridCollisionClass.COLLISION_WALL
+                    then
                         room:RemoveGridEntity(i, 0, false)
                     end
                 end
@@ -103,7 +115,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        restore,
+        function(bytes, tick, ack, betweenUpdates)
+            local applied = restore(bytes, tick, ack, betweenUpdates)
+            if applied ~= false then
+                if betweenUpdates then
+                    fastApplies = fastApplies + 1
+                else
+                    fullApplies = fullApplies + 1
+                end
+            end
+            return applied
+        end,
         function(input, sequence)
             preview, previewSequence = direction(input), sequence
             present(input, sequence)

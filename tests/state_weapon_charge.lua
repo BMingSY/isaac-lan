@@ -93,8 +93,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end
         return bytes
-    end, function(bytes, t, ack)
-        if restore(bytes, t, ack) == false then
+    end, function(bytes, t, ack, betweenUpdates)
+        if restore(bytes, t, ack, betweenUpdates) == false then
             return false
         end
         Options.ChargeBars = true

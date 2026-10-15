@@ -1505,10 +1505,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     chestMove,
                 })
         end,
-        function(bytes, t, ack)
+        function(bytes, t, ack, betweenUpdates)
             local body, pos = string.unpack(">s4", bytes)
             local meta = _IsaacLanState.decode(bytes:sub(pos))
-            local ok = restore(body, t, ack)
+            local ok = restore(body, t, ack, betweenUpdates)
             if ok == false then
                 return false
             end

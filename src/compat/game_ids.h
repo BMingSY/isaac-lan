@@ -8,6 +8,7 @@ namespace isaac::compat::ids {
 namespace entity {
 inline constexpr unsigned bomb = 4;
 inline constexpr unsigned hornfel = 906;
+inline constexpr unsigned effect = 1000;
 inline constexpr unsigned isaac = 102;
 inline constexpr unsigned lamb = 273;
 inline constexpr unsigned megaSatan = 274;
@@ -22,6 +23,9 @@ inline constexpr unsigned dogma = 950;
 inline constexpr unsigned beast = 951;
 inline constexpr unsigned genericProp = 960;
 } // namespace entity
+namespace effect {
+inline constexpr unsigned waterSplash = 99;
+} // namespace effect
 namespace player {
 inline constexpr int cainB = 23;
 inline constexpr int keeper = 14;

@@ -36,20 +36,29 @@ WINEDLLOVERRIDES="winmm=n,b" %command%
 
 ## 配置与日志
 
-首次启动会生成扩展配置文件 `config.ini`，修改后重启游戏生效：
+首次启动会在游戏目录生成 `isaac-lan/config.ini`：
 
 ```ini
+; Isaac LAN：修改后重启游戏生效。
+[network]
+; 客机输入发送频率：30 / 60，默认 60；各端可以不同。
+; 30 减少输入流量，但可能多等一个渲染帧；主机模拟和本机显示频率不变。
+input_hz = 60
+
 [logging]
+; 日志与原版 log.txt 位于同一游戏数据目录，按启动和局次分目录保存。
+; startup.log 记录启动和退出，runtime.log 记录局内事件。
+; 历史日志可手动清理。
+; 日志等级：DEBUG / INFO / WARN / ERROR，默认 INFO。
 level = INFO
 
 [diagnostics]
+; 性能统计：true / false，默认 false；排查卡顿时可开启。
+; 开启后在同一日志目录生成 performance.jsonl。
 performance = false
+; 性能统计采样间隔（毫秒）：100–60000，默认 1000。
 sample_interval_ms = 1000
 ```
-
-`level` 支持 `DEBUG`、`INFO`、`WARN`、`ERROR`，默认不写 DEBUG 日志。需要排查卡顿时，可将 `performance` 改为 `true`；采样间隔支持 100–60000 毫秒。
-
-日志随原版 `log.txt` 保存在当前游戏的数据目录。每次启动单独建目录，每局再按序号、种子和主客机分目录：启动及退出记录在 `startup.log`，局内记录在 `runtime.log`；开启性能统计后，同目录还有 `performance.jsonl`。历史日志一直保留，需要时可手动删除旧目录。升级和卸载会保留配置、联机存档及历史日志。
 
 ## 创建与加入
 

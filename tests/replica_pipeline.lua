@@ -2,6 +2,7 @@ local root = assert(arg[1])
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local schema = dofile(root .. "/src/bridge/sync/world_schema.lua")
 local trace, shared, scope, fail, waiting, epoch, roomIndex = {}, {}, nil, nil, false, 1, 84
+local current, restoredCurrent = { 0, 1 }, nil
 local function record(name)
     trace[#trace + 1] = name
     assert(fail ~= name, "failure at " .. name)
@@ -110,6 +111,9 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
         reset = noop,
     },
     motion = {
+        track = function()
+            return {}
+        end,
         reset = function()
             record("motion-reset")
         end,
@@ -151,6 +155,7 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
     },
     entitiesApply = function()
         assert(scope == "room")
+        assert(restoredCurrent[1] == current[1] and restoredCurrent[2] == current[2])
         record("entities")
     end,
     gridsApply = function()
@@ -171,6 +176,11 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
         room_rails = function(value)
             assert(scope == "room" and value == "rails")
             return record("rails")
+        end,
+        room_water_current = function(x, y)
+            assert(scope == "room", "Current escaped the local room")
+            restoredCurrent = { x, y }
+            return record("current")
         end,
         room_layout = function()
             return record("layout")
@@ -242,7 +252,7 @@ local function packet(tick, nextEpoch)
             },
         },
         slot = 1,
-        room = { true, 0, {}, {}, "music", "layout", false, "rails" },
+        room = { true, 0, {}, {}, "music", "layout", false, current, "rails" },
         sound = {},
         progress = "progress",
         epoch = nextEpoch or epoch,
@@ -255,7 +265,11 @@ local function packet(tick, nextEpoch)
     }))
 end
 local expected =
-    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,confirm,audio,events,items"
+    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,confirm,audio,events,items"
+assert(
+    not replica.apply(packet(1), 1, 0, true) and #trace == 0,
+    "Initial view escaped the full update boundary"
+)
 assert(replica.apply(packet(1), 1, 0))
 assert(table.concat(trace, ",") == expected)
 local tick, actors, motion = replica.present("", 0)
@@ -264,6 +278,21 @@ trace = {}
 assert(replica.apply(packet(1), 1, 0))
 assert(table.concat(trace, ",") == expected:gsub("motion%-reset,", ""))
 trace = {}
+assert(replica.apply(packet(2), 2, 1, true), "Stable view waited for a full update")
+assert(table.concat(trace, ",") == expected:gsub("motion%-reset,", ""))
+trace = {}
+roomIndex = 85
+assert(
+    not replica.apply(packet(3), 3, 1, true) and #trace == 0,
+    "Half-frame room transition mutated native state"
+)
+roomIndex = 84
+local replaced = codec.decode(packet(3))
+replaced[9][1][3][1] = 456
+assert(
+    not replica.apply(codec.encode(replaced), 3, 1, true) and #trace == 0,
+    "Half-frame actor replacement mutated native state"
+)
 assert(not replica.apply(packet(2, 2), 2, 0) and #trace == 0)
 waiting = true
 assert(not replica.apply("not even decoded while waiting", 2, 0) and #trace == 0)
@@ -275,14 +304,16 @@ assert(
 -- A failure after native mutation must not commit a new tick or drain later
 -- presentation queues. Native rollback is deliberately outside this contract.
 fail = "music"
-assert(not pcall(replica.apply, packet(2), 2, 0))
+assert(not pcall(replica.apply, packet(3), 3, 0))
 assert(trace[#trace] == "music" and not scope)
-assert(replica.present("", 0) == 1)
+assert(replica.present("", 0) == 2)
 fail, trace, roomIndex = nil, {}, 85
+current = { -1, 0 }
 assert(replica.apply(packet(3), 3, 0))
 assert(table.concat(trace, ",") == expected)
 replica.resetView()
 epoch, roomIndex = 2, 84
+current = { 0, 0 }
 assert(not replica.apply(packet(4, 1), 4, 0))
 assert(replica.apply(packet(4), 4, 0))
 replica.reset()

@@ -35,11 +35,22 @@ CHECKPOINTS = {
     "floor-items": {"five-pip-floor": 490, "dice-reset": 705, "r-key-reset": 1250},
     "mirror-camera": {"large-outward": 185, "large-return": 285, "mirror": 720},
 }
+RESPONSE_CASES = [
+    ("response-pause", "state_response_pause.lua", 170),
+    ("input-response", "state_input_response.lua", 550),
+    ("local-movement", "state_local_movement.lua", 350),
+]
 
 
-def build(output):
+def build(output, cases=None):
+    selected = CASES
+    if cases is not None:
+        catalog = {case[0]: case for case in [*CASES, *RESPONSE_CASES]}
+        if not cases or len(set(cases)) != len(cases) or any(name not in catalog for name in cases):
+            raise ValueError("Choose distinct known gameplay cases")
+        selected = [catalog[name] for name in cases]
     bodies, phases, start = [], [], 60
-    for name, script, duration in CASES:
+    for name, script, duration in selected:
         source = (SOURCE / "tests" / script).read_text()
         phases.append(
             {
@@ -48,7 +59,7 @@ def build(output):
                 "duration": duration,
                 "source": script,
                 "sha256": hashlib.sha256(source.encode()).hexdigest(),
-                "checkpoints": CHECKPOINTS[name],
+                "checkpoints": CHECKPOINTS.get(name, {}),
             }
         )
         bodies.append(
@@ -68,6 +79,9 @@ def build(output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--cases", nargs="+", choices=[case[0] for case in [*CASES, *RESPONSE_CASES]]
+    )
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    print(json.dumps(build(args.output), indent=2))
+    print(json.dumps(build(args.output, args.cases), indent=2))

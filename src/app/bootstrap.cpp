@@ -637,12 +637,14 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         return 14;
     const auto config = isaac::configuration::load(directory / L"isaac-lan/config.ini");
     settings = config.settings;
+    isaac::runtime::configureInput(settings.inputHz);
     isaac::logging::configure(settings.logLevel);
     isaac::diagnostics::configure(settings);
     if (!isaac::logging::initialize(logDirectory))
         return 14;
     for (const auto& warning : config.warnings)
         log("config_warning=" + warning);
+    log("network_input_hz=" + std::to_string(settings.inputHz));
     if (isolated) {
         root = env;
     } else {

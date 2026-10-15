@@ -3,6 +3,28 @@ return function(native, actorsPresentation, view)
     local Vector = view.vector
     local unpack = string.unpack
     local lastRender
+    local function sample(track, now)
+        local age = math.max(0, now - track.at)
+        return track.target
+            + track.velocity * math.min(age, 0.1)
+            + track.correction * math.exp(-age / (1 / 30))
+    end
+    local function track(prior, position, velocity, now, tick)
+        if prior and tick <= prior.tick then
+            return prior
+        end
+        local correction = prior and sample(prior, now) - position or Vector(0, 0)
+        if correction:Length() >= 96 then
+            correction = Vector(0, 0)
+        end
+        return {
+            target = position,
+            velocity = velocity,
+            at = now,
+            tick = tick,
+            correction = correction,
+        }
+    end
     local outwardDirections = { Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) }
     local function doorCorridor(room, position)
         for slot = 0, 7 do
@@ -31,10 +53,15 @@ return function(native, actorsPresentation, view)
         -- Native room and Mod presentation updates run after receiving a packet.
         -- Reassert authoritative actor poses at the render boundary so local
         -- callbacks cannot replace a body or start an unrelated dance.
+        local extraAnimationMovement = {}
         for _, actor in ipairs(actorVisuals) do
             local p = view.player(actor[1])
             if p and p.ControllerIndex == actor[2] then
                 actorsPresentation.apply(p, actor)
+                if view.extraAnimationAllowsMovement then
+                    extraAnimationMovement[actor[3][1]] =
+                        view.extraAnimationAllowsMovement(p, actor)
+                end
             end
         end
         local now = view.clock() / 1000
@@ -42,6 +69,12 @@ return function(native, actorsPresentation, view)
         lastRender = now
         local status = view.status()
         if status.pause ~= 0 then
+            -- Paused snapshots retain native velocities. Do not accumulate
+            -- an invisible extrapolation error and release it on resume.
+            for _, m in pairs(motion) do
+                m.track.target, m.track.at = m.target, now
+                m.track.velocity, m.track.correction = Vector(0, 0), Vector(0, 0)
+            end
             return
         end
         local values = { unpack(">I2I2I2I2", input) }
@@ -57,15 +90,12 @@ return function(native, actorsPresentation, view)
         for identifier, m in pairs(motion) do
             local e = ref(identifier)
             if e then
-                local age = math.max(0, now - m.at)
-                local interval = math.max(1, m.tick - m.previousTick) / 30
-                local fraction = math.min(age / interval, 1)
-                local position = m.from + (m.target - m.from) * fraction
+                local position
                 if m.actor and m.controller == status.slot + 1 then
                     local p = e:ToPlayer()
                     local controls = p.ControlsEnabled
                         and p:AreControlsEnabled()
-                        and p:IsExtraAnimationFinished()
+                        and (p:IsExtraAnimationFinished() or extraAnimationMovement[identifier])
                     if not controls then
                         m.prediction:reset(m.target, sequence - 1)
                         m.doorway = nil
@@ -126,15 +156,20 @@ return function(native, actorsPresentation, view)
                         end
                     end))
                     m.prediction:clip(position)
-                    m.display = position
-                elseif age > interval then
-                    position = position + m.velocity * math.min(age - interval, 0.1) * 30
+                else
+                    -- Continue from the same display trajectory across packet
+                    -- gaps. Only the authority error is smoothed, without a
+                    -- compulsory extra snapshot of interpolation delay.
+                    position = sample(m.track, now)
                 end
+                m.display = position
                 e.Position = position
             end
         end
     end
     return {
+        track = track,
+        sample = sample,
         present = present,
         reset = function()
             lastRender = nil

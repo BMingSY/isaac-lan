@@ -37,8 +37,10 @@ void reset();
 void resetMenuPrompts();
 void prepareControllers();
 void clearAutomation();
-// Latch one-render-frame button edges until the next 30 Hz network sample.
+// Latch button edges until the next input capture.
 void pollPhysicalInput();
+// Identity of the native input/render frame, shared by all polls in that frame.
+unsigned physicalFrame();
 // Read held bindings for local prediction without consuming latched button edges.
 lan::InputFrame previewPhysicalInput();
 unsigned menuOwner();

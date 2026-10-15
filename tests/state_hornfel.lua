@@ -226,14 +226,14 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack)
-            if restore(bytes, t, ack) == false then
+        function(bytes, t, ack, betweenUpdates)
+            if restore(bytes, t, ack, betweenUpdates) == false then
                 return false
             end
             local view = _IsaacLanState.decode(bytes)
             local found = false
             assert(native.rooms_with_player(1, function()
-                assert(native.room_rails() == view[11][8], "Room rails differ")
+                assert(native.room_rails() == view[11][9], "Room rails differ")
                 if snapshots == 1 then
                     report("CLIENT_BACKDROP " .. Game():GetRoom():GetBackdropType())
                 end
@@ -258,7 +258,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         if boss.Visible then
                             visible = visible + 1
                         end
-                        if view[11][8]:find("[^\255]") then
+                        if view[11][9]:find("[^\255]") then
                             railViews = railViews + 1
                         end
                         local first, second = string.unpack(">I4I4", v[24])

@@ -13,7 +13,12 @@ return function(types, pickups)
             end
         end
         for _, e in ipairs(env.entities()) do
-            if e:Exists() and e.Type ~= types.ENTITY_PLAYER and not currentObjects[env.key(e)] then
+            if
+                e:Exists()
+                and e.Type ~= types.ENTITY_PLAYER
+                and not currentObjects[env.key(e)]
+                and not (env.localEffect and env.localEffect(e))
+            then
                 env.discard(e)
                 removed = true
             end
@@ -47,7 +52,9 @@ return function(types, pickups)
             if e:Exists() and e.Type ~= types.ENTITY_PLAYER then
                 -- Remove implicit native segments before applying links.
                 -- Membership uses allocations, independently of Mod GetData.
-                if not currentObjects[env.key(e)] then
+                if
+                    not currentObjects[env.key(e)] and not (env.localEffect and env.localEffect(e))
+                then
                     env.discard(e)
                 end
             end
