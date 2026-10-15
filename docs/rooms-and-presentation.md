@@ -67,7 +67,7 @@
 
 渲染和本机 UI 使用 `input::ViewScope` 读取本机物理输入；地图操作也单独按本机输入查询。角色战斗更新使用房主消费的对应控制器输入。
 
-Good Trip 等本机界面发起原生换房时，客机发送 `RoomRequest`，房主核对源楼层、源房间、维度和在线身份后执行。请求描述意图，不允许客机提交任意世界状态。
+已适配的 GoodTrip 界面使用[主机动作 API](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md#主机动作与回执)提交 `travel`，在原传送函数产生副作用前交由主机验证、迁移和回执；具体边界见 [GoodTrip 兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md#goodtrip)。其他本机界面的通用原生换房入口仍可由客机发送 `RoomRequest`，房主核对源楼层、源房间、维度和在线身份后执行。两类请求都描述意图，不允许客机提交任意世界状态。
 
 依赖全局换房回调的第三方玩法 Mod 在队友房间可能效果不完整。当前没有复制任意 Mod 私有状态的机制，也不为每个 Mod 改写内部逻辑。
 
