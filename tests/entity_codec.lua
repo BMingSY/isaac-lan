@@ -21,6 +21,9 @@ local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
 )
 local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "t", env))()(
     {
+        presentation_local_effect = function(kind, variant, subtype)
+            return kind == 1000 and variant == 99 and subtype == 1
+        end,
         entity_prepare = function()
             return true
         end,
@@ -149,4 +152,13 @@ source.MaxDistance = {}
 assert(not pcall(component.capture, source, false), "Unsupported userdata scalar must be rejected")
 source.MaxDistance = math.huge
 assert(not pcall(component.capture, source, false), "Non-finite scalar must be rejected")
+local spray = entity(1000, 0)
+spray.Variant, spray.SubType = 99, 1
+assert(component.localEffect(spray) and not component.localEffect(warning))
+actor.Parent, actor.SpawnerEntity, actor.Child, actor.Target = spray, spray, spray, spray
+local linked = component.capture(actor, false)
+for index = 11, 14 do
+    assert(linked[index] == 0, "Local particle leaked an unresolved authority ID")
+end
+assert(spray:GetData().__isaac_lan_entity == nil)
 print("PASS portable entity fields, native laser state and replica lifecycle flag ownership")

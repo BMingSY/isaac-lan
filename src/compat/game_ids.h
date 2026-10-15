@@ -6,6 +6,7 @@
 // Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 namespace isaac::compat::ids {
 namespace entity {
+inline constexpr unsigned effect = 1000;
 inline constexpr unsigned isaac = 102;
 inline constexpr unsigned lamb = 273;
 inline constexpr unsigned megaSatan = 274;
@@ -20,6 +21,9 @@ inline constexpr unsigned dogma = 950;
 inline constexpr unsigned beast = 951;
 inline constexpr unsigned genericProp = 960;
 } // namespace entity
+namespace effect {
+inline constexpr unsigned waterSplash = 99;
+} // namespace effect
 namespace player {
 inline constexpr int cainB = 23;
 inline constexpr int keeper = 14;

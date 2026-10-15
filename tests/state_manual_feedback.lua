@@ -321,9 +321,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 math.max(introMotion, math.abs(Isaac.GetPlayer(1).Position.X - introStartX))
         end
         return collect(slot, t)
-    end, function(bytes, t, ack)
+    end, function(bytes, t, ack, betweenUpdates)
         local began = Isaac.GetTime()
-        if restore(bytes, t, ack) == false then
+        if restore(bytes, t, ack, betweenUpdates) == false then
             return false
         end
         cost("restore", Isaac.GetTime() - began)

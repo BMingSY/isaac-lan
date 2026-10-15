@@ -10,11 +10,15 @@ from pathlib import Path
 
 def measure(path):
     with path.open() as source:
-        rows = [{k: float(v) for k, v in row.items()} for row in csv.DictReader(source)]
+        records = list(csv.DictReader(source))
+    if records and any(value is None for value in records[-1].values()):
+        records.pop()
+    rows = [{k: float(v) for k, v in row.items()} for row in records]
     rows = [row for row in rows if 80 <= row["tick"] < 490]
     assert len(rows) > 500, "Insufficient native render samples"
     mismatched = 0
     unsent = 0
+    send_delays = []
     delays = []
     transition_steps = []
     movement_delays = []
@@ -31,6 +35,12 @@ def measure(path):
         previous = rows[i - 1]
         if raw == (previous["raw_x"], previous["raw_y"]):
             continue
+        for later in rows[i : i + 5]:
+            if (later["sent_x"], later["sent_y"]) == raw:
+                send_delays.append((later["time"] - row["time"]) * 1000)
+                break
+        else:
+            send_delays.append(math.inf)
         if "before_vx" in row and row["time"] > previous["time"]:
             acceleration_transitions += 1
             change_x, change_y = raw[0] - previous["raw_x"], raw[1] - previous["raw_y"]
@@ -56,11 +66,14 @@ def measure(path):
                 movement_delays.append(math.inf)
         else:
             releases.append(math.hypot(dx, dy))
-    assert len(delays) >= 30 and unsent >= 12, "Unsent start/turn/release changes not exercised"
+    assert len(delays) >= 30, "Start/turn/release changes not exercised"
     return {
         "render_samples": len(rows),
         "transitions": len(delays),
         "frames_with_unsent_input": unsent,
+        "max_input_to_send_ms": max(send_delays),
+        "mean_input_to_send_ms": sum(send_delays) / len(send_delays),
+        "input_samples_per_render": (rows[-1]["capture"] - rows[0]["capture"]) / (len(rows) - 1),
         "preview_mismatched_frames": mismatched,
         "max_input_to_preview_ms": max(delays),
         "mean_input_to_preview_ms": sum(delays) / len(delays),
@@ -84,6 +97,8 @@ if __name__ == "__main__":
     result = {"fixed": measure(args.fixed)}
     assert result["fixed"]["preview_mismatched_frames"] == 0, result
     assert result["fixed"]["max_input_to_preview_ms"] == 0, result
+    assert result["fixed"]["max_input_to_send_ms"] == 0, result
+    assert 0.95 <= result["fixed"]["input_samples_per_render"] <= 1.05, result
     assert (
         result["fixed"]["acceleration_transitions"] >= 30
         and result["fixed"]["acceleration_transitions_responding_same_frame"]

@@ -334,9 +334,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             return body
         end
         return string.pack(">s4", body) .. _IsaacLanState.encode({ step, finished })
-    end, function(bytes, tick, ack)
+    end, function(bytes, tick, ack, betweenUpdates)
         local body, pos = string.unpack(">s4", bytes)
-        if restore(body, tick, ack) == false then
+        if restore(body, tick, ack, betweenUpdates) == false then
             return false
         end
         local value = _IsaacLanState.decode(body)

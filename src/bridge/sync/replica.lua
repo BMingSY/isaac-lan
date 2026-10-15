@@ -18,6 +18,14 @@ return function(deps)
     local replicas, motion = {}, {}
     local replicaRoom, receivedTick = nil, -1
     local actorVisuals = {}
+    local appliedLocations
+    local function locationIdentity(locations)
+        local result = {}
+        for _, location in ipairs(locations) do
+            result[#result + 1] = { location[1], location[2], location[3] }
+        end
+        return encode(result)
+    end
     local function ref(identifier)
         local pointer = replicas[identifier]
         return pointer and pointer.Ref or nil
@@ -34,18 +42,24 @@ return function(deps)
         -- Preserve ownership through EntityPtr; local allocation indices are never IDs.
         replicas[v[1]] = deps.pointer(e)
         local prior = motion[v[1]]
+        local actor = e.Type == deps.playerType
+        local position, velocity = vec(v[6]), vec(v[7])
         motion[v[1]] = {
-            from = prior and prior.target or vec(v[6]),
-            target = vec(v[6]),
-            display = prior and prior.display or vec(v[6]),
-            velocity = vec(v[7]),
+            target = position,
+            display = prior and prior.display or position,
+            velocity = velocity,
             at = now,
             tick = tick,
-            previousTick = prior and prior.tick or tick - 1,
-            actor = e.Type == deps.playerType,
-            controller = e.Type == deps.playerType and e:ToPlayer().ControllerIndex or -1,
-            prediction = e.Type == deps.playerType
-                and (prior and prior.prediction or prediction.new(vec(v[6]))),
+            actor = actor,
+            controller = actor and e:ToPlayer().ControllerIndex or -1,
+            prediction = actor and (prior and prior.prediction or prediction.new(position)),
+            track = motionPresentation.track(
+                prior and prior.track,
+                position,
+                velocity * (actor and 60 or 30),
+                now,
+                tick
+            ),
             doorway = prior and prior.doorway,
         }
     end
@@ -144,6 +158,7 @@ return function(deps)
         assert(native.rooms_with_player(value.slot, function()
             local room = game:GetRoom()
             local data = value.room
+            assert(native.room_water_current(data[8][1], data[8][2]))
             crawlspace.apply(data[7])
             reconcileEntities(data[3], {
                 ref = ref,
@@ -159,6 +174,7 @@ return function(deps)
                     applyEntity(e, v, now, tick)
                 end,
                 entities = deps.entities,
+                localEffect = entityCodec.localEffect,
             })
             assert(native.door_slot(-1))
             reconcileGrids(data[4], {
@@ -232,12 +248,34 @@ return function(deps)
         itemPresentation.apply(value.slot, value.items)
         actorVisuals, receivedTick = value.actors, tick
     end
-    local function apply(bytes, tick, ack)
+    local function apply(bytes, tick, ack, betweenUpdates)
         performance.resources()
         if floor.waiting() then
             return false
         end
         local value = worldSchema.unpack(decode(bytes), tick)
+        if betweenUpdates then
+            -- Room transfers and roster replacements can allocate native room
+            -- objects. Keep them on the full update path, before native cleanup.
+            if locationIdentity(value.locations) ~= appliedLocations then
+                return false
+            end
+            for i, actor in ipairs(value.actors) do
+                local prior = actorVisuals[i]
+                if
+                    not prior
+                    or actor[1] ~= prior[1]
+                    or actor[2] ~= prior[2]
+                    or actor[3][1] ~= prior[3][1]
+                    or actor[4][1] ~= prior[4][1]
+                then
+                    return false
+                end
+            end
+            if #value.actors ~= #actorVisuals then
+                return false
+            end
+        end
         local game = deps.game()
         local level = game:GetLevel()
         if not floor.ready(level, value.epoch, value.stage, value.stageType) then
@@ -252,6 +290,7 @@ return function(deps)
         local mapChanged = restoreMap(value, level, roomChanged, cursesChanged)
         restoreRoom(value, game, now, tick, mapChanged)
         commit(value, tick, ack)
+        appliedLocations = locationIdentity(value.locations)
         return true
     end
     local function actorPose(player)
@@ -267,6 +306,7 @@ return function(deps)
 
     local function resetView()
         motion, actorVisuals, replicaRoom = {}, {}, nil
+        appliedLocations = nil
     end
     return {
         apply = apply,

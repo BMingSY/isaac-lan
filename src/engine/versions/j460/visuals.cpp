@@ -1,6 +1,7 @@
 #include "engine/visuals.h"
 #include "net/protocol.h"
 #include "runtime/session.h"
+#include "presentation/ambient_effects.h"
 #include <array>
 #include <bit>
 #include <cmath>
@@ -56,6 +57,13 @@ int prepareEntity(lua_State* L) {
             reinterpret_cast<void*>(entity));
     }
     lua.pushBoolean(L, true);
+    return 1;
+}
+int localAmbientEffect(lua_State* L) {
+    // Share one portable classification with the replica update hook. This
+    // query accepts ordinary IDs and never borrows or changes a game object.
+    lua.pushBoolean(L, presentation::localAmbientEffect(
+                           lua.checkInteger(L, 1), lua.checkInteger(L, 2), lua.checkInteger(L, 3)));
     return 1;
 }
 int doorSprite(lua_State* L) {
@@ -480,6 +488,8 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "entity_shadow");
     lua.pushClosure(L, prepareEntity, 0);
     lua.setField(L, -2, "entity_prepare");
+    lua.pushClosure(L, localAmbientEffect, 0);
+    lua.setField(L, -2, "presentation_local_effect");
     lua.pushClosure(L, gridVariant, 0);
     lua.setField(L, -2, "grid_variant");
     lua.pushClosure(L, removeGrid, 0);

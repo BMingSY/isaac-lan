@@ -499,9 +499,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 pocketBytes or "",
                 unique,
             })
-    end, function(bytes, t, ack)
+    end, function(bytes, t, ack, betweenUpdates)
         local body, cursor = string.unpack(">s4", bytes)
-        if restore(body, t, ack) == false then
+        if restore(body, t, ack, betweenUpdates) == false then
             return false
         end
         local value, meta = _IsaacLanState.decode(body), _IsaacLanState.decode(bytes:sub(cursor))

@@ -1,4 +1,5 @@
 #include "runtime/session.h"
+#include "runtime/input_schedule.h"
 #include "compat/challenges/catalog.h"
 #include "engine/characters.h"
 #include "engine/item_presentation.h"
@@ -239,9 +240,9 @@ bool playingEnding = false;
 bool playingCinematic = false, cinematicReady = false;
 std::uint32_t nextInputTick = 0;
 using InputClock = std::chrono::steady_clock;
-InputClock::time_point nextCaptureAt{};
+InputSchedule inputSchedule;
+unsigned inputHz = 60;
 std::optional<InputClock::time_point> rejoinAt;
-constexpr auto inputPeriod = std::chrono::nanoseconds(1'000'000'000 / 30);
 std::uint32_t nextTick = 0, currentTick = 0;
 std::uint32_t floorEpoch = 0;
 std::optional<lan::WorldState> replicaPending;
@@ -463,12 +464,15 @@ void publishState() {
     }
     session->poll();
 }
-bool captureNextInput() {
+bool captureNextInput(bool simulationStep = false) {
     if (!gated || !session || playingEnding || playingCinematic ||
         session->phase() != lan::Phase::running)
         return false;
-    const auto now = InputClock::now();
-    if (now < nextCaptureAt)
+    // Host input belongs to each native simulation step. Guest input follows
+    // the native input frames (normally 60 Hz), without a second wall-clock
+    // timer that can miss a frame or delay a press/release by another 33 ms.
+    const auto frame = input::physicalFrame();
+    if (!inputSchedule.capture(session->isHost(), simulationStep, frame))
         return true;
     const int top = lua.getTop(state);
     lua.rawGetI(state, registry, captureRef);
@@ -502,9 +506,58 @@ bool captureNextInput() {
         return false;
     }
     ++nextInputTick;
-    nextCaptureAt =
-        now - nextCaptureAt >= inputPeriod ? now + inputPeriod : nextCaptureAt + inputPeriod;
     return true;
+}
+bool applyReplicaView(bool betweenUpdates) {
+    // Reliable transitions, initial loading, and modal changes retain the full
+    // update path. A half frame only restores a ready, stable world view.
+    if (betweenUpdates &&
+        (!authoritative || playingEnding || playingCinematic || !rooms::stateReady() ||
+         session->phase() != lan::Phase::running || session->worldEpoch() != floorEpoch))
+        return false;
+    if (auto packet = session->takeState())
+        replicaPending = std::move(packet);
+    if (replicaPending) {
+        auto& packet = replicaPending;
+        if (betweenUpdates && (packet->paused != authoritative->paused ||
+                               packet->connected != authoritative->connected))
+            return false;
+        const int top = lua.getTop(state);
+        lua.rawGetI(state, registry, restoreStateRef);
+        const auto began = InputClock::now();
+        lua.pushLString(state, reinterpret_cast<const char*>(packet->bytes.data()),
+                        packet->bytes.size());
+        lua.pushInteger(state, packet->tick);
+        lua.pushInteger(state, packet->inputSequences[session->slot()]);
+        lua.pushBoolean(state, betweenUpdates);
+        if (!call(restoreStateRef, 4, 1, top))
+            return false;
+        applyCost.sample(began, "apply");
+        // A valid new-floor snapshot can arrive while the native transition is
+        // still running. Keep the newest view and retry after initialization.
+        const bool applied = lua.type(state, -1) != 1 || lua.boolean(state, -1) != 0;
+        lua.setTop(state, top);
+        if (!applied)
+            return false;
+        currentTick = packet->tick;
+        nextTick = currentTick + 1;
+        input::setMenuOwner(packet->pauseOwner);
+        pause_menu::selectPlayer(executableImage, session->slot());
+        if (packet->paused != (authoritative && authoritative->paused))
+            rooms::withView(
+                [&] {
+                    if (packet->paused)
+                        pause_menu::show(executableImage);
+                    else
+                        pause_menu::hide(executableImage);
+                },
+                true);
+        authoritative = std::move(packet);
+        replicaPending.reset();
+        session->applied(currentTick);
+        return true;
+    }
+    return false;
 }
 void updateReplica(void* game) {
     const auto g = reinterpret_cast<std::uintptr_t>(game);
@@ -557,53 +610,9 @@ void updateReplica(void* game) {
     }
     if (playingCinematic)
         return;
-    bool committedView = false;
-    if (auto packet = session->takeState())
-        replicaPending = std::move(packet);
-    if (replicaPending) {
-        auto& packet = replicaPending;
-        currentTick = packet->tick;
-        nextTick = currentTick + 1;
-        const int top = lua.getTop(state);
-        lua.rawGetI(state, registry, restoreStateRef);
-        const auto began = InputClock::now();
-        lua.pushLString(state, reinterpret_cast<const char*>(packet->bytes.data()),
-                        packet->bytes.size());
-        lua.pushInteger(state, packet->tick);
-        lua.pushInteger(state, packet->inputSequences[session->slot()]);
-        if (!call(restoreStateRef, 3, 1, top))
-            return;
-        applyCost.sample(began, "apply");
-        // A valid new-floor snapshot can arrive while the native transition is
-        // still running. Keep the newest view and retry after initialization.
-        const bool applied = lua.type(state, -1) != 1 || lua.boolean(state, -1) != 0;
-        lua.setTop(state, top);
-        if (!applied) {
-            lan::Frame neutral;
-            neutral.players = session->players();
-            neutral.connected = session->connectedMask();
-            input::apply(neutral);
-            originalUpdate(game);
-            rooms::finishFrame();
-            pendingHalf = false;
-            return;
-        }
-        input::setMenuOwner(packet->pauseOwner);
-        pause_menu::selectPlayer(executableImage, session->slot());
-        if (packet->paused != (authoritative && authoritative->paused))
-            rooms::withView(
-                [&] {
-                    if (packet->paused)
-                        pause_menu::show(executableImage);
-                    else
-                        pause_menu::hide(executableImage);
-                },
-                true);
-        authoritative = std::move(packet);
-        replicaPending.reset();
-        session->applied(currentTick);
-        committedView = true;
-    }
+    const bool committedView = applyReplicaView(false);
+    if (session->phase() != lan::Phase::running)
+        return;
     lan::Frame presentation;
     presentation.players = session->players();
     presentation.connected = session->connectedMask();
@@ -700,7 +709,7 @@ void updateOne(void* game) {
     if (!session || session->phase() != lan::Phase::running)
         return;
     session->poll();
-    if (!captureNextInput())
+    if (!captureNextInput(true))
         return;
     session->poll();
     if (!session->isHost()) {
@@ -1208,7 +1217,7 @@ int gate(lua_State* L) {
     consumedInputSequences = {};
     captureCost = {};
     applyCost = {};
-    nextCaptureAt = InputClock::now();
+    inputSchedule = InputSchedule(inputHz);
     pendingHalf = false;
     gated = true;
     playingEnding = false;
@@ -1499,7 +1508,21 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
                          reinterpret_cast<void**>(&originalControls)) == MH_OK &&
            MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::gameControls)) == MH_OK;
 }
+void configureInput(unsigned hz) {
+    inputHz = hz;
+    inputSchedule = InputSchedule(hz);
+}
 bool halfAllowed() {
+    if (replica() && !playingEnding && !playingCinematic && rooms::stateReady() &&
+        session->phase() == lan::Phase::running) {
+        session->poll();
+        if (captureNextInput()) {
+            session->poll();
+            if (applyReplicaView(true))
+                integrationCallback("_IsaacLanViewCommitted");
+            session->poll();
+        }
+    }
     // Retain native arrival interpolation while room replication is suspended.
     return !gated || playingEnding || playingCinematic || pendingHalf ||
            (replica() && !rooms::stateReady());
@@ -1575,6 +1598,7 @@ void present() {
     input::pollPhysicalInput();
     if (!captureNextInput())
         return;
+    session->poll();
     const int top = lua.getTop(state);
     lua.rawGetI(state, registry, presentRef);
     lan::Writer packed(lan::Message::input);

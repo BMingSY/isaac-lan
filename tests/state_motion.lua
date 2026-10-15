@@ -40,6 +40,7 @@ function _IsaacLanFrame()
     if s.phase == 4 or s.phase == 9 then
         report("FAILED " .. s.error)
     end
+    samples = s.verified
     moveSign = not host and samples >= 30 and (math.floor((samples - 30) / 30) % 2 == 0 and 1 or -1)
         or 0
     if not host and samples >= 600 then
@@ -67,7 +68,6 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         Isaac.GetPlayer(i):SetMinDamageCooldown(10000)
     end
     return gate(function()
-        samples = samples + 1
         return capture()
     end, function(t, n, b)
         before(t, n, b)
@@ -86,8 +86,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
             local room = Game():GetRoom()
             for i = 0, room:GetGridSize() - 1 do
+                local grid = room:GetGridEntity(i)
                 if
-                    room:GetGridEntity(i)
+                    grid
+                    and grid:GetType() ~= GridEntityType.GRID_DOOR
                     and room:GetGridCollision(i) ~= GridCollisionClass.COLLISION_WALL
                 then
                     room:RemoveGridEntity(i, 0, false)
@@ -117,8 +119,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             out:close()
         end
         return bytes
-    end, function(bytes, t, ack)
-        if restore(bytes, t, ack) == false then
+    end, function(bytes, t, ack, betweenUpdates)
+        if restore(bytes, t, ack, betweenUpdates) == false then
             return false
         end
         corrected = corrected + 1

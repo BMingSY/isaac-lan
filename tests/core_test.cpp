@@ -24,6 +24,7 @@
 #include "core/laser_state.h"
 #include "runtime/actor_roster.h"
 #include "runtime/room_scope.h"
+#include "presentation/ambient_effects.h"
 #include <stdexcept>
 #include <type_traits>
 #include "core/log_record.h"
@@ -50,6 +51,17 @@ void sharedDealChances() {
 }
 void compatibilityTargets() {
     using namespace isaac::compat;
+    require(isaac::presentation::localAmbientEffect(1000, 99, 1),
+            "Native current spray must remain local presentation");
+    for (const auto ids : {std::array<std::int64_t, 3>{1000, 99, 0},
+                           {1000, 99, 2},
+                           {1000, 22, 1},
+                           {1000, 172, 1},
+                           {9, 99, 1},
+                           {1000, 99, -1},
+                           {1000, 99, 0x100000001LL}})
+        require(!isaac::presentation::localAmbientEffect(ids[0], ids[1], ids[2]),
+                "Ambient policy admitted a different effect or truncated an ID");
     require(items::validCraftingBagState({}) &&
                 items::validCraftingBagState({{1, 29, 8, 0, 0, 0, 0, 0}, 0}) &&
                 items::validCraftingBagState({{1, 2, 3, 4, 5, 6, 7, 8}, 65535}),

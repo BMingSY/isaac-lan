@@ -558,10 +558,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     end, function(slot, t)
         local bytes = collect(slot, t)
         return string.pack(">s4", bytes) .. _IsaacLanState.encode({ step })
-    end, function(packet, t, ack)
+    end, function(packet, t, ack, betweenUpdates)
         local bytes, offset = string.unpack(">s4", packet)
         local phase = _IsaacLanState.decode(packet:sub(offset))[1]
-        if restore(bytes, t, ack) == false then
+        if restore(bytes, t, ack, betweenUpdates) == false then
             return false
         end
         local value = _IsaacLanState.decode(bytes)
@@ -595,7 +595,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 )
             end
         end))
-        assert(restore(bytes, t, ack) ~= false, "Repeated Greed state failed")
+        assert(restore(bytes, t, ack, betweenUpdates) ~= false, "Repeated Greed state failed")
         for _, a in ipairs(value[9]) do
             assert(
                 Isaac.GetPlayer(a[1]):GetNumCoins() == a[4][5][1],

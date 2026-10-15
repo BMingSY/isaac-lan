@@ -23,6 +23,7 @@
 
 | 记录 | 查阅内容 |
 | --- | --- |
+| [客机响应与连续显示](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/client-response-validation.md) | 60 Hz 输入、半帧应用、连续轨迹与定向验收 |
 | [世界视图带宽方案](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/world-state-bandwidth-plan.md) | 协议 25 时期的无损增量设计、预算和测量条件 |
 | [百变怪性能调查](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/delirium-performance-investigation.md) | 共享带宽对照、四人回放命令、结果与未定位异常 |
 | [测试夹具堆损坏](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/heap-corruption-regression.md) | 菜单越界写入证据、启动前解锁修复、退出及堆观察验证 |

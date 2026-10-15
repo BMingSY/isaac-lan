@@ -24,6 +24,7 @@
 #include "runtime/actor_roster.h"
 #include "runtime/room_scope.h"
 #include "core/poop_state.h"
+#include "presentation/ambient_effects.h"
 #include <MinHook.h>
 #include <algorithm>
 #include <array>
@@ -1783,6 +1784,21 @@ int mapPickups(lua_State* L) {
         return 1;
     }
 }
+int roomWaterCurrent(lua_State* L) {
+    const auto x = lua.checkNumber(L, 1), y = lua.checkNumber(L, 2);
+    const auto room = scopes.current();
+    const bool valid = enabled && runtime::replica() && room && !room->replicaShell &&
+                       std::isfinite(x) && std::isfinite(y) && x * x + y * y <= 1.000001;
+    if (valid) {
+        // J460 Room::GetWaterCurrent exposes these two floats but has no Lua
+        // setter. Replica layouts omit the spawn marker that initializes them.
+        // Restore the room vector before its native ambient-effect update.
+        at<float>(room->pointer, 0x7460) = static_cast<float>(x);
+        at<float>(room->pointer, 0x7464) = static_cast<float>(y);
+    }
+    lua.pushBoolean(L, valid);
+    return 1;
+}
 int roomLayout(lua_State* L) {
     try {
         if (lua.getTop(L) == 0 || lua.getTop(L) == 2) {
@@ -2298,9 +2314,12 @@ void __attribute__((fastcall)) trapdoorUpdate(void* trapdoor, void*) {
     originalTrapdoorUpdate(trapdoor);
 }
 void __attribute__((fastcall)) replicaEntityUpdate(void* entity, void*) {
-    if (runtime::replica())
+    const auto address = reinterpret_cast<Address>(entity);
+    if (runtime::replica() &&
+        !presentation::localAmbientEffect(at<unsigned>(address, 0x28), at<unsigned>(address, 0x2c),
+                                          at<unsigned>(address, 0x30)))
         return;
-    const auto entry = at<Address>(at<Address>(reinterpret_cast<Address>(entity), 0), 0xc);
+    const auto entry = at<Address>(at<Address>(address, 0), 0xc);
     entityUpdates.at(entry)(entity);
 }
 void interceptReplicaEntities(Room& room) {
@@ -3414,6 +3433,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_sync", syncLocations);
     function("state_clock", stateClock);
     function("room_layout", roomLayout);
+    function("room_water_current", roomWaterCurrent);
     function("map_pickups", mapPickups);
     function("map_refresh", refreshMap);
     function("actor_sprites", actorSprites);

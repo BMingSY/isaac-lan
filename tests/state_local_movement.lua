@@ -81,7 +81,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         if t == 0 then
             for i = 0, 1 do
                 local p = Isaac.GetPlayer(i)
-                p.Position, p.Velocity = Vector(300, 210 + i * 70), Vector(0, 0)
+                -- Leave enough room for the full acceleration and coast-down
+                -- windows before testing wall/door collision separately.
+                p.Position, p.Velocity = Vector(220, 210 + i * 70), Vector(0, 0)
                 p:SetMinDamageCooldown(10000)
             end
             for _, e in ipairs(Isaac.GetRoomEntities()) do
@@ -114,8 +116,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         authority, velocity = Vector(table.unpack(actor[6])), Vector(table.unpack(actor[7]))
         roomIndex = native.rooms_positions()["1"].index
         return bytes
-    end, function(bytes, t, sequence)
-        if restore(bytes, t, sequence) == false then
+    end, function(bytes, t, sequence, betweenUpdates)
+        if restore(bytes, t, sequence, betweenUpdates) == false then
             return false
         end
         local v = _IsaacLanState.decode(bytes)
@@ -131,6 +133,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     end, present, beginFloor)
 end
 Isaac.AddCallback({ Name = "Local movement observer" }, ModCallbacks.MC_POST_RENDER, function()
+    if done then
+        return
+    end
     local s = _IsaacLanStatus()
     if not s.prepared or not native.rooms_ready() then
         return
