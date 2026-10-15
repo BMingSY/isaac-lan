@@ -40,11 +40,13 @@ view.room = nil
 assert(not pcall(schema.pack, view))
 
 local order, ready, stage, stageType = {}, true, 6, 4
+local sourceRoom
 local native = {
     rooms_ready = function()
         return ready
     end,
-    rooms_begin_floor = function(same, animation)
+    rooms_begin_floor = function(same, animation, source)
+        sourceRoom = source
         order[#order + 1] = "floor:" .. same .. ":" .. animation
         return true
     end,
@@ -93,10 +95,12 @@ local begin = module("runtime/transitions")(native, floor, compatibility, functi
 end, function()
     order[#order + 1] = "reset"
 end)
-assert(begin(8, 4, 4, 0, false))
+assert(begin(8, 4, 4, 0, false, nil, 0, 0, -8))
+assert(sourceRoom == -8, "Floor event lost the authoritative departure room")
 assert(table.concat(order, ",") == "reset,set-stage,floor:0:0")
 assert(not begin(8, 1, 0, 0, false, false, 1) and #order == 3)
 assert(not begin(7, 1, 0, 0, false) and #order == 3)
+assert(sourceRoom == -8, "Rejected events replaced the pending floor source")
 ready = false
 assert(floor.waiting() and not floor.ready(level, 8, 4, 4))
 ready = true
@@ -125,7 +129,8 @@ assert(
 )
 assert(not begin(20, 1, 0, 0, false), "A failed accepted epoch must not run twice")
 floor.reset()
-assert(begin(1, 1, 0, 0, false), "A new run must clear the previous epoch barrier")
+assert(begin(1, 1, 0, 0, false, nil, 0, 0, 84), "A new run must clear the previous epoch barrier")
+assert(sourceRoom == 84, "A new run retained the previous special-room source")
 
 -- Execute the extracted render entry with no entity updates. It must still
 -- decode native held input and select the local room without global unpack.

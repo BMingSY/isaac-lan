@@ -24,6 +24,13 @@ add_library(isaac_lan_deflate STATIC src/core/deflate.cpp)
 target_include_directories(isaac_lan_deflate PUBLIC src)
 target_link_libraries(isaac_lan_deflate PUBLIC isaac_lan_miniz)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_floor_source_test tests/floor_source_test.cpp)
+    target_include_directories(isaac_lan_floor_source_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_floor_source_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME native.floor-source COMMAND isaac_lan_floor_source_test)
+    set_tests_properties(native.floor-source PROPERTIES TIMEOUT 30 LABELS "offline")
     add_executable(isaac_lan_player_hud_test tests/player_hud_test.cpp)
     target_include_directories(isaac_lan_player_hud_test PRIVATE src)
     if(MINGW)
@@ -260,6 +267,7 @@ if(BUILD_TESTING)
         room-transition-context
         room-scope-ownership
         compatibility-targets
+        death-certificate-arrival
         resolved-room-curses
         shared-deal-chances
         truncated-packets

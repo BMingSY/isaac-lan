@@ -108,6 +108,36 @@ void compatibilityTargets() {
     require(!targets.take() && !targets.request(0) && !targets.request(1),
             "A new run retained old pending/checkpoint state");
 }
+void deathCertificateArrival() {
+    using isaac::compat::items::deathCertificateArrival;
+    using Position = std::array<float, 2>;
+    // A teammate can leave a wide/tall room at pixels outside the annex's
+    // 1x1 entry. Only the first arriving head gets native initialization.
+    for (const auto source : {Position{1000, 600}, Position{320, 680}}) {
+        const Position entry{320, 280};
+        require(!deathCertificateArrival(20, 0, 2, std::nullopt),
+                "First Death Certificate arrival overrode native initialization");
+        for (int slot = 1; slot < 4; ++slot) {
+            const auto landing = deathCertificateArrival(20, 0, 2, entry).value_or(source);
+            require(landing == entry,
+                    "Death Certificate teammate retained out-of-room source coordinates");
+        }
+        const Position returned{160, 200};
+        require(deathCertificateArrival(20, 2, 0, returned) == returned &&
+                    deathCertificateArrival(20, 2, 1, returned) == returned,
+                "Death Certificate return kept annex coordinates or lost mirror origin");
+        // Landings are supplied by the current destination, never retained
+        // across another item use, a different return room or a floor reset.
+        require(!deathCertificateArrival(20, 2, 0, std::nullopt) &&
+                    deathCertificateArrival(20, 0, 2, Position{200, 240}) == Position{200, 240},
+                "A repeated transfer reused an earlier Death Certificate landing");
+        for (int animation : {0, 3, 11, 16, 19})
+            require(!deathCertificateArrival(animation, 2, 2, entry),
+                    "An annex door/card or minecart gathered independent players");
+        require(!deathCertificateArrival(20, 0, 0, entry),
+                "An ordinary room transfer acquired Death Certificate placement");
+    }
+}
 void roomScopeOwnership() {
     using Stack = isaac::rooms::ScopeStack<int, std::vector<int>>;
     static_assert(!std::is_copy_constructible_v<Stack>);
@@ -1039,6 +1069,7 @@ int main(int argc, char** argv) {
                      {"room-transition-context", roomTransitionContext},
                      {"room-scope-ownership", roomScopeOwnership},
                      {"compatibility-targets", compatibilityTargets},
+                     {"death-certificate-arrival", deathCertificateArrival},
                      {"resolved-room-curses", resolvedRoomCurses},
                      {"shared-deal-chances", sharedDealChances},
                      {"truncated-packets", truncatedPackets},

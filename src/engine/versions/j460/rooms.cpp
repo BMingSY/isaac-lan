@@ -38,6 +38,7 @@
 #include <limits>
 
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/floor_source.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::rooms {
@@ -252,8 +253,10 @@ struct StageRequest {
     bool same;
     int animation;
     Address player;
+    int sourceRoom;
 };
 std::optional<StageRequest> pendingStage;
+j460::FloorSource floorSource;
 struct TeamTransition {
     Key room;
     std::function<void()> begin;
@@ -278,6 +281,11 @@ std::vector<SavedLocation> resumeLocations;
 bool restoringSavedLocations = false;
 using StageTransition = void(__attribute__((thiscall)) *)(void*, bool, int, void*);
 StageTransition originalStage;
+RoomCall originalNextStage;
+void __attribute__((fastcall)) nextStage(void* level, void*) {
+    floorSource.select(at<int>(reinterpret_cast<Address>(level), 0x18304),
+                       [&] { originalNextStage(level); });
+}
 using LeaveRoom = void(__attribute__((thiscall)) *)(void*, bool);
 LeaveRoom originalLeave;
 std::set<Address> preparedDepartures;
@@ -936,7 +944,7 @@ bool occupiedCombat(const Room& room, Address arriving) {
     });
 }
 void arrival(Address player, const Room& room, int door, const std::vector<Address>& companions,
-             bool protect) {
+             bool protect, std::optional<Vec2> landing = std::nullopt) {
     if (door >= 0 && door < 8) {
         using DoorPosition = Vec2*(__attribute__((thiscall))*)(void*, Vec2*, int);
         Vec2 position;
@@ -945,10 +953,13 @@ void arrival(Address player, const Room& room, int door, const std::vector<Addre
         constexpr Vec2 inward[] = {{40, 0}, {0, 40}, {-40, 0}, {0, -40}};
         position.x += inward[door % 4].x;
         position.y += inward[door % 4].y;
-        place(player, position);
+        landing = position;
+    }
+    if (landing) {
+        place(player, *landing);
         for (auto entity : companions)
             if (at<unsigned>(entity, 0x28) != 867)
-                place(entity, position);
+                place(entity, *landing);
     }
     if (protect) {
         using Cooldown = void(__attribute__((thiscall))*)(void*, int);
@@ -1218,7 +1229,8 @@ void __attribute__((fastcall)) stageTransition(void* g, void*, bool same, int an
     // A floor transaction has precedence over room transfers in the same tick.
     // The first actor in deterministic room-update order owns the transaction.
     if (!pendingStage)
-        pendingStage = StageRequest{same, animation, currentActor(player)};
+        pendingStage =
+            StageRequest{same, animation, currentActor(player), at<int>(game(), 0x18304)};
 }
 void __cdecl rKey() {
     if (!enabled) {
@@ -1595,11 +1607,14 @@ int beginCinematic(lua_State* L) {
 }
 int beginFloor(lua_State* L) {
     const auto same = lua.checkInteger(L, 1), animation = lua.checkInteger(L, 2);
+    const auto sourceRoom = lua.checkInteger(L, 3);
     const auto head = participant(runtime::localViewSlot());
-    const bool ready = runtime::replica() && enabled && !scopes.depth() && head &&
-                       (same == 0 || same == 1) && animation >= 0 && animation <= 6;
-    if (ready && !pendingStage) {
-        pendingStage = StageRequest{same != 0, static_cast<int>(animation), head};
+    const bool ready = runtime::replica() && enabled && !scopes.depth() && head && !pendingStage &&
+                       (same == 0 || same == 1) && animation >= 0 && animation <= 6 &&
+                       sourceRoom >= -20 && sourceRoom < 169;
+    if (ready) {
+        pendingStage = StageRequest{same != 0, static_cast<int>(animation), head,
+                                    static_cast<int>(sourceRoom)};
     }
     lua.pushBoolean(L, ready);
     return 1;
@@ -2517,6 +2532,9 @@ bool takeFloorChange() {
     floorChanged = false;
     return value;
 }
+int floorSourceRoom() {
+    return floorSource.room(at<int>(game(), 0x18304));
+}
 bool receiveRoomRequest(unsigned slot, const lan::RoomRequest& request) {
     if (slot >= 4 || runtime::replica() || !stateReady() || !(connectedMask & (1u << slot)) ||
         at<int>(game(), 0) != request.stage || at<int>(game(), 4) != request.type)
@@ -2719,6 +2737,7 @@ void finishFrame() {
     }
     if (resumeStage && !enabled && at<int>(game(), 0x1ba78) == 0 && at<int>(game(), 0x1b83c) == 0) {
         if (adopt()) {
+            floorSource.reset();
             resumeStage = false;
             floorChanged = true;
             if (!resumeLocations.empty()) {
@@ -2828,6 +2847,10 @@ void finishFrame() {
         // evaluates that native decision; a terminal chest must not also send
         // a speculative floor event before the reliable ending event. Evaluate
         // with the same complete roster that native departure will use.
+        if (!floorSource.begin(request.sourceRoom)) {
+            runtime::abort("Invalid native floor source room");
+            return;
+        }
         using ChestEnding = int(__stdcall*)(bool);
         if (request.animation != 4 || runtime::replica() ||
             engine<ChestEnding>(j460::entry::gameGetChestEnding)(false) == 0)
@@ -2838,8 +2861,8 @@ void finishFrame() {
         // animation 1 plays Forget Me Now's collectible pickup, not a fade.
         const auto animation = runtime::replica() && request.animation == 4 ? 0 : request.animation;
         logger("floor_transaction=BEGIN same=" + std::to_string(request.same) +
-               " received_animation=" + std::to_string(request.animation) +
-               " native_animation=" + std::to_string(animation));
+               " received_animation=" + std::to_string(request.animation) + " native_animation=" +
+               std::to_string(animation) + " source_room=" + std::to_string(request.sourceRoom));
         originalStage(reinterpret_cast<void*>(game()), request.same, animation,
                       reinterpret_cast<void*>(request.player));
         return;
@@ -2925,6 +2948,20 @@ void finishFrame() {
                 to->context = from->context;
         }
         const bool protect = !created && occupiedCombat(*to, request.player);
+        std::optional<std::array<float, 2>> residentPosition;
+        if (!created) {
+            const auto residents = occupants(*to);
+            if (!residents.empty()) {
+                const auto position = at<Vec2>(residents.front(), 0x33c);
+                residentPosition = {position.x, position.y};
+            }
+        }
+        const auto certificatePosition = compat::items::deathCertificateArrival(
+            request.animation, from->key.dimension, to->key.dimension, residentPosition);
+        const auto landing =
+            certificatePosition
+                ? std::optional<Vec2>{{(*certificatePosition)[0], (*certificatePosition)[1]}}
+                : std::nullopt;
         if (created)
             prepareDepartureMetadata(
                 std::span<std::uint32_t, 3>(reinterpret_cast<std::uint32_t*>(to->pointer), 3),
@@ -3045,10 +3082,10 @@ void finishFrame() {
                         at<int>(game(), 0x18310) = previousDimension;
                     }
             }
-            arrival(request.player, *to, request.door, companions, protect);
+            arrival(request.player, *to, request.door, companions, protect, landing);
             for (auto player : actors)
                 if (player != request.player)
-                    arrival(player, *to, request.door, {}, protect);
+                    arrival(player, *to, request.door, {}, protect, landing);
             runtime::roomEntered();
             if (created)
                 presentation::roomEntered(to->pointer);
@@ -3165,6 +3202,7 @@ bool prepareRewind(unsigned slot) {
     return true;
 }
 void beforeStart() {
+    floorSource.reset();
     replicaDeals.reset();
     presentation::items::reset();
     replicaMapEntities.clear();
@@ -3302,6 +3340,8 @@ bool install(Address base, void (*log)(const std::string&)) {
                 reinterpret_cast<void**>(&originalTransition)) &&
            hook(j460::entry::engineRoomsStageTransition, reinterpret_cast<void*>(stageTransition),
                 reinterpret_cast<void**>(&originalStage)) &&
+           hook(j460::entry::levelSetNextStage, reinterpret_cast<void*>(nextStage),
+                reinterpret_cast<void**>(&originalNextStage)) &&
            hook(j460::entry::gameTriggerRKey, reinterpret_cast<void*>(rKey),
                 reinterpret_cast<void**>(&originalRKey)) &&
            hook(j460::entry::gameNextVictoryLap, reinterpret_cast<void*>(victoryLap),
