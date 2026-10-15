@@ -114,6 +114,9 @@ _IsaacLanStatus = function()
     return status
 end
 _IsaacLan = {
+    presentation_player_huds = function()
+        return {}
+    end,
     menu_text_end = noop,
     net_characters = function()
         return characters, catalog
@@ -131,6 +134,9 @@ _IsaacLan = {
             },
         }
     end,
+}
+_IsaacLanModules = {
+    ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
 }
 _IsaacLanCommand = function(name, value)
     commands[#commands + 1] = { name, value }

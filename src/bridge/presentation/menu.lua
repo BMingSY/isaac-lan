@@ -1,5 +1,6 @@
 -- The game's own menu sprites and bitmap fonts. No redistributed game assets.
 local assets
+local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan)
 local ip, port, seed, difficulty = "", "29506", "", 0
 local selection, editing, lastPhase = 1, nil, -1
 local page = "modes"
@@ -195,26 +196,7 @@ function _IsaacLanMenuRender(
         end
     end
     if not visible then
-        if status.prepared and phase == 3 then
-            local white = KColor(1, 1, 1, 1)
-            local line = 0
-            for slot = 1, (status.players or 1) - 1 do
-                if ((status.connected or 0) & (1 << slot)) ~= 0 then
-                    local ping = status["ping" .. slot] or -1
-                    assets[10]:DrawStringScaledUTF8(
-                        "P" .. (slot + 1) .. " " .. (ping < 0 and "—" or ping .. " ms"),
-                        origin.X + 210,
-                        origin.Y + 28 + line * 8,
-                        0.6,
-                        0.6,
-                        white,
-                        0,
-                        false
-                    )
-                    line = line + 1
-                end
-            end
-        end
+        renderPing(status, assets[10])
         local banner
         if phase == 9 then
             banner = "正在当前层归队 · 队友继续游戏"
