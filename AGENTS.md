@@ -55,3 +55,24 @@
 - 只有验证退出、重新启动、启动时加载等确实需要关闭游戏的场景，或进程异常无法恢复时，才单独关闭／重启，并记录原因。无需退出游戏的会话变化优先在现有进程中完成。
 - 现有实机工具不保证所有场景自动合并为一次启动，执行前应按上述约定安排场景，不能直接将默认分组反复启动作为日常测试流程。
 - 若当前任务明确要求不启动游戏，最终实机检查也保留为待验证，不自行启动；离线通过不等于实机验收通过。
+
+# 发布前整体验收
+
+每次准备发布版本，都必须执行以下整体验收，不能只凭 CI 默认 `fast` 检查或最近一次专项回归判定通过。执行与记录方式参考[发布前集中验证记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/release-validation-20261015.md)。
+
+- 先确定候选提交和相对上次发布的变更范围，执行 `python tools/test.py --profile full`，完成 Windows x86 构建、网络／原生 ABI 测试和安装包校验。冻结各轮使用的 DLL、夹具与安装包，记录提交及 SHA-256。
+- 实机只使用有归属标记的隔离目录和独立端口，运行前备份配置、存档及日志；不控制用户手动游玩的实例。由一个执行者调度多组游戏实例并行跑普通玩法／Boss 分片，不使用多个 agent 分别跑实机。
+- 按上方测试约定复用每组主客机进程与连接。性能检查单独运行，真实键盘／菜单检查独占焦点，避免并行实例污染帧率或抢占输入；需要重启时记录原因。
+
+| 必跑范围 | 入口与验收内容 |
+| --- | --- |
+| 安装包与基础玩法 | [run_release_acceptance.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_release_acceptance.py) 的全部用例：安装／自动加载、正常输入的战斗与拾取、分房／换层、五类沙漏回退、暂停菜单，以及单人保存 → 联机 → 单人继续的存档和独立背包保护 |
+| 全结局路线 | [run_endings.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_endings.py) 覆盖羔羊、???、Delirium、Mega Satan、Mother、上行至 Beast；羔羊使用 `--first-floor`。Mother 路线两端必须实际到达水一／二、矿一／二、陵墓一／二，并检查原生结局、会话清理和本地进度恢复 |
+| 原版全 Boss | [run_bosses.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_bosses.py) 跑完 [boss_catalog.json](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/boss_catalog.json) 的全部条目，可分片并行；与结局、贪婪结果一起交给 [check_boss_coverage.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/check_boss_coverage.py) 汇总，主客机均无缺项。覆盖原生阶段机制，包括 Rotgut 全员吞入／返回和 Horny Boys 持有炸弹引用；不把直接击杀当作特殊机制通过 |
+| 贪婪与支线机制 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 至少选 `greed`、`greedier`、`knife`、`hornfel`：两种贪婪模式全程、原生矿车／逃亡，以及 Hornfel 持有炸弹、跨层和重连；另补本版改动涉及的角色、道具、Mod 与生命周期专项 |
+| 客机响应与镜头 | [run_response_acceptance.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_response_acceptance.py) 全部七项：直连／约 20ms 往返延迟、输入预览、移动／过门、暂停、主动道具、蓄力武器、大房间镜头和镜面方向；用 `--record-view` 留下画面供核对 |
+| EID 举袋与推动水流 | [run_client_scenes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_client_scenes.py) 使用 `--include-bag-transitions --record-view`，在同一对实例中覆盖持续举袋、EID 开／关、移动／静止反复举放，以及水一／二的实际推动水流；检查帧间隔、停帧、预测重置、水花副本标记及自然销毁 |
+
+- 同时核对主客机断言、日志和实际画面；原生 Boss／换场／退出检查使用工具支持的 `--heap-check` 保留异常证据。用例结束后正常关闭所属实例，恢复隔离资料并逐文件核对哈希。
+- 发现失败先保留原始证据，补离线复现、修复并重建，再集中复测受影响的组；影响范围无法确定时重跑整体。只有开始记录、缺少一端结果、崩溃或未完成的用例不能计为通过；保留旧失败报告，复测另开一轮。
+- 每次在 [docs/history/](https://github.com/BMingSY/isaac-lan/tree/main/docs/history) 留下日期、候选构建、逐项结果、性能数据、重启原因及恢复结果。区分已修复、仍可复现、偶发未定位和未验证；偶发崩溃复测未重现不等于已修复，已有失败也不能跳过或写成全绿。
