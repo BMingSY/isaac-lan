@@ -4,7 +4,7 @@ Isaac LAN 提供本机视图、生命周期通知、主机动作和自动兼容�
 
 当前公开能力包括本机视图、生命周期、主机动作和自动适配器注册。补充状态、实体元数据、存档扩展和必需内容声明尚未提供；不会自动复制 `GetData()`、Mod 源码、配置或资源。当前传输协议为 28，世界视图 schema 为 15，各端需要同一扩展构建；公开 API 版本仍为 1，与传输和视图版本分别维护，见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)。
 
-本文是接入方契约；当前 Stats+、GoodTrip、EID 的精确版本、源码指纹、适配行为与验收记录见[第三方 Mod 额外兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。原版[角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)和[道具／效果](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)另有索引。
+本文是接入方契约；当前 Stats+、GoodTrip、EID 清单与兼容后的效果见[第三方 Mod 兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。原版[角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)和[道具／效果](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)另有清单。
 
 ## 接口入口
 
@@ -334,7 +334,7 @@ end
 
 ## 内置模块
 
-当前内置 Stats+、原版 GoodTrip 与两组 EID 版本配置；详细行为、源码指纹、安装组合及限制统一见[第三方 Mod 额外兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)，避免公开契约与支持名单各维护一份不同的版本表。
+当前内置 Stats+、原版 GoodTrip 与两组 EID 版本配置；兼容后的效果见[第三方 Mod 兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。
 
 ## 验证
 
@@ -346,4 +346,4 @@ end
 
 真实游戏使用原版文件的隔离拷贝：[`state_mod_ui.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_ui.lua) 走地图与原生手柄输入；[`state_mod_integrations.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_integrations.lua) 核对真实 Stats+ 玩家缓存及布局序号、EID 本机名单、客机 GoodTrip 请求、重复请求和最终到达。用 `--mod`、`--client-mod`、`--host-mod` 构造安装组合，见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 
-既有 Mod 组合与后续沙漏、缓存恢复的游戏证据见[第三方 Mod 验证范围](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md#验证范围)。这些用例不能替代全部特殊房间、角色、语言、回退及未知上游版本的验收。每次兼容范围扩展都需增加源码配置和对应游戏证据。
+既有实机结果见[已报问题回归](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/issue-regressions.md)和[支线与回退回归](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/side-route-regressions.md)。这些用例不能替代全部特殊房间、角色、语言、回退及未知上游版本的验收。每次兼容范围扩展都需增加源码配置和对应游戏证据。

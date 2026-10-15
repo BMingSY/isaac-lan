@@ -74,7 +74,7 @@ J460 `Scope` 按深度选择独立的临时名单，恢复原生标量与名单�
 
 现有例子：Boss 汇合用 [`compat/bosses/encounters.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/bosses/encounters.h) 判断、后端排队迁移；里拉撒路用 [`compat/characters/lazarus.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/characters/lazarus.lua) 解析原生身体；共享道具、口袋槽和特殊传送见[队伍兼容](https://github.com/BMingSY/isaac-lan/blob/main/docs/party-compatibility.md)，概率上下文见[共享开门概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md)。第三方 Mod 的注册与卸载遵循独立的[公开 API 契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md)。
 
-当前实现的效果清单分别维护在[角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具与效果](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)及[第三方 Mod](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)记录中。新增或调整兼容规则时同步更新对应记录的触发条件、作用范围、清理边界与回归入口。
+当前实现的效果清单分别维护在[角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具与效果](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)及[第三方 Mod](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)记录中。新增或调整兼容规则时，同步更新对应清单与兼容后的效果。
 
 ## 验证入口
 
