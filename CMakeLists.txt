@@ -31,6 +31,13 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME runtime.input-schedule COMMAND isaac_lan_input_schedule_test)
     set_tests_properties(runtime.input-schedule PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_player_hud_test tests/player_hud_test.cpp)
+    target_include_directories(isaac_lan_player_hud_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_player_hud_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME presentation.player-hud COMMAND isaac_lan_player_hud_test)
+    set_tests_properties(presentation.player-hud PROPERTIES TIMEOUT 30 LABELS "offline")
     add_executable(isaac_lan_deflate_test tests/deflate_test.cpp)
     target_link_libraries(isaac_lan_deflate_test PRIVATE isaac_lan_deflate)
     if(MINGW)
@@ -71,7 +78,7 @@ if(BUILD_TESTING)
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
         foreach(test_case session_lifecycle capture_generation replica_pipeline challenges
-                          challenge_menu)
+                          challenge_menu ping_hud)
             add_test(
                 NAME bridge.${test_case}
                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/${test_case}.lua"

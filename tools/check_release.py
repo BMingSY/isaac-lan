@@ -19,6 +19,7 @@ FILES = BINARIES | {
     "install.py",
     "game-profile.json",
     "README.md",
+    "FAQ.md",
     "payload.json",
     "licenses/MinHook-LICENSE.txt",
     "licenses/imgui-LICENSE.txt",

@@ -13,8 +13,11 @@
 #include <deque>
 #include <cstring>
 #include <array>
+#include <string>
+#include <utility>
 
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/player_hud.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::presentation {
@@ -143,9 +146,47 @@ struct API {
     const char*(__cdecl* pushString)(lua_State*, const char*, std::size_t);
     void(__cdecl* pushBoolean)(lua_State*, int);
     void(__cdecl* pushInteger)(lua_State*, long long);
+    void(__cdecl* pushNumber)(lua_State*, double);
+    void(__cdecl* createTable)(lua_State*, int, int);
     void(__cdecl* pushClosure)(lua_State*, int(__cdecl*)(lua_State*), int);
     void(__cdecl* setField)(lua_State*, int, const char*);
 } lua{};
+int playerHuds(lua_State* L) {
+    lua.createTable(L, 0, 4);
+    const auto manager = at<std::uintptr_t>(image, j460::globals::manager);
+    const auto game = at<std::uintptr_t>(image, j460::globals::game);
+    if (!manager || at<int>(manager, 8) != 2 || !game || runtime::localViewSlot() < 0)
+        return 1;
+    const auto width = at<float>(image, j460::globals::logicalWidth);
+    const auto height = at<float>(image, j460::globals::logicalHeight);
+    using Layout = int(__attribute__((thiscall))*)(void*, int, void*);
+    using Position = float*(__attribute__((thiscall))*)(void*, float*, int, int);
+    rooms::withView([&] {
+        for (unsigned i = 0; i < 4; ++i) {
+            const auto anchor = j460::player_hud::anchor(
+                game + 0x1da04, i, width, height,
+                [](auto hud, auto index, auto player) {
+                    return reinterpret_cast<Layout>(image + j460::entry::hUDPlayerLayout)(
+                        reinterpret_cast<void*>(hud), index, reinterpret_cast<void*>(player));
+                },
+                [](auto hud, auto point, auto index, auto layout) {
+                    reinterpret_cast<Position>(image + j460::entry::hUDPlayerPosition)(
+                        reinterpret_cast<void*>(hud), point, index, layout);
+                });
+            if (!anchor)
+                continue;
+            lua.createTable(L, 0, 3);
+            lua.pushInteger(L, anchor->layout);
+            lua.setField(L, -2, "layout");
+            lua.pushNumber(L, anchor->x);
+            lua.setField(L, -2, "x");
+            lua.pushNumber(L, anchor->y);
+            lua.setField(L, -2, "y");
+            lua.setField(L, -2, std::to_string(anchor->slot).c_str());
+        }
+    });
+    return 1;
+}
 int events(lua_State* L) {
     try {
         if (lua.getTop(L) == 1 && !runtime::replica()) {
@@ -279,6 +320,8 @@ bool bind(lua_State* L, HMODULE module) {
     IMPORT(pushString, "lua_pushlstring");
     IMPORT(pushBoolean, "lua_pushboolean");
     IMPORT(pushInteger, "lua_pushinteger");
+    IMPORT(pushNumber, "lua_pushnumber");
+    IMPORT(createTable, "lua_createtable");
     IMPORT(pushClosure, "lua_pushcclosure");
     IMPORT(setField, "lua_setfield");
 #undef IMPORT
@@ -288,6 +331,8 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "presentation_reset");
     lua.pushClosure(L, active, 0);
     lua.setField(L, -2, "presentation_active");
+    lua.pushClosure(L, playerHuds, 0);
+    lua.setField(L, -2, "presentation_player_huds");
     lua.pushClosure(L, victoryPrompt, 0);
     lua.setField(L, -2, "victory_lap_prompt");
     return items::bind(L, module);

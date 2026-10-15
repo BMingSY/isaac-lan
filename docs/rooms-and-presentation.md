@@ -37,11 +37,18 @@
 | --- | --- |
 | 房间、背景、镜头与地图焦点 | 本机角色所在房间；镜头使用该房间的原生镜头对象 |
 | 血量、卡牌与主动栏 | 保留原版多人 HUD，并保持本机栏位归属 |
+| Ping 数值 | 各在线客机角色 HUD 的右上角；按控制器身份对应房主测得的 RTT，随本机栏位排序与 HUD 偏移移动 |
 | 属性栏、道具列表与拾取提示 | 本机控制器对应的角色 |
 | 小地图玩家位置 | 共同楼层中的在线玩家位置 |
 | 地图放大与 Mod 界面操作 | 本机物理输入，不能使用队友的网络操作 |
 
 换层期间可能尚无可显示房间，仍通过临时显示名单维持本机 HUD 归属。该排序不能改掉玩法使用的控制器编号或存档人数顺序。
+
+Ping 在对应角色 HUD 右上角显示往返延迟数值（例如 `35 ms`），尚无测量值时显示 `—`。大厅、断开的玩家和隐藏的 HUD 不显示。房主没有对自身的 RTT，不显示 Ping。
+
+原版 Lua API 不提供每个角色 HUD 的屏幕位置。[J460 HUD 读取器](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/player_hud.h) 读取四个主 `PlayerHUD` 的角色控制器（步长 `0x6dc`），在本机显示名单作用域内调用原生布局和位置函数，经 `presentation_player_huds` 返回身份、布局与坐标普通数值。两个原生函数纳入启动签名校验；不分配、替换或持有原生对象，也不新增 Hook。隐藏、空栏位、无效控制器／布局及非有限／屏幕外坐标均被过滤。[Lua 表现组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/ping.lua) 负责相对位置与数值绘制。原生包围框依赖官方在线模式，在局域网模式下保持未绘制哨兵，因此不能用于定位。
+
+离线回归覆盖读取边界、身份排序、原生调用参数、延迟数值、分辨率及清理。标量按字节拷贝读取，避免 Linux 64 位离线夹具与 J460 32 位结构步长的对齐差异。基于 `main` 的 Windows x86 构建、76 项 CTest 及同组 ASan／UBSan 检查通过。[双端实机夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_ping_hud.lua) 在同一对主客机进程中检查栏位交换、实测／指定／未知延迟、HUD 偏移、隐藏／恢复、联机菜单、分房与换层；具体实机轮次与结果随 PR 记录。3／4 人及双角色布局仅离线覆盖。
 
 ## 表现也需要归属
 
@@ -67,7 +74,7 @@
 
 渲染和本机 UI 使用 `input::ViewScope` 读取本机物理输入；地图操作也单独按本机输入查询。角色战斗更新使用房主消费的对应控制器输入。
 
-Good Trip 等本机界面发起原生换房时，客机发送 `RoomRequest`，房主核对源楼层、源房间、维度和在线身份后执行。请求描述意图，不允许客机提交任意世界状态。
+已适配的 GoodTrip 界面使用[主机动作 API](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md#主机动作与回执)提交 `travel`，在原传送函数产生副作用前交由主机验证、迁移和回执；兼容后的效果见[第三方 Mod 清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。其他本机界面的通用原生换房入口仍可由客机发送 `RoomRequest`，房主核对源楼层、源房间、维度和在线身份后执行。两类请求都描述意图，不允许客机提交任意世界状态。
 
 依赖全局换房回调的第三方玩法 Mod 在队友房间可能效果不完整。当前没有复制任意 Mod 私有状态的机制，也不为每个 Mod 改写内部逻辑。
 

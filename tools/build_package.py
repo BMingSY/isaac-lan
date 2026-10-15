@@ -72,6 +72,7 @@ def build(build_directory, output):
     (output / "payload.json").write_text(json.dumps(payload, indent=2) + "\n")
     shutil.copy2(source / "package/install.ps1", output)
     shutil.copy2(source / "README.md", output)
+    shutil.copy2(source / "docs/faq.md", output / "FAQ.md")
     for mode in ("Install", "Uninstall"):
         (output / f"{mode}.cmd").write_bytes(
             (

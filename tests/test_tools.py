@@ -341,6 +341,7 @@ class PackagingTests(unittest.TestCase):
             self.assertEqual((output / name).read_bytes(), original)
             self.assertEqual(payload["files"][name], hashlib.sha256(original).hexdigest())
         self.assertEqual((output / "README.md").read_bytes(), (ROOT / "README.md").read_bytes())
+        self.assertEqual((output / "FAQ.md").read_bytes(), (ROOT / "docs/faq.md").read_bytes())
         self.assertEqual(
             (output / "install.ps1").read_bytes(), (ROOT / "package/install.ps1").read_bytes()
         )
@@ -375,6 +376,9 @@ class PackagingTests(unittest.TestCase):
             self.assertIsNone(zipped.testzip())
             self.assertEqual(zipped.namelist(), sorted(zipped.namelist()))
             self.assertEqual(set(zipped.namelist()), {archive.stem + "/" + name for name in FILES})
+            self.assertEqual(
+                zipped.read(archive.stem + "/FAQ.md"), (ROOT / "docs/faq.md").read_bytes()
+            )
 
     def test_release_tag_must_match_version(self):
         for tag in ("latest", "v999.0.0", self.tag + "-test", self.tag[1:]):
@@ -412,6 +416,12 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing or unexpected"):
             check(archive, self.tag)
         self.rewrite_archive(archive, lambda files: files.update({"unexpected.txt": b"extra"}))
+        with self.assertRaisesRegex(ValueError, "missing or unexpected"):
+            check(archive, self.tag)
+
+    def test_check_rejects_missing_faq(self):
+        archive = self.archive()
+        self.rewrite_archive(archive, lambda files: files.pop(archive.stem + "/FAQ.md"))
         with self.assertRaisesRegex(ValueError, "missing or unexpected"):
             check(archive, self.tag)
 
