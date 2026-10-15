@@ -1,6 +1,6 @@
 # 队伍兼容修复
 
-对应 #41、#42、#43、#44、#47、#48、#49、#51、#54。当前传输协议为 28，世界视图 schema 为 15；两端必须使用相同 DLL。此文记录实现边界和当时的协议升级，当前版本契约见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)，历次证据见[专项验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md)。
+对应 #41、#42、#43、#44、#47、#48、#49、#51、#54。当前传输协议为 29，世界视图 schema 为 15；两端必须使用相同 DLL。此文记录实现边界和当时的协议升级，当前版本契约见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)，历次证据见[专项验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md)。
 
 按效果查询当前兼容范围，见[角色兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具与效果兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)和[第三方 Mod 兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。本页保留原生机制与修复依据。
 
@@ -24,7 +24,13 @@ J460 EntityFactory::Create 的跟班分支在 RVA `0x2f00d7` 使用 64 槽循环
 
 ## 死亡证明
 
-原版进入死亡证明与拿取后的延迟返回均使用动画 20，返回调用的玩家参数为空，原来的逐角色适配无法解析该返回。[`compat/items/death_certificate.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/death_certificate.h) 根据动画与来源／目标维度选择整队传送；内部过门和卡牌仍逐人执行。传送卡只解析死亡证明维度内的目的地，缺少对应房间时回到原版入口 80，不能跳回普通层。任何玩家拿取后全队返回原版保存的来源房间。客机从权威房间视图进入时没有执行 Game::EnterDeathCertificate，需要补齐原版的 5 个标量来源字段：当前／上一房间索引和维度、离开门。返回时以权威目的地修正来源，避免原版 ChangeRoom 使用未初始化的索引 0。沿用已有房间生命周期、原版返回索引与维度，不复制或释放物品池、房间或实体；到达后恢复原版动画导致的控制锁。
+原版进入死亡证明与拿取后的延迟返回均使用动画 20，返回调用的玩家参数为空，原来的逐角色适配无法解析该返回。[`compat/items/death_certificate.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/death_certificate.h) 根据动画与来源／目标维度选择整队传送；内部过门和卡牌仍逐人执行。传送卡只解析死亡证明维度内的目的地，缺少对应房间时回到原版入口 80，不能跳回普通层。任何玩家拿取后全队返回原版保存的来源房间。
+
+首名角色沿用原生初始化落点；后续角色进入已加载房间时，复用已到达角色的位置，并同步放置其双角色身体与随行实体，避免沿用大房间坐标而落到地图外。落点只取自本次目标房间，不跨房间或楼层缓存。入口门定位和追逐型 Shadow 的原生进房行为保持原有处理。
+
+J460 原版的死亡证明基座可触发多人奖励补发，拿取后又生成 Boss 池道具。本次落点修复保留该行为；原版代码依据和验证范围见[死亡证明落点追加验证](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md#死亡证明落点追加验证)。
+
+客机从权威房间视图进入时没有执行 Game::EnterDeathCertificate，需要补齐原版的 5 个标量来源字段：当前／上一房间索引和维度、离开门。返回时以权威目的地修正来源，避免原版 ChangeRoom 使用未初始化的索引 0。沿用已有房间生命周期、原版返回索引与维度，不复制或释放物品池、房间或实体；到达后恢复原版动画导致的控制锁。
 
 ## 口袋槽与药丸
 

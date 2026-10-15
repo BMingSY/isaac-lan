@@ -193,7 +193,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         present,
-        function(epoch, stage, stageType, animation, same)
+        function(epoch, stage, stageType, animation, same, ...)
             assert(
                 Game():GetLevel():GetStage() == 1 and stage == 1,
                 "Floor event arrived after the new floor"
@@ -201,7 +201,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             assert(not same and animation == 0, "Native transition arguments changed")
             floorBegan = true
             report("FLOOR_BEGIN event before next-floor state time=" .. Isaac.GetTime())
-            return beginFloor(epoch, stage, stageType, animation, same)
+            return beginFloor(epoch, stage, stageType, animation, same, ...)
         end
     )
 end

@@ -181,6 +181,7 @@ def main():
         name in cases
         for name in (
             "endings",
+            "floor-sources",
             "campaign",
             "victory-lap",
             "victory-no",
@@ -267,6 +268,8 @@ def main():
                             and "SHARED_DEALS " in line
                             or name == "party-compat"
                             and "PARTY_COMPAT " in line
+                            or name == "death-certificate"
+                            and "DEATH_CERTIFICATE " in line
                             or name == "item-generation"
                             and "ITEM_GENERATION " in line
                             or name in ("greed", "greedier")

@@ -511,6 +511,12 @@ void stageEvents() {
     for (unsigned i = 0; i < stage.seeds.size(); ++i)
         stage.seeds[i] = 0x12340000 + i;
     stage.stateFlags = {0x10000, (1u << (44 - 32)) | (1u << (48 - 32))};
+    stage.sourceRoom = -8;
+    for (int invalidRoom : {-21, 169}) {
+        auto invalid = stage;
+        invalid.sourceRoom = invalidRoom;
+        require(!g.peers[0]->beginStage(invalid), "Invalid floor source room accepted");
+    }
     require(g.peers[0]->beginStage(stage), "Stage broadcast failed");
     std::optional<Stage> received;
     until([&] {
@@ -577,6 +583,7 @@ void stageDuringRejoin() {
             "First loading floor event failed");
     Stage last{2, 2, 0, 0, false, {}, {}};
     last.stateFlags[1] = 1u << (44 - 32);
+    last.sourceRoom = -8;
     require(g.peers[0]->beginStage(last), "Second loading floor event failed");
     g.poll();
     require(!g.peers[1]->takeStage(), "Native event reached an unprepared engine");
@@ -598,6 +605,7 @@ void rewindTransaction() {
     g.publish(0, 40000);
     Stage value{1, 1, 0, 12, false, {}, {}};
     value.stateFlags[1] = 1u << (44 - 32);
+    value.sourceRoom = -9;
     value.rewind.resize(300001);
     unsigned random = 17;
     for (auto& b : value.rewind) {

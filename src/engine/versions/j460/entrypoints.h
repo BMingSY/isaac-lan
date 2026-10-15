@@ -43,6 +43,7 @@ inline constexpr std::uint32_t gameRender = 0x2fbc10;
 inline constexpr std::uint32_t gameUpdateHalf = 0x2fd3f0;
 inline constexpr std::uint32_t engineRoomsTransition = 0x2fd7c0;
 inline constexpr std::uint32_t engineRoomsStageTransition = 0x2fdc10;
+inline constexpr std::uint32_t levelSetNextStage = 0x3467c0;
 inline constexpr std::uint32_t engineRoomsChange = 0x33fc80;
 inline constexpr std::uint32_t engineRoomsDesc = 0x340bc0;
 inline constexpr std::uint32_t engineRoomsAssign = 0x3a6450;

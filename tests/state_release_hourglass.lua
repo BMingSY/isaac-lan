@@ -580,7 +580,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             return true
         end,
         present,
-        function(epoch, stage, stageType, animation, same, rewind, restart, cinematic)
+        function(epoch, stage, stageType, animation, same, rewind, restart, cinematic, ...)
             if #rewind > 0 then
                 rewindEvents = rewindEvents + 1
                 assert(
@@ -635,7 +635,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     .. " rewind_bytes="
                     .. #rewind
             )
-            return beginFloor(epoch, stage, stageType, animation, same, rewind, restart, cinematic)
+            return beginFloor(
+                epoch,
+                stage,
+                stageType,
+                animation,
+                same,
+                rewind,
+                restart,
+                cinematic,
+                ...
+            )
         end
     )
 end

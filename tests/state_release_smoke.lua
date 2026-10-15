@@ -422,7 +422,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             return true
         end,
         present,
-        function(epoch, stage, stageType, animation, same, rewind, restart, cinematic)
+        function(epoch, stage, stageType, animation, same, rewind, restart, cinematic, ...)
             floorEvents = floorEvents + 1
             assert(
                 floorEvents == 1 and stage == 1 and animation ~= 6 and #rewind == 0 and restart == 0,
@@ -431,7 +431,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report(
                 "FLOOR_EVENT epoch=" .. epoch .. " stage=" .. stage .. " animation=" .. animation
             )
-            return beginFloor(epoch, stage, stageType, animation, same, rewind, restart, cinematic)
+            return beginFloor(
+                epoch,
+                stage,
+                stageType,
+                animation,
+                same,
+                rewind,
+                restart,
+                cinematic,
+                ...
+            )
         end
     )
 end
