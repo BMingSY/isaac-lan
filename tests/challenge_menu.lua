@@ -316,6 +316,35 @@ assert(labels["结束挑战（不保存）"] and not labels["保存并结束联�
 status.challenge = 0
 draw()
 assert(labels["保存并结束联机"])
+-- Reconnect/loading/game cards use the run roster, even when lobby choices
+-- were never selected (fresh rejoin) or differ from a resumed save.
+catalog["1"].animation = "02_Magdalene"
+catalog["1"].portraitAnm2Path = "native-normal.anm2"
+local roster = { 1, 23, 4096, 41 }
+for slot, id in ipairs(roster) do
+    status["character" .. (slot - 1)] = id
+    status["choice" .. (slot - 1)] = 0
+end
+for _, phase in ipairs({ 9, 7, 3, 9 }) do
+    status.phase = phase
+    for n = 2, 4 do
+        status.players = n
+        draw()
+        assert(labels["抹大拉"] and labels["里·该隐"] and not labels["以撒"])
+        for slot = 1, n do
+            local entry = catalog[tostring(roster[slot])]
+            local expected = entry.animation == "missing" and "00_Random" or entry.animation
+            assert(renderedPortraits[slot][2] == expected, "Run card used a lobby portrait")
+        end
+        assert(n < 3 or labels[longName])
+        assert(n < 4 or labels["里·无菜单画像"])
+    end
+end
+-- A new lobby returns to its own selections rather than retaining the run.
+status.phase, status.players = 2, 2
+draw()
+assert(labels["以撒"] and not labels["里·该隐"])
+assert(renderedPortraits[1][2] == "01_Isaac" and renderedPortraits[2][2] == "01_Isaac")
 -- Native MainMenu can remain behind the returning LAN page. Two Back presses
 -- close the LAN/mode overlay without invoking a lobby action.
 status.phase, status.prepared = 0, false
@@ -324,4 +353,4 @@ count = #commands
 assert(draw(27))
 assert(not draw(27))
 assert(#commands == count)
-print("PASS challenge list, colored selection, role lock, guest view, clean HUD and transient exit")
+print("PASS challenge selection, role cards, reconnect roster, clean HUD and transient exit")
