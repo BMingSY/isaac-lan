@@ -72,7 +72,9 @@ local function stateEnvironment()
             ),
             ["compat/bosses/dogma"] = dofile(root .. "/src/bridge/compat/bosses/dogma.lua"),
             ["sync/entity_links"] = dofile(root .. "/src/bridge/sync/entity_links.lua"),
-            ["compat/bosses/hornfel"] = dofile(root .. "/src/bridge/compat/bosses/hornfel.lua"),
+            ["compat/bosses/held_bombs"] = dofile(
+                root .. "/src/bridge/compat/bosses/held_bombs.lua"
+            ),
             ["compat/bosses/visuals"] = dofile(root .. "/src/bridge/compat/bosses/visuals.lua"),
             ["compat/characters/lazarus"] = dofile(
                 root .. "/src/bridge/compat/characters/lazarus.lua"

@@ -199,7 +199,7 @@ local function environment()
         return {}
     end
     modules["sync/entity_links"] = dofile(root .. "/src/bridge/sync/entity_links.lua")
-    modules["compat/bosses/hornfel"] = dofile(root .. "/src/bridge/compat/bosses/hornfel.lua")
+    modules["compat/bosses/held_bombs"] = dofile(root .. "/src/bridge/compat/bosses/held_bombs.lua")
     modules["compat/bosses/visuals"] = dofile(root .. "/src/bridge/compat/bosses/visuals.lua")
     modules["compat/bosses/dogma"] = function()
         return {}
@@ -335,7 +335,7 @@ for tick = 1, 5 do
         local bytes = host.state.capture(slot, tick)
         local view = host.state.decode(bytes)
         assert(
-            view[1] == 18 and view[9][1][8][1] == first and view[9][2][8][1] == second,
+            view[1] == 19 and view[9][1][8][1] == first and view[9][2][8][1] == second,
             "World snapshot omitted or mixed the two players' crafting bags"
         )
         assert(view[9][1][8][2] == (tick % 2 == 0) and view[9][2][8][2] == (tick % 2 ~= 0))

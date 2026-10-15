@@ -1,6 +1,6 @@
-return function(dogma, hornfel)
+return function(dogma, heldBombs)
     local function component(entity)
-        return hornfel.matches(entity) and hornfel or dogma
+        return heldBombs.matches(entity) and heldBombs or dogma
     end
     return {
         capture = function(entity, id)

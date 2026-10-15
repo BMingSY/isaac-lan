@@ -32,7 +32,7 @@ compat/items/crafting_bag
 compat/routes/crawlspace
 compat/routes/greed
 compat/bosses/dogma
-compat/bosses/hornfel
+compat/bosses/held_bombs
 compat/bosses/visuals
 compat/characters/lazarus
 compat/characters/blue_baby

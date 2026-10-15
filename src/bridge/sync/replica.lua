@@ -298,6 +298,9 @@ return function(deps)
         local cursesChanged = restoreShared(value, level)
         local mapChanged = restoreMap(value, level, roomChanged, cursesChanged)
         restoreRoom(value, game, now, tick, mapChanged)
+        -- Reclaiming removed NPCs runs a native room update and can advance
+        -- Greed waves. Finish the snapshot with the authoritative counter.
+        greed.apply(value.greed)
         commit(value, tick, ack)
         appliedLocations = locationIdentity(value.locations)
         return true

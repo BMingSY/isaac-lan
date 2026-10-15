@@ -10,7 +10,7 @@
 
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/entity_links.h"
-#include "engine/versions/j460/hornfel.h"
+#include "engine/versions/j460/held_bombs.h"
 #include "engine/versions/j460/rails.h"
 namespace j460 = isaac::engine::j460;
 
@@ -95,26 +95,28 @@ int entityMinecart(lua_State* L) {
     }
     return 1;
 }
-int hornfelBombs(lua_State* L) {
+int bossHeldBombs(lua_State* L) {
     try {
         const auto entity = entitySprite(L, 1);
+        const auto count = j460::held_bombs::slotCount(entity);
         if (lua.getTop(L) == 1) {
-            for (auto index : j460::hornfel::indices(entity))
-                lua.pushInteger(L, index);
-            return 2;
+            const auto indices = j460::held_bombs::indices(entity);
+            for (unsigned i = 0; i < count; ++i)
+                lua.pushInteger(L, indices[i]);
+            return count;
         }
-        if (!runtime::replica() || lua.getTop(L) != 3)
-            throw std::runtime_error("Only replicas restore Hornfel bombs");
-        std::array<Address, 2> bombs{};
-        for (int i = 0; i < 2; ++i)
+        if (!runtime::replica() || lua.getTop(L) != static_cast<int>(count + 1))
+            throw std::runtime_error("Only replicas restore Boss held bombs");
+        std::array<Address, 3> bombs{};
+        for (unsigned i = 0; i < count; ++i)
             if (lua.type(L, i + 2) != 1 || lua.toBoolean(L, i + 2))
                 bombs[i] = entitySprite(L, i + 2);
         const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
         using Resize = void(__attribute__((thiscall))*)(void*, unsigned);
         using Assign = void(__attribute__((fastcall))*)(void*, void*);
-        j460::hornfel::restore(entity, bombs,
-                               reinterpret_cast<Resize>(image + j460::entry::hornfelBombsResize),
-                               reinterpret_cast<Assign>(image + j460::entry::entityPtrAssign));
+        j460::held_bombs::restore(
+            entity, bombs, reinterpret_cast<Resize>(image + j460::entry::bossHeldBombsResize),
+            reinterpret_cast<Assign>(image + j460::entry::entityPtrAssign));
         lua.pushBoolean(L, true);
     } catch (const std::exception& error) {
         runtime::abort(error.what());
@@ -565,8 +567,8 @@ bool bind(lua_State* L, HMODULE module) {
 #undef IMPORT
     lua.pushClosure(L, spriteState, 0);
     lua.setField(L, -2, "sprite_state");
-    lua.pushClosure(L, hornfelBombs, 0);
-    lua.setField(L, -2, "hornfel_bombs");
+    lua.pushClosure(L, bossHeldBombs, 0);
+    lua.setField(L, -2, "boss_held_bombs");
     lua.pushClosure(L, entityMinecart, 0);
     lua.setField(L, -2, "entity_minecart");
     lua.pushClosure(L, roomRails, 0);

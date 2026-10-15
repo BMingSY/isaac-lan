@@ -8,6 +8,7 @@
 #include "core/intro_barrier.h"
 #include "runtime/room_map.h"
 #include "compat/bosses/encounters.h"
+#include "compat/bosses/rotgut.h"
 #include "compat/routes/mines.h"
 #include "compat/routes/curses.h"
 #include "compat/characters/traits.h"
@@ -260,6 +261,17 @@ void roomTransitionContext() {
     ordinary[1] = false;
     completeArrivalControls(0, ordinary[1], 2);
     require(!ordinary[1], "Ordinary arrival bypassed the native run state lock");
+    require(rotgutSwallow(-14, -1, 2, -1, 911, 0) && rotgutSwallow(-14, -1, 2, 0, 911, 0) &&
+                !rotgutSwallow(-14, -1, 2, 1, 911, 0) && !rotgutSwallow(-15, -1, 2, -1, 911, 0) &&
+                !rotgutSwallow(-14, 2, 2, -1, 911, 0) && !rotgutSwallow(-14, -1, 0, -1, 911, 0) &&
+                !rotgutSwallow(-14, -1, 2, -1, 911, 1) && !rotgutSwallow(-14, -1, 2, -1, 920, 0),
+            "Rotgut swallow must not gather other crawlspaces, forms or transitions");
+    require(rotgutReturn(-15, 87, 87, -1, 0, -1) && rotgutReturn(-15, -3, -3, -1, 0, 0) &&
+                !rotgutReturn(-14, 87, 87, -1, 0, -1) && !rotgutReturn(-4, 87, 87, -1, 0, -1) &&
+                !rotgutReturn(-15, 86, 87, -1, 0, -1) && !rotgutReturn(-15, 87, 87, 2, 0, -1) &&
+                !rotgutReturn(-15, 87, 87, -1, 2, -1) && !rotgutReturn(-15, 87, 87, -1, 0, 1) &&
+                !rotgutReturn(-15, -15, -15, -1, 0, -1) && !rotgutReturn(-15, 169, 169, -1, 0, -1),
+            "Rotgut must return only its final stomach to its recorded source");
     require(gatherHomeCombat(13, 1, true, 2, 3) && !gatherHomeCombat(13, 1, true, 3, 3) &&
                 !gatherHomeCombat(13, 0, true, 2, 3) && !gatherHomeCombat(12, 1, true, 2, 3) &&
                 !gatherHomeCombat(13, 1, false, 2, 3),

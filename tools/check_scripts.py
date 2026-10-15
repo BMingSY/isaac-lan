@@ -9,7 +9,9 @@ import tempfile
 
 from build_gameplay_suite import build
 from build_ending_suite import build as build_endings
+from build_boss_suite import build as build_bosses
 from build_special_suite import build as build_special
+from run_client_scenes import build_scene_suite
 
 ROOT = Path(__file__).resolve().parents[1]
 LUAC = shutil.which("luac5.3") or "luac"
@@ -37,6 +39,13 @@ def main():
         subprocess.run([LUAC, "-p", str(endings)], check=True)
         build_endings(endings, ["ascent"])
         subprocess.run([LUAC, "-p", str(endings)], check=True)
+        bosses = Path(temporary) / "bosses.lua"
+        for shard in range(3):
+            build_bosses(bosses, shard, 3)
+            subprocess.run([LUAC, "-p", str(bosses)], check=True)
+        scenes = Path(temporary) / "scenes.lua"
+        build_scene_suite(scenes)
+        subprocess.run([LUAC, "-p", str(scenes)], check=True)
         special = Path(temporary) / "special.lua"
         build_special(special)
         subprocess.run([LUAC, "-p", str(special)], check=True)
