@@ -140,6 +140,9 @@ local function environment()
         room_layout = function()
             return true
         end,
+        room_rails = function(value)
+            return value == nil and string.rep("\255", 448) or true
+        end,
         net_progress = function()
             return "progress"
         end,
@@ -188,6 +191,9 @@ local function environment()
     modules["sync/npc"], modules["sync/entity_schema"] = {}, function()
         return {}
     end
+    modules["sync/entity_links"] = dofile(root .. "/src/bridge/sync/entity_links.lua")
+    modules["compat/bosses/hornfel"] = dofile(root .. "/src/bridge/compat/bosses/hornfel.lua")
+    modules["compat/bosses/visuals"] = dofile(root .. "/src/bridge/compat/bosses/visuals.lua")
     modules["compat/bosses/dogma"] = function()
         return {}
     end
@@ -320,7 +326,7 @@ for tick = 1, 5 do
         local bytes = host.state.capture(slot, tick)
         local view = host.state.decode(bytes)
         assert(
-            view[1] == 15 and view[9][1][8] == first and view[9][2][8] == second,
+            view[1] == 16 and view[9][1][8] == first and view[9][2][8] == second,
             "World snapshot omitted or mixed the two players' crafting bags"
         )
         assert(guest.state.apply(bytes, tick, 0))

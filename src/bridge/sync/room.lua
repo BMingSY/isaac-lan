@@ -49,6 +49,7 @@ return function(native, entity, sprite, crawlspace, types)
                 native.music_state(),
                 native.room_layout(),
                 crawlspace.capture(),
+                assert(native.room_rails()),
             }
         end))
         return value

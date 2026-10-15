@@ -61,6 +61,9 @@ return function(types, pickups)
                 e.SpawnerEntity = env.ref(v[12])
                 e.Child = env.ref(v[13])
                 e.Target = env.ref(v[14])
+                if env.link then
+                    env.link(e, v, env.ref)
+                end
             else
                 -- Native initialization can create poofs in the effect pool
                 -- and retire an older effect while this view is installed.

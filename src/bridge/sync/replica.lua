@@ -145,6 +145,7 @@ return function(deps)
             local room = game:GetRoom()
             local data = value.room
             crawlspace.apply(data[7])
+            assert(native.room_rails(data[8]))
             reconcileEntities(data[3], {
                 ref = ref,
                 key = deps.hash,
@@ -159,7 +160,15 @@ return function(deps)
                     applyEntity(e, v, now, tick)
                 end,
                 entities = deps.entities,
+                link = entityCodec.link,
             })
+            -- Visible actors share this room's entity graph; offscreen actors
+            -- carry no visual links and their rooms may only be replica shells.
+            for _, actor in ipairs(value.actors) do
+                if actor[3][10] then
+                    entityCodec.link(assert(ref(actor[3][1])), actor[3], ref)
+                end
+            end
             assert(native.door_slot(-1))
             reconcileGrids(data[4], {
                 get = function(index)

@@ -67,6 +67,10 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
     },
     performance = { resources = noop, counter = noop },
     entityCodec = {
+        link = function(p, v, ref)
+            assert(scope == "room" and p == player and ref(v[1]) == p)
+            record("actor-links")
+        end,
         apply = function()
             record("actor-state")
         end,
@@ -164,6 +168,10 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
         end,
     },
     native = {
+        room_rails = function(value)
+            assert(scope == "room" and value == "rails")
+            return record("rails")
+        end,
         room_layout = function()
             return record("layout")
         end,
@@ -225,7 +233,7 @@ local function packet(tick, nextEpoch)
             {
                 0,
                 2,
-                { 123, 1, 0, 0, 1, { 10, 20 }, { 0, 0 } },
+                { 123, 1, 0, 0, 1, { 10, 20 }, { 0, 0 }, {}, {}, {} },
                 { 0, {}, 0, {}, 0, {}, 0, {}, false },
                 {},
                 false,
@@ -234,7 +242,7 @@ local function packet(tick, nextEpoch)
             },
         },
         slot = 1,
-        room = { true, 0, {}, {}, "music", "layout", false },
+        room = { true, 0, {}, {}, "music", "layout", false, "rails" },
         sound = {},
         progress = "progress",
         epoch = nextEpoch or epoch,
@@ -247,7 +255,7 @@ local function packet(tick, nextEpoch)
     }))
 end
 local expected =
-    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,crawlspace,entities,grids,clear,music,map-refresh,confirm,audio,events,items"
+    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,confirm,audio,events,items"
 assert(replica.apply(packet(1), 1, 0))
 assert(table.concat(trace, ",") == expected)
 local tick, actors, motion = replica.present("", 0)

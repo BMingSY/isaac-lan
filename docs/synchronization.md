@@ -73,7 +73,7 @@
 
 套接字由主线程非阻塞轮询。IPv4 地址直接连接；域名在独立线程解析为 IPv4 地址，取消、退出或重新连接不等待 DNS，也不复用旧任务的结果。解析和连接有超时，并依次尝试返回的地址；重连保留原始域名。
 
-消息使用两字节长度前缀，正文整数采用大端编码。当前协议版本为 28；Lua 视图 schema 版本为 15。顶层第 20 项包含药丸颜色效果与鉴定状态，角色库存第 11 项包含原版四个口袋槽的 ID／类型顺序；角色元组第 8 项包含每名玩家合成袋的 8 个材料和原生道具预览，同房和分房都携带。药丸和合成袋状态在库存恢复之后应用，避免库存 setter 覆盖；回退可同时撤销鉴定或恢复材料。顶层字段顺序见 [`sync/world_schema.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)；扩展指纹随构建变化，所有玩家仍须使用同一扩展构建。协议 28 在运行规则描述符和大厅规则代次之外，为握手／大厅增加每个玩家本地存档允许的新局角色、已解锁角色与规则 ID／版本列表。选角、新局、续玩与重连逐席位校验；新局消耗型资格不重复限制已有角色恢复。可靠结束事件另带显式规则完成标记，与同编号原版结局区分；挑战不改动视图 schema，材料仍完整同步，可见性由本机表现控制。
+消息使用两字节长度前缀，正文整数采用大端编码。当前协议版本为 28；Lua 视图 schema 版本为 16。顶层第 20 项包含药丸颜色效果与鉴定状态，角色库存第 11 项包含原版四个口袋槽的 ID／类型顺序；角色元组第 8 项包含每名玩家合成袋的 8 个材料和原生道具预览，同房和分房都携带。药丸和合成袋状态在库存恢复之后应用，避免库存 setter 覆盖；回退可同时撤销鉴定或恢复材料。顶层字段顺序见 [`sync/world_schema.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)；扩展指纹随构建变化，所有玩家仍须使用同一扩展构建。协议 28 在运行规则描述符和大厅规则代次之外，为握手／大厅增加每个玩家本地存档允许的新局角色、已解锁角色与规则 ID／版本列表。选角、新局、续玩与重连逐席位校验；新局消耗型资格不重复限制已有角色恢复。可靠结束事件另带显式规则完成标记，与同编号原版结局区分；挑战不改动视图 schema，材料仍完整同步，可见性由本机表现控制。
 
 协议 27 延续协议 26 的压缩载荷使用可移植 DEFLATE（模式 2），无收益时发送原始字节（模式 0）。压缩和解压不调用 Windows Compression API，支持 Windows 与 Proton 混合组队。输出长度、校验和、截断与尾随字节均检查；实时载荷仍限制为 2 MiB。模式 1 的原生 XPRESS_HUFF 读取只保留用于既有 Windows 诊断归档，新发送端不使用它。
 
@@ -125,3 +125,15 @@
 日志采样不能单独证明根因。客机卡顿仍由[性能问题 #28](https://github.com/BMingSY/isaac-lan/issues/28) 跟踪；增加诊断和资源回归不表示卡顿已修复，跨层内存变化也不能单独证明泄漏。默认无需录制画面，显示问题再按需补充。
 
 第三方动作使用独立、有大小和排队限额的可靠消息，不参与世界视图合并。请求绑定发送者、整局与世界代次，主机验证源房间并去重；异步迁移在实际完成后回执。接口和边界见[第三方 Mod 接入 API v1](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md)。
+
+## Hornfel 炸弹引用、矿车与轨道
+
+实体第 25 项保存原生矿车引用的同步 ID（`0` 表示未乘坐），第 24 项按实体类型解释：教条警告保留目标坐标；Hornfel 携带两个大端 `u32` 炸弹同步 ID，`0` 表示空槽。客机先创建实体、清理多余对象并恢复通用引用，再通过 Boss 兼容组件绑定炸弹；不发送原生地址或本机实体索引。schema 升为 16，TCP 协议保持 28，扩展指纹随构建更新。
+
+Hornfel 的 Lua API 不暴露原生持有容器。J460 后端仅对 Hornfel 提供 `hornfel_bombs`：读取返回本机炸弹索引，由兼容组件转换为同步 ID；写入仅限客机，接受两个炸弹 Sprite 或空槽。容器位于 NPC `+0xbf0`，使用游戏自身的 resize 将空容器初始化为两个槽，再经现有 `EntityPtr.Assign` 注册／撤销实体引用；分配与销毁仍由游戏管理。范围、类型与容器布局在写入前校验，无新增 Hook，也不执行客机 Boss AI。相关实现见 [Hornfel 适配](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/bosses/hornfel.lua)和[版本后端](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/hornfel.h)。
+
+铁轨属于独立的原生 `RailManager`，不会出现在 `Room:GetGridEntity` 中。房间元组第 8 项携带其 448 字节轨道布局，普通房间的空轨道也完整恢复，避免跨房残留；这项通用状态由房间同步采集／应用。J460 的 `room_rails` 只读写房间 `+0x746c` 的固定数组，写入限客机，完整校验长度、轨道值、房间尺寸和所有者后才复制；不分配对象、不运行控制器 AI。原生房间继续持有和释放轨道 Sprite。实现见[轨道后端](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rails.h)。
+
+矿车实体本身及其 `Child` 不足以恢复乘坐者的反向引用。通用实体链接阶段通过 `entity_minecart` 恢复 Entity `+0x3d4` 的 `EntityPtr`，覆盖 Boss、小怪和同房玩家；同样只接受矿车 Sprite 或空值，并使用游戏的引用注册／撤销能力，不调用会生成新矿车的原生玩法方法。实现见[实体链接](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_links.lua)和[原生引用适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_links.h)。
+
+实体回收会在房间作用域内调用 `Room::Update`。重连清除了上一局的实体更新 Hook，回收可能早于首个正常房间 tick，因此作用域内的客机更新也必须先安装现有 AI 拦截；安装失败则终止该次更新。回收仍使用游戏原有分配／释放流程，避免快照尚未恢复完整引用时运行 NPC AI。

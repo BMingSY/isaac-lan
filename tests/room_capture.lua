@@ -44,6 +44,9 @@ local native = {
     room_layout = function()
         return "layout"
     end,
+    room_rails = function()
+        return string.rep(string.char(active), 448)
+    end,
 }
 local capture = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(native, function()
     return { active }
@@ -57,6 +60,7 @@ end, {
 local one = capture(1, 10, 0, { dimension = 0, index = 84 })
 assert(one == capture(2, 10, 0, { dimension = 0, index = 84 }) and calls == 1)
 assert(one[3][1][1] == 1)
+assert(one[8] == string.rep("\1", 448))
 assert(capture(2, 10, 0, { dimension = 0, index = 85 }) ~= one and calls == 2)
 assert(capture(3, 10, 0, { dimension = 1, index = 84 }) ~= one and calls == 3)
 local nextTick = capture(1, 11, 0, { dimension = 0, index = 84 })

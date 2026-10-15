@@ -6,6 +6,8 @@
 // Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 namespace isaac::compat::ids {
 namespace entity {
+inline constexpr unsigned bomb = 4;
+inline constexpr unsigned hornfel = 906;
 inline constexpr unsigned isaac = 102;
 inline constexpr unsigned lamb = 273;
 inline constexpr unsigned megaSatan = 274;

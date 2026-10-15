@@ -31,6 +31,7 @@ DIAGNOSTICS = (
     "lanbot-spiders",
     "lanbot-greed",
     "room-entry",
+    "hornfel",
 )
 
 
@@ -65,6 +66,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "lanbot-spiders": "state_lanbot_spiders.lua",
             "lanbot-greed": "state_lanbot_greed.lua",
             "room-entry": "state_room_entry.lua",
+            "hornfel": "state_hornfel.lua",
         }.get(name, "state_side_routes.lua")
         source = (ROOT / "tests" / filename).read_text()
         if name in ("home", "home-debug", "dogma-warning", "ascent-compat"):
@@ -100,6 +102,8 @@ def build(output, cases=CASES, *, first_floor=False):
             )
         elif name == "room-entry":
             cleanup = "native.input_bot = baseInput\nnative.input_bot(0, 0)\n"
+        elif name == "hornfel":
+            cleanup = "Isaac.RemoveCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, exitCallback)\n"
         complete = {"audio": "ended", "lanbot": "done"}.get(name, "finished")
         fixtures.append(
             'function() _IsaacLanTest.route = "'

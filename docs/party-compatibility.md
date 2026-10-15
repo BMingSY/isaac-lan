@@ -1,6 +1,6 @@
 # 队伍兼容修复
 
-对应 #41、#42、#43、#44、#47、#48、#49、#51、#54。当前传输协议为 28，世界视图 schema 为 15；两端必须使用相同 DLL。此文记录实现边界和当时的协议升级，当前版本契约见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)，历次证据见[专项验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md)。
+对应 #41、#42、#43、#44、#47、#48、#49、#51、#54。当前传输协议为 28，世界视图 schema 为 16；两端必须使用相同 DLL。此文记录实现边界和当时的协议升级，当前版本契约见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)，历次证据见[专项验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md)。
 
 按效果查询当前兼容范围，见[角色兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具与效果兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)和[第三方 Mod 兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。本页保留原生机制与修复依据。
 

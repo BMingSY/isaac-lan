@@ -70,8 +70,16 @@ if(BUILD_TESTING)
         NAMES lua5.3 lua
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
-        foreach(test_case session_lifecycle capture_generation replica_pipeline challenges
-                          challenge_menu ping_hud)
+        foreach(
+            test_case
+            session_lifecycle
+            capture_generation
+            replica_pipeline
+            challenges
+            challenge_menu
+            ping_hud
+            hornfel
+            entity_links)
             add_test(
                 NAME bridge.${test_case}
                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/${test_case}.lua"
@@ -367,6 +375,17 @@ if(MINGW)
 endif()
 if(BUILD_TESTING)
     add_executable(isaac_lan_net_test tests/net_test.cpp)
+    foreach(test_case hornfel rails entity_links)
+        add_executable(isaac_lan_${test_case}_test tests/${test_case}_test.cpp)
+        target_include_directories(isaac_lan_${test_case}_test PRIVATE src)
+        if(MINGW)
+            target_link_options(isaac_lan_${test_case}_test PRIVATE -static-libgcc
+                                -static-libstdc++)
+            target_compile_options(isaac_lan_${test_case}_test PRIVATE -Wall -Wextra -Werror)
+        endif()
+        add_test(NAME native.${test_case} COMMAND isaac_lan_${test_case}_test)
+        set_tests_properties(native.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    endforeach()
     target_link_libraries(isaac_lan_net_test PRIVATE isaac_lan_net winmm psapi)
     foreach(
         test_case

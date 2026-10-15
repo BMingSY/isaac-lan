@@ -98,6 +98,9 @@ local function environment(difficulty)
         room_layout = function()
             return "layout"
         end,
+        room_rails = function()
+            return string.rep("\255", 448)
+        end,
         music_state = function()
             return "music"
         end,

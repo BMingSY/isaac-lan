@@ -46,7 +46,13 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
             return false
         end,
     },
-    dogma
+    dogma,
+    {
+        capture = function()
+            return 0
+        end,
+        apply = function() end,
+    }
 )
 local function entity(kind, flags)
     local e = {
