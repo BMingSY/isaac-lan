@@ -1,5 +1,5 @@
 -- Engine values become explicit portable fields; this component owns no room or transport.
-return function(native, schemas, npcState, visualCompatibility)
+return function(native, schemas, npcState, visualCompatibility, entityLinks)
     local function localEffect(e)
         return e.Type == schemas.types.ENTITY_EFFECT
             and native.presentation_local_effect(e.Type, e.Variant, e.SubType)
@@ -171,7 +171,8 @@ return function(native, schemas, npcState, visualCompatibility)
             e.Type == types.ENTITY_LASER and vector(e:ToLaser().EndPoint) or false,
             visual and assert(native.entity_shadow(e:GetSprite())) or false,
             npcState.capture(e:ToNPC()),
-            visual and visualCompatibility and visualCompatibility.capture(e) or false,
+            visual and visualCompatibility and visualCompatibility.capture(e, id) or false,
+            visual and entityLinks.capture(e, id) or 0,
         }
     end
     local function applyEntity(e, v)
@@ -228,6 +229,12 @@ return function(native, schemas, npcState, visualCompatibility)
         localEffect = localEffect,
         capture = entity,
         apply = applyEntity,
+        link = function(e, v, ref)
+            entityLinks.apply(e, v[25], ref)
+            if visualCompatibility and visualCompatibility.link then
+                visualCompatibility.link(e, v[24], ref)
+            end
+        end,
         sprite = sprite,
         applySprite = applySprite,
         vector = vector,

@@ -68,6 +68,10 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
     },
     performance = { resources = noop, counter = noop },
     entityCodec = {
+        link = function(p, v, ref)
+            assert(scope == "room" and p == player and ref(v[1]) == p)
+            record("actor-links")
+        end,
         apply = function()
             record("actor-state")
         end,
@@ -169,6 +173,10 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
         end,
     },
     native = {
+        room_rails = function(value)
+            assert(scope == "room" and value == "rails")
+            return record("rails")
+        end,
         room_water_current = function(x, y)
             assert(scope == "room", "Current escaped the local room")
             restoredCurrent = { x, y }
@@ -235,7 +243,7 @@ local function packet(tick, nextEpoch)
             {
                 0,
                 2,
-                { 123, 1, 0, 0, 1, { 10, 20 }, { 0, 0 } },
+                { 123, 1, 0, 0, 1, { 10, 20 }, { 0, 0 }, {}, {}, {} },
                 { 0, {}, 0, {}, 0, {}, 0, {}, false },
                 {},
                 false,
@@ -244,7 +252,7 @@ local function packet(tick, nextEpoch)
             },
         },
         slot = 1,
-        room = { true, 0, {}, {}, "music", "layout", false, current },
+        room = { true, 0, {}, {}, "music", "layout", false, current, "rails" },
         sound = {},
         progress = "progress",
         epoch = nextEpoch or epoch,
@@ -257,7 +265,7 @@ local function packet(tick, nextEpoch)
     }))
 end
 local expected =
-    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,entities,grids,clear,music,map-refresh,confirm,audio,events,items"
+    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,confirm,audio,events,items"
 assert(
     not replica.apply(packet(1), 1, 0, true) and #trace == 0,
     "Initial view escaped the full update boundary"

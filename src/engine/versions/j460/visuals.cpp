@@ -9,6 +9,9 @@
 #include <vector>
 
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/entity_links.h"
+#include "engine/versions/j460/hornfel.h"
+#include "engine/versions/j460/rails.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::visuals {
@@ -19,6 +22,8 @@ template <class T> T& at(Address p, unsigned offset) {
 }
 struct API {
     int(__cdecl* getTop)(lua_State*);
+    int(__cdecl* type)(lua_State*, int);
+    int(__cdecl* toBoolean)(lua_State*, int);
     void*(__cdecl* toUserdata)(lua_State*, int);
     void*(__cdecl* newUserdata)(lua_State*, std::size_t);
     int(__cdecl* getMetatable)(lua_State*, int);
@@ -40,6 +45,82 @@ Address sprite(lua_State* L) {
     if (!wrapper || (size != 8 && size != 0x11c))
         throw std::runtime_error("Invalid native Sprite wrapper");
     return wrapper[1];
+}
+int roomRails(lua_State* L) {
+    try {
+        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+        const auto game = at<Address>(image, j460::globals::game);
+        const auto room = game ? at<Address>(game, 0x18300) : 0;
+        if (!lua.getTop(L)) {
+            const auto value = j460::rails::grid(room);
+            lua.pushString(L, reinterpret_cast<const char*>(value.data()), value.size());
+            return 1;
+        }
+        if (!runtime::replica() || lua.getTop(L) != 1)
+            throw std::runtime_error("Only replicas restore room rails");
+        std::size_t size = 0;
+        const auto data = lua.checkString(L, 1, &size);
+        j460::rails::restore(room, {reinterpret_cast<const std::uint8_t*>(data), size});
+        lua.pushBoolean(L, true);
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
+Address entitySprite(lua_State* L, int index) {
+    auto sample = static_cast<Address*>(lua.toUserdata(L, index));
+    if (!sample || lua.rawLength(L, index) != 8 || sample[1] < 0x48)
+        throw std::runtime_error("Invalid entity Sprite wrapper");
+    return sample[1] - 0x48;
+}
+int entityMinecart(lua_State* L) {
+    try {
+        const auto entity = entitySprite(L, 1);
+        if (lua.getTop(L) == 1) {
+            lua.pushInteger(L, j460::entity_links::index(entity));
+            return 1;
+        }
+        if (!runtime::replica() || lua.getTop(L) != 2)
+            throw std::runtime_error("Only replicas restore minecart links");
+        const auto cart = lua.type(L, 2) == 1 && !lua.toBoolean(L, 2) ? 0 : entitySprite(L, 2);
+        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+        using Assign = void(__attribute__((fastcall))*)(void*, void*);
+        j460::entity_links::restore(entity, cart,
+                                    reinterpret_cast<Assign>(image + j460::entry::entityPtrAssign));
+        lua.pushBoolean(L, true);
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
+int hornfelBombs(lua_State* L) {
+    try {
+        const auto entity = entitySprite(L, 1);
+        if (lua.getTop(L) == 1) {
+            for (auto index : j460::hornfel::indices(entity))
+                lua.pushInteger(L, index);
+            return 2;
+        }
+        if (!runtime::replica() || lua.getTop(L) != 3)
+            throw std::runtime_error("Only replicas restore Hornfel bombs");
+        std::array<Address, 2> bombs{};
+        for (int i = 0; i < 2; ++i)
+            if (lua.type(L, i + 2) != 1 || lua.toBoolean(L, i + 2))
+                bombs[i] = entitySprite(L, i + 2);
+        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+        using Resize = void(__attribute__((thiscall))*)(void*, unsigned);
+        using Assign = void(__attribute__((fastcall))*)(void*, void*);
+        j460::hornfel::restore(entity, bombs,
+                               reinterpret_cast<Resize>(image + j460::entry::hornfelBombsResize),
+                               reinterpret_cast<Assign>(image + j460::entry::entityPtrAssign));
+        lua.pushBoolean(L, true);
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
 }
 int prepareEntity(lua_State* L) {
     auto sample = static_cast<Address*>(lua.toUserdata(L, 1));
@@ -465,6 +546,8 @@ bool bind(lua_State* L, HMODULE module) {
             return false;                                                                          \
     } while (false)
     IMPORT(getTop, "lua_gettop");
+    IMPORT(type, "lua_type");
+    IMPORT(toBoolean, "lua_toboolean");
     IMPORT(toUserdata, "lua_touserdata");
     IMPORT(rawLength, "lua_rawlen");
     IMPORT(newUserdata, "lua_newuserdata");
@@ -482,6 +565,12 @@ bool bind(lua_State* L, HMODULE module) {
 #undef IMPORT
     lua.pushClosure(L, spriteState, 0);
     lua.setField(L, -2, "sprite_state");
+    lua.pushClosure(L, hornfelBombs, 0);
+    lua.setField(L, -2, "hornfel_bombs");
+    lua.pushClosure(L, entityMinecart, 0);
+    lua.setField(L, -2, "entity_minecart");
+    lua.pushClosure(L, roomRails, 0);
+    lua.setField(L, -2, "room_rails");
     lua.pushClosure(L, actorPose, 0);
     lua.setField(L, -2, "actor_pose");
     lua.pushClosure(L, entityShadow, 0);

@@ -55,6 +55,7 @@ return function(native, entity, sprite, crawlspace, types, localEffect)
                 native.room_layout(),
                 crawlspace.capture(),
                 { current.X, current.Y },
+                assert(native.room_rails()),
             }
         end))
         return value

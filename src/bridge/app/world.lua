@@ -43,7 +43,15 @@ local entityCodec = assert(modules["sync/entity_codec"])(
     native,
     assert(modules["sync/entity_schema"])(EntityType),
     npcState,
-    assert(modules["compat/bosses/dogma"])(Vector, EntityType, EffectVariant)
+    assert(modules["compat/bosses/visuals"])(
+        assert(modules["compat/bosses/dogma"])(Vector, EntityType, EffectVariant),
+        assert(modules["compat/bosses/hornfel"])(native, EntityType, function()
+            return Isaac.GetRoomEntities()
+        end)
+    ),
+    assert(modules["sync/entity_links"])(native, function()
+        return Isaac.GetRoomEntities()
+    end)
 )
 local entity, sprite, applySprite, vec =
     entityCodec.capture, entityCodec.sprite, entityCodec.applySprite, entityCodec.vec

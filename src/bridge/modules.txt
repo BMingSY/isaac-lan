@@ -2,6 +2,7 @@ sync/entity_schema
 sync/pills
 diagnostics/performance
 sync/entity_codec
+sync/entity_links
 sync/world_schema
 sync/actor_pose
 presentation/actors
@@ -31,6 +32,8 @@ compat/items/crafting_bag
 compat/routes/crawlspace
 compat/routes/greed
 compat/bosses/dogma
+compat/bosses/hornfel
+compat/bosses/visuals
 compat/characters/lazarus
 compat/characters/blue_baby
 compat/characters/keeper
