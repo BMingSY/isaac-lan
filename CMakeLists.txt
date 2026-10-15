@@ -252,6 +252,7 @@ if(BUILD_TESTING)
         room-transition-context
         room-scope-ownership
         compatibility-targets
+        death-certificate-arrival
         resolved-room-curses
         shared-deal-chances
         truncated-packets
