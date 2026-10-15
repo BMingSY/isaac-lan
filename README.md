@@ -39,7 +39,7 @@ WINEDLLOVERRIDES="winmm=n,b" %command%
 首次启动会在游戏目录生成 `isaac-lan/config.ini`：
 
 ```ini
-; Isaac LAN：修改后重启游戏生效。升级时保留已有设置，仅补齐缺失项。
+; Isaac LAN：修改后重启游戏生效。
 ; 非法值保留原文，本次运行使用默认值并记录警告。
 [network]
 ; 客机输入发送频率：30 / 60，默认 60；各端可以不同。
@@ -49,8 +49,8 @@ input_hz = 60
 [logging]
 ; 日志与原版 log.txt 位于同一游戏数据目录，按启动和局次分目录保存。
 ; startup.log 记录启动和退出，runtime.log 记录局内事件。
-; 历史日志可手动清理；升级和卸载会保留配置、联机存档及日志。
-; 日志等级：DEBUG / INFO / WARN / ERROR，默认 INFO，不写调试日志。
+; 历史日志可手动清理。
+; 日志等级：DEBUG / INFO / WARN / ERROR，默认 INFO。
 level = INFO
 
 [diagnostics]
