@@ -8,6 +8,8 @@
 - 允许加载其他 Mod，保留原版多人 UI 和官方联机入口。
 - 小地图显示玩家位置，支持 Ping 显示和断线重连。
 
+进度差异、成就解锁、存档续玩与连接排查见[常见问题（FAQ）](https://github.com/BMingSY/isaac-lan/blob/main/docs/faq.md)。
+
 ## 安装
 
 1. 解压完整安装包，运行 `Install.cmd`。
