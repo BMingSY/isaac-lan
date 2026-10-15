@@ -25,10 +25,26 @@ int main() {
     // A native host update cannot stall on a separate input/render clock.
     require(host.capture(true, true, 500), "Input cadence invariant failed");
     require(host.capture(true, true, 500), "Input cadence invariant failed");
-    guest = {};
+    guest = isaac::runtime::InputSchedule{};
     require(guest.capture(false, false, 500), "Input cadence invariant failed");
     require(guest.capture(false, false, 0xffffffffu), "Input cadence invariant failed");
     require(guest.capture(false, false, 0), "Input cadence invariant failed");
+    isaac::runtime::InputSchedule slowerGuest(30), slowerHost(30);
+    unsigned slowSamples = 0;
+    for (unsigned frame = 0; frame < 120; ++frame) {
+        slowSamples += slowerGuest.capture(false, false, frame);
+        require(!slowerGuest.capture(false, true, frame), "Repeated poll bypassed 30 Hz input");
+        require(!slowerHost.capture(true, false, frame), "Host sampled outside simulation");
+        require(slowerHost.capture(true, true, frame), "Guest setting throttled host simulation");
+    }
+    require(slowSamples == 60, "30 Hz setting did not skip alternating render frames");
+    require(slowerGuest.capture(false, false, 501), "Stall delayed current input");
+    require(!slowerGuest.capture(false, false, 502), "Stall replayed missed input");
+    require(slowerGuest.capture(false, false, 503), "Input cadence did not resume after a stall");
+    slowerGuest = isaac::runtime::InputSchedule(30);
+    require(slowerGuest.capture(false, false, 0xfffffffeu), "Session reset retained its timer");
+    require(!slowerGuest.capture(false, false, 0xffffffffu), "30 Hz frame gap was lost");
+    require(slowerGuest.capture(false, false, 0), "Frame counter wrap delayed input");
     std::puts(
         "PASS guest render cadence, host simulation cadence, repeated polls, stall and reset");
 }

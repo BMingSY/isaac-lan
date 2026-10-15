@@ -37,6 +37,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--port", type=int, default=31120)
     parser.add_argument("--cases", nargs="+", choices=CASES, default=CASES)
+    parser.add_argument("--client-input-hz", type=int, choices=(30, 60), default=60)
     args = parser.parse_args()
     labs = [args.host.resolve(), args.client.resolve()]
     if len(set(labs)) != 2 or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
@@ -98,6 +99,8 @@ end
         "--virtual-input",
         "--automatic",
         "--performance",
+        "--client-input-hz",
+        str(args.client_input_hz),
         "--latency-ms",
         "10",
         "--relay-control",
@@ -107,7 +110,13 @@ end
         "--scenario-timeout",
         "420",
     ]
-    report = {"passed": False, "restored": False, "phases": phases, "command": command}
+    report = {
+        "passed": False,
+        "restored": False,
+        "phases": phases,
+        "command": command,
+        "client_input_hz": args.client_input_hz,
+    }
     try:
         with (output / "engine.log").open("w") as log:
             process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
@@ -137,9 +146,12 @@ end
             response = response_measure(client / "lan-test-digest-response.csv")
             report["response"] = response
             assert (
-                response["max_input_to_send_ms"] == 0 and response["max_input_to_preview_ms"] == 0
+                response["max_input_to_send_ms"] <= (34 if args.client_input_hz == 30 else 0)
+                and response["max_input_to_preview_ms"] == 0
             ), response
-            assert 0.95 <= response["input_samples_per_render"] <= 1.05, response
+            assert abs(response["input_samples_per_render"] - args.client_input_hz / 60) <= 0.05, (
+                response
+            )
             assert (
                 response["acceleration_transitions_responding_same_frame"]
                 >= 0.9 * response["acceleration_transitions"]

@@ -139,6 +139,12 @@ def main():
         "--debug-logs", action="store_true", help="Enable DEBUG in the owned lab config"
     )
     parser.add_argument(
+        "--client-input-hz",
+        type=int,
+        choices=(30, 60),
+        help="Set guest input frequency with a 60 Hz host setting (use a protected runner)",
+    )
+    parser.add_argument(
         "--installed",
         action="store_true",
         help="Install/uninstall the frozen package in the marked lab; retain profile isolation",
@@ -643,7 +649,7 @@ def main():
                 *(["--automatic"] if args.automatic or args.installed else []),
                 *(["--no-luadebug"] if args.no_luadebug else []),
             ]
-            if args.performance or args.debug_logs:
+            if args.performance or args.debug_logs or args.client_input_hz:
                 config = lab / "game/isaac-lan/config.ini"
                 config.parent.mkdir(parents=True, exist_ok=True)
                 config.write_text(
@@ -652,6 +658,11 @@ def main():
                     + "\n[diagnostics]\nperformance="
                     + str(args.performance).lower()
                     + "\nsample_interval_ms=1000\n"
+                    + (
+                        f"\n[network]\ninput_hz={60 if role == 'host' else args.client_input_hz}\n"
+                        if args.client_input_hz
+                        else ""
+                    )
                 )
             if args.progress_fixture:
                 prepare_progress_fixture(

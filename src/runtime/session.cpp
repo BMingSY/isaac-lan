@@ -241,6 +241,7 @@ bool playingCinematic = false, cinematicReady = false;
 std::uint32_t nextInputTick = 0;
 using InputClock = std::chrono::steady_clock;
 InputSchedule inputSchedule;
+unsigned inputHz = 60;
 std::optional<InputClock::time_point> rejoinAt;
 std::uint32_t nextTick = 0, currentTick = 0;
 std::uint32_t floorEpoch = 0;
@@ -1215,7 +1216,7 @@ int gate(lua_State* L) {
     consumedInputSequences = {};
     captureCost = {};
     applyCost = {};
-    inputSchedule = {};
+    inputSchedule = InputSchedule(inputHz);
     pendingHalf = false;
     gated = true;
     playingEnding = false;
@@ -1505,6 +1506,10 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
                          reinterpret_cast<void*>(controls),
                          reinterpret_cast<void**>(&originalControls)) == MH_OK &&
            MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::gameControls)) == MH_OK;
+}
+void configureInput(unsigned hz) {
+    inputHz = hz;
+    inputSchedule = InputSchedule(hz);
 }
 bool halfAllowed() {
     if (replica() && !playingEnding && !playingCinematic && rooms::stateReady() &&
