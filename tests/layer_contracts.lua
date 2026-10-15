@@ -4,9 +4,9 @@ local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
 local codec, schema = module("sync/codec"), module("sync/world_schema")
--- Schema 17 adds bag holding state; top-level fields retain their order.
+-- Schema 18 adds Hornfel/minecart links and rails after the existing room current.
 local tuple = {
-    17,
+    18,
     42,
     80,
     6,
@@ -32,9 +32,11 @@ assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses ==
 assert(codec.encode(schema.pack(view)) == codec.encode(tuple))
 assert(not pcall(schema.unpack, tuple, 41))
 local malformed = { table.unpack(tuple) }
-malformed[1] = 16
-assert(not pcall(schema.unpack, malformed, 42))
-malformed[1], malformed[21] = 17, true
+for _, prior in ipairs({ 16, 17 }) do
+    malformed[1] = prior
+    assert(not pcall(schema.unpack, malformed, 42))
+end
+malformed[1], malformed[21] = 18, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))

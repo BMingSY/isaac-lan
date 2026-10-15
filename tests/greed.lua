@@ -101,6 +101,9 @@ local function environment(difficulty)
         room_layout = function()
             return "layout"
         end,
+        room_rails = function()
+            return string.rep("\255", 448)
+        end,
         room_water_current = function(x, y)
             assert(x == 0 and y == 0)
             return true

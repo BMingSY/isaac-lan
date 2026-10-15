@@ -2322,7 +2322,7 @@ void __attribute__((fastcall)) replicaEntityUpdate(void* entity, void*) {
     const auto entry = at<Address>(at<Address>(address, 0), 0xc);
     entityUpdates.at(entry)(entity);
 }
-void interceptReplicaEntities(Room& room) {
+bool interceptReplicaEntities(Room& room) {
     // Preserve room cleanup, doors and background updates, while the server
     // owns entity gameplay. Native containers and allocation remain untouched.
     for (std::size_t offset : {0x20u, 0x40u, 0x70u}) {
@@ -2341,11 +2341,12 @@ void interceptReplicaEntities(Room& room) {
                               reinterpret_cast<void**>(&original)) != MH_OK ||
                 MH_EnableHook(reinterpret_cast<void*>(entry)) != MH_OK) {
                 runtime::abort("Cannot isolate replica entity updates");
-                return;
+                return false;
             }
             entityUpdates.emplace(entry, original);
         }
     }
+    return true;
 }
 } // namespace
 
@@ -2368,9 +2369,25 @@ bool finalCombat() {
     }
     return false;
 }
-bool update(void*, RoomCall original) {
-    if (!enabled || scopes.depth() || transferring)
+bool update(void* pointer, RoomCall original) {
+    if (!enabled || transferring)
         return false;
+    if (scopes.depth()) {
+        // Snapshot reconciliation calls Room::Update to reclaim removed
+        // allocations before spawning replacements. On rejoin, beforeStart
+        // cleared the intercepts and no normal room tick has installed them
+        // yet. Every scoped replica update must isolate gameplay first.
+        if (runtime::replica()) {
+            auto room = scopes.current();
+            if (!room || room->pointer != reinterpret_cast<Address>(pointer)) {
+                runtime::abort("Replica cleanup escaped its room scope");
+                return true;
+            }
+            if (!interceptReplicaEntities(*room))
+                return true;
+        }
+        return false;
+    }
     for (auto& [key, room] : loaded) {
         (void)key;
         if (room->replicaShell || occupants(*room).empty())
@@ -2405,8 +2422,8 @@ bool update(void*, RoomCall original) {
                                                          reinterpret_cast<void*>(game() + 0x676d0),
                                                          reinterpret_cast<void*>(game() + 0x676e8));
         }
-        if (runtime::replica())
-            interceptReplicaEntities(*room);
+        if (runtime::replica() && !interceptReplicaEntities(*room))
+            return true;
         original(reinterpret_cast<void*>(room->pointer));
         if (!runtime::replica() && (soundAudience() & connectedMask) != connectedMask &&
             finalCombat())

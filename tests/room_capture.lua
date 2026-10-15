@@ -48,6 +48,9 @@ local native = {
     room_layout = function()
         return "layout"
     end,
+    room_rails = function()
+        return string.rep(string.char(active), 448)
+    end,
 }
 local capture = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(native, function()
     return { active }
@@ -62,6 +65,8 @@ local one = capture(1, 10, 0, { dimension = 0, index = 84 })
 assert(one == capture(2, 10, 0, { dimension = 0, index = 84 }) and calls == 1)
 assert(one[3][1][1] == 1)
 assert(one[8][1] == 0 and one[8][2] == 1)
+assert(one[9] == string.rep("\1", 448))
+assert(#one == 9, "Current and rails must occupy distinct room fields")
 assert(capture(2, 10, 0, { dimension = 0, index = 85 }) ~= one and calls == 2)
 assert(capture(3, 10, 0, { dimension = 1, index = 84 }) ~= one and calls == 3)
 current.Y = 0
