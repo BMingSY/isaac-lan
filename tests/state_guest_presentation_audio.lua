@@ -265,8 +265,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             )
         end
         return bytes
-    end, function(bytes, t, ack)
-        local applied = restore(bytes, t, ack)
+    end, function(bytes, t, ack, betweenUpdates)
+        local applied = restore(bytes, t, ack, betweenUpdates)
         if applied and not host then
             local value = _IsaacLanState.decode(bytes)[16]
             checkText(value[1])

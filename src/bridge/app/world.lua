@@ -195,8 +195,8 @@ end, function()
     replica.resetView()
     captureState.reset()
 end)
-function state.apply(bytes, tick, ack)
-    if not replica.apply(bytes, tick, ack) then
+function state.apply(bytes, tick, ack, betweenUpdates)
+    if not replica.apply(bytes, tick, ack, betweenUpdates) then
         return false
     end
     state.lastTick = tick

@@ -108,8 +108,8 @@ local function prepare(context)
         return core[2](t + context.start, n, b)
     end, function(slot, t)
         return core[3](slot, t + context.start)
-    end, function(bytes, t, ack)
-        return core[4](bytes, t + context.start, ack)
+    end, function(bytes, t, ack, betweenUpdates)
+        return core[4](bytes, t + context.start, ack, betweenUpdates)
     end, core[5], core[6])
     assert(context.handlers, "Fixture did not install its callbacks")
     realDebug("LAN_SUITE BEGIN " .. context.name .. " tick=" .. context.start)
@@ -146,12 +146,19 @@ native.net_gate = function(...)
             return invoke(context, context.handlers[3], slot, t - context.start)
         end
         return core[3](slot, t)
-    end, function(bytes, t, ack)
+    end, function(bytes, t, ack, betweenUpdates)
         local context = selectPhase(t)
         if context then
-            return invoke(context, context.handlers[4], bytes, t - context.start, ack)
+            return invoke(
+                context,
+                context.handlers[4],
+                bytes,
+                t - context.start,
+                ack,
+                betweenUpdates
+            )
         end
-        return core[4](bytes, t, ack)
+        return core[4](bytes, t, ack, betweenUpdates)
     end, function(...)
         if current then
             return invoke(current, current.handlers[5], ...)

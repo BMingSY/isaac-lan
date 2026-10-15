@@ -222,7 +222,7 @@ local function environment()
         return { apply = noop, reset = noop }
     end
     modules["presentation/motion"] = function()
-        return { present = noop, reset = noop }
+        return { present = noop, reset = noop, track = noop }
     end
     modules["compat/characters/keeper"] = function()
         return {}

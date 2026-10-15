@@ -532,6 +532,9 @@ void finishUpdate() {
 void pollPhysicalInput() {
     samplePhysicalInput();
 }
+unsigned physicalFrame() {
+    return renderFrame();
+}
 lan::InputFrame previewPhysicalInput() {
     samplePhysicalInput();
     lan::InputFrame preview;

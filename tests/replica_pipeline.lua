@@ -106,6 +106,9 @@ local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
         reset = noop,
     },
     motion = {
+        track = function()
+            return {}
+        end,
         reset = function()
             record("motion-reset")
         end,
@@ -248,6 +251,10 @@ local function packet(tick, nextEpoch)
 end
 local expected =
     "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,crawlspace,entities,grids,clear,music,map-refresh,confirm,audio,events,items"
+assert(
+    not replica.apply(packet(1), 1, 0, true) and #trace == 0,
+    "Initial view escaped the full update boundary"
+)
 assert(replica.apply(packet(1), 1, 0))
 assert(table.concat(trace, ",") == expected)
 local tick, actors, motion = replica.present("", 0)
@@ -256,6 +263,21 @@ trace = {}
 assert(replica.apply(packet(1), 1, 0))
 assert(table.concat(trace, ",") == expected:gsub("motion%-reset,", ""))
 trace = {}
+assert(replica.apply(packet(2), 2, 1, true), "Stable view waited for a full update")
+assert(table.concat(trace, ",") == expected:gsub("motion%-reset,", ""))
+trace = {}
+roomIndex = 85
+assert(
+    not replica.apply(packet(3), 3, 1, true) and #trace == 0,
+    "Half-frame room transition mutated native state"
+)
+roomIndex = 84
+local replaced = codec.decode(packet(3))
+replaced[9][1][3][1] = 456
+assert(
+    not replica.apply(codec.encode(replaced), 3, 1, true) and #trace == 0,
+    "Half-frame actor replacement mutated native state"
+)
 assert(not replica.apply(packet(2, 2), 2, 0) and #trace == 0)
 waiting = true
 assert(not replica.apply("not even decoded while waiting", 2, 0) and #trace == 0)
@@ -267,9 +289,9 @@ assert(
 -- A failure after native mutation must not commit a new tick or drain later
 -- presentation queues. Native rollback is deliberately outside this contract.
 fail = "music"
-assert(not pcall(replica.apply, packet(2), 2, 0))
+assert(not pcall(replica.apply, packet(3), 3, 0))
 assert(trace[#trace] == "music" and not scope)
-assert(replica.present("", 0) == 1)
+assert(replica.present("", 0) == 2)
 fail, trace, roomIndex = nil, {}, 85
 assert(replica.apply(packet(3), 3, 0))
 assert(table.concat(trace, ",") == expected)

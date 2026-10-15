@@ -206,7 +206,9 @@ def main():
         help="Added one-way loopback delay; scenario reads lan-test-menu-port.txt",
     )
     parser.add_argument(
-        "--relay-control", type=Path, help="Owned JSON control file: downstream_bytes_per_second"
+        "--relay-control",
+        type=Path,
+        help="Owned JSON control file: downstream_bytes_per_second, optional delay_ms",
     )
     parser.add_argument(
         "--exercise-official",
@@ -891,13 +893,19 @@ def main():
                         "upstream_bytes": relay.upstream_bytes,
                         "connections": relay.connections,
                         "rate_limit": relay.downstream_bytes_per_second,
+                        "delay_ms": relay.delay * 1000,
                     }
                 )
             if relay and args.relay_control:
-                rate = json.loads(args.relay_control.read_text())["downstream_bytes_per_second"]
+                relay_settings = json.loads(args.relay_control.read_text())
+                rate = relay_settings["downstream_bytes_per_second"]
                 if not isinstance(rate, int) or rate < 0:
                     raise ValueError("Invalid owned relay bandwidth")
                 relay.downstream_bytes_per_second = rate
+                delay = relay_settings.get("delay_ms", args.latency_ms)
+                if not isinstance(delay, (int, float)) or not 0 <= delay <= 1000:
+                    raise ValueError("Invalid owned relay latency")
+                relay.delay = delay / 1000
             for role, _, path in process_watchers:
                 if path.exists():
                     exit_status = json.loads(path.read_text(encoding="utf-8-sig"))

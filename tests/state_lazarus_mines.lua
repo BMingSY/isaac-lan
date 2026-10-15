@@ -270,7 +270,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end
         return bytes
-    end, function(bytes, t, ack)
+    end, function(bytes, t, ack, betweenUpdates)
         if t < 3 then
             for i = 0, Game():GetNumPlayers() - 1 do
                 local p = Isaac.GetPlayer(i)
@@ -284,7 +284,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 )
             end
         end
-        if restore(bytes, t, ack) == false then
+        if restore(bytes, t, ack, betweenUpdates) == false then
             return false
         end
         snapshots = snapshots + 1

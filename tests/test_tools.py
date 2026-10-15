@@ -31,6 +31,23 @@ ROOT = Path(__file__).resolve().parents[1]
 BINARIES = ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe")
 
 
+def test_response_suite_selects_only_requested_cases(tmp_path):
+    output = tmp_path / "response.lua"
+    phases = build_suite(output, ["input-response", "local-movement", "weapon-charge"])
+    assert [phase["name"] for phase in phases] == [
+        "input-response",
+        "local-movement",
+        "weapon-charge",
+    ]
+    source = output.read_text()
+    assert "betweenUpdates" in source and "Unfinished phase" in source
+    assert "Isolated authoritative state regression" not in source
+    with pytest.raises(ValueError):
+        build_suite(output, ["motion", "motion"])
+    with pytest.raises(ValueError):
+        build_suite(output, ["unknown"])
+
+
 def test_greed_suite_keeps_both_modes_in_one_process_pair(tmp_path):
     script = tmp_path / "greed.lua"
     build_special_suite(script, ["greed", "greedier"])
