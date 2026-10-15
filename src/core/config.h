@@ -20,7 +20,6 @@ struct Parsed {
 };
 inline constexpr std::string_view defaults =
     "; Isaac LAN：修改后重启游戏生效。\n"
-    "; 非法值保留原文，本次运行使用默认值并记录警告。\n"
     "[network]\n"
     "; 客机输入发送频率：30 / 60，默认 60；各端可以不同。\n"
     "; 30 减少输入流量，但可能多等一个渲染帧；主机模拟和本机显示频率不变。\n"
