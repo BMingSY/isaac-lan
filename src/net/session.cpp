@@ -49,6 +49,7 @@ Writer stageMessage(const Stage& value, std::size_t offset = 0) {
         w.u32(flags);
     w.u8(value.restart);
     w.u8(value.cinematic);
+    w.u16(static_cast<std::uint16_t>(value.sourceRoom));
     w.u32(value.rewind.size());
     w.u32(offset);
     w.blob(std::span(value.rewind)
@@ -903,10 +904,12 @@ struct Session::Impl {
             const auto restart = r.u8();
             value.restart = restart;
             value.cinematic = r.u8();
+            value.sourceRoom = static_cast<std::int16_t>(r.u16());
             const auto total = r.u32(), offset = r.u32();
             auto bytes = r.blob(3000);
             if (!value.epoch || value.level < 1 || value.level > 13 || value.type > 5 || same > 1 ||
-                total > maxWorldSize + 5 || restart > 2 ||
+                total > maxWorldSize + 5 || restart > 2 || value.sourceRoom < -20 ||
+                value.sourceRoom >= 169 ||
                 (value.cinematic &&
                  (value.cinematic != 25 || value.level != 13 || value.type != 1 ||
                   value.animation != 1 || same || restart || total)) ||
@@ -929,6 +932,7 @@ struct Session::Impl {
                 assemblingStage->seeds != value.seeds ||
                 assemblingStage->restart != value.restart ||
                 assemblingStage->cinematic != value.cinematic || total != stageSize ||
+                assemblingStage->sourceRoom != value.sourceRoom ||
                 offset != assemblingStage->rewind.size() || offset > total ||
                 bytes.size() > total - offset || (total && bytes.empty()))
                 throw std::runtime_error("Invalid rewind transaction chunk");
@@ -1283,7 +1287,7 @@ bool Session::reconnect() {
 bool Session::beginStage(const Stage& value) {
     if (!impl->hosting || impl->state != Phase::running || impl->ending)
         return false;
-    if (value.restart > 2 ||
+    if (value.sourceRoom < -20 || value.sourceRoom >= 169 || value.restart > 2 ||
         (value.restart && (value.same || value.animation || value.level != 1 || value.type ||
                            !value.rewind.empty() || value.cinematic)) ||
         impl->cinematicEpoch ||

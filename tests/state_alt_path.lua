@@ -243,7 +243,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         present,
-        function(epoch, stage, kind, animation, same, rewind, rKey)
+        function(epoch, stage, kind, animation, same, rewind, rKey, ...)
             floorEvents = floorEvents + 1
             local secret = Game():GetStateFlag(GameStateFlag.STATE_SECRET_PATH)
             if floorEvents == 1 or floorEvents == 3 or floorEvents == 4 then
@@ -252,7 +252,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 assert(secret, "Native floor event lost authoritative trapdoor route flag")
             end
             report("FLOOR_BEGIN epoch=" .. epoch .. " secret=" .. tostring(secret))
-            return beginFloor(epoch, stage, kind, animation, same, rewind, rKey)
+            return beginFloor(epoch, stage, kind, animation, same, rewind, rKey, ...)
         end
     )
 end
