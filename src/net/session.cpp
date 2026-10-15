@@ -825,6 +825,8 @@ struct Session::Impl {
         }
         if (type == Message::waitFloor) {
             playerCount = r.u8();
+            for (auto& character : startSettings.characters)
+                character = r.u16();
             failure = r.string();
             if (playerCount < 2 || playerCount > 4 || localSlot >= playerCount)
                 throw std::runtime_error("Invalid waiting roster");
@@ -1181,6 +1183,8 @@ struct Session::Impl {
                 q.sendMessage(w);
                 Writer wait(Message::waitFloor);
                 wait.u8(playerCount);
+                for (const auto character : startSettings.characters)
+                    wait.u16(character);
                 wait.string("");
                 q.sendMessage(wait);
                 updateMods(true);

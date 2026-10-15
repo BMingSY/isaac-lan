@@ -27,7 +27,7 @@ struct Group {
     std::array<std::unique_ptr<Session>, 4> peers;
     unsigned count;
     explicit Group(unsigned n, std::uint8_t difficulty = 0, const char* address = "127.0.0.1",
-                   RunRules rules = {})
+                   RunRules rules = {}, std::array<std::uint16_t, maxPlayers> characters = {})
         : count(n) {
         for (unsigned i = 0; i < n; ++i)
             peers[i] = std::make_unique<Session>();
@@ -44,6 +44,7 @@ struct Group {
         start.seed = "YV039KQF";
         start.difficulty = difficulty;
         start.rules = rules;
+        start.characters = characters;
         if (rules.id) {
             require(peers[0]->configureRules(rules), "Rule configuration failed");
             until([&] {
@@ -311,7 +312,7 @@ void renderInputs() {
         "acknowledgements");
 }
 void floorRejoin() {
-    Group g(2);
+    Group g(2, 0, "127.0.0.1", {}, {1, 23});
     g.ready();
     g.step(0);
     const auto identity = g.peers[1]->identity();
@@ -326,6 +327,10 @@ void floorRejoin() {
         g.poll();
         return g.peers[1]->phase() == Phase::waiting;
     });
+    require(g.peers[1]->settings().characters == g.peers[0]->settings().characters,
+            "Fresh rejoin showed default characters while waiting for its checkpoint");
+    require(g.peers[1]->choices()[0].character == 0 && g.peers[1]->choices()[1].character == 0,
+            "Run roster overwrote independent lobby choices");
     Start checkpoint = g.peers[0]->settings();
     checkpoint.snapshot.resize(65537, 0x47);
     require(g.peers[0]->checkpoint(checkpoint, 2), "Floor checkpoint failed");
@@ -336,6 +341,8 @@ void floorRejoin() {
         return g.peers[1]->phase() == Phase::running;
     });
     require(g.peers[1]->settings().snapshot == checkpoint.snapshot, "Floor checkpoint corrupt");
+    require(g.peers[1]->settings().characters == checkpoint.characters,
+            "Restoring the checkpoint changed the reconnect roster");
     require(g.peers[1]->ready(), "Restored engine ready failed");
     until([&] {
         g.poll();
@@ -501,7 +508,7 @@ void cinematicEvents() {
         "PASS native shared cinematic preserves heartbeat, ordering and all-player readiness");
 }
 void stageEvents() {
-    Group g(2);
+    Group g(2, 0, "127.0.0.1", {}, {1, 23});
     g.ready();
     g.step(0);
     g.publish(0, 40000);
@@ -538,6 +545,10 @@ void stageEvents() {
     });
     require(world->tick == 1, "Floor event damaged subsequent world transfer");
     const auto identity = g.peers[1]->identity();
+    auto checkpoint = g.peers[0]->settings();
+    checkpoint.characters = {7, 2};
+    checkpoint.snapshot = {1};
+    require(g.peers[0]->checkpoint(checkpoint, 2), "Updated roster checkpoint failed");
     g.peers[1]->abort("isolated connection loss");
     until([&] {
         g.peers[0]->poll();
@@ -549,6 +560,8 @@ void stageEvents() {
         return g.peers[1]->phase() == Phase::waiting;
     });
     require(g.peers[1]->identity() == identity, "Automatic return lost player identity");
+    require(g.peers[1]->settings().characters == checkpoint.characters,
+            "Automatic return lost the current roster or reused the original characters");
     require(g.peers[0]->beginStage({2, 2, 0, 0, false, {}, {}}), "Second stage broadcast failed");
     g.poll();
     require(!g.peers[1]->takeStage() && g.peers[1]->phase() == Phase::waiting,

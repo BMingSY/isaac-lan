@@ -501,7 +501,7 @@ function _IsaacLanMenuRender(
         assets.cards:SetLayerFrame(36, i)
         layer(assets.cards, 36, x, y)
         if i < count then
-            local id = status["choice" .. i] or 0
+            local id = status[(phase == 2 and "choice" or "character") .. i] or 0
             portrait(id):Render(pos(x + 51, y + 44))
             centered(character(id), x + 51, y + 60, 10, nil, 92)
             if phase == 2 and status["ready" .. i] == 1 then
