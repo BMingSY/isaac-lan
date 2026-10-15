@@ -9,6 +9,7 @@ CASES = ("lazarus", "poop", "knife", "hush")
 DIAGNOSTICS = (
     "item-generation",
     "party-compat",
+    "death-certificate",
     "victory-lap",
     "victory-no",
     "audio",
@@ -52,6 +53,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "shared-curses": "state_shared_curses.lua",
             "shared-deals": "state_shared_deals.lua",
             "party-compat": "state_party_compat.lua",
+            "death-certificate": "state_death_certificate.lua",
             "item-generation": "state_item_generation.lua",
             "victory-lap": "state_endings.lua",
             "victory-no": "state_endings.lua",

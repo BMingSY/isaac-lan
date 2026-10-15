@@ -936,7 +936,7 @@ bool occupiedCombat(const Room& room, Address arriving) {
     });
 }
 void arrival(Address player, const Room& room, int door, const std::vector<Address>& companions,
-             bool protect) {
+             bool protect, std::optional<Vec2> landing = std::nullopt) {
     if (door >= 0 && door < 8) {
         using DoorPosition = Vec2*(__attribute__((thiscall))*)(void*, Vec2*, int);
         Vec2 position;
@@ -945,10 +945,13 @@ void arrival(Address player, const Room& room, int door, const std::vector<Addre
         constexpr Vec2 inward[] = {{40, 0}, {0, 40}, {-40, 0}, {0, -40}};
         position.x += inward[door % 4].x;
         position.y += inward[door % 4].y;
-        place(player, position);
+        landing = position;
+    }
+    if (landing) {
+        place(player, *landing);
         for (auto entity : companions)
             if (at<unsigned>(entity, 0x28) != 867)
-                place(entity, position);
+                place(entity, *landing);
     }
     if (protect) {
         using Cooldown = void(__attribute__((thiscall))*)(void*, int);
@@ -2908,6 +2911,20 @@ void finishFrame() {
                 to->context = from->context;
         }
         const bool protect = !created && occupiedCombat(*to, request.player);
+        std::optional<std::array<float, 2>> residentPosition;
+        if (!created) {
+            const auto residents = occupants(*to);
+            if (!residents.empty()) {
+                const auto position = at<Vec2>(residents.front(), 0x33c);
+                residentPosition = {position.x, position.y};
+            }
+        }
+        const auto certificatePosition = compat::items::deathCertificateArrival(
+            request.animation, from->key.dimension, to->key.dimension, residentPosition);
+        const auto landing =
+            certificatePosition
+                ? std::optional<Vec2>{{(*certificatePosition)[0], (*certificatePosition)[1]}}
+                : std::nullopt;
         if (created)
             prepareDepartureMetadata(
                 std::span<std::uint32_t, 3>(reinterpret_cast<std::uint32_t*>(to->pointer), 3),
@@ -3028,10 +3045,10 @@ void finishFrame() {
                         at<int>(game(), 0x18310) = previousDimension;
                     }
             }
-            arrival(request.player, *to, request.door, companions, protect);
+            arrival(request.player, *to, request.door, companions, protect, landing);
             for (auto player : actors)
                 if (player != request.player)
-                    arrival(player, *to, request.door, {}, protect);
+                    arrival(player, *to, request.door, {}, protect, landing);
             runtime::roomEntered();
             if (created)
                 presentation::roomEntered(to->pointer);
