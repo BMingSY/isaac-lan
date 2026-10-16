@@ -178,6 +178,18 @@ def main():
     parser.add_argument("--timeout", type=int, default=86400)
     parser.add_argument("--record", action="store_true")
     parser.add_argument(
+        "--moving-use", action="store_true", help="Move with the native stick during the use press"
+    )
+    parser.add_argument(
+        "--coins", type=int, default=0, help="Grant holder coins for payment prerequisites"
+    )
+    parser.add_argument(
+        "--wall-use", action="store_true", help="Use beside an empty allowed door slot"
+    )
+    parser.add_argument(
+        "--end-tick", type=int, help="Extend observation after transitions (150 through 3600)"
+    )
+    parser.add_argument(
         "--continue-after-failure",
         action="store_true",
         help="Preserve a failed case, then resume remaining cases in recovered processes",
@@ -215,6 +227,19 @@ def main():
                     case["physical"] = True
         if not 1 <= args.port < 65535 or not 10 <= args.timeout <= 86400:
             raise ValueError("Invalid port or timeout")
+        if not 0 <= args.coins <= 99:
+            raise ValueError("Coins must be between 0 and 99")
+        if args.end_tick is not None and not 150 <= args.end_tick <= 3600:
+            raise ValueError("End tick must be between 150 and 3600")
+        for case in cases:
+            if args.moving_use:
+                case["moving_use"] = True
+            if args.coins:
+                case["coins"] = args.coins
+            if args.wall_use:
+                case["wall_use"] = True
+            if args.end_tick is not None:
+                case["end_tick"] = args.end_tick
         if not 0 <= args.shard < args.shards or args.mode == "stress" and args.shards != 1:
             raise ValueError("Invalid shard; stress runs must remain exclusive")
         cases = cases[args.shard :: args.shards]

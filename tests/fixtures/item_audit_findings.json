@@ -55,16 +55,6 @@
       "status": "reported",
       "impact": "随机效果崩溃仍未完全定位（#69）；随机定义及负数道具库存同步已修复，有限专项通过不能排除其他随机崩溃。",
       "effect": "任一队友持有时，各房间共享错误道具生成效果；道具和随机效果仍归拾取者。"
-    },
-    "collectible:44": {
-      "status": "crash",
-      "impact": "主机同房使用后，客机发生 C0000005 崩溃（RVA 0x36083）；其他条件待复测。尚未修复。",
-      "effect": "目标：保留原版传送目的地与触发条件，传送时主客机均不崩溃。"
-    },
-    "collectible:316": {
-      "status": "crash",
-      "impact": "主机同房使用后，客机发生 C0000005 崩溃（RVA 0x36083）；其他条件待复测。尚未修复。",
-      "effect": "目标：保留原版传送目的地与触发条件，传送时主客机均不崩溃。"
     }
   },
   "audit": {
@@ -109,6 +99,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -212,6 +203,36 @@
           "problems": [],
           "evidence": "item-audit-20261017-04/batch-003",
           "teardown_events": []
+        },
+        {
+          "case": "collectible:625/host-same",
+          "status": "crash",
+          "unconfirmed": [
+            "host_case_end",
+            "client_case_end"
+          ],
+          "problems": [
+            {
+              "phase": 4,
+              "role": "client",
+              "category": "reconnect",
+              "now_ms": 23112656,
+              "key": "collectible:625/host-same",
+              "event": "problem",
+              "detail": "Peer receive failed"
+            }
+          ],
+          "evidence": "item-sweep-20261017-shard0/batch-004",
+          "conditions": {},
+          "process_exit": {
+            "host": {
+              "pid": 28692,
+              "exit_hex": "C0000005",
+              "exit_code": -1073741819
+            }
+          },
+          "crash_phase": "effect",
+          "teardown_events": []
         }
       ],
       "impact": "实机扫描触发访问异常／进程崩溃；具体持有者、房间条件见该项验证记录。尚未修复。"
@@ -241,6 +262,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -375,6 +397,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -389,6 +412,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -403,6 +427,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -417,6 +442,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -431,6 +457,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -445,6 +472,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -459,6 +487,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -473,6 +502,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -487,6 +517,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -501,6 +532,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -515,6 +547,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -529,14 +562,33 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "teardown_events": []
         }
       ],
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:44": {
-      "status": "crash",
+      "status": "basic_pass",
       "checks": [
+        {
+          "case": "collectible:44/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        },
+        {
+          "case": "collectible:44/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        },
         {
           "case": "collectible:44/host-same",
           "status": "crash",
@@ -545,6 +597,7 @@
           ],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-001",
+          "conditions": {},
           "process_exit": {
             "client": {
               "pid": 32392,
@@ -553,10 +606,11 @@
             }
           },
           "crash_phase": "effect",
-          "teardown_events": []
+          "teardown_events": [],
+          "excluded_reason": "测试脚本在客机非当前房间读取 Room:IsClear()，触及不含原生房间描述的副本。仅将该读取限定于主机后，同一 DLL、种子、用例及正常输入复测通过；不归因为道具。"
         }
       ],
-      "impact": "实机扫描触发访问异常／进程崩溃；具体持有者、房间条件见该项验证记录。尚未修复。"
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:47": {
       "status": "basic_pass",
@@ -567,6 +621,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -581,6 +636,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -595,6 +651,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -609,6 +666,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -623,6 +681,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -637,6 +696,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -651,6 +711,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -665,6 +726,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -679,6 +741,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -693,6 +756,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -707,6 +771,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -721,6 +786,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -735,6 +801,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -749,6 +816,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -763,6 +831,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -777,6 +846,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -791,6 +861,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -805,6 +876,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -819,6 +891,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -833,6 +906,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -847,6 +921,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -861,6 +936,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -875,6 +951,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -889,6 +966,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -903,6 +981,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -917,6 +996,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -931,6 +1011,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -945,6 +1026,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -959,6 +1041,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -973,6 +1056,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -987,6 +1071,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1001,6 +1086,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1015,6 +1101,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1029,6 +1116,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1043,6 +1131,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1057,6 +1146,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1071,6 +1161,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1085,6 +1176,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1099,6 +1191,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1113,6 +1206,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1127,6 +1221,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1143,6 +1238,7 @@
           ],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "interruption": "[2026-10-17 01:49:48.615+08:00] [ERROR] [pid=31900] native_exception=c0000005 eip=00956083 ecx=3a40702c edx=00956080 scope=0 image=00920000 rva=00036083 access=0 address=00000044\n[2026-10-17 01:49:48.617+08:00] [ERROR] [pid=31900] native_exception_module=D:\\isaac-lan-lab\\client-feedback-client-20261016\\game\\isaac-ng.exe rva=00036083\n[2026-10-17 01:49:48.619+08:00] [ERROR] [pid=31900] native_exception_stack= 004b427a 004b4230",
           "teardown_events": [
             {
@@ -1168,6 +1264,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1182,6 +1279,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1196,6 +1294,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1210,6 +1309,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1224,6 +1324,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1238,6 +1339,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1252,6 +1354,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1266,6 +1369,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1280,6 +1384,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1294,6 +1399,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1308,6 +1414,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1322,6 +1429,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1336,6 +1444,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1350,6 +1459,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1364,6 +1474,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1378,6 +1489,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1392,6 +1504,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1406,6 +1519,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1420,6 +1534,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1434,6 +1549,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1448,6 +1564,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1462,6 +1579,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1476,6 +1594,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1490,6 +1609,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1504,6 +1624,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1518,6 +1639,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1532,6 +1654,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1546,6 +1669,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1560,6 +1684,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1574,6 +1699,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1588,6 +1714,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1602,6 +1729,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1616,6 +1744,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1630,6 +1759,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1644,6 +1774,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1658,6 +1789,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1672,6 +1804,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1686,6 +1819,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1700,6 +1834,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1714,13 +1849,14 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:295": {
-      "status": "incomplete",
+      "status": "basic_pass",
       "checks": [
         {
           "case": "collectible:295/host-same",
@@ -1729,11 +1865,61 @@
             "native_use_callback"
           ],
           "problems": [],
-          "evidence": "item-sweep-20261017-shard0/batch-002",
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": [],
+          "excluded_reason": "初轮金币为零；提供金币复测中主客机均触发原生使用回调、扣除一枚金币并消灭目标敌人。"
+        },
+        {
+          "case": "collectible:295/client-split",
+          "status": "incomplete",
+          "unconfirmed": [
+            "native_use_callback"
+          ],
+          "problems": [],
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": [],
+          "excluded_reason": "初轮金币为零；提供金币复测中主客机均触发原生使用回调、扣除一枚金币并消灭目标敌人。"
+        },
+        {
+          "case": "collectible:295/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-02/batch-001",
+          "conditions": {
+            "moving_use": true,
+            "coins": 99
+          },
           "teardown_events": []
+        },
+        {
+          "case": "collectible:295/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-02/batch-001",
+          "conditions": {
+            "moving_use": true,
+            "coins": 99
+          },
+          "teardown_events": []
+        },
+        {
+          "case": "collectible:295/host-same",
+          "status": "incomplete",
+          "unconfirmed": [
+            "native_use_callback"
+          ],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
+          "teardown_events": [],
+          "excluded_reason": "初轮金币为零；提供金币复测中主客机均触发原生使用回调、扣除一枚金币并消灭目标敌人。"
         }
       ],
-      "impact": "基础流程未完整确认；条件效果或使用入口需要专项验证。"
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:298": {
       "status": "basic_pass",
@@ -1744,6 +1930,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1758,6 +1945,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1772,6 +1960,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1786,6 +1975,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1800,6 +1990,7 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
@@ -1814,14 +2005,33 @@
           "unconfirmed": [],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "teardown_events": []
         }
       ],
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:316": {
-      "status": "crash",
+      "status": "basic_pass",
       "checks": [
+        {
+          "case": "collectible:316/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        },
+        {
+          "case": "collectible:316/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        },
         {
           "case": "collectible:316/host-same",
           "status": "crash",
@@ -1830,6 +2040,7 @@
           ],
           "problems": [],
           "evidence": "item-sweep-20261017-shard0/batch-002",
+          "conditions": {},
           "process_exit": {
             "client": {
               "pid": 31900,
@@ -1838,10 +2049,3350 @@
             }
           },
           "crash_phase": "effect",
+          "teardown_events": [],
+          "excluded_reason": "测试脚本在客机非当前房间读取 Room:IsClear()，触及不含原生房间描述的副本。仅将该读取限定于主机后，同一 DLL、种子、用例及正常输入复测通过；不归因为道具。"
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:319": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:319/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
           "teardown_events": []
         }
       ],
-      "impact": "实机扫描触发访问异常／进程崩溃；具体持有者、房间条件见该项验证记录。尚未修复。"
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:322": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:322/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:325": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:325/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:328": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:328/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:331": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:331/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:334": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:334/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:337": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:337/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:340": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:340/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:343": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:343/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:346": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:346/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:349": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:349/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:352": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:352/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:355": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:355/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:358": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:358/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:361": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:361/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:364": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:364/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:367": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:367/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:370": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:370/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:373": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:373/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:376": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:376/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:379": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:379/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:382": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:382/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:385": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:385/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:388": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:388/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:391": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:391/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:394": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:394/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:397": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:397/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:400": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:400/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:403": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:403/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:406": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:406/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:409": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:409/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:412": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:412/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:415": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:415/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:418": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:418/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:421": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:421/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:424": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:424/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:427": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:427/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:430": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:430/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:433": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:433/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:436": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:436/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:439": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:439/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:442": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:442/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:445": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:445/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:448": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:448/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:451": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:451/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:454": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:454/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:457": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:457/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:460": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:460/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:463": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:463/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:466": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:466/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:469": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:469/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:472": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:472/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:475": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:475/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:478": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:478/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:481": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:481/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:484": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:484/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:487": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:487/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:490": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:490/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:493": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:493/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:496": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:496/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:499": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:499/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:502": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:502/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:505": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:505/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:508": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:508/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:511": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:511/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:514": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:514/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:517": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:517/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:520": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:520/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:523": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:523/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:526": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:526/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:529": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:529/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:532": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:532/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:535": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:535/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:538": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:538/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:541": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:541/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:544": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:544/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:547": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:547/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:550": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:550/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:553": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:553/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:556": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:556/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:559": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:559/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:562": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:562/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:565": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:565/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:568": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:568/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:571": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:571/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:574": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:574/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:577": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:577/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:580": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:580/host-same",
+          "status": "incomplete",
+          "unconfirmed": [
+            "native_use_callback"
+          ],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": [],
+          "excluded_reason": "未靠近可开红门的墙面；06 轮补足位置条件后，主客机均触发原生使用回调并新增通向 83 号房间的红门。"
+        },
+        {
+          "case": "collectible:580/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-06/batch-001",
+          "conditions": {
+            "wall_use": true
+          },
+          "teardown_events": []
+        },
+        {
+          "case": "collectible:580/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-06/batch-001",
+          "conditions": {
+            "wall_use": true
+          },
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:583": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:583/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:586": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:586/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:590": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:590/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:593": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:593/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:596": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:596/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:599": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:599/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:602": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:602/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:605": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:605/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:608": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:608/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:611": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:611/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:615": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:615/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:618": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:618/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:622": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:622/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-03/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        },
+        {
+          "case": "collectible:622/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-03/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        },
+        {
+          "case": "collectible:622/host-same",
+          "status": "crash",
+          "unconfirmed": [
+            "client_case_end"
+          ],
+          "problems": [],
+          "evidence": "item-sweep-20261017-shard0/batch-003",
+          "conditions": {},
+          "process_exit": {
+            "client": {
+              "pid": 32008,
+              "exit_hex": "C0000005",
+              "exit_code": -1073741819
+            }
+          },
+          "crash_phase": "effect",
+          "teardown_events": [],
+          "excluded_reason": "测试脚本在客机非当前房间读取 Room:IsClear()，触及不含原生房间描述的副本。仅将该读取限定于主机后，同一 DLL、种子、用例及正常输入复测通过；不归因为道具。"
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:130": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:130/host-same",
+          "status": "incomplete",
+          "unconfirmed": [
+            "native_use_callback"
+          ],
+          "problems": [],
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": [],
+          "excluded_reason": "初轮未提供方向输入；方向输入复测中主客机均触发原生使用回调、扣除充能并发生冲刺。"
+        },
+        {
+          "case": "collectible:130/client-split",
+          "status": "incomplete",
+          "unconfirmed": [
+            "native_use_callback"
+          ],
+          "problems": [],
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": [],
+          "excluded_reason": "初轮未提供方向输入；方向输入复测中主客机均触发原生使用回调、扣除充能并发生冲刺。"
+        },
+        {
+          "case": "collectible:130/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-02/batch-001",
+          "conditions": {
+            "moving_use": true,
+            "coins": 99
+          },
+          "teardown_events": []
+        },
+        {
+          "case": "collectible:130/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-02/batch-001",
+          "conditions": {
+            "moving_use": true,
+            "coins": 99
+          },
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:181": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:181/host-same",
+          "status": "incomplete",
+          "unconfirmed": [
+            "native_use_callback"
+          ],
+          "problems": [],
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": [],
+          "excluded_reason": "初轮未提供方向输入；方向输入复测中主客机均触发原生使用回调、扣除充能并发生冲刺。"
+        },
+        {
+          "case": "collectible:181/client-split",
+          "status": "incomplete",
+          "unconfirmed": [
+            "native_use_callback"
+          ],
+          "problems": [],
+          "evidence": "item-confirm-20261017-01/batch-001",
+          "conditions": {},
+          "teardown_events": [],
+          "excluded_reason": "初轮未提供方向输入；方向输入复测中主客机均触发原生使用回调、扣除充能并发生冲刺。"
+        },
+        {
+          "case": "collectible:181/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-02/batch-001",
+          "conditions": {
+            "moving_use": true,
+            "coins": 99
+          },
+          "teardown_events": []
+        },
+        {
+          "case": "collectible:181/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-02/batch-001",
+          "conditions": {
+            "moving_use": true,
+            "coins": 99
+          },
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:3": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:3/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:6": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:6/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:9": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:9/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:12": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:12/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:15": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:15/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:18": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:18/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:21": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:21/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:24": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:24/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:27": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:27/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:30": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:30/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:33": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:33/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:36": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:36/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:39": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:39/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:42": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:42/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:46": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:46/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:49": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:49/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:52": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:52/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:55": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:55/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:58": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:58/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:62": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:62/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:65": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:65/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:68": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:68/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:71": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:71/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:74": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:74/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:77": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:77/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:80": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:80/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:83": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:83/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:86": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:86/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:89": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:89/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:92": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:92/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:95": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:95/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:98": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:98/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:101": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:101/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:104": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:104/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:107": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:107/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:110": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:110/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:113": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:113/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:116": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:116/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:119": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:119/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:122": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:122/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:125": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:125/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:128": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:128/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:131": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:131/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:134": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:134/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:137": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:137/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:140": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:140/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:143": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:143/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:146": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:146/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:149": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:149/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:152": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:152/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:155": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:155/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:158": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:158/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:161": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:161/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:164": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:164/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:167": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:167/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:170": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:170/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:173": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:173/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:176": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:176/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:179": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:179/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:182": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:182/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:185": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:185/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:188": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:188/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:191": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:191/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:194": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:194/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:197": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:197/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:200": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:200/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:203": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:203/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:206": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:206/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:209": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:209/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:212": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:212/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:215": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:215/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:218": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:218/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:221": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:221/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:224": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:224/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:227": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:227/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:230": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:230/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:233": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:233/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:237": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:237/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:240": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:240/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:243": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:243/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:246": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:246/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:249": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:249/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:252": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:252/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:255": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:255/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:258": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:258/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:261": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:261/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:264": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:264/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:267": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:267/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:270": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:270/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:273": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:273/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:276": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:276/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:279": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:279/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:282": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:282/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:285": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:285/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:288": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:288/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:291": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:291/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:294": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:294/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:297": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:297/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:300": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:300/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:303": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:303/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:306": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:306/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:309": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:309/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:312": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:312/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:315": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:315/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:318": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:318/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:321": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:321/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:324": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:324/host-same",
+          "status": "crash",
+          "unconfirmed": [
+            "client_case_end"
+          ],
+          "problems": [],
+          "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+          "conditions": {},
+          "process_exit": {
+            "client": {
+              "pid": 36792,
+              "exit_hex": "C0000005",
+              "exit_code": -1073741819
+            }
+          },
+          "crash_phase": "effect",
+          "teardown_events": [],
+          "excluded_reason": "测试脚本在客机非当前房间读取 Room:IsClear()，触及不含原生房间描述的副本。仅将该读取限定于主机后，同一 DLL、种子、用例及正常输入复测通过；不归因为道具。"
+        },
+        {
+          "case": "collectible:324/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-04/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        },
+        {
+          "case": "collectible:324/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-04/batch-001",
+          "conditions": {},
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "card:78": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "card:78/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-06/batch-001",
+          "conditions": {
+            "wall_use": true
+          },
+          "teardown_events": []
+        },
+        {
+          "case": "card:78/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-confirm-20261017-06/batch-001",
+          "conditions": {
+            "wall_use": true
+          },
+          "teardown_events": []
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     }
   },
   "stress": [
@@ -3506,6 +7057,84 @@
     {
       "evidence": "item-sweep-20261017-shard5",
       "reason": "首次启动 Beta 提示遮挡游戏；受影响实例已关闭、恢复资料并从头重测，旧记录不计覆盖。"
+    },
+    {
+      "evidence": "item-confirm-20261017-05",
+      "reason": "补充红钥匙前置条件时，客机所在房间无可用空门位，夹具在赋予道具前断言失败；06 轮改为让持有者留在有空墙面的起始房间并重测四组。"
+    }
+  ],
+  "excluded_checks": [
+    {
+      "case": "collectible:44/host-same",
+      "evidence": "item-sweep-20261017-shard0/batch-001",
+      "reason": "测试脚本在客机非当前房间读取 Room:IsClear()，触及不含原生房间描述的副本。仅将该读取限定于主机后，同一 DLL、种子、用例及正常输入复测通过；不归因为道具。",
+      "confirmation": "item-confirm-20261017-01/batch-001"
+    },
+    {
+      "case": "collectible:316/host-same",
+      "evidence": "item-sweep-20261017-shard0/batch-002",
+      "reason": "测试脚本在客机非当前房间读取 Room:IsClear()，触及不含原生房间描述的副本。仅将该读取限定于主机后，同一 DLL、种子、用例及正常输入复测通过；不归因为道具。",
+      "confirmation": "item-confirm-20261017-01/batch-001"
+    },
+    {
+      "case": "collectible:622/host-same",
+      "evidence": "item-sweep-20261017-shard0/batch-003",
+      "reason": "测试脚本在客机非当前房间读取 Room:IsClear()，触及不含原生房间描述的副本。仅将该读取限定于主机后，同一 DLL、种子、用例及正常输入复测通过；不归因为道具。",
+      "confirmation": "item-confirm-20261017-03/batch-001"
+    },
+    {
+      "case": "collectible:324/host-same",
+      "evidence": "item-sweep-visible-20261017-shard4/batch-001",
+      "reason": "测试脚本在客机非当前房间读取 Room:IsClear()，触及不含原生房间描述的副本。仅将该读取限定于主机后，同一 DLL、种子、用例及正常输入复测通过；不归因为道具。",
+      "confirmation": "item-confirm-20261017-04/batch-001"
+    },
+    {
+      "case": "collectible:130/host-same",
+      "evidence": "item-confirm-20261017-01/batch-001",
+      "reason": "初轮未提供方向输入；方向输入复测中主客机均触发原生使用回调、扣除充能并发生冲刺。",
+      "confirmation": "item-confirm-20261017-02/batch-001"
+    },
+    {
+      "case": "collectible:130/client-split",
+      "evidence": "item-confirm-20261017-01/batch-001",
+      "reason": "初轮未提供方向输入；方向输入复测中主客机均触发原生使用回调、扣除充能并发生冲刺。",
+      "confirmation": "item-confirm-20261017-02/batch-001"
+    },
+    {
+      "case": "collectible:181/host-same",
+      "evidence": "item-confirm-20261017-01/batch-001",
+      "reason": "初轮未提供方向输入；方向输入复测中主客机均触发原生使用回调、扣除充能并发生冲刺。",
+      "confirmation": "item-confirm-20261017-02/batch-001"
+    },
+    {
+      "case": "collectible:181/client-split",
+      "evidence": "item-confirm-20261017-01/batch-001",
+      "reason": "初轮未提供方向输入；方向输入复测中主客机均触发原生使用回调、扣除充能并发生冲刺。",
+      "confirmation": "item-confirm-20261017-02/batch-001"
+    },
+    {
+      "case": "collectible:295/host-same",
+      "evidence": "item-confirm-20261017-01/batch-001",
+      "reason": "初轮金币为零；提供金币复测中主客机均触发原生使用回调、扣除一枚金币并消灭目标敌人。",
+      "confirmation": "item-confirm-20261017-02/batch-001"
+    },
+    {
+      "case": "collectible:295/client-split",
+      "evidence": "item-confirm-20261017-01/batch-001",
+      "reason": "初轮金币为零；提供金币复测中主客机均触发原生使用回调、扣除一枚金币并消灭目标敌人。",
+      "confirmation": "item-confirm-20261017-02/batch-001"
+    },
+    {
+      "case": "collectible:295/host-same",
+      "evidence": "item-sweep-20261017-shard0/batch-002",
+      "reason": "初轮金币为零；提供金币复测中主客机均触发原生使用回调、扣除一枚金币并消灭目标敌人。",
+      "confirmation": "item-confirm-20261017-02/batch-001"
+    },
+    {
+      "case": "collectible:580/host-same",
+      "evidence": "item-sweep-20261017-shard0/batch-003",
+      "reason": "未靠近可开红门的墙面；06 轮补足位置条件后，主客机均触发原生使用回调并新增通向 83 号房间的红门。",
+      "confirmation": "item-confirm-20261017-06/batch-001"
     }
   ]
 }

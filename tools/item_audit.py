@@ -245,6 +245,14 @@ def summarize_case(case, peers, engine=None):
         "unconfirmed_checks": missing,
         "teardown_events": teardown,
     }
+    if (
+        began
+        and problems
+        and not any(event["event"] in {"give_begin", "give_end"} for event in host)
+    ):
+        result["status"] = "incomplete"
+        result["interruption_phase"] = "setup"
+        missing.append("fixture_setup")
     if began and engine:
         exits = engine.get("process_exit", {})
         latest = next(

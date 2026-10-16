@@ -23,6 +23,9 @@ local function report(event, values)
 end
 local stress = createStress(report)
 local lastRender
+local function observationEnd()
+    return case.end_tick or ((case.mega or case.kind == "stress") and 1100 or 150)
+end
 local function actor(slot, fn)
     local found = false
     local ok = native.rooms_with_player(slot, function()
@@ -61,6 +64,8 @@ local function sample(label, tick)
             end
             records[#records + 1] = {
                 slot = slot,
+                x = p.Position.X,
+                y = p.Position.Y,
                 type = p:GetPlayerType(),
                 damage = p.Damage,
                 delay = p.MaxFireDelay,
@@ -71,6 +76,7 @@ local function sample(label, tick)
                 hearts = p:GetHearts(),
                 max_hearts = p:GetMaxHearts(),
                 soul = p:GetSoulHearts(),
+                coins = p:GetNumCoins(),
                 visible = p.Visible,
                 dead = p:IsDead(),
                 ghost = p:IsCoopGhost(),
@@ -86,12 +92,26 @@ local function sample(label, tick)
                 card = p:GetCard(0),
                 pill = p:GetPill(0),
                 room = native.rooms_positions()[tostring(slot)].index,
-                clear = room:IsClear(),
                 entities = count,
                 tears = tears,
                 projectiles = projectiles,
                 effects = effects,
             }
+            -- Remote replica shells do not own a native room descriptor.
+            -- IsClear dereferences that descriptor; only query the authority.
+            if host then
+                records[#records].clear = room:IsClear()
+                if case.wall_use then
+                    local doors = {}
+                    for doorSlot = 0, 7 do
+                        local door = room:GetDoor(doorSlot)
+                        if door then
+                            doors[#doors + 1] = { slot = doorSlot, target = door.TargetRoomIndex }
+                        end
+                    end
+                    records[#records].doors = doors
+                end
+            end
         end)
         if not available then
             records[#records + 1] = { slot = slot, missing = true }
@@ -128,8 +148,7 @@ Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
     if case.kind == "stress" then
         stress.finish()
     end
-    local expected = host and exiting
-        or not host and lastTick >= ((case.mega or case.kind == "stress") and 1095 or 145)
+    local expected = host and exiting or not host and lastTick >= observationEnd() - 5
     report(
         expected and "case_end" or "case_aborted",
         { samples = seen, uses = useCount, expected_exit = expected }
@@ -169,6 +188,9 @@ local function prepare(tick)
             -- Rerolls/consumption get a real inventory and pedestal target;
             -- attack/kill effects get an ordinary native enemy.
             p:AddCollectible(CollectibleType.COLLECTIBLE_BREAKFAST, 0, false)
+            if case.coins then
+                p:AddCoins(case.coins - p:GetNumCoins())
+            end
             Isaac.Spawn(
                 EntityType.ENTITY_PICKUP,
                 PickupVariant.PICKUP_COLLECTIBLE,
@@ -186,6 +208,29 @@ local function prepare(tick)
                 nil
             )
             room:SetClear(false)
+            if case.wall_use then
+                local level = Game():GetLevel()
+                local origin = native.rooms_positions()[tostring(case.slot)].index
+                local offsets = { -1, -13, 1, 13 }
+                local selected
+                for doorSlot = 0, 3 do
+                    local target = origin + offsets[doorSlot + 1]
+                    if
+                        room:IsDoorSlotAllowed(doorSlot)
+                        and not room:GetDoor(doorSlot)
+                        and target >= 0
+                        and target < 169
+                        and not level:GetRoomByIdx(target, 0).Data
+                    then
+                        selected = doorSlot
+                        local wall = room:GetDoorSlotPosition(doorSlot)
+                        p.Position = wall + (room:GetCenterPos() - wall):Normalized() * 20
+                        break
+                    end
+                end
+                assert(selected, "No empty door slot for wall-use prerequisite")
+                report("wall_use_position", { slot = selected })
+            end
         end)
     end
     sample("before", tick)
@@ -235,7 +280,10 @@ local function advance(tick)
     if not placed and tick >= 20 then
         placed = true
         if case.split then
-            assert(native.rooms_move(1, otherRoom(native.rooms_positions()["0"].index), 0, -1))
+            -- The starting room has an empty wall suitable for Red Key.
+            -- Keep the holder there and move the teammate for this prerequisite.
+            local slot = case.wall_use and (1 - case.slot) or 1
+            assert(native.rooms_move(slot, otherRoom(native.rooms_positions()["0"].index), 0, -1))
         end
         return
     end
@@ -269,8 +317,11 @@ local function advance(tick)
         assert(native.rooms_move(case.slot, target, 0, -1))
         report("room_changed", { target = target })
     end
-    local endTick = (case.mega or case.kind == "stress") and 1100 or 150
+    local endTick = observationEnd()
     local deadline = (case.mega or case.kind == "stress") and 65000 or 16000
+    if case.end_tick then
+        deadline = math.max(deadline, endTick * 1000 / 30 + 15000)
+    end
     if used and (tick >= endTick or elapsed >= deadline) then
         sample("after", tick)
         if elapsed >= deadline and tick < endTick then
@@ -349,7 +400,16 @@ function _IsaacLanFrame()
         and s.verified < 66
     native.test_gamepad(
         active and case.kind == "card" and 512 or 0,
-        active and case.kind == "collectible" and 255 or 0
+        active and case.kind == "collectible" and 255 or 0,
+        0,
+        0,
+        case
+                and case.moving_use
+                and s.slot == case.slot
+                and s.verified >= 55
+                and s.verified < 80
+                and 32767
+            or 0
     )
     return s
 end

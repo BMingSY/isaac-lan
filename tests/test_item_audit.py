@@ -99,6 +99,23 @@ def test_setup_crash_is_incomplete_and_cleanup_crash_is_not_a_pass():
     assert result["crash_phase"] == "cleanup"
 
 
+def test_failed_fixture_prerequisite_is_not_an_item_reconnect_bug():
+    case = {"key": "collectible:580/client-split"}
+    host = [
+        {"key": case["key"], "event": "case_begin"},
+        {
+            "key": case["key"],
+            "event": "problem",
+            "category": "reconnect",
+            "detail": "fixture error",
+        },
+    ]
+    result = summarize_case(case, {"host": host, "client": []})
+    assert result["status"] == "incomplete"
+    assert result["interruption_phase"] == "setup"
+    assert "fixture_setup" in result["unconfirmed_checks"]
+
+
 def test_full_registry_and_shards_cover_each_entry_and_pill_variant_once():
     from collections import Counter
 
@@ -158,7 +175,12 @@ def test_fixture_exit_socket_close_is_not_misattributed_to_item_reconnect():
     def event(name, **values):
         return {"event": name, "key": case["key"], **values}
 
-    host = [event("case_begin"), event("exit_requested", now_ms=100), event("case_end")]
+    host = [
+        event("case_begin"),
+        event("give_begin"),
+        event("exit_requested", now_ms=100),
+        event("case_end"),
+    ]
     client = [
         event("case_begin"),
         event("problem", category="reconnect", now_ms=101),
@@ -190,6 +212,71 @@ def test_first_start_notice_must_be_cleared_before_native_audit(tmp_path):
         validate_startup([tmp_path])
     options.write_text("[Options]\nAcceptedPublicBeta_v1.9.7.17=1\n")
     validate_startup([tmp_path])
+
+
+def test_import_preserves_failures_and_requires_explicit_review_to_exclude(tmp_path):
+    from import_item_audit import import_run
+
+    case = {
+        "key": "collectible:1/host-same",
+        "item": "collectible:1",
+        "kind": "collectible",
+        "id": 1,
+    }
+
+    def make_report(name, problem=False):
+        directory = tmp_path / name
+        batch = directory / "batch-001"
+        batch.mkdir(parents=True)
+        (directory / "manifest.json").write_text(json.dumps({"dll_sha256": "candidate"}))
+        (batch / "report.json").write_text(json.dumps({"cases": [case], "engine": {}}))
+        values = [
+            {"event": event, "key": case["key"]}
+            for event in ("case_begin", "give_end", "use_return", "case_end")
+        ]
+        values += [
+            {"event": "sample", "key": case["key"], "tick": tick, "players": []}
+            for tick in (90, 120)
+        ]
+        if problem:
+            values.append({"event": "problem", "key": case["key"], "category": "non_native"})
+        for role in ("host", "client"):
+            (batch / (role + "-events.log")).write_text(
+                "\n".join("LAN_ITEM_AUDIT " + json.dumps(v) for v in values)
+            )
+        return directory
+
+    failed, passed = make_report("failed", True), make_report("passed")
+    findings = {"dll_sha256": "candidate", "audit": {}, "stress": []}
+    import_run(findings, failed)
+    import_run(findings, failed)
+    item = findings["audit"][case["item"]]
+    assert len(item["checks"]) == 1
+    import_run(findings, passed)
+    assert item["status"] == "problem"
+    findings["excluded_checks"] = [
+        {
+            "case": case["key"],
+            "evidence": "failed/batch-001",
+            "reason": "Confirmed fixture failure; original evidence retained",
+        }
+    ]
+    import_run(findings, failed)
+    assert item["status"] == "basic_pass"
+    assert len(item["checks"]) == 2
+    assert any(
+        entry["status"] == "problem" and entry.get("excluded_reason") for entry in item["checks"]
+    )
+
+
+def test_excluded_run_cannot_be_reimported_as_valid_coverage(tmp_path):
+    from import_item_audit import import_run
+
+    findings = {
+        "excluded_runs": [{"evidence": "obscured", "reason": "Startup notice hid gameplay"}]
+    }
+    with pytest.raises(ValueError, match="Startup notice hid gameplay"):
+        import_run(findings, tmp_path / "obscured")
 
 
 def test_direct_effect_requires_observed_change_and_tolerates_missing_actor():

@@ -58,6 +58,16 @@ def measured_stress(result, evidence):
 
 
 def import_run(findings, directory):
+    excluded = next(
+        (
+            entry
+            for entry in findings.get("excluded_runs", [])
+            if entry["evidence"] == directory.name
+        ),
+        None,
+    )
+    if excluded:
+        raise ValueError(f"Excluded run {directory.name}: {excluded['reason']}")
     manifest = json.loads((directory / "manifest.json").read_text())
     if manifest["dll_sha256"] != findings["dll_sha256"]:
         raise ValueError("Do not combine different native candidates")
@@ -103,23 +113,53 @@ def import_run(findings, directory):
                 "unconfirmed": result["unconfirmed_checks"],
                 "problems": result["problems"],
                 "evidence": evidence,
+                "conditions": {
+                    key: case[key]
+                    for key in ("moving_use", "coins", "wall_use", "end_tick")
+                    if key in case
+                },
             }
-            for field in ("process_exit", "crash_phase", "interruption", "teardown_events"):
+            for field in (
+                "process_exit",
+                "crash_phase",
+                "interruption",
+                "interruption_phase",
+                "teardown_events",
+            ):
                 if field in result:
                     check[field] = result[field]
+            review = next(
+                (
+                    entry
+                    for entry in findings.get("excluded_checks", [])
+                    if entry["case"] == case["key"] and entry["evidence"] == evidence
+                ),
+                None,
+            )
+            if review:
+                if not review.get("reason"):
+                    raise ValueError("An excluded observation requires a reviewed reason")
+                check["excluded_reason"] = review["reason"]
             item["checks"] = [
                 entry
                 for entry in item["checks"]
                 if (entry["case"], entry["evidence"]) != (check["case"], evidence)
             ] + [check]
-            item["status"] = max((entry["status"] for entry in item["checks"]), key=RANK.get)
+            item["status"] = max(
+                (entry["status"] for entry in item["checks"] if not entry.get("excluded_reason")),
+                key=RANK.get,
+                default="untested",
+            )
             if item["status"] == "crash":
                 item["impact"] = (
                     "实机扫描触发访问异常／进程崩溃；具体持有者、房间条件见该项验证记录。尚未修复。"
                 )
             elif item["status"] == "problem":
                 categories = {
-                    problem["category"] for entry in item["checks"] for problem in entry["problems"]
+                    problem["category"]
+                    for entry in item["checks"]
+                    if not entry.get("excluded_reason")
+                    for problem in entry["problems"]
                 }
                 labels = {
                     "no_effect": "未观察到应有的直接属性效果",
@@ -133,6 +173,8 @@ def import_run(findings, directory):
                 )
             elif item["status"] == "incomplete":
                 item["impact"] = "基础流程未完整确认；条件效果或使用入口需要专项验证。"
+            elif item["status"] == "untested":
+                item["impact"] = "现有记录因夹具问题排除；效果需要重新验证。"
             else:
                 item["impact"] = "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     return findings
