@@ -1,0 +1,299 @@
+"""Catalog and evidence contracts shared by the isolated item audit tools."""
+
+import json
+from pathlib import Path
+import re
+
+ROOT = Path(__file__).resolve().parents[1]
+PREFIX = "LAN_ITEM_AUDIT "
+KINDS = ("collectible", "trinket", "card", "pill")
+COMPLETION = "LAN_NETWORK PASS item audit batch"
+DIRECT_EFFECTS = {
+    "COLLECTIBLE_SAD_ONION": ("delay", -1),
+    "COLLECTIBLE_BLOOD_OF_THE_MARTYR": ("damage", 1),
+    "COLLECTIBLE_MAGIC_MUSHROOM": ("damage", 1),
+    "COLLECTIBLE_ROID_RAGE": ("speed", 1),
+    "PILLEFFECT_BALLS_OF_STEEL": ("soul", 1),
+    "PILLEFFECT_HEALTH_UP": ("max_hearts", 1),
+    "PILLEFFECT_HEALTH_DOWN": ("max_hearts", -1),
+    "PILLEFFECT_SPEED_UP": ("speed", 1),
+    "PILLEFFECT_SPEED_DOWN": ("speed", -1),
+    "PILLEFFECT_TEARS_UP": ("delay", -1),
+    "PILLEFFECT_TEARS_DOWN": ("delay", 1),
+    "PILLEFFECT_RANGE_UP": ("range", 1),
+    "PILLEFFECT_RANGE_DOWN": ("range", -1),
+    "PILLEFFECT_LUCK_UP": ("luck", 1),
+    "PILLEFFECT_LUCK_DOWN": ("luck", -1),
+    "PILLEFFECT_SHOT_SPEED_UP": ("shot_speed", 1),
+    "PILLEFFECT_SHOT_SPEED_DOWN": ("shot_speed", -1),
+}
+
+
+def events(text):
+    result = []
+    for line in text.splitlines():
+        if PREFIX not in line:
+            continue
+        try:
+            value = json.loads(line.split(PREFIX, 1)[1])
+        except json.JSONDecodeError:
+            continue  # A process may die halfway through its final log write.
+        if isinstance(value, dict) and isinstance(value.get("event"), str):
+            result.append(value)
+    return result
+
+
+def catalog_from_log(text):
+    records = [event["item"] for event in events(text) if event["event"] == "catalog"]
+    keys = [record["key"] for record in records]
+    if not records or len(set(keys)) != len(keys):
+        raise ValueError("A complete, unique runtime catalog is required")
+    end = [event for event in events(text) if event["event"] == "catalog_end"]
+    if len(end) != 1 or end[0]["count"] != len(records):
+        raise ValueError("Runtime catalog is truncated")
+    if {record["kind"] for record in records} != set(KINDS):
+        raise ValueError("Runtime catalog is missing an item category")
+    return {"game": "1.9.7.17.J460", "source": "Isaac.GetItemConfig", "items": records}
+
+
+def localize_catalog(catalog, names_file):
+    """Import only ID/name metadata from an unmodified EID names table."""
+    kinds = {"C_ID": "collectible", "T_ID": "trinket", "Card_ID": "card", "Pill_ID": "pill"}
+    names = {}
+    for prefix, number, name in re.findall(
+        r'\[(C_ID|T_ID|Card_ID|Pill_ID)\s*\.\.\s*(\d+)\]\s*=\s*"([^"]+)"', names_file.read_text()
+    ):
+        names[f"{kinds[prefix]}:{number}"] = name
+    for item in catalog["items"]:
+        if item["key"] in names:
+            item["name_zh"] = names[item["key"]]
+    catalog["name_source"] = (
+        "https://github.com/wofsauge/External-Item-Descriptions/blob/master/descriptions/names/zh_cn.lua"
+    )
+    return catalog
+
+
+def lua(value):
+    if value is None:
+        return "nil"
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (str, int, float)):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, list):
+        return "{" + ",".join(lua(v) for v in value) + "}"
+    return "{" + ",".join("[" + lua(k) + "]=" + lua(v) for k, v in value.items()) + "}"
+
+
+def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), horse=True):
+    items = catalog["items"]
+    known = {item["key"] for item in items}
+    if keys is not None and (not keys or not set(keys) <= known or len(set(keys)) != len(keys)):
+        raise ValueError("Choose distinct runtime catalog keys")
+    cases = []
+    for item in items:
+        if keys is not None and item["key"] not in keys:
+            continue
+        for context in contexts:
+            if context not in {"host-same", "host-split", "client-same", "client-split"}:
+                raise ValueError("Unknown holder/room context")
+            variants = (False, True) if item["kind"] == "pill" and horse else (False,)
+            for large in variants:
+                cases.append(
+                    {
+                        "key": item["key"] + "/" + context + ("/horse" if large else ""),
+                        "item": item["key"],
+                        "kind": item["kind"],
+                        "id": item["id"],
+                        "enum": item.get("enum"),
+                        "slot": int(context.startswith("client")),
+                        "split": context.endswith("split"),
+                        "horse": large,
+                        "mega": item["kind"] == "collectible" and item["id"] == 625,
+                        "physical": item["kind"] == "card" or item.get("item_type") == 3,
+                    }
+                )
+    return cases
+
+
+def summarize_case(case, peers, engine=None):
+    """A smoke result never proves the complete conditional native effect."""
+    observations = {
+        role: [
+            event
+            for event in values
+            if event.get("key") == case["key"] and event["event"] not in {"catalog", "catalog_end"}
+        ]
+        for role, values in peers.items()
+    }
+    host, client = observations.get("host", []), observations.get("client", [])
+    problems = [
+        event for values in observations.values() for event in values if event["event"] == "problem"
+    ]
+    host_samples = {
+        event["tick"]: event
+        for event in host
+        if event["event"] == "sample" and event.get("label") == "observe"
+    }
+    mismatches = {}
+    for event in client:
+        if event["event"] != "sample" or event.get("tick", 0) < 90:
+            continue
+        authority = host_samples.get(event["tick"])
+        if not authority:
+            continue
+        for expected, actual in zip(authority["players"], event["players"]):
+            for field in (
+                "damage",
+                "delay",
+                "speed",
+                "range",
+                "shot_speed",
+                "luck",
+                "target_count",
+            ):
+                left, right = expected.get(field), actual.get(field)
+                if left is not None and right is not None and abs(left - right) > 0.001:
+                    mismatches.setdefault((actual["slot"], field), []).append(event["tick"])
+    for (slot, field), ticks in mismatches.items():
+        if len(ticks) >= 2:
+            problems.append(
+                {
+                    "event": "problem",
+                    "category": "non_native",
+                    "detail": f"slot {slot} {field} differs on two or more matching snapshots",
+                    "ticks": ticks,
+                }
+            )
+    expectation = DIRECT_EFFECTS.get(case.get("enum"))
+    before = next(
+        (event for event in host if event["event"] == "sample" and event.get("label") == "before"),
+        None,
+    )
+    after = [event for tick, event in host_samples.items() if 60 <= tick <= 90]
+    if (
+        expectation
+        and before
+        and after
+        and (case.get("kind") != "pill" or any(event["event"] == "use_callback" for event in host))
+    ):
+        field, direction = expectation
+        baseline = before["players"][case["slot"]].get(field)
+        values = [event["players"][case["slot"]].get(field) for event in after]
+        observed = [value for value in values if value is not None]
+        if (
+            baseline is not None
+            and observed
+            and not any((value - baseline) * direction > 0.001 for value in observed)
+        ):
+            problems.append(
+                {
+                    "event": "problem",
+                    "category": "no_effect",
+                    "detail": f"expected direct {field} change was not observed",
+                }
+            )
+    ended = all(any(event["event"] == "case_end" for event in values) for values in (host, client))
+    samples = {
+        role: sum(event["event"] == "sample" for event in values)
+        for role, values in observations.items()
+    }
+    began = any(event["event"] == "case_begin" for event in host)
+    missing = []
+    for event in ("give_end", "use_return"):
+        if not any(value["event"] == event for value in host):
+            missing.append(event)
+    if min(samples.get("host", 0), samples.get("client", 0)) < 2:
+        missing.append("two_samples_on_each_peer")
+    if (case.get("physical") or case.get("kind") == "pill") and not any(
+        value["event"] == "use_callback" for value in host
+    ):
+        missing.append("native_use_callback")
+    done = ended and not missing
+    result = {
+        **case,
+        "status": "problem"
+        if any(problem["category"] != "incomplete" for problem in problems)
+        else "incomplete"
+        if problems
+        else "basic_pass"
+        if done
+        else "incomplete"
+        if began
+        else "untested",
+        "compatibility_verified": False,
+        "problems": problems,
+        "samples": samples,
+        "observations": observations,
+        "unconfirmed_checks": missing,
+    }
+    if began and not ended and engine:
+        exits = engine.get("process_exit", {})
+        crashed = {
+            role: value
+            for role, value in exits.items()
+            if value.get("exit_code") is not None
+            and (value["exit_code"] & 0xFFFFFFFF) not in (0, 0xFFFFFFFF)
+            and next(
+                (
+                    event.get("key")
+                    for event in reversed(peers.get(role, []))
+                    if event["event"] == "case_begin"
+                ),
+                case["key"],
+            )
+            == case["key"]
+        }
+        if crashed:
+            result["status"] = "crash"
+            result["process_exit"] = crashed
+        elif engine.get("error"):
+            result["interruption"] = engine["error"]
+    return result
+
+
+def build_fixture(path, config):
+    path.write_text(
+        "local audit = "
+        + lua(config)
+        + "\n"
+        + "local exportCatalog = (function()\n"
+        + (ROOT / "tests/fixtures/item_audit_catalog.lua").read_text()
+        + "\nend)()\n"
+        + "local createStress = (function()\n"
+        + (ROOT / "tests/fixtures/item_audit_stress.lua").read_text()
+        + "\nend)()\n"
+        + (ROOT / "tests/state_item_audit.lua").read_text()
+    )
+
+
+def stress_cases(catalog, keys=None):
+    # Missing No./TMTRAINER belong in the individual randomized-effect audit.
+    excluded = {258, 721}
+    loadout = [
+        item["id"]
+        for item in catalog["items"]
+        if item["kind"] == "collectible"
+        and item["item_type"] in (1, 4)
+        and not item.get("hidden")
+        and item["id"] not in excluded
+    ]
+    profiles = [{"key": "stress:baseline"}]
+    for count in (100, 300, 500):
+        if len(loadout) < count:
+            raise ValueError("Runtime registry cannot supply the requested distinct inventory")
+        profiles.append({"key": f"stress:inventory-{count}", "loadout": loadout[:count]})
+    profiles.append({"key": "stress:copies-1000", "copies": 1000})
+    for kind in ("tears", "projectiles"):
+        for count in (100, 500, 1000, 2000):
+            profiles.append({"key": f"stress:{kind}-{count}", kind: count})
+    profiles.append(
+        {"key": "stress:combined", "loadout": loadout[:300], "tears": 500, "projectiles": 500}
+    )
+    if keys is not None and not set(keys) <= {profile["key"] for profile in profiles}:
+        raise ValueError("Unknown stress case")
+    return [
+        {**profile, "item": profile["key"], "kind": "stress", "id": 0, "slot": 1, "split": False}
+        for profile in profiles
+        if keys is None or profile["key"] in keys
+    ]

@@ -1,0 +1,1967 @@
+{
+  "game": "1.9.7.17.J460",
+  "candidate": "ab9b5265327903bcb4e08536308f9bd6fe0961a7",
+  "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650",
+  "known": {
+    "collectible:21": {
+      "effect": "任一队友持有时，全队共享特殊房间位置显示，分房后仍生效。"
+    },
+    "collectible:54": {
+      "effect": "任一队友持有时，全队共享楼层布局显示，分房后仍生效。"
+    },
+    "collectible:64": {
+      "effect": "商店折扣计入全队持有数量，分房后仍生效。"
+    },
+    "collectible:246": {
+      "effect": "任一队友持有时，全队共享秘密房位置显示，分房后仍生效。"
+    },
+    "collectible:260": {
+      "effect": "任一队友持有时，为全队清除楼层诅咒，分房后仍生效。"
+    },
+    "collectible:376": {
+      "effect": "任一队友持有时，全队共享商店补货效果，分房后仍生效。"
+    },
+    "collectible:416": {
+      "effect": "任一队友持有时，提升全队金币上限，分房后仍生效。"
+    },
+    "collectible:577": {
+      "status": "verified",
+      "effect": "激活后的额外底座对全队各房间生效；受伤判定和落剑风险仍归持有者。",
+      "impact": "已验证共享底座、移除恢复和非持有者受伤；未穷举随机落剑时机。"
+    },
+    "collectible:622": {
+      "status": "verified",
+      "effect": "使用者进入特殊房间并重选道具，队友背包保留；原生出口换层时全队进入下一层。",
+      "impact": "主客机使用、同房／分房四组专项已通过。"
+    },
+    "collectible:625": {
+      "status": "crash",
+      "impact": "主机持有，正常按键使用后发生 C0000005 崩溃（同房、分房均复现）；客机持有两组完成使用、换房及属性恢复。尚未修复。",
+      "effect": "目标：保留原版巨化效果、持续时间和恢复行为，使用时不崩溃。",
+      "evidence": "item-audit-20261017-04；主机异常 RVA 0x91b8；含双端日志、画面及转储。"
+    },
+    "collectible:636": {
+      "effect": "全队进入并在任一玩家拿取后返回来源房间；使用目标房间落点，内部可分开探索，传送卡限于该维度。"
+    },
+    "collectible:656": {
+      "status": "verified",
+      "effect": "额外道具底座对全队各房间生效；受伤判定和落剑风险仍由持有者承担。",
+      "impact": "已验证共享底座、移除恢复和非持有者受伤；未穷举随机落剑时机。"
+    },
+    "collectible:691": {
+      "effect": "任一队友持有时，全队共享道具品质筛选效果，分房后仍生效。"
+    },
+    "collectible:721": {
+      "status": "reported",
+      "impact": "随机效果崩溃仍未完全定位（#69）；随机定义及负数道具库存同步已修复，有限专项通过不能排除其他随机崩溃。",
+      "effect": "任一队友持有时，各房间共享错误道具生成效果；道具和随机效果仍归拾取者。"
+    }
+  },
+  "audit": {
+    "collectible:1": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:1/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-audit-20261017-03/batch-001"
+        },
+        {
+          "case": "collectible:1/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-audit-20261017-03/batch-001"
+        },
+        {
+          "case": "collectible:1/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "collectible:1/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:2": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:2/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-audit-20261017-03/batch-001"
+        },
+        {
+          "case": "collectible:2/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-audit-20261017-03/batch-001"
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "collectible:625": {
+      "status": "crash",
+      "checks": [
+        {
+          "case": "collectible:625/host-same",
+          "status": "crash",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "phase": 4,
+              "now_ms": 19451515,
+              "detail": "Peer receive failed",
+              "key": "collectible:625/host-same",
+              "role": "client",
+              "event": "problem",
+              "category": "reconnect"
+            }
+          ],
+          "evidence": "item-audit-20261017-04/batch-001"
+        },
+        {
+          "case": "collectible:625/client-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-audit-20261017-04/batch-002"
+        },
+        {
+          "case": "collectible:625/host-split",
+          "status": "crash",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "category": "reconnect",
+              "phase": 4,
+              "event": "problem",
+              "now_ms": 19531562,
+              "role": "client",
+              "key": "collectible:625/host-split",
+              "detail": "Peer receive failed"
+            }
+          ],
+          "evidence": "item-audit-20261017-04/batch-002"
+        },
+        {
+          "case": "collectible:625/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-audit-20261017-04/batch-003"
+        }
+      ],
+      "impact": "实机扫描触发访问异常／进程崩溃；具体持有者、房间条件见该项验证记录。尚未修复。"
+    },
+    "collectible:34": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "collectible:34/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "collectible:34/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "card:1": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "card:1/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "card:1/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "card:4": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "card:4/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "card:4/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "pill:2": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "pill:2/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "pill:2/host-same/horse",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "pill:2/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "pill:2/client-split/horse",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    },
+    "pill:6": {
+      "status": "basic_pass",
+      "checks": [
+        {
+          "case": "pill:6/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "pill:6/host-same/horse",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "pill:6/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        },
+        {
+          "case": "pill:6/client-split/horse",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-pilot-20261017-01/batch-001"
+        }
+      ],
+      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+    }
+  },
+  "stress": [
+    {
+      "case": "stress:baseline",
+      "status": "basic_pass",
+      "requested": {
+        "distinct": 0,
+        "copies": 0,
+        "tears": 0,
+        "projectiles": 0
+      },
+      "load_reached": true,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:baseline",
+          "render": {
+            "over33": 0,
+            "count": 1901,
+            "p99": 21,
+            "mean": 16.665965281431,
+            "over50": 0,
+            "max": 23,
+            "p50": 17,
+            "p95": 20
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 951,
+            "count": 951,
+            "p99": 37611,
+            "mean": 35646.701366982,
+            "over50": 951,
+            "max": 38266,
+            "p50": 35584,
+            "p95": 35584
+          },
+          "now_ms": 19783890,
+          "capture": {
+            "over33": 0,
+            "count": 951,
+            "p99": 4,
+            "mean": 2.9053627760252,
+            "over50": 0,
+            "max": 5,
+            "p50": 3,
+            "p95": 3
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 35646.701366982,
+            "count": 951,
+            "p99": 37611,
+            "over50": 951,
+            "over33": 951,
+            "max": 38266,
+            "p50": 35584,
+            "p95": 35584
+          },
+          "role": "client",
+          "apply": {
+            "mean": 1.254468980021,
+            "count": 951,
+            "p99": 2,
+            "over50": 0,
+            "over33": 0,
+            "max": 2,
+            "p50": 1,
+            "p95": 2
+          },
+          "now_ms": 19784046,
+          "key": "stress:baseline",
+          "render": {
+            "mean": 16.665966386555,
+            "count": 1904,
+            "p99": 19,
+            "over50": 0,
+            "over33": 0,
+            "max": 20,
+            "p50": 17,
+            "p95": 19
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:inventory-100",
+      "status": "basic_pass",
+      "requested": {
+        "distinct": 100,
+        "copies": 0,
+        "tears": 0,
+        "projectiles": 0
+      },
+      "load_reached": true,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 100,
+            "max": 100
+          },
+          "tears": {
+            "min": 0,
+            "max": 192
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 100,
+            "max": 100
+          },
+          "tears": {
+            "min": 0,
+            "max": 192
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:inventory-100",
+          "render": {
+            "over33": 77,
+            "count": 1901,
+            "p99": 61,
+            "mean": 17.768542872173,
+            "over50": 60,
+            "max": 75,
+            "p50": 16,
+            "p95": 28
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 951,
+            "count": 951,
+            "p99": 387713,
+            "mean": 116485.99474238,
+            "over50": 951,
+            "max": 458557,
+            "p50": 99325,
+            "p95": 308222
+          },
+          "now_ms": 19825437,
+          "capture": {
+            "over33": 58,
+            "count": 951,
+            "p99": 44,
+            "mean": 10.695057833859,
+            "over50": 4,
+            "max": 55,
+            "p50": 8,
+            "p95": 38
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 116485.99474238,
+            "count": 951,
+            "p99": 387713,
+            "over50": 951,
+            "over33": 951,
+            "max": 458557,
+            "p50": 99325,
+            "p95": 308222
+          },
+          "role": "client",
+          "apply": {
+            "mean": 4.7960042060988,
+            "count": 951,
+            "p99": 19,
+            "over50": 0,
+            "over33": 0,
+            "max": 25,
+            "p50": 4,
+            "p95": 16
+          },
+          "now_ms": 19825828,
+          "key": "stress:inventory-100",
+          "render": {
+            "mean": 16.902,
+            "count": 2000,
+            "p99": 36,
+            "over50": 0,
+            "over33": 41,
+            "max": 43,
+            "p50": 17,
+            "p95": 22
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:inventory-300",
+      "status": "incomplete",
+      "requested": {
+        "distinct": 300,
+        "copies": 0,
+        "tears": 0,
+        "projectiles": 0
+      },
+      "load_reached": true,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 300,
+            "max": 300
+          },
+          "tears": {
+            "min": 0,
+            "max": 512
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 300,
+            "max": 300
+          },
+          "tears": {
+            "min": 0,
+            "max": 512
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:inventory-300",
+          "render": {
+            "over33": 565,
+            "count": 1127,
+            "p99": 226,
+            "mean": 50.221827861579,
+            "over50": 563,
+            "max": 236,
+            "p50": 46,
+            "p95": 165
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 564,
+            "count": 564,
+            "p99": 1480014,
+            "mean": 615567.97340426,
+            "over50": 564,
+            "max": 1497521,
+            "p50": 451351,
+            "p95": 1334957
+          },
+          "now_ms": 19893859,
+          "capture": {
+            "over33": 564,
+            "count": 564,
+            "p99": 195,
+            "mean": 73.427304964539,
+            "over50": 304,
+            "max": 202,
+            "p50": 51,
+            "p95": 170
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 615567.97340426,
+            "count": 564,
+            "p99": 1480014,
+            "over50": 564,
+            "over33": 564,
+            "max": 1497521,
+            "p50": 451351,
+            "p95": 1334957
+          },
+          "role": "client",
+          "apply": {
+            "mean": 31.831560283688,
+            "count": 564,
+            "p99": 85,
+            "over50": 92,
+            "over33": 160,
+            "max": 87,
+            "p50": 23,
+            "p95": 71
+          },
+          "now_ms": 19894312,
+          "key": "stress:inventory-300",
+          "render": {
+            "mean": 22.179537436299,
+            "count": 2551,
+            "p99": 93,
+            "over50": 157,
+            "over33": 551,
+            "max": 119,
+            "p50": 17,
+            "p95": 63
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:inventory-500",
+      "status": "incomplete",
+      "requested": {
+        "distinct": 500,
+        "copies": 0,
+        "tears": 0,
+        "projectiles": 0
+      },
+      "load_reached": true,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 500,
+            "max": 500
+          },
+          "tears": {
+            "min": 500,
+            "max": 511
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 500,
+            "max": 500
+          },
+          "tears": {
+            "min": 471,
+            "max": 512
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:inventory-500",
+          "render": {
+            "over33": 220,
+            "count": 335,
+            "p99": 244,
+            "mean": 125.46268656716,
+            "over50": 182,
+            "max": 272,
+            "p50": 170,
+            "p95": 233
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 168,
+            "count": 168,
+            "p99": 1719715,
+            "mean": 1582117.077381,
+            "over50": 168,
+            "max": 1727054,
+            "p50": 1592580,
+            "p95": 1700552
+          },
+          "now_ms": 19962515,
+          "capture": {
+            "over33": 168,
+            "count": 168,
+            "p99": 232,
+            "mean": 189.80952380952,
+            "over50": 168,
+            "max": 235,
+            "p50": 191,
+            "p95": 204
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 1582338.7333333,
+            "count": 165,
+            "p99": 1719715,
+            "over50": 165,
+            "over33": 165,
+            "max": 1727054,
+            "p50": 1595177,
+            "p95": 1700552
+          },
+          "role": "client",
+          "apply": {
+            "mean": 84.224242424242,
+            "count": 165,
+            "p99": 106,
+            "over50": 165,
+            "over33": 165,
+            "max": 106,
+            "p50": 84,
+            "p95": 92
+          },
+          "now_ms": 19962906,
+          "key": "stress:inventory-500",
+          "render": {
+            "mean": 27.857332448573,
+            "count": 1507,
+            "p99": 115,
+            "over50": 165,
+            "over33": 166,
+            "max": 895,
+            "p50": 17,
+            "p95": 102
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:copies-1000",
+      "status": "basic_pass",
+      "requested": {
+        "distinct": 0,
+        "copies": 1000,
+        "tears": 0,
+        "projectiles": 0
+      },
+      "load_reached": true,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 1000,
+            "max": 1000
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 1000,
+            "max": 1000
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:copies-1000",
+          "render": {
+            "over33": 0,
+            "count": 1901,
+            "p99": 21,
+            "mean": 16.665439242504,
+            "over50": 0,
+            "max": 22,
+            "p50": 16,
+            "p95": 20
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 951,
+            "count": 951,
+            "p99": 38053,
+            "mean": 36084.814931651,
+            "over50": 951,
+            "max": 38696,
+            "p50": 36022,
+            "p95": 36022
+          },
+          "now_ms": 20001875,
+          "capture": {
+            "over33": 0,
+            "count": 951,
+            "p99": 4,
+            "mean": 2.9674027339642,
+            "over50": 0,
+            "max": 5,
+            "p50": 3,
+            "p95": 3
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 36084.814931651,
+            "count": 951,
+            "p99": 38053,
+            "over50": 951,
+            "over33": 951,
+            "max": 38696,
+            "p50": 36022,
+            "p95": 36022
+          },
+          "role": "client",
+          "apply": {
+            "mean": 1.2597266035752,
+            "count": 951,
+            "p99": 2,
+            "over50": 0,
+            "over33": 0,
+            "max": 2,
+            "p50": 1,
+            "p95": 2
+          },
+          "now_ms": 20002000,
+          "key": "stress:copies-1000",
+          "render": {
+            "mean": 16.666140904311,
+            "count": 1902,
+            "p99": 19,
+            "over50": 0,
+            "over33": 0,
+            "max": 22,
+            "p50": 17,
+            "p95": 18
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:tears-100",
+      "status": "basic_pass",
+      "requested": {
+        "distinct": 0,
+        "copies": 0,
+        "tears": 100,
+        "projectiles": 0
+      },
+      "load_reached": true,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 100,
+            "max": 101
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 100,
+            "max": 101
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:tears-100",
+          "render": {
+            "over33": 11,
+            "count": 1901,
+            "p99": 32,
+            "mean": 16.718569174119,
+            "over50": 0,
+            "max": 46,
+            "p50": 9,
+            "p95": 31
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 951,
+            "count": 951,
+            "p99": 99603,
+            "mean": 97634.793901157,
+            "over50": 951,
+            "max": 100254,
+            "p50": 97572,
+            "p95": 97572
+          },
+          "now_ms": 20041078,
+          "capture": {
+            "over33": 0,
+            "count": 951,
+            "p99": 18,
+            "mean": 12.267087276551,
+            "over50": 0,
+            "max": 28,
+            "p50": 12,
+            "p95": 14
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 97634.793901157,
+            "count": 951,
+            "p99": 99603,
+            "over50": 951,
+            "over33": 951,
+            "max": 100254,
+            "p50": 97572,
+            "p95": 97572
+          },
+          "role": "client",
+          "apply": {
+            "mean": 5.1724500525762,
+            "count": 951,
+            "p99": 8,
+            "over50": 0,
+            "over33": 0,
+            "max": 12,
+            "p50": 5,
+            "p95": 6
+          },
+          "now_ms": 20041234,
+          "key": "stress:tears-100",
+          "render": {
+            "mean": 16.66335078534,
+            "count": 1910,
+            "p99": 24,
+            "over50": 0,
+            "over33": 0,
+            "max": 29,
+            "p50": 17,
+            "p95": 23
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:tears-500",
+      "status": "incomplete",
+      "requested": {
+        "distinct": 0,
+        "copies": 0,
+        "tears": 500,
+        "projectiles": 0
+      },
+      "load_reached": true,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 500,
+            "max": 501
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 500,
+            "max": 501
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:tears-500",
+          "render": {
+            "over33": 789,
+            "count": 1579,
+            "p99": 73,
+            "mean": 35.412286257125,
+            "over50": 789,
+            "max": 84,
+            "p50": 11,
+            "p95": 71
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 790,
+            "count": 790,
+            "p99": 347631,
+            "mean": 345667.88987342,
+            "over50": 790,
+            "max": 348282,
+            "p50": 345592,
+            "p95": 345592
+          },
+          "now_ms": 20109312,
+          "capture": {
+            "over33": 790,
+            "count": 790,
+            "p99": 56,
+            "mean": 50.06582278481,
+            "over50": 269,
+            "max": 66,
+            "p50": 50,
+            "p95": 53
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 345667.88987342,
+            "count": 790,
+            "p99": 347631,
+            "over50": 790,
+            "over33": 790,
+            "max": 348282,
+            "p50": 345592,
+            "p95": 345592
+          },
+          "role": "client",
+          "apply": {
+            "mean": 20.854430379747,
+            "count": 790,
+            "p99": 25,
+            "over50": 0,
+            "over33": 0,
+            "max": 30,
+            "p50": 21,
+            "p95": 24
+          },
+          "now_ms": 20109453,
+          "key": "stress:tears-500",
+          "render": {
+            "mean": 18.993548387097,
+            "count": 2945,
+            "p99": 42,
+            "over50": 0,
+            "over33": 783,
+            "max": 49,
+            "p50": 17,
+            "p95": 40
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:tears-1000",
+      "status": "incomplete",
+      "requested": {
+        "distinct": 0,
+        "copies": 0,
+        "tears": 1000,
+        "projectiles": 0
+      },
+      "load_reached": false,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 509,
+            "max": 510
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 509,
+            "max": 510
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:tears-1000",
+          "render": {
+            "over33": 772,
+            "count": 1545,
+            "p99": 74,
+            "mean": 35.985113268608,
+            "over50": 772,
+            "max": 85,
+            "p50": 12,
+            "p95": 71
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 773,
+            "count": 773,
+            "p99": 353161,
+            "mean": 351203.35705045,
+            "over50": 773,
+            "max": 353812,
+            "p50": 351126,
+            "p95": 351763
+          },
+          "now_ms": 20177500,
+          "capture": {
+            "over33": 773,
+            "count": 773,
+            "p99": 57,
+            "mean": 51.133247089263,
+            "over50": 512,
+            "max": 66,
+            "p50": 51,
+            "p95": 54
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 351203.35705045,
+            "count": 773,
+            "p99": 353161,
+            "over50": 773,
+            "over33": 773,
+            "max": 353812,
+            "p50": 351126,
+            "p95": 351763
+          },
+          "role": "client",
+          "apply": {
+            "mean": 21.22509702458,
+            "count": 773,
+            "p99": 26,
+            "over50": 0,
+            "over33": 0,
+            "max": 28,
+            "p50": 21,
+            "p95": 24
+          },
+          "now_ms": 20177609,
+          "key": "stress:tears-1000",
+          "render": {
+            "mean": 19.116574965612,
+            "count": 2908,
+            "p99": 42,
+            "over50": 0,
+            "over33": 759,
+            "max": 47,
+            "p50": 17,
+            "p95": 41
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:tears-2000",
+      "status": "incomplete",
+      "requested": {
+        "distinct": 0,
+        "copies": 0,
+        "tears": 2000,
+        "projectiles": 0
+      },
+      "load_reached": false,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 509,
+            "max": 510
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 509,
+            "max": 510
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 0
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:tears-2000",
+          "render": {
+            "over33": 777,
+            "count": 1555,
+            "p99": 72,
+            "mean": 35.841800643087,
+            "over50": 777,
+            "max": 78,
+            "p50": 10,
+            "p95": 71
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 778,
+            "count": 778,
+            "p99": 353241,
+            "mean": 351282.90102828,
+            "over50": 778,
+            "max": 353888,
+            "p50": 351206,
+            "p95": 351847
+          },
+          "now_ms": 20245640,
+          "capture": {
+            "over33": 778,
+            "count": 778,
+            "p99": 55,
+            "mean": 50.889460154242,
+            "over50": 456,
+            "max": 60,
+            "p50": 51,
+            "p95": 53
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 351282.90102828,
+            "count": 778,
+            "p99": 353241,
+            "over50": 778,
+            "over33": 778,
+            "max": 353888,
+            "p50": 351206,
+            "p95": 351847
+          },
+          "role": "client",
+          "apply": {
+            "mean": 21.043701799486,
+            "count": 778,
+            "p99": 25,
+            "over50": 0,
+            "over33": 0,
+            "max": 27,
+            "p50": 21,
+            "p95": 23
+          },
+          "now_ms": 20245765,
+          "key": "stress:tears-2000",
+          "render": {
+            "mean": 19.121783876501,
+            "count": 2915,
+            "p99": 42,
+            "over50": 0,
+            "over33": 772,
+            "max": 45,
+            "p50": 17,
+            "p95": 40
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:projectiles-100",
+      "status": "basic_pass",
+      "requested": {
+        "distinct": 0,
+        "copies": 0,
+        "tears": 0,
+        "projectiles": 100
+      },
+      "load_reached": true,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 100,
+            "max": 100
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 100,
+            "max": 100
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:projectiles-100",
+          "render": {
+            "over33": 0,
+            "count": 1901,
+            "p99": 32,
+            "mean": 16.669121514992,
+            "over50": 0,
+            "max": 33,
+            "p50": 11,
+            "p95": 31
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 951,
+            "count": 951,
+            "p99": 101203,
+            "mean": 99234.81913775,
+            "over50": 951,
+            "max": 101858,
+            "p50": 99172,
+            "p95": 99172
+          },
+          "now_ms": 20284765,
+          "capture": {
+            "over33": 0,
+            "count": 951,
+            "p99": 15,
+            "mean": 12.656151419558,
+            "over50": 0,
+            "max": 16,
+            "p50": 12,
+            "p95": 14
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 99234.81913775,
+            "count": 951,
+            "p99": 101203,
+            "over50": 951,
+            "over33": 951,
+            "max": 101858,
+            "p50": 99172,
+            "p95": 99172
+          },
+          "role": "client",
+          "apply": {
+            "mean": 5.2407991587802,
+            "count": 951,
+            "p99": 7,
+            "over50": 0,
+            "over33": 0,
+            "max": 7,
+            "p50": 5,
+            "p95": 6
+          },
+          "now_ms": 20284953,
+          "key": "stress:projectiles-100",
+          "render": {
+            "mean": 16.663865546218,
+            "count": 1904,
+            "p99": 24,
+            "over50": 0,
+            "over33": 0,
+            "max": 25,
+            "p50": 17,
+            "p95": 23
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:projectiles-500",
+      "status": "incomplete",
+      "requested": {
+        "distinct": 0,
+        "copies": 0,
+        "tears": 0,
+        "projectiles": 500
+      },
+      "load_reached": true,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 488,
+            "max": 488
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 488,
+            "max": 488
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:projectiles-500",
+          "render": {
+            "over33": 776,
+            "count": 1553,
+            "p99": 72,
+            "mean": 35.84803605924,
+            "over50": 776,
+            "max": 78,
+            "p50": 12,
+            "p95": 71
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 777,
+            "count": 777,
+            "p99": 347935,
+            "mean": 345977.05662806,
+            "over50": 777,
+            "max": 348582,
+            "p50": 345900,
+            "p95": 346541
+          },
+          "now_ms": 20353000,
+          "capture": {
+            "over33": 777,
+            "count": 777,
+            "p99": 54,
+            "mean": 50.568854568855,
+            "over50": 367,
+            "max": 59,
+            "p50": 50,
+            "p95": 53
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 345977.05662806,
+            "count": 777,
+            "p99": 347935,
+            "over50": 777,
+            "over33": 777,
+            "max": 348582,
+            "p50": 345900,
+            "p95": 346541
+          },
+          "role": "client",
+          "apply": {
+            "mean": 20.535392535393,
+            "count": 777,
+            "p99": 24,
+            "over50": 0,
+            "over33": 0,
+            "max": 27,
+            "p50": 20,
+            "p95": 23
+          },
+          "now_ms": 20353156,
+          "key": "stress:projectiles-500",
+          "render": {
+            "mean": 18.86614706879,
+            "count": 2951,
+            "p99": 41,
+            "over50": 0,
+            "over33": 751,
+            "max": 45,
+            "p50": 17,
+            "p95": 40
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:projectiles-1000",
+      "status": "incomplete",
+      "requested": {
+        "distinct": 0,
+        "copies": 0,
+        "tears": 0,
+        "projectiles": 1000
+      },
+      "load_reached": false,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 498,
+            "max": 498
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 498,
+            "max": 498
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:projectiles-1000",
+          "render": {
+            "over33": 756,
+            "count": 1513,
+            "p99": 74,
+            "mean": 36.555849306015,
+            "over50": 756,
+            "max": 78,
+            "p50": 8,
+            "p95": 72
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 757,
+            "count": 757,
+            "p99": 354347,
+            "mean": 352390.97622193,
+            "over50": 757,
+            "max": 354998,
+            "p50": 352312,
+            "p95": 352949
+          },
+          "now_ms": 20421171,
+          "capture": {
+            "over33": 757,
+            "count": 757,
+            "p99": 56,
+            "mean": 52.089828269485,
+            "over50": 727,
+            "max": 60,
+            "p50": 52,
+            "p95": 54
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 352390.97622193,
+            "count": 757,
+            "p99": 354347,
+            "over50": 757,
+            "over33": 757,
+            "max": 354998,
+            "p50": 352312,
+            "p95": 352949
+          },
+          "role": "client",
+          "apply": {
+            "mean": 21.0,
+            "count": 757,
+            "p99": 25,
+            "over50": 0,
+            "over33": 0,
+            "max": 27,
+            "p50": 21,
+            "p95": 23
+          },
+          "now_ms": 20421343,
+          "key": "stress:projectiles-1000",
+          "render": {
+            "mean": 19.024759284732,
+            "count": 2908,
+            "p99": 42,
+            "over50": 0,
+            "over33": 745,
+            "max": 46,
+            "p50": 17,
+            "p95": 40
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:projectiles-2000",
+      "status": "incomplete",
+      "requested": {
+        "distinct": 0,
+        "copies": 0,
+        "tears": 0,
+        "projectiles": 2000
+      },
+      "load_reached": false,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 498,
+            "max": 498
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 0,
+            "max": 0
+          },
+          "tears": {
+            "min": 0,
+            "max": 1
+          },
+          "projectiles": {
+            "min": 498,
+            "max": 498
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "key": "stress:projectiles-2000",
+          "render": {
+            "over33": 759,
+            "count": 1519,
+            "p99": 73,
+            "mean": 36.46741277156,
+            "over50": 759,
+            "max": 77,
+            "p50": 11,
+            "p95": 72
+          },
+          "role": "host",
+          "event": "metrics",
+          "raw_bytes": {
+            "over33": 760,
+            "count": 760,
+            "p99": 354275,
+            "mean": 352322.61710526,
+            "over50": 760,
+            "max": 354922,
+            "p50": 352244,
+            "p95": 352885
+          },
+          "now_ms": 20489359,
+          "capture": {
+            "over33": 760,
+            "count": 760,
+            "p99": 55,
+            "mean": 51.610526315789,
+            "over50": 641,
+            "max": 58,
+            "p50": 51,
+            "p95": 54
+          }
+        },
+        "client": {
+          "event": "metrics",
+          "raw_bytes": {
+            "mean": 352322.61710526,
+            "count": 760,
+            "p99": 354275,
+            "over50": 760,
+            "over33": 760,
+            "max": 354922,
+            "p50": 352244,
+            "p95": 352885
+          },
+          "role": "client",
+          "apply": {
+            "mean": 20.910526315789,
+            "count": 760,
+            "p99": 24,
+            "over50": 0,
+            "over33": 0,
+            "max": 26,
+            "p50": 21,
+            "p95": 23
+          },
+          "now_ms": 20489531,
+          "key": "stress:projectiles-2000",
+          "render": {
+            "mean": 18.937435897436,
+            "count": 2925,
+            "p99": 41,
+            "over50": 0,
+            "over33": 748,
+            "max": 45,
+            "p50": 17,
+            "p95": 40
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-01/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-01/batch-001"
+      ]
+    },
+    {
+      "case": "stress:combined",
+      "status": "incomplete",
+      "requested": {
+        "distinct": 300,
+        "copies": 0,
+        "tears": 500,
+        "projectiles": 500
+      },
+      "load_reached": false,
+      "observed": {
+        "host": {
+          "item_count": {
+            "min": 300,
+            "max": 300
+          },
+          "tears": {
+            "min": 0,
+            "max": 512
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 263
+          }
+        },
+        "client": {
+          "item_count": {
+            "min": 300,
+            "max": 300
+          },
+          "tears": {
+            "min": 0,
+            "max": 512
+          },
+          "projectiles": {
+            "min": 0,
+            "max": 263
+          }
+        }
+      },
+      "metrics": {
+        "host": {
+          "role": "host",
+          "event": "metrics",
+          "key": "stress:combined",
+          "raw_bytes": {
+            "over50": 376,
+            "p99": 1504058,
+            "p95": 1315135,
+            "mean": 732728.17021277,
+            "over33": 376,
+            "max": 1525726,
+            "count": 376,
+            "p50": 508345
+          },
+          "now_ms": 20746453,
+          "capture": {
+            "over50": 207,
+            "p99": 196,
+            "p95": 169,
+            "mean": 90.704787234043,
+            "over33": 376,
+            "max": 198,
+            "count": 376,
+            "p50": 62
+          },
+          "render": {
+            "over50": 376,
+            "p99": 230,
+            "p95": 181,
+            "mean": 60.237017310253,
+            "over33": 382,
+            "max": 232,
+            "count": 751,
+            "p50": 54
+          }
+        },
+        "client": {
+          "role": "client",
+          "event": "metrics",
+          "raw_bytes": {
+            "over50": 373,
+            "over33": 373,
+            "max": 1525726,
+            "p50": 504817,
+            "p99": 1504058,
+            "count": 373,
+            "mean": 729128.84718499,
+            "p95": 1315135
+          },
+          "apply": {
+            "over50": 139,
+            "over33": 184,
+            "max": 87,
+            "p50": 29,
+            "p99": 86,
+            "count": 373,
+            "mean": 39.045576407507,
+            "p95": 77
+          },
+          "now_ms": 20746843,
+          "key": "stress:combined",
+          "render": {
+            "over50": 183,
+            "over33": 365,
+            "max": 637,
+            "p50": 17,
+            "p99": 96,
+            "count": 1924,
+            "mean": 23.493762993763,
+            "p95": 71
+          }
+        }
+      },
+      "evidence": "item-stress-20261017-02/batch-001",
+      "previous_evidence": [
+        "item-stress-20261017-02/batch-001",
+        "item-stress-20261017-01/batch-001"
+      ]
+    }
+  ]
+}

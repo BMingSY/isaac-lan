@@ -251,8 +251,8 @@ def main():
         help="Enable an additional fixture only on the host",
     )
     args = parser.parse_args()
-    if not 10 <= args.scenario_timeout <= 3600:
-        parser.error("Scenario timeout must be between 10 and 3600 seconds")
+    if not 10 <= args.scenario_timeout <= 86400:
+        parser.error("Scenario timeout must be between 10 and 86400 seconds")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
     if args.release_solo_coordination and (args.solo_fixture or not args.frontend):
