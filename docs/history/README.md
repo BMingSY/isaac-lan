@@ -8,6 +8,7 @@
 
 | 记录 | 查阅内容 |
 | --- | --- |
+| [2026-10-16 客机反馈与寻路](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/client-feedback-validation-20261016.md) | EID 连续显示、失焦暂停、XInput 入口与窄门卡住回归 |
 | [v0.4.1 发布验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/v0.4.1-release-validation.md) | 完整发布范围、整体场景结果、版本包复核与未解决记录 |
 | [2026-10-15 集中验证](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/release-validation-20261015.md) | 全 Boss、六条结局、贪婪／支线、客机响应、举袋／流水及存档保护 |
 | [v0.4.0 发布验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/v0.4.0-release-validation.md) | 完整发布范围、已知离线失败、安装包、沙漏原生落点与集中双端检查 |

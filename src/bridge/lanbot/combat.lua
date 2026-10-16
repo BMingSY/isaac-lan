@@ -266,6 +266,17 @@ return function(nav, hazards)
                         time + dt
                     )
                 then
+                    -- The narrow exit must be crossed by the whole actor.
+                    -- Treating its lip as an axis-sliding wall can score a
+                    -- diagonal as forward progress while collision
+                    -- repeatedly stops the actor at the same doorway point.
+                    if
+                        door
+                        and not entering
+                        and math.abs((x - door.x) * door.dx + (y - door.y) * door.dy) < 48
+                    then
+                        return nil
+                    end
                     if
                         not nav.zonesAllow(
                             obs.map,

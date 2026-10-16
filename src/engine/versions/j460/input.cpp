@@ -86,11 +86,16 @@ unsigned renderFrame() {
 using GetState = DWORD(WINAPI*)(DWORD, XINPUT_STATE*);
 using GetCapabilities = DWORD(WINAPI*)(DWORD, DWORD, XINPUT_CAPABILITIES*);
 using SetState = DWORD(WINAPI*)(DWORD, XINPUT_VIBRATION*);
-GetState originalState = nullptr;
-GetState originalExtendedState = nullptr;
-GetCapabilities originalCapabilities = nullptr;
-SetState originalVibration = nullptr;
-DWORD WINAPI state(DWORD index, XINPUT_STATE* result) {
+// Native and SDL input paths can resolve different XInput DLLs. Each returned
+// wrapper must retain the provider it replaced, including ordinal 100.
+struct XInputProvider {
+    HMODULE module = nullptr;
+    GetState state = nullptr, extendedState = nullptr;
+    GetCapabilities capabilities = nullptr;
+    SetState vibration = nullptr;
+};
+std::array<XInputProvider, 8> xinputProviders;
+DWORD readState(GetState original, DWORD index, XINPUT_STATE* result) {
     if (labInput && labButtons >= 0 && index == 0 && result) {
         *result = {};
         result->dwPacketNumber = labPacket.load();
@@ -102,13 +107,13 @@ DWORD WINAPI state(DWORD index, XINPUT_STATE* result) {
         return ERROR_SUCCESS;
     }
     if (!virtualDevices)
-        return originalState ? originalState(index, result) : ERROR_DEVICE_NOT_CONNECTED;
+        return original ? original(index, result) : ERROR_DEVICE_NOT_CONNECTED;
     if (index >= 4 || !result)
         return ERROR_DEVICE_NOT_CONNECTED;
     // Keep physical device state in the game's controller objects. Gameplay
     // queries consume accepted network input; capture queries deliberately
     // bypass that boundary and retain the user's native controller bindings.
-    if (originalState && originalState(index, result) == ERROR_SUCCESS)
+    if (original && original(index, result) == ERROR_SUCCESS)
         return ERROR_SUCCESS;
     // The game constructs and owns real native controller objects. Network
     // action values are supplied at the action-query boundary, after bindings.
@@ -116,19 +121,20 @@ DWORD WINAPI state(DWORD index, XINPUT_STATE* result) {
     result->dwPacketNumber = 1;
     return ERROR_SUCCESS;
 }
-DWORD WINAPI extendedState(DWORD index, XINPUT_STATE* result) {
-    if (virtualDevices || (labInput && labButtons >= 0 && index == 0))
-        return state(index, result);
-    return originalExtendedState ? originalExtendedState(index, result)
-                                 : ERROR_DEVICE_NOT_CONNECTED;
+template <std::size_t Provider> DWORD WINAPI state(DWORD index, XINPUT_STATE* result) {
+    return readState(xinputProviders[Provider].state, index, result);
 }
+template <std::size_t Provider> DWORD WINAPI extendedState(DWORD index, XINPUT_STATE* result) {
+    return readState(xinputProviders[Provider].extendedState, index, result);
+}
+template <std::size_t Provider>
 DWORD WINAPI capabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES* result) {
+    const auto original = xinputProviders[Provider].capabilities;
     if (!virtualDevices && !(labInput && labButtons >= 0 && index == 0))
-        return originalCapabilities ? originalCapabilities(index, flags, result)
-                                    : ERROR_DEVICE_NOT_CONNECTED;
+        return original ? original(index, flags, result) : ERROR_DEVICE_NOT_CONNECTED;
     if (index >= 4 || !result)
         return ERROR_DEVICE_NOT_CONNECTED;
-    if (originalCapabilities && originalCapabilities(index, flags, result) == ERROR_SUCCESS)
+    if (original && original(index, flags, result) == ERROR_SUCCESS)
         return ERROR_SUCCESS;
     *result = {};
     result->Type = XINPUT_DEVTYPE_GAMEPAD;
@@ -139,11 +145,22 @@ DWORD WINAPI capabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES* result)
         result->Gamepad.sThumbRY = 32767;
     return ERROR_SUCCESS;
 }
-DWORD WINAPI vibration(DWORD index, XINPUT_VIBRATION* value) {
+template <std::size_t Provider> DWORD WINAPI vibration(DWORD index, XINPUT_VIBRATION* value) {
+    const auto original = xinputProviders[Provider].vibration;
     if (!virtualDevices)
-        return originalVibration ? originalVibration(index, value) : ERROR_DEVICE_NOT_CONNECTED;
+        return original ? original(index, value) : ERROR_DEVICE_NOT_CONNECTED;
     return index < 4 ? ERROR_SUCCESS : ERROR_DEVICE_NOT_CONNECTED;
 }
+struct XInputWrappers {
+    GetState state, extendedState;
+    GetCapabilities capabilities;
+    SetState vibration;
+};
+template <std::size_t... I> constexpr auto xinputWrappers(std::index_sequence<I...>) {
+    return std::array<XInputWrappers, sizeof...(I)>{
+        XInputWrappers{state<I>, extendedState<I>, capabilities<I>, vibration<I>}...};
+}
+constexpr auto providerWrappers = xinputWrappers(std::make_index_sequence<8>{});
 using Query = bool(__attribute__((thiscall)) *)(void*, int, void*, const int*, void*, int*);
 Query originalQuery = nullptr;
 bool __attribute__((fastcall)) query(void* manager, void*, int controller, void* callback,
@@ -448,40 +465,47 @@ void install(std::uintptr_t base, void (*log)(const std::string&), bool installe
             INVALID_FILE_ATTRIBUTES;
 }
 FARPROC resolve(HMODULE module, LPCSTR name, FARPROC original) {
-    if (reinterpret_cast<std::uintptr_t>(name) <= 0xffff) {
-        if (reinterpret_cast<std::uintptr_t>(name) == 100) {
-            wchar_t path[1024]{};
-            GetModuleFileNameW(module, path, 1024);
-            std::wstring lower(path);
-            std::transform(lower.begin(), lower.end(), lower.begin(), towlower);
-            if (lower.find(L"xinput") != std::wstring::npos) {
-                memcpy(&originalExtendedState, &original, sizeof(original));
-                auto fn = extendedState;
-                FARPROC replacement;
-                memcpy(&replacement, &fn, sizeof(fn));
-                if (logger)
-                    logger("input_api=XInputGetStateEx");
-                return replacement;
-            }
-        }
+    // Preserve missing exports so the native loader can try its next provider.
+    if (!original || !module)
+        return original;
+    const bool ordinal = reinterpret_cast<std::uintptr_t>(name) <= 0xffff;
+    if (ordinal) {
+        if (reinterpret_cast<std::uintptr_t>(name) != 100)
+            return original;
+        wchar_t path[1024]{};
+        GetModuleFileNameW(module, path, 1024);
+        std::wstring lower(path);
+        std::transform(lower.begin(), lower.end(), lower.begin(), towlower);
+        if (lower.find(L"xinput") == std::wstring::npos)
+            return original;
+    } else if (strcmp(name, "XInputGetState") && strcmp(name, "XInputGetCapabilities") &&
+               strcmp(name, "XInputSetState")) {
         return original;
     }
-    FARPROC replacement = nullptr;
-#define WRAP(symbol, saved, replacementFn)                                                         \
-    if (strcmp(name, symbol) == 0) {                                                               \
-        if (original)                                                                              \
-            memcpy(&saved, &original, sizeof(original));                                           \
-        auto fn = replacementFn;                                                                   \
-        memcpy(&replacement, &fn, sizeof(fn));                                                     \
-        if (logger)                                                                                \
-            logger("input_api=" symbol);                                                           \
-        return replacement;                                                                        \
-    }
-    WRAP("XInputGetState", originalState, state)
-    WRAP("XInputGetCapabilities", originalCapabilities, capabilities)
-    WRAP("XInputSetState", originalVibration, vibration)
-#undef WRAP
-    return original;
+    std::size_t index = 0;
+    for (; index < xinputProviders.size(); ++index)
+        if (!xinputProviders[index].module || xinputProviders[index].module == module)
+            break;
+    if (index == xinputProviders.size())
+        return original;
+    auto& provider = xinputProviders[index];
+    provider.module = module;
+    const auto& wrapper = providerWrappers[index];
+    const auto wrap = [&](auto& saved, auto replacement, const char* symbol) {
+        FARPROC result;
+        memcpy(&saved, &original, sizeof(original));
+        memcpy(&result, &replacement, sizeof(result));
+        if (logger)
+            logger(std::string("input_api=") + symbol);
+        return result;
+    };
+    if (ordinal)
+        return wrap(provider.extendedState, wrapper.extendedState, "XInputGetStateEx");
+    if (strcmp(name, "XInputGetState") == 0)
+        return wrap(provider.state, wrapper.state, name);
+    if (strcmp(name, "XInputGetCapabilities") == 0)
+        return wrap(provider.capabilities, wrapper.capabilities, name);
+    return wrap(provider.vibration, wrapper.vibration, name);
 }
 void apply(const lan::Frame& frame) {
     accepted = frame;

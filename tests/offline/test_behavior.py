@@ -45,6 +45,7 @@ def test_crosses_each_door_and_clears_departure_input(lua, side, style):
 
 @pytest.mark.property
 @example(side=0, speed=310, radius=12, offset=4, distance=93)
+@example(side=0, speed=160, radius=15, offset=3, distance=92)
 @given(
     side=st.integers(0, 3),
     speed=st.integers(160, 400),
@@ -59,6 +60,14 @@ def test_doorway_progress_across_movement_parameters(lua, side, speed, radius, o
     # property requires timely crossing and released departure input; fixed
     # paths above retain their separate no-collision checks.
     assert result[4] == 1 and result[6] == 0, result
+
+
+@pytest.mark.parametrize("side", range(4), ids=["left", "up", "right", "down"])
+@pytest.mark.parametrize("offset", [-3, 3])
+def test_wide_actor_crosses_narrow_door_without_sliding_into_its_lip(lua, side, offset):
+    reset(lua, side=side, speed=160, radius=15, offset=offset, distance=92)
+    result = lua.call("bot_step", 360)
+    assert result[4:7] == [1, 0, 0], result
 
 
 def test_routes_around_a_wall_before_crossing(lua):

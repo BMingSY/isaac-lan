@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)][int]$GameProcessId,
-    [ValidateSet('Capture', 'Keys', 'PostKeys', 'Close')][string]$Action = 'Capture',
+    [ValidateSet('Capture', 'Keys', 'PostKeys', 'Close', 'Focus')][string]$Action = 'Capture',
     [string]$Value = '',
     [string]$ImagePath = ''
 )
@@ -76,6 +76,9 @@ Start-Sleep -Milliseconds 150
 [void][LanLabWindow]::GetWindowThreadProcessId([LanLabWindow]::GetForegroundWindow(), [ref]$foregroundProcessId)
 if ($foregroundProcessId -ne $GameProcessId) {
     throw 'The lab game is not in the foreground.'
+}
+if ($Action -eq 'Focus') {
+    exit
 }
 if ($Action -eq 'Keys') {
     $keys = @{ '{ENTER}' = 13; '{SPACE}' = 32; '{ESC}' = 27; '{UP}' = 38; '{DOWN}' = 40; '{LEFT}' = 37; '{RIGHT}' = 39; '{CONSOLE}' = 192; '{BACKSPACE}' = 8; '.' = 190; 'W' = 87; 'A' = 65; 'S' = 83; 'D' = 68 }

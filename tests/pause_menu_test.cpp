@@ -327,6 +327,102 @@ void viewerScopes() {
     }
 }
 
+void nativePauseDrift() {
+    Fixture f;
+    // The host remains unpaused across every packet; focus loss opens only the
+    // guest's native menu. Repeated synchronization must inspect actual state.
+    for (int page : {1, 2, 3}) {
+        f.page() = page;
+        const auto hides = f.hides;
+        menu::synchronize(f.base(), false);
+        menu::synchronize(f.base(), false);
+        require(f.page() == 0 && f.hides == hides + 1,
+                "Unchanged unpaused authority left a native guest overlay open");
+    }
+    require(f.saves == 1, "Clearing a local Options overlay lost its configuration");
+    menu::synchronize(f.base(), true);
+    for (int page : {1, 2, 3}) {
+        f.page() = page;
+        f.selection() = 3;
+        menu::synchronize(f.base(), true);
+        require(f.page() == page && f.selection() == 3 && f.shows == 1,
+                "Repeated paused snapshots reset the local submenu");
+    }
+    f.page() = 0;
+    menu::synchronize(f.base(), true);
+    require(f.page() == 1 && f.shows == 2, "Native hide escaped the authority's pause");
+}
+
+template <unsigned Marker> DWORD WINAPI physicalState(DWORD index, XINPUT_STATE* result) {
+    if (index != 2 || !result)
+        return ERROR_DEVICE_NOT_CONNECTED;
+    *result = {};
+    result->dwPacketNumber = Marker;
+    result->Gamepad.wButtons = XINPUT_GAMEPAD_A;
+    result->Gamepad.sThumbLX = 17000;
+    result->Gamepad.bLeftTrigger = 127;
+    return ERROR_SUCCESS;
+}
+template <class Function> FARPROC procedure(Function fn) {
+    FARPROC result;
+    memcpy(&result, &fn, sizeof(result));
+    return result;
+}
+template <class Function> Function functionPointer(FARPROC proc) {
+    Function result;
+    memcpy(&result, &proc, sizeof(result));
+    return result;
+}
+void xinputProviderRouting() {
+    Fixture f;
+    input::xinputProviders = {};
+    input::virtualDevices = false;
+    input::labInput = false;
+    const auto firstModule = reinterpret_cast<HMODULE>(1);
+    const auto secondModule = reinterpret_cast<HMODULE>(2);
+    const auto first = functionPointer<input::GetState>(
+        input::resolve(firstModule, "XInputGetState", procedure(physicalState<11>)));
+    const auto second = functionPointer<input::GetState>(
+        input::resolve(secondModule, "XInputGetState", procedure(physicalState<22>)));
+    input::xinputProviders[0].extendedState = physicalState<33>;
+    XINPUT_STATE value{};
+    for (bool lan : {false, true, false}) {
+        input::virtualDevices = lan;
+        require(first(2, &value) == ERROR_SUCCESS && value.dwPacketNumber == 11 &&
+                    value.Gamepad.wButtons == XINPUT_GAMEPAD_A && value.Gamepad.sThumbLX == 17000 &&
+                    value.Gamepad.bLeftTrigger == 127,
+                "Resolving another XInput DLL replaced the first provider's physical input");
+        require(second(2, &value) == ERROR_SUCCESS && value.dwPacketNumber == 22,
+                "Second XInput provider lost its own input");
+        require(input::extendedState<0>(2, &value) == ERROR_SUCCESS && value.dwPacketNumber == 33,
+                "Extended XInput query was redirected through ordinary GetState");
+        value.Gamepad.wButtons = 0xffff;
+        require(first(0, &value) == (lan ? ERROR_SUCCESS : ERROR_DEVICE_NOT_CONNECTED),
+                "Disconnected controller fallback leaked outside LAN");
+        if (lan)
+            require(value.Gamepad.wButtons == 0, "Virtual controller retained stale buttons");
+        require(first(4, &value) == ERROR_DEVICE_NOT_CONNECTED &&
+                    first(0, nullptr) == ERROR_DEVICE_NOT_CONNECTED,
+                "Invalid XInput device/result accepted");
+    }
+    require(input::resolve(firstModule, "XInputGetState", nullptr) == nullptr,
+            "Missing native export was fabricated");
+    input::virtualDevices = true;
+    input::labInput = true;
+    input::labButtons = XINPUT_GAMEPAD_START;
+    require(input::extendedState<0>(0, &value) == ERROR_SUCCESS &&
+                value.Gamepad.wButtons == XINPUT_GAMEPAD_START,
+            "Isolated test input stopped working on extended XInput");
+    require(first(2, &value) == ERROR_SUCCESS && value.dwPacketNumber == 11,
+            "Test input replaced a different physical device");
+    input::labInput = false;
+    input::labButtons = -1;
+    input::leaveLan();
+    require(first(0, &value) == ERROR_DEVICE_NOT_CONNECTED,
+            "Leaving LAN retained a virtual controller");
+    input::xinputProviders = {};
+}
+
 void invalidRosters() {
     Fixture f;
     const auto begin = reinterpret_cast<Address>(f.roster.data());
@@ -635,6 +731,8 @@ int main(int argc, char** argv) {
     return runTests(argc, argv,
                     {{"native-calls", nativeCallsAndState},
                      {"options-save-before-hide", optionsSaveBeforeHide},
+                     {"native-pause-drift", nativePauseDrift},
+                     {"xinput-provider-routing", xinputProviderRouting},
                      {"viewer-scopes", viewerScopes},
                      {"invalid-rosters", invalidRosters},
                      {"root-intents", rootIntents},
