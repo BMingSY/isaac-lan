@@ -25,7 +25,10 @@ def cell(value):
 
 def conclusion(known, audit):
     value = {**known, **audit}
-    if known.get("status") in {"crash", "problem", "reported"}:
+    severity = {"reported": 1, "problem": 2, "crash": 3}
+    if known.get("status") in severity and severity[known["status"]] >= severity.get(
+        audit.get("status"), 0
+    ):
         value.update({key: known[key] for key in ("status", "impact") if key in known})
     elif known.get("status") == "verified" and audit.get("status") not in {"crash", "problem"}:
         value.update({key: known[key] for key in ("status", "impact") if key in known})
@@ -97,7 +100,8 @@ def render(catalog, findings):
                     for value in (
                         item["id"],
                         f"`{entity}`",
-                        item.get("name_zh", item["name"]),
+                        item.get("name_zh", item["name"])
+                        + ("（内部）" if item.get("hidden") else ""),
                         status,
                         impact,
                         effect,

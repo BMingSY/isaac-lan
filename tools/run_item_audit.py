@@ -2,6 +2,7 @@
 """Audit collectibles, trinkets, cards and pills in two protected native processes."""
 
 import argparse
+import configparser
 import hashlib
 import json
 from pathlib import Path
@@ -21,6 +22,17 @@ from item_audit import (
     stress_cases,
 )
 from lab_profile import ProtectedLabs, idle, windows
+
+
+def validate_startup(labs):
+    for lab in labs:
+        options = configparser.ConfigParser()
+        options.read(lab / "profile/Documents/My Games/Binding of Isaac Repentance+/options.ini")
+        if options.get("Options", "AcceptedPublicBeta_v1.9.7.17", fallback="0") != "1":
+            raise ValueError(
+                f"{lab.name}: finish the native first-start Beta notice before auditing; "
+                "background Lua progress does not prove the gameplay view is visible"
+            )
 
 
 def validate_labs(values, output):
@@ -174,6 +186,7 @@ def main():
     output = args.output.resolve()
     try:
         labs = validate_labs([args.host, args.client], output)
+        validate_startup(labs)
         if args.mode == "stress":
             cases = stress_cases(json.loads(args.catalog.read_text()), args.case)
         elif args.mode == "sweep":

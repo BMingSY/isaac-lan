@@ -11,10 +11,11 @@ RANK = {"untested": 0, "basic_pass": 1, "incomplete": 2, "problem": 3, "crash": 
 
 
 def measured_stress(result, evidence):
-    observed, metrics = {}, {}
+    observed, metrics, sample_counts = {}, {}, {}
     for role, values in result["observations"].items():
         samples = [value for value in values if value["event"] == "sample" and value["tick"] >= 150]
         actor = result["slot"]
+        sample_counts[role] = len(samples)
         observed[role] = {
             field: {
                 "min": min(
@@ -27,9 +28,18 @@ def measured_stress(result, evidence):
             for field in ("item_count", "tears", "projectiles")
         }
         metrics[role] = next((value for value in values if value["event"] == "metrics"), {})
+    requested = {
+        "item_count": len(result.get("loadout", [])) + result.get("copies", 0),
+        "tears": result.get("tears", 0),
+        "projectiles": result.get("projectiles", 0),
+    }
     reached = all(
-        observed.get("host", {}).get(field, {}).get("min", 0) >= result.get(field, 0) * 0.9
-        for field in ("tears", "projectiles")
+        sample_counts.get(role, 0) >= 2
+        and all(
+            observed.get(role, {}).get(field, {}).get("min", 0) >= count * 0.9
+            for field, count in requested.items()
+        )
+        for role in ("host", "client")
     )
     return {
         "case": result["key"],
@@ -74,7 +84,11 @@ def import_run(findings, directory):
                 )
                 if old:
                     value["previous_evidence"] = list(
-                        dict.fromkeys(old.get("previous_evidence", []) + [old["evidence"]])
+                        dict.fromkeys(
+                            entry
+                            for entry in old.get("previous_evidence", []) + [old["evidence"]]
+                            if entry != evidence
+                        )
                     )
                     findings["stress"].remove(old)
                 findings["stress"].append(value)
@@ -83,8 +97,6 @@ def import_run(findings, directory):
                 case.get("item", f"{case['kind']}:{case['id']}"),
                 {"status": "untested", "checks": []},
             )
-            if RANK[result["status"]] > RANK[item["status"]]:
-                item["status"] = result["status"]
             check = {
                 "case": case["key"],
                 "status": result["status"],
@@ -92,11 +104,15 @@ def import_run(findings, directory):
                 "problems": result["problems"],
                 "evidence": evidence,
             }
-            for field in ("process_exit", "interruption"):
+            for field in ("process_exit", "crash_phase", "interruption", "teardown_events"):
                 if field in result:
                     check[field] = result[field]
-            if check not in item["checks"]:
-                item["checks"].append(check)
+            item["checks"] = [
+                entry
+                for entry in item["checks"]
+                if (entry["case"], entry["evidence"]) != (check["case"], evidence)
+            ] + [check]
+            item["status"] = max((entry["status"] for entry in item["checks"]), key=RANK.get)
             if item["status"] == "crash":
                 item["impact"] = (
                     "实机扫描触发访问异常／进程崩溃；具体持有者、房间条件见该项验证记录。尚未修复。"

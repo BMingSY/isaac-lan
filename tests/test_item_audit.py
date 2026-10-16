@@ -7,7 +7,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from item_audit import catalog_from_log, events, select_cases, summarize_case
-from run_item_audit import validate_labs
+from run_item_audit import validate_labs, validate_startup
 
 
 def test_pill_zero_and_horse_variants_are_not_lost_or_used_as_entity_subtypes():
@@ -69,7 +69,7 @@ def test_repeated_attribute_divergence_is_reported_even_after_clean_exit():
 
 def test_crash_is_distinct_from_forced_cleanup_and_unstarted_cases():
     case = {"key": "card:1/client-split"}
-    peers = {"host": [{"event": "case_begin", "key": case["key"]}]}
+    peers = {"host": [{"event": name, "key": case["key"]} for name in ("case_begin", "give_begin")]}
     result = {"process_exit": {"host": {"exit_code": 0xC0000005}}}
     assert summarize_case(case, peers, result)["status"] == "crash"
     assert summarize_case({"key": "card:2/client-split"}, peers, result)["status"] == "untested"
@@ -80,6 +80,23 @@ def test_crash_is_distinct_from_forced_cleanup_and_unstarted_cases():
     result["process_exit"]["host"]["exit_code"] = 0xC0000005
     peers["host"].append({"event": "case_begin", "key": "card:2/client-split"})
     assert summarize_case(case, peers, result)["status"] == "incomplete"
+
+
+def test_setup_crash_is_incomplete_and_cleanup_crash_is_not_a_pass():
+    case = {"key": "card:1/host-same"}
+    begin = {"event": "case_begin", "key": case["key"]}
+    end = {"event": "case_end", "key": case["key"]}
+    engine = {"process_exit": {"client": {"exit_code": 0xC0000005}}}
+    result = summarize_case(case, {"host": [begin], "client": []}, engine)
+    assert result["status"] == "incomplete"
+    assert result["crash_phase"] == "setup"
+    peers = {
+        "host": [begin, {"event": "give_begin", "key": case["key"]}, end],
+        "client": [begin, end],
+    }
+    result = summarize_case(case, peers, engine)
+    assert result["status"] == "crash"
+    assert result["crash_phase"] == "cleanup"
 
 
 def test_full_registry_and_shards_cover_each_entry_and_pill_variant_once():
@@ -111,6 +128,12 @@ def test_basic_pass_does_not_erase_a_known_unresolved_crash():
     )
     assert value["status"] == "reported"
     assert value["impact"] == "random crash unresolved"
+    value = conclusion(
+        {"status": "reported", "impact": "user report"},
+        {"status": "crash", "impact": "native crash reproduced"},
+    )
+    assert value["status"] == "crash"
+    assert value["impact"] == "native crash reproduced"
 
 
 def test_truncated_catalog_and_torn_event_are_not_accepted():
@@ -129,6 +152,27 @@ def test_known_problem_is_not_overridden_by_later_completion():
     assert summarize_case(case, {"host": values, "client": values})["status"] == "problem"
 
 
+def test_fixture_exit_socket_close_is_not_misattributed_to_item_reconnect():
+    case = {"key": "collectible:171/host-same"}
+
+    def event(name, **values):
+        return {"event": name, "key": case["key"], **values}
+
+    host = [event("case_begin"), event("exit_requested", now_ms=100), event("case_end")]
+    client = [
+        event("case_begin"),
+        event("problem", category="reconnect", now_ms=101),
+        event("case_aborted"),
+    ]
+    result = summarize_case(case, {"host": host, "client": client})
+    assert result["status"] == "incomplete"
+    assert not result["problems"]
+    assert result["teardown_events"]
+    assert "client_case_end" in result["unconfirmed_checks"]
+    client[1]["now_ms"] = 99
+    assert summarize_case(case, {"host": host, "client": client})["status"] == "problem"
+
+
 def test_manual_lab_alias_is_refused(tmp_path):
     manual = tmp_path / "host-001"
     manual.mkdir()
@@ -136,6 +180,16 @@ def test_manual_lab_alias_is_refused(tmp_path):
     alias.symlink_to(manual, target_is_directory=True)
     with pytest.raises(ValueError, match="manual"):
         validate_labs([alias, tmp_path / "client"], tmp_path / "evidence")
+
+
+def test_first_start_notice_must_be_cleared_before_native_audit(tmp_path):
+    options = tmp_path / "profile/Documents/My Games/Binding of Isaac Repentance+/options.ini"
+    options.parent.mkdir(parents=True)
+    options.write_text("[Options]\nEnableMods=1\n")
+    with pytest.raises(ValueError, match="first-start Beta notice"):
+        validate_startup([tmp_path])
+    options.write_text("[Options]\nAcceptedPublicBeta_v1.9.7.17=1\n")
+    validate_startup([tmp_path])
 
 
 def test_direct_effect_requires_observed_change_and_tolerates_missing_actor():

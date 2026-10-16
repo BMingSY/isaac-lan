@@ -130,6 +130,19 @@ def summarize_case(case, peers, engine=None):
     problems = [
         event for values in observations.values() for event in values if event["event"] == "problem"
     ]
+    exit_time = next(
+        (event.get("now_ms") for event in host if event["event"] == "exit_requested"), None
+    )
+    # Both peers run on the same machine/monotonic clock. A socket closing after
+    # the fixture deliberately exits is not evidence that this item reconnects.
+    teardown = [
+        event
+        for event in problems
+        if event.get("category") == "reconnect"
+        and exit_time is not None
+        and event.get("now_ms", -1) >= exit_time
+    ]
+    problems = [event for event in problems if event not in teardown]
     host_samples = {
         event["tick"]: event
         for event in host
@@ -200,6 +213,10 @@ def summarize_case(case, peers, engine=None):
     }
     began = any(event["event"] == "case_begin" for event in host)
     missing = []
+    if began:
+        for role, values in observations.items():
+            if not any(value["event"] == "case_end" for value in values):
+                missing.append(role + "_case_end")
     for event in ("give_end", "use_return"):
         if not any(value["event"] == event for value in host):
             missing.append(event)
@@ -226,28 +243,42 @@ def summarize_case(case, peers, engine=None):
         "samples": samples,
         "observations": observations,
         "unconfirmed_checks": missing,
+        "teardown_events": teardown,
     }
-    if began and not ended and engine:
+    if began and engine:
         exits = engine.get("process_exit", {})
+        latest = next(
+            (
+                event.get("key")
+                for event in reversed(peers.get("host", []))
+                if event["event"] == "case_begin"
+            ),
+            None,
+        )
         crashed = {
             role: value
             for role, value in exits.items()
             if value.get("exit_code") is not None
             and (value["exit_code"] & 0xFFFFFFFF) not in (0, 0xFFFFFFFF)
-            and next(
-                (
-                    event.get("key")
-                    for event in reversed(peers.get(role, []))
-                    if event["event"] == "case_begin"
-                ),
-                case["key"],
-            )
-            == case["key"]
+            and latest == case["key"]
         }
         if crashed:
-            result["status"] = "crash"
+            given = any(event["event"] == "give_begin" for event in host)
+            result["status"] = "crash" if given else "incomplete"
             result["process_exit"] = crashed
-        elif engine.get("error"):
+            result["crash_phase"] = (
+                "setup"
+                if not given
+                else (
+                    "cleanup"
+                    if all(
+                        any(e["event"] == "case_end" for e in observations.get(role, []))
+                        for role in crashed
+                    )
+                    else "effect"
+                )
+            )
+        elif not ended and engine.get("error"):
             result["interruption"] = engine["error"]
     return result
 
