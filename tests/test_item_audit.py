@@ -10,6 +10,20 @@ from item_audit import catalog_from_log, events, select_cases, summarize_case
 from run_item_audit import validate_labs, validate_startup
 
 
+def test_peer_failure_stops_batch_before_client_and_host_cases_drift():
+    from item_audit import unexpected_peer_failure
+
+    host = [
+        {"key": "a", "event": "case_begin", "now_ms": 100},
+        {"key": "a", "event": "exit_requested", "now_ms": 200},
+    ]
+    failure = {"key": "a", "event": "problem", "category": "reconnect", "now_ms": 150}
+    assert unexpected_peer_failure(host, [failure]) == failure
+    assert unexpected_peer_failure(host, [{**failure, "now_ms": 99}]) is None
+    assert unexpected_peer_failure(host, [{**failure, "now_ms": 201}]) is None
+    assert unexpected_peer_failure(host, [{**failure, "key": "unstarted"}]) is None
+
+
 def test_pill_zero_and_horse_variants_are_not_lost_or_used_as_entity_subtypes():
     catalog = {"items": [{"kind": "pill", "id": 0, "key": "pill:0", "entity_subtype": "color"}]}
     cases = select_cases(catalog)
@@ -28,6 +42,19 @@ def test_partial_or_one_sided_run_never_becomes_verified_compatibility():
     result = summarize_case(case, {"host": [begin, end], "client": [begin, end]})
     assert result["status"] == "incomplete"
     assert not result["compatibility_verified"]
+
+
+def test_mismatched_peer_case_windows_cannot_be_counted_as_a_pass():
+    case = {"key": "card:12/client-split"}
+    host = [
+        {"event": name, "key": case["key"], "now_ms": 100}
+        for name in ("case_begin", "give_end", "use_return", "case_end")
+    ]
+    samples = [{"event": "sample", "key": case["key"], "tick": t, "players": []} for t in (90, 120)]
+    client = [{"event": "case_end", "key": case["key"], "now_ms": 90}, *samples]
+    result = summarize_case(case, {"host": host + samples, "client": client})
+    assert result["status"] == "incomplete"
+    assert "peer_case_window" in result["unconfirmed_checks"]
 
 
 def test_complete_native_smoke_still_does_not_prove_conditional_effects():
@@ -72,6 +99,43 @@ def test_repeated_attribute_divergence_is_reported_even_after_clean_exit():
     # The actual snapshot boundary is the relevant peer comparison.
     host += [{**event, "label": "captured"} for event in client]
     assert not summarize_case(case, {"host": host, "client": client})["problems"]
+
+
+def test_held_item_requires_measured_effect_and_charge_without_use_callback():
+    case = {
+        "key": "collectible:655/host-same",
+        "enum": "COLLECTIBLE_SPIN_TO_WIN",
+        "id": 655,
+        "slot": 0,
+        "physical": True,
+    }
+
+    def sample(label, tick, speed, charge):
+        return {
+            "key": case["key"],
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [{"slot": 0, "active": 655, "speed": speed, "charge": charge}],
+        }
+
+    markers = [
+        {"key": case["key"], "event": name}
+        for name in ("case_begin", "give_end", "use_return", "case_end")
+    ]
+    host = markers + [
+        sample("before", 30, 1, 0),
+        sample("acquired", 30, 1, 90),
+        sample("captured", 90, 1.5, 60),
+        sample("captured", 120, 1.5, 30),
+    ]
+    client = [markers[-1], *host[-2:]]
+    result = summarize_case(case, {"host": host, "client": client})
+    assert result["status"] == "basic_pass"
+    assert result["use_evidence"] == "held_charge_and_speed"
+    for event in host[-2:]:
+        event["players"][0]["charge"] = 90
+    assert summarize_case(case, {"host": host, "client": client})["status"] == "incomplete"
 
 
 def test_crash_is_distinct_from_forced_cleanup_and_unstarted_cases():

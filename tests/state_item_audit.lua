@@ -77,6 +77,8 @@ local function sample(label, tick)
                 max_hearts = p:GetMaxHearts(),
                 soul = p:GetSoulHearts(),
                 coins = p:GetNumCoins(),
+                controls_cooldown = p.ControlsCooldown,
+                controls_enabled = p:AreControlsEnabled(),
                 visible = p.Visible,
                 dead = p:IsDead(),
                 ghost = p:IsCoopGhost(),
@@ -190,6 +192,9 @@ local function prepare(tick)
             p:AddCollectible(CollectibleType.COLLECTIBLE_BREAKFAST, 0, false)
             if case.coins then
                 p:AddCoins(case.coins - p:GetNumCoins())
+            end
+            if case.protect_use then
+                p:SetMinDamageCooldown(300)
             end
             Isaac.Spawn(
                 EntityType.ENTITY_PICKUP,
@@ -305,13 +310,14 @@ local function advance(tick)
         return
     end
     local elapsed = native.api_info().nowMs - beganAt
-    if not used and tick >= 60 then
+    local useTick = case.use_tick or 60
+    if not used and tick >= useTick then
         activate(tick)
     end
     if used and tick % 30 == 0 then
         sample("observe", tick)
     end
-    if not damaged and tick >= 120 and case.kind ~= "stress" and not case.mega then
+    if not damaged and tick >= useTick + 60 and case.kind ~= "stress" and not case.mega then
         damaged = true
         actor(case.slot, function(p)
             if not p:IsDead() and not p:IsCoopGhost() and p:GetHearts() + p:GetSoulHearts() > 1 then
@@ -350,7 +356,8 @@ function _IsaacLanBotFrame()
     local s = _IsaacLanStatus()
     local mask = 0
     if case and s.slot == case.slot and native.api_info().ready == 1 then
-        if s.verified >= 85 and s.verified < 140 then
+        local useTick = case.use_tick or 60
+        if s.verified >= useTick + 25 and s.verified < useTick + 80 then
             mask = 1 << ButtonAction.ACTION_SHOOTUP
         end
     end
@@ -407,8 +414,8 @@ function _IsaacLanFrame()
     local active = case
         and case.physical
         and s.slot == case.slot
-        and s.verified >= 60
-        and s.verified < 60 + (case.hold_ticks or 6)
+        and s.verified >= (case.use_tick or 60)
+        and s.verified < (case.use_tick or 60) + (case.hold_ticks or 6)
     native.test_gamepad(
         active and (case.kind == "card" or case.kind == "pill") and 512 or 0,
         active and case.kind == "collectible" and 255 or 0,
@@ -417,8 +424,8 @@ function _IsaacLanFrame()
         case
                 and case.moving_use
                 and s.slot == case.slot
-                and s.verified >= 55
-                and s.verified < 80
+                and s.verified >= (case.use_tick or 60) - 5
+                and s.verified < (case.use_tick or 60) + 14 + (case.hold_ticks or 6)
                 and 32767
             or 0
     )

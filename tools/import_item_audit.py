@@ -114,9 +114,18 @@ def import_run(findings, directory):
                 "problems": result["problems"],
                 "evidence": evidence,
                 "physical": bool(case.get("physical")),
+                "use_evidence": result.get("use_evidence"),
                 "conditions": {
                     key: case[key]
-                    for key in ("moving_use", "coins", "wall_use", "end_tick", "hold_ticks")
+                    for key in (
+                        "moving_use",
+                        "coins",
+                        "wall_use",
+                        "protect_use",
+                        "end_tick",
+                        "hold_ticks",
+                        "use_tick",
+                    )
                     if key in case
                 },
             }
@@ -126,6 +135,7 @@ def import_run(findings, directory):
                 "interruption",
                 "interruption_phase",
                 "teardown_events",
+                "preparation_events",
             ):
                 if field in result:
                     check[field] = result[field]

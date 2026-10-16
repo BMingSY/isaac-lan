@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -20,6 +21,7 @@ from item_audit import (
     select_cases,
     summarize_case,
     stress_cases,
+    unexpected_peer_failure,
 )
 from lab_profile import ProtectedLabs, idle, windows
 
@@ -98,24 +100,39 @@ def run_batch(args, cases, output, labs):
     try:
         with (output / "engine.log").open("w") as stream:
             process = subprocess.Popen(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT)
-            last_progress, last_event, offset = time.monotonic(), None, 0
+            last_progress, last_event = time.monotonic(), None
+            offsets, host_markers = {"host": 0, "client": 0}, []
             try:
                 while process.poll() is None:
-                    path = journals["host"]
-                    text = ""
-                    if path.exists():
-                        with path.open("rb") as journal:
-                            journal.seek(offset)
-                            chunk = journal.read()
-                        complete = chunk.rfind(b"\n") + 1
-                        offset += complete
-                        text = chunk[:complete].decode(errors="replace")
-                    records = events(text)
+                    recent = {}
+                    for role, path in journals.items():
+                        text = ""
+                        if path.exists():
+                            with path.open("rb") as journal:
+                                journal.seek(offsets[role])
+                                chunk = journal.read()
+                            complete = chunk.rfind(b"\n") + 1
+                            offsets[role] += complete
+                            text = chunk[:complete].decode(errors="replace")
+                        recent[role] = events(text)
+                    records = recent["host"]
+                    host_markers.extend(
+                        e for e in records if e["event"] in {"case_begin", "exit_requested"}
+                    )
                     if records:
                         last_event, last_progress = records[-1], time.monotonic()
                         for marker in records:
                             if marker["event"] in {"case_begin", "problem", "case_end"}:
                                 print(json.dumps(marker, ensure_ascii=False), flush=True)
+                    failure = unexpected_peer_failure(host_markers, recent["client"])
+                    if failure:
+                        report["watchdog"] = (
+                            "Peer failed during "
+                            + failure["key"]
+                            + "; stop to preserve case alignment"
+                        )
+                        process.terminate()
+                        break
                     if last_event and time.monotonic() - last_progress > 90:
                         report["watchdog"] = (
                             "No audit progress for 90 seconds; preserve the interrupted case"
@@ -159,6 +176,10 @@ def run_batch(args, cases, output, labs):
 
 
 def main():
+    # Background shells may inherit SIGINT ignored. Always unwind the lab
+    # protection context on an explicit stop instead of abandoning its backup.
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
@@ -187,8 +208,12 @@ def main():
         "--wall-use", action="store_true", help="Use beside an empty allowed door slot"
     )
     parser.add_argument(
+        "--protect-use", action="store_true", help="Prevent incidental damage before the use probe"
+    )
+    parser.add_argument(
         "--end-tick", type=int, help="Extend observation after transitions (150 through 3600)"
     )
+    parser.add_argument("--use-tick", type=int, default=60, help="Tick at which to press use")
     parser.add_argument(
         "--hold-ticks",
         type=int,
@@ -239,6 +264,8 @@ def main():
             raise ValueError("End tick must be between 150 and 3600")
         if not 1 <= args.hold_ticks <= 300:
             raise ValueError("Use hold duration must be between 1 and 300 ticks")
+        if not 60 <= args.use_tick < (args.end_tick or 150):
+            raise ValueError("Use tick must be at least 60 and before the observation end")
         for case in cases:
             if args.moving_use:
                 case["moving_use"] = True
@@ -246,10 +273,14 @@ def main():
                 case["coins"] = args.coins
             if args.wall_use:
                 case["wall_use"] = True
+            if args.protect_use:
+                case["protect_use"] = True
             if args.end_tick is not None:
                 case["end_tick"] = args.end_tick
             if args.hold_ticks != 6:
                 case["hold_ticks"] = args.hold_ticks
+            if args.use_tick != 60:
+                case["use_tick"] = args.use_tick
         if not 0 <= args.shard < args.shards or args.mode == "stress" and args.shards != 1:
             raise ValueError("Invalid shard; stress runs must remain exclusive")
         cases = cases[args.shard :: args.shards]

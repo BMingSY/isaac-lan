@@ -15,6 +15,7 @@ STATUSES = {
     "crash": "复现崩溃",
     "verified": "专项已验证",
     "reported": "用户反馈；未完全定位",
+    "suspected": "疑似失效；待确认",
 }
 KINDS = {"collectible": "道具", "trinket": "饰品", "card": "卡牌与符文", "pill": "药丸效果"}
 
@@ -25,7 +26,7 @@ def cell(value):
 
 def conclusion(known, audit):
     value = {**known, **audit}
-    severity = {"reported": 1, "problem": 2, "crash": 3}
+    severity = {"reported": 1, "suspected": 1, "problem": 2, "crash": 3}
     if known.get("status") in severity and severity[known["status"]] >= severity.get(
         audit.get("status"), 0
     ):
@@ -54,7 +55,7 @@ def render(catalog, findings):
     ]
     for item in items:
         entry = conclusion(known.get(item["key"], {}), audit.get(item["key"], {}))
-        if entry.get("status") in {"problem", "crash", "reported"}:
+        if entry.get("status") in {"problem", "crash", "reported", "suspected"}:
             lines.append(
                 f"| {cell(item.get('name_zh', item['name']))}（{item['id']}） | {cell(entry.get('impact', '详见该项记录'))} |"
             )

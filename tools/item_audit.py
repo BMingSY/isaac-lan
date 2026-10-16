@@ -43,6 +43,26 @@ def events(text):
     return result
 
 
+def unexpected_peer_failure(host_markers, client_events):
+    bounds = {}
+    for event in host_markers:
+        bounds.setdefault(event["key"], {})[event["event"]] = event.get("now_ms")
+    for event in client_events:
+        window = bounds.get(event.get("key"), {})
+        begin, end = window.get("case_begin"), window.get("exit_requested")
+        now = event.get("now_ms")
+        if (
+            event["event"] == "problem"
+            and event.get("category") == "reconnect"
+            and begin is not None
+            and now is not None
+            and now >= begin
+            and (end is None or now < end)
+        ):
+            return event
+    return None
+
+
 def catalog_from_log(text):
     records = [event["item"] for event in events(text) if event["event"] == "catalog"]
     keys = [record["key"] for record in records]
@@ -130,6 +150,11 @@ def summarize_case(case, peers, engine=None):
     problems = [
         event for values in observations.values() for event in values if event["event"] == "problem"
     ]
+    begin_time = next((e.get("now_ms") for e in host if e["event"] == "case_begin"), None)
+    preparation = [
+        e for e in problems if begin_time is not None and e.get("now_ms", begin_time) < begin_time
+    ]
+    problems = [e for e in problems if e not in preparation]
     exit_time = next(
         (event.get("now_ms") for event in host if event["event"] == "exit_requested"), None
     )
@@ -183,7 +208,8 @@ def summarize_case(case, peers, engine=None):
         (event for event in host if event["event"] == "sample" and event.get("label") == "before"),
         None,
     )
-    after = [event for tick, event in host_samples.items() if 60 <= tick <= 90]
+    use_tick = case.get("use_tick", 60)
+    after = [event for tick, event in host_samples.items() if use_tick <= tick <= use_tick + 30]
     if (
         expectation
         and before
@@ -213,6 +239,13 @@ def summarize_case(case, peers, engine=None):
     }
     began = any(event["event"] == "case_begin" for event in host)
     missing = []
+    client_ends = [e.get("now_ms") for e in client if e["event"] == "case_end"]
+    if (
+        begin_time is not None
+        and client_ends
+        and all(t is not None and t < begin_time for t in client_ends)
+    ):
+        missing.append("peer_case_window")
     if began:
         for role, values in observations.items():
             if not any(value["event"] == "case_end" for value in values):
@@ -222,9 +255,32 @@ def summarize_case(case, peers, engine=None):
             missing.append(event)
     if min(samples.get("host", 0), samples.get("client", 0)) < 2:
         missing.append("two_samples_on_each_peer")
-    if (case.get("physical") or case.get("kind") == "pill") and not any(
-        value["event"] == "use_callback" for value in host
-    ):
+    use_evidence = "native_callback" if any(v["event"] == "use_callback" for v in host) else None
+    acquired = next(
+        (
+            event
+            for event in host
+            if event["event"] == "sample" and event.get("label") == "acquired"
+        ),
+        None,
+    )
+    # Spin to Win is a held action and does not emit the ordinary item-use
+    # callback. Require its actual speed increase and charge consumption.
+    if case.get("enum") == "COLLECTIBLE_SPIN_TO_WIN" and acquired and before:
+        slot = case["slot"]
+        initial = acquired["players"][slot]
+        speed = before["players"][slot].get("speed")
+        for event in host_samples.values():
+            player = event["players"][slot]
+            if (
+                speed is not None
+                and player.get("active") == case["id"]
+                and player.get("speed", speed) > speed
+                and 0 <= player.get("charge", -1) < initial.get("charge", 0)
+            ):
+                use_evidence = "held_charge_and_speed"
+                break
+    if (case.get("physical") or case.get("kind") == "pill") and not use_evidence:
         missing.append("native_use_callback")
     done = ended and not missing
     result = {
@@ -244,11 +300,16 @@ def summarize_case(case, peers, engine=None):
         "observations": observations,
         "unconfirmed_checks": missing,
         "teardown_events": teardown,
+        "use_evidence": use_evidence,
+        "preparation_events": preparation,
     }
     # The client advances its fixture index after an unexpected host exit.
     # Subsequent connection errors must not consume the next unstarted item.
     if not began:
         result["status"] = "untested"
+    if "peer_case_window" in missing:
+        result["status"] = "incomplete"
+        result["interruption_phase"] = "fixture_alignment"
     if (
         began
         and problems
