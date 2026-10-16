@@ -190,6 +190,12 @@ def main():
         "--end-tick", type=int, help="Extend observation after transitions (150 through 3600)"
     )
     parser.add_argument(
+        "--hold-ticks",
+        type=int,
+        default=6,
+        help="Keep the native use button held for this many ticks",
+    )
+    parser.add_argument(
         "--continue-after-failure",
         action="store_true",
         help="Preserve a failed case, then resume remaining cases in recovered processes",
@@ -231,6 +237,8 @@ def main():
             raise ValueError("Coins must be between 0 and 99")
         if args.end_tick is not None and not 150 <= args.end_tick <= 3600:
             raise ValueError("End tick must be between 150 and 3600")
+        if not 1 <= args.hold_ticks <= 300:
+            raise ValueError("Use hold duration must be between 1 and 300 ticks")
         for case in cases:
             if args.moving_use:
                 case["moving_use"] = True
@@ -240,6 +248,8 @@ def main():
                 case["wall_use"] = True
             if args.end_tick is not None:
                 case["end_tick"] = args.end_tick
+            if args.hold_ticks != 6:
+                case["hold_ticks"] = args.hold_ticks
         if not 0 <= args.shard < args.shards or args.mode == "stress" and args.shards != 1:
             raise ValueError("Invalid shard; stress runs must remain exclusive")
         cases = cases[args.shard :: args.shards]

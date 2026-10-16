@@ -243,6 +243,18 @@ local function prepare(tick)
             p:AddTrinket(case.id, true)
         elseif case.kind == "card" then
             p:SetCard(0, case.id)
+        elseif case.kind == "pill" then
+            local pool = Game():GetItemPool()
+            local color = pool:ForceAddPillEffect(case.id)
+            assert(color > 0, "Pill effect has no assigned color")
+            color = color | (case.horse and PillColor.PILL_GIANT_FLAG or 0)
+            local effect = pool:GetPillEffect(color, p)
+            report("pill_assigned", { color = color, effect = effect })
+            assert(effect == case.id, "Pill color does not resolve to the requested effect")
+            case.pill_color = color
+            if case.physical then
+                p:SetPill(0, color)
+            end
         elseif case.kind == "stress" then
             stress.prepare(case, p, room)
         end
@@ -261,9 +273,8 @@ local function activate(tick)
             end
         elseif case.kind == "card" and not case.physical then
             p:UseCard(case.id, 0)
-        elseif case.kind == "pill" then
-            local color = PillColor.PILL_BLUE_BLUE | (case.horse and PillColor.PILL_GIANT_FLAG or 0)
-            p:UsePill(case.id, color, 0)
+        elseif case.kind == "pill" and not case.physical then
+            p:UsePill(case.id, case.pill_color, 0)
         end
         report("use_return", { tick = tick })
     end)
@@ -397,9 +408,9 @@ function _IsaacLanFrame()
         and case.physical
         and s.slot == case.slot
         and s.verified >= 60
-        and s.verified < 66
+        and s.verified < 60 + (case.hold_ticks or 6)
     native.test_gamepad(
-        active and case.kind == "card" and 512 or 0,
+        active and (case.kind == "card" or case.kind == "pill") and 512 or 0,
         active and case.kind == "collectible" and 255 or 0,
         0,
         0,
@@ -420,6 +431,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             advance(tick)
         end
     end, function(...)
+        local _, tick = ...
+        if case and prepared and case.kind ~= "stress" and tick % 30 == 0 then
+            -- Compare peers after this native simulation step, at the actual
+            -- snapshot boundary, rather than against the pre-update probe.
+            sample("captured", tick)
+        end
         local began = Isaac.GetTime()
         local bytes = collect(...)
         if case.kind == "stress" and lastTick >= 150 then

@@ -113,9 +113,10 @@ def import_run(findings, directory):
                 "unconfirmed": result["unconfirmed_checks"],
                 "problems": result["problems"],
                 "evidence": evidence,
+                "physical": bool(case.get("physical")),
                 "conditions": {
                     key: case[key]
-                    for key in ("moving_use", "coins", "wall_use", "end_tick")
+                    for key in ("moving_use", "coins", "wall_use", "end_tick", "hold_ticks")
                     if key in case
                 },
             }

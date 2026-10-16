@@ -17,6 +17,7 @@ def test_pill_zero_and_horse_variants_are_not_lost_or_used_as_entity_subtypes():
     assert {case["horse"] for case in cases} == {False, True}
     assert {case["slot"] for case in cases} == {0, 1}
     assert all(case["id"] == 0 for case in cases)
+    assert all(case["physical"] for case in cases)
 
 
 def test_partial_or_one_sided_run_never_becomes_verified_compatibility():
@@ -62,9 +63,15 @@ def test_repeated_attribute_divergence_is_reported_even_after_clean_exit():
         for tick in (90, 120)
     ]
     client = [{**event, "players": [{"slot": 0, "damage": 3.5}]} for event in host]
+    host.insert(0, {"event": "case_begin", "key": case["key"]})
+    host.insert(1, {"event": "give_begin", "key": case["key"]})
     result = summarize_case(case, {"host": host, "client": client})
     assert result["status"] == "problem"
     assert result["problems"][0]["category"] == "non_native"
+    # A temporary stat may change between pre-update observation and capture.
+    # The actual snapshot boundary is the relevant peer comparison.
+    host += [{**event, "label": "captured"} for event in client]
+    assert not summarize_case(case, {"host": host, "client": client})["problems"]
 
 
 def test_crash_is_distinct_from_forced_cleanup_and_unstarted_cases():
@@ -163,10 +170,21 @@ def test_truncated_catalog_and_torn_event_are_not_accepted():
 def test_known_problem_is_not_overridden_by_later_completion():
     case = {"key": "pill:0/host-same"}
     values = [
+        {"key": case["key"], "event": "case_begin"},
+        {"key": case["key"], "event": "give_begin"},
         {"key": case["key"], "event": "case_end"},
         {"key": case["key"], "event": "problem", "category": "reconnect"},
     ]
     assert summarize_case(case, {"host": values, "client": values})["status"] == "problem"
+
+
+def test_client_errors_after_host_crash_do_not_consume_the_next_item():
+    case = {"key": "pill:1/host-same"}
+    peers = {
+        "host": [{"event": "case_begin", "key": "card:97/host-same"}],
+        "client": [{"event": "problem", "key": case["key"], "category": "reconnect"}],
+    }
+    assert summarize_case(case, peers)["status"] == "untested"
 
 
 def test_fixture_exit_socket_close_is_not_misattributed_to_item_reconnect():

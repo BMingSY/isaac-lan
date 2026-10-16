@@ -110,7 +110,7 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
                         "split": context.endswith("split"),
                         "horse": large,
                         "mega": item["kind"] == "collectible" and item["id"] == 625,
-                        "physical": item["kind"] == "card" or item.get("item_type") == 3,
+                        "physical": item["kind"] in {"card", "pill"} or item.get("item_type") == 3,
                     }
                 )
     return cases
@@ -146,7 +146,7 @@ def summarize_case(case, peers, engine=None):
     host_samples = {
         event["tick"]: event
         for event in host
-        if event["event"] == "sample" and event.get("label") == "observe"
+        if event["event"] == "sample" and event.get("label") in {"observe", "captured"}
     }
     mismatches = {}
     for event in client:
@@ -245,6 +245,10 @@ def summarize_case(case, peers, engine=None):
         "unconfirmed_checks": missing,
         "teardown_events": teardown,
     }
+    # The client advances its fixture index after an unexpected host exit.
+    # Subsequent connection errors must not consume the next unstarted item.
+    if not began:
+        result["status"] = "untested"
     if (
         began
         and problems
