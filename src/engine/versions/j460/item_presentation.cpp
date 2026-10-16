@@ -548,7 +548,8 @@ int synchronize(lua_State* L) {
                     if (flag > 1 || e.id < 0 || e.id >= 48 || e.parameter < 0 || e.parameter > 900)
                         throw std::runtime_error("Invalid native item overlay");
                     e.hasPlayer = flag;
-                } else if (e.id < 0 || e.parameter < 1 || e.parameter > 4) {
+                } else if (e.id < -1024 || (e.id < 0 && e.parameter == 2) || e.parameter < 1 ||
+                           e.parameter > 4) {
                     throw std::runtime_error("Invalid native item text");
                 }
             } else {

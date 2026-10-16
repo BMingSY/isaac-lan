@@ -77,6 +77,7 @@ jobs:
             build-win32/isaac_lan_character_catalog_test.exe \
             build-win32/isaac_lan_pause_menu_test.exe \
             build-win32/isaac_lan_frontend_menu_test.exe \
+            build-win32/isaac_lan_generated_items_test.exe \
             build-win32/isaac_lan_rewind_home_test.exe ci/
           cp build-win32/isaac_lan_heap_watch.exe build-win32/isaac_lan_heap_fixture.exe ci/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -119,7 +120,7 @@ jobs:
         run: |
           & ./ci/isaac_lan_net_test.exe 2>&1 | Tee-Object test-runs/windows/transport-resources.log
           if ($LASTEXITCODE -ne 0) { throw 'State transport tests failed' }
-      - name: Test native menu, HUD and hourglass adapters
+      - name: Test native menu, HUD, generated items and hourglass adapters
         shell: pwsh
         run: |
           & ./ci/isaac_lan_crafting_hud_test.exe 2>&1 | Tee-Object test-runs/windows/crafting-hud.log
@@ -132,6 +133,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Pause menu ABI tests failed' }
           & ./ci/isaac_lan_frontend_menu_test.exe 2>&1 | Tee-Object test-runs/windows/frontend-menu.log
           if ($LASTEXITCODE -ne 0) { throw 'Frontend menu ABI tests failed' }
+          & ./ci/isaac_lan_generated_items_test.exe 2>&1 | Tee-Object test-runs/windows/generated-items.log
+          if ($LASTEXITCODE -ne 0) { throw 'Generated item ABI tests failed' }
           & ./ci/isaac_lan_rewind_home_test.exe 2>&1 | Tee-Object test-runs/windows/rewind-home.log
           if ($LASTEXITCODE -ne 0) { throw 'Hourglass Home ABI tests failed' }
       - name: Test configuration and launch/run log isolation

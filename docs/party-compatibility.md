@@ -1,6 +1,6 @@
 # 队伍兼容修复
 
-对应 #41、#42、#43、#44、#47、#48、#49、#51、#54。当前传输协议为 30，世界视图 schema 为 19；两端必须使用相同 DLL。此文记录实现边界和当时的协议升级，当前版本契约见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)，历次证据见[专项验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md)。
+对应 #41、#42、#43、#44、#47、#48、#49、#51、#54。当前传输协议为 30，世界视图 schema 为 20；两端必须使用相同 DLL。此文记录实现边界和当时的协议升级，当前版本契约见[网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)，历次证据见[专项验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md)。
 
 按效果查询当前兼容范围，见[角色兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具与效果兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)和[第三方 Mod 兼容记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。本页保留原生机制与修复依据。
 
@@ -12,7 +12,7 @@ J460 EntityFactory::Create 的跟班分支在 RVA `0x2f00d7` 使用 64 槽循环
 
 ## 公共被动效果与店长
 
-[`compat/items/team_effects.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/team_effects.h) 统一声明指南针、白地图、打折、蓝地图、黑蜡烛、补货、十字圣球的公共效果。后端只在原版 PlayerManager 的道具查找／数量查询中暂时借用完整队伍名单，退出查询即恢复房间名单；库存、个人属性与主动道具仍属于原持有者。新增公共效果只需扩展此名单，保留原版叠加公式。
+[`compat/items/team_effects.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/team_effects.h) 统一声明指南针、白地图、打折、蓝地图、黑蜡烛、补货、十字圣球、错误技和已激活达摩剑的公共效果。后端只在原版 PlayerManager 的道具查找／数量查询中暂时借用完整队伍名单，退出查询即恢复房间名单；库存、个人属性与主动道具仍属于原持有者。错误技共享房间内的错误道具生成，拾取后的效果属于拾取者；达摩剑共享额外底座，受伤与掉剑仍按持有者的原版个人判定执行。未使用的达摩剑主动不提供奖励。
 
 原版商店布局生成会直接检查当前名单中的里店长，不能只修复 FindPlayerType 查询。第一层在远端玩家对象创建前生成，使用已确认的大厅角色选择升级商店 subtype；之后使用完整原生名单。RoomConfig::GetRandomRoom 保持原随机种子、12 个参数及返回对象所有权，普通商店 subtype 只加一次 100，限定已核对的商店生成调用点。商店定价的里店长查询同样限定原生调用点。
 

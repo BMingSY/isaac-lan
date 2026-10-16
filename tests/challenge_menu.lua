@@ -354,3 +354,14 @@ assert(draw(27))
 assert(not draw(27))
 assert(#commands == count)
 print("PASS challenge selection, role cards, reconnect roster, clean HUD and transient exit")
+
+status.pendingSave, status.saveError = 1, "联机存档保存失败，请重试保存"
+_IsaacLanMenuOpen(true)
+draw()
+assert(labels["重试保存联机存档"] and labels[status.saveError])
+assert(not labels["创建房间"] and not labels["加入房间"])
+draw(13)
+assert(commands[#commands][1] == "retry_save", "Pending snapshot offered no retry action")
+status.pendingSave, status.saveError = 0, ""
+draw()
+assert(labels["创建房间"] and not labels["重试保存联机存档"])

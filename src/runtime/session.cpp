@@ -13,6 +13,7 @@
 #include "core/menu_input.h"
 #include "engine/save.h"
 #include "runtime/session_archive.h"
+#include "runtime/pending_archive.h"
 #include "runtime/progression.h"
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
@@ -62,6 +63,9 @@ bool menuPromptsPending = false;
 bool authorizedExit = false;
 std::string sessionFingerprint;
 std::optional<lan::Archive> exitingArchive, resumingArchive;
+PendingArchive pendingArchive;
+std::string saveError;
+bool retryArchive();
 bool exitingHost = false, exitingTransient = false;
 std::optional<unsigned> pendingChallengeFinish;
 bool networkRun = false, soloContinueAvailable = false;
@@ -78,6 +82,8 @@ bool validRules(const lan::RunRules& rules) {
 bool beginNetworkRun() {
     if (networkRun)
         return true;
+    if (!retryArchive())
+        return false;
     const auto manager =
         *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager);
     soloContinueAvailable = *reinterpret_cast<bool*>(manager + 0x20dcc);
@@ -132,12 +138,12 @@ std::filesystem::path archivePath() {
     return std::filesystem::path(executable).parent_path() / L"isaac-lan" /
            (L"session-" + std::to_wstring(slot) + L".bin");
 }
-void writeArchive(const lan::Archive& archive) {
-    const auto path = archivePath();
+void writeArchive(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes) {
     const auto temporary = path.wstring() + L".tmp";
-    const auto bytes = archive.encode();
     std::filesystem::create_directories(path.parent_path());
     std::ofstream file(temporary.c_str(), std::ios::binary | std::ios::trunc);
+    if (!file)
+        throw std::runtime_error("Cannot open LAN saved session temporary file");
     file.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     file.close();
     if (!file || !MoveFileExW(temporary.c_str(), path.c_str(),
@@ -145,6 +151,19 @@ void writeArchive(const lan::Archive& archive) {
         throw std::runtime_error("Cannot commit LAN saved session");
     if (logger)
         logger("session_save=COMPLETE bytes=" + std::to_string(bytes.size()));
+}
+bool retryArchive() {
+    if (!pendingArchive.pending())
+        return true;
+    const bool ok = pendingArchive.retry(writeArchive);
+    saveError = ok ? "" : "联机存档保存失败，请重试保存";
+    if (!ok && logger)
+        logger("session_save=FAILED " + pendingArchive.error());
+    return ok;
+}
+int retrySavedArchive(lua_State* L) {
+    lua.pushBoolean(L, retryArchive());
+    return 1;
 }
 std::optional<lan::Archive> readArchive() {
     try {
@@ -815,7 +834,7 @@ int host(lua_State* L) {
     const auto port = lua.checkInteger(L, 1);
     const char* fingerprint = lua.checkString(L, 2, nullptr);
     const char* mods = lua.checkString(L, 3, nullptr);
-    if (session || port < 0 || port > 65535) {
+    if (session || port < 0 || port > 65535 || !retryArchive()) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -832,7 +851,7 @@ int join(lua_State* L) {
     const auto port = lua.checkInteger(L, 2);
     const char* fingerprint = lua.checkString(L, 3, nullptr);
     const char* mods = lua.checkString(L, 4, nullptr);
-    if (session || port <= 0 || port > 65535) {
+    if (session || port <= 0 || port > 65535 || !retryArchive()) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -920,6 +939,9 @@ int poll(lua_State* L) {
     integer("connected", session ? session->connectedMask() : 0);
     integer("firstTick", session ? session->settings().firstTick : 0);
     integer("draining", retiring.size());
+    integer("pendingSave", pendingArchive.pending());
+    lua.pushString(L, saveError.c_str());
+    lua.setField(L, -2, "saveError");
     integer("port", session ? session->port() : 0);
     integer("tick", nextTick);
     integer("verified", session && session->verifiedTick() ? *session->verifiedTick() : -1ll);
@@ -1434,11 +1456,13 @@ void afterExit(bool save) {
             exitingArchive->game = save::encode(executableImage);
             if (exitingArchive->game.empty())
                 throw std::runtime_error("Native game save failed");
-            writeArchive(*exitingArchive);
+            pendingArchive.retain(path, std::move(*exitingArchive));
+            retryArchive();
         }
     } catch (const std::exception& error) {
         if (logger)
             logger("session_save=FAILED " + std::string(error.what()));
+        saveError = "联机存档保存失败";
     }
     exitingArchive.reset();
     const auto manager =
@@ -1818,6 +1842,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_resume", resumeSession);
     function("net_restore_rooms", restoreRooms);
     function("net_saved_info", savedInfo);
+    function("net_retry_save", retrySavedArchive);
     function("net_command", sharedCommand);
     function("net_floor_epoch", epoch);
     return true;

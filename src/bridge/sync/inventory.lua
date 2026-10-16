@@ -1,5 +1,9 @@
 -- Inventory reconciliation, using only the supplied player/config interface.
 return function(env)
+    local count = env.collectibleCount
+        or function(p, item)
+            return p:GetCollectibleNum(item, true)
+        end
     local heartTypes = {
         "BrokenHearts",
         "MaxHearts",
@@ -9,18 +13,26 @@ return function(env)
         "EternalHearts",
         "GoldenHearts",
     }
+    local function eachCollectible(config, visit)
+        for item = 1, config:GetCollectibles().Size - 1 do
+            local value = config:GetCollectible(item)
+            if value then
+                visit(item, value)
+            end
+        end
+        for _, item in ipairs(env.extraCollectibles and env.extraCollectibles(config) or {}) do
+            visit(item, assert(config:GetCollectible(item)))
+        end
+    end
     local function inventory(p)
         local items = {}
         local config = env.config()
-        for item = 1, config:GetCollectibles().Size - 1 do
-            -- J460's ghost branch dereferences the ItemConfig even for unused IDs.
-            if config:GetCollectible(item) then
-                local count = p:GetCollectibleNum(item, true)
-                if count > 0 then
-                    items[#items + 1] = { item, count }
-                end
+        eachCollectible(config, function(item)
+            local owned = count(p, item)
+            if owned > 0 then
+                items[#items + 1] = { item, owned }
             end
-        end
+        end)
         local active = {}
         for slot = 0, 3 do
             active[#active + 1] =
@@ -82,10 +94,9 @@ return function(env)
                 desired[entry[1]] = entry[2]
             end
             local config = env.config()
-            for item = 1, config:GetCollectibles().Size - 1 do
-                local itemConfig = config:GetCollectible(item)
-                if itemConfig and itemConfig.Type ~= env.activeType then
-                    local difference = (desired[item] or 0) - p:GetCollectibleNum(item, true)
+            eachCollectible(config, function(item, itemConfig)
+                if itemConfig.Type ~= env.activeType then
+                    local difference = (desired[item] or 0) - count(p, item)
                     for _ = 1, math.abs(difference) do
                         if difference > 0 then
                             p:AddCollectible(item, 0, false)
@@ -94,7 +105,7 @@ return function(env)
                         end
                     end
                 end
-            end
+            end)
         end
         for i, active in ipairs(v[3]) do
             local slot = i - 1

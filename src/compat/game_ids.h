@@ -45,7 +45,9 @@ inline constexpr int steamSale = 64;
 inline constexpr int blueMap = 246;
 inline constexpr int blackCandle = 260;
 inline constexpr int restock = 376;
+inline constexpr int damoclesPassive = 656;
 inline constexpr int sacredOrb = 691;
+inline constexpr int tmtrainer = 721;
 } // namespace collectible
 namespace stage {
 inline constexpr int greedFinal = 7;

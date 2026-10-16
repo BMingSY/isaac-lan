@@ -127,6 +127,7 @@ return function(deps)
                 greed = deps.greed.capture(),
                 deals = deps.deals.capture(),
                 pills = deps.pills.capture(),
+                glitched = deps.glitched.capture(),
             }
             -- Memoize only immutable tuples; per-peer event queues still drain
             -- separately, even when both peers are looking at the same room.

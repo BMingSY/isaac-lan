@@ -5,6 +5,7 @@
 #include "core/lanbot_console.h"
 #include "runtime/progression.h"
 #include "runtime/session_archive.h"
+#include "runtime/pending_archive.h"
 #include "core/intro_barrier.h"
 #include "runtime/room_map.h"
 #include "compat/bosses/encounters.h"
@@ -81,9 +82,9 @@ void compatibilityTargets() {
             !characters::sharedCharacterEffect(ids::player::lostB, characters::TeamEffect::shop) &&
             !characters::sharedCharacterEffect(0, characters::TeamEffect::randomCards),
         "Global character effects leaked into another trait or player type");
-    for (int item : {21, 54, 64, 246, 260, 376, 691})
+    for (int item : {21, 54, 64, 246, 260, 376, 656, 691, 721})
         require(items::sharedCollectibleEffect(item), "A public passive effect became personal");
-    for (int item : {0, 1, 105, 622, 628})
+    for (int item : {0, 1, 105, 577, 622, 628})
         require(!items::sharedCollectibleEffect(item), "A personal inventory query became shared");
     require(characters::sharedKeeperShopSubtype(4, true) == 104 &&
                 characters::sharedKeeperShopSubtype(104, true) == 104 &&
@@ -586,6 +587,17 @@ void keyboardPause() {
             "Held or invalid modal controls became repeated selection/confirm edges");
 }
 void roomMap() {
+    require(isaac::rooms::validLayoutIndices(0, -12, -1, -12),
+            "Native Genesis descriptor rejected");
+    require(isaac::rooms::validLayoutIndices(2, -12, -1, -1) &&
+                isaac::rooms::validLayoutIndices(0, -6, -1, 526) &&
+                isaac::rooms::validLayoutIndices(0, 84, 84, 506),
+            "Existing special/floor descriptor rejected");
+    for (const auto indices :
+         {std::array{0, -12, -1, -13}, std::array{0, 84, 84, -12}, std::array{0, 84, 84, 507},
+          std::array{0, -12, -1, 527}, std::array{0, -21, -1, -21}, std::array{3, -12, -1, -12}})
+        require(!isaac::rooms::validLayoutIndices(indices[0], indices[1], indices[2], indices[3]),
+                "Invalid layout indices accepted");
     std::array<int, 507> offsets;
     offsets.fill(-1);
     unsigned count = 20;
@@ -957,6 +969,60 @@ void archiveRoundTrip() {
     }
 }
 
+void archiveRetry() {
+    isaac::runtime::PendingArchive pending;
+    const auto archive = sample(2);
+    const auto expected = archive.encode();
+    auto previous = sample(4).encode();
+    const auto original = previous;
+    pending.retain("session-1.bin", archive);
+    for (const auto failure : {"open", "write", "replace"}) {
+        require(!pending.retry([&](const auto& path, const auto& bytes) {
+            require(path == "session-1.bin" && bytes == expected,
+                    "Retry changed the original snapshot or save slot");
+            throw std::runtime_error(failure);
+        }) && pending.pending() &&
+                    pending.error() == failure && previous == original,
+                "Failed save discarded its retry state or replaced the valid archive");
+        rejects([&] { pending.retain("session-2.bin", sample(4)); },
+                "A new run replaced the unsaved snapshot");
+    }
+    unsigned writes = 0;
+    const auto commit = [&](const auto& path, const auto& bytes) {
+        require(path == "session-1.bin", "Changed save slot redirected a retry");
+        previous = bytes;
+        ++writes;
+    };
+    require(pending.retry(commit) && !pending.pending() && pending.error().empty() &&
+                Archive::decode(previous).game == archive.game && writes == 1,
+            "Retry did not commit and clear the pending snapshot");
+    require(pending.retry(commit) && writes == 1, "Completed retry wrote twice");
+    auto oversized = archive;
+    oversized.game.resize(maxSnapshotSize);
+    pending.retain("session-2.bin", std::move(oversized));
+    require(!pending.retry(commit) && pending.pending() && writes == 1 && previous == expected,
+            "Encoding failure dropped the snapshot or attempted a file replacement");
+}
+
+void archiveCapacity() {
+    for (unsigned players : {2u, 4u}) {
+        auto value = sample(players);
+        if (players == 2)
+            value.settings.progress.reset();
+        const auto overhead = value.encode().size() - value.game.size();
+        for (auto size : {maxSnapshotSize - overhead - 1, maxSnapshotSize - overhead}) {
+            value.game.resize(size, 0x5a);
+            const auto bytes = value.encode();
+            require(bytes.size() <= maxSnapshotSize && Archive::decode(bytes).game == value.game,
+                    "Boundary archive cannot be read back");
+        }
+        value.game.push_back(0);
+        rejects([&] { value.encode(); }, "Archive outer metadata exceeded the file limit");
+        value.game.resize(maxSnapshotSize);
+        rejects([&] { value.encode(); }, "Full-size native blob left no archive header budget");
+    }
+}
+
 void challengeRules() {
     const auto* definition = isaac::compat::challenges::find(1001);
     require(definition && definition->character == 23 && definition->difficulty == 0 &&
@@ -1100,6 +1166,8 @@ int main(int argc, char** argv) {
                      {"hashes", hashes},
                      {"progression", progression},
                      {"archive-round-trip", archiveRoundTrip},
+                     {"archive-capacity", archiveCapacity},
+                     {"archive-retry", archiveRetry},
                      {"challenge-rules", challengeRules},
                      {"archive-integrity", archiveIntegrity},
                      {"archive-settings", archiveSettings},

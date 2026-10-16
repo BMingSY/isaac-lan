@@ -144,6 +144,7 @@ struct Socket {
     std::string mods;
     bool loaded = false;
     bool waiting = false, ready = false, rejoining = false, hasInput = false;
+    std::optional<Clock::time_point> loadingAt;
     std::shared_ptr<const Start> checkpoint;
     std::optional<Stage> floorAfterLoad;
     std::optional<Stage> sendingStage;
@@ -647,6 +648,7 @@ struct Session::Impl {
                     (p.checkpoint && !p.loaded))
                     throw std::runtime_error("Invalid engine readiness");
                 p.ready = true;
+                p.loadingAt.reset();
                 p.checkpoint.reset();
                 p.inputAt = Clock::now();
                 p.hasInput = false;
@@ -1528,7 +1530,10 @@ void Session::poll() {
                         impl->message(i, r);
                         p.packetAt = Clock::now();
                     });
-                    if (impl->hosting && p.ready &&
+                    if (impl->hosting && !p.ready && p.loadingAt &&
+                        Clock::now() - *p.loadingAt > std::chrono::seconds(60))
+                        throw ConnectionLost("Player loading timed out");
+                    if (impl->hosting && impl->initialStarted && p.ready &&
                         Clock::now() - (impl->cinematicEpoch ? p.packetAt : p.inputAt) >
                             std::chrono::seconds(15))
                         throw ConnectionLost("Player connection timed out");
@@ -1581,7 +1586,7 @@ void Session::poll() {
         if (!impl->hosting && impl->state == Phase::running && impl->localReady &&
             Clock::now() - (impl->cinematicEpoch && impl->peers[0] ? impl->peers[0]->packetAt
                                                                    : impl->progress) >
-                std::chrono::seconds(20))
+                std::chrono::seconds(impl->verified ? 20 : 90))
             throw std::runtime_error("Host state transfer timed out");
     } catch (const std::exception& e) {
         impl->fail(e.what());
@@ -1651,6 +1656,9 @@ bool Session::start(const Start& settings) {
     impl->activeMask = (1u << impl->playerCount) - 1;
     impl->startSettings.connected = impl->activeMask;
     impl->broadcast(impl->startMessage(Message::start, impl->startSettings));
+    for (auto& p : impl->peers)
+        if (p)
+            p->loadingAt = Clock::now();
     if (!settings.snapshot.empty())
         for (auto& p : impl->peers)
             if (p)
@@ -1675,6 +1683,7 @@ bool Session::checkpoint(const Start& settings, std::uint32_t tick) {
             impl->inputRooms[slot].reset();
             impl->commands[slot] = Command::none;
             p->ready = false;
+            p->loadingAt = Clock::now();
             p->loaded = false;
             p->snapshotSent = 0;
             p->checkpoint = saved;
@@ -1796,11 +1805,16 @@ std::optional<Frame> Session::take() {
     if (!impl->hosting || impl->state != Phase::running || impl->cinematicEpoch ||
         !impl->localReady || !impl->nextInput)
         return {};
-    if (!impl->initialStarted) {
+    // A host exit must be consumable while a guest is still loading.
+    // The runtime already has its native roster when localReady is true.
+    if (!impl->initialStarted && impl->commands[0] != Command::saveExit) {
         for (unsigned i = 1; i < impl->playerCount; ++i)
             if (impl->peers[i] && !impl->peers[i]->ready)
                 return {};
         impl->initialStarted = true;
+        for (auto& p : impl->peers)
+            if (p && p->ready)
+                p->inputAt = Clock::now();
     }
     if (impl->consumedLocal == impl->sequences[0])
         return {};

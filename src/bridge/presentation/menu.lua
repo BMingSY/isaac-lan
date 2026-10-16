@@ -264,7 +264,14 @@ function _IsaacLanMenuRender(
     local host = status.hosting == 1
     local ready = status["ready" .. localSlot] == 1
     local choice = status["choice" .. localSlot] or 0
-    if modes then
+    if status.pendingSave == 1 then
+        row("重试保存联机存档", function()
+            command("retry_save")
+        end)
+        row("返回", function()
+            visible = false
+        end)
+    elseif modes then
         row("官方联机", function()
             if command("close") then
                 _IsaacLan.menu_official()
@@ -520,7 +527,8 @@ function _IsaacLanMenuRender(
             centered("等待玩家", x + 51, y + 52, 10, faded)
         end
     end
-    local message = errorText ~= "" and errorText or networkError
+    local message = status.saveError and status.saveError ~= "" and status.saveError
+        or (errorText ~= "" and errorText or networkError)
     local messageColor = red
     if message == "" and phase == 2 and challenge then
         local missing = {}

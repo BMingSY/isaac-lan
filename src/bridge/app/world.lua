@@ -36,6 +36,7 @@ local forms = assert(modules["compat/characters/lazarus"])(native, function(inde
     return Isaac.GetPlayer(index)
 end, PlayerType)
 local poop = assert(modules["compat/characters/blue_baby"])(native, PlayerType)
+local glitched = assert(modules["compat/items/glitched"])(native)
 local craftingBag = assert(modules["compat/items/crafting_bag"])(native, CollectibleType)
 local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
@@ -75,6 +76,8 @@ local inventoryState = assert(modules["sync/inventory"])({
     config = function()
         return Isaac.GetItemConfig()
     end,
+    extraCollectibles = glitched.extraCollectibles,
+    collectibleCount = glitched.count,
     activeType = ItemType.ITEM_ACTIVE,
     curse = NullItemID.ID_LOST_CURSE,
     pockets = function(player, value)
@@ -130,6 +133,7 @@ local captureState = assert(modules["sync/capture"])({
     greed = greed,
     deals = deals,
     pills = pills,
+    glitched = glitched,
     audio = audioPresentation,
     items = itemPresentation,
     reconcileShared = function(level, actors)
@@ -196,6 +200,7 @@ local replica = assert(modules["sync/replica"])({
     craftingBag = craftingBag,
     crawlspace = crawlspace,
     pills = pills,
+    glitched = glitched,
     curses = curses,
     greed = greed,
     deals = deals,

@@ -1,42 +1,58 @@
 -- Portable state wire format; shared by the engine and offline tests.
 local pack, unpack = string.pack, string.unpack
+local maxBytes, maxNodes = 2 * 1024 * 1024, 250000
 -- Optional memo entries explicitly mark immutable shared tuples with false;
 -- after validation, their complete encoded fragments can be reused this tick.
 local function encode(value, memo)
     local pieces, path = {}, {}
+    local nodes, size = 0, 0
+    local function append(bytes)
+        size = size + #bytes
+        assert(size <= maxBytes, "State size exceeded")
+        pieces[#pieces + 1] = bytes
+    end
     local function put(v, depth)
-        assert(depth < 12, "State nesting exceeded")
+        nodes = nodes + 1
+        assert(depth < 12 and nodes < maxNodes, "State structure exceeded")
         local deepest = depth
         local t = type(v)
         if t == "boolean" then
-            pieces[#pieces + 1] = v and "\1" or "\0"
+            append(v and "\1" or "\0")
         elseif t == "number" then
             if math.type(v) == "integer" then
                 if v >= -2147483648 and v <= 2147483647 then
-                    pieces[#pieces + 1] = pack(">Bi4", 2, v)
+                    append(pack(">Bi4", 2, v))
                 else
-                    pieces[#pieces + 1] = pack(">Bi8", 3, v)
+                    append(pack(">Bi8", 3, v))
                 end
             else
                 assert(
                     v == v and math.abs(v) < math.huge,
                     "Non-finite state value at [" .. table.concat(path, "][") .. "]"
                 )
-                pieces[#pieces + 1] = pack(">Bf", 4, v)
+                local bytes = pack(">Bf", 4, v)
+                assert(
+                    math.abs(unpack(">f", bytes, 2)) < math.huge,
+                    "Float32 state overflow at [" .. table.concat(path, "][") .. "]"
+                )
+                append(bytes)
             end
         elseif t == "string" then
             assert(#v <= 65535)
-            pieces[#pieces + 1] = pack(">Bs2", 5, v)
+            append(pack(">Bs2", 5, v))
         elseif t == "table" then
             local cached = memo and memo[v]
             if type(cached) == "table" then
                 assert(depth + cached.depth < 12, "State nesting exceeded")
-                pieces[#pieces + 1] = cached.bytes
+                nodes = nodes + cached.nodes - 1
+                assert(nodes < maxNodes, "State structure exceeded")
+                append(cached.bytes)
                 return depth + cached.depth
             end
             assert(#v <= 65535)
             local first = #pieces + 1
-            pieces[#pieces + 1] = pack(">BI2", 6, #v)
+            local firstNode = nodes
+            append(pack(">BI2", 6, #v))
             for i = 1, #v do
                 path[depth + 1] = i
                 local childDepth = put(v[i], depth + 1)
@@ -51,7 +67,8 @@ local function encode(value, memo)
                     pieces[index] = nil
                 end
                 pieces[first] = fragment
-                memo[v] = { bytes = fragment, depth = deepest - depth }
+                memo[v] =
+                    { bytes = fragment, depth = deepest - depth, nodes = nodes - firstNode + 1 }
             end
         else
             error("Unsupported state value: " .. t .. " at [" .. table.concat(path, "][") .. "]")
@@ -62,7 +79,7 @@ local function encode(value, memo)
     return table.concat(pieces)
 end
 local function decode(bytes)
-    assert(#bytes <= 2 * 1024 * 1024, "State size exceeded")
+    assert(#bytes <= maxBytes, "State size exceeded")
     local cursor, nodes = 1, 0
     local function read(format)
         local value
@@ -71,7 +88,7 @@ local function decode(bytes)
     end
     local function get(depth)
         nodes = nodes + 1
-        assert(depth < 12 and nodes < 250000, "State structure exceeded")
+        assert(depth < 12 and nodes < maxNodes, "State structure exceeded")
         local tag = read("B")
         if tag == 0 then
             return false

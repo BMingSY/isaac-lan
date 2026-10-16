@@ -1893,9 +1893,7 @@ int roomLayout(lua_State* L) {
         for (auto& seed : seeds)
             seed = r.u32();
         r.finish();
-        if (key.dimension < 0 || key.dimension > 2 || key.index < -20 || key.index >= 169 ||
-            gridIndex < -20 || gridIndex >= 169 || listIndex < (key.index < 0 ? -1 : 0) ||
-            listIndex >= (key.index < 0 ? 527 : 507) ||
+        if (!validLayoutIndices(key.dimension, key.index, gridIndex, listIndex) ||
             (key.index >= 0 && std::find(cells.begin(), cells.end(), key.index) == cells.end()) ||
             std::any_of(cells.begin(), cells.end(), [](auto cell) { return cell >= 169; }) ||
             at<unsigned>(address, 0x48) < 1 || at<unsigned>(address, 0x48) > 12 ||

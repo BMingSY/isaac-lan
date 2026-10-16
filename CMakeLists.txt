@@ -281,6 +281,8 @@ if(BUILD_TESTING)
         hashes
         progression
         archive-round-trip
+        archive-capacity
+        archive-retry
         challenge-rules
         archive-integrity
         archive-settings
@@ -352,6 +354,7 @@ add_library(
     src/engine/versions/j460/characters.cpp
     src/engine/versions/j460/pause_menu.cpp
     src/engine/versions/j460/item_presentation.cpp
+    src/engine/versions/j460/generated_items.cpp
     src/engine/versions/j460/rewind.cpp
     src/presentation/frontend.cpp
     src/diagnostics/lab_capture.cpp)
@@ -428,6 +431,8 @@ if(BUILD_TESTING)
         handshake
         host-names
         commands
+        loading-exit
+        loading-timeout
         publication-limits
         integrations
         greed-settings
@@ -436,6 +441,7 @@ if(BUILD_TESTING)
         add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
         set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;network")
     endforeach()
+    set_tests_properties(net.loading-timeout PROPERTIES TIMEOUT 75)
 endif()
 set(MINHOOK_SOURCE_DIR
     ""
@@ -445,6 +451,15 @@ if(NOT EXISTS "${MINHOOK_SOURCE_DIR}/include/MinHook.h")
 endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_generated_items_test tests/generated_items_test.cpp)
+    target_include_directories(isaac_lan_generated_items_test PRIVATE src)
+    target_link_libraries(isaac_lan_generated_items_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_generated_items_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_generated_items_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.generated-items COMMAND isaac_lan_generated_items_test)
+    set_tests_properties(native.generated-items PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_crafting_hud_test tests/crafting_hud_test.cpp
                                                src/engine/versions/j460/crafting_hud.cpp)
     target_include_directories(isaac_lan_crafting_hud_test PRIVATE src)

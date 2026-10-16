@@ -90,6 +90,8 @@ sequenceDiagram
 
 [`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 的存档包含扩展指纹、开局设置、全队房间与位置、原生 GameState 数据和完整性哈希。格式标识为 `IsaacLAN/save/3`，包含运行规则描述符；旧格式不再加载。
 
+写入采用临时文件再替换，完整文件上限为 8 MiB。写入失败时保留原存档和内存中的待保存快照，局域网菜单提供“重试保存联机存档”；重试固定使用原存档栏，成功前不开始新的联机局。待保存快照只保存在当前进程内。
+
 房主三个存档栏分别使用 `session-1.bin`、`session-2.bin`、`session-3.bin`。联机会话保存与原有单机 Continue 状态分别管理。临时挑战退出时不写入或删除已有联机存档，仍恢复受保护的单机 Continue；运行中检查点保留规则与固定栏位，支持原客机重连。挑战模式没有整场续玩入口，详见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。
 
 整场关闭后的续玩仍要求原房主使用原存档栏，并按原人数、原加入顺序集合。运行中重连的玩家标识匹配与整场续玩的栏位顺序是两套不同条件。
