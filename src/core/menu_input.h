@@ -2,12 +2,13 @@
 #include "net/protocol.h"
 
 namespace isaac::input {
-inline bool menuActionTriggered(const lan::InputFrame& input, int action) {
-    if (action >= 0 && action < 16)
-        return (input.triggered & (1u << action)) != 0;
-    if (action >= 20 && action <= 23) {
-        const auto direction = static_cast<unsigned>(action - 20);
-        return (input.triggered & ((1u << direction) | (1u << (direction + 4)))) != 0;
+inline bool menuActionTriggered(const lan::InputFrame& input, int button) {
+    if (button >= 0 && button < static_cast<int>(lan::actionCount))
+        return (input.triggered & (1u << button)) != 0;
+    if (button >= action::menuLeft && button <= action::menuDown) {
+        const auto direction = static_cast<unsigned>(button - action::menuLeft);
+        return (input.triggered & ((1u << direction) | (1u << (direction + action::shootLeft)))) !=
+               0;
     }
     return false;
 }
@@ -16,8 +17,8 @@ inline lan::InputFrame transitionInput(const lan::InputFrame& input, bool sameFl
     // Stop stale movement/items until the guest sees the destination. Releasing
     // held fire here would discharge Brimstone and other charged weapons.
     if (sameFloor)
-        for (unsigned action = 4; action < 8; ++action)
-            result.values[action] = input.values[action];
+        for (unsigned button = action::shootLeft; button <= action::shootDown; ++button)
+            result.values[button] = input.values[button];
     return result;
 }
 inline void captureRoomInput(lan::InputFrame& input, std::optional<lan::InputRoom>& room,
@@ -37,17 +38,17 @@ inline void keyboardPause(lan::InputFrame& input, bool paused) {
     // J460 accepts keyboard Escape as MENU_BACK only on controller zero.
     // LAN actors use controllers 1..4, whose pause entry requires MENU_PAUSE.
     // Keep Back unchanged inside a menu so its native navigation still works.
-    if (!paused && (input.triggered & (1u << 15))) {
-        input.triggered |= 1u << 12;
-        input.values[12] = 65535;
+    if (!paused && (input.triggered & (1u << action::menuBack))) {
+        input.triggered |= 1u << action::menuPause;
+        input.values[action::menuPause] = lan::maxInputValue;
     }
 }
 inline lan::InputFrame pausedInput(const lan::InputFrame& input) {
     lan::InputFrame result;
     // Menu navigation stays local. Keep held fire for charged weapons across
     // the authoritative resume boundary, without forwarding item/button edges.
-    for (unsigned action = 4; action < 8; ++action)
-        result.values[action] = input.values[action];
+    for (unsigned button = action::shootLeft; button <= action::shootDown; ++button)
+        result.values[button] = input.values[button];
     return result;
 }
 } // namespace isaac::input

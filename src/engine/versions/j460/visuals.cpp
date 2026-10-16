@@ -1,3 +1,5 @@
+#include "engine/lua_api.h"
+#include "engine/versions/j460/layout.h"
 #include "engine/visuals.h"
 #include "net/protocol.h"
 #include "runtime/session.h"
@@ -20,25 +22,7 @@ using Address = std::uintptr_t;
 template <class T> T& at(Address p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }
-struct API {
-    int(__cdecl* getTop)(lua_State*);
-    int(__cdecl* type)(lua_State*, int);
-    int(__cdecl* toBoolean)(lua_State*, int);
-    void*(__cdecl* toUserdata)(lua_State*, int);
-    void*(__cdecl* newUserdata)(lua_State*, std::size_t);
-    int(__cdecl* getMetatable)(lua_State*, int);
-    int(__cdecl* setMetatable)(lua_State*, int);
-    std::size_t(__cdecl* rawLength)(lua_State*, int);
-    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
-    const char*(__cdecl* pushString)(lua_State*, const char*, std::size_t);
-    void(__cdecl* pushInteger)(lua_State*, long long);
-    long long(__cdecl* checkInteger)(lua_State*, int);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-    void(__cdecl* createTable)(lua_State*, int, int);
-    void(__cdecl* rawSetI)(lua_State*, int, long long);
-    void(__cdecl* pushClosure)(lua_State*, int(__cdecl*)(lua_State*), int);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-} lua{};
+isaac::lua::API lua{};
 Address sprite(lua_State* L) {
     auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
     const auto size = lua.rawLength(L, 1);
@@ -53,7 +37,7 @@ int roomRails(lua_State* L) {
         const auto room = game ? at<Address>(game, 0x18300) : 0;
         if (!lua.getTop(L)) {
             const auto value = j460::rails::grid(room);
-            lua.pushString(L, reinterpret_cast<const char*>(value.data()), value.size());
+            lua.pushLString(L, reinterpret_cast<const char*>(value.data()), value.size());
             return 1;
         }
         if (!runtime::replica() || lua.getTop(L) != 1)
@@ -337,8 +321,8 @@ int spriteState(lua_State* L) {
                     w.u32(at<unsigned>(p, offset));
                 w.u32(at<unsigned>(p, 0x8c));
             }
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -370,7 +354,7 @@ int spriteState(lua_State* L) {
                 lua.createTable(L, 2, 0);
                 lua.pushInteger(L, id);
                 lua.rawSetI(L, -2, 1);
-                lua.pushString(L, path.data(), path.size());
+                lua.pushLString(L, path.data(), path.size());
                 lua.rawSetI(L, -2, 2);
                 lua.rawSetI(L, -2, ++changed);
             }
@@ -422,8 +406,8 @@ int entityShadow(lua_State* L) {
             lan::Writer w(lan::Message::world);
             for (auto offset : {0x15cu, 0x160u, 0x164u, 0x350u})
                 w.u32(at<unsigned>(entity, offset));
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -458,7 +442,7 @@ int actorPose(lua_State* L) {
             // stays on the same invisible frame until the next floor reload.
             w.u32(at<unsigned>(player, 0x13bc));
             // Night Light smooths its beam angle in Player::Update.
-            w.u32(at<unsigned>(player, 0x1ae4));
+            w.u32(at<unsigned>(player, j460::layout::player::nightLightAngle));
             for (unsigned slot = 0; slot < 5; ++slot) {
                 const auto weapon = at<Address>(player, 0x13dc + slot * 4);
                 w.u8(weapon != 0);
@@ -477,8 +461,8 @@ int actorPose(lua_State* L) {
                     w.u32(at<unsigned>(p, offset));
                 w.u8(at<bool>(p, 0xc));
             }
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -490,7 +474,7 @@ int actorPose(lua_State* L) {
         at<bool>(player, 0x139a) = boolean(r);
         at<unsigned>(player, 0x1338) = r.u32();
         at<unsigned>(player, 0x13bc) = r.u32();
-        at<unsigned>(player, 0x1ae4) = number(r);
+        at<unsigned>(player, j460::layout::player::nightLightAngle) = number(r);
         for (unsigned slot = 0; slot < 5; ++slot)
             if (boolean(r)) {
                 const auto type = r.u32();
@@ -543,31 +527,16 @@ int actorPose(lua_State* L) {
 
 } // namespace
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        auto p = GetProcAddress(module, name);                                                     \
-        std::memcpy(&lua.field, &p, sizeof(p));                                                    \
-        if (!lua.field)                                                                            \
-            return false;                                                                          \
-    } while (false)
-    IMPORT(getTop, "lua_gettop");
-    IMPORT(type, "lua_type");
-    IMPORT(toBoolean, "lua_toboolean");
-    IMPORT(toUserdata, "lua_touserdata");
-    IMPORT(rawLength, "lua_rawlen");
-    IMPORT(newUserdata, "lua_newuserdata");
-    IMPORT(getMetatable, "lua_getmetatable");
-    IMPORT(setMetatable, "lua_setmetatable");
-    IMPORT(checkString, "luaL_checklstring");
-    IMPORT(pushString, "lua_pushlstring");
-    IMPORT(pushInteger, "lua_pushinteger");
-    IMPORT(checkInteger, "luaL_checkinteger");
-    IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(createTable, "lua_createtable");
-    IMPORT(rawSetI, "lua_rawseti");
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(setField, "lua_setfield");
-#undef IMPORT
+    if (!lua.load(module, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::type,
+                           isaac::lua::Symbol::toBoolean, isaac::lua::Symbol::toUserdata,
+                           isaac::lua::Symbol::rawLength, isaac::lua::Symbol::newUserdata,
+                           isaac::lua::Symbol::getMetatable, isaac::lua::Symbol::setMetatable,
+                           isaac::lua::Symbol::checkString, isaac::lua::Symbol::pushLString,
+                           isaac::lua::Symbol::pushInteger, isaac::lua::Symbol::checkInteger,
+                           isaac::lua::Symbol::pushBoolean, isaac::lua::Symbol::createTable,
+                           isaac::lua::Symbol::rawSetI, isaac::lua::Symbol::pushClosure,
+                           isaac::lua::Symbol::setField}))
+        return false;
     lua.pushClosure(L, spriteState, 0);
     lua.setField(L, -2, "sprite_state");
     lua.pushClosure(L, bossHeldBombs, 0);

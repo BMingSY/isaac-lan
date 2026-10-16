@@ -1,3 +1,4 @@
+#include "engine/lua_api.h"
 #include "engine/audio.h"
 #include "core/audio_ownership.h"
 #include "engine/rooms.h"
@@ -103,15 +104,7 @@ void __attribute__((fastcall)) play(void* manager, void*, int id, float volume, 
     }
     originalPlay(manager, id, volume, delay, loop, pitch, pan);
 }
-struct API {
-    void(__cdecl* pushClosure)(lua_State*, int(__cdecl*)(lua_State*), int);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-    long long(__cdecl* checkInteger)(lua_State*, int);
-    const char*(__cdecl* pushString)(lua_State*, const char*, std::size_t);
-    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
-    int(__cdecl* getTop)(lua_State*);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-} lua{};
+isaac::lua::API lua{};
 void ensureRoomMusic() {
     if (runtime::replica() || music.contains(roomKey()))
         return;
@@ -145,7 +138,7 @@ int status(lua_State* L) {
     }
     w.u32(playedMusic);
     w.u32(fadedMusic);
-    lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1), w.bytes.size() - 1);
+    lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1), w.bytes.size() - 1);
     return 1;
 }
 int musicState(lua_State* L) {
@@ -159,8 +152,8 @@ int musicState(lua_State* L) {
             w.u8(value.mode);
             w.u32(value.id);
             w.u32(std::bit_cast<unsigned>(value.parameter));
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -201,8 +194,8 @@ int capture(lua_State* L) {
             bytes.u32(std::bit_cast<std::uint32_t>(event.pitch));
             bytes.u32(std::bit_cast<std::uint32_t>(event.pan));
         }
-    lua.pushString(L, reinterpret_cast<const char*>(bytes.bytes.data() + 1),
-                   bytes.bytes.size() - 1);
+    lua.pushLString(L, reinterpret_cast<const char*>(bytes.bytes.data() + 1),
+                    bytes.bytes.size() - 1);
     return 1;
 }
 int resetLua(lua_State*) {
@@ -226,21 +219,11 @@ bool install(std::uintptr_t base) {
            MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::musicCrossfade)) == MH_OK;
 }
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        const auto p = GetProcAddress(module, name);                                               \
-        std::memcpy(&lua.field, &p, sizeof(p));                                                    \
-        if (!lua.field)                                                                            \
-            return false;                                                                          \
-    } while (false)
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(setField, "lua_setfield");
-    IMPORT(checkInteger, "luaL_checkinteger");
-    IMPORT(pushString, "lua_pushlstring");
-    IMPORT(checkString, "luaL_checklstring");
-    IMPORT(getTop, "lua_gettop");
-    IMPORT(pushBoolean, "lua_pushboolean");
-#undef IMPORT
+    if (!lua.load(module, {isaac::lua::Symbol::pushClosure, isaac::lua::Symbol::setField,
+                           isaac::lua::Symbol::checkInteger, isaac::lua::Symbol::pushLString,
+                           isaac::lua::Symbol::checkString, isaac::lua::Symbol::getTop,
+                           isaac::lua::Symbol::pushBoolean}))
+        return false;
     lua.pushClosure(L, capture, 0);
     lua.setField(L, -2, "sound_events");
     lua.pushClosure(L, musicState, 0);

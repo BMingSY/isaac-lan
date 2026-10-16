@@ -3,7 +3,9 @@
 #include "runtime/session.h"
 #include "net/protocol.h"
 #include <MinHook.h>
-#include <cstring>
+#include "engine/lua_api.h"
+#include "engine/versions/j460/layout.h"
+#include "compat/game_ids.h"
 
 namespace isaac::generated_items {
 namespace {
@@ -14,37 +16,34 @@ template <class T> const T& at(Address p, unsigned offset = 0) {
 }
 using Generate = int(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 Generate originalGenerate;
-struct API {
-    int(__cdecl* getTop)(lua_State*);
-    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
-    long long(__cdecl* checkInteger)(lua_State*, int);
-    void*(__cdecl* toUserdata)(lua_State*, int);
-    std::size_t(__cdecl* rawLength)(lua_State*, int);
-    void(__cdecl* pushInteger)(lua_State*, long long);
-    const char*(__cdecl* pushString)(lua_State*, const char*, std::size_t);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-    void(__cdecl* pushClosure)(lua_State*, int(__cdecl*)(lua_State*), int);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-} lua;
+isaac::lua::API lua{};
+namespace layout = engine::j460::layout;
+constexpr unsigned maxOwnedCount = 65535, maxNativePlayers = 32;
+constexpr unsigned wrapperBytes = 8, generateActiveFlag = 8;
+constexpr unsigned callInstructionBytes = 5;
+constexpr int passivePlaceholder = 25, activePlaceholder = 105;
 int ownedCount(Address player, int id) {
-    if (id >= 0 || id < -1024)
+    if (id >= 0 || id < -maxDefinitions)
         throw std::runtime_error("Invalid generated item ID");
     // HasCollectible's negative-ID branch reads this native map. The ordinary
     // GetCollectibleNum entry instead rejects all negative IDs with zero.
-    const auto head = at<Address>(player, 0x1fcc);
-    const auto size = at<unsigned>(player, 0x1fd0);
-    if (!head || size > 1024)
+    const auto head = at<Address>(player, layout::player::generatedInventoryHead);
+    const auto size = at<unsigned>(player, layout::player::generatedInventorySize);
+    if (!head || size > maxDefinitions)
         throw std::runtime_error("Invalid generated inventory");
-    auto node = at<Address>(head, 4);
+    auto node = at<Address>(head, layout::inventoryNode::parent);
     for (unsigned visited = 0; node != head; ++visited) {
-        if (!node || visited >= size || at<unsigned char>(node, 0xd))
+        if (!node || visited >= size || at<unsigned char>(node, layout::inventoryNode::nil))
             throw std::runtime_error("Invalid generated inventory tree");
-        const auto key = at<int>(node, 0x10), count = at<int>(node, 0x14);
-        if (key >= 0 || key < -1024 || count < 0 || count > 65535)
+        const auto key = at<int>(node, layout::inventoryNode::id),
+                   count = at<int>(node, layout::inventoryNode::count);
+        if (key >= 0 || key < -maxDefinitions || count < 0 ||
+            static_cast<unsigned>(count) > maxOwnedCount)
             throw std::runtime_error("Invalid generated inventory entry");
         if (key == id)
             return count;
-        node = at<Address>(node, id < key ? 0 : 8);
+        node = at<Address>(node,
+                           id < key ? layout::inventoryNode::left : layout::inventoryNode::right);
     }
     return 0;
 }
@@ -52,17 +51,19 @@ int count(lua_State* L) {
     try {
         const auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
         const auto id = lua.checkInteger(L, 2);
-        if (!wrapper || lua.rawLength(L, 1) != 8 || id >= 0 || id < -1024)
+        if (!wrapper || lua.rawLength(L, 1) != wrapperBytes || id >= 0 || id < -maxDefinitions)
             throw std::runtime_error("Invalid generated inventory request");
         const auto game = at<Address>(image + engine::j460::globals::game);
         if (!game)
             throw std::runtime_error("Generated inventory requires a game");
-        const auto first = at<Address>(game, 0x1baa8), last = at<Address>(game, 0x1baac);
-        if (last < first || (last - first) % 4 || last - first > 32 * 4)
+        const auto first = at<Address>(game, layout::game::players + layout::vector::begin),
+                   last = at<Address>(game, layout::game::players + layout::vector::end);
+        if (last < first || (last - first) % 4 || last - first > maxNativePlayers * sizeof(Address))
             throw std::runtime_error("Invalid native player roster");
         for (auto entry = first; entry < last; entry += 4) {
             const auto player = at<Address>(entry);
-            if (player && wrapper[1] == player + 0x48 && at<unsigned>(player, 0x28) == 1) {
+            if (player && wrapper[1] == player + layout::entity::sprite &&
+                at<unsigned>(player, layout::entity::type) == 1) {
                 lua.pushInteger(L, ownedCount(player, static_cast<int>(id)));
                 return 1;
             }
@@ -78,20 +79,22 @@ Address registry() {
     const auto game = at<Address>(image + engine::j460::globals::game);
     if (!game)
         throw std::runtime_error("Generated items require a game");
-    return game + 0x67758;
+    return game + layout::game::generatedItems;
 }
 std::vector<unsigned> seeds(Address registry) {
-    const auto first = at<Address>(registry), last = at<Address>(registry, 4);
-    if (last < first || (last - first) % 4 || last - first > 1024 * 4)
+    const auto first = at<Address>(registry, layout::vector::begin),
+               last = at<Address>(registry, layout::vector::end);
+    if (last < first || (last - first) % 4 || last - first > maxPayloadBytes)
         throw std::runtime_error("Invalid generated item registry");
     std::vector<unsigned> result;
     for (auto p = first; p < last; p += 4) {
         const auto entry = at<Address>(p);
-        const auto config = entry ? at<Address>(entry) : 0;
-        if (!config || at<int>(config, 4) != ~static_cast<int>(result.size()) ||
-            !at<unsigned>(entry, 8))
+        const auto config = entry ? at<Address>(entry, layout::generatedItem::config) : 0;
+        if (!config ||
+            at<int>(config, layout::generatedItem::configId) != ~static_cast<int>(result.size()) ||
+            !at<unsigned>(entry, layout::generatedItem::seed))
             throw std::runtime_error("Invalid generated item definition");
-        result.push_back(at<unsigned>(entry, 8));
+        result.push_back(at<unsigned>(entry, layout::generatedItem::seed));
     }
     return result;
 }
@@ -100,8 +103,9 @@ int __attribute__((fastcall)) generate(void* self, void*, unsigned seed, unsigne
     // Only the authority may append definitions; the snapshot installs their
     // normalized seeds through the original generator, in native ID order.
     const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
-    if (runtime::replica() && caller != engine::j460::entry::generatedItemRestoreCall + 5)
-        return (flags & 8) ? 105 : 25;
+    if (runtime::replica() &&
+        caller != engine::j460::entry::generatedItemRestoreCall + callInstructionBytes)
+        return (flags & generateActiveFlag) ? activePlaceholder : passivePlaceholder;
     return originalGenerate(self, seed, flags);
 }
 int state(lua_State* L) {
@@ -112,13 +116,13 @@ int state(lua_State* L) {
             lan::Writer w(lan::Message::world);
             for (const auto seed : current)
                 w.u32(seed);
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         std::size_t size;
         const auto bytes = lua.checkString(L, 1, &size);
-        if (!runtime::replica() || size % 4 || size > 4096)
+        if (!runtime::replica() || size % 4 || size > maxPayloadBytes)
             throw std::runtime_error("Invalid generated item snapshot");
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
         std::vector<unsigned> desired;
@@ -152,25 +156,11 @@ bool install(std::uintptr_t base) {
            MH_EnableHook(target) == MH_OK;
 }
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        const auto pointer = GetProcAddress(module, name);                                         \
-        static_assert(sizeof(pointer) == sizeof(lua.field));                                       \
-        std::memcpy(&lua.field, &pointer, sizeof(pointer));                                        \
-        if (!lua.field)                                                                            \
-            return false;                                                                          \
-    } while (false)
-    IMPORT(getTop, "lua_gettop");
-    IMPORT(checkString, "luaL_checklstring");
-    IMPORT(checkInteger, "luaL_checkinteger");
-    IMPORT(toUserdata, "lua_touserdata");
-    IMPORT(rawLength, "lua_rawlen");
-    IMPORT(pushInteger, "lua_pushinteger");
-    IMPORT(pushString, "lua_pushlstring");
-    IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(setField, "lua_setfield");
-#undef IMPORT
+    using S = isaac::lua::Symbol;
+    if (!lua.load(module,
+                  {S::getTop, S::checkString, S::checkInteger, S::toUserdata, S::rawLength,
+                   S::pushInteger, S::pushLString, S::pushBoolean, S::pushClosure, S::setField}))
+        return false;
     lua.pushClosure(L, state, 0);
     lua.setField(L, -2, "generated_items");
     lua.pushClosure(L, count, 0);

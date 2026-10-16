@@ -9,14 +9,14 @@ import argparse
 import json
 from pathlib import Path
 import re
-import shutil
 import struct
 import subprocess
 import sys
 
 from progress_fixture import MAGIC, checksum
-from run_endings import hashes, idle
-from run_network_engine import log_path, windows
+from lab_profile import ProtectedLabs, idle
+from game_logs import log_path
+from lab_profile import windows
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLES = ("host", "client", "client2", "client3")
@@ -111,14 +111,7 @@ def main():
         + "\n"
         + (ROOT / "tests/state_character_catalog.lua").read_text()
     )
-    protected = []
-    for role, lab in zip(ROLES, labs):
-        for folder in ("profile", "game/data", "game/isaac-lan"):
-            source = lab / folder
-            backup = output / "before" / role / folder
-            protected.append((source, backup, hashes(source), source.exists()))
-            if source.exists():
-                shutil.copytree(source, backup)
+    protected = ProtectedLabs(labs, output, roles=ROLES)
     command = [
         sys.executable,
         str(ROOT / "tools/run_network_engine.py"),
@@ -177,13 +170,7 @@ def main():
         )
     finally:
         try:
-            idle(labs)
-            for source, backup, baseline, existed in protected:
-                if source.exists():
-                    shutil.rmtree(source)
-                if existed:
-                    shutil.copytree(backup, source)
-                assert hashes(source) == baseline, "Protected lab files differ after restoration"
+            protected.restore()
             report["restored"] = True
         except Exception as error:
             report["restoration_error"], report["passed"] = str(error), False

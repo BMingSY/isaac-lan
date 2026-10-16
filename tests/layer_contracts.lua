@@ -169,7 +169,9 @@ local env = setmetatable({
         return { pause = 0, slot = 1 }
     end,
 }, { __index = _G })
-local motion = assert(loadfile(root .. "/src/bridge/presentation/motion.lua", "t", env))()({
+local motion = assert(loadfile(root .. "/src/bridge/presentation/motion.lua", "t", env))()(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)({
     rooms_with_player = function(slot, fn)
         assert(slot == 1)
         fn()

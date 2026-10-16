@@ -42,7 +42,7 @@ python3 tools/check_performance.py "$ISAAC_RUN_OUTPUT" --output "$ISAAC_PERFORMA
 
 [`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，反向输入保留固定延迟；375000 字节／秒对应十进制 3 Mbps。`run_network_engine.py --record-relay` 保存主机原始字节流和逐秒总下行。
 
-`isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。复现命令和历史结果见[百变怪性能记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/delirium-performance-investigation.md)。
+`isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
 
 ## 资源回归与堆检查
 
@@ -59,8 +59,8 @@ python3 tools/run_special_routes.py \
 
 `campaign` 使用固定路线、Boss 房定位、保护和伤害加速，原版战斗、拾取、出口、换层及羔羊结局仍实际执行；不代表随机无辅助通关。默认不录画面，按需 `--record`。隔离资料逐文件备份／恢复，进程非零退出仍判整轮失败。
 
-前置解锁由 [`tools/progress_fixture.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/progress_fixture.py) 在启动前写入隔离存档，核对 J460 文件头、区段和校验算法，以临时文件原子替换；必须已有原版基线。角色菜单初始化后禁止再改内存解锁表，根因见[夹具堆损坏记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/heap-corruption-regression.md)。
+前置解锁由 [`tools/progress_fixture.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/progress_fixture.py) 在启动前写入隔离存档，核对 J460 文件头、区段和校验算法，以临时文件原子替换；必须已有原版基线；角色菜单初始化后禁止修改内存解锁表。
 
 `--heap-check` 用独立的 `isaac_lan_heap_watch.exe` 观察已标记目录和已校验路径的进程。异常上下文复制到实验共享区，转储完成后继续原异常链；最多前三次异常、每次最多等 30 秒，无观察器时不等待。正常关闭预留 45 秒，超时终止必须判失败。
 
-完整转储先写 Windows 临时目录，再复制到产物的 转储归档；复制失败保留临时文件并报错，不打入安装包。观察器不改 IFEO／注册表、不附加调试器；fail-fast 或更早启动错误不保证捕获，仍检查退出结果。Windows CI 用合成进程验证转储链路，不启动游戏，也不把“未观察到异常”当作已排除所有堆损坏。
+完整转储先写 Windows 临时目录，再复制到产物的转储归档；复制失败保留临时文件并报错，不打入安装包。观察器不改 IFEO／注册表、不附加调试器；fail-fast 或更早启动错误不保证捕获，仍检查退出结果。Windows CI 用合成进程验证转储链路，不启动游戏，也不把“未观察到异常”当作已排除所有堆损坏。

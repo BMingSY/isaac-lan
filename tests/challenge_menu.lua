@@ -114,6 +114,12 @@ _IsaacLanStatus = function()
     return status
 end
 _IsaacLan = {
+    net_phases = function()
+        return dofile(root .. "/tests/fixtures/net_phases.lua")
+    end,
+    net_commands = function()
+        return dofile(root .. "/tests/fixtures/net_commands.lua")
+    end,
     presentation_player_huds = function()
         return {}
     end,
@@ -136,6 +142,7 @@ _IsaacLan = {
     end,
 }
 _IsaacLanModules = {
+    ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
     ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
 }
 _IsaacLanCommand = function(name, value)
@@ -232,7 +239,7 @@ draw(39)
 assert(status.choice0 == 23)
 draw(39)
 draw()
-assert(status.choice0 == 41 and labels["里·无菜单画像"])
+assert(status.choice0 == 41 and labels["无菜单画像"])
 assert(renderedPortraits[1][2] == "00_Random")
 draw(39)
 assert(status.choice0 == 0)
@@ -316,6 +323,39 @@ assert(labels["结束挑战（不保存）"] and not labels["保存并结束联�
 status.challenge = 0
 draw()
 assert(labels["保存并结束联机"])
+local actions = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
+    _IsaacLan.net_phases(),
+    _IsaacLan.net_commands()
+)
+local sent, hidden = {}, 0
+local deps = {
+    command = function(action, value)
+        sent[#sent + 1] = { action, value }
+    end,
+    hide = function()
+        hidden = hidden + 1
+    end,
+}
+local ui = { page = "lan" }
+local function action(label, running)
+    local rows = actions.rows(ui, running, {}, {}, deps)
+    for _, row in ipairs(rows) do
+        if row.label == label then
+            assert(row.enabled)
+            row.action()
+            return
+        end
+    end
+    error("Missing action: " .. label)
+end
+action("暂停全队", { phase = 3, hosting = 1, slot = 0, pause = 0 })
+action("恢复游戏", { phase = 3, hosting = 1, slot = 0, pause = 1, pauseOwner = 0 })
+action("保存并结束联机", { phase = 3, hosting = 1, slot = 0 })
+action("离开并保留角色", { phase = 3, hosting = 0, slot = 1 })
+for i = 1, 4 do
+    assert(sent[i][1] == "control" and sent[i][2] == tostring(i))
+end
+assert(hidden == 1)
 -- Reconnect/loading/game cards use the run roster, even when lobby choices
 -- were never selected (fresh rejoin) or differ from a resumed save.
 catalog["1"].animation = "02_Magdalene"
@@ -337,7 +377,7 @@ for _, phase in ipairs({ 9, 7, 3, 9 }) do
             assert(renderedPortraits[slot][2] == expected, "Run card used a lobby portrait")
         end
         assert(n < 3 or labels[longName])
-        assert(n < 4 or labels["里·无菜单画像"])
+        assert(n < 4 or labels["无菜单画像"])
     end
 end
 -- A new lobby returns to its own selections rather than retaining the run.

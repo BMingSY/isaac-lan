@@ -5,12 +5,11 @@ import argparse
 import json
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 from build_special_suite import CASES, DIAGNOSTICS, build
-from run_endings import hashes, idle
-from run_network_engine import log_path
+from lab_profile import ProtectedLabs, idle
+from game_logs import log_path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -124,14 +123,7 @@ def main():
     output.mkdir(parents=True, exist_ok=False)
     script = output / "suite.lua"
     build(script, cases, first_floor=args.first_floor)
-    protected = []
-    for role, lab in zip(("host", "client"), labs):
-        for folder in ("profile", "game/data", "game/isaac-lan"):
-            source = lab / folder
-            backup = output / "before" / role / folder
-            protected.append((source, backup, hashes(source), source.exists()))
-            if source.exists():
-                shutil.copytree(source, backup)
+    protected = ProtectedLabs(labs, output, roles=("host", "client"))
     command = [
         sys.executable,
         str(ROOT / "tools/run_network_engine.py"),
@@ -342,13 +334,7 @@ def main():
                 report["passed"] = report["passed"] and starts == len(cases)
     finally:
         try:
-            idle(labs)
-            for source, backup, baseline, existed in protected:
-                if source.exists():
-                    shutil.rmtree(source)
-                if existed:
-                    shutil.copytree(backup, source)
-                assert hashes(source) == baseline, "Isolated save restoration differs"
+            protected.restore()
             report["restored"] = True
         except Exception as error:
             report["restoration_error"], report["passed"] = str(error), False

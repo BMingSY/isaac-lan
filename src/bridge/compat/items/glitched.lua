@@ -1,4 +1,5 @@
 -- Glitched definitions use negative IDs, outside ItemConfig's static array.
+local MAX_DEFINITIONS = 1024
 return function(native)
     return {
         count = function(player, id)
@@ -15,7 +16,7 @@ return function(native)
         end,
         extraCollectibles = function(config)
             local result = {}
-            for id = -1, -1024, -1 do
+            for id = -1, -MAX_DEFINITIONS, -1 do
                 if not config:GetCollectible(id) then
                     break
                 end

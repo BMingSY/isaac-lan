@@ -5,6 +5,10 @@ import re
 import shutil
 
 
+def log_path(lab):
+    return lab / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt"
+
+
 def launch_directory(lab, process_id=None):
     logs = lab / "profile/Documents/My Games/Binding of Isaac Repentance+/isaac-lan/logs"
     candidates = [

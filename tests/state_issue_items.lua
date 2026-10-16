@@ -1,6 +1,10 @@
 -- One connection: shared rewards, holder-only inventories, Genesis, generated
 -- definitions/effects, then a native save/continue in the same owned processes.
 local native = assert(_IsaacLan)
+local Phase, Command = native.net_phases(), native.net_commands()
+local fields = assert(_IsaacLanModules["sync/fields"])
+local schema = assert(_IsaacLanModules["sync/world_schema"])
+local Actor, Entity, Inventory, Item = fields.actor, fields.entity, fields.inventory, fields.item
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local success = _IsaacLanTest.passivesOnly
         and "PASS generated passive effects and native continuation"
@@ -167,7 +171,7 @@ end)
 function _IsaacLanFrame()
     renders = renders + 1
     local s = frame()
-    assert(s.phase ~= 4 and s.phase ~= 9, s.error)
+    assert(s.phase ~= Phase.failed and s.phase ~= Phase.closed, s.error)
     if host and round == 2 and s.pendingSave == 1 then
         if not retryObserved then
             retryObserved = true
@@ -183,11 +187,11 @@ function _IsaacLanFrame()
         _IsaacLanCommand(host and "host" or "join", host and port or "localhost:" .. port)
         Isaac.DebugString("LAN_NETWORK MENU_READY")
     end
-    if s.phase == 2 and not chosen then
+    if s.phase == Phase.lobby and not chosen then
         chosen = true
         _IsaacLanCommand("choose", "0:1")
     end
-    if host and s.phase == 2 and s.players == 2 and s.ready0 == 1 and s.ready1 == 1 then
+    if host and s.phase == Phase.lobby and s.players == 2 and s.ready0 == 1 and s.ready1 == 1 then
         _IsaacLanCommand(
             round == 2 and "resume" or "start",
             round == 2 and "" or "YV039KQF:0:0:0:0:0"
@@ -493,7 +497,7 @@ local function advance(t)
         mark("save", t)
     elseif step == "save" and t - stepAt >= 60 then
         savedInventories = { [0] = inventory(0), [1] = inventory(1) }
-        assert(native.net_command(3))
+        assert(native.net_command(Command.saveExit))
     end
     assert(t - stepAt < 900, "Item acceptance stalled at " .. step)
 end
@@ -512,9 +516,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         if restore(body, t, ack, betweenUpdates) == false then
             return false
         end
-        local view = _IsaacLanState.decode(body)
-        assert(native.generated_items() == view[21], "Replica generated definitions differ")
-        for _, a in ipairs(view[9]) do
+        local view = schema.unpack(_IsaacLanState.decode(body), t)
+        assert(native.generated_items() == view.glitched, "Replica generated definitions differ")
+        for _, a in ipairs(view.actors) do
             for _, field in ipairs({
                 { "Damage", 1 },
                 { "MaxFireDelay", 2 },
@@ -523,21 +527,22 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 { "Luck", 6 },
                 { "TearRange", 9 },
             }) do
-                local expected = a[3][9][field[2]]
+                local expected = a[Actor.entity][Entity.typed][field[2]]
                 assert(
-                    math.abs(Isaac.GetPlayer(a[1])[field[1]] - expected)
+                    math.abs(Isaac.GetPlayer(a[Actor.index])[field[1]] - expected)
                         <= 0.00001 * math.max(1, math.abs(expected)),
                     "Replica attribute differs: " .. field[1]
                 )
             end
-            for _, item in ipairs(a[4][2]) do
+            for _, item in ipairs(a[Actor.inventory][Inventory.items]) do
                 assert(
-                    collectibleCount(Isaac.GetPlayer(a[1]), item[1]) == item[2],
+                    collectibleCount(Isaac.GetPlayer(a[Actor.index]), item[Item.id])
+                        == item[Item.count],
                     "Replica inventory differs from authority"
                 )
-                if item[1] < 0 then
+                if item[Item.id] < 0 then
                     assert(
-                        Isaac.GetItemConfig():GetCollectible(item[1]),
+                        Isaac.GetItemConfig():GetCollectible(item[Item.id]),
                         "Replica missed generated config"
                     )
                 end

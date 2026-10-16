@@ -1,8 +1,9 @@
 -- Allocations differ from authoritative IDs; only selected-room entities are enumerated.
 return function(root)
     local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
-    local reconcile =
-        dofile(root .. "/src/bridge/sync/entities.lua")(enums.EntityType, enums.PickupVariant)
+    local reconcile = dofile(root .. "/src/bridge/sync/entities.lua")(
+        dofile(root .. "/src/bridge/sync/fields.lua")
+    )(enums.EntityType, enums.PickupVariant)
     local fixture, allocations, refs, spawned, removed, room = {}, {}, {}, 0, 0, "0:1"
     local function new(id, kind, variant, subtype, selectedRoom)
         local e = {

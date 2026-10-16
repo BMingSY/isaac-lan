@@ -346,4 +346,4 @@ end
 
 真实游戏使用原版文件的隔离拷贝：[`state_mod_ui.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_ui.lua) 走地图与原生手柄输入；[`state_mod_integrations.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_integrations.lua) 核对真实 Stats+ 玩家缓存及布局序号、EID 本机名单、客机 GoodTrip 请求、重复请求和最终到达。用 `--mod`、`--client-mod`、`--host-mod` 构造安装组合，见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 
-既有实机结果见[已报问题回归](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/issue-regressions.md)和[支线与回退回归](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/side-route-regressions.md)。这些用例不能替代全部特殊房间、角色、语言、回退及未知上游版本的验收。每次兼容范围扩展都需增加源码配置和对应游戏证据。
+这些用例不能替代全部特殊房间、角色、语言、回退及未知上游版本的验收。每次兼容范围扩展都需增加源码配置和对应游戏证据。

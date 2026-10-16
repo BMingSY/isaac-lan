@@ -21,4 +21,4 @@
 
 创世纪的特殊房间描述符可使用 `ListIndex=-12`。布局校验允许特殊房间的列表编号等于其房间编号；普通房间仍限制为非负数组下标，描述符仍由原生查找接口获取。
 
-离线验证覆盖生成器 x86 调用、种子顺序、重复／冲突／损坏快照、负编号道具归属与移除，以及特殊布局编号边界。集中实机入口为 [`run_item_issues.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_issues.py)；原生随机效果的全部组合不可能由有限样本穷举，具体种子、结果及失败轮次保留在本次验证记录中。
+离线验证覆盖生成器 x86 调用、种子顺序、重复／冲突／损坏快照、负编号道具归属与移除，以及特殊布局编号边界。集中实机入口为 [`run_item_issues.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_issues.py)；原生随机效果的全部组合不可能由有限样本穷举，具体结果在 PR 中说明，原始证据保留在测试产物中。

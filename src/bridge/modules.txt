@@ -1,3 +1,4 @@
+sync/fields
 sync/entity_schema
 sync/pills
 diagnostics/performance
@@ -6,6 +7,7 @@ sync/entity_links
 sync/world_schema
 sync/actor_pose
 presentation/actors
+presentation/menu_model
 presentation/audio
 presentation/motion
 presentation/ping

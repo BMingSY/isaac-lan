@@ -10,13 +10,10 @@ import shutil
 import signal
 import subprocess
 import time
-from game_logs import freeze_probe_logs, probe_path, probe_text
+from game_logs import freeze_probe_logs, probe_path, probe_text, log_path
+from lab_profile import windows
 from check_performance import summarize_tree
 from progress_fixture import prepare as prepare_progress_fixture
-
-
-def windows(path):
-    return subprocess.check_output(["wslpath", "-w", str(path)], text=True).strip()
 
 
 def execute(*args, timeout=30):
@@ -25,10 +22,6 @@ def execute(*args, timeout=30):
     if result.returncode:
         raise RuntimeError(text)
     return text
-
-
-def log_path(lab):
-    return lab / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt"
 
 
 def read_log(lab):

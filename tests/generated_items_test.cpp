@@ -59,7 +59,7 @@ int main() {
             *size = input.size();
             return input.c_str();
         };
-        adapter::lua.pushString = [](lua_State*, const char* bytes, std::size_t size) {
+        adapter::lua.pushLString = [](lua_State*, const char* bytes, std::size_t size) {
             output.assign(bytes, size);
             return output.c_str();
         };

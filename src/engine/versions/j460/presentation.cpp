@@ -1,3 +1,6 @@
+#include "engine/lua_api.h"
+#include "engine/versions/j460/layout.h"
+#include "compat/game_ids.h"
 #include "engine/presentation.h"
 #include "engine/crafting_hud.h"
 #include "engine/challenge_hud.h"
@@ -43,9 +46,11 @@ bool __attribute__((fastcall)) visibleCollectible(void* player, void*, int item,
     // Room::Render keeps the whole roster available to HUDs, but Night Light
     // walks it without checking whether the holder belongs to this room.
     const auto caller = reinterpret_cast<std::uintptr_t>(__builtin_return_address(0)) - image;
-    if (item == 425 && caller == j460::entry::roomNightLightQuery + 5 && rooms::virtualized()) {
-        const auto controller = at<int>(reinterpret_cast<std::uintptr_t>(player), 0x1618);
-        if (controller < 1 || controller > 4 ||
+    if (item == compat::ids::collectible::nightLight &&
+        caller == j460::entry::roomNightLightQuery + 5 && rooms::virtualized()) {
+        const auto controller =
+            at<int>(reinterpret_cast<std::uintptr_t>(player), j460::layout::player::controller);
+        if (controller < 1 || controller > static_cast<int>(lan::maxPlayers) ||
             !(rooms::soundAudience() & (1u << (controller - 1))))
             return false;
     }
@@ -153,18 +158,7 @@ void __attribute__((fastcall)) startIntro(void* transition, void*, unsigned firs
         playIntro(transition, first, second);
     }
 }
-struct API {
-    int(__cdecl* getTop)(lua_State*);
-    long long(__cdecl* checkInteger)(lua_State*, int);
-    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
-    const char*(__cdecl* pushString)(lua_State*, const char*, std::size_t);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-    void(__cdecl* pushInteger)(lua_State*, long long);
-    void(__cdecl* pushNumber)(lua_State*, double);
-    void(__cdecl* createTable)(lua_State*, int, int);
-    void(__cdecl* pushClosure)(lua_State*, int(__cdecl*)(lua_State*), int);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-} lua{};
+isaac::lua::API lua{};
 int playerHuds(lua_State* L) {
     lua.createTable(L, 0, 4);
     const auto manager = at<std::uintptr_t>(image, j460::globals::manager);
@@ -216,8 +210,8 @@ int events(lua_State* L) {
                           static_cast<unsigned>(e.room), e.first, e.second})
                         w.u32(v);
                 }
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -326,24 +320,12 @@ bool install(std::uintptr_t base) {
            MH_EnableHook(reinterpret_cast<void*>(image + 0x42f1c0)) == MH_OK;
 }
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        const auto p = GetProcAddress(module, name);                                               \
-        std::memcpy(&lua.field, &p, sizeof(p));                                                    \
-        if (!lua.field)                                                                            \
-            return false;                                                                          \
-    } while (false)
-    IMPORT(getTop, "lua_gettop");
-    IMPORT(checkInteger, "luaL_checkinteger");
-    IMPORT(checkString, "luaL_checklstring");
-    IMPORT(pushString, "lua_pushlstring");
-    IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(pushInteger, "lua_pushinteger");
-    IMPORT(pushNumber, "lua_pushnumber");
-    IMPORT(createTable, "lua_createtable");
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(setField, "lua_setfield");
-#undef IMPORT
+    if (!lua.load(module, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::checkInteger,
+                           isaac::lua::Symbol::checkString, isaac::lua::Symbol::pushLString,
+                           isaac::lua::Symbol::pushBoolean, isaac::lua::Symbol::pushInteger,
+                           isaac::lua::Symbol::pushNumber, isaac::lua::Symbol::createTable,
+                           isaac::lua::Symbol::pushClosure, isaac::lua::Symbol::setField}))
+        return false;
     lua.pushClosure(L, events, 0);
     lua.setField(L, -2, "presentation_events");
     lua.pushClosure(L, resetLua, 0);

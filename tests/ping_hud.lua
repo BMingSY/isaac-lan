@@ -32,7 +32,7 @@ local render = dofile(root .. "/src/bridge/presentation/ping.lua")({
         reads = reads + 1
         return huds
     end,
-})
+}, dofile(root .. "/tests/fixtures/net_phases.lua"))
 local status = {
     prepared = true,
     phase = 3,

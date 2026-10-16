@@ -1,5 +1,6 @@
 local root = assert(arg[1])
-local factory = dofile(root .. "/src/bridge/sync/capture.lua")
+local factory =
+    dofile(root .. "/src/bridge/sync/capture.lua")(dofile(root .. "/src/bridge/sync/fields.lua"))
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local schema = dofile(root .. "/src/bridge/sync/world_schema.lua")
 local epoch, revision, calls = 1, 1, {}
