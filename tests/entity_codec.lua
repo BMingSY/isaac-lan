@@ -20,6 +20,8 @@ local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
     enums.EffectVariant
 )
 local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "t", env))()(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(
     {
         presentation_local_effect = function(kind, variant, subtype)
             return kind == 1000 and variant == 99 and subtype == 1
@@ -116,6 +118,42 @@ local function entity(kind, flags)
 end
 local source, target = entity(7, 7), entity(7, 255)
 local state = component.capture(source, false)
+local codec = dofile(root .. "/src/bridge/sync/codec.lua")
+local common, typed = {}, {}
+for _, name in ipairs(schemas.common) do
+    common[#common + 1] = source[name]
+end
+for _, name in ipairs(schemas.byType[7]) do
+    typed[#typed + 1] = source[name]
+end
+local expected = {
+    1,
+    7,
+    0,
+    0,
+    123,
+    { 12, 13 },
+    { 2, 3 },
+    common,
+    typed,
+    false,
+    0,
+    0,
+    0,
+    0,
+    { 0, 0 },
+    { 1, 1 },
+    { 1, 1, 1, 1, 0, 0, 0 },
+    40,
+    7,
+    "native laser path",
+    { 51, 52 },
+    false,
+    false,
+    false,
+    0,
+}
+assert(codec.encode(state) == codec.encode(expected), "Schema-19 entity bytes changed")
 assert(state[1] == 1 and state[10] == false and state[20] == "native laser path")
 assert(laserReads == 1 and #state[9] == 11, "SampleLaser userdata must stay outside scalar fields")
 component.apply(target, state)
@@ -146,6 +184,47 @@ for _, e in ipairs({ warning, beam }) do
     function s:RemoveOverlay() end
 end
 local wire = dofile(root .. "/src/bridge/sync/codec.lua")
+local sourceSprite = {
+    GetFilename = function()
+        return "test.anm2"
+    end,
+    GetAnimation = function()
+        return "Walk"
+    end,
+    GetFrame = function()
+        return 17
+    end,
+    GetOverlayAnimation = function()
+        return "Glow"
+    end,
+    GetOverlayFrame = function()
+        return 11
+    end,
+    FlipX = true,
+    FlipY = false,
+    Rotation = 45,
+    Scale = env.Vector(2, 3),
+    Offset = env.Vector(4, 5),
+    Color = { R = 0.1, G = 0.2, B = 0.3, A = 0.4, RO = 0.5, GO = 0.6, BO = 0.7 },
+}
+local expectedSprite = {
+    "test.anm2",
+    "Walk",
+    17,
+    "Glow",
+    11,
+    true,
+    false,
+    45,
+    { 2, 3 },
+    { 4, 5 },
+    { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7 },
+    "",
+}
+assert(
+    wire.encode(component.sprite(sourceSprite)) == wire.encode(expectedSprite),
+    "Schema-19 sprite bytes changed"
+)
 local value = wire.decode(wire.encode(component.capture(warning)))
 assert(value[24] == geometry)
 component.apply(beam, value)

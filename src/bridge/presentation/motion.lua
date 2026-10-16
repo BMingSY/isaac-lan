@@ -1,4 +1,6 @@
 return function(fields)
+    local Input = fields.input
+    local INPUT_MAX = 65535
     local Actor = fields.actor
     local Entity = fields.entity
     -- Render-only movement and interpolation; authority remains on the host.
@@ -81,8 +83,10 @@ return function(fields)
                 return
             end
             local values = { unpack(">I2I2I2I2", input) }
-            local direction =
-                Vector((values[2] - values[1]) / 65535, (values[4] - values[3]) / 65535)
+            local direction = Vector(
+                (values[Input.right] - values[Input.left]) / INPUT_MAX,
+                (values[Input.down] - values[Input.up]) / INPUT_MAX
+            )
             assert(native.rooms_with_player(status.slot, function()
                 if view.room():IsMirrorWorld() then
                     direction.X = -direction.X

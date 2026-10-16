@@ -1,5 +1,5 @@
 return function(fields)
-    local Map = fields.map
+    local Map, Location = fields.map, fields.location
     local Actor = fields.actor
     -- One immutable capture generation per (floor epoch, tick). Peer-specific
     -- room/visual/event projections share common data and encoded fragments.
@@ -91,7 +91,13 @@ return function(fields)
                     local at = locations[tostring(player)]
                     if at then
                         local position = deps.player(heads[tostring(player)]).Position
-                        loc[#loc + 1] = { player, at.dimension, at.index, position.X, position.Y }
+                        loc[#loc + 1] = {
+                            [Location.slot] = player,
+                            [Location.dimension] = at.dimension,
+                            [Location.index] = at.index,
+                            [Location.x] = position.X,
+                            [Location.y] = position.Y,
+                        }
                     end
                 end
                 deps.reconcileShared(level, actors)

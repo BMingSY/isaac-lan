@@ -1,5 +1,5 @@
 return function(fields)
-    local Actor = fields.actor
+    local Actor, ActorSprites = fields.actor, fields.actorSprites
     local Sprite = fields.sprite
     local Entity = fields.entity
     -- Native costume ownership stays in the engine; cached IDs belong to this view.
@@ -14,11 +14,11 @@ return function(fields)
         local function actorSprites(p, actor)
             local sprites = assert(native.actor_sprites(actor[Actor.index], p:GetSprite()))
             local existing, desired = {}, {}
-            for i = 11, #sprites do
+            for i = ActorSprites.firstCostume, #sprites do
                 local path = sprites[i]:GetFilename()
                 existing[path] = (existing[path] or 0) + 1
             end
-            for i = 11, #actor[Actor.visuals] do
+            for i = ActorSprites.firstCostume, #actor[Actor.visuals] do
                 local path = actor[Actor.visuals][i][Sprite.path]
                 desired[path] = (desired[path] or 0) + 1
             end
@@ -54,10 +54,10 @@ return function(fields)
             applySprite(p:GetSprite(), actor[Actor.entity][Entity.sprite])
             local used = {}
             for i, v in ipairs(actor[Actor.visuals]) do
-                if i <= 3 then
+                if i <= ActorSprites.baseCount then
                     applySprite(sprites[i], v)
-                elseif i > 10 then
-                    for j = 11, #sprites do
+                elseif i >= ActorSprites.firstCostume then
+                    for j = ActorSprites.firstCostume, #sprites do
                         if not used[j] and sprites[j]:GetFilename() == v[Sprite.path] then
                             applySprite(sprites[j], v)
                             used[j] = true

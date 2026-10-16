@@ -62,7 +62,7 @@ bool beginNetworkRun() {
         return false;
     }
     saves.networkRun = true;
-    rooms::setConnected(15);
+    rooms::setConnected(lan::allPlayersMask);
     return true;
 }
 void saveGame(const backend::Call& original) {
@@ -631,8 +631,8 @@ void updateOne(const backend::Call& original) {
         const auto command = frame->commands[slot];
         const bool paused = backend::pause() != 0;
         if (command == lan::Command::pause && !paused) {
-            frame->inputs[slot].values[12] = 65535;
-            frame->inputs[slot].triggered |= 1u << 12;
+            frame->inputs[slot].values[input::action::menuPause] = lan::maxInputValue;
+            frame->inputs[slot].triggered |= 1u << input::action::menuPause;
         } else if (command == lan::Command::resume && paused && slot == input::menuOwner()) {
             resumePause = true;
         } else if (command == lan::Command::saveExit && slot == 0) {
@@ -661,7 +661,8 @@ void updateOne(const backend::Call& original) {
     bool openPause = false;
     if (!paused)
         for (unsigned slot = 0; slot < frame->players; ++slot)
-            if ((frame->connected & (1u << slot)) && (frame->inputs[slot].triggered & (1u << 12)))
+            if ((frame->connected & (1u << slot)) &&
+                (frame->inputs[slot].triggered & (1u << input::action::menuPause)))
                 openPause = true;
     if (openPause || resumePause)
         rooms::withView(
@@ -810,10 +811,10 @@ int poll(lua_State* L) {
     integer("challengeVersion", session ? session->rules().version : 0);
     integer("pause", backend::pause());
     integer("pauseOwner", input::menuOwner());
-    for (unsigned i = 0; i < 4; ++i)
+    for (unsigned i = 0; i < lan::maxPlayers; ++i)
         integer(("character" + std::to_string(i)).c_str(),
                 session ? session->settings().characters[i] : 0);
-    for (unsigned i = 0; i < 4; ++i) {
+    for (unsigned i = 0; i < lan::maxPlayers; ++i) {
         integer(("choice" + std::to_string(i)).c_str(),
                 session ? session->choices()[i].character : 0);
         integer(("ready" + std::to_string(i)).c_str(),
@@ -828,6 +829,14 @@ int poll(lua_State* L) {
 int phaseValues(lua_State* L) {
     lua.createTable(L, 0, lan::phaseValues.size());
     for (const auto& [name, value] : lan::phaseValues) {
+        lua.pushInteger(L, static_cast<int>(value));
+        lua.setField(L, -2, name);
+    }
+    return 1;
+}
+int commandValues(lua_State* L) {
+    lua.createTable(L, 0, lan::commandValues.size());
+    for (const auto& [name, value] : lan::commandValues) {
         lua.pushInteger(L, static_cast<int>(value));
         lua.setField(L, -2, name);
     }
@@ -957,8 +966,8 @@ int finishChallenge(lua_State* L) {
 int start(lua_State* L) {
     const char* seed = lua.checkString(L, 1, nullptr);
     const auto difficulty = lua.checkInteger(L, 2);
-    std::array<long long, 4> characters;
-    for (unsigned i = 0; i < 4; ++i)
+    std::array<long long, lan::maxPlayers> characters;
+    for (unsigned i = 0; i < lan::maxPlayers; ++i)
         characters[i] = lua.checkInteger(L, i + 3);
     if (!session || difficulty < 0 || difficulty > 3) {
         lua.pushBoolean(L, false);
@@ -973,7 +982,7 @@ int start(lua_State* L) {
     settings.seed = seed;
     settings.difficulty = static_cast<std::uint8_t>(difficulty);
     settings.progress = readProgress();
-    for (unsigned i = 0; i < 4; ++i) {
+    for (unsigned i = 0; i < lan::maxPlayers; ++i) {
         if (characters[i] < 0 || characters[i] > 65535) {
             lua.pushBoolean(L, false);
             return 1;
@@ -1580,6 +1589,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_join", join);
     function("net_poll", poll);
     function("net_phases", phaseValues);
+    function("net_commands", commandValues);
     function("net_challenges", challengeList);
     function("net_characters", characterList);
     function("pause_menu_state", pauseMenuState);

@@ -1,5 +1,6 @@
 -- Menu decisions and actions are independent of fonts, sprites and mouse geometry.
-return function(Phase)
+return function(Phase, Command)
+    local CHALLENGE_MODE, MODE_COUNT = 4, 5
     local function idle(phase)
         return phase == Phase.idle or phase == Phase.failed or phase == Phase.closed
     end
@@ -130,8 +131,9 @@ return function(Phase)
             end, ready or status["eligible" .. localSlot] == true)
             if host then
                 local function changeMode(delta)
-                    local nextMode = ((challenge and 4 or ui.difficulty) + delta) % 5
-                    if nextMode == 4 then
+                    local nextMode = ((challenge and CHALLENGE_MODE or ui.difficulty) + delta)
+                        % MODE_COUNT
+                    if nextMode == CHALLENGE_MODE then
                         ui.page, ui.selection = "challenges", 1
                     elseif command("challenge", "0") then
                         ui.difficulty = nextMode
@@ -197,11 +199,11 @@ return function(Phase)
         elseif phase == Phase.running then
             if (status.pause or 0) == 0 then
                 row("暂停全队", function()
-                    command("control", "1")
+                    command("control", tostring(Command.pause))
                 end)
             else
                 row("恢复游戏", function()
-                    if command("control", "2") then
+                    if command("control", tostring(Command.resume)) then
                         deps.hide()
                     end
                 end, localSlot == status.pauseOwner)
@@ -210,12 +212,12 @@ return function(Phase)
                 row(
                     challenge and "结束挑战（不保存）" or "保存并结束联机",
                     function()
-                        command("control", "3")
+                        command("control", tostring(Command.saveExit))
                     end
                 )
             else
                 row("离开并保留角色", function()
-                    command("control", "4")
+                    command("control", tostring(Command.leave))
                 end)
             end
             row("返回游戏", function()

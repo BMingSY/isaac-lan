@@ -24,11 +24,11 @@ local performance = modules["diagnostics/performance"]
 local encode = performance.wrap("encode", codec.encode)
 local decode = performance.wrap("decode", codec.decode)
 local reconcileEntities =
-    performance.wrap("apply.entities", modules["sync/entities"](EntityType, PickupVariant))
-local reconcileGrids = performance.wrap("apply.grids", modules["sync/grids"])
+    performance.wrap("apply.entities", component("sync/entities")(EntityType, PickupVariant))
+local reconcileGrids = performance.wrap("apply.grids", component("sync/grids"))
 local npcState = assert(modules["sync/npc"])
 local curses = assert(modules["sync/curses"])
-local deals = assert(modules["sync/deals"])(native)
+local deals = component("sync/deals")(native)
 local pills = assert(modules["sync/pills"])(native)
 local greed = assert(modules["compat/routes/greed"])(function()
     return Game()
@@ -43,7 +43,7 @@ local poop = assert(modules["compat/characters/blue_baby"])(native, PlayerType)
 local craftingBag = assert(modules["compat/items/crafting_bag"])(native, CollectibleType)
 local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
-local entityCodec = assert(modules["sync/entity_codec"])(
+local entityCodec = component("sync/entity_codec")(
     native,
     assert(modules["sync/entity_schema"])(EntityType),
     npcState,
@@ -95,8 +95,12 @@ local actorsPresentation = component("presentation/actors")(native, function(pat
 end, applySprite)
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
     extraAnimationAllowsMovement = function(p, actor)
-        local extra = actor[fields.actor.visuals][1]
-        return craftingBag.allowsMovement(p, actor[fields.actor.craftingBag], extra and extra[2])
+        local extra = actor[fields.actor.visuals][fields.actorSprites.extra]
+        return craftingBag.allowsMovement(
+            p,
+            actor[fields.actor.craftingBag],
+            extra and extra[fields.sprite.animation]
+        )
     end,
     vector = Vector,
     player = function(index)

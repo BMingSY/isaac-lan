@@ -1,5 +1,6 @@
 local root = assert(arg[1])
-local factory = dofile(root .. "/src/bridge/sync/deals.lua")
+local factory =
+    dofile(root .. "/src/bridge/sync/deals.lua")(dofile(root .. "/src/bridge/sync/fields.lua"))
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local authoritative, replica, calls = { 1, 0 }, nil, 0
 local host = factory({

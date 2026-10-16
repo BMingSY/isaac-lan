@@ -5,12 +5,18 @@
 #include "runtime/session.h"
 #include "engine/frontend.h"
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/layout.h"
+#include "engine/versions/j460/menu_state.h"
 #include <MinHook.h>
 #include <array>
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include "engine/versions/j460/profile.h"
+#include "core/level_grid.h"
 namespace j460 = isaac::engine::j460;
+namespace layout = j460::layout;
+
 namespace isaac::engine::bootstrap {
 namespace {
 std::uintptr_t image;
@@ -25,9 +31,6 @@ template <class T> bool read(std::uintptr_t address, T& value) {
 // RVAs belong to the J460 build, verified by layout and entry-point signatures;
 // no pointer offsets from another game version are assumed to be compatible.
 constexpr std::uintptr_t gamePointerRva = j460::globals::game;
-constexpr std::uintptr_t roomOffset = 0x18300;
-constexpr std::uintptr_t playersOffset = 0x1baa8;
-constexpr std::uintptr_t frameOffset = 0x264f8;
 
 using LuaFn = int(__cdecl*)(lua_State*);
 isaac::lua::API lua{};
@@ -63,11 +66,12 @@ void __attribute__((fastcall)) updateForeground(void* room, void*) {
         originalRoomUpdate(room);
         return;
     }
-    const auto begin = field<std::uintptr_t>(game, playersOffset);
-    const auto end = field<std::uintptr_t>(game, playersOffset + 4);
-    field<std::uintptr_t>(game, playersOffset + 4) = begin + 4;
+    const auto begin = field<std::uintptr_t>(game, layout::game::players);
+    const auto end = field<std::uintptr_t>(game, layout::game::players + layout::vector::end);
+    field<std::uintptr_t>(game, layout::game::players + layout::vector::end) =
+        begin + sizeof(std::uintptr_t);
     originalRoomUpdate(room);
-    field<std::uintptr_t>(game, playersOffset + 4) = end;
+    field<std::uintptr_t>(game, layout::game::players + layout::vector::end) = end;
     ++foregroundNativeUpdates;
     tickBackground(game);
 }
@@ -76,10 +80,12 @@ void __attribute__((fastcall)) updateForeground(void* room, void*) {
 // Remove references without destroying the entity, then let native Add register
 // it in the destination's persistent, update, rendering and query structures.
 void movePlayer(std::uintptr_t player, std::uintptr_t from, std::uintptr_t to) {
-    for (std::size_t offset = 0x20; offset <= 0x90; offset += 0x10) {
-        const auto list = from + 0x1218 + offset;
-        auto data = reinterpret_cast<std::uintptr_t*>(field<std::uintptr_t>(list, 4));
-        auto& size = field<unsigned>(list, 12);
+    for (std::size_t offset = layout::entityList::firstArray;
+         offset <= layout::entityList::lastArray; offset += layout::entityList::arrayStride) {
+        const auto list = from + layout::room::entities + offset;
+        auto data = reinterpret_cast<std::uintptr_t*>(
+            field<std::uintptr_t>(list, layout::entityList::data));
+        auto& size = field<unsigned>(list, layout::entityList::count);
         for (unsigned i = 0; i < size;) {
             if (data[i] != player) {
                 ++i;
@@ -91,11 +97,12 @@ void movePlayer(std::uintptr_t player, std::uintptr_t from, std::uintptr_t to) {
     }
     using InvalidateQuery = void(__attribute__((thiscall))*)(void*, unsigned, unsigned, unsigned);
     engine<InvalidateQuery>(j460::entry::engineRoomsInvalidate)(
-        reinterpret_cast<void*>(from + 0x1218), 1, 0, 0);
-    field<bool>(player, 0x170) = false;
-    field<unsigned>(player, 0x20) = field<unsigned>(to, 0x1214)++;
+        reinterpret_cast<void*>(from + layout::room::entities), 1, 0, 0);
+    field<bool>(player, layout::entity::removed) = false;
+    field<unsigned>(player, layout::entity::index) =
+        field<unsigned>(to, layout::room::nextEntityIndex)++;
     using Add = void(__attribute__((thiscall))*)(void*, void*);
-    engine<Add>(j460::entry::engineRoomsAdd)(reinterpret_cast<void*>(to + 0x1218),
+    engine<Add>(j460::entry::engineRoomsAdd)(reinterpret_cast<void*>(to + layout::room::entities),
                                              reinterpret_cast<void*>(player));
 }
 
@@ -105,31 +112,35 @@ struct RoomScope {
     std::uintptr_t game;
     std::uintptr_t originalRoom;
     int originalIndex, originalDimension;
-    std::array<std::uintptr_t, 3> players;
+    std::array<std::uintptr_t, layout::vector::words> players;
     explicit RoomScope(std::uintptr_t g) : game(g) {
-        originalRoom = field<std::uintptr_t>(g, roomOffset);
-        originalIndex = field<int>(g, 0x18304);
-        originalDimension = field<int>(g, 0x1830c);
-        memcpy(players.data(), reinterpret_cast<void*>(g + playersOffset), sizeof(players));
-        field<std::uintptr_t>(g, roomOffset) = backgroundRoom;
-        field<int>(g, 0x18304) = backgroundIndex;
-        field<int>(g, 0x1830c) = 0;
+        originalRoom = field<std::uintptr_t>(g, layout::game::room);
+        originalIndex = field<int>(g, layout::game::roomIndex);
+        originalDimension = field<int>(g, layout::game::dimension);
+        memcpy(players.data(), reinterpret_cast<void*>(g + layout::game::players), sizeof(players));
+        field<std::uintptr_t>(g, layout::game::room) = backgroundRoom;
+        field<int>(g, layout::game::roomIndex) = backgroundIndex;
+        field<int>(g, layout::game::dimension) = 0;
         // Keep the game's own backing allocation. This experiment requires two
         // ordinary players and exposes only player two during background work.
-        field<std::uintptr_t>(g, playersOffset) = players[0] + 4;
-        field<std::uintptr_t>(g, playersOffset + 4) = players[0] + 8;
+        field<std::uintptr_t>(g, layout::game::players) = players[0] + sizeof(std::uintptr_t);
+        field<std::uintptr_t>(g, layout::game::players + layout::vector::end) =
+            players[0] + 2 * sizeof(std::uintptr_t);
         roomScopeActive = true;
     }
     ~RoomScope() {
-        if (field<std::uintptr_t>(game, playersOffset) != players[0] + 4 ||
-            field<std::uintptr_t>(game, playersOffset + 8) != players[2]) {
+        if (field<std::uintptr_t>(game, layout::game::players) !=
+                players[0] + sizeof(std::uintptr_t) ||
+            field<std::uintptr_t>(game, layout::game::players + layout::vector::capacity) !=
+                players[2]) {
             log("room_scope=FAIL player_vector_reallocated");
             TerminateProcess(GetCurrentProcess(), 91);
         }
-        memcpy(reinterpret_cast<void*>(game + playersOffset), players.data(), sizeof(players));
-        field<std::uintptr_t>(game, roomOffset) = originalRoom;
-        field<int>(game, 0x18304) = originalIndex;
-        field<int>(game, 0x1830c) = originalDimension;
+        memcpy(reinterpret_cast<void*>(game + layout::game::players), players.data(),
+               sizeof(players));
+        field<std::uintptr_t>(game, layout::game::room) = originalRoom;
+        field<int>(game, layout::game::roomIndex) = originalIndex;
+        field<int>(game, layout::game::dimension) = originalDimension;
         roomScopeActive = false;
     }
     RoomScope(const RoomScope&) = delete;
@@ -154,21 +165,23 @@ void __attribute__((fastcall)) renderLocalRoom(void* game, void*) {
 void restoreRoomPositions(std::uintptr_t room) {
     // The manager restores interpolated positions only for its visible room
     // (J460 VA 0x9551d8). Apply the same operation before background physics.
-    const auto list = room + 0x1218 + 0x40;
-    const auto data = field<std::uintptr_t>(list, 4);
-    for (unsigned i = 0; i < field<unsigned>(list, 12); ++i) {
-        auto entity = field<std::uintptr_t>(data, i * 4);
-        if (field<bool>(entity, 0x175)) {
-            field<float>(entity, 0x33c) = field<float>(entity, 0x344);
-            field<float>(entity, 0x340) = field<float>(entity, 0x348);
-            field<bool>(entity, 0x175) = false;
+    const auto list = room + layout::room::entities + layout::entityList::renderArray;
+    const auto data = field<std::uintptr_t>(list, layout::entityList::data);
+    for (unsigned i = 0; i < field<unsigned>(list, layout::entityList::count); ++i) {
+        auto entity = field<std::uintptr_t>(data, i * sizeof(std::uintptr_t));
+        if (field<bool>(entity, layout::entity::interpolated)) {
+            field<float>(entity, layout::entity::positionX) =
+                field<float>(entity, layout::entity::previousX);
+            field<float>(entity, layout::entity::positionY) =
+                field<float>(entity, layout::entity::previousY);
+            field<bool>(entity, layout::entity::interpolated) = false;
         }
     }
 }
 
 void restoreForegroundPositions() {
     restoreRoomPositions(
-        field<std::uintptr_t>(field<std::uintptr_t>(image, gamePointerRva), roomOffset));
+        field<std::uintptr_t>(field<std::uintptr_t>(image, gamePointerRva), layout::game::room));
 }
 
 void tickBackground(std::uintptr_t game) {
@@ -203,20 +216,21 @@ void __cdecl updateHalfFrames() {
 }
 
 void describeRoom(const char* name, std::uintptr_t room) {
-    auto list = room + 0x1218 + 0x20;
-    auto data = field<std::uintptr_t>(list, 4);
-    auto count = field<unsigned>(list, 12);
+    auto list = room + layout::room::entities + layout::entityList::firstArray;
+    auto data = field<std::uintptr_t>(list, layout::entityList::data);
+    auto count = field<unsigned>(list, layout::entityList::count);
     char line[256];
     snprintf(line, sizeof(line), "%s room=%08lx count=%u", name, static_cast<unsigned long>(room),
              count);
     log(line);
-    if (count > 2000)
+    constexpr unsigned maxAuditedEntities = 2000, maxLoggedEntities = 30;
+    if (count > maxAuditedEntities)
         return;
-    for (unsigned i = 0; i < count && i < 30; ++i) {
-        auto entity = field<std::uintptr_t>(data, i * 4);
+    for (unsigned i = 0; i < count && i < maxLoggedEntities; ++i) {
+        auto entity = field<std::uintptr_t>(data, i * sizeof(std::uintptr_t));
         snprintf(line, sizeof(line), " entity=%08lx type=%u variant=%u",
-                 static_cast<unsigned long>(entity), field<unsigned>(entity, 0x28),
-                 field<unsigned>(entity, 0x2c));
+                 static_cast<unsigned long>(entity), field<unsigned>(entity, layout::entity::type),
+                 field<unsigned>(entity, layout::entity::variant));
         log(line);
     }
 }
@@ -224,17 +238,17 @@ void describeRoom(const char* name, std::uintptr_t room) {
 int createRoom(lua_State* L) {
     const int index = static_cast<int>(lua.checkInteger(L, 1));
     auto game = field<std::uintptr_t>(image, gamePointerRva);
-    if (backgroundRoom || roomScopeActive || index < 0 || index >= 169 ||
-        field<int>(game, 0x18304) == index ||
-        field<std::uintptr_t>(game, playersOffset + 4) -
-                field<std::uintptr_t>(game, playersOffset) !=
+    if (backgroundRoom || roomScopeActive || index < 0 || index >= level_grid::cellCount ||
+        field<int>(game, layout::game::roomIndex) == index ||
+        field<std::uintptr_t>(game, layout::game::players + layout::vector::end) -
+                field<std::uintptr_t>(game, layout::game::players) !=
             8) {
         lua.pushBoolean(L, false);
         return 1;
     }
     auto desc = reinterpret_cast<std::uintptr_t>(engine<NativeGetDesc>(
         j460::entry::engineRoomsDesc)(reinterpret_cast<void*>(game), index, 0));
-    if (!desc || !field<std::uintptr_t>(desc, 0x10)) {
+    if (!desc || !field<std::uintptr_t>(desc, layout::roomDescriptor::data)) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -244,7 +258,7 @@ int createRoom(lua_State* L) {
     foregroundHalfUpdates = backgroundHalfUpdates = 0;
     using Allocate = void*(__cdecl*)(std::size_t);
     backgroundRoom = reinterpret_cast<std::uintptr_t>(
-        engine<Allocate>(j460::entry::engineRoomsAllocate)(0x7898));
+        engine<Allocate>(j460::entry::engineRoomsAllocate)(layout::room::size));
     if (!backgroundRoom) {
         lua.pushBoolean(L, false);
         return 1;
@@ -256,12 +270,12 @@ int createRoom(lua_State* L) {
         RoomScope context(game);
         engine<NativeRoomInit>(j460::entry::probeNativeRoomInit)(
             reinterpret_cast<void*>(backgroundRoom),
-            reinterpret_cast<void*>(field<std::uintptr_t>(desc, 0x10)),
+            reinterpret_cast<void*>(field<std::uintptr_t>(desc, layout::roomDescriptor::data)),
             reinterpret_cast<void*>(desc));
-        auto player = field<std::uintptr_t>(field<std::uintptr_t>(game, playersOffset), 0);
+        auto player = field<std::uintptr_t>(field<std::uintptr_t>(game, layout::game::players), 0);
         movePlayer(player, context.originalRoom, backgroundRoom);
     }
-    describeRoom("foreground_after_init", field<std::uintptr_t>(game, roomOffset));
+    describeRoom("foreground_after_init", field<std::uintptr_t>(game, layout::game::room));
     describeRoom("background_after_init", backgroundRoom);
     log("room_create=RETURNED");
     lua.pushBoolean(L, true);
@@ -274,15 +288,16 @@ int finishRooms(lua_State* L) {
         return 1;
     }
     auto game = field<std::uintptr_t>(image, gamePointerRva);
-    auto foreground = field<std::uintptr_t>(game, roomOffset);
-    auto player = field<std::uintptr_t>(field<std::uintptr_t>(game, playersOffset), 4);
+    auto foreground = field<std::uintptr_t>(game, layout::game::room);
+    auto player = field<std::uintptr_t>(field<std::uintptr_t>(game, layout::game::players), 4);
     movePlayer(player, backgroundRoom, foreground);
     // Native destructor owns native container allocations; native sized delete
     // releases the object from the same allocator used during construction.
     engine<NativeRoomCall>(j460::entry::engineRoomsRoomCall_3e9ba0)(
         reinterpret_cast<void*>(backgroundRoom));
     using Delete = void(__cdecl*)(void*, std::size_t);
-    engine<Delete>(j460::entry::engineRoomsDelete)(reinterpret_cast<void*>(backgroundRoom), 0x7898);
+    engine<Delete>(j460::entry::engineRoomsDelete)(reinterpret_cast<void*>(backgroundRoom),
+                                                   layout::room::size);
     backgroundRoom = 0;
     log("room_cleanup=RETURNED");
     lua.pushBoolean(L, true);
@@ -299,10 +314,10 @@ int traceCallback(lua_State* L) {
     std::string result = "player_callback_stack=" + std::to_string(who);
     for (unsigned i = 0; i < size; ++i) {
         auto pc = reinterpret_cast<std::uintptr_t>(frames[i]);
-        if (pc >= image && pc < image + 0x92c000) {
+        if (pc >= image && pc < image + j460::diagnosticImageSpan) {
             char address[24];
             snprintf(address, sizeof(address), " %08lx",
-                     static_cast<unsigned long>(pc - image + 0x400000));
+                     static_cast<unsigned long>(pc - image + j460::preferredImageBase));
             result += address;
         }
     }
@@ -346,12 +361,15 @@ int audit(lua_State* L) {
     std::uintptr_t game = 0, room = 0, begin = 0, end = 0;
     int stage = 0, index = 0, gameFrame = 0, enteredFrame = 0;
     bool valid = image && read(image + gamePointerRva, game) && game &&
-                 read(game + roomOffset, room) && room && read(game, stage) &&
-                 read(game + 0x18304, index) && read(game + frameOffset, gameFrame) &&
-                 read(room + 0x11f0, enteredFrame) && read(game + playersOffset, begin) &&
-                 read(game + playersOffset + 4, end) && end >= begin && end - begin <= 32;
+                 read(game + layout::game::room, room) && room && read(game, stage) &&
+                 read(game + layout::game::roomIndex, index) &&
+                 read(game + layout::game::frame, gameFrame) &&
+                 read(room + layout::room::enteredFrame, enteredFrame) &&
+                 read(game + layout::game::players, begin) &&
+                 read(game + layout::game::players + layout::vector::end, end) && end >= begin &&
+                 end - begin <= 32;
     int roomFrame = gameFrame - enteredFrame;
-    int players = static_cast<int>((end - begin) / 4);
+    int players = static_cast<int>((end - begin) / sizeof(std::uintptr_t));
     if (valid)
         valid = stage == lua.checkInteger(L, 1) && index == lua.checkInteger(L, 2) &&
                 roomFrame == lua.checkInteger(L, 3) && players == lua.checkInteger(L, 4);

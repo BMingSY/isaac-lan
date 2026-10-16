@@ -52,6 +52,9 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
         net_phases = function()
             return dofile(root .. "/tests/fixtures/net_phases.lua")
         end,
+        net_commands = function()
+            return dofile(root .. "/tests/fixtures/net_commands.lua")
+        end,
         net_challenges = function()
             return {}
         end,

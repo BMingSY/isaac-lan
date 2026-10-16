@@ -1,6 +1,5 @@
 -- The game's own menu sprites and bitmap fonts. No redistributed game assets.
 local assets
-local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan)
 local ui = {
     ip = "",
     port = "29506",
@@ -12,7 +11,12 @@ local ui = {
     errorText = "",
 }
 local Phase = _IsaacLan.net_phases()
-local model = _IsaacLanModules["presentation/menu_model"](Phase)
+local Command = _IsaacLan.net_commands()
+local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
+-- menu_key reports Windows virtual-key codes from the native frontend.
+local Key =
+    { escape = 27, enter = 13, up = 38, down = 40, tab = 9, space = 32, left = 37, right = 39 }
+local model = _IsaacLanModules["presentation/menu_model"](Phase, Command)
 local challenges = _IsaacLan.net_challenges()
 local idle = model.idle
 function _IsaacLanMenuOpen(returning)
@@ -185,7 +189,7 @@ function _IsaacLanMenuRender(
         ui.selection, ui.editing, ui.lastPhase = 1, nil, phase
         _IsaacLan.menu_text_end()
     end
-    if key == 27 then
+    if key == Key.escape then
         if ui.editing then
             ui.editing = nil
             _IsaacLan.menu_text_end()
@@ -281,15 +285,15 @@ function _IsaacLanMenuRender(
         else
             ui.seed = typed:upper():gsub("[^%w]", ""):sub(1, 8)
         end
-        if key == 13 and (ui.editing ~= "port" or model.validPort(ui)) then
+        if key == Key.enter and (ui.editing ~= "port" or model.validPort(ui)) then
             ui.editing = nil
             _IsaacLan.menu_text_end()
         end
         key = 0
     elseif #rows > 0 then
-        if key == 38 then
+        if key == Key.up then
             ui.selection = (ui.selection - 2) % #rows + 1
-        elseif key == 40 or key == 9 then
+        elseif key == Key.down or key == Key.tab then
             ui.selection = ui.selection % #rows + 1
         end
         ui.selection = math.min(ui.selection, #rows)
@@ -305,10 +309,10 @@ function _IsaacLanMenuRender(
                 item.action()
             end
         elseif i == ui.selection and not ui.editing and item.enabled then
-            if key == 13 or key == 32 then
+            if key == Key.enter or key == Key.space then
                 item.action()
-            elseif item.change and (key == 37 or key == 39) then
-                item.change(key == 37 and -1 or 1)
+            elseif item.change and (key == Key.left or key == Key.right) then
+                item.change(key == Key.left and -1 or 1)
             end
         end
         local label = item.label

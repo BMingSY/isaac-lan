@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -78,11 +79,14 @@ def test_lua_components_only_reference_known_modules():
             assert not re.search(r'(?:modules|_IsaacLanModules)\["app/', source), path
 
 
-def test_native_and_fixture_phase_names_match():
+@pytest.mark.parametrize(
+    "name, fixture_name", [("Phase", "net_phases"), ("Command", "net_commands")]
+)
+def test_native_and_fixture_enum_names_match(name, fixture_name):
     source = (ROOT / "src/net/protocol.h").read_text()
-    enum = re.search(r"enum class Phase \{(.*?)\};", source, re.DOTALL)[1]
+    enum = re.search(rf"enum class {name}(?: : std::uint8_t)? \{{(.*?)\}};", source, re.DOTALL)[1]
     expected = dict(re.findall(r"(\w+)\s*=\s*(\d+)", enum))
-    fixture = (ROOT / "tests/fixtures/net_phases.lua").read_text()
+    fixture = (ROOT / f"tests/fixtures/{fixture_name}.lua").read_text()
     assert dict(re.findall(r"(\w+)\s*=\s*(\d+)", fixture)) == expected
 
 

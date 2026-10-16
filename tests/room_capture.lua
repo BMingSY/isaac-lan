@@ -120,31 +120,31 @@ end
 for tick = 1, 3 do
     local value = filtered(1, tick, tick == 3 and 1 or 0, { dimension = 0, index = tick })
     assert(#value[3] == 1 and value[3][1][2] == 10)
-    dofile(root .. "/src/bridge/sync/entities.lua")(enums.EntityType, enums.PickupVariant)(
-        value[3],
-        {
-            ref = function(id)
-                return id == 1 and entity or nil
-            end,
-            key = function(e)
-                return e
-            end,
-            entities = function()
-                return objects
-            end,
-            localEffect = localEffect,
-            discard = function()
-                error("Retained ambience/authority entity was discarded")
-            end,
-            reclaim = function()
-                reclaimed = reclaimed + 1
-            end,
-            spawn = function()
-                error("Existing authority entity was respawned")
-            end,
-            apply = function() end,
-        }
-    )
+    dofile(root .. "/src/bridge/sync/entities.lua")(dofile(root .. "/src/bridge/sync/fields.lua"))(
+        enums.EntityType,
+        enums.PickupVariant
+    )(value[3], {
+        ref = function(id)
+            return id == 1 and entity or nil
+        end,
+        key = function(e)
+            return e
+        end,
+        entities = function()
+            return objects
+        end,
+        localEffect = localEffect,
+        discard = function()
+            error("Retained ambience/authority entity was discarded")
+        end,
+        reclaim = function()
+            reclaimed = reclaimed + 1
+        end,
+        spawn = function()
+            error("Existing authority entity was respawned")
+        end,
+        apply = function() end,
+    })
 end
 assert(captures == 3 and reclaimed == 0, "Ambient particles forced native room cleanup")
 print("PASS room views capture once per room/tick and clear on tick/floor changes")

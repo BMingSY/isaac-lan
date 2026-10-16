@@ -1,4 +1,6 @@
 return function(fields)
+    local INVENTORY_REFRESH_TICKS, GRID_SPAWN_FALLBACK_SEED = 30, 1
+    local Location = fields.location
     local Actor = fields.actor
     local Inventory = fields.inventory
     local Entity = fields.entity
@@ -30,7 +32,11 @@ return function(fields)
         local function locationIdentity(locations)
             local result = {}
             for _, location in ipairs(locations) do
-                result[#result + 1] = { location[1], location[2], location[3] }
+                result[#result + 1] = {
+                    location[Location.slot],
+                    location[Location.dimension],
+                    location[Location.index],
+                }
             end
             return encode(result)
         end
@@ -137,7 +143,8 @@ return function(fields)
                     applyInventory(
                         p,
                         actor[Actor.inventory],
-                        lastInventory[actor[Actor.entity][Entity.id]] ~= encoded or tick % 30 == 0
+                        lastInventory[actor[Actor.entity][Entity.id]] ~= encoded
+                            or tick % INVENTORY_REFRESH_TICKS == 0
                     )
                 end, 1))
                 lastInventory[actor[Actor.entity][Entity.id]] = encoded
@@ -245,7 +252,7 @@ return function(fields)
                                 v[Grid.index],
                                 v[Grid.type],
                                 v[Grid.variant],
-                                v[Grid.seed] ~= 0 and v[Grid.seed] or 1,
+                                v[Grid.seed] ~= 0 and v[Grid.seed] or GRID_SPAWN_FALLBACK_SEED,
                                 v[Grid.data]
                             )
                         end

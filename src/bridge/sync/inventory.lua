@@ -1,15 +1,22 @@
 return function(fields)
-    local Inventory = fields.inventory
+    local Inventory, Item, Active = fields.inventory, fields.item, fields.active
+    local Resource, Heart = fields.resources, fields.hearts
+    local LAST_ACTIVE_SLOT, FIRST_POCKET_ACTIVE_SLOT, LAST_POCKET_SLOT = 3, 2, 1
     -- Inventory reconciliation, using only the supplied player/config interface.
     return function(env)
         local heartTypes = {
-            "BrokenHearts",
-            "MaxHearts",
-            "BoneHearts",
-            "Hearts",
-            "RottenHearts",
-            "EternalHearts",
-            "GoldenHearts",
+            { field = Heart.broken, name = "BrokenHearts" },
+            { field = Heart.max, name = "MaxHearts" },
+            { field = Heart.bone, name = "BoneHearts" },
+            { field = Heart.red, name = "Hearts" },
+            { field = Heart.rotten, name = "RottenHearts" },
+            { field = Heart.eternal, name = "EternalHearts" },
+            { field = Heart.golden, name = "GoldenHearts" },
+        }
+        local sharedResources = {
+            { name = "Coins", field = Resource.coins },
+            { name = "Bombs", field = Resource.bombs },
+            { name = "Keys", field = Resource.keys },
         }
         local function inventory(p)
             local items = {}
@@ -19,32 +26,34 @@ return function(fields)
                 if config:GetCollectible(item) then
                     local count = p:GetCollectibleNum(item, true)
                     if count > 0 then
-                        items[#items + 1] = { item, count }
+                        items[#items + 1] = { item, count } -- Item.id, Item.count
                     end
                 end
             end
             local active = {}
-            for slot = 0, 3 do
-                active[#active + 1] =
-                    { p:GetActiveItem(slot), p:GetActiveCharge(slot) + p:GetBatteryCharge(slot) }
+            for slot = 0, LAST_ACTIVE_SLOT do
+                active[#active + 1] = {
+                    p:GetActiveItem(slot), -- Active.id
+                    p:GetActiveCharge(slot) + p:GetBatteryCharge(slot), -- Active.charge
+                }
             end
             local hearts = {}
-            for _, name in ipairs(heartTypes) do
-                hearts[#hearts + 1] = p["Get" .. name](p)
+            for _, heart in ipairs(heartTypes) do
+                hearts[heart.field] = p["Get" .. heart.name](p)
             end
-            hearts[#hearts + 1] = p:GetSoulHearts()
-            hearts[#hearts + 1] = p:GetBlackHearts()
+            hearts[Heart.soul] = p:GetSoulHearts()
+            hearts[Heart.black] = p:GetBlackHearts()
             return {
                 [Inventory.type] = p:GetPlayerType(),
                 [Inventory.items] = items,
                 [Inventory.active] = active,
                 [Inventory.hearts] = hearts,
                 [Inventory.resources] = {
-                    p:GetNumCoins(),
-                    p:GetNumBombs(),
-                    p:GetNumKeys(),
-                    p:GetSoulCharge(),
-                    p:GetBloodCharge(),
+                    p:GetNumCoins(), -- Resource.coins
+                    p:GetNumBombs(), -- Resource.bombs
+                    p:GetNumKeys(), -- Resource.keys
+                    p:GetSoulCharge(), -- Resource.soulCharge
+                    p:GetBloodCharge(), -- Resource.bloodCharge
                 },
                 [Inventory.trinkets] = { p:GetTrinket(0), p:GetTrinket(1) },
                 [Inventory.cards] = { p:GetCard(0), p:GetCard(1) },
@@ -57,8 +66,11 @@ return function(fields)
         local function applyResources(p, v)
             -- Resources are shared by native co-op, including its hidden ghost
             -- inventory. Conversion alone cannot restore a newer authority value.
-            for _, pair in ipairs({ { "Coins", 1 }, { "Bombs", 2 }, { "Keys", 3 } }) do
-                p["Add" .. pair[1]](p, v[Inventory.resources][pair[2]] - p["GetNum" .. pair[1]](p))
+            for _, pair in ipairs(sharedResources) do
+                p["Add" .. pair.name](
+                    p,
+                    v[Inventory.resources][pair.field] - p["GetNum" .. pair.name](p)
+                )
             end
         end
         local function applyInventory(p, v, refreshItems)
@@ -81,7 +93,7 @@ return function(fields)
             if refreshItems then
                 local desired = {}
                 for _, entry in ipairs(v[Inventory.items]) do
-                    desired[entry[1]] = entry[2]
+                    desired[entry[Item.id]] = entry[Item.count]
                 end
                 local config = env.config()
                 for item = 1, config:GetCollectibles().Size - 1 do
@@ -100,30 +112,30 @@ return function(fields)
             end
             for i, active in ipairs(v[Inventory.active]) do
                 local slot = i - 1
-                if p:GetActiveItem(slot) ~= active[1] then
+                if p:GetActiveItem(slot) ~= active[Active.id] then
                     if p:GetActiveItem(slot) ~= 0 then
                         p:RemoveCollectible(p:GetActiveItem(slot), true, slot)
                     end
-                    if active[1] ~= 0 then
-                        if slot >= 2 then
-                            p:SetPocketActiveItem(active[1], slot, true)
+                    if active[Active.id] ~= 0 then
+                        if slot >= FIRST_POCKET_ACTIVE_SLOT then
+                            p:SetPocketActiveItem(active[Active.id], slot, true)
                         else
-                            p:AddCollectible(active[1], 0, false, slot)
+                            p:AddCollectible(active[Active.id], 0, false, slot)
                         end
                     end
                 end
-                p:SetActiveCharge(active[2], slot)
+                p:SetActiveCharge(active[Active.charge], slot)
             end
-            for slot = 0, 1 do
+            for slot = 0, LAST_POCKET_SLOT do
                 if p:GetTrinket(slot) ~= v[Inventory.trinkets][slot + 1] then
-                    for i = 0, 1 do
+                    for i = 0, LAST_POCKET_SLOT do
                         local t = p:GetTrinket(i)
                         if t ~= 0 then
                             p:TryRemoveTrinket(t)
                         end
                     end
                     -- AddTrinket puts the newest trinket in the first slot.
-                    for i = 2, 1, -1 do
+                    for i = LAST_POCKET_SLOT + 1, 1, -1 do
                         if v[Inventory.trinkets][i] ~= 0 then
                             p:AddTrinket(v[Inventory.trinkets][i], false)
                         end
@@ -132,15 +144,15 @@ return function(fields)
                 end
             end
             applyResources(p, v)
-            p:AddSoulCharge(v[Inventory.resources][4] - p:GetSoulCharge())
-            p:AddBloodCharge(v[Inventory.resources][5] - p:GetBloodCharge())
-            for i, name in ipairs(heartTypes) do
-                local delta = v[Inventory.hearts][i] - p["Get" .. name](p)
+            p:AddSoulCharge(v[Inventory.resources][Resource.soulCharge] - p:GetSoulCharge())
+            p:AddBloodCharge(v[Inventory.resources][Resource.bloodCharge] - p:GetBloodCharge())
+            for _, heart in ipairs(heartTypes) do
+                local delta = v[Inventory.hearts][heart.field] - p["Get" .. heart.name](p)
                 if delta ~= 0 then
-                    p["Add" .. name](p, delta)
+                    p["Add" .. heart.name](p, delta)
                 end
             end
-            local souls, black = v[Inventory.hearts][8], v[Inventory.hearts][9]
+            local souls, black = v[Inventory.hearts][Heart.soul], v[Inventory.hearts][Heart.black]
             if p:GetSoulHearts() ~= souls or p:GetBlackHearts() ~= black then
                 p:AddSoulHearts(-p:GetSoulHearts())
                 for offset = 0, souls - 1, 2 do
@@ -152,7 +164,7 @@ return function(fields)
                     end
                 end
             end
-            for slot = 0, 1 do
+            for slot = 0, LAST_POCKET_SLOT do
                 if p:GetCard(slot) ~= v[Inventory.cards][slot + 1] then
                     p:SetCard(slot, v[Inventory.cards][slot + 1])
                 end

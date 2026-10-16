@@ -69,7 +69,7 @@ J460 `Scope` 按深度选择独立的临时名单，恢复原生标量与名单�
 1. 通用一致性问题放 [`sync/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/sync)；特殊玩法放对应 [`compat/`](https://github.com/BMingSY/isaac-lan/tree/main/src/compat) 分类。匹配应包含必要的角色、楼层、维度或实体形态。
 2. 优先使用现有 Lua API 和原生能力。确需新增能力时，在版本后端说明现有接口的不足、ABI、布局、校验与分配／释放责任。
 3. 由装配层注册组件；原生重建走运行协调器。可靠转场先由 `floor.begin(epoch)` 拒绝重复／旧事件，再清理旧视图，按显式顺序选择兼容处理；失败直接传播。
-4. 字段变更同时更新采集、应用、schema、嵌入清单、版本／指纹与文档。游戏 ID 使用枚举或 [`compat/game_ids.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/game_ids.h)，原生地址与特征使用 [`entrypoints.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entrypoints.h) 和 [`signatures.inc`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/signatures.inc)。
+4. 字段变更同时更新采集、应用、schema、嵌入清单、版本／指纹与文档。游戏 ID 使用枚举或 [`compat/game_ids.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/game_ids.h)，紧凑字段位置使用 [`sync/fields.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua)，原生对象偏移使用版本内的 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)；原生地址与特征使用 [`entrypoints.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entrypoints.h) 和 [`signatures.inc`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/signatures.inc)。
 5. 补充实际触发链路、重复事件、跨房／跨层和清理回归，原生机制与画面列入[最终验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#最终实机验收)。
 
 挑战目录、原版 HUD 复用和地图扩展边界见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。

@@ -4,6 +4,8 @@
 
 namespace isaac::engine::j460 {
 inline constexpr char version[] = "1.9.7.17.J460";
+inline constexpr std::uintptr_t preferredImageBase = 0x400000;
+inline constexpr std::uintptr_t diagnosticImageSpan = 0x92c000;
 inline constexpr std::uint32_t versionRva = 0x77b2f4;
 inline constexpr std::uint32_t minimumImageSize = 0x89caa4;
 struct RequiredSection {

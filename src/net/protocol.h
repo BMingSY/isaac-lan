@@ -1,5 +1,6 @@
 #pragma once
 #include "core/run_rules.h"
+#include "core/input_actions.h"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -14,6 +15,8 @@ using RunRules = isaac::RunRules;
 constexpr std::uint16_t protocolVersion = 30;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
+constexpr std::uint16_t maxInputValue = 65535;
+constexpr unsigned allPlayersMask = (1u << maxPlayers) - 1;
 constexpr std::size_t maxMessageSize = 4096;
 constexpr std::size_t maxSnapshotSize = 8 * 1024 * 1024;
 constexpr std::size_t maxWorldSize = 2 * 1024 * 1024;
@@ -74,7 +77,14 @@ inline constexpr std::array<std::pair<const char*, Phase>, 10> phaseValues{{
     {"leaving", Phase::leaving},
     {"waiting", Phase::waiting},
 }};
-enum class Command : std::uint8_t { none, pause, resume, saveExit, leave };
+enum class Command : std::uint8_t { none = 0, pause = 1, resume = 2, saveExit = 3, leave = 4 };
+inline constexpr std::array<std::pair<const char*, Command>, 5> commandValues{{
+    {"none", Command::none},
+    {"pause", Command::pause},
+    {"resume", Command::resume},
+    {"saveExit", Command::saveExit},
+    {"leave", Command::leave},
+}};
 
 struct InputFrame {
     std::array<std::uint16_t, actionCount> values{};
@@ -82,11 +92,12 @@ struct InputFrame {
     bool operator==(const InputFrame&) const = default;
 };
 // Menu requests belong to the session, not to a room's movement epoch.
-constexpr std::uint16_t menuActionMask = (1u << 12) | (1u << 15);
+constexpr std::uint16_t menuActionMask =
+    (1u << input::action::menuPause) | (1u << input::action::menuBack);
 inline InputFrame menuInput(const InputFrame& input) {
     InputFrame result;
-    result.values[12] = input.values[12];
-    result.values[15] = input.values[15];
+    result.values[input::action::menuPause] = input.values[input::action::menuPause];
+    result.values[input::action::menuBack] = input.values[input::action::menuBack];
     result.triggered = input.triggered & menuActionMask;
     return result;
 }

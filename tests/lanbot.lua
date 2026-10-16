@@ -1848,6 +1848,10 @@ test("embedded console entry dispatches lanbot and returns nil", function()
     native.net_phases = function()
         return dofile(root .. "/tests/fixtures/net_phases.lua")
     end
+
+    native.net_commands = function()
+        return dofile(root .. "/tests/fixtures/net_commands.lua")
+    end
     native.net_challenges = function()
         return {}
     end

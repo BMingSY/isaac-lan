@@ -29,8 +29,15 @@
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/layout.h"
+#include "engine/versions/j460/menu_state.h"
 #include "engine/versions/j460/menu_context.h"
+#include "core/level_grid.h"
+#include "core/input_actions.h"
+#include "compat/game_ids.h"
+
 namespace j460 = isaac::engine::j460;
+namespace layout = j460::layout;
 
 namespace isaac::frontend {
 namespace {
@@ -39,6 +46,7 @@ std::wstring labRoot;
 void (*logger)(const std::string&);
 int(__cdecl* bindNative)(lua_State*);
 lua_State* state = nullptr;
+constexpr int luaTable = 5, luaFunction = 6;
 struct Lua {
     void(__cdecl* createTable)(lua_State*, int, int);
     int(__cdecl* getTop)(lua_State*);
@@ -71,15 +79,17 @@ int __attribute__((fastcall)) statPlayerId(void* hud, void*, void* player) {
     const auto address = reinterpret_cast<std::uintptr_t>(hud);
     // StatHUD owns two scalar stat caches (Jacob and Esau). Clear a stale
     // teammate cache from the pre-network startup before selecting our actor.
-    for (unsigned i = 0; i < 2; ++i) {
-        const auto cached = *reinterpret_cast<std::uintptr_t*>(address + 0x114 + i * 0xcc);
-        if (cached && *reinterpret_cast<int*>(cached + 0x1618) != slot + 1) {
+    for (unsigned i = 0; i < layout::statHud::cacheCount; ++i) {
+        const auto cached = *reinterpret_cast<std::uintptr_t*>(address + layout::statHud::player +
+                                                               i * layout::statHud::cacheStride);
+        if (cached && *reinterpret_cast<int*>(cached + layout::player::controller) != slot + 1) {
             using Reset = void(__attribute__((thiscall))*)(void*);
             reinterpret_cast<Reset>(image + j460::entry::frontendStatHUDReset)(hud);
             break;
         }
     }
-    if (*reinterpret_cast<int*>(reinterpret_cast<std::uintptr_t>(player) + 0x1618) != slot + 1)
+    if (*reinterpret_cast<int*>(reinterpret_cast<std::uintptr_t>(player) +
+                                layout::player::controller) != slot + 1)
         return -1;
     return originalStatPlayerId(hud, player);
 }
@@ -96,7 +106,7 @@ using MenuUpdate = void(__attribute__((thiscall)) *)(void*);
 MenuUpdate originalGameMenuUpdate;
 // Private draft using Repentance+'s chat editor and native text layout lifetime.
 // Only UpdateText is called: the chat send/network dispatcher is never invoked.
-alignas(8) std::array<unsigned char, 0x628> chat{};
+alignas(8) std::array<unsigned char, layout::chat::size> chat{};
 bool chatReady = false, chatEditing = false;
 enum class ChatField { ip, port, seed };
 ChatField chatField = ChatField::ip;
@@ -139,7 +149,7 @@ std::string addresses() {
 struct Location {
     int index = -1, dimension = 0;
 };
-std::array<Location, 4> positions;
+std::array<Location, lan::maxPlayers> positions;
 HWND window;
 WNDPROC originalWndProc;
 using Swap = BOOL(WINAPI*)(HDC);
@@ -169,8 +179,8 @@ bool menuAvailable() {
 }
 void assignChat(const std::string& value) {
     using Assign = void*(__attribute__((thiscall))*)(void*, const char*, std::size_t);
-    reinterpret_cast<Assign>(image + j460::entry::frontendAssign)(chat.data() + 0xc, value.data(),
-                                                                  value.size());
+    reinterpret_cast<Assign>(image + j460::entry::frontendAssign)(chat.data() + layout::chat::text,
+                                                                  value.data(), value.size());
 }
 int beginText(lua_State* L) {
     const char* value = lua.string(L, 1, nullptr);
@@ -180,16 +190,20 @@ int beginText(lua_State* L) {
                                                            : ChatField::ip;
     const auto manager = read<std::uintptr_t>(image, j460::globals::manager);
     if (!chatReady) {
-        read<unsigned>(reinterpret_cast<std::uintptr_t>(chat.data()), 0x20) = 15;
-        reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate_51cec0)(chat.data() +
-                                                                                     0x24);
+        read<unsigned>(reinterpret_cast<std::uintptr_t>(chat.data()),
+                       layout::chat::text + layout::string::capacity) =
+            layout::string::inlineCapacity;
+        reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate_51cec0)(
+            chat.data() + layout::chat::textLayout);
         // Copy the game's font, color, scale and text bounds, not its owned containers.
-        std::memcpy(chat.data() + 0x5d8, reinterpret_cast<void*>(manager + 0x4c608 + 0x5d8), 0x44);
-        read<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(chat.data()), 0x5d8) =
-            manager + 0x4ae74;
+        std::memcpy(chat.data() + layout::chat::style,
+                    reinterpret_cast<void*>(manager + layout::manager::chat + layout::chat::style),
+                    layout::chat::styleSize);
+        read<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(chat.data()), layout::chat::style) =
+            manager + layout::manager::chatFont;
         chatReady = true;
     }
-    std::fill(chat.begin() + 0x68, chat.begin() + 0x5d8, 0);
+    std::fill(chat.begin() + layout::chat::inputState, chat.begin() + layout::chat::style, 0);
     menuText = value ? value : "";
     assignChat(menuText);
     chatEditing = true;
@@ -211,7 +225,7 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
         return;
     }
     const auto manager = read<std::uintptr_t>(image, j460::globals::menuManager);
-    if (!manager || read<int>(manager, 0x40) != 3) {
+    if (!manager || read<int>(manager, layout::menuManager::page) != j460::menuPage::main) {
         originalGameMenuUpdate(menu);
         return;
     }
@@ -226,8 +240,11 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
     }
     if (!visible) {
         const auto gameManager = read<std::uintptr_t>(image, j460::globals::manager);
-        if (!read<bool>(manager, 0xd) && read<unsigned>(gameManager, 0x4d074) == 0 &&
-            read<int>(reinterpret_cast<std::uintptr_t>(menu), 4) == 2 && input::menuTriggered(14)) {
+        if (!read<bool>(manager, layout::menuManager::inputBlocked) &&
+            read<unsigned>(gameManager, layout::manager::menuInputBlock) == 0 &&
+            read<int>(reinterpret_cast<std::uintptr_t>(menu), layout::mainMenu::selection) ==
+                j460::mainMenuSelection::online &&
+            input::menuTriggered(input::action::menuConfirm)) {
             visible = true;
             menuKey = 0;
             menuClick = false;
@@ -238,19 +255,24 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
         originalGameMenuUpdate(menu);
         return;
     }
-    for (const auto& [action, key] :
-         {std::pair{14, 13}, {15, 27}, {20, 37}, {21, 39}, {22, 38}, {23, 40}})
+    for (const auto& [action, key] : {std::pair{input::action::menuConfirm, VK_RETURN},
+                                      {input::action::menuBack, VK_ESCAPE},
+                                      {input::action::menuLeft, VK_LEFT},
+                                      {input::action::menuRight, VK_RIGHT},
+                                      {input::action::menuUp, VK_UP},
+                                      {input::action::menuDown, VK_DOWN}})
         if (input::menuTriggered(action)) {
             menuKey = key;
             break;
         }
-    if (chatEditing && menuKey != 13 && menuKey != 27) {
+    if (chatEditing && menuKey != VK_RETURN && menuKey != VK_ESCAPE) {
         reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate_51ee90)(chat.data());
         const auto base = reinterpret_cast<std::uintptr_t>(chat.data());
-        const char* value = read<unsigned>(base, 0x20) >= 16
-                                ? read<const char*>(base, 0xc)
-                                : reinterpret_cast<const char*>(base + 0xc);
-        menuText.assign(value, read<unsigned>(base, 0x1c));
+        const char* value = read<unsigned>(base, layout::chat::text + layout::string::capacity) >
+                                    layout::string::inlineCapacity
+                                ? read<const char*>(base, layout::chat::text)
+                                : reinterpret_cast<const char*>(base + layout::chat::text);
+        menuText.assign(value, read<unsigned>(base, layout::chat::text + layout::string::size));
         std::string filtered;
         const bool seed = chatField == ChatField::seed;
         const auto limit = seed                           ? 8u
@@ -273,16 +295,17 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
 void __attribute__((fastcall)) mapCache(void* config, void*) {
     rooms::withView([&] {
         const auto game = read<std::uintptr_t>(image, j460::globals::game);
-        const auto offset = reinterpret_cast<std::uintptr_t>(config) - (game + 0x25ecc);
-        if (offset == 0x18 || offset == 0x178)
-            mapAnchors[offset == 0x18 ? 0 : 1] = {read<int>(game, 0x18304),
-                                                  read<int>(game, 0x1830c)};
+        const auto offset =
+            reinterpret_cast<std::uintptr_t>(config) - (game + layout::game::minimap);
+        if (offset == layout::minimap::small || offset == layout::minimap::large)
+            mapAnchors[offset == layout::minimap::small ? 0 : 1] = {
+                read<int>(game, layout::game::roomIndex), read<int>(game, layout::game::dimension)};
         if (runtime::localViewSlot() >= 0) {
             // CacheMap switches targets before flushing. Native menu/scene work
             // already queued for the current target must stay on that target.
             using Flush = void(__attribute__((thiscall))*)(void*, bool);
             reinterpret_cast<Flush>(image + j460::entry::renderingFlush)(
-                reinterpret_cast<void*>(image + 0x8798e0), false);
+                reinterpret_cast<void*>(image + j460::globals::renderer), false);
         }
         rooms::withMapPickups([&] { originalMapCache(config); });
     });
@@ -294,7 +317,7 @@ int __attribute__((fastcall)) historyPlayerId(void* history, void*, void* player
     const int slot = runtime::localViewSlot();
     if (slot < 0)
         return originalHistoryPlayerId(history, player);
-    if (read<int>(reinterpret_cast<std::uintptr_t>(player), 0x1618) != slot + 1)
+    if (read<int>(reinterpret_cast<std::uintptr_t>(player), layout::player::controller) != slot + 1)
         return -1;
     int result = -1;
     rooms::withView([&] { result = originalHistoryPlayerId(history, player); }, true);
@@ -306,25 +329,28 @@ void bindTeamHud(void* hud) {
         return;
     const auto game = read<std::uintptr_t>(image, j460::globals::game),
                address = reinterpret_cast<std::uintptr_t>(hud);
-    std::array<std::uintptr_t, 8> desired{};
+    std::array<std::uintptr_t, lan::maxPlayers * 2> desired{};
     unsigned ordinal = 0;
-    for (auto entry = read<std::uintptr_t>(game, 0x1baa8);
-         entry < read<std::uintptr_t>(game, 0x1baac) && ordinal < 4; entry += 4) {
+    for (auto entry = read<std::uintptr_t>(game, layout::game::players);
+         entry < read<std::uintptr_t>(game, layout::game::players + layout::vector::end) &&
+         ordinal < lan::maxPlayers;
+         entry += sizeof(std::uintptr_t)) {
         const auto p = read<std::uintptr_t>(entry, 0);
-        if (read<int>(p, 0x3bc) != 0 || !read<bool>(p, 0x172))
+        if (read<int>(p, layout::entity::parent) != 0 || !read<bool>(p, layout::entity::active))
             continue;
-        const auto twin = read<std::uintptr_t>(p, 0x1e68);
-        if (twin && twin != p && read<int>(twin, 0x161c) >= 0 &&
-            read<int>(twin, 0x161c) < read<int>(p, 0x161c))
+        const auto twin = read<std::uintptr_t>(p, layout::player::twin);
+        if (twin && twin != p && read<int>(twin, layout::player::index) >= 0 &&
+            read<int>(twin, layout::player::index) < read<int>(p, layout::player::index))
             continue;
         desired[ordinal] = p;
-        if (twin && twin != p && read<bool>(twin, 0x172) && read<int>(twin, 0x13c0) != 40)
-            desired[ordinal + 4] = twin;
+        if (twin && twin != p && read<bool>(twin, layout::entity::active) &&
+            read<int>(twin, layout::player::type) != compat::ids::player::soulB)
+            desired[ordinal + lan::maxPlayers] = twin;
         ++ordinal;
     }
     bool changed = false;
     for (unsigned i = 0; i < desired.size(); ++i) {
-        const auto part = address + i * 0x6dc;
+        const auto part = address + i * layout::playerHud::size;
         if (read<std::uintptr_t>(part, 0) == desired[i])
             continue;
         // Reset owned caches through the native destructor/reset routine. A
@@ -332,13 +358,13 @@ void bindTeamHud(void* hud) {
         reinterpret_cast<MenuUpdate>(image +
                                      j460::entry::playerHUDReset)(reinterpret_cast<void*>(part));
         read<std::uintptr_t>(part, 0) = desired[i];
-        read<unsigned short>(part, 0x6ac) = 0x101;
+        read<unsigned short>(part, layout::playerHud::refreshFlags) = layout::playerHud::refreshAll;
         changed = true;
     }
     if (changed) {
         using Recompute = void(__attribute__((thiscall))*)(void*, bool);
         reinterpret_cast<Recompute>(image + j460::entry::historyHUDRecomputeAll)(
-            reinterpret_cast<void*>(address + 0x5c54), true);
+            reinterpret_cast<void*>(address + layout::hud::history), true);
     }
 }
 void __attribute__((fastcall)) hudUpdate(void* hud, void*) {
@@ -363,29 +389,38 @@ void* __attribute__((fastcall)) textureRender(void* texture, void*, const void* 
                                               const void* destination, bool transparent) {
     if (activeMap && prepared) {
         const auto source = reinterpret_cast<std::uintptr_t>(texture);
-        for (unsigned offset : {0x18u, 0x178u})
-            if (source == read<std::uintptr_t>(activeMap, offset + 0x114)) {
+        for (unsigned offset : {layout::minimap::small, layout::minimap::large})
+            if (source == read<std::uintptr_t>(activeMap, offset + layout::mapConfig::texture)) {
                 const auto config = activeMap + offset;
-                const auto anchor = mapAnchors[offset == 0x18 ? 0 : 1];
+                const auto anchor = mapAnchors[offset == layout::minimap::small ? 0 : 1];
                 const auto* q = static_cast<const float*>(quad);
                 const auto* dest = static_cast<const float*>(destination);
-                const bool pixels = static_cast<const unsigned char*>(quad)[32] != 0;
-                const float width = pixels ? 1.0f : static_cast<float>(read<int>(source, 0x10));
-                const float height = pixels ? 1.0f : static_cast<float>(read<int>(source, 0x14));
+                const bool pixels =
+                    static_cast<const unsigned char*>(quad)[layout::renderQuad::pixels] != 0;
+                const float width =
+                    pixels ? 1.0f : static_cast<float>(read<int>(source, layout::texture::width));
+                const float height =
+                    pixels ? 1.0f : static_cast<float>(read<int>(source, layout::texture::height));
                 const float left = q[0] * width, top = q[1] * height, dx = (q[2] - q[0]) * width,
                             dy = (q[5] - q[1]) * height;
-                if (dx == 0 || dy == 0 || anchor.index < 0 || anchor.index >= 169)
+                if (dx == 0 || dy == 0 || anchor.index < 0 || anchor.index >= level_grid::cellCount)
                     continue;
-                for (int slot = 0; slot < count && slot < 4; ++slot) {
+                for (int slot = 0; slot < count && slot < static_cast<int>(lan::maxPlayers);
+                     ++slot) {
                     const auto p = positions[slot];
-                    if (p.index < 0 || p.index >= 169 || p.dimension != anchor.dimension)
+                    if (p.index < 0 || p.index >= level_grid::cellCount ||
+                        p.dimension != anchor.dimension)
                         continue;
-                    const float x = read<float>(config, 0x140) +
-                                    (p.index % 13 - anchor.index % 13) *
-                                        (read<float>(config, 0x124) + read<float>(config, 0x130));
-                    const float y = read<float>(config, 0x144) +
-                                    (p.index / 13 - anchor.index / 13) *
-                                        (read<float>(config, 0x128) + read<float>(config, 0x130));
+                    const float x =
+                        read<float>(config, layout::mapConfig::anchorX) +
+                        (p.index % level_grid::width - anchor.index % level_grid::width) *
+                            (read<float>(config, layout::mapConfig::cellWidth) +
+                             read<float>(config, layout::mapConfig::cellSpacing));
+                    const float y =
+                        read<float>(config, layout::mapConfig::anchorY) +
+                        (p.index / level_grid::width - anchor.index / level_grid::width) *
+                            (read<float>(config, layout::mapConfig::cellHeight) +
+                             read<float>(config, layout::mapConfig::cellSpacing));
                     const float u = (x - left) / dx, v = (y - top) / dy;
                     if (u < 0 || u > 1 || v < 0 || v > 1)
                         continue;
@@ -401,9 +436,11 @@ void* __attribute__((fastcall)) textureRender(void* texture, void*, const void* 
 void __attribute__((fastcall)) minimapRender(void* map, void*) {
     activeMap = reinterpret_cast<std::uintptr_t>(map);
     if (!originalTextureRender) {
-        const auto texture = read<std::uintptr_t>(activeMap, 0x12c);
+        const auto texture =
+            read<std::uintptr_t>(activeMap, layout::minimap::small + layout::mapConfig::texture);
         if (texture) {
-            const auto target = *reinterpret_cast<void**>(read<std::uintptr_t>(texture, 0) + 0x10);
+            const auto target = *reinterpret_cast<void**>(read<std::uintptr_t>(texture, 0) +
+                                                          layout::texture::renderVtableSlot);
             if (MH_CreateHook(target, reinterpret_cast<void*>(textureRender),
                               reinterpret_cast<void**>(&originalTextureRender)) == MH_OK)
                 MH_EnableHook(target);
@@ -643,7 +680,7 @@ bool invoke(int nargs, int results) {
 }
 void openMenu() {
     const int top = lua.getTop(state);
-    if (lua.getGlobal(state, "_IsaacLanMenuOpen") == 6 && !invoke(0, 0))
+    if (lua.getGlobal(state, "_IsaacLanMenuOpen") == luaFunction && !invoke(0, 0))
         bridgeFailed = true;
     lua.setTop(state, top);
 }
@@ -670,7 +707,7 @@ void poll() {
     if (!state || bridgeFailed)
         return;
     const int top = lua.getTop(state);
-    if (lua.getGlobal(state, "_IsaacLanFrame") != 6) {
+    if (lua.getGlobal(state, "_IsaacLanFrame") != luaFunction) {
         lua.setTop(state, top);
         return;
     }
@@ -691,7 +728,7 @@ void poll() {
         menuKey = 0;
         menuClick = false;
         const int saved = lua.getTop(state);
-        if (lua.getGlobal(state, "_IsaacLanMenuOpen") == 6) {
+        if (lua.getGlobal(state, "_IsaacLanMenuOpen") == luaFunction) {
             lua.pushBoolean(state, true);
             if (!invoke(1, 0))
                 bridgeFailed = true;
@@ -700,10 +737,10 @@ void poll() {
         logger("native_online_entry=RETURN_LOBBY");
     }
     if (prepared) {
-        if (lua.getField(state, -1, "positions") == 5) {
+        if (lua.getField(state, -1, "positions") == luaTable) {
             for (unsigned i = 0; i < positions.size(); ++i) {
                 positions[i] = {};
-                if (lua.getField(state, -1, std::to_string(i).c_str()) == 5)
+                if (lua.getField(state, -1, std::to_string(i).c_str()) == luaTable)
                     positions[i] = {number("index"), number("dimension")};
                 lua.setTop(state, -2);
             }
@@ -735,7 +772,7 @@ LRESULT CALLBACK events(HWND h, UINT message, WPARAM w, LPARAM l) {
 void map() {
     if (prepared && !markers.empty()) {
         const auto display = ImGui::GetIO().DisplaySize;
-        const float logicalWidth = read<float>(image, 0x878dc4);
+        const float logicalWidth = read<float>(image, j460::globals::logicalWidth);
         const float scale = logicalWidth > 0 ? display.x / logicalWidth : 2;
         auto* draw = ImGui::GetForegroundDrawList();
         constexpr ImU32 colors[] = {IM_COL32(240, 75, 75, 255), IM_COL32(86, 166, 255, 255),
@@ -768,7 +805,7 @@ void renderNativeMenu() {
     if (!state || bridgeFailed || !window)
         return;
     const int top = lua.getTop(state);
-    if (lua.getGlobal(state, "_IsaacLanMenuRender") != 6) {
+    if (lua.getGlobal(state, "_IsaacLanMenuRender") != luaFunction) {
         lua.setTop(state, top);
         return;
     }
@@ -777,7 +814,8 @@ void renderNativeMenu() {
     ScreenToClient(window, &mouse);
     RECT rect{};
     GetClientRect(window, &rect);
-    const float width = read<float>(image, 0x878dc4), height = read<float>(image, 0x878edc);
+    const float width = read<float>(image, j460::globals::logicalWidth),
+                height = read<float>(image, j460::globals::logicalHeight);
     lua.pushBoolean(state, menuAvailable());
     lua.pushBoolean(state, visible);
     lua.pushInteger(state, menuKey);
@@ -849,9 +887,9 @@ void __cdecl close(lua_State* L) {
         chatEditing = false;
         if (chatReady) {
             reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate_51db00)(
-                chat.data() + 0x24);
-            reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate)(chat.data() +
-                                                                                  0xc);
+                chat.data() + layout::chat::textLayout);
+            reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate)(
+                chat.data() + layout::chat::text);
             chat.fill(0);
             chatReady = false;
         }
@@ -860,7 +898,8 @@ void __cdecl close(lua_State* L) {
 }
 void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
     originalInit(engine, debug);
-    state = *reinterpret_cast<lua_State**>(reinterpret_cast<std::uintptr_t>(engine) + 0x18);
+    state = *reinterpret_cast<lua_State**>(reinterpret_cast<std::uintptr_t>(engine) +
+                                           layout::luaEngine::state);
     const auto module = GetModuleHandleW(L"Lua5.3.3r.dll");
 #define IMPORT(field, name)                                                                        \
     do {                                                                                           \
@@ -991,9 +1030,12 @@ void prepareView() {
     rooms::withView([&] {
         const auto game = read<std::uintptr_t>(image, j460::globals::game);
         for (unsigned i = 0; i < 2; ++i)
-            if (mapAnchors[i].index != read<int>(game, 0x18304) ||
-                mapAnchors[i].dimension != read<int>(game, 0x1830c))
-                mapCache(reinterpret_cast<void*>(game + 0x25ecc + (i ? 0x178 : 0x18)), nullptr);
+            if (mapAnchors[i].index != read<int>(game, layout::game::roomIndex) ||
+                mapAnchors[i].dimension != read<int>(game, layout::game::dimension))
+                mapCache(
+                    reinterpret_cast<void*>(game + layout::game::minimap +
+                                            (i ? layout::minimap::large : layout::minimap::small)),
+                    nullptr);
     });
 }
 void render() {

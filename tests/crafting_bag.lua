@@ -284,6 +284,10 @@ local function environment()
     for _, name in ipairs({
         "sync/inventory",
         "sync/room",
+        "sync/entity_codec",
+        "sync/entities",
+        "sync/grids",
+        "sync/deals",
         "presentation/actors",
         "presentation/motion",
         "compat/characters/lazarus",

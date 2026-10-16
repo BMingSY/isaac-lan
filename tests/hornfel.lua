@@ -1,8 +1,9 @@
 local root = assert(arg[1])
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local wire = dofile(root .. "/src/bridge/sync/codec.lua")
-local reconcile =
-    dofile(root .. "/src/bridge/sync/entities.lua")(enums.EntityType, enums.PickupVariant)
+local reconcile = dofile(root .. "/src/bridge/sync/entities.lua")(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(enums.EntityType, enums.PickupVariant)
 for _, kind in ipairs({ 906, 920 }) do
     local count = kind == 920 and 3 or 2
     local function pack(a, b, c)

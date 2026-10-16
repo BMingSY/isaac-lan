@@ -1,10 +1,13 @@
 #include "engine/session_backend.h"
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/layout.h"
+#include "engine/versions/j460/menu_state.h"
 #include <MinHook.h>
 #include <cstring>
 
 namespace isaac::engine::session {
 namespace {
+namespace layout = j460::layout;
 std::uintptr_t image;
 Callbacks callbacks;
 template <class T> T& at(std::uintptr_t base, unsigned offset = 0) {
@@ -21,7 +24,8 @@ using Method = void(__attribute__((thiscall)) *)(void*);
 Plain originalSave, originalDelete, originalRerun, originalControls;
 Method originalSerialize, originalExecuteStart, originalUpdate, originalConsoleUpdate, originalMenu;
 struct Seeds {
-    std::array<std::uint32_t, 23> words;
+    static constexpr unsigned wordCount = 23;
+    std::array<std::uint32_t, wordCount> words;
 };
 static_assert(sizeof(Seeds) == 0x5c);
 using Start = void(__attribute__((thiscall)) *)(void*, int, int, Seeds, unsigned);
@@ -42,7 +46,7 @@ void __cdecl controlsHook() {
 }
 void __attribute__((fastcall)) serializeHook(void* object, void*) {
     auto original = [=] { originalSerialize(object); };
-    if (reinterpret_cast<std::uintptr_t>(object) == manager() + 0x14)
+    if (reinterpret_cast<std::uintptr_t>(object) == manager() + layout::manager::progress)
         callbacks.serializeProgress(original);
     else
         original();
@@ -67,8 +71,10 @@ void __attribute__((fastcall)) startHook(void* object, void*, int type, int chal
 void __attribute__((fastcall)) consoleHook(void* object, void*, const void* text, bool silent,
                                            void* player) {
     const auto address = reinterpret_cast<std::uintptr_t>(text);
-    const auto size = at<unsigned>(address, 16), capacity = at<unsigned>(address, 20);
-    const auto data = capacity < 16 ? static_cast<const char*>(text) : at<const char*>(address);
+    const auto size = at<unsigned>(address, layout::string::size),
+               capacity = at<unsigned>(address, layout::string::capacity);
+    const auto data = capacity <= layout::string::inlineCapacity ? static_cast<const char*>(text)
+                                                                 : at<const char*>(address);
     callbacks.consoleCommand({data, size}, [=] { originalConsole(object, text, silent, player); });
 }
 } // namespace
@@ -99,78 +105,82 @@ bool gameReady() {
     return image && game();
 }
 bool continueAvailable() {
-    return at<bool>(manager(), 0x20dcc);
+    return at<bool>(manager(), layout::manager::continueAvailable);
 }
 void continueAvailable(bool value) {
-    at<bool>(manager(), 0x20dcc) = value;
+    at<bool>(manager(), layout::manager::continueAvailable) = value;
 }
 unsigned saveSlot() {
-    return at<unsigned>(manager(), 0x10);
+    return at<unsigned>(manager(), layout::manager::saveSlot);
 }
 void captureSave() {
     using Capture = void(__attribute__((thiscall))*)(void*, void*);
     reinterpret_cast<Capture>(image + j460::entry::runtimeNetCapture)(
-        reinterpret_cast<void*>(game()), reinterpret_cast<void*>(manager() + 0xfa4));
+        reinterpret_cast<void*>(game()),
+        reinterpret_cast<void*>(manager() + layout::manager::saveState));
 }
 void suppressDelete() {
-    at<bool>(manager(), 0x4b284) = false;
+    at<bool>(manager(), layout::manager::deleteSaveRequested) = false;
 }
 void clearSave() {
     reinterpret_cast<Method>(image + j460::entry::runtimeNetClear)(
-        reinterpret_cast<void*>(manager() + 0xfa4));
+        reinterpret_cast<void*>(manager() + layout::manager::saveState));
 }
 lan::Progress readProgress() {
     lan::Progress value;
-    const auto base = manager() + 0x14;
-    std::memcpy(value.achievements.data(), reinterpret_cast<void*>(base + 0x38),
+    const auto base = manager() + layout::manager::progress;
+    std::memcpy(value.achievements.data(),
+                reinterpret_cast<void*>(base + layout::progress::achievements),
                 value.achievements.size());
-    std::memcpy(value.counters.data(), reinterpret_cast<void*>(base + 0x2bc),
+    std::memcpy(value.counters.data(), reinterpret_cast<void*>(base + layout::progress::counters),
                 sizeof(value.counters));
     return value;
 }
 void writeProgress(const lan::Progress& value) {
-    const auto base = manager() + 0x14;
-    std::memcpy(reinterpret_cast<void*>(base + 0x38), value.achievements.data(),
-                value.achievements.size());
-    std::memcpy(reinterpret_cast<void*>(base + 0x2bc), value.counters.data(),
+    const auto base = manager() + layout::manager::progress;
+    std::memcpy(reinterpret_cast<void*>(base + layout::progress::achievements),
+                value.achievements.data(), value.achievements.size());
+    std::memcpy(reinterpret_cast<void*>(base + layout::progress::counters), value.counters.data(),
                 sizeof(value.counters));
 }
 int pause() {
-    return gameReady() ? at<int>(game(), 0x23a74) : 0;
+    return gameReady() ? at<int>(game(), layout::game::pauseMenu) : 0;
 }
 int scene() {
-    return managerReady() ? at<int>(manager(), 8) : -1;
+    return managerReady() ? at<int>(manager(), layout::manager::scene) : -1;
 }
 bool cinematicFinished() {
-    return !at<bool>(manager(), 0x21618) && scene() == 2;
+    return !at<bool>(manager(), layout::manager::cinematicActive) && scene() == j460::scene::game;
 }
 bool exitRequested() {
-    return at<bool>(manager(), 0x4b288) && at<int>(manager(), 0x4b28c) == 2;
+    return at<bool>(manager(), layout::manager::menuRequested) &&
+           at<int>(manager(), layout::manager::requestedMenu) == j460::menuRequest::exitGame;
 }
 void cancelExit() {
-    at<bool>(manager(), 0x4b288) = false;
+    at<bool>(manager(), layout::manager::menuRequested) = false;
 }
 void resetPause() {
     reinterpret_cast<Method>(image + j460::entry::runtimeNetExecuteStart)(
-        reinterpret_cast<void*>(game() + 0x23a74));
+        reinterpret_cast<void*>(game() + layout::game::pauseMenu));
 }
 void pollConsole() {
     if (gameReady() && originalConsoleUpdate)
-        originalConsoleUpdate(reinterpret_cast<void*>(game() + 0x68d78));
+        originalConsoleUpdate(reinterpret_cast<void*>(game() + layout::game::console));
 }
 void controls() {
     originalControls();
 }
 std::uint32_t parseSeed(std::string_view text) {
+    constexpr unsigned seedGroupLength = 4;
     struct SmallString {
-        char text[16]{};
-        unsigned size = 9, capacity = 15;
+        char text[layout::string::inlineBytes]{};
+        unsigned size = seedGroupLength * 2 + 1, capacity = layout::string::inlineCapacity;
     } value;
-    if (text.size() != 8)
+    if (text.size() != seedGroupLength * 2)
         return 0;
-    std::memcpy(value.text, text.data(), 4);
-    value.text[4] = ' ';
-    std::memcpy(value.text + 5, text.data() + 4, 4);
+    std::memcpy(value.text, text.data(), seedGroupLength);
+    value.text[seedGroupLength] = ' ';
+    std::memcpy(value.text + seedGroupLength + 1, text.data() + seedGroupLength, seedGroupLength);
     using Parse = std::uint32_t(__cdecl*)(const SmallString*);
     return reinterpret_cast<Parse>(image + j460::entry::runtimeNetParseSeed)(&value);
 }
@@ -183,20 +193,22 @@ void start(std::uint32_t seed, int character, unsigned difficulty) {
         reinterpret_cast<void*>(manager()), character, 0, seeds, difficulty);
 }
 void requestContinue() {
-    at<bool>(manager(), 0x4b131) = true;
+    at<bool>(manager(), layout::manager::continueRequested) = true;
 }
 lan::Stage stage() {
     lan::Stage value;
-    value.level = at<int>(game());
-    value.type = at<int>(game(), 4);
-    std::memcpy(value.seeds.data(), reinterpret_cast<void*>(game() + 0x1bb84), sizeof(value.seeds));
-    std::memcpy(value.stateFlags.data(), reinterpret_cast<void*>(game() + 0x26548),
+    value.level = at<int>(game(), layout::game::stage);
+    value.type = at<int>(game(), layout::game::stageType);
+    std::memcpy(value.seeds.data(), reinterpret_cast<void*>(game() + layout::game::floorSeeds),
+                sizeof(value.seeds));
+    std::memcpy(value.stateFlags.data(), reinterpret_cast<void*>(game() + layout::game::stateFlags),
                 sizeof(value.stateFlags));
     return value;
 }
 void applyStage(const lan::Stage& value) {
-    std::memcpy(reinterpret_cast<void*>(game() + 0x1bb84), value.seeds.data(), sizeof(value.seeds));
-    std::memcpy(reinterpret_cast<void*>(game() + 0x26548), value.stateFlags.data(),
+    std::memcpy(reinterpret_cast<void*>(game() + layout::game::floorSeeds), value.seeds.data(),
+                sizeof(value.seeds));
+    std::memcpy(reinterpret_cast<void*>(game() + layout::game::stateFlags), value.stateFlags.data(),
                 sizeof(value.stateFlags));
 }
 } // namespace isaac::engine::session
