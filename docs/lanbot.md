@@ -44,8 +44,4 @@ LANBOT 通过正常输入接管本机玩家的移动与射击，便于“人机�
 
 `status` 的 `frames` 为决策次数，`hits` 为有效观察间的血量下降次数，`blocked` 为受阻次数，`max_ms` 为观察与决策峰值。2 ms 是设计目标，尚不是实时保证。`run` 表达推进目标，不保证任意种子、角色或武器都能通关。
 
-## 验证范围
-
-已有普通路线的保护／加速通关，以及固定种子、指定开局配装的双人／四人普通贪婪通关记录。随机裸装、贪婪困难、四人高延迟和通用走位质量尚未完成同等验收；历史九蜘蛛纯走位仍以死亡结束，决策峰值也曾超过预算。
-
-实现与失效约束见[设计](https://github.com/BMingSY/isaac-lan/blob/main/docs/lanbot-design.md)，具体构建、配装、成绩、失败和证据见[LANBOT 历史验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/README.md#lanbot)。
+实现与失效约束见[设计](https://github.com/BMingSY/isaac-lan/blob/main/docs/lanbot-design.md)。

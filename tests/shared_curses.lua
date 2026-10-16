@@ -1,6 +1,8 @@
 local root = assert(arg[1])
 local curses = dofile(root .. "/src/bridge/sync/curses.lua")
-local candle = dofile(root .. "/src/bridge/compat/items/black_candle.lua")
+local candle = dofile(root .. "/src/bridge/compat/items/black_candle.lua")(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)
 local function level(value)
     local result = { value = value, additions = 0, removals = 0 }
     function result:GetCurses()

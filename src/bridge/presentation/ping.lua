@@ -1,8 +1,8 @@
 -- Follow native heart HUD anchors, whose order is local-view dependent.
-return function(native)
+return function(native, Phase)
     local white = KColor(1, 1, 1, 1)
     return function(status, font)
-        if not status.prepared or status.phase ~= 3 then
+        if not status.prepared or status.phase ~= Phase.running then
             return
         end
         local huds = native.presentation_player_huds()

@@ -1,5 +1,6 @@
+#include "engine/lua_api.h"
 #include "engine/input.h"
-#include "presentation/frontend.h"
+#include "engine/frontend.h"
 #include "runtime/session.h"
 #include "core/automation_input.h"
 #include "core/menu_input.h"
@@ -242,16 +243,7 @@ bool hookQuery() {
            MH_EnableHook(target) == MH_OK;
 }
 using LuaFn = int(__cdecl*)(lua_State*);
-struct API {
-    int(__cdecl* getTop)(lua_State*);
-    void(__cdecl* pushClosure)(lua_State*, LuaFn, int);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-    void(__cdecl* pushInteger)(lua_State*, long long);
-    const char*(__cdecl* pushLString)(lua_State*, const char*, std::size_t);
-    void(__cdecl* createTable)(lua_State*, int, int);
-    long long(__cdecl* checkInteger)(lua_State*, int);
-} lua;
+isaac::lua::API lua{};
 int enable(lua_State* L) {
     virtualDevices = true;
     const bool ok = hookQuery();
@@ -600,22 +592,11 @@ bool hostMenuTriggered(int action) {
     return enabled && menuActionTriggered(accepted.inputs[0], action);
 }
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        auto p = GetProcAddress(module, name);                                                     \
-        memcpy(&lua.field, &p, sizeof(p));                                                         \
-        if (!lua.field)                                                                            \
-            return false;                                                                          \
-    } while (false)
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(setField, "lua_setfield");
-    IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(getTop, "lua_gettop");
-    IMPORT(pushInteger, "lua_pushinteger");
-    IMPORT(createTable, "lua_createtable");
-    IMPORT(checkInteger, "luaL_checkinteger");
-    IMPORT(pushLString, "lua_pushlstring");
-#undef IMPORT
+    if (!lua.load(module, {isaac::lua::Symbol::pushClosure, isaac::lua::Symbol::setField,
+                           isaac::lua::Symbol::pushBoolean, isaac::lua::Symbol::getTop,
+                           isaac::lua::Symbol::pushInteger, isaac::lua::Symbol::createTable,
+                           isaac::lua::Symbol::checkInteger, isaac::lua::Symbol::pushLString}))
+        return false;
     auto function = [&](const char* name, LuaFn fn) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, name);

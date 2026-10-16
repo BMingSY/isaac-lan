@@ -62,4 +62,4 @@
 
 离线回归入口为 [`tests/challenges.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/challenges.lua)、`challenge_menu.lua`，以及 C++ `challenge-rules`、网络 `run-rules`／`lobby-access`、Windows x86 原生角色目录 ABI 测试 `native.character-catalog` 和两个 HUD ABI 测试。它们覆盖权威奖励、重复触碰、错误房间、重连／回退后的判定、规则切换竞态、2–4 人栏位与绘制调用约定；不能替代游戏画面与原生流程验收。
 
-集中实机验收入口为 [`tools/run_lan_challenges.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_lan_challenges.py)，`--suite access` 检查资格，`gameplay` 检查完整机制，`hud` 复用普通保存、2／3／4 人显示、重连和普通 Resume，且不得出现结束事件。工具使用 2–4 个带所有权标记的隔离副本，在同组进程中切换挑战与普通会话，并在退出后恢复受保护存档。场景包括同房和分房的袋子与预览、HUD 偏移、羔羊奖杯与全队返回、全员资格与原版路线保持、死亡／复活、重连、R 键、沙漏，以及挑战退出后的普通联机存档恢复。每项实际结果、失败轮次与尚未覆盖的单机 Continue 等边界见[审阅与验收记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges-validation.md)。
+集中实机验收入口为 [`tools/run_lan_challenges.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_lan_challenges.py)，`--suite access` 检查资格，`gameplay` 检查完整机制，`hud` 复用普通保存、2／3／4 人显示、重连和普通 Resume，且不得出现结束事件。工具使用 2–4 个带所有权标记的隔离副本，在同组进程中切换挑战与普通会话，并在退出后恢复受保护存档。场景包括同房和分房的袋子与预览、HUD 偏移、羔羊奖杯与全队返回、全员资格与原版路线保持、死亡／复活、重连、R 键、沙漏，以及挑战退出后的普通联机存档恢复。

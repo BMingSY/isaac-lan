@@ -174,6 +174,7 @@ local function environment()
     for _, name in ipairs({
         "sync/codec",
         "sync/world_schema",
+        "sync/fields",
         "sync/capture",
         "sync/replica",
         "runtime/floor",
@@ -278,6 +279,23 @@ local function environment()
     modules["sync/room"] = function()
         return function()
             return { true, 20, {}, {}, false, "layout", false, { 0, 0 } }
+        end
+    end
+    for _, name in ipairs({
+        "sync/inventory",
+        "sync/room",
+        "sync/entity_codec",
+        "sync/entities",
+        "sync/grids",
+        "sync/deals",
+        "presentation/actors",
+        "presentation/motion",
+        "compat/characters/lazarus",
+        "compat/items/black_candle",
+    }) do
+        local factory = modules[name]
+        modules[name] = function()
+            return factory
         end
     end
     local env = setmetatable({

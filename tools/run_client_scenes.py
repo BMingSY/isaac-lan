@@ -10,7 +10,7 @@ import statistics
 import subprocess
 import sys
 
-from run_endings import hashes, idle
+from lab_profile import ProtectedLabs, idle
 from run_lan_challenges import profile_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -170,13 +170,7 @@ def main():
     if args.include_bag_transitions:
         build_scene_suite(script)
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
-    protected = []
-    for role, lab in zip(("host", "client"), labs):
-        for folder in ("profile", "game/data", "game/isaac-lan"):
-            source, backup = lab / folder, output / "before" / role / folder
-            protected.append((source, backup, hashes(source), source.exists()))
-            if source.exists():
-                shutil.copytree(source, backup)
+    protected = ProtectedLabs(labs, output, roles=("host", "client"))
     command = [
         sys.executable,
         str(ROOT / "tools/run_network_engine.py"),
@@ -239,13 +233,7 @@ def main():
         report["error"] = str(error)
     finally:
         try:
-            idle(labs)
-            for source, backup, baseline, existed in protected:
-                if source.exists():
-                    shutil.rmtree(source)
-                if existed:
-                    shutil.copytree(backup, source)
-                assert hashes(source) == baseline, "Isolated save restoration differs"
+            protected.restore()
             report["restored"] = True
         except Exception as error:
             report["restoration_error"], report["passed"] = str(error), False

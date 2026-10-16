@@ -1,3 +1,4 @@
+#include "engine/lua_api.h"
 #include "engine/item_presentation.h"
 #include "engine/rooms.h"
 #include "runtime/session.h"
@@ -313,22 +314,7 @@ void __attribute__((fastcall)) customText(void* hud, void*, void* target, const 
         ++played[2];
     }
 }
-struct API {
-    int(__cdecl* getTop)(lua_State*);
-    long long(__cdecl* checkInteger)(lua_State*, int);
-    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
-    const char*(__cdecl* pushString)(lua_State*, const char*, std::size_t);
-    void(__cdecl* pushInteger)(lua_State*, long long);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-    void(__cdecl* createTable)(lua_State*, int, int);
-    void(__cdecl* pushClosure)(lua_State*, int(__cdecl*)(lua_State*), int);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-    void*(__cdecl* toUserdata)(lua_State*, int);
-    void*(__cdecl* newUserdata)(lua_State*, std::size_t);
-    std::size_t(__cdecl* rawLength)(lua_State*, int);
-    int(__cdecl* getMetatable)(lua_State*, int);
-    int(__cdecl* setMetatable)(lua_State*, int);
-} lua{};
+isaac::lua::API lua{};
 int overlaySprite(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
     const auto part = lua.getTop(L) >= 3 ? lua.checkInteger(L, 3) : 1;
@@ -367,8 +353,8 @@ int pose(lua_State* L) {
             w.u8(overlay ? at<unsigned>(overlay, 0) : 0);
             w.u8(overlay ? at<unsigned>(overlay, 4) : 0);
             w.u32(overlay ? at<unsigned>(overlay, 0x119c) : 0);
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica() || slot != runtime::localViewSlot())
@@ -405,8 +391,8 @@ int scenePose(lua_State* L) {
             const auto manager = at<Address>(image, j460::globals::manager);
             w.u8(at<bool>(manager, 0x21c10));
             w.u32(at<unsigned>(manager, 0x219c8));
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -506,8 +492,8 @@ int synchronize(lua_State* L) {
                         w.u8(e.hasPlayer);
                 }
             }
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes[1] ? w.bytes.size() - 1 : 0);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes[1] ? w.bytes.size() - 1 : 0);
             return 1;
         }
         std::size_t size = 0;
@@ -663,28 +649,14 @@ bool install(Address base) {
                 reinterpret_cast<void**>(&originalCustomText));
 }
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        const auto p = GetProcAddress(module, name);                                               \
-        std::memcpy(&lua.field, &p, sizeof(p));                                                    \
-        if (!lua.field)                                                                            \
-            return false;                                                                          \
-    } while (false)
-    IMPORT(getTop, "lua_gettop");
-    IMPORT(checkInteger, "luaL_checkinteger");
-    IMPORT(checkString, "luaL_checklstring");
-    IMPORT(pushString, "lua_pushlstring");
-    IMPORT(pushInteger, "lua_pushinteger");
-    IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(createTable, "lua_createtable");
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(setField, "lua_setfield");
-    IMPORT(toUserdata, "lua_touserdata");
-    IMPORT(newUserdata, "lua_newuserdata");
-    IMPORT(rawLength, "lua_rawlen");
-    IMPORT(getMetatable, "lua_getmetatable");
-    IMPORT(setMetatable, "lua_setmetatable");
-#undef IMPORT
+    if (!lua.load(module, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::checkInteger,
+                           isaac::lua::Symbol::checkString, isaac::lua::Symbol::pushLString,
+                           isaac::lua::Symbol::pushInteger, isaac::lua::Symbol::pushBoolean,
+                           isaac::lua::Symbol::createTable, isaac::lua::Symbol::pushClosure,
+                           isaac::lua::Symbol::setField, isaac::lua::Symbol::toUserdata,
+                           isaac::lua::Symbol::newUserdata, isaac::lua::Symbol::rawLength,
+                           isaac::lua::Symbol::getMetatable, isaac::lua::Symbol::setMetatable}))
+        return false;
     lua.pushClosure(L, synchronize, 0);
     lua.setField(L, -2, "item_presentation_events");
     lua.pushClosure(L, status, 0);

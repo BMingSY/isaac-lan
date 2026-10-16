@@ -1,6 +1,6 @@
 # 开发与测试
 
-日常先做离线回归，原生机制与画面集中到最终验收。离线通过不代表实机通过；任务要求不启动游戏时，实机项记为未执行。协作和发布约定见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md)。
+BUG 修复、需求新增和日常重构按影响范围执行离线回归与必要的局部实机验证；完整实机验收统一在发版前执行。离线通过不代表实机通过；任务要求不启动游戏时，实机项记为未执行。协作和发布约定见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md)。
 
 ## 构建与产物
 
@@ -101,7 +101,7 @@ ctest --test-dir build-win32 --output-on-failure
 
 ## 最终实机验收
 
-1. 完成代码、离线检查和构建，列出待验证行为、预期及准备条件。
+1. 完成代码、离线检查和构建，按改动列出受影响行为、预期及准备条件；日常 PR 只跑相关场景，发布必须执行 AGENTS.md 的完整验收清单。
 2. 主客机各启动一次，共用兼容场景；用例之间清理夹具、恢复状态。只有启动／退出检查或进程无法恢复时才重启，并记录原因。
 3. 分别记录通过、失败、阻塞、未执行及证据。冻结 DLL、脚本和哈希，使用新的输出目录；保留双端日志、状态、连续帧和退出结果。
 
@@ -132,7 +132,7 @@ python3 tools/validate_replica.py --cases gameplay normal \
 
 现有工具并未自动合并所有分组，执行前仍需安排进程复用。`--latency-ms 75` 为两个方向各附加 75 ms，不能等同所有公网／frp 情况；`--goodtrip` 可传入原样 Mod 目录。
 
-独立分组须使用独立目录、存档、进程、端口和输出；延迟中继还占用相邻端口，例如两组选 30220／30230。前台键盘步骤顺序执行。跑圈路线曾出现并发加载异常，原因未确定，目前保留串行，见[原验收记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/party-compatibility-validation.md#验证记录)。
+独立分组须使用独立目录、存档、进程、端口和输出；延迟中继还占用相邻端口，例如两组选 30220／30230。前台键盘步骤顺序执行。
 
 画面由隔离进程渲染缓冲区采集，遮挡窗口也可记录。至少对照双端的队友过门、背景／大房间镜头、角色身体／蓄力、房间播报及完整换层动画；采样间隙和黑帧候选不能证明没有短暂闪屏。操作与录像归档见 [`tools/NORMAL_GAMEPLAY.md`](https://github.com/BMingSY/isaac-lan/blob/main/tools/NORMAL_GAMEPLAY.md)，性能和堆检查见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。
 
@@ -146,4 +146,4 @@ python3 tools/validate_replica.py --cases gameplay normal \
 | 会话／楼层 | 准备屏障、事件先于新视图、重连位置、回退清理 |
 | 表现 | 本机归属、原版多人栏位、连续转场画面 |
 
-历次实际执行结果集中在[历史验收索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/README.md)，不在开发流程中累计测试数量或通关轮次。
+实机 runner 共用 [`lab_profile.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_profile.py) 备份和恢复带归属标记的资料。恢复前确认进程已退出且备份哈希完整，恢复后逐文件核对；失败结果和原始证据保留在本轮测试产物中。

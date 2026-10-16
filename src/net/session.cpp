@@ -1,4 +1,7 @@
 #include "net/session.h"
+#include "net/messages.h"
+#include "net/peer.h"
+#include "net/host_resolution.h"
 #include "core/snapshot_delta.h"
 #include "net/compression.h"
 #include "net/host_address.h"
@@ -13,49 +16,7 @@
 
 namespace isaac::lan {
 namespace {
-void writeRules(Writer& w, const RunRules& rules) {
-    w.u16(rules.id);
-    w.u16(rules.version);
-    w.u16(rules.character);
-    w.u8(rules.difficulty);
-    w.u8(rules.transient);
-}
-RunRules readRules(Reader& r) {
-    RunRules value;
-    value.id = r.u16();
-    value.version = r.u16();
-    value.character = r.u16();
-    value.difficulty = r.u8();
-    const auto transient = r.u8();
-    value.transient = transient != 0;
-    if (transient > 1 || !value.valid())
-        throw std::runtime_error("Invalid run rules");
-    return value;
-}
 using Clock = std::chrono::steady_clock;
-struct ConnectionLost : std::runtime_error {
-    using std::runtime_error::runtime_error;
-};
-Writer stageMessage(const Stage& value, std::size_t offset = 0) {
-    Writer w(Message::stage);
-    w.u32(value.epoch);
-    w.u8(value.level);
-    w.u8(value.type);
-    w.u8(value.animation);
-    w.u8(value.same);
-    for (auto seed : value.seeds)
-        w.u32(seed);
-    for (auto flags : value.stateFlags)
-        w.u32(flags);
-    w.u8(value.restart);
-    w.u8(value.cinematic);
-    w.u16(static_cast<std::uint16_t>(value.sourceRoom));
-    w.u32(value.rewind.size());
-    w.u32(offset);
-    w.blob(std::span(value.rewind)
-               .subspan(offset, std::min<std::size_t>(3000, value.rewind.size() - offset)));
-    return w;
-}
 std::string randomIdentity() {
     std::array<unsigned char, 16> bytes{};
     if (BCryptGenRandom(nullptr, bytes.data(), bytes.size(), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0)
@@ -72,201 +33,6 @@ bool validIdentity(const std::string& value) {
                return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
            });
 }
-bool wouldBlock() {
-    return WSAGetLastError() == WSAEWOULDBLOCK;
-}
-struct HostResolution {
-    std::atomic<bool> ready{false};
-    std::vector<sockaddr_in> addresses;
-    int error = 0;
-};
-struct ResolveRequest {
-    std::shared_ptr<HostResolution> result;
-    std::string address;
-    std::uint16_t port;
-};
-DWORD WINAPI resolveHost(void* argument) {
-    const std::unique_ptr<ResolveRequest> request(static_cast<ResolveRequest*>(argument));
-    auto& result = *request->result;
-    WSADATA data{};
-    result.error = WSAStartup(MAKEWORD(2, 2), &data);
-    if (!result.error) {
-        addrinfo hints{};
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_protocol = IPPROTO_TCP;
-        addrinfo* found = nullptr;
-        result.error = getaddrinfo(request->address.c_str(), nullptr, &hints, &found);
-        if (!result.error) {
-            for (auto entry = found; entry && result.addresses.size() < 16;
-                 entry = entry->ai_next) {
-                if (entry->ai_family != AF_INET || entry->ai_addrlen != sizeof(sockaddr_in))
-                    continue;
-                auto address = *reinterpret_cast<const sockaddr_in*>(entry->ai_addr);
-                address.sin_port = htons(request->port);
-                if (std::none_of(result.addresses.begin(), result.addresses.end(),
-                                 [&](const auto& prior) {
-                                     return prior.sin_addr.s_addr == address.sin_addr.s_addr;
-                                 }))
-                    result.addresses.push_back(address);
-            }
-            freeaddrinfo(found);
-        }
-        WSACleanup();
-    }
-    result.ready.store(true, std::memory_order_release);
-    return 0;
-}
-void configure(SOCKET s) {
-    u_long mode = 1;
-    if (ioctlsocket(s, FIONBIO, &mode) != 0)
-        throw std::runtime_error("Cannot set nonblocking socket");
-    BOOL on = TRUE;
-    if (setsockopt(s, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&on), sizeof(on)) !=
-        0)
-        throw std::runtime_error("Cannot disable TCP buffering");
-}
-struct Socket {
-    struct CachedWorld {
-        std::uint32_t tick;
-        std::shared_ptr<const std::vector<std::uint8_t>> bytes;
-        std::size_t wireBytes = 0;
-        bool complete = false;
-    };
-    static constexpr std::size_t maxCachedBytes = 8 * maxWorldSize;
-    static constexpr std::size_t maxInFlightBytes = 65536;
-    static constexpr std::size_t maxInFlightStates = 16;
-    SOCKET handle = INVALID_SOCKET;
-    std::vector<std::uint8_t> received;
-    std::deque<std::vector<std::uint8_t>> outgoing;
-    std::size_t sent = 0, queued = 0;
-    bool accepted = false, finished = false;
-    std::string mods;
-    bool loaded = false;
-    bool waiting = false, ready = false, rejoining = false, hasInput = false;
-    std::shared_ptr<const Start> checkpoint;
-    std::optional<Stage> floorAfterLoad;
-    std::optional<Stage> sendingStage;
-    std::size_t stageSent = 0;
-    std::optional<WorldState> sending, pending;
-    std::size_t worldSent = 0;
-    std::uint32_t inputSequence = 0;
-    std::optional<std::uint32_t> acknowledged;
-    std::optional<CachedWorld> baseline;
-    std::deque<CachedWorld> flight, decoded;
-    bool sendingDelta = false;
-    std::uint32_t sendingBase = 0;
-    int minimumLatency = -1;
-    std::size_t snapshotSent = 0;
-    Clock::time_point packetAt = Clock::now();
-    Clock::time_point connectedAt = Clock::now();
-    Clock::time_point advancedAt = Clock::now(), inputAt = Clock::now();
-    Clock::time_point pingAt = Clock::now() - std::chrono::seconds(1);
-    std::uint32_t pingSequence = 0;
-    bool pingPending = false;
-    explicit Socket(SOCKET value = INVALID_SOCKET) : handle(value) {}
-    void resetWorldCache() {
-        baseline.reset();
-        flight.clear();
-        decoded.clear();
-    }
-    std::size_t cachedBytes() const {
-        std::size_t bytes = baseline ? baseline->bytes->capacity() : 0;
-        for (const auto& value : flight)
-            bytes += value.bytes->capacity();
-        for (const auto& value : decoded)
-            bytes += value.bytes->capacity();
-        return bytes;
-    }
-    std::size_t inFlightBytes() const {
-        std::size_t bytes = 0;
-        for (const auto& value : flight)
-            bytes += value.wireBytes;
-        return bytes;
-    }
-    std::size_t window() const {
-        // Use the uncongested RTT, not queue-inflated ping, to size the window.
-        return std::clamp<std::size_t>((std::max(0, minimumLatency) + 32) / 33 + 2, 4,
-                                       maxInFlightStates);
-    }
-    void beginStage(const Stage& value) {
-        sending.reset();
-        pending.reset();
-        resetWorldCache();
-        sendingStage = value;
-        stageSent = 0;
-    }
-    ~Socket() {
-        if (handle != INVALID_SOCKET)
-            closesocket(handle);
-    }
-    void sendMessage(const Writer& w) {
-        if (w.bytes.empty() || w.bytes.size() > maxMessageSize || queued + w.bytes.size() > 262144)
-            throw std::runtime_error("Network queue limit exceeded");
-        std::vector<std::uint8_t> data;
-        auto size = static_cast<std::uint16_t>(w.bytes.size());
-        data.push_back(size >> 8);
-        data.push_back(size & 255);
-        data.insert(data.end(), w.bytes.begin(), w.bytes.end());
-        queued += data.size();
-        outgoing.push_back(std::move(data));
-    }
-    void flush() {
-        while (!outgoing.empty()) {
-            auto& data = outgoing.front();
-            int n = ::send(handle, reinterpret_cast<const char*>(data.data() + sent),
-                           static_cast<int>(data.size() - sent), 0);
-            if (n == SOCKET_ERROR) {
-                if (wouldBlock())
-                    return;
-                throw ConnectionLost("Peer send failed");
-            }
-            if (n <= 0)
-                throw ConnectionLost("Peer closed connection");
-            sent += n;
-            queued -= n;
-            if (sent == data.size()) {
-                outgoing.pop_front();
-                sent = 0;
-            }
-        }
-    }
-    template <class F> void receive(F callback) {
-        std::array<std::uint8_t, 8192> buffer;
-        // Bound each poll so one peer cannot monopolize the engine thread.
-        for (unsigned chunk = 0; chunk < 8; ++chunk) {
-            int n = recv(handle, reinterpret_cast<char*>(buffer.data()),
-                         static_cast<int>(buffer.size()), 0);
-            if (n == SOCKET_ERROR) {
-                if (wouldBlock())
-                    break;
-                throw ConnectionLost("Peer receive failed");
-            }
-            if (!n) {
-                if (finished)
-                    return;
-                throw ConnectionLost("Peer disconnected");
-            }
-            received.insert(received.end(), buffer.begin(), buffer.begin() + n);
-            std::size_t consumed = 0;
-            while (received.size() - consumed >= 2) {
-                auto size =
-                    static_cast<unsigned>((received[consumed] << 8) | received[consumed + 1]);
-                if (!size || size > maxMessageSize)
-                    throw std::runtime_error("Invalid network message size");
-                if (received.size() - consumed < size + 2)
-                    break;
-                Reader reader{std::span<const std::uint8_t>(received).subspan(consumed + 2, size)};
-                callback(reader);
-                reader.finish();
-                consumed += size + 2;
-            }
-            received.erase(received.begin(), received.begin() + consumed);
-            if (received.size() > maxMessageSize + 2)
-                throw std::runtime_error("Receive buffer limit exceeded");
-        }
-    }
-};
 } // namespace
 struct Session::Impl {
     Observer observer = nullptr;
@@ -288,8 +54,8 @@ struct Session::Impl {
     unsigned localSlot = 0, playerCount = 1, activeMask = 1;
     std::uint16_t boundPort = 0;
     SOCKET listener = INVALID_SOCKET;
-    std::array<std::unique_ptr<Socket>, maxPlayers> peers;
-    std::vector<std::unique_ptr<Socket>> incoming;
+    std::array<std::unique_ptr<Peer>, maxPlayers> peers;
+    std::vector<std::unique_ptr<Peer>> incoming;
     Start startSettings;
     RunRules runRules;
     std::uint32_t rulesRevision = 0;
@@ -355,7 +121,7 @@ struct Session::Impl {
             const auto socketHandle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
             if (socketHandle == INVALID_SOCKET)
                 throw std::runtime_error("Cannot create LAN socket");
-            peers[0] = std::make_unique<Socket>(socketHandle);
+            peers[0] = std::make_unique<Peer>(socketHandle);
             configure(socketHandle);
             if (!connect(socketHandle, reinterpret_cast<const sockaddr*>(&address),
                          sizeof(address)) ||
@@ -1007,8 +773,8 @@ struct Session::Impl {
                 p.decoded.push_back(
                     {assembling->tick,
                      std::make_shared<const std::vector<std::uint8_t>>(assembling->bytes)});
-                while (p.decoded.size() > 2 * Socket::maxInFlightStates ||
-                       p.cachedBytes() > Socket::maxCachedBytes)
+                while (p.decoded.size() > 2 * Peer::maxInFlightStates ||
+                       p.cachedBytes() > Peer::maxCachedBytes)
                     p.decoded.pop_front();
                 receivedState = std::move(assembling);
                 assembling.reset();
@@ -1053,8 +819,8 @@ struct Session::Impl {
                 }
                 if (!p.sending && p.pending) {
                     if (p.flight.size() >= p.window() ||
-                        p.inFlightBytes() >= Socket::maxInFlightBytes ||
-                        p.cachedBytes() + p.pending->bytes.capacity() > Socket::maxCachedBytes)
+                        p.inFlightBytes() >= Peer::maxInFlightBytes ||
+                        p.cachedBytes() + p.pending->bytes.capacity() > Peer::maxCachedBytes)
                         continue;
                     p.sending = std::move(p.pending);
                     p.pending.reset();
@@ -1258,14 +1024,7 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
             impl->hostAddresses.push_back(address);
             impl->connectNextAddress();
         } else {
-            impl->resolving = std::make_shared<HostResolution>();
-            auto request =
-                std::make_unique<ResolveRequest>(ResolveRequest{impl->resolving, ip, port});
-            const auto worker = CreateThread(nullptr, 0, resolveHost, request.get(), 0, nullptr);
-            if (!worker)
-                throw std::runtime_error("Cannot start host name resolution");
-            request.release();
-            CloseHandle(worker);
+            impl->resolving = resolveHost(ip, port);
         }
         return true;
     } catch (const std::exception& e) {
@@ -1467,7 +1226,7 @@ void Session::poll() {
             SOCKET s = accept(impl->listener, nullptr, nullptr);
             if (s != INVALID_SOCKET) {
                 if (impl->state == Phase::running && impl->incoming.size() < 3) {
-                    impl->incoming.push_back(std::make_unique<Socket>(s));
+                    impl->incoming.push_back(std::make_unique<Peer>(s));
                     configure(s);
                 } else {
                     unsigned slot = 1;
@@ -1476,7 +1235,7 @@ void Session::poll() {
                     if (slot == maxPlayers || impl->state != Phase::lobby)
                         closesocket(s);
                     else {
-                        impl->peers[slot] = std::make_unique<Socket>(s);
+                        impl->peers[slot] = std::make_unique<Peer>(s);
                         configure(s);
                     }
                 }

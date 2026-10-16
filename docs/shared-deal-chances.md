@@ -37,5 +37,3 @@
 API 仅允许客机写有限、非负且可表示为 float 的总概率和 0–1 的条件天使概率，先整体校验后更新一对值，不允许房主接收客机概率。缓存只保存数值，不保存原生指针。规则依据以实际 J460 调用链为准；[Room Lua API 文档](https://wofsauge.github.io/IsaacDocs/rep/Room.html#getdevilroomchance) 用于核对公开查询的含义，旧 Repentance 的示例公式不直接移植到 Repentance+。
 
 ## 验证
-
-测试命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)，既有结果、失败轮次和未覆盖项见[专项验收记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/shared-deal-chances-validation.md)。

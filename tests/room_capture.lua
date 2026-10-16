@@ -52,7 +52,9 @@ local native = {
         return string.rep(string.char(active), 448)
     end,
 }
-local capture = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(native, function()
+local capture = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(native, function()
     return { active }
 end, function()
     error("No grids")
@@ -75,7 +77,9 @@ assert(nextTick[8][2] == 0 and one[8][2] == 1, "Room current view is mutable/sta
 assert(nextTick ~= one and calls == 4)
 assert(capture(2, 11, 0, { dimension = 0, index = 84 }) == nextTick and calls == 4)
 assert(capture(1, 11, 1, { dimension = 0, index = 84 }) ~= nextTick and calls == 5)
-local fresh = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(native, function()
+local fresh = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(native, function()
     return { active }
 end, function()
     error("No grids")
@@ -96,7 +100,9 @@ end
 Isaac.GetRoomEntities = function()
     return objects
 end
-local filtered = dofile(root .. "/src/bridge/sync/room.lua")(native, function(e)
+local filtered = dofile(root .. "/src/bridge/sync/room.lua")(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(native, function(e)
     assert(e == entity, "Local ambience was serialized")
     captures = captures + 1
     return { 1, e.Type, 0, 0 }
@@ -114,31 +120,31 @@ end
 for tick = 1, 3 do
     local value = filtered(1, tick, tick == 3 and 1 or 0, { dimension = 0, index = tick })
     assert(#value[3] == 1 and value[3][1][2] == 10)
-    dofile(root .. "/src/bridge/sync/entities.lua")(enums.EntityType, enums.PickupVariant)(
-        value[3],
-        {
-            ref = function(id)
-                return id == 1 and entity or nil
-            end,
-            key = function(e)
-                return e
-            end,
-            entities = function()
-                return objects
-            end,
-            localEffect = localEffect,
-            discard = function()
-                error("Retained ambience/authority entity was discarded")
-            end,
-            reclaim = function()
-                reclaimed = reclaimed + 1
-            end,
-            spawn = function()
-                error("Existing authority entity was respawned")
-            end,
-            apply = function() end,
-        }
-    )
+    dofile(root .. "/src/bridge/sync/entities.lua")(dofile(root .. "/src/bridge/sync/fields.lua"))(
+        enums.EntityType,
+        enums.PickupVariant
+    )(value[3], {
+        ref = function(id)
+            return id == 1 and entity or nil
+        end,
+        key = function(e)
+            return e
+        end,
+        entities = function()
+            return objects
+        end,
+        localEffect = localEffect,
+        discard = function()
+            error("Retained ambience/authority entity was discarded")
+        end,
+        reclaim = function()
+            reclaimed = reclaimed + 1
+        end,
+        spawn = function()
+            error("Existing authority entity was respawned")
+        end,
+        apply = function() end,
+    })
 end
 assert(captures == 3 and reclaimed == 0, "Ambient particles forced native room cleanup")
 print("PASS room views capture once per room/tick and clear on tick/floor changes")

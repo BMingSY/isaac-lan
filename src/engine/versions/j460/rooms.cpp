@@ -1,3 +1,4 @@
+#include "engine/lua_api.h"
 #include "engine/rooms.h"
 #include "engine/pause_menu.h"
 #include "engine/visuals.h"
@@ -1312,28 +1313,7 @@ void destroy(Room& room) {
     }
 }
 using LuaFn = int(__cdecl*)(lua_State*);
-struct API {
-    void(__cdecl* pushClosure)(lua_State*, LuaFn, int);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-    void(__cdecl* pushInteger)(lua_State*, long long);
-    void(__cdecl* pushNumber)(lua_State*, double);
-    double(__cdecl* checkNumber)(lua_State*, int);
-    void(__cdecl* createTable)(lua_State*, int, int);
-    long long(__cdecl* checkInteger)(lua_State*, int);
-    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
-    const char*(__cdecl* pushString)(lua_State*, const char*, std::size_t);
-    int(__cdecl* getTop)(lua_State*);
-    void*(__cdecl* toUserdata)(lua_State*, int);
-    void*(__cdecl* newUserdata)(lua_State*, std::size_t);
-    std::size_t(__cdecl* rawLength)(lua_State*, int);
-    int(__cdecl* getMetatable)(lua_State*, int);
-    int(__cdecl* setMetatable)(lua_State*, int);
-    void(__cdecl* rawSetI)(lua_State*, int, long long);
-    void(__cdecl* pushValue)(lua_State*, int);
-    int(__cdecl* pcall)(lua_State*, int, int, int, std::intptr_t, void*);
-    int(__cdecl* error)(lua_State*);
-} lua{};
+isaac::lua::API lua{};
 int dealChances(lua_State* L) {
     if (!lua.getTop(L)) {
         lua.pushNumber(L, engine<DealTotal>(j460::entry::roomGetDevilRoomChance)(
@@ -1419,8 +1399,8 @@ int pillState(lua_State* L) {
                 w.u32(at<int>(pool, 0x7a4 + i * 4));
                 w.u8(at<bool>(pool, 0x7e0 + i));
             }
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
         }
         return 1;
     } catch (const std::exception& e) {
@@ -1776,8 +1756,8 @@ int mapPickups(lua_State* L) {
                         for (auto offset : mapFields)
                             w.u32(at<unsigned>(entity, offset));
             }
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -1862,8 +1842,8 @@ int roomLayout(lua_State* L) {
                 w.u32(at<unsigned>(desc, offset));
             for (unsigned offset = 0x58; offset <= 0x64; offset += 4)
                 w.u32(at<unsigned>(desc, offset));
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -2021,8 +2001,8 @@ int actorPockets(lua_State* L) {
                 w.u32(at<unsigned>(player, 0x17a0 + i * 8));
                 w.u32(at<unsigned>(player, 0x17a4 + i * 8));
             }
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -2067,8 +2047,8 @@ int actorCraftingBag(lua_State* L) {
             for (unsigned i = 0; i < 8; ++i)
                 w.u8(at<std::uint8_t>(player, 0x1f44 + i));
             w.u32(at<unsigned>(player, 0x1f4c));
-            lua.pushString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                           w.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
+                            w.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica())
@@ -2280,8 +2260,8 @@ int laserPath(lua_State* L) {
                 for (auto p = points.begin; p < points.end; p += 4)
                     bytes.u32(at<std::uint32_t>(p, 0));
             }
-            lua.pushString(L, reinterpret_cast<const char*>(bytes.bytes.data() + 1),
-                           bytes.bytes.size() - 1);
+            lua.pushLString(L, reinterpret_cast<const char*>(bytes.bytes.data() + 1),
+                            bytes.bytes.size() - 1);
             return 1;
         }
         if (!runtime::replica()) {
@@ -3423,34 +3403,17 @@ bool install(Address base, void (*log)(const std::string&)) {
                 reinterpret_cast<void**>(&originalPostNewRoom));
 }
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        auto p = GetProcAddress(module, name);                                                     \
-        memcpy(&lua.field, &p, sizeof(p));                                                         \
-        if (!lua.field)                                                                            \
-            return false;                                                                          \
-    } while (false)
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(setField, "lua_setfield");
-    IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(pushInteger, "lua_pushinteger");
-    IMPORT(pushNumber, "lua_pushnumber");
-    IMPORT(checkNumber, "luaL_checknumber");
-    IMPORT(createTable, "lua_createtable");
-    IMPORT(checkInteger, "luaL_checkinteger");
-    IMPORT(checkString, "luaL_checklstring");
-    IMPORT(pushString, "lua_pushlstring");
-    IMPORT(getTop, "lua_gettop");
-    IMPORT(toUserdata, "lua_touserdata");
-    IMPORT(newUserdata, "lua_newuserdata");
-    IMPORT(rawLength, "lua_rawlen");
-    IMPORT(getMetatable, "lua_getmetatable");
-    IMPORT(setMetatable, "lua_setmetatable");
-    IMPORT(rawSetI, "lua_rawseti");
-    IMPORT(pushValue, "lua_pushvalue");
-    IMPORT(pcall, "lua_pcallk");
-    IMPORT(error, "lua_error");
-#undef IMPORT
+    if (!lua.load(module, {isaac::lua::Symbol::pushClosure,  isaac::lua::Symbol::setField,
+                           isaac::lua::Symbol::pushBoolean,  isaac::lua::Symbol::pushInteger,
+                           isaac::lua::Symbol::pushNumber,   isaac::lua::Symbol::checkNumber,
+                           isaac::lua::Symbol::createTable,  isaac::lua::Symbol::checkInteger,
+                           isaac::lua::Symbol::checkString,  isaac::lua::Symbol::pushLString,
+                           isaac::lua::Symbol::getTop,       isaac::lua::Symbol::toUserdata,
+                           isaac::lua::Symbol::newUserdata,  isaac::lua::Symbol::rawLength,
+                           isaac::lua::Symbol::getMetatable, isaac::lua::Symbol::setMetatable,
+                           isaac::lua::Symbol::rawSetI,      isaac::lua::Symbol::pushValue,
+                           isaac::lua::Symbol::pcall,        isaac::lua::Symbol::error}))
+        return false;
     auto function = [&](const char* name, LuaFn fn) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, name);

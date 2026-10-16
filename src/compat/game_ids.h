@@ -29,6 +29,7 @@ namespace effect {
 inline constexpr unsigned waterSplash = 99;
 } // namespace effect
 namespace player {
+inline constexpr int soulB = 40;
 inline constexpr int cainB = 23;
 inline constexpr int keeper = 14;
 inline constexpr int keeperB = 33;

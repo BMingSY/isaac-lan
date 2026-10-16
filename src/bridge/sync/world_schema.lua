@@ -22,11 +22,12 @@ local names = {
     "pills",
 }
 local version = 19
+local VERSION_FIELD, TICK_FIELD = 1, 2
 return {
     VERSION = version,
     pack = function(view)
-        local values = { version }
-        for index = 2, #names do
+        local values = { [VERSION_FIELD] = version }
+        for index = TICK_FIELD, #names do
             local value = view[names[index]]
             assert(value ~= nil, "Missing world field: " .. names[index])
             values[index] = value
@@ -37,8 +38,8 @@ return {
         assert(
             type(values) == "table"
                 and #values == #names
-                and values[1] == version
-                and values[2] == tick,
+                and values[VERSION_FIELD] == version
+                and values[TICK_FIELD] == tick,
             "Invalid state schema"
         )
         local view = {}

@@ -1,0 +1,139 @@
+#pragma once
+#include <cstdint>
+
+// J460 object offsets and native container sizes. No ownership or gameplay policy.
+namespace isaac::engine::j460::layout {
+namespace string {
+inline constexpr unsigned size = 0x10;
+inline constexpr unsigned capacity = 0x14;
+inline constexpr unsigned inlineBytes = 0x10;
+inline constexpr unsigned inlineCapacity = 0xf;
+} // namespace string
+namespace vector {
+inline constexpr unsigned begin = 0x0;
+inline constexpr unsigned end = 0x4;
+inline constexpr unsigned capacity = 0x8;
+inline constexpr unsigned words = 0x3;
+} // namespace vector
+namespace manager {
+inline constexpr unsigned scene = 0x8;
+inline constexpr unsigned saveSlot = 0x10;
+inline constexpr unsigned progress = 0x14;
+inline constexpr unsigned saveState = 0xfa4;
+inline constexpr unsigned continueAvailable = 0x20dcc;
+inline constexpr unsigned cinematicActive = 0x21618;
+inline constexpr unsigned continueRequested = 0x4b131;
+inline constexpr unsigned deleteSaveRequested = 0x4b284;
+inline constexpr unsigned menuRequested = 0x4b288;
+inline constexpr unsigned requestedMenu = 0x4b28c;
+inline constexpr unsigned chat = 0x4c608;
+inline constexpr unsigned chatFont = 0x4ae74;
+inline constexpr unsigned menuInputBlock = 0x4d074;
+} // namespace manager
+namespace progress {
+inline constexpr unsigned achievements = 0x38;
+inline constexpr unsigned counters = 0x2bc;
+} // namespace progress
+namespace game {
+inline constexpr unsigned stage = 0x0;
+inline constexpr unsigned stageType = 0x4;
+inline constexpr unsigned room = 0x18300;
+inline constexpr unsigned roomIndex = 0x18304;
+inline constexpr unsigned dimension = 0x1830c;
+inline constexpr unsigned players = 0x1baa8;
+inline constexpr unsigned floorSeeds = 0x1bb84;
+inline constexpr unsigned pauseMenu = 0x23a74;
+inline constexpr unsigned minimap = 0x25ecc;
+inline constexpr unsigned frame = 0x264f8;
+inline constexpr unsigned stateFlags = 0x26548;
+inline constexpr unsigned console = 0x68d78;
+} // namespace game
+namespace room {
+inline constexpr unsigned size = 0x7898;
+inline constexpr unsigned enteredFrame = 0x11f0;
+inline constexpr unsigned nextEntityIndex = 0x1214;
+inline constexpr unsigned entities = 0x1218;
+} // namespace room
+namespace roomDescriptor {
+inline constexpr unsigned data = 0x10;
+} // namespace roomDescriptor
+namespace entityList {
+inline constexpr unsigned firstArray = 0x20;
+inline constexpr unsigned lastArray = 0x90;
+inline constexpr unsigned arrayStride = 0x10;
+inline constexpr unsigned renderArray = 0x40;
+inline constexpr unsigned data = 0x4;
+inline constexpr unsigned count = 0xc;
+} // namespace entityList
+namespace entity {
+inline constexpr unsigned index = 0x20;
+inline constexpr unsigned type = 0x28;
+inline constexpr unsigned variant = 0x2c;
+inline constexpr unsigned removed = 0x170;
+inline constexpr unsigned active = 0x172;
+inline constexpr unsigned interpolated = 0x175;
+inline constexpr unsigned positionX = 0x33c;
+inline constexpr unsigned positionY = 0x340;
+inline constexpr unsigned previousX = 0x344;
+inline constexpr unsigned previousY = 0x348;
+inline constexpr unsigned parent = 0x3bc;
+} // namespace entity
+namespace player {
+inline constexpr unsigned type = 0x13c0;
+inline constexpr unsigned controller = 0x1618;
+inline constexpr unsigned index = 0x161c;
+inline constexpr unsigned twin = 0x1e68;
+} // namespace player
+namespace menuManager {
+inline constexpr unsigned inputBlocked = 0xd;
+inline constexpr unsigned page = 0x40;
+} // namespace menuManager
+namespace mainMenu {
+inline constexpr unsigned selection = 0x4;
+} // namespace mainMenu
+namespace chat {
+inline constexpr unsigned size = 0x628;
+inline constexpr unsigned text = 0xc;
+inline constexpr unsigned textLayout = 0x24;
+inline constexpr unsigned inputState = 0x68;
+inline constexpr unsigned style = 0x5d8;
+inline constexpr unsigned styleSize = 0x44;
+} // namespace chat
+namespace statHud {
+inline constexpr unsigned player = 0x114;
+inline constexpr unsigned cacheStride = 0xcc;
+inline constexpr unsigned cacheCount = 0x2;
+} // namespace statHud
+namespace playerHud {
+inline constexpr unsigned size = 0x6dc;
+inline constexpr unsigned player = 0x0;
+inline constexpr unsigned refreshFlags = 0x6ac;
+inline constexpr unsigned refreshAll = 0x101;
+} // namespace playerHud
+namespace hud {
+inline constexpr unsigned history = 0x5c54;
+} // namespace hud
+namespace minimap {
+inline constexpr unsigned small = 0x18;
+inline constexpr unsigned large = 0x178;
+} // namespace minimap
+namespace mapConfig {
+inline constexpr unsigned texture = 0x114;
+inline constexpr unsigned cellWidth = 0x124;
+inline constexpr unsigned cellHeight = 0x128;
+inline constexpr unsigned cellSpacing = 0x130;
+inline constexpr unsigned anchorX = 0x140;
+inline constexpr unsigned anchorY = 0x144;
+} // namespace mapConfig
+namespace texture {
+inline constexpr unsigned width = 0x10;
+inline constexpr unsigned height = 0x14;
+inline constexpr unsigned renderVtableSlot = 0x10;
+} // namespace texture
+namespace renderQuad {
+inline constexpr unsigned pixels = 0x20;
+} // namespace renderQuad
+namespace luaEngine {
+inline constexpr unsigned state = 0x18;
+} // namespace luaEngine
+} // namespace isaac::engine::j460::layout

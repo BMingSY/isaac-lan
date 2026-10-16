@@ -11,6 +11,7 @@ set_property(
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(CTest)
+include(cmake/Tests.cmake)
 option(ISAAC_LAN_BUILD_ENGINE "Build the Windows x86 engine adapter and tools" ON)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/miniz_export.h"
      "#pragma once\n#define MINIZ_EXPORT\n")
@@ -24,6 +25,14 @@ add_library(isaac_lan_deflate STATIC src/core/deflate.cpp)
 target_include_directories(isaac_lan_deflate PUBLIC src)
 target_link_libraries(isaac_lan_deflate PUBLIC isaac_lan_miniz)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_session_store_test tests/session_store_test.cpp
+                                                src/runtime/session_store.cpp)
+    target_include_directories(isaac_lan_session_store_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_session_store_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME runtime.session-store COMMAND isaac_lan_session_store_test)
+    set_tests_properties(runtime.session-store PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_input_schedule_test tests/input_schedule_test.cpp)
     target_include_directories(isaac_lan_input_schedule_test PRIVATE src)
     if(MINGW)
@@ -84,167 +93,47 @@ if(BUILD_TESTING)
         NAMES lua5.3 lua
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
-        foreach(
-            test_case
-            session_lifecycle
-            capture_generation
-            replica_pipeline
-            challenges
-            challenge_menu
-            ping_hud
-            hornfel
-            entity_links)
-            add_test(
-                NAME bridge.${test_case}
-                COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/${test_case}.lua"
-                        "${CMAKE_CURRENT_SOURCE_DIR}")
-            set_tests_properties(bridge.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;lua")
-        endforeach()
-        add_test(NAME bridge.codec-fragments
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/codec_fragments.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(bridge.codec-fragments PROPERTIES TIMEOUT 30 LABELS "offline;lua")
-        add_test(NAME bridge.room-capture
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/room_capture.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(bridge.room-capture PROPERTIES TIMEOUT 30 LABELS "offline;lua")
-        add_test(
-            NAME bridge.motion-intervals
-            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/motion_intervals.lua"
-                    "${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(bridge.motion-intervals PROPERTIES TIMEOUT 30 LABELS "offline;lua")
-        add_test(NAME bridge.entity-codec
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/entity_codec.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.layers
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/layer_contracts.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.api
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_api.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.goodtrip
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/goodtrip_rules.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.prediction
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/prediction.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.lanbot
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(
-            NAME bridge.lanbot-campaign
-            COMMAND
-                "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot_campaign_fixture.lua"
-                "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(
-            NAME bridge.lanbot-spiders
-            COMMAND
-                "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot_spiders_fixture.lua"
-                "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(
-            NAME bridge.lanbot-greed
-            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/lanbot_greed_fixture.lua"
-                    "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(
-            NAME bridge.room-entry
-            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/room_entry_fixture.lua"
-                    "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.grids
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/grids.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.resume
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_resume.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.mod-loading
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/mod_loading.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.presentation
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/presentation.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.floor
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/floor.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.npc-state
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/npc_state.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.actor-forms
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/actor_forms.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.poop
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/poop.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(
-            NAME bridge.special-coordinator
-            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/special_coordinator.lua"
-                    "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.special-menu
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/special_menu.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(
-            NAME bridge.shared-resources
-            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_resources.lua"
-                    "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.shared-curses
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_curses.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.shared-deals
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_deals.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.pills
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/pills.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(
-            NAME bridge.pocket-inventory
-            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/pocket_inventory.lua"
-                    "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.crafting-bag
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/crafting_bag.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.keeper
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/keeper.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.greed
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/greed.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(NAME bridge.special-visuals
-                 COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/special_visuals.lua"
-                         "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_test(
-            NAME bridge.resource-lifecycle
-            COMMAND "${ISAAC_LAN_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/resource_lifecycle.lua"
-                    "${CMAKE_CURRENT_SOURCE_DIR}")
-        set_tests_properties(
-            bridge.entity-codec
-            bridge.layers
-            bridge.api
-            bridge.goodtrip
-            bridge.prediction
-            bridge.lanbot
-            bridge.lanbot-campaign
-            bridge.lanbot-spiders
-            bridge.lanbot-greed
-            bridge.room-entry
-            bridge.grids
-            bridge.resume
-            bridge.mod-loading
-            bridge.presentation
-            bridge.floor
-            bridge.npc-state
-            bridge.actor-forms
-            bridge.poop
-            bridge.special-coordinator
-            bridge.special-menu
-            bridge.shared-resources
-            bridge.shared-curses
-            bridge.shared-deals
-            bridge.pills
-            bridge.pocket-inventory
-            bridge.crafting-bag
-            bridge.keeper
-            bridge.greed
-            bridge.special-visuals
-            bridge.resource-lifecycle
-            PROPERTIES TIMEOUT 30 LABELS "offline;lua")
+        isaac_add_lua_test(bridge.session_lifecycle session_lifecycle.lua)
+        isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
+        isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
+        isaac_add_lua_test(bridge.challenges challenges.lua)
+        isaac_add_lua_test(bridge.challenge_menu challenge_menu.lua)
+        isaac_add_lua_test(bridge.ping_hud ping_hud.lua)
+        isaac_add_lua_test(bridge.hornfel hornfel.lua)
+        isaac_add_lua_test(bridge.entity_links entity_links.lua)
+        isaac_add_lua_test(bridge.codec-fragments codec_fragments.lua)
+        isaac_add_lua_test(bridge.room-capture room_capture.lua)
+        isaac_add_lua_test(bridge.motion-intervals motion_intervals.lua)
+        isaac_add_lua_test(bridge.entity-codec entity_codec.lua)
+        isaac_add_lua_test(bridge.layers layer_contracts.lua)
+        isaac_add_lua_test(bridge.api bridge_api.lua)
+        isaac_add_lua_test(bridge.goodtrip goodtrip_rules.lua)
+        isaac_add_lua_test(bridge.prediction prediction.lua)
+        isaac_add_lua_test(bridge.lanbot lanbot.lua)
+        isaac_add_lua_test(bridge.lanbot-campaign lanbot_campaign_fixture.lua)
+        isaac_add_lua_test(bridge.lanbot-spiders lanbot_spiders_fixture.lua)
+        isaac_add_lua_test(bridge.lanbot-greed lanbot_greed_fixture.lua)
+        isaac_add_lua_test(bridge.room-entry room_entry_fixture.lua)
+        isaac_add_lua_test(bridge.grids grids.lua)
+        isaac_add_lua_test(bridge.resume bridge_resume.lua)
+        isaac_add_lua_test(bridge.mod-loading mod_loading.lua)
+        isaac_add_lua_test(bridge.presentation presentation.lua)
+        isaac_add_lua_test(bridge.floor floor.lua)
+        isaac_add_lua_test(bridge.npc-state npc_state.lua)
+        isaac_add_lua_test(bridge.actor-forms actor_forms.lua)
+        isaac_add_lua_test(bridge.poop poop.lua)
+        isaac_add_lua_test(bridge.special-coordinator special_coordinator.lua)
+        isaac_add_lua_test(bridge.special-menu special_menu.lua)
+        isaac_add_lua_test(bridge.shared-resources shared_resources.lua)
+        isaac_add_lua_test(bridge.shared-curses shared_curses.lua)
+        isaac_add_lua_test(bridge.shared-deals shared_deals.lua)
+        isaac_add_lua_test(bridge.pills pills.lua)
+        isaac_add_lua_test(bridge.pocket-inventory pocket_inventory.lua)
+        isaac_add_lua_test(bridge.crafting-bag crafting_bag.lua)
+        isaac_add_lua_test(bridge.keeper keeper.lua)
+        isaac_add_lua_test(bridge.greed greed.lua)
+        isaac_add_lua_test(bridge.special-visuals special_visuals.lua)
+        isaac_add_lua_test(bridge.resource-lifecycle resource_lifecycle.lua)
     endif()
     add_executable(isaac_lan_core_test tests/core_test.cpp)
     target_include_directories(isaac_lan_core_test PRIVATE src)
@@ -336,11 +225,15 @@ configure_file(src/bridge/embedded.h.in generated/embedded_bridge.h @ONLY)
 add_library(
     isaac_lan_probe SHARED
     src/app/bootstrap.cpp
+    src/engine/versions/j460/bootstrap.cpp
+    src/engine/versions/j460/session_backend.cpp
+    src/diagnostics/native_exceptions.cpp
     src/app/configuration.cpp
     src/diagnostics/runtime_log.cpp
     src/diagnostics/performance.cpp
     src/diagnostics/crash_signal.cpp
     src/runtime/session.cpp
+    src/runtime/session_store.cpp
     src/engine/versions/j460/rooms.cpp
     src/engine/versions/j460/visuals.cpp
     src/engine/versions/j460/input.cpp
@@ -353,7 +246,7 @@ add_library(
     src/engine/versions/j460/pause_menu.cpp
     src/engine/versions/j460/item_presentation.cpp
     src/engine/versions/j460/rewind.cpp
-    src/presentation/frontend.cpp
+    src/engine/versions/j460/frontend.cpp
     src/diagnostics/lab_capture.cpp)
 add_library(isaac_lan_build STATIC src/engine/build.cpp)
 target_include_directories(isaac_lan_build PUBLIC src)
@@ -378,7 +271,8 @@ add_library(
     "${IMGUI_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp")
 target_include_directories(isaac_lan_ui PUBLIC "${IMGUI_SOURCE_DIR}" "${IMGUI_SOURCE_DIR}/backends")
 target_link_libraries(isaac_lan_ui PUBLIC opengl32 gdi32 dwmapi)
-add_library(isaac_lan_net STATIC src/net/session.cpp src/net/compression.cpp)
+add_library(isaac_lan_net STATIC src/net/session.cpp src/net/compression.cpp
+                                 src/net/host_resolution.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate)
@@ -390,7 +284,7 @@ if(MINGW)
 endif()
 if(BUILD_TESTING)
     add_executable(isaac_lan_net_test tests/net_test.cpp)
-    foreach(test_case hornfel rails entity_links)
+    foreach(test_case hornfel rails entity_links lua_api)
         add_executable(isaac_lan_${test_case}_test tests/${test_case}_test.cpp)
         target_include_directories(isaac_lan_${test_case}_test PRIVATE src)
         if(MINGW)
