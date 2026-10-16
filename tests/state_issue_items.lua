@@ -171,7 +171,7 @@ end)
 function _IsaacLanFrame()
     renders = renders + 1
     local s = frame()
-    assert(s.phase ~= Phase.failed and s.phase ~= Phase.closed, s.error)
+    assert(s.phase ~= Phase.failed and s.phase ~= Phase.waiting, s.error)
     if host and round == 2 and s.pendingSave == 1 then
         if not retryObserved then
             retryObserved = true
