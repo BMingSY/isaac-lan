@@ -232,7 +232,7 @@ draw(39)
 assert(status.choice0 == 23)
 draw(39)
 draw()
-assert(status.choice0 == 41 and labels["里·无菜单画像"])
+assert(status.choice0 == 41 and labels["无菜单画像"])
 assert(renderedPortraits[1][2] == "00_Random")
 draw(39)
 assert(status.choice0 == 0)
@@ -337,7 +337,7 @@ for _, phase in ipairs({ 9, 7, 3, 9 }) do
             assert(renderedPortraits[slot][2] == expected, "Run card used a lobby portrait")
         end
         assert(n < 3 or labels[longName])
-        assert(n < 4 or labels["里·无菜单画像"])
+        assert(n < 4 or labels["无菜单画像"])
     end
 end
 -- A new lobby returns to its own selections rather than retaining the run.
