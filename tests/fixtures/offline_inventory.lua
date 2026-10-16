@@ -1,19 +1,19 @@
 -- Deliberately small player/config contract. Unknown methods fail immediately.
-return function(root, sharedResources, pockets)
+return function(root, sharedResources, pockets, extraCollectibles, collectibleCount)
     local module = dofile(root .. "/src/bridge/sync/inventory.lua")(
         dofile(root .. "/src/bridge/sync/fields.lua")
     )
     local fixture = {}
     local methods = {}
     local function active(id)
-        return id == 2 or id == 4
+        return id == 2 or id == 4 or id == -2
     end
     local config = {}
     function config:GetCollectibles()
         return { Size = 9 }
     end
     function config:GetCollectible(id)
-        if id > 0 and id < 9 then
+        if (id > 0 and id < 9) or (extraCollectibles and id >= -3 and id < 0) then
             return { Type = active(id) and 2 or 1 }
         end
     end
@@ -21,6 +21,8 @@ return function(root, sharedResources, pockets)
         config = function()
             return config
         end,
+        extraCollectibles = extraCollectibles,
+        collectibleCount = collectibleCount,
         activeType = 2,
         curse = 1,
         pockets = pockets,
@@ -72,6 +74,9 @@ return function(root, sharedResources, pockets)
         }
     end
     function methods:GetCollectibleNum(id)
+        if id < 0 then
+            return 0 -- J460 rejects generated IDs in its ordinary count API.
+        end
         local count = self.items[id] or 0
         for _, entry in ipairs(self.actives) do
             if entry[1] == id then
@@ -79,6 +84,9 @@ return function(root, sharedResources, pockets)
             end
         end
         return count
+    end
+    function methods:GetSprite()
+        return self
     end
     function methods:AddCollectible(id, _, _, slot)
         self.itemMutations = self.itemMutations + 1

@@ -49,7 +49,12 @@ return function(Phase, Command)
             ui.errorText = ok and "" or tostring(reason):gsub("^.-:%d+: ", "")
             return ok
         end
-        if modes then
+        if status.pendingSave == 1 then
+            row("重试保存联机存档", function()
+                command("retry_save")
+            end)
+            row("返回", deps.hide)
+        elseif modes then
             row("官方联机", function()
                 if command("close") then
                     deps.native.menu_official()

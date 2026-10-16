@@ -353,6 +353,7 @@ return function(fields)
             if not floor.ready(level, value.epoch, value.stage, value.stageType) then
                 return false
             end
+            deps.glitched.apply(value.glitched)
             local roomChanged = restoreLocations(value)
             native.state_clock(value.frame)
             assert(native.net_progress(value.progress))

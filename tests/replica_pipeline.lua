@@ -134,6 +134,12 @@ local replica = createReplica({
             record("crawlspace")
         end,
     },
+    glitched = {
+        apply = function(value)
+            assert(value == "definitions")
+            record("definitions")
+        end,
+    },
     pills = {
         apply = function(value)
             record("pills")
@@ -271,10 +277,11 @@ local function packet(tick, nextEpoch)
         greed = 2,
         deals = { 0.5, 0.25 },
         pills = "pills",
+        glitched = "definitions",
     }))
 end
 local expected =
-    "layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,greed,confirm,audio,events,items"
+    "definitions,layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,greed,confirm,audio,events,items"
 assert(
     not replica.apply(packet(1), 1, 0, true) and #trace == 0,
     "Initial view escaped the full update boundary"

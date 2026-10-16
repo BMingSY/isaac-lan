@@ -47,6 +47,7 @@ inline constexpr unsigned minimap = 0x25ecc;
 inline constexpr unsigned frame = 0x264f8;
 inline constexpr unsigned stateFlags = 0x26548;
 inline constexpr unsigned console = 0x68d78;
+inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
 namespace room {
 inline constexpr unsigned size = 0x7898;
@@ -68,6 +69,7 @@ inline constexpr unsigned count = 0xc;
 namespace entity {
 inline constexpr unsigned index = 0x20;
 inline constexpr unsigned type = 0x28;
+inline constexpr unsigned sprite = 0x48;
 inline constexpr unsigned variant = 0x2c;
 inline constexpr unsigned removed = 0x170;
 inline constexpr unsigned active = 0x172;
@@ -83,7 +85,23 @@ inline constexpr unsigned type = 0x13c0;
 inline constexpr unsigned controller = 0x1618;
 inline constexpr unsigned index = 0x161c;
 inline constexpr unsigned twin = 0x1e68;
+inline constexpr unsigned nightLightAngle = 0x1ae4;
+inline constexpr unsigned generatedInventoryHead = 0x1fcc;
+inline constexpr unsigned generatedInventorySize = 0x1fd0;
 } // namespace player
+namespace generatedItem {
+inline constexpr unsigned config = 0x0;
+inline constexpr unsigned seed = 0x8;
+inline constexpr unsigned configId = 0x4;
+} // namespace generatedItem
+namespace inventoryNode {
+inline constexpr unsigned left = 0x0;
+inline constexpr unsigned parent = 0x4;
+inline constexpr unsigned right = 0x8;
+inline constexpr unsigned nil = 0xd;
+inline constexpr unsigned id = 0x10;
+inline constexpr unsigned count = 0x14;
+} // namespace inventoryNode
 namespace menuManager {
 inline constexpr unsigned inputBlocked = 0xd;
 inline constexpr unsigned page = 0x40;

@@ -33,6 +33,10 @@ struct Archive {
         }
         w.blob(game);
         w.u64(snapshotHash(w.bytes));
+        // The file reader limits the whole archive, including progression,
+        // locations and checksum, rather than only its native game blob.
+        if (w.bytes.size() > maxSnapshotSize)
+            throw std::runtime_error("Saved session exceeds archive size limit");
         return w.bytes;
     }
     static Archive decode(std::span<const std::uint8_t> bytes) {

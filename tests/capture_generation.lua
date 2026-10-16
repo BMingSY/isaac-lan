@@ -96,6 +96,7 @@ local deps = {
     greed = shared("greed"),
     deals = shared("deals"),
     pills = shared("pills"),
+    glitched = shared("glitched"),
     reconcileShared = function()
         count("reconcile")
     end,
@@ -179,6 +180,7 @@ for _, name in ipairs({
     "greed",
     "deals",
     "pills",
+    "glitched",
     "reconcile",
 }) do
     assert(calls[name] == 1, name .. " was recaptured for another peer")

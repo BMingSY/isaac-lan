@@ -19,6 +19,7 @@ struct Peer : Socket {
     std::string mods;
     bool loaded = false;
     bool waiting = false, ready = false, rejoining = false, hasInput = false;
+    std::optional<Clock::time_point> loadingAt;
     std::shared_ptr<const Start> checkpoint;
     std::optional<Stage> floorAfterLoad;
     std::optional<Stage> sendingStage;

@@ -5,11 +5,15 @@
 #endif
 namespace isaac::runtime {
 std::size_t SessionStore::write(const lan::Archive& archive) const {
+    return writeBytes(archive.encode());
+}
+std::size_t SessionStore::writeBytes(const std::vector<std::uint8_t>& bytes) const {
     auto temporary = path;
     temporary += ".tmp";
-    const auto bytes = archive.encode();
     std::filesystem::create_directories(path.parent_path());
     std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+    if (!file)
+        throw std::runtime_error("Cannot open LAN saved session temporary file");
     file.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     file.close();
     if (!file)

@@ -58,6 +58,9 @@ local function environment(difficulty)
     local position, ready, epoch = 84, true, 1
     local chances, appliedChances = { 1, 0.5 }, nil
     local native = {
+        generated_items = function(value)
+            return value and true or ""
+        end,
         deal_chances = function(total, angel)
             if total then
                 appliedChances = { total, angel }

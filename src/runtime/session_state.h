@@ -1,5 +1,6 @@
 #pragma once
 #include "runtime/session_archive.h"
+#include "runtime/pending_archive.h"
 #include <optional>
 namespace isaac::runtime {
 struct LaunchState {
@@ -23,6 +24,8 @@ struct SessionView {
     }
 };
 struct SavedRun {
+    PendingArchive pendingArchive;
+    std::string saveError;
     bool networkRun = false, soloContinueAvailable = false;
     bool exitingHost = false, exitingTransient = false;
     std::vector<std::uint8_t> soloState;

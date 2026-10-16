@@ -18,6 +18,7 @@
 #include "engine/rewind.h"
 #include "engine/rooms.h"
 #include "engine/input.h"
+#include "engine/generated_items.h"
 #include "engine/frontend.h"
 #include "engine/build.h"
 #include "core/bootstrap_profile.h"
@@ -310,6 +311,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     if (!isaac::runtime::install(image, log, isaac::engine::bootstrap::halfUpdate,
                                  isaac::engine::bootstrap::restorePositions))
         return 18;
+    if (!isaac::generated_items::install(image))
+        return 27;
     if (!isaac::rooms::install(image, log))
         return 21;
     if (!isaac::audio::install(image))
@@ -362,6 +365,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* 
     if (!isaac::engine::bootstrap::bind(L, module))
         return 0;
     if (!isaac::runtime::bind(L, module))
+        return 0;
+    if (!isaac::generated_items::bind(L, module))
         return 0;
     if (!isaac::rooms::bind(L, module))
         return 0;

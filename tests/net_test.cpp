@@ -202,6 +202,39 @@ void codec() {
     r.finish();
     std::puts("PASS bounded state codec rejects truncated packets");
 }
+void loadingExit() {
+    Group g(2);
+    require(g.peers[0]->ready() && g.peers[0]->submit(0, {}), "Host setup failed");
+    require(!g.peers[0]->take(), "Loading guest did not hold the initial frame");
+    require(!g.peers[1]->command(Command::saveExit), "Guest could save the host run");
+    require(g.peers[0]->command(Command::saveExit), "Host exit rejected while loading");
+    const auto frame = g.peers[0]->take();
+    require(frame && frame->tick == 0 && frame->commands[0] == Command::saveExit,
+            "Initial readiness swallowed the host exit");
+    require(!g.peers[0]->take(), "Host exit was consumed twice");
+}
+void loadingTimeout() {
+    Group g(3);
+    require(g.peers[0]->ready() && g.peers[0]->submit(0, {}), "Host setup failed");
+    require(g.peers[1]->ready() && g.peers[1]->submit(0, {}), "Ready guest setup failed");
+    const auto started = std::chrono::steady_clock::now();
+    while (g.peers[0]->connectedMask() == 7) {
+        // Keep the TCP peer responsive, but never acknowledge engine readiness.
+        for (unsigned slot : {2u, 1u, 0u})
+            g.peers[slot]->poll();
+        require(g.peers[0]->phase() == Phase::running, "Loading timeout killed the host");
+        require((g.peers[0]->connectedMask() & 3) == 3 && g.peers[1]->phase() == Phase::running,
+                "Waiting for another loader disconnected an already ready guest");
+        require(std::chrono::steady_clock::now() - started < std::chrono::seconds(65),
+                "Unready peer was never removed");
+        Sleep(10);
+    }
+    require(std::chrono::steady_clock::now() - started >= std::chrono::seconds(59),
+            "Loading peer expired before its grace period");
+    const auto frame = g.peers[0]->take();
+    require(frame && frame->tick == 0 && frame->connected == 3,
+            "Host did not resume after removing the unready peer");
+}
 void inputsAndStates(unsigned n) {
     Group g(n);
     until([&] {
@@ -1789,6 +1822,8 @@ int main(int argc, char** argv) {
                                   {"handshake", handshake},
                                   {"host-names", hostNames},
                                   {"commands", commands},
+                                  {"loading-exit", loadingExit},
+                                  {"loading-timeout", loadingTimeout},
                                   {"publication-limits", publicationLimits},
                                   {"integrations", integrations},
                                   {"greed-settings", greedSettings},

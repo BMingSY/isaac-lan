@@ -20,8 +20,9 @@ local names = {
     "greed",
     "deals",
     "pills",
+    "glitched",
 }
-local version = 19
+local version = 20
 local VERSION_FIELD, TICK_FIELD = 1, 2
 return {
     VERSION = version,

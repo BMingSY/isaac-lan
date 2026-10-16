@@ -264,6 +264,9 @@ function _IsaacLanCommand(action, value)
                 tonumber(d)
             )
         )
+    elseif action == "retry_save" then
+        assert(native.net_retry_save(), "联机存档保存失败，请重试保存")
+        savedPlayers = native.net_saved_info()
     elseif action == "resume" then
         assert(
             native.net_resume(),

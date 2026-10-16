@@ -350,7 +350,8 @@ function _IsaacLanMenuRender(
             centered("等待玩家", x + 51, y + 52, 10, faded)
         end
     end
-    local message = ui.errorText ~= "" and ui.errorText or networkError
+    local message = status.saveError and status.saveError ~= "" and status.saveError
+        or (ui.errorText ~= "" and ui.errorText or networkError)
     local messageColor = red
     if message == "" and phase == Phase.lobby and challenge then
         local missing = {}

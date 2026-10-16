@@ -12,7 +12,7 @@
 | 开局、存档、重连与换层 | [会话生命周期](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md) |
 | 分房、HUD 与音画 | [房间与表现](https://github.com/BMingSY/isaac-lan/blob/main/docs/rooms-and-presentation.md) |
 | 角色共享效果 | [角色清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md) |
-| 道具共享效果 | [道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md) |
+| 道具共享效果 | [道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)、[错误道具原生边界](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md) |
 | 整队开门概率与 ABI | [恶魔／天使房概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md) |
 | 挑战规则与接入 | [联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md) |
 | 支持的 Mod | [兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md) |

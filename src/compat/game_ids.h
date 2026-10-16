@@ -40,13 +40,16 @@ inline constexpr int lazarusSecondB = 38;
 inline constexpr int jacobSecondB = 39;
 } // namespace player
 namespace collectible {
+inline constexpr int nightLight = 425;
 inline constexpr int compass = 21;
 inline constexpr int treasureMap = 54;
 inline constexpr int steamSale = 64;
 inline constexpr int blueMap = 246;
 inline constexpr int blackCandle = 260;
 inline constexpr int restock = 376;
+inline constexpr int damoclesPassive = 656;
 inline constexpr int sacredOrb = 691;
+inline constexpr int tmtrainer = 721;
 } // namespace collectible
 namespace stage {
 inline constexpr int greedFinal = 7;

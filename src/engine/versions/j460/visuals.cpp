@@ -1,4 +1,5 @@
 #include "engine/lua_api.h"
+#include "engine/versions/j460/layout.h"
 #include "engine/visuals.h"
 #include "net/protocol.h"
 #include "runtime/session.h"
@@ -440,6 +441,8 @@ int actorPose(lua_State* L) {
             // Replica Update is suppressed, so an arrival cooldown otherwise
             // stays on the same invisible frame until the next floor reload.
             w.u32(at<unsigned>(player, 0x13bc));
+            // Night Light smooths its beam angle in Player::Update.
+            w.u32(at<unsigned>(player, j460::layout::player::nightLightAngle));
             for (unsigned slot = 0; slot < 5; ++slot) {
                 const auto weapon = at<Address>(player, 0x13dc + slot * 4);
                 w.u8(weapon != 0);
@@ -471,6 +474,7 @@ int actorPose(lua_State* L) {
         at<bool>(player, 0x139a) = boolean(r);
         at<unsigned>(player, 0x1338) = r.u32();
         at<unsigned>(player, 0x13bc) = r.u32();
+        at<unsigned>(player, j460::layout::player::nightLightAngle) = number(r);
         for (unsigned slot = 0; slot < 5; ++slot)
             if (boolean(r)) {
                 const auto type = r.u32();

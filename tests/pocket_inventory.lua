@@ -46,3 +46,35 @@ assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Schema-19 inven
 plain.apply(expected, false)
 assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Repeated inventory drifted")
 print("PASS all four ordered pockets after inventory setters, repeated views and ghost cleanup")
+
+local glitched = dofile(root .. "/src/bridge/compat/items/glitched.lua")({
+    generated_item_count = function(p, id)
+        local count = p.items[id] or 0
+        for _, entry in ipairs(p.actives) do
+            if entry[1] == id then
+                count = count + 1
+            end
+        end
+        return count
+    end,
+})
+local first = factory(root, nil, nil, glitched.extraCollectibles, glitched.count)
+local second = factory(root, nil, nil, glitched.extraCollectibles, glitched.count)
+local value = first.read()[1]
+value[2] = { { 1, 1 }, { -1, 2 }, { -3, 1 } }
+value[3][1] = { -2, 4 }
+first.apply(value, true)
+local captured = first.read()[1]
+local counts = {}
+for _, entry in ipairs(captured[2]) do
+    counts[entry[1]] = entry[2]
+end
+assert(counts[-1] == 2 and counts[-2] == 1 and counts[-3] == 1 and captured[3][1][1] == -2)
+assert(#second.read()[1][2] == 0, "Glitched effects leaked into another holder")
+local mutations = first.read()[2]
+first.apply(captured, true)
+assert(first.read()[2] == mutations, "Repeated views reapplied glitched effects")
+value[2], value[3][1] = {}, { 0, 0 }
+first.apply(value, true)
+assert(#first.read()[1][2] == 0, "Removed glitched items survived inventory reconciliation")
+print("PASS generated passive/active inventory, repeated views, removal and per-picker ownership")

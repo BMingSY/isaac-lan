@@ -1,4 +1,6 @@
 #include "engine/lua_api.h"
+#include "engine/versions/j460/layout.h"
+#include "compat/game_ids.h"
 #include "engine/presentation.h"
 #include "engine/crafting_hud.h"
 #include "engine/challenge_hud.h"
@@ -38,6 +40,22 @@ unsigned played = 0;
 unsigned hostIntro = 0;
 using PromptCall = void(__attribute__((thiscall)) *)(void*);
 PromptCall originalPromptControls, originalPromptRender;
+using HasCollectible = bool(__attribute__((thiscall)) *)(void*, int, bool);
+HasCollectible originalHasCollectible;
+bool __attribute__((fastcall)) visibleCollectible(void* player, void*, int item, bool effects) {
+    // Room::Render keeps the whole roster available to HUDs, but Night Light
+    // walks it without checking whether the holder belongs to this room.
+    const auto caller = reinterpret_cast<std::uintptr_t>(__builtin_return_address(0)) - image;
+    if (item == compat::ids::collectible::nightLight &&
+        caller == j460::entry::roomNightLightQuery + 5 && rooms::virtualized()) {
+        const auto controller =
+            at<int>(reinterpret_cast<std::uintptr_t>(player), j460::layout::player::controller);
+        if (controller < 1 || controller > static_cast<int>(lan::maxPlayers) ||
+            !(rooms::soundAudience() & (1u << (controller - 1))))
+            return false;
+    }
+    return originalHasCollectible(player, item, effects);
+}
 bool promptIdle(std::uintptr_t prompt) {
     const auto animation = at<std::uintptr_t>(prompt, 0x34);
     if (!animation || !at<bool>(prompt, 0x44) || at<unsigned>(animation, 0x10) != 4)
@@ -281,6 +299,11 @@ IntroSimulationScope::~IntroSimulationScope() {
 bool install(std::uintptr_t base) {
     image = base;
     return installCraftingHud(base) && installChallengeHud(base) && items::install(base) &&
+           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::playerHasCollectible),
+                         reinterpret_cast<void*>(visibleCollectible),
+                         reinterpret_cast<void**>(&originalHasCollectible)) == MH_OK &&
+           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::playerHasCollectible)) ==
+               MH_OK &&
            MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::victoryPromptControls),
                          reinterpret_cast<void*>(promptControls),
                          reinterpret_cast<void**>(&originalPromptControls)) == MH_OK &&

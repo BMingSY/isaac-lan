@@ -16,6 +16,7 @@
 #include "core/menu_input.h"
 #include "engine/save.h"
 #include "runtime/session_archive.h"
+#include "runtime/pending_archive.h"
 #include "runtime/progression.h"
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
@@ -41,6 +42,7 @@ LaunchState launch;
 SessionView view;
 SavedRun saves;
 std::string sessionFingerprint;
+bool retryArchive();
 lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
     return definition ? lan::RunRules{definition->id, definition->version, definition->character,
                                       definition->difficulty, definition->transient}
@@ -53,6 +55,8 @@ bool validRules(const lan::RunRules& rules) {
 bool beginNetworkRun() {
     if (saves.networkRun)
         return true;
+    if (!retryArchive())
+        return false;
     saves.soloContinueAvailable = backend::continueAvailable();
     saves.soloState =
         saves.soloContinueAvailable ? save::encode(executableImage) : std::vector<std::uint8_t>{};
@@ -94,10 +98,23 @@ std::filesystem::path archivePath() {
     return std::filesystem::path(executable).parent_path() / L"isaac-lan" /
            (L"session-" + std::to_wstring(slot) + L".bin");
 }
-void writeArchive(const lan::Archive& archive) {
-    const auto bytes = SessionStore(archivePath()).write(archive);
+void writeArchive(const std::filesystem::path& path, const std::vector<std::uint8_t>& value) {
+    const auto bytes = SessionStore(path).writeBytes(value);
     if (logger)
         logger("session_save=COMPLETE bytes=" + std::to_string(bytes));
+}
+bool retryArchive() {
+    if (!saves.pendingArchive.pending())
+        return true;
+    const bool ok = saves.pendingArchive.retry(writeArchive);
+    saves.saveError = ok ? "" : "联机存档保存失败，请重试保存";
+    if (!ok && logger)
+        logger("session_save=FAILED " + saves.pendingArchive.error());
+    return ok;
+}
+int retrySavedArchive(lua_State* L) {
+    lua.pushBoolean(L, retryArchive());
+    return 1;
 }
 std::optional<lan::Archive> readArchive() {
     try {
@@ -693,7 +710,7 @@ int host(lua_State* L) {
     const auto port = lua.checkInteger(L, 1);
     const char* fingerprint = lua.checkString(L, 2, nullptr);
     const char* mods = lua.checkString(L, 3, nullptr);
-    if (session || port < 0 || port > 65535) {
+    if (session || port < 0 || port > 65535 || !retryArchive()) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -710,7 +727,7 @@ int join(lua_State* L) {
     const auto port = lua.checkInteger(L, 2);
     const char* fingerprint = lua.checkString(L, 3, nullptr);
     const char* mods = lua.checkString(L, 4, nullptr);
-    if (session || port <= 0 || port > 65535) {
+    if (session || port <= 0 || port > 65535 || !retryArchive()) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -798,6 +815,9 @@ int poll(lua_State* L) {
     integer("connected", session ? session->connectedMask() : 0);
     integer("firstTick", session ? session->settings().firstTick : 0);
     integer("draining", retiring.size());
+    integer("pendingSave", saves.pendingArchive.pending());
+    lua.pushString(L, saves.saveError.c_str());
+    lua.setField(L, -2, "saveError");
     integer("port", session ? session->port() : 0);
     integer("tick", nextTick);
     integer("verified", session && session->verifiedTick() ? *session->verifiedTick() : -1ll);
@@ -1294,11 +1314,13 @@ void afterExit(bool save) {
             saves.exitingArchive->game = save::encode(executableImage);
             if (saves.exitingArchive->game.empty())
                 throw std::runtime_error("Native game save failed");
-            writeArchive(*saves.exitingArchive);
+            saves.pendingArchive.retain(path, std::move(*saves.exitingArchive));
+            retryArchive();
         }
     } catch (const std::exception& error) {
         if (logger)
             logger("session_save=FAILED " + std::string(error.what()));
+        saves.saveError = "联机存档保存失败";
     }
     saves.exitingArchive.reset();
     if (!saves.soloState.empty()) {
@@ -1607,6 +1629,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_resume", resumeSession);
     function("net_restore_rooms", restoreRooms);
     function("net_saved_info", savedInfo);
+    function("net_retry_save", retrySavedArchive);
     function("net_command", sharedCommand);
     function("net_floor_epoch", epoch);
     return true;

@@ -113,7 +113,7 @@ jobs:
         run: |
           & ./ci/isaac_lan_net_test.exe 2>&1 | Tee-Object test-runs/windows/transport-resources.log
           if ($LASTEXITCODE -ne 0) { throw 'State transport tests failed' }
-      - name: Test native menu, HUD and hourglass adapters
+      - name: Test native menu, HUD, generated items and hourglass adapters
         shell: pwsh
         run: |
           & ./ci/isaac_lan_crafting_hud_test.exe 2>&1 | Tee-Object test-runs/windows/crafting-hud.log
@@ -126,6 +126,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Pause menu ABI tests failed' }
           & ./ci/isaac_lan_frontend_menu_test.exe 2>&1 | Tee-Object test-runs/windows/frontend-menu.log
           if ($LASTEXITCODE -ne 0) { throw 'Frontend menu ABI tests failed' }
+          & ./ci/isaac_lan_generated_items_test.exe 2>&1 | Tee-Object test-runs/windows/generated-items.log
+          if ($LASTEXITCODE -ne 0) { throw 'Generated item ABI tests failed' }
           & ./ci/isaac_lan_lua_api_test.exe 2>&1 | Tee-Object test-runs/windows/lua-api.log
           if ($LASTEXITCODE -ne 0) { throw 'Lua ABI tests failed' }
           & ./ci/isaac_lan_rewind_home_test.exe 2>&1 | Tee-Object test-runs/windows/rewind-home.log

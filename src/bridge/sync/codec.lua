@@ -10,39 +10,54 @@ local MIN_INT32, MAX_INT32 = -2147483648, 2147483647
 -- after validation, their complete encoded fragments can be reused this tick.
 local function encode(value, memo)
     local pieces, path = {}, {}
+    local nodes, size = 0, 0
+    local function append(bytes)
+        size = size + #bytes
+        assert(size <= MAX_STATE_BYTES, "State size exceeded")
+        pieces[#pieces + 1] = bytes
+    end
     local function put(v, depth)
-        assert(depth < MAX_DEPTH, "State nesting exceeded")
+        nodes = nodes + 1
+        assert(depth < MAX_DEPTH and nodes < MAX_NODES, "State structure exceeded")
         local deepest = depth
         local t = type(v)
         if t == "boolean" then
-            pieces[#pieces + 1] = v and TRUE_BYTE or FALSE_BYTE
+            append(v and TRUE_BYTE or FALSE_BYTE)
         elseif t == "number" then
             if math.type(v) == "integer" then
                 if v >= MIN_INT32 and v <= MAX_INT32 then
-                    pieces[#pieces + 1] = pack(">Bi4", Tag.int32, v)
+                    append(pack(">Bi4", Tag.int32, v))
                 else
-                    pieces[#pieces + 1] = pack(">Bi8", Tag.int64, v)
+                    append(pack(">Bi8", Tag.int64, v))
                 end
             else
                 assert(
                     v == v and math.abs(v) < math.huge,
                     "Non-finite state value at [" .. table.concat(path, "][") .. "]"
                 )
-                pieces[#pieces + 1] = pack(">Bf", Tag.float32, v)
+                local bytes = pack(">Bf", Tag.float32, v)
+                assert(
+                    math.abs(unpack(">f", bytes, 2)) < math.huge,
+                    "Float32 state overflow at [" .. table.concat(path, "][") .. "]"
+                )
+                append(bytes)
             end
         elseif t == "string" then
             assert(#v <= MAX_LENGTH)
-            pieces[#pieces + 1] = pack(">Bs2", Tag.string, v)
+            append(pack(">Bs2", Tag.string, v))
         elseif t == "table" then
             local cached = memo and memo[v]
             if type(cached) == "table" then
                 assert(depth + cached.depth < MAX_DEPTH, "State nesting exceeded")
-                pieces[#pieces + 1] = cached.bytes
+                nodes = nodes + cached.nodes - 1
+                assert(nodes < MAX_NODES, "State structure exceeded")
+                append(cached.bytes)
                 return depth + cached.depth
             end
             assert(#v <= MAX_LENGTH)
             local first = #pieces + 1
-            pieces[#pieces + 1] = pack(">BI2", Tag.array, #v)
+            local firstNode = nodes
+            append(pack(">BI2", Tag.array, #v))
             for i = 1, #v do
                 path[depth + 1] = i
                 local childDepth = put(v[i], depth + 1)
@@ -57,7 +72,8 @@ local function encode(value, memo)
                     pieces[index] = nil
                 end
                 pieces[first] = fragment
-                memo[v] = { bytes = fragment, depth = deepest - depth }
+                memo[v] =
+                    { bytes = fragment, depth = deepest - depth, nodes = nodes - firstNode + 1 }
             end
         else
             error("Unsupported state value: " .. t .. " at [" .. table.concat(path, "][") .. "]")

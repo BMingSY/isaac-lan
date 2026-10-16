@@ -1,4 +1,4 @@
--- Fixed wire positions. Renaming fields does not change schema 19 or encoded bytes.
+-- Fixed wire positions. Renaming fields preserves the current schema and encoded bytes.
 return {
     actor = {
         index = 1,

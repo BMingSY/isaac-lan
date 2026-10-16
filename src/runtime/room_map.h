@@ -7,6 +7,15 @@
 #include <stdexcept>
 
 namespace isaac::rooms {
+inline bool validLayoutIndices(int dimension, int index, int gridIndex, int listIndex) {
+    if (dimension < 0 || dimension > 2 || index < -20 || index >= 169 || gridIndex < -20 ||
+        gridIndex >= 169)
+        return false;
+    // Lazily created special descriptors can use their special room index as
+    // ListIndex (Genesis is -12). Only ordinary rooms address the floor array.
+    return index < 0 ? (listIndex == index || (listIndex >= -1 && listIndex < 527))
+                     : listIndex >= 0 && listIndex < 507;
+}
 inline bool validRoomRequest(int index, int dimension) {
     return dimension >= -1 && dimension <= 2 &&
            ((index >= -20 && index < 169) || index == -100 || index == -101);
