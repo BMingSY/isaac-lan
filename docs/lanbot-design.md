@@ -75,4 +75,4 @@ flowchart LR
 
 限制观察扫描、寻路展开、候选数和预测长度。规划按事件或低频更新，实时决策目标为单次 2 ms；该目标尚未普遍达到，不能以通关结果替代耗时和走位评估。当前无需外部 Agent；未来若接入，高层结果应异步返回并校验会话／任务代次，不能阻塞本地躲弹或网络轮询。
 
-离线测试覆盖命令、归属、生命周期、输入合成、持续过门、危险和受阻恢复；原生控制台、不同角色／武器、多人、延迟、连续画面与正常操作按[测试流程](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)集中验收。通关夹具的保护、固定配装和加速条件必须随结果记录，历史结果见[LANBOT 验收索引](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/README.md#lanbot)。
+离线测试覆盖命令、归属、生命周期、输入合成、持续过门、危险和受阻恢复；原生控制台、不同角色／武器、多人、延迟、连续画面与正常操作按[测试流程](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)集中验收。

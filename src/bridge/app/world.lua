@@ -5,6 +5,10 @@ local prediction = assert(_IsaacLanPrediction)
 local state = {}
 _IsaacLanState = state
 local modules = assert(_IsaacLanModules)
+local fields = assert(modules["sync/fields"])
+local function component(name)
+    return assert(modules[name])(fields)
+end
 local codec = assert(modules["sync/codec"])
 local performance = modules["diagnostics/performance"]
         and modules["diagnostics/performance"](native, function()
@@ -32,7 +36,7 @@ end)
 local crawlspace = assert(modules["compat/routes/crawlspace"])(function()
     return Game():GetLevel()
 end, Vector)
-local forms = assert(modules["compat/characters/lazarus"])(native, function(index)
+local forms = component("compat/characters/lazarus")(native, function(index)
     return Isaac.GetPlayer(index)
 end, PlayerType)
 local poop = assert(modules["compat/characters/blue_baby"])(native, PlayerType)
@@ -71,7 +75,7 @@ local worldSchema = assert(modules["sync/world_schema"])
 local itemPresentation = assert(modules["presentation/items"])(native, function()
     return Isaac.GetPlayer(0):GetSprite()
 end, sprite, applySprite)
-local inventoryState = assert(modules["sync/inventory"])({
+local inventoryState = component("sync/inventory")({
     config = function()
         return Isaac.GetItemConfig()
     end,
@@ -86,13 +90,13 @@ local inventoryState = assert(modules["sync/inventory"])({
 })
 local inventory = performance.wrap("capture.inventory", inventoryState.capture)
 local applyInventory = performance.wrap("apply.inventory", inventoryState.apply)
-local actorsPresentation = assert(modules["presentation/actors"])(native, function(path)
+local actorsPresentation = component("presentation/actors")(native, function(path)
     return Isaac.GetCostumeIdByPath(path)
 end, applySprite)
-local motionPresentation = assert(modules["presentation/motion"])(native, actorsPresentation, {
+local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
     extraAnimationAllowsMovement = function(p, actor)
-        local extra = actor[5][1]
-        return craftingBag.allowsMovement(p, actor[8], extra and extra[2])
+        local extra = actor[fields.actor.visuals][1]
+        return craftingBag.allowsMovement(p, actor[fields.actor.craftingBag], extra and extra[2])
     end,
     vector = Vector,
     player = function(index)
@@ -111,7 +115,7 @@ local motionPresentation = assert(modules["presentation/motion"])(native, actors
 local audioPresentation = assert(modules["presentation/audio"])(native, function()
     return SFXManager()
 end)
-local captureState = assert(modules["sync/capture"])({
+local captureState = component("sync/capture")({
     native = native,
     encode = encode,
     schema = worldSchema,
@@ -133,14 +137,14 @@ local captureState = assert(modules["sync/capture"])({
     audio = audioPresentation,
     items = itemPresentation,
     reconcileShared = function(level, actors)
-        modules["compat/items/black_candle"](
+        component("compat/items/black_candle")(
             level,
             actors,
             CollectibleType.COLLECTIBLE_BLACK_CANDLE
         )
     end,
     roomFactory = function()
-        return modules["sync/room"](
+        return component("sync/room")(
             native,
             entity,
             sprite,
@@ -162,7 +166,7 @@ local transitions = assert(modules["compat/transitions"])({
     assert(modules["compat/items/r_key"]),
     assert(modules["compat/routes/victory_lap"]),
 })
-local replica = assert(modules["sync/replica"])({
+local replica = component("sync/replica")({
     native = native,
     encode = encode,
     decode = decode,

@@ -20,7 +20,9 @@
 | [`src/diagnostics/`](https://github.com/BMingSY/isaac-lan/tree/main/src/diagnostics) | 日志、性能和隔离采集；诊断开关不控制玩法 |
 | [`tests/`](https://github.com/BMingSY/isaac-lan/tree/main/tests)、[`tools/`](https://github.com/BMingSY/isaac-lan/tree/main/tools) | 回归夹具、构建与验收；不得成为生产玩法依赖 |
 
-装配层注入运行、同步、兼容与表现组件；运行协调器连接网络和原生能力。J460 Hook 仍回调协调器，[`runtime/session.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session.cpp) 和原生前端也保留部分版本相关访问。进一步拆分应先补具名能力并验证时机。
+装配层注入运行、同步、兼容与表现组件。运行协调器通过 [`engine/session_backend.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/session_backend.h) 调用具名能力；J460 后端安装 Hook，回调只传普通值和限同步调用的原版操作，不向运行层暴露原生对象。Lua ABI 声明与符号加载共用 [`engine/lua_api.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。
+
+会话视图、启动请求和存档保护分别由 [`session_state.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_state.h) 中的状态组件持有，存档文件操作由 [`session_store.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_store.cpp) 管理。TCP 字节队列、各端协议状态和异步解析分别位于 `net/socket.h`、`net/peer.h` 和 `net/host_resolution.cpp`。
 
 Lua 嵌入清单在 [`modules.txt`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/modules.txt)。组件加载时只定义函数，依赖在全部组件加载后注入。[`app/main.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/app/main.lua)、[`app/world.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/app/world.lua)、菜单与预测入口单独装配。
 
@@ -72,10 +74,10 @@ J460 `Scope` 按深度选择独立的临时名单，恢复原生标量与名单�
 
 挑战目录、原版 HUD 复用和地图扩展边界见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。
 
-现有例子：Boss 汇合用 [`compat/bosses/encounters.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/bosses/encounters.h) 判断、后端排队迁移；里拉撒路用 [`compat/characters/lazarus.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/characters/lazarus.lua) 解析原生身体；共享道具、口袋槽和特殊传送见[队伍兼容](https://github.com/BMingSY/isaac-lan/blob/main/docs/party-compatibility.md)，概率上下文见[共享开门概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md)。第三方 Mod 的注册与卸载遵循独立的[公开 API 契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md)。
+现有例子：Boss 汇合用 [`compat/bosses/encounters.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/bosses/encounters.h) 判断、后端排队迁移；里拉撒路用 [`compat/characters/lazarus.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/characters/lazarus.lua) 解析原生身体；共享道具和特殊传送见[道具与效果](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，概率上下文见[共享开门概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md)。第三方 Mod 的注册与卸载遵循独立的[公开 API 契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md)。
 
 当前实现的效果清单分别维护在[角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具与效果](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)及[第三方 Mod](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)记录中。新增或调整兼容规则时，同步更新对应清单与兼容后的效果。
 
 ## 验证入口
 
-`core.room-scope-ownership`、[`tests/session_lifecycle.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/session_lifecycle.lua)、[`tests/capture_generation.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/capture_generation.lua) 和 [`tests/replica_pipeline.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/replica_pipeline.lua) 覆盖嵌套退栈、取消／失败、缓存复用与失效、恢复顺序和完成提交；[`tests/test_layers.py`](https://github.com/BMingSY/isaac-lan/blob/main/tests/test_layers.py) 检查模块清单与依赖。命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)，历次构建与实机结果见[历史记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/README.md)。
+`core.room-scope-ownership`、[`tests/session_lifecycle.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/session_lifecycle.lua)、[`tests/capture_generation.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/capture_generation.lua) 和 [`tests/replica_pipeline.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/replica_pipeline.lua) 覆盖嵌套退栈、取消／失败、缓存复用与失效、恢复顺序和完成提交；[`tests/test_layers.py`](https://github.com/BMingSY/isaac-lan/blob/main/tests/test_layers.py) 检查模块清单与依赖。

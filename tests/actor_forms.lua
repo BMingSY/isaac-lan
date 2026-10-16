@@ -1,6 +1,8 @@
 local root = assert(arg[1])
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
-local module = dofile(root .. "/src/bridge/compat/characters/lazarus.lua")
+local module = dofile(root .. "/src/bridge/compat/characters/lazarus.lua")(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)
 local function body(kind, controller)
     return {
         ControllerIndex = controller or 2,

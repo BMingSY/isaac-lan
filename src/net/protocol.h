@@ -51,17 +51,29 @@ struct IntegrationMessage {
     std::string bytes;
 };
 enum class Phase {
-    idle,
-    connecting,
-    lobby,
-    running,
-    failed,
-    closed,
-    finishing,
-    loading,
-    leaving,
-    waiting
+    idle = 0,
+    connecting = 1,
+    lobby = 2,
+    running = 3,
+    failed = 4,
+    closed = 5,
+    finishing = 6,
+    loading = 7,
+    leaving = 8,
+    waiting = 9,
 };
+inline constexpr std::array<std::pair<const char*, Phase>, 10> phaseValues{{
+    {"idle", Phase::idle},
+    {"connecting", Phase::connecting},
+    {"lobby", Phase::lobby},
+    {"running", Phase::running},
+    {"failed", Phase::failed},
+    {"closed", Phase::closed},
+    {"finishing", Phase::finishing},
+    {"loading", Phase::loading},
+    {"leaving", Phase::leaving},
+    {"waiting", Phase::waiting},
+}};
 enum class Command : std::uint8_t { none, pause, resume, saveExit, leave };
 
 struct InputFrame {

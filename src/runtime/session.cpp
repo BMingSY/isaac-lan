@@ -1,10 +1,13 @@
+#include "engine/lua_api.h"
 #include "runtime/session.h"
+#include "runtime/session_state.h"
+#include "runtime/session_store.h"
 #include "runtime/input_schedule.h"
 #include "compat/challenges/catalog.h"
 #include "engine/characters.h"
 #include "engine/item_presentation.h"
 #include "engine/presentation.h"
-#include "presentation/frontend.h"
+#include "engine/frontend.h"
 #include "net/session.h"
 #include "engine/rooms.h"
 #include "engine/rewind.h"
@@ -16,56 +19,28 @@
 #include "runtime/progression.h"
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
-#include <MinHook.h>
+#include "engine/session_backend.h"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <chrono>
 
-#include "engine/versions/j460/entrypoints.h"
-namespace j460 = isaac::engine::j460;
+namespace backend = isaac::engine::session;
 
 namespace isaac::runtime {
 namespace {
 constexpr int registry = -1001000;
 using LuaFunction = int(__cdecl*)(lua_State*);
-struct API {
-    void(__cdecl* pushClosure)(lua_State*, LuaFunction, int);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-    void(__cdecl* createTable)(lua_State*, int, int);
-    void(__cdecl* pushInteger)(lua_State*, long long);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-    const char*(__cdecl* pushString)(lua_State*, const char*);
-    const char*(__cdecl* pushLString)(lua_State*, const char*, std::size_t);
-    long long(__cdecl* checkInteger)(lua_State*, int);
-    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
-    const char*(__cdecl* toString)(lua_State*, int, std::size_t*);
-    int(__cdecl* getTop)(lua_State*);
-    int(__cdecl* getGlobal)(lua_State*, const char*);
-    void(__cdecl* setTop)(lua_State*, int);
-    void(__cdecl* pushValue)(lua_State*, int);
-    int(__cdecl* type)(lua_State*, int);
-    int(__cdecl* boolean)(lua_State*, int);
-    int(__cdecl* ref)(lua_State*, int);
-    void(__cdecl* unref)(lua_State*, int, int);
-    int(__cdecl* rawGetI)(lua_State*, int, long long);
-    void(__cdecl* rawSetI)(lua_State*, int, long long);
-    int(__cdecl* pcall)(lua_State*, int, int, int, std::intptr_t, void*);
-} lua{};
+isaac::lua::API lua{};
 std::unique_ptr<lan::Session> session;
 std::vector<std::unique_ptr<lan::Session>> retiring;
 std::uintptr_t executableImage = 0;
 void (*logger)(const std::string&) = nullptr;
-bool launchRequested = false;
-bool resumeLaunch = false;
-bool menuPromptsPending = false;
 bool authorizedExit = false;
+LaunchState launch;
+SessionView view;
+SavedRun saves;
 std::string sessionFingerprint;
-std::optional<lan::Archive> exitingArchive, resumingArchive;
-bool exitingHost = false, exitingTransient = false;
-std::optional<unsigned> pendingChallengeFinish;
-bool networkRun = false, soloContinueAvailable = false;
-std::vector<std::uint8_t> soloState;
 lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
     return definition ? lan::RunRules{definition->id, definition->version, definition->character,
                                       definition->difficulty, definition->transient}
@@ -76,113 +51,74 @@ bool validRules(const lan::RunRules& rules) {
     return (!rules.id || definition) && rules == rulesFor(definition);
 }
 bool beginNetworkRun() {
-    if (networkRun)
+    if (saves.networkRun)
         return true;
-    const auto manager =
-        *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager);
-    soloContinueAvailable = *reinterpret_cast<bool*>(manager + 0x20dcc);
-    soloState = soloContinueAvailable ? save::encode(executableImage) : std::vector<std::uint8_t>{};
-    if (soloContinueAvailable && soloState.empty()) {
+    saves.soloContinueAvailable = backend::continueAvailable();
+    saves.soloState =
+        saves.soloContinueAvailable ? save::encode(executableImage) : std::vector<std::uint8_t>{};
+    if (saves.soloContinueAvailable && saves.soloState.empty()) {
         if (logger)
             logger("solo_backup=FAILED");
         return false;
     }
-    networkRun = true;
+    saves.networkRun = true;
     rooms::setConnected(15);
     return true;
 }
-using SaveGame = void(__cdecl*)();
-SaveGame originalSaveGame, originalDeleteGame, originalSaveRerun;
-void __cdecl saveGame() {
-    if (!networkRun) {
-        originalSaveGame();
+void saveGame(const backend::Call& original) {
+    if (!saves.networkRun) {
+        original();
         return;
     }
     // Native save normally opens/truncates the user's solo run before calling
     // its serializer. Keep the network state in memory and commit our separate
     // session archive after the engine's exit transaction instead.
-    if (exitingArchive) {
-        const auto manager =
-            *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager);
-        const auto game = *reinterpret_cast<void**>(executableImage + j460::globals::game);
-        using Capture = void(__attribute__((thiscall))*)(void*, void*);
-        reinterpret_cast<Capture>(executableImage + j460::entry::runtimeNetCapture)(
-            game, reinterpret_cast<void*>(manager + 0xfa4));
-    }
+    if (saves.exitingArchive)
+        backend::captureSave();
 }
-void __cdecl deleteGame() {
-    if (!networkRun) {
-        originalDeleteGame();
+void deleteGame(const backend::Call& original) {
+    if (!saves.networkRun) {
+        original();
         return;
     }
-    const auto manager =
-        *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager);
-    *reinterpret_cast<bool*>(manager + 0x4b284) = false;
+    backend::suppressDelete();
 }
-void __cdecl saveRerun() {
-    if (!networkRun)
-        originalSaveRerun();
+void saveRerun(const backend::Call& original) {
+    if (!saves.networkRun)
+        original();
 }
 std::filesystem::path archivePath() {
     wchar_t executable[32768]{};
     GetModuleFileNameW(nullptr, executable, std::size(executable));
-    const auto manager =
-        *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager);
-    const auto slot = *reinterpret_cast<unsigned*>(manager + 0x10);
+    const auto slot = backend::saveSlot();
     return std::filesystem::path(executable).parent_path() / L"isaac-lan" /
            (L"session-" + std::to_wstring(slot) + L".bin");
 }
 void writeArchive(const lan::Archive& archive) {
-    const auto path = archivePath();
-    const auto temporary = path.wstring() + L".tmp";
-    const auto bytes = archive.encode();
-    std::filesystem::create_directories(path.parent_path());
-    std::ofstream file(temporary.c_str(), std::ios::binary | std::ios::trunc);
-    file.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
-    file.close();
-    if (!file || !MoveFileExW(temporary.c_str(), path.c_str(),
-                              MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-        throw std::runtime_error("Cannot commit LAN saved session");
+    const auto bytes = SessionStore(archivePath()).write(archive);
     if (logger)
-        logger("session_save=COMPLETE bytes=" + std::to_string(bytes.size()));
+        logger("session_save=COMPLETE bytes=" + std::to_string(bytes));
 }
 std::optional<lan::Archive> readArchive() {
     try {
-        const auto path = archivePath();
-        if (!std::filesystem::exists(path) ||
-            std::filesystem::file_size(path) > lan::maxSnapshotSize)
-            return {};
-        std::ifstream file(path, std::ios::binary);
-        const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(file), {}};
-        return lan::Archive::decode(bytes);
+        return SessionStore(archivePath()).read();
     } catch (const std::exception& error) {
         if (logger)
             logger("session_read=FAILED " + std::string(error.what()));
         return {};
     }
 }
-std::optional<lan::Progress> localProgress, commonProgress;
-std::uintptr_t progressionAddress() {
-    return *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager) + 0x14;
-}
 lan::Progress readProgress() {
-    lan::Progress value;
-    const auto base = progressionAddress();
-    std::memcpy(value.achievements.data(), reinterpret_cast<void*>(base + 0x38),
-                value.achievements.size());
-    std::memcpy(value.counters.data(), reinterpret_cast<void*>(base + 0x2bc),
-                value.counters.size() * 4);
-    return value;
+    return backend::readProgress();
 }
 lan::LobbyAccess personalAccess() {
     // Embedded modules load during Lua initialization, before the native save
     // manager exists. Access is unavailable until that initialization finishes.
-    if (!executableImage ||
-        !*reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager))
+    if (!backend::managerReady())
         return {};
     // During a shared run native progress contains the host's values. Access
     // always comes from this player's save, captured before that substitution.
-    const auto progress = localProgress ? *localProgress : readProgress();
+    const auto progress = saves.localProgress ? *saves.localProgress : readProgress();
     lan::LobbyAccess access;
     for (const auto& entry : characters::catalogue(executableImage, progress).entries) {
         if (entry.selectable)
@@ -198,33 +134,26 @@ lan::LobbyAccess personalAccess() {
     return access;
 }
 void writeProgress(const lan::Progress& value) {
-    const auto base = progressionAddress();
-    std::memcpy(reinterpret_cast<void*>(base + 0x38), value.achievements.data(),
-                value.achievements.size());
-    std::memcpy(reinterpret_cast<void*>(base + 0x2bc), value.counters.data(),
-                value.counters.size() * 4);
+    backend::writeProgress(value);
 }
 void restoreProgress() {
-    if (!localProgress || !commonProgress)
+    if (!saves.localProgress || !saves.commonProgress)
         return;
     const auto current = readProgress();
     // Keep each user's previous progress. Only changes earned during this
     // shared run are merged back; the host's old achievements are not granted.
-    writeProgress(lan::mergeProgress(*localProgress, *commonProgress, current));
-    localProgress.reset();
-    commonProgress.reset();
+    writeProgress(lan::mergeProgress(*saves.localProgress, *saves.commonProgress, current));
+    saves.localProgress.reset();
+    saves.commonProgress.reset();
 }
-using SerializeProgress = void(__attribute__((thiscall)) *)(void*);
-SerializeProgress originalSerializeProgress;
-void __attribute__((fastcall)) serializeProgress(void* p, void*) {
-    if (!localProgress || !commonProgress ||
-        reinterpret_cast<std::uintptr_t>(p) != progressionAddress()) {
-        originalSerializeProgress(p);
+void serializeProgress(const backend::Call& original) {
+    if (!saves.localProgress || !saves.commonProgress) {
+        original();
         return;
     }
     const auto current = readProgress();
-    writeProgress(lan::mergeProgress(*localProgress, *commonProgress, current));
-    originalSerializeProgress(p);
+    writeProgress(lan::mergeProgress(*saves.localProgress, *saves.commonProgress, current));
+    original();
     writeProgress(current);
     if (logger)
         logger("progress_save=ISOLATED");
@@ -234,18 +163,12 @@ int captureRef = -2, applyRef = -2, captureStateRef = -2, restoreStateRef = -2, 
     stageRef = -2;
 lan::InputFrame localInput;
 std::optional<lan::InputRoom> lastInputRoom;
-std::optional<lan::WorldState> authoritative;
-bool gated = false, pendingHalf = false;
-bool playingEnding = false;
-bool playingCinematic = false, cinematicReady = false;
 std::uint32_t nextInputTick = 0;
 using InputClock = std::chrono::steady_clock;
 InputSchedule inputSchedule;
 unsigned inputHz = 60;
 std::optional<InputClock::time_point> rejoinAt;
 std::uint32_t nextTick = 0, currentTick = 0;
-std::uint32_t floorEpoch = 0;
-std::optional<lan::WorldState> replicaPending;
 std::array<std::uint32_t, lan::maxPlayers> consumedInputSequences{};
 struct StateCost {
     unsigned samples = 0;
@@ -270,25 +193,9 @@ struct StateCost {
 } captureCost, applyCost;
 void (*runHalf)() = nullptr;
 void (*restorePositions)() = nullptr;
-using GameUpdate = void(__attribute__((thiscall)) *)(void*);
-GameUpdate originalUpdate = nullptr;
-using Controls = void(__cdecl*)();
-Controls originalControls;
-using ConsoleUpdate = void(__attribute__((thiscall)) *)(void*);
-ConsoleUpdate originalConsoleUpdate = nullptr;
-using ConsoleCommand = void(__attribute__((thiscall)) *)(void*, const void*, bool, void*);
-ConsoleCommand originalConsoleCommand = nullptr;
-void __attribute__((fastcall)) consoleCommand(void* console, void*, const void* text, bool silent,
-                                              void* player) {
-    // J460 uses the MSVC x86 string layout at this native boundary.
-    const auto address = reinterpret_cast<std::uintptr_t>(text);
-    const auto size = *reinterpret_cast<const unsigned*>(address + 16);
-    const auto capacity = *reinterpret_cast<const unsigned*>(address + 20);
-    const auto data =
-        capacity < 16 ? static_cast<const char*>(text) : *static_cast<const char* const*>(text);
-    const auto command = std::string_view(data, size);
+void consoleCommand(std::string_view command, const backend::Call& original) {
     if (const auto args = input::consoleArguments(command, "rewind");
-        args && gated && session && session->phase() == lan::Phase::running) {
+        args && view.gated && session && session->phase() == lan::Phase::running) {
         // Native console rewind restores its process-wide room buffer. LAN
         // suppresses that buffer in favor of controller checkpoints, so the
         // native command would end the session and restart with an empty seed.
@@ -313,26 +220,24 @@ void __attribute__((fastcall)) consoleCommand(void* console, void*, const void* 
         }
         lua.setTop(state, top);
     }
-    originalConsoleCommand(console, text, silent, player);
+    original();
 }
-void __attribute__((fastcall)) consoleUpdate(void* console, void*) {
+void consoleUpdate(const backend::Call& original) {
     // LAN services this local interface once per render, independently of the
     // host's 30 Hz simulation and the guest's snapshot presentation.
-    if (!gated || !session || session->phase() != lan::Phase::running)
-        originalConsoleUpdate(console);
+    if (!view.gated || !session || session->phase() != lan::Phase::running)
+        original();
 }
-void __cdecl controls() {
-    if (!gated || playingEnding || playingCinematic) {
-        originalControls();
+void controls(const backend::Call& original) {
+    if (!view.gated || view.playingEnding || view.playingCinematic) {
+        original();
         return;
     }
-    const auto g = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
-    if (!session || session->phase() != lan::Phase::running || !g ||
-        *reinterpret_cast<int*>(g + 0x23a74) == 0)
+    if (!session || session->phase() != lan::Phase::running || backend::pause() == 0)
         return;
     // Losing focus can open a native menu on a guest without pausing the
     // authority. Clear that local overlay even before another snapshot arrives.
-    if (!session->isHost() && authoritative && !authoritative->paused) {
+    if (!session->isHost() && view.authoritative && !view.authoritative->paused) {
         rooms::withView([&] { pause_menu::synchronize(executableImage, false); }, true);
         return;
     }
@@ -344,18 +249,10 @@ void __cdecl controls() {
     else if (request == pause_menu::Intent::exit)
         session->command(session->isHost() ? lan::Command::saveExit : lan::Command::leave);
 }
-struct SeedValue {
-    std::array<std::uint32_t, 23> words;
-};
-static_assert(sizeof(SeedValue) == 0x5c);
-using StartGame = void(__attribute__((thiscall)) *)(void*, int, int, SeedValue, unsigned);
-StartGame originalStart = nullptr;
-using ExecuteStart = void(__attribute__((thiscall)) *)(void*);
-ExecuteStart originalExecuteStart;
 void fail(const std::string& error);
 lan::Archive captureCheckpoint();
-void __attribute__((fastcall)) executeStart(void* manager, void*) {
-    const bool resume = resumeLaunch && session && session->phase() == lan::Phase::running;
+void executeStart(const backend::Call& original) {
+    const bool resume = launch.resume && session && session->phase() == lan::Phase::running;
     if (resume) {
         rooms::beforeStart();
         input::reset();
@@ -363,30 +260,27 @@ void __attribute__((fastcall)) executeStart(void* manager, void*) {
         // drops players whose saved controller is absent, before Lua can bind
         // them. Restore LAN device IDs before that roster is reconstructed.
         input::prepareControllers();
-        if (session->settings().progress && !localProgress) {
-            localProgress = readProgress();
-            commonProgress = session->settings().progress;
-            writeProgress(*commonProgress);
+        if (session->settings().progress && !saves.localProgress) {
+            saves.localProgress = readProgress();
+            saves.commonProgress = session->settings().progress;
+            writeProgress(*saves.commonProgress);
         }
     }
-    originalExecuteStart(manager);
+    original();
     // Manager invokes ExecuteStart every frame, even without a queued launch.
     // Reset only after an actual new/continued run, preserving later prompts.
-    if ((menuPromptsPending || resume) && session && session->phase() == lan::Phase::running)
+    if ((launch.promptsPending || resume) && session && session->phase() == lan::Phase::running)
         input::resetMenuPrompts();
-    menuPromptsPending = false;
+    launch.promptsPending = false;
     if (resume) {
         // Continue restores players before our controller assignment callback.
         // Clear the native reconnect/pause screen once every controller is
         // bound, just as the new-run path initializes PauseScreen.
-        const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
-        reinterpret_cast<ExecuteStart>(executableImage + j460::entry::runtimeNetExecuteStart)(
-            reinterpret_cast<void*>(game + 0x23a74));
-        resumeLaunch = false;
+        backend::resetPause();
+        launch.resume = false;
     }
 }
-void __attribute__((fastcall)) startGame(void* game, void*, int type, int challenge,
-                                         SeedValue seeds, unsigned difficulty) {
+void startGame(const backend::Call& original) {
     rooms::beforeStart();
     input::reset();
     const bool networkStart = session && session->phase() == lan::Phase::running;
@@ -394,17 +288,14 @@ void __attribute__((fastcall)) startGame(void* game, void*, int type, int challe
         session->abort("Cannot preserve the existing solo save");
         return;
     }
-    if (networkStart && session->settings().progress && !localProgress) {
-        localProgress = readProgress();
-        commonProgress = session->settings().progress;
-        writeProgress(*commonProgress);
+    if (networkStart && session->settings().progress && !saves.localProgress) {
+        saves.localProgress = readProgress();
+        saves.commonProgress = session->settings().progress;
+        writeProgress(*saves.commonProgress);
     }
-    // J460 consumes the by-value native Seeds argument (0x5c bytes). This POD
-    // forwarding copy has no destructor; ownership is consumed exactly once by
-    // the original function. Its verified stack cleanup is 0x68 bytes.
-    originalStart(game, type, challenge, seeds, difficulty);
+    original();
     if (networkStart)
-        menuPromptsPending = true;
+        launch.promptsPending = true;
 }
 
 void fail(const std::string& error) {
@@ -423,7 +314,7 @@ bool call(int reference, int arguments, int results, int stackBefore) {
     return false;
 }
 void integrationCallback(const char* name) {
-    if (!state || !gated || !session)
+    if (!state || !view.gated || !session)
         return;
     const int top = lua.getTop(state);
     if (lua.getGlobal(state, name) == 6 && lua.pcall(state, 0, 0, 0, 0, nullptr) && logger) {
@@ -435,7 +326,6 @@ void integrationCallback(const char* name) {
 void publishState() {
     if (!session || !session->isHost() || session->phase() != lan::Phase::running)
         return;
-    const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
     // Readiness can arrive between a game update and its half update. Publish
     // only the roster already applied to this game state; a new guest gets its
     // first view after setConnected has restored the actor and room.
@@ -461,7 +351,7 @@ void publishState() {
         lan::WorldState packet;
         packet.tick = currentTick;
         packet.connected = simulatedMask;
-        packet.paused = *reinterpret_cast<int*>(game + 0x23a74) != 0;
+        packet.paused = backend::pause() != 0;
         packet.pauseOwner = input::menuOwner();
         packet.inputSequences = consumedInputSequences;
         packet.bytes.assign(bytes, bytes + size);
@@ -471,7 +361,7 @@ void publishState() {
     session->poll();
 }
 bool captureNextInput(bool simulationStep = false) {
-    if (!gated || !session || playingEnding || playingCinematic ||
+    if (!view.gated || !session || view.playingEnding || view.playingCinematic ||
         session->phase() != lan::Phase::running)
         return false;
     // Host input belongs to each native simulation step. Guest input follows
@@ -494,19 +384,18 @@ bool captureNextInput(bool simulationStep = false) {
     lan::Reader reader{std::span(reinterpret_cast<const std::uint8_t*>(data), size)};
     localInput = reader.input();
     lua.setTop(state, top);
-    const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
-    if (game && *reinterpret_cast<int*>(game + 0x23a74) != 0)
+    if (backend::pause() != 0)
         localInput = input::pausedInput(localInput);
     std::optional<lan::InputRoom> inputRoom;
     const auto locations = rooms::captureLocations();
     if (rooms::stateReady() && session->slot() < locations.size()) {
         const auto& position = locations[session->slot()];
-        inputRoom = lan::InputRoom{floorEpoch, static_cast<std::int16_t>(position.index),
+        inputRoom = lan::InputRoom{view.floorEpoch, static_cast<std::int16_t>(position.index),
                                    static_cast<std::uint8_t>(position.dimension)};
         inputRoom->introSerial = presentation::playedIntro();
         inputRoom->introActive = presentation::introActive();
     }
-    input::captureRoomInput(localInput, inputRoom, lastInputRoom, floorEpoch);
+    input::captureRoomInput(localInput, inputRoom, lastInputRoom, view.floorEpoch);
     if (!session->submit(nextInputTick, localInput, inputRoom)) {
         fail("Local input sequence rejected");
         return false;
@@ -517,16 +406,16 @@ bool captureNextInput(bool simulationStep = false) {
 bool applyReplicaView(bool betweenUpdates) {
     // Reliable transitions, initial loading, and modal changes retain the full
     // update path. A half frame only restores a ready, stable world view.
-    if (betweenUpdates &&
-        (!authoritative || playingEnding || playingCinematic || !rooms::stateReady() ||
-         session->phase() != lan::Phase::running || session->worldEpoch() != floorEpoch))
+    if (betweenUpdates && (!view.authoritative || view.playingEnding || view.playingCinematic ||
+                           !rooms::stateReady() || session->phase() != lan::Phase::running ||
+                           session->worldEpoch() != view.floorEpoch))
         return false;
     if (auto packet = session->takeState())
-        replicaPending = std::move(packet);
-    if (replicaPending) {
-        auto& packet = replicaPending;
-        if (betweenUpdates && (packet->paused != authoritative->paused ||
-                               packet->connected != authoritative->connected))
+        view.replicaPending = std::move(packet);
+    if (view.replicaPending) {
+        auto& packet = view.replicaPending;
+        if (betweenUpdates && (packet->paused != view.authoritative->paused ||
+                               packet->connected != view.authoritative->connected))
             return false;
         const int top = lua.getTop(state);
         lua.rawGetI(state, registry, restoreStateRef);
@@ -541,7 +430,7 @@ bool applyReplicaView(bool betweenUpdates) {
         applyCost.sample(began, "apply");
         // A valid new-floor snapshot can arrive while the native transition is
         // still running. Keep the newest view and retry after initialization.
-        const bool applied = lua.type(state, -1) != 1 || lua.boolean(state, -1) != 0;
+        const bool applied = lua.type(state, -1) != 1 || lua.toBoolean(state, -1) != 0;
         lua.setTop(state, top);
         if (!applied)
             return false;
@@ -552,38 +441,30 @@ bool applyReplicaView(bool betweenUpdates) {
         if (packet->paused != (pause_menu::state(executableImage).page != 0))
             rooms::withView([&] { pause_menu::synchronize(executableImage, packet->paused); },
                             true);
-        authoritative = std::move(packet);
-        replicaPending.reset();
+        view.authoritative = std::move(packet);
+        view.replicaPending.reset();
         session->applied(currentTick);
         return true;
     }
     return false;
 }
-void updateReplica(void* game) {
-    const auto g = reinterpret_cast<std::uintptr_t>(game);
+void updateReplica(const backend::Call& original) {
     // A faster host can finish another floor while this replica is still
     // initializing the previous one. Leave the reliable event in the session
     // until the native roster is ready; keep updating the loading floor below.
     if (auto transition = rooms::stateReady() ? session->takeStage() : std::nullopt) {
-        replicaPending.reset();
-        authoritative.reset();
+        view.replicaPending.reset();
+        view.authoritative.reset();
         // A returning client may still have its actor parked according to the
         // checkpoint roster. The readiness event admits this local controller
         // before a deferred native floor event can name its player object.
         rooms::setConnected(session->connectedMask() | (1u << session->slot()));
-        floorEpoch = transition->epoch;
+        view.floorEpoch = transition->epoch;
         // Native Forget Me Now, five-pip rooms and R Key update Seeds before
         // starting the transition. A stage number alone regenerates the old
         // client topology, whose missing descriptor can crash the minimap.
-        if (transition->rewind.empty()) {
-            std::memcpy(reinterpret_cast<void*>(g + 0x1bb84), transition->seeds.data(),
-                        sizeof(transition->seeds));
-            // Route flags are set by authoritative trapdoor gameplay. Replicas
-            // must inherit them before native next-floor selection, not after
-            // loading a normal floor and discovering mismatched descriptors.
-            std::memcpy(reinterpret_cast<void*>(g + 0x26548), transition->stateFlags.data(),
-                        sizeof(transition->stateFlags));
-        }
+        if (transition->rewind.empty())
+            backend::applyStage(*transition);
         const int top = lua.getTop(state);
         lua.rawGetI(state, registry, stageRef);
         lua.pushInteger(state, transition->epoch);
@@ -596,19 +477,19 @@ void updateReplica(void* game) {
         lua.pushInteger(state, transition->restart);
         lua.pushInteger(state, transition->cinematic);
         lua.pushInteger(state, transition->sourceRoom);
-        playingCinematic = transition->cinematic != 0;
-        cinematicReady = false;
-        if (playingCinematic) {
+        view.playingCinematic = transition->cinematic != 0;
+        view.cinematicReady = false;
+        if (view.playingCinematic) {
             input::reset();
-            pendingHalf = false;
+            view.pendingHalf = false;
         }
         if (!call(stageRef, 9, 0, top))
             return;
         rooms::finishFrame();
         if (logger)
-            logger("floor_event=RECEIVED epoch=" + std::to_string(floorEpoch));
+            logger("floor_event=RECEIVED epoch=" + std::to_string(view.floorEpoch));
     }
-    if (playingCinematic)
+    if (view.playingCinematic)
         return;
     const bool committedView = applyReplicaView(false);
     if (session->phase() != lan::Phase::running)
@@ -617,13 +498,13 @@ void updateReplica(void* game) {
     presentation.players = session->players();
     presentation.connected = session->connectedMask();
     input::apply(presentation);
-    originalUpdate(game);
+    original();
     rooms::finishFrame();
     if (committedView)
         integrationCallback("_IsaacLanViewCommitted");
     // Player interpolation also performs gameplay in this engine. Replicas
     // use the presentation callback instead of running that native simulation.
-    pendingHalf = false;
+    view.pendingHalf = false;
 }
 void playSessionEnding(unsigned ending, bool completed) {
     if (completed)
@@ -631,18 +512,18 @@ void playSessionEnding(unsigned ending, bool completed) {
     else
         rooms::playEnding(ending);
 }
-void updateOne(void* game) {
-    if (!gated) {
-        originalUpdate(game);
+void updateOne(const backend::Call& original) {
+    if (!view.gated) {
+        original();
         rooms::finishFrame();
         return;
     }
     if (replica() && session)
         if (const auto ending = session->takeEnding()) {
-            playingEnding = true;
+            view.playingEnding = true;
             input::reset();
-            authoritative.reset();
-            replicaPending.reset();
+            view.authoritative.reset();
+            view.replicaPending.reset();
             playSessionEnding(ending->id, ending->completed);
             writeProgress(ending->progress);
             if (logger)
@@ -650,36 +531,33 @@ void updateOne(void* game) {
                        " completed=" + std::to_string(ending->completed));
             return;
         }
-    if (pendingChallengeFinish && session && session->isHost()) {
-        const auto ending = *pendingChallengeFinish;
-        pendingChallengeFinish.reset();
+    if (view.pendingChallengeFinish && session && session->isHost()) {
+        const auto ending = *view.pendingChallengeFinish;
+        view.pendingChallengeFinish.reset();
         if (beginEnding(ending, true))
             playSessionEnding(ending, true);
         return;
     }
-    if (playingEnding) {
+    if (view.playingEnding) {
         // Keep the native cinematic/exit state machine alive after finish.
         // Returning directly to the lobby would skip the guest's ending.
-        originalUpdate(game);
+        original();
         rooms::finishFrame();
         return;
     }
-    if (playingCinematic && session && session->phase() == lan::Phase::running) {
+    if (view.playingCinematic && session && session->phase() == lan::Phase::running) {
         session->poll();
-        const auto manager =
-            *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager);
-        if (!cinematicReady) {
-            originalUpdate(game);
+        if (!view.cinematicReady) {
+            original();
             rooms::finishFrame();
-            if (!*reinterpret_cast<bool*>(manager + 0x21618) &&
-                *reinterpret_cast<int*>(manager + 8) == 2 && rooms::stateReady()) {
-                cinematicReady = session->cinematicReady();
+            if (backend::cinematicFinished() && rooms::stateReady()) {
+                view.cinematicReady = session->cinematicReady();
                 if (logger)
                     logger("cinematic_event=READY");
             }
         }
         if (!session->cinematicActive()) {
-            playingCinematic = cinematicReady = false;
+            view.playingCinematic = view.cinematicReady = false;
             if (logger)
                 logger("cinematic_event=COMPLETE");
         }
@@ -687,7 +565,7 @@ void updateOne(void* game) {
     }
     // Finish each accepted frame's interpolation/player phase exactly once,
     // even if the local renderer skipped its usual half-frame callback.
-    if (pendingHalf) {
+    if (view.pendingHalf) {
         if (logger)
             logger("half_late=" + std::to_string(currentTick));
         runHalf();
@@ -713,7 +591,7 @@ void updateOne(void* game) {
         return;
     session->poll();
     if (!session->isHost()) {
-        updateReplica(game);
+        updateReplica(original);
         return;
     }
     auto frame = session->take();
@@ -722,7 +600,6 @@ void updateOne(void* game) {
     // Later polls can receive the next controls before this frame is sent.
     // Acknowledgements describe the controls used by this simulation step.
     consumedInputSequences = session->inputSequences();
-    const auto g = reinterpret_cast<std::uintptr_t>(game);
     const auto arrivals = frame->connected & ~rooms::connected();
     rooms::setConnected(frame->connected);
     rooms::protectArrivals(arrivals);
@@ -741,18 +618,18 @@ void updateOne(void* game) {
     const auto locations = rooms::captureLocations();
     for (unsigned slot = 1; slot < frame->players; ++slot) {
         const auto& context = frame->inputRooms[slot];
-        if (!context || context->epoch != floorEpoch || slot >= locations.size() ||
+        if (!context || context->epoch != view.floorEpoch || slot >= locations.size() ||
             context->index != locations[slot].index ||
             context->dimension != locations[slot].dimension)
-            frame->inputs[slot] = input::transitionInput(frame->inputs[slot],
-                                                         context && context->epoch == floorEpoch);
+            frame->inputs[slot] = input::transitionInput(
+                frame->inputs[slot], context && context->epoch == view.floorEpoch);
         else
             presentation::observeIntro(slot, context->introSerial, context->introActive);
     }
     bool resumePause = false;
     for (unsigned slot = 0; slot < frame->players; ++slot) {
         const auto command = frame->commands[slot];
-        const bool paused = *reinterpret_cast<int*>(g + 0x23a74) != 0;
+        const bool paused = backend::pause() != 0;
         if (command == lan::Command::pause && !paused) {
             frame->inputs[slot].values[12] = 65535;
             frame->inputs[slot].triggered |= 1u << 12;
@@ -780,7 +657,7 @@ void updateOne(void* game) {
     }
     currentTick = frame->tick;
     ++nextTick;
-    const bool paused = *reinterpret_cast<int*>(g + 0x23a74) != 0;
+    const bool paused = backend::pause() != 0;
     bool openPause = false;
     if (!paused)
         for (unsigned slot = 0; slot < frame->players; ++slot)
@@ -796,20 +673,20 @@ void updateOne(void* game) {
             },
             true);
     else if (!paused)
-        originalControls();
-    if (!gated) {
+        backend::controls();
+    if (!view.gated) {
         return;
     }
     {
         presentation::IntroSimulationScope intro(true);
-        originalUpdate(game);
+        original();
     }
     presentation::items::advance();
     rooms::finishFrame();
-    pendingHalf = gated && !playingCinematic;
+    view.pendingHalf = view.gated && !view.playingCinematic;
 }
-void __attribute__((fastcall)) update(void* game, void*) {
-    updateOne(game);
+void update(const backend::Call& original) {
+    updateOne(original);
 }
 int host(lua_State* L) {
     const auto port = lua.checkInteger(L, 1);
@@ -894,7 +771,7 @@ int poll(lua_State* L) {
     }
     if (rejoinAt && InputClock::now() >= *rejoinAt) {
         rejoinAt.reset();
-        if (session && !gated) {
+        if (session && !view.gated) {
             session->reconnect();
             if (logger)
                 logger("network_return=RECONNECTING");
@@ -902,7 +779,7 @@ int poll(lua_State* L) {
     }
     // Service input at render frequency too. Waiting until the next 30 Hz game
     // update to send it needlessly adds a whole frame to a LAN round trip.
-    if (gated && state == L) {
+    if (view.gated && state == L) {
         input::pollPhysicalInput();
         if (captureNextInput())
             session->poll();
@@ -923,9 +800,7 @@ int poll(lua_State* L) {
     integer("port", session ? session->port() : 0);
     integer("tick", nextTick);
     integer("verified", session && session->verifiedTick() ? *session->verifiedTick() : -1ll);
-    const auto manager =
-        *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager);
-    integer("scene", manager ? *reinterpret_cast<int*>(manager + 8) : -1);
+    integer("scene", backend::scene());
     lua.pushString(L, session ? session->error().c_str() : "");
     lua.setField(L, -2, "error");
     lua.pushString(L, session ? session->settings().seed.c_str() : "");
@@ -933,8 +808,7 @@ int poll(lua_State* L) {
     integer("difficulty", session ? session->settings().difficulty : 0);
     integer("challenge", session ? session->rules().id : 0);
     integer("challengeVersion", session ? session->rules().version : 0);
-    const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
-    integer("pause", game ? *reinterpret_cast<int*>(game + 0x23a74) : 0);
+    integer("pause", backend::pause());
     integer("pauseOwner", input::menuOwner());
     for (unsigned i = 0; i < 4; ++i)
         integer(("character" + std::to_string(i)).c_str(),
@@ -951,20 +825,29 @@ int poll(lua_State* L) {
     }
     return 1;
 }
+int phaseValues(lua_State* L) {
+    lua.createTable(L, 0, lan::phaseValues.size());
+    for (const auto& [name, value] : lan::phaseValues) {
+        lua.pushInteger(L, static_cast<int>(value));
+        lua.setField(L, -2, name);
+    }
+    return 1;
+}
 int integrationInfo(lua_State* L) {
     lua.createTable(L, 0, 9);
-    const bool active = !playingEnding && session && session->phase() == lan::Phase::running;
+    const bool active = !view.playingEnding && session && session->phase() == lan::Phase::running;
     auto integer = [&](const char* key, long long value) {
         lua.pushInteger(L, value);
         lua.setField(L, -2, key);
     };
     integer("active", active);
-    integer("ready", active && gated && rooms::viewReady() && (session->isHost() || authoritative));
+    integer("ready", active && view.gated && rooms::viewReady() &&
+                         (session->isHost() || view.authoritative));
     integer("authority", active && session->isHost());
     integer("slot", session ? session->slot() : 0);
     integer("players", session ? session->players() : 0);
     integer("connected", session ? session->connectedMask() : 0);
-    integer("worldEpoch", floorEpoch);
+    integer("worldEpoch", view.floorEpoch);
     integer("challenge", active ? session->settings().rules.id : 0);
     integer("challengeVersion", active ? session->settings().rules.version : 0);
     integer("restrictedBags", craftingBagViewTarget() != -1);
@@ -1027,10 +910,9 @@ int challengeList(lua_State* L) {
 }
 int characterList(lua_State* L) {
     characters::Catalogue catalogue;
-    if (executableImage &&
-        *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager))
-        catalogue =
-            characters::catalogue(executableImage, localProgress ? *localProgress : readProgress());
+    if (backend::managerReady())
+        catalogue = characters::catalogue(
+            executableImage, saves.localProgress ? *saves.localProgress : readProgress());
     lua.createTable(L, catalogue.entries.size(), 0);
     unsigned index = 0;
     for (const auto& entry : catalogue.entries) {
@@ -1065,10 +947,10 @@ int selectChallenge(lua_State* L) {
 int finishChallenge(lua_State* L) {
     const auto* definition =
         session ? compat::challenges::find(session->settings().rules.id) : nullptr;
-    const bool allowed = definition && gated && session->isHost() && !playingEnding &&
+    const bool allowed = definition && view.gated && session->isHost() && !view.playingEnding &&
                          session->phase() == lan::Phase::running;
     if (allowed)
-        pendingChallengeFinish = definition->ending;
+        view.pendingChallengeFinish = definition->ending;
     lua.pushBoolean(L, allowed);
     return 1;
 }
@@ -1125,34 +1007,16 @@ int startEngine(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    if (!session || session->phase() != lan::Phase::running || launchRequested || gated) {
+    if (!session || session->phase() != lan::Phase::running || launch.requested || view.gated) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    // Seeds::String2Seed accepts the displayed nine-character form. Its input
-    // is a read-only native small string, with no cross-runtime allocation.
-    struct SmallString {
-        char text[16]{};
-        unsigned size = 9, capacity = 15;
-    } value;
     const auto& settings = session->settings();
-    std::memcpy(value.text, settings.seed.data(), 4);
-    value.text[4] = ' ';
-    std::memcpy(value.text + 5, settings.seed.data() + 4, 4);
-    using ParseSeed = std::uint32_t(__cdecl*)(const SmallString*);
-    const auto seed =
-        reinterpret_cast<ParseSeed>(executableImage + j460::entry::runtimeNetParseSeed)(&value);
+    const auto seed = backend::parseSeed(settings.seed);
     if (!seed) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    SeedValue seeds{};
-    using SeedConstructor = void(__attribute__((thiscall))*)(void*);
-    using SetSeed = void(__attribute__((thiscall))*)(void*, std::uint32_t);
-    reinterpret_cast<SeedConstructor>(executableImage +
-                                      j460::entry::runtimeNetSeedConstructor)(&seeds);
-    reinterpret_cast<SetSeed>(executableImage + j460::entry::runtimeNetSetSeed)(&seeds, seed);
-    const auto manager = *reinterpret_cast<void**>(executableImage + j460::globals::manager);
     if (!beginNetworkRun()) {
         fail("Cannot preserve the existing solo save");
         lua.pushBoolean(L, false);
@@ -1160,12 +1024,12 @@ int startEngine(lua_State* L) {
     }
     if (!settings.snapshot.empty()) {
         try {
-            resumingArchive = lan::Archive::decode(settings.snapshot);
-            if (resumingArchive->fingerprint != sessionFingerprint ||
-                resumingArchive->locations.size() != session->players() ||
-                resumingArchive->settings.seed != settings.seed ||
-                resumingArchive->settings.rules != settings.rules ||
-                !save::decode(executableImage, resumingArchive->game))
+            saves.resumingArchive = lan::Archive::decode(settings.snapshot);
+            if (saves.resumingArchive->fingerprint != sessionFingerprint ||
+                saves.resumingArchive->locations.size() != session->players() ||
+                saves.resumingArchive->settings.seed != settings.seed ||
+                saves.resumingArchive->settings.rules != settings.rules ||
+                !save::decode(executableImage, saves.resumingArchive->game))
                 throw std::runtime_error("Cannot restore host saved session");
         } catch (const std::exception& error) {
             fail(error.what());
@@ -1173,14 +1037,13 @@ int startEngine(lua_State* L) {
             return 1;
         }
     }
-    launchRequested = true;
-    reinterpret_cast<StartGame>(executableImage + j460::entry::runtimeNetStartGame)(
-        manager, settings.characters[0], 0, seeds, settings.difficulty);
-    if (resumingArchive || (lua.getTop(L) > 0 && lua.checkInteger(L, 1) != 0)) {
+    launch.requested = true;
+    backend::start(seed, settings.characters[0], settings.difficulty);
+    if (saves.resumingArchive || (lua.getTop(L) > 0 && lua.checkInteger(L, 1) != 0)) {
         // Same continue request byte used by the native Continue menu. The
         // manager restores its GameState through Game::RestoreState itself.
-        *reinterpret_cast<bool*>(reinterpret_cast<std::uintptr_t>(manager) + 0x4b131) = true;
-        resumeLaunch = true;
+        backend::requestContinue();
+        launch.resume = true;
     }
     if (logger)
         logger("network_engine_start=REQUESTED seed=" + std::to_string(seed));
@@ -1188,7 +1051,7 @@ int startEngine(lua_State* L) {
     return 1;
 }
 int gate(lua_State* L) {
-    if (gated || !session || session->phase() != lan::Phase::running || lua.type(L, 1) != 6 ||
+    if (view.gated || !session || session->phase() != lan::Phase::running || lua.type(L, 1) != 6 ||
         lua.type(L, 2) != 6 || lua.type(L, 3) != 6 || lua.type(L, 4) != 6 || lua.type(L, 5) != 6 ||
         lua.type(L, 6) != 6) {
         lua.pushBoolean(L, false);
@@ -1209,20 +1072,20 @@ int gate(lua_State* L) {
     stageRef = lua.ref(L, registry);
     nextInputTick = 0;
     nextTick = currentTick = session->settings().firstTick;
-    authoritative.reset();
-    replicaPending.reset();
-    floorEpoch = session->worldEpoch();
+    view.authoritative.reset();
+    view.replicaPending.reset();
+    view.floorEpoch = session->worldEpoch();
     localInput = {};
     lastInputRoom.reset();
     consumedInputSequences = {};
     captureCost = {};
     applyCost = {};
     inputSchedule = InputSchedule(inputHz);
-    pendingHalf = false;
-    gated = true;
-    playingEnding = false;
-    pendingChallengeFinish.reset();
-    playingCinematic = cinematicReady = false;
+    view.pendingHalf = false;
+    view.gated = true;
+    view.playingEnding = false;
+    view.pendingChallengeFinish.reset();
+    view.playingCinematic = view.cinematicReady = false;
     session->ready();
     if (logger)
         logger(session->isHost() ? "state_authority=HOST" : "state_authority=REPLICA");
@@ -1231,7 +1094,7 @@ int gate(lua_State* L) {
 }
 int close(lua_State* L) {
     const bool gameExit = lua.getTop(L) > 0 && lua.checkInteger(L, 1) == 1;
-    const bool guestExit = gameExit && session && !session->isHost() && gated;
+    const bool guestExit = gameExit && session && !session->isHost() && view.gated;
     const bool retry = guestExit && session->phase() == lan::Phase::failed;
     const bool keep = gameExit && session && (session->phase() == lan::Phase::waiting || retry);
     if (guestExit)
@@ -1245,38 +1108,31 @@ int close(lua_State* L) {
         restoreProgress();
     input::reset();
     if (session && !keep) {
-        if (gated && session->phase() == lan::Phase::running) {
+        if (view.gated && session->phase() == lan::Phase::running) {
             session->finish();
             retiring.push_back(std::move(session));
         } else
             session->close();
     }
-    gated = pendingHalf = false;
-    playingEnding = false;
-    pendingChallengeFinish.reset();
-    playingCinematic = cinematicReady = false;
+    view.stop();
     for (int reference :
          {captureRef, applyRef, captureStateRef, restoreStateRef, presentRef, stageRef})
         if (reference >= 0)
             lua.unref(L, registry, reference);
     captureRef = applyRef = captureStateRef = restoreStateRef = presentRef = stageRef = -2;
-    authoritative.reset();
-    replicaPending.reset();
-    floorEpoch = 0;
+    view.clearSnapshots();
     lastInputRoom.reset();
     if (!keep) {
         session.reset();
         input::leaveLan();
     }
     state = nullptr;
-    launchRequested = false;
-    resumeLaunch = false;
-    menuPromptsPending = false;
+    launch = {};
     return 0;
 }
 int exitEngine(lua_State* L) {
     const bool save = lua.checkInteger(L, 1) != 0;
-    if (!gated || !session || session->phase() != lan::Phase::running) {
+    if (!view.gated || !session || session->phase() != lan::Phase::running) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -1335,14 +1191,14 @@ int resumeSession(lua_State* L) {
     return 1;
 }
 int restoreRooms(lua_State* L) {
-    if (!resumingArchive) {
+    if (!saves.resumingArchive) {
         lua.pushBoolean(L, true);
         return 1;
     }
-    const bool ok = rooms::restoreLocations(resumingArchive->locations);
+    const bool ok = rooms::restoreLocations(saves.resumingArchive->locations);
     if (ok) {
         rooms::setConnected(session->connectedMask());
-        resumingArchive.reset();
+        saves.resumingArchive.reset();
     }
     lua.pushBoolean(L, ok);
     return 1;
@@ -1368,7 +1224,7 @@ lan::Archive captureCheckpoint() {
     return archive;
 }
 int epoch(lua_State* L) {
-    lua.pushInteger(L, floorEpoch);
+    lua.pushInteger(L, view.floorEpoch);
     return 1;
 }
 int sharedCommand(lua_State* L) {
@@ -1388,27 +1244,22 @@ int pauseMenuState(lua_State* L) {
     }
     return 1;
 }
-using ExecuteMenu = void(__attribute__((thiscall)) *)(void*);
-ExecuteMenu originalExecuteMenu;
-void __attribute__((fastcall)) executeMenu(void* manager, void*) {
-    const auto m = reinterpret_cast<std::uintptr_t>(manager);
-    const auto g = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
-    if (gated && session && session->phase() == lan::Phase::running && !authorizedExit &&
-        *reinterpret_cast<bool*>(m + 0x4b288) && *reinterpret_cast<int*>(m + 0x4b28c) == 2 && g &&
-        *reinterpret_cast<int*>(g + 0x23a74) > 0 && input::menuOwner() != 0) {
-        *reinterpret_cast<bool*>(m + 0x4b288) = false;
+void executeMenu(const backend::Call& original) {
+    if (view.gated && session && session->phase() == lan::Phase::running && !authorizedExit &&
+        backend::exitRequested() && backend::pause() > 0 && input::menuOwner() != 0) {
+        backend::cancelExit();
         if (session->slot() == input::menuOwner())
             session->command(lan::Command::leave);
         return;
     }
-    originalExecuteMenu(manager);
+    original();
 }
 } // namespace
 void beforeExit(bool save) {
-    exitingHost = session && session->isHost() && gated;
-    exitingTransient = session && session->settings().rules.transient;
-    exitingArchive.reset();
-    if (!exitingHost || !save || exitingTransient)
+    saves.exitingHost = session && session->isHost() && view.gated;
+    saves.exitingTransient = session && session->settings().rules.transient;
+    saves.exitingArchive.reset();
+    if (!saves.exitingHost || !save || saves.exitingTransient)
         return;
     lan::Archive archive;
     archive.fingerprint = sessionFingerprint;
@@ -1416,44 +1267,40 @@ void beforeExit(bool save) {
     archive.settings.snapshot.clear();
     archive.settings.progress = readProgress();
     archive.locations = rooms::captureLocations();
-    exitingArchive = std::move(archive);
+    saves.exitingArchive = std::move(archive);
 }
 void afterExit(bool save) {
-    if (!networkRun)
+    if (!saves.networkRun)
         return;
     restoreProgress();
-    const bool host = exitingHost;
-    exitingHost = false;
+    const bool host = saves.exitingHost;
+    saves.exitingHost = false;
     try {
         const auto path = archivePath();
-        if (host && !save && !exitingTransient)
+        if (host && !save && !saves.exitingTransient)
             std::filesystem::remove(path);
-        if (host && save && !exitingTransient) {
-            if (!exitingArchive || exitingArchive->locations.size() < 2)
+        if (host && save && !saves.exitingTransient) {
+            if (!saves.exitingArchive || saves.exitingArchive->locations.size() < 2)
                 throw std::runtime_error("No room state to save");
-            exitingArchive->game = save::encode(executableImage);
-            if (exitingArchive->game.empty())
+            saves.exitingArchive->game = save::encode(executableImage);
+            if (saves.exitingArchive->game.empty())
                 throw std::runtime_error("Native game save failed");
-            writeArchive(*exitingArchive);
+            writeArchive(*saves.exitingArchive);
         }
     } catch (const std::exception& error) {
         if (logger)
             logger("session_save=FAILED " + std::string(error.what()));
     }
-    exitingArchive.reset();
-    const auto manager =
-        *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::manager);
-    if (!soloState.empty()) {
-        if (!save::decode(executableImage, soloState) && logger)
+    saves.exitingArchive.reset();
+    if (!saves.soloState.empty()) {
+        if (!save::decode(executableImage, saves.soloState) && logger)
             logger("solo_restore=FAILED");
     } else {
-        using Clear = void(__attribute__((thiscall))*)(void*);
-        reinterpret_cast<Clear>(executableImage + j460::entry::runtimeNetClear)(
-            reinterpret_cast<void*>(manager + 0xfa4));
+        backend::clearSave();
     }
-    *reinterpret_cast<bool*>(manager + 0x20dcc) = soloContinueAvailable;
-    soloState.clear();
-    networkRun = false;
+    backend::continueAvailable(saves.soloContinueAvailable);
+    saves.soloState.clear();
+    saves.networkRun = false;
     authorizedExit = false;
     if (logger)
         logger("solo_save=RESTORED");
@@ -1464,56 +1311,16 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     logger = log;
     runHalf = halfUpdate;
     restorePositions = restore;
-    auto hook = [](std::uintptr_t target, void* replacement, void** original) {
-        return MH_CreateHook(reinterpret_cast<void*>(target), replacement, original) == MH_OK &&
-               MH_EnableHook(reinterpret_cast<void*>(target)) == MH_OK;
-    };
-    return hook(image + j460::entry::managerSave, reinterpret_cast<void*>(saveGame),
-                reinterpret_cast<void**>(&originalSaveGame)) &&
-           hook(image + j460::entry::managerDeleteSave, reinterpret_cast<void*>(deleteGame),
-                reinterpret_cast<void**>(&originalDeleteGame)) &&
-           hook(image + j460::entry::managerSaveRerun, reinterpret_cast<void*>(saveRerun),
-                reinterpret_cast<void**>(&originalSaveRerun)) &&
-           hook(image + j460::entry::managerExecuteMenu, reinterpret_cast<void*>(executeMenu),
-                reinterpret_cast<void**>(&originalExecuteMenu)) &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::progressSerialize),
-                         reinterpret_cast<void*>(serializeProgress),
-                         reinterpret_cast<void**>(&originalSerializeProgress)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::progressSerialize)) ==
-               MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::gameStart),
-                         reinterpret_cast<void*>(startGame),
-                         reinterpret_cast<void**>(&originalStart)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::gameStart)) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::managerExecuteStart),
-                         reinterpret_cast<void*>(executeStart),
-                         reinterpret_cast<void**>(&originalExecuteStart)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::managerExecuteStart)) ==
-               MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::gameUpdate),
-                         reinterpret_cast<void*>(update),
-                         reinterpret_cast<void**>(&originalUpdate)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::gameUpdate)) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::consoleUpdate),
-                         reinterpret_cast<void*>(consoleUpdate),
-                         reinterpret_cast<void**>(&originalConsoleUpdate)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::consoleUpdate)) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::consoleRunCommand),
-                         reinterpret_cast<void*>(consoleCommand),
-                         reinterpret_cast<void**>(&originalConsoleCommand)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::consoleRunCommand)) ==
-               MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::gameControls),
-                         reinterpret_cast<void*>(controls),
-                         reinterpret_cast<void**>(&originalControls)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::gameControls)) == MH_OK;
+    return backend::install(image, {saveGame, deleteGame, saveRerun, serializeProgress,
+                                    executeStart, startGame, update, consoleUpdate, consoleCommand,
+                                    controls, executeMenu});
 }
 void configureInput(unsigned hz) {
     inputHz = hz;
     inputSchedule = InputSchedule(hz);
 }
 bool halfAllowed() {
-    if (replica() && !playingEnding && !playingCinematic && rooms::stateReady() &&
+    if (replica() && !view.playingEnding && !view.playingCinematic && rooms::stateReady() &&
         session->phase() == lan::Phase::running) {
         session->poll();
         if (captureNextInput()) {
@@ -1524,14 +1331,14 @@ bool halfAllowed() {
         }
     }
     // Retain native arrival interpolation while room replication is suspended.
-    return !gated || playingEnding || playingCinematic || pendingHalf ||
+    return !view.gated || view.playingEnding || view.playingCinematic || view.pendingHalf ||
            (replica() && !rooms::stateReady());
 }
 bool replica() {
-    return gated && session && !session->isHost();
+    return view.gated && session && !session->isHost();
 }
 bool challengeActive() {
-    return session && (session->phase() == lan::Phase::running || networkRun) &&
+    return session && (session->phase() == lan::Phase::running || saves.networkRun) &&
            session->settings().rules.id != 0;
 }
 bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimension, int room,
@@ -1550,7 +1357,7 @@ bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimensio
     lua.pushBoolean(state, teleport);
     if (!call(0, 6, 1, top))
         return false;
-    const bool allowed = lua.type(state, -1) == 1 && lua.boolean(state, -1);
+    const bool allowed = lua.type(state, -1) == 1 && lua.toBoolean(state, -1);
     lua.setTop(state, top);
     return allowed;
 }
@@ -1566,7 +1373,7 @@ int craftingBagViewTarget() {
     const auto* definition = compat::challenges::find(session->settings().rules.id);
     if (!definition || !definition->nextBag)
         return -1;
-    if (!gated || !rooms::viewReady() || (!session->isHost() && !authoritative))
+    if (!view.gated || !rooms::viewReady() || (!session->isHost() && !view.authoritative))
         return -2;
     return compat::challenges::nextSeat(session->slot(), session->players());
 }
@@ -1574,7 +1381,7 @@ unsigned difficulty() {
     return session ? session->settings().difficulty : 0;
 }
 bool startingPartyHasCharacter(int kind) {
-    if (!session || gated || session->phase() != lan::Phase::running)
+    if (!session || view.gated || session->phase() != lan::Phase::running)
         return false;
     for (unsigned slot = 0; slot < session->players(); ++slot)
         if ((session->connectedMask() & (1u << slot)) &&
@@ -1583,10 +1390,10 @@ bool startingPartyHasCharacter(int kind) {
     return false;
 }
 bool ending() {
-    return playingEnding;
+    return view.playingEnding;
 }
 std::uint32_t worldEpoch() {
-    return floorEpoch;
+    return view.floorEpoch;
 }
 void present() {
     if (!replica() || !state || presentRef < 0 || session->phase() != lan::Phase::running ||
@@ -1612,7 +1419,7 @@ void present() {
         rooms::presentCamera();
 }
 void refreshAutomation(std::uint32_t renderFrame) {
-    if (!state || !gated || !session || session->phase() != lan::Phase::running) {
+    if (!state || !view.gated || !session || session->phase() != lan::Phase::running) {
         input::clearAutomation();
         return;
     }
@@ -1631,21 +1438,16 @@ void refreshAutomation(std::uint32_t renderFrame) {
     lua.setTop(state, top);
 }
 void pollLocalConsole() {
-    if (!gated || !session || session->phase() != lan::Phase::running || !originalConsoleUpdate)
+    if (!view.gated || !session || session->phase() != lan::Phase::running)
         return;
-    const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
-    if (game)
-        originalConsoleUpdate(reinterpret_cast<void*>(game + 0x68d78));
+    backend::pollConsole();
 }
 void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) {
-    if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
+    if (!view.gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
         return;
-    const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
-    lan::Stage value;
-    ++floorEpoch;
-    value.epoch = floorEpoch;
-    value.level = *reinterpret_cast<int*>(game);
-    value.type = *reinterpret_cast<int*>(game + 4);
+    auto value = backend::stage();
+    ++view.floorEpoch;
+    value.epoch = view.floorEpoch;
     value.same = same;
     value.animation = animation;
     value.restart = restart;
@@ -1653,31 +1455,28 @@ void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) 
         value.level = 1;
         value.type = 0;
     }
-    std::memcpy(value.seeds.data(), reinterpret_cast<void*>(game + 0x1bb84), sizeof(value.seeds));
-    std::memcpy(value.stateFlags.data(), reinterpret_cast<void*>(game + 0x26548),
-                sizeof(value.stateFlags));
     value.cinematic = cinematic;
     value.sourceRoom = rooms::floorSourceRoom();
     if (!session->beginStage(value)) {
         fail("Native floor transaction rejected");
         return;
     }
-    playingCinematic = cinematic != 0;
-    cinematicReady = false;
-    if (playingCinematic) {
+    view.playingCinematic = cinematic != 0;
+    view.cinematicReady = false;
+    if (view.playingCinematic) {
         input::reset();
-        pendingHalf = false;
+        view.pendingHalf = false;
     }
     if (logger)
-        logger("floor_event=SENT epoch=" + std::to_string(floorEpoch));
+        logger("floor_event=SENT epoch=" + std::to_string(view.floorEpoch));
 }
 void prepareEnding() {
-    playingEnding = true;
+    view.playingEnding = true;
     input::reset();
-    pendingHalf = false;
+    view.pendingHalf = false;
 }
 bool beginEnding(unsigned ending, bool completed) {
-    if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running ||
+    if (!view.gated || !session || !session->isHost() || session->phase() != lan::Phase::running ||
         !session->beginEnding(ending, readProgress(), completed))
         return false;
     prepareEnding();
@@ -1687,18 +1486,15 @@ bool beginEnding(unsigned ending, bool completed) {
     return true;
 }
 void beginRewind(std::span<const std::uint8_t> bytes) {
-    if (!gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
+    if (!view.gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
         return;
-    const auto game = *reinterpret_cast<std::uintptr_t*>(executableImage + j460::globals::game);
-    lan::Stage value;
-    value.epoch = ++floorEpoch;
-    value.level = *reinterpret_cast<int*>(game);
-    value.type = *reinterpret_cast<int*>(game + 4);
+    auto value = backend::stage();
+    value.epoch = ++view.floorEpoch;
     value.animation = 12;
     value.rewind.assign(bytes.begin(), bytes.end());
     session->beginStage(value);
     if (logger)
-        logger("hourglass_event=SENT epoch=" + std::to_string(floorEpoch) +
+        logger("hourglass_event=SENT epoch=" + std::to_string(view.floorEpoch) +
                " bytes=" + std::to_string(bytes.size()));
 }
 bool requestRoom(const lan::RoomRequest& request) {
@@ -1711,10 +1507,10 @@ std::uint32_t tick() {
     return currentTick;
 }
 int localViewSlot() {
-    return gated && session ? static_cast<int>(session->slot()) : -1;
+    return view.gated && session ? static_cast<int>(session->slot()) : -1;
 }
 void requestWindowClose() {
-    if (!gated || !session)
+    if (!view.gated || !session)
         return;
     if (session->phase() == lan::Phase::running)
         session->command(session->isHost() ? lan::Command::saveExit : lan::Command::leave);
@@ -1731,13 +1527,13 @@ void roomEntered() {
         integrationCallback("_IsaacLanRoomEntered");
 }
 void halfStarted() {
-    if (gated)
+    if (view.gated)
         input::finishUpdate();
 }
 void halfCompleted() {
-    if (!gated || !pendingHalf || playingEnding)
+    if (!view.gated || !view.pendingHalf || view.playingEnding)
         return;
-    pendingHalf = false;
+    view.pendingHalf = false;
     if (session)
         session->completed(currentTick);
     if (session && session->isHost() && session->phase() == lan::Phase::running &&
@@ -1761,36 +1557,18 @@ void halfCompleted() {
         publishState();
 }
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        auto pointer = GetProcAddress(module, name);                                               \
-        static_assert(sizeof(pointer) == sizeof(lua.field));                                       \
-        memcpy(&lua.field, &pointer, sizeof(pointer));                                             \
-        if (!lua.field)                                                                            \
-            return false;                                                                          \
-    } while (false)
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(setField, "lua_setfield");
-    IMPORT(createTable, "lua_createtable");
-    IMPORT(pushInteger, "lua_pushinteger");
-    IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(pushString, "lua_pushstring");
-    IMPORT(pushLString, "lua_pushlstring");
-    IMPORT(checkInteger, "luaL_checkinteger");
-    IMPORT(checkString, "luaL_checklstring");
-    IMPORT(toString, "lua_tolstring");
-    IMPORT(getTop, "lua_gettop");
-    IMPORT(getGlobal, "lua_getglobal");
-    IMPORT(setTop, "lua_settop");
-    IMPORT(pushValue, "lua_pushvalue");
-    IMPORT(type, "lua_type");
-    IMPORT(ref, "luaL_ref");
-    IMPORT(unref, "luaL_unref");
-    IMPORT(rawGetI, "lua_rawgeti");
-    IMPORT(rawSetI, "lua_rawseti");
-    IMPORT(pcall, "lua_pcallk");
-    IMPORT(boolean, "lua_toboolean");
-#undef IMPORT
+    if (!lua.load(module, {isaac::lua::Symbol::pushClosure, isaac::lua::Symbol::setField,
+                           isaac::lua::Symbol::createTable, isaac::lua::Symbol::pushInteger,
+                           isaac::lua::Symbol::pushBoolean, isaac::lua::Symbol::pushString,
+                           isaac::lua::Symbol::pushLString, isaac::lua::Symbol::checkInteger,
+                           isaac::lua::Symbol::checkString, isaac::lua::Symbol::toString,
+                           isaac::lua::Symbol::getTop,      isaac::lua::Symbol::getGlobal,
+                           isaac::lua::Symbol::setTop,      isaac::lua::Symbol::pushValue,
+                           isaac::lua::Symbol::type,        isaac::lua::Symbol::ref,
+                           isaac::lua::Symbol::unref,       isaac::lua::Symbol::rawGetI,
+                           isaac::lua::Symbol::rawSetI,     isaac::lua::Symbol::pcall,
+                           isaac::lua::Symbol::toBoolean}))
+        return false;
     auto function = [&](const char* name, LuaFunction fn) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, name);
@@ -1801,6 +1579,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_host", host);
     function("net_join", join);
     function("net_poll", poll);
+    function("net_phases", phaseValues);
     function("net_challenges", challengeList);
     function("net_characters", characterList);
     function("pause_menu_state", pauseMenuState);

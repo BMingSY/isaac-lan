@@ -49,6 +49,9 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     end
     local noop = function() end
     _IsaacLan = {
+        net_phases = function()
+            return dofile(root .. "/tests/fixtures/net_phases.lua")
+        end,
         net_challenges = function()
             return {}
         end,

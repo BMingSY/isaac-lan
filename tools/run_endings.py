@@ -2,16 +2,14 @@
 """Run six ending routes with one isolated pair and restore its test saves."""
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 
 from build_ending_suite import CASES, build
-from run_network_engine import windows
+from lab_profile import ProtectedLabs, idle
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,35 +37,6 @@ def route_evidence(text, name):
         "floors": floors,
         "missing_alternate_floors": missing,
         "checkpoints": lines,
-    }
-
-
-def idle(labs):
-    command = (
-        "@(Get-Process -Name isaac-ng -ErrorAction SilentlyContinue | "
-        "ForEach-Object { $_.Path }) | ConvertTo-Json -Compress"
-    )
-    result = subprocess.run(
-        ["powershell.exe", "-NoProfile", "-Command", command],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=True,
-    )
-    paths = json.loads(result.stdout or "[]") or []
-    if isinstance(paths, str):
-        paths = [paths]
-    if {windows(lab / "game/isaac-ng.exe").casefold() for lab in labs} & {
-        path.casefold() for path in paths
-    }:
-        raise RuntimeError("The selected isolated lab already has a running game")
-
-
-def hashes(directory):
-    return {
-        str(p.relative_to(directory)): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in directory.rglob("*")
-        if p.is_file()
     }
 
 
@@ -99,15 +68,7 @@ def main():
     output.mkdir(parents=True, exist_ok=False)
     script = output / "suite.lua"
     build(script, args.route, first_floor=args.first_floor)
-    protected = []
-    for role, lab in zip(("host", "client"), labs):
-        for folder in ("profile", "game/data", "game/isaac-lan"):
-            source = lab / folder
-            backup = output / "before" / role / folder
-            baseline = hashes(source)
-            protected.append((source, backup, baseline, source.exists()))
-            if source.exists():
-                shutil.copytree(source, backup)
+    protected = ProtectedLabs(labs, output, roles=("host", "client"))
     command = [
         sys.executable,
         str(ROOT / "tools/run_network_engine.py"),
@@ -166,13 +127,7 @@ def main():
         # Do not restore files beneath a surviving process, including if a
         # native crash prevented the runner from completing owned cleanup.
         try:
-            idle(labs)
-            for source, backup, baseline, existed in protected:
-                if source.exists():
-                    shutil.rmtree(source)
-                if existed:
-                    shutil.copytree(backup, source)
-                assert hashes(source) == baseline, "Isolated save restoration differs"
+            protected.restore()
             report["restored"] = True
         except Exception as error:
             report["restoration_error"] = str(error)

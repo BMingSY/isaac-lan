@@ -1,3 +1,4 @@
+#include "engine/lua_api.h"
 #include "engine/rewind.h"
 #include "compat/items/rewind_targets.h"
 #include "compat/routes/home.h"
@@ -215,12 +216,7 @@ bool startRewind(std::span<const std::uint8_t> bytes) {
         rooms::resumeAfterTransition({});
     return true;
 }
-struct API {
-    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-    void(__cdecl* pushClosure)(lua_State*, int(__cdecl*)(lua_State*), int);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-} lua{};
+isaac::lua::API lua{};
 int beginLua(lua_State* L) {
     try {
         std::size_t size;
@@ -290,18 +286,9 @@ bool install(Address base) {
            MH_EnableHook(reinterpret_cast<void*>(image + 0x305ee0)) == MH_OK;
 }
 bool bind(lua_State* L, HMODULE module) {
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        auto p = GetProcAddress(module, name);                                                     \
-        std::memcpy(&lua.field, &p, sizeof(p));                                                    \
-        if (!lua.field)                                                                            \
-            return false;                                                                          \
-    } while (false)
-    IMPORT(checkString, "luaL_checklstring");
-    IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(setField, "lua_setfield");
-#undef IMPORT
+    if (!lua.load(module, {isaac::lua::Symbol::checkString, isaac::lua::Symbol::pushBoolean,
+                           isaac::lua::Symbol::pushClosure, isaac::lua::Symbol::setField}))
+        return false;
     lua.pushClosure(L, beginLua, 0);
     lua.setField(L, -2, "rewind_begin");
     lua.pushClosure(L, resetLua, 0);

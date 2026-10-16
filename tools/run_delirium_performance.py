@@ -13,8 +13,8 @@ import subprocess
 import sys
 import time
 
-from run_endings import hashes, idle
-from run_network_engine import log_path
+from lab_profile import ProtectedLabs, idle
+from game_logs import log_path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -171,14 +171,7 @@ def main():
         for name in ("isaac_lan_probe.dll", "winmm.dll"):
             shutil.copy2(args.installed_directory / name, build / name)
         shutil.copy2(args.build / "isaac_lan_lab.exe", build)
-    protected = []
-    for role, lab in zip(roles, labs):
-        for folder in ("profile", "game/data", "game/isaac-lan"):
-            source = lab / folder
-            backup = output / "before" / role / folder
-            protected.append((source, backup, hashes(source), source.exists()))
-            if source.exists():
-                shutil.copytree(source, backup)
+    protected = ProtectedLabs(labs, output, roles=roles)
     command = [
         sys.executable,
         str(ROOT / "tools/run_network_engine.py"),
@@ -292,13 +285,7 @@ def main():
             report["passed"] = all(checks.values())
     finally:
         try:
-            idle(labs)
-            for source, backup, baseline, existed in protected:
-                if source.exists():
-                    shutil.rmtree(source)
-                if existed:
-                    shutil.copytree(backup, source)
-                assert hashes(source) == baseline, "Isolated save restoration differs"
+            protected.restore()
             report["restored"] = True
         except Exception as error:
             report["restoration_error"], report["passed"] = str(error), False

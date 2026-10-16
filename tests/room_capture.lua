@@ -52,7 +52,9 @@ local native = {
         return string.rep(string.char(active), 448)
     end,
 }
-local capture = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(native, function()
+local capture = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(native, function()
     return { active }
 end, function()
     error("No grids")
@@ -75,7 +77,9 @@ assert(nextTick[8][2] == 0 and one[8][2] == 1, "Room current view is mutable/sta
 assert(nextTick ~= one and calls == 4)
 assert(capture(2, 11, 0, { dimension = 0, index = 84 }) == nextTick and calls == 4)
 assert(capture(1, 11, 1, { dimension = 0, index = 84 }) ~= nextTick and calls == 5)
-local fresh = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(native, function()
+local fresh = assert(loadfile(root .. "/src/bridge/sync/room.lua"))()(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(native, function()
     return { active }
 end, function()
     error("No grids")
@@ -96,7 +100,9 @@ end
 Isaac.GetRoomEntities = function()
     return objects
 end
-local filtered = dofile(root .. "/src/bridge/sync/room.lua")(native, function(e)
+local filtered = dofile(root .. "/src/bridge/sync/room.lua")(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(native, function(e)
     assert(e == entity, "Local ambience was serialized")
     captures = captures + 1
     return { 1, e.Type, 0, 0 }

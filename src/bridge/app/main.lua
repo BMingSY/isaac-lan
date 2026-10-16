@@ -1,5 +1,6 @@
 -- Embedded in the native extension. No Workshop registration or mod directory.
 local native = assert(_IsaacLan)
+local Phase = native.net_phases()
 local integration = assert(_IsaacLanModules)["api/public"]
 local registry = _IsaacLanModules["compat/mods/registry"]
 local game
@@ -282,7 +283,7 @@ function _IsaacLanFrame()
     status = native.net_poll()
     integration.poll()
     bot.poll()
-    if status.phase == 3 then
+    if status.phase == Phase.running then
         lifecycle.launch()
     end
     status.prepared = lifecycle.ready()

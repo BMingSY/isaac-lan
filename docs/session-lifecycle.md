@@ -44,13 +44,17 @@ J460 的选层发生在过场中，晚于 `StartStageTransition`；现有 Lua `S
 
 重置当前层和 R 键会改变原生种子或拓扑。Seeds 与事件一起同步；R 键使用原生立即重启路径。恢复新楼层视图前必须准备正确的描述符和房间布局。
 
+特殊传送仍走原生生命周期：死亡证明的进入与返回按整队执行，内部过门逐人执行；传送卡只解析死亡证明维度内的目的地，缺失时使用原版入口。后到达的角色及双身体复用同一目标房间内的有效落点；客机补齐五个来源标量，原版继续拥有房间、物品池和实体。
+
+跑圈提示由房主决定，客机不投票；输入沿用缓存的主机边沿。选择继续后执行原生 `NextVictoryLap`，同步种子、圈数、玩家和楼层，不能仅同步目标层数。
+
 ## 暂停与退出
 
 任何在线玩家可以请求全队暂停，由发起者恢复。暂停状态与发起者随视图同步；退出或掉线本身不会发起全队暂停。
 
 暂停菜单的光标、Items 和 Options 由各端本机输入操作；Items 读取本机玩家，设置只修改本机配置。恢复、客机离队与房主保存退出仍转换为可靠会话命令，避免原生菜单直接结束单个联网进程。暂停期间不转发菜单方向和确认输入；发起者离队后由房主恢复。
 
-J460 后端通过具名的 `pauseMenuShow`、`pauseMenuHide`、`pauseMenuControls` 和 `optionsSave` 复用原版界面。现有整段 Game::Controls 会同时处理游戏操作与退出，不能在客机重放；菜单控制因此单独调用，关闭状态按权威暂停边沿处理，避免原生消失动画造成重复切换。原生菜单索引临时映射到现有本机视图角色列表，返回时恢复，不分配或释放角色和菜单。队友恢复时本机仍停留在 Options 的情况，先调用原生配置保存，再关闭菜单。原版 Switch Controller 会改写联机绑定，只有该设置的确认被拦截。入口签名、角色列表与 Options 索引范围均受校验；具体边界和验收见[暂停菜单验证](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/pause-menu-validation.md)。
+J460 后端通过具名的 `pauseMenuShow`、`pauseMenuHide`、`pauseMenuControls` 和 `optionsSave` 复用原版界面。现有整段 Game::Controls 会同时处理游戏操作与退出，不能在客机重放；菜单控制因此单独调用，关闭状态按权威暂停边沿处理，避免原生消失动画造成重复切换。原生菜单索引临时映射到现有本机视图角色列表，返回时恢复，不分配或释放角色和菜单。队友恢复时本机仍停留在 Options 的情况，先调用原生配置保存，再关闭菜单。原版 Switch Controller 会改写联机绑定，只有该设置的确认被拦截。
 
 只有房主可以保存并结束会话。客机单独离开时，房主移出其活动角色，保留道具和主要状态。离线角色不参与战斗和奖励人数计算。
 
@@ -104,7 +108,7 @@ sequenceDiagram
 
 首访出生房使用沙漏可以早于任何检查点。此时仅在原版 Home 条件全部满足且使用者房间为完整权威房间时调用原生判断，沿已有楼层队列带全队离开；不让空检查点进入普通回退。Home 换层优先取消同帧待执行回退，但保留各玩家的检查点。R Key 与普通换层均先消费队列标志再记录检查点，避免就绪条件拒绝保存。
 
-J460 的 Game::StartRoomTransition 同时负责选路线和启动转场，缺少独立回放接口。后端因此复用原生 `RoomTransition.Start`（RVA `0x42ee40`，`thiscall void(Game+0x1b83c, index, direction, animation, player, dimension)`，被调方清理 20 字节），并保留原版调用尾部的两个完成标志。使用者源房只在完整权威房间、无借用作用域时激活，再沿现有 `beforeStart` 清理；不激活客机远端 shell，不跨清理持有 Room Scope，也不接管原生分配／释放。入口签名与转场字段范围均校验。回放参数属于现有不透明回退载荷，不增加网络字段或世界 schema；两端仍由包含实际 DLL 内容的扩展指纹要求使用相同构建。历史问题与验证结果见[首层分房沙漏记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-hourglass-start-room-issue.md)。
+J460 的 Game::StartRoomTransition 同时负责选路线和启动转场，缺少独立回放接口。后端因此复用原生 `RoomTransition.Start`（RVA `0x42ee40`，`thiscall void(Game+0x1b83c, index, direction, animation, player, dimension)`，被调方清理 20 字节），并保留原版调用尾部的两个完成标志。使用者源房只在完整权威房间、无借用作用域时激活，再沿现有 `beforeStart` 清理；不激活客机远端 shell，不跨清理持有 Room Scope，也不接管原生分配／释放。入口签名与转场字段范围均校验。回放参数属于现有不透明回退载荷，不增加网络字段或世界 schema；两端仍由包含实际 DLL 内容的扩展指纹要求使用相同构建。
 
 ## 失败边界
 

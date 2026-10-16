@@ -45,7 +45,9 @@ vector = function(value)
         end,
     })
 end
-local replica = dofile(root .. "/src/bridge/sync/replica.lua")({
+local createReplica =
+    dofile(root .. "/src/bridge/sync/replica.lua")(dofile(root .. "/src/bridge/sync/fields.lua"))
+local replica = createReplica({
     encode = codec.encode,
     decode = codec.decode,
     schema = schema,

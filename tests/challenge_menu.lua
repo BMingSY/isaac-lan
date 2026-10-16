@@ -114,6 +114,9 @@ _IsaacLanStatus = function()
     return status
 end
 _IsaacLan = {
+    net_phases = function()
+        return dofile(root .. "/tests/fixtures/net_phases.lua")
+    end,
     presentation_player_huds = function()
         return {}
     end,
@@ -136,6 +139,7 @@ _IsaacLan = {
     end,
 }
 _IsaacLanModules = {
+    ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
     ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
 }
 _IsaacLanCommand = function(name, value)

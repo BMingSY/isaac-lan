@@ -1845,6 +1845,9 @@ test("embedded console entry dispatches lanbot and returns nil", function()
     modules["runtime/challenges"] = dofile(root .. "/src/bridge/runtime/challenges.lua")
     modules["compat/routes/challenge_lamb"] =
         dofile(root .. "/src/bridge/compat/routes/challenge_lamb.lua")
+    native.net_phases = function()
+        return dofile(root .. "/tests/fixtures/net_phases.lua")
+    end
     native.net_challenges = function()
         return {}
     end

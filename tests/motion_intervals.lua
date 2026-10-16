@@ -17,7 +17,9 @@ function vector:Length()
     return math.sqrt(self.X * self.X + self.Y * self.Y)
 end
 local now, pause = 0, 0
-local motion = dofile(root .. "/src/bridge/presentation/motion.lua")({
+local motion = dofile(root .. "/src/bridge/presentation/motion.lua")(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)({
     rooms_with_player = function(_, fn)
         fn()
         return true
@@ -171,7 +173,7 @@ local localMotion = assert(
         "t",
         setmetatable({ GridCollisionClass = { COLLISION_NONE = 0 } }, { __index = _G })
     )
-)()({
+)()(dofile(root .. "/src/bridge/sync/fields.lua"))({
     rooms_with_player = function(_, fn)
         fn()
         return true

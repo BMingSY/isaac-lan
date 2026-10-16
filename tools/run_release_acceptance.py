@@ -11,8 +11,9 @@ import signal
 import subprocess
 import sys
 
-from run_endings import hashes, idle
-from run_network_engine import log_path, windows
+from lab_profile import ProtectedLabs, idle
+from game_logs import log_path
+from lab_profile import windows
 from run_pause_menu import magdalene_profile, peer_evidence as pause_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -144,13 +145,7 @@ def main():
     script = output / "suite.lua"
     build_suite(script, coordination, args.cases)
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
-    protected = []
-    for role, lab in zip(("host", "client"), labs):
-        for folder in ("profile", "game/data", "game/isaac-lan"):
-            source, backup = lab / folder, output / "before" / role / folder
-            protected.append((source, backup, hashes(source), source.exists()))
-            if source.exists():
-                shutil.copytree(source, backup)
+    protected = ProtectedLabs(labs, output, roles=("host", "client"))
     command = [
         sys.executable,
         str(ROOT / "tools/run_network_engine.py"),
@@ -229,14 +224,7 @@ def main():
             process.wait(timeout=180)
     finally:
         try:
-            idle(labs)
-            for source, backup, baseline, existed in protected:
-                if source.exists():
-                    shutil.rmtree(source)
-                if existed:
-                    shutil.copytree(backup, source)
-                if hashes(source) != baseline:
-                    raise RuntimeError("Protected release lab data differs after restoration")
+            protected.restore()
             report["restored"] = True
         except Exception as error:
             report["restoration_error"], report["passed"] = str(error), False

@@ -114,6 +114,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
           & ./ci/isaac_lan_delta_test.exe 2>&1 | Tee-Object test-runs/windows/delta.log
           if ($LASTEXITCODE -ne 0) { throw 'Delta tests failed' }
+          & ./ci/isaac_lan_session_store_test.exe 2>&1 | Tee-Object test-runs/windows/session-store.log
+          if ($LASTEXITCODE -ne 0) { throw 'Session store tests failed' }
       - name: Test state transport
         shell: pwsh
         run: |
@@ -132,6 +134,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Pause menu ABI tests failed' }
           & ./ci/isaac_lan_frontend_menu_test.exe 2>&1 | Tee-Object test-runs/windows/frontend-menu.log
           if ($LASTEXITCODE -ne 0) { throw 'Frontend menu ABI tests failed' }
+          & ./ci/isaac_lan_lua_api_test.exe 2>&1 | Tee-Object test-runs/windows/lua-api.log
+          if ($LASTEXITCODE -ne 0) { throw 'Lua ABI tests failed' }
           & ./ci/isaac_lan_rewind_home_test.exe 2>&1 | Tee-Object test-runs/windows/rewind-home.log
           if ($LASTEXITCODE -ne 0) { throw 'Hourglass Home ABI tests failed' }
       - name: Test configuration and launch/run log isolation
