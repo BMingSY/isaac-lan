@@ -76,6 +76,14 @@ void controls(Address image) {
     if (const auto p = menu(image); p && at<int>(p) != 0)
         call(image, engine::j460::entry::pauseMenuControls);
 }
+void synchronize(Address image, bool paused) {
+    if ((state(image).page != 0) == paused)
+        return;
+    if (paused)
+        show(image);
+    else
+        hide(image);
+}
 Intent intent(Address image, int action) {
     const auto p = menu(image);
     if (!p || at<int>(p) != 1)

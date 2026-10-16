@@ -232,6 +232,11 @@ def main():
         help="Send real Escape events requested by the concentrated pause fixture",
     )
     parser.add_argument(
+        "--focus-cycle",
+        action="store_true",
+        help="Exercise requested guest focus loss using only the owned game windows",
+    )
+    parser.add_argument(
         "--mod",
         type=Path,
         action="append",
@@ -890,6 +895,7 @@ def main():
         deadline = time.monotonic() + args.scenario_timeout
         exercised = False
         pause_keys = set()
+        focus_cycles = set()
         recorded = False
         solo_saved, solo_continued, solo_hashes = set(), set(), {}
         release_solo_requests, release_solo_files, release_solo_networks = set(), set(), set()
@@ -968,6 +974,14 @@ def main():
                         (args.release_solo_coordination / f"solo-network-{role}.ack").write_text(
                             "ready"
                         )
+            if args.focus_cycle:
+                for number in re.findall(r"LAN_NETWORK FOCUS_CYCLE_REQUEST (\d+)", logs[0]):
+                    if number not in focus_cycles:
+                        for role in ("client", "host", "client"):
+                            control(processes[roles.index(role)], "Focus")
+                            time.sleep(0.5)
+                        focus_cycles.add(number)
+                        result.setdefault("focus_cycles", []).append(int(number))
             if args.keyboard_pause:
                 for number, role in re.findall(
                     r"LAN_NETWORK KEYBOARD_PAUSE_REQUEST (\d+) (host|client)", logs[0]

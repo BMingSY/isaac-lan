@@ -330,6 +330,12 @@ void __cdecl controls() {
     if (!session || session->phase() != lan::Phase::running || !g ||
         *reinterpret_cast<int*>(g + 0x23a74) == 0)
         return;
+    // Losing focus can open a native menu on a guest without pausing the
+    // authority. Clear that local overlay even before another snapshot arrives.
+    if (!session->isHost() && authoritative && !authoritative->paused) {
+        rooms::withView([&] { pause_menu::synchronize(executableImage, false); }, true);
+        return;
+    }
     input::PauseScope inputScope(session->slot());
     rooms::withView([&] { pause_menu::controls(executableImage); }, true);
     const auto request = inputScope.intent();
@@ -543,15 +549,9 @@ bool applyReplicaView(bool betweenUpdates) {
         nextTick = currentTick + 1;
         input::setMenuOwner(packet->pauseOwner);
         pause_menu::selectPlayer(executableImage, session->slot());
-        if (packet->paused != (authoritative && authoritative->paused))
-            rooms::withView(
-                [&] {
-                    if (packet->paused)
-                        pause_menu::show(executableImage);
-                    else
-                        pause_menu::hide(executableImage);
-                },
-                true);
+        if (packet->paused != (pause_menu::state(executableImage).page != 0))
+            rooms::withView([&] { pause_menu::synchronize(executableImage, packet->paused); },
+                            true);
         authoritative = std::move(packet);
         replicaPending.reset();
         session->applied(currentTick);

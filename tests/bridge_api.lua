@@ -399,7 +399,19 @@ for _, build in ipairs({
         setPlayer = function(self)
             self.player = p.env.Isaac.GetPlayer(0)
         end,
+        EntitySanityCheck = function(_, entity)
+            return entity ~= nil
+        end,
+        IsGridEntity = function(_, entity)
+            return entity.grid == true
+        end,
+        getEntityData = function(_, entity, key)
+            if entity and not entity.grid then
+                return entity:GetData()[key]
+            end
+        end,
     }
+    local originalGetEntityData = eid.getEntityData
     p.env.EID = eid
     local adapter = assert(loadfile(root .. "/src/bridge/compat/mods/eid.lua", "t", p.env))()
     local r = p.env._IsaacLanModules["compat/mods/registry"]
@@ -430,6 +442,96 @@ for _, build in ipairs({
     end
     eid:setPlayer()
     assert(eid.player == actor2 and p.scope == nil, "EID selected a remote actor")
+    local replica = { FrameCount = 0, data = { __isaac_lan_replica = 7 } }
+    function replica:GetData()
+        return self.data
+    end
+    local function describable(entity)
+        return entity.FrameCount > 0 or eid:getEntityData(entity, "EID_DescribeOnFirstFrame")
+    end
+    -- EID's render eligibility check must remain true for a committed replica
+    -- that never runs Entity::Update, across cached and refreshed render frames.
+    for _ = 1, 60 do
+        p.bridge.commit()
+        assert(describable(replica), "EID rejected a stable zero-age replica")
+    end
+    assert(replica.data.EID_DescribeOnFirstFrame == nil, "Adapter changed upstream entity data")
+    replica.data.__isaac_lan_replica = nil
+    assert(not describable(replica), "EID changed a native entity's first-frame rule")
+    replica.data.__isaac_lan_replica = 7
+    p.ready = 0
+    assert(not describable(replica), "EID exposed an uncommitted replica")
+    p.ready = 1
+    replica.data.EID_DescribeOnFirstFrame = false
+    assert(describable(replica) == false, "Adapter replaced an explicit EID entity setting")
+    replica.data.EID_DescribeOnFirstFrame = nil
+    replica.data.EID_Description = "custom"
+    assert(eid:getEntityData(replica, "EID_Description") == "custom")
+    assert(eid:getEntityData(nil, "EID_DescribeOnFirstFrame") == nil)
+    assert(eid:getEntityData({ grid = true }, "EID_DescribeOnFirstFrame") == nil)
+    -- The native spatial index can omit visible replicas or alternate between
+    -- stale and current contents. Exercise the actual EID radius-query path.
+    p.env.EntityPartition = { FAMILIAR = 1, ENEMY = 2, PICKUP = 4, PLAYER = 8 }
+    local function pickup(id, distance, kind)
+        return {
+            hash = id,
+            Type = kind or 5,
+            FrameCount = 0,
+            Position = {
+                DistanceSquared = function()
+                    return distance * distance
+                end,
+            },
+            GetData = function()
+                return { __isaac_lan_replica = id }
+            end,
+            Exists = function()
+                return true
+            end,
+            IsEnemy = function()
+                return false
+            end,
+        }
+    end
+    local near, far, effect = pickup(71, 60), pickup(72, 81), pickup(73, 20, 1000)
+    local roomEntities, indexed = { near, far, effect }, false
+    p.env.Isaac.GetRoomEntities = function()
+        assert(p.scope == 1, "EID radius fallback left the local view")
+        return roomEntities
+    end
+    local nativeFind = function()
+        return indexed and { near } or {}
+    end
+    p.env.Isaac.FindInRadius = nativeFind
+    local originalRender = callbacks[2]
+    eid:AddCallback(2, function()
+        local found = p.env.Isaac.FindInRadius({}, 80, 15)
+        assert(#found == 1 and found[1] == roomEntities[1], "EID lost or duplicated a replica")
+        if not indexed then
+            assert(#p.env.Isaac.FindInRadius({}, 80, 4) == 0, "Unrelated query was replaced")
+        end
+        return 7, nil, "rendered"
+    end)
+    for frame = 1, 60 do
+        indexed = frame % 2 == 0
+        p.bridge.commit()
+        local value, gap, tail = callbacks[2](eid)
+        assert(value == 7 and gap == nil and tail == "rendered")
+        assert(p.env.Isaac.FindInRadius == nativeFind, "Radius override escaped EID rendering")
+    end
+    indexed, roomEntities = false, { pickup(74, 80) }
+    p.positions["1"].index = 70
+    p.epoch = p.epoch + 1
+    p.bridge.commit()
+    callbacks[2](eid)
+    eid:AddCallback(2, function()
+        error("EID render failure")
+    end)
+    rejects(function()
+        callbacks[2](eid)
+    end)
+    assert(p.env.Isaac.FindInRadius == nativeFind, "Radius override survived a render error")
+    callbacks[2] = originalRender
     p.positions["1"].index = 71
     p.bridge.commit()
     eid:setPlayer()
@@ -467,8 +569,11 @@ for _, build in ipairs({
     end)
     p.active, p.ready = 0, 0
     p.bridge.poll()
+    assert(not describable(replica), "EID replica override survived leaving LAN")
     assert(callbacks[15](eid, true) == "continued" and continuedGames == 1)
     assert(callbacks[2](eid, 2, nil, "solo") == 2 and soloCalls[2] == 2)
+    assert(p.api:SetCompatibilityEnabled(adapter.id, false))
+    assert(eid.getEntityData == originalGetEntityData, "EID method was not restored on uninstall")
     eid.ModVersion = 0
     assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "unsupported")
 end

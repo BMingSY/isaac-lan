@@ -9,6 +9,8 @@ struct State {
 State state(std::uintptr_t image);
 void show(std::uintptr_t image);
 void hide(std::uintptr_t image);
+// Match actual visibility without resetting a visible menu's current subpage.
+void synchronize(std::uintptr_t image, bool paused);
 void controls(std::uintptr_t image);
 // Decode only actions whose native effect must be coordinated by the session.
 Intent intent(std::uintptr_t image, int action);

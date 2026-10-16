@@ -1,7 +1,7 @@
 local bridge, wrapping = _IsaacLanModules["api/public"], _IsaacLanModules["compat/mods/wrapping"]
 local definition = {
     id = "isaac-lan.compat.eid",
-    adapterVersion = 1,
+    adapterVersion = 2,
     modName = "External Item Descriptions",
     targets = {
         {
@@ -31,6 +31,46 @@ function definition.probe(target)
     end
     return "ready"
 end
+local function renderReplicas(fn, ...)
+    -- The replica room's native radius index can lag behind its committed
+    -- entity list. Supplement only EID's pinned description query, and only
+    -- while its render callback owns the local view.
+    local original = Isaac.FindInRadius
+    local partitions = EntityPartition.FAMILIAR
+        | EntityPartition.ENEMY
+        | EntityPartition.PICKUP
+        | EntityPartition.PLAYER
+    local function find(position, radius, mask, ...)
+        local result = original(position, radius, mask, ...)
+        if mask ~= partitions or radius < 0 then
+            return result
+        end
+        local seen = {}
+        for _, entity in ipairs(result) do
+            seen[GetPtrHash(entity)] = true
+        end
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            if
+                entity:Exists()
+                and entity:GetData().__isaac_lan_replica
+                and not seen[GetPtrHash(entity)]
+                and (entity.Type == 1 or entity.Type == 3 or entity.Type == 5 or entity:IsEnemy())
+                and entity.Position:DistanceSquared(position) <= radius * radius
+            then
+                result[#result + 1] = entity
+                seen[GetPtrHash(entity)] = true
+            end
+        end
+        return result
+    end
+    Isaac.FindInRadius = find
+    local result = table.pack(pcall(fn, ...))
+    Isaac.FindInRadius = original
+    if not result[1] then
+        error(result[2], 0)
+    end
+    return table.unpack(result, 2, result.n)
+end
 function definition.install(target, api)
     local cleanups, eid = {}, target.mod
     target.pendingLifecycle = {}
@@ -38,6 +78,27 @@ function definition.install(target, api)
         wrapping.cleanup(cleanups)
     end)
     local lan = api:RegisterMod(eid, { id = definition.id, integrationVersion = 1 })
+    wrapping.patch(cleanups, eid, "getEntityData", function(original)
+        return function(self, entity, key, ...)
+            local value = original(self, entity, key, ...)
+            -- Replica entities do not run native gameplay updates, so their
+            -- FrameCount can remain zero. Use EID's existing first-frame opt-in
+            -- only for committed replicas; do not alter upstream entity data.
+            if
+                value == nil
+                and key == "EID_DescribeOnFirstFrame"
+                and lan:IsActive()
+                and lan:IsReady()
+                and not lan:IsAuthority()
+                and self:EntitySanityCheck(entity)
+                and not self:IsGridEntity(entity)
+                and entity:GetData().__isaac_lan_replica
+            then
+                return true
+            end
+            return value
+        end
+    end)
     wrapping.patch(cleanups, eid, "setPlayer", function(original)
         return function(self, ...)
             if not lan:IsActive() then
@@ -114,6 +175,9 @@ function definition.dispatch(target, record, ...)
         local args = table.pack(...)
         return lan:WithLocalView(function()
             target.mod:setPlayer()
+            if record.id == callbacks.MC_POST_RENDER and not lan:IsAuthority() then
+                return renderReplicas(record.original, table.unpack(args, 1, args.n))
+            end
             return record.original(table.unpack(args, 1, args.n))
         end)
     end

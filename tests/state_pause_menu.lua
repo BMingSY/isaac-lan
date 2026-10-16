@@ -5,6 +5,7 @@ local file = assert(io.open("./lan-test-role.txt", "r"))
 local ordinal = file:read("*l") == "host" and 0 or 1
 file:close()
 local host = ordinal == 0
+local character = pauseFeedback and 0 or ordinal
 local START, UP, DOWN, LEFT, RIGHT, CONFIRM, BACK = 16, 1, 2, 4, 8, 4096, 8192
 local renders, starts, exits, snapshots = 0, 0, 0, 0
 local current, localFrames, stepAt, matchedAt, acknowledged = 0, 0, 0, nil, false
@@ -14,6 +15,8 @@ local initialPrepared, resumePrepared, rejoined = false, false, false
 local volumeBefore, volumeChanged, exitAt, step, finished
 local shortEdges, previousPause = 0, false
 local owner = { Name = "Native pause menu acceptance" }
+local eidSamples, eidReady, focusAt = 0, false, nil
+local focusSetting
 local function report(value)
     Isaac.DebugString(
         "LAN_NETWORK PAUSE_MENU step=" .. (step and step.name or "boot") .. " " .. value
@@ -35,7 +38,8 @@ local function write(name, value)
 end
 local function checkPlayer(player, slot)
     assert(
-        player.ControllerIndex == slot + 1 and player:GetPlayerType() == slot,
+        player.ControllerIndex == slot + 1
+            and player:GetPlayerType() == (pauseFeedback and 0 or slot),
         "Selected ordinary character changed"
     )
     local own, other = slot == 0 and 1 or 2, slot == 0 and 2 or 1
@@ -208,6 +212,87 @@ local steps = {
         end,
     },
 }
+if pauseFeedback then
+    table.insert(steps, 2, {
+        name = "eid-stable",
+        check = function(s)
+            return running(s) and eidReady
+        end,
+    })
+    table.insert(steps, 3, {
+        name = "guest-focus-loss",
+        actor = 0,
+        action = function(_, now)
+            focusAt = now
+            Isaac.DebugString("LAN_NETWORK FOCUS_CYCLE_REQUEST 1")
+            return true
+        end,
+        check = function(s, m)
+            focusAt = focusAt or native.api_info().nowMs
+            return running(s)
+                and native.api_info().nowMs - focusAt > 10000
+                and m.page == 0
+                and not Game():IsPaused()
+        end,
+    })
+    Isaac.AddPriorityCallback(owner, ModCallbacks.MC_POST_RENDER, 10000, function()
+        if not step or step.name ~= "eid-stable" or eidReady then
+            return
+        end
+        assert(EID and EID.player, "EID is unavailable in the ready LAN view")
+        local entity = EID.lastDescriptionEntity
+        if eidSamples == 0 then
+            local pickups = Isaac.FindByType(5, 100, -1, false, false)
+            for _, pickup in ipairs(pickups) do
+                report(
+                    string.format(
+                        "EID_PROBE subtype=%d age=%d replica=%s first=%s described=%s distance=%.1f radius=%d hidden=%s refresh=%s ready=%s",
+                        pickup.SubType,
+                        pickup.FrameCount,
+                        tostring(pickup:GetData().__isaac_lan_replica),
+                        tostring(EID:getEntityData(pickup, "EID_DescribeOnFirstFrame")),
+                        tostring(EID:hasDescription(pickup)),
+                        pickup.Position:Distance(EID.player.Position),
+                        #Isaac.FindInRadius(
+                            EID.player.Position,
+                            tonumber(EID.Config.MaxDistance) * 40,
+                            EntityPartition.PICKUP
+                        ),
+                        tostring(EID.isHidden),
+                        tostring(EID:RefreshThisFrame()),
+                        tostring(native.api_info().ready)
+                    )
+                )
+            end
+        end
+        local diagnostic = " displaying="
+            .. tostring(EID.isDisplaying)
+            .. " entity="
+            .. tostring(entity and entity.SubType)
+            .. " player="
+            .. tostring(EID.player.ControllerIndex)
+            .. " warnings="
+            .. tostring(EID.Config.DisableStartOfRunWarnings)
+        assert(
+            EID.isDisplaying
+                and entity
+                and entity.Type == 5
+                and entity.Variant == 100
+                and entity.SubType == 13
+                and EID.player.ControllerIndex == ordinal + 1,
+            "EID lost the local pedestal description on render " .. eidSamples .. diagnostic
+        )
+        eidSamples = eidSamples + 1
+        if eidSamples == 180 then
+            eidReady = true
+            report("EID_STABLE samples=180 entity_age=" .. entity.FrameCount)
+            if not host then
+                focusSetting = Options.PauseOnFocusLost
+                Options.PauseOnFocusLost = true
+            end
+        end
+    end)
+end
 for n = 1, pausePulses do
     steps[#steps + 1] = {
         name = "short-press-" .. n,
@@ -318,6 +403,9 @@ end)
 local baseFrame, baseGate = _IsaacLanFrame, native.net_gate
 function _IsaacLanFrame()
     renders = renders + 1
+    if pauseFeedback and EID and EID.Config then
+        EID.Config.DisableStartOfRunWarnings = true
+    end
     native.test_gamepad(pendingButtons)
     pendingButtons = 0
     local s = baseFrame()
@@ -358,6 +446,10 @@ function _IsaacLanFrame()
         return s
     end
     if requested ~= current then
+        if step and step.name == "guest-focus-loss" and focusSetting ~= nil then
+            Options.PauseOnFocusLost = focusSetting
+            focusSetting = nil
+        end
         current, step = requested, assert(steps[requested])
         localFrames, stepAt, matchedAt, acknowledged = 0, now, nil, false
         acted, nextPulse, pulseCount = false, 0, 0
@@ -391,13 +483,13 @@ function _IsaacLanFrame()
         if s.phase == 2 then
             if not chosen then
                 chosen = true
-                assert(native.net_choose(ordinal, 1), "Required ordinary character is locked")
+                assert(native.net_choose(character, 1), "Required ordinary character is locked")
             end
             if host and not started and s.players == 2 and s.ready0 == 1 and s.ready1 == 1 then
                 started = true
                 _IsaacLanCommand(
                     step.resume and "resume" or "start",
-                    step.resume and "" or "YV039KQF:0:0:1:0:0"
+                    step.resume and "" or "YV039KQF:0:0:" .. (pauseFeedback and 0 or 1) .. ":0:0"
                 )
             end
         end
@@ -469,12 +561,22 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         if slot == 0 then
                             player:AddCoins(20 - player:GetNumCoins())
                         end
+                        if pauseFeedback then
+                            player.Position = Vector(240 + slot * 120, 280)
+                            if slot == 1 then
+                                Isaac.Spawn(5, 100, 13, Vector(300, 280), Vector.Zero, nil)
+                            end
+                        end
                     end))
                 end
                 actors()
                 initialPrepared = true
                 write("first-prepared.txt", "ready")
-                report("INVENTORY_FIXTURE P1=Isaac,SadOnion P2=Magdalene,InnerEye sharedCoins=20")
+                report(
+                    "INVENTORY_FIXTURE P1=Isaac,SadOnion P2="
+                        .. (pauseFeedback and "Isaac" or "Magdalene")
+                        .. ",InnerEye sharedCoins=20"
+                )
             elseif starts == 2 and not resumePrepared then
                 actors()
                 resumePrepared = true
@@ -499,7 +601,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     rejoined = true
                     assert(native.api_info().slot == 1, "Reconnect lost the guest identity")
                     write("rejoined.txt", "ready")
-                    report("REJOIN_PRESERVED slot=1 character=1 items=true")
+                    report("REJOIN_PRESERVED slot=1 character=" .. character .. " items=true")
                 end
             end
             return true

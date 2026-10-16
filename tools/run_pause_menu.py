@@ -76,6 +76,7 @@ def main():
     parser.add_argument("--record", action="store_true")
     parser.add_argument("--frame-ms", type=int, default=500)
     parser.add_argument("--heap-check", action="store_true")
+    parser.add_argument("--eid-feedback", type=Path, help="Also check EID and guest focus loss")
     args = parser.parse_args()
     labs = [args.host.resolve(), args.client.resolve()]
     if labs[0] == labs[1] or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
@@ -102,6 +103,8 @@ def main():
         + json.dumps(windows(coordination).replace("\\", "/"))
         + "\nlocal pausePulses = "
         + str(args.pause_pulses)
+        + "\nlocal pauseFeedback = "
+        + ("true" if args.eid_feedback else "false")
         + "\n"
         + (ROOT / "tests/state_pause_menu.lua").read_text()
     )
@@ -141,6 +144,8 @@ def main():
         command += ["--native-record-both", "--frame-ms", str(args.frame_ms)]
     if args.heap_check:
         command.append("--heap-check")
+    if args.eid_feedback:
+        command += ["--mod", str(args.eid_feedback.resolve()), "--focus-cycle"]
     report = {
         "passed": False,
         "restored": False,
@@ -170,9 +175,20 @@ def main():
             log = output / "engine" / role / "log.txt"
             text = log.read_text(errors="replace") if log.exists() else ""
             report["peers"][role] = peer_evidence(text, role == "host", args.pause_pulses)
+            if args.eid_feedback:
+                feedback = all(
+                    marker in text
+                    for marker in ("EID_STABLE samples=180", "step=guest-focus-loss CHECK ")
+                )
+                report["peers"][role]["eid_focus_feedback"] = feedback
+                report["peers"][role]["passed"] &= feedback
         report["passed"] = result.returncode == 0 and all(
             peer["passed"] for peer in report["peers"].values()
         )
+        if args.eid_feedback:
+            engine = json.loads((output / "engine" / "result.json").read_text())
+            report["focus_cycles"] = engine.get("focus_cycles", [])
+            report["passed"] &= report["focus_cycles"] == [1]
     finally:
         try:
             idle(labs)
