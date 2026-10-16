@@ -69,15 +69,7 @@ jobs:
           .deps/packaging/bin/python tools/check_release.py \
             "dist/Isaac-LAN-$RELEASE_TAG-windows-x86.zip" --tag "$RELEASE_TAG"
           mkdir ci
-          cp build-win32/isaac_lan_core_test.exe build-win32/isaac_lan_net_test.exe \
-            build-win32/isaac_lan_log_test.exe build-win32/isaac_lan_diagnostics_test.exe ci/
-          cp build-win32/isaac_lan_delta_test.exe ci/
-          cp build-win32/isaac_lan_crafting_hud_test.exe \
-            build-win32/isaac_lan_challenge_hud_test.exe \
-            build-win32/isaac_lan_character_catalog_test.exe \
-            build-win32/isaac_lan_pause_menu_test.exe \
-            build-win32/isaac_lan_frontend_menu_test.exe \
-            build-win32/isaac_lan_rewind_home_test.exe ci/
+          cp build-win32/*_test.exe ci/
           cp build-win32/isaac_lan_heap_watch.exe build-win32/isaac_lan_heap_fixture.exe ci/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
