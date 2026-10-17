@@ -62,17 +62,14 @@ std::vector<std::uint8_t> StateCompression::compress(std::span<const std::uint8_
                                                      std::span<const std::uint8_t> baseline) {
     if (bytes.empty() || bytes.size() > maxWorldSize || baseline.size() > maxWorldSize)
         throw std::runtime_error("Invalid state compression size");
-    std::vector<std::uint8_t> result(bytes.size() + headerSize);
-    result[0] = Mode::raw;
+    const auto compressed = impl->zstd.compress(bytes, maxWorldSize, baseline);
+    const bool packed = compressed.size() < bytes.size();
+    const auto payload = packed ? std::span<const std::uint8_t>(compressed) : bytes;
+    std::vector<std::uint8_t> result(payload.size() + headerSize);
+    result[0] = packed ? (baseline.empty() ? Mode::zstd : Mode::zstdPrefix) : Mode::raw;
     for (unsigned i = 0; i < 4; ++i)
         result[1 + i] = static_cast<std::uint8_t>(bytes.size() >> (24 - i * 8));
-    const auto compressed = impl->zstd.compress(bytes, maxWorldSize, baseline);
-    if (compressed.size() < bytes.size()) {
-        result[0] = baseline.empty() ? Mode::zstd : Mode::zstdPrefix;
-        result.resize(compressed.size() + headerSize);
-        std::memcpy(result.data() + headerSize, compressed.data(), compressed.size());
-    } else
-        std::memcpy(result.data() + headerSize, bytes.data(), bytes.size());
+    std::memcpy(result.data() + headerSize, payload.data(), payload.size());
     return result;
 }
 std::vector<std::uint8_t> StateCompression::expand(std::span<const std::uint8_t> bytes,

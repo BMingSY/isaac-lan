@@ -18,6 +18,8 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。
 
+`sprite_state(sprite)` 复制完整精灵层状态为字节串；客机的 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，没有贴图变化时返回 `true`。返回值不持有原生引用；Lua 只在数组非空时替换贴图并调用 `LoadGraphics`。捕获缓冲预留容量不改变字段或编码字节。
+
 | 能力与实现 | 原生边界 | 校验与所有权 |
 | --- | --- | --- |
 | [持有炸弹](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/held_bombs.h) `boss_held_bombs` | Lua API 不暴露 NPC `+0xbf0` 的持有容器；Hornfel 为两槽，Horny Boys 为三槽 | 读取本机实体索引，由兼容组件转换为同步 ID；客机写入校验 Boss、炸弹类型和槽数，使用游戏 resize 与 `EntityPtr.Assign`，容器仍由游戏析构 |

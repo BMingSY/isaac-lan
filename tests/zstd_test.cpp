@@ -55,6 +55,8 @@ void prefixes() {
         require(codec.expand(next, value.size(), limit, base) == value,
                 "Context reuse changed prefix state");
     }
+    require(codec.expand(frame, value.size(), limit, base) == value,
+            "Reused workspace overwrote a retained frame");
     require(codec.memory() < 16 * limit, "Compression context memory is unbounded");
 }
 void bounds() {

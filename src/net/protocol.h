@@ -236,7 +236,8 @@ struct WorldState {
 class Writer {
   public:
     std::vector<std::uint8_t> bytes;
-    explicit Writer(Message type) {
+    explicit Writer(Message type, std::size_t capacity = 1) {
+        bytes.reserve(capacity);
         u8(static_cast<std::uint8_t>(type));
     }
     void u8(std::uint8_t n) {

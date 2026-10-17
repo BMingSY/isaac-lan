@@ -22,6 +22,7 @@ void bounds(std::size_t size, std::size_t limit, std::size_t prefix) {
 struct Zstd::Impl {
     ZSTD_CCtx* encoder = ZSTD_createCCtx();
     ZSTD_DCtx* decoder = ZSTD_createDCtx();
+    std::vector<std::uint8_t> scratch;
     ~Impl() {
         ZSTD_freeCCtx(encoder);
         ZSTD_freeDCtx(decoder);
@@ -35,7 +36,11 @@ Zstd::~Zstd() = default;
 std::vector<std::uint8_t> Zstd::compress(std::span<const std::uint8_t> value, std::size_t limit,
                                          std::span<const std::uint8_t> prefix) {
     bounds(value.size(), limit, prefix.size());
-    std::vector<std::uint8_t> result(ZSTD_compressBound(value.size()));
+    // One bounded workspace per context avoids clearing a full snapshot-sized
+    // allocation for both candidates on every send. Returned frames own bytes.
+    const auto capacity = ZSTD_compressBound(value.size());
+    if (impl->scratch.size() < capacity)
+        impl->scratch.resize(capacity);
     auto* context = impl->encoder;
     checked(ZSTD_CCtx_reset(context, ZSTD_reset_session_and_parameters));
     checked(ZSTD_CCtx_setParameter(context, ZSTD_c_compressionLevel, compressionLevel));
@@ -48,12 +53,11 @@ std::vector<std::uint8_t> Zstd::compress(std::span<const std::uint8_t> value, st
         checked(ZSTD_CCtx_setParameter(context, ZSTD_c_hashLog, prefixHashLog));
     checked(ZSTD_CCtx_refPrefix(context, prefix.data(), prefix.size()));
     const auto size =
-        ZSTD_compress2(context, result.data(), result.size(), value.data(), value.size());
+        ZSTD_compress2(context, impl->scratch.data(), capacity, value.data(), value.size());
     const auto cleared = ZSTD_CCtx_refPrefix(context, nullptr, 0);
     checked(size);
     checked(cleared);
-    result.resize(size);
-    return result;
+    return {impl->scratch.begin(), impl->scratch.begin() + size};
 }
 std::vector<std::uint8_t> Zstd::expand(std::span<const std::uint8_t> frame, std::size_t size,
                                        std::size_t limit, std::span<const std::uint8_t> prefix) {
@@ -81,6 +85,7 @@ std::vector<std::uint8_t> Zstd::expand(std::span<const std::uint8_t> frame, std:
     return result;
 }
 std::size_t Zstd::memory() const {
-    return ZSTD_sizeof_CCtx(impl->encoder) + ZSTD_sizeof_DCtx(impl->decoder);
+    return ZSTD_sizeof_CCtx(impl->encoder) + ZSTD_sizeof_DCtx(impl->decoder) +
+           impl->scratch.capacity();
 }
 } // namespace isaac::compression

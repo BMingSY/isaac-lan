@@ -193,11 +193,13 @@ return function(wire)
                 s.Color = col(v[Sprite.color])
             end
             local changed = assert(native.sprite_state(s, v[Sprite.native]))
-            for _, layer in ipairs(changed) do
-                s:ReplaceSpritesheet(layer[Spritesheet.layer], layer[Spritesheet.path])
-            end
-            if #changed > 0 then
-                s:LoadGraphics()
+            if changed ~= true then
+                for _, layer in ipairs(changed) do
+                    s:ReplaceSpritesheet(layer[Spritesheet.layer], layer[Spritesheet.path])
+                end
+                if #changed > 0 then
+                    s:LoadGraphics()
+                end
             end
         end
         local function entity(e, visual)

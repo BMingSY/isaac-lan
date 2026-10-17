@@ -297,7 +297,11 @@ int spriteState(lua_State* L) {
     try {
         const auto s = sprite(L);
         if (lua.getTop(L) == 1) {
-            lan::Writer w(lan::Message::world);
+            const auto n = count(s, 0x80);
+            // Reserve typical header/layer payloads once; longer paths still
+            // grow normally. This changes allocation, never the wire layout.
+            constexpr std::size_t headerReserve = 256, layerReserve = 256;
+            lan::Writer w(lan::Message::world, headerReserve + n * layerReserve);
             captureAnimation(w, s + 0x30);
             captureAnimation(w, s + 0x50);
             w.u32(at<unsigned>(s, 0x10c));
@@ -308,7 +312,6 @@ int spriteState(lua_State* L) {
             w.u32(at<unsigned>(s, 0x104));
             w.u32(at<unsigned>(s, 0x110));
             w.u8(at<bool>(s, 0x70));
-            const auto n = count(s, 0x80);
             w.u16(n);
             for (unsigned i = 0; i < n; ++i) {
                 const auto p = at<Address>(s, 0x7c) + i * 0xa0;
@@ -345,13 +348,14 @@ int spriteState(lua_State* L) {
         const auto n = r.u16();
         if (n > 64)
             throw std::runtime_error("Too many sprite layers");
-        lua.createTable(L, 0, 0);
         unsigned changed = 0;
         for (unsigned i = 0; i < n; ++i) {
             const auto id = r.u16();
             const auto path = r.stringView();
             const auto p = layer(s, id);
             if (p && path != string(p + 8)) {
+                if (!changed)
+                    lua.createTable(L, 0, 0);
                 lua.createTable(L, 2, 0);
                 lua.pushInteger(L, id);
                 lua.rawSetI(L, -2, 1);
@@ -381,6 +385,8 @@ int spriteState(lua_State* L) {
                 at<unsigned>(p, 0x8c) = flags;
         }
         r.finish();
+        if (!changed)
+            lua.pushBoolean(L, true);
         return 1;
     } catch (const std::exception& e) {
         runtime::abort(e.what());
@@ -404,7 +410,7 @@ int entityShadow(lua_State* L) {
         // replicas must receive them instead of drawing constructor shadows.
         const auto entity = sprite(L) - 0x48;
         if (lua.getTop(L) == 1) {
-            lan::Writer w(lan::Message::world);
+            lan::Writer w(lan::Message::world, 1 + 4 * sizeof(std::uint32_t));
             for (auto offset : {0x15cu, 0x160u, 0x164u, 0x350u})
                 w.u32(at<unsigned>(entity, offset));
             lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),

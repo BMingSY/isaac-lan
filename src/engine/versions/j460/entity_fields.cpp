@@ -364,7 +364,8 @@ template <int Operation> int run(lua_State* L) {
             } else {
                 if (!runtime::replica())
                     throw std::runtime_error("Only replicas restore entity fields");
-                Values values{};
+                // Validation fills every writable component before apply reads it.
+                Values values;
                 validate(L, plan, 0, 3, values);
                 apply(plan, entity, values);
                 api.pushBoolean(L, true);

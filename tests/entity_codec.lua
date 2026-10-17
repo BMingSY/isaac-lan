@@ -13,6 +13,7 @@ local env = setmetatable({
     EntityGridCollisionClass = { GRIDCOLL_NONE = 0 },
 }, { __index = _G })
 local laserReads, laserWrites = 0, 0
+local spriteChanges = true
 local geometry = string.pack(">ff", 520, -180)
 local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
     env.Vector,
@@ -33,7 +34,7 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
             return ""
         end,
         sprite_state = function(_, bytes)
-            return bytes and {} or ""
+            return bytes and spriteChanges or ""
         end,
         laser_path = function(_, bytes)
             if bytes then
@@ -233,6 +234,19 @@ assert(
         and beam.SubType == 1
         and string.pack(">ff", beam.TargetPosition.X, beam.TargetPosition.Y) == geometry
 )
+local replaced, loaded = {}, 0
+function beam.sprite:ReplaceSpritesheet(layer, path)
+    replaced[#replaced + 1] = { layer, path }
+end
+function beam.sprite:LoadGraphics()
+    loaded = loaded + 1
+end
+spriteChanges = { { 2, "changed.png" }, { 0, "base.png" } }
+component.apply(beam, value)
+assert(wire.encode(replaced) == wire.encode(spriteChanges) and loaded == 1)
+spriteChanges = true
+component.apply(beam, value)
+assert(#replaced == 2 and loaded == 1, "Unchanged sprite reloaded graphics")
 source.MaxDistance = {}
 assert(not pcall(component.capture, source, false), "Unsupported userdata scalar must be rejected")
 source.MaxDistance = math.huge
