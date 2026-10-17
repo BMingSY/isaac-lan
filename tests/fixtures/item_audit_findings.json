@@ -39,7 +39,7 @@
       "evidence": "item-fixes-20261017-05/batch-001",
       "checks": "修复巨大化动画精灵自引用及客机临时变身状态；主客机、同房分房四组核对模型、跨房、效果结束恢复。"
     },
-    "collectible:636": {
+    "collectible:628": {
       "effect": "全队进入；任一玩家拿取道具后全队返回。"
     },
     "collectible:656": {

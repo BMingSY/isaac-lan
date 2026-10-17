@@ -43,11 +43,38 @@ def render(catalog, findings):
     lines = [
         "# 道具与效果兼容清单",
         "",
+        "## 额外兼容",
+        "",
+        "这里汇总 Mod 对原版效果的调整。全队共享效果在分房时也生效。",
+        "",
+        "| ID | 名称 | 兼容验证 | Mod 效果调整 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for item in items:
+        entry = conclusion(known.get(item["key"], {}), audit.get(item["key"], {}))
+        if entry.get("effect") and entry["effect"] != "—":
+            lines.append(
+                "| "
+                + " | ".join(
+                    cell(value)
+                    for value in (
+                        item["id"],
+                        item.get("name_zh", item["name"]),
+                        STATUSES[entry.get("status", "untested")],
+                        entry["effect"],
+                    )
+                )
+                + " |"
+            )
+    lines += [
+        "",
+        "## 完整清单",
+        "",
         f"范围：忏悔＋ `{catalog['game']}` 的实际配置，共 {len(items)} 项。隐藏／内部道具也保留；空缺 ID 不补造条目。",
         "",
         "兼容验证：**已验证**＝单独效果已验证正常；**待验证**＝尚未确认单独效果；**不兼容**＝已复现问题；**待确认**＝疑似问题。只通过基础流程检查的仍列为“待验证”。",
         "",
-        "仅注明 Mod 与原版不同的效果调整；未记录问题或没有额外调整的格子用“—”。全队共享效果在分房时也生效。",
+        "未记录问题或没有额外调整的格子用“—”。",
         "",
         "实体 ID 指拾取物，格式为 `类型.变体.子类型`。药丸子类型是颜色编号，与药丸效果 ID 不同。",
         "",
@@ -55,7 +82,7 @@ def render(catalog, findings):
     for kind, title in KINDS.items():
         group = [item for item in items if item["kind"] == kind]
         lines += [
-            f"## {title}（{len(group)}）",
+            f"### {title}（{len(group)}）",
             "",
             "| ID | 实体 ID | 名称 | 兼容验证 | 已知问题 | Mod 效果调整 |",
             "| --- | --- | --- | --- | --- | --- |",
