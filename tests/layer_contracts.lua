@@ -4,9 +4,9 @@ local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
 local codec, schema = module("sync/codec"), module("sync/world_schema")
--- Schema 22 also carries shared golden bomb/key flags in inventory resources.
+-- Schema 23 carries the bounded native temporary-effect tuple on each actor.
 local tuple = {
-    22,
+    23,
     42,
     80,
     6,
@@ -33,11 +33,11 @@ assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses ==
 assert(codec.encode(schema.pack(view)) == codec.encode(tuple))
 assert(not pcall(schema.unpack, tuple, 41))
 local malformed = { table.unpack(tuple) }
-for _, prior in ipairs({ 16, 17, 18, 19, 20, 21 }) do
+for _, prior in ipairs({ 16, 17, 18, 19, 20, 21, 22 }) do
     malformed[1] = prior
     assert(not pcall(schema.unpack, malformed, 42))
 end
-malformed[1], malformed[22] = 22, true
+malformed[1], malformed[22] = 23, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))

@@ -64,7 +64,9 @@ local function stateEnvironment()
                 root .. "/src/bridge/compat/characters/keeper.lua"
             ),
             ["compat/items/glitched"] = dofile(root .. "/src/bridge/compat/items/glitched.lua"),
-            ["compat/items/mega_mush"] = dofile(root .. "/src/bridge/compat/items/mega_mush.lua"),
+            ["compat/items/temporary_effects"] = dofile(
+                root .. "/src/bridge/compat/items/temporary_effects.lua"
+            ),
             ["compat/items/black_candle"] = dofile(
                 root .. "/src/bridge/compat/items/black_candle.lua"
             ),

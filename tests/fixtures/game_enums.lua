@@ -75,6 +75,8 @@ return {
     DoorVariant = { DOOR_UNLOCKED = 8 },
     TrinketType = { TRINKET_FLAT_FILE = 151 },
     CollectibleType = {
+        COLLECTIBLE_BOOK_OF_SHADOWS = 58,
+        COLLECTIBLE_HOLY_MANTLE = 313,
         COLLECTIBLE_MEGA_MUSH = 625,
         COLLECTIBLE_BLACK_CANDLE = 260,
         COLLECTIBLE_ISAACS_HEART = 276,

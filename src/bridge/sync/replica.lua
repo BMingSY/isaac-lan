@@ -147,7 +147,7 @@ return function(fields)
                         lastInventory[actor[Actor.entity][Entity.id]] ~= encoded
                             or tick % INVENTORY_REFRESH_TICKS == 0
                     )
-                    deps.megaMush.apply(p, actor[Actor.megaMush])
+                    deps.temporaryEffects.apply(p, actor[Actor.temporaryEffects])
                 end, 1))
                 lastInventory[actor[Actor.entity][Entity.id]] = encoded
                 applyEntity(p, actor[Actor.entity], now, tick)

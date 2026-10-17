@@ -38,6 +38,7 @@ DAMAGE_EFFECTS = {
         "horse": {"broken": 1},
     },
     "COLLECTIBLE_HOLY_MANTLE": {
+        "mantle_shield": True,
         "steps": [
             hit("first", 90, 0),
             hit("repeat", 180, 1),
@@ -47,18 +48,20 @@ DAMAGE_EFFECTS = {
             move("floor", 480),
             hit("next_floor", 720, 0),
             hit("floor_repeat", 810, 1),
-        ]
+        ],
     },
     "CARD_HOLY": {
+        "mantle_shield": True,
         "steps": [
             move("room", 150),
             hit("carried_shield", 240, 0),
             hit("consumed_shield", 330, 1),
             move("floor", 390),
             hit("next_floor", 630, 1),
-        ]
+        ],
     },
     "TRINKET_WOODEN_CROSS": {
+        "mantle_shield": True,
         # The shield is granted by a floor entry, not by the fixture itself.
         "steps": [
             move("floor", 90),
@@ -69,7 +72,7 @@ DAMAGE_EFFECTS = {
             move("floor", 630),
             hit("next_floor", 870, 0),
             hit("floor_repeat", 960, 1),
-        ]
+        ],
     },
     "COLLECTIBLE_BOOK_OF_SHADOWS": {
         "shadow_shield": True,
@@ -217,7 +220,14 @@ def damage_checks(case, observations):
             if len(pairs) >= 2
             else [],
         )
-    if rules.get("shadow_shield"):
+    shield_fields = (
+        ("shadows", "invincible")
+        if rules.get("shadow_shield")
+        else ("mantle",)
+        if rules.get("mantle_shield")
+        else ()
+    )
+    if shield_fields:
         check(
             "damage_shield_peer",
             [
@@ -228,12 +238,12 @@ def damage_checks(case, observations):
                     field not in e["players"][p].get("shield", {})
                     for e in (a, b)
                     for p in (0, 1)
-                    for field in ("shadows", "invincible")
+                    for field in shield_fields
                 )
                 else all(
                     a["players"][p]["shield"][field] == b["players"][p]["shield"][field]
                     for p in (0, 1)
-                    for field in ("shadows", "invincible")
+                    for field in shield_fields
                 )
                 for a, b in pairs
             ]

@@ -41,7 +41,7 @@ return function(fields)
                         [Actor.pose] = false,
                         [Actor.poop] = poop.capture(p),
                         [Actor.craftingBag] = craftingBag.capture(p),
-                        [Actor.megaMush] = deps.megaMush.capture(p),
+                        [Actor.temporaryEffects] = deps.temporaryEffects.capture(p),
                     }
                     captureActors[index] = base
                 end
@@ -73,7 +73,7 @@ return function(fields)
                             [Actor.pose] = assert(native.actor_pose(p:GetSprite())),
                             [Actor.poop] = base[Actor.poop],
                             [Actor.craftingBag] = base[Actor.craftingBag],
-                            [Actor.megaMush] = base[Actor.megaMush],
+                            [Actor.temporaryEffects] = base[Actor.temporaryEffects],
                         }
                         captureVisuals[index] = full
                     end

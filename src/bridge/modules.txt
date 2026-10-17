@@ -32,7 +32,7 @@ sync/curses
 sync/deals
 compat/items/black_candle
 compat/items/crafting_bag
-compat/items/mega_mush
+compat/items/temporary_effects
 compat/items/glitched
 compat/routes/crawlspace
 compat/routes/greed

@@ -92,7 +92,12 @@ local deps = {
     end,
     poop = shared("poop"),
     craftingBag = shared("bag"),
-    megaMush = shared("mega"),
+    temporaryEffects = {
+        capture = function()
+            count("effects")
+            return { revision, revision + 1, 0 }
+        end,
+    },
     curses = shared("curses"),
     greed = shared("greed"),
     deals = shared("deals"),
@@ -186,7 +191,9 @@ for _, name in ipairs({
 }) do
     assert(calls[name] == 1, name .. " was recaptured for another peer")
 end
-assert(calls.inventory == 3 and calls.poop == 3 and calls.bag == 3 and calls.mega == 3)
+assert(calls.inventory == 3 and calls.poop == 3 and calls.bag == 3 and calls.effects == 3)
+assert(table.concat(first.actors[1][9], ",") == "1,2,0")
+assert(codec.encode(first.actors[1][9]) == codec.encode(third.actors[1][9]))
 assert(calls.entity == 6, "Base/visual actor tuples were not reused across views")
 for slot = 0, 2 do
     assert(
