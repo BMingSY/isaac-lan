@@ -15,6 +15,7 @@ function _IsaacLanFrame()
     if not linked and renders >= (host and 300 or 360) then
         linked = true
         _IsaacLanCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)
+        Isaac.DebugString("LAN_NETWORK MENU_READY")
     end
     local status = originalFrame()
     assert(status.phase ~= 4 and status.phase ~= 9, status.error)
