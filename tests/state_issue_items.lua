@@ -98,32 +98,74 @@ local function pedestals(slot)
     return result
 end
 local function pickGenerated(passive)
+    -- A generated active can remove pedestals or teleport the holder. Rebuild
+    -- the passive prerequisite in the resulting room instead of treating the
+    -- absence of an unused pedestal as a compatibility failure.
+    actor(1, function(p)
+        if not p:HasCollectible(CollectibleType.COLLECTIBLE_TMTRAINER) then
+            p:AddCollectible(CollectibleType.COLLECTIBLE_TMTRAINER, 0, false)
+        end
+    end)
     for slot = 0, 1 do
         local target
-        for _, choice in ipairs(pedestals(slot)) do
+        local function matches(choice)
             local id = choice.SubType
             if id >= 0x80000000 then
                 id = id - 0x100000000
             end
-            if
-                id < 0
+            return id < 0
                 and (Isaac.GetItemConfig():GetCollectible(id).Type ~= ItemType.ITEM_ACTIVE)
-                    == passive
-            then
+                    == passive,
+                id
+        end
+        for _, choice in ipairs(pedestals(slot)) do
+            local match, id = matches(choice)
+            if match then
                 target = choice
                 pickedTargets[slot] = id
-                report(
-                    "GENERATED_TARGET slot="
-                        .. slot
-                        .. " id="
-                        .. id
-                        .. " passive="
-                        .. tostring(passive)
-                )
                 break
             end
         end
+        if not target then
+            actor(slot, function(_, room)
+                for attempt = 1, 64 do
+                    local seed = 400003 + (#native.generated_items() / 4 + attempt) * 7919
+                    local id =
+                        Game():GetItemPool():GetCollectible(ItemPoolType.POOL_TREASURE, false, seed)
+                    local choice = Isaac.Spawn(
+                        5,
+                        100,
+                        id,
+                        room:FindFreePickupSpawnPosition(room:GetCenterPos(), 0, true),
+                        Vector.Zero,
+                        nil
+                    )
+                    local match, actual = matches(choice)
+                    report(
+                        "GENERATED_REPLACEMENT slot="
+                            .. slot
+                            .. " seed="
+                            .. seed
+                            .. " id="
+                            .. actual
+                    )
+                    if match then
+                        target, pickedTargets[slot] = choice, actual
+                        break
+                    end
+                    choice:Remove()
+                end
+            end)
+        end
         assert(target, "No generated sample of requested type in room " .. slot)
+        report(
+            "GENERATED_TARGET slot="
+                .. slot
+                .. " id="
+                .. pickedTargets[slot]
+                .. " passive="
+                .. tostring(passive)
+        )
         actor(slot, function(p)
             p.Position, p.Velocity = target.Position, Vector.Zero
         end)
@@ -169,6 +211,8 @@ Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function(_, save)
     end
 end)
 function _IsaacLanFrame()
+    Options.FoundHUD, Options.ExtraHUDStyle = true, 1
+    Options.FoundHUD, Options.ExtraHUDStyle = true, 1
     renders = renders + 1
     local s = frame()
     assert(s.phase ~= Phase.failed and s.phase ~= Phase.waiting, s.error)

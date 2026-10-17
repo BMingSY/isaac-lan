@@ -30,6 +30,7 @@ local function stateEnvironment()
             ["sync/fields"] = dofile(root .. "/src/bridge/sync/fields.lua"),
             ["sync/capture"] = dofile(root .. "/src/bridge/sync/capture.lua"),
             ["sync/replica"] = dofile(root .. "/src/bridge/sync/replica.lua"),
+            ["sync/actor_roster"] = dofile(root .. "/src/bridge/sync/actor_roster.lua"),
             ["sync/entity_schema"] = dofile(root .. "/src/bridge/sync/entity_schema.lua"),
             ["sync/entity_codec"] = dofile(root .. "/src/bridge/sync/entity_codec.lua"),
             ["sync/world_schema"] = dofile(root .. "/src/bridge/sync/world_schema.lua"),
@@ -63,6 +64,9 @@ local function stateEnvironment()
                 root .. "/src/bridge/compat/characters/keeper.lua"
             ),
             ["compat/items/glitched"] = dofile(root .. "/src/bridge/compat/items/glitched.lua"),
+            ["compat/items/temporary_effects"] = dofile(
+                root .. "/src/bridge/compat/items/temporary_effects.lua"
+            ),
             ["compat/items/black_candle"] = dofile(
                 root .. "/src/bridge/compat/items/black_candle.lua"
             ),

@@ -33,6 +33,10 @@ return function(fields)
             { name = "Bombs", field = Resource.bombs },
             { name = "Keys", field = Resource.keys },
         }
+        local sharedFlags = {
+            { name = "GoldenBomb", field = Resource.goldenBomb },
+            { name = "GoldenKey", field = Resource.goldenKey },
+        }
         local function inventory(p)
             local items = {}
             local config = env.config()
@@ -66,6 +70,8 @@ return function(fields)
                     p:GetNumKeys(), -- Resource.keys
                     p:GetSoulCharge(), -- Resource.soulCharge
                     p:GetBloodCharge(), -- Resource.bloodCharge
+                    p:HasGoldenBomb(), -- Resource.goldenBomb
+                    p:HasGoldenKey(), -- Resource.goldenKey
                 },
                 [Inventory.trinkets] = { p:GetTrinket(0), p:GetTrinket(1) },
                 [Inventory.cards] = { p:GetCard(0), p:GetCard(1) },
@@ -83,6 +89,12 @@ return function(fields)
                     p,
                     v[Inventory.resources][pair.field] - p["GetNum" .. pair.name](p)
                 )
+            end
+            for _, flag in ipairs(sharedFlags) do
+                local desired = v[Inventory.resources][flag.field]
+                if p["Has" .. flag.name](p) ~= desired then
+                    p[(desired and "Add" or "Remove") .. flag.name](p)
+                end
             end
         end
         local function applyInventory(p, v, refreshItems)

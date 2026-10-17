@@ -251,8 +251,8 @@ def main():
         help="Enable an additional fixture only on the host",
     )
     args = parser.parse_args()
-    if not 10 <= args.scenario_timeout <= 3600:
-        parser.error("Scenario timeout must be between 10 and 3600 seconds")
+    if not 10 <= args.scenario_timeout <= 86400:
+        parser.error("Scenario timeout must be between 10 and 86400 seconds")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
     if args.release_solo_coordination and (args.solo_fixture or not args.frontend):
@@ -531,9 +531,11 @@ def main():
 
     relay = None
     floor_hud = None
+    closing = False
 
     def interrupted(signum, _frame):
-        raise RuntimeError(f"Test interrupted by signal {signum}")
+        if not closing:
+            raise RuntimeError(f"Test interrupted by signal {signum}")
 
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGHUP, interrupted)
@@ -1136,6 +1138,10 @@ def main():
         result["pass"] = False
         result["error"] = str(error)
     finally:
+        # A parent watchdog can observe the peer failure after this runner has
+        # already begun closing both games. Do not let that second stop signal
+        # interrupt owned-process cleanup and strand the surviving peer.
+        closing = True
         if floor_hud is not None:
             floor_hud.stop()
         # Only PIDs returned by our own isolated child runner are controlled.

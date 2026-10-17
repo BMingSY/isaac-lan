@@ -104,6 +104,7 @@ return function(fields)
             return roomChanged
         end
         local function restoreActors(value, now, tick)
+            deps.restoreActorRoster(value.actors)
             for _, actor in ipairs(value.actors) do
                 local p = forms.resolve(
                     actor[Actor.index],
@@ -146,6 +147,7 @@ return function(fields)
                         lastInventory[actor[Actor.entity][Entity.id]] ~= encoded
                             or tick % INVENTORY_REFRESH_TICKS == 0
                     )
+                    deps.temporaryEffects.apply(p, actor[Actor.temporaryEffects])
                 end, 1))
                 lastInventory[actor[Actor.entity][Entity.id]] = encoded
                 applyEntity(p, actor[Actor.entity], now, tick)

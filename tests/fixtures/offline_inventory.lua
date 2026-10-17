@@ -175,6 +175,20 @@ return function(root, sharedResources, pockets, extraCollectibles, collectibleCo
             p.resourceDelta = p.resourceDelta + math.abs(delta)
         end
     end
+    for index, name in ipairs({ "GoldenBomb", "GoldenKey" }) do
+        local field = 5 + index
+        methods["Has" .. name] = function(p)
+            return not not (sharedResources or p.resources)[field]
+        end
+        methods["Add" .. name] = function(p)
+            (sharedResources or p.resources)[field] = true
+            p.resourceDelta = p.resourceDelta + 1
+        end
+        methods["Remove" .. name] = function(p)
+            (sharedResources or p.resources)[field] = false
+            p.resourceDelta = p.resourceDelta + 1
+        end
+    end
     for i, name in ipairs({
         "BrokenHearts",
         "MaxHearts",

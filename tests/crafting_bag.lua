@@ -90,6 +90,10 @@ local function environment()
         end,
     }
     local native = {
+        actor_companions = function(bytes)
+            assert(bytes == "\0")
+            return true
+        end,
         rooms_positions = function()
             return positions
         end,
@@ -177,6 +181,7 @@ local function environment()
         "sync/fields",
         "sync/capture",
         "sync/replica",
+        "sync/actor_roster",
         "runtime/floor",
         "runtime/transitions",
         "compat/transitions",
@@ -230,6 +235,7 @@ local function environment()
         "presentation/audio",
         "compat/routes/crawlspace",
         "compat/items/glitched",
+        "compat/items/temporary_effects",
     }) do
         modules[name] = inert
     end
@@ -354,7 +360,7 @@ for tick = 1, 5 do
         local bytes = host.state.capture(slot, tick)
         local view = host.state.decode(bytes)
         assert(
-            view[1] == 20 and view[9][1][8][1] == first and view[9][2][8][1] == second,
+            view[1] == 23 and view[9][1][8][1] == first and view[9][2][8][1] == second,
             "World snapshot omitted or mixed the two players' crafting bags"
         )
         assert(view[9][1][8][2] == (tick % 2 == 0) and view[9][2][8][2] == (tick % 2 ~= 0))

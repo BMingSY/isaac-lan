@@ -6,6 +6,7 @@ sync/entity_codec
 sync/entity_links
 sync/world_schema
 sync/actor_pose
+sync/actor_roster
 presentation/actors
 presentation/menu_model
 presentation/audio
@@ -31,6 +32,7 @@ sync/curses
 sync/deals
 compat/items/black_candle
 compat/items/crafting_bag
+compat/items/temporary_effects
 compat/items/glitched
 compat/routes/crawlspace
 compat/routes/greed

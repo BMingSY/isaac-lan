@@ -11,6 +11,7 @@
 #include <atomic>
 #include <vector>
 #include <optional>
+#include <mutex>
 
 #include "engine/versions/j460/entrypoints.h"
 namespace j460 = isaac::engine::j460;
@@ -38,7 +39,42 @@ struct DeviceId {
     int original, assigned;
 };
 std::vector<DeviceId> lanDeviceIds;
+// J460's background hotplug scan and foreground polling both remove entries
+// from the same native device vector. Keep the entire traversal/callback/free
+// transaction exclusive, including the disconnects after leaving LAN. Locking
+// only XInputGetState/GetCapabilities is too late: both callers already hold
+// a device pointer. Native connect callbacks can reenter polling on this thread.
+std::recursive_mutex deviceMutex;
+using DeviceUpdate = void(__cdecl*)();
+DeviceUpdate originalEnumerateDevices = nullptr, originalPollDevices = nullptr;
+void __cdecl enumerateDevices() {
+    const std::lock_guard lock(deviceMutex);
+    originalEnumerateDevices();
+}
+void __cdecl pollDevices() {
+    const std::lock_guard lock(deviceMutex);
+    originalPollDevices();
+}
+bool hookDevices() {
+    if (originalEnumerateDevices && originalPollDevices)
+        return true;
+    auto scan = reinterpret_cast<void*>(image + j460::entry::inputEnumerateDevices);
+    auto poll = reinterpret_cast<void*>(image + j460::entry::inputPollDevices);
+    const bool created =
+        MH_CreateHook(scan, reinterpret_cast<void*>(enumerateDevices),
+                      reinterpret_cast<void**>(&originalEnumerateDevices)) == MH_OK &&
+        MH_CreateHook(poll, reinterpret_cast<void*>(pollDevices),
+                      reinterpret_cast<void**>(&originalPollDevices)) == MH_OK;
+    if (created && MH_QueueEnableHook(scan) == MH_OK && MH_QueueEnableHook(poll) == MH_OK &&
+        MH_ApplyQueued() == MH_OK)
+        return true;
+    MH_RemoveHook(scan);
+    MH_RemoveHook(poll);
+    originalEnumerateDevices = originalPollDevices = nullptr;
+    return false;
+}
 void restoreDeviceIds() {
+    const std::lock_guard lock(deviceMutex);
     const auto manager = image + 0x857b18;
     for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8) {
         const auto device = at<std::uintptr_t>(p, 0);
@@ -49,6 +85,7 @@ void restoreDeviceIds() {
     lanDeviceIds.clear();
 }
 void assignLanDeviceIds() {
+    const std::lock_guard lock(deviceMutex);
     if (!virtualDevices || !lanDeviceIds.empty())
         return;
     const auto manager = image + 0x857b18;
@@ -245,17 +282,19 @@ bool hookQuery() {
 using LuaFn = int(__cdecl*)(lua_State*);
 isaac::lua::API lua{};
 int enable(lua_State* L) {
-    virtualDevices = true;
-    const bool ok = hookQuery();
+    const bool ok = hookDevices() && hookQuery();
+    if (ok)
+        virtualDevices = true;
     lua.pushBoolean(L, ok);
     if (ok)
         logger("input_virtual=ENABLED");
     return 1;
 }
 bool exists(int index) {
+    const std::lock_guard lock(deviceMutex);
     assignLanDeviceIds();
     const auto manager = image + 0x857b18;
-    // Input enumeration and Lua callbacks run on the game's main thread.
+    // The hotplug worker also updates this vector.
     for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8)
         if (at<int>(at<std::uintptr_t>(p, 0), 12) == index)
             return true;
@@ -281,6 +320,7 @@ int assign(lua_State* L) {
     return 1;
 }
 int devices(lua_State* L) {
+    const std::lock_guard lock(deviceMutex);
     const auto manager = image + 0x857b18;
     std::string found = "input_devices=";
     for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8)

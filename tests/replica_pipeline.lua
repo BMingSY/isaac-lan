@@ -96,6 +96,9 @@ local replica = createReplica({
             }
         end,
     },
+    restoreActorRoster = function()
+        record("actor-roster")
+    end,
     forms = {
         resolve = function()
             record("resolve")
@@ -129,6 +132,12 @@ local replica = createReplica({
     },
     poop = { apply = noop },
     craftingBag = { apply = noop },
+    temporaryEffects = {
+        apply = function(_, counts)
+            assert(counts[1] == 1 and counts[2] == 1 and counts[3] == 0 and scope == "actor")
+            record("temporary-effects")
+        end,
+    },
     crawlspace = {
         apply = function()
             record("crawlspace")
@@ -264,6 +273,7 @@ local function packet(tick, nextEpoch)
                 false,
                 false,
                 false,
+                { 1, 1, 0 },
             },
         },
         slot = 1,
@@ -281,7 +291,7 @@ local function packet(tick, nextEpoch)
     }))
 end
 local expected =
-    "definitions,layout,layout,locations,motion-reset,clock,progress,resolve,inventory,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,greed,confirm,audio,events,items"
+    "definitions,layout,layout,locations,motion-reset,clock,progress,actor-roster,resolve,inventory,temporary-effects,actor-state,actor-view,prune,pills,curses,greed,deals,map,current,crawlspace,rails,entities,actor-links,grids,clear,music,map-refresh,greed,confirm,audio,events,items"
 assert(
     not replica.apply(packet(1), 1, 0, true) and #trace == 0,
     "Initial view escaped the full update boundary"
