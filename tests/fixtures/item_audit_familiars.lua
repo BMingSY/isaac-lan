@@ -47,6 +47,11 @@ return function(report, actor, moveRoom, moveFloor)
             assert(not room:GetGridEntity(rockIndex))
             assert(room:SpawnGridEntity(rockIndex, GridEntityType.GRID_ROCK, 0, 187, 0))
             positions[1] = Vector(familiar.Position.X, room:GetGridPosition(rockIndex).Y - 35)
+        elseif rules.pattern == "split" then
+            -- Harlequin's native velocities are (+/-2, -10). Put both
+            -- stationary targets in those lanes, without a central blocker.
+            positions[1] = familiar.Position + Vector(-19, -95)
+            positions[2] = familiar.Position + Vector(19, -95)
         else
             for _, angle in ipairs({ -90, -65, -115, 0, 90, 180 }) do
                 positions[#positions + 1] = familiar.Position + Vector.FromAngle(angle) * 95
