@@ -55,7 +55,7 @@ return function(report, actor, moveRoom, moveFloor)
         for _, position in ipairs(positions) do
             assert(room:IsPositionInRoom(position, 15), "Familiar target outside room")
             local e = Isaac.Spawn(EntityType.ENTITY_GAPER, 0, 0, position, Vector.Zero, nil)
-            e:AddEntityFlags(EntityFlag.FLAG_FREEZE | EntityFlag.FLAG_NO_KNOCKBACK)
+            e:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK)
             e.MaxHitPoints, e.HitPoints = 1000, 1000
             e:GetData().auditFamiliarTarget = true
             targets[#targets + 1] = e
@@ -66,6 +66,15 @@ return function(report, actor, moveRoom, moveFloor)
         return case and case.familiar_effects
     end
     return {
+        holdTarget = function(npc)
+            if rules and npc:GetData().auditFamiliarTarget then
+                -- Keep the native damage target stationary throughout the
+                -- trial. A temporary freeze expires and permits contact hits,
+                -- which interrupt the holder's normal shooting cadence.
+                npc.Velocity = Vector.Zero
+                return true
+            end
+        end,
         prepare = function(case)
             rules, tick = case.familiar_effects, 0
             firstTargets, secondTargets, moved, floored, removed = false, false, false, false, false

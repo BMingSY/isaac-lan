@@ -89,6 +89,11 @@ local function moveHolderFloor()
 end
 local damageEffects = createDamageEffects(report, actor, moveHolderRoom, moveHolderFloor)
 local familiarEffects = createFamiliarEffects(report, actor, moveHolderRoom, moveHolderFloor)
+Isaac.AddCallback(owner, ModCallbacks.MC_PRE_NPC_UPDATE, function(_, npc)
+    if host then
+        return familiarEffects.holdTarget(npc)
+    end
+end)
 Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, e, amount, _, source)
     if host then
         familiarEffects.damage(e, amount, source)

@@ -125,6 +125,7 @@ def test_familiar_replica_requires_observed_attacks():
 def test_familiar_damage_waits_for_native_update_and_clears_between_cases():
     script = """
         FamiliarVariant = { GHOST_BABY = 9 }
+        Vector = { Zero = {} }
         local events = {}
         local helper = dofile('tests/fixtures/item_audit_familiars.lua')(
             function(name, value) events[#events + 1] = { name, value } end,
@@ -135,6 +136,8 @@ def test_familiar_damage_waits_for_native_update_and_clears_between_cases():
         local familiar = { Variant = 9, Player = { ControllerIndex = 1 } }
         function familiar:ToFamiliar() return self end
         helper.prepare(case)
+        assert(helper.holdTarget(target) == true)
+        assert(helper.holdTarget({GetData = function() return {} end}) == nil)
         helper.advance(case, 160)
         helper.damage(target, 3.5, { Entity = familiar })
         helper.sample(case, 160, true)
@@ -148,6 +151,7 @@ def test_familiar_damage_waits_for_native_update_and_clears_between_cases():
         assert(hit.after_tick > hit.tick and hit.entity == nil)
         helper.damage(target, 3.5, { Entity = familiar })
         helper.prepare({})
+        assert(helper.holdTarget(target) == nil)
         helper.sample(case, 164, true)
         assert(#events == 1, 'Pending native references must be dropped on exit')
         local tear = {
