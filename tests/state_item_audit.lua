@@ -3,6 +3,7 @@
 local native, json = assert(_IsaacLan), require("json")
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local Phase, Command = native.net_phases(), native.net_commands()
+local GamepadButton = { bomb = 0x0100, consumable = 0x0200 }
 local baseFrame, baseGate = _IsaacLanFrame, native.net_gate
 local owner = { Name = "Isolated item compatibility audit" }
 local index, renders, linked, chosen, started = 1, 0, false, false, false
@@ -13,6 +14,7 @@ local placed, damaged, deathProbed = false, false, false
 local useSampled = false
 local floorMoved = false
 local cleanupRoom
+local edenInitial, pendingEden
 local case = audit.cases[index]
 local journal = assert(io.open(audit.journal[host and "host" or "client"], "a"))
 local function report(event, values)
@@ -50,6 +52,36 @@ local function actor(slot, fn)
     end)
     assert(ok or not found, "Audit actor callback failed")
     return ok and found
+end
+local function observeEdenStart(tick)
+    if not case or tick < 5 or tick > 15 then
+        return
+    end
+    local function inventory(slot, event, key)
+        return actor(slot, function(p)
+            local count, items = 0, {}
+            for id = 1, CollectibleType.NUM_COLLECTIBLES - 1 do
+                local n = p:GetCollectibleNum(id, true)
+                if n > 0 then
+                    count, items[tostring(id)] = count + n, n
+                end
+            end
+            report(event, {
+                key = key,
+                tick = tick,
+                count = count,
+                items = items,
+                seed = Game():GetSeeds():GetStartSeedString(),
+            })
+        end)
+    end
+    if pendingEden and inventory(pendingEden.slot, "eden_next_run", pendingEden.key) then
+        inventory(1 - pendingEden.slot, "eden_next_peer", pendingEden.key)
+        pendingEden = nil
+    end
+    if case.trigger_effects and case.trigger_effects.eden_next_run and not edenInitial then
+        edenInitial = inventory(case.slot, "eden_run_initial", case.key)
+    end
 end
 local function otherRoom(origin)
     local rooms = Game():GetLevel():GetRooms()
@@ -89,19 +121,43 @@ local function moveHolderFloor()
 end
 local damageEffects = createDamageEffects(report, actor, moveHolderRoom, moveHolderFloor)
 local familiarEffects = createFamiliarEffects(report, actor, moveHolderRoom, moveHolderFloor)
+local triggerEffects = createTriggerEffects(report, actor, moveHolderRoom, moveHolderFloor)
+Isaac.AddCallback(owner, ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD, function()
+    if host then
+        familiarEffects.clearAward()
+    end
+end)
+Isaac.AddCallback(owner, ModCallbacks.MC_PRE_PROJECTILE_COLLISION, function(_, projectile, collider)
+    if host then
+        familiarEffects.projectileCollision(projectile, collider)
+        triggerEffects.projectileCollision(projectile, collider)
+    end
+end)
 Isaac.AddCallback(owner, ModCallbacks.MC_PRE_NPC_UPDATE, function(_, npc)
     if host then
-        return familiarEffects.holdTarget(npc)
+        return triggerEffects.holdTarget(npc) or familiarEffects.holdTarget(npc)
     end
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, e, amount, _, source)
     if host then
         familiarEffects.damage(e, amount, source)
+        if
+            case
+            and case.trigger_effects
+            and case.trigger_effects.taurus_trial
+            and e:ToNPC()
+            and source
+            and source.Entity
+            and source.Entity:ToPlayer()
+        then
+            report("taurus_native_damage", { tick = lastTick, amount = amount, seed = e.InitSeed })
+        end
     end
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_TEAR_UPDATE, function(_, tear)
     if host then
         familiarEffects.suppressPlayerTear(tear)
+        triggerEffects.suppressPlayerTear(tear)
     end
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_NEW_LEVEL, function()
@@ -341,6 +397,7 @@ local function observedUse(kind, id, p)
     if case and case.kind == kind and case.id == id then
         useCount = useCount + 1
         report("use_callback", {
+            tick = lastTick,
             kind = kind,
             id = id,
             controller = p and p.ControllerIndex,
@@ -363,6 +420,9 @@ Isaac.AddCallback(owner, ModCallbacks.MC_USE_CARD, function(_, id, p)
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_USE_PILL, function(_, id, p)
     observedUse("pill", id, p)
+    if case and case.trigger_effects and case.trigger_effects.pill_callbacks then
+        report("trigger_pill", { tick = lastTick, id = id, controller = p.ControllerIndex })
+    end
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_CURSE_EVAL, function(_, curses)
     roomEffects.curseRoll(case, curses)
@@ -394,6 +454,10 @@ Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
         expected and "case_end" or "case_aborted",
         { samples = seen, uses = useCount, expected_exit = expected }
     )
+    if case.trigger_effects and case.trigger_effects.eden_next_run then
+        pendingEden = { key = case.key, slot = case.slot }
+    end
+    edenInitial = nil
     index = index + 1
     case = audit.cases[index]
     prepared, used, moved, exiting = false, false, false, false
@@ -581,13 +645,52 @@ local function prepare(tick)
     end
     damageEffects.prepare(case)
     familiarEffects.prepare(case)
+    triggerEffects.prepare(case, tick)
     sample("before", tick)
     poolProbe("before")
     actor(case.slot, function(p, room)
         report("give_begin")
         if case.kind == "collectible" then
             local config = assert(Isaac.GetItemConfig():GetCollectible(case.id))
-            p:AddCollectible(case.id, config.MaxCharges, true)
+            if case.trigger_effects and case.trigger_effects.pocket_active then
+                local pocketOwner = case.trigger_effects.pocket_subplayer and p:GetSubPlayer() or p
+                if p:GetActiveItem(ActiveSlot.SLOT_POCKET) == case.id then
+                    pocketOwner = p
+                end
+                report("native_pocket_prerequisite", {
+                    primary = p:GetActiveItem(ActiveSlot.SLOT_POCKET),
+                    subplayer = pocketOwner and pocketOwner:GetActiveItem(ActiveSlot.SLOT_POCKET)
+                        or -1,
+                })
+                assert(
+                    pocketOwner and pocketOwner:GetActiveItem(ActiveSlot.SLOT_POCKET) == case.id,
+                    "Native pocket item prerequisite missing"
+                )
+            elseif case.trigger_effects and case.trigger_effects.native_prerequisite_only then
+                assert(
+                    p:GetPlayerType() == PlayerType.PLAYER_JUDAS
+                        and p:HasCollectible(CollectibleType.COLLECTIBLE_BIRTHRIGHT),
+                    "Native Belial prerequisites missing"
+                )
+            elseif case.trigger_effects and case.trigger_effects.physical_pickup then
+                local pickup = Isaac.Spawn(
+                    EntityType.ENTITY_PICKUP,
+                    PickupVariant.PICKUP_COLLECTIBLE,
+                    case.id,
+                    p.Position,
+                    Vector.Zero,
+                    nil
+                ):ToPickup()
+                pickup.Wait = 0
+            elseif
+                not (
+                    case.trigger_effects
+                    and case.trigger_effects.character_before
+                    and p:HasCollectible(case.id)
+                )
+            then
+                p:AddCollectible(case.id, config.MaxCharges, true)
+            end
         elseif case.kind == "trinket" then
             p:AddTrinket(case.id, true)
         elseif case.kind == "card" then
@@ -630,6 +733,7 @@ local function activate(tick)
     end)
 end
 local function advance(tick)
+    observeEdenStart(tick)
     lastTick = tick
     if not native.rooms_ready() or not case or exiting then
         return
@@ -640,6 +744,11 @@ local function advance(tick)
                 if
                     e.Type ~= EntityType.ENTITY_PLAYER
                     and not (case.familiar_effects and e.Type == EntityType.ENTITY_FAMILIAR)
+                    and not (
+                        case.trigger_effects
+                        and case.trigger_effects.laser_persists_room
+                        and e.Type == EntityType.ENTITY_LASER
+                    )
                 then
                     e:Remove()
                 end
@@ -666,7 +775,18 @@ local function advance(tick)
     end
     if not placed and tick >= 20 then
         placed = true
-        if case.recipe and case.recipe.teleport == "start" then
+        local triggerRoom = triggerEffects.startingRoom(case)
+        if triggerRoom then
+            assert(native.rooms_move(case.slot, triggerRoom, 0, -1))
+            assert(
+                native.rooms_move(
+                    1 - case.slot,
+                    case.split and otherRoom(triggerRoom) or triggerRoom,
+                    0,
+                    -1
+                )
+            )
+        elseif case.recipe and case.recipe.teleport == "start" then
             local start = Game():GetLevel():GetStartingRoomIndex()
             local origin = otherRoom(start)
             assert(native.rooms_move(case.slot, origin, 0, -1))
@@ -712,6 +832,7 @@ local function advance(tick)
     end
     damageEffects.advance(case, tick)
     familiarEffects.advance(case, tick)
+    triggerEffects.advance(case, tick)
     if used and tick % 30 == 0 then
         sample("observe", tick)
     end
@@ -812,8 +933,11 @@ function _IsaacLanBotFrame()
         if case.familiar_effects then
             mask = familiarEffects.input(case, s.verified)
         end
+        if case.trigger_effects then
+            mask = triggerEffects.input(case, s.verified)
+        end
     end
-    native.input_bot(mask ~= 0 and 1 or 0, mask)
+    assert(native.input_bot(mask ~= 0 and 1 or 0, mask), "Unsupported audit movement/fire mask")
 end
 function _IsaacLanFrame()
     renders = renders + 1
@@ -848,7 +972,9 @@ function _IsaacLanFrame()
     end
     if s.phase == Phase.lobby and not chosen then
         chosen = true
-        _IsaacLanCommand("choose", "0:1")
+        local character = case and case.trigger_effects and case.trigger_effects.character_before
+        local selected = character and s.slot == case.slot and assert(PlayerType[character]) or 0
+        _IsaacLanCommand("choose", selected .. ":1")
     end
     if
         host
@@ -859,7 +985,16 @@ function _IsaacLanFrame()
         and s.ready1 == 1
     then
         started = true
-        _IsaacLanCommand("start", "YV039KQF:0:0:0:0:0")
+        local character = case and case.trigger_effects and case.trigger_effects.character_before
+        local selected = character and assert(PlayerType[character]) or 0
+        _IsaacLanCommand(
+            "start",
+            "YV039KQF:0:"
+                .. (case.slot == 0 and selected or 0)
+                .. ":"
+                .. (case.slot == 1 and selected or 0)
+                .. ":0:0"
+        )
     end
     if (s.phase == Phase.waiting or s.phase == Phase.failed) and s.phase ~= lastPhase then
         report("problem", { category = "reconnect", detail = s.error, phase = s.phase })
@@ -870,10 +1005,61 @@ function _IsaacLanFrame()
         and s.slot == case.slot
         and s.verified >= (case.use_tick or 60)
         and s.verified < (case.use_tick or 60) + (case.hold_ticks or 6)
+    local rules = case and case.trigger_effects
+    local holder = case and s.slot == case.slot
+    local bomb = holder
+        and rules
+        and rules.bomb_trial
+        and s.verified >= 70
+        and s.verified < (rules.bomb_hold_until or 74)
+    local priorActive = holder
+        and rules
+        and rules.prior_active
+        and s.verified >= 45
+        and s.verified < 49
+    local extraUse = holder
+        and rules
+        and s.verified >= (case.use_tick or 60)
+        and s.verified < (case.use_tick or 60) + 6
+    local extraCard = extraUse and rules.use_pocket
+    local extraActive = extraUse and rules.use_existing_active
+    local scheduledDrop = false
+    if holder and rules then
+        for _, action in ipairs(rules.input_schedule or {}) do
+            if s.verified >= action[1] and s.verified < action[2] then
+                extraCard = extraCard or action[3] == "card"
+                extraActive = extraActive or action[3] == "active"
+                scheduledDrop = scheduledDrop or action[3] == "drop"
+                bomb = bomb or action[3] == "bomb"
+            end
+        end
+    end
+    local repeatedActive = holder
+        and rules
+        and rules.repeat_uses
+        and s.verified >= (case.use_tick or 60)
+        and s.verified < (case.use_tick or 60) + rules.repeat_uses * (rules.repeat_interval or 30)
+        and (s.verified - (case.use_tick or 60)) % (rules.repeat_interval or 30) < 6
+    local discharge = holder
+        and rules
+        and rules.overcharge
+        and ((s.verified >= 180 and s.verified < 186) or (s.verified >= 240 and s.verified < 246))
     native.test_gamepad(
-        active and (case.kind == "card" or case.kind == "pill") and 512 or 0,
-        active and case.kind == "collectible" and 255 or 0,
-        0,
+        bomb and GamepadButton.bomb
+            or extraCard and GamepadButton.consumable
+            or active and rules and rules.pocket_active and GamepadButton.consumable
+            or active and (case.kind == "card" or case.kind == "pill") and GamepadButton.consumable
+            or 0,
+        (
+            (active and case.kind == "collectible" and not (rules and rules.pocket_active))
+            or priorActive
+            or extraActive
+            or repeatedActive
+            or discharge
+        )
+                and 255
+            or 0,
+        scheduledDrop and 255 or 0,
         0,
         case
                 and case.moving_use
@@ -911,6 +1097,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         shotProbe(tick)
         familiarEffects.sample(case, tick, true)
+        triggerEffects.sample(case, tick, true)
         if case.kind == "stress" and lastTick >= 150 then
             stress.record("capture", Isaac.GetTime() - began)
             stress.record("raw_bytes", #bytes)
@@ -924,8 +1111,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             stress.record("raw_bytes", #bytes)
         end
         if result ~= false then
+            observeEdenStart(tick)
             shotProbe(tick)
             familiarEffects.sample(case, tick, false)
+            triggerEffects.sample(case, tick, false)
             lastTick = tick
             if not prepared then
                 prepared = true

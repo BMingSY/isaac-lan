@@ -1084,11 +1084,13 @@ def test_held_item_requires_measured_effect_and_charge_without_use_callback():
     ]
     client = [markers[-1], *host[-2:]]
     result = summarize_case(case, {"host": host, "client": client})
-    assert result["status"] == "basic_pass"
+    assert not result["compatibility_verified"]
     assert result["use_evidence"] == "held_charge_and_speed"
     for event in host[-2:]:
         event["players"][0]["charge"] = 90
-    assert summarize_case(case, {"host": host, "client": client})["status"] == "incomplete"
+    result = summarize_case(case, {"host": host, "client": client})
+    assert result["use_evidence"] is None
+    assert "native_use_callback" in result["unconfirmed_checks"]
 
 
 def test_crash_is_distinct_from_forced_cleanup_and_unstarted_cases():

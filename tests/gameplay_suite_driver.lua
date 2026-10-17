@@ -209,12 +209,12 @@ end
 local renders, linked, chosen, finished = 0, false, false, false
 function _IsaacLanFrame()
     renders = renders + 1
-    if not linked and renders >= (host and 300 or 360) then
+    local status = realFrame()
+    if not linked and status.scene == 1 and renders >= (host and 300 or 360) then
         linked = true
         realCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)
         realDebug("LAN_NETWORK MENU_READY")
     end
-    local status = realFrame()
     if status.phase == 2 and not chosen then
         realCommand("choose", "0:1")
         chosen = true

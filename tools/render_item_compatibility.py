@@ -49,6 +49,34 @@ def render(catalog, findings):
     lines = [
         "# 道具与效果兼容清单",
         "",
+        "## 已知不兼容",
+        "",
+        "这里只列效果异常及其影响；“待确认”表示尚未复现或尚不能确定原因，不等同已确认不兼容。",
+        "",
+        "| 类型 | ID | 名称 | 状态 | 触发条件 | 影响 |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for item in items:
+        entry = conclusion(known.get(item["key"], {}), audit.get(item["key"], {}))
+        if entry.get("status") not in ISSUE_STATUSES:
+            continue
+        lines.append(
+            "| "
+            + " | ".join(
+                cell(value)
+                for value in (
+                    KINDS[item["kind"]],
+                    item["id"],
+                    item_name(item, entry),
+                    STATUSES[entry["status"]],
+                    entry.get("trigger", "尚未确定稳定触发条件"),
+                    entry.get("impact", "影响待确认"),
+                )
+            )
+            + " |"
+        )
+    lines += [
+        "",
         "## 额外兼容",
         "",
         "这里汇总 Mod 对原版效果的调整。全队共享效果在分房时也生效。",
@@ -78,7 +106,7 @@ def render(catalog, findings):
         "",
         f"范围：忏悔＋ `{catalog['game']}` 的实际配置，共 {len(items)} 项。隐藏／内部道具也保留；空缺 ID 不补造条目。",
         "",
-        "兼容验证：**已验证**＝单独效果已验证正常；**待验证**＝尚未确认单独效果；**不兼容**＝已复现问题；**待确认**＝疑似问题。只通过基础流程检查的仍列为“待验证”。",
+        "兼容验证：**已验证**＝记录范围内的独立效果、归属与双端状态已验证正常；**待验证**＝尚未确认单独效果；**不兼容**＝已复现问题；**待确认**＝疑似问题。只通过基础流程检查、触发条件未成立或证据不完整的仍列为“待验证”；不代表所有道具组合和角色变体均已覆盖。",
         "",
         "未记录问题或没有额外调整的格子用“—”。",
         "",
@@ -90,7 +118,7 @@ def render(catalog, findings):
         lines += [
             f"### {title}（{len(group)}）",
             "",
-            "| ID | 实体 ID | 名称 | 兼容验证 | 已知问题 | Mod 效果调整 |",
+            "| ID | 实体 ID | 名称 | 兼容验证 | 问题／验证限制 | Mod 效果调整 |",
             "| --- | --- | --- | --- | --- | --- |",
         ]
         for item in group:
@@ -98,7 +126,11 @@ def render(catalog, findings):
             subtype = "<颜色>" if kind == "pill" else item["entity_subtype"]
             entity = f"{item['entity_type']}.{item['entity_variant']}.{subtype}"
             status = STATUSES[entry.get("status", "untested")]
-            impact = entry.get("impact", "待确认") if entry.get("status") in ISSUE_STATUSES else "—"
+            impact = (
+                entry.get("impact", "待确认")
+                if entry.get("status") in ISSUE_STATUSES
+                else entry.get("limitation", "—")
+            )
             effect = entry.get("effect", "—")
             lines.append(
                 "| "
@@ -119,16 +151,7 @@ def render(catalog, findings):
     lines += [
         "公共效果的范围由 [`team_effects.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/team_effects.h) 声明。恶魔／天使房概率相关的全队叠加规则见[概率说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md)。",
         "",
-        "## 验证工具",
-        "",
-        "[`run_item_audit.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_audit.py) 使用隔离主客机，打开属性栏和道具栏。每项重新开局清除上项效果，复用进程与连接。",
-        "",
-        "- `--mode mega`：超级蘑菇使用、换房和结束恢复，覆盖主客机持有及同房／分房。",
-        "- `--mode sweep`：全清单基础扫描，默认主机同房、客机分房；主动道具、卡牌和药丸通过按键使用，普通／大药丸分别记录。",
-        "- `--mode effects`：有明确效果断言的逐项验证；核对对应属性、归属和双端状态，缺少证据不能通过。",
-        "- `--mode stress`：大量道具和弹幕压力测试，单独运行；记录实际数量、帧间隔和同步耗时。",
-        "",
-        "必填参数：`--host`、`--client`、`--build`、`--output`。`--case` 选择单项，`--record` 保留画面，`--continue-after-failure` 在异常清理后继续。",
+        "验证操作与默认范围见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#道具效果专项)。逐项结论、未决项及证据范围见[验收记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/2026-10-18-item-effects.md)。",
         "",
         "清单源数据：[`item_catalog.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_catalog.json)；验证记录与证据标识：[`item_audit_findings.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_audit_findings.json)。运行结果见对应 PR。",
         "",

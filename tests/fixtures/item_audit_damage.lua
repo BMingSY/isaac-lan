@@ -22,11 +22,13 @@ return function(report, actor, moveRoom, moveFloor)
             end
             for slot = 0, 1 do
                 actor(slot, function(p)
-                    p:AddMaxHearts(24 - p:GetMaxHearts(), false)
+                    local maximum = slot == case.slot and case.damage_effects.max_hearts or 24
+                    p:AddMaxHearts((maximum or 24) - p:GetMaxHearts(), false)
                     p:AddSoulHearts(-p:GetSoulHearts())
                     local desired = case.damage_effects.team_hearts or 24
                     if slot == case.slot then
                         desired = case.damage_effects.hearts or desired
+                        p:AddSoulHearts(case.damage_effects.soul or 0)
                     end
                     p:AddHearts(desired - p:GetHearts())
                     -- Clear arrival protection before acquiring the tested
@@ -70,7 +72,11 @@ return function(report, actor, moveRoom, moveFloor)
             for slot = 0, 1 do
                 actor(slot, function(p)
                     local before = health(p)
-                    p:TakeDamage(step.amount, 0, EntityRef(p), 0)
+                    local flags = 0
+                    for _, name in ipairs(step.flags or {}) do
+                        flags = flags | assert(DamageFlag[name], name)
+                    end
+                    p:TakeDamage(step.amount, flags, EntityRef(p), 0)
                     pending[#pending + 1] = {
                         probe = step.name,
                         tick = tick,

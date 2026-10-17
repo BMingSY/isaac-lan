@@ -4,11 +4,23 @@ from item_consumable_recipes import CONSUMABLE_RECIPES, consumable_recipe
 from item_room_effects import ROOM_EFFECTS, room_effect_checks
 from item_damage_effects import DAMAGE_EFFECTS, damage_checks
 from item_familiar_effects import FAMILIAR_EFFECTS, familiar_checks
+from item_trigger_effects import TRIGGER_EFFECTS, trigger_checks
 
 # These items have direct, unconditional effects in the clean Isaac fixture.
 # Values are directions, not a substitute for checking every listed attribute.
 # Conditional effects belong in their own recipe instead of this table.
 STAT_EFFECTS = {
+    "COLLECTIBLE_LORD_OF_THE_PIT": {"speed": 1, "flying": 1},
+    "COLLECTIBLE_SPEED_BALL": {"speed": 1, "shot_speed": 1},
+    "COLLECTIBLE_TOOTH_PICKS": {"delay": -1, "shot_speed": 1},
+    "COLLECTIBLE_CEREMONIAL_ROBES": {"damage": 1, "soul": 1, "black": 1},
+    "COLLECTIBLE_SCREW": {"delay": -1, "shot_speed": 1},
+    "COLLECTIBLE_BODY": {"max_hearts": 1, "hearts": 1},
+    "COLLECTIBLE_SAFETY_PIN": {"range": 1, "shot_speed": 1, "soul": 1, "black": 1},
+    "COLLECTIBLE_TORN_PHOTO": {"delay": -1, "shot_speed": 1},
+    "COLLECTIBLE_SNACK": {"max_hearts": 1, "hearts": 1},
+    "COLLECTIBLE_MIDNIGHT_SNACK": {"max_hearts": 1, "hearts": 1},
+    "COLLECTIBLE_GLASS_EYE": {"damage": 1, "luck": 1},
     "COLLECTIBLE_SAD_ONION": {"delay": -1},
     "COLLECTIBLE_MAXS_HEAD": {"damage": 1},
     "COLLECTIBLE_NUMBER_ONE": {"delay": -1, "range": -1},
@@ -116,6 +128,7 @@ STAT_EFFECTS = {
 # Each rule also checks the objects on the replica. Counts are pickup-time
 # deltas, so a pre-existing fixture pedestal cannot satisfy a spawn effect.
 SPAWN_EFFECTS = {
+    "COLLECTIBLE_PAGEANT_BOY": {"5.20.": (7, 7), "5.350.": (1, 1)},
     "COLLECTIBLE_MOMS_LIPSTICK": {"5.10.": (1, 1)},
     "COLLECTIBLE_MOMS_PURSE": {"5.350.": (1, 1)},
     "COLLECTIBLE_MOMS_COIN_PURSE": {"5.70.": (4, 4)},
@@ -137,6 +150,7 @@ SUPPORTED_EFFECTS = {
     *ROOM_EFFECTS,
     *DAMAGE_EFFECTS,
     *FAMILIAR_EFFECTS,
+    *TRIGGER_EFFECTS,
     "COLLECTIBLE_CHAOS",
 }
 
@@ -421,6 +435,7 @@ def effect_checks(case, observations):
         + room_effect_checks(case, observations)
         + damage_checks(case, observations)
         + familiar_checks(case, observations)
+        + trigger_checks(case, observations)
     )
 
 
