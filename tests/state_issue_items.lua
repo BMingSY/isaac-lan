@@ -212,6 +212,7 @@ Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function(_, save)
 end)
 function _IsaacLanFrame()
     Options.FoundHUD, Options.ExtraHUDStyle = true, 1
+    Options.FoundHUD, Options.ExtraHUDStyle = true, 1
     renders = renders + 1
     local s = frame()
     assert(s.phase ~= Phase.failed and s.phase ~= Phase.waiting, s.error)

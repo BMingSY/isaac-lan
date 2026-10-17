@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+Options = {}
 local now, commands, case, passes = 0, 0, 0, 0
 local s = { phase = 3, scene = 2, prepared = true }
 local flags = { false, false }

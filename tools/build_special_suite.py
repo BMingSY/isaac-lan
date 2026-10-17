@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CASES = ("lazarus", "poop", "knife", "hush")
 DIAGNOSTICS = (
     "item-generation",
+    "deep-pockets",
     "party-compat",
     "death-certificate",
     "victory-lap",
@@ -58,6 +59,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "party-compat": "state_party_compat.lua",
             "death-certificate": "state_death_certificate.lua",
             "item-generation": "state_item_generation.lua",
+            "deep-pockets": "state_deep_pockets.lua",
             "victory-lap": "state_endings.lua",
             "victory-no": "state_endings.lua",
             "greed": "state_greed.lua",

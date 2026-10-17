@@ -264,6 +264,8 @@ def main():
                             and "DEATH_CERTIFICATE " in line
                             or name == "item-generation"
                             and "ITEM_GENERATION " in line
+                            or name == "deep-pockets"
+                            and "DEEP_POCKETS " in line
                             or name in ("greed", "greedier")
                             and ("GREED mode=" + ("3" if name == "greedier" else "2") + " ") in line
                             or name in ("audio", "motion", "floor-items", "mod-integrations")

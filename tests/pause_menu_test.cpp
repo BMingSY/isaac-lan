@@ -5,6 +5,7 @@
 #include "engine/versions/j460/input.cpp"
 #include <array>
 #include <vector>
+#include <thread>
 
 namespace {
 int localViewer = 1;
@@ -423,6 +424,87 @@ void xinputProviderRouting() {
     input::xinputProviders = {};
 }
 
+struct DisconnectFixture {
+    HANDLE entered = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    HANDLE release = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    HANDLE competing = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    std::atomic<unsigned> traversals{0}, frees{0};
+    std::atomic<bool> live{true}, overlap{false};
+    ~DisconnectFixture() {
+        CloseHandle(entered);
+        CloseHandle(release);
+        CloseHandle(competing);
+    }
+    void disconnect() {
+        const auto ordinal = ++traversals;
+        const bool retained = live;
+        if (ordinal == 1) {
+            SetEvent(entered);
+            WaitForSingleObject(release, 5000);
+        } else
+            SetEvent(competing);
+        if (retained) {
+            // Model the native vector pointer retained across the XInput call.
+            // The old paths could both reach free() with this same pointer.
+            if (!live.exchange(false))
+                overlap = true;
+            ++frees;
+        }
+    }
+};
+DisconnectFixture* disconnectFixture = nullptr;
+void __cdecl disconnectDevice() {
+    disconnectFixture->disconnect();
+}
+void __cdecl connectCallback() {
+    input::pollDevices(); // Native connect callback reenters the poll routine.
+}
+void inputDisconnectTransactions() {
+    input::originalEnumerateDevices = disconnectDevice;
+    input::originalPollDevices = disconnectDevice;
+    {
+        DisconnectFixture unguarded;
+        disconnectFixture = &unguarded;
+        std::thread foreground(disconnectDevice);
+        const bool started = WaitForSingleObject(unguarded.entered, 5000) == WAIT_OBJECT_0;
+        std::thread background(disconnectDevice);
+        const bool raced = WaitForSingleObject(unguarded.competing, 5000) == WAIT_OBJECT_0;
+        background.join();
+        SetEvent(unguarded.release);
+        foreground.join();
+        require(started && raced && unguarded.frees == 2 && unguarded.overlap,
+                "Disconnect regression did not reproduce the unguarded double release");
+    }
+    // Exercise both orderings and the post-LAN drain (virtualDevices=false).
+    for (const bool lan : {true, false})
+        for (const bool scanFirst : {true, false}) {
+            input::virtualDevices = lan;
+            DisconnectFixture f;
+            disconnectFixture = &f;
+            const auto first = scanFirst ? input::enumerateDevices : input::pollDevices;
+            const auto second = scanFirst ? input::pollDevices : input::enumerateDevices;
+            std::thread foreground(first);
+            const bool started = WaitForSingleObject(f.entered, 5000) == WAIT_OBJECT_0;
+            std::thread background(second);
+            const auto competing = WaitForSingleObject(f.competing, 50);
+            SetEvent(f.release);
+            foreground.join();
+            background.join();
+            require(started && competing == WAIT_TIMEOUT && f.traversals == 2 && f.frees == 1 &&
+                        !f.overlap,
+                    "Hotplug and polling retained/freed the same disconnected native device");
+        }
+    DisconnectFixture nested;
+    disconnectFixture = &nested;
+    SetEvent(nested.release);
+    input::originalEnumerateDevices = connectCallback;
+    input::enumerateDevices();
+    require(nested.traversals == 1 && nested.frees == 1,
+            "Native connect callback could not reenter input polling");
+    input::originalEnumerateDevices = input::originalPollDevices = nullptr;
+    disconnectFixture = nullptr;
+}
+
 void invalidRosters() {
     Fixture f;
     const auto begin = reinterpret_cast<Address>(f.roster.data());
@@ -733,6 +815,7 @@ int main(int argc, char** argv) {
                      {"options-save-before-hide", optionsSaveBeforeHide},
                      {"native-pause-drift", nativePauseDrift},
                      {"xinput-provider-routing", xinputProviderRouting},
+                     {"input-disconnect-transactions", inputDisconnectTransactions},
                      {"viewer-scopes", viewerScopes},
                      {"invalid-rosters", invalidRosters},
                      {"root-intents", rootIntents},

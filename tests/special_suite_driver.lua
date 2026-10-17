@@ -10,6 +10,7 @@ local function activate()
 end
 activate()
 coordinator = function()
+    Options.FoundHUD, Options.ExtraHUDStyle = true, 1
     local status = caseFrame()
     if done() and not exiting then
         exiting, endedAt = true, native.api_info().nowMs
