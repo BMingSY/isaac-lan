@@ -7,7 +7,44 @@ from pathlib import Path
 
 from item_audit import ROOT, events, summarize_case
 
-RANK = {"untested": 0, "basic_pass": 1, "incomplete": 2, "problem": 3, "crash": 4}
+RANK = {"untested": 0, "basic_pass": 1, "verified": 1, "incomplete": 2, "problem": 3, "crash": 4}
+
+
+def start_candidate(findings, manifest):
+    """Keep the old measurements, with their build identity, when fixing bugs."""
+    old = findings["dll_sha256"]
+    candidates = findings.setdefault("candidates", {})
+    candidates.setdefault(old, {"commit": findings.get("candidate")})
+    for item in findings["audit"].values():
+        for check in item["checks"]:
+            check.setdefault("dll_sha256", old)
+    for check in findings["stress"]:
+        check.setdefault("dll_sha256", old)
+    current = manifest["dll_sha256"]
+    candidates[current] = {
+        key: manifest[key] for key in ("commit", "loader_sha256") if key in manifest
+    }
+    findings["dll_sha256"] = current
+    findings["candidate"] = manifest.get("commit")
+
+
+def item_status(key, checks):
+    failures = [check for check in checks if check["status"] in ("problem", "crash")]
+    if failures:
+        return max((check["status"] for check in failures), key=RANK.get)
+    # A completed rerun can fill missing evidence, but never erase a failure.
+    latest = {check["case"]: check for check in checks}
+    state = max((check["status"] for check in latest.values()), key=RANK.get, default="untested")
+    if state == "incomplete":
+        return state
+    # One holder passing cannot certify an item. Pills also need both sizes.
+    required = {
+        key + "/" + context + suffix
+        for context in ("host-same", "client-split")
+        for suffix in (("", "/horse") if key.startswith("pill:") else ("",))
+    }
+    verified = {check["case"] for check in latest.values() if check["status"] == "verified"}
+    return "verified" if required <= verified else "basic_pass" if checks else "untested"
 
 
 def measured_stress(result, evidence):
@@ -53,6 +90,8 @@ def measured_stress(result, evidence):
         "load_reached": reached,
         "observed": observed,
         "metrics": metrics,
+        "problems": result.get("problems", []),
+        "unconfirmed": result.get("unconfirmed_checks", []),
         "evidence": evidence,
     }
 
@@ -89,10 +128,19 @@ def import_run(findings, directory):
             evidence = directory.name + "/" + batch.name
             if case["kind"] == "stress":
                 value = measured_stress(result, evidence)
+                value["dll_sha256"] = manifest["dll_sha256"]
                 old = next(
                     (entry for entry in findings["stress"] if entry["case"] == case["key"]), None
                 )
                 if old:
+                    if old["evidence"] != evidence:
+                        findings.setdefault("previous_stress", []).append(old)
+                    if old.get("dll_sha256") == manifest["dll_sha256"] and old["status"] in (
+                        "problem",
+                        "crash",
+                    ):
+                        value["latest_status"] = value["status"]
+                        value["status"] = max((old["status"], value["status"]), key=RANK.get)
                     value["previous_evidence"] = list(
                         dict.fromkeys(
                             entry
@@ -114,6 +162,8 @@ def import_run(findings, directory):
                 "problems": result["problems"],
                 "evidence": evidence,
                 "physical": bool(case.get("physical")),
+                "dll_sha256": manifest["dll_sha256"],
+                "effect_checks": result["effect_checks"],
                 "use_evidence": result.get("use_evidence"),
                 "conditions": {
                     key: case[key]
@@ -156,21 +206,20 @@ def import_run(findings, directory):
                 for entry in item["checks"]
                 if (entry["case"], entry["evidence"]) != (check["case"], evidence)
             ] + [check]
-            item["status"] = max(
-                (entry["status"] for entry in item["checks"] if not entry.get("excluded_reason")),
-                key=RANK.get,
-                default="untested",
-            )
+            current = [
+                entry
+                for entry in item["checks"]
+                if not entry.get("excluded_reason")
+                and entry.get("dll_sha256", findings["dll_sha256"]) == manifest["dll_sha256"]
+            ]
+            item["status"] = item_status(case.get("item", f"{case['kind']}:{case['id']}"), current)
             if item["status"] == "crash":
                 item["impact"] = (
                     "实机扫描触发访问异常／进程崩溃；具体持有者、房间条件见该项验证记录。尚未修复。"
                 )
             elif item["status"] == "problem":
                 categories = {
-                    problem["category"]
-                    for entry in item["checks"]
-                    if not entry.get("excluded_reason")
-                    for problem in entry["problems"]
+                    problem["category"] for entry in current for problem in entry["problems"]
                 }
                 labels = {
                     "no_effect": "未观察到应有的直接属性效果",
@@ -183,20 +232,23 @@ def import_run(findings, directory):
                     + "，需专项确认归因。"
                 )
             elif item["status"] == "incomplete":
-                item["impact"] = "基础流程未完整确认；条件效果或使用入口需要专项验证。"
+                item["impact"] = "效果证据不完整。"
             elif item["status"] == "untested":
                 item["impact"] = "现有记录因夹具问题排除；效果需要重新验证。"
             else:
-                item["impact"] = "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+                item.pop("impact", None)
     return findings
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("reports", type=Path, nargs="+")
+    parser.add_argument("--new-candidate", action="store_true")
     args = parser.parse_args()
     path = ROOT / "tests/fixtures/item_audit_findings.json"
     findings = json.loads(path.read_text())
+    if args.new_candidate:
+        start_candidate(findings, json.loads((args.reports[0] / "manifest.json").read_text()))
     for report in args.reports:
         import_run(findings, report)
     path.write_text(json.dumps(findings, ensure_ascii=False, indent=2) + "\n")

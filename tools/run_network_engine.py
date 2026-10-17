@@ -531,9 +531,11 @@ def main():
 
     relay = None
     floor_hud = None
+    closing = False
 
     def interrupted(signum, _frame):
-        raise RuntimeError(f"Test interrupted by signal {signum}")
+        if not closing:
+            raise RuntimeError(f"Test interrupted by signal {signum}")
 
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGHUP, interrupted)
@@ -1136,6 +1138,10 @@ def main():
         result["pass"] = False
         result["error"] = str(error)
     finally:
+        # A parent watchdog can observe the peer failure after this runner has
+        # already begun closing both games. Do not let that second stop signal
+        # interrupt owned-process cleanup and strand the surviving peer.
+        closing = True
         if floor_hud is not None:
             floor_hud.stop()
         # Only PIDs returned by our own isolated child runner are controlled.

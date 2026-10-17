@@ -4,13 +4,15 @@ import json
 from pathlib import Path
 import re
 
+from item_effect_checks import STAT_EFFECTS, effect_checks
+
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "LAN_ITEM_AUDIT "
 KINDS = ("collectible", "trinket", "card", "pill")
 COMPLETION = "LAN_NETWORK PASS item audit batch"
 DIRECT_EFFECTS = {
     "COLLECTIBLE_SAD_ONION": ("delay", -1),
-    "COLLECTIBLE_BLOOD_OF_THE_MARTYR": ("damage", 1),
+    "COLLECTIBLE_BLOOD_MARTYR": ("damage", 1),
     "COLLECTIBLE_MAGIC_MUSHROOM": ("damage", 1),
     "COLLECTIBLE_ROID_RAGE": ("speed", 1),
     "PILLEFFECT_BALLS_OF_STEEL": ("soul", 1),
@@ -130,7 +132,13 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
                         "split": context.endswith("split"),
                         "horse": large,
                         "mega": item["kind"] == "collectible" and item["id"] == 625,
+                        "companion": (item["kind"] == "card" and item["id"] in (95, 97))
+                        or (item["kind"] == "trinket" and item["id"] == 180),
                         "physical": item["kind"] in {"card", "pill"} or item.get("item_type") == 3,
+                        "effect_check": item.get("enum") in STAT_EFFECTS,
+                        "protect_use": item.get("enum") in STAT_EFFECTS
+                        or item.get("enum") in ("COLLECTIBLE_STITCHES", "COLLECTIBLE_SUPLEX"),
+                        "moving_use": item.get("enum") == "COLLECTIBLE_SUPLEX",
                     }
                 )
     return cases
@@ -178,10 +186,10 @@ def summarize_case(case, peers, engine=None):
         if event["event"] != "sample" or event.get("tick", 0) < 90:
             continue
         authority = host_samples.get(event["tick"])
-        if not authority:
+        if not authority or authority.get("label") != "captured":
             continue
         for expected, actual in zip(authority["players"], event["players"]):
-            for field in (
+            compared = (
                 "damage",
                 "delay",
                 "speed",
@@ -189,7 +197,10 @@ def summarize_case(case, peers, engine=None):
                 "shot_speed",
                 "luck",
                 "target_count",
-            ):
+            )
+            if case.get("mega"):
+                compared += ("temporary_count", "size", "scale_x", "scale_y", "visible")
+            for field in compared:
                 left, right = expected.get(field), actual.get(field)
                 if left is not None and right is not None and abs(left - right) > 0.001:
                     mismatches.setdefault((actual["slot"], field), []).append(event["tick"])
@@ -282,19 +293,37 @@ def summarize_case(case, peers, engine=None):
                 break
     if (case.get("physical") or case.get("kind") == "pill") and not use_evidence:
         missing.append("native_use_callback")
+    checks = effect_checks(case, observations)
+    for check in checks:
+        if check["status"] == "missing":
+            missing.append(check["name"])
+        elif check["status"] == "failed":
+            problems.append(
+                {
+                    "event": "problem",
+                    "category": "no_effect"
+                    if check["name"].startswith("effect:")
+                    else "non_native",
+                    "detail": check["name"],
+                }
+            )
     done = ended and not missing
+    verified = done and bool(checks) and not problems
     result = {
         **case,
         "status": "problem"
         if any(problem["category"] != "incomplete" for problem in problems)
         else "incomplete"
         if problems
+        else "verified"
+        if verified
         else "basic_pass"
         if done
         else "incomplete"
         if began
         else "untested",
-        "compatibility_verified": False,
+        "compatibility_verified": verified,
+        "effect_checks": checks,
         "problems": problems,
         "samples": samples,
         "observations": observations,
@@ -307,8 +336,10 @@ def summarize_case(case, peers, engine=None):
     # Subsequent connection errors must not consume the next unstarted item.
     if not began:
         result["status"] = "untested"
+        result["compatibility_verified"] = False
     if "peer_case_window" in missing:
         result["status"] = "incomplete"
+        result["compatibility_verified"] = False
         result["interruption_phase"] = "fixture_alignment"
     if (
         began
@@ -316,6 +347,7 @@ def summarize_case(case, peers, engine=None):
         and not any(event["event"] in {"give_begin", "give_end"} for event in host)
     ):
         result["status"] = "incomplete"
+        result["compatibility_verified"] = False
         result["interruption_phase"] = "setup"
         missing.append("fixture_setup")
     if began and engine:
@@ -338,6 +370,7 @@ def summarize_case(case, peers, engine=None):
         if crashed:
             given = any(event["event"] == "give_begin" for event in host)
             result["status"] = "crash" if given else "incomplete"
+            result["compatibility_verified"] = False
             result["process_exit"] = crashed
             result["crash_phase"] = (
                 "setup"

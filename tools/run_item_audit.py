@@ -24,6 +24,7 @@ from item_audit import (
     unexpected_peer_failure,
 )
 from lab_profile import ProtectedLabs, idle, windows
+from item_effect_checks import SUPPORTED_EFFECTS
 
 
 def validate_startup(labs):
@@ -185,7 +186,9 @@ def main():
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--mode", choices=("catalog", "mega", "sweep", "stress"), default="mega")
+    parser.add_argument(
+        "--mode", choices=("catalog", "mega", "sweep", "effects", "stress"), default="mega"
+    )
     parser.add_argument("--catalog", type=Path, default=ROOT / "tests/fixtures/item_catalog.json")
     parser.add_argument("--case", action="append")
     parser.add_argument("--shard", type=int, default=0)
@@ -232,9 +235,14 @@ def main():
         validate_startup(labs)
         if args.mode == "stress":
             cases = stress_cases(json.loads(args.catalog.read_text()), args.case)
-        elif args.mode == "sweep":
+        elif args.mode in ("sweep", "effects"):
+            catalog = json.loads(args.catalog.read_text())
+            if args.mode == "effects":
+                catalog["items"] = [
+                    item for item in catalog["items"] if item.get("enum") in SUPPORTED_EFFECTS
+                ]
             cases = select_cases(
-                json.loads(args.catalog.read_text()),
+                catalog,
                 args.case,
                 args.context or ("host-same", "client-split"),
             )

@@ -9,7 +9,7 @@ local index, renders, linked, chosen, started = 1, 0, false, false, false
 local prepared, used, moved, exiting, finished = false, false, false, false, false
 local beganAt, sampleAt, relinkAt, useCount = nil, 0, 0, 0
 local catalogued, seen, lastTick, lastPhase = false, 0, 0, nil
-local placed, damaged = false, false
+local placed, damaged, deathProbed = false, false, false
 local case = audit.cases[index]
 local journal = assert(io.open(audit.journal[host and "host" or "client"], "a"))
 local function report(event, values)
@@ -24,7 +24,7 @@ end
 local stress = createStress(report)
 local lastRender
 local function observationEnd()
-    return case.end_tick or ((case.mega or case.kind == "stress") and 1100 or 150)
+    return case.end_tick or ((case.mega or case.companion or case.kind == "stress") and 1100 or 150)
 end
 local function actor(slot, fn)
     local found = false
@@ -56,11 +56,16 @@ local function sample(label, tick)
     for slot = 0, 1 do
         local available = actor(slot, function(p, room)
             local count, tears, projectiles, effects = 0, 0, 0, 0
+            local entities = {}
             for _, e in ipairs(Isaac.GetRoomEntities()) do
                 count = count + 1
                 tears = tears + (e.Type == EntityType.ENTITY_TEAR and 1 or 0)
                 projectiles = projectiles + (e.Type == EntityType.ENTITY_PROJECTILE and 1 or 0)
                 effects = effects + (e.Type == EntityType.ENTITY_EFFECT and 1 or 0)
+                if case.kind ~= "stress" then
+                    local key = e.Type .. "." .. e.Variant .. "." .. e.SubType
+                    entities[key] = (entities[key] or 0) + 1
+                end
             end
             records[#records + 1] = {
                 slot = slot,
@@ -76,7 +81,12 @@ local function sample(label, tick)
                 hearts = p:GetHearts(),
                 max_hearts = p:GetMaxHearts(),
                 soul = p:GetSoulHearts(),
+                bone = p:GetBoneHearts(),
+                black = p:GetBlackHearts(),
                 coins = p:GetNumCoins(),
+                bombs = p:GetNumBombs(),
+                keys = p:GetNumKeys(),
+                flying = p.CanFly,
                 controls_cooldown = p.ControlsCooldown,
                 controls_enabled = p:AreControlsEnabled(),
                 visible = p.Visible,
@@ -86,6 +96,8 @@ local function sample(label, tick)
                 scale_x = p.SpriteScale.X,
                 scale_y = p.SpriteScale.Y,
                 active = p:GetActiveItem(),
+                temporary_count = case.kind == "collectible" and p:GetEffects()
+                    :GetCollectibleEffectNum(case.id) or nil,
                 charge = p:GetActiveCharge(),
                 item_count = p:GetCollectibleCount(),
                 target_count = case.kind == "collectible" and p:GetCollectibleNum(case.id, true)
@@ -98,6 +110,7 @@ local function sample(label, tick)
                 tears = tears,
                 projectiles = projectiles,
                 effects = effects,
+                entity_types = entities,
             }
             -- Remote replica shells do not own a native room descriptor.
             -- IsClear dereferences that descriptor; only query the authority.
@@ -119,13 +132,61 @@ local function sample(label, tick)
             records[#records + 1] = { slot = slot, missing = true }
         end
     end
+    local actors = {}
+    for i = 0, Game():GetNumPlayers() - 1 do
+        local p = Isaac.GetPlayer(i)
+        actors[#actors + 1] = {
+            index = i,
+            type = p:GetPlayerType(),
+            variant = p.Variant,
+            controller = p.ControllerIndex,
+            parent_controller = p.Parent
+                    and p.Parent:ToPlayer()
+                    and p.Parent:ToPlayer().ControllerIndex
+                or nil,
+            visible = p.Visible,
+            dead = p:IsDead(),
+            x = p.Position.X,
+            y = p.Position.Y,
+        }
+    end
     seen = seen + 1
-    report("sample", { label = label, tick = tick, players = records, uses = useCount })
+    report(
+        "sample",
+        { label = label, tick = tick, players = records, actors = actors, uses = useCount }
+    )
+end
+local function poolProbe(label)
+    if case.kind ~= "collectible" or case.id ~= CollectibleType.COLLECTIBLE_CHAOS then
+        return
+    end
+    for slot = 0, 1 do
+        actor(slot, function(p)
+            local results = {}
+            for i = 1, 32 do
+                results[i] = Game()
+                    :GetItemPool()
+                    :GetCollectible(ItemPoolType.POOL_TREASURE, false, 100003 + i * 7919)
+            end
+            report("pool_probe", {
+                label = label,
+                slot = slot,
+                owned = p:GetCollectibleNum(case.id, true),
+                results = results,
+            })
+        end)
+    end
 end
 local function observedUse(kind, id, p)
     if case and case.kind == kind and case.id == id then
         useCount = useCount + 1
-        report("use_callback", { kind = kind, id = id, controller = p and p.ControllerIndex })
+        report("use_callback", {
+            kind = kind,
+            id = id,
+            controller = p and p.ControllerIndex,
+            x = p and p.Position.X,
+            y = p and p.Position.Y,
+        })
         if not host then
             report(
                 "problem",
@@ -158,7 +219,7 @@ Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
     index = index + 1
     case = audit.cases[index]
     prepared, used, moved, exiting = false, false, false, false
-    placed, damaged = false, false
+    placed, damaged, deathProbed = false, false, false
     linked, chosen, started = false, false, false
     beganAt, sampleAt, useCount, seen, lastTick = nil, 0, 0, 0, 0
     lastRender = nil
@@ -178,11 +239,36 @@ local function prepare(tick)
                 end
             end
             room:SetClear(true)
-            if case.kind == "stress" then
+            if case.kind == "stress" or case.companion then
                 p:SetMinDamageCooldown(100000)
             end
             p.Position, p.Velocity =
                 room:GetCenterPos() + Vector(slot == case.slot and -65 or 65, 60), Vector.Zero
+            if slot == case.slot and case.moving_use then
+                -- Directional actives need an unobstructed approach. A fixed
+                -- center offset can put the split-room holder inside a rock.
+                local selected, distance
+                for grid = 0, room:GetGridSize() - 1 do
+                    local position = room:GetGridPosition(grid)
+                    local clear = true
+                    for dy = -140, 20, 20 do
+                        for dx = -15, 15, 15 do
+                            local probe = position + Vector(dx, dy)
+                            clear = clear
+                                and room:IsPositionInRoom(probe, 30)
+                                and room:GetGridCollisionAtPos(probe)
+                                    == GridCollisionClass.COLLISION_NONE
+                        end
+                    end
+                    local d = position:DistanceSquared(p.Position)
+                    if clear and (not distance or d < distance) then
+                        selected, distance = position, d
+                    end
+                end
+                assert(selected, "No clear approach for directional item")
+                p.Position = selected
+                report("use_position", { x = selected.X, y = selected.Y })
+            end
         end)
     end
     if case.kind ~= "stress" and not case.mega then
@@ -239,6 +325,7 @@ local function prepare(tick)
         end)
     end
     sample("before", tick)
+    poolProbe("before")
     actor(case.slot, function(p, room)
         report("give_begin")
         if case.kind == "collectible" then
@@ -266,6 +353,7 @@ local function prepare(tick)
         report("give_end")
     end)
     sample("acquired", tick)
+    poolProbe("acquired")
 end
 local function activate(tick)
     used = true
@@ -311,6 +399,26 @@ local function advance(tick)
     end
     local elapsed = native.api_info().nowMs - beganAt
     local useTick = case.use_tick or 60
+    if case.physical and tick >= useTick - 2 and tick <= useTick + 14 then
+        actor(case.slot, function(p)
+            local action = (case.kind == "card" or case.kind == "pill")
+                    and ButtonAction.ACTION_PILLCARD
+                or ButtonAction.ACTION_ITEM
+            report("input_probe", {
+                tick = tick,
+                action = action,
+                value = Input.GetActionValue(action, p.ControllerIndex),
+                triggered = Input.IsActionTriggered(action, p.ControllerIndex),
+                charge = p:GetActiveCharge(),
+                battery = p:GetBatteryCharge(),
+                item_state = p:GetItemState(),
+                x = p.Position.X,
+                y = p.Position.Y,
+                move_x = p:GetMovementInput().X,
+                move_y = p:GetMovementInput().Y,
+            })
+        end)
+    end
     if not used and tick >= useTick then
         activate(tick)
     end
@@ -327,20 +435,34 @@ local function advance(tick)
             end
         end)
     end
-    if case.mega and not moved and tick >= 240 then
+    if (case.mega or case.companion) and not moved and tick >= 240 then
         sample("before_room", tick)
         moved = true
         local target = otherRoom(native.rooms_positions()[tostring(case.slot)].index)
         assert(native.rooms_move(case.slot, target, 0, -1))
         report("room_changed", { target = target })
     end
+    if case.companion and not deathProbed and tick >= 600 then
+        deathProbed = true
+        actor(case.slot, function(p)
+            report("owner_death_probe")
+            p:ResetDamageCooldown()
+            p:TakeDamage(99, 0, EntityRef(p), 0)
+        end)
+    end
     local endTick = observationEnd()
-    local deadline = (case.mega or case.kind == "stress") and 65000 or 16000
+    local deadline = (case.mega or case.companion or case.kind == "stress") and 65000 or 16000
     if case.end_tick then
         deadline = math.max(deadline, endTick * 1000 / 30 + 15000)
     end
     if used and (tick >= endTick or elapsed >= deadline) then
         sample("after", tick)
+        if case.kind == "collectible" and case.id == CollectibleType.COLLECTIBLE_CHAOS then
+            actor(case.slot, function(p)
+                p:RemoveCollectible(case.id)
+            end)
+            poolProbe("removed")
+        end
         if elapsed >= deadline and tick < endTick then
             report(
                 "problem",
@@ -439,7 +561,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, function(...)
         local _, tick = ...
-        if case and prepared and case.kind ~= "stress" and tick % 30 == 0 then
+        if
+            case
+            and prepared
+            and case.kind ~= "stress"
+            and (tick % 30 == 0 or case.effect_check and tick >= (case.use_tick or 60) + 30)
+        then
             -- Compare peers after this native simulation step, at the actual
             -- snapshot boundary, rather than against the pre-update probe.
             sample("captured", tick)
