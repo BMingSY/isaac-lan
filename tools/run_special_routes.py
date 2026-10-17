@@ -130,6 +130,8 @@ def main():
         command.append("--record-relay")
     if "ascent-compat" in cases:
         command.append("--ascent-fixture")
+    if "lazarus" in cases:
+        command.append("--lazarus-fixture")
     if any(
         name in cases
         for name in (

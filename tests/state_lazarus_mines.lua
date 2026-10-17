@@ -18,6 +18,13 @@ function _IsaacLanFrame()
     native.test_gamepad(0)
     local fixture = status.scene == 1 and select(2, native.progress_values(640, 522))
     if not linked and fixture == (host and 98765 or 321) and renders >= (host and 300 or 360) then
+        if not host then
+            local selectable = false
+            for _, kind in ipairs(native.net_characters()) do
+                selectable = selectable or kind == PlayerType.PLAYER_LAZARUS_B
+            end
+            assert(selectable, "Tainted Lazarus must be unlocked before the fixture starts")
+        end
         linked = true
         _IsaacLanCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)
         report("MENU_READY")

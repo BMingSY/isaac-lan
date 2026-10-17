@@ -7,6 +7,7 @@ import tempfile
 
 MAGIC = b"ISAACNGSAVE09R  "
 PROFILE = Path("profile/Documents/My Games/Binding of Isaac Repentance+")
+TAINTED_LAZARUS_ACHIEVEMENT = 482
 
 
 def checksum(data):
@@ -25,7 +26,7 @@ def checksum(data):
     return result ^ 0xFFFFFFFF
 
 
-def patch(source, *, host, endings=False, alt_path=False, hush=False, ascent=False):
+def patch(source, *, host, endings=False, alt_path=False, hush=False, ascent=False, lazarus=False):
     if not 2800 <= len(source) <= 4 * 1024 * 1024 or source[:16] != MAGIC:
         raise ValueError("A native J460 persistentgamedata1.dat baseline is required")
     if struct.unpack_from("<I", source, len(source) - 4)[0] != checksum(source[16:-4]):
@@ -56,6 +57,8 @@ def patch(source, *, host, endings=False, alt_path=False, hush=False, ascent=Fal
     if alt_path:
         achievements[407] = int(host)
         achievements[412] = 0
+    if lazarus and not host:
+        achievements[TAINTED_LAZARUS_ACHIEVEMENT] = 1
     del achievements
     struct.pack_into("<I", data, len(data) - 4, checksum(data[16:-4]))
     return bytes(data)
