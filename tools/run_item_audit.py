@@ -28,6 +28,8 @@ from item_effect_checks import SUPPORTED_EFFECTS
 
 
 def run_batch(args, cases, output, labs):
+    if args.mode == "stress":
+        idle(labs, exclusive=True)
     output.mkdir(parents=True, exist_ok=False)
     script = output / "fixture.lua"
     journals = {role: output / (role + "-events.log") for role in ("host", "client")}
@@ -135,6 +137,9 @@ def run_batch(args, cases, output, labs):
                     report["catalog_error"] = str(error)
         report["results"] = [summarize_case(case, peers, report["engine"]) for case in cases]
         report["passed"] = bool(report["engine"].get("pass")) and cases_passed(report["results"])
+        if args.mode == "stress":
+            idle(labs, exclusive=True)
+            report["performance_host_exclusive"] = True
     finally:
         finish_run(protected, report, output, process=process)
     return report
@@ -282,8 +287,8 @@ def main():
         cases = cases[args.shard :: args.shards]
         if not cases:
             raise ValueError("No selected cases")
-        idle(labs)
-    except (ValueError, OSError) as error:
+        idle(labs, exclusive=args.mode == "stress")
+    except (ValueError, OSError, RuntimeError) as error:
         parser.error(str(error))
     output.mkdir(parents=True, exist_ok=False)
     validator = ROOT / "tools/item_effect_checks.py"

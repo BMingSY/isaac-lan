@@ -77,7 +77,7 @@ def test_audit_exit_and_reports_require_case_completion(
     monkeypatch.setattr(runner, "configure_interrupts", lambda: None)
     monkeypatch.setattr(runner, "validate_labs", lambda *args: [])
     monkeypatch.setattr(runner, "validate_startup", lambda *args: None)
-    monkeypatch.setattr(runner, "idle", lambda *args: None)
+    monkeypatch.setattr(runner, "idle", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "select_cases", lambda *args, **kwargs: [case])
     monkeypatch.setattr(
         runner,

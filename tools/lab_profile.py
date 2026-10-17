@@ -45,7 +45,7 @@ def windows(path):
     return subprocess.check_output(["wslpath", "-w", str(path)], text=True).strip()
 
 
-def idle(labs):
+def idle(labs, *, exclusive=False):
     command = (
         "@(Get-Process -Name isaac-ng -ErrorAction SilentlyContinue | "
         "ForEach-Object { $_.Path }) | ConvertTo-Json -Compress"
@@ -60,6 +60,8 @@ def idle(labs):
     paths = json.loads(result.stdout or "[]") or []
     if isinstance(paths, str):
         paths = [paths]
+    if exclusive and paths:
+        raise RuntimeError("Performance measurement requires no other running Isaac games")
     if {windows(lab / "game/isaac-ng.exe").casefold() for lab in labs} & {
         path.casefold() for path in paths
     }:

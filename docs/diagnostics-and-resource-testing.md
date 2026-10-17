@@ -71,7 +71,7 @@ python tools/benchmark_compression.py --runner "$ISAAC_COMPRESSION_RUNNER" \
 
 日常命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。CI 覆盖 sanitizer、Lua 实体反复创建／删除与弱引用释放、慢消费者下的有界传输，以及重复分局后的日志句柄清理；不据此推定游戏或未执行 Hook 的资源行为。
 
-性能与压力测试不属于默认发版范围。需要定位相关问题时，单独使用一组隔离主客机，选择对应负载；例如长流程资源检查可运行：
+性能与压力测试不属于默认发版范围。需要定位相关问题时，单独使用一组隔离主客机，选择对应负载；道具压力套件在启动前和关闭后检查机器上是否还有游戏进程，有其他运行实例时不能计为有效性能轮次。测量期间也不得启动其他游戏或 CPU 密集任务。例如长流程资源检查可运行：
 
 ```sh
 python3 tools/run_special_routes.py \
