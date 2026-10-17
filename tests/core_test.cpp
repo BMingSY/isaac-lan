@@ -82,7 +82,7 @@ void compatibilityTargets() {
             !characters::sharedCharacterEffect(ids::player::lostB, characters::TeamEffect::shop) &&
             !characters::sharedCharacterEffect(0, characters::TeamEffect::randomCards),
         "Global character effects leaked into another trait or player type");
-    for (int item : {21, 54, 64, 246, 260, 376, 402, 656, 691, 721})
+    for (int item : {21, 54, 64, 246, 260, 333, 376, 402, 656, 691, 721})
         require(items::sharedCollectibleEffect(item), "A public passive effect became personal");
     for (int item : {0, 1, 105, 577, 622, 628})
         require(!items::sharedCollectibleEffect(item), "A personal inventory query became shared");
