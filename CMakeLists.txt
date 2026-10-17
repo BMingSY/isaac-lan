@@ -33,6 +33,13 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME runtime.session-store COMMAND isaac_lan_session_store_test)
     set_tests_properties(runtime.session-store PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_chat_test tests/chat_test.cpp)
+    target_include_directories(isaac_lan_chat_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_chat_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME presentation.chat-input COMMAND isaac_lan_chat_test)
+    set_tests_properties(presentation.chat-input PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_input_schedule_test tests/input_schedule_test.cpp)
     target_include_directories(isaac_lan_input_schedule_test PRIVATE src)
     if(MINGW)
@@ -93,6 +100,7 @@ if(BUILD_TESTING)
         NAMES lua5.3 lua
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
+        isaac_add_lua_test(bridge.chat chat.lua)
         isaac_add_lua_test(bridge.session_lifecycle session_lifecycle.lua)
         isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
@@ -251,6 +259,8 @@ add_library(
     src/engine/versions/j460/generated_items.cpp
     src/engine/versions/j460/rewind.cpp
     src/engine/versions/j460/frontend.cpp
+    src/engine/versions/j460/chat_input.cpp
+    src/engine/versions/j460/emotes.cpp
     src/diagnostics/lab_capture.cpp)
 add_library(isaac_lan_build STATIC src/engine/build.cpp)
 target_include_directories(isaac_lan_build PUBLIC src)
@@ -330,6 +340,7 @@ if(BUILD_TESTING)
         loading-timeout
         publication-limits
         integrations
+        communication
         greed-settings
         host-disconnect
         resource-lifecycle)
@@ -419,6 +430,7 @@ target_link_libraries(
     isaac_lan_probe
     PRIVATE bcrypt
             iphlpapi
+            imm32
             gdiplus
             psapi
             minhook

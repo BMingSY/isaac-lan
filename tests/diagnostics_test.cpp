@@ -19,6 +19,23 @@ void defaults() {
 }
 void validation() {
     using isaac::configuration::parse;
+    const auto chat = parse("[chat]\nbackground_opacity=45\nbackground_color=Ab3400\n"
+                            "border_color=123456\ntext_color=FFFFFF\n");
+    require(chat.warnings.empty() && chat.settings.chat.opacity == 45 &&
+                chat.settings.chat.background == 0xab3400 &&
+                chat.settings.chat.border == 0x123456 && chat.settings.chat.text == 0xffffff,
+            "Custom chat appearance was not preserved");
+    for (const auto opacity : {0u, 100u})
+        require(
+            parse("[chat]\nbackground_opacity=" + std::to_string(opacity)).settings.chat.opacity ==
+                opacity,
+            "Chat opacity endpoint was rejected");
+    const auto badChat = parse("[chat]\nbackground_opacity=101\nbackground_color=#ffffff\n"
+                               "border_color=bad\ntext_color=gggggg\n");
+    require(badChat.warnings.size() == 4 && badChat.settings.chat.opacity == 70 &&
+                badChat.settings.chat.background == 0x231b18 &&
+                badChat.settings.chat.text == 0xe8dfcb,
+            "Malformed chat style bypassed readable defaults");
     for (const auto hz : {30u, 60u}) {
         const auto input = parse("[network]\ninput_hz=" + std::to_string(hz));
         require(input.warnings.empty() && input.settings.inputHz == hz,

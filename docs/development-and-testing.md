@@ -62,6 +62,8 @@ ctest --test-dir build-core --output-on-failure
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
 
+聊天改动的直接回归为 CTest `presentation.chat-input`、`bridge.chat`、`diagnostics.*`、`bridge.resume`，以及 Windows `net.communication`／`net.integrations`：覆盖 UTF-8 编辑、输入释放、背景配置、输出可见性、掷骰去重、原版命令分发和过期上下文。原生执行与画面使用 [state_chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_chat.lua)，由隔离双端 runner 加载并保留双端画面；夹具输出 `CHAT KEYBOARD_READY` 后，对各自所属窗口依次输入 `~`、A、Enter、`~`，完成标记为 `LAN_NETWORK PASS chat console`。实机需另核对同房气泡、表情、背景透明度和系统输入法候选；只有脚本断言通过不能代表 IME 或画面通过。
+
 ## 失败记录与回放
 
 统一运行按当轮归档保存阶段日志、耗时、`summary.json`、`pytest.xml` 和失败请求。回放命令：

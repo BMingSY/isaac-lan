@@ -92,6 +92,46 @@ local bot = _IsaacLanModules["lanbot"]({
         log("LANBOT " .. message)
     end,
 }, _IsaacLanModules)
+local chatLimits = native.chat_limits()
+local emotes = native.emote_count()
+local chat = _IsaacLanModules["runtime/chat"]({
+    limits = chatLimits,
+    nonce = native.api_nonce,
+    clock = Isaac.GetTime,
+    send = native.chat_send,
+    receive = native.chat_receive,
+    execute = native.chat_execute,
+    roll = native.chat_roll,
+    bot = bot.command,
+    emotes = emotes,
+    info = function()
+        local info = native.api_info()
+        info.hosting = status.hosting or 0
+        return info
+    end,
+    context = function(slot)
+        return native.rooms_positions()[tostring(slot)]
+    end,
+}, _IsaacLanModules["runtime/chat_wire"])
+local chatUI = _IsaacLanModules["presentation/chat"]({
+    native = native,
+    chat = chat,
+    phase = Phase,
+    limits = chatLimits,
+    clock = Isaac.GetTime,
+}, _IsaacLanModules["presentation/chat_layout"])
+function _IsaacLanChatRender()
+    chatUI.render(status)
+end
+function _IsaacLanChatSubmit(text)
+    return chat.submit(text)
+end
+function _IsaacLanChatOutput(text, options)
+    return chat.output(text, options)
+end
+function _IsaacLanChatMessages()
+    return chat.messages
+end
 function _IsaacLanBotCommand(args)
     Isaac.ConsoleOutput(bot.command(args) .. "\n")
 end
@@ -114,6 +154,7 @@ function _IsaacLanActionStep()
         _IsaacLanModules["compat/mods/goodtrip/authority"].observe()
     end
     integration.actions.step()
+    chat.step()
 end
 local function modFingerprint()
     local parts = {}
@@ -233,12 +274,16 @@ end)
 function _IsaacLanCommand(action, value)
     if action == "host" then
         bot.reset()
+        chat.reset()
+        chatUI.reset()
         lifecycle.close()
         assert(native.input_virtual())
         assert(native.net_host(tonumber(value), _IsaacLanFingerprint, modFingerprint()))
         savedPlayers = native.net_saved_info()
     elseif action == "join" then
         bot.reset()
+        chat.reset()
+        chatUI.reset()
         lifecycle.close()
         assert(native.input_virtual())
         local ip, port = value:match("^([a-zA-Z0-9%.%-]+):(%d+)$")
@@ -282,14 +327,35 @@ function _IsaacLanCommand(action, value)
         lifecycle.close()
     end
 end
+local chatSession = false
 function _IsaacLanFrame()
     status = native.net_poll()
+    if
+        status.phase == Phase.lobby
+        or status.phase == Phase.running
+        or status.phase == Phase.waiting
+    then
+        chatSession = true
+    elseif
+        chatSession
+        and (
+            status.phase == Phase.idle
+            or status.phase == Phase.closed
+            or status.phase == Phase.failed
+        )
+    then
+        chatSession = false
+        chat.reset()
+        chatUI.reset()
+    end
     integration.poll()
+    chat.poll()
     bot.poll()
     if status.phase == Phase.running then
         lifecycle.launch()
     end
     status.prepared = lifecycle.ready()
+    chatUI.step(status)
     status.savedPlayers = savedPlayers
     if lifecycle.ready() then
         status.positions = native.rooms_positions()

@@ -11,6 +11,7 @@
 | 输入、状态流、传输与背压 | [网络与状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md) |
 | 开局、存档、重连与换层 | [会话生命周期](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md) |
 | 分房、预测、HUD 与音画 | [房间与表现](https://github.com/BMingSY/isaac-lan/blob/main/docs/rooms-and-presentation.md) |
+| 文字输入、命令、输出与气泡 | [聊天与控制台](https://github.com/BMingSY/isaac-lan/blob/main/docs/chat-console.md) |
 | 托管观察、规划与输入 | [LANBOT 设计](https://github.com/BMingSY/isaac-lan/blob/main/docs/lanbot-design.md) |
 
 ## 功能、接口与兼容参考

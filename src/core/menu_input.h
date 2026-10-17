@@ -2,6 +2,26 @@
 #include "net/protocol.h"
 
 namespace isaac::input {
+class ModalInput {
+    std::uint16_t held = 0;
+
+  public:
+    void filter(lan::InputFrame& input, bool capturing) {
+        std::uint16_t down = input.triggered;
+        for (unsigned action = 0; action < lan::actionCount; ++action)
+            if (input.values[action])
+                down |= 1u << action;
+        held = capturing ? down : held & down;
+        if (capturing) {
+            input = {};
+            return;
+        }
+        for (unsigned action = 0; action < lan::actionCount; ++action)
+            if (held & (1u << action))
+                input.values[action] = 0;
+        input.triggered &= ~held;
+    }
+};
 inline bool menuActionTriggered(const lan::InputFrame& input, int button) {
     if (button >= 0 && button < static_cast<int>(lan::actionCount))
         return (input.triggered & (1u << button)) != 0;

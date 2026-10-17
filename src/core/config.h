@@ -1,5 +1,6 @@
 #pragma once
 #include "core/log_record.h"
+#include "core/chat.h"
 #include <algorithm>
 #include <charconv>
 #include <string>
@@ -12,6 +13,7 @@ struct Settings {
     logging::Level logLevel = logging::Level::info;
     bool performance = false;
     unsigned sampleIntervalMs = 1000;
+    chat::Appearance chat;
 };
 struct Parsed {
     Settings settings;
@@ -35,7 +37,14 @@ inline constexpr std::string_view defaults =
     "; 开启后在同一日志目录生成 performance.jsonl。\n"
     "performance = false\n"
     "; 性能统计采样间隔（毫秒）：100–60000，默认 1000。\n"
-    "sample_interval_ms = 1000\n";
+    "sample_interval_ms = 1000\n\n"
+    "[chat]\n"
+    "; 聊天背景不透明度：0–100，0 完全透明，100 不透明。\n"
+    "background_opacity = 70\n"
+    "; 背景、边框与文字颜色：六位 RGB 十六进制，不加 #。\n"
+    "background_color = 231B18\n"
+    "border_color = 79604C\n"
+    "text_color = E8DFCB\n";
 inline std::string_view trim(std::string_view s) {
     const auto begin = s.find_first_not_of(" \t\r");
     return begin == s.npos ? std::string_view{}
@@ -107,6 +116,28 @@ inline Parsed parse(std::string_view source) {
                 result.settings.sampleIntervalMs = interval;
             else
                 warn("invalid_value=" + key);
+        } else if (key == "chat.background_opacity") {
+            unsigned opacity = 0;
+            const auto [endValue, error] =
+                std::from_chars(value.data(), value.data() + value.size(), opacity);
+            if (error == std::errc{} && endValue == value.data() + value.size() && opacity <= 100)
+                result.settings.chat.opacity = opacity;
+            else
+                warn("invalid_value=" + key);
+        } else if (key == "chat.background_color" || key == "chat.border_color" ||
+                   key == "chat.text_color") {
+            unsigned color = 0;
+            const auto [endValue, error] =
+                std::from_chars(value.data(), value.data() + value.size(), color, 16);
+            if (value.size() != 6 || error != std::errc{} ||
+                endValue != value.data() + value.size())
+                warn("invalid_value=" + key);
+            else if (key == "chat.background_color")
+                result.settings.chat.background = color;
+            else if (key == "chat.border_color")
+                result.settings.chat.border = color;
+            else
+                result.settings.chat.text = color;
         } else
             warn("unknown_key=" + key);
     }

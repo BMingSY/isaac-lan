@@ -243,6 +243,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     const auto config = isaac::configuration::load(directory / L"isaac-lan/config.ini");
     settings = config.settings;
     isaac::runtime::configureInput(settings.inputHz);
+    isaac::frontend::configureChat(settings.chat);
     isaac::logging::configure(settings.logLevel);
     isaac::diagnostics::configure(settings);
     if (!isaac::logging::initialize(logDirectory))
