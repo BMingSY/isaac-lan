@@ -27,6 +27,9 @@ def test_combat_arrival_closes_doors_and_only_uncleared_boss_trapdoor(lua, clear
 
 
 def inventory_value(resources=None, passive=None, actives=None, souls=0, black=0):
+    resources = list(resources or [0, 0, 0, 0, 0])
+    if len(resources) == 5:
+        resources += [False, False]
     actives = actives or [[0, 0] for _ in range(4)]
     counts = dict(passive or {})
     for item, _ in actives:
@@ -37,7 +40,7 @@ def inventory_value(resources=None, passive=None, actives=None, souls=0, black=0
         [[item, count] for item, count in sorted(counts.items()) if count],
         actives,
         [0, 0, 0, 0, 0, 0, 0, souls, black],
-        resources or [0, 0, 0, 0, 0],
+        resources,
         [0, 0],
         [0, 0],
         [0, 0],
@@ -140,9 +143,14 @@ def test_production_decoder_rejects_truncated_state(lua, value, offset):
     assert lua.call("decode", payload[: offset % len(payload)].hex())[0] is False
 
 
+resource_values = st.tuples(
+    st.lists(st.integers(0, 99), min_size=5, max_size=5), st.booleans(), st.booleans()
+).map(lambda v: v[0] + list(v[1:]))
+
+
 @pytest.mark.property
 @given(
-    resources=st.lists(st.integers(0, 99), min_size=5, max_size=5),
+    resources=resource_values,
     counts=st.lists(st.integers(0, 3), min_size=3, max_size=3),
     active_ids=st.lists(st.sampled_from([0, 2, 4]), min_size=4, max_size=4),
     charges=st.lists(st.integers(0, 12), min_size=4, max_size=4),
@@ -197,10 +205,10 @@ def test_resource_snapshot_action_sequences(lua):
         def __init__(self):
             super().__init__()
             lua.call("inventory_reset", False)
-            self.expected = [0, 0, 0, 0, 0]
+            self.expected = [0, 0, 0, 0, 0, False, False]
             self.previous = inventory_value(self.expected.copy())
 
-        @rule(resources=st.lists(st.integers(0, 99), min_size=5, max_size=5))
+        @rule(resources=resource_values)
         def apply_authority(self, resources):
             self.expected = resources
             self.previous = inventory_value(resources.copy())
@@ -214,7 +222,7 @@ def test_resource_snapshot_action_sequences(lua):
         @rule()
         def new_run(self):
             lua.call("inventory_reset", False)
-            self.expected = [0, 0, 0, 0, 0]
+            self.expected = [0, 0, 0, 0, 0, False, False]
             self.previous = inventory_value(self.expected.copy())
 
         @invariant()

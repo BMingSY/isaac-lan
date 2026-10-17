@@ -30,7 +30,7 @@ local expected = {
     { { 1, 3 }, { 2, 1 }, { 4, 1 }, { 6, 2 } },
     { { 2, 5 }, { 0, 0 }, { 4, 7 }, { 0, 0 } },
     { 1, 12, 2, 8, 1, 1, 1, 6, 5 },
-    { 21, 8, 3, 4, 5 },
+    { 21, 8, 3, 4, 5, true, false },
     { 13, 14 },
     { 22, 0 },
     { 0, 9 },
@@ -42,7 +42,7 @@ local expected = {
 local plain = factory(root)
 expected[11] = false
 plain.apply(expected, true)
-assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Schema-19 inventory bytes changed")
+assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Schema-22 inventory bytes changed")
 plain.apply(expected, false)
 assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Repeated inventory drifted")
 print("PASS all four ordered pockets after inventory setters, repeated views and ghost cleanup")

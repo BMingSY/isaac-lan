@@ -27,7 +27,15 @@ return {
     input = { left = 1, right = 2, up = 3, down = 4 },
     item = { id = 1, count = 2 },
     active = { id = 1, charge = 2 },
-    resources = { coins = 1, bombs = 2, keys = 3, soulCharge = 4, bloodCharge = 5 },
+    resources = {
+        coins = 1,
+        bombs = 2,
+        keys = 3,
+        soulCharge = 4,
+        bloodCharge = 5,
+        goldenBomb = 6,
+        goldenKey = 7,
+    },
     hearts = {
         broken = 1,
         max = 2,
