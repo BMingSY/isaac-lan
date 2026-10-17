@@ -8,11 +8,12 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 30;
+constexpr std::uint16_t protocolVersion = 31;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -253,7 +254,7 @@ class Writer {
         u32(n >> 32);
         u32(n & 0xffffffff);
     }
-    void string(const std::string& s) {
+    void string(std::string_view s) {
         if (s.size() > 1024)
             throw std::runtime_error("Protocol string too long");
         u16(static_cast<std::uint16_t>(s.size()));
@@ -325,13 +326,17 @@ class Reader {
         auto a = u32();
         return (static_cast<std::uint64_t>(a) << 32) | u32();
     }
-    std::string string() {
+    // The caller must keep the packet alive while using this bounded view.
+    std::string_view stringView() {
         auto size = u16();
         if (size > 1024 || size > bytes.size() - cursor)
             throw std::runtime_error("Invalid protocol string");
-        std::string out(reinterpret_cast<const char*>(bytes.data() + cursor), size);
+        std::string_view out(reinterpret_cast<const char*>(bytes.data() + cursor), size);
         cursor += size;
         return out;
+    }
+    std::string string() {
+        return std::string(stringView());
     }
     InputFrame input() {
         InputFrame out;

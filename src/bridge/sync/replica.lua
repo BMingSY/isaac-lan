@@ -55,28 +55,27 @@ return function(fields)
         local function applyEntity(e, v, now, tick)
             entityCodec.apply(e, v)
             -- Preserve ownership through EntityPtr; local allocation indices are never IDs.
-            replicas[v[Entity.id]] = deps.pointer(e)
+            local pointer = replicas[v[Entity.id]]
+            local existing = pointer and pointer.Ref
+            if not existing or deps.hash(existing) ~= deps.hash(e) then
+                replicas[v[Entity.id]] = deps.pointer(e)
+            end
             local prior = motion[v[Entity.id]]
             local actor = e.Type == deps.playerType
             local position, velocity = vec(v[Entity.position]), vec(v[Entity.velocity])
-            motion[v[Entity.id]] = {
-                target = position,
-                display = prior and prior.display or position,
-                velocity = velocity,
-                at = now,
-                tick = tick,
-                actor = actor,
-                controller = actor and e:ToPlayer().ControllerIndex or -1,
-                prediction = actor and (prior and prior.prediction or prediction.new(position)),
-                track = motionPresentation.track(
-                    prior and prior.track,
-                    position,
-                    velocity * (actor and 60 or 30),
-                    now,
-                    tick
-                ),
-                doorway = prior and prior.doorway,
-            }
+            local m = prior or {}
+            m.target, m.display, m.velocity, m.at, m.tick =
+                position, m.display or position, velocity, now, tick
+            m.actor, m.controller = actor, actor and e:ToPlayer().ControllerIndex or -1
+            m.prediction = actor and (m.prediction or prediction.new(position))
+            m.track = motionPresentation.track(
+                m.track,
+                position,
+                velocity * (actor and 60 or 30),
+                now,
+                tick
+            )
+            motion[v[Entity.id]] = m
         end
 
         local function restoreLocations(value)

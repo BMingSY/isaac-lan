@@ -24,6 +24,7 @@ FILES = BINARIES | {
     "licenses/MinHook-LICENSE.txt",
     "licenses/imgui-LICENSE.txt",
     "licenses/miniz-LICENSE.txt",
+    "licenses/zstd-LICENSE.txt",
 }
 SYSTEM_DLLS = {
     "bcrypt.dll",

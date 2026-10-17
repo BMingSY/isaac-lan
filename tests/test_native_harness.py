@@ -273,7 +273,16 @@ return {
     (tests / "support").mkdir(parents=True)
     for relative in ("support/scenario.lua", "special_suite_driver.lua"):
         shutil.copyfile(ROOT / "tests" / relative, tests / relative)
-    for name in ("greed", "endings", "lanbot", "lanbot_campaign", "lanbot_spiders", "lanbot_greed"):
+    for name in (
+        "greed",
+        "endings",
+        "lanbot",
+        "lanbot_campaign",
+        "lanbot_spiders",
+        "lanbot_greed",
+        "local_hud",
+        "guest_visuals",
+    ):
         (tests / f"state_{name}.lua").write_text(source)
     monkeypatch.setattr(lua_support, "ROOT", tmp_path)
     return tmp_path
@@ -286,6 +295,7 @@ return {
         (["greed", "greedier", "endings"], True),
         (["lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed"], False),
         (["campaign", "ascent-compat"], False),
+        (["local-hud", "guest-visuals"], False),
     ],
 )
 def test_built_suites_execute_options_and_cleanup(fake_scenarios, cases, first_floor):

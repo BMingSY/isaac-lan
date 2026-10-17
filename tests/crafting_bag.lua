@@ -323,6 +323,9 @@ local function environment()
             return {}
         end,
         Vector = vector,
+        GetPtrHash = function(entity)
+            return entity
+        end,
         EntityPtr = function(p)
             return { Ref = p }
         end,

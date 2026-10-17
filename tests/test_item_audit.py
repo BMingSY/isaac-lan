@@ -10,6 +10,49 @@ from item_audit import catalog_from_log, events, select_cases, summarize_case
 from lab_profile import validate_labs, validate_startup
 
 
+def test_idle_stress_preserves_inventory_and_disables_attack():
+    from item_audit import stress_cases
+
+    catalog = json.loads((ROOT / "tests/fixtures/item_catalog.json").read_text())
+    cases = {case["key"]: case for case in stress_cases(catalog)}
+    for suffix in ("baseline", "inventory-100", "inventory-300", "inventory-500", "copies-1000"):
+        active, idle = cases[f"stress:{suffix}"], cases[f"stress:idle-{suffix}"]
+        assert idle["idle"] and not active.get("idle")
+        assert idle.get("loadout") == active.get("loadout")
+        assert idle.get("copies") == active.get("copies")
+        assert idle["frame_budget_ms"] == 1000 / 30
+
+
+@pytest.mark.parametrize(
+    "client_count,client_p95,expected",
+    [(900, 20, "verified"), (900, 50, "problem"), (5, 20, "incomplete")],
+)
+def test_idle_performance_requires_both_peers_and_frame_budget(client_count, client_p95, expected):
+    case = {
+        "key": "stress:idle-baseline",
+        "kind": "stress",
+        "slot": 1,
+        "frame_budget_ms": 1000 / 30,
+    }
+    common = [
+        {"key": case["key"], "event": name}
+        for name in ("case_begin", "give_end", "use_return", "case_end")
+    ]
+    common += [
+        {"key": case["key"], "event": "sample", "tick": tick, "players": []} for tick in (150, 180)
+    ]
+    peers = {
+        role: [
+            *common,
+            {"key": case["key"], "event": "metrics", "render": {"count": count, "p95": p95}},
+        ]
+        for role, count, p95 in (("host", 900, 20), ("client", client_count, client_p95))
+    }
+    assert summarize_case(case, peers)["status"] == expected
+    peers["client"] = peers["client"][:-1]
+    assert summarize_case(case, peers)["status"] == "incomplete"
+
+
 @pytest.mark.parametrize(
     "status,restored,expected",
     [

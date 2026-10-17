@@ -9,6 +9,9 @@ return function(fields)
         local unpack = string.unpack
         local lastRender
         local function sample(track, now)
+            if track.stationary then
+                return track.target
+            end
             local age = math.max(0, now - track.at)
             return track.target
                 + track.velocity * math.min(age, 0.1)
@@ -22,13 +25,14 @@ return function(fields)
             if correction:Length() >= 96 then
                 correction = Vector(0, 0)
             end
-            return {
-                target = position,
-                velocity = velocity,
-                at = now,
-                tick = tick,
-                correction = correction,
-            }
+            local result = prior or {}
+            result.target, result.velocity, result.at, result.tick, result.correction =
+                position, velocity, now, tick, correction
+            result.stationary = velocity.X == 0
+                and velocity.Y == 0
+                and correction.X == 0
+                and correction.Y == 0
+            return result
         end
         local outwardDirections = { Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) }
         local function doorCorridor(room, position)
@@ -79,6 +83,7 @@ return function(fields)
                 for _, m in pairs(motion) do
                     m.track.target, m.track.at = m.target, now
                     m.track.velocity, m.track.correction = Vector(0, 0), Vector(0, 0)
+                    m.track.stationary = true
                 end
                 return
             end

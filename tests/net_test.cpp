@@ -166,6 +166,19 @@ void greedSettings() {
     }
 }
 void codec() {
+    Writer strings(Message::world);
+    const std::string_view binary("a\0b", 3);
+    strings.string(binary);
+    require(strings.bytes == std::vector<std::uint8_t>(
+                                 {static_cast<std::uint8_t>(Message::world), 0, 3, 'a', 0, 'b'}),
+            "Borrowed string writer changed protocol bytes");
+    Reader borrowed(strings.bytes), owned(strings.bytes);
+    borrowed.u8();
+    owned.u8();
+    require(borrowed.stringView() == binary && owned.string() == binary,
+            "Borrowed or owned string reader changed bytes");
+    borrowed.finish();
+    owned.finish();
     StateCompression compression;
     std::vector<std::uint8_t> plain(512000, 42);
     const auto compact = compression.compress(plain);
@@ -803,9 +816,12 @@ void compressionLimits() {
     rejects([&] { compression.compress(std::vector<std::uint8_t>(maxWorldSize + 1)); },
             "Oversized state accepted");
     for (const auto& plain :
-         {std::vector<std::uint8_t>{0xff}, std::vector<std::uint8_t>(maxWorldSize, 42)})
+         {std::vector<std::uint8_t>{0xff}, std::vector<std::uint8_t>(maxWorldSize, 42)}) {
         require(compression.expand(compression.compress(plain)) == plain,
                 "Compression boundary round trip failed");
+        require(compression.expand(compression.compress(plain, plain), plain) == plain,
+                "Prefix compression raw fallback or maximum size failed");
+    }
     Writer raw(Message::world);
     raw.bytes.clear();
     raw.u8(0);
@@ -822,7 +838,7 @@ void compressionLimits() {
     invalid.push_back(0);
     rejects([&] { compression.expand(invalid); }, "Trailing plain state data accepted");
     invalid = raw.bytes;
-    invalid[0] = 2;
+    invalid[0] = 255;
     rejects([&] { compression.expand(invalid); }, "Unknown compression mode accepted");
     invalid = raw.bytes;
     std::fill(invalid.begin() + 1, invalid.begin() + 5, 0);

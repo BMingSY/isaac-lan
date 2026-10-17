@@ -2,7 +2,6 @@
 #include "net/messages.h"
 #include "net/peer.h"
 #include "net/host_resolution.h"
-#include "core/snapshot_delta.h"
 #include "net/compression.h"
 #include "net/host_address.h"
 #include <winsock2.h>
@@ -757,7 +756,6 @@ struct Session::Impl {
             assembling->bytes.insert(assembling->bytes.end(), bytes.begin(), bytes.end());
             if (assembling->bytes.size() == total) {
                 const auto began = observer ? Clock::now() : Clock::time_point{};
-                assembling->bytes = compression.expand(assembling->bytes);
                 if (assemblingDelta) {
                     const auto base =
                         std::find_if(p.decoded.begin(), p.decoded.end(), [&](const auto& value) {
@@ -765,8 +763,9 @@ struct Session::Impl {
                         });
                     if (base == p.decoded.end())
                         throw std::runtime_error("World delta baseline is unavailable");
-                    assembling->bytes = core::SnapshotDelta::apply(*base->bytes, assembling->bytes);
-                }
+                    assembling->bytes = compression.expand(assembling->bytes, *base->bytes);
+                } else
+                    assembling->bytes = compression.expand(assembling->bytes);
                 if (observer)
                     observer(
                         "decompress",
@@ -836,14 +835,11 @@ struct Session::Impl {
                     p.sendingBase = 0;
                     if (p.baseline) {
                         const auto deltaBegan = observer ? Clock::now() : Clock::time_point{};
-                        if (const auto patch =
-                                core::SnapshotDelta::encode(*p.baseline->bytes, *raw)) {
-                            auto delta = compression.compress(*patch);
-                            if (delta.size() < full.size()) {
-                                full = std::move(delta);
-                                p.sendingDelta = true;
-                                p.sendingBase = p.baseline->tick;
-                            }
+                        auto delta = compression.compress(*raw, *p.baseline->bytes);
+                        if (delta.size() < full.size()) {
+                            full = std::move(delta);
+                            p.sendingDelta = true;
+                            p.sendingBase = p.baseline->tick;
                         }
                         if (observer)
                             observer("delta.encode", std::chrono::duration<double, std::milli>(

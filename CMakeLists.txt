@@ -24,7 +24,46 @@ target_compile_definitions(isaac_lan_miniz PUBLIC MINIZ_NO_ARCHIVE_APIS MINIZ_NO
 add_library(isaac_lan_deflate STATIC src/core/deflate.cpp)
 target_include_directories(isaac_lan_deflate PUBLIC src)
 target_link_libraries(isaac_lan_deflate PUBLIC isaac_lan_miniz)
+file(GLOB ISAAC_LAN_ZSTD_SOURCES CONFIGURE_DEPENDS vendor/zstd/common/*.c vendor/zstd/compress/*.c
+     vendor/zstd/decompress/*.c)
+add_library(isaac_lan_zstd_vendor STATIC ${ISAAC_LAN_ZSTD_SOURCES})
+target_include_directories(isaac_lan_zstd_vendor PUBLIC vendor/zstd)
+target_compile_definitions(isaac_lan_zstd_vendor PRIVATE ZSTD_LEGACY_SUPPORT=0 ZSTD_DISABLE_ASM)
+add_library(isaac_lan_zstd STATIC src/core/zstd.cpp)
+target_include_directories(isaac_lan_zstd PUBLIC src)
+target_link_libraries(isaac_lan_zstd PUBLIC isaac_lan_zstd_vendor)
+set(ISAAC_LAN_LZ4_SOURCE_DIR
+    ""
+    CACHE PATH "Optional upstream LZ4 lib directory for benchmarks")
+if(BUILD_TESTING AND ISAAC_LAN_LZ4_SOURCE_DIR)
+    add_executable(isaac_lan_compression_benchmark tests/compression_benchmark.cpp
+                                                   "${ISAAC_LAN_LZ4_SOURCE_DIR}/lz4.c")
+    target_include_directories(isaac_lan_compression_benchmark
+                               PRIVATE "${ISAAC_LAN_LZ4_SOURCE_DIR}")
+    target_link_libraries(isaac_lan_compression_benchmark PRIVATE isaac_lan_deflate isaac_lan_zstd)
+    if(MINGW)
+        target_link_options(isaac_lan_compression_benchmark PRIVATE -static-libgcc
+                            -static-libstdc++)
+    endif()
+endif()
 if(BUILD_TESTING)
+    add_executable(isaac_lan_occurrence_mapping_test tests/occurrence_mapping_test.cpp)
+    target_include_directories(isaac_lan_occurrence_mapping_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_occurrence_mapping_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+    endif()
+    add_test(NAME core.occurrence-mapping COMMAND isaac_lan_occurrence_mapping_test)
+    set_tests_properties(core.occurrence-mapping PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_zstd_test tests/zstd_test.cpp)
+    target_link_libraries(isaac_lan_zstd_test PRIVATE isaac_lan_zstd)
+    if(MINGW)
+        target_link_options(isaac_lan_zstd_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    foreach(test_case round-trip prefixes bounds)
+        add_test(NAME core.zstd-${test_case} COMMAND isaac_lan_zstd_test ${test_case})
+        set_tests_properties(core.zstd-${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    endforeach()
     if(NOT WIN32)
         find_package(Lua 5.3 EXACT REQUIRED)
         add_executable(isaac_lan_state_codec_runner tests/state_codec_runner.cpp
@@ -134,6 +173,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.resume bridge_resume.lua)
         isaac_add_lua_test(bridge.mod-loading mod_loading.lua)
         isaac_add_lua_test(bridge.presentation presentation.lua)
+        isaac_add_lua_test(bridge.actor-costumes actor_costumes.lua)
         isaac_add_lua_test(bridge.floor floor.lua)
         isaac_add_lua_test(bridge.npc-state npc_state.lua)
         isaac_add_lua_test(bridge.actor-forms actor_forms.lua)
@@ -246,6 +286,7 @@ add_library(
     isaac_lan_probe SHARED
     src/app/bootstrap.cpp
     src/engine/state_codec.cpp
+    src/engine/versions/j460/entity_fields.cpp
     src/engine/versions/j460/bootstrap.cpp
     src/engine/versions/j460/session_backend.cpp
     src/diagnostics/native_exceptions.cpp
@@ -297,7 +338,7 @@ add_library(isaac_lan_net STATIC src/net/session.cpp src/net/compression.cpp
                                  src/net/host_resolution.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate)
+target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate isaac_lan_zstd)
 add_executable(isaac_lan_replay_world tools/replay_world_states.cpp)
 target_link_libraries(isaac_lan_replay_world PRIVATE isaac_lan_net)
 if(MINGW)

@@ -9,7 +9,7 @@ flowchart LR
     I[客机输入] --> H[房主模拟]
     H --> C[采集完整视图]
     C --> E[C++ 二进制编码]
-    E --> D[字节增量与压缩]
+    E --> D[Zstd 完整或参考快照压缩]
     D --> T[TCP 分块传输]
     T --> R[还原完整字节]
     R --> A[C++ 解码与 Lua 副本应用]
@@ -44,9 +44,9 @@ flowchart LR
 
 每份视图包含全队主要角色状态、共同楼层与地图，以及接收者当前房间的实体、网格和表现。同房角色携带完整外观，异房角色保留多人 HUD 所需状态。任意 Mod 私有表、Lua 源码和原生指针不进入视图。
 
-采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。
+采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
 
-实体 ID 由房主分配，客机维护 `ID → EntityPtr`。恢复时先回收过期实体，再创建／更新实体，最后绑定父、子、生成者和目标引用。身份与本机地址、实体池槽位无关；原生对象仍由游戏分配和释放。特殊实体引用通过兼容组件和具名后端能力接入，见[原生能力参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。
+实体 ID 由房主分配，客机维护 `ID → EntityPtr`。同一活动对象复用其 `EntityPtr` 与显示轨迹记录，原生引用失效或角色对象替换时重新建立引用；换房清理显示轨迹，退出清理全部引用。恢复时先回收过期实体，再创建／更新实体，最后绑定父、子、生成者和目标引用。身份与本机地址、实体池槽位无关；原生对象仍由游戏分配和释放。特殊实体引用通过兼容组件和具名后端能力接入，见[原生能力参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。
 
 客机应用完整视图时遵循[恢复顺序](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md#采集与副本恢复)，全部成功后才提交 tick。原生楼层未准备好时保留最新视图，延后应用。普通状态允许在原生半帧边界应用；首次视图、暂停／名单变化、换层、换房及角色替换在完整更新边界处理。`betweenUpdates` 预检不写入房间或角色，返回 `false` 表示继续等待。
 
@@ -56,7 +56,9 @@ flowchart LR
 
 连接使用非阻塞 IPv4 TCP，由主线程轮询。域名在独立线程解析；取消或重连使旧解析结果失效。消息采用两字节长度前缀，正文整数使用大端编码，大载荷按块传输。
 
-[字节增量](https://github.com/BMingSY/isaac-lan/blob/main/src/core/snapshot_delta.h)只引用不可变的已确认基线。发送端分别压缩完整字节和增量，选择较小载荷；使用 DEFLATE，无压缩收益时发送原始字节。首块标明完整／增量模式、基线 tick 与楼层代次；接收端校验长度和哈希后还原完整字节。
+[Zstd 适配器](https://github.com/BMingSY/isaac-lan/blob/main/src/core/zstd.cpp)使用快速级别 `-1`，分别生成独立帧和引用不可变已确认快照的 prefix 帧，选择较小载荷；无压缩收益时发送原始字节。prefix 直接使用完整快照，不需要训练字典或另外构造字节补丁。压缩上下文由会话持有并复用，每次调用结束清除借用的 prefix；不同客机之间不共享基线。首块标明完整／参考模式、基线 tick 与楼层代次。
+
+协议版本为 31。压缩封套为一字节模式和四字节大端原始长度：`0` 为原始字节，`3` 为独立 Zstd 帧，`4` 为 prefix 帧；`1`／`2` 仅保留旧 XPRESS／DEFLATE 读取。Zstd 帧必须含已知原始长度和内容校验和，不接受训练字典 ID、串接帧或尾随字节；解码前验证输出大小和窗口均不超过 2 MiB。Zstd 静态链接，不依赖系统安装或额外 DLL。
 
 该增量位于完整状态编码之后，客机也要还原完整字节再解码。它减少传输量，不免除整份状态的采集、编码与解码成本。网络层不按游戏字段解释或修改状态。
 

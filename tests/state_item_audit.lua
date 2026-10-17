@@ -25,21 +25,49 @@ local function report(event, values)
     Isaac.DebugString(line)
 end
 local stress = createStress(report)
-local codecVerified
+local codecVerified, codecTick, codecFollowing
+local fieldsProbe
+local function saveCodecSnapshot(bytes, suffix)
+    local role = host and "host" or "client"
+    local path = audit.snapshotPrefix
+        .. role
+        .. "-"
+        .. case.key:gsub("[^%w%-]", "_")
+        .. suffix
+        .. ".bin"
+    local file = assert(io.open(path, "wb"))
+    assert(file:write(bytes))
+    file:close()
+end
 local function verifyCodec(bytes, tick)
+    if
+        audit.verifyCodec
+        and codecVerified == case.key
+        and codecFollowing ~= case.key
+        and tick > codecTick
+    then
+        saveCodecSnapshot(bytes, "-next")
+        codecFollowing = case.key
+        report("codec_following", { tick = tick, base_tick = codecTick, bytes = #bytes })
+    end
     if not audit.verifyCodec or tick < 100 or codecVerified == case.key then
         return
     end
     local reference = assert(_IsaacLanModules["sync/codec"])
+    if not fieldsProbe then
+        fieldsProbe = createEntityFieldsProbe(
+            native,
+            reference,
+            _IsaacLanModules["sync/entity_schema"](EntityType),
+            host
+        )
+    end
+    report("entity_fields_verified", { types = fieldsProbe() })
     assert(native.state_encode and native.state_decode, "Native state codec is unavailable")
     assert(reference.encode(native.state_decode(bytes)) == bytes, "Native decode differs")
     assert(native.state_encode(reference.decode(bytes)) == bytes, "Native encode differs")
-    local role = host and "host" or "client"
-    local path = audit.snapshotPrefix .. role .. "-" .. case.key:gsub("[^%w%-]", "_") .. ".bin"
-    local file = assert(io.open(path, "wb"))
-    assert(file:write(bytes))
-    file:close()
-    codecVerified = case.key
+    saveCodecSnapshot(bytes, "")
+    codecVerified, codecTick = case.key, tick
     report("codec_verified", { tick = tick, bytes = #bytes })
 end
 local roomEffects = createRoomEffects(report)
@@ -821,6 +849,7 @@ function _IsaacLanBotFrame()
         local useTick = case.use_tick or 60
         if
             not case.recipe
+            and not case.idle
             and s.verified >= useTick + 25
             and s.verified < (case.shot_effect and 240 or useTick + 80)
         then
@@ -830,7 +859,7 @@ function _IsaacLanBotFrame()
             mask = familiarEffects.input(case, s.verified)
         end
     end
-    native.input_bot(mask ~= 0 and 1 or 0, mask)
+    native.input_bot((case and case.idle or mask ~= 0) and 1 or 0, mask)
 end
 function _IsaacLanFrame()
     renders = renders + 1

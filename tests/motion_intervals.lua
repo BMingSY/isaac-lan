@@ -113,6 +113,15 @@ motion.reset()
 state = {}
 accept(6, 0, 20, 0)
 close(render(6), 20)
+-- Stationary snapshots preserve position without allocating render vectors;
+-- starting movement clears the fast path and keeps normal extrapolation.
+local still = state.track
+assert(still.stationary and motion.sample(still, 7) == still.target)
+accept(7, 1, 20, 0)
+assert(state.track == still and state.track.stationary)
+accept(8, 2, 20, 60)
+assert(not state.track.stationary)
+close(render(8 + 1 / 60), 21)
 
 -- Exercise local prediction with the actual item compatibility adapter. A held
 -- crafting bag reports an unfinished extra animation throughout PickupWalk.

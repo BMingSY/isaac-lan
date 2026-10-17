@@ -48,6 +48,7 @@ end
 local createReplica =
     dofile(root .. "/src/bridge/sync/replica.lua")(dofile(root .. "/src/bridge/sync/fields.lua"))
 local decodes, refreshItems = 0, nil
+local pointers = {}
 local replica = createReplica({
     encode = codec.encode,
     decode = function(bytes)
@@ -92,7 +93,12 @@ local replica = createReplica({
     vec = vector,
     playerType = 1,
     pointer = function(p)
-        return { Ref = p }
+        local pointer = { Ref = p }
+        pointers[#pointers + 1] = pointer
+        return pointer
+    end,
+    hash = function(p)
+        return p
     end,
     prediction = {
         new = function()
@@ -386,6 +392,22 @@ replica.resetView()
 assert(
     replica.apply(postponed, 31, 0) and decodes == beforeReset + 1,
     "Reset retained a decoded view from the previous lifecycle"
+)
+local pointerCount = #pointers
+assert(
+    replica.apply(packet(32), 32, 0) and #pointers == pointerCount,
+    "Repeated entity allocated another native reference"
+)
+local oldPlayer = player
+player = setmetatable({}, { __index = oldPlayer })
+assert(
+    replica.apply(packet(33), 33, 0) and #pointers == pointerCount + 1,
+    "Actor replacement reused the previous allocation's reference"
+)
+pointers[#pointers].Ref = nil
+assert(
+    replica.apply(packet(34), 34, 0) and #pointers == pointerCount + 2,
+    "Expired reference was retained"
 )
 replica.reset()
 local resetTick, resetActors, resetMotion = replica.present("", 0)

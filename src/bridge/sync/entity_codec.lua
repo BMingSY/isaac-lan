@@ -33,6 +33,40 @@ return function(wire)
         end
         local common, schema = schemas.common, schemas.byType
         local types = schemas.types
+        local plans = {}
+        if native.entity_fields_plan then
+            for kind, names in pairs(schema) do
+                if type(kind) == "number" then
+                    plans[kind] = native.entity_fields_plan(kind, {
+                        false, -- Entity.id
+                        "Type",
+                        "Variant",
+                        "SubType",
+                        "InitSeed",
+                        "Position",
+                        "Velocity",
+                        common,
+                        names,
+                        false, -- Entity.sprite
+                        false, -- Entity.parent
+                        false, -- Entity.spawner
+                        false, -- Entity.child
+                        false, -- Entity.target
+                        "SpriteOffset",
+                        "SpriteScale",
+                        "Color",
+                        "FrameCount",
+                        "EntityFlags",
+                        false, -- Entity.laserPath
+                        false, -- Entity.laserEndPoint
+                        false, -- Entity.shadow
+                        false, -- Entity.npc
+                        false, -- Entity.compatibility
+                        false, -- Entity.minecart
+                    })
+                end
+            end
+        end
         local function typed(e)
             if e.Type == types.ENTITY_PLAYER then
                 return e:ToPlayer(), schema[types.ENTITY_PLAYER]
@@ -97,7 +131,27 @@ return function(wire)
                 object[name] = values[i]
             end
         end
+        local spritePlan = native.sprite_fields_plan
+            and native.sprite_fields_plan({
+                "Filename",
+                "Animation",
+                "Frame",
+                "OverlayAnimation",
+                "OverlayFrame",
+                "FlipX",
+                "FlipY",
+                "Rotation",
+                "Scale",
+                "Offset",
+                "Color",
+                false,
+            })
         local function sprite(s)
+            if spritePlan then
+                local value = native.sprite_fields_capture(s, spritePlan)
+                value[Sprite.native] = assert(native.sprite_state(s))
+                return value
+            end
             -- Preserve Lua array preallocation; positions follow sync/fields.
             return {
                 s:GetFilename(), -- Sprite.path
@@ -130,10 +184,14 @@ return function(wire)
             else
                 s:RemoveOverlay()
             end
-            s.FlipX, s.FlipY, s.Rotation = v[Sprite.flipX], v[Sprite.flipY], v[Sprite.rotation]
-            s.Scale = vec(v[Sprite.scale])
-            s.Offset = vec(v[Sprite.offset])
-            s.Color = col(v[Sprite.color])
+            if spritePlan then
+                assert(native.sprite_fields_apply(s, spritePlan, v))
+            else
+                s.FlipX, s.FlipY, s.Rotation = v[Sprite.flipX], v[Sprite.flipY], v[Sprite.rotation]
+                s.Scale = vec(v[Sprite.scale])
+                s.Offset = vec(v[Sprite.offset])
+                s.Color = col(v[Sprite.color])
+            end
             local changed = assert(native.sprite_state(s, v[Sprite.native]))
             for _, layer in ipairs(changed) do
                 s:ReplaceSpritesheet(layer[Spritesheet.layer], layer[Spritesheet.path])
@@ -146,56 +204,82 @@ return function(wire)
             if visual == nil then
                 visual = true
             end
-            local object, names = typed(e)
+            local s = e:GetSprite()
             if visual then
-                assert(native.entity_prepare(e:GetSprite()))
+                assert(native.entity_prepare(s))
+            end
+            local plan = plans[e.Type]
+            local object, names
+            if not plan then
+                object, names = typed(e)
             end
             -- Preserve Lua array preallocation; positions follow sync/fields.
-            return {
-                id(e), -- Entity.id
-                e.Type, -- Entity.type
-                e.Variant, -- Entity.variant
-                e.SubType, -- Entity.subtype
-                e.InitSeed, -- Entity.seed
-                vector(e.Position), -- Entity.position
-                vector(e.Velocity), -- Entity.velocity
-                fields(e, common), -- Entity.common
-                fields(object, names), -- Entity.typed
-                visual and sprite(e:GetSprite()) or false, -- Entity.sprite
-                id(e.Parent), -- Entity.parent
-                id(e.SpawnerEntity), -- Entity.spawner
-                id(e.Child), -- Entity.child
-                id(e.Target), -- Entity.target
-                vector(e.SpriteOffset), -- Entity.offset
-                vector(e.SpriteScale), -- Entity.scale
-                color(e.Color), -- Entity.color
-                e.FrameCount, -- Entity.frame
-                e:GetEntityFlags(), -- Entity.flags
-                e.Type == types.ENTITY_LASER and assert(native.laser_path(e:GetSprite())) or false, -- Entity.laserPath
-                e.Type == types.ENTITY_LASER and vector(e:ToLaser().EndPoint) or false, -- Entity.laserEndPoint
-                visual and assert(native.entity_shadow(e:GetSprite())) or false, -- Entity.shadow
-                npcState.capture(e:ToNPC()), -- Entity.npc
-                visual and visualCompatibility and visualCompatibility.capture(e, id) or false, -- Entity.compatibility
-                visual and entityLinks.capture(e, id) or 0, -- Entity.minecart
-            }
+            local value = plan and native.entity_fields_capture(s, plan)
+                or {
+                    false, -- Entity.id
+                    e.Type, -- Entity.type
+                    e.Variant, -- Entity.variant
+                    e.SubType, -- Entity.subtype
+                    e.InitSeed, -- Entity.seed
+                    vector(e.Position), -- Entity.position
+                    vector(e.Velocity), -- Entity.velocity
+                    fields(e, common), -- Entity.common
+                    fields(object, names), -- Entity.typed
+                    false, -- Entity.sprite
+                    false, -- Entity.parent
+                    false, -- Entity.spawner
+                    false, -- Entity.child
+                    false, -- Entity.target
+                    vector(e.SpriteOffset), -- Entity.offset
+                    vector(e.SpriteScale), -- Entity.scale
+                    false, -- Entity.color
+                    e.FrameCount, -- Entity.frame
+                    e:GetEntityFlags(), -- Entity.flags
+                    e.Type == types.ENTITY_LASER and assert(native.laser_path(s)) or false, -- Entity.laserPath
+                    e.Type == types.ENTITY_LASER and vector(e:ToLaser().EndPoint) or false, -- Entity.laserEndPoint
+                    false, -- Entity.shadow
+                    npcState.capture(e:ToNPC()), -- Entity.npc
+                    false, -- Entity.compatibility
+                    false, -- Entity.minecart
+                }
+            value[Entity.id] = id(e)
+            value[Entity.sprite] = visual and sprite(s) or false
+            value[Entity.parent], value[Entity.spawner] = id(e.Parent), id(e.SpawnerEntity)
+            value[Entity.child], value[Entity.target] = id(e.Child), id(e.Target)
+            if not plan then
+                value[Entity.color] = color(e.Color)
+            end
+            value[Entity.shadow] = visual and assert(native.entity_shadow(s)) or false
+            value[Entity.compatibility] = visual
+                    and visualCompatibility
+                    and visualCompatibility.capture(e, id)
+                or false
+            value[Entity.minecart] = visual and entityLinks.capture(e, id) or 0
+            return value
         end
         local function applyEntity(e, v)
-            e.Variant, e.SubType = v[Entity.variant], v[Entity.subtype]
-            e.Position = vec(v[Entity.position])
-            e.Velocity = vec(v[Entity.velocity])
-            writeFields(e, common, v[Entity.common])
-            local object, names = typed(e)
-            writeFields(object, names, v[Entity.typed])
-            e.SpriteOffset = vec(v[Entity.offset])
-            e.SpriteScale = vec(v[Entity.scale])
+            local s = e:GetSprite()
+            local plan = plans[e.Type]
+            if plan then
+                assert(native.entity_fields_apply(s, plan, v))
+            else
+                e.Variant, e.SubType = v[Entity.variant], v[Entity.subtype]
+                e.Position = vec(v[Entity.position])
+                e.Velocity = vec(v[Entity.velocity])
+                writeFields(e, common, v[Entity.common])
+                local object, names = typed(e)
+                writeFields(object, names, v[Entity.typed])
+                e.SpriteOffset = vec(v[Entity.offset])
+                e.SpriteScale = vec(v[Entity.scale])
+            end
             e.Color = col(v[Entity.color])
             -- Entity.Color resets the Sprite color (including alpha/colorize). Apply
             -- the complete native visual state last so fading creep stays faded.
             if v[Entity.sprite] then
-                applySprite(e:GetSprite(), v[Entity.sprite])
+                applySprite(s, v[Entity.sprite])
             end
             if v[Entity.shadow] then
-                assert(native.entity_shadow(e:GetSprite(), v[Entity.shadow]))
+                assert(native.entity_shadow(s, v[Entity.shadow]))
             end
             if v[Entity.npc] then
                 local npc = assert(e:ToNPC())
@@ -213,14 +297,17 @@ return function(wire)
                 e:ClearEntityFlags(blink)
                 e:AddEntityFlags(v[Entity.flags] & blink)
             else
-                e:ClearEntityFlags(e:GetEntityFlags())
-                e:AddEntityFlags(v[Entity.flags] & ~(floor | wall))
+                local current, desired = e:GetEntityFlags(), v[Entity.flags] & ~(floor | wall)
+                if current ~= desired then
+                    e:ClearEntityFlags(current)
+                    e:AddEntityFlags(desired)
+                end
             end
             if (v[Entity.flags] & floor) ~= 0 then
                 e.DepthOffset = e.DepthOffset - FLOOR_DEPTH_BIAS
             end
             if e.Type == types.ENTITY_LASER then
-                assert(native.laser_path(e:GetSprite(), v[Entity.laserPath]))
+                assert(native.laser_path(s, v[Entity.laserPath]))
                 e:ToLaser().EndPoint = vec(v[Entity.laserEndPoint])
             end
             if visualCompatibility then

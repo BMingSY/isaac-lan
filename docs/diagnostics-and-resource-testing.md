@@ -42,7 +42,7 @@ python3 tools/check_performance.py "$ISAAC_RUN_OUTPUT" --output "$ISAAC_PERFORMA
 
 [`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，反向输入保留固定延迟；375000 字节／秒对应十进制 3 Mbps。`run_network_engine.py --record-relay` 保存主机原始字节流和逐秒总下行。
 
-`isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
+`isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。它支持旧字节补丁和 Zstd prefix 记录；`full_wire` 始终是当前 Zstd 完整帧对照，CSV 的 `full_codec` 标明算法，不能将旧记录的比值解释为同算法的增量收益。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
 
 ## 编解码基准
 
@@ -57,6 +57,16 @@ python tools/benchmark_state_codec.py --runner build-codec/isaac_lan_state_codec
 
 默认输入是模拟库存和实体字段的合成状态，先核对字节一致，再测编码、解码和同房三客机片段复用；不能据此推定游戏帧率。`--snapshot` 可输入一份已还原的完整二进制视图。输出保存逐项 CPU 时间、样本数、均值／P95、速度比、执行器哈希和 JSON／JUnit；缺少一端测量、输入规模不一致或执行失败不能计为完成。报告通过表示对照执行完整，不表示实机性能已通过。
 
+[`benchmark_compression.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/benchmark_compression.py)比较真实快照的 miniz、LZ4、Zstd 完整帧，以及完整发送路径的 miniz 字节补丁和 Zstd prefix。构建时将 `ISAAC_LAN_LZ4_SOURCE_DIR` 指向上游 LZ4 1.10.0 的 `lib` 目录，生成 `isaac_lan_compression_benchmark`；LZ4 只用于基准，不链接到游戏 DLL。
+
+```sh
+python tools/benchmark_compression.py --runner "$ISAAC_COMPRESSION_RUNNER" \
+  --pair "$ISAAC_BASE_SNAPSHOT" "$ISAAC_NEXT_SNAPSHOT" \
+  --iterations 100 --output "$ISAAC_COMPRESSION_REPORT"
+```
+
+每组输入是已确认基线与下一份完整字节。一个 `--pair` 测同视图，多次提供（最多三组）测不同视图；分别执行 2／3／4 人所需的发送端压缩和各接收端解压，解压计时是各客机之和。每次还原必须逐字节相同，报告保留输入与执行器哈希、实际大小、均值／P95／P99、上下文内存及 JSON／JUnit。计时包括 prefix 索引和完整帧候选，不含网络、Lua 和游戏绘制；在目标 Windows x86 Release 构建中单独执行，不能与实机性能轮次并发。
+
 ## 按需性能与资源回归
 
 日常命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。CI 覆盖 sanitizer、Lua 实体反复创建／删除与弱引用释放、慢消费者下的有界传输，以及重复分局后的日志句柄清理；不据此推定游戏或未执行 Hook 的资源行为。
@@ -70,7 +80,9 @@ python3 tools/run_special_routes.py \
   --case campaign --performance --output "$ISAAC_RUN_OUTPUT"
 ```
 
-`engine_test.py run item-audit -- --mode stress ...` 默认开启性能统计、关闭堆观察与录像；原生异常专项可加 `--heap-check`，画面可加 `--record`，两者的测量需与纯性能轮次区分。其他道具审计模式仍保留堆观察。`--verify-codec` 在每个场景的双端各核对一次真实视图的新旧编码并保存二进制样本，压力场景在第 150 tick 的统计窗口前执行；`codec_verified` 是独立证据，不替代场景完成与退出结果。
+`engine_test.py run item-audit -- --mode stress ...` 默认开启性能统计、关闭堆观察与录像；原生异常专项可加 `--heap-check`，画面可加 `--record`，两者的测量需与纯性能轮次区分。其他道具审计模式仍保留堆观察。`stress:idle-baseline`、`stress:idle-inventory-100/300/500` 和 `stress:idle-copies-1000` 禁止自动攻击，要求双端至少 100 个渲染样本且 P95 不超过 33.33 ms；原有未带 `idle-` 的场景仍包含短暂攻击，必须分别解释。
+
+`--verify-codec` 在每个场景的双端各核对一次真实视图的新旧编码，并保存原始快照及下一 tick 的快照；同时将泪弹、跟班和效果实体的原生批量字段与游戏 Lua API 对照，客机还检查写入结果与非法数组无写入。压力场景在第 150 tick 的统计窗口前执行；`codec_verified`／`entity_fields_verified` 是独立证据，不替代场景完成与退出结果。
 
 `campaign` 使用固定路线、Boss 房定位、保护和伤害加速，原版战斗、拾取、出口、换层及羔羊结局仍实际执行；不代表随机无辅助通关。默认不录画面，按需 `--record`。隔离资料逐文件备份／恢复，进程非零退出仍判整轮失败。
 

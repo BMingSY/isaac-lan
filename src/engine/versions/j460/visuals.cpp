@@ -1,4 +1,5 @@
 #include "engine/lua_api.h"
+#include "core/occurrence_mapping.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/visuals.h"
 #include "net/protocol.h"
@@ -210,7 +211,7 @@ int doorSlot(lua_State* L) {
     lua.pushBoolean(L, true);
     return 1;
 }
-std::string string(Address p) {
+std::string_view string(Address p) {
     const auto length = at<unsigned>(p, 0x10), capacity = at<unsigned>(p, 0x14);
     if (length > capacity || length > 1024)
         throw std::runtime_error("Invalid sprite path");
@@ -348,7 +349,7 @@ int spriteState(lua_State* L) {
         unsigned changed = 0;
         for (unsigned i = 0; i < n; ++i) {
             const auto id = r.u16();
-            const auto path = r.string();
+            const auto path = r.stringView();
             const auto p = layer(s, id);
             if (p && path != string(p + 8)) {
                 lua.createTable(L, 2, 0);
@@ -491,17 +492,14 @@ int actorPose(lua_State* L) {
         const auto n = r.u16();
         if (n > 4096)
             throw std::runtime_error("Too many costumes");
-        std::vector<int> mapping(n, -1);
-        std::vector<bool> used(current.size(), false);
-        for (unsigned i = 0; i < n; ++i) {
-            const auto path = r.string();
-            for (unsigned j = 0; j < current.size(); ++j)
-                if (!used[j] && string(current[j]) == path) {
-                    mapping[i] = j;
-                    used[j] = true;
-                    break;
-                }
-        }
+        std::vector<std::string_view> localPaths, remotePaths;
+        localPaths.reserve(current.size());
+        remotePaths.reserve(n);
+        for (const auto costume : current)
+            localPaths.push_back(string(costume));
+        for (unsigned i = 0; i < n; ++i)
+            remotePaths.push_back(r.stringView());
+        const auto mapping = core::mapOccurrences(localPaths, remotePaths);
         for (unsigned i = 0; i < 15; ++i) {
             const int remote = static_cast<int>(r.u32()), layerID = static_cast<int>(r.u32());
             const auto priority = r.u32(), body = boolean(r);
