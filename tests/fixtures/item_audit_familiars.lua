@@ -122,7 +122,14 @@ return function(report, actor, moveRoom, moveFloor)
             end
         end,
         suppressPlayerTear = function(tear)
-            if rules and tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer() then
+            -- Incubus initially creates a player tear, then assigns itself as
+            -- the source before the next update. Wait for that native setup.
+            if
+                rules
+                and tear.FrameCount > 0
+                and tear.SpawnerEntity
+                and tear.SpawnerEntity:ToPlayer()
+            then
                 tear:Remove()
             end
         end,
@@ -185,6 +192,7 @@ return function(report, actor, moveRoom, moveFloor)
                         value.shots[#value.shots + 1] = {
                             id = data.__isaac_lan_replica or data.__isaac_lan_entity or 0,
                             age = tear.FrameCount,
+                            source_age = source.FrameCount,
                             damage = tear.CollisionDamage,
                             controller = source.Player and source.Player.ControllerIndex or -1,
                             spectral = tear:HasTearFlags(TearFlags.TEAR_SPECTRAL),

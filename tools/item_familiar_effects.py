@@ -112,7 +112,7 @@ def familiar_checks(case, observations):
         )
         volleys = defaultdict(list)
         for e, s in shots.values():
-            volleys[e["tick"] - s["age"]].append(s)
+            volleys[s["source_age"] - s["age"]].append(s)
         full = [v for v in volleys.values() if len(v) == rules.get("volley", 1)]
         check(phase + "_volley", [len(full) >= 3])
         times = sorted(volleys)

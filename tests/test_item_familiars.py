@@ -47,6 +47,7 @@ def evidence(enum="COLLECTIBLE_BROTHER_BOBBY"):
                 {
                     "id": tick * 10 + j,
                     "age": 1,
+                    "source_age": tick,
                     "damage": damage,
                     "controller": 1,
                     "spectral": bool(rules.get("spectral")),
@@ -149,9 +150,23 @@ def test_familiar_damage_waits_for_native_update_and_clears_between_cases():
         helper.prepare({})
         helper.sample(case, 164, true)
         assert(#events == 1, 'Pending native references must be dropped on exit')
-        local tear = { SpawnerEntity = { ToPlayer = function() return true end } }
+        local tear = {
+            FrameCount = 1, SpawnerEntity = { ToPlayer = function() return true end }
+        }
         function tear:Remove() error('Player tear suppression survived case cleanup') end
         helper.suppressPlayerTear(tear)
+        helper.prepare(case)
+        tear.FrameCount = 0
+        function tear:Remove() error('Incubus source has not been assigned yet') end
+        helper.suppressPlayerTear(tear)
+        tear.FrameCount = 1
+        tear.SpawnerEntity = { ToPlayer = function() return nil end }
+        helper.suppressPlayerTear(tear)
+        local removed = false
+        tear.SpawnerEntity = { ToPlayer = function() return true end }
+        function tear:Remove() removed = true end
+        helper.suppressPlayerTear(tear)
+        assert(removed, 'Only the holder tear is isolated from target damage')
     """
     executable = shutil.which("lua5.3") or shutil.which("lua")
     assert executable, "Lua 5.3 is required"
@@ -162,3 +177,12 @@ def test_familiar_damage_waits_for_native_update_and_clears_between_cases():
         cwd=Path(__file__).resolve().parents[1],
         check=True,
     )
+
+
+def test_familiar_cadence_uses_native_updates_during_network_barriers():
+    case, peers = evidence()
+    for peer in peers.values():
+        for e in peer:
+            if e["event"] == "familiar_probe" and e["shots"]:
+                e["tick"] += 1 if e["tick"] % 3 else 2
+    assert all(c["status"] == "passed" for c in familiar_checks(case, peers))
