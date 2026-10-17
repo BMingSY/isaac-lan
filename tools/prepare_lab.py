@@ -33,6 +33,12 @@ def main():
         ):
             shutil.copy2(source, game / source.name)
             manifest[source.name] = hashlib.sha256(source.read_bytes()).hexdigest()
+    # A copied LAN loader retains its ownership; arbitrary multimedia DLLs must
+    # still be rejected by the backend before replacement.
+    loader_marker = args.game / ".isaac-lan-loader"
+    if (game / "winmm.dll").is_file() and loader_marker.is_file():
+        shutil.copy2(loader_marker, game / loader_marker.name)
+        manifest[loader_marker.name] = hashlib.sha256(loader_marker.read_bytes()).hexdigest()
     # Independent copies: even an unexpected resource write cannot reach the live game.
     shutil.copytree(args.game / "resources", game / "resources")
     shutil.copy2(args.build / "isaac_lan_probe.dll", game)

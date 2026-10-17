@@ -10,6 +10,69 @@ from item_audit import catalog_from_log, events, select_cases, summarize_case
 from lab_profile import validate_labs, validate_startup
 
 
+@pytest.mark.parametrize(
+    "status,restored,expected",
+    [
+        ("verified", True, 0),
+        ("basic_pass", True, 0),
+        ("incomplete", True, 1),
+        ("problem", True, 1),
+        ("untested", True, 1),
+        ("verified", False, 1),
+    ],
+)
+def test_audit_exit_and_reports_require_case_completion(
+    tmp_path, monkeypatch, status, restored, expected
+):
+    import run_item_audit as runner
+
+    output, build = tmp_path / "output", tmp_path / "build"
+    build.mkdir()
+    for name in ("isaac_lan_probe.dll", "winmm.dll"):
+        (build / name).write_bytes(b"candidate")
+    case = {"key": "collectible:1:host-same"}
+    monkeypatch.setattr(runner, "configure_interrupts", lambda: None)
+    monkeypatch.setattr(runner, "validate_labs", lambda *args: [])
+    monkeypatch.setattr(runner, "validate_startup", lambda *args: None)
+    monkeypatch.setattr(runner, "idle", lambda *args: None)
+    monkeypatch.setattr(runner, "select_cases", lambda *args, **kwargs: [case])
+    monkeypatch.setattr(
+        runner,
+        "run_batch",
+        lambda *args: {
+            "engine": {"pass": True},
+            "restored": restored,
+            "results": [{**case, "status": status}],
+        },
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_item_audit",
+            "--host",
+            str(tmp_path / "host"),
+            "--client",
+            str(tmp_path / "client"),
+            "--build",
+            str(build),
+            "--output",
+            str(output),
+            "--mode",
+            "catalog",
+        ],
+    )
+    assert runner.main() == expected
+    summary = json.loads((output / "summary.json").read_text())
+    report = json.loads((output / "report.json").read_text())
+    assert report == summary
+    assert report["passed"] == (expected == 0)
+    assert report["status"] == ("passed" if expected == 0 else "failed")
+    from xml.etree import ElementTree as ET
+
+    assert ET.parse(output / "junit.xml").getroot().get("failures") == str(expected)
+
+
 def test_effect_recipes_use_real_unique_catalog_enums():
     from item_effect_checks import SUPPORTED_EFFECTS
 

@@ -446,6 +446,12 @@ def summarize_case(case, peers, engine=None):
     return result
 
 
+def cases_passed(results):
+    return bool(results) and all(
+        result["status"] in {"verified", "basic_pass"} for result in results
+    )
+
+
 def build_fixture(path, config):
     path.write_text(
         "local audit = "

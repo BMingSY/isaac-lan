@@ -14,13 +14,14 @@ from item_audit import (
     ROOT,
     build_fixture,
     catalog_from_log,
+    cases_passed,
     events,
     select_cases,
     summarize_case,
     stress_cases,
     unexpected_peer_failure,
 )
-from testing.results import finish_run
+from testing.results import SCHEMA_VERSION, finish_run, write_report
 from testing.engine import configure_interrupts, engine_command
 from lab_profile import ProtectedLabs, idle, windows, validate_labs, validate_startup
 from item_effect_checks import SUPPORTED_EFFECTS
@@ -131,11 +132,7 @@ def run_batch(args, cases, output, labs):
                 except ValueError as error:
                     report["catalog_error"] = str(error)
         report["results"] = [summarize_case(case, peers, report["engine"]) for case in cases]
-        report["passed"] = (
-            bool(report["engine"].get("pass"))
-            and bool(report["results"])
-            and all(result["status"] in {"verified", "basic_pass"} for result in report["results"])
-        )
+        report["passed"] = bool(report["engine"].get("pass")) and cases_passed(report["results"])
     finally:
         finish_run(protected, report, output, process=process)
     return report
@@ -320,9 +317,15 @@ def main():
         summary["results"] = results + [
             {**case, "status": "untested", "compatibility_verified": False} for case in remaining
         ]
+        summary["passed"] = (
+            summary["restored"] and summary["engine_pass"] and cases_passed(summary["results"])
+        )
+        summary["schema_version"] = SCHEMA_VERSION
+        summary["status"] = "passed" if summary["passed"] else "failed"
         (output / "summary.json").write_text(
             json.dumps(summary, ensure_ascii=False, indent=2) + "\n"
         )
+        write_report(output, summary)
         if (
             not report["restored"]
             or not consumed
@@ -339,11 +342,12 @@ def main():
                 "output": str(output),
                 "restored": summary["restored"],
                 "engine_pass": summary["engine_pass"],
+                "passed": summary["passed"],
             }
         ),
         flush=True,
     )
-    return 0 if summary["restored"] and summary["engine_pass"] else 1
+    return 0 if summary["passed"] else 1
 
 
 if __name__ == "__main__":
