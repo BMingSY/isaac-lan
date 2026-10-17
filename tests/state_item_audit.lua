@@ -10,6 +10,9 @@ local prepared, used, moved, exiting, finished = false, false, false, false, fal
 local beganAt, sampleAt, relinkAt, useCount = nil, 0, 0, 0
 local catalogued, seen, lastTick, lastPhase = false, 0, 0, nil
 local placed, damaged, deathProbed = false, false, false
+local useSampled = false
+local floorMoved = false
+local cleanupRoom
 local case = audit.cases[index]
 local journal = assert(io.open(audit.journal[host and "host" or "client"], "a"))
 local function report(event, values)
@@ -53,10 +56,14 @@ local function sample(label, tick)
         return
     end
     local records = {}
+    local positions = native.rooms_positions()
+    local view = positions[tostring(_IsaacLanStatus().slot)]
     for slot = 0, 1 do
         local available = actor(slot, function(p, room)
             local count, tears, projectiles, effects = 0, 0, 0, 0
             local entities = {}
+            local familiarCounts = { blue_flies = 0, blue_spiders = 0 }
+            local familiars, targets = {}, {}
             for _, e in ipairs(Isaac.GetRoomEntities()) do
                 count = count + 1
                 tears = tears + (e.Type == EntityType.ENTITY_TEAR and 1 or 0)
@@ -66,9 +73,41 @@ local function sample(label, tick)
                     local key = e.Type .. "." .. e.Variant .. "." .. e.SubType
                     entities[key] = (entities[key] or 0) + 1
                 end
+                if case.effect_check then
+                    local familiar = e:ToFamiliar()
+                    if familiar then
+                        local player = familiar.Player
+                        familiars[#familiars + 1] = {
+                            variant = familiar.Variant,
+                            owner = player and player.ControllerIndex or -1,
+                        }
+                        if player and GetPtrHash(player) == GetPtrHash(p) then
+                            if familiar.Variant == FamiliarVariant.BLUE_FLY then
+                                familiarCounts.blue_flies = familiarCounts.blue_flies + 1
+                            elseif familiar.Variant == FamiliarVariant.BLUE_SPIDER then
+                                familiarCounts.blue_spiders = familiarCounts.blue_spiders + 1
+                            end
+                        end
+                    end
+                    if
+                        case.recipe
+                        and case.recipe.enemy_damage
+                        and e.Type == EntityType.ENTITY_GAPER
+                    then
+                        targets[#targets + 1] = { seed = e.InitSeed, hp = e.HitPoints }
+                    end
+                end
             end
+            table.sort(targets, function(a, b)
+                return a.seed < b.seed
+            end)
             records[#records + 1] = {
                 slot = slot,
+                room_visible = host
+                    or (
+                        positions[tostring(slot)].index == view.index
+                        and positions[tostring(slot)].dimension == view.dimension
+                    ),
                 x = p.Position.X,
                 y = p.Position.Y,
                 type = p:GetPlayerType(),
@@ -82,11 +121,22 @@ local function sample(label, tick)
                 max_hearts = p:GetMaxHearts(),
                 soul = p:GetSoulHearts(),
                 bone = p:GetBoneHearts(),
+                eternal = p:GetEternalHearts(),
                 black = p:GetBlackHearts(),
                 coins = p:GetNumCoins(),
                 bombs = p:GetNumBombs(),
                 keys = p:GetNumKeys(),
+                golden_bomb = p:HasGoldenBomb(),
+                golden_key = p:HasGoldenKey(),
                 flying = p.CanFly,
+                blue_flies = p:GetNumBlueFlies(),
+                blue_spiders = p:GetNumBlueSpiders(),
+                owned_blue_flies = familiarCounts.blue_flies,
+                owned_blue_spiders = familiarCounts.blue_spiders,
+                familiars = familiars,
+                targets = targets,
+                pocket_slots = p:GetMaxPocketItems(),
+                trinket_slots = p:GetMaxTrinkets(),
                 controls_cooldown = p.ControlsCooldown,
                 controls_enabled = p:AreControlsEnabled(),
                 visible = p.Visible,
@@ -106,6 +156,7 @@ local function sample(label, tick)
                 card = p:GetCard(0),
                 pill = p:GetPill(0),
                 room = native.rooms_positions()[tostring(slot)].index,
+                stage = Game():GetLevel():GetStage(),
                 entities = count,
                 tears = tears,
                 projectiles = projectiles,
@@ -116,6 +167,7 @@ local function sample(label, tick)
             -- IsClear dereferences that descriptor; only query the authority.
             if host then
                 records[#records].clear = room:IsClear()
+                records[#records].room_type = room:GetType()
                 if case.wall_use then
                     local doors = {}
                     for doorSlot = 0, 7 do
@@ -155,6 +207,29 @@ local function sample(label, tick)
         "sample",
         { label = label, tick = tick, players = records, actors = actors, uses = useCount }
     )
+end
+local function shotProbe(tick)
+    if not case.shot_effect or tick < 85 then
+        return
+    end
+    actor(case.slot, function(p)
+        local tears = {}
+        for _, e in ipairs(Isaac.GetRoomEntities()) do
+            local tear = e:ToTear()
+            local source = tear and tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer()
+            if source and source.ControllerIndex == p.ControllerIndex then
+                local data = tear:GetData()
+                tears[#tears + 1] = {
+                    id = data.__isaac_lan_replica or data.__isaac_lan_entity or 0,
+                    age = tear.FrameCount,
+                    damage = tear.CollisionDamage,
+                    vx = tear.Velocity.X,
+                    vy = tear.Velocity.Y,
+                }
+            end
+        end
+        report("shot_probe", { tick = tick, tears = tears })
+    end)
 end
 local function poolProbe(label)
     if case.kind ~= "collectible" or case.id ~= CollectibleType.COLLECTIBLE_CHAOS then
@@ -204,6 +279,20 @@ end)
 Isaac.AddCallback(owner, ModCallbacks.MC_USE_PILL, function(_, id, p)
     observedUse("pill", id, p)
 end)
+Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, amount, flags, source)
+    local p = entity:ToPlayer()
+    if case and p then
+        local from = source and source.Entity
+        report("player_damage", {
+            tick = lastTick,
+            controller = p.ControllerIndex,
+            amount = amount,
+            flags = flags,
+            source_type = from and from.Type,
+            source_variant = from and from.Variant,
+        })
+    end
+end)
 Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
     if not prepared and seen == 0 then
         return
@@ -220,6 +309,9 @@ Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
     case = audit.cases[index]
     prepared, used, moved, exiting = false, false, false, false
     placed, damaged, deathProbed = false, false, false
+    useSampled = false
+    floorMoved = false
+    cleanupRoom = nil
     linked, chosen, started = false, false, false
     beganAt, sampleAt, useCount, seen, lastTick = nil, 0, 0, 0, 0
     lastRender = nil
@@ -231,6 +323,18 @@ end)
 local function prepare(tick)
     prepared, beganAt = true, native.api_info().nowMs
     report("case_begin", { kind = case.kind, id = case.id, slot = case.slot, split = case.split })
+    if case.recipe and case.recipe.teleport then
+        local destination = case.recipe.teleport
+        local expected = { types = {} }
+        if destination == "start" then
+            expected.index = Game():GetLevel():GetStartingRoomIndex()
+        else
+            for _, name in ipairs(destination) do
+                expected.types[#expected.types + 1] = assert(RoomType[name])
+            end
+        end
+        report("teleport_target", expected)
+    end
     for slot = 0, 1 do
         actor(slot, function(p, room)
             for _, e in ipairs(Isaac.GetRoomEntities()) do
@@ -239,8 +343,23 @@ local function prepare(tick)
                 end
             end
             room:SetClear(true)
+            if case.shot_effect or case.open_room then
+                for grid = 0, room:GetGridSize() - 1 do
+                    local e = room:GetGridEntity(grid)
+                    if
+                        e
+                        and e:GetType() ~= GridEntityType.GRID_WALL
+                        and e:GetType() ~= GridEntityType.GRID_DOOR
+                    then
+                        room:RemoveGridEntity(grid, 0, false)
+                    end
+                end
+            end
             if case.kind == "stress" or case.companion then
                 p:SetMinDamageCooldown(100000)
+            end
+            if case.recipe and case.recipe.team_hearts then
+                p:AddHearts(case.recipe.team_hearts - p:GetHearts())
             end
             p.Position, p.Velocity =
                 room:GetCenterPos() + Vector(slot == case.slot and -65 or 65, 60), Vector.Zero
@@ -279,8 +398,48 @@ local function prepare(tick)
             if case.coins then
                 p:AddCoins(case.coins - p:GetNumCoins())
             end
-            if case.protect_use then
+            -- Damage cooldown makes the native player blink. Empty effect
+            -- rooms need no protection, so keep models visible for review.
+            if case.protect_use and not case.quiet_room then
                 p:SetMinDamageCooldown(300)
+            end
+            local recipe = case.recipe or {}
+            local resources = recipe.resources or {}
+            if resources.coins then
+                p:AddCoins(resources.coins - p:GetNumCoins())
+            end
+            if resources.bombs then
+                p:AddBombs(resources.bombs - p:GetNumBombs())
+            end
+            if resources.keys then
+                p:AddKeys(resources.keys - p:GetNumKeys())
+            end
+            if resources.hearts then
+                p:AddHearts(resources.hearts - p:GetHearts())
+            end
+            if resources.soul then
+                p:AddSoulHearts(resources.soul - p:GetSoulHearts())
+            end
+            if recipe.golden_bomb then
+                p:AddGoldenBomb()
+            end
+            if case.occupied_pocket then
+                p:SetCard(0, Card.CARD_FOOL)
+            end
+            if recipe.enemy_damage then
+                for i = 1, 2 do
+                    local enemy = Isaac.Spawn(
+                        EntityType.ENTITY_GAPER,
+                        0,
+                        0,
+                        room:GetCenterPos() + Vector(i == 1 and -80 or 80, -70),
+                        Vector.Zero,
+                        nil
+                    )
+                    enemy:AddEntityFlags(EntityFlag.FLAG_FREEZE)
+                    enemy.MaxHitPoints, enemy.HitPoints = 200, 200
+                end
+                room:SetClear(false)
             end
             Isaac.Spawn(
                 EntityType.ENTITY_PICKUP,
@@ -290,15 +449,17 @@ local function prepare(tick)
                 Vector.Zero,
                 nil
             )
-            Isaac.Spawn(
-                EntityType.ENTITY_GAPER,
-                0,
-                0,
-                p.Position - Vector(0, 110),
-                Vector.Zero,
-                nil
-            )
-            room:SetClear(false)
+            if not case.quiet_room then
+                Isaac.Spawn(
+                    EntityType.ENTITY_GAPER,
+                    0,
+                    0,
+                    p.Position - Vector(0, 110),
+                    Vector.Zero,
+                    nil
+                )
+                room:SetClear(false)
+            end
             if case.wall_use then
                 local level = Game():GetLevel()
                 local origin = native.rooms_positions()[tostring(case.slot)].index
@@ -377,13 +538,41 @@ local function advance(tick)
     if not native.rooms_ready() or not case or exiting then
         return
     end
+    if cleanupRoom and native.rooms_positions()[tostring(case.slot)].index == cleanupRoom then
+        actor(case.slot, function(p, room)
+            for _, e in ipairs(Isaac.GetRoomEntities()) do
+                if e.Type ~= EntityType.ENTITY_PLAYER then
+                    e:Remove()
+                end
+            end
+            for grid = 0, room:GetGridSize() - 1 do
+                local e = room:GetGridEntity(grid)
+                if
+                    e
+                    and e:GetType() ~= GridEntityType.GRID_WALL
+                    and e:GetType() ~= GridEntityType.GRID_DOOR
+                then
+                    room:RemoveGridEntity(grid, 0, false)
+                end
+            end
+            room:SetClear(true)
+            p.Position, p.Velocity = room:GetCenterPos(), Vector.Zero
+        end)
+        report("room_fixture_ready", { target = cleanupRoom, tick = tick })
+        cleanupRoom = nil
+    end
     if not catalogued then
         catalogued = true
         exportCatalog(report)
     end
     if not placed and tick >= 20 then
         placed = true
-        if case.split then
+        if case.recipe and case.recipe.teleport == "start" then
+            local start = Game():GetLevel():GetStartingRoomIndex()
+            local origin = otherRoom(start)
+            assert(native.rooms_move(case.slot, origin, 0, -1))
+            assert(native.rooms_move(1 - case.slot, case.split and start or origin, 0, -1))
+        elseif case.split then
             -- The starting room has an empty wall suitable for Red Key.
             -- Keep the holder there and move the teammate for this prerequisite.
             local slot = case.wall_use and (1 - case.slot) or 1
@@ -425,7 +614,13 @@ local function advance(tick)
     if used and tick % 30 == 0 then
         sample("observe", tick)
     end
-    if not damaged and tick >= useTick + 60 and case.kind ~= "stress" and not case.mega then
+    if
+        not damaged
+        and tick >= useTick + 60
+        and case.kind ~= "stress"
+        and not case.mega
+        and not case.recipe
+    then
         damaged = true
         actor(case.slot, function(p)
             if not p:IsDead() and not p:IsCoopGhost() and p:GetHearts() + p:GetSoulHearts() > 1 then
@@ -434,6 +629,43 @@ local function advance(tick)
                 p:TakeDamage(1, 0, EntityRef(p), 0)
             end
         end)
+    end
+    if
+        case.recipe
+        and (case.recipe.expire_room or case.recipe.golden_lifecycle or case.recipe.eternal_lifecycle)
+        and not moved
+        and tick >= 150
+    then
+        sample("before_room", tick)
+        moved = true
+        local target = otherRoom(native.rooms_positions()[tostring(case.slot)].index)
+        -- rooms_move queues the transfer. Protect the holder through entry,
+        -- then clear the actual destination once its room has been loaded.
+        actor(case.slot, function(p)
+            p:SetMinDamageCooldown(300)
+        end)
+        assert(native.rooms_move(case.slot, target, 0, -1))
+        cleanupRoom = target
+        report("room_changed", { target = target })
+    end
+    if case.recipe and case.recipe.reunite and not moved and tick >= 150 then
+        moved = true
+        local target = native.rooms_positions()[tostring(case.slot)]
+        assert(native.rooms_move(1 - case.slot, target.index, target.dimension, -1))
+        report("reunited", { tick = tick, target = target.index })
+    end
+    if
+        case.recipe
+        and (case.recipe.golden_lifecycle or case.recipe.eternal_lifecycle)
+        and not floorMoved
+        and tick >= 240
+    then
+        floorMoved = true
+        sample("before_floor", tick)
+        actor(case.slot, function(p)
+            Game():StartStageTransition(false, 0, p)
+        end)
+        report("floor_requested", { tick = tick })
     end
     if (case.mega or case.companion) and not moved and tick >= 240 then
         sample("before_room", tick)
@@ -479,7 +711,11 @@ function _IsaacLanBotFrame()
     local mask = 0
     if case and s.slot == case.slot and native.api_info().ready == 1 then
         local useTick = case.use_tick or 60
-        if s.verified >= useTick + 25 and s.verified < useTick + 80 then
+        if
+            not case.recipe
+            and s.verified >= useTick + 25
+            and s.verified < (case.shot_effect and 240 or useTick + 80)
+        then
             mask = 1 << ButtonAction.ACTION_SHOOTUP
         end
     end
@@ -573,6 +809,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         local began = Isaac.GetTime()
         local bytes = collect(...)
+        if case.recipe and useCount > 0 and not useSampled then
+            useSampled = true
+            sample("post_use", tick)
+        end
+        shotProbe(tick)
         if case.kind == "stress" and lastTick >= 150 then
             stress.record("capture", Isaac.GetTime() - began)
             stress.record("raw_bytes", #bytes)
@@ -586,6 +827,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             stress.record("raw_bytes", #bytes)
         end
         if result ~= false then
+            shotProbe(tick)
             lastTick = tick
             if not prepared then
                 prepared = true

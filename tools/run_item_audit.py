@@ -298,12 +298,21 @@ def main():
     except (ValueError, OSError) as error:
         parser.error(str(error))
     output.mkdir(parents=True, exist_ok=False)
+    validator = ROOT / "tools/item_effect_checks.py"
+    shutil.copy2(validator, output / validator.name)
+    recipes = ROOT / "tools/item_consumable_recipes.py"
+    shutil.copy2(recipes, output / recipes.name)
+    audit_contract = ROOT / "tools/item_audit.py"
+    shutil.copy2(audit_contract, output / audit_contract.name)
     manifest = {
         "commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip(),
         "dll_sha256": hashlib.sha256((args.build / "isaac_lan_probe.dll").read_bytes()).hexdigest(),
         "loader_sha256": hashlib.sha256((args.build / "winmm.dll").read_bytes()).hexdigest(),
+        "validator_sha256": hashlib.sha256(validator.read_bytes()).hexdigest(),
+        "recipes_sha256": hashlib.sha256(recipes.read_bytes()).hexdigest(),
+        "audit_sha256": hashlib.sha256(audit_contract.read_bytes()).hexdigest(),
         "cases": cases,
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

@@ -43,6 +43,8 @@ def item_status(key, checks):
         for context in ("host-same", "client-split")
         for suffix in (("", "/horse") if key.startswith("pill:") else ("",))
     }
+    if any(check.get("conditions", {}).get("pocket_effect") for check in checks):
+        required |= {case + "/occupied" for case in list(required)}
     verified = {check["case"] for check in latest.values() if check["status"] == "verified"}
     return "verified" if required <= verified else "basic_pass" if checks else "untested"
 
@@ -115,6 +117,9 @@ def import_run(findings, directory):
         if not report_path.is_file():
             continue
         report = json.loads(report_path.read_text())
+        # New runs freeze their validator and results. Reimporting evidence
+        # after a recipe correction must not silently rewrite the old failure.
+        frozen = {r["key"]: r for r in report.get("results", [])}
         peers = {}
         for role in ("host", "client"):
             path = batch / (role + "-events.log")
@@ -122,7 +127,12 @@ def import_run(findings, directory):
                 path = batch / "engine" / role / "log.txt"
             peers[role] = events(path.read_text(errors="replace")) if path.is_file() else []
         for case in report["cases"]:
-            result = summarize_case(case, peers, report.get("engine"))
+            if manifest.get("validator_sha256"):
+                if case["key"] not in frozen:
+                    raise ValueError("Frozen audit is missing a case result")
+                result = frozen[case["key"]]
+            else:
+                result = summarize_case(case, peers, report.get("engine"))
             if result["status"] == "untested":
                 continue
             evidence = directory.name + "/" + batch.name
@@ -175,6 +185,8 @@ def import_run(findings, directory):
                         "end_tick",
                         "hold_ticks",
                         "use_tick",
+                        "pocket_effect",
+                        "occupied_pocket",
                     )
                     if key in case
                 },

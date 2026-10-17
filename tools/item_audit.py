@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 import re
 
-from item_effect_checks import STAT_EFFECTS, effect_checks
+from item_effect_checks import SHOT_EFFECTS, SUPPORTED_EFFECTS, effect_checks
+from item_consumable_recipes import CONSUMABLE_RECIPES, consumable_recipe
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "LAN_ITEM_AUDIT "
@@ -135,12 +136,47 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
                         "companion": (item["kind"] == "card" and item["id"] in (95, 97))
                         or (item["kind"] == "trinket" and item["id"] == 180),
                         "physical": item["kind"] in {"card", "pill"} or item.get("item_type") == 3,
-                        "effect_check": item.get("enum") in STAT_EFFECTS,
-                        "protect_use": item.get("enum") in STAT_EFFECTS
+                        "effect_check": item.get("enum") in SUPPORTED_EFFECTS,
+                        "quiet_room": item.get("enum") in SUPPORTED_EFFECTS,
+                        "shot_effect": item.get("enum") in SHOT_EFFECTS,
+                        "protect_use": item.get("enum") in SUPPORTED_EFFECTS
                         or item.get("enum") in ("COLLECTIBLE_STITCHES", "COLLECTIBLE_SUPLEX"),
                         "moving_use": item.get("enum") == "COLLECTIBLE_SUPLEX",
                     }
                 )
+                if item.get("enum") in SHOT_EFFECTS:
+                    cases[-1]["end_tick"] = 300
+                if item.get("enum") in CONSUMABLE_RECIPES:
+                    recipe = consumable_recipe(cases[-1])
+                    cases[-1]["recipe"] = {
+                        key: recipe[key]
+                        for key in (
+                            "resources",
+                            "expire_room",
+                            "enemy_damage",
+                            "golden_bomb",
+                            "team_hearts",
+                            "golden_lifecycle",
+                            "eternal_lifecycle",
+                            "reunite",
+                            "teleport",
+                        )
+                        if key in recipe
+                    }
+                    cases[-1]["open_room"] = True
+                    if recipe.get("expire_room") or recipe.get("reunite") or recipe.get("teleport"):
+                        cases[-1]["end_tick"] = 270
+                    if recipe.get("golden_lifecycle") or recipe.get("eternal_lifecycle"):
+                        cases[-1]["end_tick"] = 480
+                    if recipe.get("pocket"):
+                        cases[-1]["pocket_effect"] = True
+                        cases.append(
+                            {
+                                **cases[-1],
+                                "key": cases[-1]["key"] + "/occupied",
+                                "occupied_pocket": True,
+                            }
+                        )
     return cases
 
 

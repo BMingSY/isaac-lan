@@ -18,6 +18,420 @@ def test_effect_recipes_use_real_unique_catalog_enums():
     assert all(names.count(name) == 1 for name in SUPPORTED_EFFECTS)
 
 
+def test_familiar_counts_follow_the_replica_room_and_reappear_on_reunion():
+    from copy import deepcopy
+    from item_effect_checks import consumable_checks, stat_checks
+
+    case = {"enum": "PILLEFFECT_FRIENDS_TILL_THE_END", "slot": 0, "split": True}
+
+    def sample(label, tick, flies, joined=False):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [
+                {"slot": 0, "room": 84, "owned_blue_flies": flies, "room_visible": True},
+                {
+                    "slot": 1,
+                    "room": 84 if joined else 97,
+                    "owned_blue_flies": 0,
+                    "room_visible": True,
+                },
+            ],
+        }
+
+    host = [sample("before", 30, 0), sample("post_use", 61, 3)]
+    host += [sample("captured", t, 3, t >= 180) for t in (90, 120, 180, 210)]
+    client = deepcopy(host[2:])
+    for e in client[:2]:
+        e["players"][0].update(owned_blue_flies=0, room_visible=False)
+    peers = {"host": host, "client": client}
+    checks = lambda: stat_checks(case, peers) + consumable_checks(case, peers)
+    assert all(c["status"] == "passed" for c in checks())
+    client[0]["players"][0]["owned_blue_flies"] = 3
+    assert any(c["status"] == "failed" for c in checks())
+    client[0]["players"][0]["owned_blue_flies"] = 0
+    client[-1]["players"][0]["owned_blue_flies"] = 0
+    assert next(c for c in checks() if c["name"] == "familiar_reunion")["status"] == "failed"
+    peers["client"] = client[:2]
+    assert next(c for c in checks() if c["name"] == "familiar_reunion")["status"] == "missing"
+
+
+def test_all_effect_scenarios_build_a_parseable_native_fixture(tmp_path):
+    import shutil
+    import subprocess
+    from item_audit import build_fixture
+    from item_effect_checks import SUPPORTED_EFFECTS
+
+    catalog = json.loads((ROOT / "tests/fixtures/item_catalog.json").read_text())
+    keys = [item["key"] for item in catalog["items"] if item.get("enum") in SUPPORTED_EFFECTS]
+    path = tmp_path / "effects.lua"
+    build_fixture(
+        path,
+        {
+            "cases": select_cases(catalog, keys),
+            "journal": {"host": "host.log", "client": "client.log"},
+        },
+    )
+    subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(path)], check=True)
+
+
+def test_teleport_requires_correct_destination_and_independent_teammate():
+    from copy import deepcopy
+    from item_effect_checks import consumable_checks
+
+    case = {"enum": "CARD_EMPEROR", "slot": 1}
+
+    def sample(label, tick, destination, room_type):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [{"room": 84}, {"room": destination, "room_type": room_type}],
+        }
+
+    host = [{"event": "teleport_target", "types": [5]}, sample("before", 30, 97, 1)]
+    host += [sample("captured", t, 65, 5) for t in (150, 180)]
+    peers = {"host": host, "client": deepcopy(host[2:])}
+    assert all(c["status"] == "passed" for c in consumable_checks(case, peers))
+    host[-1]["players"][1]["room_type"] = 2
+    assert consumable_checks(case, peers)[0]["status"] == "failed"
+    peers["client"][-1]["players"][0]["room"] = 65
+    assert consumable_checks(case, peers)[2]["status"] == "failed"
+    peers["client"] = []
+    assert all(c["status"] == "missing" for c in consumable_checks(case, peers))
+
+
+def test_spawned_spiders_require_native_count_and_survive_reunion():
+    from copy import deepcopy
+    from item_effect_checks import consumable_checks
+
+    case = {"enum": "COLLECTIBLE_BOX_OF_SPIDERS", "slot": 1}
+
+    def sample(label, tick, count):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [
+                {"room": 84, "owned_blue_spiders": 0},
+                {"room": 84, "owned_blue_spiders": count, "room_visible": True},
+            ],
+        }
+
+    host = [sample("before", 30, 0), sample("post_use", 61, 6)]
+    host += [sample("captured", t, 6) for t in (180, 210)]
+    peers = {"host": host, "client": deepcopy(host[2:])}
+    assert all(c["status"] == "passed" for c in consumable_checks(case, peers))
+    host[1]["players"][1]["owned_blue_spiders"] = 3
+    assert consumable_checks(case, peers)[0]["status"] == "failed"
+    host[1]["players"][1]["owned_blue_spiders"] = 6
+    for e in host[2:] + peers["client"]:
+        e["players"][1]["owned_blue_spiders"] = 0
+    assert (
+        next(c for c in consumable_checks(case, peers) if c["name"] == "familiar_reunion")["status"]
+        == "failed"
+    )
+
+
+def test_prayer_card_requires_heart_conversion_on_next_floor():
+    from copy import deepcopy
+    from item_effect_checks import consumable_checks
+
+    case = {"enum": "COLLECTIBLE_PRAYER_CARD", "slot": 1}
+
+    def sample(label, tick, room, stage, eternal, maximum):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [
+                {"eternal": 0},
+                {"eternal": eternal, "room": room, "stage": stage, "max_hearts": maximum},
+            ],
+        }
+
+    host = [sample("before", 30, 97, 1, 0, 6), sample("post_use", 61, 97, 1, 1, 6)]
+    host += [sample("captured", t, 84, 1, 1, 6) for t in (180, 210)]
+    host += [sample("captured", t, 84, 2, 0, 8) for t in (360, 390)]
+    peers = {"host": host, "client": deepcopy(host[2:])}
+    assert all(c["status"] == "passed" for c in consumable_checks(case, peers))
+    peers["client"][-1]["players"][1]["max_hearts"] = 6
+    assert consumable_checks(case, peers)[-1]["status"] == "failed"
+
+
+def test_pickup_effect_requires_new_objects_and_replica_evidence():
+    from item_effect_checks import spawn_checks
+
+    case = {"enum": "COLLECTIBLE_SQUEEZY", "slot": 1}
+
+    def sample(label, tick, count):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [{"entity_types": {}}, {"entity_types": {"5.10.3": count}}],
+        }
+
+    host = [
+        sample("before", 30, 1),
+        sample("acquired", 30, 3),
+        sample("captured", 90, 3),
+        sample("captured", 120, 3),
+    ]
+    peers = {"host": host, "client": host[-2:]}
+    assert all(c["status"] == "passed" for c in spawn_checks(case, peers))
+    host[1] = sample("acquired", 30, 2)
+    assert spawn_checks(case, peers)[0]["status"] == "failed"
+    peers["client"] = []
+    assert spawn_checks(case, peers)[1]["status"] == "missing"
+
+
+def test_generated_objects_are_absent_outside_the_client_room():
+    from item_effect_checks import spawn_checks
+
+    case = {"enum": "COLLECTIBLE_ANARCHIST_COOKBOOK", "slot": 0}
+
+    def sample(label, tick, count, visible):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [{"entity_types": {"4.3.0": count}, "room_visible": visible}, {}],
+        }
+
+    host = [sample("before", 30, 0, True), sample("post_use", 62, 6, True)]
+    host += [sample("captured", t, 6, True) for t in (90, 100)]
+    client = [sample("replica", t, 0, False) for t in (90, 100)]
+    peers = {"host": host, "client": client}
+    assert all(c["status"] == "passed" for c in spawn_checks(case, peers))
+    client[0]["players"][0]["entity_types"]["4.3.0"] = 6
+    assert spawn_checks(case, peers)[1]["status"] == "failed"
+
+
+def test_multishot_requires_actual_volleys_and_synced_damage():
+    from copy import deepcopy
+    from item_effect_checks import shot_checks
+
+    case = {"enum": "COLLECTIBLE_INNER_EYE", "slot": 1}
+    host = [
+        {
+            "event": "shot_probe",
+            "tick": tick,
+            "tears": [
+                {"id": offset + i, "age": 1, "damage": 3.5, "vx": i - 2, "vy": -10}
+                for i in range(1, 4)
+            ],
+        }
+        for tick, offset in ((90, 0), (120, 3))
+    ]
+    peers = {"host": host, "client": deepcopy(host)}
+    assert all(c["status"] == "passed" for c in shot_checks(case, peers))
+    peers["client"][0]["tears"][0]["damage"] = 7
+    assert shot_checks(case, peers)[1]["status"] == "failed"
+    host[1]["tears"].pop()
+    assert shot_checks(case, peers)[0]["status"] == "failed"
+    assert all(c["status"] == "missing" for c in shot_checks(case, {}))
+
+
+def test_consumable_requires_native_use_spawns_and_not_just_acquisition():
+    from item_effect_checks import spawn_checks
+
+    case = {"enum": "CARD_HIEROPHANT", "slot": 1}
+
+    def sample(label, tick, count):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [{"entity_types": {}}, {"entity_types": {"5.10.3": count}}],
+        }
+
+    host = [
+        sample("before", 30, 0),
+        sample("acquired", 30, 0),
+        sample("post_use", 61, 2),
+        sample("captured", 90, 2),
+        sample("captured", 120, 2),
+    ]
+    peers = {"host": host, "client": host[-2:]}
+    assert all(c["status"] == "passed" for c in spawn_checks(case, peers))
+    host[2] = sample("post_use", 61, 0)
+    assert spawn_checks(case, peers)[0]["status"] == "failed"
+
+
+def test_tower_waits_for_all_six_native_bombs_and_rejects_extra_bombs():
+    from item_effect_checks import spawn_checks
+
+    def sample(label, tick, bombs):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [{"entity_types": {"4.3.0": bombs}}, {}],
+        }
+
+    host = [
+        sample("before", 30, 0),
+        sample("post_use", 62, 0),
+        sample("captured", 90, 5),
+        sample("captured", 91, 6),
+        sample("captured", 120, 6),
+    ]
+    peers = {"host": host, "client": [host[2], host[4]]}
+    case = {"enum": "CARD_TOWER", "slot": 0}
+    assert all(c["status"] == "passed" for c in spawn_checks(case, peers))
+    host[3]["players"][0]["entity_types"]["4.3.0"] = 7
+    assert spawn_checks(case, peers)[0]["status"] == "failed"
+
+
+def test_consumable_doubling_and_room_expiration_require_both_peers():
+    from copy import deepcopy
+    from item_effect_checks import consumable_checks
+
+    def sample(label, tick, **fields):
+        return {"event": "sample", "label": label, "tick": tick, "players": [{}, fields]}
+
+    host = [
+        sample("before", 30, coins=7),
+        sample("post_use", 61, coins=14),
+        sample("captured", 90, coins=14),
+        sample("captured", 120, coins=14),
+    ]
+    peers = {"host": host, "client": deepcopy(host[-2:])}
+    case = {"enum": "CARD_DIAMONDS_2", "slot": 1}
+    assert all(c["status"] == "passed" for c in consumable_checks(case, peers))
+    host[1]["players"][1]["coins"] = 8
+    assert consumable_checks(case, peers)[0]["status"] == "failed"
+    peers["client"][0]["players"][1]["coins"] = 7
+    assert consumable_checks(case, peers)[1]["status"] == "failed"
+    host = [
+        sample("before", 30, flying=False, room=84),
+        sample("captured", 180, flying=False, room=85),
+        sample("captured", 210, flying=False, room=85),
+    ]
+    peers = {"host": host, "client": deepcopy(host[-2:])}
+    case = {"enum": "CARD_HANGED_MAN", "slot": 1}
+    assert consumable_checks(case, peers)[0]["status"] == "passed"
+    peers["client"][0]["players"][1]["flying"] = True
+    assert consumable_checks(case, peers)[0]["status"] == "failed"
+    peers["client"] = []
+    assert consumable_checks(case, peers)[0]["status"] == "missing"
+
+
+def test_room_damage_requires_each_target_and_replica_health():
+    from copy import deepcopy
+    from item_effect_checks import consumable_checks
+
+    def sample(label, tick, hp):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [{}, {"targets": [{"seed": i, "hp": hp} for i in (1, 2)]}],
+        }
+
+    host = [
+        sample("before", 30, 200),
+        sample("post_use", 61, 160),
+        sample("captured", 90, 160),
+        sample("captured", 120, 160),
+    ]
+    peers = {"host": host, "client": deepcopy(host[-2:])}
+    case = {"enum": "CARD_DEATH", "slot": 1}
+    assert all(c["status"] == "passed" for c in consumable_checks(case, peers))
+    host[1]["players"][1]["targets"][1]["hp"] = 200
+    assert consumable_checks(case, peers)[0]["status"] == "failed"
+    peers["client"][0]["players"][1]["targets"].pop()
+    assert consumable_checks(case, peers)[1]["status"] == "failed"
+
+
+def test_generated_consumable_counts_held_and_dropped_pockets():
+    from copy import deepcopy
+    from item_effect_checks import consumable_checks
+    from import_item_audit import item_status
+
+    def sample(label, tick, card, floor):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [{"card": 0, "pill": 0}, {"card": card, "pill": 0, "entity_types": floor}],
+        }
+
+    case = {"enum": "COLLECTIBLE_DECK_OF_CARDS", "slot": 1}
+    for initial, floor in ((0, {}), (1, {"5.300.1": 1})):
+        host = [
+            sample("before", 30, initial, {}),
+            sample("post_use", 62, 6, floor),
+            sample("captured", 90, 6, floor),
+            sample("captured", 120, 6, floor),
+        ]
+        peers = {"host": host, "client": deepcopy(host[-2:])}
+        assert all(c["status"] == "passed" for c in consumable_checks(case, peers))
+        host[1]["players"][1] = deepcopy(host[0]["players"][1])
+        assert consumable_checks(case, peers)[0]["status"] == "failed"
+    checks = [
+        {
+            "case": "collectible:85/" + context,
+            "status": "verified",
+            "conditions": {"pocket_effect": True},
+        }
+        for context in ("host-same", "client-split")
+    ]
+    assert item_status("collectible:85", checks) == "basic_pass"
+    checks += [{**c, "case": c["case"] + "/occupied"} for c in checks]
+    assert item_status("collectible:85", checks) == "verified"
+
+
+def test_horse_pill_swaps_increase_resources_and_swap_golden_flags():
+    from copy import deepcopy
+    from item_effect_checks import consumable_checks
+
+    def sample(label, tick, bombs, keys, golden_bomb, golden_key):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [
+                {},
+                dict(
+                    bombs=bombs,
+                    keys=keys,
+                    golden_bomb=golden_bomb,
+                    golden_key=golden_key,
+                    room=84 if tick < 150 else 85,
+                    stage=1 if tick < 240 else 2,
+                ),
+            ],
+        }
+
+    case = {"enum": "PILLEFFECT_BOMBS_ARE_KEYS", "slot": 1, "horse": True}
+    host = [
+        sample("before", 30, 4, 8, True, False),
+        sample("post_use", 62, 12, 6, False, True),
+        sample("captured", 90, 12, 6, False, True),
+        sample("captured", 120, 12, 6, False, True),
+        sample("captured", 180, 12, 6, False, True),
+        sample("captured", 210, 12, 6, False, True),
+        sample("captured", 360, 12, 6, False, False),
+        sample("captured", 390, 12, 6, False, False),
+    ]
+    peers = {"host": host, "client": deepcopy(host[2:])}
+    assert all(c["status"] == "passed" for c in consumable_checks(case, peers))
+    host[1]["players"][1]["bombs"] = 8
+    assert any(c["status"] == "failed" for c in consumable_checks(case, peers))
+    host[1]["players"][1]["bombs"] = 12
+    peers["client"][0]["players"][1]["golden_bomb"] = True
+    assert any(c["status"] == "failed" for c in consumable_checks(case, peers))
+    peers["client"] = deepcopy(host[2:])
+    peers["client"][-1]["players"][1]["golden_key"] = True
+    assert any(
+        c["name"] == "golden_flags_clear_on_floor" and c["status"] == "failed"
+        for c in consumable_checks(case, peers)
+    )
+
+
 def test_chaos_needs_shared_pool_removal_and_holder_only_ownership():
     from item_effect_checks import effect_checks
 
@@ -369,6 +783,7 @@ def test_failed_fixture_prerequisite_is_not_an_item_reconnect_bug():
 
 def test_full_registry_and_shards_cover_each_entry_and_pill_variant_once():
     from collections import Counter
+    from item_consumable_recipes import CONSUMABLE_RECIPES
 
     catalog = json.loads((ROOT / "tests/fixtures/item_catalog.json").read_text())
     cases = select_cases(catalog)
@@ -376,7 +791,13 @@ def test_full_registry_and_shards_cover_each_entry_and_pill_variant_once():
     assert len({case["key"] for case in cases}) == len(cases)
     count = Counter(case["item"] for case in cases)
     assert all(
-        count[item["key"]] == (4 if item["kind"] == "pill" else 2) for item in catalog["items"]
+        count[item["key"]]
+        == (
+            4
+            if item["kind"] == "pill" or CONSUMABLE_RECIPES.get(item.get("enum"), {}).get("pocket")
+            else 2
+        )
+        for item in catalog["items"]
     )
     shards = [cases[index::3] for index in range(3)]
     assert Counter(case["key"] for shard in shards for case in shard) == Counter(
@@ -539,6 +960,41 @@ def test_excluded_run_cannot_be_reimported_as_valid_coverage(tmp_path):
     }
     with pytest.raises(ValueError, match="Startup notice hid gameplay"):
         import_run(findings, tmp_path / "obscured")
+
+
+def test_frozen_failure_is_not_reinterpreted_by_a_new_validator(tmp_path, monkeypatch):
+    import import_item_audit
+
+    batch = tmp_path / "frozen/batch-001"
+    batch.mkdir(parents=True)
+    (batch.parent / "manifest.json").write_text(
+        json.dumps({"dll_sha256": "candidate", "validator_sha256": "original-validator"})
+    )
+    case = {
+        "key": "collectible:29/host-same",
+        "item": "collectible:29",
+        "kind": "collectible",
+        "id": 29,
+    }
+    result = {
+        **case,
+        "status": "problem",
+        "unconfirmed_checks": [],
+        "problems": [{"category": "non_native"}],
+        "effect_checks": [{"name": "peer_effect_state", "status": "failed"}],
+    }
+    (batch / "report.json").write_text(json.dumps({"cases": [case], "results": [result]}))
+
+    def unexpected(*args):
+        raise AssertionError("Old evidence must retain its original conclusion")
+
+    monkeypatch.setattr(import_item_audit, "summarize_case", unexpected)
+    findings = {"dll_sha256": "candidate", "audit": {}, "stress": []}
+    import_item_audit.import_run(findings, batch.parent)
+    assert findings["audit"]["collectible:29"]["status"] == "problem"
+    (batch / "report.json").write_text(json.dumps({"cases": [case], "results": []}))
+    with pytest.raises(ValueError, match="missing a case result"):
+        import_item_audit.import_run(findings, batch.parent)
 
 
 def test_later_stress_completion_cannot_erase_a_same_build_crash(tmp_path):
