@@ -59,25 +59,15 @@ J460 `Scope` 按深度选择独立的临时名单，恢复原生标量与名单�
 2. 通过道具兼容组件恢复运行时道具定义，再注册布局、同步角色房间；换房时先清理旧移动记录。
 3. 解析角色身份，在对应角色作用域内恢复库存、实体及角色附加状态。
 4. 恢复共享药丸、诅咒、波次和开门概率，覆盖库存 setter 的原生副作用。
-5. 更新地图，在本机房间作用域内先恢复水流向量，再恢复实体、网格和房间状态。
+5. 更新地图，在本机房间作用域内恢复环境、实体、网格和房间状态。
 6. 应用输入确认、音效和演出，成功后提交完成 tick 与角色显示记录。
 
 字段校验由 schema 和所属组件承担。该流程不提供原生回滚：失败传播给运行协调器，不提交完成 tick，已发生的写入不会自动撤销。字段和传输限制统一见[同步契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md)，启动及换层顺序见[会话恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
 
-## 新增字段或兼容机制
+## 扩展边界
 
-1. 通用一致性问题放 [`sync/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/sync)；特殊玩法放对应 [`compat/`](https://github.com/BMingSY/isaac-lan/tree/main/src/compat) 分类。匹配应包含必要的角色、楼层、维度或实体形态。
-2. 优先使用现有 Lua API 和原生能力。确需新增能力时，在版本后端说明现有接口的不足、ABI、布局、校验与分配／释放责任。
-3. 由装配层注册组件；原生重建走运行协调器。可靠转场先由 `floor.begin(epoch)` 拒绝重复／旧事件，再清理旧视图，按显式顺序选择兼容处理；失败直接传播。
-4. 字段变更同时更新采集、应用、schema、嵌入清单、版本／指纹与文档。游戏 ID 使用枚举或 [`compat/game_ids.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/game_ids.h)，紧凑字段位置使用 [`sync/fields.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua)，原生对象偏移使用版本内的 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)；原生地址与特征使用 [`entrypoints.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entrypoints.h) 和 [`signatures.inc`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/signatures.inc)。
-5. 补充实际触发链路、重复事件、跨房／跨层和清理回归，原生机制与画面列入[最终验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#最终实机验收)。
+通用字段与一致性属于同步组件，特殊玩法属于对应兼容组件。策略接收普通值，Lua 适配调用游戏 API 或具名后端能力，装配层只注册与连接组件。特殊玩法不能向网络层泄漏游戏对象或匹配规则。
 
-挑战目录、原版 HUD 复用和地图扩展边界见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。
+字段位置由 [fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 schema 统一定义，游戏 ID 使用枚举或 [game_ids.h](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/game_ids.h)。原生能力、校验和对象所有权见 [J460 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)，变更所需检查见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#修改后的契约检查)。
 
-现有例子：Boss 汇合用 [`compat/bosses/encounters.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/bosses/encounters.h) 判断、后端排队迁移；里拉撒路用 [`compat/characters/lazarus.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/characters/lazarus.lua) 解析原生身体；共享道具和特殊传送见[道具与效果](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，概率上下文见[共享开门概率](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md)。第三方 Mod 的注册与卸载遵循独立的[公开 API 契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md)。
-
-当前实现的效果清单分别维护在[角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具与效果](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)及[第三方 Mod](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)记录中。新增或调整兼容规则时，同步更新对应清单与兼容后的效果。
-
-## 验证入口
-
-`core.room-scope-ownership`、[`tests/session_lifecycle.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/session_lifecycle.lua)、[`tests/capture_generation.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/capture_generation.lua) 和 [`tests/replica_pipeline.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/replica_pipeline.lua) 覆盖嵌套退栈、取消／失败、缓存复用与失效、恢复顺序和完成提交；[`tests/test_layers.py`](https://github.com/BMingSY/isaac-lan/blob/main/tests/test_layers.py) 检查模块清单与依赖。
+当前效果与支持范围分别维护在[角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)、[第三方 Mod](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)和[挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)参考中。对第三方开放的能力遵循独立的 [API 契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md)。

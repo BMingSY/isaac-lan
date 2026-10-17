@@ -1,6 +1,6 @@
-# 错误道具定义与房间效果
+# 错误道具定义与库存
 
-错误道具的负编号只在当前进程的动态注册表中有效。同步底座编号和普通背包不足以在客机重建效果，因此 schema 20 增加有序生成种子，并在房间、实体和背包恢复之前应用。
+错误道具的负编号只在当前进程的动态注册表中有效。同步底座编号和普通背包不足以在客机重建效果，同步契约使用有序生成种子，在房间、实体和背包恢复之前重建定义。
 
 ## J460 原生边界
 
@@ -13,12 +13,8 @@
 - Lua 的道具池接口不能按原生注册表顺序恢复指定定义，现有静态库存枚举也不包含负编号。特殊定义适配位于 [`compat/items/glitched.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/glitched.lua)，通用库存通过注入的额外编号列表采集和应用。
 - J460 `GetCollectibleNum` 在 VA `0x770cb3` 对所有负编号直接返回 0。`HasCollectible` 的负编号分支则读取 `Player + 0x1fcc` 的原生数量树（大小位于 `+0x1fd0`，节点编号／数量位于 `+0x10/+0x14`）。`generated_item_count(sprite, id)` 仅接受当前原生名单中的玩家精灵，验证负编号、树大小、节点与遍历上限，读取真实数量；不分配、修改或释放树节点。背包仍通过原生 `AddCollectible/RemoveCollectible` 应用差量，避免重复快照反复添加被动效果。
 
-## 共享与显示
+## 同步与生命周期
 
-错误技 721 和已激活的达摩剑 656 复用现有 PlayerManager 查询范围，在全队各房间生效。原版达摩剑额外底座查询位于 VA `0x6e0ade`；个人受伤和落剑逻辑继续使用原持有者。未使用的主动道具 577 不提供共享奖励。
+定义恢复必须先于引用负编号的实体和库存恢复。底座生成规则由道具兼容策略决定，恢复只重建相同定义和数量，不重新触发拾取或使用效果。原生存档拥有生成定义的保存／继续生命周期。
 
-小夜灯缺少跨房间渲染筛选和客机光束角度更新。后端只在 Room::Render 的 RVA `0x410dad` 查询点过滤异房持有者；其他 `HasCollectible` 查询仍调用原版。光束角度 `Player + 0x1ae4` 随角色姿态同步，并检查其浮点值有限。没有改变照明的减速等玩法判定。
-
-创世纪的特殊房间描述符可使用 `ListIndex=-12`。布局校验允许特殊房间的列表编号等于其房间编号；普通房间仍限制为非负数组下标，描述符仍由原生查找接口获取。
-
-离线验证覆盖生成器 x86 调用、种子顺序、重复／冲突／损坏快照、负编号道具归属与移除，以及特殊布局编号边界。集中实机入口为 [`run_item_issues.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_issues.py)；原生随机效果的全部组合不可能由有限样本穷举，具体结果在 PR 中说明，原始证据保留在测试产物中。
+错误技的共享效果与验证状态见[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)。其他道具的原生接口见[后端参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#道具与效果)，专项入口见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#按需专项)。

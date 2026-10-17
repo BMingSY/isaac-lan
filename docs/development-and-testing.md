@@ -1,6 +1,6 @@
 # 开发与测试
 
-BUG 修复、需求新增和日常重构按影响范围执行离线回归与必要的局部实机验证；完整实机验收统一在发版前执行。离线通过不代表实机通过；任务要求不启动游戏时，实机项记为未执行。协作和发布约定见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md)。
+BUG 修复、需求新增和日常重构按影响范围执行离线回归与必要的局部实机验证；发版默认覆盖基础联机、全部 Boss 和正常结局／路线，专项按需执行。离线通过不代表实机通过；任务要求不启动游戏时，实机项记为未执行。协作和发布约定见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md)。
 
 ## 构建与产物
 
@@ -101,9 +101,37 @@ ctest --test-dir build-win32 --output-on-failure
 
 ## 最终实机验收
 
-1. 完成代码、离线检查和构建，按改动列出受影响行为、预期及准备条件；日常 PR 只跑相关场景，发布必须执行 AGENTS.md 的完整验收清单。
+1. 完成代码、离线检查和构建，列出行为、预期与准备条件；日常 PR 只跑相关场景，发布执行下表默认范围，并列明必要专项。
 2. 主客机各启动一次，共用兼容场景；用例之间清理夹具、恢复状态。只有启动／退出检查或进程无法恢复时才重启，并记录原因。
 3. 分别记录通过、失败、阻塞、未执行及证据。冻结 DLL、脚本和哈希，使用新的输出目录；保留双端日志、状态、连续帧和退出结果。
+
+### 默认发版范围
+
+先执行 `python tools/test.py --profile full`、Windows x86 构建、网络／原生 ABI 测试与安装包校验，冻结候选及产物哈希。实机默认检查以下范围：
+
+| 范围 | 入口与通过条件 |
+| --- | --- |
+| 基础联机 | [run_release_acceptance.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_release_acceptance.py)：安装／自动加载、战斗／拾取、分房／换层、五类沙漏、暂停及单人／联机存档隔离 |
+| 全部结局 | [run_endings.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_endings.py)：羔羊（`--first-floor`）、???、Delirium、Mega Satan、Mother、上行至 Beast；双端实际完成路线、原生结局、清理和进度恢复，Mother 经过完整支线楼层 |
+| 全部 Boss | [run_bosses.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_bosses.py)：完整 [boss_catalog.json](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/boss_catalog.json)，包含原生阶段机制；用 [check_boss_coverage.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/check_boss_coverage.py) 合并 Boss、结局与贪婪结果，主客机均无缺项 |
+| 正常路线机制 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 选 `greed`、`greedier`、`knife`、`hornfel`：两种贪婪全程、矿车／逃亡、持有炸弹、跨层与重连 |
+
+默认不执行全道具／卡牌／药丸遍历、全角色／Mod 扫描或性能压力测试。已知问题继续保留在结果中，范围外未测项目不能写成通过。默认项及追加项的完整规则见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md#发布前验收范围)。
+
+### 按需专项
+
+只有本次改动直接影响、排查相关问题或用户明确要求时，才选择对应专项；先说明理由和具体用例，不自动运行整个专项目录。
+
+| 领域 | 入口与范围 |
+| --- | --- |
+| 输入与镜头 | [run_response_acceptance.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_response_acceptance.py)：直连／约 20 ms RTT、输入预览、移动／过门、暂停、主动、蓄力和大房间／镜面；需要画面时用 `--record-view` |
+| EID、举袋与水流 | [run_client_scenes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_client_scenes.py)，需要完整举放检查时加 `--include-bag-transitions --record-view` |
+| 道具与角色 | [run_item_issues.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_issues.py) 或 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的相关场景；按实际改动选择持有者、房间和生命周期条件 |
+| 联机挑战 | [run_lan_challenges.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_lan_challenges.py)：`--suite access`／`gameplay`／`hud` 分别检查资格、规则、2–4 人显示与普通会话恢复 |
+| 第三方 Mod | [state_mod_ui.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_ui.lua)、[state_mod_integrations.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_integrations.lua)；按支持版本及 `--mod`／`--client-mod`／`--host-mod` 安装组合选择 |
+| 性能与资源 | [诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)：与其他实机分组分开运行，区分实际负载、采集／应用、传输与原生开销 |
+
+### 隔离执行与记录
 
 高层工具使用 WSL 驱动 Windows 进程，主客机分别使用独立的隔离副本。示例中的 `ISAAC_GAME_DIRECTORY`、`ISAAC_HOST_LAB`、`ISAAC_CLIENT_LAB`、`ISAAC_RUN_OUTPUT` 和 `ISAAC_FFMPEG` 由运行者设置为游戏位置、两端副本、当轮输出和录像工具；每轮输出须使用新位置。首次创建两个副本：
 
@@ -121,20 +149,13 @@ python3 tools/validate_replica.py --cases gameplay normal \
   --output "$ISAAC_RUN_OUTPUT" --latency-ms 75 --ffmpeg "$ISAAC_FFMPEG"
 ```
 
-| 入口或场景 | 用途 |
-| --- | --- |
-| `gameplay` | 连续运行兼容的输入、复活、蓄力、沙漏、门与镜头场景 |
-| `normal`／`tools/manual_gameplay.py run` | 从菜单和正常手柄输入验证走门、战斗、拾取、暂停与换层 |
-| `local-movement input-response motion mirror-camera` | 输入相位、持续移动、惯性、网格和镜像；首帧响应不能单独代表手感 |
-| `tools/run_response_acceptance.py` | 一对隔离进程、一条连接集中验证 60 Hz 输入、半帧应用、连续移动、过门、暂停恢复、主动边沿、蓄力与镜头；中途从零附加延迟切换到双向各 10 ms |
-| `item-presentation` | 同房、分房及同时使用时的道具／卡牌／药丸演出归属与去重 |
-| `tools/run_special_routes.py --case ...` | 特殊角色、路线、共享状态及通关夹具；可串联多个 `--case` |
+示例的 `gameplay` 串联兼容的输入、复活、蓄力、沙漏与镜头场景，`normal` 使用菜单和正常手柄输入。它们是局部检查入口，不能替代上表全部 Boss 与结局覆盖。
 
 现有工具并未自动合并所有分组，执行前仍需安排进程复用。`--latency-ms 75` 为两个方向各附加 75 ms，不能等同所有公网／frp 情况；`--goodtrip` 可传入原样 Mod 目录。
 
 独立分组须使用独立目录、存档、进程、端口和输出；延迟中继还占用相邻端口，例如两组选 30220／30230。前台键盘步骤顺序执行。
 
-画面由隔离进程渲染缓冲区采集，遮挡窗口也可记录。至少对照双端的队友过门、背景／大房间镜头、角色身体／蓄力、房间播报及完整换层动画；采样间隙和黑帧候选不能证明没有短暂闪屏。操作与录像归档见 [`tools/NORMAL_GAMEPLAY.md`](https://github.com/BMingSY/isaac-lan/blob/main/tools/NORMAL_GAMEPLAY.md)，性能和堆检查见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。
+画面由隔离进程渲染缓冲区采集，遮挡窗口也可记录。按本轮范围对照双端的战斗、过门、Boss 阶段和换层画面；显示专项另检查镜头、身体／蓄力和演出归属。采样间隙和黑帧候选不能证明没有短暂闪屏。操作与录像归档见 [`tools/NORMAL_GAMEPLAY.md`](https://github.com/BMingSY/isaac-lan/blob/main/tools/NORMAL_GAMEPLAY.md)，性能和堆检查见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。
 
 ## 修改后的契约检查
 
@@ -146,4 +167,4 @@ python3 tools/validate_replica.py --cases gameplay normal \
 | 会话／楼层 | 准备屏障、事件先于新视图、重连位置、回退清理 |
 | 表现 | 本机归属、原版多人栏位、连续转场画面 |
 
-实机 runner 共用 [`lab_profile.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_profile.py) 备份和恢复带归属标记的资料。恢复前确认进程已退出且备份哈希完整，恢复后逐文件核对；失败结果和原始证据保留在本轮测试产物中。
+实机 runner 共用 [`lab_profile.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_profile.py) 备份和恢复带归属标记的资料。恢复前确认进程已退出且备份哈希完整，恢复后逐文件核对；失败结果和原始证据保留在本轮测试产物中。发布验收摘要保存到 `docs/history/`，记录候选及哈希、实际范围、逐项结果、未决问题、重启和恢复；不把过程或成绩追加进设计文档。
