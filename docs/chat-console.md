@@ -1,6 +1,6 @@
 # 聊天与控制台
 
-聊天使用一条按时间排列的记录，区分队伍文字与系统输出，不设置频道切换。操作和外观配置见 [README](https://github.com/BMingSY/isaac-lan/blob/main/README.md#聊天与命令)。
+聊天使用一条按时间排列的记录，区分队伍文字与系统输出，不设置频道切换。外观配置见 [README 的配置选项](https://github.com/BMingSY/isaac-lan/blob/main/README.md#配置与日志)。
 
 ## 职责与数据流
 
