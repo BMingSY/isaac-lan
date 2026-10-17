@@ -76,6 +76,32 @@ local terminal = {
 local function report(s)
     Isaac.DebugString("LAN_NETWORK ENDINGS " .. cases[caseIndex] .. " " .. s)
 end
+local protectedDamage = {}
+-- Route checks hold actors in scripted positions and do not dodge attacks.
+-- Protect both players throughout floor transitions and native Boss phases.
+Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, _, _, flags, source)
+    if host and not finished then
+        local signature = cases[caseIndex]
+            .. ":"
+            .. flags
+            .. ":"
+            .. source.Type
+            .. ":"
+            .. source.Variant
+        if not protectedDamage[signature] then
+            protectedDamage[signature] = true
+            report(
+                "DAMAGE_BLOCKED flags="
+                    .. flags
+                    .. " source="
+                    .. source.Type
+                    .. ":"
+                    .. source.Variant
+            )
+        end
+        return false
+    end
+end, EntityType.ENTITY_PLAYER)
 local function mark(s, t)
     step, stepAt = s, t
     report("STEP " .. s .. " tick=" .. t)
@@ -97,7 +123,9 @@ local function observeFloor()
 end
 local function actor(slot, fn)
     assert(native.rooms_with_player(slot, function()
-        fn(Isaac.GetPlayer(assert(native.rooms_heads()[tostring(slot)])))
+        local player = Isaac.GetPlayer(assert(native.rooms_heads()[tostring(slot)]))
+        assert(not player:IsDead() and not player:IsCoopGhost(), "Route fixture actor is not alive")
+        fn(player)
     end))
 end
 local function protect(p)
@@ -462,6 +490,12 @@ local function chestCallback(_, pickup, collider)
                 .. p:GetSprite():GetAnimation()
                 .. " extra_done="
                 .. tostring(p:IsExtraAnimationFinished())
+                .. " can_pickup="
+                .. tostring(p:CanPickupItem())
+                .. " parent="
+                .. tostring(p.Parent and p.Parent.InitSeed)
+                .. " target="
+                .. tostring(pickup.Target and pickup.Target.InitSeed)
         )
     end
 end
@@ -974,9 +1008,15 @@ local function advance(t)
         elseif stage == 11 or stage == 12 or name == "mother" and stage == 8 and kind >= 4 then
             if pick(PickupVariant.PICKUP_BIGCHEST) then
                 mark("ending-chest", t)
-                actor(1, function(p)
-                    p.Position, p.Velocity = contact.Ref.Position + Vector(60, 0), Vector.Zero
-                end)
+                -- Native pickup cooldown restarts while ANY player touches
+                -- the newly spawned chest. Clear both actors before the
+                -- guest approaches; leaving the host against it blocks both.
+                for slot = 0, 1 do
+                    actor(slot, function(p)
+                        p.Position = contact.Ref.Position + Vector(slot == 0 and -80 or 60, 0)
+                        p.Velocity = Vector.Zero
+                    end)
+                end
             end
         elseif name == "delirium" and stage == 8 then
             specialEntrance(GridRooms.ROOM_BLUE_WOOM_IDX, t)
@@ -1430,7 +1470,7 @@ local function advance(t)
                     -- Approach through normal guest input. Teleporting into
                     -- the solid chest can leave the actor pushed outside its
                     -- trigger, even after Appear has completed.
-                    if t % 90 < 20 then
+                    if t - stepAt < 20 or t % 90 < 20 then
                         p.Position, p.Velocity = e.Position + Vector(60, 0), Vector.Zero
                     else
                         chestMove = 0

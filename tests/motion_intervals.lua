@@ -162,6 +162,9 @@ local player = { ControlsEnabled = true, MoveSpeed = 1, Size = 10, ControllerInd
 function player:ToPlayer()
     return self
 end
+function player:GetMovementInput()
+    return Vector(1, 0)
+end
 function player:AreControlsEnabled()
     return enabled
 end
@@ -293,3 +296,89 @@ extraFinished, enabled, player.ControlsEnabled, ghost = true, true, true, false
 animation = "WalkRight"
 assert(localRender(100) > localState.target.X, "Ordinary movement did not resume")
 print("PASS continuous motion, raising/holding crafting bag, control locks, gaps, pause and reset")
+
+-- Same-controller bodies must query independently. Native character rules can
+-- leave a twin stationary, switch the active body, or mirror one local room.
+local directions, queried, bodyStates, bodies = {}, {}, {}, {}
+local inRoom = false
+for id = 1, 2 do
+    local body = setmetatable({ Position = Vector(100, id * 100) }, { __index = player })
+    bodies[id] = body
+    directions[id] = Vector(1, 0)
+    body.GetMovementInput = function()
+        assert(inRoom, "Movement was queried outside the local room")
+        queried[id] = (queried[id] or 0) + 1
+        return directions[id]
+    end
+    bodyStates[id] = {
+        actor = true,
+        controller = 2,
+        target = body.Position,
+        display = body.Position,
+        prediction = prediction.new(body.Position),
+    }
+end
+local pairedMotion = assert(
+    loadfile(
+        root .. "/src/bridge/presentation/motion.lua",
+        "t",
+        setmetatable({ GridCollisionClass = { COLLISION_NONE = 0 } }, { __index = _G })
+    )
+)()(dofile(root .. "/src/bridge/sync/fields.lua"))({
+    rooms_with_player = function(slot, fn)
+        assert(slot == 1 and not inRoom)
+        inRoom = true
+        fn()
+        inRoom = false
+        return true
+    end,
+}, {}, {
+    vector = Vector,
+    clock = function()
+        return now * 1000
+    end,
+    status = function()
+        return { pause = 0, slot = 1 }
+    end,
+    room = function()
+        return room
+    end,
+})
+local function pairedRender(sequence)
+    now = sequence / 60
+    pairedMotion.present(
+        string.pack(">I2I2I2I2", 0, 65535, 0, 0),
+        sequence,
+        {},
+        bodyStates,
+        function(id)
+            return bodies[id]
+        end,
+        1
+    )
+end
+for sequence = 0, 20 do
+    pairedRender(sequence)
+end
+assert(bodies[1].Position.X > 120 and bodies[2].Position.X > 120)
+-- A drop-held twin receives zero despite the other body's continuing input.
+directions[2] = Vector(0, 0)
+for sequence = 21, 80 do
+    pairedRender(sequence)
+end
+assert(bodyStates[1].prediction.velocity.X > 200)
+assert(bodyStates[2].prediction.velocity.X < 0.2)
+-- Switching bodies changes the source without retaining the old body's input.
+directions[1], directions[2] = Vector(0, 0), Vector(-1, 0)
+for sequence = 81, 140 do
+    pairedRender(sequence)
+end
+assert(bodyStates[1].prediction.velocity.X < 0.2)
+assert(bodyStates[2].prediction.velocity.X < -200)
+assert(queried[1] == 141 and queried[2] == 141)
+-- Removing a temporary body and resetting the view never queries the old actor.
+bodyStates[2], bodies[2] = nil, nil
+pairedMotion.reset()
+pairedRender(141)
+assert(queried[2] == 141)
+print("PASS independent same-controller movement, form switch and companion cleanup")

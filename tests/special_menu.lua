@@ -77,10 +77,31 @@ for _, host in ipairs({ true, false }) do
     _IsaacLanCommand = function(name, value)
         commands[#commands + 1] = { name, value }
     end
-    Isaac = { AddCallback = function() end, DebugString = function() end }
-    ModCallbacks = { MC_PRE_PICKUP_COLLISION = 1, MC_POST_GAME_END = 2, MC_PRE_GAME_EXIT = 3 }
+    ModCallbacks = {
+        MC_PRE_PICKUP_COLLISION = 1,
+        MC_POST_GAME_END = 2,
+        MC_PRE_GAME_EXIT = 3,
+        MC_ENTITY_TAKE_DMG = 4,
+    }
+    EntityType = { ENTITY_PLAYER = 1 }
+    local damageCallback
+    Isaac = {
+        AddCallback = function(_, id, fn, filter)
+            if id == ModCallbacks.MC_ENTITY_TAKE_DMG then
+                assert(filter == EntityType.ENTITY_PLAYER)
+                damageCallback = fn
+            end
+        end,
+        DebugString = function() end,
+    }
     PickupVariant = { PICKUP_BIGCHEST = 340 }
     dofile(root .. "/tests/state_endings.lua")
+    local blocked = assert(damageCallback)(nil, {}, 1, 0, { Type = 1000, Variant = 19 })
+    if host then
+        assert(blocked == false, "Route fixture did not block native player damage")
+    else
+        assert(blocked == nil, "Guest fixture intercepted authoritative damage")
+    end
     for _ = 1, 400 do
         _IsaacLanFrame()
     end

@@ -139,7 +139,7 @@ observe(ModCallbacks.MC_POST_FIRE_TEAR, function(_, tear)
         end
     end
 end)
-observe(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, _, _, source)
+observe(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, amount, flags, source)
     if not host or finished then
         return
     end
@@ -149,7 +149,18 @@ observe(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, _, _, source)
         local player = tear and tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer()
         assert(
             player and player.ControllerIndex == slot,
-            "Controlled enemy damage did not come from its player's tear"
+            string.format(
+                "Controlled enemy damage did not come from its player's tear: target=%d:%d seed=%d expected=%d source=%d:%d player=%s amount=%g flags=%d",
+                entity.Type,
+                entity.Variant,
+                entity.InitSeed,
+                slot,
+                source.Type,
+                source.Variant,
+                player and tostring(player.ControllerIndex) or "none",
+                amount,
+                flags
+            )
         )
         hits[slot] = (hits[slot] or 0) + 1
     end
@@ -226,8 +237,9 @@ local function advance(t)
                 local center = Game():GetRoom():GetCenterPos()
                 player.Position, player.Velocity =
                     center + Vector(-140, -60 + slot * 120), Vector.Zero
+                -- Keep one target per lane; Gapers can transform and recover health.
                 local npc = Isaac.Spawn(
-                    EntityType.ENTITY_GAPER,
+                    EntityType.ENTITY_ATTACKFLY,
                     0,
                     0,
                     player.Position + Vector(200, 0),
@@ -249,7 +261,13 @@ local function advance(t)
         for slot = 1, 2 do
             assert(
                 tears[slot] > 0 and hits[slot] and deaths[slot] == 1,
-                "Native shooting did not kill both controlled enemies"
+                string.format(
+                    "Native shooting did not kill both controlled enemies: slot=%d tears=%d hits=%d deaths=%d",
+                    slot,
+                    tears[slot],
+                    hits[slot] or 0,
+                    deaths[slot] or 0
+                )
             )
             report(
                 "COMBAT_PASS slot="

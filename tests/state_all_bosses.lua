@@ -49,6 +49,20 @@ local function observeRoom(case)
         stomachRooms[index] = true
         report("STOMACH room=" .. index)
     end
+    if index == -14 or index == -15 then
+        local positions = native.rooms_positions()
+        for i = 0, Game():GetNumPlayers() - 1 do
+            local p = Isaac.GetPlayer(i)
+            local location = positions[tostring(p.ControllerIndex - 1)]
+            if location and location.index == index then
+                assert(
+                    p:IsExtraAnimationFinished() or p:GetSprite():GetAnimation() ~= "FallIn",
+                    "Rotgut entrant retained the swallowing animation: controller="
+                        .. p.ControllerIndex
+                )
+            end
+        end
+    end
 end
 local function actor(slot, fn, actorOnly)
     assert(native.rooms_with_player(slot, function()
@@ -102,6 +116,9 @@ local function complete(case)
                 native.rooms_positions()[tostring(slot)].index == stomachSource,
                 "Rotgut returned a player to the wrong room"
             )
+            actor(slot, function(p)
+                assert(p:IsExtraAnimationFinished(), "Rotgut return retained an extra animation")
+            end)
         end
         report("RETURN source=" .. stomachSource .. " players=2")
     end
@@ -229,7 +246,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
             mark("fight", tick)
         elseif phase == "fight" then
-            local clear, walkStomach = false, false
+            local clear = false
             actor(0, function(player)
                 observeRoom(case)
                 if case.stomach and tick % 300 == 0 then
@@ -276,6 +293,15 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         tick - at >= (case.warmup or 180)
                         and tick % 6 == 0
                         and entity:IsActiveEnemy(false)
+                        -- Both peers must observe the heart before the fixture kills it.
+                        and (
+                            not case.stomach
+                            or entity.Variant ~= 2
+                            or (
+                                native.rooms_positions()["0"].index == -15
+                                and native.rooms_positions()["1"].index == -15
+                            )
+                        )
                     then
                         entity:TakeDamage(
                             math.max(10, entity.MaxHitPoints / 30),
@@ -287,10 +313,6 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 end
                 clear = Game():GetRoom():IsClear()
                 if case.stomach and Game():GetLevel():GetCurrentRoomIndex() < -3 then
-                    local remaining = Isaac.FindByType(911, -1, -1, false, false)
-                    if #remaining == 0 and Game():GetLevel():GetCurrentRoomIndex() == -14 then
-                        walkStomach = true
-                    end
                     clear = false
                 end
                 if case.stomach then
@@ -300,10 +322,27 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         and positions["1"].index == stomachSource
                 end
             end)
-            if walkStomach then
+            if case.stomach then
+                -- Each player can leave the first stomach at a different time.
                 for slot = 0, 1 do
                     actor(slot, function(p)
-                        p.Velocity = Vector(6, p.Velocity.Y)
+                        local room = Game():GetLevel():GetCurrentRoomIndex()
+                        if
+                            room == -14
+                            and #Isaac.FindByType(case.entity, -1, -1, false, false) == 0
+                        then
+                            p.Velocity = Vector(6, p.Velocity.Y)
+                        end
+                        if tick % 300 == 0 then
+                            report(
+                                "FIXTURE_PARTY slot="
+                                    .. slot
+                                    .. " room="
+                                    .. room
+                                    .. " position="
+                                    .. tostring(p.Position)
+                            )
+                        end
                     end)
                 end
             end

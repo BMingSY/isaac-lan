@@ -48,6 +48,7 @@ local function stateEnvironment()
             ["compat/bosses/room_entry"] = dofile(
                 root .. "/src/bridge/compat/bosses/room_entry.lua"
             ),
+            ["compat/bosses/rotgut"] = dofile(root .. "/src/bridge/compat/bosses/rotgut.lua"),
             ["runtime/transitions"] = dofile(root .. "/src/bridge/runtime/transitions.lua"),
             ["runtime/room_entry"] = dofile(root .. "/src/bridge/runtime/room_entry.lua"),
             ["sync/inventory"] = dofile(root .. "/src/bridge/sync/inventory.lua"),
@@ -148,7 +149,12 @@ local actions = {
     end,
     room_entry = function(cleared, boss)
         local env, closed, animation = stateEnvironment(), 0, "Opened"
-        env.RoomType = { ROOM_BOSS = 5 }
+        env.RoomType = { ROOM_BOSS = 5, ROOM_DUNGEON = 16 }
+        env.Isaac = {
+            GetPlayer = function()
+                error("Ordinary room arrival must not inspect Rotgut actors")
+            end,
+        }
         env.GridEntityType = { GRID_TRAPDOOR = 17 }
         local rock = {
             State = 4,
@@ -197,6 +203,13 @@ local actions = {
         }
         env.Game = function()
             return {
+                GetLevel = function()
+                    return {
+                        GetCurrentRoomDesc = function()
+                            return { Data = { Type = boss and 5 or 1, Variant = 0 } }
+                        end,
+                    }
+                end,
                 GetRoom = function()
                     return room
                 end,

@@ -210,7 +210,8 @@ local function move(slot, index)
     report("MOVE slot=" .. slot .. " room=" .. index)
 end
 local function weapons(bytes)
-    local result, cursor = {}, 11
+    -- Two flags, two integer fields and the Night Light angle precede weapons.
+    local result, cursor = {}, string.packsize(">BBI4I4f") + 1
     for i = 1, 5 do
         local exists
         exists, cursor = string.unpack(">B", bytes, cursor)
