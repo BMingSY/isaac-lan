@@ -904,6 +904,17 @@ void fixedStateFields() {
 
 void animationPose() {
     namespace pose = isaac::core::animation_pose;
+    require(pose::validCursor(-1, 0) && pose::validCursor(0, 0),
+            "Empty animation lost its reset or initial cursor");
+    require(!pose::validCursor(-2, 0) && !pose::validCursor(1, 0),
+            "Empty animation accepted an active frame");
+    require(pose::validCursor(-1, 3) && pose::validCursor(0, 3) && pose::validCursor(2, 3) &&
+                !pose::validCursor(3, 3) && !pose::validCursor(-2, 3),
+            "Animation cursor exceeded local frame bounds");
+    require(pose::validCursor(pose::maxFrames - 1, pose::maxFrames) &&
+                !pose::validCursor(pose::maxFrames, pose::maxFrames) &&
+                !pose::validCursor(0, pose::maxFrames + 1),
+            "Animation cursor exceeded the protocol bounds");
     pose::State state;
     state.present = state.playing = true;
     state.frame = std::bit_cast<std::uint32_t>(3.5f);

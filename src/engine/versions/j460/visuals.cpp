@@ -313,7 +313,7 @@ void applyAnimation(lan::Reader& r, Address state) {
         const auto frames =
             count(at<Address>(data, animationData::layers) + order * animationLayer::stride,
                   animationLayer::frameCount, pose::maxFrames);
-        if (frameIndex >= -1 && frameIndex < static_cast<int>(frames))
+        if (pose::validCursor(frameIndex, frames))
             at<int>(at<Address>(state, animation::layerFrames), order * sizeof(int)) = frameIndex;
     }
     const auto nulls = at<Address>(data, animationData::nulls);
@@ -336,7 +336,7 @@ void applyAnimation(lan::Reader& r, Address state) {
             continue;
         const auto limit = count(nulls + order * animationLayer::stride,
                                  animationLayer::nullFrameCount, pose::maxFrames);
-        if (frameIndex < static_cast<int>(limit))
+        if (pose::validCursor(frameIndex, limit))
             at<int>(frames, order * sizeof(int)) = frameIndex;
     }
 }

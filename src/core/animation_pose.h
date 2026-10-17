@@ -8,6 +8,13 @@
 
 namespace isaac::core::animation_pose {
 inline constexpr unsigned maxLayers = 64, maxNullLayers = 256, maxFrames = 65535;
+// An empty layer can retain its initial cursor (0) after seeking an animation.
+// It still has no readable frame; -1 is the separate reset/hidden cursor.
+inline bool validCursor(std::int32_t cursor, unsigned frameCount) {
+    return cursor >= -1 && frameCount <= maxFrames &&
+           (cursor == -1 || (cursor == 0 && frameCount == 0) ||
+            static_cast<unsigned>(cursor) < frameCount);
+}
 struct Layer {
     std::uint16_t id;
     std::int32_t frame;

@@ -44,9 +44,10 @@ local function verify(bytes, tick)
     if verified or tick < 100 then
         return
     end
+    local types = probe()
     assert(
-        reference.encode(probe()) == reference.encode({ 2, 3, 1000 }),
-        "Missing native field types"
+        reference.encode(types) == reference.encode({ 2, 3, 1000 }),
+        "Missing native field types: " .. table.concat(types, ",")
     )
     assert(native.state_encode(reference.decode(bytes)) == bytes, "Native outer encoding differs")
     assert(reference.encode(native.state_decode(bytes)) == bytes, "Native outer decoding differs")
@@ -56,15 +57,20 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     return originalGate(capture, function(tick, ...)
         before(tick, ...)
         if tick == 60 then
+            Isaac.GetPlayer(0):AddCollectible(CollectibleType.COLLECTIBLE_BROTHER_BOBBY)
+        end
+        if tick == 99 then
             local player = Isaac.GetPlayer(0)
-            player:AddCollectible(CollectibleType.COLLECTIBLE_BROTHER_BOBBY)
-            local tear = player:FireTear(player.Position, Vector.Zero)
+            local position = Game():GetRoom():GetCenterPos()
+            local tear = player:FireTear(position, Vector.Zero)
             tear.FallingSpeed, tear.FallingAcceleration, tear.Height = 0, 0, -20
+            tear.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+            tear.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE
             local effect = Isaac.Spawn(
                 EntityType.ENTITY_EFFECT,
                 EffectVariant.CREEP_RED,
                 0,
-                player.Position,
+                position,
                 Vector.Zero,
                 player
             ):ToEffect()
