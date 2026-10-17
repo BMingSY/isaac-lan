@@ -73,7 +73,7 @@ local function moveHolderRoom()
 end
 local function moveHolderFloor()
     actor(case.slot, function(p, room)
-        if case.damage_effects then
+        if case.damage_effects or case.familiar_effects then
             -- Enter through the native grid collision so player departure
             -- effects follow the same path as normal play.
             local index = room:GetGridIndex(room:GetCenterPos() + Vector(80, 0))
@@ -447,7 +447,11 @@ local function prepare(tick)
                 p:AddHearts(case.recipe.team_hearts - p:GetHearts())
             end
             p.Position, p.Velocity =
-                room:GetCenterPos() + Vector(slot == case.slot and -65 or 65, 60), Vector.Zero
+                room:GetCenterPos() + Vector(
+                    slot == case.slot and -65 or 65,
+                    case.familiar_effects and 20 or 60
+                ),
+                Vector.Zero
             if slot == case.slot and case.moving_use then
                 -- Directional actives need an unobstructed approach. A fixed
                 -- center offset can put the split-room holder inside a rock.

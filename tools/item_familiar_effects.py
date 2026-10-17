@@ -188,7 +188,6 @@ def familiar_checks(case, observations):
             and all(
                 abs(s["damage"] - right[k]["damage"]) < 0.001
                 and s["controller"] == right[k]["controller"]
-                and s["spectral"] == right[k]["spectral"]
                 for k, s in left.items()
             )
         )

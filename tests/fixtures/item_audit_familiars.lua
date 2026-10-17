@@ -43,10 +43,10 @@ return function(report, actor, moveRoom, moveFloor)
         assert(familiar, "Missing familiar before attack trial")
         local positions = {}
         if rules.spectral then
-            rockIndex = room:GetGridIndex(familiar.Position - Vector(0, 55))
+            rockIndex = room:GetGridIndex(familiar.Position - Vector(0, 40))
             assert(not room:GetGridEntity(rockIndex))
             assert(room:SpawnGridEntity(rockIndex, GridEntityType.GRID_ROCK, 0, 187, 0))
-            positions[1] = Vector(familiar.Position.X, room:GetGridPosition(rockIndex).Y - 50)
+            positions[1] = Vector(familiar.Position.X, room:GetGridPosition(rockIndex).Y - 35)
         else
             for _, angle in ipairs({ -90, -65, -115, 0, 90, 180 }) do
                 positions[#positions + 1] = familiar.Position + Vector.FromAngle(angle) * 95
@@ -86,7 +86,8 @@ return function(report, actor, moveRoom, moveFloor)
                     variant = f.Variant,
                     rock_intact = rockIndex ~= nil
                         and Game():GetRoom():GetGridEntity(rockIndex) ~= nil
-                        and Game():GetRoom():GetGridEntity(rockIndex).State == 0,
+                        and Game():GetRoom():GetGridCollision(rockIndex)
+                            == GridCollisionClass.COLLISION_SOLID,
                 }
             end
         end,
@@ -100,15 +101,6 @@ return function(report, actor, moveRoom, moveFloor)
                     firstTargets = true
                     spawnTargets(p, room)
                 end
-                if not moved and tick >= 300 then
-                    moved = true
-                    clearTargets()
-                    moveRoom()
-                end
-                if not floored and tick >= 390 then
-                    floored = true
-                    moveFloor()
-                end
                 if not secondTargets and tick >= 630 then
                     secondTargets = true
                     spawnTargets(p, room)
@@ -119,6 +111,15 @@ return function(report, actor, moveRoom, moveFloor)
                     p:RemoveCollectible(case.id)
                 end
             end)
+            if not moved and tick >= 300 then
+                moved = true
+                actor(case.slot, clearTargets)
+                moveRoom()
+            end
+            if not floored and tick >= 390 then
+                floored = true
+                moveFloor()
+            end
         end,
         suppressPlayerTear = function(tear)
             if rules and tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer() then
@@ -130,12 +131,18 @@ return function(report, actor, moveRoom, moveFloor)
                 return
             end
             if host then
+                local remaining = {}
                 for _, hit in ipairs(pending) do
-                    hit.after = hit.entity.HitPoints
-                    hit.entity = nil
-                    report("familiar_hit", hit)
+                    if frame > hit.tick + 1 then
+                        hit.after = hit.entity.HitPoints
+                        hit.after_tick = frame
+                        hit.entity = nil
+                        report("familiar_hit", hit)
+                    else
+                        remaining[#remaining + 1] = hit
+                    end
                 end
-                pending = {}
+                pending = remaining
             end
             local teammateOwned
             actor(1 - case.slot, function(p)
@@ -158,7 +165,8 @@ return function(report, actor, moveRoom, moveFloor)
                     familiars = {},
                     shots = {},
                 }
-                for _, e in ipairs(Isaac.GetRoomEntities()) do
+                local entities = (host or value.room_visible) and Isaac.GetRoomEntities() or {}
+                for _, e in ipairs(entities) do
                     local f = e:ToFamiliar()
                     if f and f.Variant == FamiliarVariant[case.familiar_effects.variant] then
                         value.familiars[#value.familiars + 1] = {
@@ -192,7 +200,7 @@ return function(report, actor, moveRoom, moveFloor)
             if not enabled(case) then
                 return 0
             end
-            if frame >= 90 and frame < 110 then
+            if frame >= 90 and frame < 100 then
                 return 1 << ButtonAction.ACTION_RIGHT
             elseif frame >= 150 and frame < 270 or frame >= 630 and frame < 750 then
                 return 1 << ButtonAction.ACTION_SHOOTUP

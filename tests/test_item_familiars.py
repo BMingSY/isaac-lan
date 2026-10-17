@@ -1,5 +1,7 @@
 from copy import deepcopy
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -117,3 +119,46 @@ def test_familiar_replica_requires_observed_attacks():
     case, peers = evidence()
     peers["client"] = [e for e in peers["client"] if not e["shots"]]
     assert any(c["status"] == "failed" for c in familiar_checks(case, peers))
+
+
+def test_familiar_damage_waits_for_native_update_and_clears_between_cases():
+    script = """
+        FamiliarVariant = { GHOST_BABY = 9 }
+        local events = {}
+        local helper = dofile('tests/fixtures/item_audit_familiars.lua')(
+            function(name, value) events[#events + 1] = { name, value } end,
+            function() end, function() end, function() end)
+        local case = { familiar_effects = { variant = 'GHOST_BABY' }, slot = 0 }
+        local target = { HitPoints = 100 }
+        function target:GetData() return { auditFamiliarTarget = true } end
+        local familiar = { Variant = 9, Player = { ControllerIndex = 1 } }
+        function familiar:ToFamiliar() return self end
+        helper.prepare(case)
+        helper.advance(case, 160)
+        helper.damage(target, 3.5, { Entity = familiar })
+        helper.sample(case, 160, true)
+        helper.sample(case, 161, true)
+        assert(#events == 0, 'Damage must wait for the deferred native update')
+        target.HitPoints = 96.5
+        helper.sample(case, 162, true)
+        assert(#events == 1 and events[1][1] == 'familiar_hit')
+        local hit = events[1][2]
+        assert(hit.before == 100 and hit.after == 96.5 and hit.amount == 3.5)
+        assert(hit.after_tick > hit.tick and hit.entity == nil)
+        helper.damage(target, 3.5, { Entity = familiar })
+        helper.prepare({})
+        helper.sample(case, 164, true)
+        assert(#events == 1, 'Pending native references must be dropped on exit')
+        local tear = { SpawnerEntity = { ToPlayer = function() return true end } }
+        function tear:Remove() error('Player tear suppression survived case cleanup') end
+        helper.suppressPlayerTear(tear)
+    """
+    executable = shutil.which("lua5.3") or shutil.which("lua")
+    assert executable, "Lua 5.3 is required"
+    subprocess.run(
+        [executable, "-"],
+        input=script,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
