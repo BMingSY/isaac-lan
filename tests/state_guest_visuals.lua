@@ -14,6 +14,37 @@ end
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end
+local function checkSprite(sprite, expected, context)
+    local actual = native.sprite_state(sprite)
+    if actual ~= expected then
+        local differences = {}
+        for index = 1, math.max(#actual, #expected) do
+            if actual:byte(index) ~= expected:byte(index) then
+                differences[#differences + 1] = index
+                    .. ":"
+                    .. tostring(expected:byte(index))
+                    .. "/"
+                    .. tostring(actual:byte(index))
+                if #differences == 16 then
+                    break
+                end
+            end
+        end
+        error(
+            context
+                .. " animation="
+                .. sprite:GetAnimation()
+                .. " frame="
+                .. sprite:GetFrame()
+                .. " bytes="
+                .. #expected
+                .. "/"
+                .. #actual
+                .. " differences="
+                .. table.concat(differences, ",")
+        )
+    end
+end
 local renders, linked, chosen, finished = 0, false, false, false
 local originalFrame = _IsaacLanFrame
 function _IsaacLanFrame()
@@ -202,8 +233,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 and actorPosition.dimension == localPosition.dimension
             assert((actor[6] ~= false) == displayed, "Visual state included an undisplayed room")
             if displayed then
-                assert(
-                    native.sprite_state(p:GetSprite()) == actor[3][10][12],
+                checkSprite(
+                    p:GetSprite(),
+                    actor[3][10][12],
                     "Actor layer state differs at " .. t .. " player=" .. actor[1]
                 )
                 assert(
@@ -212,8 +244,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 )
                 local extras = native.actor_sprites(actor[1], p:GetSprite())
                 for i = 1, 3 do
-                    assert(
-                        native.sprite_state(extras[i]) == actor[5][i][12],
+                    checkSprite(
+                        extras[i],
+                        actor[5][i][12],
                         "Actor extra layers differ at " .. t .. " sprite=" .. i
                     )
                 end

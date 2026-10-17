@@ -63,7 +63,7 @@ ctest --test-dir build-core --output-on-failure
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
 
-Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，执行新旧编码逐字节对照、共享片段、边界／非法输入、分配失败及恢复检查；它通过统一离线入口运行，sanitizer 同时检查绑定和缓冲区的释放。性能比较使用 Release 构建，方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md#编解码基准)。
+Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，执行原生与 Lua 参考编码的逐字节对照、共享片段、边界／非法输入、分配失败及恢复检查；它通过统一离线入口运行，sanitizer 同时检查绑定和缓冲区的释放。性能比较使用 Release 构建，方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md#编解码基准)。
 
 ## 失败记录与回放
 
@@ -128,6 +128,8 @@ python tools/engine_test.py run special-routes -- \
 连续玩法组合器在同一局内切换兼容场景，保持绝对网络 tick，仅为夹具转换相对时间；路线组合器在同一组进程中等待原生退出与菜单恢复后再切换。独立启动配置、真实键盘焦点和性能隔离要求仍属于套件执行边界，不能将任意套件直接合并。
 
 `special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存传输原始流，供离线解压和状态回放。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
+
+`entity-fields` 使用泪弹、跟班和效果实体，对照游戏 Lua 属性、原生数组与数值块的读写结果，检查完整动画往返、错误输入不写入及外层编解码；它不作性能验收，可与其他功能场景共用进程。`lazarus` 在启动前仅为隔离客机准备所需角色解锁，并在进入联机前核对菜单可选项；存档仍由套件备份和恢复。
 
 受保护的实机入口在 `finally` 中等待所属后端收尾，再恢复资料并核对哈希，统一输出 `report.json`、`restored.json` 和 `junit.xml`。报告的 `schema_version` 为 `1`，`status` 区分 `passed`、`failed` 和 `error`，保留各套件原有双端证据和详细结果。JUnit 表示整次套件结果；道具效果、路线与 Boss 覆盖仍读取详细报告。未完成的子项、原生异常或恢复失败不能由一个完成标记覆盖。
 

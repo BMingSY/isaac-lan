@@ -231,7 +231,14 @@ def main():
                             and "DEEP_POCKETS " in line
                             or name in ("greed", "greedier")
                             and ("GREED mode=" + ("3" if name == "greedier" else "2") + " ") in line
-                            or name in ("audio", "motion", "floor-items", "mod-integrations")
+                            or name
+                            in (
+                                "audio",
+                                "motion",
+                                "entity-fields",
+                                "floor-items",
+                                "mod-integrations",
+                            )
                             and "LAN_NETWORK " in line
                             and "SIDE " not in line
                             or name == "lazarus"

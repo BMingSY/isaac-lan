@@ -1,6 +1,6 @@
 """Combine character and side-route fixtures without restarting game processes."""
 
-from testing.lua import factory, write_suite
+from testing.lua import ROOT, factory, write_suite
 import re
 
 
@@ -18,6 +18,7 @@ DIAGNOSTICS = (
     "home",
     "endings",
     "motion",
+    "entity-fields",
     "local-hud",
     "guest-visuals",
     "floor-items",
@@ -54,6 +55,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "rewind": "state_hourglass.lua",
             "endings": "state_endings.lua",
             "motion": "state_motion.lua",
+            "entity-fields": "state_entity_fields.lua",
             "local-hud": "state_local_hud.lua",
             "guest-visuals": "state_guest_visuals.lua",
             "floor-items": "state_floor_items.lua",
@@ -96,7 +98,14 @@ def build(output, cases=CASES, *, first_floor=False):
             options["endingRoutes"] = ["ascent"]
         elif name in ("campaign", "victory-lap", "victory-no"):
             options["endingRoutes"] = ["lamb"]
-        fixtures.append(factory(filename, options=options))
+        prelude = ""
+        if name == "entity-fields":
+            prelude = (
+                "local createEntityFieldsProbe = (function()\n"
+                + (ROOT / "tests/fixtures/entity_fields_probe.lua").read_text()
+                + "\nend)()\n"
+            )
+        fixtures.append(factory(filename, options=options, prelude=prelude))
     write_suite(output, fixtures)
 
 

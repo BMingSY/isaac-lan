@@ -79,7 +79,7 @@ flowchart LR
 
 Lua 决定游戏字段契约、采集与恢复顺序，通过游戏 API 或具名批量能力访问属性。[`state_encode(value, memo)`／`state_decode(bytes)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/state_codec.cpp) 在主线程通过共用 Lua 5.3 ABI 批量处理数组，字节读写与大小限制位于可移植的 [state_codec.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/state_codec.h)。编解码接口不访问游戏对象、原生布局或网络连接。Lua [参考实现](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/codec.lua) 用于离线对照与未绑定原生能力的夹具。
 
-值仅包含布尔、整数、有限 float32、字符串和普通数组。类型标记、整数宽度和大端格式由新旧实现的逐字节对照检查；整数与浮点数的类型、负零及有符号 64 位值保持原样。编码使用连续缓冲区，Lua 分配失败时由 userdata 的终结器释放 C++ 缓冲区；正常返回或 C++ 校验失败立即释放。
+值仅包含布尔、整数、有限 float32、字符串和普通数组。类型标记、整数宽度和大端格式由原生与 Lua 参考实现的逐字节对照检查；整数与浮点数的类型、负零及有符号 64 位值保持原样。编码使用连续缓冲区，Lua 分配失败时由 userdata 的终结器释放 C++ 缓冲区；正常返回或 C++ 校验失败立即释放。
 
 `memo` 由采集组件持有，只标记当前采集代次内不可变的数组。缓存记录完整字节、节点数与相对深度，重复引用仍计入整份视图的预算；普通数组不自动缓存，不可在标记后修改内容或缓存元数据。
 
