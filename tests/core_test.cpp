@@ -1,6 +1,7 @@
 #include "net/protocol.h"
 #include "core/automation_input.h"
 #include "core/animation_pose.h"
+#include "core/state_codec.h"
 #include "core/menu_input.h"
 #include "core/bootstrap_profile.h"
 #include "core/lanbot_console.h"
@@ -867,6 +868,40 @@ void inputAndProgress() {
         "Invalid achievement flag accepted");
 }
 
+void fixedStateFields() {
+    namespace codec = isaac::state_codec;
+    auto capture = [](auto& writer) {
+        writer.array(7);
+        writer.number(std::int64_t{-2147483649LL});
+        writer.number(std::int64_t{2147483648LL});
+        writer.number(-0.0);
+        writer.number(1.25);
+        writer.boolean(true);
+        writer.string("");
+        writer.array(2);
+        writer.boolean(false);
+        writer.string("pose");
+    };
+    codec::Writer dynamic;
+    codec::FixedWriter<128> fixed;
+    capture(dynamic);
+    capture(fixed);
+    require(std::ranges::equal(dynamic.data(), fixed.data()), "Fixed field bytes differ");
+    codec::FixedWriter<2> small;
+    small.boolean(true);
+    small.boolean(false);
+    rejects([&] { small.boolean(false); }, "Fixed writer overflow accepted");
+    codec::FixedWriter<4> string;
+    string.string("a");
+    require(string.data().size() == 4, "Exact field buffer capacity rejected");
+    rejects([&] { string.append({reinterpret_cast<const std::uint8_t*>("x"), 1}); },
+            "Fixed append overflow accepted");
+    codec::FixedWriter<128> invalid;
+    rejects([&] { invalid.number(std::numeric_limits<double>::infinity()); },
+            "Packed non-finite field accepted");
+    rejects([&] { invalid.array(codec::maxLength + 1); }, "Packed oversized array accepted");
+}
+
 void animationPose() {
     namespace pose = isaac::core::animation_pose;
     pose::State state;
@@ -1329,6 +1364,7 @@ int main(int argc, char** argv) {
                      {"transition-charge", transitionCharge},
                      {"audio-ownership", audioOwnership},
                      {"animation-pose", animationPose},
+                     {"fixed-state-fields", fixedStateFields},
                      {"localized-text", localizedText},
                      {"laser-state", laserState},
                      {"actor-roster", actorRoster},

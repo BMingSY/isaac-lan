@@ -153,8 +153,9 @@ local expected = {
     false,
     false,
     0,
+    false,
 }
-assert(codec.encode(state) == codec.encode(expected), "Schema-19 entity bytes changed")
+assert(codec.encode(state) == codec.encode(expected), "Schema-25 entity bytes changed")
 assert(state[1] == 1 and state[10] == false and state[20] == "native laser path")
 assert(laserReads == 1 and #state[9] == 11, "SampleLaser userdata must stay outside scalar fields")
 component.apply(target, state)
@@ -284,4 +285,73 @@ for index = 11, 14 do
     assert(linked[index] == 0, "Local particle leaked an unresolved authority ID")
 end
 assert(spray:GetData().__isaac_lan_entity == nil)
+
+-- Exercise the production packing branch. Opaque fields must survive the outer
+-- codec and reach their own plan, while identity/motion remain available to Lua.
+local unpacked = component.capture(warning, false)
+local packedFields =
+    codec.encode({ unpacked[8], unpacked[9], unpacked[15], unpacked[16], unpacked[17] })
+local applied = {}
+local packedNative = {
+    entity_fields_plan = function(kind, template)
+        return kind == 1000 and template or false
+    end,
+    entity_fields_capture = function(_, template)
+        assert(#template == 26)
+        local value = {}
+        for i, field in ipairs(template) do
+            value[i] = field ~= false and unpacked[i] or false
+        end
+        return value
+    end,
+    entity_fields_encode = function(_, template)
+        assert(template[1] == schemas.common and template[2] == schemas.byType[1000])
+        assert(
+            template[3] == "SpriteOffset"
+                and template[4] == "SpriteScale"
+                and template[5] == "Color"
+        )
+        return packedFields
+    end,
+    entity_fields_apply = function(_, template, value)
+        if #template == 26 then
+            assert(value[2] == 1000 and value[6][1] == unpacked[6][1])
+            applied[#applied + 1] = "outer"
+        else
+            assert(#template == 5 and value == packedFields)
+            applied[#applied + 1] = "packed"
+        end
+        return true
+    end,
+    presentation_local_effect = function()
+        return false
+    end,
+}
+local packedComponent = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "t", env))()(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(
+    packedNative,
+    schemas,
+    {
+        capture = function()
+            return false
+        end,
+    },
+    nil,
+    {
+        capture = function()
+            return 0
+        end,
+        apply = function() end,
+    }
+)
+local packedState = codec.decode(codec.encode(packedComponent.capture(warning, false)))
+for _, field in ipairs({ 8, 9, 15, 16, 17 }) do
+    assert(packedState[field] == false, "Packed fields were also expanded into Lua arrays")
+end
+assert(packedState[26] == packedFields)
+packedComponent.apply(beam, packedState)
+assert(table.concat(applied, ",") == "outer,packed", "Packed plan was not restored")
+packedState[26] = false
+assert(not pcall(packedComponent.apply, beam, packedState), "Missing packed fields accepted")
 print("PASS portable entity fields, native laser state and replica lifecycle flag ownership")

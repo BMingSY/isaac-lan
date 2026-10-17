@@ -1,4 +1,5 @@
 #include "engine/entity_fields.h"
+#include "core/state_codec.h"
 #include "engine/versions/j460/entity_fields.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "runtime/session.h"
@@ -19,6 +20,9 @@ using Address = std::uintptr_t;
 lua::API api;
 Address image = 0;
 constexpr unsigned maxNodes = 128, maxDepth = 3;
+// Each numeric node uses at most an array header plus seven float32 values.
+constexpr unsigned maxPackedBytes = maxNodes * (3 + 7 * 5);
+using FieldWriter = state_codec::FixedWriter<maxPackedBytes>;
 constexpr std::uint32_t planMagic = 0x45465031;
 enum LuaType { boolean = 1, number = 3, string = 4, table = 5, userdata = 7 };
 struct Node {
@@ -195,6 +199,53 @@ float real(lua_State* L, int index) {
         throw std::runtime_error("Invalid entity number");
     return value;
 }
+void capturePacked(FieldWriter& writer, const Plan& plan, unsigned index, Address entity,
+                   unsigned frame) {
+    const auto& node = plan.nodes[index];
+    if (node.array) {
+        writer.array(node.count);
+        for (unsigned child = index + 1; child < node.next; child = plan.nodes[child].next)
+            capturePacked(writer, plan, child, entity, frame);
+    } else if (!node.field) {
+        writer.boolean(false);
+    } else {
+        const auto& field = *node.field;
+        const auto address = entity + field.offset;
+        switch (field.kind) {
+        case Kind::real:
+            writer.number(static_cast<double>(at<float>(address, 0)));
+            break;
+        case Kind::integer:
+            writer.number(static_cast<std::int64_t>(at<std::int32_t>(address, 0)));
+            break;
+        case Kind::unsignedInteger:
+            writer.number(static_cast<std::int64_t>(at<std::uint32_t>(address, 0)));
+            break;
+        case Kind::frame:
+            writer.number(static_cast<std::int64_t>(
+                std::bit_cast<std::int32_t>(frame - at<unsigned>(address, 0))));
+            break;
+        case Kind::flags:
+            writer.number(std::bit_cast<std::int64_t>(at<std::uint64_t>(address, 0)));
+            break;
+        case Kind::boolean:
+            writer.boolean(at<bool>(address, 0));
+            break;
+        case Kind::vector:
+        case Kind::color: {
+            const auto count = field.kind == Kind::color ? std::size(properties::colorOffsets) : 2;
+            writer.array(count);
+            for (unsigned i = 0; i < count; ++i) {
+                const auto offset = field.kind == Kind::color ? properties::colorOffsets[i] : i * 4;
+                writer.number(static_cast<double>(at<float>(address, offset)));
+            }
+            break;
+        }
+        default:
+            throw std::runtime_error("Only numeric entity fields can be packed");
+        }
+    }
+}
 void writeReal(Address entity, const properties::Field& field, float value) {
     using SetFloat = void(__attribute__((thiscall))*)(void*, float);
     switch (field.write) {
@@ -226,6 +277,70 @@ void writeReal(Address entity, const properties::Field& field, float value) {
     }
 }
 using Values = std::array<std::array<std::uint32_t, std::size(properties::colorOffsets)>, maxNodes>;
+std::int64_t packedInteger(state_codec::Reader& reader, state_codec::Tag tag) {
+    if (tag == state_codec::Tag::int32)
+        return std::bit_cast<std::int32_t>(static_cast<std::uint32_t>(reader.integer(4)));
+    if (tag == state_codec::Tag::int64)
+        return std::bit_cast<std::int64_t>(reader.integer(8));
+    throw std::runtime_error("Invalid packed entity integer");
+}
+float packedReal(state_codec::Reader& reader, state_codec::Tag tag) {
+    if (tag == state_codec::Tag::float32)
+        return static_cast<float>(reader.number());
+    return static_cast<float>(packedInteger(reader, tag));
+}
+void packedArray(state_codec::Reader& reader, state_codec::Tag tag, unsigned count) {
+    if (tag != state_codec::Tag::array || reader.integer(2) != count)
+        throw std::runtime_error("Packed entity field shape mismatch");
+}
+void validatePacked(state_codec::Reader& reader, const Plan& plan, unsigned index, Values& values) {
+    const auto& node = plan.nodes[index];
+    const auto tag = reader.tag();
+    if (node.array) {
+        packedArray(reader, tag, node.count);
+        for (unsigned child = index + 1; child < node.next; child = plan.nodes[child].next)
+            validatePacked(reader, plan, child, values);
+        return;
+    }
+    if (!node.field) {
+        if (tag != state_codec::Tag::falseValue)
+            throw std::runtime_error("Packed field placeholder must be false");
+        return;
+    }
+    const auto& field = *node.field;
+    switch (field.kind) {
+    case Kind::real:
+        values[index][0] = std::bit_cast<std::uint32_t>(packedReal(reader, tag));
+        break;
+    case Kind::integer:
+    case Kind::unsignedInteger:
+    case Kind::frame:
+    case Kind::flags: {
+        const auto number = packedInteger(reader, tag);
+        if ((field.kind == Kind::unsignedInteger && (number < 0 || number > UINT32_MAX)) ||
+            ((field.kind == Kind::integer || field.kind == Kind::frame) &&
+             (number < INT32_MIN || number > INT32_MAX)))
+            throw std::runtime_error("Invalid packed entity integer");
+        values[index][0] = static_cast<std::uint32_t>(number);
+        break;
+    }
+    case Kind::boolean:
+        if (tag != state_codec::Tag::falseValue && tag != state_codec::Tag::trueValue)
+            throw std::runtime_error("Invalid packed entity boolean");
+        values[index][0] = tag == state_codec::Tag::trueValue;
+        break;
+    case Kind::color:
+    case Kind::vector: {
+        const auto count = field.kind == Kind::color ? std::size(properties::colorOffsets) : 2;
+        packedArray(reader, tag, count);
+        for (unsigned i = 0; i < count; ++i)
+            values[index][i] = std::bit_cast<std::uint32_t>(packedReal(reader, reader.tag()));
+        break;
+    }
+    default:
+        throw std::runtime_error("Only numeric entity fields can be packed");
+    }
+}
 void validate(lua_State* L, const Plan& plan, unsigned index, int value, Values& values) {
     const auto& node = plan.nodes[index];
     if (node.array) {
@@ -347,7 +462,7 @@ template <int Operation> int run(lua_State* L) {
     try {
         if (!api.checkStack(L, maxDepth + 16))
             throw std::runtime_error("Cannot reserve entity field stack");
-        constexpr bool sprite = Operation >= 3;
+        constexpr bool sprite = Operation >= 3 && Operation <= 5;
         if constexpr (Operation == 0 || Operation == 3) {
             const auto type =
                 sprite ? properties::spriteType : static_cast<unsigned>(api.checkInteger(L, 1));
@@ -365,7 +480,7 @@ template <int Operation> int run(lua_State* L) {
             if (sprite != (plan.type == properties::spriteType))
                 throw std::runtime_error("Native field plan domain mismatch");
             const auto entity = sprite ? checkedSprite(L) : checkedEntity(L, plan);
-            if constexpr (Operation == 1 || Operation == 4) {
+            if constexpr (Operation == 1 || Operation == 4 || Operation == 6) {
                 unsigned frame = 0;
                 if constexpr (!sprite) {
                     const auto game = at<Address>(image, j460::globals::game);
@@ -373,13 +488,30 @@ template <int Operation> int run(lua_State* L) {
                         throw std::runtime_error("Entity capture requires an active game");
                     frame = at<unsigned>(game, j460::layout::game::frame);
                 }
-                capture(L, plan, 0, entity, frame);
+                if constexpr (Operation == 6) {
+                    FieldWriter writer;
+                    capturePacked(writer, plan, 0, entity, frame);
+                    const auto bytes = writer.data();
+                    // Fixed storage owns no heap resource across Lua's longjmp.
+                    api.pushLString(L, reinterpret_cast<const char*>(bytes.data()), bytes.size());
+                } else
+                    capture(L, plan, 0, entity, frame);
             } else {
                 if (!runtime::replica())
                     throw std::runtime_error("Only replicas restore entity fields");
                 // Validation fills every writable component before apply reads it.
                 Values values;
-                validate(L, plan, 0, 3, values);
+                if (!sprite && api.type(L, 3) == LuaType::string) {
+                    std::size_t size = 0;
+                    const auto bytes = api.toString(L, 3, &size);
+                    if (size > maxPackedBytes)
+                        throw std::runtime_error("Packed entity field size exceeded");
+                    state_codec::Reader reader(
+                        {reinterpret_cast<const std::uint8_t*>(bytes), size});
+                    validatePacked(reader, plan, 0, values);
+                    reader.finish();
+                } else
+                    validate(L, plan, 0, 3, values);
                 apply(plan, entity, values);
                 api.pushBoolean(L, true);
             }
@@ -409,6 +541,8 @@ bool bind(lua_State* L, lua::Module module) {
     api.setField(L, -2, "entity_fields_capture");
     api.pushClosure(L, run<2>, 0);
     api.setField(L, -2, "entity_fields_apply");
+    api.pushClosure(L, run<6>, 0);
+    api.setField(L, -2, "entity_fields_encode");
     api.pushClosure(L, run<3>, 0);
     api.setField(L, -2, "sprite_fields_plan");
     api.pushClosure(L, run<4>, 0);

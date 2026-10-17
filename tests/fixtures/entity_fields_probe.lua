@@ -170,6 +170,10 @@ return function(native, reference, schemas, host)
                         reference.encode(native.entity_fields_capture(sprite, plan)) == expected,
                         "Batch capture differs for entity type " .. kind
                     )
+                    assert(
+                        native.entity_fields_encode(sprite, plan) == expected,
+                        "Packed capture differs"
+                    )
                     if not host then
                         local originalSprite = assert(native.sprite_state(sprite))
                         local value = reference.decode(expected)
@@ -188,10 +192,40 @@ return function(native, reference, schemas, host)
                                     and native.sprite_state(sprite) == viaLuaSprite,
                                 "Batch application differs for entity type " .. kind
                             )
+                            write(entity, original)
+                            assert(native.sprite_state(sprite, originalSprite))
+                            local packed = reference.encode(value)
+                            assert(native.entity_fields_apply(sprite, plan, packed))
+                            assert(
+                                reference.encode(read(entity)) == viaLua
+                                    and native.sprite_state(sprite) == viaLuaSprite,
+                                "Packed application differs for entity type " .. kind
+                            )
+                            for size = 0, #packed - 1 do
+                                assert(
+                                    not pcall(
+                                        native.entity_fields_apply,
+                                        sprite,
+                                        plan,
+                                        packed:sub(1, size)
+                                    )
+                                )
+                            end
+                            assert(
+                                not pcall(native.entity_fields_apply, sprite, plan, packed .. "\0")
+                            )
                             -- Reject the complete bad shape before changing any field.
                             local broken = reference.decode(expected)
                             broken[1][1], broken[4] = broken[1][1] + 100, {}
                             assert(not pcall(native.entity_fields_apply, sprite, plan, broken))
+                            assert(
+                                not pcall(
+                                    native.entity_fields_apply,
+                                    sprite,
+                                    plan,
+                                    reference.encode(broken)
+                                )
+                            )
                             assert(
                                 reference.encode(read(entity)) == viaLua,
                                 "Rejected batch changed the entity"

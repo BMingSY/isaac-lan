@@ -34,11 +34,11 @@ return function(wire)
         end
         local common, schema = schemas.common, schemas.byType
         local types = schemas.types
-        local plans = {}
+        local plans, packedPlans = {}, {}
         if native.entity_fields_plan then
             for kind, names in pairs(schema) do
                 if type(kind) == "number" then
-                    plans[kind] = native.entity_fields_plan(kind, {
+                    local template = {
                         false, -- Entity.id
                         "Type",
                         "Variant",
@@ -64,7 +64,29 @@ return function(wire)
                         false, -- Entity.npc
                         false, -- Entity.compatibility
                         false, -- Entity.minecart
-                    })
+                        false, -- Entity.nativeFields
+                    }
+                    if native.entity_fields_encode then
+                        for _, field in ipairs({
+                            Entity.common,
+                            Entity.typed,
+                            Entity.offset,
+                            Entity.scale,
+                            Entity.color,
+                        }) do
+                            template[field] = false
+                        end
+                    end
+                    plans[kind] = native.entity_fields_plan(kind, template)
+                    if plans[kind] and native.entity_fields_encode then
+                        packedPlans[kind] = assert(native.entity_fields_plan(kind, {
+                            common,
+                            names,
+                            "SpriteOffset",
+                            "SpriteScale",
+                            "Color",
+                        }))
+                    end
                 end
             end
         end
@@ -247,6 +269,7 @@ return function(wire)
                     npcState.capture(e:ToNPC()), -- Entity.npc
                     false, -- Entity.compatibility
                     false, -- Entity.minecart
+                    false, -- Entity.nativeFields
                 }
             value[Entity.id] = id(e, kind)
             value[Entity.sprite] = visual and sprite(s) or false
@@ -261,6 +284,9 @@ return function(wire)
                     and visualCompatibility.capture(e, id)
                 or false
             value[Entity.minecart] = visual and entityLinks.capture(e, id) or 0
+            value[Entity.nativeFields] = packedPlans[kind]
+                    and assert(native.entity_fields_encode(s, packedPlans[kind]))
+                or false
             return value
         end
         local function applyEntity(e, v)
@@ -269,6 +295,10 @@ return function(wire)
             local plan = plans[kind]
             if plan then
                 assert(native.entity_fields_apply(s, plan, v))
+                if packedPlans[kind] then
+                    assert(type(v[Entity.nativeFields]) == "string", "Missing packed entity fields")
+                    assert(native.entity_fields_apply(s, packedPlans[kind], v[Entity.nativeFields]))
+                end
             else
                 e.Variant, e.SubType = v[Entity.variant], v[Entity.subtype]
                 e.Position = vec(v[Entity.position])

@@ -212,6 +212,7 @@ if(BUILD_TESTING)
         transition-charge
         audio-ownership
         animation-pose
+        fixed-state-fields
         localized-text
         laser-state
         actor-roster

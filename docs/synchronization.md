@@ -85,6 +85,8 @@ Lua 决定游戏字段契约、采集与恢复顺序，通过游戏 API 或具�
 
 客机仅在预检尚未进入原生恢复时保留最新解码结果，用于半帧延后到完整更新的同一份状态。字节或 tick 变化、楼层等待、视图重置及开始恢复都会使该缓存失效。库存比较直接检查角色类型、道具种类／数量和饰品槽，仍保留每 30 tick 的原生库存纠偏。
 
+泪弹、跟班和效果实体的 `nativeFields`（实体字段 26）携带数值块，顺序为通用属性数组、类型属性数组、精灵偏移、精灵缩放和颜色；原位置 8、9、15、16、17 为 `false`。数值块沿用相同的标记和大端编码，由具名字段计划在原生端直接采集和恢复，避免逐帧构造、遍历中间 Lua 表。其他实体及离线 Lua 参考路径仍使用展开的属性数组，字段 26 为 `false`。字段名称与顺序由 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua)、[entity_codec.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_codec.lua) 和 [fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 定义，原生白名单不决定玩法或引用关系。
+
 ## 校验与失败边界
 
 | 边界 | 检查与结果 |
@@ -96,6 +98,6 @@ Lua 决定游戏字段契约、采集与恢复顺序，通过游戏 API 或具�
 
 协议与字段版本分别由 [protocol.h](https://github.com/BMingSY/isaac-lan/blob/main/src/net/protocol.h) 和 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua) 管理。变更字段时同步更新生产者、消费者、版本／指纹和相关契约。
 
-世界字段版本为 24，精灵原生载荷使用格式 2，包含动画挂点帧和事件状态。角色和服装在渲染边界仍恢复权威姿态；同名动画通过完整状态恢复，避免每帧重新初始化动画。不同字段版本不能互相应用，嵌入模块与 DLL 指纹继续参与连接校验。
+世界字段版本为 25，精灵原生载荷使用格式 2，包含动画挂点帧和事件状态。角色和服装在渲染边界仍恢复权威姿态；同名动画通过完整状态恢复，避免每帧重新初始化动画。不同字段版本不能互相应用，嵌入模块与 DLL 指纹继续参与连接校验。
 
 客机协议或应用错误会结束其当前游戏并返回大厅；房主自身的桥接错误可能结束整场会话，详见[失败边界](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md#失败边界)。Ping 是包含轮询与排队的往返时间，不能代替状态处理耗时；测量与排查方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。

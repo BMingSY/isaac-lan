@@ -1,4 +1,6 @@
 #pragma once
+#include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -23,8 +25,39 @@ struct Budget {
     }
 };
 
-class Writer {
-    std::vector<std::uint8_t> bytes;
+// Small native field plans can encode without heap ownership across a Lua
+// allocation failure. Both storage choices use exactly the same wire writer.
+template <std::size_t Capacity> class FixedBytes {
+    std::array<std::uint8_t, Capacity> bytes;
+    std::size_t used = 0;
+
+  public:
+    void reserve(std::size_t) {}
+    std::size_t size() const {
+        return used;
+    }
+    const std::uint8_t* data() const {
+        return bytes.data();
+    }
+    std::uint8_t* end() {
+        return bytes.data() + used;
+    }
+    void push_back(std::uint8_t value) {
+        if (used == Capacity)
+            throw std::runtime_error("Field state size exceeded");
+        bytes[used++] = value;
+    }
+    void insert(std::uint8_t*, const std::uint8_t* first, const std::uint8_t* last) {
+        const auto count = static_cast<std::size_t>(last - first);
+        if (count > Capacity - used)
+            throw std::runtime_error("Field state size exceeded");
+        std::copy(first, last, bytes.data() + used);
+        used += count;
+    }
+};
+
+template <class Storage> class BasicWriter {
+    Storage bytes;
     void integer(std::uint64_t value, unsigned width) {
         if (bytes.size() + width > maxBytes)
             throw std::runtime_error("State size exceeded");
@@ -33,16 +66,18 @@ class Writer {
     }
 
   public:
-    Writer() {
+    BasicWriter() {
         bytes.reserve(4096);
     }
     std::span<const std::uint8_t> data() const {
-        return bytes;
+        return {bytes.data(), bytes.size()};
     }
     void append(std::span<const std::uint8_t> value) {
         if (value.size() > maxBytes - bytes.size())
             throw std::runtime_error("State size exceeded");
-        bytes.insert(bytes.end(), value.begin(), value.end());
+        if (value.empty())
+            return;
+        bytes.insert(bytes.end(), value.data(), value.data() + value.size());
     }
     void boolean(bool value) {
         integer(static_cast<unsigned>(value ? Tag::trueValue : Tag::falseValue), 1);
@@ -74,6 +109,8 @@ class Writer {
         integer(size, 2);
     }
 };
+using Writer = BasicWriter<std::vector<std::uint8_t>>;
+template <std::size_t Capacity> using FixedWriter = BasicWriter<FixedBytes<Capacity>>;
 
 class Reader {
     std::span<const std::uint8_t> bytes;
