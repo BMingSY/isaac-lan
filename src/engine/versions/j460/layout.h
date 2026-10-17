@@ -80,6 +80,12 @@ inline constexpr unsigned previousX = 0x344;
 inline constexpr unsigned previousY = 0x348;
 inline constexpr unsigned parent = 0x3bc;
 } // namespace entity
+namespace sprite {
+inline constexpr unsigned size = 0x114;
+// Both native animation states store a non-owning pointer to their ANM2.
+inline constexpr unsigned animationOwner = 0x30;
+inline constexpr unsigned overlayOwner = 0x50;
+} // namespace sprite
 namespace player {
 inline constexpr unsigned type = 0x13c0;
 inline constexpr unsigned controller = 0x1618;

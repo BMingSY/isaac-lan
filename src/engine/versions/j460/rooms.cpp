@@ -41,6 +41,7 @@
 #include <limits>
 
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/floor_source.h"
 namespace j460 = isaac::engine::j460;
 
@@ -189,6 +190,9 @@ void selectSharedState(Room* room) {
 std::map<Key, std::unique_ptr<Room>> loaded;
 std::map<Address, Room*> location;
 std::vector<Address> participants;
+// Non-owning identities of replica-only parented bodies. Native PlayerManager
+// owns their allocations; the map is invalidated before native run teardown.
+std::map<unsigned, Address> replicaCompanions;
 bool floorChanged = false;
 struct Dormant {
     std::unique_ptr<Room> room;
@@ -2087,6 +2091,131 @@ int actorCraftingBag(lua_State* L) {
         return 1;
     }
 }
+int actorCompanions(lua_State* L) {
+    try {
+        if (!runtime::replica() || !enabled || scopes.depth())
+            throw std::runtime_error("Only an idle replica restores companion actors");
+        struct Companion {
+            unsigned id, index, parent, controller, kind, variant;
+        };
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 1, &size);
+        lan::Reader reader({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        const auto count = reader.u8();
+        if (count > 60)
+            throw std::runtime_error("Too many companion actors");
+        std::vector<Companion> desired;
+        std::set<unsigned> ids, indices;
+        for (unsigned i = 0; i < count; ++i) {
+            Companion value{reader.u32(), reader.u8(),  reader.u8(),
+                            reader.u8(),  reader.u16(), reader.u16()};
+            if (!value.id || value.index >= 64 || value.parent >= value.index ||
+                value.controller < 1 || value.controller > 4 || value.variant > 1 ||
+                !ids.insert(value.id).second || !indices.insert(value.index).second)
+                throw std::runtime_error("Invalid companion actor identity");
+            desired.push_back(value);
+        }
+        reader.finish();
+        if (!count && replicaCompanions.empty()) {
+            lua.pushBoolean(L, true);
+            return 1;
+        }
+        std::sort(desired.begin(), desired.end(),
+                  [](const auto& a, const auto& b) { return a.index < b.index; });
+        auto all = values(roster());
+        for (auto it = replicaCompanions.begin(); it != replicaCompanions.end();) {
+            if (ids.contains(it->first)) {
+                ++it;
+                continue;
+            }
+            const auto body = it->second;
+            if (std::find(all.begin(), all.end(), body) != all.end()) {
+                const auto room = findRoom(body);
+                if (!room)
+                    throw std::runtime_error("Companion room is missing");
+                {
+                    Scope scope(*room, all);
+                    using Remove = void(__attribute__((thiscall))*)(void*, void*, bool);
+                    engine<Remove>(j460::entry::playerManagerRemovePlayer)(
+                        reinterpret_cast<void*>(game() + j460::layout::game::players),
+                        reinterpret_cast<void*>(body), false);
+                }
+                location.erase(body);
+                all = values(roster());
+            }
+            it = replicaCompanions.erase(it);
+        }
+        for (const auto& value : desired) {
+            if (value.parent >= all.size())
+                throw std::runtime_error("Companion owner is missing");
+            const auto parent = all[value.parent];
+            if (at<unsigned>(parent, j460::layout::player::controller) != value.controller)
+                throw std::runtime_error("Companion controller differs from its owner");
+            const auto room = findRoom(parent);
+            if (!room)
+                throw std::runtime_error("Companion owner has no room");
+            Address body = 0;
+            if (const auto found = replicaCompanions.find(value.id);
+                found != replicaCompanions.end() &&
+                std::find(all.begin(), all.end(), found->second) != all.end())
+                body = found->second;
+            // Continue/rejoin can already contain the native parented body.
+            if (!body && value.index < all.size()) {
+                const auto candidate = all[value.index];
+                if (at<Address>(candidate, j460::layout::entity::parent) == parent &&
+                    at<unsigned>(candidate, j460::layout::player::controller) == value.controller &&
+                    at<unsigned>(candidate, j460::layout::player::type) == value.kind)
+                    body = candidate;
+            }
+            if (!body) {
+                const auto view = findRoom(participant(runtime::localViewSlot()));
+                if (!view || view->replicaShell)
+                    throw std::runtime_error("Companion creation requires a loaded local room");
+                {
+                    Scope scope(*view, all);
+                    using Spawn = void*(__attribute__((thiscall))*)(void*, int);
+                    body = reinterpret_cast<Address>(engine<Spawn>(j460::entry::engineInputSpawn)(
+                        reinterpret_cast<void*>(game() + j460::layout::game::players), 0));
+                    if (!body)
+                        throw std::runtime_error("Cannot allocate companion actor");
+                    using Assign = void(__attribute__((thiscall))*)(void*, int, bool);
+                    engine<Assign>(j460::entry::engineRoomsAssign)(reinterpret_cast<void*>(body),
+                                                                   value.controller, false);
+                    using AssignPtr = void*(__attribute__((thiscall))*)(void*, void*);
+                    engine<AssignPtr>(j460::entry::entityPtrAssignTwin)(
+                        reinterpret_cast<void*>(body + j460::layout::entity::parent),
+                        reinterpret_cast<void*>(parent));
+                    // Initialize a neutral native body, then restore its display
+                    // form. Initializing a gameplay character here would create
+                    // another Soul/twin or reroll starting items on the replica.
+                    engine<RoomCall>(j460::entry::engineInputInitialize)(
+                        reinterpret_cast<void*>(body));
+                    at<unsigned>(body, j460::layout::player::type) = value.kind;
+                    at<unsigned>(body, j460::layout::entity::variant) = value.variant;
+                }
+                if (view != room)
+                    moveEntity(body, *view, *room);
+                location[body] = room;
+                all = values(roster());
+            }
+            replicaCompanions[value.id] = body;
+            const auto existing = std::find(all.begin(), all.end(), body);
+            if (existing == all.end() || value.index >= all.size())
+                throw std::runtime_error("Companion roster index is missing");
+            all.erase(existing);
+            all.insert(all.begin() + value.index, body);
+        }
+        assign(roster(), all);
+        for (unsigned i = 0; i < all.size(); ++i)
+            at<unsigned>(all[i], j460::layout::player::index) = i;
+        participants = logicalPlayers();
+        lua.pushBoolean(L, true);
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
 int actorForm(lua_State* L) {
     const auto index = lua.checkInteger(L, 1), desired = lua.checkInteger(L, 2);
     const auto controller = lua.getTop(L) >= 3 ? lua.checkInteger(L, 3) : -1;
@@ -2753,6 +2882,8 @@ bool restoreLocations(const std::vector<SavedLocation>& saved) {
 void finishFrame() {
     if (scopes.depth())
         return;
+    if (enabled)
+        actors::forgetRemoved(location, values(roster()));
     if (pendingExit) {
         requestExit(*pendingExit);
         pendingExit.reset();
@@ -3225,6 +3356,7 @@ bool prepareRewind(unsigned slot) {
     return true;
 }
 void beforeStart() {
+    replicaCompanions.clear();
     floorSource.reset();
     replicaDeals.reset();
     presentation::items::reset();
@@ -3252,6 +3384,7 @@ void beforeStart() {
     // dormant actors canonicalizes the viewport; native departure must still
     // use the initiating room, including its chest and arrival animation.
     const auto source = at<Address>(game(), 0x18300);
+    actors::forgetRemoved(location, values(roster()));
     const auto mask = connectedMask;
     setConnected(15);
     for (auto& [key, room] : loaded) {
@@ -3444,6 +3577,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("actor_pockets", actorPockets);
     function("actor_crafting_bag", actorCraftingBag);
     function("actor_form", actorForm);
+    function("actor_companions", actorCompanions);
     function("actor_poop", actorPoop);
     function("actor_ghost", actorGhost);
     function("laser_path", laserPath);

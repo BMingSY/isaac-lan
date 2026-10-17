@@ -58,6 +58,10 @@ local function environment(difficulty)
     local position, ready, epoch = 84, true, 1
     local chances, appliedChances = { 1, 0.5 }, nil
     local native = {
+        actor_companions = function(bytes)
+            assert(bytes == "\0")
+            return true
+        end,
         generated_items = function(value)
             return value and true or ""
         end,

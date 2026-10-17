@@ -82,7 +82,7 @@ void compatibilityTargets() {
             !characters::sharedCharacterEffect(ids::player::lostB, characters::TeamEffect::shop) &&
             !characters::sharedCharacterEffect(0, characters::TeamEffect::randomCards),
         "Global character effects leaked into another trait or player type");
-    for (int item : {21, 54, 64, 246, 260, 376, 656, 691, 721})
+    for (int item : {21, 54, 64, 246, 260, 376, 402, 656, 691, 721})
         require(items::sharedCollectibleEffect(item), "A public passive effect became personal");
     for (int item : {0, 1, 105, 577, 622, 628})
         require(!items::sharedCollectibleEffect(item), "A personal inventory query became shared");
@@ -363,6 +363,17 @@ void logRecord() {
 void actorRoster() {
     using isaac::actors::reconcile;
     using isaac::actors::replacementView;
+    std::map<int, int> locations{{11, 84}, {12, 97}, {21, 97}};
+    isaac::actors::forgetRemoved(locations, std::vector{11, 12});
+    require(locations == std::map<int, int>{{11, 84}, {12, 97}},
+            "Expired native companion retained a room after leaving the roster");
+    isaac::actors::forgetRemoved(locations, std::vector{11});
+    require(locations == std::map<int, int>{{11, 84}},
+            "A parked actor retained an active room location");
+    locations[12] = 84;
+    isaac::actors::forgetRemoved(locations, std::vector{11, 12});
+    require(locations.size() == 2 && locations.at(12) == 84,
+            "Rejoined actor lost its newly assigned location");
     require(replacementView<int>({11, 32, 22, 14}, {22, 32}, 22, 32) == std::vector{32, 22},
             "Birthright replacement lost the global permutation or included another room");
     require(replacementView<int>({11, 32, 14}, {22}, 22, 32) == std::vector{32},

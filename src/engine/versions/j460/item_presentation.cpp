@@ -12,6 +12,7 @@
 #include <memory>
 
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/layout.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::presentation::items {
@@ -248,7 +249,16 @@ void __attribute__((fastcall)) show(void* overlay, void*, int id, int delay, voi
             // overlay; its completion restores this player's visibility.
             auto* source = reinterpret_cast<unsigned char*>(overlay) + 0x11a4;
             auto* destination = owned[actor.slot]->storage.data() + 0x11a4;
-            std::swap_ranges(source, source + 0x114, destination);
+            // ANM2's two animation states point back to their owning sprite.
+            // Moving the storage without rebinding them makes Render read the
+            // emptied global sprite's layer vector. Keep each allocation owned
+            // exactly once and restore both non-owning self references.
+            std::swap_ranges(source, source + j460::layout::sprite::size, destination);
+            for (auto sprite : {source, destination}) {
+                const auto address = reinterpret_cast<Address>(sprite);
+                at<Address>(address, j460::layout::sprite::animationOwner) = address;
+                at<Address>(address, j460::layout::sprite::overlayOwner) = address;
+            }
         }
         originalShow(owned[actor.slot]->storage.data(), id, delay, target);
         if (static_cast<int>(actor.slot) == runtime::localViewSlot())

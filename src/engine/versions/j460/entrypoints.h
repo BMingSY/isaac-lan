@@ -7,6 +7,7 @@ namespace entry {
 inline constexpr std::uint32_t bossHeldBombsResize = 0x4bd80;
 inline constexpr std::uint32_t entityPtrAssignTwin = 0xcf1d0;
 inline constexpr std::uint32_t playerManagerAddExistingPlayer = 0x5b9f60;
+inline constexpr std::uint32_t playerManagerRemovePlayer = 0x5ba000;
 inline constexpr std::uint32_t playerGetPoopMana = 0x353c20;
 inline constexpr std::uint32_t playerGetPoopSpell = 0x441cd0;
 inline constexpr std::uint32_t playerManagerReplacePlayer = 0x5bee80;

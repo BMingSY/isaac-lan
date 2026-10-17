@@ -42,6 +42,7 @@ end, PlayerType)
 local poop = assert(modules["compat/characters/blue_baby"])(native, PlayerType)
 local glitched = assert(modules["compat/items/glitched"])(native)
 local craftingBag = assert(modules["compat/items/crafting_bag"])(native, CollectibleType)
+local megaMush = assert(modules["compat/items/mega_mush"])(CollectibleType)
 local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
 local entityCodec = component("sync/entity_codec")(
@@ -137,6 +138,7 @@ local captureState = component("sync/capture")({
     sprite = sprite,
     poop = poop,
     craftingBag = craftingBag,
+    megaMush = megaMush,
     curses = curses,
     greed = greed,
     deals = deals,
@@ -201,11 +203,13 @@ local replica = component("sync/replica")({
         return Isaac.GetRoomEntities()
     end,
     forms = forms,
+    restoreActorRoster = component("sync/actor_roster")(native),
     applyInventory = applyInventory,
     actors = actorsPresentation,
     motion = motionPresentation,
     poop = poop,
     craftingBag = craftingBag,
+    megaMush = megaMush,
     crawlspace = crawlspace,
     pills = pills,
     glitched = glitched,

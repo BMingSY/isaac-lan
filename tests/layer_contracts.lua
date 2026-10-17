@@ -4,9 +4,9 @@ local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
 local codec, schema = module("sync/codec"), module("sync/world_schema")
--- Schema 20 restores generated definitions before inventory/room state.
+-- Schema 21 adds the actor's temporary Mega Mush form.
 local tuple = {
-    20,
+    21,
     42,
     80,
     6,
@@ -33,11 +33,11 @@ assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses ==
 assert(codec.encode(schema.pack(view)) == codec.encode(tuple))
 assert(not pcall(schema.unpack, tuple, 41))
 local malformed = { table.unpack(tuple) }
-for _, prior in ipairs({ 16, 17, 18, 19 }) do
+for _, prior in ipairs({ 16, 17, 18, 19, 20 }) do
     malformed[1] = prior
     assert(not pcall(schema.unpack, malformed, 42))
 end
-malformed[1], malformed[22] = 20, true
+malformed[1], malformed[22] = 21, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))

@@ -1,8 +1,18 @@
 #pragma once
 #include <algorithm>
+#include <map>
 #include <vector>
 
 namespace isaac::actors {
+template <class Locations, class Actor>
+void forgetRemoved(Locations& locations, const std::vector<Actor>& listed) {
+    // Location metadata does not own actors. Native temporary actors can be
+    // removed after a scoped update; compare identities without dereferencing
+    // allocations which the native player manager may already have released.
+    std::erase_if(locations, [&](const auto& entry) {
+        return std::find(listed.begin(), listed.end(), entry.first) == listed.end();
+    });
+}
 template <class Actor>
 std::vector<Actor> replacementView(const std::vector<Actor>& all, const std::vector<Actor>& scoped,
                                    Actor old, Actor next) {

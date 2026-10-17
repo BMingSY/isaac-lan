@@ -9,6 +9,7 @@ return {
         pose = 6,
         poop = 7,
         craftingBag = 8,
+        megaMush = 9,
     },
     inventory = {
         type = 1,

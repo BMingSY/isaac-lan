@@ -73,3 +73,34 @@ assert(not pcall(broken.resolve, 0, inventory(38)))
 print(
     "PASS Tainted Lazarus replacement, Birthright backup listing, idempotence and redirected motion cleanup"
 )
+local wire = dofile(root .. "/src/bridge/sync/fields.lua")
+local restore = dofile(root .. "/src/bridge/sync/actor_roster.lua")(wire)
+local packets = {}
+local sync = restore({
+    actor_companions = function(bytes)
+        packets[#packets + 1] = bytes
+        return true
+    end,
+})
+local function actor(index, controller, identifier, parent, kind, variant)
+    return {
+        index,
+        controller,
+        { [1] = identifier, [3] = variant or 0, [11] = parent or 0 },
+        { kind or 0 },
+    }
+end
+local host, guest = actor(0, 1, 100), actor(1, 2, 200)
+local soul = actor(2, 2, 300, 200, 16)
+sync({ host, guest, soul })
+local count, identifier, index, parent, controller, kind, variant, nextByte =
+    string.unpack(">I1I4I1I1I1I2I2", packets[#packets])
+assert(count == 1 and identifier == 300 and index == 2 and parent == 1)
+assert(controller == 2 and kind == 16 and variant == 0 and nextByte == #packets[#packets] + 1)
+sync({ host, guest, soul })
+assert(packets[1] == packets[2], "Repeated companion snapshots changed identity")
+sync({ host, guest })
+assert(packets[3] == string.pack(">I1", 0), "Missing companions must reach native cleanup")
+assert(not pcall(sync, { host, guest, actor(2, 1, 300, 200, 20) }))
+assert(not pcall(sync, { host, actor(1, 1, 200, 300), actor(2, 1, 300) }))
+print("PASS parented actor identities, owner validation, repeated state and cleanup request")
