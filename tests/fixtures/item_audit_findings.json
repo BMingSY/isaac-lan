@@ -1,7 +1,7 @@
 {
   "game": "1.9.7.17.J460",
-  "candidate": "23cb167c607049bd34996d570267cbc7835e1884",
-  "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+  "candidate": "0d0a78dcc6f9ae1009e91f7a34e413557c4a9ba1",
+  "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
   "known": {
     "collectible:21": {
       "effect": "全队共享特殊房间位置显示。"
@@ -98,6 +98,9 @@
       "status": "crash",
       "impact": "用例退出时客机堆损坏，栈在手柄设备清理；归因未定。",
       "evidence": "item-effects-full-20261017-03/batch-002；C0000374；原始转储保留。"
+    },
+    "collectible:333": {
+      "effect": "全队共享完整地图显示。"
     }
   },
   "audit": {
@@ -12328,7 +12331,7 @@
       ]
     },
     "collectible:21": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "collectible:21/host-same",
@@ -12355,9 +12358,164 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:21/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:21/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:21/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:21/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "collectible:24": {
       "status": "verified",
@@ -16574,7 +16732,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:246": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "collectible:246/host-same",
@@ -16601,9 +16759,164 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:246/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:246/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:246/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:246/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "collectible:249": {
       "status": "basic_pass",
@@ -21713,7 +22026,7 @@
       ]
     },
     "card:22": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "card:22/host-same",
@@ -21740,9 +22053,164 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "card:22/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:22/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:22/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:22/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "card:25": {
       "status": "verified",
@@ -27298,7 +27766,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "pill:25": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "pill:25/host-same",
@@ -27407,9 +27875,164 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "pill:25/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-15/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "identified_pills_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "identified_pills_after_use",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "pill:25/host-same/horse",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-15/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "identified_pills_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "identified_pills_after_use",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "pill:25/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-15/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "identified_pills_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "identified_pills_after_use",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "pill:25/client-split/horse",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-15/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "identified_pills_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "identified_pills_after_use",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "pill:26": {
       "status": "basic_pass",
@@ -27698,7 +28321,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "pill:31": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "pill:31/host-same",
@@ -27807,9 +28430,132 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "pill:31/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-15/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "pill:31/host-same/horse",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-15/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "pill:31/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-15/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "pill:31/client-split/horse",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-15/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "pill:32": {
       "status": "verified",
@@ -31129,7 +31875,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:333": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "collectible:333/host-same",
@@ -31156,9 +31902,320 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:333/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:333/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:333/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:333/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:333/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-16/batch-001",
+          "physical": false,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:333/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-16/batch-001",
+          "physical": false,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:333/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-16/batch-001",
+          "physical": false,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:333/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-16/batch-001",
+          "physical": false,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "collectible:336": {
       "status": "basic_pass",
@@ -39708,7 +40765,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "card:36": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "card:36/host-same",
@@ -39769,9 +40826,164 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "card:36/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:36/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:36/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:36/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "card:39": {
       "status": "basic_pass",
@@ -42536,7 +43748,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:54": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "collectible:54/host-same",
@@ -42563,9 +43775,334 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:54/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:54/host-split",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "map_precondition"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "failed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "藏宝图原生效果已显示隐藏的宝箱房与 Boss 房轮廓；旧检查只用普通房间判断前提，而普通房间已由分房探索显示，属于前提误报。修正检查后第 17 轮四组通过。"
+        },
+        {
+          "case": "collectible:54/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:54/client-split",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "map_precondition"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-13/batch-001",
+          "physical": false,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "failed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "藏宝图原生效果已显示隐藏的宝箱房与 Boss 房轮廓；旧检查只用普通房间判断前提，而普通房间已由分房探索显示，属于前提误报。修正检查后第 17 轮四组通过。"
+        },
+        {
+          "case": "collectible:54/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-17/batch-001",
+          "physical": false,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:54/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-17/batch-001",
+          "physical": false,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:54/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-17/batch-001",
+          "physical": false,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:54/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-17/batch-001",
+          "physical": false,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "collectible:57": {
       "status": "basic_pass",
@@ -54148,7 +55685,7 @@
       ]
     },
     "card:20": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "card:20/host-same",
@@ -54175,9 +55712,567 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "card:20/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "peer_room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:20/host-split",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "peer_room_damage"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "peer_room_damage",
+              "status": "failed"
+            },
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "主机房间的两名敌人均正常减少 100 HP；客机处于其他房间，远端角色视图没有敌人实体，旧检查错误要求复制远端敌人列表。修正可见房间判断后第 17 轮四组通过。"
+        },
+        {
+          "case": "card:20/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "peer_room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:20/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "peer_room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:20/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-17/batch-001",
+          "physical": true,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "peer_room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:20/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-17/batch-001",
+          "physical": true,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "peer_room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:20/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-17/batch-001",
+          "physical": true,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "peer_room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:20/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-17/batch-001",
+          "physical": true,
+          "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+          "effect_checks": [
+            {
+              "name": "exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "peer_room_damage",
+              "status": "passed"
+            },
+            {
+              "name": "map_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "map_revealed",
+              "status": "passed"
+            },
+            {
+              "name": "map_scope",
+              "status": "passed"
+            },
+            {
+              "name": "peer_map",
+              "status": "passed"
+            },
+            {
+              "name": "map_next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            },
+            {
+              "name": "curse_next_floor",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 480
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "card:23": {
       "status": "verified",
@@ -54410,7 +56505,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "card:35": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "card:35/host-same",
@@ -54437,9 +56532,160 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "card:35/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "exact_effect:soul",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:soul",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:soul",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:35/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "exact_effect:soul",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:soul",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:soul",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:35/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "exact_effect:soul",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:soul",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:soul",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:35/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-14/batch-001",
+          "physical": true,
+          "dll_sha256": "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281",
+          "effect_checks": [
+            {
+              "name": "exact_effect:soul",
+              "status": "passed"
+            },
+            {
+              "name": "peer_exact_effect:soul",
+              "status": "passed"
+            },
+            {
+              "name": "holder_only:soul",
+              "status": "passed"
+            },
+            {
+              "name": "curse_precondition",
+              "status": "passed"
+            },
+            {
+              "name": "curse_result",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "card:38": {
       "status": "basic_pass",
@@ -62321,6 +64567,21 @@
       "evidence": "item-effects-full-20261017-10/batch-001",
       "reason": "夹具在排队换房时清理了原房间，目标房间敌人仍在；换层前永恒之心已因受伤消失。改为进入目标房间后清理并保护测试角色，主客机同房／分房四种组合均验证换房保留、换层增加红心上限。",
       "confirmation": "item-effects-full-20261017-12/batch-001"
+    },
+    {
+      "case": "collectible:54/host-split",
+      "evidence": "item-effects-full-20261017-13/batch-001",
+      "reason": "藏宝图原生效果已显示隐藏的宝箱房与 Boss 房轮廓；旧检查只用普通房间判断前提，而普通房间已由分房探索显示，属于前提误报。修正检查后第 17 轮四组通过。"
+    },
+    {
+      "case": "collectible:54/client-split",
+      "evidence": "item-effects-full-20261017-13/batch-001",
+      "reason": "藏宝图原生效果已显示隐藏的宝箱房与 Boss 房轮廓；旧检查只用普通房间判断前提，而普通房间已由分房探索显示，属于前提误报。修正检查后第 17 轮四组通过。"
+    },
+    {
+      "case": "card:20/host-split",
+      "evidence": "item-effects-full-20261017-14/batch-001",
+      "reason": "主机房间的两名敌人均正常减少 100 HP；客机处于其他房间，远端角色视图没有敌人实体，旧检查错误要求复制远端敌人列表。修正可见房间判断后第 17 轮四组通过。"
     }
   ],
   "candidates": {
@@ -62339,6 +64600,10 @@
     },
     "ff80a8417bb9578dac990b4fac529131b57edc2bdf77524197550b0a103ba281": {
       "commit": "23cb167c607049bd34996d570267cbc7835e1884",
+      "loader_sha256": "0fc3ed1bf8119bcc05151faf118e3891512f4f6b623107b71fa7a9c3b6c4f099"
+    },
+    "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c": {
+      "commit": "0d0a78dcc6f9ae1009e91f7a34e413557c4a9ba1",
       "loader_sha256": "0fc3ed1bf8119bcc05151faf118e3891512f4f6b623107b71fa7a9c3b6c4f099"
     }
   },
