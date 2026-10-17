@@ -36,6 +36,21 @@ return function(deps, layout)
         bubble:Load("gfx/OnlineEmotes.anm2", true)
         bubble:SetFrame("Bubble", 0)
         assets = { font = font, fill = fill, bubble = bubble }
+        if
+            style.image
+            and style.image ~= ""
+            and style.image_width > 0
+            and style.image_height > 0
+        then
+            local backgroundSprite = Sprite()
+            local loaded = pcall(function()
+                backgroundSprite:Load(style.image, true)
+                backgroundSprite:SetFrame("Idle", 0)
+            end)
+            if loaded and backgroundSprite:IsLoaded() then
+                assets.background = backgroundSprite
+            end
+        end
     end
     local function measure(text)
         return assets.font:GetStringWidthUTF8(text) * scale
@@ -60,6 +75,16 @@ return function(deps, layout)
         assets.fill:Render(Vector(x, y))
     end
     local function panel(x, y, width, height, alpha, fillColor, edgeColor)
+        if assets.background then
+            local padding = 6
+            assets.background.Scale = Vector(
+                (width + padding * 2) / style.image_width,
+                (height + padding * 2) / style.image_height
+            )
+            assets.background.Color = Color(1, 1, 1, alpha)
+            assets.background:Render(Vector(x - padding, y - padding))
+            return
+        end
         -- Border strips avoid stacking translucent fills into an opaque panel.
         rect(x - 1, y + 1, 1, height - 2, edgeColor, alpha)
         rect(x + width, y + 1, 1, height - 2, edgeColor, alpha)
@@ -264,31 +289,34 @@ return function(deps, layout)
         ui.scroll = math.min(ui.scroll, math.max(0, #lines - shown))
         local ending = #lines - (ui.input.open and ui.scroll or 0)
         local first = math.max(1, ending - shown + 1)
-        local y = bottom
-            - (ui.input.open and inputHeight + 4 or 0)
-            - (ending - first + 1) * layout.lineHeight
+        local rows, backgroundFade = {}, 0
         for index = first, ending do
             local row = lines[index]
             local age = now - row.message.time
             if ui.input.open or (row.message.kind == "team" and age < 6000) then
                 local alpha = ui.input.open and 1 or math.min(1, (6000 - age) / 700)
-                local color = foreground
+                backgroundFade = math.max(backgroundFade, alpha)
                 if row.message.kind ~= "team" then
                     alpha = alpha * 0.8
                 end
-                if not ui.input.open then
-                    rect(
-                        x + 3,
-                        y,
-                        math.min(panelWidth - 6, measure(row.text) + 8),
-                        layout.lineHeight,
-                        background,
-                        alpha * backgroundAlpha
-                    )
-                end
-                text(row.text, x + 8, y, color, alpha)
-                y = y + layout.lineHeight
+                rows[#rows + 1] = { text = row.text, alpha = alpha }
             end
+        end
+        local y = bottom - (ui.input.open and inputHeight + 4 or 0) - #rows * layout.lineHeight
+        if not ui.input.open and #rows > 0 then
+            panel(
+                x,
+                y - 4,
+                panelWidth,
+                #rows * layout.lineHeight + 8,
+                backgroundAlpha * backgroundFade,
+                background,
+                border
+            )
+        end
+        for _, row in ipairs(rows) do
+            text(row.text, x + 8, y, foreground, row.alpha)
+            y = y + layout.lineHeight
         end
         if ui.input.open then
             local input = ui.input

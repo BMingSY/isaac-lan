@@ -11,6 +11,8 @@ void defaults() {
     const auto parsed = isaac::configuration::parse(isaac::configuration::defaults);
     require(parsed.warnings.empty(), "Default configuration is invalid");
     require(parsed.settings.inputHz == 60, "Default guest input rate changed");
+    require(parsed.settings.chat.backgroundImage.empty(),
+            "Default background overrides the bundled image");
     require(isaac::configuration::missingDefaults(parsed).empty(),
             "Complete config needs migration");
     require(parsed.settings.logLevel == isaac::logging::Level::info &&
@@ -19,12 +21,18 @@ void defaults() {
 }
 void validation() {
     using isaac::configuration::parse;
-    const auto chat = parse("[chat]\nbackground_opacity=45\nbackground_color=Ab3400\n"
-                            "border_color=123456\ntext_color=FFFFFF\n");
+    const auto chat =
+        parse("[chat]\nbackground_opacity=45\nbackground_color=Ab3400\n"
+              "border_color=123456\ntext_color=FFFFFF\nbackground_image=背景/my panel.png\n");
     require(chat.warnings.empty() && chat.settings.chat.opacity == 45 &&
                 chat.settings.chat.background == 0xab3400 &&
-                chat.settings.chat.border == 0x123456 && chat.settings.chat.text == 0xffffff,
+                chat.settings.chat.border == 0x123456 && chat.settings.chat.text == 0xffffff &&
+                chat.settings.chat.backgroundImage == "背景/my panel.png",
             "Custom chat appearance was not preserved");
+    require(
+        parse("[chat]\nbackground_image=\"C:\\My UI\\背景.png\"").settings.chat.backgroundImage ==
+            "C:\\My UI\\背景.png",
+        "Quoted absolute image path was not preserved");
     for (const auto opacity : {0u, 100u})
         require(
             parse("[chat]\nbackground_opacity=" + std::to_string(opacity)).settings.chat.opacity ==

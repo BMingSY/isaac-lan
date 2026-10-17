@@ -45,6 +45,7 @@ namespace isaac::frontend {
 namespace {
 std::uintptr_t image;
 chat::Appearance chatAppearance;
+presentation::ChatBackground chatBackground;
 std::wstring labRoot;
 void (*logger)(const std::string&);
 int(__cdecl* bindNative)(lua_State*);
@@ -958,14 +959,18 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
             throw std::runtime_error("Cannot bind chat input");
         if (!emotes::bind(state, module))
             throw std::runtime_error("Cannot bind original emotes");
-        lua.createTable(state, 0, 4);
+        lua.createTable(state, 0, 7);
         for (const auto& [key, value] : {std::pair{"opacity", chatAppearance.opacity},
                                          {"background", chatAppearance.background},
                                          {"border", chatAppearance.border},
-                                         {"text", chatAppearance.text}}) {
+                                         {"text", chatAppearance.text},
+                                         {"image_width", chatBackground.width},
+                                         {"image_height", chatBackground.height}}) {
             lua.pushInteger(state, value);
             lua.setField(state, -2, key);
         }
+        lua.pushString(state, chatBackground.animation.c_str());
+        lua.setField(state, -2, "image");
         lua.setField(state, -2, "chat_style");
         // Ordinary launches omit the global debug library. Keep the sandbox
         // intact and expose only our source/upvalue inspection functions.
@@ -1076,8 +1081,10 @@ void render() {
 bool capturesInput() {
     return visible || chat_input::capturesInput();
 }
-void configureChat(const chat::Appearance& appearance) {
+void configureChat(const chat::Appearance& appearance,
+                   const presentation::ChatBackground& background) {
     chatAppearance = appearance;
+    chatBackground = background;
 }
 void returnToLobby() {
     lobbyRequested = true;

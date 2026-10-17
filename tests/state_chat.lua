@@ -64,6 +64,26 @@ function _IsaacLanFrame()
         native.test_gamepad(playing == 630 and 4096 or 0, 0, 0, 32767, 0)
     end
     if playing == 30 then
+        local style = native.chat_style
+        assert(
+            style.image ~= "" and style.image_width > 0 and style.image_height > 0,
+            "Background preparation failed"
+        )
+        local background = Sprite()
+        background:Load(style.image, true)
+        assert(background:IsLoaded(), "Background ANM2 could not be loaded by the game")
+        background:SetFrame("Idle", 0)
+        local center =
+            background:GetTexel(Vector(style.image_width / 2, style.image_height / 2), Vector.Zero)
+        assert(center.Alpha > 0, "Background PNG is not visible in the native Sprite")
+        report(
+            "CHAT background="
+                .. style.image_width
+                .. "x"
+                .. style.image_height
+                .. " opacity="
+                .. style.opacity
+        )
         assert(_IsaacLanChatSubmit(host and "/e HOST_PRIVATE" or "/echo GUEST_PRIVATE"))
         native.chat_ui_open(true)
         native.chat_ui_text("中文输入 /console help")

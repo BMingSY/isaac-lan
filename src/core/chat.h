@@ -13,6 +13,7 @@ inline constexpr unsigned maxDice = 1000000000;
 struct Appearance {
     unsigned opacity = 70;
     unsigned background = 0x231b18, border = 0x79604c, text = 0xe8dfcb;
+    std::string backgroundImage;
 };
 
 // Byte boundaries of Unicode scalar values, including the final end boundary.

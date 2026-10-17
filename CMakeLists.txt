@@ -101,6 +101,7 @@ if(BUILD_TESTING)
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
         isaac_add_lua_test(bridge.chat chat.lua)
+        isaac_add_lua_test(presentation.chat-render chat_presentation.lua)
         isaac_add_lua_test(bridge.session_lifecycle session_lifecycle.lua)
         isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
@@ -195,6 +196,8 @@ endif()
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The native engine adapter requires a 32-bit Windows toolchain")
 endif()
+enable_language(RC)
+configure_file(src/presentation/assets.rc.in generated/chat_assets.rc @ONLY)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/main.lua" ISAAC_LAN_BRIDGE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/world.lua" ISAAC_LAN_STATE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/presentation/prediction.lua" ISAAC_LAN_PREDICTION)
@@ -240,6 +243,8 @@ add_library(
     src/engine/versions/j460/session_backend.cpp
     src/diagnostics/native_exceptions.cpp
     src/app/configuration.cpp
+    src/presentation/chat_background.cpp
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/chat_assets.rc"
     src/diagnostics/runtime_log.cpp
     src/diagnostics/performance.cpp
     src/diagnostics/crash_signal.cpp
@@ -298,6 +303,20 @@ if(MINGW)
 endif()
 if(BUILD_TESTING)
     add_executable(isaac_lan_net_test tests/net_test.cpp)
+    add_executable(
+        isaac_lan_chat_background_test
+        tests/chat_background_test.cpp src/presentation/chat_background.cpp
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/chat_assets.rc")
+    target_include_directories(isaac_lan_chat_background_test PRIVATE src)
+    target_compile_definitions(isaac_lan_chat_background_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(isaac_lan_chat_background_test PRIVATE gdiplus ole32)
+    if(MINGW)
+        target_link_options(isaac_lan_chat_background_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_chat_background_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME presentation.chat-background COMMAND isaac_lan_chat_background_test)
+    set_tests_properties(presentation.chat-background PROPERTIES TIMEOUT 30 LABELS
+                                                                 "offline;presentation")
     foreach(test_case hornfel rails entity_links lua_api)
         add_executable(isaac_lan_${test_case}_test tests/${test_case}_test.cpp)
         target_include_directories(isaac_lan_${test_case}_test PRIVATE src)
@@ -432,6 +451,7 @@ target_link_libraries(
             iphlpapi
             imm32
             gdiplus
+            ole32
             psapi
             minhook
             isaac_lan_net
