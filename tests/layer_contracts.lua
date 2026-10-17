@@ -193,11 +193,10 @@ local input = string.pack(">I2I2I2I2", 0, 65535, 0, 0)
 motion.present(input, 1, {}, {}, function() end, -1)
 assert(rendered == 0 and statusCalls == 0)
 motion.present(input, 1, {}, {}, function() end, 1)
-assert(rendered == 1 and statusCalls == 1)
+assert(rendered == 0 and statusCalls == 1)
 now = 1016
 motion.present(input, 2, {}, {}, function() end, 1)
-assert(rendered == 2)
-assert(not pcall(motion.present, "short", 2, {}, {}, function() end, 1))
+assert(rendered == 0, "An empty view must not enter a player room")
 motion.reset()
 
 -- Consolidated native fixtures must initialize in the ordinary game sandbox.

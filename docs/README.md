@@ -31,5 +31,7 @@
 | 构建、检查与默认发版范围 | [开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md) |
 | 日志、性能口径与堆异常 | [诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md) |
 | 2026-10-17 候选版本验收，未通过 | [v0.4.2 验收记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/release-validation-20261017.md) |
+| 2026-10-17 第二轮验收，未通过 | [候选重验记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/release-validation-20261017-round2.md) |
+| 2026-10-18 路线与多身体定向回归 | [修复验证记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/route-and-prediction-validation-20261018.md) |
 
 设计文档只描述当前架构；专项接口和效果查参考文档，已执行的测试结论查 `docs/history/`。原始日志与画面保留在测试产物或 CI 附件中。

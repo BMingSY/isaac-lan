@@ -1,12 +1,9 @@
 return function(fields)
-    local Input = fields.input
-    local INPUT_MAX = 65535
     local Actor = fields.actor
     local Entity = fields.entity
     -- Render-only movement and interpolation; authority remains on the host.
     return function(native, actorsPresentation, view)
         local Vector = view.vector
-        local unpack = string.unpack
         local lastRender
         local function sample(track, now)
             local age = math.max(0, now - track.at)
@@ -82,19 +79,6 @@ return function(fields)
                 end
                 return
             end
-            local values = { unpack(">I2I2I2I2", input) }
-            local direction = Vector(
-                (values[Input.right] - values[Input.left]) / INPUT_MAX,
-                (values[Input.down] - values[Input.up]) / INPUT_MAX
-            )
-            assert(native.rooms_with_player(status.slot, function()
-                if view.room():IsMirrorWorld() then
-                    direction.X = -direction.X
-                end
-            end))
-            if direction:Length() > 1 then
-                direction = direction:Normalized()
-            end
             for identifier, m in pairs(motion) do
                 local e = ref(identifier)
                 if e then
@@ -104,6 +88,17 @@ return function(fields)
                         local controls = p.ControlsEnabled
                             and p:AreControlsEnabled()
                             and (p:IsExtraAnimationFinished() or extraAnimationMovement[identifier])
+                        local direction = Vector(0, 0)
+                        if controls then
+                            assert(native.rooms_with_player(status.slot, function()
+                                -- The render scope supplies the same preview input
+                                -- to the native query, including drop and mirror rules.
+                                direction = p:GetMovementInput()
+                            end))
+                            if direction:Length() > 1 then
+                                direction = direction:Normalized()
+                            end
+                        end
                         if not controls then
                             m.prediction:reset(m.target, sequence - 1)
                             m.doorway = nil
