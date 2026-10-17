@@ -18,15 +18,17 @@ DAMAGE_EFFECTS = {
             move("room", 240),
             hit("next_room", 330, 1, 2),
             move("floor", 390),
-            hit("next_floor", 540, 1, 2),
+            hit("next_floor", 630, 1, 2),
         ]
     },
     "PILLEFFECT_PERCS": {
         "hearts": 12,
+        "team_hearts": 12,
         "steps": [hit("first", 90, 1, 2), hit("repeat", 180, 1, 2), *ROOM_DAMAGE],
         "horse": {"full_heal": True},
     },
     "PILLEFFECT_ADDICTED": {
+        "team_hearts": 12,
         "steps": [
             hit("first", 90, 2),
             hit("repeat", 180, 2),
@@ -43,7 +45,8 @@ DAMAGE_EFFECTS = {
             hit("next_room", 330, 0),
             hit("room_repeat", 420, 1),
             move("floor", 480),
-            hit("next_floor", 630, 0),
+            hit("next_floor", 720, 0),
+            hit("floor_repeat", 810, 1),
         ]
     },
     "CARD_HOLY": {
@@ -52,20 +55,20 @@ DAMAGE_EFFECTS = {
             hit("carried_shield", 240, 0),
             hit("consumed_shield", 330, 1),
             move("floor", 390),
-            hit("next_floor", 540, 1),
+            hit("next_floor", 630, 1),
         ]
     },
     "TRINKET_WOODEN_CROSS": {
         # The shield is granted by a floor entry, not by the fixture itself.
         "steps": [
             move("floor", 90),
-            hit("first_floor", 240, 0),
-            hit("consumed_shield", 330, 1),
-            move("room", 390),
-            hit("next_room", 480, 1),
-            move("floor", 540),
-            hit("next_floor", 690, 0),
-            hit("floor_repeat", 780, 1),
+            hit("first_floor", 330, 0),
+            hit("consumed_shield", 420, 1),
+            move("room", 480),
+            hit("next_room", 570, 1),
+            move("floor", 630),
+            hit("next_floor", 870, 0),
+            hit("floor_repeat", 960, 1),
         ]
     },
     "COLLECTIBLE_BOOK_OF_SHADOWS": {
@@ -128,6 +131,10 @@ def damage_checks(case, observations):
     for step in rules["steps"]:
         if step["action"] != "hit":
             continue
+        limit = next(
+            (s["tick"] for s in rules["steps"] if s["tick"] > step["tick"]),
+            case.get("end_tick", rules["steps"][-1]["tick"] + 60),
+        )
         for player in (slot, 1 - slot):
             trial = trials.get((step["name"], player))
             expected = step["loss"] if player == slot else step["amount"]
@@ -135,7 +142,7 @@ def damage_checks(case, observations):
                 "damage:" + step["name"] + (":holder" if player == slot else ":teammate"),
                 [
                     trial["amount"] == step["amount"]
-                    and trial["tick"] == step["tick"]
+                    and step["tick"] <= trial["tick"] < limit
                     and health(trial["before"]) > step["amount"]
                     and health(trial["before"]) - health(trial["after"]) == expected
                 ]
@@ -174,7 +181,11 @@ def damage_checks(case, observations):
             (s["tick"] for s in rules["steps"] if s["tick"] > step["tick"]),
             case.get("end_tick", rules["steps"][-1]["tick"] + 60),
         )
-        window = [(a, b) for a, b in pairs if step["tick"] < a["tick"] < end]
+        actual_tick = max(
+            (trials[step["name"], p]["tick"] for p in (0, 1) if (step["name"], p) in trials),
+            default=step["tick"],
+        )
+        window = [(a, b) for a, b in pairs if actual_tick < a["tick"] < end]
         check(
             "damage_health_retained:" + step["name"],
             [
@@ -206,6 +217,22 @@ def damage_checks(case, observations):
         )
     before = next((e for e in host if e.get("label") == "before"), None)
     used = next((e for e in host if e.get("label") == "post_use"), None)
+    if rules.get("team_hearts"):
+        check(
+            "damage_use_hearts",
+            [
+                before["players"][p]["hearts"] < before["players"][p]["max_hearts"]
+                and used["players"][p]["hearts"]
+                == (
+                    used["players"][p]["max_hearts"]
+                    if rules.get("full_heal") and p == slot
+                    else before["players"][p]["hearts"]
+                )
+                for p in (0, 1)
+            ]
+            if before and used
+            else [],
+        )
     if rules.get("full_heal"):
         check(
             "damage_full_heal",

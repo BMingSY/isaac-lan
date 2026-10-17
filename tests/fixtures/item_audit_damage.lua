@@ -7,6 +7,10 @@ return function(report, actor, moveRoom, moveFloor)
             soul = p:GetSoulHearts(),
             broken = p:GetBrokenHearts(),
             cooldown = p:GetDamageCooldown(),
+            mantle = p:GetEffects()
+                :GetCollectibleEffectNum(CollectibleType.COLLECTIBLE_HOLY_MANTLE),
+            multiplier = p:GetTrinketMultiplier(TrinketType.TRINKET_WOODEN_CROSS),
+            room_frame = Game():GetRoom():GetFrameCount(),
         }
     end
     return {
@@ -20,7 +24,10 @@ return function(report, actor, moveRoom, moveFloor)
                 actor(slot, function(p)
                     p:AddMaxHearts(24 - p:GetMaxHearts(), false)
                     p:AddSoulHearts(-p:GetSoulHearts())
-                    local desired = slot == case.slot and case.damage_effects.hearts or 24
+                    local desired = case.damage_effects.team_hearts or 24
+                    if slot == case.slot then
+                        desired = case.damage_effects.hearts or desired
+                    end
                     p:AddHearts(desired - p:GetHearts())
                     -- Clear arrival protection before acquiring the tested
                     -- effect. Subsequent trials let native cooldowns expire.

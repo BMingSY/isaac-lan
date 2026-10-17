@@ -63,11 +63,38 @@ local function moveHolderRoom()
     report("room_changed", { target = target })
 end
 local function moveHolderFloor()
-    actor(case.slot, function(p)
-        Game():StartStageTransition(false, 0, p)
+    actor(case.slot, function(p, room)
+        if case.damage_effects then
+            -- Enter through the native grid collision so player departure
+            -- effects follow the same path as normal play.
+            local index = room:GetGridIndex(room:GetCenterPos() + Vector(80, 0))
+            assert(not room:GetGridEntity(index), "Damage trial trapdoor grid is occupied")
+            assert(room:SpawnGridEntity(index, GridEntityType.GRID_TRAPDOOR, 0, 187, 0))
+            local trap = assert(room:GetGridEntity(index))
+            trap.State = 2
+            p.Position, p.Velocity = trap.Position, Vector.Zero
+        else
+            Game():StartStageTransition(false, 0, p)
+        end
     end)
 end
 local damageEffects = createDamageEffects(report, actor, moveHolderRoom, moveHolderFloor)
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_NEW_LEVEL, function()
+    if not host or not case or not case.damage_effects then
+        return
+    end
+    local players = {}
+    for i = 0, Game():GetNumPlayers() - 1 do
+        local p = Isaac.GetPlayer(i)
+        players[#players + 1] = {
+            controller = p.ControllerIndex,
+            seed = p.InitSeed,
+            mantle = p:GetEffects()
+                :GetCollectibleEffectNum(CollectibleType.COLLECTIBLE_HOLY_MANTLE),
+        }
+    end
+    report("damage_native_floor", { stage = Game():GetLevel():GetStage(), players = players })
+end)
 local function sample(label, tick)
     if not native.rooms_ready() then
         return
@@ -141,6 +168,17 @@ local function sample(label, tick)
                 eternal = p:GetEternalHearts(),
                 black = p:GetBlackHearts(),
                 broken = p:GetBrokenHearts(),
+                shield = case.damage_effects
+                        and {
+                            mantle = p:GetEffects():GetCollectibleEffectNum(
+                                CollectibleType.COLLECTIBLE_HOLY_MANTLE
+                            ),
+                            shadows = p:GetEffects():GetCollectibleEffectNum(
+                                CollectibleType.COLLECTIBLE_BOOK_OF_SHADOWS
+                            ),
+                            invincible = p:HasInvincibility(),
+                        }
+                    or nil,
                 coins = p:GetNumCoins(),
                 bombs = p:GetNumBombs(),
                 keys = p:GetNumKeys(),

@@ -7,7 +7,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from item_audit import catalog_from_log, events, select_cases, summarize_case
-from run_item_audit import validate_labs, validate_startup
+from lab_profile import validate_labs, validate_startup
 
 
 def test_effect_recipes_use_real_unique_catalog_enums():
@@ -23,8 +23,16 @@ def test_damage_effects_require_real_loss_expiry_and_replica_health():
     from item_damage_effects import damage_checks
 
     case = {"enum": "PILLEFFECT_PERCS", "slot": 0}
-    host = []
-    left = [12, 24]
+    host = [
+        {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [{"hearts": 12, "max_hearts": 24, "soul": 0, "broken": 0} for _ in (0, 1)],
+        }
+        for label, tick in (("before", 30), ("post_use", 61))
+    ]
+    left = [12, 12]
     for name, tick, losses, room in (
         ("first", 90, [1, 2], 84),
         ("repeat", 180, [1, 2], 84),
@@ -54,12 +62,14 @@ def test_damage_effects_require_real_loss_expiry_and_replica_health():
             }
         )
     host.append({"event": "damage_transition", "tick": 240, "room": 84, "stage": 1})
-    peers = {"host": host, "client": deepcopy([e for e in host if e["event"] == "sample"])}
+    peers = {"host": host, "client": deepcopy([e for e in host if e.get("label") == "captured"])}
     assert all(c["status"] == "passed" for c in damage_checks(case, peers))
     # A shield on the teammate, or reduction that survives changing rooms,
     # must fail even when the game used the item and stayed connected.
     wrong = deepcopy(peers)
-    wrong["host"][1]["after"]["hearts"] += 1
+    next(e for e in wrong["host"] if e.get("probe") == "first" and e["slot"] == 1)["after"][
+        "hearts"
+    ] += 1
     assert any(c["status"] == "failed" for c in damage_checks(case, wrong))
     wrong = deepcopy(peers)
     trial = next(e for e in wrong["host"] if e.get("probe") == "next_room" and e["slot"] == 0)
@@ -68,6 +78,20 @@ def test_damage_effects_require_real_loss_expiry_and_replica_health():
     wrong = deepcopy(peers)
     wrong["client"][-1]["players"][0]["hearts"] += 1
     assert any(c["status"] == "failed" for c in damage_checks(case, wrong))
+    delayed = deepcopy(peers)
+    for trial in delayed["host"]:
+        if trial.get("probe") == "first":
+            trial["tick"] = 101
+    before_hit = {**deepcopy(host[0]), "label": "captured", "tick": 100}
+    delayed["host"].append(before_hit)
+    delayed["client"].append(deepcopy(before_hit))
+    assert all(c["status"] == "passed" for c in damage_checks(case, delayed))
+    wrong = deepcopy(peers)
+    wrong["host"][1]["players"][1]["hearts"] = 24
+    assert any(
+        c["name"] == "damage_use_hearts" and c["status"] == "failed"
+        for c in damage_checks(case, wrong)
+    )
     peers["client"].pop()
     assert any(c["status"] == "missing" for c in damage_checks(case, peers))
 
@@ -104,6 +128,8 @@ def test_damage_fixture_observes_after_simulation_and_clears_pending_on_next_cas
                 GetSoulHearts = function() return 0 end,
                 GetBrokenHearts = function() return 0 end,
                 GetDamageCooldown = function() return 0 end,
+                GetTrinketMultiplier = function() return 0 end,
+                GetEffects = function() return {GetCollectibleEffectNum=function() return 0 end} end,
                 AddMaxHearts = function() end,
                 AddSoulHearts = function() end,
                 AddHearts = function(p, n) p.hearts = p.hearts + n end,
@@ -112,7 +138,10 @@ def test_damage_fixture_observes_after_simulation_and_clears_pending_on_next_cas
             }
         end
         function EntityRef(p) return p end
-        function Game() return { GetLevel = function()
+        CollectibleType = {COLLECTIBLE_HOLY_MANTLE=313}
+        TrinketType = {TRINKET_WOODEN_CROSS=121}
+        function Game() return { GetRoom=function() return {GetFrameCount=function() return 10 end} end,
+            GetLevel = function()
             return { GetStage = function() return 1 end }
         end } end
         _IsaacLan = { rooms_positions = function()

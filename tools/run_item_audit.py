@@ -2,7 +2,6 @@
 """Audit collectibles, trinkets, cards and pills in two protected native processes."""
 
 import argparse
-import configparser
 import hashlib
 import json
 from pathlib import Path
@@ -23,33 +22,8 @@ from item_audit import (
     stress_cases,
     unexpected_peer_failure,
 )
-from lab_profile import ProtectedLabs, idle, windows
+from lab_profile import ProtectedLabs, idle, windows, validate_labs, validate_startup
 from item_effect_checks import SUPPORTED_EFFECTS
-
-
-def validate_startup(labs):
-    for lab in labs:
-        options = configparser.ConfigParser()
-        options.read(lab / "profile/Documents/My Games/Binding of Isaac Repentance+/options.ini")
-        if options.get("Options", "AcceptedPublicBeta_v1.9.7.17", fallback="0") != "1":
-            raise ValueError(
-                f"{lab.name}: finish the native first-start Beta notice before auditing; "
-                "background Lua progress does not prove the gameplay view is visible"
-            )
-
-
-def validate_labs(values, output):
-    labs = [Path(value).resolve() for value in values]
-    if len(labs) != 2 or len(set(labs)) != 2:
-        raise ValueError("Two distinct owned labs are required")
-    for lab in labs:
-        if lab.name.casefold() in {"host-001", "client-001"}:
-            raise ValueError("The user's manual games must not be controlled")
-        if not (lab / ".isaac-lan-lab").is_file() or not (lab / "game/isaac-ng.exe").is_file():
-            raise ValueError("Every lab needs an ownership marker and its own executable")
-        if output.is_relative_to(lab) or lab.is_relative_to(output):
-            raise ValueError("Evidence must be outside the protected labs")
-    return labs
 
 
 def run_batch(args, cases, output, labs):
