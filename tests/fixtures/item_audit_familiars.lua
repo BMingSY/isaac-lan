@@ -86,10 +86,19 @@ return function(report, actor, moveRoom, moveFloor)
             end
             local f = familiarSource(source.Entity)
             if f and f.Player and f.Variant == FamiliarVariant[rules.variant] then
+                for _, hit in ipairs(pending) do
+                    if hit.seed == entity.InitSeed and hit.tick == tick then
+                        hit.amount = hit.amount + amount
+                        hit.hits = hit.hits + 1
+                        return
+                    end
+                end
                 pending[#pending + 1] = {
                     entity = entity,
+                    seed = entity.InitSeed,
                     tick = tick,
                     amount = amount,
+                    hits = 1,
                     before = entity.HitPoints,
                     controller = f.Player.ControllerIndex,
                     variant = f.Variant,
@@ -180,11 +189,18 @@ return function(report, actor, moveRoom, moveFloor)
                     teammate_owned = teammateOwned,
                     familiars = {},
                     shots = {},
+                    retired_familiars = 0,
                 }
                 local entities = (host or value.room_visible) and Isaac.GetRoomEntities() or {}
                 for _, e in ipairs(entities) do
                     local f = e:ToFamiliar()
-                    if f and f.Variant == FamiliarVariant[case.familiar_effects.variant] then
+                    if
+                        f
+                        and f.Variant == FamiliarVariant[case.familiar_effects.variant]
+                        and not f:Exists()
+                    then
+                        value.retired_familiars = value.retired_familiars + 1
+                    elseif f and f.Variant == FamiliarVariant[case.familiar_effects.variant] then
                         value.familiars[#value.familiars + 1] = {
                             controller = f.Player and f.Player.ControllerIndex or -1,
                             x = f.Position.X,
@@ -194,6 +210,7 @@ return function(report, actor, moveRoom, moveFloor)
                     local tear, source = e:ToTear(), familiarSource(e)
                     if
                         tear
+                        and tear:Exists()
                         and source
                         and source.Variant == FamiliarVariant[case.familiar_effects.variant]
                     then

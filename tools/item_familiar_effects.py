@@ -145,8 +145,8 @@ def familiar_checks(case, observations):
         check(
             phase + "_actual_damage",
             [
-                abs(e["amount"] - expected) < 0.001
-                and abs(e["before"] - e["after"] - expected) < 0.001
+                abs(e["amount"] - expected * e.get("hits", 1)) < 0.001
+                and abs(e["before"] - e["after"] - e["amount"]) < 0.001
                 and e["controller"] == case["slot"] + 1
                 for e in hits
             ],

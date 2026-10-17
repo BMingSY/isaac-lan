@@ -171,6 +171,13 @@ def test_familiar_damage_waits_for_native_update_and_clears_between_cases():
         function tear:Remove() removed = true end
         helper.suppressPlayerTear(tear)
         assert(removed, 'Only the holder tear is isolated from target damage')
+        helper.advance(case, 180)
+        helper.damage(target, 3.5, { Entity = familiar })
+        helper.damage(target, 3.5, { Entity = familiar })
+        target.HitPoints = 89.5
+        helper.sample(case, 182, true)
+        hit = events[#events][2]
+        assert(hit.hits == 2 and hit.amount == 7 and hit.before - hit.after == 7)
     """
     executable = shutil.which("lua5.3") or shutil.which("lua")
     assert executable, "Lua 5.3 is required"
