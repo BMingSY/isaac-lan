@@ -8,6 +8,7 @@ from item_effect_checks import SHOT_EFFECTS, SUPPORTED_EFFECTS, effect_checks
 from item_consumable_recipes import CONSUMABLE_RECIPES, consumable_recipe
 from item_room_effects import ROOM_EFFECTS, room_effect_recipe
 from item_damage_effects import DAMAGE_EFFECTS, damage_recipe
+from item_familiar_effects import FAMILIAR_EFFECTS
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "LAN_ITEM_AUDIT "
@@ -154,6 +155,11 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
                     cases[-1]["recipe"] = {}
                     cases[-1]["open_room"] = True
                     cases[-1]["end_tick"] = rules["steps"][-1]["tick"] + 60
+                if item.get("enum") in FAMILIAR_EFFECTS:
+                    cases[-1]["familiar_effects"] = FAMILIAR_EFFECTS[item["enum"]]
+                    cases[-1]["recipe"] = {}
+                    cases[-1]["open_room"] = True
+                    cases[-1]["end_tick"] = 840
                 if item.get("enum") in ROOM_EFFECTS:
                     rules = room_effect_recipe(cases[-1])
                     cases[-1]["room_effects"] = rules
@@ -459,6 +465,9 @@ def build_fixture(path, config):
         + "\nend)()\n"
         + "local createDamageTrace = (function()\n"
         + (ROOT / "tests/fixtures/item_damage_trace.lua").read_text()
+        + "\nend)()\n"
+        + "local createFamiliarEffects = (function()\n"
+        + (ROOT / "tests/fixtures/item_audit_familiars.lua").read_text()
         + "\nend)()\n"
         + (ROOT / "tests/state_item_audit.lua").read_text()
     )

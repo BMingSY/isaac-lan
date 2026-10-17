@@ -3,6 +3,7 @@
 from item_consumable_recipes import CONSUMABLE_RECIPES, consumable_recipe
 from item_room_effects import ROOM_EFFECTS, room_effect_checks
 from item_damage_effects import DAMAGE_EFFECTS, damage_checks
+from item_familiar_effects import FAMILIAR_EFFECTS, familiar_checks
 
 # These items have direct, unconditional effects in the clean Isaac fixture.
 # Values are directions, not a substitute for checking every listed attribute.
@@ -135,6 +136,7 @@ SUPPORTED_EFFECTS = {
     *CONSUMABLE_RECIPES,
     *ROOM_EFFECTS,
     *DAMAGE_EFFECTS,
+    *FAMILIAR_EFFECTS,
     "COLLECTIBLE_CHAOS",
 }
 
@@ -418,6 +420,7 @@ def effect_checks(case, observations):
         + consumable_checks(case, observations)
         + room_effect_checks(case, observations)
         + damage_checks(case, observations)
+        + familiar_checks(case, observations)
     )
 
 

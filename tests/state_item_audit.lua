@@ -88,6 +88,17 @@ local function moveHolderFloor()
     end)
 end
 local damageEffects = createDamageEffects(report, actor, moveHolderRoom, moveHolderFloor)
+local familiarEffects = createFamiliarEffects(report, actor, moveHolderRoom, moveHolderFloor)
+Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, e, amount, _, source)
+    if host then
+        familiarEffects.damage(e, amount, source)
+    end
+end)
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_TEAR_UPDATE, function(_, tear)
+    if host then
+        familiarEffects.suppressPlayerTear(tear)
+    end
+end)
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_NEW_LEVEL, function()
     if not host or not case or not case.damage_effects then
         return
@@ -366,6 +377,7 @@ Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, am
     end
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_PRE_GAME_EXIT, function()
+    familiarEffects.prepare({})
     if not prepared and seen == 0 then
         return
     end
@@ -559,6 +571,7 @@ local function prepare(tick)
         end)
     end
     damageEffects.prepare(case)
+    familiarEffects.prepare(case)
     sample("before", tick)
     poolProbe("before")
     actor(case.slot, function(p, room)
@@ -615,7 +628,10 @@ local function advance(tick)
     if cleanupRoom and native.rooms_positions()[tostring(case.slot)].index == cleanupRoom then
         actor(case.slot, function(p, room)
             for _, e in ipairs(Isaac.GetRoomEntities()) do
-                if e.Type ~= EntityType.ENTITY_PLAYER then
+                if
+                    e.Type ~= EntityType.ENTITY_PLAYER
+                    and not (case.familiar_effects and e.Type == EntityType.ENTITY_FAMILIAR)
+                then
                     e:Remove()
                 end
             end
@@ -686,6 +702,7 @@ local function advance(tick)
         activate(tick)
     end
     damageEffects.advance(case, tick)
+    familiarEffects.advance(case, tick)
     if used and tick % 30 == 0 then
         sample("observe", tick)
     end
@@ -782,6 +799,9 @@ function _IsaacLanBotFrame()
             and s.verified < (case.shot_effect and 240 or useTick + 80)
         then
             mask = 1 << ButtonAction.ACTION_SHOOTUP
+        end
+        if case.familiar_effects then
+            mask = familiarEffects.input(case, s.verified)
         end
     end
     native.input_bot(mask ~= 0 and 1 or 0, mask)
@@ -881,6 +901,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             sample("post_use", tick)
         end
         shotProbe(tick)
+        familiarEffects.sample(case, tick, true)
         if case.kind == "stress" and lastTick >= 150 then
             stress.record("capture", Isaac.GetTime() - began)
             stress.record("raw_bytes", #bytes)
@@ -895,6 +916,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         if result ~= false then
             shotProbe(tick)
+            familiarEffects.sample(case, tick, false)
             lastTick = tick
             if not prepared then
                 prepared = true

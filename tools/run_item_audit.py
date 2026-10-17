@@ -282,6 +282,8 @@ def main():
     shutil.copy2(room_effects, output / room_effects.name)
     damage_effects = ROOT / "tools/item_damage_effects.py"
     shutil.copy2(damage_effects, output / damage_effects.name)
+    familiar_effects = ROOT / "tools/item_familiar_effects.py"
+    shutil.copy2(familiar_effects, output / familiar_effects.name)
     manifest = {
         "commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
@@ -293,6 +295,7 @@ def main():
         "audit_sha256": hashlib.sha256(audit_contract.read_bytes()).hexdigest(),
         "room_effects_sha256": hashlib.sha256(room_effects.read_bytes()).hexdigest(),
         "damage_effects_sha256": hashlib.sha256(damage_effects.read_bytes()).hexdigest(),
+        "familiar_effects_sha256": hashlib.sha256(familiar_effects.read_bytes()).hexdigest(),
         "cases": cases,
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
