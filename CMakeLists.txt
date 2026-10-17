@@ -211,6 +211,7 @@ if(BUILD_TESTING)
         keyboard-pause
         transition-charge
         audio-ownership
+        animation-pose
         localized-text
         laser-state
         actor-roster

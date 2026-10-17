@@ -63,6 +63,22 @@ return function(native, reference, schemas, host)
         )
         if not host then
             local state = assert(native.sprite_state(s))
+            if original[2] ~= "" then
+                -- Advance real layer/attachment cursors and event state, then
+                -- restore both directions without calling SetFrame again.
+                s:Update()
+                local advanced = assert(native.sprite_state(s))
+                local advancedFields = reference.encode(readSprite(s))
+                assert(native.sprite_state(s, state))
+                assert(native.sprite_state(s) == state, "Animation rewind differs")
+                assert(native.sprite_state(s, advanced))
+                assert(
+                    native.sprite_state(s) == advanced
+                        and reference.encode(readSprite(s)) == advancedFields,
+                    "Complete animation restore differs"
+                )
+                assert(native.sprite_state(s, state))
+            end
             local changed = reference.decode(bytes)
             changed[6], changed[7], changed[8] = not changed[6], not changed[7], 17.25
             changed[9], changed[10], changed[11] =

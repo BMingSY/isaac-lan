@@ -96,4 +96,6 @@ Lua 决定游戏字段契约、采集与恢复顺序，通过游戏 API 或具�
 
 协议与字段版本分别由 [protocol.h](https://github.com/BMingSY/isaac-lan/blob/main/src/net/protocol.h) 和 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua) 管理。变更字段时同步更新生产者、消费者、版本／指纹和相关契约。
 
+世界字段版本为 24，精灵原生载荷使用格式 2，包含动画挂点帧和事件状态。角色和服装在渲染边界仍恢复权威姿态；同名动画通过完整状态恢复，避免每帧重新初始化动画。不同字段版本不能互相应用，嵌入模块与 DLL 指纹继续参与连接校验。
+
 客机协议或应用错误会结束其当前游戏并返回大厅；房主自身的桥接错误可能结束整场会话，详见[失败边界](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md#失败边界)。Ping 是包含轮询与排队的往返时间，不能代替状态处理耗时；测量与排查方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。

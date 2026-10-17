@@ -143,8 +143,19 @@ inline constexpr unsigned overlayOwner = 0x50;
 } // namespace sprite
 namespace animationState {
 inline constexpr unsigned data = 0x4;
+inline constexpr unsigned layerFrames = 0x8, nullFrames = 0xc;
 inline constexpr unsigned frame = 0x10;
+inline constexpr unsigned playing = 0x14, events = 0x18, previousEvents = 0x1c;
 } // namespace animationState
+namespace animationData {
+inline constexpr unsigned layers = 0x18, layerCount = 0x1c;
+inline constexpr unsigned nulls = 0x20, nullCount = 0x24;
+inline constexpr unsigned layerMap = 0x38;
+} // namespace animationData
+namespace animationLayer {
+inline constexpr unsigned stride = 0x10, id = 0x0, frameCount = 0x8;
+inline constexpr unsigned nullFrameCount = 0xc;
+} // namespace animationLayer
 namespace color {
 inline constexpr unsigned size = 0x2c;
 inline constexpr unsigned red = 0x0, green = 0x4, blue = 0x8, alpha = 0xc;

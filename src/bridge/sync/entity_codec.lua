@@ -177,11 +177,13 @@ return function(wire)
                     s:Load(v[Sprite.path], true)
                 end
             end
-            if v[Sprite.animation] ~= "" then
+            if v[Sprite.animation] ~= "" and s:GetAnimation() ~= v[Sprite.animation] then
                 s:SetFrame(v[Sprite.animation], v[Sprite.frame])
             end
             if v[Sprite.overlay] ~= "" then
-                s:SetOverlayFrame(v[Sprite.overlay], v[Sprite.overlayFrame])
+                if s:GetOverlayAnimation() ~= v[Sprite.overlay] then
+                    s:SetOverlayFrame(v[Sprite.overlay], v[Sprite.overlayFrame])
+                end
             else
                 s:RemoveOverlay()
             end

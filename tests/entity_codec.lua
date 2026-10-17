@@ -226,6 +226,30 @@ assert(
     wire.encode(component.sprite(sourceSprite)) == wire.encode(expectedSprite),
     "Schema-19 sprite bytes changed"
 )
+local animation, overlay = "Walk", "Glow"
+local animationChanges, overlayChanges = 0, 0
+function sourceSprite:GetAnimation()
+    return animation
+end
+function sourceSprite:GetOverlayAnimation()
+    return overlay
+end
+function sourceSprite:SetFrame(name)
+    animation, animationChanges = name, animationChanges + 1
+end
+function sourceSprite:SetOverlayFrame(name)
+    overlay, overlayChanges = name, overlayChanges + 1
+end
+function sourceSprite:RemoveOverlay()
+    overlay = ""
+end
+component.applySprite(sourceSprite, expectedSprite)
+assert(animationChanges == 0 and overlayChanges == 0, "Unchanged animations restarted")
+local switched = wire.decode(wire.encode(expectedSprite))
+switched[2], switched[4] = "Idle", "Flash"
+component.applySprite(sourceSprite, switched)
+component.applySprite(sourceSprite, switched)
+assert(animationChanges == 1 and overlayChanges == 1, "Animation switch did not occur once")
 local value = wire.decode(wire.encode(component.capture(warning)))
 assert(value[24] == geometry)
 component.apply(beam, value)
