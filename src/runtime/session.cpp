@@ -1440,7 +1440,9 @@ void present() {
     const int top = lua.getTop(state);
     lua.rawGetI(state, registry, presentRef);
     lan::Writer packed(lan::Message::input);
-    packed.input(input::previewPhysicalInput());
+    const auto preview = input::previewPhysicalInput();
+    const input::MovementPreviewScope movementPreview(preview, localViewSlot() + 1);
+    packed.input(preview);
     lua.pushLString(state, reinterpret_cast<const char*>(packed.bytes.data() + 1),
                     packed.bytes.size() - 1);
     // Movement displayed between network samples belongs to the upcoming

@@ -131,7 +131,8 @@ function _IsaacLanFrame()
     return status
 end
 local function charge(bytes)
-    local cursor = 11
+    -- Two flags, two integer fields and the Night Light angle precede weapons.
+    local cursor = string.packsize(">BBI4I4f") + 1
     for i = 1, 5 do
         local present
         present, cursor = string.unpack(">B", bytes, cursor)

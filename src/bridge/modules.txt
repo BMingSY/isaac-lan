@@ -18,6 +18,7 @@ compat/items/r_key
 compat/routes/home
 compat/routes/victory_lap
 compat/bosses/room_entry
+compat/bosses/rotgut
 runtime/transitions
 runtime/room_entry
 sync/codec
