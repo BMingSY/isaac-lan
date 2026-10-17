@@ -46,6 +46,7 @@ CONSUMABLE_RECIPES = {
     "CARD_QUEEN_OF_HEARTS": {"spawns": {"5.10.1": (1, 20)}},
     "CARD_SOUL_KEEPER": {"spawns": {"5.20.": (1, 25)}},
     "COLLECTIBLE_DECK_OF_CARDS": {"pocket": "card"},
+    "COLLECTIBLE_NECRONOMICON": {"enemy_damage": 40},
     "COLLECTIBLE_MOMS_BOTTLE_OF_PILLS": {"pocket": "pill"},
     "COLLECTIBLE_ANARCHIST_COOKBOOK": {"spawns": {"4.3.": (6, 6)}, "delayed_spawn": True},
     "COLLECTIBLE_GUPPYS_PAW": {

@@ -18,6 +18,130 @@ def test_effect_recipes_use_real_unique_catalog_enums():
     assert all(names.count(name) == 1 for name in SUPPORTED_EFFECTS)
 
 
+def test_damage_effects_require_real_loss_expiry_and_replica_health():
+    from copy import deepcopy
+    from item_damage_effects import damage_checks
+
+    case = {"enum": "PILLEFFECT_PERCS", "slot": 0}
+    host = []
+    left = [12, 24]
+    for name, tick, losses, room in (
+        ("first", 90, [1, 2], 84),
+        ("repeat", 180, [1, 2], 84),
+        ("next_room", 330, [2, 2], 85),
+    ):
+        for slot, loss in enumerate(losses):
+            host.append(
+                {
+                    "event": "damage_trial",
+                    "probe": name,
+                    "tick": tick,
+                    "slot": slot,
+                    "amount": 2,
+                    "room": room,
+                    "stage": 1,
+                    "before": {"hearts": left[slot], "soul": 0, "broken": 0},
+                    "after": {"hearts": left[slot] - loss, "soul": 0, "broken": 0},
+                }
+            )
+            left[slot] -= loss
+        host.append(
+            {
+                "event": "sample",
+                "label": "captured",
+                "tick": tick + 30,
+                "players": [{"hearts": n, "max_hearts": 24, "soul": 0, "broken": 0} for n in left],
+            }
+        )
+    host.append({"event": "damage_transition", "tick": 240, "room": 84, "stage": 1})
+    peers = {"host": host, "client": deepcopy([e for e in host if e["event"] == "sample"])}
+    assert all(c["status"] == "passed" for c in damage_checks(case, peers))
+    # A shield on the teammate, or reduction that survives changing rooms,
+    # must fail even when the game used the item and stayed connected.
+    wrong = deepcopy(peers)
+    wrong["host"][1]["after"]["hearts"] += 1
+    assert any(c["status"] == "failed" for c in damage_checks(case, wrong))
+    wrong = deepcopy(peers)
+    trial = next(e for e in wrong["host"] if e.get("probe") == "next_room" and e["slot"] == 0)
+    trial["after"]["hearts"] += 1
+    assert any(c["status"] == "failed" for c in damage_checks(case, wrong))
+    wrong = deepcopy(peers)
+    wrong["client"][-1]["players"][0]["hearts"] += 1
+    assert any(c["status"] == "failed" for c in damage_checks(case, wrong))
+    peers["client"].pop()
+    assert any(c["status"] == "missing" for c in damage_checks(case, peers))
+
+
+def test_damage_effect_cases_include_expiry_floor_and_horse_prerequisites():
+    catalog = json.loads((ROOT / "tests/fixtures/item_catalog.json").read_text())
+    cases = select_cases(catalog, ["pill:28", "pill:29", "trinket:121", "card:39"])
+    percs = next(c for c in cases if c["item"] == "pill:28" and c["horse"])
+    assert percs["damage_effects"]["hearts"] == 12
+    assert percs["damage_effects"]["full_heal"] is True
+    addicted = next(c for c in cases if c["item"] == "pill:29" and c["horse"])
+    assert addicted["damage_effects"]["broken"] == 1
+    cross = next(c for c in cases if c["item"] == "trinket:121")
+    assert len([s for s in cross["damage_effects"]["steps"] if s["action"] == "floor"]) == 2
+    algiz = next(c for c in cases if c["item"] == "card:39")
+    assert algiz["end_tick"] > 60 + 20 * 30
+
+
+def test_damage_fixture_observes_after_simulation_and_clears_pending_on_next_case():
+    import shutil
+    import subprocess
+
+    executable = shutil.which("lua5.3") or shutil.which("lua")
+    if not executable:
+        pytest.skip("Lua is unavailable")
+    script = r"""
+        local factory = dofile("tests/fixtures/item_audit_damage.lua")
+        local records, players = {}, {}
+        for i = 0, 1 do
+            players[i] = {
+                hearts = 12,
+                GetHearts = function(p) return p.hearts end,
+                GetMaxHearts = function() return 24 end,
+                GetSoulHearts = function() return 0 end,
+                GetBrokenHearts = function() return 0 end,
+                GetDamageCooldown = function() return 0 end,
+                AddMaxHearts = function() end,
+                AddSoulHearts = function() end,
+                AddHearts = function(p, n) p.hearts = p.hearts + n end,
+                ResetDamageCooldown = function() end,
+                TakeDamage = function(p, n) p.pending = n end,
+            }
+        end
+        function EntityRef(p) return p end
+        function Game() return { GetLevel = function()
+            return { GetStage = function() return 1 end }
+        end } end
+        _IsaacLan = { rooms_positions = function()
+            return { ["0"] = {index=84}, ["1"] = {index=97} }
+        end }
+        local probe = factory(function(event, v)
+            assert(event == "damage_trial")
+            records[#records+1] = v
+        end, function(slot, callback) callback(players[slot]) end)
+        local case = {slot=0, damage_effects={steps={
+            {action="hit", name="first", tick=90, amount=2},
+            {action="hit", name="repeat", tick=180, amount=2},
+        }}}
+        probe.prepare(case)
+        probe.advance(case, 90)
+        assert(#records == 0)
+        for _, p in pairs(players) do p.hearts = p.hearts - p.pending end
+        probe.advance(case, 91)
+        assert(#records == 2)
+        assert(records[1].before.hearts == 24 and records[1].after.hearts == 22)
+        assert(records[1].tick == 90 and records[1].after_tick == 91)
+        probe.advance(case, 180)
+        probe.prepare(case)
+        probe.advance(case, 31)
+        assert(#records == 2, "Old case leaked a pending hit into its successor")
+    """
+    subprocess.run([executable, "-"], input=script, text=True, cwd=ROOT, check=True)
+
+
 def test_mapping_checks_actual_reveal_peer_and_next_floor():
     from copy import deepcopy
     from item_room_effects import room_effect_checks

@@ -52,6 +52,22 @@ local function otherRoom(origin)
     end
     error("Audit seed has no ordinary second room")
 end
+local function moveHolderRoom()
+    local target = otherRoom(native.rooms_positions()[tostring(case.slot)].index)
+    -- The move is queued; cleanupRoom clears the actual destination on entry.
+    actor(case.slot, function(p)
+        p:SetMinDamageCooldown(case.damage_effects and 20 or 300)
+    end)
+    assert(native.rooms_move(case.slot, target, 0, -1))
+    cleanupRoom = target
+    report("room_changed", { target = target })
+end
+local function moveHolderFloor()
+    actor(case.slot, function(p)
+        Game():StartStageTransition(false, 0, p)
+    end)
+end
+local damageEffects = createDamageEffects(report, actor, moveHolderRoom, moveHolderFloor)
 local function sample(label, tick)
     if not native.rooms_ready() then
         return
@@ -124,6 +140,7 @@ local function sample(label, tick)
                 bone = p:GetBoneHearts(),
                 eternal = p:GetEternalHearts(),
                 black = p:GetBlackHearts(),
+                broken = p:GetBrokenHearts(),
                 coins = p:GetNumCoins(),
                 bombs = p:GetNumBombs(),
                 keys = p:GetNumKeys(),
@@ -494,6 +511,7 @@ local function prepare(tick)
             end
         end)
     end
+    damageEffects.prepare(case)
     sample("before", tick)
     poolProbe("before")
     actor(case.slot, function(p, room)
@@ -620,6 +638,7 @@ local function advance(tick)
     if not used and tick >= useTick then
         activate(tick)
     end
+    damageEffects.advance(case, tick)
     if used and tick % 30 == 0 then
         sample("observe", tick)
     end
@@ -647,15 +666,7 @@ local function advance(tick)
     then
         sample("before_room", tick)
         moved = true
-        local target = otherRoom(native.rooms_positions()[tostring(case.slot)].index)
-        -- rooms_move queues the transfer. Protect the holder through entry,
-        -- then clear the actual destination once its room has been loaded.
-        actor(case.slot, function(p)
-            p:SetMinDamageCooldown(300)
-        end)
-        assert(native.rooms_move(case.slot, target, 0, -1))
-        cleanupRoom = target
-        report("room_changed", { target = target })
+        moveHolderRoom()
     end
     if case.recipe and case.recipe.reunite and not moved and tick >= 150 then
         moved = true
@@ -671,9 +682,7 @@ local function advance(tick)
     then
         floorMoved = true
         sample("before_floor", tick)
-        actor(case.slot, function(p)
-            Game():StartStageTransition(false, 0, p)
-        end)
+        moveHolderFloor()
         report("floor_requested", { tick = tick })
     end
     if (case.mega or case.companion) and not moved and tick >= 240 then
