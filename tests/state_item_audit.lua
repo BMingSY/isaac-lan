@@ -25,6 +25,23 @@ local function report(event, values)
     Isaac.DebugString(line)
 end
 local stress = createStress(report)
+local codecVerified
+local function verifyCodec(bytes, tick)
+    if not audit.verifyCodec or tick < 100 or codecVerified == case.key then
+        return
+    end
+    local reference = assert(_IsaacLanModules["sync/codec"])
+    assert(native.state_encode and native.state_decode, "Native state codec is unavailable")
+    assert(reference.encode(native.state_decode(bytes)) == bytes, "Native decode differs")
+    assert(native.state_encode(reference.decode(bytes)) == bytes, "Native encode differs")
+    local role = host and "host" or "client"
+    local path = audit.snapshotPrefix .. role .. "-" .. case.key:gsub("[^%w%-]", "_") .. ".bin"
+    local file = assert(io.open(path, "wb"))
+    assert(file:write(bytes))
+    file:close()
+    codecVerified = case.key
+    report("codec_verified", { tick = tick, bytes = #bytes })
+end
 local roomEffects = createRoomEffects(report)
 local traceDamage = createDamageTrace(report, function()
     return host and prepared and not exiting and case and case.damage_effects
@@ -905,6 +922,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         local began = Isaac.GetTime()
         local bytes = collect(...)
+        verifyCodec(bytes, tick)
         if case.recipe and useCount > 0 and not useSampled then
             useSampled = true
             sample("post_use", tick)
@@ -917,6 +935,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         return bytes
     end, function(bytes, tick, ...)
+        verifyCodec(bytes, tick)
         local began = Isaac.GetTime()
         local result = restore(bytes, tick, ...)
         if case.kind == "stress" and tick >= 150 then

@@ -258,6 +258,7 @@ local function environment()
     end
     modules["sync/inventory"] = function()
         return {
+            sameItems = module("sync/inventory")(modules["sync/fields"])({}).sameItems,
             capture = function(p)
                 return { 23, {}, {}, {}, {}, {}, {}, {}, p.ghost }
             end,

@@ -205,6 +205,29 @@ return function(fields)
                 )
             end
         end
-        return { capture = inventory, apply = applyInventory }
+        local function sameItems(a, b)
+            if not a or a[Inventory.type] ~= b[Inventory.type] then
+                return false
+            end
+            local before, after = a[Inventory.items], b[Inventory.items]
+            if #before ~= #after then
+                return false
+            end
+            for i, entry in ipairs(after) do
+                if
+                    before[i][Item.id] ~= entry[Item.id]
+                    or before[i][Item.count] ~= entry[Item.count]
+                then
+                    return false
+                end
+            end
+            for i, trinket in ipairs(b[Inventory.trinkets]) do
+                if a[Inventory.trinkets][i] ~= trinket then
+                    return false
+                end
+            end
+            return #a[Inventory.trinkets] == #b[Inventory.trinkets]
+        end
+        return { capture = inventory, apply = applyInventory, sameItems = sameItems }
     end
 end

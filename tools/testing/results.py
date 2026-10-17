@@ -9,7 +9,7 @@ from testing.engine import BackendCleanupError, stop_child
 SCHEMA_VERSION = 1
 
 
-def write_report(output, report):
+def write_report(output, report, *, classname="engine"):
     temporary = output / "report.json.tmp"
     temporary.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     temporary.replace(output / "report.json")
@@ -22,7 +22,7 @@ def write_report(output, report):
         errors=str(int(status == "error")),
         skipped=str(int(status in {"skipped", "not_run"})),
     )
-    case = ET.SubElement(suite, "testcase", name=output.name, classname="engine")
+    case = ET.SubElement(suite, "testcase", name=output.name, classname=classname)
     if status != "passed":
         tag = {"failed": "failure", "error": "error"}.get(status, "skipped")
         ET.SubElement(case, tag, message=report.get("error", status))

@@ -25,6 +25,22 @@ add_library(isaac_lan_deflate STATIC src/core/deflate.cpp)
 target_include_directories(isaac_lan_deflate PUBLIC src)
 target_link_libraries(isaac_lan_deflate PUBLIC isaac_lan_miniz)
 if(BUILD_TESTING)
+    if(NOT WIN32)
+        find_package(Lua 5.3 EXACT REQUIRED)
+        add_executable(isaac_lan_state_codec_runner tests/state_codec_runner.cpp
+                                                    src/engine/state_codec.cpp)
+        target_include_directories(isaac_lan_state_codec_runner PRIVATE src ${LUA_INCLUDE_DIR})
+        target_link_libraries(isaac_lan_state_codec_runner PRIVATE ${LUA_LIBRARIES}
+                                                                   ${CMAKE_DL_LIBS})
+        set_target_properties(isaac_lan_state_codec_runner PROPERTIES ENABLE_EXPORTS ON)
+        target_compile_options(isaac_lan_state_codec_runner PRIVATE -Wall -Wextra -Werror)
+        add_test(
+            NAME bridge.native-codec
+            COMMAND
+                isaac_lan_state_codec_runner "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_codec.lua"
+                "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.native-codec PROPERTIES TIMEOUT 60 LABELS "offline;lua;core")
+    endif()
     add_executable(isaac_lan_session_store_test tests/session_store_test.cpp
                                                 src/runtime/session_store.cpp)
     target_include_directories(isaac_lan_session_store_test PRIVATE src)
@@ -229,6 +245,7 @@ configure_file(src/bridge/embedded.h.in generated/embedded_bridge.h @ONLY)
 add_library(
     isaac_lan_probe SHARED
     src/app/bootstrap.cpp
+    src/engine/state_codec.cpp
     src/engine/versions/j460/bootstrap.cpp
     src/engine/versions/j460/session_backend.cpp
     src/diagnostics/native_exceptions.cpp

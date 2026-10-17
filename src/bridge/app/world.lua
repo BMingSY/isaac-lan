@@ -21,8 +21,8 @@ local performance = modules["diagnostics/performance"]
         counter = function() end,
         resources = function() end,
     }
-local encode = performance.wrap("encode", codec.encode)
-local decode = performance.wrap("decode", codec.decode)
+local encode = performance.wrap("encode", native.state_encode or codec.encode)
+local decode = performance.wrap("decode", native.state_decode or codec.decode)
 local reconcileEntities =
     performance.wrap("apply.entities", component("sync/entities")(EntityType, PickupVariant))
 local reconcileGrids = performance.wrap("apply.grids", component("sync/grids"))
@@ -205,6 +205,7 @@ local replica = component("sync/replica")({
     forms = forms,
     restoreActorRoster = component("sync/actor_roster")(native),
     applyInventory = applyInventory,
+    sameInventory = inventoryState.sameItems,
     actors = actorsPresentation,
     motion = motionPresentation,
     poop = poop,

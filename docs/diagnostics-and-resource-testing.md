@@ -44,6 +44,19 @@ python3 tools/check_performance.py "$ISAAC_RUN_OUTPUT" --output "$ISAAC_PERFORMA
 
 `isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
 
+## 编解码基准
+
+[`benchmark_state_codec.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/benchmark_state_codec.py) 在无需游戏的 Linux Lua 5.3 中比较生产 C++ 绑定与 Lua 参考实现。使用独立 Release 构建，避免 sanitizer 和调试构建干扰计时：
+
+```sh
+cmake -S . -B build-codec -DISAAC_LAN_BUILD_ENGINE=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build-codec --target isaac_lan_state_codec_runner
+python tools/benchmark_state_codec.py --runner build-codec/isaac_lan_state_codec_runner \
+  --iterations 100 --output "$ISAAC_CODEC_REPORT"
+```
+
+默认输入是模拟库存和实体字段的合成状态，先核对字节一致，再测编码、解码和同房三客机片段复用；不能据此推定游戏帧率。`--snapshot` 可输入一份已还原的完整二进制视图。输出保存逐项 CPU 时间、样本数、均值／P95、速度比、执行器哈希和 JSON／JUnit；缺少一端测量、输入规模不一致或执行失败不能计为完成。报告通过表示对照执行完整，不表示实机性能已通过。
+
 ## 按需性能与资源回归
 
 日常命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。CI 覆盖 sanitizer、Lua 实体反复创建／删除与弱引用释放、慢消费者下的有界传输，以及重复分局后的日志句柄清理；不据此推定游戏或未执行 Hook 的资源行为。
@@ -56,6 +69,8 @@ python3 tools/run_special_routes.py \
   --client "$ISAAC_CLIENT_LAB" \
   --case campaign --performance --output "$ISAAC_RUN_OUTPUT"
 ```
+
+`engine_test.py run item-audit -- --mode stress ...` 默认开启性能统计、关闭堆观察与录像；原生异常专项可加 `--heap-check`，画面可加 `--record`，两者的测量需与纯性能轮次区分。其他道具审计模式仍保留堆观察。`--verify-codec` 在每个场景的双端各核对一次真实视图的新旧编码并保存二进制样本，压力场景在第 150 tick 的统计窗口前执行；`codec_verified` 是独立证据，不替代场景完成与退出结果。
 
 `campaign` 使用固定路线、Boss 房定位、保护和伤害加速，原版战斗、拾取、出口、换层及羔羊结局仍实际执行；不代表随机无辅助通关。默认不录画面，按需 `--record`。隔离资料逐文件备份／恢复，进程非零退出仍判整轮失败。
 

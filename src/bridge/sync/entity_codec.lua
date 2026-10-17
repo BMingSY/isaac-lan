@@ -75,9 +75,8 @@ return function(wire)
                             .. type(v)
                     )
                 end
-                if type(v) == "number" then
-                    assert(
-                        v == v and math.abs(v) < math.huge,
+                if type(v) == "number" and (v ~= v or math.abs(v) == math.huge) then
+                    error(
                         "Non-finite entity field "
                             .. object.Type
                             .. "."

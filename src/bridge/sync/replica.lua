@@ -25,6 +25,7 @@ return function(fields)
         local audioPresentation, itemPresentation = deps.audio, deps.items
         local pack = string.pack
         local lastInventory = {}
+        local pendingBytes, pendingTick, pendingValue
         local replicas, motion = {}, {}
         local replicaRoom, receivedTick = nil, -1
         local actorVisuals = {}
@@ -132,11 +133,7 @@ return function(fields)
                         )
                     )
                 end
-                local encoded = encode({
-                    actor[Actor.inventory][Inventory.type],
-                    actor[Actor.inventory][Inventory.items],
-                    actor[Actor.inventory][Inventory.trinkets],
-                })
+                local inventory = actor[Actor.inventory]
                 -- Item/health setters and familiars stay in this actor's room. The
                 -- native resource broadcast restores the whole team's shared pool;
                 -- subsequent actor snapshots see the same count and apply no delta.
@@ -144,12 +141,15 @@ return function(fields)
                     applyInventory(
                         p,
                         actor[Actor.inventory],
-                        lastInventory[actor[Actor.entity][Entity.id]] ~= encoded
+                        not deps.sameInventory(
+                                lastInventory[actor[Actor.entity][Entity.id]],
+                                inventory
+                            )
                             or tick % INVENTORY_REFRESH_TICKS == 0
                     )
                     deps.temporaryEffects.apply(p, actor[Actor.temporaryEffects])
                 end, 1))
-                lastInventory[actor[Actor.entity][Entity.id]] = encoded
+                lastInventory[actor[Actor.entity][Entity.id]] = inventory
                 applyEntity(p, actor[Actor.entity], now, tick)
                 actorsPresentation.apply(p, actor)
                 poop.apply(p, actor[Actor.poop])
@@ -325,9 +325,17 @@ return function(fields)
         local function apply(bytes, tick, ack, betweenUpdates)
             performance.resources()
             if floor.waiting() then
+                pendingBytes, pendingTick, pendingValue = nil, nil, nil
                 return false
             end
-            local value = worldSchema.unpack(decode(bytes), tick)
+            -- A half-update may defer a view to the next full update. Retain its
+            -- immutable decoded tree until preflight succeeds or a newer view arrives.
+            if pendingBytes ~= bytes or pendingTick ~= tick then
+                pendingBytes, pendingTick, pendingValue = nil, nil, nil
+                local decoded = worldSchema.unpack(decode(bytes), tick)
+                pendingBytes, pendingTick, pendingValue = bytes, tick, decoded
+            end
+            local value = pendingValue
             if betweenUpdates then
                 -- Room transfers and roster replacements can allocate native room
                 -- objects. Keep them on the full update path, before native cleanup.
@@ -356,6 +364,8 @@ return function(fields)
             if not floor.ready(level, value.epoch, value.stage, value.stageType) then
                 return false
             end
+            -- Never reuse a tree after native restoration has started, including failure.
+            pendingBytes, pendingTick, pendingValue = nil, nil, nil
             deps.glitched.apply(value.glitched)
             local roomChanged = restoreLocations(value)
             native.state_clock(value.frame)
@@ -384,6 +394,7 @@ return function(fields)
         end
 
         local function resetView()
+            pendingBytes, pendingTick, pendingValue = nil, nil, nil
             motion, actorVisuals, replicaRoom = {}, {}, nil
             appliedLocations = nil
         end

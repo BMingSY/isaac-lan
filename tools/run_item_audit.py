@@ -32,7 +32,12 @@ def run_batch(args, cases, output, labs):
     journals = {role: output / (role + "-events.log") for role in ("host", "client")}
     build_fixture(
         script,
-        {"cases": cases, "journal": {role: windows(path) for role, path in journals.items()}},
+        {
+            "cases": cases,
+            "journal": {role: windows(path) for role, path in journals.items()},
+            "verifyCodec": args.verify_codec,
+            "snapshotPrefix": windows(output / "codec-"),
+        },
     )
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
     command = engine_command(
@@ -47,7 +52,6 @@ def run_batch(args, cases, output, labs):
         "--virtual-input",
         "--menu-port",
         str(args.port),
-        "--heap-check",
         "--scenario-timeout",
         str(args.timeout),
     )
@@ -55,6 +59,8 @@ def run_batch(args, cases, output, labs):
         command.extend(("--native-record-both", "--frame-ms", "1000"))
     if args.mode == "stress":
         command.append("--performance")
+    if args.mode != "stress" or args.heap_check:
+        command.append("--heap-check")
     protected = ProtectedLabs(labs, output)
     report = {
         "cases": cases,
@@ -157,6 +163,16 @@ def main():
     parser.add_argument("--port", type=int, default=51900)
     parser.add_argument("--timeout", type=int, default=86400)
     parser.add_argument("--record", action="store_true")
+    parser.add_argument(
+        "--verify-codec",
+        action="store_true",
+        help="Compare native/Lua codecs once per peer/case before stress sampling",
+    )
+    parser.add_argument(
+        "--heap-check",
+        action="store_true",
+        help="Enable heap evidence for stress runs; changes performance measurements",
+    )
     parser.add_argument(
         "--moving-use", action="store_true", help="Move with the native stick during the use press"
     )
