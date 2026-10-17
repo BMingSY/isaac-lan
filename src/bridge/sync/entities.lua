@@ -4,6 +4,20 @@ return function(fields)
     local COLLECTIBLE_SPAWN_PLACEHOLDER = 1
     return function(types, pickups)
         return function(values, env)
+            local function optionalTear(v)
+                if v[Entity.type] ~= types.ENTITY_TEAR then
+                    return false
+                end
+                -- Only player-owned tears may disappear under allocation pressure.
+                -- Hostile projectiles and entities with native links remain required.
+                if (v[Entity.child] or 0) ~= 0 or (v[Entity.minecart] or 0) ~= 0 then
+                    return false
+                end
+                local parent = env.ref(v[Entity.parent])
+                local spawner = env.ref(v[Entity.spawner])
+                return (parent and parent.Type == types.ENTITY_PLAYER)
+                    or (spawner and spawner.Type == types.ENTITY_PLAYER)
+            end
             local currentObjects = {}
             local removed = false
             -- Native entity pools are bounded. Free obsolete allocations before
@@ -57,10 +71,13 @@ return function(fields)
                         or v[Entity.subtype]
                     e = env.spawn(v, env.ref(v[Entity.spawner]), subtype)
                 end
-                assert(e, "Replica spawn failed")
-                e:GetData().__isaac_lan_replica = v[Entity.id]
-                env.apply(e, v)
-                currentObjects[env.key(e)] = true
+                if e then
+                    e:GetData().__isaac_lan_replica = v[Entity.id]
+                    env.apply(e, v)
+                    currentObjects[env.key(e)] = true
+                else
+                    assert(optionalTear(v), "Replica spawn failed")
+                end
             end
             for _, e in ipairs(env.entities()) do
                 if e:Exists() and e.Type ~= types.ENTITY_PLAYER then
@@ -74,6 +91,7 @@ return function(fields)
                     end
                 end
             end
+            local missingTears = 0
             -- Native NPC spawns can allocate their own segments. Removing those extra
             -- entities unlinks their parent, so install authoritative links afterward.
             for _, v in ipairs(values) do
@@ -91,7 +109,7 @@ return function(fields)
                     -- and retire an older effect while this view is installed.
                     -- The next view recreates it if it remains authoritative.
                     assert(
-                        v[Entity.type] == types.ENTITY_EFFECT,
+                        v[Entity.type] == types.ENTITY_EFFECT or optionalTear(v),
                         "Replica identity missing: "
                             .. v[Entity.id]
                             .. " type="
@@ -99,8 +117,12 @@ return function(fields)
                             .. ":"
                             .. v[Entity.variant]
                     )
+                    if v[Entity.type] == types.ENTITY_TEAR then
+                        missingTears = missingTears + 1
+                    end
                 end
             end
+            return missingTears
         end
     end
 end

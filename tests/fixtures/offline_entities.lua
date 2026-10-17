@@ -35,10 +35,17 @@ return function(root)
     function fixture.reset()
         allocations, refs, spawned, removed, room = {}, {}, 0, 0, "0:1"
         -- An unrelated player and a second room must survive reconciliation.
-        new(-1, 1, 0, 0, room)
+        refs[-1] = new(-1, 1, 0, 0, room)
         refs[900] = new(900, 10, 0, 0, "0:2")
     end
-    function fixture.apply(selectedRoom, values, implicitSegments, invalidateData, factoryLimit)
+    function fixture.apply(
+        selectedRoom,
+        values,
+        implicitSegments,
+        invalidateData,
+        factoryLimit,
+        failedSpawn
+    )
         room = selectedRoom
         reconcile(values, {
             ref = ref,
@@ -47,6 +54,9 @@ return function(root)
             end,
             spawn = function(v, _, subtype)
                 spawned = spawned + 1
+                if v[1] == failedSpawn then
+                    return nil
+                end
                 if factoryLimit then
                     local active = {}
                     for _, existing in ipairs(allocations) do

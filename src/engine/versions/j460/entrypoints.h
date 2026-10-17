@@ -11,6 +11,7 @@ inline constexpr std::uint32_t playerManagerRemovePlayer = 0x5ba000;
 inline constexpr std::uint32_t playerGetPoopMana = 0x353c20;
 inline constexpr std::uint32_t playerGetPoopSpell = 0x441cd0;
 inline constexpr std::uint32_t playerManagerReplacePlayer = 0x5bee80;
+inline constexpr std::uint32_t playerTriggerRoomClear = 0x3a8fd0;
 inline constexpr std::uint32_t gameEnd = 0x2f9770;
 inline constexpr std::uint32_t gameTriggerRKey = 0x307ad0;
 inline constexpr std::uint32_t gameNextVictoryLap = 0x2f7ac0;
