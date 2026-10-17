@@ -44,11 +44,11 @@ python3 tools/check_performance.py "$ISAAC_RUN_OUTPUT" --output "$ISAAC_PERFORMA
 
 `isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
 
-## 资源回归与堆检查
+## 按需性能与资源回归
 
 日常命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。CI 覆盖 sanitizer、Lua 实体反复创建／删除与弱引用释放、慢消费者下的有界传输，以及重复分局后的日志句柄清理；不据此推定游戏或未执行 Hook 的资源行为。
 
-最终实机可复用一组隔离主客机，先运行相关专项再加 `--case campaign`：
+性能与压力测试不属于默认发版范围。需要定位相关问题时，单独使用一组隔离主客机，选择对应负载；例如长流程资源检查可运行：
 
 ```sh
 python3 tools/run_special_routes.py \
@@ -61,6 +61,8 @@ python3 tools/run_special_routes.py \
 
 前置解锁由 [`tools/progress_fixture.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/progress_fixture.py) 在启动前写入隔离存档，核对 J460 文件头、区段和校验算法，以临时文件原子替换；必须已有原版基线；角色菜单初始化后禁止修改内存解锁表。
 
-`--heap-check` 用独立的 `isaac_lan_heap_watch.exe` 观察已标记目录和已校验路径的进程。异常上下文复制到实验共享区，转储完成后继续原异常链；最多前三次异常、每次最多等 30 秒，无观察器时不等待。正常关闭预留 45 秒，超时终止必须判失败。
+## 原生异常与堆检查
+
+Boss、转场与退出验收的异常采集与性能压测分别安排。`--heap-check` 用独立的 `isaac_lan_heap_watch.exe` 观察已标记目录和已校验路径的进程。异常上下文复制到实验共享区，转储完成后继续原异常链；最多前三次异常、每次最多等 30 秒，无观察器时不等待。正常关闭预留 45 秒，超时终止必须判失败。
 
 完整转储先写 Windows 临时目录，再复制到产物的转储归档；复制失败保留临时文件并报错，不打入安装包。观察器不改 IFEO／注册表、不附加调试器；fail-fast 或更早启动错误不保证捕获，仍检查退出结果。Windows CI 用合成进程验证转储链路，不启动游戏，也不把“未观察到异常”当作已排除所有堆损坏。

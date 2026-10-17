@@ -1,65 +1,39 @@
 # 联机挑战
 
-## 行为与原版复用
+联机挑战由房主在大厅选择，通过运行规则约束角色、难度、终点和效果。网络传输规则描述符，玩法由挑战兼容组件执行，界面复用原版 HUD。
 
-大厅由房主选择挑战，编号从 1001 开始；切换规则会清空所有人的准备状态。只有所有玩家自己的存档均已解锁底片（能走暗室／羔羊路线）和里该隐时，才允许选择、准备和开始此挑战；加入已选挑战的房间会重新核对全员资格。共享主机进度不参与资格判定。普通选角复用游戏原生角色菜单目录、顺序、名称、画像及可选判定，包含本机已加载的角色 Mod；不维护固定角色名单或另一套解锁成就表。原版角色使用本机存档资格，Mod 角色沿用游戏原生菜单的收录规则。伊甸及里伊甸新开局还需要伊甸令牌；恢复或重连已有角色不重复要求令牌。
+## 当前规则：1001 恶魔形态
 
-当前 **1001 恶魔形态** 固定普通难度、里该隐开局，2–4 人按固定栏位形成观察环：P1 → P2 → … → P1。实际材料、旋转和合成仍属于操作者，只显示下一位的材料与原生预览。死亡、掉线和重连不重排观察环；下一位无法显示时不切换到其他人的袋子。变身与其他道具仍走普通联机规则。
-
-终点为羔羊：在 Dark Room 的羔羊房清场后，把原版结局宝箱变为原版奖杯。任意在线、存活且非幽灵的队员领取后，房主发布一次可靠结束事件；各端调用原版 `Game::FinishChallenge` 的淡出／返回菜单流程，不记录原版挑战解锁。路线完全沿用原版，玩家需要自行取得底片并前往暗室。可推进原版楼层的入口保留，不自动改道或转场。其他终局宝箱在碰撞前拦截；原生结局和跑圈入口也拒绝执行。羔羊清场后的奖杯更新同时清理虚空传送门、楼层地洞和天堂光柱，不移除普通房门；终点只留下奖杯，领取是本挑战唯一通关方式；死亡和主动退出仍可结束会话。
-
-左侧属性栏上方的终点使用原版 HUD 的 `Destination` 绘制分支，沿用原版精灵、位置计算、角色额外计数行与 HUD 偏移。百宝袋沿用原版绘制：隐藏队友小 HUD 的整个副手区域，在本机右下角绘制下一位的材料和预览；本机自己的卡牌、药丸和其他口袋道具继续正常显示。下一位缺失、幽灵或没有百宝袋时隐藏材料和预览，不回退到自己。第三方 Mod 的界面保持原行为。
-
-挑战暂不持久保存或续玩，退出也不覆盖／删除已有普通联机存档。客机可通过现有内存检查点重连；规则 ID／版本、原栏位与材料随检查点和实时视图恢复。R 键和沙漏不清除会话规则。
-
-## 扩展位置
-
-| 内容 | 位置／契约 |
+| 项目 | 行为 |
 | --- | --- |
-| 编号、名称、版本、角色、难度、目标与效果选择 | [`src/compat/challenges/catalog.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/challenges/catalog.h)；改规则时提升定义版本 |
-| 大厅与可靠运行设置 | [`core/run_rules.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/core/run_rules.h)、[`net/session.*`](https://github.com/BMingSY/isaac-lan/tree/main/src/net)；网络只传普通值，不识别挑战内容 |
-| 回调时机、权威判断、重连与结束 | [`runtime/session.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session.cpp)、[`bridge/runtime/challenges.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/challenges.lua) |
-| 具体终点与奖励规则 | [`bridge/compat/routes/challenge_lamb.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/routes/challenge_lamb.lua)；由 [`app/main.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/app/main.lua) 注入 |
-| 菜单与存档选角 | [`bridge/presentation/menu.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/menu.lua)；具名 [`engine/characters.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/characters.h) 返回复制的原生目录与个人资格 |
-| 画面与原生能力 | J460 的 `crafting_hud.cpp`、`challenge_hud.cpp`；不修改权威材料 |
+| 资格 | 全员自己的存档均解锁底片和里该隐；共享主机进度不参与资格判定 |
+| 开局 | 普通难度、里该隐、2–4 人 |
+| 百宝袋 | 固定栏位形成 P1 → P2 → … → P1 观察环；显示下一位的材料与原生预览，实际材料和操作仍属于自己 |
+| 身份变化 | 死亡、掉线和重连不重排观察环；目标缺失、幽灵或没有袋子时隐藏显示 |
+| 路线与终点 | 沿原版路线取得底片并前往暗室；羔羊清场后以原版奖杯替代结局宝箱 |
+| 完成 | 在线、存活且非幽灵的角色领取奖杯，房主发布一次可靠结束，全队返回菜单，不写入原版挑战解锁 |
+| 保存 | 临时会话，不保存整场续玩，不覆盖已有普通联机存档；原客机可通过当前层检查点重连 |
 
-未来地图由 `maps[id]` 注入两个可选回调，1001 不配置地图模块：
+非终点的终局宝箱、原生结局和跑圈入口受规则限制。羔羊清场后移除会绕开终点的虚空入口、楼层地洞和天堂光柱，保留普通房门；奖杯领取是唯一通关方式。死亡与主动退出仍可结束会话。
 
-- `onLayoutReady(info, level)`：房主的新层／重建已可用时调用，可衔接布局构建；不在原生加载回调里递归换层。
-- `canEnter(ctx)`：房主在房间迁移入队前判断，包含 `slot`、源／目标房间与维度、`teleport`、`info`；存在策略时只接受明确的 `true`。普通门和经过队列的传送共用检查。
+## 规则与生命周期
 
-这里只预留调用边界，没有提供绘图格式、房间构建器或通用地图同步扩展。以后加入手绘地图时，应同时实现布局采集／应用、恢复和全队强制汇合的拒绝策略；不能仅靠这个回调完成所有地图能力。
+切换规则清空全员准备状态；加入、选角、准备和启动分别校验本机存档资格及规则代次。普通选角使用原生菜单目录与可选判定，包含本机已加载的 Mod 角色。新开局所需的消耗型资格不重复限制已有角色恢复。
 
-## J460 原生边界
+规则 ID／版本、原栏位与材料随检查点和实时视图恢复。R 键与沙漏保留会话规则，退出恢复受保护的单人 Continue。玩法层决定奖励与结束时机，运行层协调原生退出。
 
-现有材料读写接口不能分别控制材料与预览的显示，Lua HUD API 也不能为独立联机规则指定原版终点。新增以下受版本特征校验的能力：
+## 显示与扩展位置
 
-| 入口／布局 | 用途与约束 |
+终点使用原版 HUD 的 Destination 分支；百宝袋使用原版绘制，在本机右下角显示观察目标，隐藏队友小 HUD 的副手区域。本机其他卡牌／药丸正常显示。材料仍完整同步，显示限制不提供防作弊或数据保密。
+
+| 职责 | 入口 |
 | --- | --- |
-| `PlayerHUD` 副手绘制，RVA `0x4471c0` | `ECX=PlayerHUD*`、`XMM3=scale`，栈上位置／布局／透明度共 12 字节；只允许本机 HUD，保留自己的 receiver／透明度；挑战使用原生完整布局 `layout=0`、`scale=1`，保留自己的其他口袋内容 |
-| 原生完整副手定位，调用点 RVA `0x5a73ef` | 所有主／客机用原生逻辑宽高 `0x878dc4`／`0x878edc` 与 HUD 偏移 `+0x594c`／`+0x5950` 计算右下位置：`(width-28+offsetX, height-18+offsetY)`；用临时栈 Vector 包住原生调用，不改 caller 的 Vector、栈参数或 HUD。避免 3／4 人原生 compact 布局把袋子移到左上；原生 HUD 在每帧布局分支前更新这两个偏移，直接首次开 3／4 人局同样有效 |
-| `PlayerHUD` 百宝袋绘制，RVA `0x449510` | `ECX=PlayerHUD*`、栈上 `Vector*`、`XMM2=scale`，被调方清理 4 字节；完整保留寄存器与 SSE。该函数同时画材料和缓存预览；仅借用下一位的 receiver，保留本机位置和缩放 |
-| `PlayerHUD[0..1]`、HUD 的 8 个 `0x6dc` 槽位、Player `+0x1618`／`+0x20a9` | 只读借用角色、父 HUD、控制器和幽灵标记；复用 `GetActiveItem` 检查目标仍有袋子；不替换绑定或缓存、不写材料、不拥有角色或精灵 |
-| HUD 终点存在标记，RVA `0x5a4eae` | 只更改原版绘制栈帧中的两个显示标记，复用后续完整布局／绘制 |
-| `Game::GetChallengeParams`，RVA `0x306940` | 仅对 HUD 的指定调用点返回标量目标视图；其余调用保持原版返回值。目标视图无原生容器所有权，不进入玩法或析构 |
-| `Game::FinishChallenge`，RVA `0x304f20` | 在全队接受结束事件后的安全更新边界调用；原版 `Game::Challenge` 保持 0，避免套用原版挑战规则或解锁编号 |
+| 编号、版本、资格与效果定义 | [compat/challenges/catalog.h](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/challenges/catalog.h) |
+| 规则描述符和大厅传输 | [core/run_rules.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/run_rules.h)、[net/](https://github.com/BMingSY/isaac-lan/tree/main/src/net) |
+| 生命周期、重连与结束 | [bridge/runtime/challenges.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/challenges.lua)、[runtime/session.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session.cpp) |
+| 终点与奖励规则 | [compat/routes/challenge_lamb.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/routes/challenge_lamb.lua) |
+| 菜单与本机显示 | [presentation/menu.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/menu.lua)、[J460 HUD 能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#hud-与本机输入) |
 
-路线适配通过具名 `rooms_chest_ending` 复用原生 `Game::GetChestEnding(false)`，在临时完整队伍作用域中读取当前大箱是否会结束游戏；不读取或改写 Lua 内存，不选择替代楼层。
+地图策略可通过 `maps[id]` 提供 `onLayoutReady(info, level)` 与 `canEnter(ctx)`。前者在权威布局准备后调用，后者在迁移入队前验证来源／目标和传送类型。1001 不配置地图策略；这些回调不提供房间构建或任意布局同步能力。
 
-原生菜单的 BACK／SELECT 纸片在第二次开局后残留并遮挡副手栏。现有输入清理不覆盖该原生提示组，因此 `input::resetMenuPrompts` 在联网 `ExecuteStart` 销毁菜单后调用 RVA `0x239b0`：`thiscall void(Manager+0x4a950, false)`，接收者是嵌入组、被调方清理 4 字节。只调用原生重置一次，不接管分配和释放、不影响之后的暂停提示。
-
-原版 Lua API 不提供角色配置枚举、隐藏字段及完整菜单可选判定；`EntityConfig.GetPlayer` 等接口需要 REPENTOGON，因此普通选角通过范围受限的 `characters::catalogue` 读取 J460 原生目录，未增加 Hook 或 Mod 一致性门禁：
-
-- 原生两页菜单表 RVA `0x724140`（每条 `0x18`、每页 18 条）提供原版角色及动画，页表 `0x724120` 提供画像 ANM2。两页的随机占位行按位置跳过；不自行列举角色 ID 或成就映射。
-- Manager 的 `PlayerConfig` 向量 `+0x2a678/+0x2a67c`、记录大小 `0x148`；按原生 Mod 轮盘规则扫描附加配置，排除 `hidden +0x128` 和有 `bSkinParent` 的子项，里页取配对 `+0x124`。该 J460 原生菜单直接收录 Mod 角色，不额外应用 XML 的 `achievement` 条件。
-- `MenuCharacter::Available` RVA `0x546cd0` 使用原生菜单记录作为 `thiscall` 接收者，另有一个栈参数（传 0、被调方清理 4 字节）。查询前同步借入本机的 642 个成就字节和 523 个计数，并临时使用 frontend scene，避免共享主机进度及局内挑战免解锁分支改变选角；无 Lua、回调、存档或分配调用进入这个作用域，返回前还原全部字节和 scene。续玩资格只临时豁免已消耗的伊甸令牌，仍复用同一原生判定。
-- 字符串和画像路径立即复制，不跨模块析构游戏的 MSVC 字符串；`#` 名称复用已有 StringTable 的 `Players` 查询，检查缺键标记。Lua 只收到 ID、复制的名称与画像元数据，不接收原生指针；菜单自行持有 Lua Sprite。
-- 配置范围、步长、数量、配置 ID、字符串长度与配对索引都有边界检查。Mod 枚举布局锚 RVA `0x54919e` 和原生可选入口加入启动签名校验。网络沿用已有角色 ID／个人资格契约，不新增要求全部 Mod 相同的规则。
-
-所有入口与调用点列在 `entrypoints.h`／`signatures.inc`。协议提升为 **28**，挑战 1001 定义版本为 **2**，检查点封装为 **save/3**；当前 WorldState schema 为 **23**，扩展指纹仍须相同。材料完整同步，因此显示限制不是防作弊或数据保密机制。
-
-## 验证边界
-
-离线回归入口为 [`tests/challenges.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/challenges.lua)、`challenge_menu.lua`，以及 C++ `challenge-rules`、网络 `run-rules`／`lobby-access`、Windows x86 原生角色目录 ABI 测试 `native.character-catalog` 和两个 HUD ABI 测试。它们覆盖权威奖励、重复触碰、错误房间、重连／回退后的判定、规则切换竞态、2–4 人栏位与绘制调用约定；不能替代游戏画面与原生流程验收。
-
-集中实机验收入口为 [`tools/run_lan_challenges.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_lan_challenges.py)，`--suite access` 检查资格，`gameplay` 检查完整机制，`hud` 复用普通保存、2／3／4 人显示、重连和普通 Resume，且不得出现结束事件。工具使用 2–4 个带所有权标记的隔离副本，在同组进程中切换挑战与普通会话，并在退出后恢复受保护存档。场景包括同房和分房的袋子与预览、HUD 偏移、羔羊奖杯与全队返回、全员资格与原版路线保持、死亡／复活、重连、R 键、沙漏，以及挑战退出后的普通联机存档恢复。
+规则变更更新定义版本；启动与恢复均校验规则。专项入口为 [run_lan_challenges.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_lan_challenges.py)，使用方法和执行范围见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#按需专项)。
