@@ -20,17 +20,24 @@ def validate_startup(labs):
             )
 
 
-def validate_labs(values, output):
+def validate_labs(values, output=None, *, count=2):
     labs = [Path(value).resolve() for value in values]
-    if len(labs) != 2 or len(set(labs)) != 2:
-        raise ValueError("Two distinct owned labs are required")
+    if (
+        (count is not None and len(labs) != count)
+        or not 2 <= len(labs) <= 4
+        or len(set(labs)) != len(labs)
+    ):
+        raise ValueError("Distinct owned labs are required for every selected peer")
+    output = Path(output).resolve() if output is not None else None
     for lab in labs:
         if lab.name.casefold() in {"host-001", "client-001"}:
             raise ValueError("The user's manual games must not be controlled")
         if not (lab / ".isaac-lan-lab").is_file() or not (lab / "game/isaac-ng.exe").is_file():
             raise ValueError("Every lab needs an ownership marker and its own executable")
-        if output.is_relative_to(lab) or lab.is_relative_to(output):
+        if output is not None and (output.is_relative_to(lab) or lab.is_relative_to(output)):
             raise ValueError("Evidence must be outside the protected labs")
+        if any(other != lab and lab.is_relative_to(other) for other in labs):
+            raise ValueError("Isolated labs must not contain one another")
     return labs
 
 

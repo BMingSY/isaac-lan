@@ -1,11 +1,13 @@
 -- Repeated raise/lower transitions, with EID on/off, in one isolated session.
 local native = assert(_IsaacLan)
+local previousSprite, previousPrediction = native.sprite_state, _IsaacLanPrediction.new
+local previousEidMethods, previousBagMode = {}, nil
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local renders, verified, previousButtons = 0, 0, 0
 local linked, chosen, finished, prepared = false, false, false, false
 local eid, lastRender, remoteBag
 local resets, transitions = 0, 0
-local output = assert(io.open("./lan-test-digest-scenes.csv", "w"))
+local output = assert(io.open(_IsaacLanTest.sceneOutput or "./lan-test-digest-scenes.csv", "w"))
 output:write(
     "time_ms,tick,phase,interval_ms,x,y,extra_finished,animation,extra_animation,holding,prediction_resets\n"
 )
@@ -42,6 +44,7 @@ function _IsaacLanFrame()
         for mod, handle in pairs(_IsaacLanModules["api/public"].modHandles) do
             if handle.id == "isaac-lan.compat.eid" then
                 eid = mod
+                previousBagMode = eid.Config.DisplayBagOfCrafting
             end
         end
     end
@@ -179,3 +182,19 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         beginFloor
     )
 end
+
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        output:close()
+        native.sprite_state, _IsaacLanPrediction.new = previousSprite, previousPrediction
+        if eid then
+            for name, fn in pairs(previousEidMethods) do
+                eid[name] = fn
+            end
+            eid.Config.DisplayBagOfCrafting = previousBagMode
+        end
+    end,
+}

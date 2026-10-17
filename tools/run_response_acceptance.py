@@ -6,14 +6,16 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import time
 
-from build_gameplay_suite import build
+from testing.gameplay import build
 from check_input_response import measure as response_measure
 from check_local_movement import measure as movement_measure
 from check_state_motion import measure as motion_measure
 from check_mirror_camera import check as camera_measure
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command
+from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle
 from game_logs import log_path
 
@@ -30,6 +32,7 @@ CASES = [
 
 
 def main():
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
@@ -40,11 +43,9 @@ def main():
     parser.add_argument("--client-input-hz", type=int, choices=(30, 60), default=60)
     parser.add_argument("--record-view", action="store_true")
     args = parser.parse_args()
-    labs = [args.host.resolve(), args.client.resolve()]
-    if len(set(labs)) != 2 or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
-        parser.error("Two distinct marked labs are required")
-    if any(lab.name in {"host-001", "client-001"} for lab in labs):
-        parser.error("Manual game labs must not be controlled")
+    labs = validate_owned_labs(
+        [args.host.resolve(), args.client.resolve()], args.output.resolve(), count=None
+    )
     idle(labs)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -74,20 +75,11 @@ end
         script.write_text(script.read_text() + switch)
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
     protected = ProtectedLabs(labs, output, roles=("host", "client"))
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
-        "--build",
-        str(args.build.resolve()),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
+    command = engine_command(
+        labs,
+        args.build,
+        output / "engine",
+        script,
         "LAN_NETWORK PASS continuous gameplay suite",
         "--frontend",
         "--menu-start",
@@ -104,7 +96,7 @@ end
         str(args.port),
         "--scenario-timeout",
         "420",
-    ]
+    )
     if args.record_view:
         command += ["--native-record-view", "1", "--frame-ms", "500"]
     report = {
@@ -114,6 +106,7 @@ end
         "command": command,
         "client_input_hz": args.client_input_hz,
     }
+    process = None
     try:
         with (output / "engine.log").open("w") as log:
             process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
@@ -171,13 +164,9 @@ end
         report["passed"] = True
     except Exception as error:
         report["error"] = str(error)
+        report["error_type"] = type(error).__name__
     finally:
-        try:
-            protected.restore()
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"], report["passed"] = str(error), False
-        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        finish_run(protected, report, output, process=process)
     print(
         json.dumps(
             {key: report.get(key) for key in ("passed", "restored", "error")}, ensure_ascii=False

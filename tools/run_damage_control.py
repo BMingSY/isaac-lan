@@ -6,17 +6,16 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
-import signal
 import subprocess
-import sys
 
 from item_audit import ROOT, lua, select_cases
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command
 from lab_profile import ProtectedLabs, idle, validate_labs, validate_startup
 
 
 def main():
-    signal.signal(signal.SIGINT, signal.default_int_handler)
-    signal.signal(signal.SIGTERM, signal.default_int_handler)
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("host", "client", "build", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
@@ -60,20 +59,11 @@ def main():
     }
     protected = ProtectedLabs(labs, output)
     (output / "backup.json").write_text(json.dumps(protected.report(), indent=2) + "\n")
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
-        "--build",
-        str(args.build.resolve()),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
+    command = engine_command(
+        labs,
+        args.build,
+        output / "engine",
+        script,
         "LAN_NETWORK NATIVE_DAMAGE_CONTROL_COMPLETE",
         "--frontend",
         "--menu-start",
@@ -87,28 +77,17 @@ def main():
         "1000",
         "--scenario-timeout",
         "600",
-    ]
+    )
     process = None
     try:
         with (output / "engine.log").open("w") as stream:
             process = subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT)
             report["returncode"] = process.wait()
         report["engine"] = json.loads((output / "engine/result.json").read_text())
+        report["passed"] = report["returncode"] == 0 and report["engine"]["pass"]
     finally:
-        try:
-            if process is not None and process.poll() is None:
-                # The child owns both game PIDs and handles SIGTERM by closing
-                # them. Never kill that cleanup or restore beneath a live game.
-                process.terminate()
-                process.wait(timeout=60)
-            restoration = protected.restore()
-            (output / "restored.json").write_text(json.dumps(restoration, indent=2) + "\n")
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"] = str(error)
-        finally:
-            (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-    return 0 if report["engine"]["pass"] and report["restored"] else 1
+        finish_run(protected, report, output, process=process)
+    return 0 if report["passed"] else 1
 
 
 if __name__ == "__main__":

@@ -39,11 +39,17 @@ for i = 1, 2 do
             return frame()
         end
         _IsaacLan.net_gate = function() end
-        return function()
-            return flags[i]
-        end
+        return {
+            done = function()
+                return flags[i]
+            end,
+        }
     end
 end
+Isaac.AddCallback = function() end
+Isaac.RemoveCallback = function() end
+_IsaacLan.test_gamepad = function() end
+createScenario = dofile(root .. "/tests/support/scenario.lua")
 dofile(root .. "/tests/special_suite_driver.lua")
 local coordinator = _IsaacLanFrame
 assert(case == 1)

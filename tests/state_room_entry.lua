@@ -195,3 +195,14 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, collect, restore, present, beginFloor)
 end
+
+-- Explicit test-only lifecycle consumed by both suite coordinators.
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        native.input_bot = baseInput
+        native.input_bot(0, 0)
+    end,
+}

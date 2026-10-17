@@ -203,3 +203,16 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
         settledFrames = settledFrames + 1
     end
 end)
+
+-- Explicit test-only lifecycle consumed by both suite coordinators.
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        if motionFile then
+            motionFile:close()
+            motionFile = nil
+        end
+    end,
+}

@@ -172,3 +172,16 @@ Isaac.AddCallback(
         )
     end
 )
+
+-- Explicit test-only lifecycle consumed by both suite coordinators.
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        if out then
+            out:close()
+            out = nil
+        end
+    end,
+}

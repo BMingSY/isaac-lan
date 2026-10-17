@@ -2,74 +2,23 @@
 """Concentrated release checks using one installed, protected native pair."""
 
 import argparse
+from testing.release import CASES, HOURGLASS, COMPLETION, build_suite
 import hashlib
 import json
 from pathlib import Path
 import re
 import shutil
-import signal
 import subprocess
-import sys
 
-from lab_profile import ProtectedLabs, idle
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command
+from lab_profile import validate_labs as validate_owned_labs
+from lab_profile import ProtectedLabs, idle, windows
 from game_logs import log_path
-from lab_profile import windows
-from run_pause_menu import magdalene_profile, peer_evidence as pause_evidence
+from testing.profiles import magdalene_profile
+from testing.pause import peer_evidence as pause_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
-HOURGLASS = (
-    "cross-floor",
-    "greed-start",
-    "greed-neighbor",
-    "greedier-start",
-    "greedier-neighbor",
-)
-CASES = ("smoke", *HOURGLASS, "pause", "solo")
-COMPLETION = "LAN_NETWORK PASS all selected character and side routes"
-
-
-def build_suite(output, coordination, cases=CASES):
-    """Keep each fixture's callbacks and frame/gate wrappers inside its factory."""
-    factories = []
-    for name in cases:
-        prefix = ""
-        filename = "state_release_" + name + ".lua"
-        if name in HOURGLASS:
-            filename = "state_release_hourglass.lua"
-            prefix = "_IsaacLanTest.releaseHourglass = " + json.dumps(name) + "\n"
-        elif name == "pause":
-            filename = "state_pause_menu.lua"
-            prefix = (
-                "local pauseCoordination = "
-                + json.dumps(windows(coordination / "pause").replace("\\", "/"))
-                + "\nlocal pausePulses = 8\n"
-            )
-        elif name == "solo":
-            prefix = (
-                "_IsaacLanTest.releaseCoordination = "
-                + json.dumps(windows(coordination).replace("\\", "/"))
-                + "\n"
-            )
-        source = (ROOT / "tests" / filename).read_text()
-        factories.append(
-            "function()\nlocal registered, addCallback = {}, Isaac.AddCallback\n"
-            "Isaac.AddCallback = function(owner, id, callback, parameter)\n"
-            "registered[#registered + 1] = {owner, id, callback}\n"
-            "return addCallback(owner, id, callback, parameter) end\n"
-            + prefix
-            + source
-            + "\nIsaac.AddCallback = addCallback\nlocal cleaned = false\n"
-            "return function()\nif finished and not cleaned then\ncleaned = true\n"
-            "for _, callback in ipairs(registered) do\n"
-            "Isaac.RemoveCallback(callback[1], callback[2], callback[3]) end\n"
-            "native.test_gamepad(0) end\nreturn finished end end"
-        )
-    output.write_text(
-        "local fixtures = {\n"
-        + ",\n".join(factories)
-        + "\n}\n"
-        + (ROOT / "tests/special_suite_driver.lua").read_text()
-    )
 
 
 def evidence(text, host, cases=CASES):
@@ -107,6 +56,7 @@ def evidence(text, host, cases=CASES):
 
 
 def main():
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
@@ -120,14 +70,10 @@ def main():
     args = parser.parse_args()
     if len(set(args.cases)) != len(args.cases):
         parser.error("Each case may only be selected once")
-    labs = [args.host.resolve(), args.client.resolve()]
-    if len(set(labs)) != 2 or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
-        parser.error("Two distinct owned labs are required")
-    if any(lab.name.casefold() in {"host-001", "client-001"} for lab in labs):
-        parser.error("Manual host-001/client-001 games must not be controlled")
+    labs = validate_owned_labs(
+        [args.host.resolve(), args.client.resolve()], args.output.resolve(), count=None
+    )
     output = args.output.resolve()
-    if any(output.is_relative_to(lab) or lab.is_relative_to(output) for lab in labs):
-        parser.error("Evidence must be outside all selected labs")
     if not 1 <= args.port < 65535:
         parser.error("Invalid port")
     payload = json.loads((args.package / "payload.json").read_text())
@@ -143,23 +89,14 @@ def main():
     (coordination / "pause").mkdir(parents=True)
     (coordination / "pause/step.txt").write_text("1")
     script = output / "suite.lua"
-    build_suite(script, coordination, args.cases)
+    build_suite(script, windows(coordination), args.cases)
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
     protected = ProtectedLabs(labs, output, roles=("host", "client"))
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
-        "--build",
-        str(args.build.resolve()),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
+    command = engine_command(
+        labs,
+        args.build,
+        output / "engine",
+        script,
         COMPLETION,
         "--frontend",
         "--menu-start",
@@ -172,7 +109,7 @@ def main():
         str(coordination),
         "--scenario-timeout",
         "1800",
-    ]
+    )
     if args.record:
         command += ["--native-record-both", "--frame-ms", "250"]
     if args.heap_check:
@@ -185,12 +122,6 @@ def main():
         "command": command,
     }
     process = None
-
-    def interrupted(signum, _frame):
-        raise RuntimeError("Release acceptance interrupted by signal " + str(signum))
-
-    signal.signal(signal.SIGTERM, interrupted)
-    signal.signal(signal.SIGHUP, interrupted)
     try:
         (log_path(labs[1]).parent / "persistentgamedata1.dat").write_bytes(progress)
         for role, lab in zip(("host", "client"), labs):
@@ -219,16 +150,9 @@ def main():
             report["passed"] &= len(engine.get("preserved_solo_sha256", {})) == 2
     except Exception as error:
         report["error"] = str(error)
-        if process and process.poll() is None:
-            process.terminate()
-            process.wait(timeout=180)
+        report["error_type"] = type(error).__name__
     finally:
-        try:
-            protected.restore()
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"], report["passed"] = str(error), False
-        (output / "report.json").write_text(json.dumps(report, indent=2))
+        finish_run(protected, report, output, process=process)
     print(json.dumps({key: report[key] for key in ("passed", "restored")}, indent=2))
     return 0 if report["passed"] else 1
 

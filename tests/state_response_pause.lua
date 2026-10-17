@@ -135,3 +135,16 @@ Isaac.AddCallback({ Name = "Response pause trajectory" }, ModCallbacks.MC_POST_R
     end
     previous, wasPaused = p.Position, status.pause ~= 0
 end)
+
+-- Explicit test-only lifecycle consumed by both suite coordinators.
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        if digest then
+            digest:close()
+            digest = nil
+        end
+    end,
+}

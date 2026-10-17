@@ -1,5 +1,7 @@
 -- Focused observation of held crafting bags and native Dross I/II currents.
 local native = assert(_IsaacLan)
+local previousSprite, previousPrediction = native.sprite_state, _IsaacLanPrediction.new
+local previousEidMethods, previousBagMode = {}, nil
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local waterOnly = _IsaacLanTest.waterOnly
 local timelineOffset = waterOnly and 1200 or 0
@@ -94,6 +96,7 @@ function _IsaacLanFrame()
         for mod, handle in pairs(_IsaacLanModules["api/public"].modHandles) do
             if handle.id == "isaac-lan.compat.eid" then
                 eid = mod
+                previousBagMode = eid.Config.DisplayBagOfCrafting
             end
         end
     end
@@ -117,6 +120,7 @@ function _IsaacLanFrame()
             "printDescription",
         }) do
             if type(eid[name]) == "function" then
+                previousEidMethods[name] = eid[name]
                 eid[name] = measure("eid." .. name:lower(), eid[name])
             end
         end
@@ -345,3 +349,19 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, collect, measure("scene.restore", restore), measure("scene.present", present), beginFloor)
 end
+
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        output:close()
+        native.sprite_state, _IsaacLanPrediction.new = previousSprite, previousPrediction
+        if eid then
+            for name, fn in pairs(previousEidMethods) do
+                eid[name] = fn
+            end
+            eid.Config.DisplayBagOfCrafting = previousBagMode
+        end
+    end,
+}

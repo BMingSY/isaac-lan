@@ -12,11 +12,10 @@ def test_catalog_reads_engine_inventory_without_import_or_execution(monkeypatch)
     monkeypatch.setattr("subprocess.run", forbidden)
     monkeypatch.setattr("subprocess.Popen", forbidden)
     catalog = engine_catalog()
-    registered = {entry["script"] for entry in catalog["registered"]}
-    legacy = set(catalog["unregistered_scripts"])
+    registered = {entry["script"] for entry in catalog["fixtures"]}
     existing = {path.name for path in (ROOT / "tests").glob("state_*.lua")}
-    assert registered.isdisjoint(legacy)
-    assert registered | legacy == existing
+    assert registered == existing
+    assert all((ROOT / entry["entry"]).is_file() for entry in catalog["suites"])
     assert catalog["requires_game"] is True
 
 

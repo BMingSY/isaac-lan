@@ -6,67 +6,26 @@ archive checks. It does not change the production Lua sandbox.
 """
 
 import argparse
+from testing.challenges import completion_evidence
 import json
 from pathlib import Path
 import re
-import struct
 import subprocess
-import sys
 import tempfile
 
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command, run_engine
+from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle
 from game_logs import log_path
 from lab_profile import windows
-from progress_fixture import MAGIC, checksum
+from testing.profiles import profile_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def profile_fixture(source, *, negative=True, tainted_cain=True):
-    """Prepare startup-only qualification while preserving every unrelated byte."""
-    if not 2800 <= len(source) <= 4 * 1024 * 1024 or source[:16] != MAGIC:
-        raise ValueError("A native J460 progress baseline is required")
-    if struct.unpack_from("<I", source, len(source) - 4)[0] != checksum(source[16:-4]):
-        raise ValueError("Native progress baseline checksum differs")
-    if struct.unpack_from("<3I", source, 20) != (1, 642, 642):
-        raise ValueError("Unsupported native achievement section")
-    if struct.unpack_from("<3I", source, 674) != (2, 523 * 4, 523):
-        raise ValueError("Unsupported native counter section")
-    if any(value > 1 for value in source[32:674]):
-        raise ValueError("Invalid native achievement flags")
-    data = bytearray(source)
-    for identifier, unlocked in ((4, True), (34, True), (78, negative), (476, tainted_cain)):
-        data[32 + identifier] = int(unlocked)
-    struct.pack_into("<I", data, len(data) - 4, checksum(data[16:-4]))
-    return bytes(data)
-
-
-def completion_evidence(probe, *, ordinal, players, expected=None):
-    """A trophy must broadcast FinishChallenge, rather than a normal ending."""
-    lines = [line for line in probe.splitlines() if "ending_event=" in line]
-    events = []
-    for line in lines:
-        match = re.search(r"ending_event=(SENT|RECEIVED) id=(\d+) completed=([01])\b", line)
-        if match:
-            events.append(
-                {
-                    "direction": match[1],
-                    "id": int(match[2]),
-                    "completed": match[3] == "1",
-                }
-            )
-    if expected is None:
-        expected = players - max(2, ordinal + 1) + 1
-    direction = "SENT" if ordinal == 0 else "RECEIVED"
-    return {
-        "events": events,
-        "expected": expected,
-        "passed": len(events) == len(lines) == expected
-        and all(event["completed"] and event["direction"] == direction for event in events),
-    }
-
-
 def main():
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
@@ -91,15 +50,15 @@ def main():
         help="Run the shared-room control; excludes the split starting-room/Home boundary",
     )
     args = parser.parse_args()
-    labs = [args.host.resolve(), args.client.resolve(), *(p.resolve() for p in args.extra_client)]
-    if not 2 <= len(labs) <= 4 or len(set(labs)) != len(labs):
-        parser.error("Two to four distinct labs are required")
+    labs = validate_owned_labs(
+        [args.host.resolve(), args.client.resolve(), *(p.resolve() for p in args.extra_client)],
+        args.output.resolve(),
+        count=None,
+    )
     if args.suite == "access" and len(labs) != 4:
         parser.error("The access suite requires four distinct startup profiles")
     if args.suite == "access" and args.latency_ms:
         parser.error("The access suite rotates hosts and requires --latency-ms 0")
-    if any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
-        parser.error("Every lab must have an .isaac-lan-lab ownership marker")
     if not 1 <= args.port < 65535 or not 0 <= args.latency_ms <= 1000:
         parser.error("Invalid port or latency")
     if not 16 <= args.frame_ms <= 1000:
@@ -138,20 +97,11 @@ def main():
     )
     roles = ["host", "client", "client2", "client3"][: len(labs)]
     protected = ProtectedLabs(labs, output, roles=roles)
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
-        "--build",
-        str(args.build.resolve()),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
+    command = engine_command(
+        labs,
+        args.build,
+        output / "engine",
+        script,
         "LAN_NETWORK PASS concentrated LAN challenges",
         "--frontend",
         "--menu-start",
@@ -163,7 +113,7 @@ def main():
         str(args.latency_ms),
         "--scenario-timeout",
         "1800",
-    ]
+    )
     for lab in labs[2:]:
         command += ["--extra-client", str(lab)]
     for mod in args.mod:
@@ -233,7 +183,7 @@ def main():
             text = re.sub(r"(?m)^PopUps=.*$", "PopUps=0", text)
             options.write_text(text)
         with (output / "engine.log").open("w") as log:
-            result = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+            result = run_engine(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         for ordinal, role in enumerate(roles):
             log = output / "engine" / role / "log.txt"
             text = log.read_text(errors="replace") if log.exists() else ""
@@ -256,12 +206,7 @@ def main():
         )
         report["visual_review_required"] = bool(args.record)
     finally:
-        try:
-            protected.restore()
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"], report["passed"] = str(error), False
-        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        finish_run(protected, report, output)
     print(
         json.dumps(
             {

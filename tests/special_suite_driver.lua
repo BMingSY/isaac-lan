@@ -1,18 +1,23 @@
 local native, host = _IsaacLan, _IsaacLanTest.host
 local originalFrame, originalGate = _IsaacLanFrame, native.net_gate
 local current, exiting, endedAt, finished, requested = 1, false, 0, false, false
-local caseFrame, done
+local caseFrame, scenario
 local coordinator
 local function activate()
     _IsaacLanFrame, native.net_gate = originalFrame, originalGate
-    done = fixtures[current]()
+    scenario = createScenario(fixtures[current])
     caseFrame = _IsaacLanFrame
 end
 activate()
 coordinator = function()
     Options.FoundHUD, Options.ExtraHUDStyle = true, 1
-    local status = caseFrame()
-    if done() and not exiting then
+    local ok, status = pcall(scenario.call, exiting and originalFrame or caseFrame)
+    if not ok then
+        local clean, message = pcall(scenario.cleanup)
+        error(tostring(status) .. (clean and "" or "; cleanup: " .. tostring(message)))
+    end
+    if not exiting and scenario.done() then
+        scenario.cleanup()
         exiting, endedAt = true, native.api_info().nowMs
         Isaac.DebugString("LAN_NETWORK SPECIAL_CASE_PASS index=" .. current)
     end

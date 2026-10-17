@@ -168,3 +168,16 @@ Isaac.AddCallback({ Name = "Local movement observer" }, ModCallbacks.MC_POST_REN
         )
     )
 end)
+
+-- Explicit test-only lifecycle consumed by both suite coordinators.
+return {
+    done = function()
+        return done
+    end,
+    cleanup = function()
+        if out then
+            out:close()
+            out = nil
+        end
+    end,
+}

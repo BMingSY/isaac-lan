@@ -6,9 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
-import signal
 import subprocess
-import sys
 import time
 
 from item_audit import (
@@ -22,6 +20,8 @@ from item_audit import (
     stress_cases,
     unexpected_peer_failure,
 )
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command
 from lab_profile import ProtectedLabs, idle, windows, validate_labs, validate_startup
 from item_effect_checks import SUPPORTED_EFFECTS
 
@@ -35,20 +35,11 @@ def run_batch(args, cases, output, labs):
         {"cases": cases, "journal": {role: windows(path) for role, path in journals.items()}},
     )
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
-        "--build",
-        str(args.build.resolve()),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
+    command = engine_command(
+        labs,
+        args.build,
+        output / "engine",
+        script,
         COMPLETION,
         "--frontend",
         "--automatic",
@@ -59,7 +50,7 @@ def run_batch(args, cases, output, labs):
         "--heap-check",
         "--scenario-timeout",
         str(args.timeout),
-    ]
+    )
     if args.record:
         command.extend(("--native-record-both", "--frame-ms", "1000"))
     if args.mode == "stress":
@@ -72,54 +63,48 @@ def run_batch(args, cases, output, labs):
         "restored": False,
     }
     (output / "backup.json").write_text(json.dumps(protected.report(), indent=2) + "\n")
+    process = None
     try:
         with (output / "engine.log").open("w") as stream:
             process = subprocess.Popen(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT)
             last_progress, last_event = time.monotonic(), None
             offsets, host_markers = {"host": 0, "client": 0}, []
-            try:
-                while process.poll() is None:
-                    recent = {}
-                    for role, path in journals.items():
-                        text = ""
-                        if path.exists():
-                            with path.open("rb") as journal:
-                                journal.seek(offsets[role])
-                                chunk = journal.read()
-                            complete = chunk.rfind(b"\n") + 1
-                            offsets[role] += complete
-                            text = chunk[:complete].decode(errors="replace")
-                        recent[role] = events(text)
-                    records = recent["host"]
-                    host_markers.extend(
-                        e for e in records if e["event"] in {"case_begin", "exit_requested"}
+            while process.poll() is None:
+                recent = {}
+                for role, path in journals.items():
+                    text = ""
+                    if path.exists():
+                        with path.open("rb") as journal:
+                            journal.seek(offsets[role])
+                            chunk = journal.read()
+                        complete = chunk.rfind(b"\n") + 1
+                        offsets[role] += complete
+                        text = chunk[:complete].decode(errors="replace")
+                    recent[role] = events(text)
+                records = recent["host"]
+                host_markers.extend(
+                    e for e in records if e["event"] in {"case_begin", "exit_requested"}
+                )
+                if records:
+                    last_event, last_progress = records[-1], time.monotonic()
+                    for marker in records:
+                        if marker["event"] in {"case_begin", "problem", "case_end"}:
+                            print(json.dumps(marker, ensure_ascii=False), flush=True)
+                failure = unexpected_peer_failure(host_markers, recent["client"])
+                if failure:
+                    report["watchdog"] = (
+                        "Peer failed during " + failure["key"] + "; stop to preserve case alignment"
                     )
-                    if records:
-                        last_event, last_progress = records[-1], time.monotonic()
-                        for marker in records:
-                            if marker["event"] in {"case_begin", "problem", "case_end"}:
-                                print(json.dumps(marker, ensure_ascii=False), flush=True)
-                    failure = unexpected_peer_failure(host_markers, recent["client"])
-                    if failure:
-                        report["watchdog"] = (
-                            "Peer failed during "
-                            + failure["key"]
-                            + "; stop to preserve case alignment"
-                        )
-                        process.terminate()
-                        break
-                    if last_event and time.monotonic() - last_progress > 90:
-                        report["watchdog"] = (
-                            "No audit progress for 90 seconds; preserve the interrupted case"
-                        )
-                        process.terminate()
-                        break
-                    time.sleep(0.5)
-                process.wait(timeout=120)
-            except BaseException:
-                process.terminate()
-                process.wait(timeout=120)
-                raise
+                    process.terminate()
+                    break
+                if last_event and time.monotonic() - last_progress > 90:
+                    report["watchdog"] = (
+                        "No audit progress for 90 seconds; preserve the interrupted case"
+                    )
+                    process.terminate()
+                    break
+                time.sleep(0.5)
+            process.wait(timeout=120)
         result = output / "engine/result.json"
         report["engine"] = (
             json.loads(result.read_text())
@@ -140,21 +125,18 @@ def run_batch(args, cases, output, labs):
                 except ValueError as error:
                     report["catalog_error"] = str(error)
         report["results"] = [summarize_case(case, peers, report["engine"]) for case in cases]
+        report["passed"] = (
+            bool(report["engine"].get("pass"))
+            and bool(report["results"])
+            and all(result["status"] in {"verified", "basic_pass"} for result in report["results"])
+        )
     finally:
-        try:
-            report["restoration"] = protected.restore()
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"] = str(error)
-        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        finish_run(protected, report, output, process=process)
     return report
 
 
 def main():
-    # Background shells may inherit SIGINT ignored. Always unwind the lab
-    # protection context on an explicit stop instead of abandoning its backup.
-    signal.signal(signal.SIGINT, signal.default_int_handler)
-    signal.signal(signal.SIGTERM, signal.default_int_handler)
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)

@@ -323,17 +323,10 @@ for _, host in ipairs({ true, false }) do
             prepared = phase == 3,
         }
     end
-    local file = assert(io.open(root .. "/tests/state_lanbot_campaign.lua"))
-    local source = file:read("a")
-    file:close()
-    local inspect, coverage, terminal, fights, firing = assert(
-        load(
-            source .. "\nreturn function() return finished end, visited, bosses, fought, floorShots",
-            "campaign",
-            "t",
-            env
-        )
-    )()
+    local scenario = assert(loadfile(root .. "/tests/state_lanbot_campaign.lua", "t", env))()
+    local inspect, observations = scenario.done, scenario.observations
+    local coverage, terminal, fights, firing =
+        observations.visited, observations.bosses, observations.fought, observations.shots
     native.net_gate(function() end, function() end, function() end, function()
         return true
     end, function() end, function()

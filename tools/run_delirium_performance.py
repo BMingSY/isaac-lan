@@ -10,9 +10,11 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import sys
 import time
 
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command
+from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle
 from game_logs import log_path
 
@@ -106,6 +108,7 @@ def samples(output):
 
 
 def main():
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
@@ -132,14 +135,12 @@ def main():
         parser.error("Combat seconds must be between 10 and 300")
     if args.bandwidth_low_health < 0 or args.bandwidth_low_health and not args.latency_ms:
         parser.error("A bandwidth phase requires the delayed relay and a nonnegative byte rate")
-    labs = [args.host.resolve(), args.client.resolve(), *(p.resolve() for p in args.extra_client)]
+    labs = validate_owned_labs(
+        [args.host.resolve(), args.client.resolve(), *(p.resolve() for p in args.extra_client)],
+        args.output.resolve(),
+        count=None,
+    )
     roles = ("host", "client", "client2", "client3")[: len(labs)]
-    if (
-        len(labs) > 4
-        or len(set(labs)) != len(labs)
-        or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs)
-    ):
-        parser.error("Two to four distinct marked isolated labs are required")
     idle(labs)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -172,20 +173,11 @@ def main():
             shutil.copy2(args.installed_directory / name, build / name)
         shutil.copy2(args.build / "isaac_lan_lab.exe", build)
     protected = ProtectedLabs(labs, output, roles=roles)
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
-        "--build",
-        str(build),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
+    command = engine_command(
+        labs,
+        build,
+        output / "engine",
+        script,
         "LAN_NETWORK DELIRIUM_PERF PASS Delirium performance reproduction",
         "--frontend",
         "--menu-start",
@@ -202,7 +194,7 @@ def main():
         str(args.port),
         "--scenario-timeout",
         str(240 + args.seconds * (3 if args.bandwidth_low_health else 2)),
-    ]
+    )
     for mod in dict.fromkeys(path.resolve() for path in mods):
         command.extend(("--mod", str(mod)))
     for lab in labs[2:]:
@@ -235,6 +227,7 @@ def main():
             "The local delay relay preserves throughput; it does not reproduce a specific frp server or its bandwidth.",
         ],
     }
+    process = None
     try:
         for lab in labs:
             options = log_path(lab).parent / "options.ini"
@@ -244,25 +237,20 @@ def main():
         with (output / "engine.log").open("w") as stream:
             process = subprocess.Popen(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT)
             last_rate = 0
-            try:
-                while process.poll() is None:
-                    if args.bandwidth_low_health:
-                        path = log_path(labs[0])
-                        text = path.read_text(errors="replace") if path.exists() else ""
-                        phases = re.findall(r"DELIRIUM_PERF PHASE name=(\S+) now_ms=(\d+)", text)
-                        phase, now = phases[-1] if phases else ("setup", "0")
-                        rate = args.bandwidth_low_health if phase == "combat-bandwidth" else 0
-                        if rate != last_rate:
-                            write_rate(rate)
-                            last_rate = rate
-                            report["relay_bandwidth_events"].append(
-                                {"phase": phase, "now_ms": int(now), "bytes_per_second": rate}
-                            )
-                    time.sleep(0.2)
-            except BaseException:
-                process.terminate()
-                process.wait(timeout=45)
-                raise
+            while process.poll() is None:
+                if args.bandwidth_low_health:
+                    path = log_path(labs[0])
+                    text = path.read_text(errors="replace") if path.exists() else ""
+                    phases = re.findall(r"DELIRIUM_PERF PHASE name=(\S+) now_ms=(\d+)", text)
+                    phase, now = phases[-1] if phases else ("setup", "0")
+                    rate = args.bandwidth_low_health if phase == "combat-bandwidth" else 0
+                    if rate != last_rate:
+                        write_rate(rate)
+                        last_rate = rate
+                        report["relay_bandwidth_events"].append(
+                            {"phase": phase, "now_ms": int(now), "bytes_per_second": rate}
+                        )
+                time.sleep(0.2)
         report["passed"] = process.returncode == 0
         result_path = output / "engine/result.json"
         if result_path.exists():
@@ -284,12 +272,7 @@ def main():
             report["fixture_checks"] = checks
             report["passed"] = all(checks.values())
     finally:
-        try:
-            protected.restore()
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"], report["passed"] = str(error), False
-        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        finish_run(protected, report, output, process=process)
     print(
         json.dumps(
             {
