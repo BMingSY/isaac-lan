@@ -142,13 +142,12 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
                 assert(native.rooms_move(1, t == 690 and other or first, 0, -1))
             end
             if t % 120 == 0 then
-                guest(function(p)
+                guest(function()
                     for _, e in ipairs(Isaac.GetRoomEntities()) do
                         if e:ToNPC() and e:IsActiveEnemy(false) then
                             e:Remove()
                         end
                     end
-                    p:SetMinDamageCooldown(10000)
                 end)
             end
         end,
