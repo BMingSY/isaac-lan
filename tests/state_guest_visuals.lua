@@ -73,7 +73,7 @@ function _IsaacLanFrame()
 end
 local gate = native.net_gate
 local ticks, corrected, samples = 0, 0, 0
-local startingItems = 0
+local startingItems = {}
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     for i = 0, Game():GetNumPlayers() - 1 do
         Isaac.GetPlayer(i):SetMinDamageCooldown(10000)
@@ -98,7 +98,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report("AUTHORITY host simulation begins")
         end
         if t == 20 then
-            startingItems = Isaac.GetPlayer(0):GetCollectibleCount()
+            for i = 0, Game():GetNumPlayers() - 1 do
+                startingItems[i] = Isaac.GetPlayer(i):GetCollectibleCount()
+            end
             Isaac.GetPlayer(0):AddCollectible(CollectibleType.COLLECTIBLE_SAD_ONION)
             Isaac.GetPlayer(0):AddCoins(7)
             Game():Spawn(EntityType.ENTITY_GAPER, 0, Vector(400, 300), Vector.Zero, nil, 0, 123456)
@@ -176,8 +178,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         if t == 600 then
             assert(not Isaac.GetPlayer(1):IsCoopGhost(), "Boss did not revive remote teammate")
             assert(
-                Isaac.GetPlayer(0):GetCollectibleCount() == startingItems + 3,
-                "Boss reward did not match party count"
+                Isaac.GetPlayer(0):GetCollectibleCount() == startingItems[0] + 1,
+                "Boss rewards changed the non-picking player's inventory"
+            )
+            assert(
+                Isaac.GetPlayer(1):GetCollectibleCount() == startingItems[1] + 2,
+                "Boss rewards did not reach the picking player's inventory"
             )
             report("HOST boss rewards and remote revival verified")
         end
@@ -226,6 +232,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 "Actor position not restored"
             )
             assert(p:GetNumCoins() == actor[4][5][1], "Resources not restored")
+            for _, item in ipairs(actor[4][2]) do
+                assert(p:GetCollectibleNum(item[1], true) == item[2], "Inventory not restored")
+            end
             assert(p:IsCoopGhost() == actor[4][9], "Ghost state not restored")
             local localPosition = native.rooms_positions()["1"]
             local actorPosition = native.rooms_positions()[tostring(actor[2] - 1)]
