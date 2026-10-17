@@ -146,6 +146,7 @@ inline constexpr unsigned data = 0x4;
 inline constexpr unsigned frame = 0x10;
 } // namespace animationState
 namespace color {
+inline constexpr unsigned size = 0x2c;
 inline constexpr unsigned red = 0x0, green = 0x4, blue = 0x8, alpha = 0xc;
 inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;

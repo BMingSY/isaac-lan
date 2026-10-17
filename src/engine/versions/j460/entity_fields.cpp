@@ -221,6 +221,8 @@ void writeReal(Address entity, const properties::Field& field, float value) {
         break;
     case Write::readOnly:
         break;
+    case Write::entityColor:
+        throw std::runtime_error("Color setter requires a color field");
     }
 }
 using Values = std::array<std::array<std::uint32_t, std::size(properties::colorOffsets)>, maxNodes>;
@@ -311,6 +313,17 @@ void apply(const Plan& plan, Address entity, const Values& values) {
             break;
         case Kind::vector:
         case Kind::color: {
+            if (field->write == Write::entityColor) {
+                // Match Color(r,g,b,a,ro,go,bo), including zero colorize, then
+                // use the actual Lua setter's virtual native color operation.
+                std::array<std::uint32_t, j460::layout::color::size / sizeof(float)> color{};
+                for (unsigned i = 0; i < std::size(properties::colorOffsets); ++i)
+                    color[properties::colorOffsets[i] / sizeof(float)] = value[i];
+                using SetColor = void(__cdecl*)(void*, const void*);
+                reinterpret_cast<SetColor>(image + j460::entry::entityLuaSetColor)(
+                    reinterpret_cast<void*>(entity), color.data());
+                break;
+            }
             const unsigned count =
                 field->kind == Kind::color ? std::size(properties::colorOffsets) : 2;
             for (unsigned i = 0; i < count; ++i) {

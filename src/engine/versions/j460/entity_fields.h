@@ -20,7 +20,7 @@ enum class Kind {
     animationFrame,
     overlayFrame
 };
-enum class Write { direct, readOnly, size, damage, tearHeight, tearScale };
+enum class Write { direct, readOnly, size, damage, tearHeight, tearScale, entityColor };
 struct Field {
     const char* name;
     Kind kind;
@@ -49,7 +49,7 @@ inline constexpr Field common[] = {
     {"SpriteScale", Kind::vector, layout::entity::spriteScale},
     {"FrameCount", Kind::frame, layout::entity::createdFrame, Write::readOnly},
     {"EntityFlags", Kind::flags, layout::entity::flags, Write::readOnly},
-    {"Color", Kind::color, layout::entity::color, Write::readOnly},
+    {"Color", Kind::color, layout::entity::color, Write::entityColor},
 };
 inline constexpr unsigned spriteType = 0;
 inline constexpr Field sprite[] = {

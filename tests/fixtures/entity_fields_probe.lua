@@ -118,6 +118,7 @@ return function(native, reference, schemas, host)
         end
         entity.SpriteOffset, entity.SpriteScale =
             Vector(table.unpack(value[5])), Vector(table.unpack(value[6]))
+        entity.Color = Color(table.unpack(value[9]))
     end
     return function()
         if not native.entity_fields_plan then
@@ -154,16 +155,21 @@ return function(native, reference, schemas, host)
                         "Batch capture differs for entity type " .. kind
                     )
                     if not host then
+                        local originalSprite = assert(native.sprite_state(sprite))
                         local value = reference.decode(expected)
                         value[1][1], value[1][2] = value[1][1] + 3, value[1][2] - 2
                         value[3][4] = not value[3][4] -- Visible
+                        value[9] = { 0.3, 0.4, 0.5, 0.6, 0.1, 0.2, 0.3 }
                         local ok, message = pcall(function()
                             write(entity, value)
                             local viaLua = reference.encode(read(entity))
+                            local viaLuaSprite = native.sprite_state(sprite)
                             write(entity, original)
+                            assert(native.sprite_state(sprite, originalSprite))
                             assert(native.entity_fields_apply(sprite, plan, value))
                             assert(
-                                reference.encode(read(entity)) == viaLua,
+                                reference.encode(read(entity)) == viaLua
+                                    and native.sprite_state(sprite) == viaLuaSprite,
                                 "Batch application differs for entity type " .. kind
                             )
                             -- Reject the complete bad shape before changing any field.
@@ -176,6 +182,7 @@ return function(native, reference, schemas, host)
                             )
                         end)
                         write(entity, original)
+                        assert(native.sprite_state(sprite, originalSprite))
                         assert(ok, message)
                     end
                     checked[kind] = true

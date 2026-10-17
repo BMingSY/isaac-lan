@@ -3,9 +3,10 @@ return function(wire)
     local FLOOR_DEPTH_BIAS = 10000
     -- Engine values become explicit portable fields; this component owns no room or transport.
     return function(native, schemas, npcState, visualCompatibility, entityLinks)
-        local function localEffect(e)
-            return e.Type == schemas.types.ENTITY_EFFECT
-                and native.presentation_local_effect(e.Type, e.Variant, e.SubType)
+        local function localEffect(e, kind)
+            kind = kind or e.Type
+            return kind == schemas.types.ENTITY_EFFECT
+                and native.presentation_local_effect(kind, e.Variant, e.SubType)
         end
         local function vector(v)
             return { v.X, v.Y }
@@ -20,8 +21,8 @@ return function(wire)
             return Color(table.unpack(c))
         end
         local nextID = 1
-        local function id(e)
-            if not e or not e:Exists() or localEffect(e) then
+        local function id(e, kind)
+            if not e or not e:Exists() or localEffect(e, kind) then
                 return 0
             end
             local d = e:GetData()
@@ -67,24 +68,24 @@ return function(wire)
                 end
             end
         end
-        local function typed(e)
-            if e.Type == types.ENTITY_PLAYER then
+        local function typed(e, kind)
+            if kind == types.ENTITY_PLAYER then
                 return e:ToPlayer(), schema[types.ENTITY_PLAYER]
-            elseif e.Type == types.ENTITY_TEAR then
+            elseif kind == types.ENTITY_TEAR then
                 return e:ToTear(), schema[types.ENTITY_TEAR]
-            elseif e.Type == types.ENTITY_FAMILIAR then
+            elseif kind == types.ENTITY_FAMILIAR then
                 return e:ToFamiliar(), schema[types.ENTITY_FAMILIAR]
-            elseif e.Type == types.ENTITY_BOMB then
+            elseif kind == types.ENTITY_BOMB then
                 return e:ToBomb(), schema[types.ENTITY_BOMB]
-            elseif e.Type == types.ENTITY_PICKUP then
+            elseif kind == types.ENTITY_PICKUP then
                 return e:ToPickup(), schema[types.ENTITY_PICKUP]
-            elseif e.Type == types.ENTITY_LASER then
+            elseif kind == types.ENTITY_LASER then
                 return e:ToLaser(), schema[types.ENTITY_LASER]
-            elseif e.Type == types.ENTITY_KNIFE then
+            elseif kind == types.ENTITY_KNIFE then
                 return e:ToKnife(), schema[types.ENTITY_KNIFE]
-            elseif e.Type == types.ENTITY_PROJECTILE then
+            elseif kind == types.ENTITY_PROJECTILE then
                 return e:ToProjectile(), schema[types.ENTITY_PROJECTILE]
-            elseif e.Type == types.ENTITY_EFFECT then
+            elseif kind == types.ENTITY_EFFECT then
                 return e:ToEffect(), schema[types.ENTITY_EFFECT]
             elseif e:ToNPC() then
                 return e:ToNPC(), schema.npc
@@ -210,16 +211,17 @@ return function(wire)
             if visual then
                 assert(native.entity_prepare(s))
             end
-            local plan = plans[e.Type]
+            local kind = e.Type
+            local plan = plans[kind]
             local object, names
             if not plan then
-                object, names = typed(e)
+                object, names = typed(e, kind)
             end
             -- Preserve Lua array preallocation; positions follow sync/fields.
             local value = plan and native.entity_fields_capture(s, plan)
                 or {
                     false, -- Entity.id
-                    e.Type, -- Entity.type
+                    kind, -- Entity.type
                     e.Variant, -- Entity.variant
                     e.SubType, -- Entity.subtype
                     e.InitSeed, -- Entity.seed
@@ -237,14 +239,14 @@ return function(wire)
                     false, -- Entity.color
                     e.FrameCount, -- Entity.frame
                     e:GetEntityFlags(), -- Entity.flags
-                    e.Type == types.ENTITY_LASER and assert(native.laser_path(s)) or false, -- Entity.laserPath
-                    e.Type == types.ENTITY_LASER and vector(e:ToLaser().EndPoint) or false, -- Entity.laserEndPoint
+                    kind == types.ENTITY_LASER and assert(native.laser_path(s)) or false, -- Entity.laserPath
+                    kind == types.ENTITY_LASER and vector(e:ToLaser().EndPoint) or false, -- Entity.laserEndPoint
                     false, -- Entity.shadow
                     npcState.capture(e:ToNPC()), -- Entity.npc
                     false, -- Entity.compatibility
                     false, -- Entity.minecart
                 }
-            value[Entity.id] = id(e)
+            value[Entity.id] = id(e, kind)
             value[Entity.sprite] = visual and sprite(s) or false
             value[Entity.parent], value[Entity.spawner] = id(e.Parent), id(e.SpawnerEntity)
             value[Entity.child], value[Entity.target] = id(e.Child), id(e.Target)
@@ -261,7 +263,8 @@ return function(wire)
         end
         local function applyEntity(e, v)
             local s = e:GetSprite()
-            local plan = plans[e.Type]
+            local kind = v[Entity.type]
+            local plan = plans[kind]
             if plan then
                 assert(native.entity_fields_apply(s, plan, v))
             else
@@ -269,12 +272,12 @@ return function(wire)
                 e.Position = vec(v[Entity.position])
                 e.Velocity = vec(v[Entity.velocity])
                 writeFields(e, common, v[Entity.common])
-                local object, names = typed(e)
+                local object, names = typed(e, kind)
                 writeFields(object, names, v[Entity.typed])
                 e.SpriteOffset = vec(v[Entity.offset])
                 e.SpriteScale = vec(v[Entity.scale])
+                e.Color = col(v[Entity.color])
             end
-            e.Color = col(v[Entity.color])
             -- Entity.Color resets the Sprite color (including alpha/colorize). Apply
             -- the complete native visual state last so fading creep stays faded.
             if v[Entity.sprite] then
@@ -291,7 +294,7 @@ return function(wire)
             -- Replicas instead keep receiving its pose/lifetime from the host. Baking
             -- an earlier death pose leaves a permanent silhouette in their backdrop.
             local floor, wall = EntityFlag.FLAG_RENDER_FLOOR, EntityFlag.FLAG_RENDER_WALL
-            if e.Type == types.ENTITY_PLAYER then
+            if kind == types.ENTITY_PLAYER then
                 -- Actor lifecycle/persistence flags belong to this native allocation.
                 -- Copying the authority's lifecycle bits can retire a live actor when
                 -- temporary forms change. Only the visual blink override is replicated.
@@ -308,7 +311,7 @@ return function(wire)
             if (v[Entity.flags] & floor) ~= 0 then
                 e.DepthOffset = e.DepthOffset - FLOOR_DEPTH_BIAS
             end
-            if e.Type == types.ENTITY_LASER then
+            if kind == types.ENTITY_LASER then
                 assert(native.laser_path(s, v[Entity.laserPath]))
                 e:ToLaser().EndPoint = vec(v[Entity.laserEndPoint])
             end

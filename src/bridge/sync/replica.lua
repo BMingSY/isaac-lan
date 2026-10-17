@@ -64,7 +64,7 @@ return function(fields)
                 end
             end
             local prior = motion[v[Entity.id]]
-            local actor = e.Type == deps.playerType
+            local actor = v[Entity.type] == deps.playerType
             local position, velocity = vec(v[Entity.position]), vec(v[Entity.velocity])
             local m = prior or {}
             m.target, m.display, m.velocity, m.at, m.tick =
