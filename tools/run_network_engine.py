@@ -108,8 +108,9 @@ def main():
     )
     parser.add_argument(
         "--performance",
-        action="store_true",
-        help="Enable metrics in the owned lab config (use a protected runner)",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Set detailed metrics in the owned lab config (use a protected runner)",
     )
     parser.add_argument(
         "--debug-logs", action="store_true", help="Enable DEBUG in the owned lab config"
@@ -632,14 +633,14 @@ def main():
                 *(["--automatic"] if args.automatic or args.installed else []),
                 *(["--no-luadebug"] if args.no_luadebug else []),
             ]
-            if args.performance or args.debug_logs or args.client_input_hz:
+            if args.performance is not None or args.debug_logs or args.client_input_hz:
                 config = lab / "game/isaac-lan/config.ini"
                 config.parent.mkdir(parents=True, exist_ok=True)
                 config.write_text(
                     "[logging]\nlevel="
                     + ("DEBUG" if args.debug_logs else "INFO")
                     + "\n[diagnostics]\nperformance="
-                    + str(args.performance).lower()
+                    + str(bool(args.performance)).lower()
                     + "\nsample_interval_ms=1000\n"
                     + (
                         f"\n[network]\ninput_hz={60 if role == 'host' else args.client_input_hz}\n"

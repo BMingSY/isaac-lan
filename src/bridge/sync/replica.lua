@@ -52,13 +52,16 @@ return function(fields)
             e.Visible = false
             e:Remove()
         end
-        local function applyEntity(e, v, now, tick)
+        local function applyEntity(e, v, now, tick, registered)
             entityCodec.apply(e, v)
             -- Preserve ownership through EntityPtr; local allocation indices are never IDs.
-            local pointer = replicas[v[Entity.id]]
-            local existing = pointer and pointer.Ref
-            if not existing or deps.hash(existing) ~= deps.hash(e) then
-                replicas[v[Entity.id]] = deps.pointer(e)
+            -- Entity reconciliation already resolved and validated retained refs.
+            if not registered then
+                local pointer = replicas[v[Entity.id]]
+                local existing = pointer and pointer.Ref
+                if not existing or deps.hash(existing) ~= deps.hash(e) then
+                    replicas[v[Entity.id]] = deps.pointer(e)
+                end
             end
             local prior = motion[v[Entity.id]]
             local actor = e.Type == deps.playerType
@@ -68,13 +71,8 @@ return function(fields)
                 position, m.display or position, velocity, now, tick
             m.actor, m.controller = actor, actor and e:ToPlayer().ControllerIndex or -1
             m.prediction = actor and (m.prediction or prediction.new(position))
-            m.track = motionPresentation.track(
-                m.track,
-                position,
-                velocity * (actor and 60 or 30),
-                now,
-                tick
-            )
+            m.track =
+                motionPresentation.track(m.track, position, velocity, now, tick, actor and 60 or 30)
             motion[v[Entity.id]] = m
         end
 
@@ -216,8 +214,8 @@ return function(fields)
                     reclaim = function()
                         room:Update()
                     end,
-                    apply = function(e, v)
-                        applyEntity(e, v, now, tick)
+                    apply = function(e, v, registered)
+                        applyEntity(e, v, now, tick, registered)
                     end,
                     entities = deps.entities,
                     link = entityCodec.link,
@@ -321,6 +319,11 @@ return function(fields)
             itemPresentation.apply(value.slot, value.items)
             actorVisuals, receivedTick = value.actors, tick
         end
+        restoreActors = performance.wrap("apply.actors", restoreActors)
+        restoreRoom = performance.wrap("apply.room", restoreRoom)
+        restoreLocations = performance.wrap("apply.locations", restoreLocations)
+        restoreMap = performance.wrap("apply.map", restoreMap)
+        commit = performance.wrap("apply.commit", commit)
         local function apply(bytes, tick, ack, betweenUpdates)
             performance.resources()
             if floor.waiting() then

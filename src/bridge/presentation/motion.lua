@@ -8,30 +8,36 @@ return function(fields)
         local Vector = view.vector
         local unpack = string.unpack
         local lastRender
+        local function coordinates(track, now)
+            local age = math.max(0, now - track.at)
+            local travel, decay = math.min(age, 0.1), math.exp(-age / (1 / 30))
+            return track.x + track.vx * travel + track.cx * decay,
+                track.y + track.vy * travel + track.cy * decay
+        end
         local function sample(track, now)
             if track.stationary then
                 return track.target
             end
-            local age = math.max(0, now - track.at)
-            return track.target
-                + track.velocity * math.min(age, 0.1)
-                + track.correction * math.exp(-age / (1 / 30))
+            return Vector(coordinates(track, now))
         end
-        local function track(prior, position, velocity, now, tick)
+        local function track(prior, position, velocity, now, tick, rate)
             if prior and tick <= prior.tick then
                 return prior
             end
-            local correction = prior and sample(prior, now) - position or Vector(0, 0)
-            if correction:Length() >= 96 then
-                correction = Vector(0, 0)
+            local x, y = position.X, position.Y
+            local cx, cy = 0, 0
+            if prior then
+                local px, py = coordinates(prior, now)
+                cx, cy = px - x, py - y
+                if cx * cx + cy * cy >= 96 * 96 then
+                    cx, cy = 0, 0
+                end
             end
             local result = prior or {}
-            result.target, result.velocity, result.at, result.tick, result.correction =
-                position, velocity, now, tick, correction
-            result.stationary = velocity.X == 0
-                and velocity.Y == 0
-                and correction.X == 0
-                and correction.Y == 0
+            result.target, result.at, result.tick = position, now, tick
+            result.x, result.y, result.cx, result.cy = x, y, cx, cy
+            result.vx, result.vy = velocity.X * (rate or 1), velocity.Y * (rate or 1)
+            result.stationary = result.vx == 0 and result.vy == 0 and cx == 0 and cy == 0
             return result
         end
         local outwardDirections = { Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) }
@@ -82,7 +88,8 @@ return function(fields)
                 -- an invisible extrapolation error and release it on resume.
                 for _, m in pairs(motion) do
                     m.track.target, m.track.at = m.target, now
-                    m.track.velocity, m.track.correction = Vector(0, 0), Vector(0, 0)
+                    m.track.x, m.track.y = m.target.X, m.target.Y
+                    m.track.vx, m.track.vy, m.track.cx, m.track.cy = 0, 0, 0, 0
                     m.track.stationary = true
                 end
                 return

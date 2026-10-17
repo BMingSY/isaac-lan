@@ -20,6 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--injected",
+        action="store_true",
+        help="Use the isolated injection backend; skip autoload validation",
+    )
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--build", type=Path, default=ROOT / "build-win32")
@@ -33,6 +38,11 @@ def main():
     )
     parser.add_argument("--port", type=int, default=30220)
     parser.add_argument("--latency-ms", type=int, default=75)
+    parser.add_argument(
+        "--record-relay",
+        action="store_true",
+        help="Archive the delayed relay stream for offline replay",
+    )
     parser.add_argument(
         "--heap-check",
         action="store_true",
@@ -56,6 +66,8 @@ def main():
     cases = args.case or CASES
     if not 0 <= args.latency_ms <= 5000:
         parser.error("Latency must be between 0 and 5000 ms")
+    if args.record_relay and not args.latency_ms:
+        parser.error("Relay recording requires positive latency")
     if not 16 <= args.frame_ms <= 1000 or args.record and args.record_client:
         parser.error("Choose one recording mode and a frame interval of 16..1000 ms")
     if len(set(cases)) != len(cases):
@@ -89,7 +101,6 @@ def main():
         "--menu-start",
         "--virtual-input",
         "--no-luadebug",
-        "--automatic",
         "--progress-fixture",
         "--alt-path-fixture",
         "--hush-fixture",
@@ -113,6 +124,10 @@ def main():
         )
         else "900",
     )
+    if not args.injected:
+        command.append("--automatic")
+    if args.record_relay:
+        command.append("--record-relay")
     if "ascent-compat" in cases:
         command.append("--ascent-fixture")
     if any(

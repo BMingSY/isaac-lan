@@ -823,6 +823,7 @@ local function advance(tick)
     if case.end_tick then
         deadline = math.max(deadline, endTick * 1000 / 30 + 15000)
     end
+    deadline = audit.caseTimeoutMs or deadline
     if used and (tick >= endTick or elapsed >= deadline) then
         sample("after", tick)
         if case.kind == "collectible" and case.id == CollectibleType.COLLECTIBLE_CHAOS then

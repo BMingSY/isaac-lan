@@ -17,6 +17,7 @@ using properties::Kind;
 using properties::Write;
 using Address = std::uintptr_t;
 lua::API api;
+Address image = 0;
 constexpr unsigned maxNodes = 128, maxDepth = 3;
 constexpr std::uint32_t planMagic = 0x45465031;
 enum LuaType { boolean = 1, number = 3, string = 4, table = 5, userdata = 7 };
@@ -195,7 +196,6 @@ float real(lua_State* L, int index) {
     return value;
 }
 void writeReal(Address entity, const properties::Field& field, float value) {
-    const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
     using SetFloat = void(__attribute__((thiscall))*)(void*, float);
     switch (field.write) {
     case Write::direct:
@@ -223,7 +223,8 @@ void writeReal(Address entity, const properties::Field& field, float value) {
         break;
     }
 }
-void apply(lua_State* L, const Plan& plan, unsigned index, Address entity, int value, bool write) {
+using Values = std::array<std::array<std::uint32_t, std::size(properties::colorOffsets)>, maxNodes>;
+void validate(lua_State* L, const Plan& plan, unsigned index, int value, Values& values) {
     const auto& node = plan.nodes[index];
     if (node.array) {
         if (api.type(L, value) != LuaType::table || api.rawLength(L, value) != node.count)
@@ -231,7 +232,7 @@ void apply(lua_State* L, const Plan& plan, unsigned index, Address entity, int v
         auto child = index + 1;
         for (unsigned i = 1; i <= node.count; ++i) {
             api.rawGetI(L, value, i);
-            apply(L, plan, child, entity, api.getTop(L), write);
+            validate(L, plan, child, api.getTop(L), values);
             pop(L);
             child = plan.nodes[child].next;
         }
@@ -240,12 +241,10 @@ void apply(lua_State* L, const Plan& plan, unsigned index, Address entity, int v
     if (!node.field)
         return;
     const auto& field = *node.field;
-    const auto writable = write && field.write != Write::readOnly;
     switch (field.kind) {
     case Kind::real: {
         const auto number = real(L, value);
-        if (writable)
-            writeReal(entity, field, number);
+        values[index][0] = std::bit_cast<std::uint32_t>(number);
         break;
     }
     case Kind::integer:
@@ -258,8 +257,7 @@ void apply(lua_State* L, const Plan& plan, unsigned index, Address entity, int v
             ((field.kind == Kind::integer || field.kind == Kind::frame) &&
              (number < INT32_MIN || number > INT32_MAX)))
             throw std::runtime_error("Invalid entity integer");
-        if (writable)
-            at<std::uint32_t>(entity, field.offset) = static_cast<std::uint32_t>(number);
+        values[index][0] = static_cast<std::uint32_t>(number);
         break;
     }
     case Kind::animationFrame:
@@ -275,8 +273,7 @@ void apply(lua_State* L, const Plan& plan, unsigned index, Address entity, int v
     case Kind::boolean:
         if (api.type(L, value) != LuaType::boolean)
             throw std::runtime_error("Invalid entity boolean");
-        if (writable)
-            at<bool>(entity, field.offset) = api.toBoolean(L, value) != 0;
+        values[index][0] = api.toBoolean(L, value) != 0;
         break;
     case Kind::color:
     case Kind::vector: {
@@ -286,19 +283,50 @@ void apply(lua_State* L, const Plan& plan, unsigned index, Address entity, int v
         for (unsigned i = 0; i < count; ++i) {
             api.rawGetI(L, value, i + 1);
             const auto number = real(L, api.getTop(L));
-            if (writable) {
-                const auto offset =
-                    field.kind == Kind::color ? properties::colorOffsets[i] : i * sizeof(float);
-                at<float>(entity, field.offset + offset) = number;
-            }
+            values[index][i] = std::bit_cast<std::uint32_t>(number);
             pop(L);
         }
-        if (writable && field.kind == Kind::color)
-            for (unsigned i = 0; i < j460::layout::color::colorizeChannels; ++i)
-                at<float>(entity,
-                          field.offset + j460::layout::color::colorize + i * sizeof(float)) = 0;
         break;
     }
+    }
+}
+void apply(const Plan& plan, Address entity, const Values& values) {
+    // Validation resolves Lua values once. This pass neither enters Lua nor
+    // retains Lua references, and starts only after the complete shape is valid.
+    for (unsigned index = 0; index < plan.used; ++index) {
+        const auto* field = plan.nodes[index].field;
+        if (!field || field->write == Write::readOnly)
+            continue;
+        const auto& value = values[index];
+        switch (field->kind) {
+        case Kind::real:
+            writeReal(entity, *field, std::bit_cast<float>(value[0]));
+            break;
+        case Kind::integer:
+        case Kind::unsignedInteger:
+            at<std::uint32_t>(entity, field->offset) = value[0];
+            break;
+        case Kind::boolean:
+            at<bool>(entity, field->offset) = value[0] != 0;
+            break;
+        case Kind::vector:
+        case Kind::color: {
+            const unsigned count =
+                field->kind == Kind::color ? std::size(properties::colorOffsets) : 2;
+            for (unsigned i = 0; i < count; ++i) {
+                const auto offset =
+                    field->kind == Kind::color ? properties::colorOffsets[i] : i * sizeof(float);
+                at<float>(entity, field->offset + offset) = std::bit_cast<float>(value[i]);
+            }
+            if (field->kind == Kind::color)
+                for (unsigned i = 0; i < j460::layout::color::colorizeChannels; ++i)
+                    at<float>(entity, field->offset + j460::layout::color::colorize +
+                                          i * sizeof(float)) = 0;
+            break;
+        }
+        default:
+            throw std::runtime_error("Unsupported writable entity property");
+        }
     }
 }
 template <int Operation> int run(lua_State* L) {
@@ -327,7 +355,6 @@ template <int Operation> int run(lua_State* L) {
             if constexpr (Operation == 1 || Operation == 4) {
                 unsigned frame = 0;
                 if constexpr (!sprite) {
-                    const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
                     const auto game = at<Address>(image, j460::globals::game);
                     if (!game)
                         throw std::runtime_error("Entity capture requires an active game");
@@ -337,8 +364,9 @@ template <int Operation> int run(lua_State* L) {
             } else {
                 if (!runtime::replica())
                     throw std::runtime_error("Only replicas restore entity fields");
-                apply(L, plan, 0, entity, 3, false);
-                apply(L, plan, 0, entity, 3, true);
+                Values values{};
+                validate(L, plan, 0, 3, values);
+                apply(plan, entity, values);
                 api.pushBoolean(L, true);
             }
         }
@@ -360,6 +388,7 @@ bool bind(lua_State* L, lua::Module module) {
                    S::pushInteger, S::pushNumber,   S::pushString,  S::pushClosure, S::setField,
                    S::error,       S::checkInteger, S::checkStack,  S::pushLString}))
         return false;
+    image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
     api.pushClosure(L, run<0>, 0);
     api.setField(L, -2, "entity_fields_plan");
     api.pushClosure(L, run<1>, 0);

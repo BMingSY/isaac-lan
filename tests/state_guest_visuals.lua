@@ -174,7 +174,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, function(slot, t)
         local bytes = collect(slot, t)
-        if t == 150 or t == 300 then
+        if io and (t == 150 or t == 300) then
             local out = assert(io.open("./authority-" .. t .. ".bin", "wb"))
             out:write(bytes)
             out:close()

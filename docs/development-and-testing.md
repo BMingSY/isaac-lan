@@ -34,7 +34,7 @@ python3 -m venv .deps/checks
 | `--profile full` | 扩展检查；预算 200 例、状态机最多 60 步 |
 | `--list` | 只列 Python 用例 |
 | `--list-engine` | 按文件名发现实机入口和 Lua 场景；不执行场景 |
-| `--sanitizers` | 为可移植 C++ 构建启用 ASan／LSan／UBSan；CI 使用此选项 |
+| `--sanitizers` | 为可移植 C／C++ 构建启用 ASan／LSan／UBSan；CI 使用此选项 |
 
 Hypothesis 还会运行缓存失败样例和缩减步骤，上述预算不是精确执行次数。按改动选择局部检查：
 
@@ -126,6 +126,8 @@ python tools/engine_test.py run special-routes -- \
 组合 Lua 场景返回 `{ done = function, cleanup = function }`：`done` 返回布尔值，只有实际断言完成才能返回 `true`；`cleanup` 可省略，负责所属文件、外部 Mod 包装和输入适配的释放。共享的 [`scenario.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/support/scenario.lua) 隔离场景参数、跟踪场景注册的回调并保证清理只执行一次；准备或执行失败也清理已注册回调。场景参数通过数据传入，组合器不替换场景源码，也不依赖内部完成变量名或 PASS 日志判断结束。
 
 连续玩法组合器在同一局内切换兼容场景，保持绝对网络 tick，仅为夹具转换相对时间；路线组合器在同一组进程中等待原生退出与菜单恢复后再切换。独立启动配置、真实键盘焦点和性能隔离要求仍属于套件执行边界，不能将任意套件直接合并。
+
+`special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存传输原始流，供离线解压和状态回放。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
 
 受保护的实机入口在 `finally` 中等待所属后端收尾，再恢复资料并核对哈希，统一输出 `report.json`、`restored.json` 和 `junit.xml`。报告的 `schema_version` 为 `1`，`status` 区分 `passed`、`failed` 和 `error`，保留各套件原有双端证据和详细结果。JUnit 表示整次套件结果；道具效果、路线与 Boss 覆盖仍读取详细报告。未完成的子项、原生异常或恢复失败不能由一个完成标记覆盖。
 

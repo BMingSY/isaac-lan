@@ -38,6 +38,7 @@ def run_batch(args, cases, output, labs):
             "journal": {role: windows(path) for role, path in journals.items()},
             "verifyCodec": args.verify_codec,
             "snapshotPrefix": windows(output / "codec-"),
+            "caseTimeoutMs": args.case_timeout * 1000 if args.case_timeout else None,
         },
     )
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
@@ -48,7 +49,6 @@ def run_batch(args, cases, output, labs):
         script,
         COMPLETION,
         "--frontend",
-        "--automatic",
         "--menu-start",
         "--virtual-input",
         "--menu-port",
@@ -56,10 +56,12 @@ def run_batch(args, cases, output, labs):
         "--scenario-timeout",
         str(args.timeout),
     )
+    if not args.injected:
+        command.append("--automatic")
     if args.record:
         command.extend(("--native-record-both", "--frame-ms", "1000"))
     if args.mode == "stress":
-        command.append("--performance")
+        command.append("--no-performance" if args.no_phase_profile else "--performance")
     if args.mode != "stress" or args.heap_check:
         command.append("--heap-check")
     protected = ProtectedLabs(labs, output)
@@ -141,6 +143,21 @@ def run_batch(args, cases, output, labs):
 def main():
     configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--injected",
+        action="store_true",
+        help="Use the isolated injection backend; skip autoload validation",
+    )
+    parser.add_argument(
+        "--no-phase-profile",
+        action="store_true",
+        help="Measure stress with production-default diagnostics; fixture frame/capture/apply timing remains enabled",
+    )
+    parser.add_argument(
+        "--case-timeout",
+        type=int,
+        help="Override the per-case watchdog in seconds for slow baseline measurements",
+    )
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--build", type=Path, required=True)
@@ -235,6 +252,8 @@ def main():
                     case["physical"] = True
         if not 1 <= args.port < 65535 or not 10 <= args.timeout <= 86400:
             raise ValueError("Invalid port or timeout")
+        if args.case_timeout is not None and not 10 <= args.case_timeout <= args.timeout:
+            raise ValueError("Case timeout must be between 10 seconds and the suite timeout")
         if not 0 <= args.coins <= 99:
             raise ValueError("Coins must be between 0 and 99")
         if args.end_tick is not None and not 150 <= args.end_tick <= 3600:

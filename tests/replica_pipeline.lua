@@ -80,7 +80,13 @@ local replica = createReplica({
             return incoming == epoch
         end,
     },
-    performance = { resources = noop, counter = noop },
+    performance = {
+        resources = noop,
+        counter = noop,
+        wrap = function(_, fn)
+            return fn
+        end,
+    },
     entityCodec = {
         link = function(p, v, ref)
             assert(scope == "room" and p == player and ref(v[1]) == p)

@@ -1,7 +1,9 @@
 local root = assert(arg[1])
 local vector = {}
 vector.__index = vector
+local allocations = 0
 local function Vector(x, y)
+    allocations = allocations + 1
     return setmetatable({ X = x, Y = y }, vector)
 end
 function vector.__add(a, b)
@@ -122,6 +124,23 @@ assert(state.track == still and state.track.stationary)
 accept(8, 2, 20, 60)
 assert(not state.track.stationary)
 close(render(8 + 1 / 60), 21)
+
+-- Preserve diagonal movement and per-tick velocity units without allocating
+-- intermediate native Vector values for every moving entity and render.
+local position, velocity = Vector(10, 20), Vector(2, -3)
+local allocated = allocations
+local diagonal = motion.track(nil, position, velocity, 0, 1, 30)
+assert(allocations == allocated)
+local displayed = motion.sample(diagonal, 1 / 30)
+assert(allocations == allocated + 1)
+close(displayed.X, 12)
+close(displayed.Y, 17)
+allocated = allocations
+assert(motion.track(diagonal, position, velocity, 1 / 30, 2, 30) == diagonal)
+assert(allocations == allocated)
+displayed = motion.sample(diagonal, 1 / 30)
+close(displayed.X, 12)
+close(displayed.Y, 17)
 
 -- Exercise local prediction with the actual item compatibility adapter. A held
 -- crafting bag reports an unfinished extra animation throughout PickupWalk.
