@@ -2,6 +2,8 @@
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 #include "engine/frontend.h"
+#include "engine/chat_input.h"
+#include "engine/emotes.h"
 #include "engine/build.h"
 #include "runtime/session.h"
 #include "engine/rooms.h"
@@ -42,6 +44,8 @@ namespace layout = j460::layout;
 namespace isaac::frontend {
 namespace {
 std::uintptr_t image;
+chat::Appearance chatAppearance;
+presentation::ChatBackground chatBackground;
 std::wstring labRoot;
 void (*logger)(const std::string&);
 int(__cdecl* bindNative)(lua_State*);
@@ -255,6 +259,8 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
         originalGameMenuUpdate(menu);
         return;
     }
+    if (chat_input::capturesInput())
+        return;
     for (const auto& [action, key] : {std::pair{input::action::menuConfirm, VK_RETURN},
                                       {input::action::menuBack, VK_ESCAPE},
                                       {input::action::menuLeft, VK_LEFT},
@@ -765,6 +771,8 @@ LRESULT CALLBACK events(HWND h, UINT message, WPARAM w, LPARAM l) {
         closeRequested = true;
         return 0;
     }
+    if (const auto handled = chat_input::event(h, message, w, l))
+        return *handled;
     if (visible && message == WM_LBUTTONDOWN)
         menuClick = true;
     return CallWindowProcW(originalWndProc, h, message, w, l);
@@ -835,9 +843,18 @@ void renderNativeMenu() {
     if (!visible)
         chatEditing = false;
 }
+void renderChat() {
+    if (!state || bridgeFailed)
+        return;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanChatRender") == luaFunction)
+        invoke(0, 0);
+    lua.setTop(state, top);
+}
 void __cdecl menuRender() {
     originalMenuRender();
     renderNativeMenu();
+    renderChat();
 }
 void draw() {
     ImGui_ImplOpenGL3_NewFrame();
@@ -884,6 +901,8 @@ void __cdecl close(lua_State* L) {
     if (state == L) {
         lab_capture::stop();
         state = nullptr;
+        chat_input::reset();
+        emotes::reset();
         chatEditing = false;
         if (chatReady) {
             reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate_51db00)(
@@ -936,6 +955,23 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         manifest();
         if (bindNative(state) != 1)
             throw std::runtime_error("Cannot bind native game interfaces");
+        if (!chat_input::bind(state, module))
+            throw std::runtime_error("Cannot bind chat input");
+        if (!emotes::bind(state, module))
+            throw std::runtime_error("Cannot bind original emotes");
+        lua.createTable(state, 0, 7);
+        for (const auto& [key, value] : {std::pair{"opacity", chatAppearance.opacity},
+                                         {"background", chatAppearance.background},
+                                         {"border", chatAppearance.border},
+                                         {"text", chatAppearance.text},
+                                         {"image_width", chatBackground.width},
+                                         {"image_height", chatBackground.height}}) {
+            lua.pushInteger(state, value);
+            lua.setField(state, -2, key);
+        }
+        lua.pushString(state, chatBackground.animation.c_str());
+        lua.setField(state, -2, "image");
+        lua.setField(state, -2, "chat_style");
         // Ordinary launches omit the global debug library. Keep the sandbox
         // intact and expose only our source/upvalue inspection functions.
         const auto openDebug =
@@ -1040,9 +1076,15 @@ void prepareView() {
 }
 void render() {
     renderNativeMenu();
+    renderChat();
 }
 bool capturesInput() {
-    return visible;
+    return visible || chat_input::capturesInput();
+}
+void configureChat(const chat::Appearance& appearance,
+                   const presentation::ChatBackground& background) {
+    chatAppearance = appearance;
+    chatBackground = background;
 }
 void returnToLobby() {
     lobbyRequested = true;
@@ -1053,6 +1095,8 @@ bool install(std::uintptr_t base, const std::wstring& root, void (*log)(const st
     labRoot = root;
     logger = log;
     bindNative = bind;
+    if (!emotes::install(image))
+        return false;
     if (MH_CreateHookApi(L"gdi32.dll", "SwapBuffers", reinterpret_cast<void*>(swap),
                          reinterpret_cast<void**>(&originalSwap)) != MH_OK ||
         MH_EnableHook(reinterpret_cast<void*>(

@@ -117,6 +117,9 @@ void assignLanDeviceIds() {
 lan::Frame accepted;
 unsigned pauseOwner = 0;
 std::array<lan::InputFrame, 5> physicalInput;
+std::array<ModalInput, 5> modalInput;
+std::array<WORD, 4> previousChatButtons{};
+int localChatController = 0;
 std::optional<unsigned> sampledFrame;
 AutomationInput automation;
 unsigned renderFrame() {
@@ -431,10 +434,10 @@ void samplePhysicalInput() {
     sampledFrame = frame;
     runtime::pollLocalConsole();
     runtime::refreshAutomation(frame);
-    if (frontend::capturesInput()) {
+    const bool capturing = frontend::capturesInput();
+    if (capturing) {
         automation.clear();
         physicalInput = {};
-        return;
     }
     void* inputManager = reinterpret_cast<void*>(image + 0x857b18);
     for (unsigned source = 0; source < physicalInput.size(); ++source) {
@@ -454,6 +457,7 @@ void samplePhysicalInput() {
         const auto game = at<std::uintptr_t>(image, j460::globals::game);
         if (source == 0 && game)
             keyboardPause(input, at<int>(game, 0x23a74) != 0);
+        modalInput[source].filter(input, capturing);
     }
 }
 int capture(lua_State* L) {
@@ -587,6 +591,9 @@ void reset() {
     accepted = {};
     pauseOwner = 0;
     physicalInput = {};
+    modalInput = {};
+    previousChatButtons = {};
+    localChatController = 0;
     sampledFrame.reset();
 }
 void clearAutomation() {
@@ -657,6 +664,44 @@ bool menuTriggered(int action) {
 bool hostMenuTriggered(int action) {
     return enabled && menuActionTriggered(accepted.inputs[0], action);
 }
+int chatControls(lua_State* L) {
+    // Read the original physical device, before LAN's virtual controller routing.
+    // L3 is a local UI shortcut; it is never transmitted as a gameplay action.
+    auto& previous = previousChatButtons;
+    bool toggle = false;
+    for (unsigned i = 0; i < previous.size(); ++i) {
+        XINPUT_STATE state{};
+        const auto provider = std::find_if(xinputProviders.begin(), xinputProviders.end(),
+                                           [](const auto& p) { return p.state != nullptr; });
+        if (provider != xinputProviders.end() &&
+            readState(provider->state, i, &state) == ERROR_SUCCESS) {
+            const auto pressed = static_cast<WORD>(state.Gamepad.wButtons & ~previous[i]);
+            toggle |= (pressed & XINPUT_GAMEPAD_LEFT_THUMB) != 0;
+            if (pressed)
+                localChatController = i + 1;
+            previous[i] = state.Gamepad.wButtons;
+        } else
+            previous[i] = 0;
+    }
+    lua.createTable(L, 0, 8);
+    lua.pushBoolean(L, toggle);
+    lua.setField(L, -2, "chat");
+    if (GetKeyState(VK_LMENU) < 0)
+        localChatController = 0;
+    lua.pushInteger(L, localChatController);
+    lua.setField(L, -2, "controller");
+    for (const auto& [name, action] : {std::pair{"confirm", action::menuConfirm},
+                                       {"back", action::menuBack},
+                                       {"left", action::menuLeft},
+                                       {"right", action::menuRight},
+                                       {"up", action::menuUp},
+                                       {"down", action::menuDown},
+                                       {"emote", action::emote}}) {
+        lua.pushBoolean(L, menuTriggered(action));
+        lua.setField(L, -2, name);
+    }
+    return 1;
+}
 bool bind(lua_State* L, HMODULE module) {
     if (!lua.load(module, {isaac::lua::Symbol::pushClosure, isaac::lua::Symbol::setField,
                            isaac::lua::Symbol::pushBoolean, isaac::lua::Symbol::getTop,
@@ -667,6 +712,7 @@ bool bind(lua_State* L, HMODULE module) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, name);
     };
+    function("chat_controls", chatControls);
     function("input_virtual", enable);
     function("input_assign", assign);
     function("input_devices", devices);

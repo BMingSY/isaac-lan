@@ -68,3 +68,7 @@ sync/capture
 sync/replica
 compat/routes/challenge_lamb
 runtime/challenges
+runtime/chat_wire
+runtime/chat
+presentation/chat_layout
+presentation/chat

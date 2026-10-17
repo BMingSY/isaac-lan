@@ -1553,6 +1553,56 @@ void publicationLimits() {
     });
     require(received->bytes == state.bytes && received->tick == 0, "Valid publication damaged");
 }
+void communication() {
+    Group g(3);
+    g.ready();
+    g.step(0);
+    require(!g.peers[1]->sendCommunication(2, "spoof") &&
+                !g.peers[1]->sendCommunication(0, std::string(maxCommunicationSize + 1, 'x')),
+            "Invalid communication destination or size accepted");
+    require(g.peers[1]->sendCommunication(0, "chat") && g.peers[1]->sendIntegration(0, "action"),
+            "Independent messages rejected");
+    std::optional<IntegrationMessage> message, action;
+    until([&] {
+        g.poll();
+        if (!message)
+            message = g.peers[0]->takeCommunication();
+        if (!action)
+            action = g.peers[0]->takeIntegration();
+        return message && action;
+    });
+    require(message->sender == 1 && message->bytes == "chat" && action->bytes == "action",
+            "Communication leaked into Mod action traffic or lost sender");
+    require(g.peers[0]->sendCommunication(1, "private"), "Private result rejected");
+    message.reset();
+    until([&] {
+        g.poll();
+        message = g.peers[1]->takeCommunication();
+        return message.has_value();
+    });
+    require(message->sender == 0 && message->bytes == "private" && !g.peers[2]->takeCommunication(),
+            "Private result leaked to another player");
+    require(g.peers[0]->sendCommunication(1, "before-floor"), "Pre-floor chat rejected");
+    Stage stage;
+    stage.epoch = 1;
+    stage.level = 2;
+    require(g.peers[0]->beginStage(stage), "Floor failed");
+    require(g.peers[0]->sendCommunication(1, "during-floor"), "Loading dropped chat");
+    std::vector<std::string> received;
+    until([&] {
+        g.poll();
+        while (auto next = g.peers[1]->takeCommunication())
+            received.push_back(next->bytes);
+        return received.size() == 2 && g.peers[1]->worldEpoch() == 1;
+    });
+    require(received == std::vector<std::string>{"before-floor", "during-floor"},
+            "World transition merged or cleared communication");
+    for (unsigned i = 0; i < maxIntegrationQueue; ++i)
+        require(g.peers[0]->sendCommunication(0, "local"), "Local communication filled early");
+    require(!g.peers[0]->sendCommunication(0, "overflow"), "Unbounded local communication queue");
+    require(g.peers[0]->sendIntegration(0, "still-available"), "Chat exhausted action queue");
+    std::puts("PASS communication routing, bounded independent queues and floor survival");
+}
 void integrations() {
     Group g(3);
     require(g.peers[0]->runId().size() == 32 && g.peers[0]->runId() == g.peers[1]->runId() &&
@@ -1826,6 +1876,7 @@ int main(int argc, char** argv) {
                                   {"loading-timeout", loadingTimeout},
                                   {"publication-limits", publicationLimits},
                                   {"integrations", integrations},
+                                  {"communication", communication},
                                   {"greed-settings", greedSettings},
                                   {"host-disconnect", hostDisconnect},
                                   {"resource-lifecycle", resourceLifecycle}});

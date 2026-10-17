@@ -1,0 +1,40 @@
+# 聊天与控制台
+
+聊天使用一条按时间排列的记录，区分队伍文字与系统输出，不设置频道切换。外观配置见 [README 的配置选项](https://github.com/BMingSY/isaac-lan/blob/main/README.md#配置与日志)。
+
+## 职责与数据流
+
+- [core/chat.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/chat.h) 持有字符／字节限制、UTF-8 编辑和历史记录；Win32 输入适配在版本后端，处理 `~`、剪贴板和 IME，编辑期间隔离本机玩法输入，关闭后需释放已按住的动作键。
+- [runtime/chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat.lua) 持有命令队列、消息记录、输出归属和去重。`/console`、`/c` 后的文本直接交给原版解析，不维护原版命令白名单；`/e` 在本机完成，掷骰由房主使用独立随机源生成一次。
+- [presentation/chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/chat.lua) 只处理本机输入状态、布局、滚动和绘制；文字气泡只渲染同房角色，使用半透明的原版气泡素材。表情选择、动画和气泡复用游戏已有轮盘及角色表情组件；原版资源从游戏读取，不重新分发。背景配置通过启动装配注入，不参与联网一致性。
+- [chat_wire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat_wire.lua) 编解码请求、输出、表情。底层 `communication` 是独立于 Mod 动作与世界快照的可靠字节消息；网络层不解析聊天内容。协议版本为 31，同版本扩展才可联机。
+
+输入者的连接槽由传输层确定。原版命令在房主的更新安全边界执行，使用输入者的角色与房间上下文；排队时记录局次、世界代次、房间和维度，执行前不再匹配则取消。`rewind` 使用既有回退事务。没有玩家权限分级；同步方式不改变成员使用命令的资格。
+
+背景图片由 [chat_background.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/presentation/chat_background.cpp) 在启动时准备。默认使用随 DLL 嵌入的暗色破纸纹理；配置可指定相对 `config.ini` 的路径或绝对路径。自定义 PNG 只读，保留原始像素与透明度，按当前面板大小缩放；配置透明度再与图片透明度相乘。输入图片限制为 16 MiB、单边 4096 像素且总计不超过 8 Mi 像素，完成解码校验后将图片和动画描述写入 `isaac-lan/cache/chat`。Lua 通过普通 Sprite API 加载，帧内不读盘。缺失或损坏的自定义图片回退到内置纹理，缓存不可用时才回退纯色并记录日志，不增加界面提示。
+
+## 输出契约
+
+组件内部 `chat.output(text, options)` 将可见范围和气泡分开表达；主机上的命令执行期间，省略 `owner` 时继承执行者。装配暴露 `_IsaacLanChatOutput`，供原版 `/console lua ...` 等同步调用使用，它不是第三方稳定 API。
+
+| 字段 | 默认 | 含义 |
+| --- | --- | --- |
+| `audience` | `"self"` | `"self"` 仅给执行者，`"party"` 给所有已连接成员 |
+| `owner` | 当前执行者，否则本机槽 | 从 0 开始的角色归属；决定气泡跟随的角色 |
+| `bubble` | `false` | 是否同时在角色头顶显示 |
+| `kind` | `"system"` | `"system"` 为系统结果，`"team"` 为队伍发言 |
+
+```lua
+chat.output("掷出 d20：12", { audience = "party", bubble = true })
+chat.output("本机提示", { audience = "self" })
+```
+
+广播和远程定向输出从房主发出，客机提交命令请求，不能自行选择别人的身份。原版执行期间同步产生的 `Console.Print` 文本回给执行者；异步回调的输出不自动归入已经结束的命令。需要共享结果的命令显式调用输出接口，避免把所有原版日志广播。
+
+## 生命周期与限制
+
+文字聊天最多 60 个 Unicode 标量值，命令最多 2048 个 UTF-8 字节。一次粘贴的换行转换为空格，不拆成多次提交。消息历史保留 200 条，输入历史 64 条；原版同步返回最多采集 16 KiB，并分行、按 UTF-8 边界分包。
+
+每个请求携带随机会话标记和递增序号，重复请求不重复执行或掷骰。传输消息最多 3072 字节，每发送者待收最多 32 条、每秒最多 64 条；命令待执行最多 16 条。暂时积压的输出按接收者保持顺序，重试最多 5 秒，待发最多 64 条。关闭连接移除对应传输消息，关闭／重新加入会话清理本机记录、草稿、气泡和命令；换层清理临时气泡，不清理文字历史。
+
+气泡最多显示三行，超出用省略号；完整内容保留在文字记录中。停留时间按内容长度为 4～8 秒，靠近屏幕边缘时限制到画面范围，相邻文字气泡优先错开到附近空位。表情不进入文字记录，不支持用户图片导入。手柄可操作开关、确认、取消和表情选择，文字编辑使用键盘，没有手柄软键盘。
