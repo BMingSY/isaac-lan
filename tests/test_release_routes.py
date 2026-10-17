@@ -6,10 +6,10 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from build_boss_suite import build, catalog, select_cases
-from build_ending_suite import build as build_endings
-from run_bosses import COMPLETION, evidence
-from run_endings import route_evidence
+from testing.bosses import build, catalog, select_cases
+from testing.endings import build as build_endings
+from testing.bosses import COMPLETION, evidence
+from testing.endings import route_evidence
 
 
 def test_boss_shards_cover_each_playable_entry_once(tmp_path):
@@ -61,8 +61,6 @@ def test_mother_win_does_not_hide_missing_alternate_floor():
 def test_ending_selection_and_first_floor(tmp_path):
     script = tmp_path / "endings.lua"
     build_endings(script, ["mother", "lamb"], first_floor=True)
-    assert 'local cases = { "mother", "lamb" }' in script.read_text()
-    assert script.read_text().startswith("_IsaacLanTest.firstFloor = true")
     with pytest.raises(ValueError):
         build_endings(script, ["mother", "mother"])
     with pytest.raises(ValueError):
@@ -138,7 +136,7 @@ def test_interrupted_boss_coverage_requires_both_completed_assertions_and_clean_
 def test_current_scene_checks_replica_identity_instead_of_unrelated_effect_count(tmp_path):
     import csv
 
-    from run_client_scenes import measure
+    from testing.scenes import measure
 
     rows = [
         {

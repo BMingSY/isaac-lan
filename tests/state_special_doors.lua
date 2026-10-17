@@ -140,3 +140,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         beginFloor
     )
 end
+
+-- Explicit test-only lifecycle consumed by both suite coordinators.
+return {
+    done = function()
+        return done
+    end,
+}

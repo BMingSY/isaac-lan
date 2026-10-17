@@ -33,7 +33,8 @@ python3 -m venv .deps/checks
 | 默认 `--profile fast` | 日常和 PR；属性测试生成预算 25 例、状态机最多 20 步 |
 | `--profile full` | 扩展检查；预算 200 例、状态机最多 60 步 |
 | `--list` | 只列 Python 用例 |
-| `--list-engine` | 只读取实机清单，不执行场景；脚本存在不代表已通过 |
+| `--list-engine` | 按文件名发现实机入口和 Lua 场景；不执行场景 |
+| `--sanitizers` | 为可移植 C++ 构建启用 ASan／LSan／UBSan；CI 使用此选项 |
 
 Hypothesis 还会运行缓存失败样例和缩减步骤，上述预算不是精确执行次数。按改动选择局部检查：
 
@@ -64,7 +65,7 @@ ctest --test-dir build-core --output-on-failure
 
 ## 失败记录与回放
 
-统一运行按当轮归档保存阶段日志、耗时、`summary.json`、`pytest.xml` 和失败请求。回放命令：
+统一运行按当轮归档保存阶段日志、耗时、`summary.json`、`ctest.xml`、`pytest.xml` 和失败请求。回放命令：
 
 ```sh
 .deps/checks/bin/python tools/replay_offline.py "$ISAAC_FAILURE_RECORD"
@@ -100,6 +101,33 @@ ctest --test-dir build-win32 --output-on-failure
 测试程序不带用例名时运行全部传输测试，通过标记为 `ALL STATE TRANSPORT TESTS PASSED`。
 
 ## 最终实机验收
+
+### 用例与执行工具
+
+[`engine_test.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/engine_test.py) 提供统一发现、计划和执行入口；套件保留各自的参数与验收条件：
+
+```sh
+python tools/engine_test.py list
+python tools/engine_test.py plan special-routes -- --case motion --case floor-items
+python tools/engine_test.py run special-routes -- \
+  --host "$ISAAC_HOST_LAB" --client "$ISAAC_CLIENT_LAB" \
+  --build build-win32 --output "$ISAAC_RUN_OUTPUT" \
+  --case motion --case floor-items --heap-check
+```
+
+`list` 和 `--list-engine` 通过 [`discovery.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/testing/discovery.py) 自动扫描 `tools/run_*.py` 和 `tests/state_*.lua`；排除底层后端 `run_network_engine.py`，并兼容 `manual_gameplay.py`、`validate_replica.py` 两个旧入口。新增、删除或重命名文件后，下次发现立即生效，无需登记清单。套件名由文件名去掉 `run_` 前缀、将下划线换为短横线得到，例如 `run_release_acceptance.py` 对应 `release-acceptance`。
+
+发现过程不导入执行器或执行 Lua。`plan` 只显示选中入口和命令；`run` 才调用该入口，路径、参数和准备条件由入口校验。文件被发现不代表它能与其他场景组合，也不代表已执行或通过。场景选择、顺序与完成条件在所属执行器／构建器中维护；进程复用与焦点安排见下方验证约定。
+
+公共实现位于 [`tools/testing/`](https://github.com/BMingSY/isaac-lan/tree/main/tools/testing)：启动命令和子进程收尾由 `engine.py` 管理，原生资料准备函数放在 `profiles.py`，报告由 `results.py` 写入。具体入口保留场景选择、必要准备与效果断言，调用公共模块，不从其他执行入口导入共享实现。原有 `run_*.py` 命令可直接使用。
+
+组合 Lua 场景返回 `{ done = function, cleanup = function }`：`done` 返回布尔值，只有实际断言完成才能返回 `true`；`cleanup` 可省略，负责所属文件、外部 Mod 包装和输入适配的释放。共享的 [`scenario.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/support/scenario.lua) 隔离场景参数、跟踪场景注册的回调并保证清理只执行一次；准备或执行失败也清理已注册回调。场景参数通过数据传入，组合器不替换场景源码，也不依赖内部完成变量名或 PASS 日志判断结束。
+
+连续玩法组合器在同一局内切换兼容场景，保持绝对网络 tick，仅为夹具转换相对时间；路线组合器在同一组进程中等待原生退出与菜单恢复后再切换。独立启动配置、真实键盘焦点和性能隔离要求仍属于套件执行边界，不能将任意套件直接合并。
+
+受保护的实机入口在 `finally` 中等待所属后端收尾，再恢复资料并核对哈希，统一输出 `report.json`、`restored.json` 和 `junit.xml`。报告的 `schema_version` 为 `1`，`status` 区分 `passed`、`failed` 和 `error`，保留各套件原有双端证据和详细结果。JUnit 表示整次套件结果；道具效果、路线与 Boss 覆盖仍读取详细报告。未完成的子项、原生异常或恢复失败不能由一个完成标记覆盖。
+
+### 验证安排
 
 1. 完成代码、离线检查和构建，列出行为、预期与准备条件；日常 PR 只跑相关场景，发布执行下表默认范围，并列明必要专项。
 2. 主客机各启动一次，共用兼容场景；用例之间清理夹具、恢复状态。只有启动／退出检查或进程无法恢复时才重启，并记录原因。

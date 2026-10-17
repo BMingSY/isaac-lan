@@ -217,3 +217,14 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
         report("VIEWS_CHECKED Stats+=" .. tostring(visibleMod) .. " EID=" .. tostring(EID ~= nil))
     end
 end)
+
+-- Explicit test-only lifecycle consumed by both suite coordinators.
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        native.api_send, native.api_receive = send, receive
+        lan:Unregister()
+    end,
+}

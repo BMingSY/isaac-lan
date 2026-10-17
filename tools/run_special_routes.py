@@ -2,68 +2,23 @@
 """Run selected character, route, Greed and LANBOT fixtures with one protected native pair."""
 
 import argparse
+from testing.special_routes import lanbot_behavior_passed, lanbot_greed_result
 import json
 from pathlib import Path
 import re
 import subprocess
-import sys
-from build_special_suite import CASES, DIAGNOSTICS, build
+from testing.special_routes import CASES, DIAGNOSTICS, build
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command, run_engine
+from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle
 from game_logs import log_path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def lanbot_behavior_passed(checkpoints):
-    expected = {
-        "exit-pickup",
-        "arrival",
-        "buttons",
-        "cleared-spikes",
-        "timed-spikes",
-        "crossing-projectiles",
-        "door-transfer",
-        "poop-obstacle",
-        "brown-fire-obstacle",
-        "red-fire-obstacle",
-    }
-    checks = [
-        re.search(r"LANBOT_CASE (\S+) passed=(true|false)(?: |$)", line) for line in checkpoints
-    ]
-    checks = [check for check in checks if check]
-    return (
-        len(checks) == len(expected)
-        and {check[1] for check in checks} == expected
-        and all(check[2] == "true" for check in checks)
-    )
-
-
-def lanbot_greed_result(checkpoints):
-    results = [
-        line.split("LANBOT_GREED RESULT ", 1)[1]
-        for line in checkpoints
-        if "LANBOT_GREED RESULT " in line
-    ]
-    if len(results) != 1:
-        raise ValueError("Expected exactly one authoritative LANBOT Greed result")
-    values = dict(word.split("=", 1) for word in results[0].split())
-    if values.get("outcome") not in {"win", "death", "stalled", "timeout", "bot_error"}:
-        raise ValueError("Unknown LANBOT Greed outcome")
-    won = values["outcome"] == "win"
-    if values.get("cleared") != str(won).lower():
-        raise ValueError("Greed outcome disagrees with the cleared flag")
-    for name in ("stage", "wave", "shots0", "shots1", "hits0", "hits1"):
-        values[name] = int(values[name])
-    for name in ("wall_s", "simulation_s"):
-        values[name] = float(values[name])
-    values["cleared"] = won
-    values["native_ending"] = values.get("native_ending") == "true"
-    if won and (values["stage"] != 7 or not values["native_ending"]):
-        raise ValueError("Greed win requires a native final-floor ending")
-    return values
-
-
 def main():
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
@@ -115,29 +70,20 @@ def main():
         parser.error("The LANBOT first-floor campaign must run last")
     if "lanbot-greed" in cases and cases[-1] != "lanbot-greed":
         parser.error("The LANBOT Greed challenge must run last")
-    labs = [args.host.resolve(), args.client.resolve()]
-    if labs[0] == labs[1] or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
-        parser.error("Two distinct marked isolated labs are required")
+    labs = validate_owned_labs(
+        [args.host.resolve(), args.client.resolve()], args.output.resolve(), count=None
+    )
     idle(labs)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     script = output / "suite.lua"
     build(script, cases, first_floor=args.first_floor)
     protected = ProtectedLabs(labs, output, roles=("host", "client"))
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
-        "--build",
-        str(args.build.resolve()),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
+    command = engine_command(
+        labs,
+        args.build,
+        output / "engine",
+        script,
         "LAN_NETWORK PASS all selected character and side routes",
         "--frontend",
         "--menu-start",
@@ -166,7 +112,7 @@ def main():
             )
         )
         else "900",
-    ]
+    )
     if "ascent-compat" in cases:
         command.append("--ascent-fixture")
     if any(
@@ -221,7 +167,7 @@ def main():
                 options.write_text(text)
             report["native_options"] = {"PopUps": 0}
         with (output / "engine.log").open("w") as log:
-            result = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+            result = run_engine(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         for index, name in enumerate(cases, 1):
             report["cases"][name] = {}
             for role in ("host", "client"):
@@ -335,12 +281,7 @@ def main():
                 report["native_game_starts"][role] = starts
                 report["passed"] = report["passed"] and starts == len(cases)
     finally:
-        try:
-            protected.restore()
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"], report["passed"] = str(error), False
-        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        finish_run(protected, report, output)
     print(
         json.dumps(
             {

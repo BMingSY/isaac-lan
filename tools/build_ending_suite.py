@@ -1,27 +1,9 @@
 #!/usr/bin/env python3
-"""Build the native ending-route fixture, optionally selecting diagnostic routes."""
+"""Command-line entry for the shared endings suite builder."""
 
 import argparse
-import json
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-CASES = ("lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent")
-
-
-def build(output, routes=None, *, first_floor=False):
-    if routes is not None and (
-        not routes or len(set(routes)) != len(routes) or any(route not in CASES for route in routes)
-    ):
-        raise ValueError("Choose distinct known ending routes")
-    endings = (ROOT / "tests/state_endings.lua").read_text()
-    if routes:
-        endings = endings.replace(
-            'local cases = { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }',
-            "local cases = { " + ", ".join(json.dumps(route) for route in routes) + " }",
-        )
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(("_IsaacLanTest.firstFloor = true\n" if first_floor else "") + endings)
+from testing.endings import build, CASES
 
 
 if __name__ == "__main__":

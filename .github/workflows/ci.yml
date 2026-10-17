@@ -41,30 +41,12 @@ jobs:
           .deps/checks/bin/python -m zipfile -e .deps/stylua.zip .deps/checks/bin
           chmod +x .deps/checks/bin/stylua
           echo "$PWD/.deps/checks/bin" >> "$GITHUB_PATH"
-      - name: Check formatting
-        run: python tools/format.py --check
-      - name: Check Python and Lua syntax
-        run: python tools/check_scripts.py
-      - name: Test tools, semantic state and continuous behavior without the game
+      - name: Run the offline suite with sanitizers
         env:
           OFFLINE_PROFILE: ${{ inputs.offline_profile || 'fast' }}
         run: |
-          python -m pytest --offline-profile "$OFFLINE_PROFILE" \
-            --offline-report-dir test-runs/ci/traces \
-            --junitxml test-runs/ci/pytest.xml --durations=10 -q
-      - name: Build portable tests with sanitizers
-        run: |
-          cmake -S . -B build-core -G Ninja \
-            -DISAAC_LAN_BUILD_ENGINE=OFF -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
-          cmake --build build-core --parallel 2
-      - name: Test protocol and saved sessions
-        env:
-          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: |
-          mkdir -p test-runs/ci/sanitizers
-          ctest --test-dir build-core --output-on-failure --output-junit "$PWD/test-runs/ci/sanitizers/ctest.xml"
+          python tools/test.py --profile "$OFFLINE_PROFILE" --sanitizers \
+            --build-dir build-core --report-dir test-runs/ci
       - name: Preserve offline test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

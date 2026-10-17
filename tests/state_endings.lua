@@ -6,7 +6,8 @@ local native = assert(_IsaacLan)
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local frame = _IsaacLanFrame
 local owner = { Name = "Six native ending routes" }
-local cases = { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }
+local cases = _IsaacLanTest.endingRoutes
+    or { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }
 local caseIndex, wins, renders, lastExit = 1, 0, 0, 0
 local lastExitMs, relinkAt = 0, 0
 local localProgress
@@ -1694,3 +1695,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     )
 end
+
+-- Explicit test-only lifecycle consumed by both suite coordinators.
+return {
+    done = function()
+        return finished
+    end,
+}

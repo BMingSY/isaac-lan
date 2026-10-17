@@ -7,11 +7,12 @@ import py_compile
 import subprocess
 import tempfile
 
-from build_gameplay_suite import build
-from build_ending_suite import build as build_endings
-from build_boss_suite import build as build_bosses
-from build_special_suite import build as build_special
-from run_client_scenes import build_scene_suite
+from testing.gameplay import build
+from testing.endings import build as build_endings
+from testing.bosses import build as build_bosses
+from testing.special_routes import build as build_special
+from testing.scenes import build_scene_suite
+from testing.release import build_suite as build_release
 
 ROOT = Path(__file__).resolve().parents[1]
 LUAC = shutil.which("luac5.3") or "luac"
@@ -46,6 +47,9 @@ def main():
         scenes = Path(temporary) / "scenes.lua"
         build_scene_suite(scenes)
         subprocess.run([LUAC, "-p", str(scenes)], check=True)
+        release = Path(temporary) / "release.lua"
+        build_release(release, "C:/owned-lab/coordination")
+        subprocess.run([LUAC, "-p", str(release)], check=True)
         special = Path(temporary) / "special.lua"
         build_special(special)
         subprocess.run([LUAC, "-p", str(special)], check=True)

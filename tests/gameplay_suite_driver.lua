@@ -2,7 +2,7 @@
 -- are relative to their phase. One menu connection and one native game start.
 local native = assert(_IsaacLan)
 local realFrame, realStatus, realCommand = _IsaacLanFrame, _IsaacLanStatus, _IsaacLanCommand
-local realGate, realDebug, realCallback = native.net_gate, Isaac.DebugString, Isaac.AddCallback
+local realGate, realDebug = native.net_gate, Isaac.DebugString
 local modules = {
     -- BUNDLED_FIXTURES
 }
@@ -13,6 +13,19 @@ f = assert(io.open("./lan-test-menu-port.txt", "r"))
 local port = f:read("*l")
 f:close()
 local current, core
+local function cleanupAll()
+    local errors = {}
+    for _, context in ipairs(modules) do
+        if context.scope then
+            local ok, message = pcall(context.scope.cleanup)
+            context.closed = true
+            if not ok then
+                errors[#errors + 1] = context.name .. ": " .. tostring(message)
+            end
+        end
+    end
+    assert(#errors == 0, table.concat(errors, "; "))
+end
 local function statusFor(context)
     local status = {}
     for k, v in pairs(realStatus()) do
@@ -28,15 +41,27 @@ local function invoke(context, fn, ...)
         return statusFor(context)
     end
     Isaac.DebugString = function(text)
-        if text:find("LAN_NETWORK PASS ", 1, true) then
-            context.completed = true
-        end
         realDebug("LAN_SUITE " .. context.name .. " " .. text)
     end
-    local values = table.pack(pcall(fn, ...))
+    local values = table.pack(pcall(context.scope.call, fn, ...))
     _IsaacLanCommand, _IsaacLanStatus, Isaac.DebugString = command, status, debug
+    if values[1] then
+        local ok, complete = pcall(context.scope.done)
+        if ok then
+            context.completed = complete
+        else
+            values = { false, complete }
+        end
+    end
     if not values[1] then
-        error("Suite " .. context.name .. ": " .. tostring(values[2]))
+        local ok, message = pcall(cleanupAll)
+        error(
+            "Suite "
+                .. context.name
+                .. ": "
+                .. tostring(values[2])
+                .. (ok and "" or "; cleanup: " .. tostring(message))
+        )
     end
     return table.unpack(values, 2, values.n)
 end
@@ -48,18 +73,19 @@ for _, context in ipairs(modules) do
         context.handlers = { ... }
         return true
     end
-    Isaac.AddCallback = function(owner, id, fn, ...)
-        return realCallback(owner, id, function(...)
-            if current == context then
-                return invoke(context, fn, ...)
-            end
-        end, ...)
+    local ok, scope = pcall(createScenario, context.load, function()
+        return current == context and not context.closed
+    end, function(fn, ...)
+        return invoke(context, fn, ...)
+    end)
+    if not ok then
+        local clean, message = pcall(cleanupAll)
+        error(tostring(scope) .. (clean and "" or "; cleanup: " .. tostring(message)))
     end
-    context.load()
+    context.scope = scope
     context.frame = _IsaacLanFrame
     context.bind = native.net_gate
 end
-Isaac.AddCallback = realCallback
 _IsaacLanFrame = realFrame
 local function prepare(context)
     if host then
@@ -123,17 +149,26 @@ local function selectPhase(tick)
     end
     if next and current ~= next then
         if current then
-            assert(current.completed, "Suite phase did not finish: " .. current.name)
+            if not current.completed then
+                cleanupAll()
+                error("Suite phase did not finish: " .. current.name)
+            end
+            current.scope.cleanup()
+            current.closed = true
         end
         current = next
-        prepare(current)
+        local ok, message = pcall(prepare, current)
+        if not ok then
+            local clean, cleanupError = pcall(cleanupAll)
+            error(tostring(message) .. (clean and "" or "; cleanup: " .. tostring(cleanupError)))
+        end
     end
-    return current
+    return current and not current.closed and current or nil
 end
 native.net_gate = function(...)
     core = { ... }
     return realGate(function()
-        return current and invoke(current, current.handlers[1]) or core[1]()
+        return current and not current.closed and invoke(current, current.handlers[1]) or core[1]()
     end, function(t, n, b)
         local context = selectPhase(t)
         if context then
@@ -160,12 +195,12 @@ native.net_gate = function(...)
         end
         return core[4](bytes, t, ack, betweenUpdates)
     end, function(...)
-        if current then
+        if current and not current.closed then
             return invoke(current, current.handlers[5], ...)
         end
         return core[5](...)
     end, function(...)
-        if current then
+        if current and not current.closed then
             return invoke(current, current.handlers[6], ...)
         end
         return core[6](...)
@@ -196,7 +231,7 @@ function _IsaacLanFrame()
     if status.phase == 4 or status.phase == 9 then
         realDebug("LAN_NETWORK FAILED " .. status.error)
     end
-    if current and status.prepared then
+    if current and not current.closed and status.prepared then
         invoke(current, current.frame)
     end
     -- Keep a completed fixture's grace period from killing an idle actor.
@@ -209,8 +244,12 @@ function _IsaacLanFrame()
     local last = modules[#modules]
     if status.verified >= last.start + last.duration + 30 and not finished then
         for _, context in ipairs(modules) do
-            assert(context.completed, "Unfinished phase: " .. context.name)
+            if not context.completed then
+                cleanupAll()
+                error("Unfinished phase: " .. context.name)
+            end
         end
+        cleanupAll()
         finished = true
         realDebug("LAN_NETWORK PASS continuous gameplay suite")
     end

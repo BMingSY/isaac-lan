@@ -12,8 +12,10 @@ import json
 from pathlib import Path
 import re
 import subprocess
-import sys
 
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command, run_engine
+from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle
 from game_logs import log_path
 from lab_profile import windows
@@ -29,15 +31,7 @@ CASES = tuple(
 
 
 def validate_labs(labs):
-    resolved = [Path(lab).resolve() for lab in labs]
-    if len(resolved) != 4 or len(set(resolved)) != 4:
-        raise ValueError("Four distinct owned labs are required")
-    if any(lab.name.casefold() in {"host-001", "client-001"} for lab in resolved):
-        raise ValueError("host-001/client-001 are reserved for the user's manual games")
-    if any(not (lab / ".isaac-lan-lab").is_file() for lab in resolved):
-        raise ValueError("Every selected lab needs an .isaac-lan-lab ownership marker")
-    if any(not (lab / "game/isaac-ng.exe").is_file() for lab in resolved):
-        raise ValueError("Every selected lab needs its own game executable")
+    resolved = validate_owned_labs(labs, count=4)
     if any(not (log_path(lab).parent / "options.ini").is_file() for lab in resolved):
         raise ValueError("Every selected lab needs an existing isolated options.ini")
     return resolved
@@ -91,6 +85,7 @@ def transition_evidence(probe, ordinal, players=(2, 3, 4)):
 
 
 def main():
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
@@ -129,25 +124,16 @@ def main():
         + (ROOT / "tests/state_hourglass_home.lua").read_text()
     )
     protected = ProtectedLabs(labs, output, roles=ROLES)
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
+    command = engine_command(
+        labs,
+        args.build,
+        output / "engine",
+        script,
+        COMPLETION,
         "--extra-client",
         str(labs[2]),
         "--extra-client",
         str(labs[3]),
-        "--build",
-        str(args.build.resolve()),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
-        COMPLETION,
         "--frontend",
         "--menu-start",
         "--virtual-input",
@@ -156,7 +142,7 @@ def main():
         str(args.port),
         "--scenario-timeout",
         "1800",
-    ]
+    )
     if args.record:
         command += ["--native-record-both", "--frame-ms", str(args.frame_ms)]
     if args.heap_check:
@@ -178,7 +164,7 @@ def main():
             options = log_path(lab).parent / "options.ini"
             options.write_text(re.sub(r"(?m)^PopUps=.*$", "PopUps=0", options.read_text()))
         with (output / "engine.log").open("w") as log:
-            result = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+            result = run_engine(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         report["returncode"] = result.returncode
         for ordinal, role in enumerate(ROLES):
             directory = output / "engine" / role
@@ -197,13 +183,7 @@ def main():
             peer["passed"] for peer in report["peers"].values()
         )
     finally:
-        try:
-            for source, actual in protected.restore().items():
-                report["protected"][source]["after"] = actual
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"], report["passed"] = str(error), False
-        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        finish_run(protected, report, output)
     print(json.dumps({key: report[key] for key in ("passed", "restored")}, indent=2))
     return 0 if report["passed"] else 1
 

@@ -1,0 +1,478 @@
+"""Exercise harness behavior without a game, including interruption and cleanup."""
+
+import json
+import shutil
+import subprocess
+import sys
+from xml.etree import ElementTree as ET
+
+import pytest
+
+import lab_profile
+from testing.discovery import ROOT, inventory, suite_command
+from testing.engine import BackendCleanupError, engine_process
+from testing.results import finish_run
+from testing import lua as lua_support
+from testing.special_routes import build as build_special
+from testing.endings import build as build_endings
+from testing import gameplay as build_gameplay_suite
+from testing import discovery
+
+
+def run_lua(source, tmp_path):
+    script = tmp_path / "check.lua"
+    script.write_text(source)
+    return subprocess.run(
+        [shutil.which("lua5.3"), str(script)],
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
+
+
+def test_inventory_covers_every_fixture_and_executor():
+    catalog = inventory()
+    assert {entry["script"] for entry in catalog["fixtures"]} == {
+        path.name for path in (ROOT / "tests").glob("state_*.lua")
+    }
+    entries = {entry["entry"] for entry in catalog["suites"]}
+    assert {str(path.relative_to(ROOT)) for path in (ROOT / "tools").glob("run_*.py")} - {
+        "tools/run_network_engine.py"
+    } <= entries
+    assert all((ROOT / path).is_file() for path in entries)
+    assert "tools/run_network_engine.py" not in entries
+    assert {"tools/manual_gameplay.py", "tools/validate_replica.py"} <= entries
+    with pytest.raises(ValueError, match="Unknown"):
+        suite_command("missing", [])
+
+
+def test_discovery_tracks_added_renamed_and_deleted_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(discovery, "ROOT", tmp_path)
+    runners, fixtures = tmp_path / "tools", tmp_path / "tests"
+    runners.mkdir()
+    fixtures.mkdir()
+    for name in ("run_zeta.py", "run_network_engine.py", "helper.py"):
+        (runners / name).write_text("raise RuntimeError('discovery must not import runners')")
+    for name in ("state_zeta.lua", "state_alpha.lua", "helper.lua"):
+        (fixtures / name).write_text("error('discovery must not execute fixtures')")
+    (fixtures / "state_directory.lua").mkdir()
+    assert inventory() == {
+        "requires_game": True,
+        "suites": [{"id": "zeta", "entry": "tools/run_zeta.py"}],
+        "fixtures": [
+            {"id": "alpha", "script": "state_alpha.lua"},
+            {"id": "zeta", "script": "state_zeta.lua"},
+        ],
+    }
+    (fixtures / "state_zeta.lua").unlink()
+    (fixtures / "state_alpha.lua").rename(fixtures / "state_new_case.lua")
+    (runners / "run_zeta.py").rename(runners / "run_new_case.py")
+    assert inventory()["fixtures"] == [{"id": "new-case", "script": "state_new_case.lua"}]
+    assert suite_command("new-case", ["--case", "selected"]) == [
+        sys.executable,
+        str(runners / "run_new_case.py"),
+        "--case",
+        "selected",
+    ]
+    with pytest.raises(ValueError, match="Unknown"):
+        suite_command("zeta", [])
+    (runners / "run_new_case.py").unlink()
+    assert inventory()["suites"] == []
+    with pytest.raises(ValueError, match="Unknown"):
+        suite_command("new-case", [])
+
+
+@pytest.mark.parametrize("action", ["list", "plan"])
+def test_listing_and_planning_never_start_processes(tmp_path, monkeypatch, capsys, action):
+    import engine_test
+
+    monkeypatch.setattr(discovery, "ROOT", tmp_path)
+    (tmp_path / "tools").mkdir()
+    script = tmp_path / "tools/run_new_suite.py"
+    script.write_text("raise RuntimeError('discovery must not import runners')")
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Discovery started a subprocess")
+
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["engine_test.py", action]
+        + (["new-suite", "--", "--case", "mom"] if action == "plan" else []),
+    )
+    assert engine_test.main() == 0
+    result = json.loads(capsys.readouterr().out)
+    if action == "plan":
+        assert result["game_started"] is False
+        assert result["command"][:2] == [sys.executable, str(script)]
+        assert result["command"][-2:] == ["--case", "mom"]
+    else:
+        assert result["requires_game"] is True
+        assert result["suites"] == [{"id": "new-suite", "entry": "tools/run_new_suite.py"}]
+
+
+def test_interrupted_child_gets_time_to_cleanup():
+    child = (
+        "import signal,time,sys\n"
+        "def stop(*args):\n print('cleaned',flush=True)\n sys.exit(0)\n"
+        "signal.signal(signal.SIGTERM,stop)\nprint('ready',flush=True)\n"
+        "while True: time.sleep(0.1)\n"
+    )
+    with pytest.raises(KeyboardInterrupt):
+        with engine_process(
+            [sys.executable, "-u", "-c", child], stdout=subprocess.PIPE, text=True
+        ) as process:
+            assert process.stdout.readline().strip() == "ready"
+            raise KeyboardInterrupt()
+    assert process.returncode == 0
+    assert process.stdout.read().strip() == "cleaned"
+    process.stdout.close()
+
+
+@pytest.fixture
+def protection(tmp_path, monkeypatch):
+    monkeypatch.setattr(lab_profile, "idle", lambda labs: None)
+    labs = [tmp_path / role for role in ("host", "client")]
+    for lab in labs:
+        (lab / "profile").mkdir(parents=True)
+        (lab / ".isaac-lan-lab").touch()
+        (lab / "profile/save.dat").write_bytes(b"original")
+    output = tmp_path / "report"
+    output.mkdir()
+    protected = lab_profile.ProtectedLabs(labs, output)
+    for lab in labs:
+        (lab / "profile/save.dat").write_bytes(b"fixture")
+    return protected, output
+
+
+@pytest.mark.parametrize("failure", [None, AssertionError, RuntimeError, KeyboardInterrupt])
+def test_outcome_and_restore_survive_failures(protection, failure):
+    protected, output = protection
+    report = {"passed": True}
+    try:
+        try:
+            if failure:
+                raise failure("injected")
+        finally:
+            finish_run(protected, report, output)
+    except BaseException as error:
+        assert type(error) is failure
+    assert all((lab / "profile/save.dat").read_bytes() == b"original" for lab in protected.labs)
+    assert report["restored"] is True
+    expected = "passed" if failure is None else "failed" if failure is AssertionError else "error"
+    assert report["status"] == expected
+    assert json.loads((output / "report.json").read_text()) == report
+    case = ET.parse(output / "junit.xml").find("testcase")
+    assert (case.find("failure") is not None) == (expected == "failed")
+    assert (case.find("error") is not None) == (expected == "error")
+
+
+def test_restore_failure_cannot_be_reported_as_pass(protection, monkeypatch):
+    protected, output = protection
+
+    def busy(labs):
+        raise RuntimeError("game still running")
+
+    monkeypatch.setattr(lab_profile, "idle", busy)
+    report = {"passed": True}
+    finish_run(protected, report, output)
+    assert not report["passed"] and not report["restored"] and report["status"] == "error"
+    assert "game still running" in report["restoration_error"]
+    assert all((lab / "profile/save.dat").read_bytes() == b"fixture" for lab in protected.labs)
+
+
+def test_child_stops_before_data_is_restored(protection, monkeypatch):
+    protected, output = protection
+    events = []
+
+    class Child:
+        running = True
+
+        def poll(self):
+            return None if self.running else 0
+
+        def terminate(self):
+            events.append("terminate")
+
+        def wait(self, timeout):
+            events.append("wait")
+            self.running = False
+
+    child = Child()
+
+    def idle(labs):
+        assert not child.running
+        events.append("restore")
+
+    monkeypatch.setattr(lab_profile, "idle", idle)
+    finish_run(protected, {"passed": False}, output, process=child)
+    assert events == ["terminate", "wait", "restore"]
+
+
+def test_unfinished_backend_never_restores_live_data(protection):
+    protected, output = protection
+
+    class Child:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout):
+            raise subprocess.TimeoutExpired("owned backend", timeout)
+
+    report = {"passed": True}
+    finish_run(protected, report, output, process=Child())
+    assert report["status"] == "error" and not report["restored"]
+    assert all((lab / "profile/save.dat").read_bytes() == b"fixture" for lab in protected.labs)
+
+
+def test_transport_completion_without_suite_assertions_is_not_a_pass(protection):
+    protected, output = protection
+    report = {"engine": {"pass": True}}
+    finish_run(protected, report, output)
+    assert report["status"] == "failed" and not report["passed"]
+
+
+@pytest.mark.parametrize("caught", [True, False])
+def test_backend_cleanup_error_never_restores_live_data(protection, caught):
+    protected, output = protection
+    report = {"passed": True}
+    try:
+        try:
+            raise BackendCleanupError("still shutting down")
+        except BackendCleanupError as error:
+            if not caught:
+                raise
+            report["error"], report["error_type"] = str(error), type(error).__name__
+        finally:
+            finish_run(protected, report, output)
+    except BackendCleanupError:
+        pass
+    assert report["status"] == "error" and not report["restored"]
+    assert all((lab / "profile/save.dat").read_bytes() == b"fixture" for lab in protected.labs)
+
+
+@pytest.fixture
+def fake_scenarios(tmp_path, monkeypatch):
+    source = """
+local config = _IsaacLanTest
+observed[#observed + 1] = config
+local owner = {}
+Isaac.AddCallback(owner, 1, function() end)
+_IsaacLanFrame = function() return state end
+return {
+    done = function() return complete end,
+    cleanup = function() cleanups = cleanups + 1 end,
+}
+"""
+    tests = tmp_path / "tests"
+    (tests / "support").mkdir(parents=True)
+    for relative in ("support/scenario.lua", "special_suite_driver.lua"):
+        shutil.copyfile(ROOT / "tests" / relative, tests / relative)
+    for name in ("greed", "endings", "lanbot", "lanbot_campaign", "lanbot_spiders", "lanbot_greed"):
+        (tests / f"state_{name}.lua").write_text(source)
+    monkeypatch.setattr(lua_support, "ROOT", tmp_path)
+    return tmp_path
+
+
+@pytest.mark.parametrize(
+    "cases,first_floor",
+    [
+        (["greed", "greedier"], False),
+        (["greed", "greedier", "endings"], True),
+        (["lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed"], False),
+        (["campaign", "ascent-compat"], False),
+    ],
+)
+def test_built_suites_execute_options_and_cleanup(fake_scenarios, cases, first_floor):
+    output = fake_scenarios / "suite.lua"
+    build_special(output, cases, first_floor=first_floor)
+    run_lua(
+        """
+observed, cleanups, removed, started, now = {}, 0, 0, 0, 0
+state = { phase = 3, scene = 2, prepared = true }
+complete = false
+Options = {}
+_IsaacLanTest = { host = true, port = "1234" }
+_IsaacLanFrame = function() return state end
+_IsaacLan = {
+    net_gate = function() end,
+    test_gamepad = function(buttons) assert(buttons == 0) end,
+    api_info = function() return { nowMs = now } end,
+    net_command = function() state = { phase = 0, scene = 1, prepared = false }; return true end,
+}
+Isaac = {
+    AddCallback = function() started = started + 1 end,
+    RemoveCallback = function() removed = removed + 1 end,
+    DebugString = function() end,
+}
+dofile("""
+        + lua_support.literal(str(output))
+        + """)
+local expected = """
+        + lua_support.literal(cases)
+        + """
+for index, name in ipairs(expected) do
+    assert(#observed == index and observed[index].route == name)
+    assert(observed[index].firstFloor == (name == "endings" and """
+        + lua_support.literal(first_floor)
+        + """))
+    assert(observed[index].greedCampaign == (name == "greed" or name == "greedier"))
+    if name == "campaign" then assert(observed[index].endingRoutes[1] == "lamb") end
+    if name == "ascent-compat" then assert(observed[index].endingRoutes[1] == "ascent") end
+    complete = true
+    _IsaacLanFrame()
+    assert(cleanups == index and removed == index)
+    now = now + 2100
+    _IsaacLanFrame()
+    now = now + 1100
+    _IsaacLanFrame()
+    state = { phase = 3, scene = 2, prepared = true }
+    complete = false
+end
+assert(started == #expected and cleanups == #expected)
+assert(_IsaacLanTest.route == nil)
+""",
+        fake_scenarios,
+    )
+
+
+def test_special_suite_rejects_invalid_selection(tmp_path):
+    output = tmp_path / "suite.lua"
+    for cases in ([], ["missing"], ["motion", "motion"]):
+        with pytest.raises(ValueError, match="distinct known"):
+            build_special(output, cases)
+    with pytest.raises(ValueError, match="requires the six ending routes"):
+        build_special(output, ["greed"], first_floor=True)
+    assert not output.exists()
+
+
+def test_ending_builder_passes_selected_routes_without_source_rewriting(fake_scenarios):
+    output = fake_scenarios / "ending.lua"
+    build_endings(output, ["mother", "lamb"], first_floor=True)
+    run_lua(
+        """
+observed = {}
+_IsaacLanTest = {}
+Isaac = { AddCallback = function() end }
+dofile("""
+        + lua_support.literal(str(output))
+        + """)
+assert(observed[1].firstFloor)
+assert(#observed[1].endingRoutes == 2)
+assert(observed[1].endingRoutes[1] == "mother" and observed[1].endingRoutes[2] == "lamb")
+""",
+        fake_scenarios,
+    )
+
+
+@pytest.mark.parametrize("complete_first", [True, False, "invalid"])
+def test_continuous_suite_requires_completion_and_preserves_absolute_ticks(
+    tmp_path, monkeypatch, complete_first
+):
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    shutil.copyfile(ROOT / "tests/gameplay_suite_driver.lua", tests / "gameplay_suite_driver.lua")
+    for name in ("motion", "arrival"):
+        (tests / f"state_{name}.lua").write_text(
+            """
+local name = """
+            + lua_support.literal(name)
+            + """
+local frame = _IsaacLanFrame
+_IsaacLanFrame = function()
+    Isaac.DebugString("LAN_NETWORK PASS an intermediate checkpoint")
+    return frame()
+end
+local gate = _IsaacLan.net_gate
+_IsaacLan.net_gate = function(...) return gate(...) end
+Isaac.AddCallback({}, 1, function() callbacks[name] = (callbacks[name] or 0) + 1 end)
+return {
+    done = function()
+        if completed[name] == "invalid" then return nil end
+        return completed[name] == true
+    end,
+    cleanup = function() cleaned[name] = (cleaned[name] or 0) + 1 end,
+}
+"""
+        )
+    monkeypatch.setattr(build_gameplay_suite, "SOURCE", tmp_path)
+    output = tmp_path / "suite.lua"
+    phases = build_gameplay_suite.build(output, ["motion", "arrival"])
+    # Only the two bootstrap files are virtualized; production time mapping,
+    # callback dispatch, completion and cleanup are executed from the driver.
+    source = (
+        """
+completed, cleaned, callbacks = {}, {}, {}
+local installed, removed, ticks = {}, 0, {}
+local status = { verified = 0, phase = 3, prepared = true }
+_IsaacLanTest = { host = false }
+_IsaacLanFrame = function() return status end
+_IsaacLanStatus = function() return status end
+_IsaacLanCommand = function() end
+_IsaacLan = { test_gamepad = function() end, net_gate = function(...) handlers = {...}; return true end }
+Isaac = {
+    DebugString = function() end,
+    AddCallback = function(owner, id, fn) installed[#installed + 1] = fn end,
+    RemoveCallback = function() removed = removed + 1 end,
+}
+local open = io.open
+io.open = function(path, mode)
+    if path == "./lan-test-role.txt" or path == "./lan-test-menu-port.txt" then
+        return { read = function() return path:find("role") and "client" or "1234" end, close = function() end }
+    end
+    return open(path, mode)
+end
+dofile("""
+        + lua_support.literal(str(output))
+        + """)
+io.open = open
+local function noop() end
+_IsaacLan.net_gate(noop, function(t) ticks[#ticks + 1] = t end, noop, noop, noop, noop)
+status.verified = """
+        + str(phases[0]["start"])
+        + """
+handlers[2](status.verified, 0, "")
+_IsaacLanFrame()
+installed[1]()
+installed[2]()
+assert(callbacks.motion == 1 and callbacks.arrival == nil)
+assert(ticks[1] == status.verified, "Authority tick was converted twice")
+completed.motion = """
+        + lua_support.literal(complete_first)
+        + """
+local frameOK = pcall(_IsaacLanFrame)
+if completed.motion == "invalid" then
+    assert(not frameOK and cleaned.motion == 1 and cleaned.arrival == 1 and removed == 2)
+    return
+end
+assert(frameOK)
+status.verified = """
+        + str(phases[1]["start"])
+        + """
+local ok = pcall(handlers[2], status.verified, 0, "")
+assert(ok == """
+        + lua_support.literal(complete_first)
+        + """, "A PASS log must not substitute for completion")
+if ok then
+    assert(cleaned.motion == 1 and removed == 1)
+    installed[1]()
+    installed[2]()
+    assert(callbacks.motion == 1 and callbacks.arrival == 1)
+    assert(ticks[#ticks] == status.verified)
+    completed.arrival = true
+    status.verified = """
+        + str(phases[1]["start"] + phases[1]["duration"] + 30)
+        + """
+    _IsaacLanFrame()
+    assert(cleaned.arrival == 1 and removed == 2)
+else
+    assert(cleaned.motion == 1 and cleaned.arrival == 1 and removed == 2)
+end
+"""
+    )
+    run_lua(source, tmp_path)

@@ -2,45 +2,22 @@
 """Run six ending routes with one isolated pair and restore its test saves."""
 
 import argparse
+from testing.endings import route_evidence
 import json
 from pathlib import Path
-import re
 import subprocess
-import sys
 
-from build_ending_suite import CASES, build
+from testing.endings import CASES, build
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command, run_engine
+from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def route_evidence(text, name):
-    lines = [line for line in text.splitlines() if "ENDINGS " + name + " " in line]
-    floors = sorted(
-        {
-            (int(stage), int(kind))
-            for line in lines
-            for stage, kind in re.findall(r"ROUTE_FLOOR stage=(\d+) type=(\d+)", line)
-        }
-    )
-    missing = [
-        stage
-        for stage in range(1, 7)
-        if name == "mother" and not any((stage, kind) in floors for kind in (4, 5))
-    ]
-    return {
-        "win": any(
-            "NATIVE_WIN callback=MC_POST_GAME_END game_over=false" in line for line in lines
-        ),
-        "cleanup": any("PASS native ending and session cleanup" in line for line in lines),
-        "progress": any("LOCAL_PROGRESS_RESTORED" in line for line in lines),
-        "floors": floors,
-        "missing_alternate_floors": missing,
-        "checkpoints": lines,
-    }
-
-
 def main():
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
@@ -60,29 +37,20 @@ def main():
     cases = args.route or CASES
     if len(set(cases)) != len(cases):
         parser.error("Each selected route must appear once")
-    labs = [args.host.resolve(), args.client.resolve()]
-    if labs[0] == labs[1] or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
-        parser.error("Two distinct marked isolated labs are required")
+    labs = validate_owned_labs(
+        [args.host.resolve(), args.client.resolve()], args.output.resolve(), count=None
+    )
     idle(labs)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     script = output / "suite.lua"
     build(script, args.route, first_floor=args.first_floor)
     protected = ProtectedLabs(labs, output, roles=("host", "client"))
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
-        "--build",
-        str(args.build.resolve()),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
+    command = engine_command(
+        labs,
+        args.build,
+        output / "engine",
+        script,
         "LAN_NETWORK PASS all selected native ending routes",
         "--frontend",
         "--menu-start",
@@ -99,7 +67,7 @@ def main():
         str(args.port),
         "--scenario-timeout",
         "1800",
-    ]
+    )
     if args.heap_check:
         command.append("--heap-check")
     for mod in args.mod:
@@ -107,7 +75,7 @@ def main():
     report = {"passed": False, "restored": False, "routes": {}, "command": command}
     try:
         with (output / "engine.log").open("w") as log:
-            result = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+            result = run_engine(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         for name in cases:
             peers = {}
             for role in ("host", "client"):
@@ -126,13 +94,7 @@ def main():
     finally:
         # Do not restore files beneath a surviving process, including if a
         # native crash prevented the runner from completing owned cleanup.
-        try:
-            protected.restore()
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"] = str(error)
-            report["passed"] = False
-        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        finish_run(protected, report, output)
     print(
         json.dumps(
             {

@@ -12,8 +12,8 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-from build_gameplay_suite import build as build_suite
-from build_special_suite import build as build_special_suite
+from testing.gameplay import build as build_suite
+from testing.special_routes import build as build_special_suite
 from capture_suite_checkpoints import capture as capture_checkpoints
 from archive_gameplay import archive
 
@@ -52,6 +52,7 @@ CASES = {
     "floor-items": ("state_floor_items.lua", "native Forget Me Now five-pip and R Key"),
     "greed": ("state_greed.lua", "native Greed and Greedier gameplay"),
 }
+
 DEFAULT_CASES = [
     "gameplay",
     "greed",

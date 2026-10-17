@@ -10,7 +10,8 @@ import shutil
 import signal
 import subprocess
 import time
-from game_logs import freeze_probe_logs, probe_path, probe_text, log_path
+from testing.engine import finalize_result
+from game_logs import freeze_probe_logs, probe_text, log_path
 from lab_profile import windows
 from check_performance import summarize_tree
 from progress_fixture import prepare as prepare_progress_fixture
@@ -27,24 +28,6 @@ def execute(*args, timeout=30):
 def read_log(lab):
     path = log_path(lab)
     return path.read_text(errors="replace") if path.exists() else ""
-
-
-def finalize_result(result, expected_roles):
-    result["scenario_pass"] = bool(result["pass"])
-    exits = result.get("process_exit", {})
-    errors = []
-    for role in expected_roles:
-        status = exits.get(role)
-        if status is None:
-            errors.append(f"{role}: process exit report is missing")
-        elif status.get("exit_code") != 0:
-            errors.append(f"{role}: process exited with {status.get('exit_hex', 'unknown')}")
-    result["clean_exit"] = not errors
-    if errors:
-        result.setdefault("close_errors", []).extend(errors)
-    result["pass"] = result["scenario_pass"] and not result.get("close_errors")
-    if result.get("close_errors") and not result.get("error"):
-        result["error"] = "; ".join(result["close_errors"])
 
 
 def main():

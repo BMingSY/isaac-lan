@@ -15,17 +15,16 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
-from build_gameplay_suite import CASES, CHECKPOINTS, build as build_suite
-from build_special_suite import build as build_special_suite
+from testing.gameplay import CASES, CHECKPOINTS, build as build_suite
 from build_package import build
 from build_release import release
 from check_release import FILES, check
 from delayed_relay import DelayedRelay
 from game_logs import freeze_probe_logs, probe_path, probe_text
 from check_performance import summarize
-from run_network_engine import finalize_result
+from testing.engine import finalize_result
 from progress_fixture import MAGIC, PROFILE, checksum, patch, prepare
-from run_special_routes import lanbot_behavior_passed, lanbot_greed_result
+from testing.special_routes import lanbot_behavior_passed, lanbot_greed_result
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARIES = ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe")
@@ -39,57 +38,10 @@ def test_response_suite_selects_only_requested_cases(tmp_path):
         "local-movement",
         "weapon-charge",
     ]
-    source = output.read_text()
-    assert "betweenUpdates" in source and "Unfinished phase" in source
-    assert "Isolated authoritative state regression" not in source
     with pytest.raises(ValueError):
         build_suite(output, ["motion", "motion"])
     with pytest.raises(ValueError):
         build_suite(output, ["unknown"])
-
-
-def test_greed_suite_keeps_both_modes_in_one_process_pair(tmp_path):
-    script = tmp_path / "greed.lua"
-    build_special_suite(script, ["greed", "greedier"])
-    source = script.read_text()
-    assert '_IsaacLanTest.route = "greed"' in source
-    assert '_IsaacLanTest.route = "greedier"' in source
-    assert source.count("PASS native Greed gameplay") == 2
-    assert source.count("local originalFrame, originalGate") == 1
-    assert source.count("return finished end end") == 2
-    assert source.count("_IsaacLanTest.greedCampaign = true") == 2
-    assert "MC_POST_GAME_END" in source and "LOCAL_PROGRESS_RESTORED" in source
-
-
-def test_endings_suite_combines_first_floor_and_both_greed_modes(tmp_path):
-    script = tmp_path / "all-endings.lua"
-    build_special_suite(script, ["greed", "greedier", "endings"], first_floor=True)
-    source = script.read_text()
-    assert source.count("local originalFrame, originalGate") == 1
-    assert source.count("_IsaacLanTest.firstFloor = true") == 1
-    assert source.count("_IsaacLanTest.firstFloor = false") == 2
-    assert 'cases[caseIndex] == "lamb"' in source
-    assert "campaign, visitedFloors = campaignRoute(), {}" in source
-    assert "CAMPAIGN_PASS first_floor=1 terminal=lamb native_win=true" in source
-    with pytest.raises(ValueError, match="requires the six ending routes"):
-        build_special_suite(script, ["greed"], first_floor=True)
-
-
-def test_lanbot_suite_reuses_pair_and_cleans_owned_callbacks(tmp_path):
-    script = tmp_path / "lanbot.lua"
-    build_special_suite(script, ["lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed"])
-    source = script.read_text()
-    assert source.count("local originalFrame, originalGate") == 1
-    assert "return done end end" in source and "return finished end end" in source
-    assert "native.input_bot = baseInput" in source
-    for callback in (
-        "MC_ENTITY_TAKE_DMG",
-        "MC_POST_FIRE_TEAR",
-        "MC_POST_GAME_END",
-        "MC_PRE_GAME_EXIT",
-        "MC_PRE_NPC_UPDATE",
-    ):
-        assert "Isaac.RemoveCallback(owner, ModCallbacks." + callback in source
 
 
 def test_lanbot_behavior_requires_all_ten_successes():

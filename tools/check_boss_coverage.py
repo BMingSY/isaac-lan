@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-from build_boss_suite import catalog
+from testing.bosses import catalog
 
 
 def summarize(arena_reports, ending_reports, special_reports, partial_reports=()):
@@ -91,7 +91,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     partial = []
-    from run_bosses import evidence
+    from testing.bosses import evidence
 
     for path in args.partial_arena:
         value = json.loads(path.read_text())

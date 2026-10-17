@@ -2,7 +2,6 @@
 """Run offline regressions only. Engine scenarios can be listed, never launched."""
 
 import argparse
-import ast
 from datetime import datetime, timezone
 import json
 import os
@@ -11,36 +10,17 @@ import shutil
 import subprocess
 import sys
 import time
+from testing.discovery import inventory
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def engine_catalog():
-    """Read fixture declarations as data, without importing the engine runner."""
-    tree = ast.parse((ROOT / "tools/validate_replica.py").read_text())
-    cases = next(
-        ast.literal_eval(node.value)
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        and any(isinstance(target, ast.Name) and target.id == "CASES" for target in node.targets)
-    )
-    registered = {script for script, _ in cases.values()}
-    return {
-        "requires_game": True,
-        "registered": [
-            {"name": name, "script": script, "description": description}
-            for name, (script, description) in cases.items()
-        ],
-        "normal": "tools/manual_gameplay.py",
-        "unregistered_scripts": sorted(
-            path.name
-            for path in (ROOT / "tests").glob("state_*.lua")
-            if path.name not in registered
-        ),
-    }
+    """Discover suites and fixtures without importing an executor."""
+    return inventory()
 
 
-def plan(build, report, profile, lua):
+def plan(build, report, profile, lua, *, sanitizers=False):
     python = sys.executable
     return [
         ("format", [python, "tools/format.py", "--check"]),
@@ -56,10 +36,27 @@ def plan(build, report, profile, lua):
                 "-DISAAC_LAN_BUILD_ENGINE=OFF",
                 "-DCMAKE_BUILD_TYPE=Debug",
                 "-DISAAC_LAN_LUA=" + lua,
+                *(
+                    ["-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer"]
+                    if sanitizers
+                    else []
+                ),
             ],
         ),
         ("build", ["cmake", "--build", str(build), "--parallel", "2"]),
-        ("core", ["ctest", "--test-dir", str(build), "--output-on-failure", "-L", "offline"]),
+        (
+            "core",
+            [
+                "ctest",
+                "--test-dir",
+                str(build),
+                "--output-on-failure",
+                "--output-junit",
+                str(report / "ctest.xml"),
+                "-L",
+                "offline",
+            ],
+        ),
         (
             "scenarios",
             [
@@ -85,6 +82,11 @@ def main():
     parser.add_argument("--build-dir", type=Path, default=ROOT / "build-offline")
     parser.add_argument("--report-dir", type=Path)
     parser.add_argument(
+        "--sanitizers",
+        action="store_true",
+        help="Enable ASan/LSan/UBSan for the portable C++ build",
+    )
+    parser.add_argument(
         "--list", action="store_true", help="Collect Python cases without execution"
     )
     parser.add_argument("--list-engine", action="store_true", help="Read engine inventory only")
@@ -96,6 +98,9 @@ def main():
     environment["PATH"] = (
         str(Path(sys.executable).parent) + os.pathsep + environment.get("PATH", "")
     )
+    if args.sanitizers:
+        environment.setdefault("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=1")
+        environment.setdefault("UBSAN_OPTIONS", "halt_on_error=1:print_stacktrace=1")
     if args.list:
         return subprocess.run(
             [sys.executable, "-m", "pytest", "--collect-only", "-q"],
@@ -118,9 +123,17 @@ def main():
     )
     report = report.resolve()
     report.mkdir(parents=True, exist_ok=False)
-    summary = {"profile": args.profile, "game_started": False, "passed": False, "stages": []}
+    summary = {
+        "profile": args.profile,
+        "sanitizers": args.sanitizers,
+        "game_started": False,
+        "passed": False,
+        "stages": [],
+    }
     try:
-        for name, command in plan(args.build_dir.resolve(), report, args.profile, lua):
+        for name, command in plan(
+            args.build_dir.resolve(), report, args.profile, lua, sanitizers=args.sanitizers
+        ):
             print(f"Running offline stage: {name}", flush=True)
             start = time.monotonic()
             stage = {"name": name, "command": command, "log": name + ".log"}

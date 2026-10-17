@@ -390,3 +390,10 @@ function checkPresentation(t)
         )
     end
 end
+
+-- Explicit test-only lifecycle consumed by both suite coordinators.
+return {
+    done = function()
+        return ended
+    end,
+}

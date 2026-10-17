@@ -2,44 +2,24 @@
 """Run an owned Boss shard, record both peers, and restore all isolated saves."""
 
 import argparse
-from collections import Counter
+from testing.bosses import evidence
 import json
 from pathlib import Path
-import re
 import shutil
 import subprocess
-import sys
 
-from build_boss_suite import build
+from testing.bosses import build
+from testing.results import finish_run
+from testing.engine import configure_interrupts, engine_command, run_engine
+from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPLETION = "LAN_NETWORK PASS all selected Boss encounters"
-
-
-def evidence(text, cases):
-    matches = re.findall(r"ALL_BOSSES PASS key=([\w-]+) live=(\d+) visible=(\d+) views=(\d+)", text)
-    found = {
-        key: {"live": int(live), "visible": int(visible), "views": int(views)}
-        for key, live, visible, views in matches
-    }
-    expected = {case["key"] for case in cases}
-    return {
-        "passed": COMPLETION in text
-        and set(found) == expected
-        and len(matches) == len(expected)
-        and all(value["live"] >= 30 and value["visible"] >= 10 for value in found.values())
-        and "LAN_NETWORK FAILED" not in text,
-        "missing": sorted(expected - found.keys()),
-        "duplicates": sorted(
-            key for key, count in Counter(match[0] for match in matches).items() if count > 1
-        ),
-        "cases": found,
-        "forms": re.findall(r"ALL_BOSSES FORM key=([\w-]+) entity=([\d:]+)", text),
-    }
+from testing.bosses import COMPLETION
 
 
 def main():
+    configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
@@ -51,34 +31,21 @@ def main():
     parser.add_argument("--case", action="append")
     parser.add_argument("--heap-check", action="store_true")
     args = parser.parse_args()
-    labs = [args.host.resolve(), args.client.resolve()]
-    if len(set(labs)) != 2 or any(not (lab / ".isaac-lan-lab").is_file() for lab in labs):
-        parser.error("Two distinct marked isolated labs are required")
-    if any(lab.name.casefold() in {"host-001", "client-001"} for lab in labs):
-        parser.error("host-001/client-001 are reserved for manual games")
+    labs = validate_owned_labs(
+        [args.host.resolve(), args.client.resolve()], args.output.resolve(), count=None
+    )
     output = args.output.resolve()
-    if any(output.is_relative_to(lab) or lab.is_relative_to(output) for lab in labs):
-        parser.error("Evidence directory must be separate from the selected labs")
     idle(labs)
     output.mkdir(parents=True, exist_ok=False)
     script = output / "bosses.lua"
     cases = build(script, args.shard, args.shards, args.case)
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
     protected = ProtectedLabs(labs, output, roles=("host", "client"))
-    command = [
-        sys.executable,
-        str(ROOT / "tools/run_network_engine.py"),
-        "--host",
-        str(labs[0]),
-        "--client",
-        str(labs[1]),
-        "--build",
-        str(args.build.resolve()),
-        "--output",
-        str(output / "engine"),
-        "--script",
-        str(script),
-        "--completion",
+    command = engine_command(
+        labs,
+        args.build,
+        output / "engine",
+        script,
         COMPLETION,
         "--frontend",
         "--menu-start",
@@ -94,7 +61,7 @@ def main():
         str(args.port),
         "--scenario-timeout",
         "3600",
-    ]
+    )
     if args.heap_check:
         command.append("--heap-check")
     report = {
@@ -107,7 +74,7 @@ def main():
     }
     try:
         with (output / "engine.log").open("w") as log:
-            result = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+            result = run_engine(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         report["peers"] = {}
         for role in ("host", "client"):
             path = output / "engine" / role / "log.txt"
@@ -118,12 +85,7 @@ def main():
             peer["passed"] for peer in report["peers"].values()
         )
     finally:
-        try:
-            protected.restore()
-            report["restored"] = True
-        except Exception as error:
-            report["restoration_error"], report["passed"] = str(error), False
-        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        finish_run(protected, report, output)
     print(json.dumps({key: report[key] for key in ("passed", "restored")}, indent=2))
     return 0 if report["passed"] else 1
 

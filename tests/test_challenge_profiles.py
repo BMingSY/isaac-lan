@@ -8,7 +8,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from progress_fixture import MAGIC, checksum
-from run_lan_challenges import completion_evidence, profile_fixture
+from testing.challenges import completion_evidence
+from testing.profiles import profile_fixture
 
 
 def baseline():
