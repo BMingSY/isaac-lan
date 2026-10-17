@@ -133,6 +133,20 @@
         "checks": "无 LAN、同为控制器 1/2 时，木十字架仍只抵挡一次；11 次伤害检查通过，但键盘退出夹具未完成，局部证据保留，未计完整通过。",
         "setup_failure": "item-damage-native-control-20261017-05"
       }
+    },
+    "collectible:163": {
+      "status": "crash",
+      "impact": "用例退出时主机堆损坏，栈在手柄设备清理；归因未定。",
+      "evidence": "item-effects-full-20261017-40/batch-001；37872-1.dmp，C0000374，游戏 RVA 0x66da74。",
+      "checks": "第 42 轮四组原生射击、穿石命中、伤害、归属、换房换层及移除检查通过；退出崩溃未定位，不计完整兼容通过。",
+      "confirmation": "item-effects-full-20261017-42/batch-001"
+    },
+    "collectible:360": {
+      "status": "crash",
+      "impact": "用例退出时客机堆损坏，栈在手柄设备清理；归因未定。",
+      "evidence": "item-effects-full-20261017-36/37/41；C0000374，原始转储保留。",
+      "checks": "第 41 轮四组射击、弹数、间隔、2.625 实际伤害、归属、换房换层及移除检查通过；末组退出仍崩溃。",
+      "fixture_notes": "第 36 轮过早移除魅魔初始化中的眼泪，第 37 轮靶子恢复行动导致玩家受伤、打断射击；这些效果探针已在第 41 轮纠正，原退出失败保留。"
     }
   },
   "audit": {
@@ -19138,7 +19152,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:167": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "collectible:167/host-same",
@@ -19165,9 +19179,1340 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:167/host-same",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_pattern"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_actual_damage"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_pattern"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_actual_damage"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-35/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理；双发同时命中按目标与帧合并实际扣血，靶子位置按原生 (+/-2,-10) 弹道布置。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:167/host-split",
+          "status": "problem",
+          "unconfirmed": [
+            "familiar_initial_cadence",
+            "familiar_initial_pattern"
+          ],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_volley"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_actual_damage"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_pattern"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_actual_damage"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-35/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计；临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理；双发同时命中按目标与帧合并实际扣血，靶子位置按原生 (+/-2,-10) 弹道布置。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:167/client-same",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_removed"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_pattern"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_actual_damage"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_pattern"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_actual_damage"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_peer_ownership"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-35/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理；双发同时命中按目标与帧合并实际扣血，靶子位置按原生 (+/-2,-10) 弹道布置。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:167/client-split",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_pattern"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_actual_damage"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_pattern"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_actual_damage"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-35/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理；双发同时命中按目标与帧合并实际扣血，靶子位置按原生 (+/-2,-10) 弹道布置。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:167/host-same",
+          "status": "incomplete",
+          "unconfirmed": [
+            "familiar_floor_actual_damage"
+          ],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-42/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:167/host-split",
+          "status": "incomplete",
+          "unconfirmed": [
+            "familiar_floor_actual_damage"
+          ],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-42/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:167/client-same",
+          "status": "incomplete",
+          "unconfirmed": [
+            "familiar_floor_actual_damage"
+          ],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-42/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:167/client-split",
+          "status": "incomplete",
+          "unconfirmed": [
+            "familiar_floor_actual_damage"
+          ],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-42/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:167/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-44/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:167/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-44/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:167/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-44/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:167/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-44/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "collectible:170": {
       "status": "basic_pass",
@@ -41433,7 +42778,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:360": {
-      "status": "basic_pass",
+      "status": "crash",
       "checks": [
         {
           "case": "collectible:360/host-same",
@@ -41460,9 +42805,616 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:360/host-same",
+          "status": "crash",
+          "unconfirmed": [
+            "familiar_initial_cadence",
+            "familiar_initial_actual_damage",
+            "familiar_floor_cadence",
+            "familiar_floor_actual_damage"
+          ],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_volley"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_volley"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_peer_attack_visible"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_peer_shots"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-36/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "failed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "process_exit": {
+            "client": {
+              "pid": 16528,
+              "exit_hex": "C0000374",
+              "exit_code": -1073740940
+            }
+          },
+          "crash_phase": "cleanup",
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:360/host-same",
+          "status": "crash",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-37/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "process_exit": {
+            "client": {
+              "pid": 31940,
+              "exit_hex": "C0000374",
+              "exit_code": -1073740940
+            }
+          },
+          "crash_phase": "cleanup",
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:360/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-41/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:360/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-41/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:360/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-41/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:360/host-split",
+          "status": "crash",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-41/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "process_exit": {
+            "client": {
+              "pid": 38996,
+              "exit_hex": "C0000374",
+              "exit_code": -1073740940
+            }
+          },
+          "crash_phase": "cleanup",
+          "teardown_events": [],
+          "preparation_events": []
         }
       ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      "impact": "实机扫描触发访问异常／进程崩溃；具体持有者、房间条件见该项验证记录。尚未修复。"
     },
     "collectible:363": {
       "status": "basic_pass",
@@ -42460,7 +44412,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:435": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "collectible:435/host-same",
@@ -42487,9 +44439,513 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:435/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-38/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:435/host-split",
+          "status": "problem",
+          "unconfirmed": [
+            "familiar_initial_cadence",
+            "familiar_initial_pattern"
+          ],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_volley"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-38/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:435/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-38/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:435/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-38/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:435/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-43/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_pattern",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "collectible:438": {
       "status": "verified",
@@ -52833,7 +55289,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:8": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "collectible:8/host-same",
@@ -52860,9 +55316,857 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:8/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-34/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:8/host-split",
+          "status": "problem",
+          "unconfirmed": [
+            "familiar_initial_cadence"
+          ],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_volley"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-34/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计；临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:8/client-same",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_removed"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_peer_ownership"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-34/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:8/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-34/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:8/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-39/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:8/host-split",
+          "status": "problem",
+          "unconfirmed": [
+            "familiar_initial_cadence"
+          ],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_volley"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-39/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:8/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-39/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:8/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-39/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:8/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-43/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "collectible:11": {
       "status": "basic_pass",
@@ -55050,7 +58354,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:67": {
-      "status": "basic_pass",
+      "status": "verified",
       "checks": [
         {
           "case": "collectible:67/host-same",
@@ -55077,9 +58381,896 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:67/host-same",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-34/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:67/host-split",
+          "status": "problem",
+          "unconfirmed": [
+            "familiar_initial_cadence"
+          ],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_volley"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-34/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计；临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:67/client-same",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_removed"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_peer_ownership"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-34/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:67/client-split",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_cadence"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-34/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:67/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-39/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:67/host-split",
+          "status": "problem",
+          "unconfirmed": [
+            "familiar_initial_cadence"
+          ],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_volley"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-39/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:67/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-39/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:67/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-39/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:67/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-43/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
-      ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      ]
     },
     "collectible:70": {
       "status": "verified",
@@ -57173,7 +61364,7 @@
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
     },
     "collectible:163": {
-      "status": "basic_pass",
+      "status": "crash",
       "checks": [
         {
           "case": "collectible:163/host-same",
@@ -57200,9 +61391,1131 @@
           "teardown_events": [],
           "preparation_events": [],
           "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+        },
+        {
+          "case": "collectible:163/host-same",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_floor_cadence"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-35/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:163/host-split",
+          "status": "problem",
+          "unconfirmed": [
+            "familiar_initial_cadence"
+          ],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_volley"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-35/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计；临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:163/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-35/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:163/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-35/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:163/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-40/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:163/host-split",
+          "status": "problem",
+          "unconfirmed": [
+            "familiar_initial_cadence"
+          ],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "familiar_initial_volley"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-40/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "failed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "missing"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": [],
+          "excluded_reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计。此处仅排除已确认的夹具误报；原记录保留。"
+        },
+        {
+          "case": "collectible:163/client-same",
+          "status": "crash",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-40/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "process_exit": {
+            "host": {
+              "pid": 37872,
+              "exit_hex": "C0000374",
+              "exit_code": -1073740940
+            }
+          },
+          "crash_phase": "cleanup",
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:163/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-42/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:163/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-42/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:163/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-42/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:163/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-42/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "familiar_acquired",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_room",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_removed",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_follows_owner",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_transitions",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_initial_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_shot_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_volley",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_cadence",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_actual_damage",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_floor_through_rock",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_ownership",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_attack_visible",
+              "status": "passed"
+            },
+            {
+              "name": "familiar_peer_shots",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 840
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
       ],
-      "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。"
+      "impact": "实机扫描触发访问异常／进程崩溃；具体持有者、房间条件见该项验证记录。尚未修复。"
     },
     "collectible:166": {
       "status": "basic_pass",
@@ -73962,6 +79275,18 @@
     {
       "evidence": "item-confirm-20261017-05",
       "reason": "补充红钥匙前置条件时，客机所在房间无可用空门位，夹具在赋予道具前断言失败；06 轮改为让持有者留在有空墙面的起始房间并重测四组。"
+    },
+    {
+      "evidence": "item-effects-full-20261017-31",
+      "reason": "跟班测试靶子超出房间边界，夹具断言中断；不用于判定道具效果。原始日志、恢复记录及转储保留。中断后的双端退出访问异常另列 execution_issues，未按夹具误报清除。"
+    },
+    {
+      "evidence": "item-effects-full-20261017-32",
+      "reason": "跟班测试靶子超出房间边界，夹具断言中断；不用于判定道具效果。原始日志、恢复记录及转储保留。"
+    },
+    {
+      "evidence": "item-effects-full-20261017-33",
+      "reason": "跟班测试靶子超出房间边界，夹具断言中断；不用于判定道具效果。原始日志、恢复记录及转储保留。"
     }
   ],
   "excluded_checks": [
@@ -75503,6 +80828,102 @@
       "evidence": "item-effects-full-20261017-20/batch-001",
       "reason": "换层阻塞期间测试 tick 继续前进，伤害在房间恢复后才执行；旧检查要求精确等于计划 tick，并将实际受伤前的快照误作受伤后的比较。原始记录的受伤量符合预期；改按实际执行时间核对，并延后换层后的伤害探针复测。",
       "confirmation": "item-effects-full-20261017-23/batch-001"
+    },
+    {
+      "case": "collectible:8/host-split",
+      "evidence": "item-effects-full-20261017-34/batch-001",
+      "reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计；临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-43/batch-001"
+    },
+    {
+      "case": "collectible:8/client-same",
+      "evidence": "item-effects-full-20261017-34/batch-001",
+      "reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-39/batch-001"
+    },
+    {
+      "case": "collectible:67/host-same",
+      "evidence": "item-effects-full-20261017-34/batch-001",
+      "reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-39/batch-001"
+    },
+    {
+      "case": "collectible:67/host-split",
+      "evidence": "item-effects-full-20261017-34/batch-001",
+      "reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计；临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-43/batch-001"
+    },
+    {
+      "case": "collectible:67/client-same",
+      "evidence": "item-effects-full-20261017-34/batch-001",
+      "reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-39/batch-001"
+    },
+    {
+      "case": "collectible:67/client-split",
+      "evidence": "item-effects-full-20261017-34/batch-001",
+      "reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-39/batch-001"
+    },
+    {
+      "case": "collectible:163/host-same",
+      "evidence": "item-effects-full-20261017-35/batch-001",
+      "reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-42/batch-001"
+    },
+    {
+      "case": "collectible:163/host-split",
+      "evidence": "item-effects-full-20261017-35/batch-001",
+      "reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计；临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-42/batch-001"
+    },
+    {
+      "case": "collectible:167/host-same",
+      "evidence": "item-effects-full-20261017-35/batch-001",
+      "reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理；双发同时命中按目标与帧合并实际扣血，靶子位置按原生 (+/-2,-10) 弹道布置。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-44/batch-001"
+    },
+    {
+      "case": "collectible:167/host-split",
+      "evidence": "item-effects-full-20261017-35/batch-001",
+      "reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计；临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理；双发同时命中按目标与帧合并实际扣血，靶子位置按原生 (+/-2,-10) 弹道布置。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-44/batch-001"
+    },
+    {
+      "case": "collectible:167/client-same",
+      "evidence": "item-effects-full-20261017-35/batch-001",
+      "reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理；双发同时命中按目标与帧合并实际扣血，靶子位置按原生 (+/-2,-10) 弹道布置。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-44/batch-001"
+    },
+    {
+      "case": "collectible:167/client-split",
+      "evidence": "item-effects-full-20261017-35/batch-001",
+      "reason": "临时冻结失效后靶子接触玩家，打断射击，部分场景玩家死亡；现固定靶子 AI，正常受伤仍由原生处理；双发同时命中按目标与帧合并实际扣血，靶子位置按原生 (+/-2,-10) 弹道布置。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-44/batch-001"
+    },
+    {
+      "case": "collectible:435/host-split",
+      "evidence": "item-effects-full-20261017-38/batch-001",
+      "reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-43/batch-001"
+    },
+    {
+      "case": "collectible:8/host-split",
+      "evidence": "item-effects-full-20261017-39/batch-001",
+      "reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-43/batch-001"
+    },
+    {
+      "case": "collectible:67/host-split",
+      "evidence": "item-effects-full-20261017-39/batch-001",
+      "reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-43/batch-001"
+    },
+    {
+      "case": "collectible:163/host-split",
+      "evidence": "item-effects-full-20261017-40/batch-001",
+      "reason": "主机独处房间不向客机编码，原夹具用为零的网络 ID 合并了不同子弹；现改用原生 InitSeed 统计。此处仅排除已确认的夹具误报；原记录保留。",
+      "confirmation": "item-effects-full-20261017-42/batch-001"
     }
   ],
   "candidates": {
@@ -77355,6 +82776,26 @@
         "item-stress-20261017-01/batch-001"
       ],
       "dll_sha256": "2cdc0f1c547ee233a3b247a7aa2ed135b64469b303955756320df2d21000b650"
+    }
+  ],
+  "execution_issues": [
+    {
+      "id": "input-device-cleanup",
+      "status": "unresolved",
+      "evidence": [
+        "item-effects-full-20261017-31",
+        "item-effects-full-20261017-36",
+        "item-effects-full-20261017-37",
+        "item-effects-full-20261017-40",
+        "item-effects-full-20261017-41"
+      ],
+      "impact": "第 31 轮夹具中断后的双端退出访问异常，RVA 0x513795；其他四轮退出时堆损坏，转储涉及原生手柄设备清理 RVA 0x66da74。不同道具、主客机均有记录，归因未定。第 31 轮排除效果结论不等于排除退出崩溃。"
+    },
+    {
+      "id": "host-split-item-sidebar",
+      "status": "unresolved",
+      "evidence": "item-effects-full-20261017-41/visual-review.json",
+      "impact": "主机分房后换层，库存仍有道具但道具栏空白；同轮主机同房和客机持有时道具栏可见。"
     }
   ]
 }
