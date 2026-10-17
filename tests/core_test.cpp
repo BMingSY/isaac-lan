@@ -867,6 +867,20 @@ void inputAndProgress() {
 }
 
 void truncatedPackets() {
+    Writer integers(Message::world);
+    integers.u16(0x80ff);
+    integers.u32(0xfedcba98);
+    integers.u64(0xfedcba9876543210ull);
+    require(integers.bytes == std::vector<std::uint8_t>{static_cast<std::uint8_t>(Message::world),
+                                                        0x80, 0xff, 0xfe, 0xdc, 0xba, 0x98, 0xfe,
+                                                        0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10},
+            "Integer encoding changed big-endian bytes");
+    Reader integerReader(integers.bytes);
+    integerReader.u8();
+    require(integerReader.u16() == 0x80ff && integerReader.u32() == 0xfedcba98 &&
+                integerReader.u64() == 0xfedcba9876543210ull,
+            "Misaligned integer decoding changed unsigned bits");
+    integerReader.finish();
     Writer w(Message::world);
     w.u64(42);
     w.string("test");

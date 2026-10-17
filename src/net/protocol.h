@@ -244,12 +244,18 @@ class Writer {
         bytes.push_back(n);
     }
     void u16(std::uint16_t n) {
-        u8(n >> 8);
-        u8(n & 255);
+        const auto at = bytes.size();
+        bytes.resize(at + sizeof(n));
+        bytes[at] = static_cast<std::uint8_t>(n >> 8);
+        bytes[at + 1] = static_cast<std::uint8_t>(n);
     }
     void u32(std::uint32_t n) {
-        u16(n >> 16);
-        u16(n & 65535);
+        const auto at = bytes.size();
+        bytes.resize(at + sizeof(n));
+        bytes[at] = static_cast<std::uint8_t>(n >> 24);
+        bytes[at + 1] = static_cast<std::uint8_t>(n >> 16);
+        bytes[at + 2] = static_cast<std::uint8_t>(n >> 8);
+        bytes[at + 3] = static_cast<std::uint8_t>(n);
     }
     void u64(std::uint64_t n) {
         u32(n >> 32);
@@ -307,6 +313,13 @@ class Writer {
 class Reader {
     std::span<const std::uint8_t> bytes;
     std::size_t cursor = 0;
+    const std::uint8_t* take(std::size_t size) {
+        if (size > bytes.size() - cursor)
+            throw std::runtime_error("Truncated protocol message");
+        const auto* value = bytes.data() + cursor;
+        cursor += size;
+        return value;
+    }
 
   public:
     explicit Reader(std::span<const std::uint8_t> b) : bytes(b) {}
@@ -316,12 +329,14 @@ class Reader {
         return bytes[cursor++];
     }
     std::uint16_t u16() {
-        auto a = u8();
-        return static_cast<std::uint16_t>((a << 8) | u8());
+        const auto* value = take(sizeof(std::uint16_t));
+        return static_cast<std::uint16_t>((value[0] << 8) | value[1]);
     }
     std::uint32_t u32() {
-        auto a = u16();
-        return (static_cast<std::uint32_t>(a) << 16) | u16();
+        const auto* value = take(sizeof(std::uint32_t));
+        return (static_cast<std::uint32_t>(value[0]) << 24) |
+               (static_cast<std::uint32_t>(value[1]) << 16) |
+               (static_cast<std::uint32_t>(value[2]) << 8) | value[3];
     }
     std::uint64_t u64() {
         auto a = u32();
