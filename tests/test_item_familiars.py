@@ -197,3 +197,16 @@ def test_familiar_cadence_uses_native_updates_during_network_barriers():
             if e["event"] == "familiar_probe" and e["shots"]:
                 e["tick"] += 1 if e["tick"] % 3 else 2
     assert all(c["status"] == "passed" for c in familiar_checks(case, peers))
+
+
+def test_familiar_host_room_uses_native_identities_when_not_replicated():
+    case, peers = evidence("COLLECTIBLE_LIL_LOKI")
+    for e in peers["host"]:
+        if e["event"] == "familiar_probe" and e["tick"] < 390:
+            for s in e["shots"]:
+                s["seed"], s["id"] = s["id"], 0
+    for e in peers["client"]:
+        if e["tick"] < 390:
+            e["room_visible"] = False
+            e["familiars"], e["shots"] = [], []
+    assert all(c["status"] == "passed" for c in familiar_checks(case, peers))

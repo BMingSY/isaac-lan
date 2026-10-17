@@ -99,7 +99,9 @@ def familiar_checks(case, observations):
         shots = {}
         for e in frames:
             for shot in e.get("shots", []):
-                shots.setdefault(shot["id"], (e, shot))
+                # The host's separate room is not serialized for the client,
+                # so its native tears do not need network entity identities.
+                shots.setdefault(shot.get("seed", shot["id"]), (e, shot))
         expected = rules.get("damage", 3.5 * rules.get("damage_factor", 1))
         check(
             phase + "_shot_damage",
@@ -185,6 +187,7 @@ def familiar_checks(case, observations):
         left, right = {s["id"]: s for s in a["shots"]}, {s["id"]: s for s in b["shots"]}
         compare.append(
             left.keys() == right.keys()
+            and all(k > 0 for k in left)
             and all(
                 abs(s["damage"] - right[k]["damage"]) < 0.001
                 and s["controller"] == right[k]["controller"]

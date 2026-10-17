@@ -217,6 +217,7 @@ return function(report, actor, moveRoom, moveFloor)
                         local data = tear:GetData()
                         value.shots[#value.shots + 1] = {
                             id = data.__isaac_lan_replica or data.__isaac_lan_entity or 0,
+                            seed = tear.InitSeed,
                             age = tear.FrameCount,
                             source_age = source.FrameCount,
                             damage = tear.CollisionDamage,
