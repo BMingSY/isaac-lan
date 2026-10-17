@@ -34,6 +34,8 @@ bool menuConfirm = false;
 bool localPauseInput = false;
 pause_menu::Intent pauseIntent = pause_menu::Intent::none;
 int viewSlot = -1;
+const lan::InputFrame* movementPreview = nullptr;
+int movementController = -1;
 struct DeviceId {
     std::uintptr_t device;
     int original, assigned;
@@ -205,7 +207,7 @@ bool __attribute__((fastcall)) query(void* manager, void*, int controller, void*
                                      const int* action, void* result, int* source) {
     const auto kind = reinterpret_cast<std::uintptr_t>(callback) - image;
     if (localPauseInput && enabled && action &&
-        (kind == j460::entry::inputValue || kind == 0x620940 ||
+        (kind == j460::entry::inputValue || kind == j460::entry::inputPressed ||
          kind == j460::entry::inputTriggered)) {
         if (pauseIntent != pause_menu::Intent::none) {
             if (kind == j460::entry::inputValue && result)
@@ -226,15 +228,30 @@ bool __attribute__((fastcall)) query(void* manager, void*, int controller, void*
     }
     if (menuConfirm && kind == j460::entry::inputTriggered && action && *action == 14)
         return true;
+    if (enabled && movementPreview && controller == movementController && action &&
+        ((*action >= input::action::moveLeft && *action <= input::action::moveDown) ||
+         *action == input::action::drop) &&
+        (kind == j460::entry::inputValue || kind == j460::entry::inputPressed ||
+         kind == j460::entry::inputTriggered)) {
+        const auto value = movementPreview->values[*action];
+        const bool pressed = kind == j460::entry::inputTriggered
+                                 ? (movementPreview->triggered & (1u << *action)) != 0
+                                 : value != 0;
+        if (kind == j460::entry::inputValue && result)
+            *static_cast<float*>(result) = value / 65535.0f;
+        if (pressed && source)
+            *source = controller;
+        return pressed;
+    }
     // Map is a local interface action, including queries during Game::Controls
     // and Mod updates. Presentation callbacks consume this machine's controls
     // even when a Mod still caches another actor's controller index.
     if (enabled && action && (*action == 13 || viewSlot >= 0) &&
-        (kind == j460::entry::inputValue || kind == 0x620940 ||
+        (kind == j460::entry::inputValue || kind == j460::entry::inputPressed ||
          kind == j460::entry::inputTriggered))
         return originalQuery(manager, -1, callback, action, result, source);
     if (!enabled || controller > accepted.players || !action || *action < 0 ||
-        (kind != j460::entry::inputValue && kind != 0x620940 &&
+        (kind != j460::entry::inputValue && kind != j460::entry::inputPressed &&
          kind != j460::entry::inputTriggered))
         return originalQuery(manager, controller, callback, action, result, source);
     const auto& input = accepted.inputs[controller < 1 ? pauseOwner : controller - 1];
@@ -470,6 +487,15 @@ ViewScope::ViewScope(int slot) : previous(viewSlot) {
 }
 ViewScope::~ViewScope() {
     viewSlot = previous;
+}
+MovementPreviewScope::MovementPreviewScope(const lan::InputFrame& input, int controller)
+    : previous(movementPreview), previousController(movementController) {
+    movementPreview = &input;
+    movementController = controller;
+}
+MovementPreviewScope::~MovementPreviewScope() {
+    movementPreview = previous;
+    movementController = previousController;
 }
 PauseScope::PauseScope(int slot)
     : view(slot), previous(localPauseInput), previousIntent(pauseIntent) {

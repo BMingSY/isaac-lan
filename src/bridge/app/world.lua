@@ -66,6 +66,7 @@ sprite = performance.wrap("capture.sprite", sprite)
 applySprite = performance.wrap("apply.sprite", applySprite)
 entityCodec.apply = performance.wrap("apply.entity", entityCodec.apply)
 function _IsaacLanRoomEntered()
+    modules["compat/bosses/rotgut"](Game(), Isaac.GetPlayer, RoomType.ROOM_DUNGEON)
     modules["runtime/room_entry"](
         Game():GetRoom(),
         RoomType.ROOM_BOSS,

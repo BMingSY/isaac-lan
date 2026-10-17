@@ -91,6 +91,7 @@ inline constexpr std::uint32_t runtimeNetParseSeed = 0x5eb6b0;
 inline constexpr std::uint32_t runtimeNetSetSeed = 0x5eb880;
 inline constexpr std::uint32_t engineRoomsAllocate = 0x60f4c0;
 inline constexpr std::uint32_t engineRoomsTransition_60f550 = 0x60f550;
+inline constexpr std::uint32_t inputPressed = 0x620940;
 inline constexpr std::uint32_t inputTriggered = 0x6209e0;
 inline constexpr std::uint32_t inputValue = 0x620ab0;
 inline constexpr std::uint32_t inputQuery = 0x620fb0;
