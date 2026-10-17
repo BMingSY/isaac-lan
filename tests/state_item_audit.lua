@@ -26,6 +26,15 @@ local function report(event, values)
 end
 local stress = createStress(report)
 local roomEffects = createRoomEffects(report)
+local traceDamage = createDamageTrace(report, function()
+    return host and prepared and not exiting and case and case.damage_effects
+end)
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_PEFFECT_UPDATE, function(_, p)
+    traceDamage("player_effects", p)
+end)
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_NEW_ROOM, function()
+    traceDamage("new_room")
+end)
 local lastRender
 local function observationEnd()
     return case.end_tick or ((case.mega or case.companion or case.kind == "stress") and 1100 or 150)
@@ -780,7 +789,9 @@ end
 function _IsaacLanFrame()
     renders = renders + 1
     Options.FoundHUD, Options.ExtraHUDStyle = true, 1
+    traceDamage("before_frame")
     local s = baseFrame()
+    traceDamage("after_frame")
     local now = native.api_info().nowMs
     if case and case.kind == "stress" and s.prepared and s.verified >= 150 then
         local measured = Isaac.GetTime()

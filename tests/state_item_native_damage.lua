@@ -13,6 +13,12 @@ local function report(event, values)
     values.event, values.key, values.role = event, case.key, role
     Isaac.DebugString("LAN_NATIVE_DAMAGE " .. json.encode(values))
 end
+local traceDamage = createDamageTrace(report, function()
+    return phase == "running"
+end)
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_PEFFECT_UPDATE, function(_, p)
+    traceDamage("player_effects", p)
+end)
 local function health(p)
     return {
         hearts = p:GetHearts(),
@@ -47,7 +53,9 @@ _IsaacLanMenuRender = function(...)
     return visible
 end
 function _IsaacLanFrame()
+    traceDamage("before_frame")
     local status = baseFrame()
+    traceDamage("after_frame")
     if floorPending then
         floorPending = false
         Game():StartStageTransition(false, 0, Isaac.GetPlayer(0))
@@ -74,6 +82,7 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_GAME_STARTED, function(_, continue
 end)
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_NEW_ROOM, function()
     if phase == "running" then
+        traceDamage("new_room")
         clear()
     end
 end)

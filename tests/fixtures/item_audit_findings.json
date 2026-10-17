@@ -1,7 +1,7 @@
 {
   "game": "1.9.7.17.J460",
-  "candidate": "0d0a78dcc6f9ae1009e91f7a34e413557c4a9ba1",
-  "dll_sha256": "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c",
+  "candidate": "a8a28f8ddb10b118b05afd07f711306e2a6673c1",
+  "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
   "known": {
     "collectible:21": {
       "effect": "全队共享特殊房间位置显示。"
@@ -103,38 +103,28 @@
       "effect": "全队共享完整地图显示。"
     },
     "collectible:58": {
-      "status": "problem",
-      "impact": "伤害免疫正常，但客机不显示持有者的护罩。",
-      "evidence": "item-effects-full-20261017-18/batch-001",
-      "checks": "伤害免疫及结束恢复正常；双端画面护罩不一致。第 26 轮确认主机临时暗影之书层数为 1、客机为 0，新增状态检查失败。",
-      "frames": {
-        "host": "engine/host/frames/105.png",
-        "client": "engine/client/frames/90.png"
-      },
-      "confirmation": "item-effects-full-20261017-26/batch-001"
+      "status": "verified",
+      "evidence": "item-effects-full-20261017-27/batch-001",
+      "checks": "通过原生 TemporaryEffects 同步护罩层数；四组验证归属、伤害免疫、结束恢复及双端护罩画面。",
+      "visual_review": "item-effects-full-20261017-27/visual-review.json"
     },
     "card:39": {
-      "status": "problem",
-      "impact": "伤害免疫正常，但客机不显示持有者的护罩。",
-      "evidence": "item-effects-full-20261017-20/batch-001",
-      "checks": "伤害免疫及结束恢复正常；双端画面护罩不一致。第 26 轮确认主机临时暗影之书层数为 1、客机为 0，新增状态检查失败。",
-      "frames": {
-        "host": "engine/host/frames/270.png",
-        "client": "engine/client/frames/254.png"
-      },
-      "confirmation": "item-effects-full-20261017-26/batch-001"
+      "status": "verified",
+      "evidence": "item-effects-full-20261017-27/batch-001",
+      "checks": "通过原生 TemporaryEffects 同步护罩层数；四组验证归属、伤害免疫、结束恢复及双端护罩画面。",
+      "visual_review": "item-effects-full-20261017-27/visual-review.json"
     },
     "trinket:121": {
       "status": "problem",
       "impact": "换层后多出一次护盾抵挡。",
       "evidence": "item-effects-full-20261017-21/batch-001",
-      "checks": "普通木十字架倍率为 1，换层后两次间隔受伤均不掉血。延后施伤及正常楼梯换层各四组仍复现；原生单人、本地双人和帧回调换层对照均只有一次护盾。",
+      "checks": "普通木十字架倍率为 1，换层后两次间隔受伤均不掉血。延后施伤及正常楼梯换层各四组仍复现；原生单人、本地双人和帧回调换层对照均只有一次护盾。第 29 轮修复副本护盾显示后，四组仍复现权威端多挡一次伤害。",
       "controls": [
         "item-damage-native-control-20261017-01",
         "item-damage-native-control-20261017-02",
         "item-damage-native-control-20261017-03"
       ],
-      "confirmation": "item-effects-full-20261017-25/batch-001"
+      "confirmation": "item-effects-full-20261017-29/batch-001"
     }
   },
   "audit": {
@@ -733,6 +723,74 @@
           "evidence": "item-fixes-20261017-05/batch-001",
           "physical": true,
           "dll_sha256": "f3e362cf23ee8e01865c941b272c28ecc8b427f863b19ebc0ee84a7765b58ce8",
+          "effect_checks": [],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": false
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:625/host-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-29/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": false
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:625/host-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-29/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": false
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:625/client-same",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-29/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": false
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:625/client-split",
+          "status": "basic_pass",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-29/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
           "effect_checks": [],
           "use_evidence": "native_callback",
           "conditions": {
@@ -9597,6 +9655,498 @@
           },
           "teardown_events": [],
           "preparation_events": []
+        },
+        {
+          "case": "collectible:313/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-28/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:room_repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:room_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:240",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:480",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:room_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:floor_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 870
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:313/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-28/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:room_repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:room_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:240",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:480",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:room_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:floor_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 870
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:313/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-28/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:room_repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:room_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:240",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:480",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:room_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:floor_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 870
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:313/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-28/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:room_repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:room_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:240",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:480",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:room_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:floor_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 870
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
       ]
     },
@@ -15679,6 +16229,434 @@
             },
             {
               "name": "damage_peer:broken",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 600
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:58/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-27/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:450",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:before_expiry",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:expired",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 600
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:58/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-27/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:450",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:before_expiry",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:expired",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 600
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:58/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-27/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:450",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:before_expiry",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:expired",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 600
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "collectible:58/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-27/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:450",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:before_expiry",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:expired",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
               "status": "passed"
             }
           ],
@@ -25049,6 +26027,510 @@
             },
             {
               "name": "damage_peer:broken",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 1020
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "trinket:121/host-same",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "damage:consumed_shield:holder"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "damage:floor_repeat:holder"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-29/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:holder",
+              "status": "failed"
+            },
+            {
+              "name": "damage:consumed_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:holder",
+              "status": "failed"
+            },
+            {
+              "name": "damage:floor_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:90",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:480",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:630",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:consumed_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:floor_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 1020
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "trinket:121/host-split",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "damage:consumed_shield:holder"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "damage:floor_repeat:holder"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-29/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:holder",
+              "status": "failed"
+            },
+            {
+              "name": "damage:consumed_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:holder",
+              "status": "failed"
+            },
+            {
+              "name": "damage:floor_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:90",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:480",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:630",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:consumed_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:floor_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 1020
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "trinket:121/client-same",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "damage:consumed_shield:holder"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "damage:floor_repeat:holder"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-29/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:holder",
+              "status": "failed"
+            },
+            {
+              "name": "damage:consumed_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:holder",
+              "status": "failed"
+            },
+            {
+              "name": "damage:floor_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:90",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:480",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:630",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:consumed_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:floor_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": null,
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 1020
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "trinket:121/client-split",
+          "status": "problem",
+          "unconfirmed": [],
+          "problems": [
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "damage:consumed_shield:holder"
+            },
+            {
+              "event": "problem",
+              "category": "non_native",
+              "detail": "damage:floor_repeat:holder"
+            }
+          ],
+          "evidence": "item-effects-full-20261017-29/batch-001",
+          "physical": false,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:holder",
+              "status": "failed"
+            },
+            {
+              "name": "damage:consumed_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:floor_repeat:holder",
+              "status": "failed"
+            },
+            {
+              "name": "damage:floor_repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:90",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:480",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:630",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:consumed_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:floor_repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
               "status": "passed"
             }
           ],
@@ -48565,6 +50047,434 @@
           },
           "teardown_events": [],
           "preparation_events": []
+        },
+        {
+          "case": "card:39/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-27/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:750",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:before_expiry",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:expired",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 900
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:39/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-27/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:750",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:before_expiry",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:expired",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 900
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:39/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-27/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:750",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:before_expiry",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:expired",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 900
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:39/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-27/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:first:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:repeat:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:before_expiry:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:expired:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_room:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:750",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:first",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:repeat",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:before_expiry",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:expired",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_room",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 900
+          },
+          "teardown_events": [],
+          "preparation_events": []
         }
       ]
     },
@@ -49529,6 +51439,354 @@
             },
             {
               "name": "damage_peer:broken",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 690
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:51/host-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-28/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:carried_shield:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:carried_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:150",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:390",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:carried_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:consumed_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 690
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:51/host-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-28/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:carried_shield:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:carried_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:150",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:390",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:carried_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:consumed_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 690
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:51/client-same",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-28/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:carried_shield:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:carried_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:150",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:390",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:carried_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:consumed_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
+              "status": "passed"
+            }
+          ],
+          "use_evidence": "native_callback",
+          "conditions": {
+            "moving_use": false,
+            "protect_use": true,
+            "end_tick": 690
+          },
+          "teardown_events": [],
+          "preparation_events": []
+        },
+        {
+          "case": "card:51/client-split",
+          "status": "verified",
+          "unconfirmed": [],
+          "problems": [],
+          "evidence": "item-effects-full-20261017-28/batch-001",
+          "physical": true,
+          "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e",
+          "effect_checks": [
+            {
+              "name": "damage_trial_count",
+              "status": "passed"
+            },
+            {
+              "name": "damage:carried_shield:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:carried_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:consumed_shield:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:holder",
+              "status": "passed"
+            },
+            {
+              "name": "damage:next_floor:teammate",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:150",
+              "status": "passed"
+            },
+            {
+              "name": "damage_transition:390",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:carried_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:consumed_shield",
+              "status": "passed"
+            },
+            {
+              "name": "damage_health_retained:next_floor",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:max_hearts",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:soul",
+              "status": "passed"
+            },
+            {
+              "name": "damage_peer:broken",
+              "status": "passed"
+            },
+            {
+              "name": "damage_shield_peer",
               "status": "passed"
             }
           ],
@@ -73008,6 +75266,10 @@
     "901f65a40a160b0e2c3b83e890f91b8cadbcce4ff592413d094434504e908c4c": {
       "commit": "0d0a78dcc6f9ae1009e91f7a34e413557c4a9ba1",
       "loader_sha256": "0fc3ed1bf8119bcc05151faf118e3891512f4f6b623107b71fa7a9c3b6c4f099"
+    },
+    "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e": {
+      "commit": "a8a28f8ddb10b118b05afd07f711306e2a6673c1",
+      "loader_sha256": "84e37c35c782ee2a8ec3f33731fd44e6eca9ce5ef23b09d4a5ecb94147ff2af1"
     }
   },
   "resolved_issues": {
@@ -73060,6 +75322,38 @@
       "resolution": "原测试未移动，分房站位还会与障碍物重叠；按原版要求选择无障碍移动方向后四组均成功触发。保留原始记录，尚未完成全部效果验证。",
       "evidence": "item-fixes-20261017-06/batch-001",
       "dll_sha256": "f3e362cf23ee8e01865c941b272c28ecc8b427f863b19ebc0ee84a7765b58ce8"
+    },
+    "collectible:58": {
+      "previous": {
+        "status": "problem",
+        "impact": "伤害免疫正常，但客机不显示持有者的护罩。",
+        "evidence": "item-effects-full-20261017-18/batch-001",
+        "checks": "伤害免疫及结束恢复正常；双端画面护罩不一致。第 26 轮确认主机临时暗影之书层数为 1、客机为 0，新增状态检查失败。",
+        "frames": {
+          "host": "engine/host/frames/105.png",
+          "client": "engine/client/frames/90.png"
+        },
+        "confirmation": "item-effects-full-20261017-26/batch-001"
+      },
+      "resolution": "通过原生 TemporaryEffects 同步护罩层数；四组验证归属、伤害免疫、结束恢复及双端护罩画面。",
+      "evidence": "item-effects-full-20261017-27/batch-001",
+      "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e"
+    },
+    "card:39": {
+      "previous": {
+        "status": "problem",
+        "impact": "伤害免疫正常，但客机不显示持有者的护罩。",
+        "evidence": "item-effects-full-20261017-20/batch-001",
+        "checks": "伤害免疫及结束恢复正常；双端画面护罩不一致。第 26 轮确认主机临时暗影之书层数为 1、客机为 0，新增状态检查失败。",
+        "frames": {
+          "host": "engine/host/frames/270.png",
+          "client": "engine/client/frames/254.png"
+        },
+        "confirmation": "item-effects-full-20261017-26/batch-001"
+      },
+      "resolution": "通过原生 TemporaryEffects 同步护罩层数；四组验证归属、伤害免疫、结束恢复及双端护罩画面。",
+      "evidence": "item-effects-full-20261017-27/batch-001",
+      "dll_sha256": "f325696b9643daedc14c07d96da54ae74aca48df48d59207bd2372a1f2067d5e"
     }
   },
   "previous_stress": [

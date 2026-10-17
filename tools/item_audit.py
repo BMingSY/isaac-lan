@@ -457,6 +457,9 @@ def build_fixture(path, config):
         + "local createDamageEffects = (function()\n"
         + (ROOT / "tests/fixtures/item_audit_damage.lua").read_text()
         + "\nend)()\n"
+        + "local createDamageTrace = (function()\n"
+        + (ROOT / "tests/fixtures/item_damage_trace.lua").read_text()
+        + "\nend)()\n"
         + (ROOT / "tests/state_item_audit.lua").read_text()
     )
 

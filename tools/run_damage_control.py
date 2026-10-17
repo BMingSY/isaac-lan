@@ -44,6 +44,9 @@ def main():
         + "\nlocal controlCases = "
         + lua(cases)
         + "\n"
+        + "local createDamageTrace = (function()\n"
+        + (ROOT / "tests/fixtures/item_damage_trace.lua").read_text()
+        + "\nend)()\n"
         + (ROOT / "tests/state_item_native_damage.lua").read_text()
     )
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
