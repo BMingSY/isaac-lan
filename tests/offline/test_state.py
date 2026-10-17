@@ -136,6 +136,53 @@ def test_native_effect_pool_eviction_during_view_does_not_abort(lua):
     assert lua.call("entities_apply", "0:1", retained, False, False, 64) == stable
 
 
+def test_player_tear_eviction_recovers_on_later_view(lua):
+    lua.call("entities_reset")
+    values = [entity(i, kind=2, parent=-1) for i in range(1, 66)]
+    result = lua.call("entities_apply", "0:1", values, False, False, 64)
+    assert len([v for v in result[0] if v[1] == 2]) == 64
+    assert result[1] == 65, "A missing tear must not be respawned repeatedly in one view"
+    # Capacity is available again. A still-authoritative missing tear returns,
+    # and repeated state no longer allocates or removes anything.
+    retained = values[:32]
+    recovered = lua.call("entities_apply", "0:1", retained, False, False, 64)
+    assert {v[0] for v in recovered[0] if v[1] == 2} == set(range(1, 33))
+    assert lua.call("entities_apply", "0:1", retained, False, False, 64) == recovered
+    cleared = lua.call("entities_apply", "0:1", [])
+    assert not any(v[1] == 2 for v in cleared[0])
+
+
+@pytest.mark.parametrize("kind,parent", [(2, 0), (9, -1), (4, -1), (7, -1), (10, 0)])
+def test_missing_required_entities_still_fail(lua, kind, parent):
+    lua.call("entities_reset")
+    values = [entity(i, kind=kind, parent=parent) for i in range(1, 3)]
+    with pytest.raises(AssertionError, match="Replica identity missing"):
+        lua.call("entities_apply", "0:1", values, False, False, 1)
+
+
+def test_player_tear_spawn_failure_is_bounded_and_retried_on_next_view(lua):
+    lua.call("entities_reset")
+    tear = entity(1, kind=2)
+    tear[11] = -1  # SpawnerEntity may carry ownership without Parent.
+    values = [tear, entity(2)]
+    result = lua.call("entities_apply", "0:1", values, False, False, False, 1)
+    assert {v[0] for v in result[0]} == {-1, 2, 900}
+    assert result[1] == 2
+    recovered = lua.call("entities_apply", "0:1", values)
+    assert {v[0] for v in recovered[0]} == {-1, 1, 2, 900}
+    assert lua.call("entities_apply", "0:1", values) == recovered
+
+
+def test_missing_linked_tear_and_failed_required_spawn_still_fail(lua):
+    lua.call("entities_reset")
+    with pytest.raises(AssertionError, match="Replica spawn failed"):
+        lua.call("entities_apply", "0:1", [entity(1)], False, False, False, 1)
+    lua.call("entities_reset")
+    linked = [entity(1, kind=2, parent=-1, child=3), entity(2, kind=2, parent=-1), entity(3)]
+    with pytest.raises(AssertionError, match="Replica identity missing"):
+        lua.call("entities_apply", "0:1", linked, False, False, 1)
+
+
 @pytest.mark.property
 @given(value=st.lists(atoms, min_size=1, max_size=8), offset=st.integers(0, 500))
 def test_production_decoder_rejects_truncated_state(lua, value, offset):

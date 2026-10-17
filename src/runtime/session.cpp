@@ -74,11 +74,11 @@ void saveGame(const backend::Call& original) {
         original();
         return;
     }
-    // Native save normally opens/truncates the user's solo run before calling
-    // its serializer. Keep the network state in memory and commit our separate
-    // session archive after the engine's exit transaction instead.
-    if (saves.exitingArchive)
-        backend::captureSave();
+    // Capture also runs native player departure cleanup. The caller restores
+    // room effects afterward, including Wooden Cross's remaining shields.
+    // Preserve that pair on autosave as well as exit, while keeping the capture
+    // in memory: only our separate session archive may be written for this run.
+    backend::captureSave();
 }
 void deleteGame(const backend::Call& original) {
     if (!saves.networkRun) {

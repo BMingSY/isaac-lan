@@ -7,9 +7,38 @@ local caseIndex, phase, at = 1, "floor", 0
 local live, visible, views, caseViews, seen, passed = 0, 0, 0, 0, false, {}
 local forms = {}
 local stomachRooms, stomachSource, heldMask = {}, nil, 0
+local protectedDamage = {}
 local function report(value)
     Isaac.DebugString("LAN_NETWORK ALL_BOSSES " .. value)
 end
+-- Actors are held in place to observe native Boss phases. Protect the fixture
+-- from accumulated damage: a dead co-op ghost would follow its living teammate
+-- out of the next test room instead of participating in that encounter.
+Isaac.AddCallback(
+    { Name = "Isolated Boss encounter protection" },
+    ModCallbacks.MC_ENTITY_TAKE_DMG,
+    function(_, _, _, flags, source)
+        if host and not finished then
+            local key = bossCases[caseIndex].key
+            local signature = key .. ":" .. flags .. ":" .. source.Type .. ":" .. source.Variant
+            if not protectedDamage[signature] then
+                protectedDamage[signature] = true
+                report(
+                    "DAMAGE_BLOCKED key="
+                        .. key
+                        .. " flags="
+                        .. flags
+                        .. " source="
+                        .. source.Type
+                        .. ":"
+                        .. source.Variant
+                )
+            end
+            return false
+        end
+    end,
+    EntityType.ENTITY_PLAYER
+)
 local function observeRoom(case)
     if not case.stomach then
         return
@@ -128,6 +157,15 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         local case = bossCases[caseIndex]
         for slot = 0, 1 do
             actor(slot, function(player)
+                assert(
+                    not player:IsDead() and not player:IsCoopGhost(),
+                    "Boss fixture actor died: "
+                        .. case.key
+                        .. " phase="
+                        .. phase
+                        .. " slot="
+                        .. slot
+                )
                 player:SetMinDamageCooldown(120)
                 if case.hold_position ~= false or phase ~= "fight" then
                     player.Position =

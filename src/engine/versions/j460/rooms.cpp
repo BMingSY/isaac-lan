@@ -574,6 +574,15 @@ bool __attribute__((fastcall)) spawnDeals(void* room, void*, bool animate, bool 
     return originalSpawnDeals(room, animate, force);
 }
 using ReplacePlayer = bool(__attribute__((thiscall)) *)(void*, void*, void*);
+RoomCall originalPlayerRoomClear;
+void __attribute__((fastcall)) playerRoomClear(void* player, void*) {
+    // Replica Room::Update still reclaims allocations and updates doors. Its
+    // clear callback must not trigger actor gameplay (including native Flip)
+    // after the authoritative actor state has already been restored.
+    if (enabled && runtime::replica())
+        return;
+    originalPlayerRoomClear(player);
+}
 ReplacePlayer originalReplacePlayer;
 bool __attribute__((fastcall)) replacePlayer(void* manager, void*, void* oldPlayer,
                                              void* nextPlayer) {
@@ -3482,6 +3491,8 @@ bool install(Address base, void (*log)(const std::string&)) {
                 reinterpret_cast<void**>(&originalSpawnDeals)) &&
            hook(j460::entry::playerManagerReplacePlayer, reinterpret_cast<void*>(replacePlayer),
                 reinterpret_cast<void**>(&originalReplacePlayer)) &&
+           hook(j460::entry::playerTriggerRoomClear, reinterpret_cast<void*>(playerRoomClear),
+                reinterpret_cast<void**>(&originalPlayerRoomClear)) &&
            hook(j460::entry::entityPlayerSyncResources, reinterpret_cast<void*>(syncResources),
                 reinterpret_cast<void**>(&originalResources)) &&
            hook(j460::entry::gameEnd, reinterpret_cast<void*>(endGame),

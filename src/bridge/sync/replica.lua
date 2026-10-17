@@ -199,7 +199,7 @@ return function(fields)
                 assert(native.room_water_current(data[Room.current][1], data[Room.current][2]))
                 crawlspace.apply(data[Room.crawlspace])
                 assert(native.room_rails(data[Room.rails]))
-                reconcileEntities(data[Room.entities], {
+                local missingTears = reconcileEntities(data[Room.entities], {
                     ref = ref,
                     key = deps.hash,
                     spawn = function(v, spawner, subtype)
@@ -224,6 +224,7 @@ return function(fields)
                     link = entityCodec.link,
                     localEffect = entityCodec.localEffect,
                 })
+                performance.counter("missing_player_tears", missingTears or 0)
                 -- Visible actors share this room's entity graph; offscreen actors
                 -- carry no visual links and their rooms may only be replica shells.
                 for _, actor in ipairs(value.actors) do
