@@ -18,6 +18,141 @@ def test_effect_recipes_use_real_unique_catalog_enums():
     assert all(names.count(name) == 1 for name in SUPPORTED_EFFECTS)
 
 
+def test_mapping_checks_actual_reveal_peer_and_next_floor():
+    from copy import deepcopy
+    from item_room_effects import room_effect_checks
+
+    def sample(label, tick, stage, flags):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "floor_effects": {
+                "stage": stage,
+                "map": [
+                    {"index": 10, "type": 1, "flags": flags},
+                    {"index": 11, "type": 7, "flags": 0},
+                ],
+            },
+        }
+
+    host = [sample("before", 30, 1, 0)]
+    host += [sample("captured", t, 1 if t < 360 else 2, 1) for t in (90, 120, 360, 390)]
+    peers = {"host": host, "client": deepcopy(host[1:])}
+    case = {"enum": "COLLECTIBLE_TREASURE_MAP"}
+    assert all(c["status"] == "passed" for c in room_effect_checks(case, peers))
+    peers["client"][-1]["floor_effects"]["map"][0]["flags"] = 0
+    assert (
+        next(c for c in room_effect_checks(case, peers) if c["name"] == "map_next_floor")["status"]
+        == "failed"
+    )
+    peers["client"] = peers["client"][:2]
+    assert (
+        next(c for c in room_effect_checks(case, peers) if c["name"] == "map_next_floor")["status"]
+        == "missing"
+    )
+    case["enum"] = "CARD_WORLD"
+    # A one-use reveal must not remain on the following floor.
+    peers["client"] = deepcopy(host[1:])
+    assert (
+        next(c for c in room_effect_checks(case, peers) if c["name"] == "map_next_floor")["status"]
+        == "failed"
+    )
+
+
+def test_curse_removal_preserves_labyrinth_and_requires_replica_evidence():
+    from copy import deepcopy
+    from item_room_effects import room_effect_checks
+
+    def sample(label, tick, curses):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "floor_effects": {"stage": 1, "curses": curses},
+        }
+
+    host = [
+        {"event": "floor_effect_precondition", "initial_curses": 7, "remaining_curses": 2},
+        sample("before", 30, 7),
+        sample("captured", 90, 2),
+        sample("captured", 120, 2),
+    ]
+    peers = {"host": host, "client": deepcopy(host[2:])}
+    case = {"enum": "RUNE_DAGAZ"}
+    assert all(c["status"] == "passed" for c in room_effect_checks(case, peers))
+    peers["client"][-1]["floor_effects"]["curses"] = 0
+    assert room_effect_checks(case, peers)[-1]["status"] == "failed"
+
+
+def test_treasure_map_can_reveal_special_room_outlines_when_ordinary_rooms_are_explored():
+    from copy import deepcopy
+    from item_room_effects import room_effect_checks
+
+    def sample(label, tick, stage, flag):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "floor_effects": {
+                "stage": stage,
+                "map": [
+                    {"index": 10, "type": 1, "flags": 5},
+                    {"index": 11, "type": 5, "flags": flag},
+                ],
+            },
+        }
+
+    host = [sample("before", 30, 1, 0)]
+    host += [sample("captured", t, 1 if t < 360 else 2, 1) for t in (90, 120, 360, 390)]
+    peers = {"host": host, "client": deepcopy(host[1:])}
+    case = {"enum": "COLLECTIBLE_TREASURE_MAP"}
+    assert all(c["status"] == "passed" for c in room_effect_checks(case, peers))
+    peers["client"][0]["floor_effects"]["map"][1]["flags"] = 5
+    assert (
+        next(c for c in room_effect_checks(case, peers) if c["name"] == "map_scope")["status"]
+        == "failed"
+    )
+
+
+def test_horse_amnesia_forgets_other_pills_and_does_not_carry_its_curse():
+    from copy import deepcopy
+    from item_room_effects import room_effect_checks
+
+    def sample(label, tick, stage, curses, known):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "floor_effects": {
+                "stage": stage,
+                "curses": curses,
+                "identified_pills": [{"color": c, "known": known} for c in (1, 2, 3)],
+            },
+        }
+
+    host = [
+        {"event": "floor_effect_precondition", "initial_curses": 0, "remaining_curses": 4},
+        {"event": "pill_assigned", "color": 2049},
+        sample("before", 30, 1, 0, True),
+    ]
+    host += [sample("captured", t, 1, 4, False) for t in (90, 120)]
+    host += [{"event": "floor_curse_roll", "stage": 2, "curses": 0}]
+    host += [sample("captured", t, 2, 0, False) for t in (360, 390)]
+    peers = {"host": host, "client": deepcopy([e for e in host if e.get("label") == "captured"])}
+    case = {"enum": "PILLEFFECT_AMNESIA", "horse": True}
+    assert all(c["status"] == "passed" for c in room_effect_checks(case, peers))
+    peers["client"][0]["floor_effects"]["identified_pills"][1]["known"] = True
+    assert room_effect_checks(case, peers)[-1]["status"] == "failed"
+    peers["client"][-1]["floor_effects"]["curses"] = 4
+    assert (
+        next(c for c in room_effect_checks(case, peers) if c["name"] == "curse_next_floor")[
+            "status"
+        ]
+        == "failed"
+    )
+
+
 def test_familiar_counts_follow_the_replica_room_and_reappear_on_reunion():
     from copy import deepcopy
     from item_effect_checks import consumable_checks, stat_checks
@@ -132,6 +267,42 @@ def test_spawned_spiders_require_native_count_and_survive_reunion():
         next(c for c in consumable_checks(case, peers) if c["name"] == "familiar_reunion")["status"]
         == "failed"
     )
+
+
+def test_room_damage_checks_remote_authority_and_visible_replica():
+    from copy import deepcopy
+    from item_effect_checks import consumable_checks
+
+    case = {"enum": "CARD_DEATH", "slot": 0}
+
+    def sample(label, tick, hp):
+        return {
+            "event": "sample",
+            "label": label,
+            "tick": tick,
+            "players": [
+                {
+                    "room": 84,
+                    "stage": 1,
+                    "room_visible": True,
+                    "targets": [{"seed": seed, "hp": hp} for seed in (1, 2)],
+                },
+                {},
+            ],
+        }
+
+    host = [sample("before", 30, 200), sample("post_use", 61, 160)]
+    host += [sample("captured", t, 160) for t in (90, 120)]
+    peers = {"host": host, "client": deepcopy(host[2:])}
+    assert all(c["status"] == "passed" for c in consumable_checks(case, peers))
+    for event in peers["client"]:
+        event["players"][0].update(room_visible=False, targets=[])
+    assert all(c["status"] == "passed" for c in consumable_checks(case, peers))
+    peers["client"][0]["players"][0]["room_visible"] = True
+    assert consumable_checks(case, peers)[-1]["status"] == "failed"
+    peers["client"] = deepcopy(host[2:])
+    host[1]["players"][0]["targets"][0]["hp"] = 200
+    assert consumable_checks(case, peers)[0]["status"] == "failed"
 
 
 def test_prayer_card_requires_heart_conversion_on_next_floor():

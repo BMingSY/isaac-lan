@@ -25,6 +25,7 @@ local function report(event, values)
     Isaac.DebugString(line)
 end
 local stress = createStress(report)
+local roomEffects = createRoomEffects(report)
 local lastRender
 local function observationEnd()
     return case.end_tick or ((case.mega or case.companion or case.kind == "stress") and 1100 or 150)
@@ -203,10 +204,14 @@ local function sample(label, tick)
         }
     end
     seen = seen + 1
-    report(
-        "sample",
-        { label = label, tick = tick, players = records, actors = actors, uses = useCount }
-    )
+    report("sample", {
+        label = label,
+        tick = tick,
+        players = records,
+        actors = actors,
+        uses = useCount,
+        floor_effects = roomEffects.sample(case),
+    })
 end
 local function shotProbe(tick)
     if not case.shot_effect or tick < 85 then
@@ -279,6 +284,9 @@ end)
 Isaac.AddCallback(owner, ModCallbacks.MC_USE_PILL, function(_, id, p)
     observedUse("pill", id, p)
 end)
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_CURSE_EVAL, function(_, curses)
+    roomEffects.curseRoll(case, curses)
+end)
 Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, amount, flags, source)
     local p = entity:ToPlayer()
     if case and p then
@@ -323,6 +331,7 @@ end)
 local function prepare(tick)
     prepared, beganAt = true, native.api_info().nowMs
     report("case_begin", { kind = case.kind, id = case.id, slot = case.slot, split = case.split })
+    roomEffects.prepare(case)
     if case.recipe and case.recipe.teleport then
         local destination = case.recipe.teleport
         local expected = { types = {} }
@@ -632,7 +641,7 @@ local function advance(tick)
     end
     if
         case.recipe
-        and (case.recipe.expire_room or case.recipe.golden_lifecycle or case.recipe.eternal_lifecycle)
+        and (case.recipe.expire_room or case.recipe.golden_lifecycle or case.recipe.eternal_lifecycle or case.room_effects and case.room_effects.floor_lifecycle)
         and not moved
         and tick >= 150
     then
@@ -656,7 +665,7 @@ local function advance(tick)
     end
     if
         case.recipe
-        and (case.recipe.golden_lifecycle or case.recipe.eternal_lifecycle)
+        and (case.recipe.golden_lifecycle or case.recipe.eternal_lifecycle or case.room_effects and case.room_effects.floor_lifecycle)
         and not floorMoved
         and tick >= 240
     then

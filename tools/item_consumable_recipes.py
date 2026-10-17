@@ -3,6 +3,12 @@
 # Temporary buffs must also disappear when their holder changes rooms. Spawn
 # rules count actual objects immediately after native use, then compare peers.
 CONSUMABLE_RECIPES = {
+    "CARD_SUN": {
+        "resources": {"hearts": 2},
+        "exact": {"hearts": "max_hearts"},
+        "enemy_damage": 100,
+    },
+    "RUNE_DAGAZ": {"delta": {"soul": 2}},
     "CARD_FOOL": {"teleport": "start"},
     "CARD_EMPEROR": {"teleport": ["ROOM_BOSS"]},
     "CARD_HERMIT": {"teleport": ["ROOM_SHOP"]},

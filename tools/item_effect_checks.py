@@ -1,6 +1,7 @@
 """Assertions for individual effects; an unknown recipe never becomes a pass."""
 
 from item_consumable_recipes import CONSUMABLE_RECIPES, consumable_recipe
+from item_room_effects import ROOM_EFFECTS, room_effect_checks
 
 # These items have direct, unconditional effects in the clean Isaac fixture.
 # Values are directions, not a substitute for checking every listed attribute.
@@ -131,6 +132,7 @@ SUPPORTED_EFFECTS = {
     *SPAWN_EFFECTS,
     *SHOT_EFFECTS,
     *CONSUMABLE_RECIPES,
+    *ROOM_EFFECTS,
     "COLLECTIBLE_CHAOS",
 }
 
@@ -412,6 +414,7 @@ def effect_checks(case, observations):
         + spawn_checks(case, observations)
         + shot_checks(case, observations)
         + consumable_checks(case, observations)
+        + room_effect_checks(case, observations)
     )
 
 
@@ -715,8 +718,12 @@ def consumable_checks(case, observations):
             [
                 None
                 if value(a, "targets") is None or value(b, "targets") is None
-                else value(a, "targets") == value(b, "targets") and len(value(a, "targets")) == 2
+                else len(value(a, "targets")) == 2
+                and (value(a, "targets") if value(b, "room_visible") is not False else [])
+                == value(b, "targets")
                 for a, b in pairs
+                if value(a, "room") == value(before, "room")
+                and value(a, "stage") == value(before, "stage")
             ]
             if len(pairs) >= 2
             else [],

@@ -304,6 +304,8 @@ def main():
     shutil.copy2(recipes, output / recipes.name)
     audit_contract = ROOT / "tools/item_audit.py"
     shutil.copy2(audit_contract, output / audit_contract.name)
+    room_effects = ROOT / "tools/item_room_effects.py"
+    shutil.copy2(room_effects, output / room_effects.name)
     manifest = {
         "commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
@@ -313,6 +315,7 @@ def main():
         "validator_sha256": hashlib.sha256(validator.read_bytes()).hexdigest(),
         "recipes_sha256": hashlib.sha256(recipes.read_bytes()).hexdigest(),
         "audit_sha256": hashlib.sha256(audit_contract.read_bytes()).hexdigest(),
+        "room_effects_sha256": hashlib.sha256(room_effects.read_bytes()).hexdigest(),
         "cases": cases,
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

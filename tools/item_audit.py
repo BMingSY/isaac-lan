@@ -6,6 +6,7 @@ import re
 
 from item_effect_checks import SHOT_EFFECTS, SUPPORTED_EFFECTS, effect_checks
 from item_consumable_recipes import CONSUMABLE_RECIPES, consumable_recipe
+from item_room_effects import ROOM_EFFECTS, room_effect_recipe
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "LAN_ITEM_AUDIT "
@@ -146,6 +147,13 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
                 )
                 if item.get("enum") in SHOT_EFFECTS:
                     cases[-1]["end_tick"] = 300
+                if item.get("enum") in ROOM_EFFECTS:
+                    rules = room_effect_recipe(cases[-1])
+                    cases[-1]["room_effects"] = rules
+                    cases[-1]["recipe"] = {}
+                    cases[-1]["open_room"] = True
+                    if rules.get("floor_lifecycle"):
+                        cases[-1]["end_tick"] = 480
                 if item.get("enum") in CONSUMABLE_RECIPES:
                     recipe = consumable_recipe(cases[-1])
                     cases[-1]["recipe"] = {
@@ -435,6 +443,9 @@ def build_fixture(path, config):
         + "\nend)()\n"
         + "local createStress = (function()\n"
         + (ROOT / "tests/fixtures/item_audit_stress.lua").read_text()
+        + "\nend)()\n"
+        + "local createRoomEffects = (function()\n"
+        + (ROOT / "tests/fixtures/item_audit_rooms.lua").read_text()
         + "\nend)()\n"
         + (ROOT / "tests/state_item_audit.lua").read_text()
     )
