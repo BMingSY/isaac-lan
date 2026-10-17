@@ -25,6 +25,12 @@ def cell(value):
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 
+def item_name(item, entry):
+    name = item.get("name_zh", item["name"])
+    note = entry.get("name_note", "内部" if item.get("hidden") else "")
+    return name + (f"（{note}）" if note else "")
+
+
 def conclusion(known, audit):
     value = {**known, **audit}
     severity = {"reported": 1, "suspected": 1, "problem": 2, "crash": 3}
@@ -59,7 +65,7 @@ def render(catalog, findings):
                     cell(value)
                     for value in (
                         item["id"],
-                        item.get("name_zh", item["name"]),
+                        item_name(item, entry),
                         STATUSES[entry.get("status", "untested")],
                         entry["effect"],
                     )
@@ -101,8 +107,7 @@ def render(catalog, findings):
                     for value in (
                         item["id"],
                         f"`{entity}`",
-                        item.get("name_zh", item["name"])
-                        + ("（内部）" if item.get("hidden") else ""),
+                        item_name(item, entry),
                         status,
                         impact,
                         effect,

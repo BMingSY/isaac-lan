@@ -27,7 +27,7 @@
     "collectible:577": {
       "status": "verified",
       "impact": "已验证共享底座、移除恢复和非持有者受伤；未穷举随机落剑时机。",
-      "effect": "额外道具底座全队共享；受伤与落剑判定仍归持有者。"
+      "name_note": "主动"
     },
     "collectible:622": {
       "status": "verified",
@@ -45,7 +45,8 @@
     "collectible:656": {
       "status": "verified",
       "impact": "已验证共享底座、移除恢复和非持有者受伤；未穷举随机落剑时机。",
-      "effect": "额外道具底座全队共享；受伤与落剑判定仍归持有者。"
+      "effect": "额外道具底座全队共享；受伤与落剑判定仍归持有者。",
+      "name_note": "被动"
     },
     "collectible:691": {
       "effect": "全队共享道具品质筛选效果。"
