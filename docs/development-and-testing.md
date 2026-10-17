@@ -33,7 +33,7 @@ python3 -m venv .deps/checks
 | 默认 `--profile fast` | 日常和 PR；属性测试生成预算 25 例、状态机最多 20 步 |
 | `--profile full` | 扩展检查；预算 200 例、状态机最多 60 步 |
 | `--list` | 只列 Python 用例 |
-| `--list-engine` | 只读取全部实机套件、场景及独立诊断脚本的清单；不执行场景 |
+| `--list-engine` | 按文件名发现实机入口和 Lua 场景；不执行场景 |
 | `--sanitizers` | 为可移植 C++ 构建启用 ASan／LSan／UBSan；CI 使用此选项 |
 
 Hypothesis 还会运行缓存失败样例和缩减步骤，上述预算不是精确执行次数。按改动选择局部检查：
@@ -107,7 +107,7 @@ ctest --test-dir build-win32 --output-on-failure
 [`engine_test.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/engine_test.py) 提供统一发现、计划和执行入口；套件保留各自的参数与验收条件：
 
 ```sh
-python tools/engine_test.py list --tag route
+python tools/engine_test.py list
 python tools/engine_test.py plan special-routes -- --case motion --case floor-items
 python tools/engine_test.py run special-routes -- \
   --host "$ISAAC_HOST_LAB" --client "$ISAAC_CLIENT_LAB" \
@@ -115,7 +115,9 @@ python tools/engine_test.py run special-routes -- \
   --case motion --case floor-items --heap-check
 ```
 
-`list`、`plan` 和离线入口均不启动游戏。计划显示套件入口、完整命令、进程复用范围及焦点要求；执行前仍须提供该套件要求的路径和参数。完整清单维护在 [`catalog.json`](https://github.com/BMingSY/isaac-lan/blob/main/tools/testing/catalog.json)，未接入套件的脚本标为 `diagnostic`，不能据此计为已运行或通过。增加、删除场景时同时维护清单，离线测试检查清单与文件一致。
+`list` 和 `--list-engine` 通过 [`discovery.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/testing/discovery.py) 自动扫描 `tools/run_*.py` 和 `tests/state_*.lua`；排除底层后端 `run_network_engine.py`，并兼容 `manual_gameplay.py`、`validate_replica.py` 两个旧入口。新增、删除或重命名文件后，下次发现立即生效，无需登记清单。套件名由文件名去掉 `run_` 前缀、将下划线换为短横线得到，例如 `run_release_acceptance.py` 对应 `release-acceptance`。
+
+发现过程不导入执行器或执行 Lua。`plan` 只显示选中入口和命令；`run` 才调用该入口，路径、参数和准备条件由入口校验。文件被发现不代表它能与其他场景组合，也不代表已执行或通过。场景选择、顺序与完成条件在所属执行器／构建器中维护；进程复用与焦点安排见下方验证约定。
 
 公共实现位于 [`tools/testing/`](https://github.com/BMingSY/isaac-lan/tree/main/tools/testing)：启动命令和子进程收尾由 `engine.py` 管理，原生资料准备函数放在 `profiles.py`，报告由 `results.py` 写入。具体入口保留场景选择、必要准备与效果断言，调用公共模块，不从其他执行入口导入共享实现。原有 `run_*.py` 命令可直接使用。
 

@@ -10,13 +10,13 @@ import shutil
 import subprocess
 import sys
 import time
-from testing.catalog import inventory
+from testing.discovery import inventory
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def engine_catalog():
-    """Read all suites and fixtures without importing an executor."""
+    """Discover suites and fixtures without importing an executor."""
     return inventory()
 
 

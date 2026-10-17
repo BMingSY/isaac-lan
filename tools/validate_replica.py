@@ -19,7 +19,39 @@ from archive_gameplay import archive
 
 SOURCE = Path(__file__).resolve().parents[1]
 LAB = Path("/mnt/d/isaac-lan-lab")
-from testing.catalog import REPLICA_CASES as CASES
+CASES = {
+    "projection": ("state_projection.lua", "single-view special rooms and native floor transition"),
+    "reconnect": ("state_reconnect.lua", "current-floor reconnect while host continues"),
+    "reconnect-stage": (
+        "state_reconnect_stage.lua",
+        "reconnect follows floor changes during loading",
+    ),
+    "resume": ("state_resume.lua", "authoritative saved session"),
+    "drop": ("state_drop_lobby.lua", "unexpected drop returns to LAN lobby then rejoins"),
+    "arrival": ("state_arrival.lua", "door protection only when joining occupied combat"),
+    "motion": ("state_motion.lua", "continuous local movement"),
+    "input-response": ("state_input_response.lua", "immediate native input response"),
+    "local-movement": ("state_local_movement.lua", "local movement and door arrival"),
+    "lanbot": ("state_lanbot.lua", "lanbot behavior suite"),
+    "visuals": ("state_guest_visuals.lua", "guest native revival visuals"),
+    "mod-ui": ("state_mod_ui.lua", "local Mod map and room request"),
+    "special-doors": ("state_special_doors.lua", "special door slots and raw-input Devil entry"),
+    "white-fire": (
+        "state_white_fire.lua",
+        "native white-fire transformation and room-clear restoration",
+    ),
+    "peer-flash": ("state_peer_flash.lua", "peer native door viewport isolation"),
+    "active-edges": ("state_active_edges.lua", "one physical active press"),
+    "item-revive": ("state_item_revive.lua", "native Collar and Dead Cat resurrection"),
+    "hourglass": ("state_hourglass.lua", "native full team hourglass"),
+    "weapon-charge": ("state_weapon_charge.lua", "guest native charged weapon"),
+    "peer-intro": ("state_peer_intro.lua", "peer native intro isolation"),
+    "item-presentation": ("state_item_presentation.lua", "item presentation ownership"),
+    "item-text": ("state_item_text.lua", "native guest pickup text"),
+    "mirror-camera": ("state_mirror_camera.lua", "native mirror direction and large room camera"),
+    "floor-items": ("state_floor_items.lua", "native Forget Me Now five-pip and R Key"),
+    "greed": ("state_greed.lua", "native Greed and Greedier gameplay"),
+}
 
 DEFAULT_CASES = [
     "gameplay",

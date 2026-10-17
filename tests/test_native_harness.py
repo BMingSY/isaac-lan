@@ -9,13 +9,14 @@ from xml.etree import ElementTree as ET
 import pytest
 
 import lab_profile
-from testing.catalog import ROOT, inventory, suite_command
+from testing.discovery import ROOT, inventory, suite_command
 from testing.engine import BackendCleanupError, engine_process
 from testing.results import finish_run
 from testing import lua as lua_support
 from testing.special_routes import build as build_special
 from testing.endings import build as build_endings
 from testing import gameplay as build_gameplay_suite
+from testing import discovery
 
 
 def run_lua(source, tmp_path):
@@ -39,15 +40,56 @@ def test_inventory_covers_every_fixture_and_executor():
         "tools/run_network_engine.py"
     } <= entries
     assert all((ROOT / path).is_file() for path in entries)
-    for fixture in catalog["fixtures"]:
-        assert fixture["kind"] == ("scenario" if fixture["suites"] else "diagnostic")
+    assert "tools/run_network_engine.py" not in entries
+    assert {"tools/manual_gameplay.py", "tools/validate_replica.py"} <= entries
     with pytest.raises(ValueError, match="Unknown"):
         suite_command("missing", [])
 
 
+def test_discovery_tracks_added_renamed_and_deleted_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(discovery, "ROOT", tmp_path)
+    runners, fixtures = tmp_path / "tools", tmp_path / "tests"
+    runners.mkdir()
+    fixtures.mkdir()
+    for name in ("run_zeta.py", "run_network_engine.py", "helper.py"):
+        (runners / name).write_text("raise RuntimeError('discovery must not import runners')")
+    for name in ("state_zeta.lua", "state_alpha.lua", "helper.lua"):
+        (fixtures / name).write_text("error('discovery must not execute fixtures')")
+    (fixtures / "state_directory.lua").mkdir()
+    assert inventory() == {
+        "requires_game": True,
+        "suites": [{"id": "zeta", "entry": "tools/run_zeta.py"}],
+        "fixtures": [
+            {"id": "alpha", "script": "state_alpha.lua"},
+            {"id": "zeta", "script": "state_zeta.lua"},
+        ],
+    }
+    (fixtures / "state_zeta.lua").unlink()
+    (fixtures / "state_alpha.lua").rename(fixtures / "state_new_case.lua")
+    (runners / "run_zeta.py").rename(runners / "run_new_case.py")
+    assert inventory()["fixtures"] == [{"id": "new-case", "script": "state_new_case.lua"}]
+    assert suite_command("new-case", ["--case", "selected"]) == [
+        sys.executable,
+        str(runners / "run_new_case.py"),
+        "--case",
+        "selected",
+    ]
+    with pytest.raises(ValueError, match="Unknown"):
+        suite_command("zeta", [])
+    (runners / "run_new_case.py").unlink()
+    assert inventory()["suites"] == []
+    with pytest.raises(ValueError, match="Unknown"):
+        suite_command("new-case", [])
+
+
 @pytest.mark.parametrize("action", ["list", "plan"])
-def test_listing_and_planning_never_start_processes(monkeypatch, capsys, action):
+def test_listing_and_planning_never_start_processes(tmp_path, monkeypatch, capsys, action):
     import engine_test
+
+    monkeypatch.setattr(discovery, "ROOT", tmp_path)
+    (tmp_path / "tools").mkdir()
+    script = tmp_path / "tools/run_new_suite.py"
+    script.write_text("raise RuntimeError('discovery must not import runners')")
 
     def forbidden(*args, **kwargs):
         raise AssertionError("Discovery started a subprocess")
@@ -58,15 +100,17 @@ def test_listing_and_planning_never_start_processes(monkeypatch, capsys, action)
         sys,
         "argv",
         ["engine_test.py", action]
-        + (["bosses", "--", "--case", "mom"] if action == "plan" else []),
+        + (["new-suite", "--", "--case", "mom"] if action == "plan" else []),
     )
     assert engine_test.main() == 0
     result = json.loads(capsys.readouterr().out)
     if action == "plan":
         assert result["game_started"] is False
+        assert result["command"][:2] == [sys.executable, str(script)]
         assert result["command"][-2:] == ["--case", "mom"]
     else:
         assert result["requires_game"] is True
+        assert result["suites"] == [{"id": "new-suite", "entry": "tools/run_new_suite.py"}]
 
 
 def test_interrupted_child_gets_time_to_cleanup():
