@@ -72,6 +72,7 @@ DAMAGE_EFFECTS = {
         ]
     },
     "COLLECTIBLE_BOOK_OF_SHADOWS": {
+        "shadow_shield": True,
         "steps": [
             hit("first", 90, 0),
             hit("repeat", 240, 0),
@@ -79,9 +80,10 @@ DAMAGE_EFFECTS = {
             hit("expired", 390, 1),
             move("room", 450),
             hit("next_room", 540, 1),
-        ]
+        ],
     },
     "RUNE_ALGIZ": {
+        "shadow_shield": True,
         "steps": [
             hit("first", 90, 0),
             hit("repeat", 240, 0),
@@ -89,7 +91,7 @@ DAMAGE_EFFECTS = {
             hit("expired", 690, 1),
             move("room", 750),
             hit("next_room", 840, 1),
-        ]
+        ],
     },
 }
 
@@ -210,6 +212,29 @@ def damage_checks(case, observations):
                 or len(b.get("players", [])) != 2
                 or any(field not in e["players"][p] for e in (a, b) for p in (0, 1))
                 else all(a["players"][p][field] == b["players"][p][field] for p in (0, 1))
+                for a, b in pairs
+            ]
+            if len(pairs) >= 2
+            else [],
+        )
+    if rules.get("shadow_shield"):
+        check(
+            "damage_shield_peer",
+            [
+                None
+                if len(a.get("players", [])) != 2
+                or len(b.get("players", [])) != 2
+                or any(
+                    field not in e["players"][p].get("shield", {})
+                    for e in (a, b)
+                    for p in (0, 1)
+                    for field in ("shadows", "invincible")
+                )
+                else all(
+                    a["players"][p]["shield"][field] == b["players"][p]["shield"][field]
+                    for p in (0, 1)
+                    for field in ("shadows", "invincible")
+                )
                 for a, b in pairs
             ]
             if len(pairs) >= 2

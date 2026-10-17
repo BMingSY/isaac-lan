@@ -96,6 +96,41 @@ def test_damage_effects_require_real_loss_expiry_and_replica_health():
     assert any(c["status"] == "missing" for c in damage_checks(case, peers))
 
 
+def test_damage_shield_requires_peer_state_and_expiry():
+    from copy import deepcopy
+    from item_damage_effects import damage_checks
+
+    host = [
+        {
+            "event": "sample",
+            "label": "captured",
+            "tick": tick,
+            "players": [
+                {"shield": {"shadows": count, "invincible": bool(count)}},
+                {"shield": {"shadows": 0, "invincible": False}},
+            ],
+        }
+        for tick, count in ((120, 1), (450, 0))
+    ]
+    peers = {"host": host, "client": deepcopy(host)}
+
+    def status():
+        return next(
+            c["status"]
+            for c in damage_checks({"enum": "COLLECTIBLE_BOOK_OF_SHADOWS", "slot": 0}, peers)
+            if c["name"] == "damage_shield_peer"
+        )
+
+    assert status() == "passed"
+    peers["client"][0]["players"][0]["shield"]["shadows"] = 0
+    assert status() == "failed", "A missing replica shield passed damage-only verification"
+    peers["client"] = deepcopy(host)
+    peers["client"][1]["players"][0]["shield"]["invincible"] = True
+    assert status() == "failed", "An expired shield remained on the replica"
+    del peers["client"][1]["players"][0]["shield"]
+    assert status() == "missing"
+
+
 def test_damage_effect_cases_include_expiry_floor_and_horse_prerequisites():
     catalog = json.loads((ROOT / "tests/fixtures/item_catalog.json").read_text())
     cases = select_cases(catalog, ["pill:28", "pill:29", "trinket:121", "card:39"])
