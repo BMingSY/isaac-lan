@@ -99,14 +99,6 @@ local actorsPresentation = component("presentation/actors")(native, function(pat
     return Isaac.GetCostumeIdByPath(path)
 end, applySprite)
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
-    extraAnimationAllowsMovement = function(p, actor)
-        local extra = actor[fields.actor.visuals][fields.actorSprites.extra]
-        return craftingBag.allowsMovement(
-            p,
-            actor[fields.actor.craftingBag],
-            extra and extra[fields.sprite.animation]
-        )
-    end,
     vector = Vector,
     player = function(index)
         return Isaac.GetPlayer(index)

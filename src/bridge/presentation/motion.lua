@@ -1,6 +1,20 @@
 return function(fields)
     local Actor = fields.actor
     local Entity = fields.entity
+    local walkingExtras = { Pickup = true, UseItem = true, LiftItem = true, HideItem = true }
+    local function actionAllowsMovement(player, actor)
+        if player:IsCoopGhost() then
+            return false
+        end
+        local body = player:GetSprite():GetAnimation()
+        local extra = actor[Actor.visuals][fields.actorSprites.extra]
+        local animation = extra and extra[fields.sprite.animation]
+        -- These split head/item poses leave native walking enabled, including
+        -- the first frames before Walk changes to PickupWalk. Pill reactions
+        -- also animate the body without consuming movement input.
+        return walkingExtras[animation] and (body:match("^Walk") or body:match("^PickupWalk"))
+            or (animation == "" and (body == "Happy" or body == "Sad"))
+    end
     -- Render-only movement and interpolation; authority remains on the host.
     return function(native, actorsPresentation, view)
         local Vector = view.vector
@@ -70,10 +84,8 @@ return function(fields)
                 local p = view.player(actor[Actor.index])
                 if p and p.ControllerIndex == actor[Actor.controller] then
                     actorsPresentation.apply(p, actor)
-                    if view.extraAnimationAllowsMovement then
-                        extraAnimationMovement[actor[Actor.entity][Entity.id]] =
-                            view.extraAnimationAllowsMovement(p, actor)
-                    end
+                    extraAnimationMovement[actor[Actor.entity][Entity.id]] =
+                        actionAllowsMovement(p, actor)
                 end
             end
             local now = view.clock() / 1000
@@ -112,14 +124,14 @@ return function(fields)
                             end
                         end
                         if not controls then
-                            m.prediction:reset(m.target, sequence - 1)
                             m.doorway = nil
                         end
                         position = m.prediction:step(
                             controls and direction or Vector(0, 0),
                             sequence,
                             p.MoveSpeed * (4.4117647 * 60),
-                            dt
+                            dt,
+                            not controls
                         )
                         assert(native.rooms_with_player(status.slot, function()
                             local room = view.room()

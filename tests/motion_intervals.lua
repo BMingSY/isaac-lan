@@ -142,8 +142,8 @@ displayed = motion.sample(diagonal, 1 / 30)
 close(displayed.X, 12)
 close(displayed.Y, 17)
 
--- Exercise local prediction with the actual item compatibility adapter. A held
--- crafting bag reports an unfinished extra animation throughout PickupWalk.
+-- Item actions can report unfinished extra animations without blocking walking.
+-- Exercise the production presentation path without any item-specific adapter.
 function vector:LengthSquared()
     return self.X * self.X + self.Y * self.Y
 end
@@ -153,11 +153,7 @@ local prediction = assert(loadfile(root .. "/src/bridge/presentation/prediction.
     math = math,
     pairs = pairs,
 }))()
-local bag = dofile(root .. "/src/bridge/compat/items/crafting_bag.lua")({}, {
-    COLLECTIBLE_BAG_OF_CRAFTING = 710,
-})
-local animation, heldItem, extraFinished, enabled, ghost =
-    "PickupWalkRight", 710, false, true, false
+local animation, extraFinished, enabled, ghost = "PickupWalkRight", false, true, false
 local player = { ControlsEnabled = true, MoveSpeed = 1, Size = 10, ControllerIndex = 2 }
 function player:ToPlayer()
     return self
@@ -173,9 +169,6 @@ function player:IsExtraAnimationFinished()
 end
 function player:IsCoopGhost()
     return ghost
-end
-function player:GetActiveItem(slot)
-    return slot == 2 and heldItem or 0
 end
 function player:GetSprite()
     return {
@@ -211,9 +204,6 @@ local localMotion = assert(
     end,
 }, { apply = function() end }, {
     vector = Vector,
-    extraAnimationAllowsMovement = function(p, value)
-        return bag.allowsMovement(p, value[8], value[5][1] and value[5][1][2])
-    end,
     player = function()
         return player
     end,
@@ -266,36 +256,49 @@ for sequence = 31, 90 do
     assert(position > previous, "Raising/lowering the bag reset movement prediction")
     previous = position
 end
--- The exception never enables controls during crafting, pickup, cooldown,
--- ghost conversion, or after removing the bag. Ordinary walking still works.
-extraFinished = false
-for i, blocked in ipairs({
+-- Every native split item pose keeps walking, independent of inventory and
+-- item state. Unknown/full-body poses and explicit control locks stay blocked.
+local sequence = 90
+actor[8] = false
+for _, extra in ipairs({ "Pickup", "UseItem", "LiftItem", "HideItem", "" }) do
+    for _, body in ipairs(extra == "" and { "Happy", "Sad" } or { "WalkRight", "PickupWalkRight" }) do
+        animation, actor[5][1][2], extraFinished = body, extra, false
+        sequence = sequence + 1
+        local position = localRender(sequence)
+        assert(position > previous, extra .. "/" .. body .. " froze pending movement")
+        assert(localState.prediction.acknowledged == -1, "Action fabricated an acknowledgement")
+        previous = position
+    end
+end
+local lockedPosition = previous
+for _, blocked in ipairs({
     "craft",
     "pickup",
+    "death",
+    "trapdoor",
     "cooldown",
     "disabled",
-    "removed",
     "ghost",
-    "unrelated",
     "absent",
-    "stale_pose",
+    "unknown",
 }) do
     animation = blocked == "craft" and "UseItem"
         or blocked == "pickup" and "Pickup"
-        or (blocked == "unrelated" or blocked == "absent") and "WalkRight"
+        or blocked == "death" and "Death"
+        or blocked == "trapdoor" and "Trapdoor"
         or "PickupWalkRight"
-    actor[8] = blocked ~= "absent" and { string.rep("\0", 12), blocked ~= "unrelated" }
-    actor[5][1][2] = (blocked == "craft" or blocked == "stale_pose") and "UseItem"
-        or blocked == "pickup" and "Pickup"
+    actor[5][1][2] = blocked == "unknown" and "UnknownAction"
+        or blocked == "absent" and ""
         or "LiftItem"
-    enabled, player.ControlsEnabled = blocked ~= "cooldown", blocked ~= "disabled"
-    heldItem, ghost = blocked == "removed" and 0 or 710, blocked == "ghost"
-    close(localRender(90 + i), localState.target.X, blocked .. " incorrectly predicted movement")
+    enabled, player.ControlsEnabled, ghost =
+        blocked ~= "cooldown", blocked ~= "disabled", blocked == "ghost"
+    sequence = sequence + 1
+    close(localRender(sequence), lockedPosition, blocked .. " incorrectly predicted movement")
 end
 extraFinished, enabled, player.ControlsEnabled, ghost = true, true, true, false
 animation = "WalkRight"
-assert(localRender(100) > localState.target.X, "Ordinary movement did not resume")
-print("PASS continuous motion, raising/holding crafting bag, control locks, gaps, pause and reset")
+assert(localRender(sequence + 1) > lockedPosition, "Ordinary movement did not resume")
+print("PASS pickup/use/raise/lower/pill motion, control locks, gaps, pause and reset")
 
 -- Same-controller bodies must query independently. Native character rules can
 -- leave a twin stationary, switch the active body, or mirror one local room.
@@ -382,3 +385,46 @@ pairedMotion.reset()
 pairedRender(141)
 assert(queried[2] == 141)
 print("PASS independent same-controller movement, form switch and companion cleanup")
+
+-- A pickup/use animation can arrive while several local inputs are still in
+-- flight. The lock must not turn those inputs into host acknowledgements or
+-- snap the view back to the older received position.
+extraFinished, enabled, player.ControlsEnabled = true, true, true
+actor[8] = false
+localState.target, localState.display = Vector(100, 100), Vector(100, 100)
+localState.prediction = prediction.new(localState.target)
+localState.prediction:confirm(localState.target, 0)
+localMotion.reset()
+for sequence = 0, 8 do
+    localRender(sequence)
+end
+local beforeLock = player.Position.X
+assert(beforeLock > 110, "Fixture did not build unacknowledged movement")
+extraFinished = false
+actor[5][1][2] = "Pickup"
+animation = "Pickup"
+close(localRender(9), beforeLock, "Pickup snapped to the delayed host position")
+assert(localState.prediction.acknowledged == 0, "Animation acknowledged unsent input")
+localState.prediction:confirm(Vector(100, 100), 3)
+local duringLock = localRender(10)
+assert(duringLock < beforeLock and duringLock > 100, "Locked motion ignored or snapped correction")
+assert(localState.prediction.acknowledged == 3, "Delayed acknowledgement was discarded")
+assert(localState.prediction.velocity:LengthSquared() == 0, "Control lock retained movement")
+localState.prediction:confirm(Vector(100, 100), 10)
+local previousLocked = duringLock
+for sequence = 11, 50 do
+    localState.prediction:confirm(Vector(100, 100), 10)
+    local position = localRender(sequence)
+    assert(
+        position <= previousLocked and position >= 100,
+        "Repeated locked state restarted correction"
+    )
+    assert(localState.prediction.acknowledged == 10, "Repeated lock consumed pending input")
+    previousLocked = position
+end
+assert(previousLocked - 100 < 0.001, "Locked position did not settle at the host position")
+extraFinished = true
+animation = "WalkRight"
+localRender(51)
+assert(localState.prediction.velocity.X > 0, "Movement waited for another host packet")
+print("PASS action locks retain pending inputs, reconcile delayed state and resume locally")

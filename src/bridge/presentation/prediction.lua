@@ -59,9 +59,14 @@ function methods:confirm(position, sequence, velocity)
         self.correction = self.display - target(self)
     end
 end
-function methods:step(direction, sequence, speed, dt)
+function methods:step(direction, sequence, speed, dt, locked)
     dt = math.max(0, math.min(dt, 0.05))
     self.sequence = sequence
+    if locked then
+        -- An action blocks new walking, not acknowledgement of earlier input.
+        -- Keep the current path and reconcile it against real host replies.
+        self.velocity = Vector(0, 0)
+    end
     if sequence > self.acknowledged then
         local input = self.pending[sequence]
         if not input then
@@ -73,7 +78,7 @@ function methods:step(direction, sequence, speed, dt)
         -- J460 ordinary walking: velocity retains .775 per 30 Hz update;
         -- terminal speed is MoveSpeed * 4.4117647 per rendered 60 Hz frame.
         -- Split stalls into render-sized steps so acceleration is consistent.
-        while elapsed > 0 do
+        while not locked and elapsed > 0 do
             local step = math.min(elapsed, 1 / 60)
             local retain = 0.775 ^ (step * 30)
             self.velocity = self.velocity * retain + direction * speed * (1 - retain)
