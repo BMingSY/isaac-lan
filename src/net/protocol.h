@@ -12,7 +12,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 31;
+constexpr std::uint16_t protocolVersion = 32;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -129,6 +129,11 @@ struct Progress {
     std::array<std::uint32_t, 523> counters{};
     bool operator==(const Progress&) const = default;
 };
+namespace ending {
+inline constexpr unsigned gameOver = 1;
+inline constexpr unsigned firstCinematic = 2;
+inline constexpr unsigned lastCinematic = 14;
+} // namespace ending
 struct Ending {
     unsigned id = 0;
     Progress progress;

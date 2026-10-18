@@ -1580,7 +1580,12 @@ int localViewSlot() {
 void requestWindowClose() {
     if (!view.gated || !session)
         return;
-    if (session->phase() == lan::Phase::running)
+    if (view.playingEnding) {
+        // Terminal presentation no longer consumes gameplay command frames.
+        // Close at the native boundary, without saving a finished/dead run.
+        authorizedExit = true;
+        rooms::requestExit(false);
+    } else if (session->phase() == lan::Phase::running)
         session->command(session->isHost() ? lan::Command::saveExit : lan::Command::leave);
     else {
         authorizedExit = true;

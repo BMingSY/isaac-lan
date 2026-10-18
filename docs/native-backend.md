@@ -27,6 +27,7 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 | 已决定的房间转场 | `RoomTransition.Start`，RVA `0x42ee40`，receiver 为 `Game+0x1b83c`，五个栈参数、被调方清理 20 字节 | 回放 index、direction、animation、player、dimension，保留原版尾部完成标志；不重新选择路线 |
 | 暂停菜单 | `pauseMenuShow`、`pauseMenuHide`、`pauseMenuControls`、`optionsSave` | 菜单操作独立于整段 `Game::Controls`，临时使用本机显示名单，返回恢复，不接管菜单或角色所有权 |
 | 原生菜单提示清理 | `input::resetMenuPrompts`，RVA `0x239b0`，`thiscall void(Manager+0x4a950, false)` | 联网启动销毁菜单后调用一次，被调方清理 4 字节，不影响随后暂停菜单提示 |
+| 原生结束回放 | `Game::End`，RVA `0x2f9770`，`thiscall void(Game*, int id)` | `1` 为死亡结算，`2～14` 为结局；房主原生确认后发送可靠结束事件，客机在安全更新边界调用原入口。本机名单只在调用期间借用，不复制结算 Sprite、角色或原生容器；单人保留原调用 |
 
 回退使用者源房只在完整权威房间、无借用作用域时激活；不激活客机远端存储壳，不跨清理持有 Room Scope。来源和回放参数由运行事务维护，选路与对象分配／释放由原版负责。
 

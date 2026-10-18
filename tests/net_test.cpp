@@ -397,18 +397,25 @@ void floorRejoin() {
 }
 void endingEvents() {
     for (unsigned count = 2; count <= 4; ++count)
-        for (unsigned scenario = 0; scenario < 3; ++scenario) {
-            const RunRules rules = scenario ? RunRules{1001, 2, 23, 0, true} : RunRules{};
+        for (unsigned scenario = 0; scenario < 5; ++scenario) {
+            const RunRules rules = scenario == 1 || scenario == 2 || scenario == 4
+                                       ? RunRules{1001, 2, 23, 0, true}
+                                       : RunRules{};
             const bool completed = scenario == 2;
+            const unsigned id = scenario >= 3 ? ending::gameOver : 6;
             Group group(count, 0, "127.0.0.1", rules);
             group.ready();
             group.step(0);
             if (!scenario)
                 require(!group.peers[0]->beginEnding(6, {}, true),
                         "Ordinary run declared explicit rule completion");
-            require(group.peers[0]->beginEnding(6, {}, completed), "Terminal event rejected");
-            require(group.peers[0]->beginEnding(6, {}, completed), "Terminal replay rejected");
-            require(!group.peers[0]->beginEnding(6, {}, !completed),
+            require(!group.peers[1]->beginEnding(id), "Replica published a terminal event");
+            if (id == ending::gameOver)
+                require(!group.peers[0]->beginEnding(id, {}, true),
+                        "Game over was accepted as challenge completion");
+            require(group.peers[0]->beginEnding(id, {}, completed), "Terminal event rejected");
+            require(group.peers[0]->beginEnding(id, {}, completed), "Terminal replay rejected");
+            require(!group.peers[0]->beginEnding(id, {}, !completed),
                     "Same ending ID changed native ending into explicit completion");
             for (unsigned slot = 1; slot < count; ++slot) {
                 std::optional<Ending> event;
@@ -417,45 +424,78 @@ void endingEvents() {
                     event = group.peers[slot]->takeEnding();
                     return event.has_value();
                 });
-                require(event == Ending{6, {}, completed},
+                require(event == Ending{id, {}, completed},
                         "Native ending and explicit completion were conflated on a replica");
+                require(!group.peers[slot]->takeEnding(), "Terminal event was applied twice");
             }
         }
-    Group g(4);
-    g.ready();
-    g.step(0);
-    g.publish(0, 40000);
-    require(!g.peers[1]->beginEnding(8), "Client could choose the shared ending");
-    for (auto invalid : {0u, 1u, 15u, 255u})
-        require(!g.peers[0]->beginEnding(invalid), "Invalid ending was accepted");
-    Progress progress;
-    progress.achievements[7] = 1;
-    progress.counters[21] = 5;
-    require(g.peers[0]->beginEnding(8, progress), "Ending broadcast failed");
-    require(g.peers[0]->beginEnding(8), "Duplicate native ending was not idempotent");
-    require(!g.peers[0]->beginEnding(13), "A terminal event changed its ending");
-    require(!g.peers[0]->beginStage({1, 2, 0, 0, false, {}, {}}),
-            "A floor change followed the terminal event");
-    WorldState obsolete;
-    obsolete.tick = 0;
-    obsolete.bytes = {1};
-    require(!g.peers[0]->publish(1, obsolete), "World publication continued after the ending");
-    // The engine closes immediately after its native exit callback. Every
-    // replica must retain the ending even if finish and EOF arrive together.
-    g.peers[0]->finish();
-    until([&] {
-        g.poll();
-        return g.peers[1]->phase() == Phase::closed && g.peers[2]->phase() == Phase::closed &&
-               g.peers[3]->phase() == Phase::closed;
-    });
-    for (unsigned slot = 1; slot < 4; ++slot) {
-        require(g.peers[slot]->takeEnding() == Ending{8, progress},
-                "Finish/EOF lost the native ending or its earned progress");
-        require(!g.peers[slot]->takeEnding(), "A replica received the ending twice");
-        require(!g.peers[slot]->takeState(), "Old world state survived the terminal event");
+    for (const auto id : {8u, ending::gameOver}) {
+        Group g(4);
+        g.ready();
+        g.step(0);
+        g.publish(0, 40000);
+        require(!g.peers[1]->beginEnding(id), "Client could choose the shared ending");
+        for (auto invalid : {0u, 15u, 255u})
+            require(!g.peers[0]->beginEnding(invalid), "Invalid ending was accepted");
+        Progress progress;
+        progress.achievements[7] = 1;
+        progress.counters[21] = 5;
+        require(g.peers[0]->beginEnding(id, progress), "Ending broadcast failed");
+        require(g.peers[0]->beginEnding(id), "Duplicate native ending was not idempotent");
+        require(!g.peers[0]->beginEnding(13), "A terminal event changed its ending");
+        require(!g.peers[0]->beginStage({1, 2, 0, 0, false, {}, {}}),
+                "A floor change followed the terminal event");
+        WorldState obsolete;
+        obsolete.tick = 0;
+        obsolete.bytes = {1};
+        require(!g.peers[0]->publish(1, obsolete), "World publication continued after the ending");
+        // The engine closes immediately after its native exit callback. Every
+        // replica must retain the ending even if finish and EOF arrive together.
+        g.peers[0]->finish();
+        until([&] {
+            g.poll();
+            return g.peers[1]->phase() == Phase::closed && g.peers[2]->phase() == Phase::closed &&
+                   g.peers[3]->phase() == Phase::closed;
+        });
+        for (unsigned slot = 1; slot < 4; ++slot) {
+            require(g.peers[slot]->takeEnding() == Ending{id, progress},
+                    "Finish/EOF lost the native ending or its earned progress");
+            require(!g.peers[slot]->takeEnding(), "A replica received the ending twice");
+            require(!g.peers[slot]->takeState(), "Old world state survived the terminal event");
+        }
     }
     std::puts(
         "PASS authoritative ending survives immediate finish/EOF and plays once on all peers");
+}
+void endingLiveness() {
+    Group g(4);
+    g.ready();
+    g.step(0);
+    g.publish(0);
+    for (unsigned slot = 1; slot < g.count; ++slot)
+        until([&] {
+            g.poll();
+            if (const auto state = g.peers[slot]->takeState()) {
+                g.peers[slot]->applied(state->tick);
+                return true;
+            }
+            return false;
+        });
+    require(g.peers[0]->beginEnding(ending::gameOver), "Game-over event rejected");
+    // Outlive both gameplay watchdogs (15 s inputs, 20 s snapshots). Terminal
+    // screens exchange only transport heartbeats until the user dismisses them.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(22);
+    while (std::chrono::steady_clock::now() < deadline) {
+        g.poll();
+        require(g.peers[0]->connectedMask() == 15, "Game-over screen lost a healthy peer");
+        Sleep(5);
+    }
+    for (unsigned slot = 1; slot < g.count; ++slot) {
+        require(g.peers[slot]->takeEnding() == Ending{ending::gameOver, {}},
+                "Waiting on game over lost its event");
+        require(g.peers[slot]->phase() == Phase::running,
+                "Terminal heartbeat did not preserve the connection");
+    }
 }
 void cinematicEvents() {
     Group g(4);
@@ -1859,6 +1899,7 @@ int main(int argc, char** argv) {
                                   {"floor-rejoin", floorRejoin},
                                   {"stage-events", stageEvents},
                                   {"ending-events", endingEvents},
+                                  {"ending-liveness", endingLiveness},
                                   {"cinematic-events", cinematicEvents},
                                   {"stage-during-rejoin", stageDuringRejoin},
                                   {"rewind", rewindTransaction},

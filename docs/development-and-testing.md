@@ -158,6 +158,7 @@ python tools/engine_test.py run special-routes -- \
 | EID、举袋与水流 | [run_client_scenes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_client_scenes.py)，需要完整举放检查时加 `--include-bag-transitions --record-view` |
 | 道具与角色 | [run_item_issues.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_issues.py) 或 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的相关场景；按实际改动选择持有者、房间和生命周期条件 |
 | 联机挑战 | [run_lan_challenges.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_lan_challenges.py)：`--suite access`／`gameplay`／`hud` 分别检查资格、规则、2–4 人显示与普通会话恢复 |
+| 全队死亡结算 | [run_game_over.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_game_over.py)：指定 `--host`、`--client`、`--output`，可加 `--record --heap-check`；同一双端进程检查参孙魂石、狂怒与里参孙的最后存活者死亡、普通死亡对照、额外生命、结算停留和原版退出。离线对应 `net.ending-events` 与 `net.ending-liveness` |
 | 第三方 Mod | [state_mod_ui.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_ui.lua)、[state_mod_integrations.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_integrations.lua)；按支持版本及 `--mod`／`--client-mod`／`--host-mod` 安装组合选择 |
 | 性能与资源 | [诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)：与其他实机分组分开运行，区分实际负载、采集／应用、传输与原生开销 |
 

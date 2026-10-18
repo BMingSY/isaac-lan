@@ -341,6 +341,7 @@ if(BUILD_TESTING)
         floor-rejoin
         stage-events
         ending-events
+        ending-liveness
         cinematic-events
         stage-during-rejoin
         rewind

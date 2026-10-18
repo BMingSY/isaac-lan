@@ -574,7 +574,8 @@ struct Session::Impl {
         if (type == Message::ending && state == Phase::running) {
             const auto value = r.u8();
             const auto completed = r.u8();
-            if (value < 2 || value > 14 || ending || completed > 1 || (completed && !runRules.id))
+            if (value < ending::gameOver || value > ending::lastCinematic || ending ||
+                completed > 1 || (completed && (!runRules.id || value == ending::gameOver)))
                 throw std::runtime_error("Invalid authoritative ending");
             const auto progress = r.progress();
             if (!progress)
@@ -1139,8 +1140,9 @@ bool Session::cinematicReady() {
     return true;
 }
 bool Session::beginEnding(unsigned ending, const Progress& progress, bool completed) {
-    if (!impl->hosting || impl->state != Phase::running || ending < 2 || ending > 14 ||
-        (completed && !impl->runRules.id))
+    if (!impl->hosting || impl->state != Phase::running || ending < ending::gameOver ||
+        ending > ending::lastCinematic ||
+        (completed && (!impl->runRules.id || ending == ending::gameOver)))
         return false;
     if (impl->ending)
         return *impl->ending == ending && impl->endingCompleted == completed;
@@ -1295,7 +1297,8 @@ void Session::poll() {
                         Clock::now() - *p.loadingAt > std::chrono::seconds(60))
                         throw ConnectionLost("Player loading timed out");
                     if (impl->hosting && impl->initialStarted && p.ready &&
-                        Clock::now() - (impl->cinematicEpoch ? p.packetAt : p.inputAt) >
+                        Clock::now() -
+                                (impl->cinematicEpoch || impl->ending ? p.packetAt : p.inputAt) >
                             std::chrono::seconds(15))
                         throw ConnectionLost("Player connection timed out");
                 } catch (const std::exception& e) {
@@ -1345,8 +1348,9 @@ void Session::poll() {
             }
         }
         if (!impl->hosting && impl->state == Phase::running && impl->localReady &&
-            Clock::now() - (impl->cinematicEpoch && impl->peers[0] ? impl->peers[0]->packetAt
-                                                                   : impl->progress) >
+            Clock::now() - ((impl->cinematicEpoch || impl->ending) && impl->peers[0]
+                                ? impl->peers[0]->packetAt
+                                : impl->progress) >
                 std::chrono::seconds(impl->verified ? 20 : 90))
             throw std::runtime_error("Host state transfer timed out");
     } catch (const std::exception& e) {

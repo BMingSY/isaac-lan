@@ -768,14 +768,18 @@ End originalEnd;
 void __attribute__((fastcall)) endGame(void* target, void*, int ending) {
     // LAN challenges complete through their explicit reward transaction.
     // Native terminal routes cannot publish a second completion path.
-    if (runtime::challengeActive() && ending >= 2 && ending <= 14)
+    if (runtime::challengeActive() && ending >= static_cast<int>(lan::ending::firstCinematic) &&
+        ending <= static_cast<int>(lan::ending::lastCinematic))
         return;
-    if (runtime::localViewSlot() < 0 || ending < 2 || ending > 14) {
+    if (runtime::localViewSlot() < 0 || ending < static_cast<int>(lan::ending::gameOver) ||
+        ending > static_cast<int>(lan::ending::lastCinematic)) {
         originalEnd(target, ending);
         return;
     }
     // Native pickups/NPCs can call End while this actor's room is scoped. Keep
     // that native roster and ending semantics, then include earned progress.
+    // Game::End(1) is the native game-over screen. Replicas do not simulate
+    // lethal damage, so they must receive this terminal event too.
     if (runtime::replica())
         return;
     const auto state = at<int>(game(), 0x26614);
