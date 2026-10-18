@@ -27,6 +27,7 @@ return function(Phase, Command)
             or phase == Phase.running
             or phase == Phase.loading
             or phase == Phase.waiting
+            or phase == Phase.returning
         )
                 and (status.players or 0)
             or 0
@@ -229,7 +230,7 @@ return function(Phase, Command)
                 deps.hide()
             end)
         else
-            notice = "waiting"
+            notice = phase == Phase.returning and "returning" or "waiting"
             if not status.prepared then
                 row("离开房间", function()
                     command("close")

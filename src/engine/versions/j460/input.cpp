@@ -28,6 +28,8 @@ std::atomic<int> labButtons{-1};
 std::atomic<int> labLeftTrigger{0}, labRightTrigger{0};
 std::atomic<int> labThumbX{0}, labThumbY{0};
 std::atomic<unsigned> labPacket{1};
+constexpr WORD restartChord = XINPUT_GAMEPAD_LEFT_THUMB | XINPUT_GAMEPAD_RIGHT_THUMB |
+                              XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER;
 bool labInput = false;
 bool enabled = false;
 bool menuConfirm = false;
@@ -77,7 +79,7 @@ bool hookDevices() {
 }
 void restoreDeviceIds() {
     const std::lock_guard lock(deviceMutex);
-    const auto manager = image + 0x857b18;
+    const auto manager = image + j460::globals::inputManager;
     for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8) {
         const auto device = at<std::uintptr_t>(p, 0);
         for (const auto& saved : lanDeviceIds)
@@ -90,7 +92,7 @@ void assignLanDeviceIds() {
     const std::lock_guard lock(deviceMutex);
     if (!virtualDevices || !lanDeviceIds.empty())
         return;
-    const auto manager = image + 0x857b18;
+    const auto manager = image + j460::globals::inputManager;
     std::vector<DeviceId> devices;
     for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8) {
         const auto device = at<std::uintptr_t>(p, 0);
@@ -291,7 +293,7 @@ bool __attribute__((fastcall)) query(void* manager, void*, int controller, void*
 bool hookQuery() {
     if (originalQuery)
         return true;
-    const auto manager = image + 0x857b18;
+    const auto manager = image + j460::globals::inputManager;
     const auto target =
         reinterpret_cast<void*>(at<std::uintptr_t>(at<std::uintptr_t>(manager, 0), 0x74));
     logger("input_query_rva=" + std::to_string(reinterpret_cast<std::uintptr_t>(target) - image));
@@ -313,7 +315,7 @@ int enable(lua_State* L) {
 bool exists(int index) {
     const std::lock_guard lock(deviceMutex);
     assignLanDeviceIds();
-    const auto manager = image + 0x857b18;
+    const auto manager = image + j460::globals::inputManager;
     // The hotplug worker also updates this vector.
     for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8)
         if (at<int>(at<std::uintptr_t>(p, 0), 12) == index)
@@ -349,7 +351,7 @@ int ready(lua_State* L) {
 }
 int devices(lua_State* L) {
     const std::lock_guard lock(deviceMutex);
-    const auto manager = image + 0x857b18;
+    const auto manager = image + j460::globals::inputManager;
     std::string found = "input_devices=";
     for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8)
         found += std::to_string(at<int>(at<std::uintptr_t>(p, 0), 12)) + ",";
@@ -442,12 +444,12 @@ void samplePhysicalInput() {
     sampledFrame = frame;
     runtime::pollLocalConsole();
     runtime::refreshAutomation(frame);
-    const bool capturing = frontend::capturesInput();
+    const bool capturing = frontend::capturesInput() || restartHeld();
     if (capturing) {
         automation.clear();
         physicalInput = {};
     }
-    void* inputManager = reinterpret_cast<void*>(image + 0x857b18);
+    void* inputManager = reinterpret_cast<void*>(image + j460::globals::inputManager);
     for (unsigned source = 0; source < physicalInput.size(); ++source) {
         auto& input = physicalInput[source];
         for (int action = 0; action < 16; ++action) {
@@ -665,9 +667,28 @@ void confirmOriginalMenu(void* menu, void(__attribute__((thiscall)) * update)(vo
 }
 bool menuTriggered(int action) {
     return hookQuery() &&
-           originalQuery(reinterpret_cast<void*>(image + 0x857b18), -1,
+           originalQuery(reinterpret_cast<void*>(image + j460::globals::inputManager), -1,
                          reinterpret_cast<void*>(image + j460::entry::inputTriggered), &action,
                          nullptr, nullptr);
+}
+bool restartHeld() {
+    const int action = input::action::restart;
+    if (hookQuery())
+        for (unsigned source = 0; source < physicalInput.size(); ++source)
+            if (originalQuery(reinterpret_cast<void*>(image + j460::globals::inputManager), source,
+                              reinterpret_cast<void*>(image + j460::entry::inputPressed), &action,
+                              nullptr, nullptr))
+                return true;
+    const auto provider = std::find_if(xinputProviders.begin(), xinputProviders.end(),
+                                       [](const auto& p) { return p.state != nullptr; });
+    if (provider != xinputProviders.end())
+        for (unsigned i = 0; i < 4; ++i) {
+            XINPUT_STATE state{};
+            if (readState(provider->state, i, &state) == ERROR_SUCCESS &&
+                (state.Gamepad.wButtons & restartChord) == restartChord)
+                return true;
+        }
+    return false;
 }
 bool hostMenuTriggered(int action) {
     return enabled && menuActionTriggered(accepted.inputs[0], action);
@@ -676,7 +697,7 @@ int chatControls(lua_State* L) {
     // Read the original physical device, before LAN's virtual controller routing.
     // L3 is a local UI shortcut; it is never transmitted as a gameplay action.
     auto& previous = previousChatButtons;
-    bool toggle = false;
+    bool toggle = false, restart = false;
     for (unsigned i = 0; i < previous.size(); ++i) {
         XINPUT_STATE state{};
         const auto provider = std::find_if(xinputProviders.begin(), xinputProviders.end(),
@@ -685,6 +706,7 @@ int chatControls(lua_State* L) {
             readState(provider->state, i, &state) == ERROR_SUCCESS) {
             const auto pressed = static_cast<WORD>(state.Gamepad.wButtons & ~previous[i]);
             toggle |= (pressed & XINPUT_GAMEPAD_LEFT_THUMB) != 0;
+            restart |= (state.Gamepad.wButtons & restartChord) == restartChord;
             if (pressed)
                 localChatController = i + 1;
             previous[i] = state.Gamepad.wButtons;
@@ -692,8 +714,10 @@ int chatControls(lua_State* L) {
             previous[i] = 0;
     }
     lua.createTable(L, 0, 8);
-    lua.pushBoolean(L, toggle);
+    lua.pushBoolean(L, toggle && !restart);
     lua.setField(L, -2, "chat");
+    lua.pushBoolean(L, restart);
+    lua.setField(L, -2, "restart");
     if (GetKeyState(VK_LMENU) < 0)
         localChatController = 0;
     lua.pushInteger(L, localChatController);
@@ -705,7 +729,7 @@ int chatControls(lua_State* L) {
                                        {"up", action::menuUp},
                                        {"down", action::menuDown},
                                        {"emote", action::emote}}) {
-        lua.pushBoolean(L, menuTriggered(action));
+        lua.pushBoolean(L, !restart && menuTriggered(action));
         lua.setField(L, -2, name);
     }
     return 1;

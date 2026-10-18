@@ -1,11 +1,13 @@
 -- Reproduce deferred native room transfers in the actual engine fixture.
 local root = assert(arg[1])
+local Phase = dofile(root .. "/tests/fixtures/net_phases.lua")
 for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true } }) do
     local difficulty, campaign = table.unpack(scenario)
     local callbacks, clock, tears, terminalVariant = {}, 0, {}, 0
     local main, shop, exit, active, terminal = 84, 70, 98, 84, 58
     local stage, ready = 1, true
     local exitEnemy = false
+    local returned = false
     local positions = { ["0"] = { index = main }, ["1"] = { index = main } }
     local pending, hooks, wave, clear, enemy, coins, bought, spawned =
         {}, nil, 0, false, true, 0, false, 0
@@ -141,6 +143,9 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
         end,
     }
     local native = {
+        net_phases = function()
+            return Phase
+        end,
         api_info = function()
             return { nowMs = clock }
         end,
@@ -175,7 +180,13 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
     local env = setmetatable({
         _IsaacLan = native,
         _IsaacLanFrame = function()
-            return { phase = 0, scene = 1, prepared = false }
+            return {
+                phase = returned and Phase.lobby or Phase.idle,
+                scene = 1,
+                prepared = false,
+                players = 2,
+                connected = 3,
+            }
         end,
         _IsaacLanCommand = function() end,
         _IsaacLanTest = {
@@ -478,6 +489,7 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
         callbacks[1](nil, false)
         assert(not pcall(callbacks[1], nil, false), "Duplicate win callback was accepted")
         callbacks[2]()
+        returned = true
         clock = clock + 4000
         env._IsaacLanFrame()
     end

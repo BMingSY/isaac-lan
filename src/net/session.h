@@ -34,11 +34,19 @@ class Session {
     void poll();
     void close();
     void finish();
+    // Called after a completed run exits locally. Keep the room until every
+    // connected participant has finished its native ending/exit boundary.
+    bool returnToLobby();
     void abort(const std::string& reason);
     bool start(const Start& settings);
     // Admit waiting guests from a native current-floor save. Loading never
     // stalls the live session; the first live view uses the host's latest room.
     bool checkpoint(const Start& settings, std::uint32_t firstTick);
+    // Replace the run while retaining connection identities and seats.
+    bool restart(const Start& settings);
+    bool takeRestart();
+    bool sendLifecycle(unsigned destination, const std::string& bytes);
+    std::optional<IntegrationMessage> takeLifecycle();
     bool checkpointNeeded() const;
     bool choose(Choice choice);
     bool configureRules(const RunRules& rules);

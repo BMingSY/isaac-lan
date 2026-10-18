@@ -1890,7 +1890,7 @@ test("embedded console entry dispatches lanbot and returns nil", function()
         MC_POST_PICKUP_UPDATE = 7,
         MC_POST_NEW_LEVEL = 8,
     }
-    dofile(root .. "/tests/fixtures/chat_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
+    dofile(root .. "/tests/fixtures/app_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
     dofile(root .. "/src/bridge/app/main.lua")
     assert(callbacks[1](nil, "another_command", "on") == nil and #output == 0)
     assert(callbacks[1](nil, "lanbot", "on") == nil and output[1]:find("running"))

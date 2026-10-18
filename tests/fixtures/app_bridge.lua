@@ -1,13 +1,24 @@
--- Main-bridge fixtures use the real chat components with an idle local editor.
+-- Main-bridge fixtures use real UI/lifecycle components with no local requests.
 return function(root, native, modules)
     native.chat_style = { opacity = 70, background = 0x231b18, border = 0x79604c, text = 0xe8dfcb }
     for _, name in ipairs({
+        "runtime/restart",
         "runtime/chat_wire",
         "runtime/chat",
         "presentation/chat_layout",
         "presentation/chat",
     }) do
         modules[name] = dofile(root .. "/src/bridge/" .. name .. ".lua")
+    end
+    native.net_lifecycle_receive = function() end
+    native.net_lifecycle_send = function()
+        return false
+    end
+    native.net_restart_request = function()
+        return false
+    end
+    native.net_restart = function()
+        error("Unexpected restart without a local request")
     end
     native.chat_limits = function()
         return { characters = 60, commandBytes = 2048, history = 200, dice = 999 }

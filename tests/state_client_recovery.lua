@@ -1,5 +1,5 @@
 -- One pair covers fresh ownership, manual reconnect, failed restore, retry,
--- automatic recovery and leaving. Native exits are intentional; processes stay.
+-- automatic recovery, restart, ending and leaving. Processes stay throughout.
 local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
 local host, port = config.host, config.port
 local Phase = native.net_phases()
@@ -8,8 +8,9 @@ local frame, gate = _IsaacLanFrame, native.net_gate
 local renders, starts, departures = 0, 0, 0
 local linked, chosen, finished = false, false, false
 local manual, failedRestore, retried, dropped, left = false, false, false, false, false
-local failedAt, liveAt, lastConnected, firstPosition, origin
-local sawRecovery, sawFailure, sawMovingHost = false, false, false
+local failedAt, liveAt, lastConnected, firstPosition, origin, restartAt, lobbyAt
+local sawRecovery, sawFailure, sawMovingHost, sawLobby = false, false, false, false
+local RESTART_BUTTONS, CONFIRM_BUTTON, FIRST_CINEMATIC = 0x3c0, 0x1000, 2
 local inputReady, deviceWait = native.input_ready, host and 0 or 45
 native.input_ready = function()
     if deviceWait > 0 then
@@ -69,12 +70,17 @@ function _IsaacLanFrame()
         sawRecovery = true
     end
     if host then
+        if starts == 2 and status.phase == Phase.lobby then
+            assert(not status.prepared and not status.recovering)
+            sawLobby = true
+        end
         if lastConnected == 3 and status.connected == 1 then
             departures = departures + 1
         end
         lastConnected = status.connected
         if departures >= 4 and not finished then
             assert(sawMovingHost, "Host input never moved its own actor")
+            assert(starts == 2 and sawLobby, "Restart or ending lost the host session")
             finished = true
             report("PASS client recovery lifecycle")
         end
@@ -101,22 +107,44 @@ function _IsaacLanFrame()
         if starts == 1 and status.verified - liveAt > 100 and not manual then
             manual = true
             _IsaacLanCommand("reconnect")
-        elseif starts == 4 and status.verified - liveAt > 100 and not left then
+        end
+    elseif starts == 5 and status.phase == Phase.lobby then
+        assert(not status.prepared and not status.recovering)
+        sawLobby = true
+        lobbyAt = lobbyAt or renders
+        if renders - lobbyAt > 30 and not left then
             assert(sawRecovery and sawFailure and retried and dropped)
             left = true
             _IsaacLanCommand("leave")
         end
     elseif left and status.phase == Phase.idle and not finished then
-        assert(not status.recovering and starts == 4)
+        assert(not status.recovering and starts == 5 and sawLobby)
         finished = true
         report("PASS client recovery lifecycle")
     end
+    local vote = false
+    if status.phase == Phase.running and status.prepared then
+        if host and starts == 1 and departures == 3 and status.connected == 3 then
+            restartAt = restartAt or status.verified
+            vote = status.verified - restartAt > 100
+        elseif not host and starts == 4 and liveAt then
+            vote = status.verified - liveAt > 100
+        end
+    end
+    -- Exercise the shared exit boundary after recovery: unanimous restart,
+    -- then the native ending returns both peers to the same lobby.
+    native.test_gamepad(
+        status.scene == 3 and (renders % 30 < 5 and CONFIRM_BUTTON or 0)
+            or vote and RESTART_BUTTONS
+            or 0
+    )
     assert(not host or status.phase ~= Phase.failed, status.error)
     return status
 end
 native.net_gate = function(capture, apply, collect, restore, present, stage)
     if host then
         local h, p = checkActors()
+        assert(p:GetNumCoins() == 0, "Restart retained the previous inventory")
         h.Position = Game():GetRoom():GetCenterPos()
         p:AddCoins(19)
         p:AddCollectible(CollectibleType.COLLECTIBLE_BROTHER_BOBBY)
@@ -140,17 +168,20 @@ native.net_gate = function(capture, apply, collect, restore, present, stage)
                 local h = checkActors()
                 sawMovingHost = (h.Position - firstPosition):Length() > 10
             end
-            if host and t == 30 then
+            if host and starts == 1 and t == 30 then
                 local h, p = checkActors()
                 assert(native.rooms_with_player(1, function()
                     p:UseCard(Card.CARD_JOKER, UseFlag.USE_NOANIM)
                 end))
             end
-            if host and t == 90 then
+            if host and starts == 1 and t == 90 then
                 assert(Game():GetLevel():GetCurrentRoomIndex() == origin, "Guest moved the host")
                 assert(native.rooms_with_player(1, function()
                     assert(Game():GetRoom():GetType() == RoomType.ROOM_DEVIL)
                 end))
+            end
+            if host and starts == 2 and t == 150 then
+                Game():End(FIRST_CINEMATIC)
             end
         end,
         collect,

@@ -47,6 +47,18 @@ end)
 function _IsaacLanCanEnterRoom(...)
     return challenge.canEnter(...)
 end
+local restart = _IsaacLanModules["runtime/restart"]({
+    running = Phase.running,
+    now = function()
+        return native.api_info().nowMs
+    end,
+    send = native.net_lifecycle_send,
+    receive = native.net_lifecycle_receive,
+    request = native.net_restart_request,
+    restart = function()
+        return native.net_restart(Seeds.Seed2String(Random()):gsub("%s", ""))
+    end,
+})
 local status, tick = {}, 0
 local lifecycle
 local continuedRun = false
@@ -305,7 +317,11 @@ function _IsaacLanCommand(action, value)
 end
 local chatSession = false
 function _IsaacLanFrame()
+    local previousPhase = status.phase
     status = native.net_poll()
+    if status.phase == Phase.lobby and previousPhase ~= Phase.lobby then
+        savedPlayers = native.net_saved_info()
+    end
     if
         status.phase == Phase.lobby
         or status.phase == Phase.running
@@ -324,6 +340,7 @@ function _IsaacLanFrame()
         chat.reset()
         chatUI.reset()
     end
+    restart.poll(status)
     integration.poll()
     chat.poll()
     bot.poll()

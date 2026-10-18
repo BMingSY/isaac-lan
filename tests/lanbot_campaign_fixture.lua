@@ -1,10 +1,12 @@
 -- Execute the actual accelerated campaign against a native lifecycle model.
 -- Player motion and victory remain external engine events in this model.
 local root = assert(arg[1])
+local Phase = dofile(root .. "/tests/fixtures/net_phases.lua")
 for _, host in ipairs({ true, false }) do
     local hooks, callbacks, messages = nil, {}, {}
     local clock, stage, roomIndex, clear, phase, scene, tick = 0, 1, 84, false, 0, 1, 0
     local paused = false
+    local returned = false
     local flags, extraAnimation = host and { 0, 1 } or { 1, 1 }, "Idle"
     local points, items, moves, nextCalls, confirms = { 0, 0 }, {}, {}, 0, 0
     local positions =
@@ -88,6 +90,9 @@ for _, host in ipairs({ true, false }) do
         .. string.pack(">I4", host and 98765 or 321)
     local baseline = progress
     local native = {
+        net_phases = function()
+            return Phase
+        end,
         actor_sprites = function()
             local value = {
                 GetAnimation = function()
@@ -318,8 +323,8 @@ for _, host in ipairs({ true, false }) do
             phase = phase,
             scene = scene,
             players = 2,
-            ready0 = 1,
-            ready1 = 1,
+            ready0 = returned and 0 or 1,
+            ready1 = returned and 0 or 1,
             prepared = phase == 3,
         }
     end
@@ -418,7 +423,7 @@ for _, host in ipairs({ true, false }) do
     if host then
         assert(flags[1] == 0 and flags[2] == 1, "Fixture changed the original blink overrides")
     end
-    phase, scene, clock = 0, 1, clock + 4000
+    phase, scene, clock, returned = Phase.lobby, 1, clock + 4000, true
     progress = baseline:sub(1, -5) .. string.pack(">I4", 1)
     assert(not pcall(env._IsaacLanFrame), "Changed private progress counter was accepted")
     progress = baseline

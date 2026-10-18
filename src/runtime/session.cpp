@@ -39,10 +39,47 @@ std::vector<std::unique_ptr<lan::Session>> retiring;
 std::uintptr_t executableImage = 0;
 void (*logger)(const std::string&) = nullptr;
 bool authorizedExit = false;
+RestartState restartState;
+constexpr auto restartHoldDuration = std::chrono::milliseconds(550);
+
 LaunchState launch;
 SessionView view;
 SavedRun saves;
 std::string sessionFingerprint;
+bool requestRestart(bool held) {
+    if (!view.gated || !session || session->phase() != lan::Phase::running)
+        return false;
+    if (!restartState.exiting && !view.playingCinematic && (!held || !restartState.heldVoted)) {
+        if (!restartState.requested && logger)
+            logger(held ? "network_restart=HOLD_VOTE" : "network_restart=RESULT_VOTE");
+        restartState.requested = true;
+        if (held)
+            restartState.heldVoted = true;
+    }
+    return true;
+}
+void pollRestart() {
+    if (!session || session->phase() != lan::Phase::running)
+        return;
+    if (view.gated && session->takeRestart()) {
+        restartState.exiting = authorizedExit = true;
+        restartState.requested = false;
+        view.pendingHalf = false;
+        rooms::requestExit(false);
+        if (logger)
+            logger("network_restart=EXIT_OLD_RUN");
+    }
+    if (!view.gated || restartState.exiting)
+        return;
+    const bool held = !frontend::capturesInput() && !view.playingCinematic && input::restartHeld();
+    if (!held) {
+        restartState.heldAt.reset();
+        restartState.heldVoted = false;
+    } else if (!restartState.heldAt) {
+        restartState.heldAt = std::chrono::steady_clock::now();
+    } else if (std::chrono::steady_clock::now() - *restartState.heldAt >= restartHoldDuration)
+        requestRestart(true);
+}
 bool retryArchive();
 lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
     return definition ? lan::RunRules{definition->id, definition->version, definition->character,
@@ -382,8 +419,9 @@ void publishState() {
     session->poll();
 }
 bool captureNextInput(bool simulationStep = false) {
-    if (!view.gated || !session || view.playingEnding || view.playingCinematic ||
-        session->phase() != lan::Phase::running)
+    pollRestart();
+    if (!view.gated || !session || restartState.exiting || view.playingEnding ||
+        view.playingCinematic || session->phase() != lan::Phase::running)
         return false;
     // Host input belongs to each native simulation step. Guest input follows
     // the native input frames (normally 60 Hz), without a second wall-clock
@@ -425,7 +463,8 @@ bool captureNextInput(bool simulationStep = false) {
     return true;
 }
 bool applyReplicaView(bool betweenUpdates) {
-    if (!session || session->phase() != lan::Phase::running)
+    pollRestart();
+    if (!session || session->phase() != lan::Phase::running || restartState.exiting)
         return false;
     // Reliable transitions, initial loading, and modal changes retain the full
     // update path. A half frame only restores a ready, stable world view.
@@ -537,6 +576,11 @@ void playSessionEnding(unsigned ending, bool completed) {
         rooms::playEnding(ending);
 }
 void updateOne(const backend::Call& original) {
+    pollRestart();
+    if (restartState.exiting) {
+        rooms::finishFrame();
+        return;
+    }
     if (!view.gated) {
         if (launch.requested && session &&
             (session->phase() == lan::Phase::failed || session->phase() == lan::Phase::closed)) {
@@ -620,6 +664,9 @@ void updateOne(const backend::Call& original) {
     if (!captureNextInput(true))
         return;
     session->poll();
+    pollRestart();
+    if (restartState.exiting)
+        return;
     if (!session->isHost()) {
         updateReplica(original);
         return;
@@ -784,6 +831,7 @@ int poll(lua_State* L) {
     }
     if (session)
         session->poll();
+    pollRestart();
     if (session && diagnostics::enabled()) {
         const auto resource = session->resources();
         diagnostics::counter("connections", resource.connections);
@@ -814,7 +862,7 @@ int poll(lua_State* L) {
         guestRecovery = false;
     // Service input at render frequency too. Waiting until the next 30 Hz game
     // update to send it needlessly adds a whole frame to a LAN round trip.
-    if (view.gated && state == L) {
+    if (view.gated && !restartState.exiting && state == L) {
         input::pollPhysicalInput();
         if (captureNextInput())
             session->poll();
@@ -834,6 +882,9 @@ int poll(lua_State* L) {
     integer("connected", session ? session->connectedMask() : 0);
     integer("firstTick", session ? session->settings().firstTick : 0);
     integer("draining", retiring.size());
+    integer("restarting", restartState.exiting);
+    lua.pushString(L, session ? session->runId().c_str() : "");
+    lua.setField(L, -2, "runId");
     integer("pendingSave", saves.pendingArchive.pending());
     lua.pushString(L, saves.saveError.c_str());
     lua.setField(L, -2, "saveError");
@@ -939,6 +990,44 @@ int integrationReceive(lua_State* L) {
 }
 int communicationSend(lua_State* L) {
     return sideChannelSend(L, true);
+}
+int lifecycleSend(lua_State* L) {
+    const auto destination = lua.checkInteger(L, 1);
+    std::size_t size = 0;
+    const auto bytes = lua.checkString(L, 2, &size);
+    lua.pushBoolean(L, session && destination >= 0 && destination < lan::maxPlayers &&
+                           size <= lan::maxIntegrationSize &&
+                           session->sendLifecycle(destination, std::string(bytes, size)));
+    return 1;
+}
+int lifecycleReceive(lua_State* L) {
+    if (session)
+        if (auto message = session->takeLifecycle()) {
+            lua.pushInteger(L, message->sender);
+            lua.pushLString(L, message->bytes.data(), message->bytes.size());
+            return 2;
+        }
+    return 0;
+}
+int takeRestartRequest(lua_State* L) {
+    lua.pushBoolean(L, restartState.requested);
+    restartState.requested = false;
+    return 1;
+}
+int restartSession(lua_State* L) {
+    const std::string seed = lua.checkString(L, 1, nullptr);
+    bool ok = false;
+    if (view.gated && !restartState.exiting && session && backend::parseSeed(seed)) {
+        auto settings = session->settings();
+        settings.seed = seed;
+        settings.snapshot.clear();
+        settings.progress = readProgress();
+        ok = session->restart(settings);
+        if (ok)
+            pollRestart();
+    }
+    lua.pushBoolean(L, ok);
+    return 1;
 }
 int communicationReceive(lua_State* L) {
     return sideChannelReceive(L, true);
@@ -1188,9 +1277,12 @@ int close(lua_State* L) {
     const bool retry = guestExit && ((session->phase() == lan::Phase::failed && !guestRecovery) ||
                                      (session->phase() == lan::Phase::closed && guestRecovery));
     guestRecovery = gameExit && (guestRecovery || retry);
-    const bool keep =
-        gameExit && session && (session->phase() == lan::Phase::waiting || guestRecovery);
-    if (guestExit)
+    const bool returning = gameExit && view.playingEnding && !restartState.exiting && session &&
+                           session->returnToLobby();
+    const bool keep = gameExit && session &&
+                      (returning || restartState.exiting ||
+                       session->phase() == lan::Phase::waiting || guestRecovery);
+    if (returning || (guestExit && !restartState.exiting))
         frontend::returnToLobby();
     rejoinAt =
         retry ? std::optional{InputClock::now() + std::chrono::milliseconds(250)} : std::nullopt;
@@ -1221,6 +1313,7 @@ int close(lua_State* L) {
     }
     state = nullptr;
     launch = {};
+    restartState.close(keep);
     return 0;
 }
 int reconnect(lua_State* L) {
@@ -1437,6 +1530,7 @@ void afterExit(bool save) {
     saves.soloState.clear();
     saves.networkRun = false;
     authorizedExit = false;
+    restartState.exiting = false;
     if (logger)
         logger("solo_save=RESTORED");
 }
@@ -1448,7 +1542,7 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     restorePositions = restore;
     return backend::install(image, {saveGame, deleteGame, saveRerun, serializeProgress,
                                     executeStart, startGame, update, consoleUpdate, consoleCommand,
-                                    controls, executeMenu});
+                                    controls, executeMenu, requestRestart});
 }
 void configureInput(unsigned hz) {
     inputHz = hz;
@@ -1541,6 +1635,9 @@ void present() {
     if (!captureNextInput())
         return;
     session->poll();
+    pollRestart();
+    if (restartState.exiting)
+        return;
     const int top = lua.getTop(state);
     lua.rawGetI(state, registry, presentRef);
     lan::Writer packed(lan::Message::input);
@@ -1649,7 +1746,12 @@ int localViewSlot() {
 void requestWindowClose() {
     if (!view.gated || !session)
         return;
-    if (session->phase() == lan::Phase::running)
+    if (view.playingEnding) {
+        // Terminal presentation no longer consumes gameplay command frames.
+        // Close at the native boundary, without saving a finished/dead run.
+        authorizedExit = true;
+        rooms::requestExit(false);
+    } else if (session->phase() == lan::Phase::running)
         session->command(session->isHost() ? lan::Command::saveExit : lan::Command::leave);
     else {
         authorizedExit = true;
@@ -1742,6 +1844,10 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_restore_rooms", restoreRooms);
     function("net_saved_info", savedInfo);
     function("net_retry_save", retrySavedArchive);
+    function("net_lifecycle_send", lifecycleSend);
+    function("net_lifecycle_receive", lifecycleReceive);
+    function("net_restart", restartSession);
+    function("net_restart_request", takeRestartRequest);
     function("net_command", sharedCommand);
     function("net_floor_epoch", epoch);
     return true;
