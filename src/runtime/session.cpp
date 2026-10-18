@@ -1447,8 +1447,7 @@ int savedInfo(lua_State* L) {
 lan::Archive captureCheckpoint() {
     lan::Archive archive;
     archive.fingerprint = sessionFingerprint;
-    archive.settings = session->settings();
-    archive.settings.snapshot.clear();
+    archive.settings = session->settings().metadata();
     archive.settings.progress = readProgress();
     archive.locations = rooms::captureLocations();
     for (unsigned slot = 1; slot < archive.locations.size(); ++slot)
@@ -1499,8 +1498,7 @@ void beforeExit(bool save) {
         return;
     lan::Archive archive;
     archive.fingerprint = sessionFingerprint;
-    archive.settings = session->settings();
-    archive.settings.snapshot.clear();
+    archive.settings = session->settings().metadata();
     archive.settings.progress = readProgress();
     archive.locations = rooms::captureLocations();
     saves.exitingArchive = std::move(archive);
@@ -1790,10 +1788,21 @@ void halfCompleted() {
         rooms::takeFloorChange();
         try {
             if (session->checkpointNeeded()) {
+                const auto began = InputClock::now();
                 const auto checkpoint = captureCheckpoint();
-                auto settings = session->settings();
+                const auto captured = InputClock::now();
+                auto settings = checkpoint.settings;
                 settings.snapshot = checkpoint.encode();
-                settings.progress = readProgress();
+                if (logger)
+                    logger(
+                        "checkpoint_capture bytes=" + std::to_string(settings.snapshot.size()) +
+                        " capture_ms=" +
+                        std::to_string(
+                            std::chrono::duration<double, std::milli>(captured - began).count()) +
+                        " archive_ms=" +
+                        std::to_string(
+                            std::chrono::duration<double, std::milli>(InputClock::now() - captured)
+                                .count()));
                 if (!session->checkpoint(settings, nextTick))
                     throw std::runtime_error("Cannot publish current-floor checkpoint");
             }

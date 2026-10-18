@@ -1,5 +1,6 @@
 #include "core/snapshot_delta.h"
 #include "net/compression.h"
+#include "net/wire_codec.h"
 #include "net/protocol.h"
 #include <algorithm>
 #include <deque>
@@ -22,7 +23,7 @@ int main(int argc, char** argv) {
         csv << "tick,epoch,raw,wire,full_wire,delta,full_codec\n";
         const auto firstDump = argc == 5 ? std::stoul(argv[3]) : UINT32_MAX;
         unsigned dumps = argc == 5 ? std::stoul(argv[4]) : 0;
-        isaac::lan::StateCompression compression;
+        isaac::lan::StateCompression compression, wireCodec(isaac::lan::maxMessageSize);
         using Bytes = std::vector<std::uint8_t>;
         std::deque<std::pair<std::uint32_t, Bytes>> cache;
         Bytes assembling;
@@ -43,7 +44,8 @@ int main(int argc, char** argv) {
             input.read(reinterpret_cast<char*>(packet.data()), size);
             if (input.gcount() != static_cast<std::streamsize>(size))
                 throw std::runtime_error("Truncated stream message");
-            isaac::lan::Reader reader(packet);
+            const auto message = isaac::lan::decodeWire(packet, wireCodec);
+            isaac::lan::Reader reader(message);
             const auto type = static_cast<isaac::lan::Message>(reader.u8());
             if (type == isaac::lan::Message::stage || type == isaac::lan::Message::start) {
                 cache.clear();

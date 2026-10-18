@@ -30,7 +30,9 @@
 
 载荷不含 TCP、frp 或可靠存档流量。`compress` 已包含 `delta.encode`，二者不能相加。DEBUG 的 `state_transfer` 提供 `raw`、`wire`、`full_wire`、`delta`、`base`。
 
-均值与最大值使用窗口全部样本；p50／p95／p99 使用最近 512 个样本，成本名及计数器各最多 64 个并按窗口清理。Lua 堆为只读采样，不强制游戏 GC；关闭统计时直接调用原函数。
+网络压缩／解压计时由工作线程产生，通过有界队列交回主线程；队列已满时丢弃诊断样本，不阻塞传输。`checkpoint_capture` 区分主线程原生采集与存档封装耗时；`checkpoint_pack` 记录原始／压缩字节数与后台耗时；`checkpoint_received` 记录后台还原耗时及从启动头到还原完成的时间。这些数据不包含后续原生 Continue 和首份实时视图应用，不能当成完整重连耗时。
+
+均值与最大值使用窗口收到的全部样本；p50／p95／p99 使用最近 512 个样本，成本名及计数器各最多 64 个并按窗口清理。Lua 堆为只读采样，不强制游戏 GC；关闭统计时直接调用原函数。
 
 将 `ISAAC_RUN_OUTPUT` 和 `ISAAC_PERFORMANCE_SUMMARY` 设为本轮记录与汇总输出后执行：
 

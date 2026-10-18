@@ -12,11 +12,12 @@ struct TransportResources {
     std::uint64_t worldSnapshots = 0, deltaSnapshots = 0, rawWorldBytes = 0, wireWorldBytes = 0,
                   fullWorldBytes = 0;
 };
-// Main-thread, nonblocking TCP transport. No external server and no Lua calls on
-// worker threads. TCP_NODELAY is set on every connected socket.
+// Main-thread session coordinator. Socket/byte workers exchange owned values;
+// no worker invokes Lua or touches game objects. TCP_NODELAY is always enabled.
 class Session {
     struct Impl;
     std::unique_ptr<Impl> impl;
+    std::vector<std::unique_ptr<Impl>> retiring;
 
   public:
     using Observer = void (*)(std::string_view, double);

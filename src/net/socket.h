@@ -1,5 +1,7 @@
 #pragma once
 #include "net/protocol.h"
+#include "net/network_io.h"
+#include "net/send_queue.h"
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <deque>
@@ -21,97 +23,97 @@ inline void configure(SOCKET s) {
         throw std::runtime_error("Cannot disable TCP buffering");
 }
 // Owns a socket and bounded framed-byte queues, never game or peer policy.
-struct Socket {
+struct Socket : SendQueue {
+    std::shared_ptr<NetworkIo> io;
+    std::shared_ptr<ConnectionPipe> pipe;
     SOCKET handle = INVALID_SOCKET;
-    std::vector<std::uint8_t> received;
-    std::deque<std::vector<std::uint8_t>> outgoing;
-    std::size_t sent = 0, queued = 0;
     bool finished = false;
     explicit Socket(SOCKET value = INVALID_SOCKET) : handle(value) {}
+    Socket(std::shared_ptr<NetworkIo> worker, std::shared_ptr<ConnectionPipe> connection)
+        : io(std::move(worker)), pipe(std::move(connection)) {}
     Socket(const Socket&) = delete;
     Socket& operator=(const Socket&) = delete;
     ~Socket() {
+        if (pipe) {
+            pipe->closing.store(true, std::memory_order_release);
+            io->signal();
+        }
         if (handle != INVALID_SOCKET)
             closesocket(handle);
     }
-    std::span<const std::uint8_t> unsentTail(Message type) const {
-        if (outgoing.empty() || (outgoing.size() == 1 && sent != 0) ||
-            outgoing.back()[2] != static_cast<unsigned>(type))
-            return {};
-        return std::span(outgoing.back()).subspan(2);
+    std::size_t queuedBytes() const {
+        return queued + (pipe ? pipe->queued.load(std::memory_order_acquire) : 0);
     }
-    void replaceTail(const Writer& message) {
-        if (unsentTail(static_cast<Message>(message.bytes.at(0))).empty())
-            throw std::runtime_error("Cannot replace a partially sent or ordered message");
-        queued -= outgoing.back().size();
-        outgoing.pop_back();
-        sendMessage(message);
+    bool sendTransfer(std::shared_ptr<const ReliableTransfer> transfer) {
+        flush();
+        if (!outgoing.empty() || !pipe->outgoing.push({{}, std::move(transfer)}))
+            return false;
+        io->signal();
+        return true;
     }
     void sendMessage(const Writer& w) {
-        if (w.bytes.empty() || w.bytes.size() > maxMessageSize || queued + w.bytes.size() > 262144)
+        if (w.bytes.empty() || w.bytes.size() > maxMessageSize ||
+            queuedBytes() + w.bytes.size() + 2 > maxSocketQueueBytes)
             throw std::runtime_error("Network queue limit exceeded");
         std::vector<std::uint8_t> data;
         auto size = static_cast<std::uint16_t>(w.bytes.size());
         data.push_back(size >> 8);
         data.push_back(size & 255);
         data.insert(data.end(), w.bytes.begin(), w.bytes.end());
-        queued += data.size();
-        outgoing.push_back(std::move(data));
+        append(std::move(data));
+        if (pipe)
+            flush();
     }
     void flush() {
-        while (!outgoing.empty()) {
-            auto& data = outgoing.front();
-            int n = ::send(handle, reinterpret_cast<const char*>(data.data() + sent),
-                           static_cast<int>(data.size() - sent), 0);
-            if (n == SOCKET_ERROR) {
-                if (wouldBlock())
-                    return;
-                throw ConnectionLost("Peer send failed");
-            }
-            if (n <= 0)
-                throw ConnectionLost("Peer closed connection");
-            sent += n;
-            queued -= n;
-            if (sent == data.size()) {
+        if (pipe) {
+            while (!outgoing.empty() && !pipe->outgoing.full()) {
+                auto message = std::move(outgoing.front());
                 outgoing.pop_front();
-                sent = 0;
+                queued -= message.size();
+                pipe->queued.fetch_add(message.size(), std::memory_order_acq_rel);
+                message.erase(message.begin(), message.begin() + 2);
+                pipe->outgoing.push({std::move(message), {}});
             }
+            io->signal();
+            return;
         }
     }
-    template <class F> void receive(F callback) {
-        std::array<std::uint8_t, 8192> buffer;
-        // Bound each poll so one peer cannot monopolize the engine thread.
-        for (unsigned chunk = 0; chunk < 8; ++chunk) {
-            int n = recv(handle, reinterpret_cast<char*>(buffer.data()),
-                         static_cast<int>(buffer.size()), 0);
-            if (n == SOCKET_ERROR) {
-                if (wouldBlock())
+    template <class F, class W = std::nullptr_t, class B = std::nullptr_t>
+    void receive(F callback, W world = nullptr, const std::function<bool()>& paused = {},
+                 B bulk = nullptr) {
+        if (pipe) {
+            for (unsigned count = 0; count < 128; ++count) {
+                if (paused && paused())
                     break;
-                throw ConnectionLost("Peer receive failed");
-            }
-            if (!n) {
-                if (finished)
-                    return;
-                throw ConnectionLost("Peer disconnected");
-            }
-            received.insert(received.end(), buffer.begin(), buffer.begin() + n);
-            std::size_t consumed = 0;
-            while (received.size() - consumed >= 2) {
-                auto size =
-                    static_cast<unsigned>((received[consumed] << 8) | received[consumed + 1]);
-                if (!size || size > maxMessageSize)
-                    throw std::runtime_error("Invalid network message size");
-                if (received.size() - consumed < size + 2)
+                auto message = pipe->incoming.pop();
+                if (!message)
                     break;
-                Reader reader{std::span<const std::uint8_t>(received).subspan(consumed + 2, size)};
-                callback(reader);
-                reader.finish();
-                consumed += size + 2;
+                pipe->incomingBytes.fetch_sub(message->size(), std::memory_order_acq_rel);
+                if (message->bulk) {
+                    if constexpr (std::is_same_v<B, std::nullptr_t>)
+                        throw std::runtime_error("Unexpected bulk transfer before handshake");
+                    else
+                        bulk(std::move(*message->bulk));
+                } else if (message->world) {
+                    if constexpr (std::is_same_v<W, std::nullptr_t>)
+                        throw std::runtime_error("Unexpected world before handshake");
+                    else
+                        world(std::move(*message->world));
+                } else {
+                    Reader reader(message->bytes);
+                    callback(reader);
+                    reader.finish();
+                }
             }
-            received.erase(received.begin(), received.begin() + consumed);
-            if (received.size() > maxMessageSize + 2)
-                throw std::runtime_error("Receive buffer limit exceeded");
+            io->signal();
+            const auto status = pipe->state.load(std::memory_order_acquire);
+            if (pipe->incoming.empty() && !finished &&
+                (status == ConnectionPipe::closed || status == ConnectionPipe::failed))
+                throw ConnectionLost(status == ConnectionPipe::failed ? pipe->error
+                                                                      : "Peer disconnected");
+            return;
         }
+        throw std::runtime_error("No attached network connection");
     }
 };
 } // namespace isaac::lan

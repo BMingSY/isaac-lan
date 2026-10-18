@@ -2,6 +2,7 @@
 #include "runtime/progression.h"
 #include "net/compression.h"
 #include "net/peer.h"
+#include "net/wire_codec.h"
 #include "test_support.h"
 #include <winsock2.h>
 #include <windows.h>
@@ -12,15 +13,18 @@
 #include <memory>
 #include <psapi.h>
 #include <random>
+#include <source_location>
 using namespace isaac::lan;
 namespace {
 LobbyAccess testAccess() {
     return {{0, 1, 2, 3, 7, 23}, {{1001, 2}, {1001, 3}}, {0, 1, 2, 3, 7, 23}};
 }
-template <class F> void until(F f) {
+template <class F>
+void until(F f, const std::source_location location = std::source_location::current()) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(8);
     while (!f()) {
-        require(std::chrono::steady_clock::now() < deadline, "Test timed out");
+        if (std::chrono::steady_clock::now() >= deadline)
+            throw std::runtime_error("Test timed out at line " + std::to_string(location.line()));
         Sleep(0);
     }
 }
@@ -33,10 +37,17 @@ struct Group {
         for (unsigned i = 0; i < n; ++i)
             peers[i] = std::make_unique<Session>();
         require(peers[0]->host(0, "state-test", "host-mods", testAccess()), "Host failed");
-        for (unsigned i = 1; i < n; ++i)
+        for (unsigned i = 1; i < n; ++i) {
             require(peers[i]->join(address, peers[0]->port(), "state-test", {}, "cosmetic-mods",
                                    testAccess()),
                     "Join failed");
+            // Seat assignment follows accepted connections, not thread start order.
+            until([&] {
+                poll();
+                return peers[i]->phase() == Phase::lobby;
+            });
+            require(peers[i]->slot() == i, "Connection received the wrong seat");
+        }
         until([&] {
             poll();
             return peers[0]->players() == n && peers[n - 1]->players() == n;
@@ -321,17 +332,19 @@ void inputsAndStates(unsigned n) {
 void renderInputs() {
     Group g(3);
     g.ready();
+    // Sequence zero is also the host's initial observation before any sample.
+    require(g.peers[2]->submit(0, {}), "Initial slow guest sample rejected");
     for (unsigned tick = 0; tick < 60; ++tick) {
         InputFrame input;
         input.values[tick % 2] = 65535;
         input.triggered = tick % 3 == 0 ? 1u << 8 : 0;
         require(g.peers[1]->submit(tick * 2, input), "Render press rejected");
         require(g.peers[1]->submit(tick * 2 + 1, {}), "Render release rejected");
-        require(g.peers[2]->submit(tick, input), "30 Hz guest input rejected");
+        require(g.peers[2]->submit(tick + 1, input), "30 Hz guest input rejected");
         until([&] {
             g.poll();
             return g.peers[0]->inputSequences()[1] == tick * 2 + 1 &&
-                   g.peers[0]->inputSequences()[2] == tick;
+                   g.peers[0]->inputSequences()[2] == tick + 1;
         });
         const auto frame = g.step(tick);
         require(frame.tick == tick, "Render input accelerated simulation");
@@ -349,7 +362,7 @@ void renderInputs() {
                 return state.has_value();
             });
             require(state->tick == tick && state->inputSequences[1] == tick * 2 + 1 &&
-                        state->inputSequences[2] == tick,
+                        state->inputSequences[2] == tick + 1,
                     "Prediction confirmation confused mixed input rates with simulation ticks");
             g.peers[slot]->applied(tick);
         }
@@ -366,12 +379,12 @@ void inputBackpressure() {
     press.values[0] = 50000;
     press.triggered = 1u << 6;
     const InputRoom source{0, 84, 0};
-    // No writable poll: a stalled guest must retain one current sample and
-    // its short button edge rather than thousands of obsolete directions.
+    // Producer burst while the game does not poll. The background socket still
+    // progresses; both handoff and socket queues must remain bounded.
     require(group.peers[1]->submit(0, press, source), "Press rejected");
     for (unsigned sequence = 1; sequence <= 10000; ++sequence)
         require(group.peers[1]->submit(sequence, {}, source), "Release sample rejected");
-    require(group.peers[1]->resources().queuedBytes < 256,
+    require(group.peers[1]->resources().queuedBytes <= 16384,
             "Blocked input queue kept stale samples");
     until([&] {
         group.poll();
@@ -383,6 +396,12 @@ void inputBackpressure() {
             "Coalescing lost a press or replayed stale movement");
     require(group.step(2).inputs[1].triggered == 0, "Retained input edge repeated");
 
+    Peer stalled;
+    stalled.submitInput({0, press, source});
+    for (unsigned sequence = 1; sequence <= 10000; ++sequence)
+        stalled.submitInput({sequence, {}, source});
+    require(stalled.outgoing.size() == 1 && stalled.queued < 256,
+            "Unsent input retained obsolete directions");
     Peer peer;
     peer.submitInput({0, press, source});
     const auto first = peer.outgoing.front();
@@ -416,7 +435,10 @@ void floorRejoin() {
     g.step(0);
     const auto identity = g.peers[1]->identity();
     g.peers[1]->close();
-    g.poll();
+    until([&] {
+        g.poll();
+        return g.peers[0]->connectedMask() == 1;
+    });
     require(g.step(1).connected == 1, "Departure did not remove guest from active roster");
     g.peers[1] = std::make_unique<Session>();
     require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, "other-mods",
@@ -545,6 +567,33 @@ void returnLobby() {
         for (unsigned slot = 0; slot < count; ++slot)
             identities[slot] = g.peers[slot]->identity();
         for (bool hostFirst : {true, false, true}) {
+            // Every new run reuses its first floor epoch. Previous-run chunk
+            // assembly and reference history must not survive that boundary.
+            g.publish(0);
+            for (unsigned slot = 1; slot < count; ++slot)
+                until([&] {
+                    g.poll();
+                    if (auto world = g.peers[slot]->takeState()) {
+                        g.peers[slot]->applied(world->tick);
+                        return true;
+                    }
+                    return false;
+                });
+            Stage floor{1, 2, 0, 0, false, {}, {}};
+            require(g.peers[0]->beginStage(floor), "Next run floor transition failed");
+            g.step(1);
+            g.publish(1);
+            for (unsigned slot = 1; slot < count; ++slot)
+                until([&] {
+                    g.poll();
+                    if (auto world = g.peers[slot]->takeState()) {
+                        require(world->epoch == floor.epoch && world->tick == 1,
+                                "Next run reused an old floor view");
+                        g.peers[slot]->applied(world->tick);
+                        return true;
+                    }
+                    return false;
+                });
             const auto oldRun = g.peers[0]->runId();
             require(g.peers[0]->beginEnding(ending::firstCinematic), "Ending failed");
             for (unsigned slot = 1; slot < count; ++slot) {
@@ -598,7 +647,9 @@ void returnLobby() {
             require(g.peers[0]->start(settings), "Next lobby start failed");
             until([&] {
                 g.poll();
-                return g.peers[count - 1]->phase() == Phase::running;
+                return std::all_of(g.peers.begin(), g.peers.begin() + count, [](const auto& peer) {
+                    return peer->phase() == Phase::running;
+                });
             });
             for (unsigned slot = 0; slot < count; ++slot)
                 require(g.peers[slot]->runId() != oldRun &&
@@ -1280,8 +1331,11 @@ void runRules() {
         const unsigned slot = n - 1;
         const auto identity = g.peers[slot]->identity();
         g.peers[slot]->close();
-        g.poll();
         const auto mask = ((1u << n) - 1) & ~(1u << slot);
+        until([&] {
+            g.poll();
+            return g.peers[0]->connectedMask() == mask;
+        });
         require(g.step(1).connected == mask, "Disconnected seat remained active");
         g.peers[slot] = std::make_unique<Session>();
         require(g.peers[slot]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {},
@@ -1542,8 +1596,9 @@ void lobbyAccess() {
                 "Access guest failed");
             until([&] {
                 poll();
-                return peers[0]->players() == peers.size() &&
-                       peers.back()->players() == peers.size();
+                return std::all_of(peers.begin(), peers.end(), [&](const auto& peer) {
+                    return peer->players() == peers.size();
+                });
             });
         }
         void chooseAll(std::uint16_t character) {
@@ -1654,7 +1709,8 @@ void lobbyAccess() {
         require(lobby.peers[0]->configureRules(rules), "Eligible rule setup failed");
         until([&] {
             lobby.poll();
-            return lobby.peers.back()->rules() == rules;
+            return std::all_of(lobby.peers.begin(), lobby.peers.end(),
+                               [&](const auto& peer) { return peer->rules() == rules; });
         });
         lobby.chooseAll(23);
         lobby.add(basic);
@@ -1670,7 +1726,8 @@ void lobbyAccess() {
         require(lobby.peers[0]->configureRules({}), "Cannot return to ordinary rules");
         until([&] {
             lobby.poll();
-            return lobby.peers.back()->rules().id == 0;
+            return std::all_of(lobby.peers.begin(), lobby.peers.end(),
+                               [](const auto& peer) { return peer->rules().id == 0; });
         });
         require(lobby.peers[0]->choices()[n - 1].character == 0 &&
                     lobby.peers.back()->choices()[n - 1].character == 0,
@@ -2020,6 +2077,166 @@ void hostDisconnect() {
     require(!g.peers[1]->error().empty() && !g.peers[1]->take(),
             "Host departure did not end guest simulation");
 }
+void wireCompression() {
+    StateCompression codec(maxMessageSize);
+    for (const auto type : {Message::hello, Message::lobby, Message::start, Message::communication,
+                            Message::integration, Message::lifecycle}) {
+        Writer message(type);
+        message.string(std::string(900, 'x'));
+        auto wire = encodeWire(message.bytes, codec);
+        require(wire.front() == compressedMessageTag && wire.size() < message.bytes.size() / 4,
+                "Variable message bypassed shared compression policy");
+        require(decodeWire(wire, codec) == message.bytes, "Message compression changed bytes");
+        wire.back() ^= 1;
+        rejects([&] { decodeWire(wire, codec); }, "Corrupt compressed message accepted");
+    }
+    const auto input = inputMessage({7, {}, {}}).bytes;
+    require(encodeWire(input, codec) == input, "Small input gained a compression envelope");
+    std::vector<std::uint8_t> randomBytes(3000);
+    std::mt19937 random(91);
+    for (auto& byte : randomBytes)
+        byte = static_cast<std::uint8_t>(random());
+    randomBytes[0] = static_cast<std::uint8_t>(Message::communication);
+    require(encodeWire(randomBytes, codec) == randomBytes,
+            "Incompressible message grew on the wire");
+    randomBytes.assign(3000, 0);
+    randomBytes[0] = static_cast<std::uint8_t>(Message::snapshot);
+    require(encodeWire(randomBytes, codec) == randomBytes, "Bulk chunks were compressed twice");
+    rejects([&] { decodeWire({&compressedMessageTag, 1}, codec); },
+            "Empty compressed envelope accepted");
+}
+void asyncNetwork() {
+    Group g(2);
+    g.ready();
+    g.step(0);
+    WorldState state;
+    state.tick = 0;
+    state.connected = 3;
+    state.bytes.resize(maxWorldSize);
+    std::mt19937 random(93);
+    for (auto& byte : state.bytes)
+        byte = static_cast<std::uint8_t>(random());
+    require(g.peers[0]->publish(1, state), "Async world rejected");
+    g.peers[0]->poll();
+    // No more host polling: compression and every chunk must finish without
+    // waiting for the next game frame, even for an incompressible maximum view.
+    std::optional<WorldState> received;
+    until([&] {
+        g.peers[1]->poll();
+        require(g.peers[1]->phase() != Phase::failed, g.peers[1]->error().c_str());
+        received = g.peers[1]->takeState();
+        return received.has_value();
+    });
+    require(received->bytes == state.bytes, "Background world transfer changed bytes");
+    require(g.peers[1]->sendCommunication(0, "without another guest frame"), "Async chat rejected");
+    std::optional<IntegrationMessage> chat;
+    until([&] {
+        g.peers[0]->poll();
+        chat = g.peers[0]->takeCommunication();
+        return chat.has_value();
+    });
+    require(chat->bytes == "without another guest frame", "Chat required another producer poll");
+    // Guest main thread stays idle; the network thread must answer heartbeats.
+    until([&] {
+        g.peers[0]->poll();
+        return g.peers[0]->latency()[1] >= 0;
+    });
+    require(g.peers[0]->connectedMask() == 3, "Idle guest main thread stopped the connection");
+}
+void bulkWorker() {
+    const auto main = GetCurrentThreadId();
+    WakeEvent started, release;
+    BulkWorker worker;
+    struct Unblock {
+        WakeEvent& event;
+        ~Unblock() {
+            event.signal();
+        }
+    } unblock{release};
+    auto blocked = worker.submit([&](StateCompression&) {
+        started.signal();
+        WaitForSingleObject(release.handle(), INFINITE);
+        return GetCurrentThreadId();
+    });
+    require(WaitForSingleObject(started.handle(), 2000) == WAIT_OBJECT_0,
+            "Bulk worker did not start");
+    std::atomic<unsigned> cancelledCalls{0};
+    auto cancelled = worker.submit([&](StateCompression&) { return ++cancelledCalls; });
+    cancelled.reset();
+    // A blocked bulk job must not hold a session lock or the socket owner.
+    asyncNetwork();
+    release.signal();
+    until([&] { return blocked->ready(); });
+    require(blocked->take() != main, "Bulk processing ran on the game thread");
+    auto checkpoint = std::vector<std::uint8_t>(maxSnapshotSize, 0x47);
+    auto packed = worker.submit(
+        [bytes = checkpoint](StateCompression& codec) { return codec.compress(bytes); });
+    until([&] { return packed->ready(); });
+    auto wire = packed->take();
+    require(wire.size() < checkpoint.size() / 100, "Archive bypassed compression");
+    auto restored = restoreCheckpoint(worker, wire, snapshotHash(wire));
+    until([&] { return restored->ready(); });
+    require(restored->take() == checkpoint && cancelledCalls == 0,
+            "Archive restore or cancelled task ownership failed");
+    auto corrupt = restoreCheckpoint(worker, wire, snapshotHash(wire) ^ 1);
+    until([&] { return corrupt->ready(); });
+    rejects([&] { corrupt->take(); }, "Corrupted checkpoint accepted");
+}
+void reliableReceive() {
+    ReliableReceiver receiver;
+    StartEnvelope start;
+    start.size = maxSnapshotSize;
+    std::vector<std::uint8_t> bytes(start.size);
+    std::mt19937 random(99);
+    for (auto& byte : bytes)
+        byte = static_cast<std::uint8_t>(random());
+    const auto snapshotChunk = [&](std::size_t offset) {
+        Writer w(Message::snapshot);
+        w.u32(offset);
+        w.blob(bulkChunk(bytes, offset));
+        return w;
+    };
+    for (unsigned run = 0; run < 2; ++run) {
+        receiver.begin(start);
+        std::optional<ReceivedBulk> received;
+        for (std::size_t offset = 0; offset < bytes.size(); offset += bulkChunkSize) {
+            auto message = snapshotChunk(offset);
+            Reader r(std::span(message.bytes).subspan(1));
+            received = receiver.snapshot(r);
+            require(received.has_value() == (offset + bulkChunkSize >= bytes.size()),
+                    "Incomplete checkpoint escaped assembly");
+        }
+        require(received->checkpoint == bytes, "Maximum checkpoint changed during assembly");
+        Stage stage{1, 1, 0, 12, false, {}, {}};
+        stage.rewind.assign(bytes.begin(), bytes.begin() + 12007);
+        for (std::size_t offset = 0; offset < stage.rewind.size(); offset += bulkChunkSize) {
+            auto message = stageMessage(stage, offset);
+            Reader r(std::span(message.bytes).subspan(1));
+            received = receiver.floor(r);
+        }
+        require(received && received->stage == stage,
+                "Repeated rewind assembly lost owned chunk bytes");
+    }
+    receiver.begin(start);
+    auto first = snapshotChunk(0), next = snapshotChunk(bulkChunkSize);
+    Reader firstReader(std::span(first.bytes).subspan(1));
+    receiver.snapshot(firstReader);
+    receiver.reset();
+    Reader nextReader(std::span(next.bytes).subspan(1));
+    rejects([&] { receiver.snapshot(nextReader); }, "Cancelled checkpoint accepted old chunks");
+    receiver.begin(start);
+    Reader gapReader(std::span(next.bytes).subspan(1));
+    rejects([&] { receiver.snapshot(gapReader); }, "Out-of-order checkpoint chunk accepted");
+    Stage stage{1, 1, 0, 12, false, {}, {}};
+    stage.rewind.resize(6001, 1);
+    auto chunk = stageMessage(stage);
+    Reader stageFirst(std::span(chunk.bytes).subspan(1));
+    receiver.floor(stageFirst);
+    ++stage.sourceRoom;
+    chunk = stageMessage(stage, bulkChunkSize);
+    Reader changed(std::span(chunk.bytes).subspan(1));
+    rejects([&] { receiver.floor(changed); }, "Mixed rewind metadata accepted");
+}
 void worldDeltas() {
     Group g(4);
     g.ready();
@@ -2086,20 +2303,23 @@ void deliveryBackpressure() {
     Group group(3);
     group.ready();
     std::uint32_t sequence = 0;
-    auto step = [&](bool slowReceipt) {
+    auto step = [&](bool slowReceipt, bool waitSlowDelivery = false) {
         const auto tick = group.step(sequence++).tick;
         group.publish(tick);
-        bool healthy = false;
+        bool healthy = false, recoveredPeer = !(slowReceipt || waitSlowDelivery);
         until([&] {
             group.poll();
-            if (slowReceipt)
-                if (auto state = group.peers[1]->takeState())
-                    group.peers[1]->applied(state->tick);
+            if (slowReceipt || waitSlowDelivery)
+                if (auto state = group.peers[1]->takeState()) {
+                    if (slowReceipt)
+                        group.peers[1]->applied(state->tick);
+                    recoveredPeer = state->tick == tick;
+                }
             if (auto state = group.peers[2]->takeState()) {
                 group.peers[2]->applied(state->tick);
                 healthy = state->tick == tick;
             }
-            return healthy;
+            return healthy && recoveredPeer;
         });
         return tick;
     };
@@ -2113,7 +2333,10 @@ void deliveryBackpressure() {
     // Retire the delayed views. Refilling remains bounded while the other
     // guest has continued receiving every tick.
     step(true);
-    group.poll();
+    until([&] {
+        group.poll();
+        return group.peers[0]->resources().inFlightStates == 0;
+    });
     const auto before = group.peers[0]->resources().worldSnapshots;
     for (unsigned i = 0; i < 10; ++i)
         step(false);
@@ -2137,13 +2360,19 @@ void deliveryBackpressure() {
     });
     for (unsigned i = 0; i < 24; ++i)
         step(true);
-    group.poll();
+    until([&] {
+        group.poll();
+        return group.peers[0]->resources().inFlightStates == 0;
+    });
     const auto recovered = group.peers[0]->resources().worldSnapshots;
     for (unsigned i = 0; i < 10; ++i)
-        step(false);
-    group.poll();
-    require(group.peers[0]->resources().worldSnapshots - recovered >= 14,
-            "Recovered connection did not restore its healthy delivery window");
+        // Observe delivery without acknowledging the first four states. Fast
+        // publication alone may legitimately replace unscheduled latest views.
+        step(false, i < 4);
+    until([&] {
+        group.poll();
+        return group.peers[0]->resources().worldSnapshots - recovered >= 14;
+    });
 }
 void deltaFloorBoundary() {
     Group g(2);
@@ -2243,6 +2472,10 @@ int main(int argc, char** argv) {
     const auto result = runTests(argc, argv,
                                  {{"codec", codec},
                                   {"world-deltas", worldDeltas},
+                                  {"wire-compression", wireCompression},
+                                  {"async-network", asyncNetwork},
+                                  {"bulk-worker", bulkWorker},
+                                  {"reliable-receive", reliableReceive},
                                   {"delivery-backpressure", deliveryBackpressure},
                                   {"delta-floor-boundary", deltaFloorBoundary},
                                   {"compression-limits", compressionLimits},

@@ -1,6 +1,14 @@
 -- One pair covers fresh ownership, manual reconnect, failed restore, retry,
 -- automatic recovery, restart, ending and leaving. Processes stay throughout.
 local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
+local inventoryCopies = (_IsaacLanRecoveryFixture or {}).copies or 0
+local inventoryItems = {
+    CollectibleType.COLLECTIBLE_SAD_ONION,
+    CollectibleType.COLLECTIBLE_PENTAGRAM,
+    CollectibleType.COLLECTIBLE_STEVEN,
+    CollectibleType.COLLECTIBLE_WIRE_COAT_HANGER,
+}
+local recoveryAt, lastPhase, lastRender, maximumGap = nil, nil, nil, 0
 local host, port = config.host, config.port
 local Phase = native.net_phases()
 local owner = { Name = "Client recovery lifecycle" }
@@ -61,6 +69,42 @@ function _IsaacLanFrame()
         report("MENU_READY")
     end
     local status = frame()
+    local now = native.api_info().nowMs
+    if not host then
+        if status.phase ~= lastPhase then
+            report(
+                "RECOVERY_PHASE phase=" .. status.phase .. " now_ms=" .. now .. " starts=" .. starts
+            )
+            if status.phase == Phase.connecting and starts > 0 then
+                recoveryAt, maximumGap = now, 0
+            end
+            lastPhase = status.phase
+        end
+        if recoveryAt then
+            maximumGap = math.max(maximumGap, lastRender and now - lastRender or 0)
+            if status.phase == Phase.failed then
+                recoveryAt = nil -- Deliberate rejection; the next retry is timed separately.
+            elseif
+                status.phase == Phase.running
+                and status.prepared
+                and status.verified >= 0
+                and not status.recovering
+            then
+                report(
+                    "RECOVERY_TIMING starts="
+                        .. starts
+                        .. " elapsed_ms="
+                        .. (now - recoveryAt)
+                        .. " maximum_render_gap_ms="
+                        .. maximumGap
+                        .. " inventory_copies="
+                        .. inventoryCopies
+                )
+                recoveryAt = nil
+            end
+        end
+        lastRender = now
+    end
     if status.phase == Phase.lobby and not chosen then
         chosen = true
         assert(native.net_choose(host and 1 or 0, 1))
@@ -164,6 +208,16 @@ native.net_gate = function(capture, apply, collect, restore, present, stage)
         h.Position = Game():GetRoom():GetCenterPos()
         p:AddCoins(19)
         p:AddCollectible(CollectibleType.COLLECTIBLE_BROTHER_BOBBY)
+        for _, player in ipairs({ h, p }) do
+            for _, item in ipairs(inventoryItems) do
+                for _ = 1, inventoryCopies do
+                    player:AddCollectible(item, 0, false)
+                end
+            end
+        end
+        report(
+            "RECOVERY_INVENTORY copies=" .. inventoryCopies .. " now_ms=" .. native.api_info().nowMs
+        )
         firstPosition = h.Position
         origin = Game():GetLevel():GetCurrentRoomIndex()
     end
@@ -220,13 +274,24 @@ native.net_gate = function(capture, apply, collect, restore, present, stage)
                         and p:HasCollectible(CollectibleType.COLLECTIBLE_BROTHER_BOBBY),
                     "Recovery lost inventory"
                 )
+                for _, item in ipairs(inventoryItems) do
+                    assert(
+                        p:GetCollectibleNum(item) == inventoryCopies,
+                        "Recovery changed inventory counts"
+                    )
+                end
                 if t >= 90 and starts == 1 then
                     assert(Game():GetRoom():GetType() == RoomType.ROOM_DEVIL, "Wrong guest room")
                 elseif starts > 1 then
                     local positions = native.rooms_positions()
                     assert(
                         positions["0"].index == positions["1"].index,
-                        "Rejoining guest did not return to the host's room"
+                        "Rejoining guest did not return to the host's room: tick="
+                            .. t
+                            .. " host="
+                            .. positions["0"].index
+                            .. " client="
+                            .. positions["1"].index
                     )
                 end
             end
