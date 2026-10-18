@@ -50,7 +50,8 @@ struct Group {
         }
         until([&] {
             poll();
-            return peers[0]->players() == n && peers[n - 1]->players() == n;
+            return std::all_of(peers.begin(), peers.begin() + n,
+                               [&](const auto& peer) { return peer->players() == n; });
         });
         Start start;
         start.seed = "YV039KQF";
@@ -61,7 +62,8 @@ struct Group {
             require(peers[0]->configureRules(rules), "Rule configuration failed");
             until([&] {
                 poll();
-                return peers[n - 1]->rules() == rules;
+                return std::all_of(peers.begin(), peers.begin() + n,
+                                   [&](const auto& peer) { return peer->rules() == rules; });
             });
             start.characters.fill(rules.character);
             for (unsigned i = 0; i < n; ++i)
@@ -155,7 +157,10 @@ void greedSettings() {
                 "Delayed Greed floor event was lost or replayed during loading");
         const auto identity = g.peers[1]->identity();
         g.peers[1]->close();
-        g.poll();
+        until([&] {
+            g.poll();
+            return g.peers[0]->connectedMask() == 1;
+        });
         g.step(2);
         g.peers[1] = std::make_unique<Session>();
         require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {},
@@ -986,7 +991,10 @@ void stageDuringRejoin() {
     g.step(0);
     const auto identity = g.peers[1]->identity();
     g.peers[1]->close();
-    g.poll();
+    until([&] {
+        g.poll();
+        return g.peers[0]->connectedMask() == 1;
+    });
     g.step(1);
     g.peers[1] = std::make_unique<Session>();
     require(
@@ -1640,7 +1648,9 @@ void lobbyAccess() {
             require(lobby.peers[0]->start(start), "Allowed ordinary Resume rejected");
             until([&] {
                 lobby.poll();
-                return lobby.peers.back()->phase() == Phase::running;
+                return std::all_of(lobby.peers.begin(), lobby.peers.end(), [](const auto& peer) {
+                    return peer->phase() == Phase::running;
+                });
             });
         }
         // A permitted forced character is insufficient without its rule key.
@@ -1763,8 +1773,12 @@ void lobbyAccess() {
         const auto identity = group.peers[slot]->identity();
         group.peers[slot]->close();
         group.peers[slot].reset();
-        group.poll();
-        require(group.step(1).connected == (((1u << n) - 1) & ~(1u << slot)),
+        const auto departedMask = ((1u << n) - 1) & ~(1u << slot);
+        until([&] {
+            group.poll();
+            return group.peers[0]->connectedMask() == departedMask;
+        });
+        require(group.step(1).connected == departedMask,
                 "Access rejoin fixture did not disconnect");
         for (unsigned missing = 0; missing < 2; ++missing) {
             auto denied = testAccess();
