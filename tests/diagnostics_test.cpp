@@ -11,8 +11,8 @@ void defaults() {
     const auto parsed = isaac::configuration::parse(isaac::configuration::defaults);
     require(parsed.warnings.empty(), "Default configuration is invalid");
     require(parsed.settings.inputHz == 60, "Default guest input rate changed");
-    require(parsed.settings.chat.backgroundImage.empty(),
-            "Default background overrides the bundled image");
+    require(parsed.settings.chat.backgroundImage.empty() && parsed.settings.chat.opacity == 70,
+            "Default chat background is not a translucent solid color");
     require(isaac::configuration::missingDefaults(parsed).empty(),
             "Complete config needs migration");
     require(parsed.settings.logLevel == isaac::logging::Level::info &&

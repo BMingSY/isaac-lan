@@ -11,7 +11,7 @@
 
 输入者的连接槽由传输层确定。原版命令在房主的更新安全边界执行，使用输入者的角色与房间上下文；排队时记录局次、世界代次、房间和维度，执行前不再匹配则取消。`rewind` 使用既有回退事务。没有玩家权限分级；同步方式不改变成员使用命令的资格。
 
-背景图片由 [chat_background.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/presentation/chat_background.cpp) 在启动时准备。默认使用随 DLL 嵌入的暗色破纸纹理；配置可指定相对 `config.ini` 的路径或绝对路径。自定义 PNG 只读，保留原始像素与透明度，按当前面板大小缩放；配置透明度再与图片透明度相乘。输入图片限制为 16 MiB、单边 4096 像素且总计不超过 8 Mi 像素，完成解码校验后将图片和动画描述写入 `isaac-lan/cache/chat`。Lua 通过普通 Sprite API 加载，帧内不读盘。缺失或损坏的自定义图片回退到内置纹理，缓存不可用时才回退纯色并记录日志，不增加界面提示。
+聊天背景默认使用 70% 不透明度的纯色，颜色与透明度可配置；安装包不附带背景图片。配置自定义 PNG 时，由 [chat_background.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/presentation/chat_background.cpp) 在启动时准备，可指定相对 `config.ini` 的路径或绝对路径。自定义 PNG 只读，保留原始像素与透明度，按当前面板大小缩放；配置透明度再与图片透明度相乘。输入图片限制为 16 MiB、单边 4096 像素且总计不超过 8 Mi 像素，完成解码校验后将图片和动画描述写入 `isaac-lan/cache/chat`。Lua 通过普通 Sprite API 加载，帧内不读盘。未配置图片时不创建缓存；图片缺失、损坏或缓存不可用时回退纯色并记录日志，不增加界面提示。
 
 ## 输出契约
 

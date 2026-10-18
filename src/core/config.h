@@ -41,10 +41,10 @@ inline constexpr std::string_view defaults =
     "[chat]\n"
     "; 聊天背景不透明度：0–100，0 完全透明，100 不透明。\n"
     "background_opacity = 70\n"
-    "; 自定义 PNG 背景：相对 config.ini 的路径或绝对路径；留空使用内置图片。\n"
+    "; 自定义 PNG 背景：相对 config.ini 的路径或绝对路径；留空使用纯色背景。\n"
     "; 例如 backgrounds/chat.png；按框大小缩放，保留图片透明区域。\n"
     "background_image =\n"
-    "; 纯色回退背景、边框／分隔线与文字颜色：六位 RGB 十六进制，不加 #。\n"
+    "; 纯色背景、边框／分隔线与文字颜色：六位 RGB 十六进制，不加 #。\n"
     "background_color = 231B18\n"
     "border_color = 79604C\n"
     "text_color = E8DFCB\n";

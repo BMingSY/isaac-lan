@@ -14,20 +14,6 @@ namespace isaac::presentation {
 namespace {
 constexpr std::size_t maxImageBytes = 16 * 1024 * 1024;
 constexpr unsigned maxImageEdge = 4096, maxImagePixels = 8 * 1024 * 1024;
-const wchar_t resourceName[] = L"ISAAC_LAN_CHAT_BACKGROUND";
-std::span<const unsigned char> defaultImage() {
-    HMODULE module = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            resourceName, &module))
-        throw std::runtime_error("default_image_module");
-    const auto resource = FindResourceW(module, resourceName, MAKEINTRESOURCEW(10));
-    const auto loaded = resource ? LoadResource(module, resource) : nullptr;
-    const auto bytes = loaded ? static_cast<const unsigned char*>(LockResource(loaded)) : nullptr;
-    if (!bytes)
-        throw std::runtime_error("default_image_resource");
-    return {bytes, SizeofResource(module, resource)};
-}
 struct Imaging {
     ULONG_PTR token = 0;
     Imaging() {
@@ -139,20 +125,12 @@ std::string animation(unsigned width, unsigned height) {
 ChatBackground prepareChatBackground(const std::filesystem::path& configDirectory,
                                      const std::string& selectedImage) {
     ChatBackground result;
+    if (selectedImage.empty())
+        return result;
     try {
         Imaging imaging;
-        std::vector<unsigned char> custom;
-        auto bytes = defaultImage();
-        if (!selectedImage.empty()) {
-            try {
-                const std::u8string path(selectedImage.begin(), selectedImage.end());
-                custom = readImage(configDirectory / std::filesystem::path(path));
-                dimensions(custom);
-                bytes = custom;
-            } catch (const std::exception& error) {
-                result.warning = std::string("custom_background=") + error.what();
-            }
-        }
+        const std::u8string selectedPath(selectedImage.begin(), selectedImage.end());
+        const auto bytes = readImage(configDirectory / std::filesystem::path(selectedPath));
         const auto [width, height] = dimensions(bytes);
         const auto cache = configDirectory / L"cache/chat";
         std::filesystem::create_directories(cache);
@@ -165,9 +143,7 @@ ChatBackground prepareChatBackground(const std::filesystem::path& configDirector
         result.width = width;
         result.height = height;
     } catch (const std::exception& error) {
-        if (!result.warning.empty())
-            result.warning += " ";
-        result.warning += std::string("background_unavailable=") + error.what();
+        result.warning = std::string("background_unavailable=") + error.what();
     }
     return result;
 }

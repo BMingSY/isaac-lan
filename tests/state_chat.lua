@@ -65,17 +65,26 @@ function _IsaacLanFrame()
     end
     if playing == 30 then
         local style = native.chat_style
-        assert(
-            style.image ~= "" and style.image_width > 0 and style.image_height > 0,
-            "Background preparation failed"
-        )
-        local background = Sprite()
-        background:Load(style.image, true)
-        assert(background:IsLoaded(), "Background ANM2 could not be loaded by the game")
-        background:SetFrame("Idle", 0)
-        local center =
-            background:GetTexel(Vector(style.image_width / 2, style.image_height / 2), Vector.Zero)
-        assert(center.Alpha > 0, "Background PNG is not visible in the native Sprite")
+        if style.image ~= "" then
+            assert(
+                style.image_width > 0 and style.image_height > 0,
+                "Background preparation failed"
+            )
+            local background = Sprite()
+            background:Load(style.image, true)
+            assert(background:IsLoaded(), "Background ANM2 could not be loaded by the game")
+            background:SetFrame("Idle", 0)
+            local center = background:GetTexel(
+                Vector(style.image_width / 2, style.image_height / 2),
+                Vector.Zero
+            )
+            assert(center.Alpha > 0, "Background PNG is not visible in the native Sprite")
+        else
+            assert(
+                style.image_width == 0 and style.image_height == 0,
+                "Unexpected image dimensions"
+            )
+        end
         report(
             "CHAT background="
                 .. style.image_width

@@ -44,15 +44,15 @@ Isaac = {
         return 360
     end,
 }
-local function create()
+local function create(image, opacity)
     local ui = factory({
         native = {
             chat_style = {
-                opacity = 45,
+                opacity = opacity or 70,
                 background = 0x231b18,
                 border = 0x79604c,
                 text = 0xe8dfcb,
-                image = "custom.anm2",
+                image = image or "",
                 image_width = 420,
                 image_height = 192,
             },
@@ -73,6 +73,15 @@ local function create()
 end
 local ui = create()
 ui.render({ phase = 2 })
+assert(loads["custom.anm2"] == nil, "Solid default loaded a background image")
+assert(draws[5].path == "gfx/ui/bossoverlay_whiteout.anm2" and draws[5].color.A == 0.7)
+draws = {}
+ui.input.open = false
+ui.render({ phase = 2 })
+assert(draws[5].color.A == 0.7, "Recent messages lost their translucent solid background")
+draws = {}
+ui = create("custom.anm2", 45)
+ui.render({ phase = 2 })
 assert(draws[1].path == "custom.anm2" and draws[1].color.A == 0.45)
 assert(
     draws[1].color.R == 1 and draws[1].scale.X * 420 >= 210,
@@ -85,11 +94,10 @@ ui.input.open = false
 ui.render({ phase = 2 })
 assert(draws[1].path == "custom.anm2", "Recent messages lost their image background")
 missing, draws = true, {}
-create().render({ phase = 2 })
+create("custom.anm2", 45).render({ phase = 2 })
 assert(#draws > 0)
+assert(draws[5].color.A == 0.45, "Image fallback lost configured opacity")
 for _, draw in ipairs(draws) do
     assert(draw.path ~= "custom.anm2", "Failed image was rendered instead of the fallback")
 end
-print(
-    "PASS chat image scaling, opacity, cached rendering, recent messages and missing-image fallback"
-)
+print("PASS translucent solid default, custom image scaling, opacity, caching and fallback")

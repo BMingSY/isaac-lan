@@ -39,9 +39,9 @@ int main() {
         }
     } cleanup{root};
     const auto base = prepareChatBackground(root, "");
-    require(base.warning.empty() && base.width > 0 && base.height > 0 && !base.animation.empty(),
-            "Bundled background was not materialized");
-    const auto original = read(root / "cache/chat/background.png");
+    require(base.warning.empty() && base.width == 0 && base.height == 0 && base.animation.empty(),
+            "Default background did not select a solid color");
+    require(!std::filesystem::exists(root / "cache"), "Default background created image cache");
     const auto customName = std::filesystem::path(u8"背景 & custom.png");
     saveCustom(root / customName);
     const auto originalCustom = read(root / customName);
@@ -55,13 +55,16 @@ int main() {
     const auto absolute = (root / customName).generic_u8string();
     require(prepareChatBackground(root, {absolute.begin(), absolute.end()}).warning.empty(),
             "Absolute custom image failed");
+    const auto cleared = prepareChatBackground(root, "");
+    require(cleared.animation.empty() && cleared.warning.empty(),
+            "Clearing the selection reused a stale cached image");
     const auto missing = prepareChatBackground(root, "missing.png");
-    require(!missing.warning.empty() && missing.width == base.width &&
-                read(root / "cache/chat/background.png") == original,
-            "Missing custom image did not fall back to bundled art");
+    require(!missing.warning.empty() && missing.animation.empty() && missing.width == 0 &&
+                missing.height == 0,
+            "Missing custom image did not fall back to a solid color");
     { std::ofstream(root / "broken.png", std::ios::binary) << originalCustom.substr(0, 40); }
-    require(!prepareChatBackground(root, "broken.png").warning.empty() &&
-                read(root / "cache/chat/background.png") == original,
+    const auto broken = prepareChatBackground(root, "broken.png");
+    require(!broken.warning.empty() && broken.animation.empty(),
             "Corrupt PNG was passed to the game");
     {
         auto oversized = originalCustom;
@@ -69,15 +72,18 @@ int main() {
         std::ofstream(root / "oversized.png", std::ios::binary)
             .write(oversized.data(), oversized.size());
     }
-    require(!prepareChatBackground(root, "oversized.png").warning.empty(),
-            "Oversized image accepted");
+    const auto oversized = prepareChatBackground(root, "oversized.png");
+    require(!oversized.warning.empty() && oversized.animation.empty(), "Oversized image accepted");
     std::filesystem::create_directory(root / "blocked");
     std::ofstream(root / "blocked/cache") << "owned obstacle";
-    const auto blocked = prepareChatBackground(root / "blocked", "");
+    const auto blocked =
+        prepareChatBackground(root / "blocked", {absolute.begin(), absolute.end()});
     require(blocked.animation.empty() && !blocked.warning.empty(),
             "Cache failure did not return fallback");
+    require(prepareChatBackground(root / "blocked", "").warning.empty(),
+            "Solid background tried to access an unavailable image cache");
     for (const auto& entry : std::filesystem::directory_iterator(root / "cache/chat"))
         require(entry.path().extension() != ".tmp", "Staged image leaked after preparation");
     std::puts(
-        "PASS bundled/custom PNG, Unicode paths, alpha preservation, fallback and cache cleanup");
+        "PASS solid default, custom PNG, Unicode paths, alpha preservation and cache fallback");
 }
