@@ -238,6 +238,42 @@ host.clearBubbles()
 assert(next(host.bubbles) == nil and next(host.emotes) == nil and #host.messages > 0)
 guest.reset()
 assert(#guest.messages == 0 and next(guest.bubbles) == nil)
+-- Help stays local, is available before game readiness, and never executes native commands.
+local packetCount, executionCount = #packets, #executions
+local hostCount, otherCount = #host.messages, #other.messages
+local help
+peers[2].info.ready = 0
+for _, alias in ipairs({ "/h", "/help" }) do
+    local first = #guest.messages + 1
+    assert(guest.submit(alias))
+    assert(guest.messages[first].command and guest.messages[first].text == alias)
+    local lines = {}
+    for index = first + 1, #guest.messages do
+        local message = guest.messages[index]
+        assert(message.kind == "system" and not message.bubble and message.owner == 1)
+        lines[#lines + 1] = message.text
+    end
+    local result = table.concat(lines, "\n")
+    for _, command in ipairs({
+        "/h",
+        "/help",
+        "/e",
+        "/echo",
+        "/dN",
+        "/c",
+        "/console",
+        "/c help",
+        "/lanbot help",
+    }) do
+        assert(result:find(command, 1, true), "Help omitted " .. command)
+    end
+    assert(not help or help == result, "Help aliases returned different content")
+    help = result
+end
+poll()
+assert(#packets == packetCount and #executions == executionCount)
+assert(#host.messages == hostCount and #other.messages == otherCount and next(guest.bubbles) == nil)
+peers[2].info.ready = 1
 local layout = dofile(root .. "/src/bridge/presentation/chat_layout.lua")
 local function measure(text)
     return utf8.len(text) * 10

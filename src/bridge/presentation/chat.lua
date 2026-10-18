@@ -22,6 +22,8 @@ return function(deps, layout)
     local shownEmotes = {}
     local position, drag, mouseDown, lastWidth
     local completion = {
+        "/h",
+        "/help",
         "/e",
         "/echo",
         "/d6",

@@ -97,6 +97,9 @@ return function(deps, wire)
             return nil, "请输入命令"
         end
         local lower = name:lower()
+        if lower == "h" or lower == "help" then
+            return { kind = "help" }
+        end
         if lower == "e" or lower == "echo" then
             return { kind = "echo", text = args }
         end
@@ -211,7 +214,19 @@ return function(deps, wire)
                 bubble = false,
             })
         end
-        if parsed.kind == "echo" then
+        if parsed.kind == "help" then
+            for _, line in ipairs({
+                "/h /help：命令帮助",
+                "/e /echo 文字：仅自己可见",
+                "/dN：全队掷骰，N 为 1～" .. limits.dice,
+                "/c /console 命令：原版控制台",
+                "/c help：原版命令列表",
+                "/lanbot help：托管命令",
+            }) do
+                chat.output(line, { audience = "self" })
+            end
+            return true
+        elseif parsed.kind == "echo" then
             chat.output(parsed.text, { audience = "self" })
             return true
         elseif parsed.kind == "bot" then
