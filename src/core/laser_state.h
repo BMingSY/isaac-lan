@@ -39,4 +39,21 @@ inline LaserPath readLaserPath(lan::Reader& bytes) {
     bytes.finish();
     return result;
 }
+inline void translateLaserPath(LaserPath& path, float x, float y) {
+    if (!std::isfinite(x) || !std::isfinite(y))
+        throw std::runtime_error("Invalid laser render offset");
+    auto translate = [](std::uint32_t& value, float offset) {
+        const auto coordinate = std::bit_cast<float>(value) + offset;
+        if (!std::isfinite(coordinate))
+            throw std::runtime_error("Invalid translated laser coordinate");
+        value = std::bit_cast<std::uint32_t>(coordinate);
+    };
+    // Origin and endpoint are world coordinates; the remaining two values
+    // carry shape/scale and must not be translated.
+    for (unsigned i = 0; i < 4; ++i)
+        translate(path.values[i], i % 2 ? y : x);
+    for (auto& points : path.paths)
+        for (std::size_t i = 0; i < points.size(); ++i)
+            translate(points[i], i % 2 ? y : x);
+}
 } // namespace isaac::presentation

@@ -1,5 +1,6 @@
 #pragma once
 #include "net/socket.h"
+#include "net/messages.h"
 #include <chrono>
 #include <algorithm>
 #include <memory>
@@ -11,10 +12,12 @@ struct Peer : Socket {
         std::shared_ptr<const std::vector<std::uint8_t>> bytes;
         std::size_t wireBytes = 0;
         bool complete = false;
+        Clock::time_point started = Clock::now();
     };
     static constexpr std::size_t maxCachedBytes = 8 * maxWorldSize;
     static constexpr std::size_t maxInFlightBytes = 65536;
     static constexpr std::size_t maxInFlightStates = 16;
+    std::uint64_t coalescedInputs = 0;
     bool accepted = false;
     std::string mods;
     bool loaded = false;
@@ -41,6 +44,19 @@ struct Peer : Socket {
     std::uint32_t pingSequence = 0;
     bool pingPending = false;
     using Socket::Socket;
+    void submitInput(InputSample sample) {
+        const auto tail = unsentTail(Message::input);
+        if (!tail.empty()) {
+            Reader reader(tail.subspan(1));
+            const auto previous = readInput(reader);
+            reader.finish();
+            sample.input.triggered |=
+                retainedInputEdges(previous.input, previous.room, sample.room);
+            replaceTail(inputMessage(sample));
+            ++coalescedInputs;
+        } else
+            sendMessage(inputMessage(sample));
+    }
     void resetWorldCache() {
         baseline.reset();
         flight.clear();

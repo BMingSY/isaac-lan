@@ -2414,7 +2414,13 @@ int laserPath(lua_State* L) {
         std::size_t size = 0;
         const auto data = lua.checkString(L, 2, &size);
         lan::Reader bytes({reinterpret_cast<const std::uint8_t*>(data), size});
-        const auto path = presentation::readLaserPath(bytes);
+        auto path = presentation::readLaserPath(bytes);
+        if (lua.getTop(L) > 2) {
+            if (lua.getTop(L) != 4)
+                throw std::runtime_error("Laser render offset requires two coordinates");
+            presentation::translateLaserPath(path, static_cast<float>(lua.checkNumber(L, 3)),
+                                             static_cast<float>(lua.checkNumber(L, 4)));
+        }
         at<std::uint8_t>(entity, 0x45d) = path.sampleState;
         for (unsigned i = 0; i < floats.size(); ++i)
             at<std::uint32_t>(entity, floats[i]) = path.values[i];

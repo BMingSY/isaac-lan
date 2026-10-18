@@ -6,6 +6,8 @@
 // Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 namespace isaac::compat::ids {
 namespace entity {
+inline constexpr unsigned tear = 2;
+inline constexpr unsigned familiar = 3;
 inline constexpr unsigned bomb = 4;
 inline constexpr unsigned hornfel = 906;
 inline constexpr unsigned hornyBoys = 920;

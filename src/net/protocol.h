@@ -8,6 +8,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace isaac::lan {
@@ -247,25 +248,32 @@ struct WorldState {
 class Writer {
   public:
     std::vector<std::uint8_t> bytes;
-    explicit Writer(Message type) {
+    explicit Writer(Message type, std::size_t capacity = 1) {
+        bytes.reserve(capacity);
         u8(static_cast<std::uint8_t>(type));
     }
     void u8(std::uint8_t n) {
         bytes.push_back(n);
     }
     void u16(std::uint16_t n) {
-        u8(n >> 8);
-        u8(n & 255);
+        const auto at = bytes.size();
+        bytes.resize(at + sizeof(n));
+        bytes[at] = static_cast<std::uint8_t>(n >> 8);
+        bytes[at + 1] = static_cast<std::uint8_t>(n);
     }
     void u32(std::uint32_t n) {
-        u16(n >> 16);
-        u16(n & 65535);
+        const auto at = bytes.size();
+        bytes.resize(at + sizeof(n));
+        bytes[at] = static_cast<std::uint8_t>(n >> 24);
+        bytes[at + 1] = static_cast<std::uint8_t>(n >> 16);
+        bytes[at + 2] = static_cast<std::uint8_t>(n >> 8);
+        bytes[at + 3] = static_cast<std::uint8_t>(n);
     }
     void u64(std::uint64_t n) {
         u32(n >> 32);
         u32(n & 0xffffffff);
     }
-    void string(const std::string& s) {
+    void string(std::string_view s) {
         if (s.size() > 1024)
             throw std::runtime_error("Protocol string too long");
         u16(static_cast<std::uint16_t>(s.size()));
@@ -317,6 +325,13 @@ class Writer {
 class Reader {
     std::span<const std::uint8_t> bytes;
     std::size_t cursor = 0;
+    const std::uint8_t* take(std::size_t size) {
+        if (size > bytes.size() - cursor)
+            throw std::runtime_error("Truncated protocol message");
+        const auto* value = bytes.data() + cursor;
+        cursor += size;
+        return value;
+    }
 
   public:
     explicit Reader(std::span<const std::uint8_t> b) : bytes(b) {}
@@ -326,24 +341,30 @@ class Reader {
         return bytes[cursor++];
     }
     std::uint16_t u16() {
-        auto a = u8();
-        return static_cast<std::uint16_t>((a << 8) | u8());
+        const auto* value = take(sizeof(std::uint16_t));
+        return static_cast<std::uint16_t>((value[0] << 8) | value[1]);
     }
     std::uint32_t u32() {
-        auto a = u16();
-        return (static_cast<std::uint32_t>(a) << 16) | u16();
+        const auto* value = take(sizeof(std::uint32_t));
+        return (static_cast<std::uint32_t>(value[0]) << 24) |
+               (static_cast<std::uint32_t>(value[1]) << 16) |
+               (static_cast<std::uint32_t>(value[2]) << 8) | value[3];
     }
     std::uint64_t u64() {
         auto a = u32();
         return (static_cast<std::uint64_t>(a) << 32) | u32();
     }
-    std::string string() {
+    // The caller must keep the packet alive while using this bounded view.
+    std::string_view stringView() {
         auto size = u16();
         if (size > 1024 || size > bytes.size() - cursor)
             throw std::runtime_error("Invalid protocol string");
-        std::string out(reinterpret_cast<const char*>(bytes.data() + cursor), size);
+        std::string_view out(reinterpret_cast<const char*>(bytes.data() + cursor), size);
         cursor += size;
         return out;
+    }
+    std::string string() {
+        return std::string(stringView());
     }
     InputFrame input() {
         InputFrame out;

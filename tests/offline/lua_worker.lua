@@ -37,6 +37,9 @@ local function stateEnvironment()
             ["presentation/actors"] = dofile(root .. "/src/bridge/presentation/actors.lua"),
             ["presentation/audio"] = dofile(root .. "/src/bridge/presentation/audio.lua"),
             ["presentation/motion"] = dofile(root .. "/src/bridge/presentation/motion.lua"),
+            ["presentation/attachments"] = dofile(
+                root .. "/src/bridge/presentation/attachments.lua"
+            ),
             ["compat/transitions"] = dofile(root .. "/src/bridge/compat/transitions.lua"),
             ["compat/items/hourglass"] = dofile(root .. "/src/bridge/compat/items/hourglass.lua"),
             ["compat/items/r_key"] = dofile(root .. "/src/bridge/compat/items/r_key.lua"),

@@ -1,7 +1,12 @@
-"""Loopback-only latency fixture; preserves TCP byte order and packet throughput."""
+"""Owned TCP delivery fixture: delay, jitter, rate limits and ordered stalls.
+
+Stalls model the delivery gap visible to an application, not IP packet loss.
+Every accepted byte is forwarded in order, including across graceful close.
+"""
 
 from collections import deque
 import select
+import random
 import socket
 import threading
 import time
@@ -11,8 +16,11 @@ class DelayedRelay:
     def __init__(self, listen_port, target_port, delay_ms, record_path=None):
         self.delay = delay_ms / 1000
         # One shared host-to-client budget models a server's total egress.
-        # Zero means unlimited; input traffic retains the fixed delay.
+        # Zero means unlimited in either direction.
         self.downstream_bytes_per_second = 0
+        self.upstream_bytes_per_second = 0
+        self.jitter = 0
+        self.stall = (0, 0)
         self.downstream_bytes = 0
         self.upstream_bytes = 0
         self.connections = 0
@@ -29,6 +37,40 @@ class DelayedRelay:
         self.error = None
         self.thread = threading.Thread(target=self.run, daemon=True)
         self.thread.start()
+
+    def configure(self, settings, default_delay_ms):
+        """Validate a complete live profile before changing the owned relay."""
+        rates = [settings.get(name + "_bytes_per_second", 0) for name in ("downstream", "upstream")]
+        delay = settings.get("delay_ms", default_delay_ms)
+        jitter = settings.get("jitter_ms", 0)
+        interval, duration = settings.get("stall_every_ms", 0), settings.get("stall_ms", 0)
+        if any(type(rate) is not int or rate < 0 for rate in rates):
+            raise ValueError("Invalid owned relay bandwidth")
+        if any(
+            type(value) not in (int, float) or not 0 <= value <= 5000 for value in (delay, jitter)
+        ):
+            raise ValueError("Invalid owned relay latency or jitter")
+        if (
+            any(type(value) is not int or value < 0 for value in (interval, duration))
+            or bool(interval) != bool(duration)
+            or duration >= interval
+            and duration != 0
+            or duration > 5000
+        ):
+            raise ValueError("Invalid owned relay stall interval")
+        self.downstream_bytes_per_second, self.upstream_bytes_per_second = rates
+        self.delay, self.jitter = delay / 1000, jitter / 1000
+        self.stall = (interval / 1000, duration / 1000)
+
+    def settings(self):
+        return {
+            "downstream_bytes_per_second": self.downstream_bytes_per_second,
+            "upstream_bytes_per_second": self.upstream_bytes_per_second,
+            "delay_ms": self.delay * 1000,
+            "jitter_ms": self.jitter * 1000,
+            "stall_every_ms": self.stall[0] * 1000,
+            "stall_ms": self.stall[1] * 1000,
+        }
 
     def connect(self):
         # Consecutive native endings reuse the game processes, but close the
@@ -48,7 +90,9 @@ class DelayedRelay:
         routes, pending = {}, {}
         downstream = set()
         recordings, sequence = {}, 0
-        credit, credited_at, rotation = 0, time.monotonic(), 0
+        credit, credited_at, rotation = [0, 0], time.monotonic(), 0
+        started_at = None
+        jitter = random.Random(0)
         eof, shutdown = set(), set()
         try:
             while not self.stop.is_set():
@@ -88,6 +132,8 @@ class DelayedRelay:
                                 "wb"
                             )
                         downstream.add(client)
+                        if started_at is None:
+                            started_at = time.monotonic()
                         self.connections += 1
                         continue
                     try:
@@ -99,25 +145,31 @@ class DelayedRelay:
                         continue
                     if source in recordings:
                         recordings[source].write(data)
-                    pending[routes[source]].append((time.monotonic() + self.delay, data))
+                    delay = max(0, self.delay + jitter.uniform(-self.jitter, self.jitter))
+                    pending[routes[source]].append((time.monotonic() + delay, data))
                 now = time.monotonic()
-                shared_rate = self.downstream_bytes_per_second
-                credit = (
-                    min(max(1, shared_rate * 0.02), credit + shared_rate * (now - credited_at))
-                    if shared_rate
-                    else 0
-                )
+                rates = [self.upstream_bytes_per_second, self.downstream_bytes_per_second]
+                for direction, rate in enumerate(rates):
+                    credit[direction] = (
+                        min(max(1, rate * 0.02), credit[direction] + rate * (now - credited_at))
+                        if rate
+                        else 0
+                    )
                 credited_at = now
+                interval, duration = self.stall
+                elapsed = now - started_at if started_at is not None else 0
+                stalled = interval and elapsed >= interval and elapsed % interval < duration
                 targets = list(pending)
                 if targets:
                     rotation = (rotation + 1) % len(targets)
                     targets = targets[rotation:] + targets[:rotation]
                 for target in targets:
                     queue = pending[target]
-                    rate = shared_rate if target in downstream else 0
-                    while queue and queue[0][0] <= time.monotonic():
+                    direction = int(target in downstream)
+                    rate = rates[direction]
+                    while not stalled and queue and queue[0][0] <= time.monotonic():
                         ready, data = queue[0]
-                        allowance = min(len(data), int(credit)) if rate else len(data)
+                        allowance = min(len(data), int(credit[direction])) if rate else len(data)
                         if allowance == 0:
                             break
                         try:
@@ -131,7 +183,7 @@ class DelayedRelay:
                             eof.add(target)
                             break
                         if rate:
-                            credit -= sent
+                            credit[direction] -= sent
                         if target in downstream:
                             self.downstream_bytes += sent
                         else:

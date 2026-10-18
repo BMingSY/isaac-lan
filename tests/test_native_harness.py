@@ -30,6 +30,38 @@ def run_lua(source, tmp_path):
     ).stdout
 
 
+def test_field_scenario_announces_the_ready_lobby_before_gameplay(tmp_path):
+    run_lua(
+        """
+local status = { phase = 0, players = 1, verified = 0 }
+local ready, hosted = false, false
+_IsaacLanTest = { host = true, port = "1234" }
+_IsaacLan = { net_gate = function() end, test_gamepad = function() end }
+_IsaacLanFrame = function() return status end
+_IsaacLanModules = { ["sync/codec"] = {}, ["sync/entity_schema"] = function() return {} end }
+createEntityFieldsProbe = function() return function() error("Probe ran in lobby") end end
+Isaac = { DebugString = function(message)
+    assert(hosted and message == "LAN_NETWORK MENU_READY")
+    ready = true
+end }
+function _IsaacLanCommand(action, value)
+    if action == "host" then
+        assert(value == "1234" and not hosted)
+        hosted, status.phase = true, 2
+    else
+        assert(action == "choose" and value == "0:1" and ready)
+    end
+end
+local scenario = dofile("""
+        + lua_support.literal(str(ROOT / "tests/state_entity_fields.lua"))
+        + """)
+for _ = 1, 300 do _IsaacLanFrame() end
+assert(ready and not scenario.done())
+""",
+        tmp_path,
+    )
+
+
 def test_inventory_covers_every_fixture_and_executor():
     catalog = inventory()
     assert {entry["script"] for entry in catalog["fixtures"]} == {
@@ -273,7 +305,16 @@ return {
     (tests / "support").mkdir(parents=True)
     for relative in ("support/scenario.lua", "special_suite_driver.lua"):
         shutil.copyfile(ROOT / "tests" / relative, tests / relative)
-    for name in ("greed", "endings", "lanbot", "lanbot_campaign", "lanbot_spiders", "lanbot_greed"):
+    for name in (
+        "greed",
+        "endings",
+        "lanbot",
+        "lanbot_campaign",
+        "lanbot_spiders",
+        "lanbot_greed",
+        "local_hud",
+        "guest_visuals",
+    ):
         (tests / f"state_{name}.lua").write_text(source)
     monkeypatch.setattr(lua_support, "ROOT", tmp_path)
     return tmp_path
@@ -286,6 +327,7 @@ return {
         (["greed", "greedier", "endings"], True),
         (["lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed"], False),
         (["campaign", "ascent-compat"], False),
+        (["local-hud", "guest-visuals"], False),
     ],
 )
 def test_built_suites_execute_options_and_cleanup(fake_scenarios, cases, first_floor):

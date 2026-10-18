@@ -1,5 +1,10 @@
 #pragma once
+#ifdef _WIN32
 #include <windows.h>
+#define ISAAC_LUA_CALL __cdecl
+#else
+#define ISAAC_LUA_CALL
+#endif
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -7,9 +12,19 @@
 
 struct lua_State;
 namespace isaac::lua {
-using Function = int(__cdecl*)(lua_State*);
-using Continuation = int(__cdecl*)(lua_State*, int, std::intptr_t);
+using Function = int(ISAAC_LUA_CALL*)(lua_State*);
+using Continuation = int(ISAAC_LUA_CALL*)(lua_State*, int, std::intptr_t);
+#ifdef _WIN32
+using Module = HMODULE;
+using Procedure = FARPROC;
 using Resolver = FARPROC(WINAPI*)(HMODULE, LPCSTR);
+inline constexpr Resolver defaultResolver = GetProcAddress;
+#else
+using Module = void*;
+using Procedure = void (*)();
+using Resolver = Procedure (*)(Module, const char*);
+inline constexpr Resolver defaultResolver = nullptr;
+#endif
 enum class Symbol {
     createTable,
     pushClosure,
@@ -40,39 +55,55 @@ enum class Symbol {
     getMetatable,
     setMetatable,
     error,
+    isInteger,
+    toInteger,
+    toNumber,
+    rawGet,
+    rawSet,
+    getField,
+    checkStack,
 };
 struct API {
-    void(__cdecl* createTable)(lua_State*, int, int) = nullptr;
-    void(__cdecl* pushClosure)(lua_State*, Function, int) = nullptr;
-    void(__cdecl* setField)(lua_State*, int, const char*) = nullptr;
-    const char*(__cdecl* pushString)(lua_State*, const char*) = nullptr;
-    long long(__cdecl* checkInteger)(lua_State*, int) = nullptr;
-    const char*(__cdecl* checkString)(lua_State*, int, std::size_t*) = nullptr;
-    double(__cdecl* checkNumber)(lua_State*, int) = nullptr;
-    void(__cdecl* pushBoolean)(lua_State*, int) = nullptr;
-    void(__cdecl* pushValue)(lua_State*, int) = nullptr;
-    int(__cdecl* pcall)(lua_State*, int, int, int, std::intptr_t, Continuation) = nullptr;
-    void(__cdecl* pushInteger)(lua_State*, long long) = nullptr;
-    const char*(__cdecl* pushLString)(lua_State*, const char*, std::size_t) = nullptr;
-    const char*(__cdecl* toString)(lua_State*, int, std::size_t*) = nullptr;
-    int(__cdecl* getTop)(lua_State*) = nullptr;
-    int(__cdecl* getGlobal)(lua_State*, const char*) = nullptr;
-    void(__cdecl* setTop)(lua_State*, int) = nullptr;
-    int(__cdecl* type)(lua_State*, int) = nullptr;
-    int(__cdecl* ref)(lua_State*, int) = nullptr;
-    void(__cdecl* unref)(lua_State*, int, int) = nullptr;
-    int(__cdecl* rawGetI)(lua_State*, int, long long) = nullptr;
-    void(__cdecl* rawSetI)(lua_State*, int, long long) = nullptr;
-    int(__cdecl* toBoolean)(lua_State*, int) = nullptr;
-    void(__cdecl* pushNumber)(lua_State*, double) = nullptr;
-    void*(__cdecl* toUserdata)(lua_State*, int) = nullptr;
-    void*(__cdecl* newUserdata)(lua_State*, std::size_t) = nullptr;
-    std::size_t(__cdecl* rawLength)(lua_State*, int) = nullptr;
-    int(__cdecl* getMetatable)(lua_State*, int) = nullptr;
-    int(__cdecl* setMetatable)(lua_State*, int) = nullptr;
-    int(__cdecl* error)(lua_State*) = nullptr;
-    bool load(HMODULE module, std::initializer_list<Symbol> required,
-              Resolver resolve = GetProcAddress) {
+    void(ISAAC_LUA_CALL* createTable)(lua_State*, int, int) = nullptr;
+    void(ISAAC_LUA_CALL* pushClosure)(lua_State*, Function, int) = nullptr;
+    void(ISAAC_LUA_CALL* setField)(lua_State*, int, const char*) = nullptr;
+    const char*(ISAAC_LUA_CALL* pushString)(lua_State*, const char*) = nullptr;
+    long long(ISAAC_LUA_CALL* checkInteger)(lua_State*, int) = nullptr;
+    const char*(ISAAC_LUA_CALL* checkString)(lua_State*, int, std::size_t*) = nullptr;
+    double(ISAAC_LUA_CALL* checkNumber)(lua_State*, int) = nullptr;
+    void(ISAAC_LUA_CALL* pushBoolean)(lua_State*, int) = nullptr;
+    void(ISAAC_LUA_CALL* pushValue)(lua_State*, int) = nullptr;
+    int(ISAAC_LUA_CALL* pcall)(lua_State*, int, int, int, std::intptr_t, Continuation) = nullptr;
+    void(ISAAC_LUA_CALL* pushInteger)(lua_State*, long long) = nullptr;
+    const char*(ISAAC_LUA_CALL* pushLString)(lua_State*, const char*, std::size_t) = nullptr;
+    const char*(ISAAC_LUA_CALL* toString)(lua_State*, int, std::size_t*) = nullptr;
+    int(ISAAC_LUA_CALL* getTop)(lua_State*) = nullptr;
+    int(ISAAC_LUA_CALL* getGlobal)(lua_State*, const char*) = nullptr;
+    void(ISAAC_LUA_CALL* setTop)(lua_State*, int) = nullptr;
+    int(ISAAC_LUA_CALL* type)(lua_State*, int) = nullptr;
+    int(ISAAC_LUA_CALL* ref)(lua_State*, int) = nullptr;
+    void(ISAAC_LUA_CALL* unref)(lua_State*, int, int) = nullptr;
+    int(ISAAC_LUA_CALL* rawGetI)(lua_State*, int, long long) = nullptr;
+    void(ISAAC_LUA_CALL* rawSetI)(lua_State*, int, long long) = nullptr;
+    int(ISAAC_LUA_CALL* toBoolean)(lua_State*, int) = nullptr;
+    void(ISAAC_LUA_CALL* pushNumber)(lua_State*, double) = nullptr;
+    void*(ISAAC_LUA_CALL* toUserdata)(lua_State*, int) = nullptr;
+    void*(ISAAC_LUA_CALL* newUserdata)(lua_State*, std::size_t) = nullptr;
+    std::size_t(ISAAC_LUA_CALL* rawLength)(lua_State*, int) = nullptr;
+    int(ISAAC_LUA_CALL* getMetatable)(lua_State*, int) = nullptr;
+    int(ISAAC_LUA_CALL* setMetatable)(lua_State*, int) = nullptr;
+    int(ISAAC_LUA_CALL* error)(lua_State*) = nullptr;
+    int(ISAAC_LUA_CALL* isInteger)(lua_State*, int) = nullptr;
+    long long(ISAAC_LUA_CALL* toInteger)(lua_State*, int, int*) = nullptr;
+    double(ISAAC_LUA_CALL* toNumber)(lua_State*, int, int*) = nullptr;
+    int(ISAAC_LUA_CALL* rawGet)(lua_State*, int) = nullptr;
+    void(ISAAC_LUA_CALL* rawSet)(lua_State*, int) = nullptr;
+    int(ISAAC_LUA_CALL* getField)(lua_State*, int, const char*) = nullptr;
+    int(ISAAC_LUA_CALL* checkStack)(lua_State*, int) = nullptr;
+    bool load(Module module, std::initializer_list<Symbol> required,
+              Resolver resolve = defaultResolver) {
+        if (!resolve)
+            return false;
         API next = *this;
         for (auto symbol : required) {
             switch (symbol) {
@@ -188,6 +219,34 @@ struct API {
                 if (!bind(next.setMetatable, resolve(module, "lua_setmetatable")))
                     return false;
                 break;
+            case Symbol::isInteger:
+                if (!bind(next.isInteger, resolve(module, "lua_isinteger")))
+                    return false;
+                break;
+            case Symbol::toInteger:
+                if (!bind(next.toInteger, resolve(module, "lua_tointegerx")))
+                    return false;
+                break;
+            case Symbol::toNumber:
+                if (!bind(next.toNumber, resolve(module, "lua_tonumberx")))
+                    return false;
+                break;
+            case Symbol::rawGet:
+                if (!bind(next.rawGet, resolve(module, "lua_rawget")))
+                    return false;
+                break;
+            case Symbol::rawSet:
+                if (!bind(next.rawSet, resolve(module, "lua_rawset")))
+                    return false;
+                break;
+            case Symbol::getField:
+                if (!bind(next.getField, resolve(module, "lua_getfield")))
+                    return false;
+                break;
+            case Symbol::checkStack:
+                if (!bind(next.checkStack, resolve(module, "lua_checkstack")))
+                    return false;
+                break;
             case Symbol::error:
                 if (!bind(next.error, resolve(module, "lua_error")))
                     return false;
@@ -199,7 +258,7 @@ struct API {
     }
 
   private:
-    template <class T> static bool bind(T& target, FARPROC address) {
+    template <class T> static bool bind(T& target, Procedure address) {
         static_assert(sizeof(target) == sizeof(address));
         if (!address)
             return false;
@@ -208,3 +267,4 @@ struct API {
     }
 };
 } // namespace isaac::lua
+#undef ISAAC_LUA_CALL

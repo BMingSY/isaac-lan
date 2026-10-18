@@ -136,6 +136,18 @@ class ProgressFixtureTests(unittest.TestCase):
             flags[identifier] = 1
         self.assertEqual(ascent[32:674], flags)
 
+    def test_lazarus_fixture_changes_only_the_guests_required_unlock(self):
+        source = self.baseline()
+        ordinary = patch(source, host=False)
+        guest = patch(source, host=False, lazarus=True)
+        flags = bytearray(ordinary[32:674])
+        flags[482] = 1
+        self.assertEqual(guest[32:674], flags)
+        self.assertEqual(guest[674:-4], ordinary[674:-4])
+        self.assertEqual(guest[:32], ordinary[:32])
+        self.assertEqual(struct.unpack_from("<I", guest, len(guest) - 4)[0], checksum(guest[16:-4]))
+        self.assertEqual(patch(source, host=True, lazarus=True), patch(source, host=True))
+
     def test_invalid_baselines_are_rejected_before_writing(self):
         source = self.baseline()
         corrupted = bytearray(source)

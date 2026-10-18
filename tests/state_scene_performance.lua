@@ -54,7 +54,7 @@ local spriteState = native.sprite_state
 native.sprite_state = function(...)
     local sprite, value = ...
     local result = spriteState(...)
-    if value and result then
+    if value and type(result) == "table" then
         changedLayers = changedLayers + #result
         for _, layer in ipairs(result) do
             local key = sprite:GetFilename() .. "|" .. layer[1] .. "|" .. layer[2]

@@ -72,6 +72,24 @@ inline constexpr unsigned data = 0x4;
 inline constexpr unsigned count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned subtype = 0x30;
+inline constexpr unsigned initSeed = 0x3ec;
+inline constexpr unsigned velocity = 0x360;
+inline constexpr unsigned hitPoints = 0x380;
+inline constexpr unsigned maxHitPoints = 0x384;
+inline constexpr unsigned collisionDamage = 0x388;
+inline constexpr unsigned visible = 0x171;
+inline constexpr unsigned flipX = 0x148;
+inline constexpr unsigned depthOffset = 0x358;
+inline constexpr unsigned mass = 0x37c;
+inline constexpr unsigned size = 0x370;
+inline constexpr unsigned spriteRotation = 0xec;
+inline constexpr unsigned spriteOffset = 0xdc;
+inline constexpr unsigned spriteScale = 0xe4;
+inline constexpr unsigned createdFrame = 0x328;
+inline constexpr unsigned flags = 0x168;
+inline constexpr unsigned damageVtableSlot = 0x40;
+inline constexpr unsigned color = 0x1b8;
 inline constexpr unsigned index = 0x20;
 inline constexpr unsigned type = 0x28;
 inline constexpr unsigned sprite = 0x48;
@@ -85,12 +103,70 @@ inline constexpr unsigned previousX = 0x344;
 inline constexpr unsigned previousY = 0x348;
 inline constexpr unsigned parent = 0x3bc;
 } // namespace entity
+namespace tear {
+inline constexpr unsigned height = 0x410;
+inline constexpr unsigned fallingSpeed = 0x414;
+inline constexpr unsigned fallingAcceleration = 0x418;
+inline constexpr unsigned scale = 0x420;
+inline constexpr unsigned rotation = 0x458;
+inline constexpr unsigned waitFrames = 0x438;
+} // namespace tear
+namespace effect {
+inline constexpr unsigned state = 0x450;
+inline constexpr unsigned timeout = 0x45c;
+inline constexpr unsigned lifeSpan = 0x460;
+inline constexpr unsigned rotation = 0x474;
+inline constexpr unsigned scale = 0x478;
+inline constexpr unsigned minRadius = 0x454;
+inline constexpr unsigned maxRadius = 0x458;
+} // namespace effect
+namespace familiar {
+inline constexpr unsigned state = 0xd88;
+inline constexpr unsigned fireCooldown = 0xd4c;
+inline constexpr unsigned headFrameDelay = 0xd50;
+inline constexpr unsigned moveDirection = 0xd54;
+inline constexpr unsigned shootDirection = 0xd58;
+inline constexpr unsigned lastDirection = 0xd5c;
+inline constexpr unsigned orbitAngleOffset = 0xd60;
+inline constexpr unsigned orbitSpeed = 0xd6c;
+inline constexpr unsigned orbitLayer = 0xd70;
+} // namespace familiar
 namespace sprite {
 inline constexpr unsigned size = 0x114;
+inline constexpr unsigned path = 0x0;
+inline constexpr unsigned animation = 0x30;
+inline constexpr unsigned overlay = 0x50;
+inline constexpr unsigned offset = 0x94;
+inline constexpr unsigned scale = 0x9c;
+inline constexpr unsigned rotation = 0xa4;
+inline constexpr unsigned color = 0xa8;
+inline constexpr unsigned flipX = 0x100;
+inline constexpr unsigned flipY = 0x101;
 // Both native animation states store a non-owning pointer to their ANM2.
 inline constexpr unsigned animationOwner = 0x30;
 inline constexpr unsigned overlayOwner = 0x50;
 } // namespace sprite
+namespace animationState {
+inline constexpr unsigned data = 0x4;
+inline constexpr unsigned layerFrames = 0x8, nullFrames = 0xc;
+inline constexpr unsigned frame = 0x10;
+inline constexpr unsigned playing = 0x14, events = 0x18, previousEvents = 0x1c;
+} // namespace animationState
+namespace animationData {
+inline constexpr unsigned layers = 0x18, layerCount = 0x1c;
+inline constexpr unsigned nulls = 0x20, nullCount = 0x24;
+inline constexpr unsigned layerMap = 0x38;
+} // namespace animationData
+namespace animationLayer {
+inline constexpr unsigned stride = 0x10, id = 0x0, frameCount = 0x8;
+inline constexpr unsigned nullFrameCount = 0xc;
+} // namespace animationLayer
+namespace color {
+inline constexpr unsigned size = 0x2c;
+inline constexpr unsigned red = 0x0, green = 0x4, blue = 0x8, alpha = 0xc;
+inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
+inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
+} // namespace color
 namespace player {
 inline constexpr unsigned emote = 0x26d8;
 inline constexpr unsigned type = 0x13c0;

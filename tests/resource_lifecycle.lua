@@ -27,7 +27,10 @@ local env = {
         observed[spawned] = e
         return e
     end,
-    apply = function() end,
+    apply = function(e, _, registered)
+        assert(registered == not not e.applied, "Retained reference confused with a new allocation")
+        e.applied = true
+    end,
     reclaim = function() end,
     entities = function()
         local all = {}
@@ -53,6 +56,9 @@ local function cycle()
     local before = spawned
     reconcile(values, env)
     assert(spawned == before, "Repeated snapshot allocated new identities")
+    values[1][3] = 1
+    reconcile(values, env)
+    assert(spawned == before + 1, "Changed native variant retained its old allocation")
     reconcile({}, env)
     assert(next(refs) == nil and next(live) == nil, "Removed identities remain retained")
     local bytes = codec.encode(values)

@@ -1,6 +1,7 @@
 #include "net/session.h"
 #include "runtime/progression.h"
 #include "net/compression.h"
+#include "net/peer.h"
 #include "test_support.h"
 #include <winsock2.h>
 #include <windows.h>
@@ -166,6 +167,19 @@ void greedSettings() {
     }
 }
 void codec() {
+    Writer strings(Message::world);
+    const std::string_view binary("a\0b", 3);
+    strings.string(binary);
+    require(strings.bytes == std::vector<std::uint8_t>(
+                                 {static_cast<std::uint8_t>(Message::world), 0, 3, 'a', 0, 'b'}),
+            "Borrowed string writer changed protocol bytes");
+    Reader borrowed(strings.bytes), owned(strings.bytes);
+    borrowed.u8();
+    owned.u8();
+    require(borrowed.stringView() == binary && owned.string() == binary,
+            "Borrowed or owned string reader changed bytes");
+    borrowed.finish();
+    owned.finish();
     StateCompression compression;
     std::vector<std::uint8_t> plain(512000, 42);
     const auto compact = compression.compress(plain);
@@ -343,6 +357,58 @@ void renderInputs() {
     std::puts(
         "PASS mixed 30/60 Hz guest samples coalesce into 30 Hz host steps with one-shot edges and "
         "acknowledgements");
+}
+void inputBackpressure() {
+    Group group(2);
+    group.ready();
+    group.step(0);
+    InputFrame press;
+    press.values[0] = 50000;
+    press.triggered = 1u << 6;
+    const InputRoom source{0, 84, 0};
+    // No writable poll: a stalled guest must retain one current sample and
+    // its short button edge rather than thousands of obsolete directions.
+    require(group.peers[1]->submit(0, press, source), "Press rejected");
+    for (unsigned sequence = 1; sequence <= 10000; ++sequence)
+        require(group.peers[1]->submit(sequence, {}, source), "Release sample rejected");
+    require(group.peers[1]->resources().queuedBytes < 256,
+            "Blocked input queue kept stale samples");
+    until([&] {
+        group.poll();
+        return group.peers[0]->inputSequences()[1] == 10000;
+    });
+    const auto applied = group.step(1);
+    require(applied.inputs[1].values == InputFrame{}.values &&
+                applied.inputs[1].triggered == press.triggered,
+            "Coalescing lost a press or replayed stale movement");
+    require(group.step(2).inputs[1].triggered == 0, "Retained input edge repeated");
+
+    Peer peer;
+    peer.submitInput({0, press, source});
+    const auto first = peer.outgoing.front();
+    peer.sent = 4;
+    peer.queued -= peer.sent;
+    peer.submitInput({1, {}, source});
+    peer.submitInput({2, {}, source});
+    require(peer.outgoing.size() == 2 && peer.outgoing.front() == first && peer.sent == 4,
+            "Coalescing modified a partially transmitted TCP frame");
+    Writer pause(Message::control);
+    pause.u8(static_cast<unsigned>(Command::pause));
+    peer.sendMessage(pause);
+    peer.submitInput({3, press, source});
+    require(peer.outgoing.size() == 4, "Input replacement crossed an ordered control boundary");
+    auto destination = source;
+    destination.index = 85;
+    peer.submitInput({4, {}, destination});
+    Reader reader(peer.unsentTail(Message::input).subspan(1));
+    const auto last = readInput(reader);
+    reader.finish();
+    require(last.sequence == 4 && last.room == destination && last.input.triggered == 0,
+            "Old-room button edges crossed the destination boundary");
+    std::size_t remaining = 0;
+    for (const auto& message : peer.outgoing)
+        remaining += message.size();
+    require(peer.queued == remaining - peer.sent, "Replacement corrupted queued-byte accounting");
 }
 void floorRejoin() {
     Group g(2, 0, "127.0.0.1", {}, {1, 23});
@@ -1050,9 +1116,12 @@ void compressionLimits() {
     rejects([&] { compression.compress(std::vector<std::uint8_t>(maxWorldSize + 1)); },
             "Oversized state accepted");
     for (const auto& plain :
-         {std::vector<std::uint8_t>{0xff}, std::vector<std::uint8_t>(maxWorldSize, 42)})
+         {std::vector<std::uint8_t>{0xff}, std::vector<std::uint8_t>(maxWorldSize, 42)}) {
         require(compression.expand(compression.compress(plain)) == plain,
                 "Compression boundary round trip failed");
+        require(compression.expand(compression.compress(plain, plain), plain) == plain,
+                "Prefix compression raw fallback or maximum size failed");
+    }
     Writer raw(Message::world);
     raw.bytes.clear();
     raw.u8(0);
@@ -1069,7 +1138,7 @@ void compressionLimits() {
     invalid.push_back(0);
     rejects([&] { compression.expand(invalid); }, "Trailing plain state data accepted");
     invalid = raw.bytes;
-    invalid[0] = 2;
+    invalid[0] = 255;
     rejects([&] { compression.expand(invalid); }, "Unknown compression mode accepted");
     invalid = raw.bytes;
     std::fill(invalid.begin() + 1, invalid.begin() + 5, 0);
@@ -1999,6 +2068,69 @@ void worldDeltas() {
                 static_cast<unsigned long long>(resources.fullWorldBytes),
                 static_cast<unsigned long long>(resources.wireWorldBytes));
 }
+void deliveryBackpressure() {
+    Group group(3);
+    group.ready();
+    std::uint32_t sequence = 0;
+    auto step = [&](bool slowReceipt) {
+        const auto tick = group.step(sequence++).tick;
+        group.publish(tick);
+        bool healthy = false;
+        until([&] {
+            group.poll();
+            if (slowReceipt)
+                if (auto state = group.peers[1]->takeState())
+                    group.peers[1]->applied(state->tick);
+            if (auto state = group.peers[2]->takeState()) {
+                group.peers[2]->applied(state->tick);
+                healthy = state->tick == tick;
+            }
+            return healthy;
+        });
+        return tick;
+    };
+    for (unsigned i = 0; i < 20; ++i) {
+        step(false);
+        Sleep(20);
+    }
+    const auto stalled = group.peers[0]->resources();
+    require(stalled.inFlightStates <= 8 && stalled.oldestWorldMs >= 300,
+            "Stalled application receipts were unbounded or not exercised");
+    // Retire the delayed views. Refilling remains bounded while the other
+    // guest has continued receiving every tick.
+    step(true);
+    group.poll();
+    const auto before = group.peers[0]->resources().worldSnapshots;
+    for (unsigned i = 0; i < 10; ++i)
+        step(false);
+    group.poll();
+    const auto throttled = group.peers[0]->resources();
+    require(throttled.worldSnapshots - before <= 14,
+            "Delayed receipt refilled an unbounded stale-state window");
+    // Reliable lifecycle messages must still progress through the same TCP
+    // connection while ordinary world publication is throttled.
+    const Stage stage{1, 2, 0, 0, false, {}, {}};
+    require(group.peers[0]->beginStage(stage), "Congestion blocked a floor event");
+    std::array<bool, 3> arrived{};
+    until([&] {
+        group.poll();
+        for (unsigned slot = 1; slot < 3; ++slot)
+            if (auto event = group.peers[slot]->takeStage()) {
+                require(*event == stage, "Throttled floor event changed");
+                arrived[slot] = true;
+            }
+        return arrived[1] && arrived[2];
+    });
+    for (unsigned i = 0; i < 24; ++i)
+        step(true);
+    group.poll();
+    const auto recovered = group.peers[0]->resources().worldSnapshots;
+    for (unsigned i = 0; i < 10; ++i)
+        step(false);
+    group.poll();
+    require(group.peers[0]->resources().worldSnapshots - recovered >= 14,
+            "Recovered connection did not restore its healthy delivery window");
+}
 void deltaFloorBoundary() {
     Group g(2);
     g.ready();
@@ -2097,9 +2229,11 @@ int main(int argc, char** argv) {
     const auto result = runTests(argc, argv,
                                  {{"codec", codec},
                                   {"world-deltas", worldDeltas},
+                                  {"delivery-backpressure", deliveryBackpressure},
                                   {"delta-floor-boundary", deltaFloorBoundary},
                                   {"compression-limits", compressionLimits},
                                   {"render-inputs", renderInputs},
+                                  {"input-backpressure", inputBackpressure},
                                   {"inputs-2", [] { inputsAndStates(2); }},
                                   {"inputs-3", [] { inputsAndStates(3); }},
                                   {"inputs-4", [] { inputsAndStates(4); }},

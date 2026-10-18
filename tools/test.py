@@ -37,7 +37,10 @@ def plan(build, report, profile, lua, *, sanitizers=False):
                 "-DCMAKE_BUILD_TYPE=Debug",
                 "-DISAAC_LAN_LUA=" + lua,
                 *(
-                    ["-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer"]
+                    [
+                        "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer",
+                        "-DCMAKE_C_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer",
+                    ]
                     if sanitizers
                     else []
                 ),

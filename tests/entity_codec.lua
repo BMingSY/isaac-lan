@@ -13,6 +13,7 @@ local env = setmetatable({
     EntityGridCollisionClass = { GRIDCOLL_NONE = 0 },
 }, { __index = _G })
 local laserReads, laserWrites = 0, 0
+local spriteChanges = true
 local geometry = string.pack(">ff", 520, -180)
 local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
     env.Vector,
@@ -33,7 +34,7 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
             return ""
         end,
         sprite_state = function(_, bytes)
-            return bytes and {} or ""
+            return bytes and spriteChanges or ""
         end,
         laser_path = function(_, bytes)
             if bytes then
@@ -152,8 +153,9 @@ local expected = {
     false,
     false,
     0,
+    false,
 }
-assert(codec.encode(state) == codec.encode(expected), "Schema-19 entity bytes changed")
+assert(codec.encode(state) == codec.encode(expected), "Schema-25 entity bytes changed")
 assert(state[1] == 1 and state[10] == false and state[20] == "native laser path")
 assert(laserReads == 1 and #state[9] == 11, "SampleLaser userdata must stay outside scalar fields")
 component.apply(target, state)
@@ -225,6 +227,30 @@ assert(
     wire.encode(component.sprite(sourceSprite)) == wire.encode(expectedSprite),
     "Schema-19 sprite bytes changed"
 )
+local animation, overlay = "Walk", "Glow"
+local animationChanges, overlayChanges = 0, 0
+function sourceSprite:GetAnimation()
+    return animation
+end
+function sourceSprite:GetOverlayAnimation()
+    return overlay
+end
+function sourceSprite:SetFrame(name)
+    animation, animationChanges = name, animationChanges + 1
+end
+function sourceSprite:SetOverlayFrame(name)
+    overlay, overlayChanges = name, overlayChanges + 1
+end
+function sourceSprite:RemoveOverlay()
+    overlay = ""
+end
+component.applySprite(sourceSprite, expectedSprite)
+assert(animationChanges == 0 and overlayChanges == 0, "Unchanged animations restarted")
+local switched = wire.decode(wire.encode(expectedSprite))
+switched[2], switched[4] = "Idle", "Flash"
+component.applySprite(sourceSprite, switched)
+component.applySprite(sourceSprite, switched)
+assert(animationChanges == 1 and overlayChanges == 1, "Animation switch did not occur once")
 local value = wire.decode(wire.encode(component.capture(warning)))
 assert(value[24] == geometry)
 component.apply(beam, value)
@@ -233,6 +259,19 @@ assert(
         and beam.SubType == 1
         and string.pack(">ff", beam.TargetPosition.X, beam.TargetPosition.Y) == geometry
 )
+local replaced, loaded = {}, 0
+function beam.sprite:ReplaceSpritesheet(layer, path)
+    replaced[#replaced + 1] = { layer, path }
+end
+function beam.sprite:LoadGraphics()
+    loaded = loaded + 1
+end
+spriteChanges = { { 2, "changed.png" }, { 0, "base.png" } }
+component.apply(beam, value)
+assert(wire.encode(replaced) == wire.encode(spriteChanges) and loaded == 1)
+spriteChanges = true
+component.apply(beam, value)
+assert(#replaced == 2 and loaded == 1, "Unchanged sprite reloaded graphics")
 source.MaxDistance = {}
 assert(not pcall(component.capture, source, false), "Unsupported userdata scalar must be rejected")
 source.MaxDistance = math.huge
@@ -246,4 +285,73 @@ for index = 11, 14 do
     assert(linked[index] == 0, "Local particle leaked an unresolved authority ID")
 end
 assert(spray:GetData().__isaac_lan_entity == nil)
+
+-- Exercise the production packing branch. Opaque fields must survive the outer
+-- codec and reach their own plan, while identity/motion remain available to Lua.
+local unpacked = component.capture(warning, false)
+local packedFields =
+    codec.encode({ unpacked[8], unpacked[9], unpacked[15], unpacked[16], unpacked[17] })
+local applied = {}
+local packedNative = {
+    entity_fields_plan = function(kind, template)
+        return kind == 1000 and template or false
+    end,
+    entity_fields_capture = function(_, template)
+        assert(#template == 26)
+        local value = {}
+        for i, field in ipairs(template) do
+            value[i] = field ~= false and unpacked[i] or false
+        end
+        return value
+    end,
+    entity_fields_encode = function(_, template)
+        assert(template[1] == schemas.common and template[2] == schemas.byType[1000])
+        assert(
+            template[3] == "SpriteOffset"
+                and template[4] == "SpriteScale"
+                and template[5] == "Color"
+        )
+        return packedFields
+    end,
+    entity_fields_apply = function(_, template, value)
+        if #template == 26 then
+            assert(value[2] == 1000 and value[6][1] == unpacked[6][1])
+            applied[#applied + 1] = "outer"
+        else
+            assert(#template == 5 and value == packedFields)
+            applied[#applied + 1] = "packed"
+        end
+        return true
+    end,
+    presentation_local_effect = function()
+        return false
+    end,
+}
+local packedComponent = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "t", env))()(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(
+    packedNative,
+    schemas,
+    {
+        capture = function()
+            return false
+        end,
+    },
+    nil,
+    {
+        capture = function()
+            return 0
+        end,
+        apply = function() end,
+    }
+)
+local packedState = codec.decode(codec.encode(packedComponent.capture(warning, false)))
+for _, field in ipairs({ 8, 9, 15, 16, 17 }) do
+    assert(packedState[field] == false, "Packed fields were also expanded into Lua arrays")
+end
+assert(packedState[26] == packedFields)
+packedComponent.apply(beam, packedState)
+assert(table.concat(applied, ",") == "outer,packed", "Packed plan was not restored")
+packedState[26] = false
+assert(not pcall(packedComponent.apply, beam, packedState), "Missing packed fields accepted")
 print("PASS portable entity fields, native laser state and replica lifecycle flag ownership")

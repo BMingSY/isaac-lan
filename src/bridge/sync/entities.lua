@@ -62,6 +62,7 @@ return function(fields)
                     env.discard(e)
                     e = nil
                 end
+                local registered = e ~= nil
                 if not e then
                     -- Spawn subtype zero rolls a new collectible, even for an empty pedestal.
                     local subtype = v[Entity.type] == types.ENTITY_PICKUP
@@ -73,7 +74,7 @@ return function(fields)
                 end
                 if e then
                     e:GetData().__isaac_lan_replica = v[Entity.id]
-                    env.apply(e, v)
+                    env.apply(e, v, registered)
                     currentObjects[env.key(e)] = true
                 else
                     assert(optionalTear(v), "Replica spawn failed")

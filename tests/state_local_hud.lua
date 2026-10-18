@@ -1,11 +1,16 @@
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated local HUD and room animation regression" }
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port
+if _IsaacLanTest then
+    host, port = _IsaacLanTest.host, _IsaacLanTest.port
+else
+    local f = assert(io.open("./lan-test-role.txt", "r"))
+    host = f:read("*l") == "host"
+    f:close()
+    f = assert(io.open("./lan-test-menu-port.txt", "r"))
+    port = f:read("*l")
+    f:close()
+end
 local function report(s)
     Isaac.DebugString("LAN_NETWORK " .. s)
 end
@@ -264,3 +269,9 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_UPDATE, function()
         end
     end
 end)
+
+return {
+    done = function()
+        return done
+    end,
+}

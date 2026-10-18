@@ -65,7 +65,9 @@ end
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     for i = 0, Game():GetNumPlayers() - 1 do
-        Isaac.GetPlayer(i):SetMinDamageCooldown(10000)
+        local player = Isaac.GetPlayer(i)
+        player:SetMinDamageCooldown(10000)
+        player:AddEntityFlags(EntityFlag.FLAG_NO_DAMAGE_BLINK)
     end
     return gate(function()
         return capture()
