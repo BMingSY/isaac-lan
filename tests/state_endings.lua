@@ -9,7 +9,7 @@ local owner = { Name = "Six native ending routes" }
 local cases = _IsaacLanTest.endingRoutes
     or { "lamb", "blue-baby", "delirium", "mega-satan", "mother", "ascent" }
 local caseIndex, wins, renders, lastExit = 1, 0, 0, 0
-local lastExitMs, relinkAt = 0, 0
+local lastExitMs = 0
 local localProgress
 local linked, chosen, started, finished = false, false, false, false
 local step, stepAt, floorAt, seenBoss, photo, contact, shoot = "init", 0, 0, false, nil, nil, -1
@@ -771,18 +771,11 @@ function _IsaacLanFrame()
                     false, false, nil, nil
                 terminalWalk = {}
                 scratchReported = {}
-                -- Menu rendering is throttled differently in each window.
-                -- Schedule lobbies in wall time rather than render counts.
-                relinkAt = now + (host and 250 or 1000)
             end
         end
         return s
     end
-    if
-        not linked
-        and s.scene == 1
-        and (relinkAt > 0 and now >= relinkAt or relinkAt == 0 and renders >= (host and 300 or 360))
-    then
+    if not linked and s.scene == 1 and renders >= (host and 300 or 360) then
         linked = true
         localProgress = native.net_progress()
         _IsaacLanCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)

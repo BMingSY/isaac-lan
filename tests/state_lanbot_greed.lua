@@ -502,7 +502,7 @@ function _IsaacLanFrame()
         end
     elseif
         seenGame
-        and status.phase == 0
+        and (status.phase == 0 or status.phase == native.net_phases().lobby)
         and status.scene == 1
         and not status.prepared
         and not finished

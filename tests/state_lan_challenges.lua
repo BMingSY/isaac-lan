@@ -854,6 +854,12 @@ function _IsaacLanFrame()
         return status
     end
     if requested and requested ~= current then
+        -- Each case owns a separate room/configuration. Successful runs now
+        -- retain their lobby, so end it only after all peers recorded results.
+        if current and status.scene == 1 and not status.prepared and status.phase ~= 0 then
+            _IsaacLanCommand("close")
+            return status
+        end
         if status.phase ~= 0 or status.scene ~= 1 or status.prepared then
             return status
         end
@@ -992,7 +998,7 @@ function _IsaacLanFrame()
         and exitedAt
         and not menuDone
         and (not reconnectRequested or reconnectJoined)
-        and status.phase == 0
+        and (status.phase == 0 or status.phase == native.net_phases().lobby)
         and status.scene == 1
         and not status.prepared
         and now - exitedAt > 2000

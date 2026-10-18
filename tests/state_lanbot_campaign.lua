@@ -323,7 +323,7 @@ function _IsaacLanFrame()
         won
         and not finished
         and native.api_info().nowMs - endedAt > 3000
-        and s.phase == 0
+        and s.phase == native.net_phases().lobby
         and s.scene == 1
         and not s.prepared
     then
