@@ -43,7 +43,7 @@ native.emote_show = function(owner, id)
 end
 local function has(text)
     for _, message in ipairs(_IsaacLanChatMessages()) do
-        if message.text:find(text, 1, true) then
+        if not message.command and message.text:find(text, 1, true) then
             return message
         end
     end
@@ -148,7 +148,7 @@ function _IsaacLanFrame()
         end
         report("CHAT native command and private output verified")
     elseif playing == 450 then
-        local dice = assert(has("掷出 d20："), "Shared dice result missing")
+        local dice = assert(has("2P掷出 D20 : "), "Shared dice result missing")
         assert(dice.bubble and dice.owner == 1)
         report("CHAT dice=" .. dice.text)
         native.chat_ui_open(false)

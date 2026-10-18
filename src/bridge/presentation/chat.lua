@@ -12,8 +12,12 @@ return function(deps, layout)
     end
     local background, border, foreground = rgb(style.background), rgb(style.border), rgb(style.text)
     local backgroundAlpha = style.opacity / 100
-    local colors =
-        { { 0.60, 0.16, 0.12 }, { 0.16, 0.35, 0.59 }, { 0.55, 0.40, 0.10 }, { 0.21, 0.45, 0.24 } }
+    local playerColors = {
+        { text = rgb(0xf0a7a0), bubble = rgb(0x722f2b) },
+        { text = rgb(0x9dc8f0), bubble = rgb(0x244b70) },
+        { text = rgb(0xe6ce85), bubble = rgb(0x665018) },
+        { text = rgb(0xa8d3a3), bubble = rgb(0x305b35) },
+    }
     local scale = 0.85
     local shownEmotes = {}
     local position, drag, mouseDown, lastWidth
@@ -56,7 +60,11 @@ return function(deps, layout)
     local function measure(text)
         return assets.font:GetStringWidthUTF8(text) * scale
     end
-    local function text(value, x, y, color, alpha)
+    local shadowInk = { 0.10, 0.08, 0.07 }
+    local function text(value, x, y, color, alpha, shadow)
+        if assets.background and shadow ~= false then
+            text(value, x + 1, y + 1, shadowInk, alpha, false)
+        end
         assets.font:DrawStringScaledUTF8(
             value,
             x,
@@ -236,8 +244,10 @@ return function(deps, layout)
                                     line,
                                     x + 6,
                                     y + 3 + (index - 1) * layout.lineHeight,
-                                    ink,
-                                    alpha
+                                    playerColors[owner + 1] and playerColors[owner + 1].bubble
+                                        or ink,
+                                    alpha,
+                                    false
                                 )
                             end
                         end
@@ -292,7 +302,8 @@ return function(deps, layout)
             local previousCount = #lines
             lines = {}
             for _, message in ipairs(chat.messages) do
-                local prefix = message.kind == "team" and ((message.owner + 1) .. "P：") or ""
+                local prefix = message.command and "system: "
+                    or (message.kind == "team" and ((message.owner + 1) .. "P：") or "")
                 for _, line in ipairs(layout.wrap(prefix .. message.text, panelWidth - 16, measure)) do
                     lines[#lines + 1] = { text = line, message = message }
                 end
@@ -330,7 +341,12 @@ return function(deps, layout)
                 if row.message.kind ~= "team" then
                     alpha = alpha * 0.8
                 end
-                rows[#rows + 1] = { text = row.text, alpha = alpha }
+                local player = playerColors[row.message.owner + 1]
+                local color = player
+                        and (row.message.kind == "team" or row.message.bubble)
+                        and player.text
+                    or foreground
+                rows[#rows + 1] = { text = row.text, alpha = alpha, color = color }
             end
         end
         local y = bottom - (ui.input.open and inputHeight + 4 or 0) - #rows * layout.lineHeight
@@ -346,7 +362,7 @@ return function(deps, layout)
             )
         end
         for _, row in ipairs(rows) do
-            text(row.text, x + 8, y, foreground, row.alpha)
+            text(row.text, x + 8, y, row.color, row.alpha)
             y = y + layout.lineHeight
         end
         if ui.input.open then
@@ -395,7 +411,7 @@ return function(deps, layout)
                     counter,
                     x + panelWidth - measure(counter) - 5,
                     bottom - 15,
-                    input.limit and colors[1] or foreground
+                    input.limit and playerColors[1].text or foreground
                 )
             end
             native.chat_ui_caret(cursorX, bottom - 3, width, height)

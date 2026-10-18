@@ -176,7 +176,7 @@ return function(deps, wire)
                 return
             end
             chat.output(
-                "掷出 d" .. parsed.sides .. "：" .. result,
+                (sender + 1) .. "P掷出 D" .. parsed.sides .. " : " .. result,
                 { owner = sender, audience = "party", bubble = true }
             )
         elseif parsed.kind == "native" then
@@ -200,6 +200,16 @@ return function(deps, wire)
         if not parsed then
             errorTo(reason)
             return false
+        end
+        if parsed.kind ~= "text" then
+            -- Keep the submitted command locally, even when native execution is silent.
+            append({
+                text = text:gsub("[\r\n\t]", " "),
+                owner = info.slot,
+                kind = "system",
+                command = true,
+                bubble = false,
+            })
         end
         if parsed.kind == "echo" then
             chat.output(parsed.text, { audience = "self" })

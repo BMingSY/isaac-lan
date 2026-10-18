@@ -75,18 +75,19 @@ local function poll()
 end
 local host, guest, other = peers[1].chat, peers[2].chat, peers[3].chat
 assert(guest.submit("/e 只有我看到"))
-assert(#guest.messages == 1 and #host.messages == 0 and #other.messages == 0)
+assert(#guest.messages == 2 and #host.messages == 0 and #other.messages == 0)
+assert(guest.messages[1].command and guest.messages[1].text == "/e 只有我看到")
 assert(next(guest.bubbles) == nil)
 assert(guest.submit("你好，队友"))
 poll()
-assert(#host.messages == 1 and #guest.messages == 2 and #other.messages == 1)
+assert(#host.messages == 1 and #guest.messages == 3 and #other.messages == 1)
 assert(guest.bubbles[1].text == "你好，队友" and host.bubbles[1].text == "你好，队友")
 assert(guest.submit("/d20"))
 local replay = packets[#packets][2]
 poll()
 inbox[1][#inbox[1] + 1] = replay
 poll()
-assert(rolls == 1 and host.bubbles[1].text == "掷出 d20：20")
+assert(rolls == 1 and host.bubbles[1].text == "2P掷出 D20 : 20")
 assert(
     guest.bubbles[1].text == host.bubbles[1].text and other.bubbles[1].text == host.bubbles[1].text
 )
@@ -192,6 +193,47 @@ assert(host.output("after command"))
 assert(host.messages[#host.messages].owner == 0)
 executeHook = nil
 assert(guest.parse("/d1").sides == 1 and guest.parse("/d1000000000").sides == 1000000000)
+-- Silent native commands still leave an exact, private, non-bubble submission record.
+executeHook = function()
+    return ""
+end
+for _, peer in ipairs(peers) do
+    peer.chat.clearBubbles()
+end
+local hostBefore, otherBefore = #host.messages, #other.messages
+local guestBefore = #guest.messages
+assert(guest.submit("/c g c333"))
+local command = guest.messages[#guest.messages]
+assert(
+    command.command and command.text == "/c g c333" and command.owner == 1 and not command.bubble
+)
+assert(#guest.messages == guestBefore + 1)
+local repeatedCommand = packets[#packets][2]
+poll()
+inbox[1][#inbox[1] + 1] = repeatedCommand
+poll()
+local executionsBefore = #executions
+host.step()
+host.step()
+poll()
+assert(#executions == executionsBefore + 1 and guest.messages[#guest.messages] == command)
+assert(#host.messages == hostBefore and #other.messages == otherBefore)
+assert(next(guest.bubbles) == nil and next(host.bubbles) == nil and next(other.bubbles) == nil)
+local longestCommand = "/c " .. string.rep("x", limits.commandBytes - 3)
+assert(host.submit(longestCommand))
+host.step()
+poll()
+assert(
+    host.messages[#host.messages].command and host.messages[#host.messages].text == longestCommand
+)
+assert(#guest.messages == guestBefore + 1 and #other.messages == otherBefore)
+assert(host.submit("/d6"))
+poll()
+for _, peer in ipairs(peers) do
+    assert(peer.chat.messages[#peer.chat.messages].text == "1P掷出 D6 : 6")
+    assert(peer.chat.bubbles[0].text == "1P掷出 D6 : 6")
+end
+executeHook = nil
 host.clearBubbles()
 assert(next(host.bubbles) == nil and next(host.emotes) == nil and #host.messages > 0)
 guest.reset()
@@ -223,5 +265,5 @@ for _ = 1, 4 do
     end
 end
 print(
-    "PASS chat visibility, dice, duplicate requests, native dispatch, stale world, emotes, bounds and layout"
+    "PASS private command history, player dice labels, visibility, deduplication, native dispatch, stale world, emotes, bounds and layout"
 )

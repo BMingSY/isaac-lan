@@ -2,6 +2,8 @@
 
 聊天使用一条按时间排列的记录，区分队伍文字与系统输出，不设置频道切换。外观配置见 [README 的配置选项](https://github.com/BMingSY/isaac-lan/blob/main/README.md#配置与日志)。
 
+新版聊天控制台只在联机大厅、联机游戏及联机等待期间启用。单人游戏沿用原版控制台和按键行为；退出联机后停止接管输入及绘制聊天界面。
+
 ## 职责与数据流
 
 - [core/chat.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/chat.h) 持有字符／字节限制、UTF-8 编辑和历史记录；Win32 输入适配在版本后端，处理 `~`、剪贴板和 IME，编辑期间隔离本机玩法输入，关闭后需释放已按住的动作键。
@@ -10,6 +12,10 @@
 - [chat_wire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat_wire.lua) 编解码请求、输出、表情。底层 `communication` 是独立于 Mod 动作与世界快照的可靠字节消息；网络层不解析聊天内容。协议版本为 31，同版本扩展才可联机。
 
 输入者的连接槽由传输层确定。原版命令在房主的更新安全边界执行，使用输入者的角色与房间上下文；排队时记录局次、世界代次、房间和维度，执行前不再匹配则取消。`rewind` 使用既有回退事务。没有玩家权限分级；同步方式不改变成员使用命令的资格。
+
+已解析的斜杠命令提交后先写入本机聊天记录，显示为 `system: /c g c333`，不广播、不显示气泡；原版命令没有返回文字时也保留这条记录。记录表示提交内容，执行错误另行输出。掷骰结果包含执行者编号，例如 `1P掷出 D6 : 4`，全队聊天记录和对应角色气泡使用相同文字。
+
+1P～4P 的发言和带气泡的命令结果分别使用红、蓝、金、绿四种字体颜色。深色聊天面板使用较亮的色值，浅色气泡使用同色系深色文字；本机命令记录及不带气泡的系统输出沿用配置的文字颜色。自定义图片背景上的文字加深色阴影，减少浅色图片对可读性的影响。
 
 聊天背景默认使用 70% 不透明度的纯色，颜色与透明度可配置；安装包不附带背景图片。配置自定义 PNG 时，由 [chat_background.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/presentation/chat_background.cpp) 在启动时准备，可指定相对 `config.ini` 的路径或绝对路径。自定义 PNG 只读，保留原始像素与透明度，按当前面板大小缩放；配置透明度再与图片透明度相乘。输入图片限制为 16 MiB、单边 4096 像素且总计不超过 8 Mi 像素，完成解码校验后将图片和动画描述写入 `isaac-lan/cache/chat`。Lua 通过普通 Sprite API 加载，帧内不读盘。未配置图片时不创建缓存；图片缺失、损坏或缓存不可用时回退纯色并记录日志，不增加界面提示。
 
@@ -27,7 +33,7 @@
 | `kind` | `"system"` | `"system"` 为系统结果，`"team"` 为队伍发言 |
 
 ```lua
-chat.output("掷出 d20：12", { audience = "party", bubble = true })
+chat.output("共享结果", { audience = "party", bubble = true })
 chat.output("本机提示", { audience = "self" })
 ```
 
