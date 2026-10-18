@@ -28,21 +28,36 @@ def evidence(enum="COLLECTIBLE_BROTHER_BOBBY"):
             "teammate_owned": 0,
             "room_visible": True,
             "familiars": []
-            if removed
-            else [{"x": 130 if moved else 80, "y": 100, "controller": 1}],
+            if removed and not rules.get("modifier")
+            else [
+                {"x": (130 if moved else 80) + i * 5, "y": 100, "controller": 1}
+                for i in range(rules.get("count", 1))
+            ],
             "shots": shots or [],
         }
 
     host.extend(probe(t) for t in (90, 140, 360, 610, 820))
     damage = rules.get("damage", 3.5 * rules.get("damage_factor", 1))
     directions = {
-        None: [(0, -8)],
+        None: [(0, -8)] * rules.get("count", 1),
         "split": [(-3, -8), (3, -8)],
         "cross": [(-8, 0), (8, 0), (0, -8), (0, 8)],
     }[rules.get("pattern")]
     for start in (175, 655):
+        if rules.get("provider"):
+            host.extend({"event": "familiar_clear", "tick": start - 25 + i * 12} for i in range(8))
+            host.append(
+                {
+                    "event": "familiar_drop",
+                    "tick": start + 60,
+                    "seed": start,
+                    "variant": rules["provider"]["pickup"] or 20,
+                    "subtype": rules["provider"]["subtype"] or 1,
+                    "controller": 1,
+                }
+            )
         for i in range(3):
-            tick = start + i * rules["interval"]
+            tick = start + i * rules.get("interval", 22)
             shots = [
                 {
                     "id": tick * 10 + j,
@@ -51,12 +66,23 @@ def evidence(enum="COLLECTIBLE_BROTHER_BOBBY"):
                     "damage": damage,
                     "controller": 1,
                     "spectral": bool(rules.get("spectral")),
+                    "flags": {flag: True for flag in rules.get("flags", [])},
+                    "variant": i % 2 if rules.get("observe_flags") else 0,
                     "vx": x,
                     "vy": y,
                 }
                 for j, (x, y) in enumerate(directions)
             ]
             host.append(probe(tick, shots=shots))
+            if rules.get("blocks"):
+                host.append(
+                    {
+                        "event": "familiar_block",
+                        "tick": tick,
+                        "removed": True,
+                        "familiar_collision": True,
+                    }
+                )
             host.append(
                 {
                     "event": "familiar_hit",
@@ -64,12 +90,16 @@ def evidence(enum="COLLECTIBLE_BROTHER_BOBBY"):
                     "amount": damage,
                     "before": 100,
                     "after": 100 - damage,
+                    "bleeding": bool(rules.get("damage_over_time")),
+                    "fear": bool(rules.get("fear")),
                     "controller": 1,
                     "rock_intact": bool(rules.get("spectral")),
                 }
             )
     host.sort(key=lambda e: e["tick"])
-    client = deepcopy([e for e in host if e["event"] == "familiar_probe"])
+    client = deepcopy([e for e in host if e["event"] in ("familiar_probe", "familiar_drop")])
+    for event in host + client:
+        event["tick"] *= rules.get("timeline_scale", 1)
     return {"enum": enum, "slot": 0}, {"host": host, "client": client}
 
 
@@ -77,8 +107,31 @@ def evidence(enum="COLLECTIBLE_BROTHER_BOBBY"):
 def test_familiar_requires_attack_and_lifecycle_evidence(enum):
     case, peers = evidence(enum)
     assert all(c["status"] == "passed" for c in familiar_checks(case, peers))
-    peers["host"] = [e for e in peers["host"] if e["event"] != "familiar_hit"]
+    peers["host"] = [
+        e
+        for e in peers["host"]
+        if e["event"] not in ("familiar_hit", "familiar_drop", "familiar_block")
+    ]
     assert any(c["status"] == "missing" for c in familiar_checks(case, peers))
+
+
+def test_lil_haunt_contact_damage_alone_does_not_prove_fear():
+    case, peers = evidence("COLLECTIBLE_LIL_HAUNT")
+    for event in peers["host"]:
+        if event["event"] == "familiar_hit":
+            event["fear"] = False
+    assert any(c["status"] == "failed" for c in familiar_checks(case, peers))
+
+
+def test_twisted_pair_requires_both_familiars_and_both_shots():
+    case, peers = evidence("COLLECTIBLE_TWISTED_PAIR")
+    for event in peers["host"]:
+        if event["event"] == "familiar_probe":
+            event["familiars"] = event["familiars"][:1]
+            event["shots"] = event["shots"][:1]
+    checks = familiar_checks(case, peers)
+    assert {"name": "familiar_acquired", "status": "failed"} in checks
+    assert {"name": "familiar_initial_volley", "status": "failed"} in checks
 
 
 @pytest.mark.parametrize("fault", ("owner", "health", "cadence", "replica", "removal", "teammate"))
@@ -103,6 +156,37 @@ def test_familiar_spectral_requires_real_hit_behind_intact_rock():
     case, peers = evidence("COLLECTIBLE_GHOST_BABY")
     next(e for e in peers["host"] if e["event"] == "familiar_hit")["rock_intact"] = False
     assert any(c["status"] == "failed" for c in familiar_checks(case, peers))
+
+
+def test_projectile_disappearance_without_familiar_collision_is_not_blocking_evidence():
+    case, peers = evidence("COLLECTIBLE_SACRIFICIAL_DAGGER")
+    for event in peers["host"]:
+        if event["event"] == "familiar_block":
+            event["familiar_collision"] = False
+    assert any(
+        c["name"].endswith("blocks_projectiles") and c["status"] == "failed"
+        for c in familiar_checks(case, peers)
+    )
+
+
+def test_contact_damage_accounts_for_overlapping_native_observation_windows():
+    case, peers = evidence("COLLECTIBLE_DISTANT_ADMIRATION")
+    first = next(e for e in peers["host"] if e["event"] == "familiar_hit")
+    second = {
+        **first,
+        "tick": first["tick"] + 1,
+        "before": first["after"],
+        "after": first["after"] - first["amount"],
+    }
+    first["after_tick"] = first["tick"] + 2
+    first["after"] = second["after"]
+    peers["host"].append(second)
+    assert all(c["status"] == "passed" for c in familiar_checks(case, peers))
+    second["after"] += second["amount"]
+    assert any(
+        c["name"].endswith("contact_damage") and c["status"] == "failed"
+        for c in familiar_checks(case, peers)
+    )
 
 
 def test_familiar_replica_only_materializes_its_current_room():
@@ -210,3 +294,18 @@ def test_familiar_host_room_uses_native_identities_when_not_replicated():
             e["room_visible"] = False
             e["familiars"], e["shots"] = [], []
     assert all(c["status"] == "passed" for c in familiar_checks(case, peers))
+
+
+def test_contact_fear_needs_a_real_proc_without_requiring_every_hit_to_keep_the_flag():
+    case = {"enum": "COLLECTIBLE_LIL_HAUNT", "slot": 0}
+    _, observations = evidence(case["enum"])
+    hits = [e for e in observations["host"] if e["event"] == "familiar_hit"]
+    hits[0]["fear"] = False
+    checks = familiar_checks(case, observations)
+    assert {"name": "familiar_contact_fear", "status": "passed"} in checks
+    assert {"name": "familiar_initial_contact_damage", "status": "passed"} in checks
+    for hit in hits:
+        hit["fear"] = False
+    assert {"name": "familiar_contact_fear", "status": "failed"} in familiar_checks(
+        case, observations
+    )

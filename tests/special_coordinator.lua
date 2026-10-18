@@ -52,7 +52,13 @@ _IsaacLan.test_gamepad = function() end
 createScenario = dofile(root .. "/tests/support/scenario.lua")
 dofile(root .. "/tests/special_suite_driver.lua")
 local coordinator = _IsaacLanFrame
+assert(case == 0)
+coordinator()
+assert(case == 0, "Fixture activated before reaching the native menu")
+s = { phase = 0, scene = 1, prepared = false }
+coordinator()
 assert(case == 1)
+s = { phase = 3, scene = 2, prepared = true }
 coordinator()
 flags[1], now = true, 1000
 coordinator()

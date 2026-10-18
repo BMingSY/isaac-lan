@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--port", type=int, default=51840)
     parser.add_argument("--tm-passives-only", action="store_true")
+    parser.add_argument("--injected-bootstrap", action="store_true")
     args = parser.parse_args()
     labs = validate_owned_labs(
         [args.host.resolve(), args.client.resolve()], args.output.resolve(), count=None
@@ -46,7 +47,7 @@ def main():
         if args.tm_passives_only
         else "PASS shared rewards, Genesis, generated effects and native continuation",
         "--frontend",
-        "--automatic",
+        *([] if args.injected_bootstrap else ["--automatic"]),
         "--menu-start",
         "--virtual-input",
         "--menu-port",
@@ -58,7 +59,12 @@ def main():
         "--scenario-timeout",
         "300",
     )
-    report = {"passed": False, "restored": False, "command": command}
+    report = {
+        "passed": False,
+        "restored": False,
+        "command": command,
+        "automatic_loader": not args.injected_bootstrap,
+    }
     process = None
     try:
         # A directory at the temporary-file path forces a real open failure.

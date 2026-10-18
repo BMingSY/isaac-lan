@@ -316,6 +316,12 @@ dofile("""
 local expected = """
         + lua_support.literal(cases)
         + """
+assert(#observed == 0)
+_IsaacLanFrame()
+assert(#observed == 0, "Fixture activated before the native menu")
+state = { phase = 0, scene = 1, prepared = false }
+_IsaacLanFrame()
+state = { phase = 3, scene = 2, prepared = true }
 for index, name in ipairs(expected) do
     assert(#observed == index and observed[index].route == name)
     assert(observed[index].firstFloor == (name == "endings" and """

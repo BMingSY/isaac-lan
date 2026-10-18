@@ -42,7 +42,7 @@ def run_batch(args, cases, output, labs):
         script,
         COMPLETION,
         "--frontend",
-        "--automatic",
+        *([] if args.injected_bootstrap else ["--automatic"]),
         "--menu-start",
         "--virtual-input",
         "--menu-port",
@@ -158,6 +158,11 @@ def main():
     parser.add_argument("--timeout", type=int, default=86400)
     parser.add_argument("--record", action="store_true")
     parser.add_argument(
+        "--injected-bootstrap",
+        action="store_true",
+        help="Use the owned-child bootstrap when the environment prevents proxy DLL loading",
+    )
+    parser.add_argument(
         "--moving-use", action="store_true", help="Move with the native stick during the use press"
     )
     parser.add_argument(
@@ -266,6 +271,12 @@ def main():
     shutil.copy2(damage_effects, output / damage_effects.name)
     familiar_effects = ROOT / "tools/item_familiar_effects.py"
     shutil.copy2(familiar_effects, output / familiar_effects.name)
+    trigger_effects = ROOT / "tools/item_trigger_effects.py"
+    shutil.copy2(trigger_effects, output / trigger_effects.name)
+    interaction_effects = ROOT / "tools/item_interaction_effects.py"
+    shutil.copy2(interaction_effects, output / interaction_effects.name)
+    projectile_effects = ROOT / "tools/item_projectile_effects.py"
+    shutil.copy2(projectile_effects, output / projectile_effects.name)
     manifest = {
         "commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
@@ -278,6 +289,10 @@ def main():
         "room_effects_sha256": hashlib.sha256(room_effects.read_bytes()).hexdigest(),
         "damage_effects_sha256": hashlib.sha256(damage_effects.read_bytes()).hexdigest(),
         "familiar_effects_sha256": hashlib.sha256(familiar_effects.read_bytes()).hexdigest(),
+        "trigger_effects_sha256": hashlib.sha256(trigger_effects.read_bytes()).hexdigest(),
+        "interaction_effects_sha256": hashlib.sha256(interaction_effects.read_bytes()).hexdigest(),
+        "projectile_effects_sha256": hashlib.sha256(projectile_effects.read_bytes()).hexdigest(),
+        "automatic_loader": not args.injected_bootstrap,
         "cases": cases,
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

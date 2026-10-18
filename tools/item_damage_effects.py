@@ -1,8 +1,15 @@
 """Damage-effect trials: real health loss, ownership, expiry and native resets."""
 
 
-def hit(name, tick, loss, amount=1):
-    return {"action": "hit", "name": name, "tick": tick, "amount": amount, "loss": loss}
+def hit(name, tick, loss, amount=1, *, flags=()):
+    return {
+        "action": "hit",
+        "name": name,
+        "tick": tick,
+        "amount": amount,
+        "loss": loss,
+        "flags": list(flags),
+    }
 
 
 def move(action, tick):
@@ -11,6 +18,30 @@ def move(action, tick):
 
 ROOM_DAMAGE = [move("room", 240), hit("next_room", 330, 2, 2)]
 DAMAGE_EFFECTS = {
+    "COLLECTIBLE_DOGMA": {
+        "max_hearts": 6,
+        "hearts": 2,
+        "steps": [hit("native_shield", 120, 0), hit("shield_consumed", 240, 1)],
+    },
+    "COLLECTIBLE_CANCER": {
+        "steps": [hit("first", 90, 2, 2), hit("reduced", 180, 1, 2), *ROOM_DAMAGE],
+    },
+    "COLLECTIBLE_PYROMANIAC": {
+        "hearts": 22,
+        "steps": [
+            hit("explosion_heals", 90, -1, 2, flags=("DAMAGE_EXPLOSION",)),
+            hit("repeat_heals", 180, -1, 2, flags=("DAMAGE_EXPLOSION",)),
+            move("room", 240),
+            hit("next_room_fire", 330, 0, 2, flags=("DAMAGE_FIRE",)),
+            hit("normal_hit", 420, 2, 2),
+        ],
+    },
+    "COLLECTIBLE_POLAROID": {
+        "max_hearts": 2,
+        "hearts": 1,
+        "soul": 8,
+        "steps": [hit("first", 90, 1), hit("shielded", 180, 0), hit("expired", 300, 1)],
+    },
     "COLLECTIBLE_WAFER": {
         "steps": [
             hit("first", 90, 1, 2),
