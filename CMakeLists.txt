@@ -320,6 +320,7 @@ add_library(
     src/runtime/session.cpp
     src/runtime/session_store.cpp
     src/engine/versions/j460/rooms.cpp
+    src/engine/versions/j460/room_routing.cpp
     src/engine/versions/j460/visuals.cpp
     src/engine/versions/j460/input.cpp
     src/engine/versions/j460/save.cpp
@@ -480,6 +481,15 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME native.challenge-hud COMMAND isaac_lan_challenge_hud_test)
     set_tests_properties(native.challenge-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_room_routing_test tests/room_routing_test.cpp)
+    target_include_directories(isaac_lan_room_routing_test PRIVATE src)
+    target_link_libraries(isaac_lan_room_routing_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_room_routing_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_room_routing_test PRIVATE -Wall -Wextra -Werror -msse2)
+    endif()
+    add_test(NAME native.room-routing COMMAND isaac_lan_room_routing_test)
+    set_tests_properties(native.room-routing PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_test(NAME native.crafting-hud COMMAND isaac_lan_crafting_hud_test)
     set_tests_properties(native.crafting-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_character_catalog_test tests/character_catalog_test.cpp

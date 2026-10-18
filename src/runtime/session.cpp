@@ -764,7 +764,14 @@ void updateOne(const backend::Call& original) {
     view.pendingHalf = view.gated && !view.playingCinematic;
 }
 void update(const backend::Call& original) {
-    updateOne(original);
+    try {
+        updateOne(original);
+    } catch (const std::exception& error) {
+        // Native adapters defer their errors until their game frames have
+        // returned. End the session here rather than unwinding through the
+        // caller's native update frame and terminating the game process.
+        fail(std::string("Game update failed: ") + error.what());
+    }
 }
 int host(lua_State* L) {
     const auto port = lua.checkInteger(L, 1);

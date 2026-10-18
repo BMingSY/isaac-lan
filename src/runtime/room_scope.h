@@ -10,13 +10,20 @@ template <typename Room, typename Roster> class ScopeStack {
     class Binding {
       public:
         Binding(ScopeStack& stack, Room& room, Roster& savedRoster)
-            : stack_(stack), parent_(stack.top_), room_(room),
+            : stack_(stack), parent_(stack.top_), room_(&room),
               team_(parent_ ? parent_->team_ : savedRoster),
               depth_(parent_ ? parent_->depth_ + 1 : 1) {
             stack_.top_ = this;
         }
         Binding(const Binding&) = delete;
         Binding& operator=(const Binding&) = delete;
+        // A native transition resolves its destination before entering it.
+        // Keep the same borrowed roster and restore boundary during that handoff.
+        void enter(Room& room) {
+            if (stack_.top_ != this || restoring_)
+                std::terminate();
+            room_ = &room;
+        }
         // Keep the depth barrier and borrowed team alive during native cleanup,
         // after scalar state and the roster have returned to the parent room.
         void restoreParent() {
@@ -36,12 +43,12 @@ template <typename Room, typename Roster> class ScopeStack {
         friend class ScopeStack;
         ScopeStack& stack_;
         Binding* parent_;
-        Room& room_;
+        Room* room_;
         Roster& team_;
         unsigned depth_;
         bool restoring_ = false;
         Room* current() const {
-            return restoring_ ? (parent_ ? parent_->current() : nullptr) : &room_;
+            return restoring_ ? (parent_ ? parent_->current() : nullptr) : room_;
         }
     };
     ScopeStack() = default;

@@ -188,6 +188,15 @@ void roomScopeOwnership() {
                     *stack.teamRoster() == std::vector<int>({1, 2, 3}) &&
                     slice == std::vector<int>{1},
                 "Unwinding lost parent context or wrote a replacement into the scoped slice");
+        outer.enter(second);
+        require(stack.current() == &second && stack.depth() == 1 && stack.teamRoster() == &team,
+                "Resolved room handoff changed the parent boundary or borrowed roster");
+        {
+            Stack::Binding arrival(stack, first, slice);
+            require(stack.current() == &first && stack.teamRoster() == &team,
+                    "Arrival callback lost the full team after native redirection");
+        }
+        require(stack.current() == &second, "Arrival callback restored the requested room");
         outer.restoreParent();
         require(!stack.current() && stack.depth() == 1 && stack.teamRoster() == &team,
                 "Outermost native cleanup became an unscoped operation");
@@ -237,7 +246,8 @@ void roomTransitionContext() {
             "Invalid native room request was accepted");
     for (const auto& args :
          {std::array{-100, 84, 1}, std::array{-100, 84, 0}, std::array{-101, 162, 1},
-          std::array{-101, 55, 0}, std::array{85, 84, 0}}) {
+          std::array{-101, 55, 0}, std::array{85, 84, 0}, std::array{107, 106, 0},
+          std::array{119, 106, 0}, std::array{120, 106, 0}}) {
         const auto key = canonicalRoomDestination(args[0], args[1], args[2]);
         require(key && (*key)[0] == args[2] && (*key)[1] == args[1],
                 "Native descriptor dimension/canonical grid cell was lost");
@@ -689,41 +699,46 @@ void roomMap() {
     }
 }
 void resolvedRoomCurses() {
-    constexpr unsigned maze = 1u << 5, darkness = 1, blind = 1u << 6, unknown = 1u << 3;
-    for (bool replica : {false, true}) {
-        unsigned base = maze | darkness, seeds = maze | blind;
-        unsigned randomCalls = 0;
-        auto nativeEntry = [&] {
-            require((base & darkness) && (seeds & blind), "Entry lost unrelated curses");
-            if ((base | seeds) & maze) {
-                ++randomCalls;
-                return 148;
-            }
-            return 135;
-        };
-        {
-            isaac::compat::routes::ResolvedRoomCurses scope(base, seeds, replica);
-            require(nativeEntry() == (replica ? 135 : 148),
-                    "Replica re-routed a resolved room or host lost native Maze");
-            base |= unknown; // A separate native entry effect must survive.
-            {
-                isaac::compat::routes::ResolvedRoomCurses nested(base, seeds, replica);
-                require(nativeEntry() == (replica ? 135 : 148), "Nested entry lost its policy");
-            }
-            require(nativeEntry() == (replica ? 135 : 148), "Nested entry restored Maze too soon");
+    constexpr unsigned maze = 1u << 5, darkness = 1, blind = 1u << 6;
+    using isaac::compat::routes::resolveRoomCurse;
+    require(resolveRoomCurse(false, false, maze),
+            "Authoritative Maze entry bypassed native resolution");
+    require(!resolveRoomCurse(true, false, maze) && !resolveRoomCurse(false, true, maze),
+            "Replica or checkpoint restoration re-ran native Maze routing");
+    require(!resolveRoomCurse(false, false, darkness | blind),
+            "Unrelated curse entered Maze resolution");
+    for (bool firstActive : {false, true})
+        for (bool secondActive : {false, true})
+            require(isaac::compat::routes::allowCurseRoomSwap(firstActive, secondActive) ==
+                        (!firstActive && !secondActive),
+                    "Native content swap replaced an active room's descriptor");
+    bool suppressed = false;
+    unsigned randomCalls = 0;
+    const auto nativeEntry = [&] {
+        if (!suppressed) {
+            ++randomCalls;
+            return 148;
         }
-        require(base == (maze | darkness | unknown) && seeds == (maze | blind),
-                "Room entry lost the shared curse or an unrelated native effect");
-        require(randomCalls == (replica ? 0u : 3u), "Replica consumed Maze RNG");
+        return 135;
+    };
+    require(nativeEntry() == 148, "Authority lost native Maze routing");
+    {
+        isaac::compat::routes::ResolvedRoomCurses scope(suppressed);
+        require(nativeEntry() == 135, "Replica re-routed a resolved destination");
+        {
+            isaac::compat::routes::ResolvedRoomCurses nested(suppressed);
+            require(nativeEntry() == 135, "Nested entry lost its fixed destination");
+        }
+        require(nativeEntry() == 135, "Nested entry restored Maze too soon");
     }
-    unsigned base = 1, seeds = maze;
+    require(!suppressed && nativeEntry() == 148 && randomCalls == 2,
+            "Replica consumed Maze RNG or leaked suppression into authority");
     try {
-        isaac::compat::routes::ResolvedRoomCurses scope(base, seeds, true);
-        base |= blind;
+        isaac::compat::routes::ResolvedRoomCurses scope(suppressed);
         throw std::runtime_error("entry failed");
     } catch (const std::runtime_error&) {
     }
-    require(base == (1 | blind) && seeds == maze, "Failed entry did not restore shared curses");
+    require(!suppressed, "Failed entry did not release Maze suppression");
 }
 void introBarrier() {
     isaac::presentation::IntroBarrier barrier;
