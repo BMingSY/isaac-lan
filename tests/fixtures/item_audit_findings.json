@@ -80460,5 +80460,119 @@
       "crash": 1,
       "reported": 1
     }
+  },
+  "rechecks": {
+    "collectible:665": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-08"
+      ],
+      "scope": "主机／客机持有，同房／分房；本机原生内容预览、非持有者无预览、开箱及正常退出。",
+      "effect_status": "verified"
+    },
+    "collectible:381": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-08"
+      ],
+      "scope": "主机／客机拾取，同房／分房；同一对进程连续开局，下一局两人获得相同的一个原生奖励，射速只属于拾取者。",
+      "effect_status": "verified"
+    },
+    "collectible:441": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "主机／客机持有，同房／分房；正常方向输入过门后激光继续存在并造成伤害。"
+    },
+    "collectible:590": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "主机／客机持有，同房／分房；原生战斗房间有敌人时，允许的普通出口保持打开。"
+    },
+    "collectible:582": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "主机／客机使用，同房／分房；个人属性与画面扭曲只作用于使用者。"
+    },
+    "card:44": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "主机／客机使用，同房／分房；英文规则提示只出现在使用者画面。",
+      "limitation": "已验证使用者归属；两端使用不同语言的组合未验证。"
+    },
+    "pill:37": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "普通／大颗，主机／客机，同房／分房；仅使用者像素化，原生计时结束后恢复清晰。"
+    },
+    "pill:41": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01",
+        "item-effect-fixes-20261018/native-08"
+      ],
+      "scope": "普通／大颗，主机／客机，同房／分房；普通药丸换房失效，大颗跨房持续，换层恢复正常速度。"
+    },
+    "collectible:249": {
+      "status": "problem",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01",
+        "item-effect-fixes-20261018/native-11"
+      ],
+      "scope": "主机／客机，同房／分房；持有者与队友分别触发 Boss 二选一，背包保持个人归属。分房退出仍有断线。",
+      "effect_status": "untested",
+      "trigger": "主机持有白选并与客机分房，进入 Boss 房获得二选一奖励，随后保存退出。",
+      "impact": "二选一奖励断言通过，但客机在奖励后的同步阶段停止更新，最终报 Peer send failed 并中断会话，未完成正常退出；独立复测仍出现。原因尚未定位，不能确定是否由白选本身触发。",
+      "fix": "共享奖励规则已实现；分房同步／退出异常待定位，完整兼容性尚未通过。"
+    },
+    "collectible:414": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01",
+        "item-effect-fixes-20261018/native-11"
+      ],
+      "scope": "主机／客机，同房／分房；持有者与队友分别触发宝箱房二选一，背包保持个人归属。",
+      "effect_status": "verified"
+    },
+    "collectible:670": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01",
+        "item-effect-fixes-20261018/native-11"
+      ],
+      "scope": "主机／客机，同房／分房；持有者与队友分别触发清房奖励二选一，背包保持个人归属。",
+      "effect_status": "verified"
+    }
   }
 }

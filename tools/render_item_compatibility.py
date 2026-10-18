@@ -31,7 +31,7 @@ def item_name(item, entry):
     return name + (f"（{note}）" if note else "")
 
 
-def conclusion(known, audit):
+def conclusion(known, audit, recheck=None):
     value = {**known, **audit}
     severity = {"reported": 1, "suspected": 1, "problem": 2, "crash": 3}
     if known.get("status") in severity and severity[known["status"]] >= severity.get(
@@ -40,11 +40,21 @@ def conclusion(known, audit):
         value.update({key: known[key] for key in ("status", "impact") if key in known})
     elif known.get("status") == "verified" and audit.get("status") not in {"crash", "problem"}:
         value.update({key: known[key] for key in ("status", "impact") if key in known})
+    # A reviewed native recheck can replace an older build's conclusion;
+    # keep the original audit intact and never promote incomplete evidence.
+    if (
+        recheck
+        and recheck.get("candidate")
+        and recheck.get("evidence")
+        and recheck.get("status") in {"verified", "problem", "crash"}
+    ):
+        value.update(recheck)
     return value
 
 
 def render(catalog, findings):
     known, audit = findings.get("known", {}), findings.get("audit", {})
+    rechecks = findings.get("rechecks", {})
     items = catalog["items"]
     lines = [
         "# 道具与效果兼容清单",
@@ -57,7 +67,9 @@ def render(catalog, findings):
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for item in items:
-        entry = conclusion(known.get(item["key"], {}), audit.get(item["key"], {}))
+        entry = conclusion(
+            known.get(item["key"], {}), audit.get(item["key"], {}), rechecks.get(item["key"])
+        )
         if entry.get("status") not in ISSUE_STATUSES:
             continue
         lines.append(
@@ -86,7 +98,9 @@ def render(catalog, findings):
         "| --- | --- | --- | --- |",
     ]
     for item in items:
-        entry = conclusion(known.get(item["key"], {}), audit.get(item["key"], {}))
+        entry = conclusion(
+            known.get(item["key"], {}), audit.get(item["key"], {}), rechecks.get(item["key"])
+        )
         if entry.get("effect") and entry["effect"] != "—":
             lines.append(
                 "| "
@@ -123,7 +137,9 @@ def render(catalog, findings):
             "| --- | --- | --- | --- | --- | --- |",
         ]
         for item in group:
-            entry = conclusion(known.get(item["key"], {}), audit.get(item["key"], {}))
+            entry = conclusion(
+                known.get(item["key"], {}), audit.get(item["key"], {}), rechecks.get(item["key"])
+            )
             subtype = "<颜色>" if kind == "pill" else item["entity_subtype"]
             entity = f"{item['entity_type']}.{item['entity_variant']}.{subtype}"
             recorded_status = entry.get("status", "untested")
@@ -159,7 +175,7 @@ def render(catalog, findings):
     lines += [
         "公共效果的范围由 [`team_effects.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/team_effects.h) 声明。恶魔／天使房概率相关的全队叠加规则见[概率说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md)。",
         "",
-        "验证操作与默认范围见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#道具效果专项)。逐项结论、未决项及证据范围见[验收记录](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/2026-10-18-item-effects.md)。",
+        "验证操作与默认范围见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#道具效果专项)。逐项结论、未决项及证据范围见[初次验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/2026-10-18-item-effects.md)与[修复复验](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/2026-10-18-item-effect-fixes.md)。",
         "",
         "清单源数据：[`item_catalog.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_catalog.json)；验证记录与证据标识：[`item_audit_findings.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_audit_findings.json)。运行结果见对应 PR。",
         "",

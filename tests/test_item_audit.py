@@ -1193,6 +1193,17 @@ def test_truncated_catalog_and_torn_event_are_not_accepted():
         catalog_from_log(text)
 
 
+def test_reviewed_recheck_replaces_old_build_without_erasing_failed_evidence():
+    from render_item_compatibility import conclusion
+
+    original = {"status": "crash", "impact": "native preview crash"}
+    recheck = {"candidate": "fixed-build", "evidence": ["native-recheck"], "status": "verified"}
+    assert conclusion({}, original, recheck)["status"] == "verified"
+    assert original == {"status": "crash", "impact": "native preview crash"}
+    assert conclusion({}, original, {**recheck, "status": "incomplete"})["status"] == "crash"
+    assert conclusion({}, original, {"status": "verified"})["status"] == "crash"
+
+
 def test_known_problem_is_not_overridden_by_later_completion():
     case = {"key": "pill:0/host-same"}
     values = [
