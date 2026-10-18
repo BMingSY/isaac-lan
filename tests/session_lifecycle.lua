@@ -140,3 +140,28 @@ end)
 assert(not continued.launch() and not continued.ready() and not continued.prepare())
 assert(table.concat(continuedEvents, ",") == "start,players,failed")
 print("PASS delayed controllers, reentrant roster initialization and recoverable startup failure")
+
+-- A failure before native launch has no game-exit callback. The transport
+-- keeps its failed session, but a user retry must be able to launch again.
+local rejected, failures = true, 0
+local prelaunch = factory({
+    canStart = function()
+        return true
+    end,
+    start = function()
+        assert(not rejected, "archive rejected before native launch")
+    end,
+    bindPlayers = function() end,
+    enableRooms = function() end,
+    gate = function() end,
+    restoreRooms = function() end,
+    close = function() end,
+    fail = function()
+        failures = failures + 1
+        return false
+    end,
+})
+assert(not prelaunch.launch() and failures == 1 and not prelaunch.active())
+rejected = false
+assert(prelaunch.launch() and prelaunch.gameStarted() and prelaunch.prepare())
+print("PASS prelaunch rejection releases startup without waiting for an absent exit callback")

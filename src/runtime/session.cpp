@@ -1354,7 +1354,17 @@ int leave(lua_State* L) {
 }
 int bridgeFailure(lua_State* L) {
     fail(std::string("Game initialization failed: ") + lua.checkString(L, 1, nullptr));
-    return 0;
+    const bool needsExit = view.gated || launch.requested;
+    if (!needsExit) {
+        // A rejected archive/start never reaches MC_PRE_GAME_EXIT. Roll back
+        // its local save guard now, retaining the failed guest's retry identity.
+        afterExit(false);
+        saves.resumingArchive.reset();
+        guestRecovery = session && !session->isHost();
+        frontend::returnToLobby();
+    }
+    lua.pushBoolean(L, needsExit);
+    return 1;
 }
 int exitEngine(lua_State* L) {
     const bool save = lua.checkInteger(L, 1) != 0;

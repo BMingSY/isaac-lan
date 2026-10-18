@@ -19,7 +19,12 @@ return function(effects)
         if not ok then
             if generation == current then
                 phase = "failed"
-                effects.fail(tostring(result))
+                local needsExit = effects.fail(tostring(result))
+                if generation == current and needsExit == false then
+                    -- Rejected before native launch: no exit callback will
+                    -- arrive to release this generation for retry or leaving.
+                    phase = "idle"
+                end
             end
             return false
         end

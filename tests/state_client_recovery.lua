@@ -8,10 +8,19 @@ local frame, gate = _IsaacLanFrame, native.net_gate
 local renders, starts, departures = 0, 0, 0
 local linked, chosen, finished = false, false, false
 local manual, failedRestore, retried, dropped, left = false, false, false, false, false
+local prelaunchFailed, prelaunchRetried, prelaunchAt = false, false, nil
 local failedAt, liveAt, lastConnected, firstPosition, origin, restartAt, lobbyAt
 local sawRecovery, sawFailure, sawMovingHost, sawLobby = false, false, false, false
 local RESTART_BUTTONS, CONFIRM_BUTTON, FIRST_CINEMATIC = 0x3c0, 0x1000, 2
 local inputReady, deviceWait = native.input_ready, host and 0 or 45
+local engineStart = native.net_engine_start
+native.net_engine_start = function(...)
+    if not host and manual and starts == 1 and not prelaunchFailed then
+        prelaunchFailed = true
+        error("isolated disconnect fixture: prelaunch rejection")
+    end
+    return engineStart(...)
+end
 native.input_ready = function()
     if deviceWait > 0 then
         assert(starts == 0, "Started before controller enumeration completed")
@@ -85,7 +94,14 @@ function _IsaacLanFrame()
             report("PASS client recovery lifecycle")
         end
     elseif status.phase == Phase.failed then
-        if starts == 2 then
+        if starts == 1 then
+            assert(prelaunchFailed and status.recovering, status.error)
+            prelaunchAt = prelaunchAt or renders
+            if renders - prelaunchAt > 45 and not prelaunchRetried then
+                prelaunchRetried = true
+                menu(13)
+            end
+        elseif starts == 2 then
             assert(failedRestore and status.recovering, status.error)
             sawFailure = true
             failedAt = failedAt or renders
@@ -113,7 +129,7 @@ function _IsaacLanFrame()
         sawLobby = true
         lobbyAt = lobbyAt or renders
         if renders - lobbyAt > 30 and not left then
-            assert(sawRecovery and sawFailure and retried and dropped)
+            assert(sawRecovery and sawFailure and prelaunchRetried and retried and dropped)
             left = true
             _IsaacLanCommand("leave")
         end
