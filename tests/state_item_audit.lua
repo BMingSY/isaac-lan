@@ -36,6 +36,51 @@ local function report(event, values)
     end
 end
 local stress = createStress(report)
+local codecVerified, codecTick, codecFollowing
+local fieldsProbe
+local function saveCodecSnapshot(bytes, suffix)
+    local role = host and "host" or "client"
+    local path = audit.snapshotPrefix
+        .. role
+        .. "-"
+        .. case.key:gsub("[^%w%-]", "_")
+        .. suffix
+        .. ".bin"
+    local file = assert(io.open(path, "wb"))
+    assert(file:write(bytes))
+    file:close()
+end
+local function verifyCodec(bytes, tick)
+    if
+        audit.verifyCodec
+        and codecVerified == case.key
+        and codecFollowing ~= case.key
+        and tick > codecTick
+    then
+        saveCodecSnapshot(bytes, "-next")
+        codecFollowing = case.key
+        report("codec_following", { tick = tick, base_tick = codecTick, bytes = #bytes })
+    end
+    if not audit.verifyCodec or tick < 100 or codecVerified == case.key then
+        return
+    end
+    local reference = assert(_IsaacLanModules["sync/codec"])
+    if not fieldsProbe then
+        fieldsProbe = createEntityFieldsProbe(
+            native,
+            reference,
+            _IsaacLanModules["sync/entity_schema"](EntityType),
+            host
+        )
+    end
+    report("entity_fields_verified", { types = fieldsProbe() })
+    assert(native.state_encode and native.state_decode, "Native state codec is unavailable")
+    assert(reference.encode(native.state_decode(bytes)) == bytes, "Native decode differs")
+    assert(native.state_encode(reference.decode(bytes)) == bytes, "Native encode differs")
+    saveCodecSnapshot(bytes, "")
+    codecVerified, codecTick = case.key, tick
+    report("codec_verified", { tick = tick, bytes = #bytes })
+end
 local roomEffects = createRoomEffects(report)
 local traceDamage = createDamageTrace(report, function()
     return host and prepared and not exiting and case and case.damage_effects
@@ -1024,6 +1069,7 @@ local function advance(tick)
         -- to finish the same observations without treating a slow host as proof.
         deadline = math.max(deadline, endTick * 1000 / 15 + 30000)
     end
+    deadline = audit.caseTimeoutMs or deadline
     if used and (tick >= endTick or elapsed >= deadline) then
         sample("after", tick)
         if case.kind == "collectible" and case.id == CollectibleType.COLLECTIBLE_CHAOS then
@@ -1050,6 +1096,7 @@ function _IsaacLanBotFrame()
         local useTick = case.use_tick or 60
         if
             not case.recipe
+            and not case.idle
             and s.verified >= useTick + 25
             and s.verified < (case.shot_effect and 240 or useTick + 80)
         then
@@ -1062,7 +1109,10 @@ function _IsaacLanBotFrame()
             mask = triggerEffects.input(case, s.verified)
         end
     end
-    assert(native.input_bot(mask ~= 0 and 1 or 0, mask), "Unsupported audit movement/fire mask")
+    assert(
+        native.input_bot((case and case.idle or mask ~= 0) and 1 or 0, mask),
+        "Unsupported audit movement/fire mask"
+    )
 end
 function _IsaacLanFrame()
     renders = renders + 1
@@ -1237,6 +1287,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         local began = Isaac.GetTime()
         local bytes = collect(...)
+        verifyCodec(bytes, tick)
         if case.recipe and useCount > 0 and not useSampled then
             useSampled = true
             sample("post_use", tick)
@@ -1250,6 +1301,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         return bytes
     end, function(bytes, tick, ...)
+        verifyCodec(bytes, tick)
         local began = Isaac.GetTime()
         local result = restore(bytes, tick, ...)
         if case.kind == "stress" and tick >= 150 then

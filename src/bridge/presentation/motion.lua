@@ -1,31 +1,55 @@
 return function(fields)
     local Actor = fields.actor
     local Entity = fields.entity
+    local walkingExtras = { Pickup = true, UseItem = true, LiftItem = true, HideItem = true }
+    local function actionAllowsMovement(player, actor)
+        if player:IsCoopGhost() then
+            return false
+        end
+        local body = player:GetSprite():GetAnimation()
+        local extra = actor[Actor.visuals][fields.actorSprites.extra]
+        local animation = extra and extra[fields.sprite.animation]
+        -- These split head/item poses leave native walking enabled, including
+        -- the first frames before Walk changes to PickupWalk. Pill reactions
+        -- also animate the body without consuming movement input.
+        return walkingExtras[animation] and (body:match("^Walk") or body:match("^PickupWalk"))
+            or (animation == "" and (body == "Happy" or body == "Sad"))
+    end
     -- Render-only movement and interpolation; authority remains on the host.
     return function(native, actorsPresentation, view)
         local Vector = view.vector
         local lastRender
-        local function sample(track, now)
+        local function coordinates(track, now)
             local age = math.max(0, now - track.at)
-            return track.target
-                + track.velocity * math.min(age, 0.1)
-                + track.correction * math.exp(-age / (1 / 30))
+            local travel, decay = math.min(age, 0.1), math.exp(-age / (1 / 30))
+            return track.x + track.vx * travel + track.cx * decay,
+                track.y + track.vy * travel + track.cy * decay
         end
-        local function track(prior, position, velocity, now, tick)
+        local function sample(track, now)
+            if track.stationary then
+                return track.target
+            end
+            return Vector(coordinates(track, now))
+        end
+        local function track(prior, position, velocity, now, tick, rate)
             if prior and tick <= prior.tick then
                 return prior
             end
-            local correction = prior and sample(prior, now) - position or Vector(0, 0)
-            if correction:Length() >= 96 then
-                correction = Vector(0, 0)
+            local x, y = position.X, position.Y
+            local cx, cy = 0, 0
+            if prior then
+                local px, py = coordinates(prior, now)
+                cx, cy = px - x, py - y
+                if cx * cx + cy * cy >= 96 * 96 then
+                    cx, cy = 0, 0
+                end
             end
-            return {
-                target = position,
-                velocity = velocity,
-                at = now,
-                tick = tick,
-                correction = correction,
-            }
+            local result = prior or {}
+            result.target, result.at, result.tick = position, now, tick
+            result.x, result.y, result.cx, result.cy = x, y, cx, cy
+            result.vx, result.vy = velocity.X * (rate or 1), velocity.Y * (rate or 1)
+            result.stationary = result.vx == 0 and result.vy == 0 and cx == 0 and cy == 0
+            return result
         end
         local outwardDirections = { Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) }
         local function doorCorridor(room, position)
@@ -42,10 +66,11 @@ return function(fields)
                 end
             end
         end
-        local function clearForPlayer(room, position, aperture)
+        local function clearForPlayer(room, position, aperture, flying)
             local collision = room:GetGridCollisionAtPos(position)
             return collision == GridCollisionClass.COLLISION_NONE
                 or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
+                or (flying and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT or collision == GridCollisionClass.COLLISION_SOLID))
                 or (aperture and collision == GridCollisionClass.COLLISION_WALL)
         end
         local function present(input, sequence, actorVisuals, motion, ref, receivedTick)
@@ -60,10 +85,8 @@ return function(fields)
                 local p = view.player(actor[Actor.index])
                 if p and p.ControllerIndex == actor[Actor.controller] then
                     actorsPresentation.apply(p, actor)
-                    if view.extraAnimationAllowsMovement then
-                        extraAnimationMovement[actor[Actor.entity][Entity.id]] =
-                            view.extraAnimationAllowsMovement(p, actor)
-                    end
+                    extraAnimationMovement[actor[Actor.entity][Entity.id]] =
+                        actionAllowsMovement(p, actor)
                 end
             end
             local now = view.clock() / 1000
@@ -75,7 +98,9 @@ return function(fields)
                 -- an invisible extrapolation error and release it on resume.
                 for _, m in pairs(motion) do
                     m.track.target, m.track.at = m.target, now
-                    m.track.velocity, m.track.correction = Vector(0, 0), Vector(0, 0)
+                    m.track.x, m.track.y = m.target.X, m.target.Y
+                    m.track.vx, m.track.vy, m.track.cx, m.track.cy = 0, 0, 0, 0
+                    m.track.stationary = true
                 end
                 return
             end
@@ -83,7 +108,13 @@ return function(fields)
                 local e = ref(identifier)
                 if e then
                     local position
-                    if m.actor and m.controller == status.slot + 1 then
+                    local predict = m.actor and m.controller == status.slot + 1
+                    if predict and view.predictMovement then
+                        assert(native.rooms_with_player(status.slot, function()
+                            predict = view.predictMovement(e:ToPlayer(), view.room())
+                        end))
+                    end
+                    if predict then
                         local p = e:ToPlayer()
                         local controls = p.ControlsEnabled
                             and p:AreControlsEnabled()
@@ -100,14 +131,14 @@ return function(fields)
                             end
                         end
                         if not controls then
-                            m.prediction:reset(m.target, sequence - 1)
                             m.doorway = nil
                         end
                         position = m.prediction:step(
                             controls and direction or Vector(0, 0),
                             sequence,
                             p.MoveSpeed * (4.4117647 * 60),
-                            dt
+                            dt,
+                            not controls
                         )
                         assert(native.rooms_with_player(status.slot, function()
                             local room = view.room()
@@ -146,16 +177,16 @@ return function(fields)
                             if not aperture then
                                 position = room:GetClampedPosition(position, math.max(5, e.Size))
                             end
-                            if not p.CanFly and not clearForPlayer(room, position, aperture) then
+                            if not clearForPlayer(room, position, aperture, p.CanFly) then
                                 -- Slide along blocked grids; returning to the older
                                 -- authority position on every blocked frame flickers.
                                 local x = Vector(position.X, m.display.Y)
                                 local y = Vector(m.display.X, position.Y)
-                                if clearForPlayer(room, x, aperture) then
+                                if clearForPlayer(room, x, aperture, p.CanFly) then
                                     position = x
-                                elseif clearForPlayer(room, y, aperture) then
+                                elseif clearForPlayer(room, y, aperture, p.CanFly) then
                                     position = y
-                                elseif clearForPlayer(room, m.display, aperture) then
+                                elseif clearForPlayer(room, m.display, aperture, p.CanFly) then
                                     position = m.display
                                 else
                                     position = m.target
@@ -164,6 +195,13 @@ return function(fields)
                         end))
                         m.prediction:clip(position)
                     else
+                        if m.prediction then
+                            -- Drop walking offsets when this body stops accepting
+                            -- walking input. Retain the real acknowledgement so a
+                            -- later form cannot replay another body's pending path.
+                            m.prediction:reset(m.target, m.prediction.acknowledged, m.velocity * 60)
+                            m.doorway = nil
+                        end
                         -- Continue from the same display trajectory across packet
                         -- gaps. Only the authority error is smoothed, without a
                         -- compulsory extra snapshot of interpolation delay.
@@ -172,6 +210,9 @@ return function(fields)
                     m.display = position
                     e.Position = position
                 end
+            end
+            if view.attachments then
+                view.attachments.present(motion, ref)
             end
         end
         return {

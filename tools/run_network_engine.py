@@ -97,6 +97,11 @@ def main():
         help="Prepare prior Hush kills and the Void unlock only on the owned host",
     )
     parser.add_argument(
+        "--lazarus-fixture",
+        action="store_true",
+        help="Unlock Tainted Lazarus on the owned guest before character menus initialize",
+    )
+    parser.add_argument(
         "--automatic",
         action="store_true",
         help="Use the automatically loaded DLL instead of remote-thread injection",
@@ -108,8 +113,9 @@ def main():
     )
     parser.add_argument(
         "--performance",
-        action="store_true",
-        help="Enable metrics in the owned lab config (use a protected runner)",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Set detailed metrics in the owned lab config (use a protected runner)",
     )
     parser.add_argument(
         "--debug-logs", action="store_true", help="Enable DEBUG in the owned lab config"
@@ -190,7 +196,7 @@ def main():
     parser.add_argument(
         "--relay-control",
         type=Path,
-        help="Owned JSON control file: downstream_bytes_per_second, optional delay_ms",
+        help="Owned JSON relay profile: delay_ms, jitter_ms, per-direction bytes_per_second, stall_every_ms/stall_ms",
     )
     parser.add_argument(
         "--exercise-official",
@@ -242,7 +248,7 @@ def main():
         parser.error("Release solo GUI checks require frontend and exclude the legacy solo fixture")
     if args.release_solo_coordination and not args.release_solo_coordination.is_dir():
         parser.error("Release solo coordination directory must already exist")
-    if args.endings_fixture or args.hush_fixture or args.ascent_fixture:
+    if args.endings_fixture or args.hush_fixture or args.ascent_fixture or args.lazarus_fixture:
         args.progress_fixture = True
     if args.alt_path_fixture and not args.progress_fixture:
         parser.error("--alt-path-fixture requires --progress-fixture")
@@ -532,6 +538,9 @@ def main():
                 args.latency_ms,
                 args.output / "relay" if args.record_relay else None,
             )
+            if args.relay_control:
+                relay.configure(json.loads(args.relay_control.read_text()), args.latency_ms)
+            result["relay_profile"] = relay.settings()
             result["one_way_latency_ms"] = args.latency_ms
         for lab, role in zip(labs, roles):
             # Windows refuses replacement if an older process still has the DLL
@@ -632,14 +641,14 @@ def main():
                 *(["--automatic"] if args.automatic or args.installed else []),
                 *(["--no-luadebug"] if args.no_luadebug else []),
             ]
-            if args.performance or args.debug_logs or args.client_input_hz:
+            if args.performance is not None or args.debug_logs or args.client_input_hz:
                 config = lab / "game/isaac-lan/config.ini"
                 config.parent.mkdir(parents=True, exist_ok=True)
                 config.write_text(
                     "[logging]\nlevel="
                     + ("DEBUG" if args.debug_logs else "INFO")
                     + "\n[diagnostics]\nperformance="
-                    + str(args.performance).lower()
+                    + str(bool(args.performance)).lower()
                     + "\nsample_interval_ms=1000\n"
                     + (
                         f"\n[network]\ninput_hz={60 if role == 'host' else args.client_input_hz}\n"
@@ -655,6 +664,7 @@ def main():
                     alt_path=args.alt_path_fixture,
                     hush=args.hush_fixture,
                     ascent=args.ascent_fixture,
+                    lazarus=args.lazarus_fixture,
                 )
             response = execute(str(lab / "isaac_lan_lab.exe"), windows(lab), *flags)
             match = re.search(r"(?:bootstrap_status=0|autoload_started=1) pid=(\d+)", response)
@@ -888,19 +898,12 @@ def main():
                         "upstream_bytes": relay.upstream_bytes,
                         "connections": relay.connections,
                         "rate_limit": relay.downstream_bytes_per_second,
-                        "delay_ms": relay.delay * 1000,
+                        **relay.settings(),
                     }
                 )
             if relay and args.relay_control:
                 relay_settings = json.loads(args.relay_control.read_text())
-                rate = relay_settings["downstream_bytes_per_second"]
-                if not isinstance(rate, int) or rate < 0:
-                    raise ValueError("Invalid owned relay bandwidth")
-                relay.downstream_bytes_per_second = rate
-                delay = relay_settings.get("delay_ms", args.latency_ms)
-                if not isinstance(delay, (int, float)) or not 0 <= delay <= 1000:
-                    raise ValueError("Invalid owned relay latency")
-                relay.delay = delay / 1000
+                relay.configure(relay_settings, args.latency_ms)
             for role, _, path in process_watchers:
                 if path.exists():
                     exit_status = json.loads(path.read_text(encoding="utf-8-sig"))

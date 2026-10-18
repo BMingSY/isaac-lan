@@ -9,4 +9,5 @@ return {
     loading = 7,
     leaving = 8,
     waiting = 9,
+    returning = 10,
 }

@@ -36,17 +36,26 @@ namespace progress {
 inline constexpr unsigned achievements = 0x38;
 inline constexpr unsigned counters = 0x2bc;
 } // namespace progress
+namespace roomChangeFrame {
+inline constexpr unsigned mazeRedirected = 0xb;
+} // namespace roomChangeFrame
 namespace game {
 inline constexpr unsigned pixelation = 0x269e0;
 inline constexpr unsigned pixelationDuration = 0x269e4;
 inline constexpr unsigned dizzyIntensity = 0x67738;
 inline constexpr unsigned dizzyTarget = 0x6773c;
 inline constexpr unsigned dizzyStep = 0x67740;
+inline constexpr unsigned curses = 0xc;
+inline constexpr unsigned seedCurses = 0x26550;
 inline constexpr unsigned stage = 0x0;
 inline constexpr unsigned stageType = 0x4;
 inline constexpr unsigned room = 0x18300;
 inline constexpr unsigned roomIndex = 0x18304;
+inline constexpr unsigned previousRoomIndex = 0x18308;
 inline constexpr unsigned dimension = 0x1830c;
+inline constexpr unsigned previousDimension = 0x18310;
+inline constexpr unsigned leaveDoor = 0x18318;
+inline constexpr unsigned enterDoor = 0x1831c;
 inline constexpr unsigned players = 0x1baa8;
 inline constexpr unsigned floorSeeds = 0x1bb84;
 inline constexpr unsigned pauseMenu = 0x23a74;
@@ -55,6 +64,9 @@ inline constexpr unsigned minimap = 0x25ecc;
 inline constexpr unsigned frame = 0x264f8;
 inline constexpr unsigned stateFlags = 0x26548;
 inline constexpr unsigned console = 0x68d78;
+inline constexpr unsigned fadeAlpha = 0x265b0;
+inline constexpr unsigned fadeAction = 0x265bc;
+inline constexpr unsigned restartHeldFrames = 0x265c4;
 inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
 namespace room {
@@ -76,6 +88,24 @@ inline constexpr unsigned count = 0xc;
 } // namespace entityList
 namespace entity {
 inline constexpr unsigned removeMethod = 0x28;
+inline constexpr unsigned subtype = 0x30;
+inline constexpr unsigned initSeed = 0x3ec;
+inline constexpr unsigned velocity = 0x360;
+inline constexpr unsigned hitPoints = 0x380;
+inline constexpr unsigned maxHitPoints = 0x384;
+inline constexpr unsigned collisionDamage = 0x388;
+inline constexpr unsigned visible = 0x171;
+inline constexpr unsigned flipX = 0x148;
+inline constexpr unsigned depthOffset = 0x358;
+inline constexpr unsigned mass = 0x37c;
+inline constexpr unsigned size = 0x370;
+inline constexpr unsigned spriteRotation = 0xec;
+inline constexpr unsigned spriteOffset = 0xdc;
+inline constexpr unsigned spriteScale = 0xe4;
+inline constexpr unsigned createdFrame = 0x328;
+inline constexpr unsigned flags = 0x168;
+inline constexpr unsigned damageVtableSlot = 0x40;
+inline constexpr unsigned color = 0x1b8;
 inline constexpr unsigned index = 0x20;
 inline constexpr unsigned type = 0x28;
 inline constexpr unsigned sprite = 0x48;
@@ -89,12 +119,70 @@ inline constexpr unsigned previousX = 0x344;
 inline constexpr unsigned previousY = 0x348;
 inline constexpr unsigned parent = 0x3bc;
 } // namespace entity
+namespace tear {
+inline constexpr unsigned height = 0x410;
+inline constexpr unsigned fallingSpeed = 0x414;
+inline constexpr unsigned fallingAcceleration = 0x418;
+inline constexpr unsigned scale = 0x420;
+inline constexpr unsigned rotation = 0x458;
+inline constexpr unsigned waitFrames = 0x438;
+} // namespace tear
+namespace effect {
+inline constexpr unsigned state = 0x450;
+inline constexpr unsigned timeout = 0x45c;
+inline constexpr unsigned lifeSpan = 0x460;
+inline constexpr unsigned rotation = 0x474;
+inline constexpr unsigned scale = 0x478;
+inline constexpr unsigned minRadius = 0x454;
+inline constexpr unsigned maxRadius = 0x458;
+} // namespace effect
+namespace familiar {
+inline constexpr unsigned state = 0xd88;
+inline constexpr unsigned fireCooldown = 0xd4c;
+inline constexpr unsigned headFrameDelay = 0xd50;
+inline constexpr unsigned moveDirection = 0xd54;
+inline constexpr unsigned shootDirection = 0xd58;
+inline constexpr unsigned lastDirection = 0xd5c;
+inline constexpr unsigned orbitAngleOffset = 0xd60;
+inline constexpr unsigned orbitSpeed = 0xd6c;
+inline constexpr unsigned orbitLayer = 0xd70;
+} // namespace familiar
 namespace sprite {
 inline constexpr unsigned size = 0x114;
+inline constexpr unsigned path = 0x0;
+inline constexpr unsigned animation = 0x30;
+inline constexpr unsigned overlay = 0x50;
+inline constexpr unsigned offset = 0x94;
+inline constexpr unsigned scale = 0x9c;
+inline constexpr unsigned rotation = 0xa4;
+inline constexpr unsigned color = 0xa8;
+inline constexpr unsigned flipX = 0x100;
+inline constexpr unsigned flipY = 0x101;
 // Both native animation states store a non-owning pointer to their ANM2.
 inline constexpr unsigned animationOwner = 0x30;
 inline constexpr unsigned overlayOwner = 0x50;
 } // namespace sprite
+namespace animationState {
+inline constexpr unsigned data = 0x4;
+inline constexpr unsigned layerFrames = 0x8, nullFrames = 0xc;
+inline constexpr unsigned frame = 0x10;
+inline constexpr unsigned playing = 0x14, events = 0x18, previousEvents = 0x1c;
+} // namespace animationState
+namespace animationData {
+inline constexpr unsigned layers = 0x18, layerCount = 0x1c;
+inline constexpr unsigned nulls = 0x20, nullCount = 0x24;
+inline constexpr unsigned layerMap = 0x38;
+} // namespace animationData
+namespace animationLayer {
+inline constexpr unsigned stride = 0x10, id = 0x0, frameCount = 0x8;
+inline constexpr unsigned nullFrameCount = 0xc;
+} // namespace animationLayer
+namespace color {
+inline constexpr unsigned size = 0x2c;
+inline constexpr unsigned red = 0x0, green = 0x4, blue = 0x8, alpha = 0xc;
+inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
+inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
+} // namespace color
 namespace player {
 inline constexpr unsigned megaBlastLaser = 0x1458;
 inline constexpr unsigned megaBlastDuration = 0x18f4;
@@ -103,6 +191,7 @@ inline constexpr unsigned type = 0x13c0;
 inline constexpr unsigned controller = 0x1618;
 inline constexpr unsigned index = 0x161c;
 inline constexpr unsigned twin = 0x1e68;
+inline constexpr unsigned coopGhost = 0x20a9;
 inline constexpr unsigned nightLightAngle = 0x1ae4;
 inline constexpr unsigned generatedInventoryHead = 0x1fcc;
 inline constexpr unsigned generatedInventorySize = 0x1fd0;

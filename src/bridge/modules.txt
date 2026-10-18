@@ -11,7 +11,9 @@ presentation/actors
 presentation/menu_model
 presentation/audio
 presentation/motion
+presentation/attachments
 presentation/ping
+presentation/restart
 compat/transitions
 compat/items/hourglass
 compat/items/r_key
@@ -42,6 +44,7 @@ compat/bosses/dogma
 compat/bosses/held_bombs
 compat/bosses/visuals
 compat/characters/lazarus
+compat/characters/forgotten
 compat/characters/blue_baby
 compat/characters/keeper
 api/codec
@@ -65,6 +68,8 @@ compat/mods/eid
 compat/mods/goodtrip/authority
 compat/mods/goodtrip/client
 runtime/session
+runtime/party
+runtime/restart
 sync/capture
 sync/replica
 compat/routes/challenge_lamb

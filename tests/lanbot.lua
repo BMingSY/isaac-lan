@@ -1856,6 +1856,13 @@ test("embedded console entry dispatches lanbot and returns nil", function()
         return {}
     end
     modules["runtime/session"] = dofile(root .. "/src/bridge/runtime/session.lua")
+    modules["runtime/party"] = dofile(root .. "/src/bridge/runtime/party.lua")
+    native.input_ready = function()
+        return true
+    end
+    native.net_fail = function(reason)
+        error(reason)
+    end
     modules["compat/characters/keeper"] = dofile(root .. "/src/bridge/compat/characters/keeper.lua")
     _IsaacLanState = { actorPose = function() end }
     local source = { active = false, mask = 0 }
@@ -1883,7 +1890,7 @@ test("embedded console entry dispatches lanbot and returns nil", function()
         MC_POST_PICKUP_UPDATE = 7,
         MC_POST_NEW_LEVEL = 8,
     }
-    dofile(root .. "/tests/fixtures/chat_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
+    dofile(root .. "/tests/fixtures/app_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
     dofile(root .. "/src/bridge/app/main.lua")
     assert(callbacks[1](nil, "another_command", "on") == nil and #output == 0)
     assert(callbacks[1](nil, "lanbot", "on") == nil and output[1]:find("running"))

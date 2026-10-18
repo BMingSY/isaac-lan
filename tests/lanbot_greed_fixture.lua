@@ -1,6 +1,7 @@
 -- Exercise the actual challenge lifecycle with native events supplied by the
 -- model. Reject gameplay writes, extra grants and synthesized damage/shots.
 local root = assert(arg[1])
+local Phase = dofile(root .. "/tests/fixtures/net_phases.lua")
 for _, ownerCase in ipairs({ { 2, 0 }, { 2, 1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, { 4, 3 } }) do
     local playerCount, localSlot = table.unpack(ownerCase)
     local host = localSlot == 0
@@ -9,6 +10,7 @@ for _, ownerCase in ipairs({ { 2, 0 }, { 2, 1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, {
         local hooks, callbacks, logs, commands, players = nil, {}, {}, {}, {}
         local grants, inputCalls, entities = 0, 0, {}
         local botFault, paused, shop, collision = false, false, false, 0
+        local returned = false
         local health, counts = {}, {}
         for i = 1, playerCount do
             health[i], counts[i] = 6, {}
@@ -144,6 +146,9 @@ for _, ownerCase in ipairs({ { 2, 0 }, { 2, 1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, {
             StartStageTransition = forbidden,
         }
         _IsaacLan = {
+            net_phases = function()
+                return Phase
+            end,
             api_info = function()
                 return {
                     ready = phase == 3 and 1 or 0,
@@ -212,10 +217,10 @@ for _, ownerCase in ipairs({ { 2, 0 }, { 2, 1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, {
                 scene = scene,
                 prepared = false,
                 players = playerCount,
-                ready0 = 1,
-                ready1 = 1,
-                ready2 = 1,
-                ready3 = 1,
+                ready0 = returned and 0 or 1,
+                ready1 = returned and 0 or 1,
+                ready2 = returned and 0 or 1,
+                ready3 = returned and 0 or 1,
             }
         end
         _IsaacLanCommand = function(command, args)
@@ -360,7 +365,7 @@ for _, ownerCase in ipairs({ { 2, 0 }, { 2, 1 }, { 4, 0 }, { 4, 1 }, { 4, 2 }, {
                 frame()
             end
         end
-        phase, scene = 0, 1
+        phase, scene, returned = ending == "win" and Phase.lobby or Phase.idle, 1, true
         _IsaacLanFrame()
         local text = table.concat(logs, "\n")
         assert(text:find("PASS challenge observed", 1, true), text)

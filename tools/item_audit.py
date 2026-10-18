@@ -429,6 +429,22 @@ def summarize_case(case, peers, engine=None, *, last_case_key=None):
     if (case.get("physical") or case.get("kind") == "pill") and not use_evidence:
         missing.append("native_use_callback")
     checks = effect_checks(case, observations)
+    if case.get("frame_budget_ms"):
+        for role, values in observations.items():
+            metrics = [event.get("render") for event in values if event["event"] == "metrics"]
+            render = metrics[-1] if metrics else None
+            checks.append(
+                {
+                    "name": f"performance:{role}:render_p95",
+                    "status": "missing"
+                    if not render or render.get("count", 0) < 100
+                    else "passed"
+                    if render.get("p95", float("inf")) <= case["frame_budget_ms"]
+                    else "failed",
+                    "budget_ms": case["frame_budget_ms"],
+                    "actual": render,
+                }
+            )
     for check in checks:
         if check["status"] == "missing":
             missing.append(check["name"])
@@ -524,6 +540,12 @@ def summarize_case(case, peers, engine=None, *, last_case_key=None):
     return result
 
 
+def cases_passed(results):
+    return bool(results) and all(
+        result["status"] in {"verified", "basic_pass"} for result in results
+    )
+
+
 def build_fixture(path, config):
     path.write_text(
         "local audit = "
@@ -534,6 +556,9 @@ def build_fixture(path, config):
         + "\nend)()\n"
         + "local createStress = (function()\n"
         + (ROOT / "tests/fixtures/item_audit_stress.lua").read_text()
+        + "\nend)()\n"
+        + "local createEntityFieldsProbe = (function()\n"
+        + (ROOT / "tests/fixtures/entity_fields_probe.lua").read_text()
         + "\nend)()\n"
         + "local createRoomEffects = (function()\n"
         + (ROOT / "tests/fixtures/item_audit_rooms.lua").read_text()
@@ -583,6 +608,16 @@ def stress_cases(catalog, keys=None):
             raise ValueError("Runtime registry cannot supply the requested distinct inventory")
         profiles.append({"key": f"stress:inventory-{count}", "loadout": loadout[:count]})
     profiles.append({"key": "stress:copies-1000", "copies": 1000})
+    # Preserve the attacking workloads and measure idle holding separately.
+    profiles.extend(
+        {
+            **profile,
+            "key": profile["key"].replace("stress:", "stress:idle-"),
+            "idle": True,
+            "frame_budget_ms": 1000 / 30,
+        }
+        for profile in list(profiles)
+    )
     for kind in ("tears", "projectiles"):
         for count in (100, 500, 1000, 2000):
             profiles.append({"key": f"stress:{kind}-{count}", kind: count})

@@ -24,7 +24,69 @@ target_compile_definitions(isaac_lan_miniz PUBLIC MINIZ_NO_ARCHIVE_APIS MINIZ_NO
 add_library(isaac_lan_deflate STATIC src/core/deflate.cpp)
 target_include_directories(isaac_lan_deflate PUBLIC src)
 target_link_libraries(isaac_lan_deflate PUBLIC isaac_lan_miniz)
+file(GLOB ISAAC_LAN_ZSTD_SOURCES CONFIGURE_DEPENDS vendor/zstd/common/*.c vendor/zstd/compress/*.c
+     vendor/zstd/decompress/*.c)
+add_library(isaac_lan_zstd_vendor STATIC ${ISAAC_LAN_ZSTD_SOURCES})
+target_include_directories(isaac_lan_zstd_vendor PUBLIC vendor/zstd)
+target_compile_definitions(isaac_lan_zstd_vendor PRIVATE ZSTD_LEGACY_SUPPORT=0 ZSTD_DISABLE_ASM)
+add_library(isaac_lan_zstd STATIC src/core/zstd.cpp)
+target_include_directories(isaac_lan_zstd PUBLIC src)
+target_link_libraries(isaac_lan_zstd PUBLIC isaac_lan_zstd_vendor)
+set(ISAAC_LAN_LZ4_SOURCE_DIR
+    ""
+    CACHE PATH "Optional upstream LZ4 lib directory for benchmarks")
+if(BUILD_TESTING AND ISAAC_LAN_LZ4_SOURCE_DIR)
+    add_executable(isaac_lan_compression_benchmark tests/compression_benchmark.cpp
+                                                   "${ISAAC_LAN_LZ4_SOURCE_DIR}/lz4.c")
+    target_include_directories(isaac_lan_compression_benchmark
+                               PRIVATE "${ISAAC_LAN_LZ4_SOURCE_DIR}")
+    target_link_libraries(isaac_lan_compression_benchmark PRIVATE isaac_lan_deflate isaac_lan_zstd)
+    if(MINGW)
+        target_link_options(isaac_lan_compression_benchmark PRIVATE -static-libgcc
+                            -static-libstdc++)
+    endif()
+endif()
 if(BUILD_TESTING)
+    add_executable(isaac_lan_mailbox_test tests/mailbox_test.cpp)
+    target_include_directories(isaac_lan_mailbox_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_mailbox_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME core.mailboxes COMMAND isaac_lan_mailbox_test)
+    set_tests_properties(core.mailboxes PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_occurrence_mapping_test tests/occurrence_mapping_test.cpp)
+    target_include_directories(isaac_lan_occurrence_mapping_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_occurrence_mapping_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+    endif()
+    add_test(NAME core.occurrence-mapping COMMAND isaac_lan_occurrence_mapping_test)
+    set_tests_properties(core.occurrence-mapping PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_zstd_test tests/zstd_test.cpp)
+    target_link_libraries(isaac_lan_zstd_test PRIVATE isaac_lan_zstd)
+    if(MINGW)
+        target_link_options(isaac_lan_zstd_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    foreach(test_case round-trip prefixes bounds)
+        add_test(NAME core.zstd-${test_case} COMMAND isaac_lan_zstd_test ${test_case})
+        set_tests_properties(core.zstd-${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    endforeach()
+    if(NOT WIN32)
+        find_package(Lua 5.3 EXACT REQUIRED)
+        add_executable(isaac_lan_state_codec_runner tests/state_codec_runner.cpp
+                                                    src/engine/state_codec.cpp)
+        target_include_directories(isaac_lan_state_codec_runner PRIVATE src ${LUA_INCLUDE_DIR})
+        target_link_libraries(isaac_lan_state_codec_runner PRIVATE ${LUA_LIBRARIES}
+                                                                   ${CMAKE_DL_LIBS})
+        set_target_properties(isaac_lan_state_codec_runner PROPERTIES ENABLE_EXPORTS ON)
+        target_compile_options(isaac_lan_state_codec_runner PRIVATE -Wall -Wextra -Werror)
+        add_test(
+            NAME bridge.native-codec
+            COMMAND
+                isaac_lan_state_codec_runner "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_codec.lua"
+                "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.native-codec PROPERTIES TIMEOUT 60 LABELS "offline;lua;core")
+    endif()
     add_executable(isaac_lan_session_store_test tests/session_store_test.cpp
                                                 src/runtime/session_store.cpp)
     target_include_directories(isaac_lan_session_store_test PRIVATE src)
@@ -103,6 +165,8 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.chat chat.lua)
         isaac_add_lua_test(presentation.chat-render chat_presentation.lua)
         isaac_add_lua_test(bridge.session_lifecycle session_lifecycle.lua)
+        isaac_add_lua_test(bridge.party-startup party_startup.lua)
+        isaac_add_lua_test(bridge.restart restart.lua)
         isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
         isaac_add_lua_test(bridge.challenges challenges.lua)
@@ -113,6 +177,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.codec-fragments codec_fragments.lua)
         isaac_add_lua_test(bridge.room-capture room_capture.lua)
         isaac_add_lua_test(bridge.motion-intervals motion_intervals.lua)
+        isaac_add_lua_test(presentation.attachments attachments.lua)
         isaac_add_lua_test(bridge.entity-codec entity_codec.lua)
         isaac_add_lua_test(bridge.layers layer_contracts.lua)
         isaac_add_lua_test(bridge.api bridge_api.lua)
@@ -128,6 +193,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.resume bridge_resume.lua)
         isaac_add_lua_test(bridge.mod-loading mod_loading.lua)
         isaac_add_lua_test(bridge.presentation presentation.lua)
+        isaac_add_lua_test(bridge.actor-costumes actor_costumes.lua)
         isaac_add_lua_test(bridge.floor floor.lua)
         isaac_add_lua_test(bridge.npc-state npc_state.lua)
         isaac_add_lua_test(bridge.actor-forms actor_forms.lua)
@@ -165,6 +231,8 @@ if(BUILD_TESTING)
         keyboard-pause
         transition-charge
         audio-ownership
+        animation-pose
+        fixed-state-fields
         localized-text
         laser-state
         actor-roster
@@ -240,6 +308,8 @@ configure_file(src/bridge/embedded.h.in generated/embedded_bridge.h @ONLY)
 add_library(
     isaac_lan_probe SHARED
     src/app/bootstrap.cpp
+    src/engine/state_codec.cpp
+    src/engine/versions/j460/entity_fields.cpp
     src/engine/versions/j460/bootstrap.cpp
     src/engine/versions/j460/session_backend.cpp
     src/diagnostics/native_exceptions.cpp
@@ -251,6 +321,7 @@ add_library(
     src/runtime/session.cpp
     src/runtime/session_store.cpp
     src/engine/versions/j460/rooms.cpp
+    src/engine/versions/j460/room_routing.cpp
     src/engine/versions/j460/visuals.cpp
     src/engine/versions/j460/input.cpp
     src/engine/versions/j460/save.cpp
@@ -294,11 +365,11 @@ add_library(
     "${IMGUI_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp")
 target_include_directories(isaac_lan_ui PUBLIC "${IMGUI_SOURCE_DIR}" "${IMGUI_SOURCE_DIR}/backends")
 target_link_libraries(isaac_lan_ui PUBLIC opengl32 gdi32 dwmapi)
-add_library(isaac_lan_net STATIC src/net/session.cpp src/net/compression.cpp
-                                 src/net/host_resolution.cpp)
+add_library(isaac_lan_net STATIC src/net/session.cpp src/net/network_io.cpp src/net/byte_worker.cpp
+                                 src/net/compression.cpp src/net/host_resolution.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate)
+target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate isaac_lan_zstd)
 add_executable(isaac_lan_replay_world tools/replay_world_states.cpp)
 target_link_libraries(isaac_lan_replay_world PRIVATE isaac_lan_net)
 if(MINGW)
@@ -335,15 +406,24 @@ if(BUILD_TESTING)
         test_case
         codec
         compression-limits
+        wire-compression
+        async-network
+        bulk-worker
+        reliable-receive
         world-deltas
+        delivery-backpressure
         delta-floor-boundary
         inputs-2
         render-inputs
+        input-backpressure
         inputs-3
         inputs-4
         floor-rejoin
         stage-events
         ending-events
+        ending-liveness
+        restart
+        return-lobby
         cinematic-events
         stage-during-rejoin
         rewind
@@ -413,6 +493,15 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME native.challenge-hud COMMAND isaac_lan_challenge_hud_test)
     set_tests_properties(native.challenge-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_room_routing_test tests/room_routing_test.cpp)
+    target_include_directories(isaac_lan_room_routing_test PRIVATE src)
+    target_link_libraries(isaac_lan_room_routing_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_room_routing_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_room_routing_test PRIVATE -Wall -Wextra -Werror -msse2)
+    endif()
+    add_test(NAME native.room-routing COMMAND isaac_lan_room_routing_test)
+    set_tests_properties(native.room-routing PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_test(NAME native.crafting-hud COMMAND isaac_lan_crafting_hud_test)
     set_tests_properties(native.crafting-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_character_catalog_test tests/character_catalog_test.cpp

@@ -21,8 +21,8 @@ local performance = modules["diagnostics/performance"]
         counter = function() end,
         resources = function() end,
     }
-local encode = performance.wrap("encode", codec.encode)
-local decode = performance.wrap("decode", codec.decode)
+local encode = performance.wrap("encode", native.state_encode or codec.encode)
+local decode = performance.wrap("decode", native.state_decode or codec.decode)
 local reconcileEntities =
     performance.wrap("apply.entities", component("sync/entities")(EntityType, PickupVariant))
 local reconcileGrids = performance.wrap("apply.grids", component("sync/grids"))
@@ -35,7 +35,8 @@ local greed = assert(modules["compat/routes/greed"])(function()
 end)
 local crawlspace = assert(modules["compat/routes/crawlspace"])(function()
     return Game():GetLevel()
-end, Vector)
+end, Vector, RoomType.ROOM_DUNGEON)
+local forgotten = assert(modules["compat/characters/forgotten"])(PlayerType)
 local forms = component("compat/characters/lazarus")(native, function(index)
     return Isaac.GetPlayer(index)
 end, PlayerType)
@@ -99,15 +100,12 @@ local applyInventory = performance.wrap("apply.inventory", inventoryState.apply)
 local actorsPresentation = component("presentation/actors")(native, function(path)
     return Isaac.GetCostumeIdByPath(path)
 end, applySprite)
+local attachments = component("presentation/attachments")(native, Vector, EntityType, EffectVariant)
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
-    extraAnimationAllowsMovement = function(p, actor)
-        local extra = actor[fields.actor.visuals][fields.actorSprites.extra]
-        return craftingBag.allowsMovement(
-            p,
-            actor[fields.actor.craftingBag],
-            extra and extra[fields.sprite.animation]
-        )
+    predictMovement = function(player, room)
+        return forgotten.predictMovement(player) and crawlspace.predictMovement(room)
     end,
+    attachments = attachments,
     vector = Vector,
     player = function(index)
         return Isaac.GetPlayer(index)
@@ -207,8 +205,10 @@ local replica = component("sync/replica")({
     forms = forms,
     restoreActorRoster = component("sync/actor_roster")(native),
     applyInventory = applyInventory,
+    sameInventory = inventoryState.sameItems,
     actors = actorsPresentation,
     motion = motionPresentation,
+    attachments = attachments,
     poop = poop,
     craftingBag = craftingBag,
     temporaryEffects = temporaryEffects,

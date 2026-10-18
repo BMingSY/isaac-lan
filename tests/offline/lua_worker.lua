@@ -37,6 +37,9 @@ local function stateEnvironment()
             ["presentation/actors"] = dofile(root .. "/src/bridge/presentation/actors.lua"),
             ["presentation/audio"] = dofile(root .. "/src/bridge/presentation/audio.lua"),
             ["presentation/motion"] = dofile(root .. "/src/bridge/presentation/motion.lua"),
+            ["presentation/attachments"] = dofile(
+                root .. "/src/bridge/presentation/attachments.lua"
+            ),
             ["compat/transitions"] = dofile(root .. "/src/bridge/compat/transitions.lua"),
             ["compat/items/hourglass"] = dofile(root .. "/src/bridge/compat/items/hourglass.lua"),
             ["compat/items/r_key"] = dofile(root .. "/src/bridge/compat/items/r_key.lua"),
@@ -86,6 +89,9 @@ local function stateEnvironment()
             ["compat/bosses/visuals"] = dofile(root .. "/src/bridge/compat/bosses/visuals.lua"),
             ["compat/characters/lazarus"] = dofile(
                 root .. "/src/bridge/compat/characters/lazarus.lua"
+            ),
+            ["compat/characters/forgotten"] = dofile(
+                root .. "/src/bridge/compat/characters/forgotten.lua"
             ),
             ["compat/characters/blue_baby"] = dofile(
                 root .. "/src/bridge/compat/characters/blue_baby.lua"

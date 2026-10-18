@@ -1,0 +1,8 @@
+{
+  "delay_ms": 45,
+  "jitter_ms": 20,
+  "downstream_bytes_per_second": 32768,
+  "upstream_bytes_per_second": 8192,
+  "stall_every_ms": 4000,
+  "stall_ms": 250
+}

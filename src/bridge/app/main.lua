@@ -47,26 +47,23 @@ end)
 function _IsaacLanCanEnterRoom(...)
     return challenge.canEnter(...)
 end
+local restart = _IsaacLanModules["runtime/restart"]({
+    running = Phase.running,
+    now = function()
+        return native.api_info().nowMs
+    end,
+    send = native.net_lifecycle_send,
+    receive = native.net_lifecycle_receive,
+    request = native.net_restart_request,
+    restart = function()
+        return native.net_restart(Seeds.Seed2String(Random()):gsub("%s", ""))
+    end,
+})
 local status, tick = {}, 0
 local lifecycle
-local players = {}
 local continuedRun = false
 local savedPlayers = 0
-local function refreshPlayers(restoredOrder)
-    local heads = restoredOrder and native.rooms_heads(1) or native.rooms_heads()
-    players = {}
-    for slot = 0, status.players - 1 do
-        if heads[tostring(slot)] then
-            players[#players + 1] = Isaac.GetPlayer(heads[tostring(slot)])
-        else
-            assert(
-                (native.rooms_connected() & (1 << slot)) == 0,
-                "联机角色数量与房间人数不一致"
-            )
-        end
-    end
-    return heads
-end
+local bindParty = _IsaacLanModules["runtime/party"](native, Isaac.GetPlayer)
 local function log(s)
     Isaac.DebugString("ISAAC_LAN " .. s)
 end
@@ -174,8 +171,15 @@ local function capture()
     return assert(native.input_capture(-1))
 end
 lifecycle = assert(_IsaacLanModules["runtime/session"])({
+    canStart = function()
+        return native.input_ready()
+    end,
+    fail = native.net_fail,
     start = function()
         assert(native.net_engine_start())
+    end,
+    bindPlayers = function(restoredOrder)
+        bindParty(status, continuedRun, restoredOrder)
     end,
     enableRooms = function()
         assert(native.rooms_enable())
@@ -201,7 +205,6 @@ lifecycle = assert(_IsaacLanModules["runtime/session"])({
         else
             native.net_close(preserve)
         end
-        players = {}
         continuedRun = false
     end,
 })
@@ -221,18 +224,7 @@ callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
     end
     _IsaacLanState.reset()
     continuedRun = continued
-    if lifecycle.gameStarted() then
-        if continued then
-            -- Native continue detaches unavailable physical controllers. Bind
-            -- the restored heads before its first update can pause for them.
-            -- Native Continue may attach a saved controller to a different
-            -- physical device or keyboard. Use restored roster order until
-            -- assigning LAN controllers; physical IDs cannot identify slots yet.
-            local heads = refreshPlayers(true)
-            for slot = 0, status.players - 1 do
-                assert(native.input_assign(heads[tostring(slot)], slot + 1))
-            end
-        end
+    if lifecycle.gameStarted(continued) then
         math.randomseed(game:GetSeeds():GetStartSeed())
         log("GAME_STARTED " .. game:GetSeeds():GetStartSeedString())
         if status.firstTick > 0 then
@@ -244,19 +236,6 @@ callback(ModCallbacks.MC_POST_UPDATE, function()
     keeper.update()
     if not lifecycle.initializing() or game:GetRoom():GetFrameCount() < 10 then
         return
-    end
-    if continuedRun then
-        local heads = refreshPlayers()
-        for slot = 0, status.players - 1 do
-            assert(native.input_assign(heads[tostring(slot)], slot + 1))
-        end
-    else
-        players = { Isaac.GetPlayer(0) }
-        assert(native.input_assign(0, 1))
-        for slot = 1, status.players - 1 do
-            local index = assert(native.players_spawn(status["character" .. slot], slot + 1))
-            players[#players + 1] = Isaac.GetPlayer(index)
-        end
     end
     prepareCheckpoint()
 end)
@@ -320,6 +299,14 @@ function _IsaacLanCommand(action, value)
         )
     elseif action == "control" then
         assert(native.net_command(tonumber(value)), "当前玩家没有执行此操作的权限")
+    elseif action == "reconnect" then
+        assert(native.net_reconnect(), "当前无法重连游戏")
+    elseif action == "leave" then
+        if lifecycle.active() then
+            assert(native.net_leave(), "当前无法离开游戏")
+        else
+            lifecycle.close()
+        end
     elseif action == "choose" then
         local character, ready = value:match("^(%d+):([01])$")
         assert(character and native.net_choose(tonumber(character), tonumber(ready)))
@@ -330,7 +317,11 @@ function _IsaacLanCommand(action, value)
 end
 local chatSession = false
 function _IsaacLanFrame()
+    local previousPhase = status.phase
     status = native.net_poll()
+    if status.phase == Phase.lobby and previousPhase ~= Phase.lobby then
+        savedPlayers = native.net_saved_info()
+    end
     if
         status.phase == Phase.lobby
         or status.phase == Phase.running
@@ -349,6 +340,7 @@ function _IsaacLanFrame()
         chat.reset()
         chatUI.reset()
     end
+    restart.poll(status)
     integration.poll()
     chat.poll()
     bot.poll()

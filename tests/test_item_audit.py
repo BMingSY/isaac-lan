@@ -10,6 +10,116 @@ from item_audit import catalog_from_log, events, select_cases, summarize_case
 from lab_profile import validate_labs, validate_startup
 
 
+def test_idle_stress_preserves_inventory_and_disables_attack():
+    from item_audit import stress_cases
+
+    catalog = json.loads((ROOT / "tests/fixtures/item_catalog.json").read_text())
+    cases = {case["key"]: case for case in stress_cases(catalog)}
+    for suffix in ("baseline", "inventory-100", "inventory-300", "inventory-500", "copies-1000"):
+        active, idle = cases[f"stress:{suffix}"], cases[f"stress:idle-{suffix}"]
+        assert idle["idle"] and not active.get("idle")
+        assert idle.get("loadout") == active.get("loadout")
+        assert idle.get("copies") == active.get("copies")
+        assert idle["frame_budget_ms"] == 1000 / 30
+
+
+@pytest.mark.parametrize(
+    "client_count,client_p95,expected",
+    [(900, 20, "verified"), (900, 50, "problem"), (5, 20, "incomplete")],
+)
+def test_idle_performance_requires_both_peers_and_frame_budget(client_count, client_p95, expected):
+    case = {
+        "key": "stress:idle-baseline",
+        "kind": "stress",
+        "slot": 1,
+        "frame_budget_ms": 1000 / 30,
+    }
+    common = [
+        {"key": case["key"], "event": name}
+        for name in ("case_begin", "give_end", "use_return", "case_end")
+    ]
+    common += [
+        {"key": case["key"], "event": "sample", "tick": tick, "players": []} for tick in (150, 180)
+    ]
+    peers = {
+        role: [
+            *common,
+            {"key": case["key"], "event": "metrics", "render": {"count": count, "p95": p95}},
+        ]
+        for role, count, p95 in (("host", 900, 20), ("client", client_count, client_p95))
+    }
+    assert summarize_case(case, peers)["status"] == expected
+    peers["client"] = peers["client"][:-1]
+    assert summarize_case(case, peers)["status"] == "incomplete"
+
+
+@pytest.mark.parametrize(
+    "status,restored,expected",
+    [
+        ("verified", True, 0),
+        ("basic_pass", True, 0),
+        ("incomplete", True, 1),
+        ("problem", True, 1),
+        ("untested", True, 1),
+        ("verified", False, 1),
+    ],
+)
+@pytest.mark.parametrize("bootstrap", [None, "--injected", "--injected-bootstrap"])
+def test_audit_exit_and_reports_require_case_completion(
+    tmp_path, monkeypatch, status, restored, expected, bootstrap
+):
+    import run_item_audit as runner
+
+    output, build = tmp_path / "output", tmp_path / "build"
+    build.mkdir()
+    for name in ("isaac_lan_probe.dll", "winmm.dll"):
+        (build / name).write_bytes(b"candidate")
+    case = {"key": "collectible:1:host-same"}
+    monkeypatch.setattr(runner, "configure_interrupts", lambda: None)
+    monkeypatch.setattr(runner, "validate_labs", lambda *args: [])
+    monkeypatch.setattr(runner, "validate_startup", lambda *args: None)
+    monkeypatch.setattr(runner, "idle", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "select_cases", lambda *args, **kwargs: [case])
+    monkeypatch.setattr(
+        runner,
+        "run_batch",
+        lambda *args: {
+            "engine": {"pass": True},
+            "restored": restored,
+            "results": [{**case, "status": status}],
+        },
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_item_audit",
+            "--host",
+            str(tmp_path / "host"),
+            "--client",
+            str(tmp_path / "client"),
+            "--build",
+            str(build),
+            "--output",
+            str(output),
+            "--mode",
+            "catalog",
+            *([bootstrap] if bootstrap else []),
+        ],
+    )
+    assert runner.main() == expected
+    summary = json.loads((output / "summary.json").read_text())
+    report = json.loads((output / "report.json").read_text())
+    assert report == summary
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["automatic_loader"] == (bootstrap is None)
+    assert report["passed"] == (expected == 0)
+    assert report["status"] == ("passed" if expected == 0 else "failed")
+    from xml.etree import ElementTree as ET
+
+    assert ET.parse(output / "junit.xml").getroot().get("failures") == str(expected)
+
+
 def test_effect_recipes_use_real_unique_catalog_enums():
     from item_effect_checks import SUPPORTED_EFFECTS
 

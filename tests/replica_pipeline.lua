@@ -47,9 +47,17 @@ vector = function(value)
 end
 local createReplica =
     dofile(root .. "/src/bridge/sync/replica.lua")(dofile(root .. "/src/bridge/sync/fields.lua"))
+local decodes, refreshItems = 0, nil
+local pointers = {}
 local replica = createReplica({
     encode = codec.encode,
-    decode = codec.decode,
+    decode = function(bytes)
+        decodes = decodes + 1
+        return codec.decode(bytes)
+    end,
+    sameInventory = dofile(root .. "/src/bridge/sync/inventory.lua")(
+        dofile(root .. "/src/bridge/sync/fields.lua")
+    )({}).sameItems,
     schema = schema,
     game = function()
         return {
@@ -72,7 +80,13 @@ local replica = createReplica({
             return incoming == epoch
         end,
     },
-    performance = { resources = noop, counter = noop },
+    performance = {
+        resources = noop,
+        counter = noop,
+        wrap = function(_, fn)
+            return fn
+        end,
+    },
     entityCodec = {
         link = function(p, v, ref)
             assert(scope == "room" and p == player and ref(v[1]) == p)
@@ -85,7 +99,12 @@ local replica = createReplica({
     vec = vector,
     playerType = 1,
     pointer = function(p)
-        return { Ref = p }
+        local pointer = { Ref = p }
+        pointers[#pointers + 1] = pointer
+        return pointer
+    end,
+    hash = function(p)
+        return p
     end,
     prediction = {
         new = function()
@@ -108,7 +127,8 @@ local replica = createReplica({
             record("prune")
         end,
     },
-    applyInventory = function()
+    applyInventory = function(_, _, refresh)
+        refreshItems = refresh
         assert(scope == "actor", "Inventory escaped the actor's room")
         record("inventory")
         shared = { curses = -1, pills = -1, deals = -1, greed = -1 }
@@ -297,11 +317,14 @@ assert(
     "Initial view escaped the full update boundary"
 )
 assert(replica.apply(packet(1), 1, 0))
+assert(decodes == 1, "Deferred view was decoded twice")
+assert(refreshItems, "First inventory was not reconciled")
 assert(table.concat(trace, ",") == expected)
 local tick, actors, motion = replica.present("", 0)
 assert(tick == 1 and #actors == 1 and motion[123], "Room entry lost the arriving actor")
 trace = {}
 assert(replica.apply(packet(1), 1, 0))
+assert(not refreshItems, "Unchanged inventory was reconciled again")
 assert(table.concat(trace, ",") == expected:gsub("motion%-reset,", ""))
 trace = {}
 assert(replica.apply(packet(2), 2, 1, true), "Stable view waited for a full update")
@@ -349,6 +372,49 @@ for _, half in ipairs({ false, true, true }) do
     assert(replica.apply(packet(5), 5, 0, half))
     assert(shared.greed == 2, "Native room cleanup advanced the authoritative Greed wave")
 end
+local fields = dofile(root .. "/src/bridge/sync/fields.lua")
+local changed = codec.decode(packet(6))
+local inventory = changed[9][1][fields.actor.inventory]
+inventory[fields.inventory.items] = { { 1, 1 }, { 2, 1 } }
+assert(replica.apply(codec.encode(changed), 6, 0) and refreshItems)
+assert(replica.apply(codec.encode(changed), 6, 0) and not refreshItems)
+-- Equal total counts must not hide a reroll or a change in item multiplicity.
+inventory[fields.inventory.items] = { { 1, 2 } }
+assert(replica.apply(codec.encode(changed), 6, 0) and refreshItems)
+inventory[fields.inventory.items] = { { 3, 2 } }
+assert(replica.apply(codec.encode(changed), 6, 0) and refreshItems)
+inventory[fields.inventory.trinkets] = { 17, 0 }
+assert(replica.apply(codec.encode(changed), 6, 0) and refreshItems)
+changed[2] = 30
+assert(
+    replica.apply(codec.encode(changed), 30, 0) and refreshItems,
+    "Periodic native inventory correction was lost"
+)
+local postponed = packet(31)
+replica.resetView()
+assert(not replica.apply(postponed, 31, 0, true))
+local beforeReset = decodes
+replica.resetView()
+assert(
+    replica.apply(postponed, 31, 0) and decodes == beforeReset + 1,
+    "Reset retained a decoded view from the previous lifecycle"
+)
+local pointerCount = #pointers
+assert(
+    replica.apply(packet(32), 32, 0) and #pointers == pointerCount,
+    "Repeated entity allocated another native reference"
+)
+local oldPlayer = player
+player = setmetatable({}, { __index = oldPlayer })
+assert(
+    replica.apply(packet(33), 33, 0) and #pointers == pointerCount + 1,
+    "Actor replacement reused the previous allocation's reference"
+)
+pointers[#pointers].Ref = nil
+assert(
+    replica.apply(packet(34), 34, 0) and #pointers == pointerCount + 2,
+    "Expired reference was retained"
+)
 replica.reset()
 local resetTick, resetActors, resetMotion = replica.present("", 0)
 assert(resetTick == -1 and #resetActors == 0 and next(resetMotion) == nil)

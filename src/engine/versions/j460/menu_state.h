@@ -4,7 +4,7 @@ namespace scene {
 inline constexpr int menu = 1, game = 2;
 }
 namespace menuPage {
-inline constexpr int main = 3;
+inline constexpr int title = 1, save = 2, main = 3;
 }
 namespace mainMenuSelection {
 inline constexpr int online = 2;

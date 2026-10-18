@@ -11,13 +11,23 @@ return function(fields)
             end
             return costumeIDs[path]
         end
-        local function actorSprites(p, actor)
-            local sprites = assert(native.actor_sprites(actor[Actor.index], p:GetSprite()))
-            local existing, desired = {}, {}
+        local function indexCostumes(sprites)
+            local byPath = {}
             for i = ActorSprites.firstCostume, #sprites do
                 local path = sprites[i]:GetFilename()
-                existing[path] = (existing[path] or 0) + 1
+                local entries = byPath[path]
+                if not entries then
+                    entries = { next = 1 }
+                    byPath[path] = entries
+                end
+                entries[#entries + 1] = sprites[i]
             end
+            return byPath
+        end
+        local function actorSprites(p, actor)
+            local sprites = assert(native.actor_sprites(actor[Actor.index], p:GetSprite()))
+            local existing, desired = indexCostumes(sprites), {}
+            local changed = false
             for i = ActorSprites.firstCostume, #actor[Actor.visuals] do
                 local path = actor[Actor.visuals][i][Sprite.path]
                 desired[path] = (desired[path] or 0) + 1
@@ -30,39 +40,42 @@ return function(fields)
                     local id = costumeID(path)
                     if id >= 0 then
                         p:TryRemoveNullCostume(id)
+                        changed = true
                     end
                 end
             end
             for path, count in pairs(desired) do
                 local id = costumeID(path)
                 if id >= 0 then
-                    for _ = 1, count - (existing[path] or 0) do
+                    for _ = 1, count - (existing[path] and #existing[path] or 0) do
                         p:AddNullCostume(id)
+                        changed = true
                     end
                 end
             end
             -- Adding/removing a costume can reallocate the native vector; reacquire
             -- its non-owning Sprite references before applying any animation state.
-            return assert(native.actor_sprites(actor[Actor.index], p:GetSprite()))
+            if changed then
+                sprites = assert(native.actor_sprites(actor[Actor.index], p:GetSprite()))
+                existing = indexCostumes(sprites)
+            end
+            return sprites, existing
         end
         local function applyActorVisuals(p, actor)
             if not actor[Actor.pose] then
                 return
             end
-            local sprites = actorSprites(p, actor)
+            local sprites, byPath = actorSprites(p, actor)
             -- Costume changes can rebuild the base body layers as well.
             applySprite(p:GetSprite(), actor[Actor.entity][Entity.sprite])
-            local used = {}
             for i, v in ipairs(actor[Actor.visuals]) do
                 if i <= ActorSprites.baseCount then
                     applySprite(sprites[i], v)
                 elseif i >= ActorSprites.firstCostume then
-                    for j = ActorSprites.firstCostume, #sprites do
-                        if not used[j] and sprites[j]:GetFilename() == v[Sprite.path] then
-                            applySprite(sprites[j], v)
-                            used[j] = true
-                            break
-                        end
+                    local entries = byPath[v[Sprite.path]]
+                    if entries and entries[entries.next] then
+                        applySprite(entries[entries.next], v)
+                        entries.next = entries.next + 1
                     end
                 end
             end

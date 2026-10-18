@@ -1,6 +1,6 @@
 """Combine character and side-route fixtures without restarting game processes."""
 
-from testing.lua import factory, write_suite
+from testing.lua import ROOT, factory, write_suite
 import re
 
 
@@ -18,6 +18,12 @@ DIAGNOSTICS = (
     "home",
     "endings",
     "motion",
+    "action-prediction",
+    "attached-motion",
+    "weak-network",
+    "entity-fields",
+    "local-hud",
+    "guest-visuals",
     "floor-items",
     "floor-sources",
     "mod-integrations",
@@ -52,6 +58,12 @@ def build(output, cases=CASES, *, first_floor=False):
             "rewind": "state_hourglass.lua",
             "endings": "state_endings.lua",
             "motion": "state_motion.lua",
+            "action-prediction": "state_action_prediction.lua",
+            "attached-motion": "state_attached_motion.lua",
+            "weak-network": "state_weak_network.lua",
+            "entity-fields": "state_entity_fields.lua",
+            "local-hud": "state_local_hud.lua",
+            "guest-visuals": "state_guest_visuals.lua",
             "floor-items": "state_floor_items.lua",
             "floor-sources": "state_floor_sources.lua",
             "mod-integrations": "state_mod_integrations.lua",
@@ -92,7 +104,23 @@ def build(output, cases=CASES, *, first_floor=False):
             options["endingRoutes"] = ["ascent"]
         elif name in ("campaign", "victory-lap", "victory-no"):
             options["endingRoutes"] = ["lamb"]
-        fixtures.append(factory(filename, options=options))
+        prelude = ""
+        if name in ("attached-motion", "weak-network"):
+            prelude = (
+                "local fields = (function()\n"
+                + (ROOT / "src/bridge/sync/fields.lua").read_text()
+                + "\nend)()\n"
+                + "local worldSchema = (function()\n"
+                + (ROOT / "src/bridge/sync/world_schema.lua").read_text()
+                + "\nend)()\n"
+            )
+        if name == "entity-fields":
+            prelude = (
+                "local createEntityFieldsProbe = (function()\n"
+                + (ROOT / "tests/fixtures/entity_fields_probe.lua").read_text()
+                + "\nend)()\n"
+            )
+        fixtures.append(factory(filename, options=options, prelude=prelude))
     write_suite(output, fixtures)
 
 

@@ -3,7 +3,6 @@
 #include "net/messages.h"
 #include "net/peer.h"
 #include "net/host_resolution.h"
-#include "core/snapshot_delta.h"
 #include "net/compression.h"
 #include "net/host_address.h"
 #include <winsock2.h>
@@ -38,7 +37,15 @@ bool validIdentity(const std::string& value) {
 struct Session::Impl {
     Observer observer = nullptr;
     bool debugLogs = false;
-    StateCompression compression;
+    std::shared_ptr<NetworkIo> io;
+    std::unique_ptr<BulkWorker> bulk;
+    std::shared_ptr<ByteResult<Stage>> encodingStage, decodingStage;
+    std::shared_ptr<ByteResult<std::vector<std::uint8_t>>> decodingCheckpoint;
+    BulkWorker& bulkWorker() {
+        if (!bulk)
+            bulk = std::make_unique<BulkWorker>();
+        return *bulk;
+    }
     void (*logger)(const std::string&);
     bool winsock = false, hosting = false, connecting = false, localReady = false,
          initialStarted = false;
@@ -54,7 +61,7 @@ struct Session::Impl {
     std::array<LobbyAccess, maxPlayers> access;
     unsigned localSlot = 0, playerCount = 1, activeMask = 1;
     std::uint16_t boundPort = 0;
-    SOCKET listener = INVALID_SOCKET;
+    std::shared_ptr<ListenerPipe> listener;
     std::array<std::unique_ptr<Peer>, maxPlayers> peers;
     std::vector<std::unique_ptr<Peer>> incoming;
     Start startSettings;
@@ -69,68 +76,136 @@ struct Session::Impl {
     Clock::time_point latencyAt = Clock::now() - std::chrono::seconds(1);
     std::uint32_t nextInput = 0, nextConsume = 0, committed = 0;
     std::optional<std::uint32_t> consumedLocal, verified;
-    std::optional<WorldState> receivedState, assembling;
+    std::optional<WorldState> receivedState;
     std::optional<Stage> receivedStage;
     std::optional<std::uint32_t> cinematicEpoch;
     unsigned cinematicReadyMask = 0;
     std::optional<unsigned> ending;
     bool endingCompleted = false;
     std::optional<Ending> receivedEnding;
-    std::optional<Stage> assemblingStage;
-    std::size_t stageSize = 0;
     std::array<std::optional<RoomRequest>, maxPlayers> roomRequests{};
     std::string integrationRun;
     std::uint32_t integrationEpoch = 0;
-    SideChannel integration, communication;
-    std::size_t worldSize = 0, snapshotSize = 0;
-    bool assemblingDelta = false;
-    std::uint32_t assemblingBase = 0, takenWorldEpoch = 0;
+    SideChannel integration, communication, lifecycle;
+    bool restartPending = false;
+    unsigned returnedMask = 0;
+    std::size_t snapshotSize = 0;
+    std::uint32_t takenWorldEpoch = 0;
     std::uint64_t worldSnapshots = 0, deltaSnapshots = 0, rawWorldBytes = 0, wireWorldBytes = 0,
                   fullWorldBytes = 0;
     std::uint64_t snapshotChecksum = 0;
-    Clock::time_point progress = Clock::now();
+    Clock::time_point progress = Clock::now(), checkpointAt = Clock::now();
 
     explicit Impl(void (*log)(const std::string&), Observer observe = nullptr, bool debug = false)
         : observer(observe), debugLogs(debug), logger(log) {
         WSADATA data{};
         winsock = WSAStartup(MAKEWORD(2, 2), &data) == 0;
+        if (winsock) {
+            try {
+                io = std::make_shared<NetworkIo>();
+            } catch (...) {
+                WSACleanup();
+                throw;
+            }
+        }
     }
     ~Impl() {
         shutdown();
+        bulk.reset();
+        io.reset();
         if (winsock)
             WSACleanup();
     }
     void shutdown() {
+        encodingStage.reset();
+        decodingStage.reset();
+        decodingCheckpoint.reset();
         // A DNS worker owns its result and its own Winsock reference. Closing
         // a session never waits for DNS or lets that worker touch a new one.
         resolving.reset();
         hostAddresses.clear();
-        if (listener != INVALID_SOCKET) {
-            closesocket(listener);
-            listener = INVALID_SOCKET;
+        if (listener) {
+            listener->closing.store(true, std::memory_order_release);
+            listener.reset();
+            io->signal();
         }
         for (auto& peer : peers)
-            peer.reset();
+            retirePeer(peer);
         incoming.clear();
         integration = {};
         communication = {};
+        lifecycle = {};
+        if (bulk)
+            bulk->stop();
+        if (io)
+            io->stop();
+    }
+    bool workersFinished() const {
+        return (!io || io->finished()) && (!bulk || bulk->finished());
+    }
+    void retirePeer(std::unique_ptr<Peer>& peer) {
+        if (peer && peer->pipe) {
+            const auto& totals = peer->pipe->world;
+            worldSnapshots += totals.snapshots.load();
+            deltaSnapshots += totals.deltas.load();
+            rawWorldBytes += totals.raw.load();
+            wireWorldBytes += totals.wire.load();
+            fullWorldBytes += totals.full.load();
+        }
+        peer.reset();
+    }
+    void resetRun() {
+        encodingStage.reset();
+        decodingStage.reset();
+        decodingCheckpoint.reset();
+        returnedMask = 0;
+        restartPending = false;
+        localReady = initialStarted = false;
+        nextInput = nextConsume = committed = 0;
+        consumedLocal.reset();
+        verified.reset();
+        latest = {};
+        inputRooms = {};
+        sequences = {};
+        commands = {};
+        roomRequests = {};
+        receivedState.reset();
+        receivedStage.reset();
+        cinematicEpoch.reset();
+        cinematicReadyMask = 0;
+        ending.reset();
+        endingCompleted = false;
+        receivedEnding.reset();
+        integration = {};
+        communication = {};
+        lifecycle = {};
+        takenWorldEpoch = integrationEpoch;
+        for (auto& p : peers)
+            if (p) {
+                p->ready = p->hasInput = false;
+                p->inputSequence = 0;
+                p->acknowledged.reset();
+                p->resetWorldCache(integrationEpoch);
+                p->sendingStage.reset();
+                p->floorAfterLoad.reset();
+                p->checkpoint.reset();
+                p->preparingCheckpoint.reset();
+                p->loadingAt = Clock::now();
+            }
+        progress = Clock::now();
     }
     void connectNextAddress() {
         peers[0].reset();
         while (nextHostAddress < hostAddresses.size()) {
             const auto& address = hostAddresses[nextHostAddress++];
-            const auto socketHandle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-            if (socketHandle == INVALID_SOCKET)
+            Socket setup(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+            if (setup.handle == INVALID_SOCKET)
                 throw std::runtime_error("Cannot create LAN socket");
-            peers[0] = std::make_unique<Peer>(socketHandle);
-            configure(socketHandle);
-            if (!connect(socketHandle, reinterpret_cast<const sockaddr*>(&address),
-                         sizeof(address)) ||
-                wouldBlock()) {
-                connecting = true;
-                return;
-            }
-            peers[0].reset();
+            configure(setup.handle);
+            peers[0] = std::make_unique<Peer>(
+                io, io->attach(std::exchange(setup.handle, INVALID_SOCKET), address));
+            connecting = true;
+            return;
         }
         throw std::runtime_error("Cannot connect to host");
     }
@@ -171,7 +246,7 @@ struct Session::Impl {
             return false;
         auto& peer = peers[hosting ? destination : 0];
         constexpr std::size_t maxSideChannelBacklog = 32768;
-        if (!peer || !peer->accepted || peer->queued > maxSideChannelBacklog)
+        if (!peer || !peer->accepted || peer->queuedBytes() > maxSideChannelBacklog)
             return false;
         Writer w(type);
         w.blob({reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()});
@@ -185,7 +260,7 @@ struct Session::Impl {
         for (unsigned slot = 1; slot < maxPlayers; ++slot)
             if (auto& peer = peers[slot]; peer && peer->accepted) {
                 if (now - peer->pingAt < std::chrono::seconds(peer->pingPending ? 5 : 1) ||
-                    peer->queued > 16384)
+                    peer->queuedBytes() > 16384)
                     continue;
                 Writer ping(Message::ping);
                 ping.u32(++peer->pingSequence);
@@ -240,6 +315,7 @@ struct Session::Impl {
                 ++next;
             }
         playerCount = next;
+        activeMask = (1u << playerCount) - 1;
         for (unsigned i = 0; i < playerCount; ++i) {
             auto& choice = choices[i];
             if (runRules.character != 65535)
@@ -268,7 +344,44 @@ struct Session::Impl {
         lobbyDirty = false;
         updateMods(true);
     }
-    Writer startMessage(Message type, const Start& value) {
+    void finishReturn() {
+        if (!hosting || state != Phase::returning || (returnedMask & activeMask) != activeMask)
+            return;
+        // A disconnected/rejoining seat has no completed local run. It is not
+        // part of this barrier or the next lobby's compact, connected roster.
+        for (unsigned slot = 1; slot < maxPlayers; ++slot)
+            if (peers[slot] && !(activeMask & (1u << slot))) {
+                Writer finish(Message::finish);
+                finish.u32(committed);
+                try {
+                    peers[slot]->sendMessage(finish);
+                    peers[slot]->flush();
+                } catch (...) {
+                }
+                remove(slot);
+            }
+        incoming.clear();
+        resetRun();
+        for (unsigned slot = 1; slot < maxPlayers; ++slot)
+            if (!peers[slot]) {
+                identities[slot].clear();
+                access[slot] = {};
+                choices[slot] = {};
+            }
+        ++rulesRevision;
+        choicesRequired = true;
+        for (auto& choice : choices)
+            choice.ready = false;
+        for (auto& peer : peers)
+            if (peer)
+                peer->loadingAt.reset();
+        state = Phase::lobby;
+        lobbyDirty = true;
+        if (logger)
+            logger("network_return=LOBBY");
+    }
+    Writer startMessage(Message type, const Start& value, std::size_t size = 0,
+                        std::uint64_t checksum = snapshotHash({})) {
         Writer w(type);
         writeRules(w, value.rules);
         w.string(value.seed);
@@ -280,8 +393,8 @@ struct Session::Impl {
         w.u32(integrationEpoch);
         w.u32(value.firstTick);
         w.u8(value.connected);
-        w.u32(value.snapshot.size());
-        w.u64(snapshotHash(value.snapshot));
+        w.u32(size);
+        w.u64(checksum);
         return w;
     }
     void finishCinematic() {
@@ -303,8 +416,8 @@ struct Session::Impl {
         inputRooms[slot].reset();
         commands[slot] = Command::none;
         roomRequests[slot].reset();
-        peers[slot].reset();
-        for (auto* channel : {&integration, &communication})
+        retirePeer(peers[slot]);
+        for (auto* channel : {&integration, &communication, &lifecycle})
             std::erase_if(channel->queue,
                           [slot](const auto& message) { return message.sender == slot; });
         if (state == Phase::lobby) {
@@ -342,7 +455,9 @@ struct Session::Impl {
     void message(unsigned slot, Reader& r) {
         const auto type = static_cast<Message>(r.u8());
         auto& p = *peers[slot];
-        if ((type == Message::integration || type == Message::communication) && p.accepted) {
+        if ((type == Message::integration || type == Message::communication ||
+             type == Message::lifecycle) &&
+            p.accepted) {
             const bool chat = type == Message::communication;
             auto bytes = r.blob(chat ? maxCommunicationSize : maxIntegrationSize);
             r.finish();
@@ -352,7 +467,9 @@ struct Session::Impl {
             if (!chat && hosting && state == Phase::running &&
                 (!p.ready || p.waiting || p.rejoining))
                 return;
-            (chat ? communication : integration)
+            (chat                         ? communication
+             : type == Message::lifecycle ? lifecycle
+                                          : integration)
                 .receive(hosting ? slot : 0, {bytes.begin(), bytes.end()});
             return;
         }
@@ -372,6 +489,7 @@ struct Session::Impl {
                 p.pingPending = false;
                 if (p.minimumLatency < 0 || latency[slot] < p.minimumLatency)
                     p.minimumLatency = latency[slot];
+                p.pipe->minimumLatency.store(p.minimumLatency);
             }
             return;
         }
@@ -393,6 +511,13 @@ struct Session::Impl {
             }
             if (!p.accepted)
                 throw std::runtime_error("Handshake required");
+            if (type == Message::returnLobby) {
+                const auto run = r.string();
+                if (run == integrationRun && ending && *ending != ending::gameOver &&
+                    (state == Phase::running || state == Phase::returning))
+                    returnedMask |= 1u << slot;
+                return;
+            }
             if (type == Message::cinematic && state == Phase::running) {
                 const auto epoch = r.u32();
                 if (!cinematicEpoch || epoch != *cinematicEpoch || r.u8() != 1 ||
@@ -419,16 +544,22 @@ struct Session::Impl {
                 return;
             }
             if (type == Message::loaded && p.checkpoint) {
-                if (p.loaded || p.snapshotSent != p.checkpoint->snapshot.size() ||
-                    r.u64() != snapshotHash(p.checkpoint->snapshot))
+                if (p.loaded ||
+                    p.pipe->checkpointSent.load(std::memory_order_acquire) !=
+                        p.checkpoint->wire.size() ||
+                    r.u64() != p.checkpoint->checksum)
                     throw std::runtime_error("Invalid checkpoint receipt");
                 p.loaded = true;
                 p.advancedAt = Clock::now();
                 return;
             }
             if (type == Message::ready && state == Phase::running) {
+                const auto run = r.string();
                 const auto epoch = r.u32();
-                if (epoch != (p.checkpoint ? p.checkpoint->firstTick : startSettings.firstTick) ||
+                if (run != integrationRun)
+                    return;
+                if (epoch != (p.checkpoint ? p.checkpoint->settings.firstTick
+                                           : startSettings.firstTick) ||
                     (p.checkpoint && !p.loaded))
                     throw std::runtime_error("Invalid engine readiness");
                 p.ready = true;
@@ -452,49 +583,38 @@ struct Session::Impl {
                 }
                 return;
             }
-            if (type == Message::input && (state == Phase::running || state == Phase::finishing)) {
-                const auto sequence = r.u32();
-                const auto value = r.input();
-                std::optional<InputRoom> room;
-                const auto hasRoom = r.u8();
-                if (hasRoom > 1)
-                    throw std::runtime_error("Invalid input room flag");
-                if (hasRoom) {
-                    room = InputRoom{r.u32(), static_cast<std::int16_t>(r.u16()), r.u8()};
-                    room->introSerial = r.u32();
-                    const auto active = r.u8();
-                    if (active > 1)
-                        throw std::runtime_error("Invalid intro state");
-                    room->introActive = active != 0;
-                    if (room->index < -20 || room->index >= 169 || room->dimension > 2)
-                        throw std::runtime_error("Invalid input room");
-                }
-                if (!p.ready || p.waiting || state == Phase::finishing)
+            if (type == Message::input && (state == Phase::running || state == Phase::finishing ||
+                                           state == Phase::returning)) {
+                const auto sample = readInput(r);
+                const auto sequence = sample.sequence;
+                const auto& value = sample.input;
+                const auto& room = sample.room;
+                if (!p.ready || p.waiting || state != Phase::running)
                     return;
                 if (p.hasInput && sequence <= p.inputSequence)
                     throw std::runtime_error("Duplicate input sequence");
                 p.hasInput = true;
                 p.inputSequence = sequence;
                 p.inputAt = Clock::now();
-                const bool sameRoom = room && inputRooms[slot] ? room->sameRoom(*inputRooms[slot])
-                                                               : room == inputRooms[slot];
-                const auto edges = latest[slot].triggered & (sameRoom ? 0xffffu : menuActionMask);
+                const auto edges = retainedInputEdges(latest[slot], inputRooms[slot], room);
                 latest[slot] = value;
                 latest[slot].triggered |= edges;
                 inputRooms[slot] = room;
                 sequences[slot] = sequence;
                 return;
             }
-            if (type == Message::control && state == Phase::running) {
+            if (type == Message::control &&
+                (state == Phase::running || state == Phase::returning)) {
                 const auto c = r.u8();
                 if (!c || c > static_cast<unsigned>(Command::leave) ||
                     c == static_cast<unsigned>(Command::saveExit))
                     throw std::runtime_error("Unauthorized shared command");
-                if (p.ready)
+                if (p.ready && state == Phase::running)
                     commands[slot] = static_cast<Command>(c);
                 return;
             }
-            if (type == Message::roomRequest && state == Phase::running) {
+            if (type == Message::roomRequest &&
+                (state == Phase::running || state == Phase::returning)) {
                 RoomRequest value;
                 value.stage = r.u8();
                 value.type = r.u8();
@@ -509,14 +629,16 @@ struct Session::Impl {
                     teleport > 1)
                     throw std::runtime_error("Invalid room command");
                 value.teleport = teleport != 0;
-                if (p.ready && !p.waiting && !p.rejoining)
+                if (p.ready && !p.waiting && !p.rejoining && state == Phase::running)
                     roomRequests[slot] = value;
                 return;
             }
-            if (type == Message::applied &&
-                (state == Phase::running || state == Phase::finishing)) {
+            if (type == Message::applied && (state == Phase::running || state == Phase::finishing ||
+                                             state == Phase::returning)) {
                 const auto epoch = r.u32();
                 const auto tick = r.u32();
+                if (state == Phase::returning)
+                    return;
                 // A receipt sent before a reliable floor boundary may arrive
                 // after its caches were retired. It cannot establish a new base.
                 if (epoch < integrationEpoch)
@@ -525,14 +647,6 @@ struct Session::Impl {
                     throw std::runtime_error("Invalid state receipt epoch");
                 if (tick >= nextConsume || (p.acknowledged && tick <= *p.acknowledged))
                     throw std::runtime_error("Invalid state receipt");
-                const auto found =
-                    std::find_if(p.flight.begin(), p.flight.end(), [tick](const auto& value) {
-                        return value.tick == tick && value.complete;
-                    });
-                if (found == p.flight.end())
-                    throw std::runtime_error("Receipt for an unsent state");
-                p.baseline = *found;
-                p.flight.erase(p.flight.begin(), std::next(found));
                 p.acknowledged = tick;
                 p.advancedAt = Clock::now();
                 return;
@@ -544,6 +658,7 @@ struct Session::Impl {
             if (!localSlot || localSlot >= maxPlayers)
                 throw std::runtime_error("Invalid assigned slot");
             p.accepted = true;
+            p.pipe->answerPing.store(true);
             state = Phase::lobby;
             return;
         }
@@ -574,7 +689,8 @@ struct Session::Impl {
         if (type == Message::ending && state == Phase::running) {
             const auto value = r.u8();
             const auto completed = r.u8();
-            if (value < 2 || value > 14 || ending || completed > 1 || (completed && !runRules.id))
+            if (value < ending::gameOver || value > ending::lastCinematic || ending ||
+                completed > 1 || (completed && (!runRules.id || value == ending::gameOver)))
                 throw std::runtime_error("Invalid authoritative ending");
             const auto progress = r.progress();
             if (!progress)
@@ -583,12 +699,15 @@ struct Session::Impl {
             endingCompleted = completed != 0;
             receivedEnding = Ending{value, *progress, endingCompleted};
             receivedState.reset();
-            assembling.reset();
             receivedStage.reset();
-            assemblingStage.reset();
             return;
         }
-        if (type == Message::lobby && state == Phase::lobby) {
+        if (type == Message::lobby && (state == Phase::lobby || state == Phase::returning)) {
+            if (state == Phase::returning) {
+                resetRun();
+                p.loadingAt.reset();
+                state = Phase::lobby;
+            }
             playerCount = r.u8();
             localSlot = r.u8();
             rulesRevision = r.u32();
@@ -607,6 +726,7 @@ struct Session::Impl {
                 value = r.access();
             if (access[localSlot] != localAccess)
                 throw std::runtime_error("Lobby changed local profile access");
+            activeMask = (1u << playerCount) - 1;
             return;
         }
         if (type == Message::waitFloor) {
@@ -621,25 +741,22 @@ struct Session::Impl {
             receivedState.reset();
             return;
         }
-        if (type == Message::start && (state == Phase::lobby || state == Phase::waiting)) {
-            Start value;
-            value.rules = readRules(r);
-            value.seed = r.string();
-            value.difficulty = r.u8();
-            for (auto& c : value.characters)
-                c = r.u16();
-            value.progress = r.progress();
-            integrationRun = r.string();
-            integrationEpoch = r.u32();
-            if (integrationRun.size() != 32)
-                throw std::runtime_error("Invalid integration run identity");
+        if ((type == Message::start && (state == Phase::lobby || state == Phase::waiting)) ||
+            (type == Message::restart && state == Phase::running)) {
+            const bool restarting = type == Message::restart;
+            const auto previousEpoch = integrationEpoch;
+            auto envelope = readStart(r);
+            auto value = std::move(envelope.settings);
+            integrationRun = std::move(envelope.run);
+            integrationEpoch = envelope.epoch;
+            if (restarting && integrationEpoch <= previousEpoch)
+                throw std::runtime_error("Invalid new run epoch");
             integration.queue.clear();
-            value.firstTick = r.u32();
-            value.connected = r.u8();
-            snapshotSize = r.u32();
-            snapshotChecksum = r.u64();
+            snapshotSize = envelope.size;
+            snapshotChecksum = envelope.checksum;
             if (value.seed.size() != 8 || value.difficulty > 3 || !(value.connected & 1) ||
-                value.connected >= (1u << playerCount) || snapshotSize > maxSnapshotSize)
+                value.connected >= (1u << playerCount) ||
+                snapshotSize > maxSnapshotSize + StateCompression::headerSize)
                 throw std::runtime_error("Invalid start state");
             if (!localAccess.allowsRules(value.rules, snapshotSize != 0) ||
                 !localAccess.allowsCharacter(value.characters[localSlot], snapshotSize != 0) ||
@@ -647,162 +764,103 @@ struct Session::Impl {
                  value.characters[localSlot] != value.rules.character) ||
                 (value.rules.difficulty != 255 && value.difficulty != value.rules.difficulty))
                 throw std::runtime_error("Start is unavailable for the local profile");
+            if (restarting) {
+                if (snapshotSize || value.firstTick || value.rules != runRules ||
+                    value.characters != startSettings.characters ||
+                    value.difficulty != startSettings.difficulty)
+                    throw std::runtime_error("Invalid new run settings");
+                resetRun();
+                restartPending = true;
+            }
             localReady = false;
             receivedState.reset();
-            assembling.reset();
             startSettings = value;
             runRules = value.rules;
             activeMask = value.connected;
             nextConsume = value.firstTick;
             nextInput = 0;
             state = snapshotSize ? Phase::loading : Phase::running;
-            progress = Clock::now();
-            return;
-        }
-        if (type == Message::snapshot && state == Phase::loading) {
-            auto& target = startSettings;
-            const auto offset = r.u32();
-            const auto bytes = r.blob(3000);
-            if (offset != target.snapshot.size() || bytes.empty() || offset > snapshotSize ||
-                bytes.size() > snapshotSize - offset)
-                throw std::runtime_error("Invalid checkpoint chunk");
-            target.snapshot.insert(target.snapshot.end(), bytes.begin(), bytes.end());
-            progress = Clock::now();
-            if (target.snapshot.size() == snapshotSize) {
-                if (snapshotHash(target.snapshot) != snapshotChecksum)
-                    throw std::runtime_error("Checkpoint transfer is damaged");
-                Writer w(Message::loaded);
-                w.u64(snapshotChecksum);
-                p.sendMessage(w);
-                state = Phase::running;
-            }
-            return;
-        }
-        if (type == Message::stage && state == Phase::running && localReady) {
-            Stage value;
-            value.epoch = r.u32();
-            value.level = r.u8();
-            value.type = r.u8();
-            value.animation = r.u8();
-            const auto same = r.u8();
-            for (auto& seed : value.seeds)
-                seed = r.u32();
-            for (auto& flags : value.stateFlags)
-                flags = r.u32();
-            const auto restart = r.u8();
-            value.restart = restart;
-            value.cinematic = r.u8();
-            value.sourceRoom = static_cast<std::int16_t>(r.u16());
-            const auto total = r.u32(), offset = r.u32();
-            auto bytes = r.blob(3000);
-            if (!value.epoch || value.level < 1 || value.level > 13 || value.type > 5 || same > 1 ||
-                total > maxWorldSize + 5 || restart > 2 || value.sourceRoom < -20 ||
-                value.sourceRoom >= 169 ||
-                (value.cinematic &&
-                 (value.cinematic != 25 || value.level != 13 || value.type != 1 ||
-                  value.animation != 1 || same || restart || total)) ||
-                (restart && (total || value.animation || same || value.level != 1 || value.type)) ||
-                (total ? value.animation != 12 : value.animation > 6))
-                throw std::runtime_error("Invalid floor transition");
-            value.same = same != 0;
-            if (!offset) {
-                assemblingStage = std::move(value);
-                stageSize = total;
-                receivedState.reset();
-                assembling.reset();
-                p.resetWorldCache();
-            }
-            if (!assemblingStage || assemblingStage->epoch != value.epoch ||
-                assemblingStage->level != value.level || assemblingStage->type != value.type ||
-                assemblingStage->animation != value.animation ||
-                assemblingStage->same != value.same ||
-                assemblingStage->stateFlags != value.stateFlags ||
-                assemblingStage->seeds != value.seeds ||
-                assemblingStage->restart != value.restart ||
-                assemblingStage->cinematic != value.cinematic || total != stageSize ||
-                assemblingStage->sourceRoom != value.sourceRoom ||
-                offset != assemblingStage->rewind.size() || offset > total ||
-                bytes.size() > total - offset || (total && bytes.empty()))
-                throw std::runtime_error("Invalid rewind transaction chunk");
-            assemblingStage->rewind.insert(assemblingStage->rewind.end(), bytes.begin(),
-                                           bytes.end());
-            if (assemblingStage->rewind.size() == total) {
-                if (total)
-                    assemblingStage->rewind = compression.expand(assemblingStage->rewind);
-                integrationEpoch = assemblingStage->epoch;
-                if (assemblingStage->cinematic) {
-                    if (cinematicEpoch)
-                        throw std::runtime_error("Overlapping cinematic transaction");
-                    cinematicEpoch = assemblingStage->epoch;
-                    cinematicReadyMask = 0;
-                }
-                receivedStage = std::move(assemblingStage);
-                assemblingStage.reset();
-            }
-            progress = Clock::now();
-            return;
-        }
-        if (type == Message::world && state == Phase::running) {
-            const auto tick = r.u32(), offset = r.u32(), total = r.u32();
-            if (!offset) {
-                if (total == 0 || total > maxWorldSize + 5 ||
-                    (receivedState && tick <= receivedState->tick) ||
-                    (verified && tick <= *verified))
-                    throw std::runtime_error("Invalid world state header");
-                assembling = WorldState{};
-                assembling->tick = tick;
-                assembling->epoch = r.u32();
-                const auto mode = r.u8();
-                assemblingBase = r.u32();
-                if (assembling->epoch != integrationEpoch || mode > 1 || (!mode && assemblingBase))
-                    throw std::runtime_error("Invalid world encoding header");
-                assemblingDelta = mode != 0;
-                assembling->connected = r.u8();
-                assembling->pauseOwner = r.u8();
-                const auto paused = r.u8();
-                if (!(assembling->connected & 1) || assembling->connected >= (1u << playerCount) ||
-                    assembling->pauseOwner >= playerCount || paused > 1)
-                    throw std::runtime_error("Invalid world roster");
-                assembling->paused = paused != 0;
-                for (auto& seq : assembling->inputSequences)
-                    seq = r.u32();
-                worldSize = total;
-            }
-            const auto bytes = r.blob(3000);
-            if (!assembling || assembling->tick != tick || total != worldSize ||
-                offset != assembling->bytes.size() || bytes.empty() ||
-                bytes.size() > total - offset)
-                throw std::runtime_error("Invalid world state chunk");
-            assembling->bytes.insert(assembling->bytes.end(), bytes.begin(), bytes.end());
-            if (assembling->bytes.size() == total) {
-                const auto began = observer ? Clock::now() : Clock::time_point{};
-                assembling->bytes = compression.expand(assembling->bytes);
-                if (assemblingDelta) {
-                    const auto base =
-                        std::find_if(p.decoded.begin(), p.decoded.end(), [&](const auto& value) {
-                            return value.tick == assemblingBase;
-                        });
-                    if (base == p.decoded.end())
-                        throw std::runtime_error("World delta baseline is unavailable");
-                    assembling->bytes = core::SnapshotDelta::apply(*base->bytes, assembling->bytes);
-                }
-                if (observer)
-                    observer(
-                        "decompress",
-                        std::chrono::duration<double, std::milli>(Clock::now() - began).count());
-                p.decoded.push_back(
-                    {assembling->tick,
-                     std::make_shared<const std::vector<std::uint8_t>>(assembling->bytes)});
-                while (p.decoded.size() > 2 * Peer::maxInFlightStates ||
-                       p.cachedBytes() > Peer::maxCachedBytes)
-                    p.decoded.pop_front();
-                receivedState = std::move(assembling);
-                assembling.reset();
-            }
+            checkpointAt = Clock::now();
             progress = Clock::now();
             return;
         }
         throw std::runtime_error("Unexpected host message");
+    }
+    void receiveBulk(ReceivedBulk value) {
+        if (hosting)
+            throw std::runtime_error("Unexpected client bulk transfer");
+        receivedState.reset();
+        progress = Clock::now();
+        if (value.stage) {
+            if (state != Phase::running || !localReady)
+                throw std::runtime_error("Unexpected floor transfer");
+            peers[0]->resetWorldCache();
+            if (value.stage->rewind.empty())
+                receiveStage(std::move(*value.stage));
+            else
+                decodingStage = bulkWorker().submit(
+                    [stage = std::move(*value.stage)](StateCompression& codec) mutable {
+                        stage.rewind = codec.expand(stage.rewind);
+                        return stage;
+                    });
+        } else {
+            if (state != Phase::loading || value.checkpoint.size() != snapshotSize ||
+                decodingCheckpoint)
+                throw std::runtime_error("Unexpected checkpoint transfer");
+            decodingCheckpoint =
+                restoreCheckpoint(bulkWorker(), std::move(value.checkpoint), snapshotChecksum);
+        }
+    }
+    void receiveStage(Stage value) {
+        integrationEpoch = value.epoch;
+        if (value.cinematic) {
+            if (cinematicEpoch)
+                throw std::runtime_error("Overlapping cinematic transaction");
+            cinematicEpoch = value.epoch;
+            cinematicReadyMask = 0;
+        }
+        receivedStage = std::move(value);
+    }
+    void sendStage(const Stage& encoded) {
+        const auto data = std::make_shared<const Stage>(encoded);
+        for (unsigned slot = 1; slot < playerCount; ++slot)
+            if (auto& p = peers[slot]; p && p->accepted) {
+                if (p->rejoining) {
+                    p->floorAfterLoad = encoded;
+                    continue;
+                }
+                if (p->ready && !p->waiting)
+                    p->sendingStage = data;
+            }
+    }
+    void finishBytes() {
+        io->check();
+        if (bulk)
+            bulk->check();
+        if (decodingCheckpoint && decodingCheckpoint->ready()) {
+            startSettings.snapshot = decodingCheckpoint->take();
+            if (logger)
+                logger("checkpoint_received wire=" + std::to_string(snapshotSize) +
+                       " raw=" + std::to_string(startSettings.snapshot.size()) + " restore_ms=" +
+                       std::to_string(decodingCheckpoint->milliseconds) + " transfer_restore_ms=" +
+                       std::to_string(
+                           std::chrono::duration<double, std::milli>(Clock::now() - checkpointAt)
+                               .count()));
+            decodingCheckpoint.reset();
+            Writer loaded(Message::loaded);
+            loaded.u64(snapshotChecksum);
+            peers[0]->sendMessage(loaded);
+            state = Phase::running;
+            progress = Clock::now();
+        }
+        if (decodingStage && decodingStage->ready()) {
+            receiveStage(decodingStage->take());
+            decodingStage.reset();
+        }
+        if (encodingStage && encodingStage->ready()) {
+            sendStage(encodingStage->take());
+            encodingStage.reset();
+        }
     }
     void sendPending() {
         if (!hosting)
@@ -810,112 +868,50 @@ struct Session::Impl {
         for (unsigned slot = 1; slot < playerCount; ++slot)
             if (peers[slot]) {
                 auto& p = *peers[slot];
+                if (p.preparingCheckpoint) {
+                    if (!p.preparingCheckpoint->ready())
+                        continue;
+                    // One immutable compressed result is shared by all recipients.
+                    if (p.preparingCheckpoint->error)
+                        std::rethrow_exception(p.preparingCheckpoint->error);
+                    p.checkpoint = p.preparingCheckpoint->value.value();
+                    if (logger)
+                        logger("checkpoint_pack slot=" + std::to_string(slot) +
+                               " raw=" + std::to_string(p.checkpoint->rawSize) +
+                               " wire=" + std::to_string(p.checkpoint->wire.size()) +
+                               " ms=" + std::to_string(p.preparingCheckpoint->milliseconds));
+                    p.preparingCheckpoint.reset();
+                }
                 if (p.checkpoint && !p.loaded) {
-                    const auto& bytes = p.checkpoint->snapshot;
-                    for (unsigned part = 0;
-                         part < 8 && p.queued < 32768 && p.snapshotSent < bytes.size(); ++part) {
-                        const auto n = std::min<std::size_t>(3000, bytes.size() - p.snapshotSent);
-                        Writer w(Message::snapshot);
-                        w.u32(p.snapshotSent);
-                        w.blob(std::span(bytes).subspan(p.snapshotSent, n));
-                        p.sendMessage(w);
-                        p.snapshotSent += n;
+                    if (!p.checkpointQueued) {
+                        auto transfer = std::make_shared<ReliableTransfer>();
+                        transfer->checkpoint = p.checkpoint;
+                        transfer->header =
+                            startMessage(Message::start, p.checkpoint->settings,
+                                         p.checkpoint->wire.size(), p.checkpoint->checksum)
+                                .bytes;
+                        p.checkpointQueued = p.sendTransfer(std::move(transfer));
                     }
                     continue;
                 }
                 if (!p.ready)
                     continue;
                 if (p.sendingStage) {
-                    for (unsigned part = 0; part < 8 && p.queued < 32768 && p.sendingStage;
-                         ++part) {
-                        p.sendMessage(stageMessage(*p.sendingStage, p.stageSent));
-                        p.stageSent += std::min<std::size_t>(3000, p.sendingStage->rewind.size() -
-                                                                       p.stageSent);
-                        if (p.stageSent == p.sendingStage->rewind.size())
-                            p.sendingStage.reset();
-                    }
-                    if (p.sendingStage)
+                    auto transfer = std::make_shared<ReliableTransfer>();
+                    transfer->stage = p.sendingStage;
+                    if (!p.sendTransfer(std::move(transfer)))
                         continue;
+                    p.sendingStage.reset();
                 }
-                if (!p.sending && p.pending) {
-                    if (p.flight.size() >= p.window() ||
-                        p.inFlightBytes() >= Peer::maxInFlightBytes ||
-                        p.cachedBytes() + p.pending->bytes.capacity() > Peer::maxCachedBytes)
+                if (p.pending && !encodingStage) {
+                    p.pending->epoch = integrationEpoch;
+                    p.flush();
+                    if (!p.outgoing.empty())
                         continue;
-                    p.sending = std::move(p.pending);
+                    p.pipe->publication.publish(std::make_unique<WorldPublication>(
+                        WorldPublication{p.pipe->generation.load(), std::move(*p.pending)}));
                     p.pending.reset();
-                    p.worldSent = 0;
-                    const auto size = p.sending->bytes.size();
-                    const auto began = observer ? Clock::now() : Clock::time_point{};
-                    auto raw = std::make_shared<const std::vector<std::uint8_t>>(
-                        std::move(p.sending->bytes));
-                    auto full = compression.compress(*raw);
-                    const auto fullSize = full.size();
-                    p.sendingDelta = false;
-                    p.sendingBase = 0;
-                    if (p.baseline) {
-                        const auto deltaBegan = observer ? Clock::now() : Clock::time_point{};
-                        if (const auto patch =
-                                core::SnapshotDelta::encode(*p.baseline->bytes, *raw)) {
-                            auto delta = compression.compress(*patch);
-                            if (delta.size() < full.size()) {
-                                full = std::move(delta);
-                                p.sendingDelta = true;
-                                p.sendingBase = p.baseline->tick;
-                            }
-                        }
-                        if (observer)
-                            observer("delta.encode", std::chrono::duration<double, std::milli>(
-                                                         Clock::now() - deltaBegan)
-                                                         .count());
-                    }
-                    p.sending->bytes = std::move(full);
-                    p.sending->epoch = integrationEpoch;
-                    p.flight.push_back({p.sending->tick, std::move(raw), p.sending->bytes.size()});
-                    ++worldSnapshots;
-                    deltaSnapshots += p.sendingDelta;
-                    rawWorldBytes += size;
-                    wireWorldBytes += p.sending->bytes.size();
-                    fullWorldBytes += fullSize;
-                    if (observer)
-                        observer("compress",
-                                 std::chrono::duration<double, std::milli>(Clock::now() - began)
-                                     .count());
-                    if (logger && debugLogs && p.sending->tick % 300 == 0)
-                        logger("state_transfer slot=" + std::to_string(slot) + " tick=" +
-                               std::to_string(p.sending->tick) + " raw=" + std::to_string(size) +
-                               " wire=" + std::to_string(p.sending->bytes.size()) +
-                               " full_wire=" + std::to_string(fullSize) +
-                               " delta=" + std::to_string(p.sendingDelta) +
-                               " base=" + std::to_string(p.sendingBase));
-                }
-                if (!p.sending)
-                    continue;
-                auto& value = *p.sending;
-                for (unsigned part = 0;
-                     part < 8 && p.queued < 16384 && p.worldSent < value.bytes.size(); ++part) {
-                    const auto n = std::min<std::size_t>(3000, value.bytes.size() - p.worldSent);
-                    Writer w(Message::world);
-                    w.u32(value.tick);
-                    w.u32(p.worldSent);
-                    w.u32(value.bytes.size());
-                    if (!p.worldSent) {
-                        w.u32(value.epoch);
-                        w.u8(p.sendingDelta);
-                        w.u32(p.sendingBase);
-                        w.u8(value.connected);
-                        w.u8(value.pauseOwner);
-                        w.u8(value.paused);
-                        for (auto seq : value.inputSequences)
-                            w.u32(seq);
-                    }
-                    w.blob(std::span(value.bytes).subspan(p.worldSent, n));
-                    p.sendMessage(w);
-                    p.worldSent += n;
-                }
-                if (p.worldSent == value.bytes.size()) {
-                    p.flight.back().complete = true;
-                    p.sending.reset();
+                    io->signal();
                 }
             }
     }
@@ -990,23 +986,24 @@ bool Session::host(std::uint16_t port, const std::string& fingerprint, const std
     if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty() || !access.valid())
         return false;
     try {
-        impl->listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (impl->listener == INVALID_SOCKET)
+        Socket setup(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+        const auto listener = setup.handle;
+        if (listener == INVALID_SOCKET)
             throw std::runtime_error("Cannot create LAN socket");
-        configure(impl->listener);
+        configure(listener);
         BOOL exclusive = TRUE;
-        setsockopt(impl->listener, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+        setsockopt(listener, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
                    reinterpret_cast<const char*>(&exclusive), sizeof(exclusive));
         sockaddr_in a{};
         a.sin_family = AF_INET;
         a.sin_port = htons(port);
         a.sin_addr.s_addr = INADDR_ANY;
-        if (bind(impl->listener, reinterpret_cast<sockaddr*>(&a), sizeof(a)) ||
-            listen(impl->listener, 3))
+        if (bind(listener, reinterpret_cast<sockaddr*>(&a), sizeof(a)) || listen(listener, 3))
             throw std::runtime_error("LAN port is unavailable");
         int size = sizeof(a);
-        if (getsockname(impl->listener, reinterpret_cast<sockaddr*>(&a), &size))
+        if (getsockname(listener, reinterpret_cast<sockaddr*>(&a), &size))
             throw std::runtime_error("Cannot inspect LAN port");
+        impl->listener = impl->io->listen(std::exchange(setup.handle, INVALID_SOCKET));
         impl->boundPort = ntohs(a.sin_port);
         impl->hosting = true;
         impl->fingerprint = fingerprint;
@@ -1053,7 +1050,12 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
     }
 }
 bool Session::reconnect() {
-    if (impl->hosting || impl->state != Phase::failed || impl->hostIP.empty())
+    if (impl->hosting || (impl->state != Phase::failed && impl->state != Phase::closed) ||
+        impl->hostIP.empty())
+        return false;
+    std::erase_if(retiring, [](const auto& value) { return value->workersFinished(); });
+    constexpr std::size_t maxRetiringConnections = 2;
+    if (retiring.size() >= maxRetiringConnections)
         return false;
     const auto ip = impl->hostIP, identity = impl->identity, fingerprint = impl->fingerprint,
                mods = impl->mods;
@@ -1063,6 +1065,8 @@ bool Session::reconnect() {
     const auto debug = impl->debugLogs;
     const auto choices = impl->choices;
     const auto access = impl->localAccess;
+    impl->shutdown();
+    retiring.push_back(std::move(impl));
     impl = std::make_unique<Impl>(logger, observer, debug);
     impl->choices = choices;
     return join(ip, port, fingerprint, identity, mods, access);
@@ -1083,25 +1087,19 @@ bool Session::beginStage(const Stage& value) {
         impl->cinematicReadyMask = 0;
     }
     impl->integrationEpoch = value.epoch;
-    auto encoded = value;
-    if (!encoded.rewind.empty())
-        encoded.rewind = impl->compression.compress(encoded.rewind);
-    for (unsigned slot = 1; slot < impl->playerCount; ++slot)
-        if (auto& p = impl->peers[slot]; p && p->accepted) {
-            if (p->rejoining) {
-                p->floorAfterLoad = encoded;
-                continue;
-            }
-            if (!p->ready || p->waiting)
-                continue;
-            try {
-                // An unfinished view is superseded. Already queued chunks precede
-                // this reliable event; no chunk from that view may follow it.
-                p->beginStage(encoded);
-            } catch (const std::exception&) {
-                impl->remove(slot);
-            }
-        }
+    for (auto& p : impl->peers)
+        if (p)
+            p->resetWorldCache(value.epoch);
+    if (value.rewind.empty()) {
+        impl->encodingStage.reset();
+        impl->sendStage(value);
+    } else {
+        impl->encodingStage =
+            impl->bulkWorker().submit([value = Stage(value)](StateCompression& codec) mutable {
+                value.rewind = codec.compress(value.rewind);
+                return value;
+            });
+    }
     impl->sendPending();
     for (unsigned slot = 1; slot < impl->playerCount; ++slot)
         if (auto& p = impl->peers[slot]; p) {
@@ -1139,8 +1137,9 @@ bool Session::cinematicReady() {
     return true;
 }
 bool Session::beginEnding(unsigned ending, const Progress& progress, bool completed) {
-    if (!impl->hosting || impl->state != Phase::running || ending < 2 || ending > 14 ||
-        (completed && !impl->runRules.id))
+    if (!impl->hosting || impl->state != Phase::running || ending < ending::gameOver ||
+        ending > ending::lastCinematic ||
+        (completed && (!impl->runRules.id || ending == ending::gameOver)))
         return false;
     if (impl->ending)
         return *impl->ending == ending && impl->endingCompleted == completed;
@@ -1155,7 +1154,7 @@ bool Session::beginEnding(unsigned ending, const Progress& progress, bool comple
             // The terminal event precedes finish/EOF. Never append an unfinished
             // view after it, even when the engine exits during this update.
             try {
-                p->sending.reset();
+                p->resetWorldCache(impl->integrationEpoch);
                 p->pending.reset();
                 p->sendingStage.reset();
                 p->sendMessage(w);
@@ -1211,9 +1210,11 @@ std::uint32_t Session::worldEpoch() const {
     return impl->integrationEpoch;
 }
 void Session::poll() {
+    std::erase_if(retiring, [](const auto& value) { return value->workersFinished(); });
     if (impl->state == Phase::failed || impl->state == Phase::closed || impl->state == Phase::idle)
         return;
     try {
+        impl->finishBytes();
         if (impl->resolving) {
             if (!impl->resolving->ready.load(std::memory_order_acquire)) {
                 if (Clock::now() - impl->joinAt > std::chrono::seconds(10))
@@ -1226,49 +1227,32 @@ void Session::poll() {
             impl->resolving.reset();
             impl->connectNextAddress();
         }
-        if (impl->listener != INVALID_SOCKET) {
-            SOCKET s = accept(impl->listener, nullptr, nullptr);
-            if (s != INVALID_SOCKET) {
-                if (impl->state == Phase::running && impl->incoming.size() < 3) {
-                    impl->incoming.push_back(std::make_unique<Peer>(s));
-                    configure(s);
-                } else {
+        if (impl->listener) {
+            if (impl->listener->failed.load(std::memory_order_acquire))
+                throw std::runtime_error("LAN accept failed");
+            if (auto accepted = impl->listener->accepted.pop()) {
+                auto peer = std::make_unique<Peer>(impl->io, std::move(*accepted));
+                if (impl->state == Phase::running && impl->incoming.size() < 3)
+                    impl->incoming.push_back(std::move(peer));
+                else {
                     unsigned slot = 1;
                     while (slot < maxPlayers && impl->peers[slot])
                         ++slot;
-                    if (slot == maxPlayers || impl->state != Phase::lobby)
-                        closesocket(s);
-                    else {
-                        impl->peers[slot] = std::make_unique<Peer>(s);
-                        configure(s);
-                    }
+                    if (slot < maxPlayers && impl->state == Phase::lobby)
+                        impl->peers[slot] = std::move(peer);
                 }
-            } else if (!wouldBlock())
-                throw std::runtime_error("LAN accept failed");
+            }
         }
         if (impl->connecting) {
             auto& p = *impl->peers[0];
-            fd_set write, error;
-            FD_ZERO(&write);
-            FD_ZERO(&error);
-            FD_SET(p.handle, &write);
-            FD_SET(p.handle, &error);
-            timeval timeout{};
-            if (select(0, nullptr, &write, &error, &timeout) == SOCKET_ERROR)
-                throw std::runtime_error("Host connection refused");
-            if (FD_ISSET(p.handle, &error)) {
+            const auto status = p.pipe->state.load(std::memory_order_acquire);
+            if (status == ConnectionPipe::failed || status == ConnectionPipe::closed) {
                 impl->connectNextAddress();
                 return;
             }
-            if (!FD_ISSET(p.handle, &write)) {
+            if (status != ConnectionPipe::connected) {
                 if (Clock::now() - impl->joinAt > std::chrono::seconds(10))
                     throw std::runtime_error("Host connection timed out");
-                return;
-            }
-            int status = 0, size = sizeof(status);
-            getsockopt(p.handle, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&status), &size);
-            if (status) {
-                impl->connectNextAddress();
                 return;
             }
             impl->connecting = false;
@@ -1287,15 +1271,47 @@ void Session::poll() {
                     if (!p.accepted && Clock::now() - p.connectedAt > std::chrono::seconds(10))
                         throw std::runtime_error("Handshake timed out");
                     p.flush();
-                    p.receive([&](Reader& r) {
-                        impl->message(i, r);
-                        p.packetAt = Clock::now();
-                    });
+                    p.receive(
+                        [&](Reader& r) {
+                            impl->message(i, r);
+                            p.packetAt = Clock::now();
+                        },
+                        [&](WorldState value) {
+                            if (impl->hosting || impl->state != Phase::running ||
+                                value.epoch != impl->integrationEpoch ||
+                                value.connected >= (1u << impl->playerCount) ||
+                                value.pauseOwner >= impl->playerCount ||
+                                (impl->verified && value.tick <= *impl->verified))
+                                throw std::runtime_error("Unexpected decoded world state");
+                            impl->receivedState = std::move(value);
+                            impl->progress = p.packetAt = Clock::now();
+                        },
+                        [&] {
+                            return impl->decodingStage != nullptr ||
+                                   impl->decodingCheckpoint != nullptr;
+                        },
+                        [&](ReceivedBulk value) {
+                            impl->receiveBulk(std::move(value));
+                            p.packetAt = Clock::now();
+                        });
+                    while (auto sample = p.pipe->samples.pop())
+                        if (impl->observer)
+                            impl->observer(sample->name, sample->milliseconds);
+                    while (auto trace = p.pipe->traces.pop())
+                        if (impl->logger && impl->debugLogs)
+                            impl->logger("state_transfer slot=" + std::to_string(i) +
+                                         " tick=" + std::to_string(trace->tick) +
+                                         " raw=" + std::to_string(trace->raw) +
+                                         " wire=" + std::to_string(trace->wire) +
+                                         " full_wire=" + std::to_string(trace->full) +
+                                         " delta=" + std::to_string(trace->delta) +
+                                         " base=" + std::to_string(trace->base));
                     if (impl->hosting && !p.ready && p.loadingAt &&
                         Clock::now() - *p.loadingAt > std::chrono::seconds(60))
                         throw ConnectionLost("Player loading timed out");
                     if (impl->hosting && impl->initialStarted && p.ready &&
-                        Clock::now() - (impl->cinematicEpoch ? p.packetAt : p.inputAt) >
+                        Clock::now() -
+                                (impl->cinematicEpoch || impl->ending ? p.packetAt : p.inputAt) >
                             std::chrono::seconds(15))
                         throw ConnectionLost("Player connection timed out");
                 } catch (const std::exception& e) {
@@ -1316,6 +1332,7 @@ void Session::poll() {
                     }
                 }
             }
+        impl->finishReturn();
         if (impl->hosting && impl->lobbyDirty)
             impl->lobby();
         if (impl->hosting) {
@@ -1338,15 +1355,17 @@ void Session::poll() {
         if (impl->state == Phase::finishing) {
             const bool drained =
                 std::all_of(impl->peers.begin(), impl->peers.end(),
-                            [](const auto& p) { return !p || p->outgoing.empty(); });
+                            [](const auto& p) { return !p || p->queuedBytes() == 0; });
             if (drained || Clock::now() - impl->progress > std::chrono::seconds(5)) {
                 impl->shutdown();
                 impl->state = Phase::closed;
             }
         }
-        if (!impl->hosting && impl->state == Phase::running && impl->localReady &&
-            Clock::now() - (impl->cinematicEpoch && impl->peers[0] ? impl->peers[0]->packetAt
-                                                                   : impl->progress) >
+        if (!impl->hosting && (impl->state == Phase::running || impl->state == Phase::returning) &&
+            impl->localReady &&
+            Clock::now() - ((impl->cinematicEpoch || impl->ending) && impl->peers[0]
+                                ? impl->peers[0]->packetAt
+                                : impl->progress) >
                 std::chrono::seconds(impl->verified ? 20 : 90))
             throw std::runtime_error("Host state transfer timed out");
     } catch (const std::exception& e) {
@@ -1365,6 +1384,20 @@ void Session::close() {
         }
     impl->shutdown();
     impl->state = Phase::closed;
+}
+bool Session::returnToLobby() {
+    if (impl->state == Phase::returning)
+        return true;
+    if (impl->state != Phase::running || !impl->ending || *impl->ending == ending::gameOver)
+        return false;
+    if (!impl->hosting) {
+        Writer request(Message::returnLobby);
+        request.string(impl->integrationRun);
+        impl->peers[0]->sendMessage(request);
+    }
+    impl->returnedMask |= 1u << impl->localSlot;
+    impl->state = Phase::returning;
+    return true;
 }
 void Session::finish() {
     if (!impl->hosting || impl->state != Phase::running) {
@@ -1416,28 +1449,83 @@ bool Session::start(const Start& settings) {
     impl->startSettings.firstTick = 0;
     impl->activeMask = (1u << impl->playerCount) - 1;
     impl->startSettings.connected = impl->activeMask;
-    impl->broadcast(impl->startMessage(Message::start, impl->startSettings));
+    if (settings.snapshot.empty())
+        impl->broadcast(impl->startMessage(Message::start, impl->startSettings));
     for (auto& p : impl->peers)
         if (p)
             p->loadingAt = Clock::now();
-    if (!settings.snapshot.empty())
+    if (!settings.snapshot.empty()) {
+        const auto job = prepareCheckpoint(impl->bulkWorker(), impl->startSettings);
         for (auto& p : impl->peers)
             if (p)
-                p->checkpoint = std::make_shared<Start>(impl->startSettings);
+                p->preparingCheckpoint = job;
+    }
     impl->state = Phase::running;
     impl->progress = Clock::now();
     return true;
+}
+bool Session::restart(const Start& settings) {
+    if (!impl->hosting || impl->state != Phase::running || !impl->localReady ||
+        impl->cinematicEpoch || settings.seed.size() != 8 || !settings.snapshot.empty() ||
+        settings.rules != impl->runRules || settings.characters != impl->startSettings.characters ||
+        settings.difficulty != impl->startSettings.difficulty)
+        return false;
+    // A checkpoint loader still owns its previous run transaction. Wait for
+    // that boundary rather than interrupting a partially transferred archive.
+    for (const auto& peer : impl->peers)
+        if (peer && peer->accepted && (!peer->ready || peer->waiting || peer->rejoining))
+            return false;
+    for (unsigned slot = 0; slot < impl->playerCount; ++slot)
+        if ((impl->activeMask & (1u << slot)) &&
+            (!impl->access[slot].allowsRules(settings.rules) ||
+             !impl->access[slot].allowsCharacter(settings.characters[slot]) ||
+             (slot && (!impl->peers[slot] || !impl->peers[slot]->ready))))
+            return false;
+    ++impl->integrationEpoch;
+    impl->integrationRun = randomIdentity();
+    impl->startSettings = settings;
+    impl->startSettings.firstTick = 0;
+    impl->startSettings.connected = impl->activeMask;
+    const auto message = impl->startMessage(Message::restart, impl->startSettings);
+    for (unsigned slot = 1; slot < impl->playerCount; ++slot)
+        if ((impl->activeMask & (1u << slot)) && impl->peers[slot])
+            impl->peers[slot]->sendMessage(message);
+    impl->resetRun();
+    impl->restartPending = true;
+    return true;
+}
+bool Session::takeRestart() {
+    const bool pending = impl->restartPending;
+    impl->restartPending = false;
+    return pending;
+}
+bool Session::sendLifecycle(unsigned destination, const std::string& bytes) {
+    // Consumers discard lifecycle messages until their new run is ready.
+    // Report that boundary to the caller so initial vote state is retried.
+    if (impl->state != Phase::running || !impl->localReady || destination >= impl->playerCount)
+        return false;
+    if (impl->hosting && destination) {
+        const auto& peer = impl->peers[destination];
+        if (!peer || !peer->ready || peer->waiting || peer->rejoining)
+            return false;
+    }
+    return impl->sendSideChannel(Message::lifecycle, impl->lifecycle, maxIntegrationSize,
+                                 destination, bytes);
+}
+std::optional<IntegrationMessage> Session::takeLifecycle() {
+    return impl->lifecycle.take();
 }
 bool Session::checkpoint(const Start& settings, std::uint32_t tick) {
     if (!impl->hosting || impl->state != Phase::running || settings.snapshot.empty() ||
         settings.snapshot.size() > maxSnapshotSize || tick != impl->committed ||
         settings.rules != impl->runRules)
         return false;
-    auto saved = std::make_shared<Start>(settings);
-    saved->firstTick = tick;
-    saved->connected = impl->activeMask;
-    impl->startSettings = *saved;
-    impl->startSettings.snapshot.clear();
+    impl->startSettings = settings.metadata();
+    impl->startSettings.firstTick = tick;
+    impl->startSettings.connected = impl->activeMask;
+    auto saved = impl->startSettings;
+    saved.snapshot = settings.snapshot;
+    const auto job = prepareCheckpoint(impl->bulkWorker(), std::move(saved));
     for (unsigned slot = 1; slot < impl->playerCount; ++slot)
         if (auto& p = impl->peers[slot]; p && p->accepted && p->waiting) {
             impl->latest[slot] = {};
@@ -1446,14 +1534,15 @@ bool Session::checkpoint(const Start& settings, std::uint32_t tick) {
             p->ready = false;
             p->loadingAt = Clock::now();
             p->loaded = false;
-            p->snapshotSent = 0;
-            p->checkpoint = saved;
+            p->checkpointQueued = false;
+            p->pipe->checkpointSent.store(0);
+            p->preparingCheckpoint = job;
             p->pending.reset();
             // Finish a partly transmitted view before the checkpoint header.
             // All queued chunks are bounded; the receiver discards the old view.
-            p->sending.reset();
+            p->resetWorldCache(impl->integrationEpoch);
             p->rejoining = true;
-            p->sendMessage(impl->startMessage(Message::start, *saved));
+
             p->waiting = false;
         }
     return true;
@@ -1546,18 +1635,7 @@ bool Session::submit(std::uint32_t sequence, const InputFrame& input,
         impl->sequences[0] = sequence;
         impl->inputRooms[0] = room;
     } else {
-        Writer w(Message::input);
-        w.u32(sequence);
-        w.input(input);
-        w.u8(room.has_value());
-        if (room) {
-            w.u32(room->epoch);
-            w.u16(static_cast<std::uint16_t>(room->index));
-            w.u8(room->dimension);
-            w.u32(room->introSerial);
-            w.u8(room->introActive);
-        }
-        impl->peers[0]->sendMessage(w);
+        impl->peers[0]->submitInput({sequence, input, room});
     }
     ++impl->nextInput;
     return true;
@@ -1570,7 +1648,7 @@ std::optional<Frame> Session::take() {
     // The runtime already has its native roster when localReady is true.
     if (!impl->initialStarted && impl->commands[0] != Command::saveExit) {
         for (unsigned i = 1; i < impl->playerCount; ++i)
-            if (impl->peers[i] && !impl->peers[i]->ready)
+            if ((impl->activeMask & (1u << i)) && impl->peers[i] && !impl->peers[i]->ready)
                 return {};
         impl->initialStarted = true;
         for (auto& p : impl->peers)
@@ -1611,6 +1689,7 @@ bool Session::ready() {
     impl->progress = Clock::now();
     if (!impl->hosting) {
         Writer w(Message::ready);
+        w.string(impl->integrationRun);
         w.u32(impl->startSettings.firstTick);
         impl->peers[0]->sendMessage(w);
     }
@@ -1697,27 +1776,38 @@ TransportResources Session::resources() const {
     out.rawWorldBytes = impl->rawWorldBytes;
     out.wireWorldBytes = impl->wireWorldBytes;
     out.fullWorldBytes = impl->fullWorldBytes;
-    out.connections = impl->listener != INVALID_SOCKET;
+    out.connections = impl->listener != nullptr;
     const auto observe = [&out](const auto& p) {
         if (!p)
             return;
         ++out.connections;
-        out.queuedBytes += p->queued;
-        out.receiveCapacity += p->received.capacity();
+        out.queuedBytes += p->queuedBytes();
+        out.receiveCapacity +=
+            p->pipe ? p->pipe->receiveCapacity.load(std::memory_order_acquire) : 0;
         out.cachedWorldBytes += p->cachedBytes();
         out.inFlightBytes += p->inFlightBytes();
-        out.inFlightStates += p->flight.size();
-        for (const auto* state : {&p->sending, &p->pending})
-            if (*state)
-                out.worldBytes += (*state)->bytes.capacity();
+        if (p->pipe) {
+            const auto& world = p->pipe->world;
+            out.inFlightStates += world.flightStates.load();
+            out.coalescedInputs += p->coalescedInputs + p->pipe->coalescedInputs.load();
+            out.deliveryWindow += p->window();
+            out.oldestWorldMs = std::max<std::uint64_t>(out.oldestWorldMs, world.oldestMs.load());
+            out.worldBytes += world.worldBytes.load();
+            out.worldSnapshots += world.snapshots.load();
+            out.deltaSnapshots += world.deltas.load();
+            out.rawWorldBytes += world.raw.load();
+            out.wireWorldBytes += world.wire.load();
+            out.fullWorldBytes += world.full.load();
+        }
+        if (p->pending)
+            out.worldBytes += p->pending->bytes.capacity();
     };
     for (const auto& p : impl->peers)
         observe(p);
     for (const auto& p : impl->incoming)
         observe(p);
-    for (const auto* state : {&impl->receivedState, &impl->assembling})
-        if (*state)
-            out.worldBytes += (*state)->bytes.capacity();
+    if (impl->receivedState)
+        out.worldBytes += impl->receivedState->bytes.capacity();
     return out;
 }
 } // namespace isaac::lan

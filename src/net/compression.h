@@ -1,21 +1,26 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <vector>
 
 namespace isaac::lan {
-// Bounded portable DEFLATE; packets remain independent so a
-// newly joined client never needs previous snapshots to decode current state.
-// The native XPRESS reader remains for previous Windows trace archives.
+// Bounded checksummed Zstd frames, optionally referencing an acknowledged view.
+// The DEFLATE/XPRESS readers remain for previous trace archives.
 class StateCompression {
     struct Impl;
     std::unique_ptr<Impl> impl;
 
   public:
+    static constexpr std::size_t headerSize = 5;
+    enum Mode : std::uint8_t { raw, xpress, deflate, zstd, zstdPrefix };
     StateCompression();
+    explicit StateCompression(std::size_t limit);
     ~StateCompression();
-    std::vector<std::uint8_t> compress(std::span<const std::uint8_t> bytes);
-    std::vector<std::uint8_t> expand(std::span<const std::uint8_t> bytes);
+    std::vector<std::uint8_t> compress(std::span<const std::uint8_t> bytes,
+                                       std::span<const std::uint8_t> baseline = {});
+    std::vector<std::uint8_t> expand(std::span<const std::uint8_t> bytes,
+                                     std::span<const std::uint8_t> baseline = {});
 };
 } // namespace isaac::lan

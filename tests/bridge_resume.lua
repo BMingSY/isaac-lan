@@ -49,6 +49,12 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     end
     local noop = function() end
     _IsaacLan = {
+        input_ready = function()
+            return true
+        end,
+        net_fail = function(reason)
+            error(reason)
+        end,
         net_phases = function()
             return dofile(root .. "/tests/fixtures/net_phases.lua")
         end,
@@ -59,10 +65,18 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
             return {}
         end,
         api_info = function()
-            return { ready = 0 }
+            return { ready = 0, nowMs = 0 }
         end,
         net_poll = function()
-            return { phase = phase, players = 2, firstTick = 0 }
+            return {
+                phase = phase,
+                players = 2,
+                firstTick = 0,
+                runId = string.rep("a", 32),
+                connected = 3,
+                hosting = 1,
+                slot = 0,
+            }
         end,
         net_engine_start = function()
             return true
@@ -116,6 +130,7 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
             root .. "/src/bridge/compat/routes/challenge_lamb.lua"
         ),
         ["runtime/session"] = dofile(root .. "/src/bridge/runtime/session.lua"),
+        ["runtime/party"] = dofile(root .. "/src/bridge/runtime/party.lua"),
         ["compat/characters/keeper"] = dofile(root .. "/src/bridge/compat/characters/keeper.lua"),
         ["compat/mods/observation"] = dofile(root .. "/src/bridge/compat/mods/observation.lua"),
         ["api/public"] = { poll = noop, commit = noop, reset = noop, actions = { step = noop } },
@@ -129,7 +144,7 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
         end,
     }
     RegisterMod, require = originalRegisterMod, originalRequire
-    dofile(root .. "/tests/fixtures/chat_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
+    dofile(root .. "/tests/fixtures/app_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
     dofile(root .. "/src/bridge/app/main.lua")
     _IsaacLanFrame()
     callbacks[ModCallbacks.MC_POST_GAME_STARTED](nil, true)

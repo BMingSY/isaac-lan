@@ -13,6 +13,78 @@ from delayed_relay import DelayedRelay
 
 
 class DelayedRelayTest(unittest.TestCase):
+    def test_jitter_stalls_and_upstream_limit_preserve_bytes_and_fin(self):
+        payload = bytes(range(251)) * 200
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        server.settimeout(8)
+        received, errors, gaps = [], [], []
+
+        def serve():
+            try:
+                with server.accept()[0] as connection:
+                    connection.settimeout(8)
+                    chunks, previous = [], time.monotonic()
+                    while data := connection.recv(1024):
+                        now = time.monotonic()
+                        gaps.append(now - previous)
+                        previous = now
+                        chunks.append(data)
+                    received.append(b"".join(chunks))
+                    connection.sendall(b"complete")
+            except Exception as error:
+                errors.append(error)
+
+        relay = DelayedRelay(0, server.getsockname()[1], 40)
+        relay.configure(
+            {
+                "jitter_ms": 20,
+                "upstream_bytes_per_second": 32768,
+                "stall_every_ms": 300,
+                "stall_ms": 150,
+            },
+            40,
+        )
+        thread = threading.Thread(target=serve)
+        thread.start()
+        try:
+            with socket.create_connection(relay.listener.getsockname(), timeout=8) as client:
+                client.settimeout(8)
+                client.sendall(payload)
+                client.shutdown(socket.SHUT_WR)
+                result = bytearray()
+                while data := client.recv(1024):
+                    result.extend(data)
+                self.assertEqual(result, b"complete")
+            thread.join(timeout=8)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(received, [payload])
+            self.assertFalse(errors)
+            self.assertGreater(max(gaps), 0.1, "Configured delivery stall never happened")
+            self.assertEqual(relay.upstream_bytes, len(payload))
+            self.assertIsNone(relay.error)
+        finally:
+            relay.close()
+            server.close()
+            thread.join(timeout=3)
+
+    def test_invalid_profile_is_rejected_without_partial_application(self):
+        relay = DelayedRelay(0, 1, 40)
+        try:
+            before = relay.settings()
+            for settings in (
+                {"upstream_bytes_per_second": -1},
+                {"jitter_ms": float("nan")},
+                {"stall_every_ms": 100, "stall_ms": 100},
+                {"stall_ms": 10},
+            ):
+                with self.assertRaises(ValueError):
+                    relay.configure(settings, 40)
+                self.assertEqual(relay.settings(), before)
+        finally:
+            relay.close()
+
     def test_three_clients_share_one_egress_budget(self):
         payload = bytes(range(256)) * 256
         server = socket.socket()

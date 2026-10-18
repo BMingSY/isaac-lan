@@ -18,6 +18,7 @@ struct Callbacks {
     void (*consoleCommand)(std::string_view, const Call&);
     void (*controls)(const Call&);
     void (*executeMenu)(const Call&);
+    bool (*restartRequest)(bool held);
 };
 bool install(std::uintptr_t image, const Callbacks& callbacks);
 bool managerReady();

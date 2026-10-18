@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory = $true)][int]$GameProcessId,
     [ValidateSet('Capture', 'Keys', 'PostKeys', 'Close', 'Focus', 'Drag')][string]$Action = 'Capture',
     [string]$Value = '',
-    [string]$ImagePath = ''
+    [string]$ImagePath = '',
+    [ValidateRange(1, 5000)][int]$HoldMilliseconds = 500
 )
 $ErrorActionPreference = 'Stop'
 $process = Get-Process -Id $GameProcessId
@@ -34,7 +35,7 @@ public static class LanLabWindow {
 }
 '@
 if ($Action -eq 'PostKeys') {
-    $keys = @{ '{ENTER}' = 13; '{SPACE}' = 32; '{ESC}' = 27; '{UP}' = 38; '{DOWN}' = 40; '{LEFT}' = 37; '{RIGHT}' = 39; '{CONSOLE}' = 192; '{BACKSPACE}' = 8; '.' = 190; 'W' = 87; 'A' = 65; 'S' = 83; 'D' = 68 }
+    $keys = @{ '{ENTER}' = 13; '{SPACE}' = 32; '{ESC}' = 27; '{UP}' = 38; '{DOWN}' = 40; '{LEFT}' = 37; '{RIGHT}' = 39; '{CONSOLE}' = 192; '{BACKSPACE}' = 8; '.' = 190; 'W' = 87; 'A' = 65; 'S' = 83; 'D' = 68; 'R' = 82 }
     if ($keys.ContainsKey($Value)) {
         $key = $keys[$Value]
     } elseif ($Value -match '^[0-9A-Z]$') {
@@ -125,7 +126,7 @@ if ($Action -eq 'Drag') {
     exit
 }
 if ($Action -eq 'Keys') {
-    $keys = @{ '{ENTER}' = 13; '{SPACE}' = 32; '{ESC}' = 27; '{UP}' = 38; '{DOWN}' = 40; '{LEFT}' = 37; '{RIGHT}' = 39; '{CONSOLE}' = 192; '{BACKSPACE}' = 8; '.' = 190; 'W' = 87; 'A' = 65; 'S' = 83; 'D' = 68 }
+    $keys = @{ '{ENTER}' = 13; '{SPACE}' = 32; '{ESC}' = 27; '{UP}' = 38; '{DOWN}' = 40; '{LEFT}' = 37; '{RIGHT}' = 39; '{CONSOLE}' = 192; '{BACKSPACE}' = 8; '.' = 190; 'W' = 87; 'A' = 65; 'S' = 83; 'D' = 68; 'R' = 82 }
     if ($keys.ContainsKey($Value)) {
         $key = $keys[$Value]
         $scan = [LanLabWindow]::MapVirtualKey($key, 0)
@@ -134,7 +135,7 @@ if ($Action -eq 'Keys') {
             $downFlags = 1
         }
         [LanLabWindow]::keybd_event($key, $scan, $downFlags, [UIntPtr]::Zero)
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds $HoldMilliseconds
         [LanLabWindow]::keybd_event($key, $scan, ($downFlags -bor 2), [UIntPtr]::Zero)
     } else {
         $shell.SendKeys($Value)

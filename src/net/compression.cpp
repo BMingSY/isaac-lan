@@ -1,12 +1,15 @@
 #include "net/compression.h"
 #include "net/protocol.h"
 #include "core/deflate.h"
+#include "core/zstd.h"
 #include <windows.h>
 #include <cstring>
 #include <string>
 
 namespace isaac::lan {
 struct StateCompression::Impl {
+    std::size_t limit = maxWorldSize;
+    compression::Zstd zstd;
     HMODULE module = nullptr;
     HANDLE compressor = nullptr, decompressor = nullptr;
     using Create = BOOL(WINAPI*)(DWORD, void*, HANDLE*);
@@ -51,42 +54,51 @@ struct StateCompression::Impl {
             FreeLibrary(module);
     }
 };
-StateCompression::StateCompression() : impl(std::make_unique<Impl>()) {}
+StateCompression::StateCompression() : StateCompression(maxWorldSize) {}
+StateCompression::StateCompression(std::size_t limit) : impl(std::make_unique<Impl>()) {
+    if (!limit || limit > maxSnapshotSize)
+        throw std::runtime_error("Invalid compression limit");
+    impl->limit = limit;
+}
 StateCompression::~StateCompression() = default;
-std::vector<std::uint8_t> StateCompression::compress(std::span<const std::uint8_t> bytes) {
-    if (bytes.empty() || bytes.size() > maxWorldSize)
+std::vector<std::uint8_t> StateCompression::compress(std::span<const std::uint8_t> bytes,
+                                                     std::span<const std::uint8_t> baseline) {
+    if (bytes.empty() || bytes.size() > impl->limit || baseline.size() > impl->limit)
         throw std::runtime_error("Invalid state compression size");
-    std::vector<std::uint8_t> result(bytes.size() + 5);
-    result[0] = 0;
+    const auto compressed = impl->zstd.compress(bytes, impl->limit, baseline);
+    const bool packed = compressed.size() < bytes.size();
+    const auto payload = packed ? std::span<const std::uint8_t>(compressed) : bytes;
+    std::vector<std::uint8_t> result(payload.size() + headerSize);
+    result[0] = packed ? (baseline.empty() ? Mode::zstd : Mode::zstdPrefix) : Mode::raw;
     for (unsigned i = 0; i < 4; ++i)
         result[1 + i] = static_cast<std::uint8_t>(bytes.size() >> (24 - i * 8));
-    const auto compressed = compression::deflate(bytes, maxWorldSize);
-    if (compressed.size() < bytes.size()) {
-        result[0] = 2;
-        result.resize(compressed.size() + 5);
-        std::memcpy(result.data() + 5, compressed.data(), compressed.size());
-    } else
-        std::memcpy(result.data() + 5, bytes.data(), bytes.size());
+    std::memcpy(result.data() + headerSize, payload.data(), payload.size());
     return result;
 }
-std::vector<std::uint8_t> StateCompression::expand(std::span<const std::uint8_t> bytes) {
+std::vector<std::uint8_t> StateCompression::expand(std::span<const std::uint8_t> bytes,
+                                                   std::span<const std::uint8_t> baseline) {
     Reader reader(bytes);
     const auto mode = reader.u8();
     const auto size = reader.u32();
-    if (mode > 2 || !size || size > maxWorldSize || bytes.size() < 6)
+    if (mode > Mode::zstdPrefix || !size || size > impl->limit || bytes.size() <= headerSize ||
+        bytes.size() > impl->limit + headerSize || baseline.size() > impl->limit ||
+        (mode == Mode::zstdPrefix && baseline.empty()) ||
+        (mode != Mode::zstdPrefix && mode != Mode::raw && !baseline.empty()))
         throw std::runtime_error("Invalid compressed state header");
-    if (!mode) {
-        if (bytes.size() - 5 != size)
+    if (mode == Mode::zstd || mode == Mode::zstdPrefix)
+        return impl->zstd.expand(bytes.subspan(headerSize), size, impl->limit, baseline);
+    if (mode == Mode::raw) {
+        if (bytes.size() - headerSize != size)
             throw std::runtime_error("Invalid plain state size");
-        return {bytes.begin() + 5, bytes.end()};
+        return {bytes.begin() + headerSize, bytes.end()};
     }
-    if (mode == 2)
-        return compression::inflate(bytes.subspan(5), size, maxWorldSize);
+    if (mode == Mode::deflate)
+        return compression::inflate(bytes.subspan(headerSize), size, impl->limit);
     impl->initialize();
     std::vector<std::uint8_t> result(size);
     SIZE_T written = 0;
-    if (!impl->decompress(impl->decompressor, bytes.data() + 5, bytes.size() - 5, result.data(),
-                          result.size(), &written) ||
+    if (!impl->decompress(impl->decompressor, bytes.data() + headerSize, bytes.size() - headerSize,
+                          result.data(), result.size(), &written) ||
         written != size)
         throw std::runtime_error("Invalid compressed world state");
     return result;

@@ -727,7 +727,7 @@ void poll() {
     prepared = boolean("prepared");
     draining = number("draining");
     error = string("error");
-    if (lobbyRequested && !prepared && menuAvailable()) {
+    if (lobbyRequested && !prepared && j460::menu_context::returnToMain(image)) {
         lobbyRequested = false;
         visible = true;
         chatEditing = false;

@@ -1,5 +1,6 @@
 #include "core/snapshot_delta.h"
 #include "net/compression.h"
+#include "net/wire_codec.h"
 #include "net/protocol.h"
 #include <algorithm>
 #include <deque>
@@ -19,10 +20,10 @@ int main(int argc, char** argv) {
         if (!input)
             throw std::runtime_error("Cannot read captured stream");
         std::ofstream csv(output / "states.csv");
-        csv << "tick,epoch,raw,wire,full_wire,delta\n";
+        csv << "tick,epoch,raw,wire,full_wire,delta,full_codec\n";
         const auto firstDump = argc == 5 ? std::stoul(argv[3]) : UINT32_MAX;
         unsigned dumps = argc == 5 ? std::stoul(argv[4]) : 0;
-        isaac::lan::StateCompression compression;
+        isaac::lan::StateCompression compression, wireCodec(isaac::lan::maxMessageSize);
         using Bytes = std::vector<std::uint8_t>;
         std::deque<std::pair<std::uint32_t, Bytes>> cache;
         Bytes assembling;
@@ -43,7 +44,8 @@ int main(int argc, char** argv) {
             input.read(reinterpret_cast<char*>(packet.data()), size);
             if (input.gcount() != static_cast<std::streamsize>(size))
                 throw std::runtime_error("Truncated stream message");
-            isaac::lan::Reader reader(packet);
+            const auto message = isaac::lan::decodeWire(packet, wireCodec);
+            isaac::lan::Reader reader(message);
             const auto type = static_cast<isaac::lan::Message>(reader.u8());
             if (type == isaac::lan::Message::stage || type == isaac::lan::Message::start) {
                 cache.clear();
@@ -76,18 +78,23 @@ int main(int argc, char** argv) {
             assembling.insert(assembling.end(), chunk.begin(), chunk.end());
             if (assembling.size() != total)
                 continue;
-            auto value = compression.expand(assembling);
+            Bytes value;
             if (delta) {
                 const auto found =
                     std::find_if(cache.begin(), cache.end(),
                                  [base](const auto& entry) { return entry.first == base; });
                 if (found == cache.end())
                     throw std::runtime_error("Missing recorded baseline");
-                value = isaac::core::SnapshotDelta::apply(found->second, value);
-            }
+                if (assembling.front() == isaac::lan::StateCompression::zstdPrefix)
+                    value = compression.expand(assembling, found->second);
+                else
+                    value = isaac::core::SnapshotDelta::apply(found->second,
+                                                              compression.expand(assembling));
+            } else
+                value = compression.expand(assembling);
             const auto full = compression.compress(value).size();
             csv << tick << ',' << epoch << ',' << value.size() << ',' << total << ',' << full << ','
-                << delta << '\n';
+                << delta << ",zstd\n";
             ++states;
             wireBytes += total;
             fullBytes += full;

@@ -7,11 +7,13 @@ return function(native, clock)
         if not active then
             return fn
         end
+        local function finish(start, ...)
+            native.diagnostics_sample(name, clock() - start)
+            return ...
+        end
         return function(...)
             local start = clock()
-            local result = table.pack(fn(...))
-            native.diagnostics_sample(name, clock() - start)
-            return table.unpack(result, 1, result.n)
+            return finish(start, fn(...))
         end
     end
     function profile.counter(name, value)

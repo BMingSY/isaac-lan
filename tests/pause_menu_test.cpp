@@ -796,6 +796,18 @@ void gameplayRoutingUnchanged() {
             "Out-of-party native queries lost their ordinary passthrough");
 }
 
+void restartPhysicalRouting() {
+    Fixture f;
+    f.accept();
+    f.press(input::action::restart);
+    require(input::restartHeld(), "LAN restart lost physical input behind accepted gameplay input");
+    require(f.queries.front().controller == 0, "Restart did not query the physical keyboard");
+    f.clearPhysical();
+    require(!input::restartHeld(), "Restart retained a released key");
+    f.press(input::action::menuBack);
+    require(!input::restartHeld(), "An ordinary menu action submitted a restart");
+}
+
 void movementPreviewRouting() {
     Fixture f;
     isaac::lan::Frame frame;
@@ -878,6 +890,7 @@ int main(int argc, char** argv) {
                      {"nested-input-scopes", nestedInputScopes},
                      {"ordinary-options", ordinaryOptionsRemainLocal},
                      {"gameplay-routing", gameplayRoutingUnchanged},
+                     {"restart-physical-routing", restartPhysicalRouting},
                      {"movement-preview", movementPreviewRouting},
                      {"paused-input", pausedInputPreservesOnlyCharge}});
 }

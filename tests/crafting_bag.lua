@@ -234,6 +234,7 @@ local function environment()
         "presentation/items",
         "presentation/audio",
         "compat/routes/crawlspace",
+        "compat/characters/forgotten",
         "compat/items/glitched",
         "compat/items/temporary_effects",
     }) do
@@ -244,6 +245,9 @@ local function environment()
     end
     modules["presentation/motion"] = function()
         return { present = noop, reset = noop, track = noop }
+    end
+    modules["presentation/attachments"] = function()
+        return { capture = noop, present = noop }
     end
     modules["compat/characters/keeper"] = function()
         return {}
@@ -258,6 +262,7 @@ local function environment()
     end
     modules["sync/inventory"] = function()
         return {
+            sameItems = module("sync/inventory")(modules["sync/fields"])({}).sameItems,
             capture = function(p)
                 return { 23, {}, {}, {}, {}, {}, {}, {}, p.ghost }
             end,
@@ -273,6 +278,7 @@ local function environment()
                 return { p.ControllerIndex, 1, 0, 0, 0, { 100, 100 }, { 0, 0 } }
             end,
             apply = noop,
+            link = noop,
             reset = noop,
             sprite = function()
                 return {}
@@ -297,6 +303,7 @@ local function environment()
         "sync/deals",
         "presentation/actors",
         "presentation/motion",
+        "presentation/attachments",
         "compat/characters/lazarus",
         "compat/items/black_candle",
     }) do
@@ -322,6 +329,9 @@ local function environment()
             return {}
         end,
         Vector = vector,
+        GetPtrHash = function(entity)
+            return entity
+        end,
         EntityPtr = function(p)
             return { Ref = p }
         end,
@@ -360,7 +370,7 @@ for tick = 1, 5 do
         local bytes = host.state.capture(slot, tick)
         local view = host.state.decode(bytes)
         assert(
-            view[1] == 24 and view[9][1][8][1] == first and view[9][2][8][1] == second,
+            view[1] == 27 and view[9][1][8][1] == first and view[9][2][8][1] == second,
             "World snapshot omitted or mixed the two players' crafting bags"
         )
         assert(view[9][1][8][2] == (tick % 2 == 0) and view[9][2][8][2] == (tick % 2 ~= 0))
