@@ -1,4 +1,6 @@
 #include "engine/session_backend.h"
+#include "engine/rooms.h"
+#include "core/chat.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/menu_state.h"
@@ -32,6 +34,27 @@ using Start = void(__attribute__((thiscall)) *)(void*, int, int, Seeds, unsigned
 Start originalStart;
 using Console = void(__attribute__((thiscall)) *)(void*, const void*, bool, void*);
 Console originalConsole;
+using ConsolePrint = void(__attribute__((thiscall)) *)(void*, const void*, unsigned, unsigned);
+ConsolePrint originalConsolePrint;
+std::string* capturedOutput = nullptr;
+std::string_view nativeText(const void* value) {
+    const auto address = reinterpret_cast<std::uintptr_t>(value);
+    const auto size = at<unsigned>(address, layout::string::size);
+    const auto capacity = at<unsigned>(address, layout::string::capacity);
+    const auto data = capacity <= layout::string::inlineCapacity ? static_cast<const char*>(value)
+                                                                 : at<const char*>(address);
+    return {data, size};
+}
+void __attribute__((fastcall)) consolePrintHook(void* object, void*, const void* text,
+                                                unsigned color, unsigned fade) {
+    if (capturedOutput && capturedOutput->size() < chat::maxOutputBytes) {
+        auto value = nativeText(text);
+        capturedOutput->append(
+            chat::boundedOutput(value, chat::maxOutputBytes - capturedOutput->size()));
+    }
+    originalConsolePrint(object, text, color, fade);
+}
+
 void __cdecl saveHook() {
     callbacks.save(originalSave);
 }
@@ -96,6 +119,7 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
            hook(image + j460::entry::gameUpdate, updateHook, originalUpdate) &&
            hook(image + j460::entry::consoleUpdate, consoleUpdateHook, originalConsoleUpdate) &&
            hook(image + j460::entry::consoleRunCommand, consoleHook, originalConsole) &&
+           hook(image + j460::entry::consolePrint, consolePrintHook, originalConsolePrint) &&
            hook(image + j460::entry::gameControls, controlsHook, originalControls);
 }
 bool managerReady() {
@@ -166,6 +190,38 @@ void resetPause() {
 void pollConsole() {
     if (gameReady() && originalConsoleUpdate)
         originalConsoleUpdate(reinterpret_cast<void*>(game() + layout::game::console));
+}
+void hideConsole() {
+    if (gameReady())
+        at<int>(game() + layout::game::console, layout::console::state) = 0;
+}
+std::string executeConsole(std::string_view command) {
+    // MSVC owns this string's storage. Allocate and release through the same
+    // native helpers used by the existing menu editor, never the MinGW heap.
+    struct NativeString {
+        std::array<unsigned char, layout::string::size + 2 * sizeof(unsigned)> bytes{};
+        ~NativeString() {
+            reinterpret_cast<Method>(image + j460::entry::frontendMenuUpdate)(this);
+        }
+    } text;
+    at<unsigned>(reinterpret_cast<std::uintptr_t>(&text), layout::string::capacity) =
+        layout::string::inlineCapacity;
+    using Assign = void*(__attribute__((thiscall))*)(void*, const char*, std::size_t);
+    reinterpret_cast<Assign>(image + j460::entry::frontendAssign)(&text, command.data(),
+                                                                  command.size());
+    std::string output;
+    struct Capture {
+        std::string* previous = capturedOutput;
+        explicit Capture(std::string& output) {
+            capturedOutput = &output;
+        }
+        ~Capture() {
+            capturedOutput = previous;
+        }
+    } capture(output);
+    originalConsole(reinterpret_cast<void*>(game() + layout::game::console), &text, false,
+                    reinterpret_cast<void*>(rooms::presentationPlayer()));
+    return output;
 }
 void controls() {
     originalControls();

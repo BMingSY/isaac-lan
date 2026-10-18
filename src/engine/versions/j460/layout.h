@@ -28,6 +28,7 @@ inline constexpr unsigned menuRequested = 0x4b288;
 inline constexpr unsigned requestedMenu = 0x4b28c;
 inline constexpr unsigned chat = 0x4c608;
 inline constexpr unsigned chatFont = 0x4ae74;
+inline constexpr unsigned pendingEmote = 0x4ccac;
 inline constexpr unsigned menuInputBlock = 0x4d074;
 } // namespace manager
 namespace progress {
@@ -43,6 +44,7 @@ inline constexpr unsigned dimension = 0x1830c;
 inline constexpr unsigned players = 0x1baa8;
 inline constexpr unsigned floorSeeds = 0x1bb84;
 inline constexpr unsigned pauseMenu = 0x23a74;
+inline constexpr unsigned emoteWheel = 0x25108;
 inline constexpr unsigned minimap = 0x25ecc;
 inline constexpr unsigned frame = 0x264f8;
 inline constexpr unsigned stateFlags = 0x26548;
@@ -163,6 +165,7 @@ inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
 namespace player {
+inline constexpr unsigned emote = 0x26d8;
 inline constexpr unsigned type = 0x13c0;
 inline constexpr unsigned controller = 0x1618;
 inline constexpr unsigned index = 0x161c;
@@ -171,6 +174,15 @@ inline constexpr unsigned nightLightAngle = 0x1ae4;
 inline constexpr unsigned generatedInventoryHead = 0x1fcc;
 inline constexpr unsigned generatedInventorySize = 0x1fd0;
 } // namespace player
+namespace emote {
+inline constexpr unsigned id = 0x4;
+inline constexpr int lastId = 58;
+inline constexpr unsigned duration = 90;
+} // namespace emote
+namespace emoteWheel {
+inline constexpr unsigned state = 0x4, radius = 0x840;
+inline constexpr unsigned participantBytes = 0x37c, participantDevice = 0x378, controllerId = 0xc;
+} // namespace emoteWheel
 namespace generatedItem {
 inline constexpr unsigned config = 0x0;
 inline constexpr unsigned seed = 0x8;
@@ -191,6 +203,9 @@ inline constexpr unsigned page = 0x40;
 namespace mainMenu {
 inline constexpr unsigned selection = 0x4;
 } // namespace mainMenu
+namespace console {
+inline constexpr unsigned state = 0;
+} // namespace console
 namespace chat {
 inline constexpr unsigned size = 0x628;
 inline constexpr unsigned text = 0xc;

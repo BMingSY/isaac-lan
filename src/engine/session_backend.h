@@ -37,6 +37,8 @@ bool exitRequested();
 void cancelExit();
 void resetPause();
 void pollConsole();
+void hideConsole();
+std::string executeConsole(std::string_view command);
 void controls();
 std::uint32_t parseSeed(std::string_view text);
 void start(std::uint32_t seed, int character, unsigned difficulty);

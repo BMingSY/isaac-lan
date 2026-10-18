@@ -1,4 +1,5 @@
 #include "net/session.h"
+#include "net/side_channel.h"
 #include "net/messages.h"
 #include "net/peer.h"
 #include "net/host_resolution.h"
@@ -79,9 +80,7 @@ struct Session::Impl {
     std::array<std::optional<RoomRequest>, maxPlayers> roomRequests{};
     std::string integrationRun;
     std::uint32_t integrationEpoch = 0;
-    std::vector<IntegrationMessage> integrationQueue;
-    std::array<unsigned, maxPlayers> integrationCounts{};
-    Clock::time_point integrationWindow = Clock::now();
+    SideChannel integration, communication;
     std::size_t worldSize = 0, snapshotSize = 0;
     bool assemblingDelta = false;
     std::uint32_t assemblingBase = 0, takenWorldEpoch = 0;
@@ -112,6 +111,8 @@ struct Session::Impl {
         for (auto& peer : peers)
             peer.reset();
         incoming.clear();
+        integration = {};
+        communication = {};
     }
     void connectNextAddress() {
         peers[0].reset();
@@ -155,6 +156,26 @@ struct Session::Impl {
         for (auto& p : peers)
             if (p && p->accepted)
                 p->sendMessage(w);
+    }
+    bool sendSideChannel(Message type, SideChannel& channel, std::size_t limit,
+                         unsigned destination, const std::string& bytes) {
+        const bool chat = type == Message::communication;
+        if (destination >= playerCount || bytes.empty() || bytes.size() > limit ||
+            (state != Phase::lobby && state != Phase::running &&
+             !(chat && state == Phase::waiting)))
+            return false;
+        if (hosting && !destination)
+            return channel.enqueue(0, bytes);
+        if (!hosting && destination)
+            return false;
+        auto& peer = peers[hosting ? destination : 0];
+        constexpr std::size_t maxSideChannelBacklog = 32768;
+        if (!peer || !peer->accepted || peer->queued > maxSideChannelBacklog)
+            return false;
+        Writer w(type);
+        w.blob({reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()});
+        peer->sendMessage(w);
+        return true;
     }
     void measureLatency() {
         if (!hosting)
@@ -282,6 +303,9 @@ struct Session::Impl {
         commands[slot] = Command::none;
         roomRequests[slot].reset();
         peers[slot].reset();
+        for (auto* channel : {&integration, &communication})
+            std::erase_if(channel->queue,
+                          [slot](const auto& message) { return message.sender == slot; });
         if (state == Phase::lobby) {
             choices[slot] = {};
             identities[slot].clear();
@@ -317,23 +341,18 @@ struct Session::Impl {
     void message(unsigned slot, Reader& r) {
         const auto type = static_cast<Message>(r.u8());
         auto& p = *peers[slot];
-        if (type == Message::integration && p.accepted) {
-            auto bytes = r.blob(maxIntegrationSize);
-            if (bytes.empty() || (state != Phase::lobby && state != Phase::running))
+        if ((type == Message::integration || type == Message::communication) && p.accepted) {
+            const bool chat = type == Message::communication;
+            auto bytes = r.blob(chat ? maxCommunicationSize : maxIntegrationSize);
+            r.finish();
+            if (bytes.empty() || (state != Phase::lobby && state != Phase::running &&
+                                  !(chat && state == Phase::waiting)))
                 return;
-            if (hosting && state == Phase::running && (!p.ready || p.waiting || p.rejoining))
+            if (!chat && hosting && state == Phase::running &&
+                (!p.ready || p.waiting || p.rejoining))
                 return;
-            if (Clock::now() - integrationWindow >= std::chrono::seconds(1)) {
-                integrationWindow = Clock::now();
-                integrationCounts = {};
-            }
-            const auto sender = hosting ? slot : 0;
-            const auto queued =
-                std::count_if(integrationQueue.begin(), integrationQueue.end(),
-                              [sender](const auto& item) { return item.sender == sender; });
-            if (++integrationCounts[sender] <= 64 &&
-                static_cast<std::size_t>(queued) < maxIntegrationQueue)
-                integrationQueue.push_back({sender, {bytes.begin(), bytes.end()}});
+            (chat ? communication : integration)
+                .receive(hosting ? slot : 0, {bytes.begin(), bytes.end()});
             return;
         }
         if (type == Message::ping && !hosting && p.accepted) {
@@ -613,7 +632,7 @@ struct Session::Impl {
             integrationEpoch = r.u32();
             if (integrationRun.size() != 32)
                 throw std::runtime_error("Invalid integration run identity");
-            integrationQueue.clear();
+            integration.queue.clear();
             value.firstTick = r.u32();
             value.connected = r.u8();
             snapshotSize = r.u32();
@@ -1168,34 +1187,18 @@ std::array<std::optional<RoomRequest>, maxPlayers> Session::takeRoomRequests() {
     return result;
 }
 bool Session::sendIntegration(unsigned destination, const std::string& bytes) {
-    if (destination >= impl->playerCount || bytes.empty() || bytes.size() > maxIntegrationSize ||
-        (impl->state != Phase::lobby && impl->state != Phase::running))
-        return false;
-    if (impl->hosting && !destination) {
-        const auto count =
-            std::count_if(impl->integrationQueue.begin(), impl->integrationQueue.end(),
-                          [](const auto& item) { return !item.sender; });
-        if (static_cast<std::size_t>(count) >= maxIntegrationQueue)
-            return false;
-        impl->integrationQueue.push_back({0, bytes});
-        return true;
-    }
-    if (!impl->hosting && destination)
-        return false;
-    auto& peer = impl->peers[impl->hosting ? destination : 0];
-    if (!peer || !peer->accepted || peer->queued > 32768)
-        return false;
-    Writer w(Message::integration);
-    w.blob({reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()});
-    peer->sendMessage(w);
-    return true;
+    return impl->sendSideChannel(Message::integration, impl->integration, maxIntegrationSize,
+                                 destination, bytes);
 }
 std::optional<IntegrationMessage> Session::takeIntegration() {
-    if (impl->integrationQueue.empty())
-        return std::nullopt;
-    auto result = std::move(impl->integrationQueue.front());
-    impl->integrationQueue.erase(impl->integrationQueue.begin());
-    return result;
+    return impl->integration.take();
+}
+bool Session::sendCommunication(unsigned destination, const std::string& bytes) {
+    return impl->sendSideChannel(Message::communication, impl->communication, maxCommunicationSize,
+                                 destination, bytes);
+}
+std::optional<IntegrationMessage> Session::takeCommunication() {
+    return impl->communication.take();
 }
 const std::string& Session::runId() const {
     return impl->integrationRun;
@@ -1404,7 +1407,7 @@ bool Session::start(const Start& settings) {
             return false;
     impl->integrationRun = randomIdentity();
     impl->integrationEpoch = 0;
-    impl->integrationQueue.clear();
+    impl->integration.queue.clear();
     impl->startSettings = settings;
     impl->startSettings.firstTick = 0;
     impl->activeMask = (1u << impl->playerCount) - 1;

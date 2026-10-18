@@ -46,9 +46,11 @@ enum class Message : std::uint8_t {
     latency,
     integration,
     ending,
-    cinematic
+    cinematic,
+    communication
 };
 constexpr std::size_t maxIntegrationSize = 2048;
+constexpr std::size_t maxCommunicationSize = 3072;
 constexpr std::size_t maxIntegrationQueue = 32;
 struct IntegrationMessage {
     unsigned sender = 0; // Assigned by the transport, never supplied in a payload.

@@ -1002,6 +1002,9 @@ void __attribute__((fastcall)) playerUpdate(void* player, void*) {
         using UpdateSprite = void(__attribute__((thiscall))*)(void*);
         for (unsigned i = 0; i < 7; ++i)
             engine<UpdateSprite>(0x9100)(static_cast<char*>(player) + 0x758 + i * 0x114);
+        // Original emote animation, dice result and expiry are local presentation too.
+        engine<UpdateSprite>(j460::entry::emoteUpdate)(static_cast<char*>(player) +
+                                                       j460::layout::player::emote);
         return;
     }
     const auto before = actor;

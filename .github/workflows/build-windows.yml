@@ -113,6 +113,13 @@ jobs:
         run: |
           & ./ci/isaac_lan_net_test.exe 2>&1 | Tee-Object test-runs/windows/transport-resources.log
           if ($LASTEXITCODE -ne 0) { throw 'State transport tests failed' }
+      - name: Test chat input and background images
+        shell: pwsh
+        run: |
+          & ./ci/isaac_lan_chat_test.exe 2>&1 | Tee-Object test-runs/windows/chat-input.log
+          if ($LASTEXITCODE -ne 0) { throw 'Chat input tests failed' }
+          & ./ci/isaac_lan_chat_background_test.exe 2>&1 | Tee-Object test-runs/windows/chat-background.log
+          if ($LASTEXITCODE -ne 0) { throw 'Chat background tests failed' }
       - name: Test native menu, HUD, generated items and hourglass adapters
         shell: pwsh
         run: |

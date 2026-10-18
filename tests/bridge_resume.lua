@@ -129,6 +129,7 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
         end,
     }
     RegisterMod, require = originalRegisterMod, originalRequire
+    dofile(root .. "/tests/fixtures/chat_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
     dofile(root .. "/src/bridge/app/main.lua")
     _IsaacLanFrame()
     callbacks[ModCallbacks.MC_POST_GAME_STARTED](nil, true)

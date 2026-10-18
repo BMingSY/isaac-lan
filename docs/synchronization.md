@@ -22,6 +22,7 @@ flowchart LR
 | 输入与请求 | 客机 → 房主 | 持有值取最新值，按下边沿保留到消费；请求由房主验证身份与权限 |
 | 实时视图 `WorldState` | 房主 → 对应客机 | 每份可还原为完整状态；尚未开始发送的旧视图可被最新视图替换 |
 | 可靠事务 | 双向，以房主发布为主 | 大厅、开局、检查点、换层、回退和结束按序交付，不参与视图合并 |
+| 聊天通信 `communication` | 客机请求 → 房主；房主 → 接收者 | 独立限额的可靠字节消息，不随世界快照合并；内容契约见[聊天与控制台](https://github.com/BMingSY/isaac-lan/blob/main/docs/chat-console.md) |
 
 第三方动作使用有独立限额的可靠消息，具体契约见 [Mod API](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md)。房主内部的 `Frame` 仅汇总输入，不用于让客机重放同一套玩法模拟。
 
