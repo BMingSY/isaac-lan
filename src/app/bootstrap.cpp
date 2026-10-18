@@ -1,4 +1,6 @@
 #include "engine/lua_api.h"
+#include "engine/state_codec.h"
+#include "engine/entity_fields.h"
 // J460 native adapter. Lab launches retain explicit profile isolation; ordinary
 // launches require the installer marker, J460 layout and compatible entry points.
 #include <windows.h>
@@ -368,6 +370,10 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* 
         lua.setField(L, -2, name);
     }
     if (!isaac::engine::bootstrap::bind(L, module))
+        return 0;
+    if (!isaac::lua_state_codec::bind(L, module))
+        return 0;
+    if (!isaac::entity_fields::bind(L, module))
         return 0;
     if (!isaac::runtime::bind(L, module))
         return 0;

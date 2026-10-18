@@ -25,6 +25,7 @@ return function(fields)
         local audioPresentation, itemPresentation = deps.audio, deps.items
         local pack = string.pack
         local lastInventory = {}
+        local pendingBytes, pendingTick, pendingValue
         local replicas, motion = {}, {}
         local replicaRoom, receivedTick = nil, -1
         local actorVisuals = {}
@@ -51,31 +52,29 @@ return function(fields)
             e.Visible = false
             e:Remove()
         end
-        local function applyEntity(e, v, now, tick)
+        local function applyEntity(e, v, now, tick, registered)
             entityCodec.apply(e, v)
             -- Preserve ownership through EntityPtr; local allocation indices are never IDs.
-            replicas[v[Entity.id]] = deps.pointer(e)
+            -- Entity reconciliation already resolved and validated retained refs.
+            if not registered then
+                local pointer = replicas[v[Entity.id]]
+                local existing = pointer and pointer.Ref
+                if not existing or deps.hash(existing) ~= deps.hash(e) then
+                    replicas[v[Entity.id]] = deps.pointer(e)
+                end
+            end
             local prior = motion[v[Entity.id]]
-            local actor = e.Type == deps.playerType
+            local actor = v[Entity.type] == deps.playerType
             local position, velocity = vec(v[Entity.position]), vec(v[Entity.velocity])
-            motion[v[Entity.id]] = {
-                target = position,
-                display = prior and prior.display or position,
-                velocity = velocity,
-                at = now,
-                tick = tick,
-                actor = actor,
-                controller = actor and e:ToPlayer().ControllerIndex or -1,
-                prediction = actor and (prior and prior.prediction or prediction.new(position)),
-                track = motionPresentation.track(
-                    prior and prior.track,
-                    position,
-                    velocity * (actor and 60 or 30),
-                    now,
-                    tick
-                ),
-                doorway = prior and prior.doorway,
-            }
+            local m = prior or {}
+            m.target, m.display, m.velocity, m.at, m.tick =
+                position, m.display or position, velocity, now, tick
+            m.actor, m.controller = actor, actor and e:ToPlayer().ControllerIndex or -1
+            m.prediction = actor and (m.prediction or prediction.new(position))
+            m.attachment = deps.attachments and deps.attachments.capture(e, v)
+            m.track =
+                motionPresentation.track(m.track, position, velocity, now, tick, actor and 60 or 30)
+            motion[v[Entity.id]] = m
         end
 
         local function restoreLocations(value)
@@ -132,11 +131,7 @@ return function(fields)
                         )
                     )
                 end
-                local encoded = encode({
-                    actor[Actor.inventory][Inventory.type],
-                    actor[Actor.inventory][Inventory.items],
-                    actor[Actor.inventory][Inventory.trinkets],
-                })
+                local inventory = actor[Actor.inventory]
                 -- Item/health setters and familiars stay in this actor's room. The
                 -- native resource broadcast restores the whole team's shared pool;
                 -- subsequent actor snapshots see the same count and apply no delta.
@@ -144,12 +139,15 @@ return function(fields)
                     applyInventory(
                         p,
                         actor[Actor.inventory],
-                        lastInventory[actor[Actor.entity][Entity.id]] ~= encoded
+                        not deps.sameInventory(
+                                lastInventory[actor[Actor.entity][Entity.id]],
+                                inventory
+                            )
                             or tick % INVENTORY_REFRESH_TICKS == 0
                     )
                     deps.temporaryEffects.apply(p, actor[Actor.temporaryEffects])
                 end, 1))
-                lastInventory[actor[Actor.entity][Entity.id]] = encoded
+                lastInventory[actor[Actor.entity][Entity.id]] = inventory
                 applyEntity(p, actor[Actor.entity], now, tick)
                 actorsPresentation.apply(p, actor)
                 poop.apply(p, actor[Actor.poop])
@@ -217,8 +215,8 @@ return function(fields)
                     reclaim = function()
                         room:Update()
                     end,
-                    apply = function(e, v)
-                        applyEntity(e, v, now, tick)
+                    apply = function(e, v, registered)
+                        applyEntity(e, v, now, tick, registered)
                     end,
                     entities = deps.entities,
                     link = entityCodec.link,
@@ -322,12 +320,25 @@ return function(fields)
             itemPresentation.apply(value.slot, value.items)
             actorVisuals, receivedTick = value.actors, tick
         end
+        restoreActors = performance.wrap("apply.actors", restoreActors)
+        restoreRoom = performance.wrap("apply.room", restoreRoom)
+        restoreLocations = performance.wrap("apply.locations", restoreLocations)
+        restoreMap = performance.wrap("apply.map", restoreMap)
+        commit = performance.wrap("apply.commit", commit)
         local function apply(bytes, tick, ack, betweenUpdates)
             performance.resources()
             if floor.waiting() then
+                pendingBytes, pendingTick, pendingValue = nil, nil, nil
                 return false
             end
-            local value = worldSchema.unpack(decode(bytes), tick)
+            -- A half-update may defer a view to the next full update. Retain its
+            -- immutable decoded tree until preflight succeeds or a newer view arrives.
+            if pendingBytes ~= bytes or pendingTick ~= tick then
+                pendingBytes, pendingTick, pendingValue = nil, nil, nil
+                local decoded = worldSchema.unpack(decode(bytes), tick)
+                pendingBytes, pendingTick, pendingValue = bytes, tick, decoded
+            end
+            local value = pendingValue
             if betweenUpdates then
                 -- Room transfers and roster replacements can allocate native room
                 -- objects. Keep them on the full update path, before native cleanup.
@@ -356,6 +367,8 @@ return function(fields)
             if not floor.ready(level, value.epoch, value.stage, value.stageType) then
                 return false
             end
+            -- Never reuse a tree after native restoration has started, including failure.
+            pendingBytes, pendingTick, pendingValue = nil, nil, nil
             deps.glitched.apply(value.glitched)
             local roomChanged = restoreLocations(value)
             native.state_clock(value.frame)
@@ -384,6 +397,7 @@ return function(fields)
         end
 
         local function resetView()
+            pendingBytes, pendingTick, pendingValue = nil, nil, nil
             motion, actorVisuals, replicaRoom = {}, {}, nil
             appliedLocations = nil
         end

@@ -23,7 +23,7 @@ def main():
         {
             path
             for path in tracked
-            if path and not path.startswith("vendor/miniz/") and (ROOT / path).is_file()
+            if path and not path.startswith("vendor/") and (ROOT / path).is_file()
         }
     )
     groups = [

@@ -14,25 +14,34 @@ from item_audit import (
     ROOT,
     build_fixture,
     catalog_from_log,
+    cases_passed,
     events,
     select_cases,
     summarize_case,
     stress_cases,
     unexpected_peer_failure,
 )
-from testing.results import finish_run
+from testing.results import SCHEMA_VERSION, finish_run, write_report
 from testing.engine import configure_interrupts, engine_command
 from lab_profile import ProtectedLabs, idle, windows, validate_labs, validate_startup
 from item_effect_checks import SUPPORTED_EFFECTS
 
 
 def run_batch(args, cases, output, labs):
+    if args.mode == "stress":
+        idle(labs, exclusive=True)
     output.mkdir(parents=True, exist_ok=False)
     script = output / "fixture.lua"
     journals = {role: output / (role + "-events.log") for role in ("host", "client")}
     build_fixture(
         script,
-        {"cases": cases, "journal": {role: windows(path) for role, path in journals.items()}},
+        {
+            "cases": cases,
+            "journal": {role: windows(path) for role, path in journals.items()},
+            "verifyCodec": args.verify_codec,
+            "snapshotPrefix": windows(output / "codec-"),
+            "caseTimeoutMs": args.case_timeout * 1000 if args.case_timeout else None,
+        },
     )
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
     command = engine_command(
@@ -42,19 +51,21 @@ def run_batch(args, cases, output, labs):
         script,
         COMPLETION,
         "--frontend",
-        *([] if args.injected_bootstrap else ["--automatic"]),
         "--menu-start",
         "--virtual-input",
         "--menu-port",
         str(args.port),
-        "--heap-check",
         "--scenario-timeout",
         str(args.timeout),
     )
+    if not args.injected:
+        command.append("--automatic")
     if args.record:
         command.extend(("--native-record-both", "--frame-ms", "1000"))
     if args.mode == "stress":
-        command.append("--performance")
+        command.append("--no-performance" if args.no_phase_profile else "--performance")
+    if args.mode != "stress" or args.heap_check:
+        command.append("--heap-check")
     protected = ProtectedLabs(labs, output)
     report = {
         "cases": cases,
@@ -125,11 +136,10 @@ def run_batch(args, cases, output, labs):
                 except ValueError as error:
                     report["catalog_error"] = str(error)
         report["results"] = [summarize_case(case, peers, report["engine"]) for case in cases]
-        report["passed"] = (
-            bool(report["engine"].get("pass"))
-            and bool(report["results"])
-            and all(result["status"] in {"verified", "basic_pass"} for result in report["results"])
-        )
+        report["passed"] = bool(report["engine"].get("pass")) and cases_passed(report["results"])
+        if args.mode == "stress":
+            idle(labs, exclusive=True)
+            report["performance_host_exclusive"] = True
     finally:
         finish_run(protected, report, output, process=process)
     return report
@@ -138,6 +148,22 @@ def run_batch(args, cases, output, labs):
 def main():
     configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--injected",
+        "--injected-bootstrap",
+        action="store_true",
+        help="Use the isolated injection backend; skip autoload validation",
+    )
+    parser.add_argument(
+        "--no-phase-profile",
+        action="store_true",
+        help="Measure stress with production-default diagnostics; fixture frame/capture/apply timing remains enabled",
+    )
+    parser.add_argument(
+        "--case-timeout",
+        type=int,
+        help="Override the per-case watchdog in seconds for slow baseline measurements",
+    )
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--build", type=Path, required=True)
@@ -158,9 +184,14 @@ def main():
     parser.add_argument("--timeout", type=int, default=86400)
     parser.add_argument("--record", action="store_true")
     parser.add_argument(
-        "--injected-bootstrap",
+        "--verify-codec",
         action="store_true",
-        help="Use the owned-child bootstrap when the environment prevents proxy DLL loading",
+        help="Compare native/Lua codecs once per peer/case before stress sampling",
+    )
+    parser.add_argument(
+        "--heap-check",
+        action="store_true",
+        help="Enable heap evidence for stress runs; changes performance measurements",
     )
     parser.add_argument(
         "--moving-use", action="store_true", help="Move with the native stick during the use press"
@@ -227,6 +258,8 @@ def main():
                     case["physical"] = True
         if not 1 <= args.port < 65535 or not 10 <= args.timeout <= 86400:
             raise ValueError("Invalid port or timeout")
+        if args.case_timeout is not None and not 10 <= args.case_timeout <= args.timeout:
+            raise ValueError("Case timeout must be between 10 seconds and the suite timeout")
         if not 0 <= args.coins <= 99:
             raise ValueError("Coins must be between 0 and 99")
         if args.end_tick is not None and not 150 <= args.end_tick <= 3600:
@@ -255,8 +288,8 @@ def main():
         cases = cases[args.shard :: args.shards]
         if not cases:
             raise ValueError("No selected cases")
-        idle(labs)
-    except (ValueError, OSError) as error:
+        idle(labs, exclusive=args.mode == "stress")
+    except (ValueError, OSError, RuntimeError) as error:
         parser.error(str(error))
     output.mkdir(parents=True, exist_ok=False)
     validator = ROOT / "tools/item_effect_checks.py"
@@ -292,7 +325,7 @@ def main():
         "trigger_effects_sha256": hashlib.sha256(trigger_effects.read_bytes()).hexdigest(),
         "interaction_effects_sha256": hashlib.sha256(interaction_effects.read_bytes()).hexdigest(),
         "projectile_effects_sha256": hashlib.sha256(projectile_effects.read_bytes()).hexdigest(),
-        "automatic_loader": not args.injected_bootstrap,
+        "automatic_loader": not args.injected,
         "cases": cases,
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -319,9 +352,15 @@ def main():
         summary["results"] = results + [
             {**case, "status": "untested", "compatibility_verified": False} for case in remaining
         ]
+        summary["passed"] = (
+            summary["restored"] and summary["engine_pass"] and cases_passed(summary["results"])
+        )
+        summary["schema_version"] = SCHEMA_VERSION
+        summary["status"] = "passed" if summary["passed"] else "failed"
         (output / "summary.json").write_text(
             json.dumps(summary, ensure_ascii=False, indent=2) + "\n"
         )
+        write_report(output, summary)
         if (
             not report["restored"]
             or not consumed
@@ -338,11 +377,12 @@ def main():
                 "output": str(output),
                 "restored": summary["restored"],
                 "engine_pass": summary["engine_pass"],
+                "passed": summary["passed"],
             }
         ),
         flush=True,
     )
-    return 0 if summary["restored"] and summary["engine_pass"] else 1
+    return 0 if summary["passed"] else 1
 
 
 if __name__ == "__main__":

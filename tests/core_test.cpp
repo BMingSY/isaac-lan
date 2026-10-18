@@ -1,5 +1,7 @@
 #include "net/protocol.h"
 #include "core/automation_input.h"
+#include "core/animation_pose.h"
+#include "core/state_codec.h"
 #include "core/menu_input.h"
 #include "core/bootstrap_profile.h"
 #include "core/lanbot_console.h"
@@ -439,6 +441,32 @@ void laserState() {
                 readLaserPath(r);
             },
             "Malformed laser path accepted");
+    for (unsigned count : {0u, 2u, 2048u}) {
+        const auto bytes = packet(255, 1.25f, count);
+        Reader r(bytes);
+        auto path = readLaserPath(r);
+        isaac::presentation::translateLaserPath(path, 17.0f, -9.0f);
+        require(path.sampleState == 255 && path.samples == 2 &&
+                    std::bit_cast<float>(path.values[0]) == 18.25f &&
+                    std::bit_cast<float>(path.values[1]) == -7.75f &&
+                    path.values[0] == path.values[2] && path.values[1] == path.values[3] &&
+                    std::bit_cast<float>(path.values[4]) == 1.25f &&
+                    path.values[4] == path.values[5],
+                "Laser render translation changed shape or missed its endpoints");
+        for (const auto& points : path.paths)
+            for (unsigned i = 0; i < points.size(); ++i)
+                require(std::bit_cast<float>(points[i]) == (i % 2 ? -12.5f : 13.5f),
+                        "Laser samples did not follow the rendered origin");
+    }
+    for (float offset : {INFINITY, NAN, std::numeric_limits<float>::max()})
+        rejects(
+            [&] {
+                const auto bytes = packet(0, std::numeric_limits<float>::max());
+                Reader r(bytes);
+                auto path = readLaserPath(r);
+                isaac::presentation::translateLaserPath(path, offset, offset);
+            },
+            "Invalid laser render offset or overflowing coordinate accepted");
     const auto bytes = packet(255);
     for (unsigned length = 0; length < bytes.size(); ++length)
         rejects(
@@ -866,7 +894,220 @@ void inputAndProgress() {
         "Invalid achievement flag accepted");
 }
 
+void fixedStateFields() {
+    namespace codec = isaac::state_codec;
+    auto capture = [](auto& writer) {
+        writer.array(7);
+        writer.number(std::int64_t{-2147483649LL});
+        writer.number(std::int64_t{2147483648LL});
+        writer.number(-0.0);
+        writer.number(1.25);
+        writer.boolean(true);
+        writer.string("");
+        writer.array(2);
+        writer.boolean(false);
+        writer.string("pose");
+    };
+    codec::Writer dynamic;
+    codec::FixedWriter<128> fixed;
+    capture(dynamic);
+    capture(fixed);
+    require(std::ranges::equal(dynamic.data(), fixed.data()), "Fixed field bytes differ");
+    codec::FixedWriter<2> small;
+    small.boolean(true);
+    small.boolean(false);
+    rejects([&] { small.boolean(false); }, "Fixed writer overflow accepted");
+    codec::FixedWriter<4> string;
+    string.string("a");
+    require(string.data().size() == 4, "Exact field buffer capacity rejected");
+    rejects([&] { string.append({reinterpret_cast<const std::uint8_t*>("x"), 1}); },
+            "Fixed append overflow accepted");
+    codec::FixedWriter<128> invalid;
+    rejects([&] { invalid.number(std::numeric_limits<double>::infinity()); },
+            "Packed non-finite field accepted");
+    rejects([&] { invalid.array(codec::maxLength + 1); }, "Packed oversized array accepted");
+}
+
+void animationPose() {
+    namespace pose = isaac::core::animation_pose;
+    require(pose::validCursor(-1, 0) && pose::validCursor(0, 0),
+            "Empty animation lost its reset or initial cursor");
+    require(!pose::validCursor(-2, 0) && !pose::validCursor(1, 0),
+            "Empty animation accepted an active frame");
+    require(pose::validCursor(-1, 3) && pose::validCursor(0, 3) && pose::validCursor(2, 3) &&
+                !pose::validCursor(3, 3) && !pose::validCursor(-2, 3),
+            "Animation cursor exceeded local frame bounds");
+    require(pose::validCursor(pose::maxFrames - 1, pose::maxFrames) &&
+                !pose::validCursor(pose::maxFrames, pose::maxFrames) &&
+                !pose::validCursor(0, pose::maxFrames + 1),
+            "Animation cursor exceeded the protocol bounds");
+    pose::State state;
+    state.present = state.playing = true;
+    state.frame = std::bit_cast<std::uint32_t>(3.5f);
+    state.events = 0x80000001;
+    state.previousEvents = 0xffffffff;
+    state.layerCount = state.nullCount = 2;
+    state.layers[0] = {3, 5};
+    state.layers[1] = {0, -1};
+    state.nulls[0] = {4, 7};
+    state.nulls[1] = {2, -1};
+    Writer packet(Message::world);
+    pose::write(packet, state);
+    const std::vector<std::uint8_t> expected = {static_cast<std::uint8_t>(Message::world),
+                                                1,
+                                                0x40,
+                                                0x60,
+                                                0,
+                                                0,
+                                                1,
+                                                0x80,
+                                                0,
+                                                0,
+                                                1,
+                                                0xff,
+                                                0xff,
+                                                0xff,
+                                                0xff,
+                                                0,
+                                                2,
+                                                0,
+                                                3,
+                                                0,
+                                                0,
+                                                0,
+                                                5,
+                                                0,
+                                                0,
+                                                0xff,
+                                                0xff,
+                                                0xff,
+                                                0xff,
+                                                0,
+                                                2,
+                                                0,
+                                                4,
+                                                0,
+                                                0,
+                                                0,
+                                                7,
+                                                0,
+                                                2,
+                                                0xff,
+                                                0xff,
+                                                0xff,
+                                                0xff};
+    require(packet.bytes == expected, "Animation pose wire layout changed");
+    Reader reader(packet.bytes);
+    reader.u8();
+    const auto restored = pose::read(reader);
+    reader.finish();
+    require(restored.frame == state.frame && restored.events == state.events &&
+                restored.previousEvents == state.previousEvents && restored.playing &&
+                restored.layers[1].frame == -1 && restored.nulls[0].id == 4 &&
+                restored.nulls[0].frame == 7 && restored.nulls[1].frame == -1,
+            "Animation restore lost subframes, attachment layers or event bits");
+    for (std::size_t size = 0; size < expected.size(); ++size)
+        rejects(
+            [&] {
+                Reader shortRead{std::span(expected).first(size)};
+                shortRead.u8();
+                pose::read(shortRead);
+            },
+            "Truncated animation pose accepted");
+    auto malformed = expected;
+    malformed[1] = 2;
+    rejects(
+        [&] {
+            Reader r{std::span(malformed).subspan(1)};
+            pose::read(r);
+        },
+        "Invalid animation presence accepted");
+    auto header = [](unsigned playing = 1, std::uint32_t frame = 0) {
+        Writer w(Message::world);
+        w.u8(1);
+        w.u32(frame);
+        w.u8(playing);
+        w.u32(0);
+        w.u32(0);
+        return w;
+    };
+    for (auto w : {header(2), header(1, 0x7f800000)}) {
+        w.u16(0);
+        w.u16(0);
+        rejects(
+            [&] {
+                Reader r(std::span(w.bytes).subspan(1));
+                pose::read(r);
+            },
+            "Malformed animation header accepted");
+    }
+    auto tooMany = header();
+    tooMany.u16(pose::maxLayers + 1);
+    rejects(
+        [&] {
+            Reader r{std::span(tooMany.bytes).subspan(1)};
+            pose::read(r);
+        },
+        "Oversized decoded animation layers accepted");
+    auto duplicate = header();
+    duplicate.u16(2);
+    for (unsigned i = 0; i < 2; ++i) {
+        duplicate.u16(1);
+        duplicate.u32(0);
+    }
+    duplicate.u16(0);
+    rejects(
+        [&] {
+            Reader r(std::span(duplicate.bytes).subspan(1));
+            pose::read(r);
+        },
+        "Duplicate decoded animation IDs accepted");
+    auto oversized = header();
+    oversized.u16(0);
+    oversized.u16(pose::maxNullLayers + 1);
+    rejects(
+        [&] {
+            Reader r(std::span(oversized.bytes).subspan(1));
+            pose::read(r);
+        },
+        "Oversized attachment array accepted");
+    state.layerCount = pose::maxLayers + 1;
+    rejects([&] { pose::write(packet, state); }, "Too many animation layers accepted");
+    state.layerCount = 2;
+    state.layers[1].id = state.layers[0].id;
+    rejects([&] { pose::write(packet, state); }, "Duplicate layer IDs accepted");
+    state.layers[1].id = 0;
+    state.nulls[0].frame = pose::maxFrames;
+    rejects([&] { pose::write(packet, state); }, "Invalid attachment frame accepted");
+    state.nulls[0].frame = -1;
+    state.nulls[0].id = pose::maxNullLayers;
+    rejects([&] { pose::write(packet, state); }, "Invalid attachment ID accepted");
+    state.nulls[0].id = 0;
+    state.frame = std::bit_cast<std::uint32_t>(std::numeric_limits<float>::infinity());
+    rejects([&] { pose::write(packet, state); }, "Infinite animation frame accepted");
+    pose::State empty;
+    Writer absent(Message::world);
+    pose::write(absent, empty);
+    Reader emptyRead(std::span(absent.bytes).subspan(1));
+    require(!pose::read(emptyRead).present, "Empty animation did not clear its state");
+    emptyRead.finish();
+}
+
 void truncatedPackets() {
+    Writer integers(Message::world);
+    integers.u16(0x80ff);
+    integers.u32(0xfedcba98);
+    integers.u64(0xfedcba9876543210ull);
+    require(integers.bytes == std::vector<std::uint8_t>{static_cast<std::uint8_t>(Message::world),
+                                                        0x80, 0xff, 0xfe, 0xdc, 0xba, 0x98, 0xfe,
+                                                        0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10},
+            "Integer encoding changed big-endian bytes");
+    Reader integerReader(integers.bytes);
+    integerReader.u8();
+    require(integerReader.u16() == 0x80ff && integerReader.u32() == 0xfedcba98 &&
+                integerReader.u64() == 0xfedcba9876543210ull,
+            "Misaligned integer decoding changed unsigned bits");
+    integerReader.finish();
     Writer w(Message::world);
     w.u64(42);
     w.string("test");
@@ -1159,6 +1400,8 @@ int main(int argc, char** argv) {
                      {"keyboard-pause", keyboardPause},
                      {"transition-charge", transitionCharge},
                      {"audio-ownership", audioOwnership},
+                     {"animation-pose", animationPose},
+                     {"fixed-state-fields", fixedStateFields},
                      {"localized-text", localizedText},
                      {"laser-state", laserState},
                      {"actor-roster", actorRoster},

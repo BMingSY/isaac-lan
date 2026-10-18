@@ -19,10 +19,12 @@
 | 数据 | 含义 |
 | --- | --- |
 | 进程资源 | 本局时间／窗口时长、CPU 占单核比例、私有内存、工作集、句柄；读取失败为 `null` |
-| 阶段耗时 | 渲染间隔，采集／应用、编码／解码、库存、实体、网格、精灵、压缩／解压 |
+| 阶段耗时 | 渲染间隔，采集／应用、编码／解码、库存、实体、网格、精灵、压缩／解压；应用另分位置、角色、地图、房间和提交阶段 |
 | 对象与队列 | Lua 堆、实体／网格／地图规模、连接、队列／状态容量、退休会话 |
 | `cached_world_bytes` | 完整视图历史的分配容量 |
 | `world_in_flight_bytes`／`world_in_flight_states` | 未确认载荷／视图数 |
+| `world_delivery_window`／`world_oldest_unapplied_ms` | 有在途视图的连接窗口总和／最旧未确认视图的年龄 |
+| `input_coalesced` | 当前连接合并的未发送输入数量；不包含 TCP 已接收的字节 |
 | `world_snapshots_total`／`world_delta_snapshots_total` | 当前会话累计视图数／增量数 |
 | `world_raw_bytes_total`／`world_wire_bytes_total`／`world_full_wire_bytes_total` | 原始字节／实际载荷／同批完整压缩对照量 |
 
@@ -40,15 +42,38 @@ python3 tools/check_performance.py "$ISAAC_RUN_OUTPUT" --output "$ISAAC_PERFORMA
 
 ## 带宽测量
 
-[`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，反向输入保留固定延迟；375000 字节／秒对应十进制 3 Mbps。`run_network_engine.py --record-relay` 保存主机原始字节流和逐秒总下行。
+[`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，上行有独立共享预算，默认不限速；375000 字节／秒对应十进制 3 Mbps。`--relay-control` 接受 JSON 中的 `downstream_bytes_per_second`、`upstream_bytes_per_second`、`delay_ms`、`jitter_ms`、`stall_every_ms` 与 `stall_ms`，配置先完整校验再应用。抖动和停传保持字节顺序，不删除 TCP 流内容，也不代表真实 IP 丢包。`run_network_engine.py --record-relay` 保存主机原始字节流；逐秒中继记录包含双向字节数与实际配置。弱网功能与状态年龄验收见[开发测试说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 
-`isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
+`isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。它支持旧字节补丁和 Zstd prefix 记录；`full_wire` 始终是当前 Zstd 完整帧对照，CSV 的 `full_codec` 标明算法，不能将旧记录的比值解释为同算法的增量收益。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
+
+## 编解码基准
+
+[`benchmark_state_codec.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/benchmark_state_codec.py) 在无需游戏的 Linux Lua 5.3 中比较生产 C++ 绑定与 Lua 参考实现。使用独立 Release 构建，避免 sanitizer 和调试构建干扰计时：
+
+```sh
+cmake -S . -B build-codec -DISAAC_LAN_BUILD_ENGINE=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build-codec --target isaac_lan_state_codec_runner
+python tools/benchmark_state_codec.py --runner build-codec/isaac_lan_state_codec_runner \
+  --iterations 100 --output "$ISAAC_CODEC_REPORT"
+```
+
+默认输入是模拟库存和实体字段的合成状态，先核对字节一致，再测编码、解码和同房三客机片段复用；不能据此推定游戏帧率。`--snapshot` 可输入一份已还原的完整二进制视图。输出保存逐项 CPU 时间、样本数、均值／P95、速度比、执行器哈希和 JSON／JUnit；缺少一端测量、输入规模不一致或执行失败不能计为完成。报告通过表示对照执行完整，不表示实机性能已通过。
+
+[`benchmark_compression.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/benchmark_compression.py)比较真实快照的 miniz、LZ4、Zstd 完整帧，以及完整发送路径的 miniz 字节补丁和 Zstd prefix。构建时将 `ISAAC_LAN_LZ4_SOURCE_DIR` 指向上游 LZ4 1.10.0 的 `lib` 目录，生成 `isaac_lan_compression_benchmark`；LZ4 只用于基准，不链接到游戏 DLL。
+
+```sh
+python tools/benchmark_compression.py --runner "$ISAAC_COMPRESSION_RUNNER" \
+  --pair "$ISAAC_BASE_SNAPSHOT" "$ISAAC_NEXT_SNAPSHOT" \
+  --iterations 100 --output "$ISAAC_COMPRESSION_REPORT"
+```
+
+每组输入是已确认基线与下一份完整字节。一个 `--pair` 测同视图，多次提供（最多三组）测不同视图；分别执行 2／3／4 人所需的发送端压缩和各接收端解压，解压计时是各客机之和。每次还原必须逐字节相同，报告保留输入与执行器哈希、实际大小、均值／P95／P99、上下文内存及 JSON／JUnit。计时包括 prefix 索引和完整帧候选，不含网络、Lua 和游戏绘制；在目标 Windows x86 Release 构建中单独执行，不能与实机性能轮次并发。
 
 ## 按需性能与资源回归
 
 日常命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。CI 覆盖 sanitizer、Lua 实体反复创建／删除与弱引用释放、慢消费者下的有界传输，以及重复分局后的日志句柄清理；不据此推定游戏或未执行 Hook 的资源行为。
 
-性能与压力测试不属于默认发版范围。需要定位相关问题时，单独使用一组隔离主客机，选择对应负载；例如长流程资源检查可运行：
+性能与压力测试不属于默认发版范围。需要定位相关问题时，单独使用一组隔离主客机，选择对应负载；道具压力套件在启动前和关闭后检查机器上是否还有游戏进程，有其他运行实例时不能计为有效性能轮次。测量期间也不得启动其他游戏或 CPU 密集任务。例如长流程资源检查可运行：
 
 ```sh
 python3 tools/run_special_routes.py \
@@ -56,6 +81,14 @@ python3 tools/run_special_routes.py \
   --client "$ISAAC_CLIENT_LAB" \
   --case campaign --performance --output "$ISAAC_RUN_OUTPUT"
 ```
+
+`engine_test.py run item-audit -- --mode stress ...` 默认开启性能统计、关闭堆观察与录像；原生异常专项可加 `--heap-check`，画面可加 `--record`，两者的测量需与纯性能轮次区分。其他道具审计模式仍保留堆观察。`stress:idle-baseline`、`stress:idle-inventory-100/300/500` 和 `stress:idle-copies-1000` 禁止自动攻击，要求双端至少 100 个渲染样本且 P95 不超过 33.33 ms；原有未带 `idle-` 的场景仍包含短暂攻击，必须分别解释。
+
+`--no-phase-profile` 将本轮隔离配置的详细诊断显式关闭，用于对照默认生产设置；夹具自身仍逐帧记录渲染间隔，并记录每次采集、应用耗时和字节数，验收预算不变。大量实体下，逐实体／精灵的详细计时会干扰结果，基线与候选必须使用同一诊断设置。
+
+较慢的基线可用 `--case-timeout` 延长单用例看门狗，以完成相同目标 tick 的对照；它不改变道具负载、采样起点或帧耗时预算。原超时轮次必须保留。
+
+`--verify-codec` 在每个场景的双端各核对一次真实视图的新旧编码，并保存原始快照及下一 tick 的快照；同时将泪弹、跟班和效果实体的原生批量字段与游戏 Lua API 对照，客机还检查写入结果与非法数组无写入。压力场景在第 150 tick 的统计窗口前执行；`codec_verified`／`entity_fields_verified` 是独立证据，不替代场景完成与退出结果。
 
 `campaign` 使用固定路线、Boss 房定位、保护和伤害加速，原版战斗、拾取、出口、换层及羔羊结局仍实际执行；不代表随机无辅助通关。默认不录画面，按需 `--record`。隔离资料逐文件备份／恢复，进程非零退出仍判整轮失败。
 

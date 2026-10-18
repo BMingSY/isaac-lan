@@ -11,6 +11,7 @@ presentation/actors
 presentation/menu_model
 presentation/audio
 presentation/motion
+presentation/attachments
 presentation/ping
 compat/transitions
 compat/items/hourglass

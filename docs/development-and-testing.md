@@ -18,7 +18,7 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 
 ## 离线测试
 
-需要 Python 3.10+、CMake、C++ 编译器和 **Lua 5.3**；Lua 版本不符时检查失败。安装 Python 依赖，并将 [StyLua 2.0.2](https://github.com/JohnnyMorganz/StyLua/releases/tag/v2.0.2) 放入 `PATH`：
+需要 Python 3.10+、CMake、C++ 编译器和 **Lua 5.3**；Lua 版本不符时检查失败。Linux 原生编解码对照另需 Lua 5.3 开发库（Ubuntu 的 `liblua5.3-dev`；非标准安装可设置 CMake 的 `LUA_INCLUDE_DIR`／`LUA_LIBRARY`）。安装 Python 依赖，并将 [StyLua 2.0.2](https://github.com/JohnnyMorganz/StyLua/releases/tag/v2.0.2) 放入 `PATH`：
 
 ```sh
 python3 -m venv .deps/checks
@@ -34,7 +34,7 @@ python3 -m venv .deps/checks
 | `--profile full` | 扩展检查；预算 200 例、状态机最多 60 步 |
 | `--list` | 只列 Python 用例 |
 | `--list-engine` | 按文件名发现实机入口和 Lua 场景；不执行场景 |
-| `--sanitizers` | 为可移植 C++ 构建启用 ASan／LSan／UBSan；CI 使用此选项 |
+| `--sanitizers` | 为可移植 C／C++ 构建启用 ASan／LSan／UBSan；CI 使用此选项 |
 
 Hypothesis 还会运行缓存失败样例和缩减步骤，上述预算不是精确执行次数。按改动选择局部检查：
 
@@ -62,6 +62,8 @@ ctest --test-dir build-core --output-on-failure
 | 隔离实机／正常操作 | 原生机制、入口与连续画面 | 结果限定于所用版本、夹具和采样范围 |
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
+
+Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，执行原生与 Lua 参考编码的逐字节对照、共享片段、边界／非法输入、分配失败及恢复检查；它通过统一离线入口运行，sanitizer 同时检查绑定和缓冲区的释放。性能比较使用 Release 构建，方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md#编解码基准)。
 
 聊天改动的直接回归为 CTest `presentation.chat-input`、`presentation.chat-render`、`bridge.chat`、`diagnostics.*`、`bridge.resume`，以及 Windows `presentation.chat-background`、`net.communication`／`net.integrations`：覆盖 UTF-8 编辑、输入释放、背景配置与 PNG 加载／回退、HUD 避让、拖动与尺寸变化、输出可见性、掷骰去重、原版命令分发和过期上下文。原生执行与画面使用 [state_chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_chat.lua)，由隔离双端 runner 加载并保留双端画面；夹具开启属性栏、物品栏和最大 HUD 偏移，并通过原版轮盘选择 D6。输出 `CHAT KEYBOARD_READY` 后，对各自所属窗口依次输入 `~`、A、Enter、`~`；随后聚焦主机，打开输入并将记录区域向右上拖动，再关闭输入。960×540 客户区可使用 [lab_window.ps1](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_window.ps1) 的 `-Action Drag -Value '220,350:300,320'`，其他尺寸按客户区像素换算。完成键盘与拖动操作后，在两端隔离游戏目录的 `isaac-lan/chat-interaction.done` 写入完成标记；夹具等待该标记后检查结果，避免窗口操作耗时造成提前断言。完成标记为 `LAN_NETWORK PASS chat console`。背景检查可在一端配置自定义 PNG、另一端保留默认值，对照默认纯色、自定义图片和透明度。实机需核对遮挡、光标、D6 滚动与结果画面及双端相同结果；系统输入法候选仍需单独核对，脚本通过不能代表 IME 或画面通过。
 
@@ -126,6 +128,18 @@ python tools/engine_test.py run special-routes -- \
 组合 Lua 场景返回 `{ done = function, cleanup = function }`：`done` 返回布尔值，只有实际断言完成才能返回 `true`；`cleanup` 可省略，负责所属文件、外部 Mod 包装和输入适配的释放。共享的 [`scenario.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/support/scenario.lua) 隔离场景参数、跟踪场景注册的回调并保证清理只执行一次；准备或执行失败也清理已注册回调。场景参数通过数据传入，组合器不替换场景源码，也不依赖内部完成变量名或 PASS 日志判断结束。
 
 连续玩法组合器在同一局内切换兼容场景，保持绝对网络 tick，仅为夹具转换相对时间；路线组合器在同一组进程中等待原生退出与菜单恢复后再切换。独立启动配置、真实键盘焦点和性能隔离要求仍属于套件执行边界，不能将任意套件直接合并。
+
+`special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存传输原始流，供离线解压和状态回放。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
+
+`entity-fields` 使用泪弹、跟班和效果实体，对照游戏 Lua 属性、原生数组与数值块的读写结果，检查完整动画往返、错误输入不写入及外层编解码；它不作性能验收，可与其他功能场景共用进程。`lazarus` 在启动前仅为隔离客机准备所需角色解锁，并在进入联机前核对菜单可选项；存档仍由套件备份和恢复。
+
+`action-prediction` 用正常客机输入和实际拾取覆盖主动、卡牌、正负药丸、道具／饰品／卡牌／药丸拾取及举起类主动，核对房主使用回调、拾取结果、两端动作姿态和客机连续帧移动。`--latency-ms 75` 为两个方向各增加 75 ms；延迟中继本身增加约 150 ms RTT。它检查动作期间及结束后的移动连续性，不预测道具效果或提前确认拾取。
+
+`attached-motion` 用正常客机移动、点按、蓄力和松键覆盖骸骨、妈刀、圣剑、硫磺火、科技、科技 X 与虚空之喉。它检查武器相对预测身体的位置、激光世界路径／终点及命中特效，并确认独立激光不被绑定到身体。推荐与 `--latency-ms 75 --record-client --heap-check` 配合；场景逐项核对两端实际生成的攻击，不以仅完成会话视为通过。
+
+`weak-network` 用正常客机输入核对八次主动道具使用不丢失、不重复，以及状态／库存恢复和停止后的预测收敛。可选择 `--latency-ms 45 --relay-control tests/fixtures/tcp_weak_network.json --case weak-network --case motion`，在同一对进程追加碰墙／松键回归。[中继配置](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/tcp_weak_network.json)设置基础 RTT 90 ms、每方向 ±20 ms 抖动、双向限速及每四秒一次 250 ms 停传；现场游戏 Ping 还包含调度开销。中继保持 TCP 字节及顺序，停传模拟应用可见的交付间隙，不等同于 IP 丢包率或真实重传测试。
+
+弱网报告同时记录到达时的状态年龄、相邻应用间隔和按时间加权的视图年龄；后者计入等待下一份状态期间持续变旧的时间，避免降低发送频率后仅靠到达样本得出改善结论。时间来自同一 Windows 机器上的隔离主客机，不能直接用于不同机器而未校准的时钟。对照须使用相同场景和中继配置，分别冻结构建及夹具，保留每轮失败和恢复记录。
 
 受保护的实机入口在 `finally` 中等待所属后端收尾，再恢复资料并核对哈希，统一输出 `report.json`、`restored.json` 和 `junit.xml`。报告的 `schema_version` 为 `1`，`status` 区分 `passed`、`failed` 和 `error`，保留各套件原有双端证据和详细结果。JUnit 表示整次套件结果；道具效果、路线与 Boss 覆盖仍读取详细报告。未完成的子项、原生异常或恢复失败不能由一个完成标记覆盖。
 

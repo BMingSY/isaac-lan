@@ -1,12 +1,30 @@
 """Restoring a suite must preserve personal data even on partial failure."""
 
 from pathlib import Path
+from types import SimpleNamespace
+import json
 import sys
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import lab_profile
+
+
+@pytest.mark.parametrize("paths", [[], ["/lab/game/isaac-ng.exe"], ["/other/game/isaac-ng.exe"]])
+@pytest.mark.parametrize("exclusive", [False, True])
+def test_performance_requires_an_idle_machine(monkeypatch, paths, exclusive):
+    monkeypatch.setattr(lab_profile, "windows", str)
+    monkeypatch.setattr(
+        lab_profile.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(stdout=json.dumps(paths)),
+    )
+    if paths and (exclusive or paths[0].startswith("/lab/")):
+        with pytest.raises(RuntimeError):
+            lab_profile.idle([Path("/lab")], exclusive=exclusive)
+    else:
+        lab_profile.idle([Path("/lab")], exclusive=exclusive)
 
 
 @pytest.fixture

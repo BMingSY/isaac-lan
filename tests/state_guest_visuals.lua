@@ -1,13 +1,49 @@
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated authoritative state regression" }
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port
+if _IsaacLanTest then
+    host, port = _IsaacLanTest.host, _IsaacLanTest.port
+else
+    local f = assert(io.open("./lan-test-role.txt", "r"))
+    host = f:read("*l") == "host"
+    f:close()
+    f = assert(io.open("./lan-test-menu-port.txt", "r"))
+    port = f:read("*l")
+    f:close()
+end
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
+end
+local function checkSprite(sprite, expected, context)
+    local actual = native.sprite_state(sprite)
+    if actual ~= expected then
+        local differences = {}
+        for index = 1, math.max(#actual, #expected) do
+            if actual:byte(index) ~= expected:byte(index) then
+                differences[#differences + 1] = index
+                    .. ":"
+                    .. tostring(expected:byte(index))
+                    .. "/"
+                    .. tostring(actual:byte(index))
+                if #differences == 16 then
+                    break
+                end
+            end
+        end
+        error(
+            context
+                .. " animation="
+                .. sprite:GetAnimation()
+                .. " frame="
+                .. sprite:GetFrame()
+                .. " bytes="
+                .. #expected
+                .. "/"
+                .. #actual
+                .. " differences="
+                .. table.concat(differences, ",")
+        )
+    end
 end
 local renders, linked, chosen, finished = 0, false, false, false
 local originalFrame = _IsaacLanFrame
@@ -37,7 +73,7 @@ function _IsaacLanFrame()
 end
 local gate = native.net_gate
 local ticks, corrected, samples = 0, 0, 0
-local startingItems = 0
+local startingItems = {}
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     for i = 0, Game():GetNumPlayers() - 1 do
         Isaac.GetPlayer(i):SetMinDamageCooldown(10000)
@@ -62,7 +98,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report("AUTHORITY host simulation begins")
         end
         if t == 20 then
-            startingItems = Isaac.GetPlayer(0):GetCollectibleCount()
+            for i = 0, Game():GetNumPlayers() - 1 do
+                startingItems[i] = Isaac.GetPlayer(i):GetCollectibleCount()
+            end
             Isaac.GetPlayer(0):AddCollectible(CollectibleType.COLLECTIBLE_SAD_ONION)
             Isaac.GetPlayer(0):AddCoins(7)
             Game():Spawn(EntityType.ENTITY_GAPER, 0, Vector(400, 300), Vector.Zero, nil, 0, 123456)
@@ -140,8 +178,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         if t == 600 then
             assert(not Isaac.GetPlayer(1):IsCoopGhost(), "Boss did not revive remote teammate")
             assert(
-                Isaac.GetPlayer(0):GetCollectibleCount() == startingItems + 3,
-                "Boss reward did not match party count"
+                Isaac.GetPlayer(0):GetCollectibleCount() == startingItems[0] + 1,
+                "Boss rewards changed the non-picking player's inventory"
+            )
+            assert(
+                Isaac.GetPlayer(1):GetCollectibleCount() == startingItems[1] + 2,
+                "Boss rewards did not reach the picking player's inventory"
             )
             report("HOST boss rewards and remote revival verified")
         end
@@ -169,7 +211,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, function(slot, t)
         local bytes = collect(slot, t)
-        if t == 150 or t == 300 then
+        if io and (t == 150 or t == 300) then
             local out = assert(io.open("./authority-" .. t .. ".bin", "wb"))
             out:write(bytes)
             out:close()
@@ -190,6 +232,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 "Actor position not restored"
             )
             assert(p:GetNumCoins() == actor[4][5][1], "Resources not restored")
+            for _, item in ipairs(actor[4][2]) do
+                assert(p:GetCollectibleNum(item[1], true) == item[2], "Inventory not restored")
+            end
             assert(p:IsCoopGhost() == actor[4][9], "Ghost state not restored")
             local localPosition = native.rooms_positions()["1"]
             local actorPosition = native.rooms_positions()[tostring(actor[2] - 1)]
@@ -197,8 +242,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 and actorPosition.dimension == localPosition.dimension
             assert((actor[6] ~= false) == displayed, "Visual state included an undisplayed room")
             if displayed then
-                assert(
-                    native.sprite_state(p:GetSprite()) == actor[3][10][12],
+                checkSprite(
+                    p:GetSprite(),
+                    actor[3][10][12],
                     "Actor layer state differs at " .. t .. " player=" .. actor[1]
                 )
                 assert(
@@ -207,8 +253,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 )
                 local extras = native.actor_sprites(actor[1], p:GetSprite())
                 for i = 1, 3 do
-                    assert(
-                        native.sprite_state(extras[i]) == actor[5][i][12],
+                    checkSprite(
+                        extras[i],
+                        actor[5][i][12],
                         "Actor extra layers differ at " .. t .. " sprite=" .. i
                     )
                 end
@@ -323,3 +370,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, present, beginFloor)
 end
+
+return {
+    done = function()
+        return finished
+    end,
+}
