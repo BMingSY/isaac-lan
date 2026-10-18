@@ -49,7 +49,6 @@ void prepare() {
                 const auto entity = at<Address>(data, i * sizeof(Address));
                 if (at<unsigned>(entity, j460::layout::entity::type) ==
                         compat::ids::entity::pickup &&
-                    at<bool>(entity, j460::layout::entity::active) &&
                     !at<bool>(entity, j460::layout::entity::removed))
                     pickups.push_back(entity);
             }

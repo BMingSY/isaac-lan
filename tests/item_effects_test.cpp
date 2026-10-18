@@ -178,7 +178,8 @@ void localPickupPreview() {
     require(previewed.empty(), "Preview ran before its view was ready");
     isaac::rooms::previewReady = true;
     preview::prepare();
-    require(previewed == std::vector<void*>({entities[0].data(), entities[1].data()}),
+    require(previewed ==
+                std::vector<void*>({entities[0].data(), entities[1].data(), entities[3].data()}),
             "Preview missed rendered pickups or included removed/non-pickup entities");
     preview::image = 0;
     preview::originalUpdate = nullptr;
