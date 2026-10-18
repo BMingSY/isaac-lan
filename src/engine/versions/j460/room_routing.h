@@ -5,6 +5,7 @@
 namespace isaac::engine::j460 {
 struct RoomArrival {
     int index, dimension, door;
+    bool redirected;
 };
 // Synchronous, main-thread-only boundary inside Level::ChangeRoom. The callback
 // installs the final native room; false skips initialization of an occupied room.

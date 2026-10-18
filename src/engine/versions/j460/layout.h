@@ -35,6 +35,9 @@ namespace progress {
 inline constexpr unsigned achievements = 0x38;
 inline constexpr unsigned counters = 0x2bc;
 } // namespace progress
+namespace roomChangeFrame {
+inline constexpr unsigned mazeRedirected = 0xb;
+} // namespace roomChangeFrame
 namespace game {
 inline constexpr unsigned curses = 0xc;
 inline constexpr unsigned seedCurses = 0x26550;

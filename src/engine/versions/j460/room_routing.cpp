@@ -55,15 +55,17 @@ __attribute__((naked)) void isaac_lan_room_maze_thunk() {
                          "popfl\n\tjmp *_isaac_lan_room_maze_original\n\t1:\n\t"
                          "popfl\n\tjmp *_isaac_lan_room_maze_end");
 }
-__attribute__((used, force_align_arg_pointer)) bool __cdecl isaac_lan_room_resolved_prepare() {
+__attribute__((used, force_align_arg_pointer)) bool __cdecl isaac_lan_room_resolved_prepare(
+    std::uintptr_t nativeFrame) {
     if (!pending || pending->reached)
         return true;
     pending->reached = true;
     try {
         const auto game = read<std::uintptr_t>(image, globals::game);
-        return pending->prepare({read<int>(game, layout::game::roomIndex),
-                                 read<int>(game, layout::game::dimension),
-                                 read<int>(game, layout::game::enterDoor)});
+        return pending->prepare(
+            {read<int>(game, layout::game::roomIndex), read<int>(game, layout::game::dimension),
+             read<int>(game, layout::game::enterDoor),
+             read<unsigned char>(nativeFrame, layout::roomChangeFrame::mazeRedirected) != 0});
     } catch (...) {
         pending->error = std::current_exception();
         return false;
@@ -86,7 +88,8 @@ __attribute__((used, force_align_arg_pointer)) bool __cdecl isaac_lan_room_resol
 // The common epilogue restores the native SEH frame and pops both arguments.
 __attribute__((naked)) void isaac_lan_room_resolved_thunk() {
     __asm__ __volatile__(SAVE_ROOM_REGISTERS
-                         "call _isaac_lan_room_resolved_prepare\n\ttestb %al, %al\n\tjz "
+                         "pushl %ebp\n\tcall _isaac_lan_room_resolved_prepare\n\t"
+                         "addl $4, %esp\n\ttestb %al, %al\n\tjz "
                          "1f\n\t" RESTORE_ROOM_REGISTERS
                          "jmp *_isaac_lan_room_resolved_original\n\t1:\n\t" RESTORE_ROOM_REGISTERS
                          "jmp *_isaac_lan_room_resolved_return");

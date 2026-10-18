@@ -3,12 +3,14 @@
 #include "engine/versions/j460/room_routing.cpp"
 #include <array>
 #include <cstdio>
+#include <utility>
 #include <vector>
 
 extern "C" {
 unsigned roomBoundaryVisits = 0;
 unsigned roomBoundaryECX = 0, roomBoundaryEBX = 0;
 float roomBoundarySSE = 0;
+unsigned char roomBoundaryFrame[16]{};
 __attribute__((naked)) int roomBoundaryContinue() {
     __asm__ __volatile__("incl _roomBoundaryVisits\n\tmovl %ecx, _roomBoundaryECX\n\t"
                          "movl %ebx, _roomBoundaryEBX\n\tmovss %xmm7, _roomBoundarySSE\n\t"
@@ -18,10 +20,11 @@ __attribute__((naked)) int roomBoundaryResident() {
     __asm__ __volatile__("movl $23, %eax\n\tret");
 }
 __attribute__((naked)) int invokeRoomBoundary() {
-    __asm__ __volatile__("pushl %ebx\n\tmovl $0x12345678, %ebx\n\t"
+    __asm__ __volatile__("pushl %ebp\n\tmovl $_roomBoundaryFrame, %ebp\n\t"
+                         "pushl %ebx\n\tmovl $0x12345678, %ebx\n\t"
                          "movl $0x87654321, %ecx\n\tmovl $0x3f400000, %eax\n\t"
                          "movd %eax, %xmm7\n\tcall _isaac_lan_room_resolved_thunk\n\t"
-                         "popl %ebx\n\tret");
+                         "popl %ebx\n\tpopl %ebp\n\tret");
 }
 __attribute__((naked)) int invokeMazeBoundary() {
     __asm__ __volatile__("call _isaac_lan_room_maze_thunk\n\tret");
@@ -47,11 +50,15 @@ int main() {
         isaac_lan_room_maze_end = reinterpret_cast<void*>(roomBoundaryResident);
         require(invokeRoomBoundary() == 17, "Unmanaged native room entry was intercepted");
         unsigned prepared = 0;
-        for (bool fresh : {true, false, true}) {
+        for (const auto& [fresh, redirected] :
+             {std::pair{true, false}, std::pair{true, true}, std::pair{false, false},
+              std::pair{false, true}, std::pair{true, false}}) {
+            roomBoundaryFrame[layout::roomChangeFrame::mazeRedirected] = redirected;
             const auto calls = roomBoundaryVisits;
             withResolvedRoomEntry(
                 [&](RoomArrival arrival) {
-                    require(arrival.index == 70 && arrival.dimension == 0 && arrival.door == 3,
+                    require(arrival.index == 70 && arrival.dimension == 0 && arrival.door == 3 &&
+                                arrival.redirected == redirected,
                             "Boundary did not expose the native resolved room and entrance");
                     ++prepared;
                     __asm__ __volatile__("pxor %%xmm7, %%xmm7" ::: "xmm7");
@@ -65,7 +72,7 @@ int main() {
                     "Native destination initialized more than once");
             require(!pending, "Native entry retained a borrowed callback");
         }
-        require(prepared == 3 && roomBoundaryECX == 0x87654321 && roomBoundaryEBX == 0x12345678 &&
+        require(prepared == 5 && roomBoundaryECX == 0x87654321 && roomBoundaryEBX == 0x12345678 &&
                     roomBoundarySSE == 0.75f,
                 "Entry callback corrupted native general/SSE registers");
         for (bool inside : {false, true}) {

@@ -2975,12 +2975,15 @@ struct RoomTransfer {
             const auto final = destination(*from, resolved->index, resolved->dimension);
             if (!final)
                 throw std::runtime_error("Native room resolution selected an invalid descriptor");
-            const bool redirected = *final != request.destination;
+            // Maze can select another covered cell/entrance of the same large
+            // room. Its native redirect flag matters even if the key matches.
+            const bool redirected = resolved->redirected || *final != request.destination;
             logger("room_route slot=" + std::to_string(slotOf(request.player)) +
                    " from=" + std::to_string(from->key.index) +
                    " requested=" + std::to_string(request.destination.index) +
                    " actual=" + std::to_string(final->index) +
                    " native_index=" + std::to_string(resolved->index) +
+                   " redirected=" + std::to_string(resolved->redirected) +
                    " native_entry=" + std::to_string(resolved->door));
             request.destination = *final;
             if (redirected) {
