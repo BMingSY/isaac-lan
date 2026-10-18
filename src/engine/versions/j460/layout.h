@@ -36,11 +36,17 @@ inline constexpr unsigned achievements = 0x38;
 inline constexpr unsigned counters = 0x2bc;
 } // namespace progress
 namespace game {
+inline constexpr unsigned curses = 0xc;
+inline constexpr unsigned seedCurses = 0x26550;
 inline constexpr unsigned stage = 0x0;
 inline constexpr unsigned stageType = 0x4;
 inline constexpr unsigned room = 0x18300;
 inline constexpr unsigned roomIndex = 0x18304;
+inline constexpr unsigned previousRoomIndex = 0x18308;
 inline constexpr unsigned dimension = 0x1830c;
+inline constexpr unsigned previousDimension = 0x18310;
+inline constexpr unsigned leaveDoor = 0x18318;
+inline constexpr unsigned enterDoor = 0x1831c;
 inline constexpr unsigned players = 0x1baa8;
 inline constexpr unsigned floorSeeds = 0x1bb84;
 inline constexpr unsigned pauseMenu = 0x23a74;
