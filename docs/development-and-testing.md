@@ -137,6 +137,10 @@ python tools/engine_test.py run special-routes -- \
 
 `attached-motion` 用正常客机移动、点按、蓄力和松键覆盖骸骨、妈刀、圣剑、硫磺火、科技、科技 X 与虚空之喉。它检查武器相对预测身体的位置、激光世界路径／终点及命中特效，并确认独立激光不被绑定到身体。推荐与 `--latency-ms 75 --record-client --heap-check` 配合；场景逐项核对两端实际生成的攻击，不以仅完成会话视为通过。
 
+`weak-network` 用正常客机输入核对八次主动道具使用不丢失、不重复，以及状态／库存恢复和停止后的预测收敛。可选择 `--latency-ms 45 --relay-control tests/fixtures/tcp_weak_network.json --case weak-network --case motion`，在同一对进程追加碰墙／松键回归。[中继配置](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/tcp_weak_network.json)设置基础 RTT 90 ms、每方向 ±20 ms 抖动、双向限速及每四秒一次 250 ms 停传；现场游戏 Ping 还包含调度开销。中继保持 TCP 字节及顺序，停传模拟应用可见的交付间隙，不等同于 IP 丢包率或真实重传测试。
+
+弱网报告同时记录到达时的状态年龄、相邻应用间隔和按时间加权的视图年龄；后者计入等待下一份状态期间持续变旧的时间，避免降低发送频率后仅靠到达样本得出改善结论。时间来自同一 Windows 机器上的隔离主客机，不能直接用于不同机器而未校准的时钟。对照须使用相同场景和中继配置，分别冻结构建及夹具，保留每轮失败和恢复记录。
+
 受保护的实机入口在 `finally` 中等待所属后端收尾，再恢复资料并核对哈希，统一输出 `report.json`、`restored.json` 和 `junit.xml`。报告的 `schema_version` 为 `1`，`status` 区分 `passed`、`failed` 和 `error`，保留各套件原有双端证据和详细结果。JUnit 表示整次套件结果；道具效果、路线与 Boss 覆盖仍读取详细报告。未完成的子项、原生异常或恢复失败不能由一个完成标记覆盖。
 
 ### 验证安排

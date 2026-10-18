@@ -196,7 +196,7 @@ def main():
     parser.add_argument(
         "--relay-control",
         type=Path,
-        help="Owned JSON control file: downstream_bytes_per_second, optional delay_ms",
+        help="Owned JSON relay profile: delay_ms, jitter_ms, per-direction bytes_per_second, stall_every_ms/stall_ms",
     )
     parser.add_argument(
         "--exercise-official",
@@ -538,6 +538,9 @@ def main():
                 args.latency_ms,
                 args.output / "relay" if args.record_relay else None,
             )
+            if args.relay_control:
+                relay.configure(json.loads(args.relay_control.read_text()), args.latency_ms)
+            result["relay_profile"] = relay.settings()
             result["one_way_latency_ms"] = args.latency_ms
         for lab, role in zip(labs, roles):
             # Windows refuses replacement if an older process still has the DLL
@@ -895,19 +898,12 @@ def main():
                         "upstream_bytes": relay.upstream_bytes,
                         "connections": relay.connections,
                         "rate_limit": relay.downstream_bytes_per_second,
-                        "delay_ms": relay.delay * 1000,
+                        **relay.settings(),
                     }
                 )
             if relay and args.relay_control:
                 relay_settings = json.loads(args.relay_control.read_text())
-                rate = relay_settings["downstream_bytes_per_second"]
-                if not isinstance(rate, int) or rate < 0:
-                    raise ValueError("Invalid owned relay bandwidth")
-                relay.downstream_bytes_per_second = rate
-                delay = relay_settings.get("delay_ms", args.latency_ms)
-                if not isinstance(delay, (int, float)) or not 0 <= delay <= 1000:
-                    raise ValueError("Invalid owned relay latency")
-                relay.delay = delay / 1000
+                relay.configure(relay_settings, args.latency_ms)
             for role, _, path in process_watchers:
                 if path.exists():
                     exit_status = json.loads(path.read_text(encoding="utf-8-sig"))

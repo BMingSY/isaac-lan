@@ -23,6 +23,8 @@
 | 对象与队列 | Lua 堆、实体／网格／地图规模、连接、队列／状态容量、退休会话 |
 | `cached_world_bytes` | 完整视图历史的分配容量 |
 | `world_in_flight_bytes`／`world_in_flight_states` | 未确认载荷／视图数 |
+| `world_delivery_window`／`world_oldest_unapplied_ms` | 有在途视图的连接窗口总和／最旧未确认视图的年龄 |
+| `input_coalesced` | 当前连接合并的未发送输入数量；不包含 TCP 已接收的字节 |
 | `world_snapshots_total`／`world_delta_snapshots_total` | 当前会话累计视图数／增量数 |
 | `world_raw_bytes_total`／`world_wire_bytes_total`／`world_full_wire_bytes_total` | 原始字节／实际载荷／同批完整压缩对照量 |
 
@@ -40,7 +42,7 @@ python3 tools/check_performance.py "$ISAAC_RUN_OUTPUT" --output "$ISAAC_PERFORMA
 
 ## 带宽测量
 
-[`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，反向输入保留固定延迟；375000 字节／秒对应十进制 3 Mbps。`run_network_engine.py --record-relay` 保存主机原始字节流和逐秒总下行。
+[`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，上行有独立共享预算，默认不限速；375000 字节／秒对应十进制 3 Mbps。`--relay-control` 接受 JSON 中的 `downstream_bytes_per_second`、`upstream_bytes_per_second`、`delay_ms`、`jitter_ms`、`stall_every_ms` 与 `stall_ms`，配置先完整校验再应用。抖动和停传保持字节顺序，不删除 TCP 流内容，也不代表真实 IP 丢包。`run_network_engine.py --record-relay` 保存主机原始字节流；逐秒中继记录包含双向字节数与实际配置。弱网功能与状态年龄验收见[开发测试说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 
 `isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。它支持旧字节补丁和 Zstd prefix 记录；`full_wire` 始终是当前 Zstd 完整帧对照，CSV 的 `full_codec` 标明算法，不能将旧记录的比值解释为同算法的增量收益。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
 

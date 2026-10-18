@@ -452,22 +452,10 @@ struct Session::Impl {
                 return;
             }
             if (type == Message::input && (state == Phase::running || state == Phase::finishing)) {
-                const auto sequence = r.u32();
-                const auto value = r.input();
-                std::optional<InputRoom> room;
-                const auto hasRoom = r.u8();
-                if (hasRoom > 1)
-                    throw std::runtime_error("Invalid input room flag");
-                if (hasRoom) {
-                    room = InputRoom{r.u32(), static_cast<std::int16_t>(r.u16()), r.u8()};
-                    room->introSerial = r.u32();
-                    const auto active = r.u8();
-                    if (active > 1)
-                        throw std::runtime_error("Invalid intro state");
-                    room->introActive = active != 0;
-                    if (room->index < -20 || room->index >= 169 || room->dimension > 2)
-                        throw std::runtime_error("Invalid input room");
-                }
+                const auto sample = readInput(r);
+                const auto sequence = sample.sequence;
+                const auto& value = sample.input;
+                const auto& room = sample.room;
                 if (!p.ready || p.waiting || state == Phase::finishing)
                     return;
                 if (p.hasInput && sequence <= p.inputSequence)
@@ -475,9 +463,7 @@ struct Session::Impl {
                 p.hasInput = true;
                 p.inputSequence = sequence;
                 p.inputAt = Clock::now();
-                const bool sameRoom = room && inputRooms[slot] ? room->sameRoom(*inputRooms[slot])
-                                                               : room == inputRooms[slot];
-                const auto edges = latest[slot].triggered & (sameRoom ? 0xffffu : menuActionMask);
+                const auto edges = retainedInputEdges(latest[slot], inputRooms[slot], room);
                 latest[slot] = value;
                 latest[slot].triggered |= edges;
                 inputRooms[slot] = room;
@@ -1542,18 +1528,7 @@ bool Session::submit(std::uint32_t sequence, const InputFrame& input,
         impl->sequences[0] = sequence;
         impl->inputRooms[0] = room;
     } else {
-        Writer w(Message::input);
-        w.u32(sequence);
-        w.input(input);
-        w.u8(room.has_value());
-        if (room) {
-            w.u32(room->epoch);
-            w.u16(static_cast<std::uint16_t>(room->index));
-            w.u8(room->dimension);
-            w.u32(room->introSerial);
-            w.u8(room->introActive);
-        }
-        impl->peers[0]->sendMessage(w);
+        impl->peers[0]->submitInput({sequence, input, room});
     }
     ++impl->nextInput;
     return true;
@@ -1703,6 +1678,14 @@ TransportResources Session::resources() const {
         out.cachedWorldBytes += p->cachedBytes();
         out.inFlightBytes += p->inFlightBytes();
         out.inFlightStates += p->flight.size();
+        out.coalescedInputs += p->coalescedInputs;
+        if (!p->flight.empty()) {
+            out.deliveryWindow += p->window();
+            out.oldestWorldMs = std::max<std::uint64_t>(
+                out.oldestWorldMs, std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       Clock::now() - p->flight.front().started)
+                                       .count());
+        }
         for (const auto* state : {&p->sending, &p->pending})
             if (*state)
                 out.worldBytes += (*state)->bytes.capacity();

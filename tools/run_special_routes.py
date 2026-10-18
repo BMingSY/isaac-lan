@@ -9,6 +9,7 @@ import re
 import subprocess
 from testing.special_routes import CASES, DIAGNOSTICS, build
 from testing.results import finish_run
+from testing.delivery import analyze_delivery
 from testing.engine import configure_interrupts, engine_command, run_engine
 from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle
@@ -39,6 +40,9 @@ def main():
     parser.add_argument("--port", type=int, default=30220)
     parser.add_argument("--latency-ms", type=int, default=75)
     parser.add_argument(
+        "--relay-control", type=Path, help="Owned JSON profile for TCP jitter, limits and stalls"
+    )
+    parser.add_argument(
         "--record-relay",
         action="store_true",
         help="Archive the delayed relay stream for offline replay",
@@ -68,6 +72,8 @@ def main():
         parser.error("Latency must be between 0 and 5000 ms")
     if args.record_relay and not args.latency_ms:
         parser.error("Relay recording requires positive latency")
+    if args.relay_control and not args.latency_ms:
+        parser.error("Relay control requires positive latency")
     if not 16 <= args.frame_ms <= 1000 or args.record and args.record_client:
         parser.error("Choose one recording mode and a frame interval of 16..1000 ms")
     if len(set(cases)) != len(cases):
@@ -128,6 +134,8 @@ def main():
         command.append("--automatic")
     if args.record_relay:
         command.append("--record-relay")
+    if args.relay_control:
+        command.extend(("--relay-control", str(args.relay_control.resolve())))
     if "ascent-compat" in cases:
         command.append("--ascent-fixture")
     if "lazarus" in cases:
@@ -237,6 +245,7 @@ def main():
                                 "motion",
                                 "action-prediction",
                                 "attached-motion",
+                                "weak-network",
                                 "entity-fields",
                                 "floor-items",
                                 "mod-integrations",
@@ -255,6 +264,13 @@ def main():
         report["passed"] = result.returncode == 0 and all(
             peer["passed"] for case in report["cases"].values() for peer in case.values()
         )
+        if "weak-network" in cases and all(
+            peer["passed"] for peer in report["cases"]["weak-network"].values()
+        ):
+            report["tcp_delivery"] = analyze_delivery(
+                (output / "engine/host/log.txt").read_text(errors="replace"),
+                (output / "engine/client/log.txt").read_text(errors="replace"),
+            )
         if "victory-lap" in cases:
             lap = report["cases"]["victory-lap"]
             report["victory_lap_passed"] = all(

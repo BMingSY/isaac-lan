@@ -34,6 +34,19 @@ struct Socket {
         if (handle != INVALID_SOCKET)
             closesocket(handle);
     }
+    std::span<const std::uint8_t> unsentTail(Message type) const {
+        if (outgoing.empty() || (outgoing.size() == 1 && sent != 0) ||
+            outgoing.back()[2] != static_cast<unsigned>(type))
+            return {};
+        return std::span(outgoing.back()).subspan(2);
+    }
+    void replaceTail(const Writer& message) {
+        if (unsentTail(static_cast<Message>(message.bytes.at(0))).empty())
+            throw std::runtime_error("Cannot replace a partially sent or ordered message");
+        queued -= outgoing.back().size();
+        outgoing.pop_back();
+        sendMessage(message);
+    }
     void sendMessage(const Writer& w) {
         if (w.bytes.empty() || w.bytes.size() > maxMessageSize || queued + w.bytes.size() > 262144)
             throw std::runtime_error("Network queue limit exceeded");

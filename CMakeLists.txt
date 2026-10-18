@@ -394,9 +394,11 @@ if(BUILD_TESTING)
         codec
         compression-limits
         world-deltas
+        delivery-backpressure
         delta-floor-boundary
         inputs-2
         render-inputs
+        input-backpressure
         inputs-3
         inputs-4
         floor-rejoin

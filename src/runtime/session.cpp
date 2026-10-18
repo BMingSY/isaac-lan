@@ -781,6 +781,9 @@ int poll(lua_State* L) {
         diagnostics::counter("cached_world_bytes", resource.cachedWorldBytes);
         diagnostics::counter("world_in_flight_bytes", resource.inFlightBytes);
         diagnostics::counter("world_in_flight_states", resource.inFlightStates);
+        diagnostics::counter("world_delivery_window", resource.deliveryWindow);
+        diagnostics::counter("world_oldest_unapplied_ms", resource.oldestWorldMs);
+        diagnostics::counter("input_coalesced", resource.coalescedInputs);
         diagnostics::counter("world_snapshots_total", resource.worldSnapshots);
         diagnostics::counter("world_delta_snapshots_total", resource.deltaSnapshots);
         diagnostics::counter("world_raw_bytes_total", resource.rawWorldBytes);
