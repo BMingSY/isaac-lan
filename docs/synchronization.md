@@ -51,7 +51,7 @@ flowchart LR
 
 采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
 
-实体 ID 由房主分配，客机维护 `ID → EntityPtr`。同一活动对象复用其 `EntityPtr` 与显示轨迹记录，原生引用失效或角色对象替换时重新建立引用；换房清理显示轨迹，退出清理全部引用。恢复时先回收过期实体，再创建／更新实体，最后绑定父、子、生成者和目标引用。身份与本机地址、实体池槽位无关；原生对象仍由游戏分配和释放。特殊实体引用通过兼容组件和具名后端能力接入，见[原生能力参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。
+实体 ID 由房主分配，客机维护 `ID → EntityPtr`。同一活动对象复用其 `EntityPtr` 与显示轨迹记录，原生引用失效或角色对象替换时重新建立引用；换房清理显示轨迹，退出清理全部引用。恢复时先回收过期实体，再创建／更新实体，最后绑定父、子、生成者、目标和角色持有引用。`held`（实体字段 27）是被抱起对象的稳定 ID，无对象或不在当前视图时为 `0`；异房角色同样清空旧链接。身份与本机地址、实体池槽位无关；原生对象仍由游戏分配和释放。特殊实体引用通过兼容组件和具名后端能力接入，见[原生能力参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。
 
 客机应用完整视图时遵循[恢复顺序](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md#采集与副本恢复)，全部成功后才提交 tick。原生楼层未准备好时保留最新视图，延后应用。普通状态允许在原生半帧边界应用；首次视图、暂停／名单变化、换层、换房及角色替换在完整更新边界处理。`betweenUpdates` 预检不写入房间或角色，返回 `false` 表示继续等待。
 

@@ -156,3 +156,26 @@ motion.present("", 0, {}, models, function(id)
 end, 1)
 close(newBone.Position, 106, 200, "Render pipeline did not anchor the zero-velocity weapon")
 print("Attached weapon, beam path, independent projectile and lifecycle checks passed")
+
+-- A carried actor and its weapon share the holder's prediction, then resume
+-- independent trajectories when the authoritative link is released.
+local body, bone = models[20], entities[1]
+local soul, soulModel = add(80, types.ENTITY_PLAYER)
+soulModel.display = Vector(150, 230)
+soulModel.held = 20
+body.target = Vector(110, 190)
+body.display = Vector(115, 195)
+present()
+close(entities[20].Position, 160, 220, "Carried actor did not follow holder")
+close(bone.Position, 150, 230, "Carried weapon did not follow holder")
+present()
+close(entities[20].Position, 160, 220, "Repeated carry render drifted")
+soulModel.held = 0
+body.display = Vector(120, 205)
+present()
+close(bone.Position, 110, 215, "Thrown weapon retained holder offset")
+soulModel.held = 20
+entities[80] = nil
+present()
+close(bone.Position, 110, 215, "Removed holder retained a link")
+print("PASS carried actor/weapon offsets, repeat, throw and holder removal")

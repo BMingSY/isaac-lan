@@ -79,6 +79,7 @@ return {
         compatibility = 24,
         minecart = 25,
         nativeFields = 26,
+        held = 27,
     },
     room = {
         clear = 1,

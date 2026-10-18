@@ -21,6 +21,7 @@
 #include "compat/items/crafting_bag.h"
 #include "compat/items/team_effects.h"
 #include "compat/characters/traits.h"
+#include "compat/characters/ghost.h"
 #include "compat/characters/keeper.h"
 #include "compat/characters/team_effects.h"
 #include "runtime/actor_roster.h"
@@ -253,6 +254,7 @@ struct Request {
     bool teleport;
     bool animateDeparture;
     int animation;
+    std::optional<Vec2> landing;
 };
 std::vector<Request> pending;
 std::set<unsigned> pendingItemRevival;
@@ -1069,7 +1071,8 @@ bool remoteCommand(Address player, int index, int dimension, bool teleport) {
          static_cast<std::int16_t>(target->index), teleport});
 }
 bool queue(Address player, int index, int dimension, int door, bool teleport = false,
-           bool animateDeparture = true, int animation = 0) {
+           bool animateDeparture = true, int animation = 0,
+           std::optional<Vec2> landing = std::nullopt) {
     for (auto head : participants) {
         const auto actors = controlledActors(head);
         if (std::find(actors.begin(), actors.end(), player) != actors.end()) {
@@ -1118,7 +1121,7 @@ bool queue(Address player, int index, int dimension, int door, bool teleport = f
             door = resolved;
         }
     }
-    pending.push_back({player, key, door, teleport, animateDeparture, animation});
+    pending.push_back({player, key, door, teleport, animateDeparture, animation, landing});
     if (teleport && animateDeparture) {
         using Animate = void(__attribute__((thiscall))*)(void*, bool);
         for (auto p : controlledActors(player))
@@ -3045,25 +3048,27 @@ void finishFrame() {
     }
     setConnected(connectedMask);
     if (!runtime::replica()) {
-        // Vanilla global room changes carry co-op ghosts with living players.
-        // Per-player transfers need that same rule when the last survivor
-        // leaves a room, including a death that occurs while already split.
-        for (const auto ghost : participants) {
-            if (!at<bool>(ghost, 0x20a9))
+        std::array<compat::characters::GhostRoomActor, lan::maxPlayers> actors{};
+        std::size_t count = 0;
+        for (const auto player : participants) {
+            const auto room = findRoom(player);
+            if (!room)
                 continue;
-            const auto source = findRoom(ghost);
-            const auto livingHere =
-                std::any_of(participants.begin(), participants.end(), [&](Address p) {
-                    return !at<bool>(p, 0x20a9) && findRoom(p) == source;
-                });
-            if (!source || livingHere)
-                continue;
-            const auto survivor = std::find_if(participants.begin(), participants.end(),
-                                               [](Address p) { return !at<bool>(p, 0x20a9); });
-            if (survivor != participants.end())
-                if (const auto target = findRoom(*survivor))
-                    queue(ghost, target->key.index, target->key.dimension, -1);
+            const auto slot = slotOf(player);
+            const auto position = at<Vec2>(player, 0x33c);
+            actors[count++] = {slot,
+                               room->key.dimension,
+                               room->key.index,
+                               at<bool>(player, j460::layout::player::coopGhost),
+                               (connectedMask & (1u << slot)) != 0,
+                               position.x,
+                               position.y};
         }
+        const auto roster = std::span(actors).first(count);
+        for (const auto& actor : roster)
+            if (const auto target = compat::characters::ghostFollowTarget(actor, roster))
+                queue(participant(actor.slot), target->room, target->dimension, -1, false, true, 0,
+                      Vec2{target->x, target->y});
     }
     if (pending.empty() && pendingItemRevival.empty()) {
         preparedDepartures.clear();
@@ -3135,7 +3140,8 @@ void finishFrame() {
         const auto certificatePosition = compat::items::deathCertificateArrival(
             request.animation, from->key.dimension, to->key.dimension, residentPosition);
         const auto landing =
-            certificatePosition
+            request.landing ? request.landing
+            : certificatePosition
                 ? std::optional<Vec2>{{(*certificatePosition)[0], (*certificatePosition)[1]}}
                 : std::nullopt;
         if (created)

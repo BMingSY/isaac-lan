@@ -189,13 +189,21 @@ local room = {
         return 0
     end,
 }
+local collision = {
+    COLLISION_NONE = 0,
+    COLLISION_PIT = 1,
+    COLLISION_OBJECT = 2,
+    COLLISION_SOLID = 3,
+    COLLISION_WALL_EXCEPT_PLAYER = 5,
+    COLLISION_WALL = 4,
+}
 local actor =
     { 1, 2, { 1 }, {}, { { "body", "LiftItem" } }, false, false, { string.rep("\0", 12), true } }
 local localMotion = assert(
     loadfile(
         root .. "/src/bridge/presentation/motion.lua",
         "t",
-        setmetatable({ GridCollisionClass = { COLLISION_NONE = 0 } }, { __index = _G })
+        setmetatable({ GridCollisionClass = collision }, { __index = _G })
     )
 )()(dofile(root .. "/src/bridge/sync/fields.lua"))({
     rooms_with_player = function(_, fn)
@@ -428,3 +436,116 @@ animation = "WalkRight"
 localRender(51)
 assert(localState.prediction.velocity.X > 0, "Movement waited for another host packet")
 print("PASS action locks retain pending inputs, reconcile delayed state and resume locally")
+
+-- Flying crosses pits/rocks but never a solid wall. Check the whole render
+-- path, including repeated blocked frames and resuming after the obstacle.
+local obstacle = collision.COLLISION_WALL
+room.GetGridCollisionAtPos = function(_, p)
+    return p.X >= 120 and obstacle or collision.COLLISION_NONE
+end
+player.CanFly = true
+localState.target, localState.display = Vector(100, 100), Vector(100, 100)
+localState.prediction = prediction.new(localState.target)
+localMotion.reset()
+for s = 0, 40 do
+    assert(localRender(s) < 120, "Flying prediction crossed a solid wall")
+end
+for _, kind in ipairs({
+    collision.COLLISION_PIT,
+    collision.COLLISION_OBJECT,
+    collision.COLLISION_SOLID,
+}) do
+    obstacle = kind
+    localState.target, localState.display = Vector(100, 100), Vector(100, 100)
+    localState.prediction = prediction.new(localState.target)
+    localMotion.reset()
+    for s = 0, 40 do
+        localRender(s)
+    end
+    assert(player.Position.X > 120, "Flying prediction stopped at a flyable grid")
+end
+room.GetGridCollisionAtPos = function()
+    return collision.COLLISION_NONE
+end
+
+-- Native movement queries return the same input for the tainted skeleton
+-- and soul, despite only the soul walking. Carrying/throwing still comes
+-- from authority. Dungeon gravity/ladders never use top-down walking.
+local types = dofile(root .. "/tests/fixtures/game_enums.lua").PlayerType
+local forgotten = dofile(root .. "/src/bridge/compat/characters/forgotten.lua")(types)
+local dungeonType, roomType, kind = 16, 1, types.PLAYER_ISAAC
+local crawlspace = dofile(root .. "/src/bridge/compat/routes/crawlspace.lua")(nil, nil, dungeonType)
+player.GetPlayerType = function()
+    return kind
+end
+room.GetType = function()
+    return roomType
+end
+local special = assert(
+    loadfile(
+        root .. "/src/bridge/presentation/motion.lua",
+        "t",
+        setmetatable({ GridCollisionClass = collision }, { __index = _G })
+    )
+)()(dofile(root .. "/src/bridge/sync/fields.lua"))({
+    rooms_with_player = function(_, fn)
+        fn()
+        return true
+    end,
+}, {}, {
+    vector = Vector,
+    clock = function()
+        return now * 1000
+    end,
+    status = function()
+        return { pause = 0, slot = 1 }
+    end,
+    room = function()
+        return room
+    end,
+    predictMovement = function(p, r)
+        return forgotten.predictMovement(p) and crawlspace.predictMovement(r)
+    end,
+})
+localState.velocity, localState.target = Vector(0, 0), Vector(100, 100)
+localState.display = localState.target
+localState.prediction = prediction.new(localState.target)
+localState.prediction:confirm(localState.target, 0)
+localState.track = special.track(nil, localState.target, localState.velocity, 0, 1, 60)
+local function specialRender(s)
+    now = s / 60
+    special.present("", s, {}, { [1] = localState }, function()
+        return player
+    end, 1)
+end
+for s = 0, 10 do
+    specialRender(s)
+end
+assert(player.Position.X > 100)
+kind = types.PLAYER_THEFORGOTTEN_B
+for s = 11, 30 do
+    specialRender(s)
+    close(player.Position.X, 100, "Tainted skeleton followed its soul's input")
+    assert(not next(localState.prediction.pending), "Inactive body kept walking input")
+    assert(localState.prediction.acknowledged == 0, "Inactive body fabricated an acknowledgement")
+end
+-- A thrown skeleton follows its host velocity even while direction is held.
+localState.velocity = Vector(-2, 0)
+localState.track = special.track(nil, localState.target, localState.velocity, now, 2, 60)
+specialRender(31)
+close(player.Position.X, 98, "Thrown skeleton lost authoritative movement")
+kind, roomType = types.PLAYER_ISAAC, dungeonType
+localState.velocity = Vector(0, 0)
+localState.track = special.track(nil, localState.target, localState.velocity, now, 3, 60)
+for s = 32, 40 do
+    specialRender(s)
+    close(player.Position.X, 100, "Dungeon used ordinary walking prediction")
+end
+roomType = 1
+specialRender(41)
+assert(player.Position.X > 100, "Walking did not resume after leaving the dungeon")
+kind = types.PLAYER_THESOUL_B
+assert(forgotten.predictMovement(player), "Tainted soul lost local walking prediction")
+kind = types.PLAYER_THEFORGOTTEN
+assert(forgotten.predictMovement(player), "Ordinary Forgotten lost local walking prediction")
+print("PASS flying walls, flyable grids, tainted body authority, dungeon and form transitions")

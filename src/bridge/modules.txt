@@ -43,6 +43,7 @@ compat/bosses/dogma
 compat/bosses/held_bombs
 compat/bosses/visuals
 compat/characters/lazarus
+compat/characters/forgotten
 compat/characters/blue_baby
 compat/characters/keeper
 api/codec

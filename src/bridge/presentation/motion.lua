@@ -66,10 +66,11 @@ return function(fields)
                 end
             end
         end
-        local function clearForPlayer(room, position, aperture)
+        local function clearForPlayer(room, position, aperture, flying)
             local collision = room:GetGridCollisionAtPos(position)
             return collision == GridCollisionClass.COLLISION_NONE
                 or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
+                or (flying and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT or collision == GridCollisionClass.COLLISION_SOLID))
                 or (aperture and collision == GridCollisionClass.COLLISION_WALL)
         end
         local function present(input, sequence, actorVisuals, motion, ref, receivedTick)
@@ -107,7 +108,13 @@ return function(fields)
                 local e = ref(identifier)
                 if e then
                     local position
-                    if m.actor and m.controller == status.slot + 1 then
+                    local predict = m.actor and m.controller == status.slot + 1
+                    if predict and view.predictMovement then
+                        assert(native.rooms_with_player(status.slot, function()
+                            predict = view.predictMovement(e:ToPlayer(), view.room())
+                        end))
+                    end
+                    if predict then
                         local p = e:ToPlayer()
                         local controls = p.ControlsEnabled
                             and p:AreControlsEnabled()
@@ -170,16 +177,16 @@ return function(fields)
                             if not aperture then
                                 position = room:GetClampedPosition(position, math.max(5, e.Size))
                             end
-                            if not p.CanFly and not clearForPlayer(room, position, aperture) then
+                            if not clearForPlayer(room, position, aperture, p.CanFly) then
                                 -- Slide along blocked grids; returning to the older
                                 -- authority position on every blocked frame flickers.
                                 local x = Vector(position.X, m.display.Y)
                                 local y = Vector(m.display.X, position.Y)
-                                if clearForPlayer(room, x, aperture) then
+                                if clearForPlayer(room, x, aperture, p.CanFly) then
                                     position = x
-                                elseif clearForPlayer(room, y, aperture) then
+                                elseif clearForPlayer(room, y, aperture, p.CanFly) then
                                     position = y
-                                elseif clearForPlayer(room, m.display, aperture) then
+                                elseif clearForPlayer(room, m.display, aperture, p.CanFly) then
                                     position = m.display
                                 else
                                     position = m.target
@@ -188,6 +195,13 @@ return function(fields)
                         end))
                         m.prediction:clip(position)
                     else
+                        if m.prediction then
+                            -- Drop walking offsets when this body stops accepting
+                            -- walking input. Retain the real acknowledgement so a
+                            -- later form cannot replay another body's pending path.
+                            m.prediction:reset(m.target, m.prediction.acknowledged, m.velocity * 60)
+                            m.doorway = nil
+                        end
                         -- Continue from the same display trajectory across packet
                         -- gaps. Only the authority error is smoothed, without a
                         -- compulsory extra snapshot of interpolation delay.
