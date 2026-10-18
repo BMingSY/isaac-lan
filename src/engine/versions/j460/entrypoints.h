@@ -45,6 +45,7 @@ inline constexpr std::uint32_t consoleRunCommand = 0x28cdc0;
 inline constexpr std::uint32_t emoteLocalParticipant = 0x50b070;
 inline constexpr std::uint32_t emoteWheelUpdate = 0x4d1f20;
 inline constexpr std::uint32_t emoteShow = 0x30750;
+inline constexpr std::uint32_t emoteUpdate = 0x303e0;
 inline constexpr std::uint32_t gameUpdate = 0x2fadc0;
 inline constexpr std::uint32_t gameRender = 0x2fbc10;
 inline constexpr std::uint32_t gameUpdateHalf = 0x2fd3f0;

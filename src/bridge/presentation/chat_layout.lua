@@ -1,4 +1,16 @@
 local layout = { lineHeight = 11, bubbleLines = 3, recentLines = 3, expandedLines = 6 }
+local panelMargin, statsWidth, inventoryWidth, hudInset = 12, 76, 64, 20
+function layout.panel(screenWidth, screenHeight, hud, position)
+    local offset = math.max(0, math.min(1, hud.offset or 0)) * hudInset
+    local left = hud.stats and statsWidth + offset or panelMargin
+    local right = screenWidth - (hud.items and inventoryWidth + offset or panelMargin)
+    local top, bottom = 48 + offset, screenHeight - 16
+    local width = math.min(210, screenWidth * 0.42, right - left)
+    local height = layout.expandedLines * layout.lineHeight + 30
+    local x = math.max(left, math.min(right - width, position and position.x or left))
+    local y = math.max(top + height, math.min(bottom, position and position.bottom or bottom))
+    return { x = x, y = y - height, width = width, height = height, bottom = y }
+end
 function layout.wrap(text, width, measure)
     local lines, line = {}, ""
     for _, code in utf8.codes(text) do

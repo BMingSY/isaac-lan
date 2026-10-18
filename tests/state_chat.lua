@@ -13,6 +13,23 @@ local frame = _IsaacLanFrame
 local frames, playing, linked, chosen, done = 0, 0, false, false, false
 local originalEmotePoll, originalEmoteShow = native.emote_poll, native.emote_show
 local openedWheel, receivedEmotes = false, {}
+local originalPointer, originalCaret = native.chat_ui_pointer, native.chat_ui_caret
+local lastCaret, dragStart, dragDelta, wasDown
+native.chat_ui_caret = function(x, y, ...)
+    lastCaret = { x = x, y = y }
+    return originalCaret(x, y, ...)
+end
+native.chat_ui_pointer = function(...)
+    local value = originalPointer(...)
+    if value.down and not wasDown then
+        dragStart = lastCaret
+    elseif wasDown and not value.down and dragStart and lastCaret then
+        dragDelta = { x = lastCaret.x - dragStart.x, y = lastCaret.y - dragStart.y }
+        report("CHAT drag delta=" .. dragDelta.x .. "," .. dragDelta.y)
+    end
+    wasDown = value.down
+    return value
+end
 native.emote_poll = function(...)
     local value = originalEmotePoll(...)
     openedWheel = openedWheel or value.open
@@ -59,9 +76,16 @@ function _IsaacLanFrame()
         return status
     end
     playing = playing + 1
+    if playing == 1 then
+        Options.FoundHUD, Options.ExtraHUDStyle, Options.HUDOffset = true, 1, 1
+        for _, id in ipairs({ 2, 4, 5, 6, 7, 8, 9, 10 }) do
+            assert(_IsaacLanChatSubmit("/c giveitem c" .. id))
+        end
+    end
     native.test_gamepad(0)
     if playing >= 570 and playing <= 635 then
-        native.test_gamepad(playing == 630 and 4096 or 0, 0, 0, 32767, 0)
+        -- Aim inside the original D6 sector after the controller's axis deadzone.
+        native.test_gamepad(playing == 630 and 4096 or 0, 0, 0, 29200, 21000)
     end
     if playing == 30 then
         local style = native.chat_style
@@ -134,8 +158,13 @@ function _IsaacLanFrame()
         assert(openedWheel, "Original emote wheel did not open")
     elseif playing == 700 then
         assert(
-            receivedEmotes[0] and receivedEmotes[1],
-            "Native emotes not received from both peers"
+            receivedEmotes[0]
+                and receivedEmotes[1]
+                and receivedEmotes[0] >= 23
+                and receivedEmotes[0] <= 28
+                and receivedEmotes[1] >= 23
+                and receivedEmotes[1] <= 28,
+            "Original D6 wheel did not send result IDs for both peers"
         )
     elseif playing == 720 then
         native.test_gamepad(64) -- L3 opens text input.
@@ -146,15 +175,32 @@ function _IsaacLanFrame()
         native.chat_ui_open(false)
         native.chat_ui_text("")
         report("CHAT KEYBOARD_READY")
-    elseif playing == 1800 and not done then
+    elseif playing >= 900 and playing % 15 == 0 and not done then
+        assert(playing < 5400, "Keyboard and drag check did not finish")
+        local ready = io.open("./isaac-lan/chat-interaction.done", "r")
+        if not ready then
+            return status
+        end
+        ready:close()
         local typed = {}
         for _, message in ipairs(_IsaacLanChatMessages()) do
             if message.text == "a" or message.text == "A" then
                 typed[message.owner] = true
             end
         end
+        for _, message in ipairs(_IsaacLanChatMessages()) do
+            if message.kind == "team" then
+                report("CHAT typed owner=" .. message.owner .. " text=" .. message.text)
+            end
+        end
         assert(typed[0] and typed[1], "Keyboard chat was not submitted by both peers")
         assert(not native.chat_ui_state().open, "Tilde did not close chat")
+        if host then
+            assert(
+                dragDelta and dragDelta.x >= 30 and dragDelta.y <= -10,
+                "Real pointer did not move the chat panel"
+            )
+        end
         done = true
         report("PASS chat console")
     end

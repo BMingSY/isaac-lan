@@ -153,6 +153,22 @@ int modal(lua_State* L) {
     wheel = available && lua.toBoolean(L, 1);
     return 0;
 }
+int pointer(lua_State* L) {
+    const auto width = lua.checkNumber(L, 1), height = lua.checkNumber(L, 2);
+    POINT point{};
+    RECT client{};
+    const bool active = window && opened && GetForegroundWindow() == window &&
+                        GetCursorPos(&point) && ScreenToClient(window, &point) &&
+                        GetClientRect(window, &client) && client.right > 0 && client.bottom > 0;
+    lua.createTable(L, 0, 3);
+    lua.pushNumber(L, active ? point.x * width / client.right : -1000);
+    lua.setField(L, -2, "x");
+    lua.pushNumber(L, active ? point.y * height / client.bottom : -1000);
+    lua.setField(L, -2, "y");
+    lua.pushBoolean(L, active && (GetAsyncKeyState(VK_LBUTTON) & 0x8000));
+    lua.setField(L, -2, "down");
+    return 1;
+}
 int caret(lua_State* L) {
     if (!window || !opened)
         return 0;
@@ -240,6 +256,12 @@ std::optional<LRESULT> event(HWND hwnd, UINT message, WPARAM key, LPARAM data) {
     }
     if (!opened || !available)
         return {};
+    if (message == WM_SETCURSOR && LOWORD(data) == HTCLIENT) {
+        SetCursor(LoadCursor(nullptr, IDC_ARROW));
+        return TRUE;
+    }
+    if (message == WM_LBUTTONDOWN || message == WM_LBUTTONUP)
+        return 0;
     if (message == WM_IME_SETCONTEXT)
         return DefWindowProcW(hwnd, message, key, data & ~ISC_SHOWUICOMPOSITIONWINDOW);
     if (message == WM_IME_STARTCOMPOSITION) {
@@ -344,9 +366,9 @@ void reset() {
 bool bind(lua_State* L, HMODULE module) {
     if (!lua.load(module,
                   {lua::Symbol::pushClosure, lua::Symbol::setField, lua::Symbol::createTable,
-                   lua::Symbol::pushBoolean, lua::Symbol::pushInteger, lua::Symbol::pushLString,
-                   lua::Symbol::toBoolean, lua::Symbol::checkString, lua::Symbol::checkNumber,
-                   lua::Symbol::checkInteger}))
+                   lua::Symbol::pushBoolean, lua::Symbol::pushInteger, lua::Symbol::pushNumber,
+                   lua::Symbol::pushLString, lua::Symbol::toBoolean, lua::Symbol::checkString,
+                   lua::Symbol::checkNumber, lua::Symbol::checkInteger}))
         return false;
     for (const auto& [name, function] :
          {std::pair<const char*, lua::Function>{"chat_ui_available", configure},
@@ -356,6 +378,7 @@ bool bind(lua_State* L, HMODULE module) {
           {"chat_ui_open", open},
           {"chat_ui_modal", modal},
           {"chat_ui_caret", caret},
+          {"chat_ui_pointer", pointer},
           {"chat_ui_reset", clear},
           {"chat_limits", limits},
           {"chat_roll", roll}}) {

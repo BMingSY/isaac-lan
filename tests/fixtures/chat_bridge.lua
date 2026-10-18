@@ -22,6 +22,9 @@ return function(root, native, modules)
         return { open = false, selected = 0 }
     end
     native.emote_show = function() end
+    native.chat_ui_pointer = function()
+        return { x = -1000, y = -1000, down = false }
+    end
     native.chat_receive = function() end
     native.chat_send = function()
         return false

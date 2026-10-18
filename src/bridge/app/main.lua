@@ -115,6 +115,7 @@ local chat = _IsaacLanModules["runtime/chat"]({
 }, _IsaacLanModules["runtime/chat_wire"])
 local chatUI = _IsaacLanModules["presentation/chat"]({
     native = native,
+    options = Options,
     chat = chat,
     phase = Phase,
     limits = chatLimits,

@@ -55,6 +55,8 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 [chat_input.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/chat_input.cpp) 接收本机窗口文字、剪贴板与 IME 消息，不向游戏投递输入文本。UTF-16／UTF-8 转换拒绝非法编码；IME 候选位置跟随编辑光标，失焦取消输入法组合并关闭输入。随机掷骰调用 `BCryptGenRandom` 并使用拒绝采样，不消耗游戏 RNG。编辑缓冲、手柄边沿和动作释放状态在所属组件清理，Lua 只接收普通值。
 
+聊天输入适配的 `chat_ui_pointer(width, height)` 只在所属窗口处于前台且输入打开时返回鼠标位置和左键状态，客户区坐标换算为逻辑画面坐标；其他状态返回无效位置与松开状态。编辑期间左键事件由界面接管，客户区使用系统箭头光标；拖动范围、HUD 避让和位置状态属于 Lua 表现层。
+
 ## 原版表情轮盘与气泡
 
 [emotes.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/emotes.cpp) 复用游戏已构造的轮盘 `Game+0x25108`，不分配、复制或析构其 Sprite、环形几何和候选容器。原版 `EmoteWheel.Update` RVA `0x4d1f20` 为 `thiscall void(Wheel*)`，原版绘制由 `Game.Render` 调用；选择、分页、开合动画保留原有行为。
@@ -62,6 +64,10 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 轮盘的本机参与者查询 RVA `0x50b070` 只在调用原版更新的作用域内提供控制器视图：临时普通缓冲仅在 `+0x378` 指向只读控制器记录，控制器 ID 在 `+0xc`，范围 0～4。作用域结束即失效，既不加入官方在线名单，也不启动 Steam 连接。原版待发送字段 `Manager+0x4ccac` 在调用后读取并恢复，选中 ID 交给独立通信消息；官方模式下所有查询保留原调用。
 
 角色的原版 Emote 组件位于 `Player+0x26d8`，`Show` RVA `0x30750` 为 `thiscall void(Emote*, int id, unsigned duration)`。桥接值 1～59 对应原生 ID 0～58，仅在已就绪、已连接的角色房间作用域内设置；相同表情重复发送重新开始计时。原版玩家更新与绘制管理动画和气泡寿命，所有原生对象仍由游戏拥有。离开界面关闭轮盘标量状态，不修改其原生容器。
+
+原版轮盘的 D6／D20 选项分别为原生 ID 18／19，确认时由轮盘生成一次结果，待发送值分别为 22～27／28～47。通信转发这个结果编号，两端的原版 Emote 更新负责播放 `D6Roll`／`D20Roll`，再切换到对应的结果帧；接收端不重新掷骰。
+
+客机的副本角色跳过权威玩法更新时，仍按原版角色更新节拍调用 `Emote.Update` RVA `0x303e0`（`thiscall void(Emote*)`）。该调用仅推进已存在组件的动画、结果帧和寿命，不分配对象或执行角色玩法；主机沿用原版完整更新，避免重复推进。入口纳入 J460 签名校验。
 
 ## 角色目录与个人资格
 

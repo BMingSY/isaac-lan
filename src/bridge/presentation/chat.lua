@@ -16,6 +16,7 @@ return function(deps, layout)
         { { 0.60, 0.16, 0.12 }, { 0.16, 0.35, 0.59 }, { 0.55, 0.40, 0.10 }, { 0.21, 0.45, 0.24 } }
     local scale = 0.85
     local shownEmotes = {}
+    local position, drag, mouseDown, lastWidth
     local completion = {
         "/e",
         "/echo",
@@ -256,9 +257,38 @@ return function(deps, layout)
         load()
         local width, height, now = Isaac.GetScreenWidth(), Isaac.GetScreenHeight(), deps.clock()
         renderBubbles(status, width, height, now)
-        local x, bottom, panelWidth = 12, height - 16, math.min(210, width * 0.42)
+        local options = deps.options
+        local hud = {
+            stats = status.prepared and options.FoundHUD,
+            items = status.prepared and options.ExtraHUDStyle > 0,
+            offset = status.prepared and options.HUDOffset or 0,
+        }
+        local bounds = layout.panel(width, height, hud, position)
         local inputHeight = 20
-        if lastRevision ~= chat.revision or lastOpen ~= ui.input.open then
+        local mouse = native.chat_ui_pointer(width, height)
+        if not ui.input.open or not mouse.down then
+            drag = nil
+        elseif
+            not mouseDown
+            and mouse.x >= bounds.x
+            and mouse.x <= bounds.x + bounds.width
+            and mouse.y >= bounds.y
+            and mouse.y < bounds.bottom - inputHeight
+        then
+            drag = { x = mouse.x - bounds.x, y = mouse.y - bounds.bottom }
+        end
+        if drag then
+            position = { x = mouse.x - drag.x, bottom = mouse.y - drag.y }
+            bounds = layout.panel(width, height, hud, position)
+            position = { x = bounds.x, bottom = bounds.bottom }
+        end
+        mouseDown = mouse.down
+        local x, bottom, panelWidth = bounds.x, bounds.bottom, bounds.width
+        if
+            lastRevision ~= chat.revision
+            or lastOpen ~= ui.input.open
+            or lastWidth ~= panelWidth
+        then
             local previousCount = #lines
             lines = {}
             for _, message in ipairs(chat.messages) do
@@ -271,6 +301,7 @@ return function(deps, layout)
                 ui.scroll = ui.scroll + math.max(0, #lines - previousCount)
             end
             lastRevision, lastOpen = chat.revision, ui.input.open
+            lastWidth = panelWidth
         end
         if ui.input.open then
             local panelHeight = layout.expandedLines * layout.lineHeight + inputHeight + 10
@@ -374,6 +405,7 @@ return function(deps, layout)
         native.emote_poll(0, false)
         native.chat_ui_reset()
         shownEmotes = {}
+        drag, mouseDown = nil, false
         ui.wheel, ui.scroll, lastRevision, lastEpoch = false, 0, -1, nil
         ui.input = { open = false, text = "", cursor = 0, anchor = 0 }
     end
