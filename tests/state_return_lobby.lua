@@ -10,6 +10,7 @@ local run, wins, exits, lobbyRun, visibleRun = 0, 0, 0, 0, 0
 local checkedRun = 0
 local lobbyAt, movieAt, runId, baseline = nil, nil, nil, nil
 local GAMEPAD_CONFIRM, FIRST_CINEMATIC = 0x1000, 2
+local MAGDALENE_ACHIEVEMENT = 1
 local function report(message)
     Isaac.DebugString("LAN_NETWORK RETURN_LOBBY " .. message)
 end
@@ -47,6 +48,11 @@ function _IsaacLanFrame()
     assert(s.phase ~= Phase.failed, s.error)
     if not joined and Isaac.GetTime() - startedAt > 15000 then
         joined = true
+        baseline = native.net_progress()
+        -- The isolated profile starts empty. Unlock this fixture's second
+        -- character before lobby access is captured; ProtectedLabs restores it.
+        local flag = MAGDALENE_ACHIEVEMENT + 2
+        assert(native.net_progress(baseline:sub(1, flag - 1) .. "\1" .. baseline:sub(flag + 1)))
         baseline = native.net_progress()
         Isaac.DebugString("LAN_NETWORK MENU_READY")
         _IsaacLanCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)
