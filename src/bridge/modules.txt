@@ -12,6 +12,7 @@ presentation/menu_model
 presentation/audio
 presentation/motion
 presentation/ping
+presentation/restart
 compat/transitions
 compat/items/hourglass
 compat/items/r_key
@@ -64,6 +65,7 @@ compat/mods/eid
 compat/mods/goodtrip/authority
 compat/mods/goodtrip/client
 runtime/session
+runtime/restart
 sync/capture
 sync/replica
 compat/routes/challenge_lamb

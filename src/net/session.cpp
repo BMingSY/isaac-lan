@@ -81,7 +81,8 @@ struct Session::Impl {
     std::array<std::optional<RoomRequest>, maxPlayers> roomRequests{};
     std::string integrationRun;
     std::uint32_t integrationEpoch = 0;
-    SideChannel integration, communication;
+    SideChannel integration, communication, lifecycle;
+    bool restartPending = false;
     std::size_t worldSize = 0, snapshotSize = 0;
     bool assemblingDelta = false;
     std::uint32_t assemblingBase = 0, takenWorldEpoch = 0;
@@ -114,6 +115,45 @@ struct Session::Impl {
         incoming.clear();
         integration = {};
         communication = {};
+        lifecycle = {};
+    }
+    void resetRun() {
+        localReady = initialStarted = false;
+        nextInput = nextConsume = committed = 0;
+        consumedLocal.reset();
+        verified.reset();
+        latest = {};
+        inputRooms = {};
+        sequences = {};
+        commands = {};
+        roomRequests = {};
+        receivedState.reset();
+        assembling.reset();
+        receivedStage.reset();
+        assemblingStage.reset();
+        cinematicEpoch.reset();
+        cinematicReadyMask = 0;
+        ending.reset();
+        endingCompleted = false;
+        receivedEnding.reset();
+        integration = {};
+        communication = {};
+        lifecycle = {};
+        takenWorldEpoch = integrationEpoch;
+        for (auto& p : peers)
+            if (p) {
+                p->ready = p->hasInput = false;
+                p->inputSequence = 0;
+                p->acknowledged.reset();
+                p->resetWorldCache();
+                p->pending.reset();
+                p->sending.reset();
+                p->sendingStage.reset();
+                p->floorAfterLoad.reset();
+                p->checkpoint.reset();
+                p->loadingAt = Clock::now();
+            }
+        progress = Clock::now();
     }
     void connectNextAddress() {
         peers[0].reset();
@@ -304,7 +344,7 @@ struct Session::Impl {
         commands[slot] = Command::none;
         roomRequests[slot].reset();
         peers[slot].reset();
-        for (auto* channel : {&integration, &communication})
+        for (auto* channel : {&integration, &communication, &lifecycle})
             std::erase_if(channel->queue,
                           [slot](const auto& message) { return message.sender == slot; });
         if (state == Phase::lobby) {
@@ -342,7 +382,9 @@ struct Session::Impl {
     void message(unsigned slot, Reader& r) {
         const auto type = static_cast<Message>(r.u8());
         auto& p = *peers[slot];
-        if ((type == Message::integration || type == Message::communication) && p.accepted) {
+        if ((type == Message::integration || type == Message::communication ||
+             type == Message::lifecycle) &&
+            p.accepted) {
             const bool chat = type == Message::communication;
             auto bytes = r.blob(chat ? maxCommunicationSize : maxIntegrationSize);
             r.finish();
@@ -352,7 +394,9 @@ struct Session::Impl {
             if (!chat && hosting && state == Phase::running &&
                 (!p.ready || p.waiting || p.rejoining))
                 return;
-            (chat ? communication : integration)
+            (chat                         ? communication
+             : type == Message::lifecycle ? lifecycle
+                                          : integration)
                 .receive(hosting ? slot : 0, {bytes.begin(), bytes.end()});
             return;
         }
@@ -427,7 +471,10 @@ struct Session::Impl {
                 return;
             }
             if (type == Message::ready && state == Phase::running) {
+                const auto run = r.string();
                 const auto epoch = r.u32();
+                if (run != integrationRun)
+                    return;
                 if (epoch != (p.checkpoint ? p.checkpoint->firstTick : startSettings.firstTick) ||
                     (p.checkpoint && !p.loaded))
                     throw std::runtime_error("Invalid engine readiness");
@@ -622,7 +669,10 @@ struct Session::Impl {
             receivedState.reset();
             return;
         }
-        if (type == Message::start && (state == Phase::lobby || state == Phase::waiting)) {
+        if ((type == Message::start && (state == Phase::lobby || state == Phase::waiting)) ||
+            (type == Message::restart && state == Phase::running)) {
+            const bool restarting = type == Message::restart;
+            const auto previousEpoch = integrationEpoch;
             Start value;
             value.rules = readRules(r);
             value.seed = r.string();
@@ -632,6 +682,8 @@ struct Session::Impl {
             value.progress = r.progress();
             integrationRun = r.string();
             integrationEpoch = r.u32();
+            if (restarting && integrationEpoch <= previousEpoch)
+                throw std::runtime_error("Invalid new run epoch");
             if (integrationRun.size() != 32)
                 throw std::runtime_error("Invalid integration run identity");
             integration.queue.clear();
@@ -648,6 +700,14 @@ struct Session::Impl {
                  value.characters[localSlot] != value.rules.character) ||
                 (value.rules.difficulty != 255 && value.difficulty != value.rules.difficulty))
                 throw std::runtime_error("Start is unavailable for the local profile");
+            if (restarting) {
+                if (snapshotSize || value.firstTick || value.rules != runRules ||
+                    value.characters != startSettings.characters ||
+                    value.difficulty != startSettings.difficulty)
+                    throw std::runtime_error("Invalid new run settings");
+                resetRun();
+                restartPending = true;
+            }
             localReady = false;
             receivedState.reset();
             assembling.reset();
@@ -1432,6 +1492,57 @@ bool Session::start(const Start& settings) {
     impl->progress = Clock::now();
     return true;
 }
+bool Session::restart(const Start& settings) {
+    if (!impl->hosting || impl->state != Phase::running || !impl->localReady ||
+        impl->cinematicEpoch || settings.seed.size() != 8 || !settings.snapshot.empty() ||
+        settings.rules != impl->runRules || settings.characters != impl->startSettings.characters ||
+        settings.difficulty != impl->startSettings.difficulty)
+        return false;
+    // A checkpoint loader still owns its previous run transaction. Wait for
+    // that boundary rather than interrupting a partially transferred archive.
+    for (const auto& peer : impl->peers)
+        if (peer && peer->accepted && (!peer->ready || peer->waiting || peer->rejoining))
+            return false;
+    for (unsigned slot = 0; slot < impl->playerCount; ++slot)
+        if ((impl->activeMask & (1u << slot)) &&
+            (!impl->access[slot].allowsRules(settings.rules) ||
+             !impl->access[slot].allowsCharacter(settings.characters[slot]) ||
+             (slot && (!impl->peers[slot] || !impl->peers[slot]->ready))))
+            return false;
+    ++impl->integrationEpoch;
+    impl->integrationRun = randomIdentity();
+    impl->startSettings = settings;
+    impl->startSettings.firstTick = 0;
+    impl->startSettings.connected = impl->activeMask;
+    const auto message = impl->startMessage(Message::restart, impl->startSettings);
+    for (unsigned slot = 1; slot < impl->playerCount; ++slot)
+        if ((impl->activeMask & (1u << slot)) && impl->peers[slot])
+            impl->peers[slot]->sendMessage(message);
+    impl->resetRun();
+    impl->restartPending = true;
+    return true;
+}
+bool Session::takeRestart() {
+    const bool pending = impl->restartPending;
+    impl->restartPending = false;
+    return pending;
+}
+bool Session::sendLifecycle(unsigned destination, const std::string& bytes) {
+    // Consumers discard lifecycle messages until their new run is ready.
+    // Report that boundary to the caller so initial vote state is retried.
+    if (impl->state != Phase::running || !impl->localReady || destination >= impl->playerCount)
+        return false;
+    if (impl->hosting && destination) {
+        const auto& peer = impl->peers[destination];
+        if (!peer || !peer->ready || peer->waiting || peer->rejoining)
+            return false;
+    }
+    return impl->sendSideChannel(Message::lifecycle, impl->lifecycle, maxIntegrationSize,
+                                 destination, bytes);
+}
+std::optional<IntegrationMessage> Session::takeLifecycle() {
+    return impl->lifecycle.take();
+}
 bool Session::checkpoint(const Start& settings, std::uint32_t tick) {
     if (!impl->hosting || impl->state != Phase::running || settings.snapshot.empty() ||
         settings.snapshot.size() > maxSnapshotSize || tick != impl->committed ||
@@ -1574,7 +1685,7 @@ std::optional<Frame> Session::take() {
     // The runtime already has its native roster when localReady is true.
     if (!impl->initialStarted && impl->commands[0] != Command::saveExit) {
         for (unsigned i = 1; i < impl->playerCount; ++i)
-            if (impl->peers[i] && !impl->peers[i]->ready)
+            if ((impl->activeMask & (1u << i)) && impl->peers[i] && !impl->peers[i]->ready)
                 return {};
         impl->initialStarted = true;
         for (auto& p : impl->peers)
@@ -1615,6 +1726,7 @@ bool Session::ready() {
     impl->progress = Clock::now();
     if (!impl->hosting) {
         Writer w(Message::ready);
+        w.string(impl->integrationRun);
         w.u32(impl->startSettings.firstTick);
         impl->peers[0]->sendMessage(w);
     }

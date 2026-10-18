@@ -12,6 +12,7 @@ local ui = {
 }
 local Phase = _IsaacLan.net_phases()
 local Command = _IsaacLan.net_commands()
+local renderRestart = _IsaacLanModules["presentation/restart"]()
 local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
 -- menu_key reports Windows virtual-key codes from the native frontend.
 local Key =
@@ -206,6 +207,7 @@ function _IsaacLanMenuRender(
     end
     if not visible then
         renderPing(status, assets[10])
+        renderRestart(status, assets[10])
         local banner
         if phase == Phase.waiting then
             banner = "正在当前层归队 · 队友继续游戏"

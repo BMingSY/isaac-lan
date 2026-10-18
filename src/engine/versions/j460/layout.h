@@ -49,6 +49,9 @@ inline constexpr unsigned minimap = 0x25ecc;
 inline constexpr unsigned frame = 0x264f8;
 inline constexpr unsigned stateFlags = 0x26548;
 inline constexpr unsigned console = 0x68d78;
+inline constexpr unsigned fadeAlpha = 0x265b0;
+inline constexpr unsigned fadeAction = 0x265bc;
+inline constexpr unsigned restartHeldFrames = 0x265c4;
 inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
 namespace room {

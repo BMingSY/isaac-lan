@@ -5,6 +5,7 @@ local draws, loads, missing = {}, {}, false
 local texts, availability, controlsPolled, sceneReady = {}, {}, 0, false
 local mouse = { x = -1000, y = -1000, down = false }
 local copied, copySucceeds = {}, true
+local restartChord, emoteEnabled, modal = false, false, false
 local screenWidth, screenHeight = 640, 360
 function Vector(x, y)
     return { X = x, Y = y }
@@ -102,10 +103,16 @@ local function create(image, opacity, options, messages)
             end,
             chat_controls = function()
                 controlsPolled = controlsPolled + 1
-                return {}
+                return { restart = restartChord }
             end,
-            chat_ui_modal = function() end,
-            emote_poll = function()
+            chat_ui_open = function(value)
+                input.open = value
+            end,
+            chat_ui_modal = function(value)
+                modal = value
+            end,
+            emote_poll = function(_, enabled)
+                emoteEnabled = enabled
                 return { open = false, selected = 0 }
             end,
             api_info = function()
@@ -445,6 +452,13 @@ assert(#copied == 4, "Session reset retained a pending copy")
 ui.input.open = false
 click(commandY)
 assert(#copied == 4, "Collapsed history exposed a copy action")
+-- The full restart chord dismisses local overlays while retaining the draft.
+restartChord = true
+ui.input.open, ui.input.text, ui.wheel = true, "保留草稿", true
+ui.step({ phase = 3, prepared = true })
+assert(not ui.input.open and not ui.wheel and not modal and not emoteEnabled)
+assert(ui.input.text == "保留草稿")
+restartChord = false
 print(
     "PASS chat appearance, private history, player colors, LAN input, HUD dragging and message copy"
 )

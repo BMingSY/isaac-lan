@@ -103,6 +103,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.chat chat.lua)
         isaac_add_lua_test(presentation.chat-render chat_presentation.lua)
         isaac_add_lua_test(bridge.session_lifecycle session_lifecycle.lua)
+        isaac_add_lua_test(bridge.restart restart.lua)
         isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
         isaac_add_lua_test(bridge.challenges challenges.lua)
@@ -342,6 +343,7 @@ if(BUILD_TESTING)
         stage-events
         ending-events
         ending-liveness
+        restart
         cinematic-events
         stage-during-rejoin
         rewind

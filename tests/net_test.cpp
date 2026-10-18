@@ -467,6 +467,108 @@ void endingEvents() {
     std::puts(
         "PASS authoritative ending survives immediate finish/EOF and plays once on all peers");
 }
+void restartRuns() {
+    for (unsigned count : {2u, 4u}) {
+        Group g(count, 1, "127.0.0.1", {}, {0, 1, 2, 3});
+        g.ready();
+        g.step(0);
+        const auto identities = [&] {
+            std::array<std::string, maxPlayers> values;
+            for (unsigned slot = 0; slot < count; ++slot)
+                values[slot] = g.peers[slot]->identity();
+            return values;
+        }();
+        for (bool ended : {false, true, false}) {
+            g.publish(0, 12000);
+            g.poll();
+            // Leave previous-run input and receipt traffic in flight.
+            for (unsigned slot = 1; slot < count; ++slot) {
+                if (auto world = g.peers[slot]->takeState())
+                    g.peers[slot]->applied(world->tick);
+                require(g.peers[slot]->submit(0, {}), "Old input not queued");
+            }
+            if (ended)
+                require(g.peers[0]->beginEnding(ending::gameOver), "Game over failed");
+            const auto oldRun = g.peers[0]->runId();
+            const auto oldEpoch = g.peers[0]->worldEpoch();
+            auto settings = g.peers[0]->settings();
+            settings.seed = settings.seed == "YV039KQF" ? "QWERTY12" : "YV039KQF";
+            require(!g.peers[1]->restart(settings), "Guest initiated authoritative reset");
+            require(g.peers[0]->restart(settings), "Host restart failed");
+            require(!g.peers[0]->restart(settings), "Repeated restart accepted before readiness");
+            until([&] {
+                g.poll();
+                for (unsigned slot = 1; slot < count; ++slot)
+                    if (g.peers[slot]->runId() == oldRun)
+                        return false;
+                return true;
+            });
+            for (unsigned slot = 0; slot < count; ++slot) {
+                auto& peer = *g.peers[slot];
+                require(peer.takeRestart() && !peer.takeRestart(), "Reset was not one-shot");
+                require(peer.identity() == identities[slot] && peer.slot() == slot &&
+                            peer.players() == count && peer.connectedMask() == (1u << count) - 1,
+                        "Restart changed the room membership");
+                require(peer.settings().seed == settings.seed && peer.settings().difficulty == 1 &&
+                            peer.settings().characters == settings.characters &&
+                            peer.worldEpoch() > oldEpoch && !peer.takeEnding() && !peer.takeState(),
+                        "New run retained old state or lost settings");
+            }
+            require(!g.peers[0]->take(), "New run simulated before readiness");
+            require(!g.peers[0]->sendLifecycle(1, "initial vote state") &&
+                        !g.peers[1]->sendLifecycle(0, "consent"),
+                    "Lifecycle delivery reported success before local readiness");
+            require(g.peers[0]->ready(), "Host could not load the fresh run");
+            require(!g.peers[0]->sendLifecycle(1, "initial vote state"),
+                    "Initial vote state would be lost while guest loads");
+            g.ready();
+            require(g.step(0).tick == 0, "New run did not reset simulation ticks");
+            require(g.peers[1]->sendLifecycle(0, "consent"), "Lifecycle channel failed");
+            std::optional<IntegrationMessage> vote;
+            until([&] {
+                g.poll();
+                vote = g.peers[0]->takeLifecycle();
+                return vote.has_value();
+            });
+            require(vote->sender == 1 && vote->bytes == "consent", "Vote sender was not preserved");
+        }
+    }
+    {
+        Group g(3);
+        g.ready();
+        g.step(0);
+        const auto identity = g.peers[1]->identity();
+        g.peers[1]->close();
+        g.peers[1].reset();
+        until([&] {
+            g.poll();
+            return g.peers[0]->connectedMask() == 5;
+        });
+        auto settings = g.peers[0]->settings();
+        settings.seed = "QWERTY12";
+        require(g.peers[0]->restart(settings), "A disconnected seat prevented restart");
+        until([&] {
+            g.poll();
+            return g.peers[2]->runId() == g.peers[0]->runId();
+        });
+        require(g.peers[2]->slot() == 2 && g.peers[2]->connectedMask() == 5,
+                "Restart compacted or revived an absent seat");
+        require(g.peers[0]->ready() && g.peers[2]->ready(), "Survivors could not load new run");
+        g.step(0);
+        g.peers[1] = std::make_unique<Session>();
+        require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {},
+                                 testAccess()),
+                "Returning seat could not reconnect after restart");
+        until([&] {
+            g.poll();
+            return g.peers[1]->phase() == Phase::waiting;
+        });
+        require(g.peers[1]->slot() == 1, "Restart lost a returning player's identity");
+        require(!g.peers[0]->restart(settings), "Restart interrupted checkpoint admission");
+    }
+    std::puts(
+        "PASS repeated new-run barriers preserve seats, reject stale state, and clear endings");
+}
 void endingLiveness() {
     Group g(4);
     g.ready();
@@ -1900,6 +2002,7 @@ int main(int argc, char** argv) {
                                   {"stage-events", stageEvents},
                                   {"ending-events", endingEvents},
                                   {"ending-liveness", endingLiveness},
+                                  {"restart", restartRuns},
                                   {"cinematic-events", cinematicEvents},
                                   {"stage-during-rejoin", stageDuringRejoin},
                                   {"rewind", rewindTransaction},

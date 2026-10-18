@@ -142,6 +142,7 @@ _IsaacLan = {
     end,
 }
 _IsaacLanModules = {
+    ["presentation/restart"] = dofile(root .. "/src/bridge/presentation/restart.lua"),
     ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
     ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
 }
