@@ -80539,18 +80539,16 @@
       "scope": "普通／大颗，主机／客机，同房／分房；普通药丸换房失效，大颗跨房持续，换层恢复正常速度。"
     },
     "collectible:249": {
-      "status": "problem",
-      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "status": "verified",
+      "candidate": "55f6feaeeee827f40ac87612584262028108f6fc",
       "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
       "evidence": [
-        "item-effect-fixes-20261018/native-01",
-        "item-effect-fixes-20261018/native-11"
+        "item-effect-fixes-20261018/native-13-debug",
+        "item-effect-fixes-20261018/native-14"
       ],
-      "scope": "主机／客机，同房／分房；持有者与队友分别触发 Boss 二选一，背包保持个人归属。分房退出仍有断线。",
-      "effect_status": "untested",
-      "trigger": "主机持有白选并与客机分房，进入 Boss 房获得二选一奖励，随后保存退出。",
-      "impact": "二选一奖励断言通过，但客机在奖励后的同步阶段停止更新，最终报 Peer send failed 并中断会话，未完成正常退出；独立复测仍出现。原因尚未定位，不能确定是否由白选本身触发。",
-      "fix": "共享奖励规则已实现；分房同步／退出异常待定位，完整兼容性尚未通过。"
+      "scope": "主机／客机，同房／分房，本人／队友持有的 8 种组合，以及主机持有分房额外 2 次重复；Boss 奖励二选一、选择后另一奖励消失、个人背包及双端正常退出均通过。",
+      "effect_status": "verified",
+      "diagnosis": "原断线由验收采样器遍历未初始化的客机远端房间网格导致；同步应用正常完成，随后采样阻塞约 72 秒。修正采样边界后使用相同生产 DLL 复验通过，原失败记录保留在历史验收中。"
     },
     "collectible:414": {
       "status": "verified",
