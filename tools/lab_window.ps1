@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)][int]$GameProcessId,
-    [ValidateSet('Capture', 'Keys', 'PostKeys', 'Close', 'Focus')][string]$Action = 'Capture',
+    [ValidateSet('Capture', 'Keys', 'PostKeys', 'Close', 'Focus', 'Drag')][string]$Action = 'Capture',
     [string]$Value = '',
     [string]$ImagePath = ''
 )
@@ -14,6 +14,8 @@ using System;
 using System.Runtime.InteropServices;
 public static class LanLabWindow {
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int L,T,R,B; }
+  [StructLayout(LayoutKind.Sequential)] public struct Point { public int X,Y; }
+  [StructLayout(LayoutKind.Sequential)] public struct CursorInfo { public int Size,Flags; public IntPtr Cursor; public Point Position; }
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool attach);
@@ -21,6 +23,11 @@ public static class LanLabWindow {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
+  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out Rect r);
+  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref Point p);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern bool GetCursorInfo(ref CursorInfo c);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint x, uint y, uint data, UIntPtr extra);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint code, uint kind);
   [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
@@ -78,6 +85,43 @@ if ($foregroundProcessId -ne $GameProcessId) {
     throw 'The lab game is not in the foreground.'
 }
 if ($Action -eq 'Focus') {
+    exit
+}
+if ($Action -eq 'Drag') {
+    if ($Value -notmatch '^(\d+),(\d+):(\d+),(\d+)$') {
+        throw 'Drag requires startX,startY:endX,endY in client pixels.'
+    }
+    $start = [LanLabWindow+Point]@{ X = [int]$Matches[1]; Y = [int]$Matches[2] }
+    $end = [LanLabWindow+Point]@{ X = [int]$Matches[3]; Y = [int]$Matches[4] }
+    $client = New-Object LanLabWindow+Rect
+    [void][LanLabWindow]::GetClientRect($process.MainWindowHandle, [ref]$client)
+    if ($start.X -ge $client.R -or $end.X -ge $client.R -or $start.Y -ge $client.B -or $end.Y -ge $client.B) {
+        throw 'Drag endpoints must be inside the owned game client.'
+    }
+    [void][LanLabWindow]::ClientToScreen($process.MainWindowHandle, [ref]$start)
+    [void][LanLabWindow]::ClientToScreen($process.MainWindowHandle, [ref]$end)
+    [void][LanLabWindow]::SetCursorPos($start.X, $start.Y)
+    Start-Sleep -Milliseconds 200
+    $leftButtonDown = 0x0002
+    $leftButtonUp = 0x0004
+    try {
+        [LanLabWindow]::mouse_event($leftButtonDown, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 200
+        for ($step = 1; $step -le 12; $step++) {
+            if ([LanLabWindow]::GetForegroundWindow() -ne $process.MainWindowHandle) {
+                throw 'Owned game lost focus during drag.'
+            }
+            [void][LanLabWindow]::SetCursorPos($start.X + ($end.X - $start.X) * $step / 12, $start.Y + ($end.Y - $start.Y) * $step / 12)
+            Start-Sleep -Milliseconds 30
+        }
+    } finally {
+        [LanLabWindow]::mouse_event($leftButtonUp, 0, 0, 0, [UIntPtr]::Zero)
+    }
+    Start-Sleep -Milliseconds 200
+    $cursor = New-Object LanLabWindow+CursorInfo
+    $cursor.Size = [System.Runtime.InteropServices.Marshal]::SizeOf($cursor)
+    [void][LanLabWindow]::GetCursorInfo([ref]$cursor)
+    Write-Output "cursor_flags=$($cursor.Flags)"
     exit
 }
 if ($Action -eq 'Keys') {

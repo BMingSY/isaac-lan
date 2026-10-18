@@ -15,6 +15,9 @@ bool viewReady() {
 bool virtualized() {
     return true;
 }
+std::uintptr_t presentationPlayer(void*) {
+    throw std::runtime_error("Item ABI fixture must not execute console commands");
+}
 void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     require(localPlayersOnly, "Preview queried another player's inventory");
     localPreviewRoster = true;

@@ -62,6 +62,8 @@ class Session {
     std::array<std::optional<RoomRequest>, maxPlayers> takeRoomRequests();
     bool sendIntegration(unsigned destination, const std::string& bytes);
     std::optional<IntegrationMessage> takeIntegration();
+    bool sendCommunication(unsigned destination, const std::string& bytes);
+    std::optional<IntegrationMessage> takeCommunication();
     const std::string& runId() const;
     std::uint32_t worldEpoch() const;
     void applied(std::uint32_t tick);

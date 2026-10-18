@@ -15,6 +15,7 @@
 #include "engine/input.h"
 #include "core/lanbot_console.h"
 #include "core/menu_input.h"
+#include "core/chat.h"
 #include "engine/save.h"
 #include "runtime/session_archive.h"
 #include "runtime/pending_archive.h"
@@ -887,29 +888,63 @@ int integrationInfo(lua_State* L) {
     lua.setField(L, -2, "runId");
     return 1;
 }
-int integrationSend(lua_State* L) {
+int sideChannelSend(lua_State* L, bool communication) {
     const auto slot = lua.checkInteger(L, 1);
     std::size_t size = 0;
     const auto bytes = lua.checkString(L, 2, &size);
     bool sent = false;
     try {
-        sent = session && slot >= 0 && slot < 4 && size <= lan::maxIntegrationSize &&
-               session->sendIntegration(static_cast<unsigned>(slot), {bytes, size});
+        if (session && slot >= 0 && slot < 4)
+            sent = communication ? session->sendCommunication(slot, {bytes, size})
+                                 : session->sendIntegration(slot, {bytes, size});
     } catch (const std::exception& error) {
         if (logger)
-            logger(std::string("integration_send_error=") + error.what());
+            logger(std::string("side_channel_send_error=") + error.what());
     }
     lua.pushBoolean(L, sent);
     return 1;
 }
-int integrationReceive(lua_State* L) {
+int sideChannelReceive(lua_State* L, bool communication) {
     if (session)
-        if (auto message = session->takeIntegration()) {
+        if (auto message =
+                communication ? session->takeCommunication() : session->takeIntegration()) {
             lua.pushInteger(L, message->sender);
             lua.pushLString(L, message->bytes.data(), message->bytes.size());
             return 2;
         }
     return 0;
+}
+int integrationSend(lua_State* L) {
+    return sideChannelSend(L, false);
+}
+int integrationReceive(lua_State* L) {
+    return sideChannelReceive(L, false);
+}
+int communicationSend(lua_State* L) {
+    return sideChannelSend(L, true);
+}
+int communicationReceive(lua_State* L) {
+    return sideChannelReceive(L, true);
+}
+int executeChatCommand(lua_State* L) {
+    const auto slot = lua.checkInteger(L, 1);
+    std::size_t length = 0;
+    const auto data = lua.checkString(L, 2, &length);
+    const std::string_view command(data, length);
+    if (!session || !session->isHost() || session->phase() != lan::Phase::running || !view.gated ||
+        !rooms::stateReady() || slot < 0 || slot >= lan::maxPlayers ||
+        !(session->connectedMask() & (1u << slot)) || length > chat::maxCommandBytes ||
+        !chat::boundaries(command))
+        return 0;
+    std::string result;
+    if (const auto args = input::consoleArguments(command, "rewind")) {
+        const bool ok =
+            args->find_first_not_of(" \t\r\n") == std::string_view::npos && rewind::request(slot);
+        result = ok ? "已请求房间回退" : "当前无法回退";
+    } else if (!rooms::withPlayer(slot, [&] { result = backend::executeConsole(command); }))
+        return 0;
+    lua.pushLString(L, result.data(), result.size());
+    return 1;
 }
 int challengeList(lua_State* L) {
     const auto access = session ? session->localAccess() : personalAccess();
@@ -1478,7 +1513,7 @@ void refreshAutomation(std::uint32_t renderFrame) {
 void pollLocalConsole() {
     if (!view.gated || !session || session->phase() != lan::Phase::running)
         return;
-    backend::pollConsole();
+    backend::hideConsole();
 }
 void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) {
     if (!view.gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
@@ -1614,6 +1649,9 @@ bool bind(lua_State* L, HMODULE module) {
     function("api_info", integrationInfo);
     function("api_send", integrationSend);
     function("api_receive", integrationReceive);
+    function("chat_send", communicationSend);
+    function("chat_receive", communicationReceive);
+    function("chat_execute", executeChatCommand);
     function("net_host", host);
     function("net_join", join);
     function("net_poll", poll);
