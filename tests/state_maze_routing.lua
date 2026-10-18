@@ -47,7 +47,18 @@ local function coherent(slot)
         -- Native door walking can cross the room edge before the queued
         -- transfer commits. Check landing only after that transition settles.
         if phase ~= "walking" then
-            assert(room:IsPositionInRoom(p.Position, 0), "Arrival outside native room")
+            assert(
+                room:IsPositionInRoom(p.Position, 0),
+                string.format(
+                    "Arrival outside native room: role=%s slot=%d phase=%s room=%d x=%.2f y=%.2f",
+                    host and "host" or "client",
+                    slot,
+                    phase,
+                    location.index,
+                    p.Position.X,
+                    p.Position.Y
+                )
+            )
         end
         if host then
             clear(p)
@@ -184,7 +195,10 @@ local function advance(t)
                     "Ghost followed into a missing quadrant"
                 )
                 assert(
-                    (p.Position - survivorPosition):Length() < 30,
+                    -- Death can occur while already sharing the survivor's
+                    -- room. Only a subsequent room transfer promises landing
+                    -- beside them; native ghosts can move freely in one room.
+                    ghostWalks == 0 or (p.Position - survivorPosition):Length() < 30,
                     "Ghost missed survivor landing"
                 )
             end)
