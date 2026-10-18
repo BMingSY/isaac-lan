@@ -1330,6 +1330,10 @@ void afterExit(bool save) {
     } else {
         backend::clearSave();
     }
+    // The intercepted native SaveGame cannot persist progression. Flush the
+    // merged local values before the menu reloads them from disk; otherwise
+    // pending next-run rewards can disappear even after a successful exit.
+    backend::persistProgress();
     backend::continueAvailable(saves.soloContinueAvailable);
     saves.soloState.clear();
     saves.networkRun = false;

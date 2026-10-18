@@ -2,6 +2,8 @@
 #include "test_support.h"
 #include "engine/versions/j460/item_effects.cpp"
 #include "engine/versions/j460/pickup_preview.cpp"
+#include "engine/versions/j460/session_backend.cpp"
+#include "runtime/progression.h"
 #include <array>
 #include <cstring>
 
@@ -51,10 +53,11 @@ void __attribute__((fastcall)) assignFixture(void* reference, void* entity) {
     ++detachments;
 }
 struct Fixture {
-    static constexpr unsigned size = 0x3bf000;
+    static constexpr unsigned size = native::globals::manager + sizeof(Address);
     unsigned char* image = static_cast<unsigned char*>(
         VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
     std::array<unsigned char, 0x2000> player{};
+    std::array<unsigned char, 0x1000> manager{};
     std::array<Address, 11> vtable{};
     Address beam = reinterpret_cast<Address>(vtable.data());
     Fixture() {
@@ -99,6 +102,54 @@ struct Fixture {
                                                                                   item);
     }
 };
+void* expectedProgress;
+std::vector<int> progressWrites;
+isaac::lan::Progress expectedLocalProgress;
+void __attribute__((thiscall)) saveProgressCloudFixture(void* progress) {
+    require(progress == expectedProgress, "Progress save used the wrong receiver");
+    require(isaac::engine::session::readProgress() == expectedLocalProgress,
+            "Saved shared values instead of merged local progress");
+    progressWrites.push_back(1);
+}
+void __attribute__((thiscall)) saveProgressFileFixture(void* progress) {
+    require(progress == expectedProgress && progressWrites == std::vector<int>{1},
+            "Local progress save preceded the native cloud save");
+    progressWrites.push_back(2);
+}
+void pendingRewardPersistence() {
+    namespace session = isaac::engine::session;
+    Fixture f;
+    session::image = reinterpret_cast<Address>(f.image);
+    *reinterpret_cast<Address*>(f.image + native::globals::manager) =
+        reinterpret_cast<Address>(f.manager.data());
+    expectedProgress = f.manager.data() + native::layout::manager::progress;
+    auto publish = [&](unsigned entry, auto method) {
+        auto call = f.image + entry;
+        call[0] = 0xe9;
+        const auto displacement = static_cast<unsigned>(reinterpret_cast<Address>(method) -
+                                                        reinterpret_cast<Address>(call + 5));
+        std::memcpy(call + 1, &displacement, 4);
+    };
+    publish(native::entry::progressSaveCloud, saveProgressCloudFixture);
+    publish(native::entry::progressSaveFile, saveProgressFileFixture);
+    require(FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size) != 0,
+            "Cannot publish private progress save methods");
+    constexpr unsigned pendingBlessings = 114;
+    isaac::lan::Progress local, common, current;
+    local.achievements[1] = 1;
+    common.achievements[2] = 1;
+    current = common;
+    current.counters[pendingBlessings] = 1;
+    expectedLocalProgress = isaac::lan::mergeProgress(local, common, current);
+    session::writeProgress(expectedLocalProgress);
+    progressWrites.clear();
+    session::persistProgress();
+    require(progressWrites == std::vector<int>({1, 2}), "Progress was not persisted");
+    require(session::readProgress().counters[pendingBlessings] == 1 &&
+                !session::readProgress().achievements[2],
+            "Pending reward was lost or host achievements leaked");
+    session::image = 0;
+}
 void startingRewards() {
     Fixture f;
     items::startingRewards(
@@ -189,5 +240,6 @@ int main(int argc, char** argv) {
     return runTests(argc, argv,
                     {{"starting-rewards", startingRewards},
                      {"beam-departure", beamDeparture},
+                     {"pending-reward-persistence", pendingRewardPersistence},
                      {"local-pickup-preview", localPickupPreview}});
 }

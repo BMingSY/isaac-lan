@@ -143,6 +143,14 @@ void writeProgress(const lan::Progress& value) {
     std::memcpy(reinterpret_cast<void*>(base + layout::progress::counters), value.counters.data(),
                 sizeof(value.counters));
 }
+void persistProgress() {
+    // Use the same receiver and order as Manager::SaveGame. Each native
+    // method opens/closes its own stream; Serialize alone requires an open
+    // stream and must not be called directly here.
+    auto progress = reinterpret_cast<void*>(manager() + layout::manager::progress);
+    reinterpret_cast<Method>(image + j460::entry::progressSaveCloud)(progress);
+    reinterpret_cast<Method>(image + j460::entry::progressSaveFile)(progress);
+}
 int pause() {
     return gameReady() ? at<int>(game(), layout::game::pauseMenu) : 0;
 }
