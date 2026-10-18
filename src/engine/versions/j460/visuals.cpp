@@ -86,6 +86,27 @@ int entityMinecart(lua_State* L) {
     }
     return 1;
 }
+int actorHeldEntity(lua_State* L) {
+    try {
+        const auto player = entitySprite(L, 1);
+        if (lua.getTop(L) == 1) {
+            lua.pushInteger(L, j460::entity_links::heldIndex(player));
+            return 1;
+        }
+        if (!runtime::replica() || lua.getTop(L) != 2)
+            throw std::runtime_error("Only replicas restore player held entity links");
+        const auto held = lua.type(L, 2) == 1 && !lua.toBoolean(L, 2) ? 0 : entitySprite(L, 2);
+        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+        using Assign = void(__attribute__((fastcall))*)(void*, void*);
+        j460::entity_links::restoreHeld(
+            player, held, reinterpret_cast<Assign>(image + j460::entry::entityPtrAssign));
+        lua.pushBoolean(L, true);
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
 int bossHeldBombs(lua_State* L) {
     try {
         const auto entity = entitySprite(L, 1);
@@ -600,6 +621,8 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "boss_held_bombs");
     lua.pushClosure(L, entityMinecart, 0);
     lua.setField(L, -2, "entity_minecart");
+    lua.pushClosure(L, actorHeldEntity, 0);
+    lua.setField(L, -2, "actor_held_entity");
     lua.pushClosure(L, roomRails, 0);
     lua.setField(L, -2, "room_rails");
     lua.pushClosure(L, actorPose, 0);

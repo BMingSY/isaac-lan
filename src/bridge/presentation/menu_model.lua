@@ -55,6 +55,15 @@ return function(Phase, Command)
                 command("retry_save")
             end)
             row("返回", deps.hide)
+        elseif not host and (status.recovering or phase == Phase.running) then
+            local busy = status.recovering and (phase ~= Phase.failed or status.prepared)
+            notice = status.recovering and (busy and "reconnecting" or "reconnect_failed") or nil
+            row("重连游戏", function()
+                command("reconnect")
+            end, not busy)
+            row("离开游戏", function()
+                command("leave")
+            end)
         elseif modes then
             row("官方联机", function()
                 if command("close") then
@@ -214,18 +223,9 @@ return function(Phase, Command)
                     end
                 end, localSlot == status.pauseOwner)
             end
-            if host then
-                row(
-                    challenge and "结束挑战（不保存）" or "保存并结束联机",
-                    function()
-                        command("control", tostring(Command.saveExit))
-                    end
-                )
-            else
-                row("离开并保留角色", function()
-                    command("control", tostring(Command.leave))
-                end)
-            end
+            row(challenge and "结束挑战（不保存）" or "保存并结束联机", function()
+                command("control", tostring(Command.saveExit))
+            end)
             row("返回游戏", function()
                 deps.hide()
             end)

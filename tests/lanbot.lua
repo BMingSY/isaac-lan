@@ -1856,6 +1856,13 @@ test("embedded console entry dispatches lanbot and returns nil", function()
         return {}
     end
     modules["runtime/session"] = dofile(root .. "/src/bridge/runtime/session.lua")
+    modules["runtime/party"] = dofile(root .. "/src/bridge/runtime/party.lua")
+    native.input_ready = function()
+        return true
+    end
+    native.net_fail = function(reason)
+        error(reason)
+    end
     modules["compat/characters/keeper"] = dofile(root .. "/src/bridge/compat/characters/keeper.lua")
     _IsaacLanState = { actorPose = function() end }
     local source = { active = false, mask = 0 }

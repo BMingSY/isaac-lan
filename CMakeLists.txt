@@ -47,6 +47,13 @@ if(BUILD_TESTING AND ISAAC_LAN_LZ4_SOURCE_DIR)
     endif()
 endif()
 if(BUILD_TESTING)
+    add_executable(isaac_lan_mailbox_test tests/mailbox_test.cpp)
+    target_include_directories(isaac_lan_mailbox_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_mailbox_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME core.mailboxes COMMAND isaac_lan_mailbox_test)
+    set_tests_properties(core.mailboxes PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_occurrence_mapping_test tests/occurrence_mapping_test.cpp)
     target_include_directories(isaac_lan_occurrence_mapping_test PRIVATE src)
     if(MINGW)
@@ -158,6 +165,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.chat chat.lua)
         isaac_add_lua_test(presentation.chat-render chat_presentation.lua)
         isaac_add_lua_test(bridge.session_lifecycle session_lifecycle.lua)
+        isaac_add_lua_test(bridge.party-startup party_startup.lua)
         isaac_add_lua_test(bridge.restart restart.lua)
         isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
@@ -353,8 +361,8 @@ add_library(
     "${IMGUI_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp")
 target_include_directories(isaac_lan_ui PUBLIC "${IMGUI_SOURCE_DIR}" "${IMGUI_SOURCE_DIR}/backends")
 target_link_libraries(isaac_lan_ui PUBLIC opengl32 gdi32 dwmapi)
-add_library(isaac_lan_net STATIC src/net/session.cpp src/net/compression.cpp
-                                 src/net/host_resolution.cpp)
+add_library(isaac_lan_net STATIC src/net/session.cpp src/net/network_io.cpp src/net/byte_worker.cpp
+                                 src/net/compression.cpp src/net/host_resolution.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate isaac_lan_zstd)
@@ -394,6 +402,10 @@ if(BUILD_TESTING)
         test_case
         codec
         compression-limits
+        wire-compression
+        async-network
+        bulk-worker
+        reliable-receive
         world-deltas
         delivery-backpressure
         delta-floor-boundary

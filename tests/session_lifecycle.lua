@@ -12,7 +12,12 @@ local function environment(interrupt)
         end
     end
     lifecycle = factory({
+        canStart = function()
+            return true
+        end,
+        fail = effect("failed"),
         start = effect("start"),
+        bindPlayers = effect("players"),
         enableRooms = effect("rooms"),
         gate = effect("gate"),
         restoreRooms = effect("restore"),
@@ -32,7 +37,7 @@ assert(lifecycle.initializing() and lifecycle.prepare())
 assert(lifecycle.ready() and not lifecycle.prepare() and not lifecycle.launch())
 lifecycle.close(1)
 assert(not lifecycle.active() and not lifecycle.ready())
-assert(table.concat(events, ",") == "start,rooms,gate,restore,save-close")
+assert(table.concat(events, ",") == "start,players,rooms,gate,restore,save-close")
 -- Continue/rejoin uses the same gate, even when start invokes callbacks inline.
 local immediate = environment(function(name, current)
     if name == "start" then
@@ -53,7 +58,7 @@ assert(replaced.active() and not replaced.ready() and not replaced.initializing(
 assert(replaced.gameStarted() and replaced.prepare(), "Old completion advanced the new run")
 -- Cancellation at every native boundary must stop the old generation. A new
 -- run can then prepare from scratch, without an old completion marking ready.
-for _, boundary in ipairs({ "start", "rooms", "gate", "restore" }) do
+for _, boundary in ipairs({ "start", "players", "rooms", "gate", "restore" }) do
     local cancel = true
     local current, trace = environment(function(name, session)
         if name == boundary and cancel then
@@ -71,9 +76,9 @@ for _, boundary in ipairs({ "start", "rooms", "gate", "restore" }) do
     assert(current.launch() and current.gameStarted() and current.prepare() and current.ready())
 end
 -- Native failures propagate once and never retry partial preparation on poll.
-for _, boundary in ipairs({ "start", "rooms", "gate", "restore" }) do
+for _, boundary in ipairs({ "start", "players", "rooms", "gate", "restore" }) do
     local fail = true
-    local current = environment(function(name)
+    local current, trace = environment(function(name)
         if name == boundary and fail then
             error("native failure at " .. name)
         end
@@ -83,7 +88,8 @@ for _, boundary in ipairs({ "start", "rooms", "gate", "restore" }) do
         current.gameStarted()
         current.prepare()
     end)
-    assert(not ok and reason:find(boundary, 1, true))
+    assert(ok, "A startup failure must not disable frontend polling")
+    assert(trace[#trace] == "failed")
     assert(current.active() and not current.ready())
     assert(not current.launch() and not current.prepare())
     current.close()
@@ -91,3 +97,71 @@ for _, boundary in ipairs({ "start", "rooms", "gate", "restore" }) do
     assert(current.launch() and current.gameStarted() and current.prepare())
 end
 print("PASS startup, inline callbacks, cancellation, failures and new generations")
+
+-- Delayed native controller enumeration must not consume the launch generation.
+local available, starts = false, 0
+local deferred = factory({
+    canStart = function()
+        return available
+    end,
+    start = function()
+        starts = starts + 1
+    end,
+    bindPlayers = function() end,
+    enableRooms = function() end,
+    gate = function() end,
+    restoreRooms = function() end,
+    close = function() end,
+    fail = function(reason)
+        error(reason)
+    end,
+})
+assert(not deferred.launch() and not deferred.active() and starts == 0)
+available = true
+assert(deferred.launch() and starts == 1 and not deferred.launch())
+-- Player initialization can dispatch native callbacks. A nested prepare must
+-- not spawn the same guest twice or advance readiness before its owner exists.
+local nested = environment(function(name, current)
+    if name == "players" then
+        assert(not current.initializing() and not current.prepare())
+    end
+end)
+assert(nested.launch() and nested.gameStarted() and nested.prepare() and nested.ready())
+-- A failed Continue binding can occur synchronously inside native start. The
+-- outer successful call must not overwrite that failure or enable gameplay.
+local continued, continuedEvents = environment(function(name, current)
+    if name == "start" then
+        assert(not current.gameStarted(true))
+    elseif name == "players" then
+        assert(not current.initializing() and not current.prepare())
+        error("restored actor is missing")
+    end
+end)
+assert(not continued.launch() and not continued.ready() and not continued.prepare())
+assert(table.concat(continuedEvents, ",") == "start,players,failed")
+print("PASS delayed controllers, reentrant roster initialization and recoverable startup failure")
+
+-- A failure before native launch has no game-exit callback. The transport
+-- keeps its failed session, but a user retry must be able to launch again.
+local rejected, failures = true, 0
+local prelaunch = factory({
+    canStart = function()
+        return true
+    end,
+    start = function()
+        assert(not rejected, "archive rejected before native launch")
+    end,
+    bindPlayers = function() end,
+    enableRooms = function() end,
+    gate = function() end,
+    restoreRooms = function() end,
+    close = function() end,
+    fail = function()
+        failures = failures + 1
+        return false
+    end,
+})
+assert(not prelaunch.launch() and failures == 1 and not prelaunch.active())
+rejected = false
+assert(prelaunch.launch() and prelaunch.gameStarted() and prelaunch.prepare())
+print("PASS prelaunch rejection releases startup without waiting for an absent exit callback")

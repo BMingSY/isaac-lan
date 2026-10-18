@@ -13,7 +13,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 34;
+constexpr std::uint16_t protocolVersion = 35;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -155,6 +155,9 @@ struct Start {
     std::array<std::uint16_t, maxPlayers> characters{};
     std::optional<Progress> progress;
     std::vector<std::uint8_t> snapshot;
+    Start metadata() const {
+        return {rules, firstTick, connected, seed, difficulty, characters, progress, {}};
+    }
 };
 struct Choice {
     std::uint16_t character = 0;

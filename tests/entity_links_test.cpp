@@ -51,6 +51,39 @@ int main() {
         restore(owner, second, assign);
         restore(owner, 0, assign);
         require(observers[second].empty(), "Dismount retained an observer");
+        std::array<unsigned, 0x1420 / 4> actor{};
+        const auto player = reinterpret_cast<Address>(actor.data());
+        field<unsigned>(player, 0x28) = playerType;
+        field<unsigned>(first, 0x28) = playerType;
+        const auto previousWrites = writes;
+        restoreHeld(player, first, assign);
+        restoreHeld(player, first, assign);
+        require(heldIndex(player) == 17 && writes == previousWrites + 1,
+                "Repeated carry changed the registered reference");
+        restoreHeld(player, second, assign);
+        require(observers[first].empty() && heldIndex(player) == 81,
+                "Replacement retained the previous held entity");
+        rejected = false;
+        try {
+            restoreHeld(player, player, assign);
+        } catch (const std::runtime_error&) {
+            rejected = true;
+        }
+        require(rejected && heldIndex(player) == 81, "Self carry changed the link");
+        for (auto slot : observers[second])
+            field<Address>(slot, 0) = 0;
+        observers[second].clear();
+        require(heldIndex(player) == -1, "Removed held entity retained a dangling reference");
+        restoreHeld(player, first, assign);
+        restoreHeld(player, 0, assign);
+        require(observers[first].empty(), "Throw retained the held entity observer");
+        rejected = false;
+        try {
+            restoreHeld(owner, first, assign);
+        } catch (const std::runtime_error&) {
+            rejected = true;
+        }
+        require(rejected, "Non-player received a held entity field");
         std::cout
             << "PASS minecart native reference ABI, repeat, replace, removal and validation\n";
         return 0;

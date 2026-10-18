@@ -51,7 +51,7 @@ flowchart LR
 
 采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
 
-实体 ID 由房主分配，客机维护 `ID → EntityPtr`。同一活动对象复用其 `EntityPtr` 与显示轨迹记录，原生引用失效或角色对象替换时重新建立引用；换房清理显示轨迹，退出清理全部引用。恢复时先回收过期实体，再创建／更新实体，最后绑定父、子、生成者和目标引用。身份与本机地址、实体池槽位无关；原生对象仍由游戏分配和释放。特殊实体引用通过兼容组件和具名后端能力接入，见[原生能力参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。
+实体 ID 由房主分配，客机维护 `ID → EntityPtr`。同一活动对象复用其 `EntityPtr` 与显示轨迹记录，原生引用失效或角色对象替换时重新建立引用；换房清理显示轨迹，退出清理全部引用。恢复时先回收过期实体，再创建／更新实体，最后绑定父、子、生成者、目标和角色持有引用。`held`（实体字段 27）是被抱起对象的稳定 ID，无对象或不在当前视图时为 `0`；异房角色同样清空旧链接。身份与本机地址、实体池槽位无关；原生对象仍由游戏分配和释放。特殊实体引用通过兼容组件和具名后端能力接入，见[原生能力参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。
 
 客机应用完整视图时遵循[恢复顺序](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md#采集与副本恢复)，全部成功后才提交 tick。原生楼层未准备好时保留最新视图，延后应用。普通状态允许在原生半帧边界应用；首次视图、暂停／名单变化、换层、换房及角色替换在完整更新边界处理。`betweenUpdates` 预检不写入房间或角色，返回 `false` 表示继续等待。
 
@@ -59,11 +59,15 @@ flowchart LR
 
 ## 传输、压缩与积压
 
-连接使用非阻塞 IPv4 TCP，由主线程轮询。域名在独立线程解析；取消或重连使旧解析结果失效。消息采用两字节长度前缀，正文整数使用大端编码，大载荷按块传输。
+连接使用非阻塞 IPv4 TCP。每个会话的 [网络线程](https://github.com/BMingSY/isaac-lan/blob/main/src/net/network_io.cpp) 通过 socket 事件和唤醒事件处理连接、收发、消息封装、分块组装及实时视图压缩／解压。主线程的 `Session::poll` 只消费已交接的结果、推进协议状态；主机取得输入后仍在当前更新中推进游戏，不经过后台任务往返。聊天与心跳的字节收发不等待下一帧，聊天的业务分发和界面更新仍由主线程执行。域名独立解析，取消或重连使旧解析结果失效。
 
-[Zstd 适配器](https://github.com/BMingSY/isaac-lan/blob/main/src/core/zstd.cpp)使用快速级别 `-1`，分别生成独立帧和引用不可变已确认快照的 prefix 帧，选择较小载荷；无压缩收益时发送原始字节。prefix 直接使用完整快照，不需要训练字典或另外构造字节补丁。压缩上下文由会话持有并复用，每次调用结束清除借用的 prefix；不同客机之间不共享基线。首块标明完整／参考模式、基线 tick 与楼层代次。
+主线程通过有界单生产者／单消费者队列交换拥有独立存储的消息，最新视图使用单值邮箱替换尚未处理的旧值。网络工作线程不调用 Lua、游戏 API、日志回调或诊断回调；诊断样本有界交接后由主线程记录。存档和回退使用独立的 [大数据工作线程](https://github.com/BMingSY/isaac-lan/blob/main/src/net/byte_worker.cpp)，在后台压缩、解压并校验完整性，避免占住网络线程。原生存档采集、Continue 和副本应用必须在主线程执行。取消任务后，已开始的任务只完成其独立字节结果；旧会话退出等待在线程退休阶段完成，不阻塞下一次重连的启动。
 
-协议版本为 31。压缩封套为一字节模式和四字节大端原始长度：`0` 为原始字节，`3` 为独立 Zstd 帧，`4` 为 prefix 帧；`1`／`2` 仅保留旧 XPRESS／DEFLATE 读取。Zstd 帧必须含已知原始长度和内容校验和，不接受训练字典 ID、串接帧或尾随字节；解码前验证输出大小和窗口均不超过 2 MiB。Zstd 静态链接，不依赖系统安装或额外 DLL。
+协议版本为 35。消息采用两字节大端长度前缀。[统一消息封装](https://github.com/BMingSY/isaac-lan/blob/main/src/net/wire_codec.h) 对至少 256 字节的控制、聊天及扩展消息尝试压缩，仅在包含封套后仍更小时使用 `0x80 + 压缩封套`；小消息和不可压缩消息保持原正文。实时视图、检查点和回退载荷先整体压缩再分块，不逐块重复压缩。
+
+[Zstd 适配器](https://github.com/BMingSY/isaac-lan/blob/main/src/core/zstd.cpp) 使用快速级别 `-1`。实时视图比较独立帧和引用已确认不可变快照的 prefix 帧，选择较小载荷；检查点及回退使用独立帧。无压缩收益时使用原始字节。prefix 直接引用完整快照，不训练字典或另外构造字节补丁。压缩上下文由所属工作线程持有并复用，每次调用结束清除借用的 prefix；不同客机之间不共享基线。实时视图首块标明完整／参考模式、基线 tick 与楼层代次。
+
+压缩封套为一字节模式和四字节大端原始长度：`0` 为原始字节，`3` 为独立 Zstd 帧，`4` 为 prefix 帧；`1`／`2` 仅保留旧 XPRESS／DEFLATE 读取。Zstd 帧必须含已知原始长度和内容校验和，不接受训练字典 ID、串接帧或尾随字节。解码前按通道检查输出大小和窗口：消息 4096 字节、实时视图 2 MiB、存档及回退 8 MiB。Zstd 静态链接，不依赖系统安装或额外 DLL。
 
 该增量位于完整状态编码之后，客机也要还原完整字节再解码。它减少传输量，不免除整份状态的采集、编码与解码成本。网络层不按游戏字段解释或修改状态。
 
@@ -79,6 +83,9 @@ flowchart LR
 | 未确认视图窗口 | 每客机 4–16 份，按最低已测 RTT 调整 |
 | 开始新视图的未确认载荷阈值 | 64 KiB，可再容纳一份正在发送的视图 |
 | 完整视图历史缓存 | 每连接 16 MiB；客机另限 32 份 |
+| 主线程与网络线程的消息交接 | 每方向每连接 128 条；已完成接收数据达到 4 MiB 时停止继续收包，可额外容纳当前一份视图或存档 |
+| 普通发送字节队列 | 每连接 256 KiB；可靠大数据另按事务持有，分批进入字节队列 |
+| 可靠大数据／后台字节任务 | 每连接 4 个大数据事务；每工作线程 4 个待处理任务 |
 
 达到窗口或容量上限时，仅更新待发视图，不等待该客机追上后才推进其他玩家。已入 TCP 队列的字节仍按序交付。换层／回退事务使旧视图、组装状态和基线失效；新连接从完整视图建立基线，旧代次回执不能建立新基线。
 
@@ -105,6 +112,6 @@ Lua 决定游戏字段契约、采集与恢复顺序，通过游戏 API 或具�
 
 协议与字段版本分别由 [protocol.h](https://github.com/BMingSY/isaac-lan/blob/main/src/net/protocol.h) 和 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua) 管理。变更字段时同步更新生产者、消费者、版本／指纹和相关契约。
 
-世界字段版本为 25，精灵原生载荷使用格式 2，包含动画挂点帧和事件状态。角色和服装在渲染边界仍恢复权威姿态；同名动画通过完整状态恢复，避免每帧重新初始化动画。不同字段版本不能互相应用，嵌入模块与 DLL 指纹继续参与连接校验。
+世界字段版本为 26，精灵原生载荷使用格式 2，包含动画挂点帧和事件状态。角色和服装在渲染边界仍恢复权威姿态；同名动画通过完整状态恢复，避免每帧重新初始化动画。不同字段版本不能互相应用，嵌入模块与 DLL 指纹继续参与连接校验。
 
-客机协议或应用错误会结束其当前游戏并返回大厅；房主自身的桥接错误可能结束整场会话，详见[失败边界](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md#失败边界)。Ping 是包含轮询与排队的往返时间，不能代替状态处理耗时；测量与排查方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。
+客机协议或应用错误会结束其当前游戏并返回大厅；房主自身的桥接错误可能结束整场会话，详见[失败边界](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md#失败边界)。Ping 是包含主机消费回包及传输排队的往返时间，不能代替状态处理耗时；测量与排查方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。

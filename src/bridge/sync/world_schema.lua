@@ -22,7 +22,7 @@ local names = {
     "pills",
     "glitched",
 }
-local version = 25
+local version = 26
 local VERSION_FIELD, TICK_FIELD = 1, 2
 return {
     VERSION = version,

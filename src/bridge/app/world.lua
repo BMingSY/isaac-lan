@@ -35,7 +35,8 @@ local greed = assert(modules["compat/routes/greed"])(function()
 end)
 local crawlspace = assert(modules["compat/routes/crawlspace"])(function()
     return Game():GetLevel()
-end, Vector)
+end, Vector, RoomType.ROOM_DUNGEON)
+local forgotten = assert(modules["compat/characters/forgotten"])(PlayerType)
 local forms = component("compat/characters/lazarus")(native, function(index)
     return Isaac.GetPlayer(index)
 end, PlayerType)
@@ -100,6 +101,9 @@ local actorsPresentation = component("presentation/actors")(native, function(pat
 end, applySprite)
 local attachments = component("presentation/attachments")(native, Vector, EntityType, EffectVariant)
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
+    predictMovement = function(player, room)
+        return forgotten.predictMovement(player) and crawlspace.predictMovement(room)
+    end,
     attachments = attachments,
     vector = Vector,
     player = function(index)

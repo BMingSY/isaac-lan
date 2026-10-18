@@ -12,7 +12,19 @@ return function(fields)
             resolve = function(index, inventory, controller)
                 local p = player(index)
                 if not p or (controller and p.ControllerIndex ~= controller) then
-                    assert(lazarus(inventory[Inventory.type]), "Replica actor owner differs")
+                    assert(
+                        lazarus(inventory[Inventory.type]),
+                        "Replica actor owner differs: index="
+                            .. index
+                            .. " expectedController="
+                            .. tostring(controller)
+                            .. " actualController="
+                            .. (p and p.ControllerIndex or -1)
+                            .. " expectedType="
+                            .. inventory[Inventory.type]
+                            .. " actualType="
+                            .. (p and p:GetPlayerType() or -1)
+                    )
                     assert(
                         native.actor_form(index, inventory[Inventory.type], controller),
                         "Cannot list Lazarus backup"

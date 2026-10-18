@@ -65,6 +65,7 @@ return function(wire)
                         false, -- Entity.compatibility
                         false, -- Entity.minecart
                         false, -- Entity.nativeFields
+                        false, -- Entity.held
                     }
                     if native.entity_fields_encode then
                         for _, field in ipairs({
@@ -270,6 +271,7 @@ return function(wire)
                     false, -- Entity.compatibility
                     false, -- Entity.minecart
                     false, -- Entity.nativeFields
+                    false, -- Entity.held
                 }
             value[Entity.id] = id(e, kind)
             value[Entity.sprite] = visual and sprite(s) or false
@@ -284,6 +286,7 @@ return function(wire)
                     and visualCompatibility.capture(e, id)
                 or false
             value[Entity.minecart] = visual and entityLinks.capture(e, id) or 0
+            value[Entity.held] = visual and entityLinks.captureHeld(e, id) or 0
             value[Entity.nativeFields] = packedPlans[kind]
                     and assert(native.entity_fields_encode(s, packedPlans[kind]))
                 or false
@@ -359,6 +362,7 @@ return function(wire)
             apply = applyEntity,
             link = function(e, v, ref)
                 entityLinks.apply(e, v[Entity.minecart], ref)
+                entityLinks.applyHeld(e, v[Entity.held], ref)
                 if visualCompatibility and visualCompatibility.link then
                     visualCompatibility.link(e, v[Entity.compatibility], ref)
                 end

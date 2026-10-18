@@ -173,6 +173,7 @@ inline constexpr unsigned type = 0x13c0;
 inline constexpr unsigned controller = 0x1618;
 inline constexpr unsigned index = 0x161c;
 inline constexpr unsigned twin = 0x1e68;
+inline constexpr unsigned coopGhost = 0x20a9;
 inline constexpr unsigned nightLightAngle = 0x1ae4;
 inline constexpr unsigned generatedInventoryHead = 0x1fcc;
 inline constexpr unsigned generatedInventorySize = 0x1fd0;

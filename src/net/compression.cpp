@@ -7,10 +7,8 @@
 #include <string>
 
 namespace isaac::lan {
-namespace {
-constexpr std::size_t headerSize = 5;
-} // namespace
 struct StateCompression::Impl {
+    std::size_t limit = maxWorldSize;
     compression::Zstd zstd;
     HMODULE module = nullptr;
     HANDLE compressor = nullptr, decompressor = nullptr;
@@ -56,13 +54,18 @@ struct StateCompression::Impl {
             FreeLibrary(module);
     }
 };
-StateCompression::StateCompression() : impl(std::make_unique<Impl>()) {}
+StateCompression::StateCompression() : StateCompression(maxWorldSize) {}
+StateCompression::StateCompression(std::size_t limit) : impl(std::make_unique<Impl>()) {
+    if (!limit || limit > maxSnapshotSize)
+        throw std::runtime_error("Invalid compression limit");
+    impl->limit = limit;
+}
 StateCompression::~StateCompression() = default;
 std::vector<std::uint8_t> StateCompression::compress(std::span<const std::uint8_t> bytes,
                                                      std::span<const std::uint8_t> baseline) {
-    if (bytes.empty() || bytes.size() > maxWorldSize || baseline.size() > maxWorldSize)
+    if (bytes.empty() || bytes.size() > impl->limit || baseline.size() > impl->limit)
         throw std::runtime_error("Invalid state compression size");
-    const auto compressed = impl->zstd.compress(bytes, maxWorldSize, baseline);
+    const auto compressed = impl->zstd.compress(bytes, impl->limit, baseline);
     const bool packed = compressed.size() < bytes.size();
     const auto payload = packed ? std::span<const std::uint8_t>(compressed) : bytes;
     std::vector<std::uint8_t> result(payload.size() + headerSize);
@@ -77,20 +80,20 @@ std::vector<std::uint8_t> StateCompression::expand(std::span<const std::uint8_t>
     Reader reader(bytes);
     const auto mode = reader.u8();
     const auto size = reader.u32();
-    if (mode > Mode::zstdPrefix || !size || size > maxWorldSize || bytes.size() <= headerSize ||
-        bytes.size() > maxWorldSize + headerSize || baseline.size() > maxWorldSize ||
+    if (mode > Mode::zstdPrefix || !size || size > impl->limit || bytes.size() <= headerSize ||
+        bytes.size() > impl->limit + headerSize || baseline.size() > impl->limit ||
         (mode == Mode::zstdPrefix && baseline.empty()) ||
         (mode != Mode::zstdPrefix && mode != Mode::raw && !baseline.empty()))
         throw std::runtime_error("Invalid compressed state header");
     if (mode == Mode::zstd || mode == Mode::zstdPrefix)
-        return impl->zstd.expand(bytes.subspan(headerSize), size, maxWorldSize, baseline);
+        return impl->zstd.expand(bytes.subspan(headerSize), size, impl->limit, baseline);
     if (mode == Mode::raw) {
         if (bytes.size() - headerSize != size)
             throw std::runtime_error("Invalid plain state size");
         return {bytes.begin() + headerSize, bytes.end()};
     }
     if (mode == Mode::deflate)
-        return compression::inflate(bytes.subspan(headerSize), size, maxWorldSize);
+        return compression::inflate(bytes.subspan(headerSize), size, impl->limit);
     impl->initialize();
     std::vector<std::uint8_t> result(size);
     SIZE_T written = 0;

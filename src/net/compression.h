@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -12,8 +13,10 @@ class StateCompression {
     std::unique_ptr<Impl> impl;
 
   public:
+    static constexpr std::size_t headerSize = 5;
     enum Mode : std::uint8_t { raw, xpress, deflate, zstd, zstdPrefix };
     StateCompression();
+    explicit StateCompression(std::size_t limit);
     ~StateCompression();
     std::vector<std::uint8_t> compress(std::span<const std::uint8_t> bytes,
                                        std::span<const std::uint8_t> baseline = {});

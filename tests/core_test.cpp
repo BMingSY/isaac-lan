@@ -15,6 +15,7 @@
 #include "compat/routes/mines.h"
 #include "compat/routes/curses.h"
 #include "compat/characters/traits.h"
+#include "compat/characters/ghost.h"
 #include "compat/items/rewind_targets.h"
 #include "compat/items/deal_chances.h"
 #include "compat/items/death_certificate.h"
@@ -198,6 +199,34 @@ void roomScopeOwnership() {
             "A new room operation retained the old full roster");
 }
 void roomTransitionContext() {
+    {
+        using namespace isaac::compat::characters;
+        std::array<GhostRoomActor, 3> actors{{
+            {0, 0, 83, false, true, 320, 280},
+            {1, 0, 83, true, true, 320, 280},
+            {2, 0, 83, false, false, 100, 100},
+        }};
+        require(!ghostFollowTarget(actors[1], actors), "Ghost left its living roommate");
+        actors[0] = {0, 0, 82, false, true, 1080, 280};
+        const auto target = ghostFollowTarget(actors[1], actors);
+        require(target && target->slot == 0 && target->room == 82 && target->x == 1080 &&
+                    target->y == 280,
+                "Ghost arrival retained 1x1 coordinates in the L-shaped void");
+        actors[1].room = 82;
+        require(!ghostFollowTarget(actors[1], actors), "Repeated follow moved an arrived ghost");
+        actors[0].dimension = 1;
+        actors[0].x = 500;
+        const auto split = ghostFollowTarget(actors[1], actors);
+        require(split && split->dimension == 1 && split->x == 500,
+                "Split-room death or dimension transfer reused a previous landing");
+        actors[0].connected = false;
+        require(!ghostFollowTarget(actors[1], actors), "Ghost followed an offline survivor");
+        actors[0].connected = true;
+        actors[0].ghost = true;
+        require(!ghostFollowTarget(actors[1], actors), "Ghosts followed each other");
+        actors[1].ghost = false;
+        require(!ghostFollowTarget(actors[1], actors), "Revived player still followed a ghost");
+    }
     using namespace isaac::rooms;
     using namespace isaac::compat::bosses;
     using namespace isaac::compat::routes;

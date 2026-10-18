@@ -22,7 +22,7 @@
 
 装配层注入运行、同步、兼容与表现组件。运行协调器通过 [`engine/session_backend.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/session_backend.h) 调用具名能力；J460 后端安装 Hook，回调只传普通值和限同步调用的原版操作，不向运行层暴露原生对象。Lua ABI 声明与符号加载共用 [`engine/lua_api.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。
 
-会话视图、启动请求和存档保护分别由 [`session_state.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_state.h) 中的状态组件持有，存档文件操作由 [`session_store.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_store.cpp) 管理。TCP 字节队列、各端协议状态和异步解析分别位于 `net/socket.h`、`net/peer.h` 和 `net/host_resolution.cpp`。
+会话视图、启动请求和存档保护分别由 [`session_state.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_state.h) 中的状态组件持有，存档文件操作由 [`session_store.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_store.cpp) 管理。会话协议状态留在主线程的 `net/session.cpp` 与 `net/peer.h`；`net/socket.h` 负责有界数据交接，`net/network_io.cpp` 独占连接、收发和实时压缩上下文。`net/world_transfer.h` 管理实时视图基线与分块，`net/reliable_transfer.h`／`net/reliable_receiver.h` 管理可靠大数据的分块与组装，`net/byte_worker.cpp` 执行存档字节任务；域名解析位于 `net/host_resolution.cpp`。
 
 Lua 嵌入清单在 [`modules.txt`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/modules.txt)。组件加载时只定义函数，依赖在全部组件加载后注入。[`app/main.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/app/main.lua)、[`app/world.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/app/world.lua)、菜单与预测入口单独装配。
 
@@ -30,7 +30,8 @@ Lua 嵌入清单在 [`modules.txt`](https://github.com/BMingSY/isaac-lan/blob/ma
 
 | 状态 | 管理者 | 失效边界 |
 | --- | --- | --- |
-| TCP 队列、分块、视图基线 | 网络会话 | 关闭、连接或可靠事务切换 |
+| TCP 队列、分块、视图基线 | 网络线程 | 关闭、连接或可靠事务切换 |
+| 存档压缩／解压任务及完成结果 | 大数据工作线程与主线程结果票据 | 取消、会话退出或楼层事务替换；过期结果不能进入新会话 |
 | 会话身份、输入确认、楼层代次 | 运行协调器 | 新会话、换层、重建和回退 |
 | 桥接启动阶段与准备代次 | [`bridge/runtime/session.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/session.lua) | 关闭、取消；原生错误进入失败阶段 |
 | 房间绑定、深度、借用的完整名单 | [`runtime/room_scope.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 与 J460 `Scope` | 按栈顺序完成原生恢复与清理 |

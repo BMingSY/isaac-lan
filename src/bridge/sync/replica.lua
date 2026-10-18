@@ -72,6 +72,7 @@ return function(fields)
             m.actor, m.controller = actor, actor and e:ToPlayer().ControllerIndex or -1
             m.prediction = actor and (m.prediction or prediction.new(position))
             m.attachment = deps.attachments and deps.attachments.capture(e, v)
+            m.held = v[Entity.held]
             m.track =
                 motionPresentation.track(m.track, position, velocity, now, tick, actor and 60 or 30)
             motion[v[Entity.id]] = m
@@ -223,16 +224,14 @@ return function(fields)
                     localEffect = entityCodec.localEffect,
                 })
                 performance.counter("missing_player_tears", missingTears or 0)
-                -- Visible actors share this room's entity graph; offscreen actors
-                -- carry no visual links and their rooms may only be replica shells.
+                -- Visible actors share this room's graph. Offscreen actors carry
+                -- zero links, clearing references retained from the previous view.
                 for _, actor in ipairs(value.actors) do
-                    if actor[Actor.entity][Entity.sprite] then
-                        entityCodec.link(
-                            assert(ref(actor[Actor.entity][Entity.id])),
-                            actor[Actor.entity],
-                            ref
-                        )
-                    end
+                    entityCodec.link(
+                        assert(ref(actor[Actor.entity][Entity.id])),
+                        actor[Actor.entity],
+                        ref
+                    )
                 end
                 assert(native.door_slot(-1))
                 reconcileGrids(data[Room.grids], {

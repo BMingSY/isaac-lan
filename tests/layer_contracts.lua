@@ -4,9 +4,9 @@ local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
 local codec, schema = module("sync/codec"), module("sync/world_schema")
--- Schema 25 carries packed numeric entity fields alongside complete animation poses.
+-- Schema 26 carries stable held-entity links alongside packed numeric fields.
 local tuple = {
-    25,
+    26,
     42,
     80,
     6,

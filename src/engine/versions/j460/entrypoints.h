@@ -21,6 +21,7 @@ inline constexpr std::uint32_t gameTriggerRKey = 0x307ad0;
 inline constexpr std::uint32_t gameNextVictoryLap = 0x2f7ac0;
 inline constexpr std::uint32_t spriteIsFinished = 0xa550;
 inline constexpr std::uint32_t entityPtrAssign = 0x2b5b50;
+inline constexpr std::uint32_t playerHeldEntityAssignSite = 0x3d23e6;
 inline constexpr std::uint32_t roomRemoveGridEntityImmediate = 0x41e980;
 inline constexpr std::uint32_t roomMakeDoor = 0x3eea90;
 inline constexpr std::uint32_t luaPostNewRoom = 0x465180;

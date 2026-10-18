@@ -33,6 +33,12 @@ return function(fields)
         end
         local function present(motion, ref)
             local resolved, visiting = {}, {}
+            local holders = {}
+            for identifier, model in pairs(motion) do
+                if model.held and model.held ~= 0 and ref(identifier) then
+                    holders[model.held] = identifier
+                end
+            end
             local function offset(identifier)
                 if resolved[identifier] ~= nil then
                     return resolved[identifier]
@@ -43,7 +49,9 @@ return function(fields)
                 end
                 visiting[identifier] = true
                 local value = false
-                if model.actor then
+                if holders[identifier] then
+                    value = offset(holders[identifier])
+                elseif model.actor then
                     value = model.display - model.target
                 elseif model.attachment and model.attachment.parent ~= 0 then
                     value = offset(model.attachment.parent)
@@ -60,7 +68,7 @@ return function(fields)
             -- of hash-table order, including a laser's attached impact effect.
             for identifier, model in pairs(motion) do
                 local attachment = model.attachment
-                if attachment then
+                if attachment or holders[identifier] then
                     local entity = ref(identifier)
                     if entity then
                         local translation = offset(identifier)
@@ -68,7 +76,7 @@ return function(fields)
                             model.display = model.target + translation
                             entity.Position = model.display
                         end
-                        if attachment.path then
+                        if attachment and attachment.path then
                             local delta = model.display - model.target
                             if attachment.x ~= delta.X or attachment.y ~= delta.Y then
                                 -- Rebuild from the accepted bytes, not the last
