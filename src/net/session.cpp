@@ -1035,7 +1035,8 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
     }
 }
 bool Session::reconnect() {
-    if (impl->hosting || impl->state != Phase::failed || impl->hostIP.empty())
+    if (impl->hosting || (impl->state != Phase::failed && impl->state != Phase::closed) ||
+        impl->hostIP.empty())
         return false;
     const auto ip = impl->hostIP, identity = impl->identity, fingerprint = impl->fingerprint,
                mods = impl->mods;

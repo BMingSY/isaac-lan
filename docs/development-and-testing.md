@@ -169,6 +169,7 @@ python tools/engine_test.py run special-routes -- \
 | 领域 | 入口与范围 |
 | --- | --- |
 | 输入与镜头 | [run_response_acceptance.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_response_acceptance.py)：直连／约 20 ms RTT、输入预览、移动／过门、暂停、主动、蓄力和大房间／镜面；需要画面时用 `--record-view`。多身体预测用 [state_multi_actor_prediction.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_multi_actor_prediction.lua) 检查双子、骸骨切换及魂石身体的生成／退场 |
+| 客机重连 | [state_client_recovery.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_client_recovery.lua) 通过 `run_network_engine.py --frontend --menu-start` 复用一组进程，检查虚拟控制器延迟就绪、新局角色归属、客机单独传送进恶魔房后的主动重连、恢复失败后的手动重试、意外掉线恢复、菜单提示与离开；重连导致的原生退出不重启进程。执行前用 `ProtectedLabs` 保护隔离资料，收尾后恢复并核对哈希 |
 | EID、举袋与水流 | [run_client_scenes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_client_scenes.py)，需要完整举放检查时加 `--include-bag-transitions --record-view` |
 | 道具与角色 | [run_item_issues.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_issues.py) 或 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的相关场景；按实际改动选择持有者、房间和生命周期条件 |
 | 联机挑战 | [run_lan_challenges.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_lan_challenges.py)：`--suite access`／`gameplay`／`hud` 分别检查资格、规则、2–4 人显示与普通会话恢复 |

@@ -1,7 +1,16 @@
 -- Bridge startup owns one lifecycle. Transport phases only request launch;
 -- readiness is published after native room/gate/restore have all succeeded.
 return function(effects)
-    for _, name in ipairs({ "start", "enableRooms", "gate", "restoreRooms", "close" }) do
+    for _, name in ipairs({
+        "canStart",
+        "start",
+        "bindPlayers",
+        "enableRooms",
+        "gate",
+        "restoreRooms",
+        "close",
+        "fail",
+    }) do
         assert(type(effects[name]) == "function", "Missing session effect: " .. name)
     end
     local phase, generation = "idle", 0
@@ -10,10 +19,11 @@ return function(effects)
         if not ok then
             if generation == current then
                 phase = "failed"
+                effects.fail(tostring(result))
             end
-            error(result, 0)
+            return false
         end
-        return generation == current
+        return generation == current and phase ~= "failed"
     end
     return {
         active = function()
@@ -26,16 +36,28 @@ return function(effects)
             return phase == "initializing"
         end,
         launch = function()
-            if phase ~= "idle" then
+            if phase ~= "idle" or not effects.canStart() then
                 return false
             end
             -- Native start may synchronously invoke the game-start callback.
             phase = "starting"
             return run(effects.start, generation)
         end,
-        gameStarted = function()
+        gameStarted = function(continued)
             if phase ~= "starting" then
                 return false
+            end
+            if continued then
+                -- Continue must bind saved heads before the first native input
+                -- update. Keep failures inside the same startup transaction.
+                phase = "preparing"
+                if
+                    not run(function()
+                        effects.bindPlayers(true)
+                    end, generation)
+                then
+                    return false
+                end
             end
             phase = "initializing"
             return true
@@ -46,7 +68,12 @@ return function(effects)
             end
             phase = "preparing"
             local current = generation
-            for _, effect in ipairs({ effects.enableRooms, effects.gate, effects.restoreRooms }) do
+            for _, effect in ipairs({
+                effects.bindPlayers,
+                effects.enableRooms,
+                effects.gate,
+                effects.restoreRooms,
+            }) do
                 if not run(effect, current) then
                     return false
                 end

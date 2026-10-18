@@ -351,10 +351,38 @@ end
 action("暂停全队", { phase = 3, hosting = 1, slot = 0, pause = 0 })
 action("恢复游戏", { phase = 3, hosting = 1, slot = 0, pause = 1, pauseOwner = 0 })
 action("保存并结束联机", { phase = 3, hosting = 1, slot = 0 })
-action("离开并保留角色", { phase = 3, hosting = 0, slot = 1 })
-for i = 1, 4 do
+action("重连游戏", { phase = 3, hosting = 0, slot = 1 })
+action("离开游戏", { phase = 3, hosting = 0, slot = 1 })
+for i = 1, 3 do
     assert(sent[i][1] == "control" and sent[i][2] == tostring(i))
 end
+assert(sent[4][1] == "reconnect" and sent[5][1] == "leave")
+for _, phase in ipairs({ 1, 7, 9, 3, 4 }) do
+    local recovering = { phase = phase, hosting = 0, slot = 1, recovering = true }
+    local rows, notice = actions.rows(ui, recovering, {}, {}, deps)
+    assert(#rows == 2 and rows[1].label == "重连游戏" and rows[2].label == "离开游戏")
+    assert(rows[1].enabled == (phase == 4) and rows[2].enabled)
+    assert(notice == (phase == 4 and "reconnect_failed" or "reconnecting"))
+end
+status.hosting, status.recovering, status.prepared = 0, true, false
+for _, phase in ipairs({ 1, 7, 9, 4 }) do
+    status.phase = phase
+    labels = {}
+    assert(_IsaacLanMenuRender(false, false, 0, "", -1000, -1000, false, "", ""))
+    assert(labels[phase == 4 and "重连失败，请重试" or "正在重连…"])
+    assert(labels["重连游戏"] and labels["离开游戏"] and not labels["暂停全队"])
+    assert(not labels["方向选择 · 确认进入 · 返回退出"])
+end
+status.hosting, status.recovering, status.prepared, status.phase = 0, false, true, 3
+assert(
+    not _IsaacLanMenuRender(false, true, 0, "", -1000, -1000, false, "", ""),
+    "Recovered game kept capturing input"
+)
+assert(
+    _IsaacLanMenuRender(false, true, 0, "", -1000, -1000, false, "", ""),
+    "A later manual menu open was hidden"
+)
+status.hosting, status.prepared = 1, false
 assert(hidden == 1)
 -- Reconnect/loading/game cards use the run roster, even when lobby choices
 -- were never selected (fresh rejoin) or differ from a resumed save.

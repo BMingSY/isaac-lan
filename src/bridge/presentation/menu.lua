@@ -136,7 +136,18 @@ function _IsaacLanMenuRender(
 )
     local status = _IsaacLanStatus()
     local phase = status.phase or Phase.idle
-    if not visible and not available and not status.prepared and phase ~= Phase.waiting then
+    local playing = phase == Phase.running and status.prepared and not status.recovering
+    if playing and not ui.wasPlaying then
+        visible = false
+    end
+    ui.wasPlaying = playing
+    if
+        not visible
+        and not available
+        and not status.prepared
+        and not status.recovering
+        and phase ~= Phase.waiting
+    then
         return false
     end
     load()
@@ -189,6 +200,10 @@ function _IsaacLanMenuRender(
         ui.selection, ui.editing, ui.lastPhase = 1, nil, phase
         _IsaacLan.menu_text_end()
     end
+    if status.recovering then
+        visible = true
+        ui.page = "lan"
+    end
     if key == Key.escape then
         if ui.editing then
             ui.editing = nil
@@ -196,11 +211,11 @@ function _IsaacLanMenuRender(
             key = 0
         elseif ui.page == "challenges" then
             ui.page, ui.selection, key = "lan", 3, 0
-        elseif ui.page == "lan" and idle(phase) then
+        elseif ui.page == "lan" and idle(phase) and not status.recovering then
             ui.page = "modes"
             ui.selection = 2
             key = 0
-        else
+        elseif not status.recovering then
             visible = false
         end
     end
@@ -262,7 +277,14 @@ function _IsaacLanMenuRender(
             visible = false
         end,
     })
-    if notice == "unavailable" then
+    if notice == "reconnecting" or notice == "reconnect_failed" then
+        centered(
+            notice == "reconnecting" and "正在重连…" or "重连失败，请重试",
+            110,
+            100,
+            12
+        )
+    elseif notice == "unavailable" then
         centered("全员需解锁底片与里该隐", 240, 250, 10, red)
     elseif notice == "waiting" then
         centered(
@@ -273,7 +295,12 @@ function _IsaacLanMenuRender(
         )
         centered("队友可以继续游戏", 110, 124, 10)
     end
-    local yStart = (phase == Phase.waiting or phase == Phase.loading or phase == Phase.connecting)
+    local yStart = (
+        status.recovering
+        or phase == Phase.waiting
+        or phase == Phase.loading
+        or phase == Phase.connecting
+    )
             and 157
         or 89
     local gap = #rows > 6 and 19 or 23
@@ -379,6 +406,7 @@ function _IsaacLanMenuRender(
     else
         text(
             ui.editing and "输入后确认 · 支持粘贴"
+                or status.recovering and "方向选择 · 确认进入"
                 or "方向选择 · 确认进入 · 返回退出",
             25,
             footerY,

@@ -65,6 +65,7 @@ compat/mods/eid
 compat/mods/goodtrip/authority
 compat/mods/goodtrip/client
 runtime/session
+runtime/party
 sync/capture
 sync/replica
 compat/routes/challenge_lamb

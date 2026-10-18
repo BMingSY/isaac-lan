@@ -49,6 +49,12 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     end
     local noop = function() end
     _IsaacLan = {
+        input_ready = function()
+            return true
+        end,
+        net_fail = function(reason)
+            error(reason)
+        end,
         net_phases = function()
             return dofile(root .. "/tests/fixtures/net_phases.lua")
         end,
@@ -116,6 +122,7 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
             root .. "/src/bridge/compat/routes/challenge_lamb.lua"
         ),
         ["runtime/session"] = dofile(root .. "/src/bridge/runtime/session.lua"),
+        ["runtime/party"] = dofile(root .. "/src/bridge/runtime/party.lua"),
         ["compat/characters/keeper"] = dofile(root .. "/src/bridge/compat/characters/keeper.lua"),
         ["compat/mods/observation"] = dofile(root .. "/src/bridge/compat/mods/observation.lua"),
         ["api/public"] = { poll = noop, commit = noop, reset = noop, actions = { step = noop } },

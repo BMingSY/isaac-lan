@@ -186,6 +186,9 @@ using InputClock = std::chrono::steady_clock;
 InputSchedule inputSchedule;
 unsigned inputHz = 60;
 std::optional<InputClock::time_point> rejoinAt;
+// Survives the native exit tail and failed attempts, until a live view is applied
+// or the player explicitly leaves. Never restart a failed restore in a loop.
+bool guestRecovery = false;
 std::uint32_t nextTick = 0, currentTick = 0;
 std::array<std::uint32_t, lan::maxPlayers> consumedInputSequences{};
 struct StateCost {
@@ -422,6 +425,8 @@ bool captureNextInput(bool simulationStep = false) {
     return true;
 }
 bool applyReplicaView(bool betweenUpdates) {
+    if (!session || session->phase() != lan::Phase::running)
+        return false;
     // Reliable transitions, initial loading, and modal changes retain the full
     // update path. A half frame only restores a ready, stable world view.
     if (betweenUpdates && (!view.authoritative || view.playingEnding || view.playingCinematic ||
@@ -462,6 +467,7 @@ bool applyReplicaView(bool betweenUpdates) {
         view.authoritative = std::move(packet);
         view.replicaPending.reset();
         session->applied(currentTick);
+        guestRecovery = false;
         return true;
     }
     return false;
@@ -532,6 +538,12 @@ void playSessionEnding(unsigned ending, bool completed) {
 }
 void updateOne(const backend::Call& original) {
     if (!view.gated) {
+        if (launch.requested && session &&
+            (session->phase() == lan::Phase::failed || session->phase() == lan::Phase::closed)) {
+            authorizedExit = true;
+            rooms::requestExit(false);
+            return;
+        }
         original();
         rooms::finishFrame();
         return;
@@ -794,11 +806,12 @@ int poll(lua_State* L) {
     if (rejoinAt && InputClock::now() >= *rejoinAt) {
         rejoinAt.reset();
         if (session && !view.gated) {
-            session->reconnect();
-            if (logger)
+            if (session->reconnect() && logger)
                 logger("network_return=RECONNECTING");
         }
     }
+    if (guestRecovery && session && session->phase() == lan::Phase::lobby)
+        guestRecovery = false;
     // Service input at render frequency too. Waiting until the next 30 Hz game
     // update to send it needlessly adds a whole frame to a LAN round trip.
     if (view.gated && state == L) {
@@ -814,6 +827,8 @@ int poll(lua_State* L) {
     integer("phase", session ? static_cast<int>(session->phase()) : 0);
     integer("slot", session ? session->slot() : 0);
     integer("hosting", session && session->isHost());
+    lua.pushBoolean(L, guestRecovery);
+    lua.setField(L, -2, "recovering");
     integer("modMismatch", session && session->modsDiffer());
     integer("players", session ? session->players() : 0);
     integer("connected", session ? session->connectedMask() : 0);
@@ -1154,16 +1169,27 @@ int gate(lua_State* L) {
     view.pendingChallengeFinish.reset();
     view.playingCinematic = view.cinematicReady = false;
     session->ready();
-    if (logger)
+    if (logger) {
         logger(session->isHost() ? "state_authority=HOST" : "state_authority=REPLICA");
+        std::string party = "network_party local_slot=" + std::to_string(session->slot()) +
+                            " players=" + std::to_string(session->players());
+        for (unsigned slot = 0; slot < session->players(); ++slot)
+            party += " character" + std::to_string(slot) + "=" +
+                     std::to_string(session->settings().characters[slot]);
+        logger(party);
+    }
     lua.pushBoolean(L, true);
     return 1;
 }
 int close(lua_State* L) {
     const bool gameExit = lua.getTop(L) > 0 && lua.checkInteger(L, 1) == 1;
-    const bool guestExit = gameExit && session && !session->isHost() && view.gated;
-    const bool retry = guestExit && session->phase() == lan::Phase::failed;
-    const bool keep = gameExit && session && (session->phase() == lan::Phase::waiting || retry);
+    const bool guestExit =
+        gameExit && session && !session->isHost() && (view.gated || launch.requested);
+    const bool retry = guestExit && ((session->phase() == lan::Phase::failed && !guestRecovery) ||
+                                     (session->phase() == lan::Phase::closed && guestRecovery));
+    guestRecovery = gameExit && (guestRecovery || retry);
+    const bool keep =
+        gameExit && session && (session->phase() == lan::Phase::waiting || guestRecovery);
     if (guestExit)
         frontend::returnToLobby();
     rejoinAt =
@@ -1195,6 +1221,46 @@ int close(lua_State* L) {
     }
     state = nullptr;
     launch = {};
+    return 0;
+}
+int reconnect(lua_State* L) {
+    if (!session || session->isHost() || rejoinAt ||
+        (guestRecovery && session->phase() != lan::Phase::failed) ||
+        (session->phase() != lan::Phase::running && session->phase() != lan::Phase::failed &&
+         session->phase() != lan::Phase::closed)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    guestRecovery = true;
+    if (view.gated || launch.requested) {
+        // Release the seat now; reconnect only after MC_PRE_GAME_EXIT has
+        // relinquished the old room and Lua callbacks. Preserve the solo guard.
+        session->close();
+        authorizedExit = true;
+        rooms::requestExit(false);
+    } else {
+        if (session->phase() == lan::Phase::running)
+            session->close();
+        rejoinAt = InputClock::now();
+        frontend::returnToLobby();
+    }
+    lua.pushBoolean(L, true);
+    return 1;
+}
+int leave(lua_State* L) {
+    const bool allowed = session && !session->isHost() && (view.gated || launch.requested);
+    if (allowed) {
+        guestRecovery = false;
+        rejoinAt.reset();
+        session->close();
+        authorizedExit = true;
+        rooms::requestExit(false);
+    }
+    lua.pushBoolean(L, allowed);
+    return 1;
+}
+int bridgeFailure(lua_State* L) {
+    fail(std::string("Game initialization failed: ") + lua.checkString(L, 1, nullptr));
     return 0;
 }
 int exitEngine(lua_State* L) {
@@ -1665,6 +1731,9 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_engine_start", startEngine);
     function("net_gate", gate);
     function("net_close", close);
+    function("net_reconnect", reconnect);
+    function("net_leave", leave);
+    function("net_fail", bridgeFailure);
     function("net_progress", progressState);
     function("progress_values", progressValues);
     function("net_engine_exit", exitEngine);

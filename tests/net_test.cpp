@@ -665,6 +665,20 @@ void stageEvents() {
     g.poll();
     require(!g.peers[1]->takeStage() && g.peers[1]->phase() == Phase::waiting,
             "Waiting player entered an online floor animation");
+    g.peers[1]->close();
+    until([&] {
+        g.peers[0]->poll();
+        return g.peers[0]->connectedMask() == 1;
+    });
+    require(g.peers[1]->reconnect(), "Manual return after closing failed");
+    require(!g.peers[1]->reconnect(), "Repeated click replaced an in-flight connection");
+    require(!g.peers[0]->reconnect(), "Host reconnected to itself");
+    until([&] {
+        g.poll();
+        return g.peers[1]->phase() == Phase::waiting;
+    });
+    require(g.peers[1]->identity() == identity && g.peers[1]->slot() == 1,
+            "Manual return lost player identity or seat");
     std::puts("PASS native floor begin precedes new state; automatic return retains identity until "
               "a checkpoint is supplied");
 }

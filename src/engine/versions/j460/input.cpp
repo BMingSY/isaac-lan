@@ -339,6 +339,14 @@ int assign(lua_State* L) {
     lua.pushBoolean(L, at<int>(player, 0x1618) == controller);
     return 1;
 }
+int ready(lua_State* L) {
+    const std::lock_guard lock(deviceMutex);
+    bool available = virtualDevices && originalQuery;
+    for (int controller = 1; controller <= 4; ++controller)
+        available = exists(controller) && available;
+    lua.pushBoolean(L, available);
+    return 1;
+}
 int devices(lua_State* L) {
     const std::lock_guard lock(deviceMutex);
     const auto manager = image + 0x857b18;
@@ -714,6 +722,7 @@ bool bind(lua_State* L, HMODULE module) {
     };
     function("chat_controls", chatControls);
     function("input_virtual", enable);
+    function("input_ready", ready);
     function("input_assign", assign);
     function("input_devices", devices);
     function("input_capture", capture);
