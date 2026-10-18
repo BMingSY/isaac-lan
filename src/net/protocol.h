@@ -12,7 +12,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 30;
+constexpr std::uint16_t protocolVersion = 31;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -45,9 +45,11 @@ enum class Message : std::uint8_t {
     latency,
     integration,
     ending,
-    cinematic
+    cinematic,
+    communication
 };
 constexpr std::size_t maxIntegrationSize = 2048;
+constexpr std::size_t maxCommunicationSize = 3072;
 constexpr std::size_t maxIntegrationQueue = 32;
 struct IntegrationMessage {
     unsigned sender = 0; // Assigned by the transport, never supplied in a payload.

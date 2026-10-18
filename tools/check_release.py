@@ -30,6 +30,7 @@ SYSTEM_DLLS = {
     "dwmapi.dll",
     "gdi32.dll",
     "gdiplus.dll",
+    "imm32.dll",
     "iphlpapi.dll",
     "kernel32.dll",
     "msvcrt.dll",
