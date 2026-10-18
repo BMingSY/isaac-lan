@@ -22,6 +22,11 @@ bool capturesInput() {
     return false;
 }
 } // namespace isaac::frontend
+namespace isaac::engine::items {
+void grantStartingRewards(void*, unsigned) {
+    throw std::runtime_error("The menu fixture must not spawn gameplay actors");
+}
+} // namespace isaac::engine::items
 
 namespace {
 namespace menu = isaac::pause_menu;

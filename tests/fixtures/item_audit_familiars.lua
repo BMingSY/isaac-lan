@@ -4,6 +4,10 @@ return function(report, actor, moveRoom, moveFloor)
     local pending, targets, rockIndex = {}, {}, nil
     local contactFamiliar, projectiles = nil, {}
     local seenPickups = {}
+    local function owned(p, case)
+        return case.kind == "trinket" and p:GetTrinketMultiplier(case.id)
+            or p:GetCollectibleNum(case.id, true)
+    end
     local function familiarSource(entity)
         if not entity then
             return nil
@@ -112,6 +116,14 @@ return function(report, actor, moveRoom, moveFloor)
             end
         end,
         projectileCollision = function(projectile, collider)
+            if rules and rules.persists_after_drop and projectile:GetData().auditDroppedClot then
+                local trial = projectile:GetData().auditDroppedClot
+                local f = collider:ToFamiliar()
+                if f and f.Variant == FamiliarVariant[rules.variant] and not trial.hit then
+                    trial.hit = true
+                    report("familiar_drop_collision", { tick = nativeTick, seed = f.InitSeed })
+                end
+            end
             if rules and rules.blocks and projectile:GetData().auditBlockTrial then
                 local f = collider:ToFamiliar()
                 if f and f.Variant == FamiliarVariant[rules.variant] then
@@ -217,7 +229,39 @@ return function(report, actor, moveRoom, moveFloor)
                 if not removed and tick >= 780 then
                     removed = true
                     clearTargets()
-                    p:RemoveCollectible(case.id)
+                    if rules.physical_remove then
+                        report("familiar_physical_drop_requested", { tick = tick })
+                    elseif case.kind == "trinket" then
+                        p:TryRemoveTrinket(case.id)
+                    else
+                        p:RemoveCollectible(case.id)
+                    end
+                end
+                for _, hitTick in ipairs(rules.drop_damage_ticks or {}) do
+                    if tick == hitTick then
+                        for _, e in ipairs(Isaac.GetRoomEntities()) do
+                            local f = e:ToFamiliar()
+                            if
+                                f
+                                and f.Variant == FamiliarVariant[rules.variant]
+                                and f.Player
+                                and f.Player.ControllerIndex == p.ControllerIndex
+                            then
+                                local q = Isaac.Spawn(
+                                    EntityType.ENTITY_PROJECTILE,
+                                    0,
+                                    0,
+                                    f.Position,
+                                    Vector.Zero,
+                                    nil
+                                ):ToProjectile()
+                                q.CollisionDamage = 1
+                                q.Height, q.FallingSpeed, q.FallingAccel = -10, 0, 0
+                                q:GetData().auditDroppedClot = {}
+                                break
+                            end
+                        end
+                    end
                 end
             end)
             if not moved and tick >= 300 then
@@ -228,6 +272,9 @@ return function(report, actor, moveRoom, moveFloor)
             if not floored and tick >= 390 then
                 floored = true
                 moveFloor()
+            end
+            if rules.remove_room_tick and tick == rules.remove_room_tick then
+                moveRoom()
             end
         end,
         suppressPlayerTear = function(tear)
@@ -287,7 +334,7 @@ return function(report, actor, moveRoom, moveFloor)
             end
             local teammateOwned
             actor(1 - case.slot, function(p)
-                teammateOwned = p:GetCollectibleNum(case.id, true)
+                teammateOwned = owned(p, case)
             end)
             actor(case.slot, function(p, room)
                 local positions = _IsaacLan.rooms_positions()
@@ -301,7 +348,7 @@ return function(report, actor, moveRoom, moveFloor)
                         and view.dimension == location.dimension,
                     x = p.Position.X,
                     y = p.Position.Y,
-                    owned = p:GetCollectibleNum(case.id, true),
+                    owned = owned(p, case),
                     teammate_owned = teammateOwned,
                     familiars = {},
                     shots = {},
@@ -382,6 +429,8 @@ return function(report, actor, moveRoom, moveFloor)
             end
             frame = frame / (case.familiar_effects.timeline_scale or 1)
             if frame >= 90 and frame < 100 then
+                return 1 << ButtonAction.ACTION_RIGHT
+            elseif case.familiar_effects.drop_window and frame >= 120 and frame < 139 then
                 return 1 << ButtonAction.ACTION_RIGHT
             elseif case.familiar_effects.controlled and frame >= 100 and frame < 140 then
                 return 1 << ButtonAction.ACTION_SHOOTUP

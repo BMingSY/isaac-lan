@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-from item_audit import ROOT, events, summarize_case
+from item_audit import AuditJournals, ROOT, summarize_case
 
 RANK = {"untested": 0, "basic_pass": 1, "verified": 1, "incomplete": 2, "problem": 3, "crash": 4}
 
@@ -120,23 +120,39 @@ def import_run(findings, directory):
         # New runs freeze their validator and results. Reimporting evidence
         # after a recipe correction must not silently rewrite the old failure.
         frozen = {r["key"]: r for r in report.get("results", [])}
-        peers = {}
+        journals = {}
         for role in ("host", "client"):
             path = batch / (role + "-events.log")
             if not path.is_file():
                 path = batch / "engine" / role / "log.txt"
-            peers[role] = events(path.read_text(errors="replace")) if path.is_file() else []
+            journals[role] = path
+        evidence_index = None
+
+        def observations(key):
+            nonlocal evidence_index
+            if evidence_index is None:
+                evidence_index = AuditJournals(journals)
+                expected = report.get("journal_sha256")
+                if expected is not None and evidence_index.sha256 != expected:
+                    raise ValueError("Audit journals differ from the frozen report")
+            return evidence_index.observations(key)
+
         for case in report["cases"]:
             if manifest.get("validator_sha256"):
                 if case["key"] not in frozen:
                     raise ValueError("Frozen audit is missing a case result")
                 result = frozen[case["key"]]
             else:
-                result = summarize_case(case, peers, report.get("engine"))
+                peers = observations(case["key"])
+                result = summarize_case(
+                    case, peers, report.get("engine"), last_case_key=evidence_index.last_case_key
+                )
             if result["status"] == "untested":
                 continue
             evidence = directory.name + "/" + batch.name
             if case["kind"] == "stress":
+                if "observations" not in result:
+                    result = {**result, "observations": observations(case["key"])}
                 value = measured_stress(result, evidence)
                 value["dll_sha256"] = manifest["dll_sha256"]
                 old = next(

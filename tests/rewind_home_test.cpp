@@ -244,7 +244,7 @@ namespace isaac::rooms {
 bool virtualized() {
     return current->virtualized;
 }
-void beforeStart() {
+void beforeStart(bool) {
     current->events.push_back("before-start");
     ++current->cleanups;
     current->virtualized = false;

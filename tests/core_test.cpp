@@ -1,3 +1,5 @@
+#include "compat/items/starting_rewards.h"
+#include "presentation/item_screen.h"
 #include "net/protocol.h"
 #include "core/automation_input.h"
 #include "core/animation_pose.h"
@@ -41,6 +43,65 @@
 using namespace isaac::lan;
 
 namespace {
+void ownedItemEffects() {
+    isaac::compat::items::StartingRewards rewards;
+    rewards.record(10);
+    require(rewards.take(1).empty(), "Unrelated grants became starting rewards");
+    rewards.begin();
+    rewards.record(20);
+    rewards.record(30);
+    rewards.record(40);
+    rewards.finish();
+    rewards.record(50);
+    require(rewards.take(0).empty(), "The native host reward was granted twice");
+    for (unsigned slot = 1; slot < 4; ++slot) {
+        require(rewards.take(slot) == std::vector<int>({20, 30}),
+                "A peer missed the shared native rewards");
+        require(rewards.take(slot).empty(), "Repeated character setup duplicated rewards");
+    }
+    require(rewards.take(4).empty(), "An invalid peer received rewards");
+    rewards.begin();
+    rewards.finish();
+    require(rewards.take(1).empty(), "Starting rewards leaked into the next run");
+    using isaac::presentation::ItemScreen;
+    std::array<ItemScreen, 2> peers;
+    peers[1].pixelate(2700);
+    peers[1].target = 0.2f;
+    peers[1].pixelate(900);
+    for (unsigned tick = 0; tick < 250; ++tick) {
+        for (auto& peer : peers)
+            peer.advance();
+    }
+    require(peers[0].pixels == 0 && peers[0].dizzy == 0 && peers[1].pixels == 2450 &&
+                peers[1].pixelDuration == 2700 && std::abs(peers[1].dizzy - 0.2f) < 0.00001f,
+            "A remote screen effect leaked or advanced by the wrong duration");
+    Writer w(Message::world);
+    peers[1].write(w);
+    for (int repeat = 0; repeat < 3; ++repeat) {
+        Reader r(std::span(w.bytes).subspan(1));
+        const auto copy = ItemScreen::read(r);
+        r.finish();
+        require(copy.pixels == 2450 && copy.dizzy == peers[1].dizzy,
+                "Repeated snapshots restarted a presentation effect");
+    }
+    peers[1].target = 0;
+    for (unsigned tick = 0; tick < 2450; ++tick)
+        peers[1].advance();
+    require(peers[1].pixels == 0 && peers[1].dizzy == 0,
+            "An expired visual effect survived cleanup");
+    for (const auto bad : {ItemScreen{2, 1}, ItemScreen{0, ItemScreen::maxDuration + 1},
+                           ItemScreen{0, 0, std::numeric_limits<float>::quiet_NaN()},
+                           ItemScreen{0, 0, 0, -1}, ItemScreen{0, 0, 0, 0, -1}}) {
+        Writer invalid(Message::world);
+        bad.write(invalid);
+        rejects(
+            [&] {
+                Reader r(std::span(invalid.bytes).subspan(1));
+                ItemScreen::read(r);
+            },
+            "Invalid screen state accepted");
+    }
+}
 void sharedDealChances() {
     using isaac::compat::items::sharedRoomDealChance;
     require(sharedRoomDealChance(0.36f, 0.36f) == 0.36f,
@@ -55,10 +116,17 @@ void sharedDealChances() {
             "The native multi-Pentagram result was capped or summed across rooms");
 }
 void compatibilityTargets() {
+    ownedItemEffects();
     using namespace isaac::compat;
     require(isaac::presentation::localAmbientEffect(1000, 99, 1),
             "Native current spray must remain local presentation");
+    require(isaac::presentation::localAmbientEffect(1000, 191, 0) &&
+                isaac::presentation::localAmbientEffect(1000, 191, 1),
+            "Native pickup previews entered the generic entity stream");
     for (const auto ids : {std::array<std::int64_t, 3>{1000, 99, 0},
+                           {5, 191, 0},
+                           {1000, 190, 0},
+                           {1000, 192, 0},
                            {1000, 99, 2},
                            {1000, 22, 1},
                            {1000, 172, 1},
@@ -85,9 +153,9 @@ void compatibilityTargets() {
             !characters::sharedCharacterEffect(ids::player::lostB, characters::TeamEffect::shop) &&
             !characters::sharedCharacterEffect(0, characters::TeamEffect::randomCards),
         "Global character effects leaked into another trait or player type");
-    for (int item : {21, 54, 64, 246, 260, 333, 376, 402, 656, 691, 721})
+    for (int item : {21, 54, 64, 246, 249, 260, 333, 376, 402, 414, 656, 670, 691, 721})
         require(items::sharedCollectibleEffect(item), "A public passive effect became personal");
-    for (int item : {0, 1, 105, 577, 622, 628})
+    for (int item : {0, 1, 105, 381, 577, 590, 622, 628, 665})
         require(!items::sharedCollectibleEffect(item), "A personal inventory query became shared");
     require(characters::sharedKeeperShopSubtype(4, true) == 104 &&
                 characters::sharedKeeperShopSubtype(104, true) == 104 &&

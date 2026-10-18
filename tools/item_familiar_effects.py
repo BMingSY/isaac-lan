@@ -5,6 +5,72 @@ from math import hypot
 
 
 FAMILIAR_EFFECTS = {
+    "TRINKET_DUCT_TAPE": {
+        "variant": "BROTHER_BOBBY",
+        "prerequisite": "COLLECTIBLE_BROTHER_BOBBY",
+        "damage": 3.5,
+        "modifier": True,
+        "fixed_offset": True,
+    },
+    "TRINKET_FRIENDSHIP_NECKLACE": {
+        "variant": "BROTHER_BOBBY",
+        "prerequisite": "COLLECTIBLE_BROTHER_BOBBY",
+        "damage": 3.5,
+        "modifier": True,
+        "orbital": True,
+        "native_orbit": True,
+        "distance": 120,
+    },
+    "TRINKET_RC_REMOTE": {
+        "variant": "BROTHER_BOBBY",
+        "prerequisite": "COLLECTIBLE_BROTHER_BOBBY",
+        "damage": 3.5,
+        "modifier": True,
+        "drop_window": [120, 139],
+        "distance": 150,
+    },
+    "TRINKET_ISAACS_HEAD": {"variant": "ISAACS_HEAD", "damage": 3.5, "flags": ["TEAR_PIERCING"]},
+    "TRINKET_SOUL": {"variant": "BLUE_BABY_SOUL", "damage": 3.5, "independent_motion": True},
+    "TRINKET_BABY_BENDER": {
+        "variant": "BROTHER_BOBBY",
+        "prerequisite": "COLLECTIBLE_BROTHER_BOBBY",
+        "damage": 3.5,
+        "flags": ["TEAR_HOMING"],
+        "modifier": True,
+    },
+    "TRINKET_FORGOTTEN_LULLABY": {
+        "variant": "BROTHER_BOBBY",
+        "prerequisite": "COLLECTIBLE_BROTHER_BOBBY",
+        "damage": 3.5,
+        "interval": 8,
+        "modifier": True,
+    },
+    "TRINKET_CHILD_LEASH": {
+        "variant": "BROTHER_BOBBY",
+        "prerequisite": "COLLECTIBLE_BROTHER_BOBBY",
+        "damage": 4.375,
+        "distance": 50,
+        "modifier": True,
+    },
+    "TRINKET_LIL_CLOT": {
+        "variant": "BLOOD_BABY",
+        "damage_factor": 0.35,
+        "physical_remove": True,
+        "persists_after_drop": True,
+        "drop_damage_ticks": [900, 945, 990],
+        "remove_room_tick": 1140,
+        "end_tick": 1260,
+    },
+    "TRINKET_APOLLYONS_BEST_FRIEND": {
+        "variant": "ABYSS_LOCUST",
+        "contact": True,
+        "contact_shoot": True,
+        "independent_motion": True,
+        "idle_without_targets": True,
+        "physical_remove": True,
+        "remove_room_tick": 900,
+        "end_tick": 1020,
+    },
     "COLLECTIBLE_BFFS": {
         "variant": "BROTHER_BOBBY",
         "prerequisite": "COLLECTIBLE_BROTHER_BOBBY",
@@ -211,7 +277,12 @@ def familiar_checks(case, observations):
         ("acquired", 80, 140, 1),
         ("room", 350, 380, 1),
         ("floor", 600, 620, 1),
-        ("removed", 810, 840, 0),
+        (
+            "trinket_dropped_clot_remains" if rules.get("persists_after_drop") else "removed",
+            870 if rules.get("physical_remove") else 810,
+            890 if rules.get("physical_remove") else 840,
+            0,
+        ),
     ):
         values = window(low, high)
         check(
@@ -220,12 +291,71 @@ def familiar_checks(case, observations):
                 e.get("owned") == count
                 and e.get("teammate_owned") == 0
                 and len(e.get("familiars", []))
-                == (1 if rules.get("modifier") else count) * rules.get("count", 1)
+                == (1 if rules.get("modifier") or rules.get("persists_after_drop") else count)
+                * rules.get("count", 1)
                 and all(f.get("controller") == case["slot"] + 1 for f in e["familiars"])
                 for e in values
             ],
         )
     initial, moved = window(80, 90), window(130, 140)
+    if rules.get("drop_window"):
+        # Normal following precedes the intentional hold-position interval.
+        moved = window(110, 119)
+    if rules.get("persists_after_drop"):
+        collisions = [e for e in host if e["event"] == "familiar_drop_collision"]
+        check("dropped_clot_takes_three_projectile_hits", [len(collisions) == 3])
+        check("dropped_clot_dies", [not e["familiars"] for e in window(1080, 1110)])
+    if rules.get("remove_room_tick"):
+        boundary = rules["remove_room_tick"]
+        check(
+            "removed_after_room_transition",
+            [e["owned"] == 0 and not e["familiars"] for e in window(boundary + 60, boundary + 90)],
+        )
+    if rules.get("fixed_offset"):
+        positions = [
+            (e["familiars"][0]["x"] - e["x"], e["familiars"][0]["y"] - e["y"])
+            for e in window(95, 138)
+            if e["familiars"]
+        ]
+        check(
+            "fixed_offset_while_owner_moves",
+            [
+                len(positions) >= 3
+                and max(hypot(x - positions[0][0], y - positions[0][1]) for x, y in positions) < 3
+            ],
+        )
+    if rules.get("native_orbit"):
+        positions = [
+            (e["familiars"][0]["x"] - e["x"], e["familiars"][0]["y"] - e["y"])
+            for e in window(80, 140)
+            if e["familiars"]
+        ]
+        check(
+            "familiar_actually_orbits_owner",
+            [
+                len(positions) >= 3
+                and max(x for x, y in positions) - min(x for x, y in positions) > 20
+                and max(y for x, y in positions) - min(y for x, y in positions) > 20
+            ],
+        )
+    if rules.get("drop_window"):
+        held = window(124, 137)
+        check(
+            "drop_holds_familiar_while_owner_moves",
+            [
+                len(held) >= 3
+                and all(len(e["familiars"]) == 1 for e in held)
+                and held[-1]["x"] - held[0]["x"] > 10
+                and max(
+                    hypot(
+                        e["familiars"][0]["x"] - held[0]["familiars"][0]["x"],
+                        e["familiars"][0]["y"] - held[0]["familiars"][0]["y"],
+                    )
+                    for e in held
+                )
+                < 3
+            ],
+        )
     expected_familiars = rules.get("count", 1)
     check(
         "independent_motion" if rules.get("independent_motion") else "follows_owner",

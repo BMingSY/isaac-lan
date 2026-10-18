@@ -1,15 +1,18 @@
 #include "engine/lua_api.h"
 #include "engine/item_presentation.h"
+#include "engine/pickup_preview.h"
 #include "engine/rooms.h"
 #include "runtime/session.h"
 #include "net/protocol.h"
 #include "core/localized_text.h"
+#include "presentation/item_screen.h"
 #include <MinHook.h>
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <deque>
 #include <memory>
+#include <charconv>
 
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
@@ -120,7 +123,11 @@ struct Actor {
     unsigned slot = 0, role = 0;
     Address player = 0;
 };
+void* actionPlayer = nullptr;
+std::array<ItemScreen, 4> screens;
 Actor owner(void* explicitPlayer) {
+    if (!explicitPlayer)
+        explicitPlayer = actionPlayer;
     Actor result;
     result.player = rooms::presentationPlayer(explicitPlayer);
     if (!result.player)
@@ -148,8 +155,74 @@ Address player(unsigned slot, unsigned role) {
     }
     return 0;
 }
-enum class Kind : unsigned char { overlay = 1, item, text, localizedText };
-TextSources lookups;
+ItemScreen readScreen() {
+    using namespace j460::layout::game;
+    const auto g = game();
+    return {at<unsigned>(g, pixelation), at<unsigned>(g, pixelationDuration),
+            at<float>(g, dizzyIntensity), at<float>(g, dizzyTarget), at<float>(g, dizzyStep)};
+}
+void writeScreen(const ItemScreen& value) {
+    using namespace j460::layout::game;
+    const auto g = game();
+    at<unsigned>(g, pixelation) = value.pixels;
+    at<unsigned>(g, pixelationDuration) = value.pixelDuration;
+    at<float>(g, dizzyIntensity) = value.dizzy;
+    at<float>(g, dizzyTarget) = value.target;
+    at<float>(g, dizzyStep) = value.step;
+}
+using Pixelate = void(__attribute__((thiscall)) *)(void*, int);
+using Pill = void(__attribute__((thiscall)) *)(void*, int, int, unsigned);
+using Card = void(__attribute__((thiscall)) *)(void*, int, unsigned);
+Pixelate originalPixelate;
+Pill originalPill;
+Card originalCard;
+Call originalWavy;
+void __attribute__((fastcall)) pixelate(void* g, void*, int duration) {
+    const auto actor = owner(nullptr);
+    if (!rooms::virtualized() || !actor.player) {
+        originalPixelate(g, duration);
+        return;
+    }
+    if (!runtime::replica() && duration > 0)
+        screens[actor.slot].pixelate(static_cast<unsigned>(duration));
+}
+void __attribute__((fastcall)) wavy(void* p, void*) {
+    const auto actor = owner(p);
+    if (!rooms::virtualized() || !actor.player) {
+        originalWavy(p);
+        return;
+    }
+    const auto before = readScreen();
+    writeScreen(screens[actor.slot]);
+    originalWavy(p);
+    if (!runtime::replica())
+        screens[actor.slot] = readScreen();
+    writeScreen(before);
+}
+void __attribute__((fastcall)) pill(void* p, void*, int effect, int color, unsigned flags) {
+    withActor(p, [&] { originalPill(p, effect, color, flags); });
+}
+void __attribute__((fastcall)) card(void* p, void*, int id, unsigned flags) {
+    withActor(p, [&] { originalCard(p, id, flags); });
+}
+enum class Kind : unsigned char { overlay = 1, item, text, localizedText, fortune };
+TextSources lookups, indexedLookups;
+using IndexedText = const char*(__attribute__((thiscall)) *)(void*, const char*, int, int);
+using Fortune = void(__attribute__((thiscall)) *)(void*, const void*);
+IndexedText originalIndexedText;
+Fortune originalFortune;
+const char* __attribute__((fastcall)) indexedText(void* table, void*, const char* section,
+                                                  int language, int index) {
+    const auto value = originalIndexedText(table, section, language, index);
+    if (rooms::virtualized() && !runtime::replica() && value && section && index >= 0 &&
+        index <= 65535 && strnlen(value, 1025) <= 1024 && strnlen(section, 129) <= 128) {
+        std::string normalized(value);
+        while (!normalized.empty() && normalized.back() == '|')
+            normalized.pop_back();
+        indexedLookups.record(runtime::tick(), normalized, {section, std::to_string(index)});
+    }
+    return value;
+}
 const char* __attribute__((fastcall)) lookupText(void* table, void*, const char* section,
                                                  int language, const char* key, bool* missing) {
     const auto value = originalLookupText(table, section, language, key, missing);
@@ -163,7 +236,8 @@ const char* __attribute__((fastcall)) lookupText(void* table, void*, const char*
 std::string localText(const std::string& fallback, const TextSource& source) {
     return translateText(
         fallback, source, [&](const TextSource& entry) -> std::optional<std::string> {
-            const auto table = at<Address>(image, j460::globals::manager) + 0x4a920;
+            const auto table =
+                at<Address>(image, j460::globals::manager) + j460::layout::manager::stringTable;
             bool missing = false;
             const auto value =
                 originalLookupText(reinterpret_cast<void*>(table), entry.section.c_str(),
@@ -324,6 +398,93 @@ void __attribute__((fastcall)) customText(void* hud, void*, void* target, const 
         ++played[2];
     }
 }
+// HUD::ShowFortuneText borrows a native list of strings; it neither retains
+// nor frees the list. Keep its x86 MSVC layout confined to this backend.
+struct FortuneNode {
+    FortuneNode* next;
+    FortuneNode* previous;
+    const char* text;
+    std::array<unsigned char, 12> unused{};
+    unsigned size, capacity;
+};
+static_assert(sizeof(FortuneNode) == 32);
+struct FortuneList {
+    FortuneNode* head;
+    unsigned size;
+};
+void showFortune(void* hud, const std::string& text) {
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    do {
+        const auto end = text.find('|', start);
+        lines.push_back(text.substr(start, end == std::string::npos ? end : end - start));
+        if (end == std::string::npos)
+            break;
+        start = end + 1;
+    } while (lines.size() < 32);
+    std::array<FortuneNode, 33> nodes{};
+    const auto count = lines.size();
+    for (std::size_t i = 0; i <= count; ++i) {
+        nodes[i].next = &nodes[(i + 1) % (count + 1)];
+        nodes[i].previous = &nodes[(i + count) % (count + 1)];
+        if (i) {
+            nodes[i].text = lines[i - 1].c_str();
+            nodes[i].size = lines[i - 1].size();
+            nodes[i].capacity = std::max(16u, nodes[i].size);
+        }
+    }
+    const FortuneList list{nodes.data(), static_cast<unsigned>(count)};
+    originalFortune(hud, &list);
+}
+void __attribute__((fastcall)) fortune(void* hud, void*, const void* nativeList) {
+    const auto actor = owner(nullptr);
+    if (!rooms::virtualized() || !actor.player) {
+        originalFortune(hud, nativeList);
+        return;
+    }
+    if (!runtime::replica()) {
+        const auto list = static_cast<const FortuneList*>(nativeList);
+        if (list && list->head && list->size > 0 && list->size <= 32) {
+            auto e = event(actor, Kind::fortune);
+            const auto* node = list->head->next;
+            for (unsigned i = 0; i < list->size && node != list->head; ++i, node = node->next) {
+                const auto* text =
+                    node->capacity >= 16 ? node->text : reinterpret_cast<const char*>(&node->text);
+                if (node->size > 1024 || e.title.size() + node->size + 1 > 1024)
+                    break;
+                if (i)
+                    e.title += '|';
+                e.title.append(text, node->size);
+            }
+            while (!e.title.empty() && e.title.back() == '|')
+                e.title.pop_back();
+            e.titleSource = indexedLookups.find(runtime::tick(), e.title);
+            enqueue(std::move(e));
+        }
+    }
+    if (static_cast<int>(actor.slot) == runtime::localViewSlot()) {
+        originalFortune(hud, nativeList);
+        ++played[2];
+    }
+}
+std::string fortuneText(const Event& e) {
+    return translateText(
+        e.title, e.titleSource, [&](const TextSource& source) -> std::optional<std::string> {
+            int index = -1;
+            const auto result =
+                std::from_chars(source.key.data(), source.key.data() + source.key.size(), index);
+            if (result.ec != std::errc{} || result.ptr != source.key.data() + source.key.size() ||
+                index < 0 || index > 65535)
+                return std::nullopt;
+            const auto table =
+                at<Address>(image, j460::globals::manager) + j460::layout::manager::stringTable;
+            const auto value = originalIndexedText(
+                reinterpret_cast<void*>(table), source.section.c_str(), at<int>(table, 0), index);
+            if (value && strnlen(value, 1025) <= 1024)
+                return value;
+            return std::nullopt;
+        });
+}
 isaac::lua::API lua{};
 int overlaySprite(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
@@ -363,6 +524,7 @@ int pose(lua_State* L) {
             w.u8(overlay ? at<unsigned>(overlay, 0) : 0);
             w.u8(overlay ? at<unsigned>(overlay, 4) : 0);
             w.u32(overlay ? at<unsigned>(overlay, 0x119c) : 0);
+            screens[slot].write(w);
             lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
                             w.bytes.size() - 1);
             return 1;
@@ -374,6 +536,7 @@ int pose(lua_State* L) {
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
         const auto state = r.u8(), id = r.u8();
         const auto delay = r.u32();
+        const auto screen = ItemScreen::read(r);
         r.finish();
         if (state > 2 || id >= 48 || delay > 900)
             throw std::runtime_error("Invalid item overlay pose");
@@ -382,6 +545,7 @@ int pose(lua_State* L) {
         at<unsigned>(overlay, 0) = state;
         at<unsigned>(overlay, 4) = id;
         at<unsigned>(overlay, 0x119c) = delay;
+        screens[slot] = screen;
         lua.pushBoolean(L, true);
         return 1;
     } catch (const std::exception& e) {
@@ -488,10 +652,11 @@ int synchronize(lua_State* L) {
                 w.u8(e.slot);
                 w.u8(e.role);
                 w.u8(static_cast<unsigned char>(e.kind));
-                if (e.kind == Kind::text || e.kind == Kind::localizedText) {
+                if (e.kind == Kind::text || e.kind == Kind::localizedText ||
+                    e.kind == Kind::fortune) {
                     w.string(e.title);
                     w.string(e.subtitle);
-                    if (e.kind == Kind::localizedText)
+                    if (e.kind == Kind::localizedText || e.kind == Kind::fortune)
                         for (const auto* source : {&e.titleSource, &e.subtitleSource}) {
                             source->write(w);
                         }
@@ -529,10 +694,12 @@ int synchronize(lua_State* L) {
             e.kind = static_cast<Kind>(r.u8());
             if (e.slot >= 4 || e.role >= 8 || batch.size() >= maxEvents)
                 throw std::runtime_error("Invalid item presentation owner");
-            if (e.kind == Kind::text || e.kind == Kind::localizedText) {
+            if (e.kind == Kind::text || e.kind == Kind::localizedText || e.kind == Kind::fortune) {
                 e.title = r.string();
                 e.subtitle = r.string();
-                if (e.kind == Kind::localizedText)
+                if (e.title.size() > 1024 || e.subtitle.size() > 1024)
+                    throw std::runtime_error("Invalid item presentation text");
+                if (e.kind == Kind::localizedText || e.kind == Kind::fortune)
                     for (auto* source : {&e.titleSource, &e.subtitleSource}) {
                         *source = TextSource::read(r);
                     }
@@ -570,6 +737,8 @@ int synchronize(lua_State* L) {
                 if (e.kind == Kind::overlay) {
                     originalShow(reinterpret_cast<void*>(game() + 0x1c034), e.id, e.parameter,
                                  e.hasPlayer ? reinterpret_cast<void*>(target) : nullptr);
+                } else if (e.kind == Kind::fortune) {
+                    showFortune(reinterpret_cast<void*>(hud), fortuneText(e));
                 } else if (e.kind == Kind::text || e.kind == Kind::localizedText) {
                     const auto title = localText(e.title, e.titleSource),
                                subtitle = localText(e.subtitle, e.subtitleSource);
@@ -590,8 +759,9 @@ int synchronize(lua_State* L) {
                     originalItemText(reinterpret_cast<void*>(hud), reinterpret_cast<void*>(target),
                                      reinterpret_cast<void*>(item));
                 }
-                ++played[e.kind == Kind::localizedText ? 2
-                                                       : static_cast<unsigned char>(e.kind) - 1];
+                ++played[e.kind == Kind::localizedText || e.kind == Kind::fortune
+                             ? 2
+                             : static_cast<unsigned char>(e.kind) - 1];
             });
         }
         lua.pushBoolean(L, true);
@@ -640,7 +810,20 @@ bool install(Address base) {
         const auto target = reinterpret_cast<void*>(image + offset);
         return MH_CreateHook(target, callback, original) == MH_OK && MH_EnableHook(target) == MH_OK;
     };
-    return hook(j460::entry::bossOverlayUpdate, reinterpret_cast<void*>(sceneUpdate),
+    return pickup_preview::install(base) &&
+           hook(j460::entry::hudShowFortune, reinterpret_cast<void*>(fortune),
+                reinterpret_cast<void**>(&originalFortune)) &&
+           hook(j460::entry::stringTableIndexed, reinterpret_cast<void*>(indexedText),
+                reinterpret_cast<void**>(&originalIndexedText)) &&
+           hook(j460::entry::gameAddPixelation, reinterpret_cast<void*>(pixelate),
+                reinterpret_cast<void**>(&originalPixelate)) &&
+           hook(j460::entry::playerUpdateWavyCap, reinterpret_cast<void*>(wavy),
+                reinterpret_cast<void**>(&originalWavy)) &&
+           hook(j460::entry::playerUsePill, reinterpret_cast<void*>(pill),
+                reinterpret_cast<void**>(&originalPill)) &&
+           hook(j460::entry::playerUseCard, reinterpret_cast<void*>(card),
+                reinterpret_cast<void**>(&originalCard)) &&
+           hook(j460::entry::bossOverlayUpdate, reinterpret_cast<void*>(sceneUpdate),
                 reinterpret_cast<void**>(&originalSceneUpdate)) &&
            hook(j460::entry::bossOverlayShow, reinterpret_cast<void*>(sceneShow),
                 reinterpret_cast<void**>(&originalSceneShow)) &&
@@ -684,6 +867,23 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "home_dream_sprite");
     return true;
 }
+void withActor(void* player, const std::function<void()>& action) {
+    const auto before = actionPlayer;
+    actionPlayer = player;
+    action();
+    actionPlayer = before;
+}
+void withScreen(const std::function<void()>& draw) {
+    const auto slot = runtime::localViewSlot();
+    if (!rooms::virtualized() || slot < 0 || slot >= 4) {
+        draw();
+        return;
+    }
+    const auto before = readScreen();
+    writeScreen(screens[slot]);
+    draw();
+    writeScreen(before);
+}
 void advance() {
     if (!rooms::virtualized()) {
         owned = {};
@@ -691,6 +891,8 @@ void advance() {
     }
     if (runtime::replica() || at<int>(game(), 0x23a74))
         return;
+    for (auto& screen : screens)
+        screen.advance();
     // Game skips ItemOverlay::Update when its global overlay is inactive.
     // Owned overlays therefore advance once per accepted host tick, in their
     // owner's room/roster, without pausing another player's simulation/input.
@@ -698,11 +900,21 @@ void advance() {
         if (owned[slot] && at<int>(owned[slot]->address(), 0))
             rooms::withPlayer(slot, [&] { originalUpdate(owned[slot]->storage.data(), false); });
 }
-void reset() {
+void reset(bool preservePixels) {
+    for (auto& screen : screens) {
+        const auto previous = screen;
+        screen = {};
+        if (preservePixels) {
+            screen.pixels = previous.pixels;
+            screen.pixelDuration = previous.pixelDuration;
+        }
+    }
+    actionPlayer = nullptr;
     homeSleepSerial = 0;
     owned = {};
     events.clear();
     lookups.clear();
+    indexedLookups.clear();
     serial = seen = 0;
     played = {};
 }

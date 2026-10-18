@@ -22,6 +22,7 @@ inline constexpr unsigned progress = 0x14;
 inline constexpr unsigned saveState = 0xfa4;
 inline constexpr unsigned continueAvailable = 0x20dcc;
 inline constexpr unsigned cinematicActive = 0x21618;
+inline constexpr unsigned stringTable = 0x4a920;
 inline constexpr unsigned continueRequested = 0x4b131;
 inline constexpr unsigned deleteSaveRequested = 0x4b284;
 inline constexpr unsigned menuRequested = 0x4b288;
@@ -39,6 +40,11 @@ namespace roomChangeFrame {
 inline constexpr unsigned mazeRedirected = 0xb;
 } // namespace roomChangeFrame
 namespace game {
+inline constexpr unsigned pixelation = 0x269e0;
+inline constexpr unsigned pixelationDuration = 0x269e4;
+inline constexpr unsigned dizzyIntensity = 0x67738;
+inline constexpr unsigned dizzyTarget = 0x6773c;
+inline constexpr unsigned dizzyStep = 0x67740;
 inline constexpr unsigned curses = 0xc;
 inline constexpr unsigned seedCurses = 0x26550;
 inline constexpr unsigned stage = 0x0;
@@ -81,6 +87,7 @@ inline constexpr unsigned data = 0x4;
 inline constexpr unsigned count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned removeMethod = 0x28;
 inline constexpr unsigned subtype = 0x30;
 inline constexpr unsigned initSeed = 0x3ec;
 inline constexpr unsigned velocity = 0x360;
@@ -103,7 +110,7 @@ inline constexpr unsigned index = 0x20;
 inline constexpr unsigned type = 0x28;
 inline constexpr unsigned sprite = 0x48;
 inline constexpr unsigned variant = 0x2c;
-inline constexpr unsigned removed = 0x170;
+inline constexpr unsigned registered = 0x170;
 inline constexpr unsigned active = 0x172;
 inline constexpr unsigned interpolated = 0x175;
 inline constexpr unsigned positionX = 0x33c;
@@ -177,6 +184,8 @@ inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
 namespace player {
+inline constexpr unsigned megaBlastLaser = 0x1458;
+inline constexpr unsigned megaBlastDuration = 0x18f4;
 inline constexpr unsigned emote = 0x26d8;
 inline constexpr unsigned type = 0x13c0;
 inline constexpr unsigned controller = 0x1618;

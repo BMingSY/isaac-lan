@@ -194,6 +194,10 @@ python tools/engine_test.py run special-routes -- \
 
 必填参数为 `--host`、`--client`、`--build`、`--output`；`--case` 选单项，`--context` 选持有者／房间条件，`--record` 留存画面，`--continue-after-failure` 在异常清理和资料恢复后另起进程继续。`--injected-bootstrap` 仅验收注入启动的玩法行为，不覆盖代理 DLL 自动加载和安装流程。
 
+效果验收可按 `--shards N --shard 0` 至 `--shard N-1` 并行分片，各片使用相同选项和候选构建、独立主客机目录、`--port` 与输出目录。一个执行者统一调度，每片复用一对进程；根据 CPU 和 Windows 已提交内存余量控制并发数，不能只看空闲物理内存。真实键盘／焦点检查和压力测试仍独占执行。
+
+逐帧证据保存在 `host-events.log` 与 `client-events.log`，游戏日志只记录用例边界和问题；报告按单个用例读取证据，保存结论与原始日志哈希，避免长批次汇总占用整批日志的内存。画面采集默认间隔 1000 ms；闪光等短暂效果可使用 `--record --frame-ms 33`，结合实际帧时间人工复核。
+
 每轮冻结 DLL、生成夹具、配方和判定器；复测使用新输出目录。修正判定器后重审已有原始记录，应保留原判定、变更原因、前后哈希及新的审阅报告。触发前提不成立、夹具错误、缺少一端或退出未完成均保留为未通过，不直接归因于道具不兼容。更新 [`item_audit_findings.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_audit_findings.json) 后用 `python tools/render_item_compatibility.py` 生成清单，`--check` 检查一致性；专项结果只写入 `docs/history/` 或 PR。
 
 ## 隔离执行与记录

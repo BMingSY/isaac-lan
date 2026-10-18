@@ -6,6 +6,7 @@
 // Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 namespace isaac::compat::ids {
 namespace entity {
+inline constexpr unsigned pickup = 5;
 inline constexpr unsigned tear = 2;
 inline constexpr unsigned familiar = 3;
 inline constexpr unsigned bomb = 4;
@@ -29,6 +30,7 @@ inline constexpr unsigned genericProp = 960;
 } // namespace entity
 namespace effect {
 inline constexpr unsigned waterSplash = 99;
+inline constexpr unsigned pickupGhost = 191;
 } // namespace effect
 namespace player {
 inline constexpr int soulB = 40;
@@ -47,11 +49,14 @@ inline constexpr int compass = 21;
 inline constexpr int treasureMap = 54;
 inline constexpr int steamSale = 64;
 inline constexpr int blueMap = 246;
+inline constexpr int theresOptions = 249;
 inline constexpr int blackCandle = 260;
 inline constexpr int mind = 333;
 inline constexpr int restock = 376;
 inline constexpr int chaos = 402;
+inline constexpr int moreOptions = 414;
 inline constexpr int damoclesPassive = 656;
+inline constexpr int options = 670;
 inline constexpr int sacredOrb = 691;
 inline constexpr int tmtrainer = 721;
 } // namespace collectible

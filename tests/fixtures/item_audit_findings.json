@@ -82,7 +82,34 @@
       "impact": "随机效果有崩溃反馈，尚未定位（#69）。",
       "effect": "错误道具生成效果全队共享；拾取的道具与随机效果仍归拾取者。",
       "latest_evidence": "item-effects-20261018/runs/existing-item-issues-01",
-      "latest_check": "三十二项错误道具定义；主客机主动／被动生成、实际拾取和重复使用、同房／分房、换层、失败存档重试与原生续玩。历史随机崩溃反馈仍待确认。"
+      "latest_check": {
+        "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+        "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+        "evidence": [
+          "item-effects-completion-20261018/native-followup-16-a",
+          "item-effects-completion-20261018/remaining-recovery-13-a",
+          "item-effects-completion-20261018/serial-recovery-14"
+        ],
+        "result": "16个随机种子／持有方条件未复现历史崩溃；有限随机样本不能排除反馈。13-a曾有镰刀尺寸差异，后续未生成同一错误定义，画面差异仍待确认。",
+        "cases": [
+          "collectible:721/host-same/seed-1",
+          "collectible:721/host-same/seed-2",
+          "collectible:721/host-same/seed-3",
+          "collectible:721/host-same/seed-4",
+          "collectible:721/host-same/seed-5",
+          "collectible:721/host-same/seed-6",
+          "collectible:721/host-same/seed-7",
+          "collectible:721/host-same/seed-8",
+          "collectible:721/client-split/seed-1",
+          "collectible:721/client-split/seed-2",
+          "collectible:721/client-split/seed-3",
+          "collectible:721/client-split/seed-4",
+          "collectible:721/client-split/seed-5",
+          "collectible:721/client-split/seed-6",
+          "collectible:721/client-split/seed-7",
+          "collectible:721/client-split/seed-8"
+        ]
+      }
     },
     "card:97": {
       "status": "verified",
@@ -102,7 +129,19 @@
     "collectible:635": {
       "status": "suspected",
       "impact": "曾出现客机分房无法使用，本轮未复现。",
-      "evidence": "item-sweep-visible-20261017-shard1；item-confirm-20261017-10、12。"
+      "evidence": "item-sweep-visible-20261017-shard1；item-confirm-20261017-10、12。",
+      "latest_check": {
+        "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+        "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+        "evidence": [
+          "item-effects-completion-20261018/remaining-recovery-13-a"
+        ],
+        "result": "本轮所列场景未复现历史使用异常；保留疑似状态。",
+        "cases": [
+          "collectible:635/host-same",
+          "collectible:635/client-split"
+        ]
+      }
     },
     "collectible:1": {
       "status": "verified",
@@ -192,7 +231,8 @@
       "impact": "提示文字只在主机画面出现；客机使用后卡牌被消耗，但使用者看不到提示，分房的主机反而收到提示。",
       "evidence": "item-effects-20261018/triggers-06；双端 card:44/host-same、card:44/client-split 原生录像，使用前及使用后约第 90、150 帧。",
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
-      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136"
+      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
+      "fix": "规则提示按使用者发送并在接收者语言表解析；已实现修复，待实机复验。"
     },
     "pill:37": {
       "status": "problem",
@@ -201,7 +241,8 @@
       "checks": "普通／大药丸、主机同房／客机分房四组：核对使用前、使用后及持续时间结束后的双端录像。",
       "evidence": "item-effects-20261018/triggers-06；visual-reviewed/triggers-06-retro-* 原生画面对照。",
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
-      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136"
+      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
+      "fix": "普通与大颗药丸的像素化计时按使用者保存和同步；已实现修复，待实机复验。"
     },
     "pill:41": {
       "status": "problem",
@@ -210,7 +251,8 @@
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
       "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
       "evidence": "item-effects-20261018/input-and-time-01；drowsy-review.json；triggers-06 对照。",
-      "checks": "主客机、同房分房、普通和大颗共 8 组：原生目标速度基线 2，使用后 1；大颗同房换房后仍为 1，分房换房后变为 2；新层均恢复 2。"
+      "checks": "主客机、同房分房、普通和大颗共 8 组：原生目标速度基线 2，使用后 1；大颗同房换房后仍为 1，分房换房后变为 2；新层均恢复 2。",
+      "fix": "进房时根据原生楼层标记恢复大颗药丸减速；已实现修复，待实机复验。"
     },
     "collectible:582": {
       "status": "problem",
@@ -218,7 +260,8 @@
       "impact": "射速和移速变化归属正确，但画面扭曲施加在另一房间的主机画面；客机使用者没有对应视觉效果，主机受到无关的视野干扰。",
       "evidence": "item-effects-20261018/active-effects-12；visual-reviewed/wavy-cap-review.json；主客机使用后约第 120 帧画面对照。",
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
-      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136"
+      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
+      "fix": "画面扭曲按使用者保存和同步；已实现修复，待实机复验。"
     },
     "collectible:665": {
       "status": "crash",
@@ -226,7 +269,10 @@
       "impact": "客机发生原生访问冲突并退出，联机会话中断。两次独立携带测试均复现；相同箱子流程在移除该道具后，两组对照均正常结束。",
       "evidence": "item-effects-20261018/runs/native-preview-and-flip-49；guppy-preview-control-52。",
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
-      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136"
+      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
+      "fix": "预览改为本机持有者生成，不传输原生预览实体；已实现修复，待实机复验。",
+      "effect": "内容预览只在本机持有者的视图生成，不向其他玩家同步预览实体。",
+      "effect_status": "untested"
     },
     "collectible:381": {
       "status": "problem",
@@ -235,7 +281,10 @@
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
       "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
       "evidence": "item-effects-20261018/runs/native-eden-physical-pickup-65；native-eden-independent-contexts-67",
-      "summary_sha256": "726d27a255eff83bc0e42335183caceb143ba7d8ed06836c2bd0e8ffc9f08011"
+      "summary_sha256": "726d27a255eff83bc0e42335183caceb143ba7d8ed06836c2bd0e8ffc9f08011",
+      "fix": "下一局原生奖励共享给各玩家，射速仍独立；已实现调整，待实机复验。",
+      "effect": "全队共享下一局的原生额外道具奖励；射速提升只属于伊甸的祝福持有者。",
+      "effect_status": "untested"
     },
     "collectible:590": {
       "status": "problem",
@@ -244,7 +293,8 @@
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
       "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
       "evidence": "item-effects-20261018/runs/native-observation-rechecks-66；native-map-and-rooms-46",
-      "summary_sha256": "573eb011c59de6136b766c2f66ccb27a85cadc59e7bef72af36abbed04050b5c"
+      "summary_sha256": "573eb011c59de6136b766c2f66ccb27a85cadc59e7bef72af36abbed04050b5c",
+      "fix": "通用战斗关门后恢复当前房间持有者允许的普通出口；已实现修复，待实机复验。"
     },
     "collectible:441": {
       "status": "problem",
@@ -253,7 +303,20 @@
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
       "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
       "evidence": "item-effects-20261018/runs/native-extra-context-retries-62；combat-and-lifecycle-rechecks-24",
-      "summary_sha256": "6426f6dd18779c82d9e8df97cec68e36547b875cf55b694a093fd387bbd62044"
+      "summary_sha256": "6426f6dd18779c82d9e8df97cec68e36547b875cf55b694a093fd387bbd62044",
+      "fix": "离房时通过原生接口移除旧激光并解除引用，保留剩余持续时间；已实现修复，待实机复验。"
+    },
+    "collectible:249": {
+      "effect": "白选：全队共享 Boss 奖励二选一，背包仍归实际拾取者。",
+      "effect_status": "untested"
+    },
+    "collectible:414": {
+      "effect": "金选：全队共享宝箱房道具二选一，背包仍归实际拾取者。",
+      "effect_status": "untested"
+    },
+    "collectible:670": {
+      "effect": "铁选：全队共享清房掉落二选一，背包仍归实际拾取者。",
+      "effect_status": "untested"
     }
   },
   "audit": {
@@ -44657,7 +44720,7 @@
         }
       ],
       "impact": "本轮基础场景未发现异常；条件效果与组合尚未穷举。",
-      "limitation": "幸运提升通过；染色石提示的定位断言未在两种条件下都成立。"
+      "limitation": "幸运提升通过；随从指向隐藏目标的原生前提和实际目标位置仍在复核。"
     },
     "collectible:495": {
       "status": "verified",
@@ -80436,5 +80499,3293 @@
       "crash": 1,
       "reported": 1
     }
+  },
+  "rechecks": {
+    "collectible:665": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-08"
+      ],
+      "scope": "主机／客机持有，同房／分房；本机原生内容预览、非持有者无预览、开箱及正常退出。",
+      "effect_status": "verified",
+      "effect": "—"
+    },
+    "collectible:381": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-08"
+      ],
+      "scope": "主机／客机拾取，同房／分房；同一对进程连续开局，下一局两人获得相同的一个原生奖励，射速只属于拾取者。",
+      "effect_status": "verified",
+      "effect": "全队共享下一局的原生额外道具奖励。"
+    },
+    "collectible:441": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "主机／客机持有，同房／分房；正常方向输入过门后激光继续存在并造成伤害。"
+    },
+    "collectible:590": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "主机／客机持有，同房／分房；原生战斗房间有敌人时，允许的普通出口保持打开。"
+    },
+    "collectible:582": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "主机／客机使用，同房／分房；个人属性与画面扭曲只作用于使用者。"
+    },
+    "card:44": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "主机／客机使用，同房／分房；英文规则提示只出现在使用者画面。",
+      "limitation": "已验证使用者归属；两端使用不同语言的组合未验证。"
+    },
+    "pill:37": {
+      "status": "verified",
+      "candidate": "7c9626a6faea31dc99a78ba15bbaf8cafdf0a4cf",
+      "dll_sha256": "3ce37842fca1a3562eecfd8763a8ec7917314418fcbf8a09c3cf4db4c35486fd",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01"
+      ],
+      "scope": "普通／大颗，主机／客机，同房／分房；仅使用者像素化，原生计时结束后恢复清晰。"
+    },
+    "pill:41": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01",
+        "item-effect-fixes-20261018/native-08"
+      ],
+      "scope": "普通／大颗，主机／客机，同房／分房；普通药丸换房失效，大颗跨房持续，换层恢复正常速度。"
+    },
+    "collectible:249": {
+      "status": "verified",
+      "candidate": "55f6feaeeee827f40ac87612584262028108f6fc",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-13-debug",
+        "item-effect-fixes-20261018/native-14"
+      ],
+      "scope": "主机／客机，同房／分房，本人／队友持有的 8 种组合，以及主机持有分房额外 2 次重复；Boss 奖励二选一、选择后另一奖励消失、个人背包及双端正常退出均通过。",
+      "effect_status": "verified",
+      "diagnosis": "原断线由验收采样器遍历未初始化的客机远端房间网格导致；同步应用正常完成，随后采样阻塞约 72 秒。修正采样边界后使用相同生产 DLL 复验通过，原失败记录保留在历史验收中。",
+      "effect": "全队共享 Boss 奖励二选一。"
+    },
+    "collectible:414": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01",
+        "item-effect-fixes-20261018/native-11"
+      ],
+      "scope": "主机／客机，同房／分房；持有者与队友分别触发宝箱房二选一，背包保持个人归属。",
+      "effect_status": "verified",
+      "effect": "全队共享宝箱房道具二选一。"
+    },
+    "collectible:670": {
+      "status": "verified",
+      "candidate": "c82d7af870cd4300636f03dc33848147a6913442",
+      "dll_sha256": "207fa9fde282af76cd9d6b5bfecfbe5374e4e4f1bb06c829f38fc654829e420b",
+      "evidence": [
+        "item-effect-fixes-20261018/native-01",
+        "item-effect-fixes-20261018/native-11"
+      ],
+      "scope": "主机／客机，同房／分房；持有者与队友分别触发清房奖励二选一，背包保持个人归属。",
+      "effect_status": "verified",
+      "effect": "全队共享清房掉落二选一。"
+    },
+    "collectible:396": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:396/host-same",
+        "collectible:396/client-split"
+      ]
+    },
+    "collectible:498": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:498/host-same",
+        "collectible:498/client-split"
+      ]
+    },
+    "collectible:550": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:550/host-same",
+        "collectible:550/client-split"
+      ]
+    },
+    "collectible:673": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "problem",
+      "effect_status": "problem",
+      "trigger": "客机分房持有赎罪，实际进入原生恶魔房，出现十字标记，未取走任何交易道具或掉落物后离开并换层。",
+      "impact": "下一层没有获得伤害提升和魂心奖励；主机同房／分房、客机同房对照均获得奖励。",
+      "fix": "未修复。",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05",
+        "item-effects-completion-20261018/trinket-followup-06b",
+        "item-effects-completion-20261018/reviews/redemption-06b-visual/review-input.json",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "verified_cases": [
+        "collectible:673/host-same"
+      ]
+    },
+    "collectible:692": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:692/host-same",
+        "collectible:692/client-split"
+      ]
+    },
+    "trinket:1": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:1/host-same",
+        "trinket:1/client-split"
+      ]
+    },
+    "trinket:3": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:3/host-same",
+        "trinket:3/client-split"
+      ]
+    },
+    "trinket:4": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:4/host-same",
+        "trinket:4/client-split"
+      ]
+    },
+    "trinket:6": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:6/host-same",
+        "trinket:6/client-split"
+      ]
+    },
+    "trinket:7": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:7/host-same/shop",
+        "trinket:7/host-same/library",
+        "trinket:7/host-same/angel",
+        "trinket:7/client-split/shop",
+        "trinket:7/client-split/library",
+        "trinket:7/client-split/angel"
+      ]
+    },
+    "trinket:8": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:8/host-same",
+        "trinket:8/client-split"
+      ]
+    },
+    "trinket:9": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-conditions-02"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:9/host-same",
+        "trinket:9/client-split"
+      ]
+    },
+    "trinket:10": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:10/host-same",
+        "trinket:10/client-split"
+      ]
+    },
+    "trinket:11": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:11/host-same",
+        "trinket:11/client-split"
+      ]
+    },
+    "trinket:13": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:13/host-same",
+        "trinket:13/client-split"
+      ]
+    },
+    "trinket:15": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:15/host-same",
+        "trinket:15/client-split"
+      ]
+    },
+    "trinket:17": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-conditions-02"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:17/host-same",
+        "trinket:17/client-split"
+      ]
+    },
+    "trinket:18": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-conditions-02"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:18/host-same",
+        "trinket:18/client-split"
+      ]
+    },
+    "trinket:19": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:19/host-same",
+        "trinket:19/client-split"
+      ]
+    },
+    "trinket:20": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:20/host-same",
+        "trinket:20/client-split"
+      ]
+    },
+    "trinket:22": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-conditions-02"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:22/host-same",
+        "trinket:22/client-split"
+      ]
+    },
+    "trinket:23": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "problem",
+      "effect_status": "problem",
+      "trigger": "主机同房或客机分房持有寻人启事，受到致命伤害并触发原生复活。",
+      "impact": "复活后的游魂仍存活且不是联机幽灵，但角色持续不可见，影响复活后的角色辨识与位置判断；本轮未据此断言移动或射击失效。",
+      "fix": "未修复。",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04",
+        "item-effects-completion-20261018/native-remaining-05",
+        "item-effects-completion-20261018/reviews/missing-poster-05/review.json"
+      ],
+      "verified_cases": []
+    },
+    "trinket:24": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:24/host-same/coin",
+        "trinket:24/host-same/poop",
+        "trinket:24/client-split/coin",
+        "trinket:24/client-split/poop"
+      ]
+    },
+    "trinket:26": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:26/host-same",
+        "trinket:26/client-split"
+      ]
+    },
+    "trinket:27": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:27/host-same",
+        "trinket:27/client-split"
+      ]
+    },
+    "trinket:29": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:29/host-same",
+        "trinket:29/client-split"
+      ]
+    },
+    "trinket:30": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:30/host-same",
+        "trinket:30/client-split"
+      ]
+    },
+    "trinket:31": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:31/host-same",
+        "trinket:31/client-split"
+      ]
+    },
+    "trinket:32": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:32/host-same",
+        "trinket:32/client-split"
+      ]
+    },
+    "trinket:34": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:34/host-same",
+        "trinket:34/client-split"
+      ]
+    },
+    "trinket:36": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:36/host-same",
+        "trinket:36/client-split"
+      ]
+    },
+    "trinket:38": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-conditions-02"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:38/host-same",
+        "trinket:38/client-split"
+      ]
+    },
+    "trinket:40": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:40/host-same",
+        "trinket:40/client-split"
+      ]
+    },
+    "trinket:41": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:41/host-same",
+        "trinket:41/client-split"
+      ]
+    },
+    "trinket:42": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:42/host-same",
+        "trinket:42/client-split"
+      ]
+    },
+    "trinket:43": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:43/host-same",
+        "trinket:43/client-split"
+      ]
+    },
+    "trinket:44": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:44/host-same",
+        "trinket:44/client-split"
+      ]
+    },
+    "trinket:45": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:45/host-same",
+        "trinket:45/client-split"
+      ]
+    },
+    "trinket:46": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:46/host-same",
+        "trinket:46/client-split"
+      ]
+    },
+    "trinket:48": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:48/host-same",
+        "trinket:48/client-split"
+      ]
+    },
+    "trinket:49": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:49/host-same",
+        "trinket:49/client-split"
+      ]
+    },
+    "trinket:50": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:50/host-same",
+        "trinket:50/client-split"
+      ]
+    },
+    "trinket:51": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:51/host-same",
+        "trinket:51/client-split"
+      ]
+    },
+    "trinket:52": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:52/host-same",
+        "trinket:52/client-split"
+      ]
+    },
+    "trinket:54": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:54/host-same",
+        "trinket:54/client-split"
+      ]
+    },
+    "trinket:55": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:55/host-same",
+        "trinket:55/client-split"
+      ]
+    },
+    "trinket:57": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:57/host-same",
+        "trinket:57/client-split"
+      ]
+    },
+    "trinket:58": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:58/host-same",
+        "trinket:58/client-split"
+      ]
+    },
+    "trinket:59": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:59/host-same",
+        "trinket:59/client-split"
+      ]
+    },
+    "trinket:60": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:60/host-same",
+        "trinket:60/client-split"
+      ]
+    },
+    "trinket:61": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:61/host-same",
+        "trinket:61/client-split"
+      ]
+    },
+    "trinket:62": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/visual-followup-09"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:62/host-same",
+        "trinket:62/client-split"
+      ]
+    },
+    "trinket:64": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:64/host-same",
+        "trinket:64/client-split"
+      ]
+    },
+    "trinket:65": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:65/host-same",
+        "trinket:65/client-split"
+      ]
+    },
+    "trinket:66": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:66/host-same",
+        "trinket:66/client-split"
+      ]
+    },
+    "trinket:70": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:70/host-same",
+        "trinket:70/client-split"
+      ]
+    },
+    "trinket:71": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:71/host-same",
+        "trinket:71/client-split"
+      ]
+    },
+    "trinket:75": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:75/host-same",
+        "trinket:75/client-split"
+      ]
+    },
+    "trinket:76": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:76/host-same",
+        "trinket:76/client-split"
+      ]
+    },
+    "trinket:78": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:78/host-same",
+        "trinket:78/client-split"
+      ]
+    },
+    "trinket:79": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:79/host-same",
+        "trinket:79/client-split"
+      ]
+    },
+    "trinket:80": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:80/host-same",
+        "trinket:80/client-split"
+      ]
+    },
+    "trinket:81": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:81/host-same",
+        "trinket:81/client-split"
+      ]
+    },
+    "trinket:86": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:86/host-same",
+        "trinket:86/client-split"
+      ]
+    },
+    "trinket:87": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-conditions-02"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:87/host-same",
+        "trinket:87/client-split"
+      ]
+    },
+    "trinket:88": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-conditions-02"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:88/host-same",
+        "trinket:88/client-split"
+      ]
+    },
+    "trinket:89": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:89/host-same",
+        "trinket:89/client-split"
+      ]
+    },
+    "trinket:90": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:90/host-same",
+        "trinket:90/client-split"
+      ]
+    },
+    "trinket:92": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:92/host-same",
+        "trinket:92/client-split"
+      ]
+    },
+    "trinket:93": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:93/host-same",
+        "trinket:93/client-split"
+      ]
+    },
+    "trinket:94": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:94/host-same",
+        "trinket:94/client-split"
+      ]
+    },
+    "trinket:95": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-conditions-02"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:95/host-same",
+        "trinket:95/client-split"
+      ]
+    },
+    "trinket:96": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:96/host-same",
+        "trinket:96/client-split"
+      ]
+    },
+    "trinket:97": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:97/host-same",
+        "trinket:97/client-split"
+      ]
+    },
+    "trinket:98": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:98/host-same",
+        "trinket:98/client-split"
+      ]
+    },
+    "trinket:99": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:99/host-same",
+        "trinket:99/client-split"
+      ]
+    },
+    "trinket:100": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:100/host-same",
+        "trinket:100/client-split"
+      ]
+    },
+    "trinket:101": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:101/host-same",
+        "trinket:101/client-split"
+      ]
+    },
+    "trinket:102": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:102/host-same",
+        "trinket:102/client-split"
+      ]
+    },
+    "trinket:103": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:103/host-same",
+        "trinket:103/client-split"
+      ]
+    },
+    "trinket:104": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:104/host-same",
+        "trinket:104/client-split"
+      ]
+    },
+    "trinket:105": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:105/host-same",
+        "trinket:105/client-split"
+      ]
+    },
+    "trinket:106": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:106/host-same",
+        "trinket:106/client-split"
+      ]
+    },
+    "trinket:108": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:108/host-same",
+        "trinket:108/client-split"
+      ]
+    },
+    "trinket:109": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:109/host-same",
+        "trinket:109/client-split"
+      ]
+    },
+    "trinket:110": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:110/host-same",
+        "trinket:110/client-split"
+      ]
+    },
+    "trinket:111": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:111/host-same",
+        "trinket:111/client-split"
+      ]
+    },
+    "trinket:113": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:113/host-same",
+        "trinket:113/client-split"
+      ]
+    },
+    "trinket:114": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:114/host-same",
+        "trinket:114/client-split"
+      ]
+    },
+    "trinket:115": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:115/host-same",
+        "trinket:115/client-split"
+      ]
+    },
+    "trinket:117": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:117/host-same",
+        "trinket:117/client-split"
+      ]
+    },
+    "trinket:119": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:119/host-same",
+        "trinket:119/client-split"
+      ]
+    },
+    "trinket:125": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:125/host-same",
+        "trinket:125/client-split"
+      ]
+    },
+    "trinket:126": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:126/host-same",
+        "trinket:126/client-split"
+      ]
+    },
+    "trinket:127": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:127/host-same",
+        "trinket:127/client-split"
+      ]
+    },
+    "trinket:128": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:128/host-same",
+        "trinket:128/client-split"
+      ]
+    },
+    "trinket:129": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:129/host-same",
+        "trinket:129/client-split"
+      ]
+    },
+    "trinket:130": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:130/host-same",
+        "trinket:130/client-split"
+      ]
+    },
+    "trinket:131": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:131/host-same",
+        "trinket:131/client-split"
+      ]
+    },
+    "trinket:132": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:132/host-same",
+        "trinket:132/client-split"
+      ]
+    },
+    "trinket:133": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:133/host-same",
+        "trinket:133/client-split"
+      ]
+    },
+    "trinket:134": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-followup-06b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:134/host-same",
+        "trinket:134/client-split"
+      ]
+    },
+    "trinket:136": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:136/host-same",
+        "trinket:136/client-split"
+      ]
+    },
+    "trinket:138": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:138/host-same",
+        "trinket:138/client-split"
+      ]
+    },
+    "trinket:141": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:141/host-same",
+        "trinket:141/client-split"
+      ]
+    },
+    "trinket:142": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:142/host-same",
+        "trinket:142/client-split"
+      ]
+    },
+    "trinket:143": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:143/host-same",
+        "trinket:143/client-split"
+      ]
+    },
+    "trinket:145": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:145/host-same",
+        "trinket:145/client-split"
+      ]
+    },
+    "trinket:147": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:147/host-same",
+        "trinket:147/client-split"
+      ]
+    },
+    "trinket:148": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:148/host-same",
+        "trinket:148/client-split"
+      ]
+    },
+    "trinket:149": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:149/host-same",
+        "trinket:149/client-split"
+      ]
+    },
+    "trinket:152": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:152/host-same",
+        "trinket:152/client-split"
+      ]
+    },
+    "trinket:153": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:153/host-same",
+        "trinket:153/client-split"
+      ]
+    },
+    "trinket:155": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:155/host-same",
+        "trinket:155/client-split"
+      ]
+    },
+    "trinket:156": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-direct-01"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:156/host-same",
+        "trinket:156/client-split"
+      ]
+    },
+    "trinket:157": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:157/host-same",
+        "trinket:157/client-split"
+      ]
+    },
+    "trinket:158": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:158/host-same",
+        "trinket:158/client-split"
+      ]
+    },
+    "trinket:159": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:159/host-same",
+        "trinket:159/client-split"
+      ]
+    },
+    "trinket:160": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:160/host-same",
+        "trinket:160/client-split"
+      ]
+    },
+    "trinket:161": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:161/host-same",
+        "trinket:161/client-split"
+      ]
+    },
+    "trinket:164": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:164/host-same",
+        "trinket:164/client-split"
+      ]
+    },
+    "trinket:166": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:166/host-same",
+        "trinket:166/client-split"
+      ]
+    },
+    "trinket:168": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:168/host-same",
+        "trinket:168/client-split"
+      ]
+    },
+    "trinket:170": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:170/host-same",
+        "trinket:170/client-split"
+      ]
+    },
+    "trinket:178": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:178/host-same",
+        "trinket:178/client-split"
+      ]
+    },
+    "trinket:183": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:183/host-same",
+        "trinket:183/client-split"
+      ]
+    },
+    "trinket:188": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-remaining-05"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:188/host-same",
+        "trinket:188/client-split"
+      ]
+    },
+    "trinket:189": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/trinket-lifecycle-04"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:189/host-same",
+        "trinket:189/client-split"
+      ]
+    },
+    "collectible:208": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/parallel-recovery-10-a"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:208/host-same",
+        "collectible:208/client-split"
+      ]
+    },
+    "trinket:5": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/parallel-recovery-10-c"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:5/host-same",
+        "trinket:5/client-split"
+      ]
+    },
+    "trinket:91": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/manual-confirmation-11"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:91/host-same",
+        "trinket:91/client-split"
+      ]
+    },
+    "trinket:122": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/manual-confirmation-11"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:122/host-same/active",
+        "trinket:122/host-same/damage",
+        "trinket:122/client-split/active",
+        "trinket:122/client-split/damage"
+      ]
+    },
+    "collectible:60": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-18-a",
+        "item-effects-completion-20261018/native-followup-18-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:60/host-same",
+        "collectible:60/client-split"
+      ]
+    },
+    "collectible:276": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-20-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:276/host-same",
+        "collectible:276/client-split"
+      ]
+    },
+    "collectible:282": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-20-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:282/host-same",
+        "collectible:282/client-split"
+      ]
+    },
+    "collectible:445": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-25-a"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:445/host-same",
+        "collectible:445/client-split"
+      ]
+    },
+    "collectible:497": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/remaining-recovery-13-a",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:497/host-same/single_holder",
+        "collectible:497/host-same/both_hidden",
+        "collectible:497/client-split/single_holder",
+        "collectible:497/client-split/both_hidden"
+      ]
+    },
+    "collectible:527": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:527/host-same",
+        "collectible:527/client-split"
+      ]
+    },
+    "collectible:604": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-25-a"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:604/host-same",
+        "collectible:604/client-split"
+      ]
+    },
+    "collectible:619": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "problem",
+      "effect_status": "problem",
+      "trigger": "客机分房使用里游魂，持有长子名分并受到致命伤害，触发本房复活。",
+      "impact": "复活本身成功，但同房近处敌人没有受到应有的200点复活爆炸伤害；主机同房／分房和客机同房对照可造成伤害。",
+      "fix": "未修复。",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b",
+        "item-effects-completion-20261018/native-followup-18-a",
+        "item-effects-completion-20261018/reviews/lost18-client/review-input.json"
+      ],
+      "verified_cases": [
+        "collectible:619/host-same/isaac",
+        "collectible:619/host-same/magdalene",
+        "collectible:619/host-same/cain",
+        "collectible:619/host-same/judas",
+        "collectible:619/host-same/blue_baby",
+        "collectible:619/host-same/eve",
+        "collectible:619/host-same/samson",
+        "collectible:619/host-same/azazel",
+        "collectible:619/host-same/lazarus",
+        "collectible:619/host-same/eden",
+        "collectible:619/host-same/lost",
+        "collectible:619/host-same/lilith",
+        "collectible:619/host-same/keeper",
+        "collectible:619/host-same/bethany",
+        "collectible:619/host-same/jacob",
+        "collectible:619/host-same/esau",
+        "collectible:619/host-same/tainted_magdalene",
+        "collectible:619/host-same/tainted_cain",
+        "collectible:619/host-same/tainted_blue_baby",
+        "collectible:619/host-same/tainted_eden",
+        "collectible:619/host-same/tainted_lost",
+        "collectible:619/host-same/tainted_bethany",
+        "collectible:619/host-same/tainted_jacob",
+        "collectible:619/host-same/apollyon",
+        "collectible:619/host-same/forgotten",
+        "collectible:619/host-same/tainted_isaac",
+        "collectible:619/host-same/tainted_judas",
+        "collectible:619/host-same/tainted_eve",
+        "collectible:619/host-same/tainted_samson",
+        "collectible:619/host-same/tainted_azazel",
+        "collectible:619/host-same/tainted_lazarus",
+        "collectible:619/host-same/tainted_lilith",
+        "collectible:619/host-same/tainted_keeper",
+        "collectible:619/host-same/tainted_apollyon",
+        "collectible:619/host-same/tainted_forgotten",
+        "collectible:619/client-split/isaac",
+        "collectible:619/client-split/magdalene",
+        "collectible:619/client-split/cain",
+        "collectible:619/client-split/judas",
+        "collectible:619/client-split/blue_baby",
+        "collectible:619/client-split/eve",
+        "collectible:619/client-split/samson",
+        "collectible:619/client-split/azazel",
+        "collectible:619/client-split/lazarus",
+        "collectible:619/client-split/eden",
+        "collectible:619/client-split/lost",
+        "collectible:619/client-split/lilith",
+        "collectible:619/client-split/keeper",
+        "collectible:619/client-split/bethany",
+        "collectible:619/client-split/jacob",
+        "collectible:619/client-split/esau",
+        "collectible:619/client-split/tainted_magdalene",
+        "collectible:619/client-split/tainted_cain",
+        "collectible:619/client-split/tainted_blue_baby",
+        "collectible:619/client-split/tainted_eden",
+        "collectible:619/client-split/tainted_bethany",
+        "collectible:619/client-split/tainted_jacob",
+        "collectible:619/client-split/apollyon",
+        "collectible:619/client-split/forgotten",
+        "collectible:619/client-split/tainted_isaac",
+        "collectible:619/client-split/tainted_judas",
+        "collectible:619/client-split/tainted_eve",
+        "collectible:619/client-split/tainted_samson",
+        "collectible:619/client-split/tainted_azazel",
+        "collectible:619/client-split/tainted_lazarus",
+        "collectible:619/client-split/tainted_lilith",
+        "collectible:619/client-split/tainted_keeper",
+        "collectible:619/client-split/tainted_apollyon",
+        "collectible:619/client-split/tainted_forgotten"
+      ]
+    },
+    "collectible:681": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:681/host-same",
+        "collectible:681/client-split"
+      ]
+    },
+    "collectible:711": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:711/host-same",
+        "collectible:711/client-split"
+      ]
+    },
+    "collectible:714": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-22-a"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:714/host-same",
+        "collectible:714/client-split"
+      ]
+    },
+    "trinket:2": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/remaining-recovery-13-a",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:2/host-same",
+        "trinket:2/client-split"
+      ]
+    },
+    "trinket:12": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:12/host-same",
+        "trinket:12/client-split"
+      ]
+    },
+    "trinket:14": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:14/host-same",
+        "trinket:14/client-split"
+      ]
+    },
+    "trinket:16": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:16/host-same",
+        "trinket:16/client-split"
+      ]
+    },
+    "trinket:21": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:21/host-same",
+        "trinket:21/client-split"
+      ]
+    },
+    "trinket:25": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:25/host-same",
+        "trinket:25/client-split"
+      ]
+    },
+    "trinket:28": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:28/host-same",
+        "trinket:28/client-split"
+      ]
+    },
+    "trinket:33": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-22-a"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:33/host-same",
+        "trinket:33/client-split"
+      ]
+    },
+    "trinket:53": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:53/host-same/match_stick",
+        "trinket:53/host-same/lighter",
+        "trinket:53/client-split/match_stick",
+        "trinket:53/client-split/lighter"
+      ]
+    },
+    "trinket:56": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:56/host-same",
+        "trinket:56/client-split"
+      ]
+    },
+    "trinket:63": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:63/host-same",
+        "trinket:63/client-split"
+      ]
+    },
+    "trinket:67": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:67/host-same",
+        "trinket:67/client-split"
+      ]
+    },
+    "trinket:68": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:68/host-same",
+        "trinket:68/client-split"
+      ]
+    },
+    "trinket:69": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/parallel-recovery-10-c",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:69/host-same/single_holder",
+        "trinket:69/host-same/both_hidden",
+        "trinket:69/client-split/single_holder",
+        "trinket:69/client-split/both_hidden"
+      ]
+    },
+    "trinket:72": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/manual-confirmation-11",
+        "item-effects-completion-20261018/native-followup-18-b",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:72/host-same/pickups",
+        "trinket:72/host-same/awards",
+        "trinket:72/host-same/charge",
+        "trinket:72/client-split/pickups",
+        "trinket:72/client-split/awards",
+        "trinket:72/client-split/charge"
+      ]
+    },
+    "trinket:73": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:73/host-same",
+        "trinket:73/client-split"
+      ]
+    },
+    "trinket:74": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:74/host-same",
+        "trinket:74/client-split"
+      ]
+    },
+    "trinket:77": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:77/host-same",
+        "trinket:77/client-split"
+      ]
+    },
+    "trinket:82": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/parallel-recovery-10-a",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:82/host-same",
+        "trinket:82/client-split"
+      ]
+    },
+    "trinket:83": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:83/host-same",
+        "trinket:83/client-split"
+      ]
+    },
+    "trinket:84": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-18-a",
+        "item-effects-completion-20261018/parallel-recovery-10-a",
+        "item-effects-completion-20261018/parallel-recovery-10-b",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:84/host-same/room_shop",
+        "trinket:84/host-same/room_secret",
+        "trinket:84/host-same/awards",
+        "trinket:84/client-split/room_shop",
+        "trinket:84/client-split/room_secret",
+        "trinket:84/client-split/awards"
+      ]
+    },
+    "trinket:85": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/parallel-recovery-10-b",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:85/host-same",
+        "trinket:85/client-split"
+      ]
+    },
+    "trinket:107": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:107/host-same",
+        "trinket:107/client-split"
+      ]
+    },
+    "trinket:112": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:112/host-same",
+        "trinket:112/client-split"
+      ]
+    },
+    "trinket:116": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:116/host-same",
+        "trinket:116/client-split"
+      ]
+    },
+    "trinket:118": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:118/host-same",
+        "trinket:118/client-split"
+      ]
+    },
+    "trinket:120": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "problem",
+      "effect_status": "problem",
+      "trigger": "主机或客机持有发夹，以空充能的六面骰实际穿过房门进入尚有Boss的房间；另一名玩家留在门外。",
+      "impact": "进入Boss房后六面骰充能仍为0，无法获得发夹提供的进房充满主动道具效果。",
+      "fix": "未修复。",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14",
+        "item-effects-completion-20261018/reviews/hairpin-14/review-input.json"
+      ],
+      "verified_cases": []
+    },
+    "trinket:123": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:123/host-same",
+        "trinket:123/client-split"
+      ]
+    },
+    "trinket:124": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "problem",
+      "effect_status": "problem",
+      "trigger": "主机或客机持有门挡，通过正常方向输入穿门进入仍有敌人的普通房间；队友留在原房。",
+      "impact": "进入后原入口关闭，门挡未能保持入口开启，战斗结束前无法按预期从入口退回。",
+      "fix": "未修复。",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14",
+        "item-effects-completion-20261018/reviews/door-stop-14/review-input.json"
+      ],
+      "verified_cases": []
+    },
+    "trinket:135": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:135/host-same",
+        "trinket:135/client-split"
+      ]
+    },
+    "trinket:137": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:137/host-same",
+        "trinket:137/client-split"
+      ]
+    },
+    "trinket:139": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:139/host-same",
+        "trinket:139/client-split"
+      ]
+    },
+    "trinket:140": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:140/host-same",
+        "trinket:140/client-split"
+      ]
+    },
+    "trinket:144": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:144/host-same",
+        "trinket:144/client-split"
+      ]
+    },
+    "trinket:146": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:146/host-same",
+        "trinket:146/client-split"
+      ]
+    },
+    "trinket:150": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "problem",
+      "effect_status": "problem",
+      "trigger": "主机或客机持有蓝钥匙，在无钥匙状态通过普通房间到未进入过的宝箱房的上锁房门。",
+      "impact": "无饰品时门仍锁住，持有后可直接进入宝箱房且不消耗钥匙；跳过了应生成的蓝色战斗房及其中战斗。",
+      "fix": "未修复。",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14",
+        "item-effects-completion-20261018/reviews/blue-key-14/review-input.json"
+      ],
+      "verified_cases": []
+    },
+    "trinket:151": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b",
+        "item-effects-completion-20261018/remaining-recovery-13-a",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:151/host-same/spikes",
+        "trinket:151/host-same/chests",
+        "trinket:151/host-same/curse_control",
+        "trinket:151/host-same/curse",
+        "trinket:151/client-split/spikes",
+        "trinket:151/client-split/chests",
+        "trinket:151/client-split/curse_control",
+        "trinket:151/client-split/curse"
+      ]
+    },
+    "trinket:154": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:154/host-same",
+        "trinket:154/client-split"
+      ]
+    },
+    "trinket:162": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-18-b",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:162/host-same",
+        "trinket:162/client-split"
+      ]
+    },
+    "trinket:163": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:163/host-same",
+        "trinket:163/client-split"
+      ]
+    },
+    "trinket:165": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:165/host-same",
+        "trinket:165/client-split"
+      ]
+    },
+    "trinket:167": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:167/host-same",
+        "trinket:167/client-split"
+      ]
+    },
+    "trinket:169": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:169/host-same",
+        "trinket:169/client-split"
+      ]
+    },
+    "trinket:171": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:171/host-same",
+        "trinket:171/client-split"
+      ]
+    },
+    "trinket:172": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:172/host-same",
+        "trinket:172/client-split"
+      ]
+    },
+    "trinket:173": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:173/host-same",
+        "trinket:173/client-split"
+      ]
+    },
+    "trinket:174": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:174/host-same",
+        "trinket:174/client-split"
+      ]
+    },
+    "trinket:175": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:175/host-same/pandora",
+        "trinket:175/host-same/hush_control",
+        "trinket:175/host-same/hush",
+        "trinket:175/client-split/pandora",
+        "trinket:175/client-split/hush_control",
+        "trinket:175/client-split/hush"
+      ]
+    },
+    "trinket:176": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:176/host-same",
+        "trinket:176/client-split"
+      ]
+    },
+    "trinket:177": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-20-b",
+        "item-effects-completion-20261018/native-followup-25-a",
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:177/host-same/normal",
+        "trinket:177/host-same/boss",
+        "trinket:177/client-split/normal",
+        "trinket:177/client-split/boss"
+      ]
+    },
+    "trinket:179": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:179/host-same",
+        "trinket:179/client-split"
+      ]
+    },
+    "trinket:181": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:181/host-same",
+        "trinket:181/client-split"
+      ]
+    },
+    "trinket:182": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:182/host-same/angel",
+        "trinket:182/host-same/beggar",
+        "trinket:182/client-split/angel",
+        "trinket:182/client-split/beggar"
+      ]
+    },
+    "trinket:184": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-16-a",
+        "item-effects-completion-20261018/native-followup-16-b"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:184/host-same",
+        "trinket:184/client-split"
+      ]
+    },
+    "trinket:185": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:185/host-same",
+        "trinket:185/client-split"
+      ]
+    },
+    "trinket:186": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/serial-recovery-14"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:186/host-same",
+        "trinket:186/client-split"
+      ]
+    },
+    "trinket:187": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-18-a",
+        "item-effects-completion-20261018/native-followup-18-b",
+        "item-effects-completion-20261018/parallel-recovery-10-c"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "trinket:187/host-same/treasure",
+        "trinket:187/host-same/alt_path",
+        "trinket:187/client-split/treasure",
+        "trinket:187/client-split/alt_path"
+      ]
+    },
+    "collectible:492": {
+      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "—",
+      "evidence": [
+        "item-effects-completion-20261018/native-followup-27-a"
+      ],
+      "scope": "主机持有同房、客机持有分房；双端效果断言、用例结束及相关人工证据。仅覆盖所列场景。",
+      "cases": [
+        "collectible:492/host-same",
+        "collectible:492/client-split"
+      ]
+    }
+  },
+  "completion_acceptance": {
+    "date": "2026-10-18",
+    "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+    "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+    "items": 203,
+    "kinds": {
+      "collectible": 20,
+      "trinket": 183
+    },
+    "scope": "补齐原清单183个饰品、18个未完成道具及2个历史疑似道具的独立效果验收；卡牌与药丸沿用此前记录。",
+    "history": "docs/history/2026-10-18-item-effect-completion.md",
+    "results": {
+      "verified": 195,
+      "problem": 6,
+      "suspected": 2
+    },
+    "complete": true
   }
 }

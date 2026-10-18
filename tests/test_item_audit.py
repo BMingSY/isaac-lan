@@ -490,6 +490,86 @@ def test_familiar_counts_follow_the_replica_room_and_reappear_on_reunion():
     assert next(c for c in checks() if c["name"] == "familiar_reunion")["status"] == "missing"
 
 
+def test_trigger_probe_never_reads_remote_room_shells():
+    import shutil
+    import subprocess
+
+    executable = shutil.which("lua5.3") or shutil.which("lua")
+    if not executable:
+        pytest.skip("Lua is unavailable")
+    script = r"""
+        TearVariant, RoomType = {}, {ROOM_DEFAULT=1}
+        LevelStage = {STAGE1_2=2, STAGE2_GREED=2, NUM_STAGES=2}
+        PlayerType = {PLAYER_BLUEBABY=4, PLAYER_XXX=4, PLAYER_BLUEBABY_B=25, PLAYER_XXX_B=25}
+        GridEntityType = {GRID_ROCK=2, GRID_POOP=14}
+        EffectVariant, FamiliarVariant, PickupVariant, CollectibleType = {}, {}, {}, {}
+        TrinketType, PillColor, NullItemID, PlayerForm = {}, {}, {}, {}
+        DoorSlot = {NUM_DOOR_SLOTS=8}
+        function createInteractionEffects() return {sample=function() end} end
+        function createProjectileTrials() return {sample=function() end} end
+        function createTrinketTrials() return {} end
+        function createBirthrightTrials() return {} end
+        local location, view = {index=84, dimension=0}, {index=97, dimension=0}
+        _IsaacLan = {rooms_positions=function() return {["0"]=location, ["1"]=view} end}
+        function _IsaacLanStatus() return {slot=1} end
+        local allowed, reads, records = false, 0, {}
+        local function roomRead()
+            assert(allowed, "Remote replica shell was queried as an initialized room")
+            reads = reads + 1
+        end
+        local room = {
+            GetGridSize=function() roomRead(); return 2 end,
+            GetGridEntity=function(_, index)
+                roomRead()
+                if index == 0 then return {
+                    State=0, GetType=function() return 2 end, ToRock=function() return true end
+                } end
+            end,
+            GetDoor=function() roomRead() end,
+            GetType=function() roomRead(); return 1 end,
+            GetBrokenWatchState=function() roomRead(); return 2 end,
+        }
+        Isaac = {GetRoomEntities=function() roomRead(); return {} end}
+        local level = {GetStage=function() return 2 end, GetCurses=function() return 0 end}
+        function Game() return {GetLevel=function() return level end} end
+        local player = setmetatable({Position={X=10,Y=20}, Velocity={X=0,Y=0},
+            SpriteScale={X=1,Y=1}, Damage=3.5, MaxFireDelay=10, MoveSpeed=1,
+            TearRange=260, ShotSpeed=1, Luck=0, Visible=true, CanFly=false,
+            GetHearts=function() return 6 end, GetPlayerType=function() return 4 end},
+            {__index=function() return function() return 0 end end})
+        local probe = dofile("tests/fixtures/item_audit_triggers.lua")(
+            function(event, value) if event == "trigger_probe" then records[#records+1]=value end end,
+            function(_, callback) callback(player, room) end, function() end, function() end)
+        local case = {slot=0, id=249, trigger_effects={watch_trial=true}}
+        local function sample(host, visible)
+            allowed, reads = host or visible, 0
+            probe.sample(case, 450, host)
+            local result = records[#records]
+            assert(result.player_type == "PLAYER_BLUEBABY", "Legacy aliases must serialize consistently")
+            assert(result.stage_name == "STAGE1_2", "Greed aliases must not replace normal stages")
+            assert(result.room_visible == visible)
+            assert(result.room == location.index and result.hearts == 6 and result.x == 10,
+                "Offscreen actor observations must remain available")
+            if allowed then
+                assert(reads > 0 and result.grids.GRID_ROCK == 1 and result.rock_count == 1)
+                assert(result.room_type == "ROOM_DEFAULT" and result.watch_state == 2)
+            else
+                assert(reads == 0 and next(result.grids) == nil and #result.doors == 0)
+                assert(result.room_type == nil and result.watch_state == nil)
+            end
+        end
+        sample(false, false)
+        sample(true, false)
+        view.index = location.index
+        sample(false, true)
+        view.dimension = 1
+        sample(false, false)
+        view.dimension = 0
+        sample(false, true)
+    """
+    subprocess.run([executable, "-"], input=script, text=True, cwd=ROOT, check=True)
+
+
 def test_all_effect_scenarios_build_a_parseable_native_fixture(tmp_path):
     import shutil
     import subprocess
@@ -1255,6 +1335,7 @@ def test_failed_fixture_prerequisite_is_not_an_item_reconnect_bug():
 def test_full_registry_and_shards_cover_each_entry_and_pill_variant_once():
     from collections import Counter
     from item_consumable_recipes import CONSUMABLE_RECIPES
+    from item_trigger_effects import TRIGGER_EFFECTS
 
     catalog = json.loads((ROOT / "tests/fixtures/item_catalog.json").read_text())
     cases = select_cases(catalog)
@@ -1268,6 +1349,7 @@ def test_full_registry_and_shards_cover_each_entry_and_pill_variant_once():
             if item["kind"] == "pill" or CONSUMABLE_RECIPES.get(item.get("enum"), {}).get("pocket")
             else 2
         )
+        * len(TRIGGER_EFFECTS.get(item.get("enum"), {}).get("scenarios", {None: {}}))
         for item in catalog["items"]
     )
     shards = [cases[index::3] for index in range(3)]
@@ -1301,6 +1383,43 @@ def test_truncated_catalog_and_torn_event_are_not_accepted():
     text = "LAN_ITEM_AUDIT " + json.dumps({"event": "catalog", "item": {"key": "pill:0"}})
     with pytest.raises(ValueError, match="truncated"):
         catalog_from_log(text)
+
+
+def test_journal_index_retains_late_evidence_and_crash_attribution(tmp_path):
+    from item_audit import AuditJournals
+
+    case = {"key": "collectible:1/host-same"}
+    records = [
+        {"event": "case_begin", "key": case["key"]},
+        {"event": "give_begin", "key": case["key"]},
+        {"event": "case_end", "key": case["key"]},
+        {"event": "case_begin", "key": "collectible:2/host-same"},
+        {"event": "eden_next_run", "key": case["key"], "count": 1},
+    ]
+    path = tmp_path / "host-events.log"
+    path.write_text(
+        "\n".join("LAN_ITEM_AUDIT " + json.dumps(e) for e in records) + '\nLAN_ITEM_AUDIT {"event":'
+    )
+    journal = AuditJournals({"host": path, "client": tmp_path / "missing.log"})
+    observations = journal.observations(case["key"])
+    assert observations == {"host": records[:3] + records[4:], "client": []}
+    assert journal.last_case_key == records[3]["key"]
+    engine = {"process_exit": {"host": {"exit_code": 0xC0000005}}}
+    original = summarize_case(case, {"host": records, "client": []}, engine)
+    indexed = summarize_case(case, observations, engine, last_case_key=journal.last_case_key)
+    assert indexed == original
+    assert indexed["status"] != "crash"
+
+
+def test_reviewed_recheck_replaces_old_build_without_erasing_failed_evidence():
+    from render_item_compatibility import conclusion
+
+    original = {"status": "crash", "impact": "native preview crash"}
+    recheck = {"candidate": "fixed-build", "evidence": ["native-recheck"], "status": "verified"}
+    assert conclusion({}, original, recheck)["status"] == "verified"
+    assert original == {"status": "crash", "impact": "native preview crash"}
+    assert conclusion({}, original, {**recheck, "status": "incomplete"})["status"] == "crash"
+    assert conclusion({}, original, {"status": "verified"})["status"] == "crash"
 
 
 def test_known_problem_is_not_overridden_by_later_completion():
@@ -1468,7 +1587,9 @@ def test_frozen_failure_is_not_reinterpreted_by_a_new_validator(tmp_path, monkey
         import_item_audit.import_run(findings, batch.parent)
 
 
-def test_later_stress_completion_cannot_erase_a_same_build_crash(tmp_path):
+@pytest.mark.parametrize("compact_report", [False, True])
+def test_later_stress_completion_cannot_erase_a_same_build_crash(tmp_path, compact_report):
+    from item_audit import AuditJournals
     from import_item_audit import import_run
 
     case = {"key": "stress:copies-1000", "kind": "stress", "id": 0, "slot": 0, "copies": 1000}
@@ -1493,6 +1614,18 @@ def test_later_stress_completion_cannot_erase_a_same_build_crash(tmp_path):
         (batch / (role + "-events.log")).write_text(
             "\n".join("LAN_ITEM_AUDIT " + json.dumps(e) for e in values)
         )
+    if compact_report:
+        journal = AuditJournals(
+            {role: batch / (role + "-events.log") for role in ("host", "client")}
+        )
+        result = summarize_case(case, journal.observations(case["key"]))
+        result.pop("observations")
+        (batch.parent / "manifest.json").write_text(
+            json.dumps({"dll_sha256": "candidate", "validator_sha256": "frozen-validator"})
+        )
+        (batch / "report.json").write_text(
+            json.dumps({"cases": [case], "results": [result], "journal_sha256": journal.sha256})
+        )
     old = {
         "case": case["key"],
         "status": "crash",
@@ -1506,6 +1639,11 @@ def test_later_stress_completion_cannot_erase_a_same_build_crash(tmp_path):
     assert current["status"] == "crash" and current["latest_status"] == "basic_pass"
     assert current["load_reached"]
     assert findings["previous_stress"] == [old]
+    if compact_report:
+        with (batch / "host-events.log").open("a") as stream:
+            stream.write("\nChanged raw evidence\n")
+        with pytest.raises(ValueError, match="differ from the frozen report"):
+            import_run(findings, batch.parent)
 
 
 def test_direct_effect_requires_observed_change_and_tolerates_missing_actor():

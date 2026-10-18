@@ -31,6 +31,7 @@ void suppressDelete();
 void clearSave();
 lan::Progress readProgress();
 void writeProgress(const lan::Progress& value);
+void persistProgress();
 int pause();
 int scene();
 bool cinematicFinished();

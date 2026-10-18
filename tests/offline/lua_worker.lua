@@ -54,6 +54,7 @@ local function stateEnvironment()
             ["compat/bosses/rotgut"] = dofile(root .. "/src/bridge/compat/bosses/rotgut.lua"),
             ["runtime/transitions"] = dofile(root .. "/src/bridge/runtime/transitions.lua"),
             ["runtime/room_entry"] = dofile(root .. "/src/bridge/runtime/room_entry.lua"),
+            ["compat/items/room_entry"] = dofile(root .. "/src/bridge/compat/items/room_entry.lua"),
             ["sync/inventory"] = dofile(root .. "/src/bridge/sync/inventory.lua"),
             ["sync/entities"] = dofile(root .. "/src/bridge/sync/entities.lua"),
             ["sync/room"] = dofile(root .. "/src/bridge/sync/room.lua"),
@@ -211,6 +212,9 @@ local actions = {
             return {
                 GetLevel = function()
                     return {
+                        GetStateFlag = function()
+                            return false
+                        end,
                         GetCurrentRoomDesc = function()
                             return { Data = { Type = boss and 5 or 1, Variant = 0 } }
                         end,
@@ -218,6 +222,9 @@ local actions = {
                 end,
                 GetRoom = function()
                     return room
+                end,
+                GetNumPlayers = function()
+                    return 0
                 end,
             }
         end

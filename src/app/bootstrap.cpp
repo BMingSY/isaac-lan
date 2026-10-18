@@ -1,3 +1,4 @@
+#include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/state_codec.h"
 #include "engine/entity_fields.h"
@@ -318,6 +319,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     if (!isaac::runtime::install(image, log, isaac::engine::bootstrap::halfUpdate,
                                  isaac::engine::bootstrap::restorePositions))
         return 18;
+    if (!isaac::engine::items::install(image))
+        return 27;
     if (!isaac::generated_items::install(image))
         return 27;
     if (!isaac::rooms::install(image, log))

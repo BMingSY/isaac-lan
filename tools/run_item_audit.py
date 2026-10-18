@@ -10,6 +10,7 @@ import subprocess
 import time
 
 from item_audit import (
+    AuditJournals,
     COMPLETION,
     ROOT,
     build_fixture,
@@ -61,7 +62,7 @@ def run_batch(args, cases, output, labs):
     if not args.injected:
         command.append("--automatic")
     if args.record:
-        command.extend(("--native-record-both", "--frame-ms", "1000"))
+        command.extend(("--native-record-both", "--frame-ms", str(getattr(args, "frame_ms", 1000))))
     if args.mode == "stress":
         command.append("--no-performance" if args.no_phase_profile else "--performance")
     if args.mode != "stress" or args.heap_check:
@@ -122,20 +123,28 @@ def run_batch(args, cases, output, labs):
             if result.exists()
             else {"error": "Engine report missing"}
         )
-        peers = {}
-        for role in ("host", "client"):
-            path = journals[role]
-            text = path.read_text(errors="replace") if path.exists() else ""
-            peers[role] = events(text)
-            if role == "host":
-                try:
-                    catalog = catalog_from_log(text)
-                    (output / "catalog.json").write_text(
-                        json.dumps(catalog, ensure_ascii=False, indent=2) + "\n"
-                    )
-                except ValueError as error:
-                    report["catalog_error"] = str(error)
-        report["results"] = [summarize_case(case, peers, report["engine"]) for case in cases]
+        evidence = AuditJournals(journals)
+        report["journal_sha256"] = evidence.sha256
+        try:
+            catalog = catalog_from_log("".join(evidence.catalog_lines))
+            (output / "catalog.json").write_text(
+                json.dumps(catalog, ensure_ascii=False, indent=2) + "\n"
+            )
+        except ValueError as error:
+            report["catalog_error"] = str(error)
+        report["results"] = []
+        for case in cases:
+            result = summarize_case(
+                case,
+                evidence.observations(case["key"]),
+                report["engine"],
+                last_case_key=evidence.last_case_key,
+            )
+            # The journals are the complete evidence. Avoid duplicating hundreds
+            # of megabytes of observations in the report and its JSON encoder.
+            result.pop("observations")
+            result["journals"] = {role: path.name for role, path in journals.items()}
+            report["results"].append(result)
         report["passed"] = bool(report["engine"].get("pass")) and cases_passed(report["results"])
         if args.mode == "stress":
             idle(labs, exclusive=True)
@@ -183,6 +192,12 @@ def main():
     parser.add_argument("--port", type=int, default=51900)
     parser.add_argument("--timeout", type=int, default=86400)
     parser.add_argument("--record", action="store_true")
+    parser.add_argument(
+        "--frame-ms",
+        type=int,
+        default=1000,
+        help="Recording interval; use 100 for brief visual effects",
+    )
     parser.add_argument(
         "--verify-codec",
         action="store_true",

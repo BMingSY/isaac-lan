@@ -1,7 +1,7 @@
 -- These native visuals read TemporaryEffects in addition to actor pose/size.
 -- Counts retain native ownership and lifetime without replaying item use.
 return function(collectibles)
-    -- Actor tuple field 9, in this fixed wire order (world schema 25).
+    -- Actor tuple field 9, in this fixed wire order (world schema 27).
     local ids = {
         assert(collectibles.COLLECTIBLE_MEGA_MUSH),
         assert(collectibles.COLLECTIBLE_BOOK_OF_SHADOWS),

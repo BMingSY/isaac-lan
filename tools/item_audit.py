@@ -1,6 +1,8 @@
 """Catalog and evidence contracts shared by the isolated item audit tools."""
 
+import hashlib
 import json
+from itertools import product
 from pathlib import Path
 import re
 
@@ -125,10 +127,16 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
             if context not in {"host-same", "host-split", "client-same", "client-split"}:
                 raise ValueError("Unknown holder/room context")
             variants = (False, True) if item["kind"] == "pill" and horse else (False,)
-            for large in variants:
+            scenarios = TRIGGER_EFFECTS.get(item.get("enum"), {}).get("scenarios", {None: {}})
+            for large, scenario in product(variants, scenarios):
                 cases.append(
                     {
-                        "key": item["key"] + "/" + context + ("/horse" if large else ""),
+                        "key": item["key"]
+                        + "/"
+                        + context
+                        + ("/horse" if large else "")
+                        + ("/" + scenario if scenario else ""),
+                        **({"scenario": scenario} if scenario else {}),
                         "item": item["key"],
                         "kind": item["kind"],
                         "id": item["id"],
@@ -176,9 +184,9 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
                     cases[-1]["familiar_effects"] = FAMILIAR_EFFECTS[item["enum"]]
                     cases[-1]["recipe"] = {}
                     cases[-1]["open_room"] = True
-                    cases[-1]["end_tick"] = 840 * FAMILIAR_EFFECTS[item["enum"]].get(
-                        "timeline_scale", 1
-                    )
+                    cases[-1]["end_tick"] = FAMILIAR_EFFECTS[item["enum"]].get(
+                        "end_tick", 840
+                    ) * FAMILIAR_EFFECTS[item["enum"]].get("timeline_scale", 1)
                 if item.get("enum") in ROOM_EFFECTS:
                     rules = room_effect_recipe(cases[-1])
                     cases[-1]["room_effects"] = rules
@@ -220,7 +228,54 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
     return cases
 
 
-def summarize_case(case, peers, engine=None):
+class AuditJournals:
+    """Index raw evidence once; retain at most one case's observations in memory."""
+
+    def __init__(self, paths):
+        self.paths = paths
+        self.ranges = {}
+        self.sha256 = {}
+        self.catalog_lines = []
+        self.last_case_key = None
+        for role, path in paths.items():
+            ranges = self.ranges[role] = {}
+            if not path.is_file():
+                continue
+            with path.open("rb") as stream:
+                digest = hashlib.sha256()
+                start = 0
+                for line in stream:
+                    digest.update(line)
+                    end = start + len(line)
+                    for event in events(line.decode(errors="replace")):
+                        if role == "host" and event["event"] in {"catalog", "catalog_end"}:
+                            self.catalog_lines.append(line.decode(errors="replace"))
+                        elif event.get("key"):
+                            spans = ranges.setdefault(event["key"], [])
+                            if spans and spans[-1][1] == start:
+                                spans[-1][1] = end
+                            else:
+                                spans.append([start, end])
+                        if role == "host" and event["event"] == "case_begin":
+                            self.last_case_key = event["key"]
+                    start = end
+                self.sha256[role] = digest.hexdigest()
+
+    def observations(self, key):
+        peers = {}
+        for role, path in self.paths.items():
+            peers[role] = []
+            if not path.is_file():
+                continue
+            with path.open("rb") as stream:
+                for start, end in self.ranges[role].get(key, []):
+                    stream.seek(start)
+                    while stream.tell() < end:
+                        peers[role].extend(events(stream.readline().decode(errors="replace")))
+        return peers
+
+
+def summarize_case(case, peers, engine=None, *, last_case_key=None):
     """A smoke result never proves the complete conditional native effect."""
     observations = {
         role: [
@@ -448,7 +503,7 @@ def summarize_case(case, peers, engine=None):
         missing.append("fixture_setup")
     if began and engine:
         exits = engine.get("process_exit", {})
-        latest = next(
+        latest = last_case_key or next(
             (
                 event.get("key")
                 for event in reversed(peers.get("host", []))
@@ -518,6 +573,12 @@ def build_fixture(path, config):
         + (ROOT / "tests/fixtures/item_audit_familiars.lua").read_text()
         + "\nend)()\n"
         + "local createTriggerEffects = (function()\n"
+        + "local createBirthrightTrials = (function()\n"
+        + (ROOT / "tests/fixtures/item_audit_birthright.lua").read_text()
+        + "\nend)()\n"
+        + "local createTrinketTrials = (function()\n"
+        + (ROOT / "tests/fixtures/item_audit_trinkets.lua").read_text()
+        + "\nend)()\n"
         + "local createProjectileTrials = (function()\n"
         + (ROOT / "tests/fixtures/item_audit_projectiles.lua").read_text()
         + "\nend)()\n"

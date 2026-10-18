@@ -1,5 +1,11 @@
 """Native pickup consumption, pocket repetition and active-slot trials."""
 
+# Allow native boss death animations to finish before inspecting deal doors.
+DEAL_REWARD_SETTLE_TICKS = 90
+
+# A detached body well outside the native pickup radius is a valid recall target.
+RECALL_SEPARATION_MIN_DISTANCE = 80
+
 INTERACTION_EFFECTS = {}
 for name, mode, extra in (
     ("SKATOLE", "fly_contact", {}),
@@ -18,6 +24,25 @@ for name, mode, extra in (
         "end_tick": 420,
         **extra,
     }
+
+# Search an actual generated floor: a scripted GRID_PIT can exist without
+# having native collision and cannot provide a valid movement control.
+NATIVE_PIT_SEARCH_TICKS = 1200
+for name in ("LADDER", "HOW_TO_JUMP"):
+    INTERACTION_EFFECTS["COLLECTIBLE_" + name].update(
+        {
+            "native_pit_trial": True,
+            "pit_stage": "STAGE2_1",
+            "collision_delay": NATIVE_PIT_SEARCH_TICKS,
+            "button_intervals": [
+                [NATIVE_PIT_SEARCH_TICKS + 90, NATIVE_PIT_SEARCH_TICKS + 114, "ACTION_RIGHT"],
+                [NATIVE_PIT_SEARCH_TICKS + 270, NATIVE_PIT_SEARCH_TICKS + 306, "ACTION_RIGHT"],
+            ],
+            "observe_until": NATIVE_PIT_SEARCH_TICKS + 417,
+            "end_tick": NATIVE_PIT_SEARCH_TICKS + 420,
+            **({"use_tick": NATIVE_PIT_SEARCH_TICKS + 278} if name == "HOW_TO_JUMP" else {}),
+        }
+    )
 for name, variant, pickup, count in (
     ("BUM_FRIEND", "BUM_FRIEND", "PICKUP_COIN", 12),
     ("DARK_BUM", "DARK_BUM", "PICKUP_HEART", 8),
@@ -109,12 +134,15 @@ def interaction_checks(rules, observations, probes, check):
         return [e for e in events if e["event"] == name]
 
     if rules.get("deal_item_trial"):
+        delay = rules.get("deal_delay", 0)
         doors = named("native_deal_doors")
-        check("native_devil_door_generated", [len(doors) == 1 and doors[0]["devil"]])
-        entered = [e for e in probes if 630 <= e["tick"] <= 660]
+        room = rules.get("deal_room", "ROOM_DEVIL")
+        kind = "angel" if room == "ROOM_ANGEL" else "devil"
+        check("native_" + kind + "_door_generated", [len(doors) == 1 and doors[0][kind]])
+        entered = [e for e in probes if 630 + delay <= e["tick"] <= 660 + delay]
         check(
-            "native_devil_room_entered",
-            [bool(entered), all(e["room_type"] == "ROOM_DEVIL" for e in entered)],
+            "native_" + kind + "_room_entered",
+            [bool(entered), all(e["room_type"] == room for e in entered)],
         )
         if rules["deal_item_trial"] == "duality":
             choices = named("duality_choice_result")
@@ -124,8 +152,8 @@ def interaction_checks(rules, observations, probes, check):
                 [len(choices) == 1 and not choices[0]["angel"]],
             )
         elif rules["deal_item_trial"] == "redemption":
-            initial = next((e for e in probes if e["tick"] == 570), None)
-            late = [e for e in probes if e["tick"] >= 960]
+            initial = next((e for e in probes if e["tick"] == 570 + delay), None)
+            late = [e for e in probes if e["tick"] >= 960 + delay]
             check(
                 "unclaimed_devil_visit_rewards_next_floor",
                 [
@@ -142,8 +170,8 @@ def interaction_checks(rules, observations, probes, check):
                 "native_devil_spikes_damage_holder",
                 [len(hits) == 12 and any(e["after"] < e["before"] for e in hits)],
             )
-            initial = next((e for e in probes if e["tick"] == 627), None)
-            late = [e for e in probes if e["tick"] >= 1320]
+            initial = next((e for e in probes if e["tick"] == 627 + delay), None)
+            late = [e for e in probes if e["tick"] >= 1320 + delay]
             check(
                 "sanguine_sacrifices_produce_native_reward",
                 [
@@ -246,7 +274,7 @@ def interaction_checks(rules, observations, probes, check):
             [
                 len(values) == 2
                 and all(e["found"] for e in values)
-                and values[0]["distance"] > 100
+                and values[0]["distance"] > RECALL_SEPARATION_MIN_DISTANCE
                 and values[1]["distance"] < 40
             ],
         )
@@ -292,17 +320,41 @@ def interaction_checks(rules, observations, probes, check):
         )
     if rules.get("secret_sound_trial"):
         check(
+            "howl_audio_probe_control_plays",
+            [any(e["playing"] for e in named("secret_sound_control"))],
+        )
+        check(
             "native_howl_on_secret_neighbor_entry",
-            [any(e["howl"] for e in named("secret_sound_probe") if e["tick"] >= 210)],
+            [
+                any(
+                    e["howl"]
+                    for e in named("secret_sound_probe")
+                    if e["tick"] >= 210 + rules.get("secret_sound_delay", 0)
+                )
+            ],
         )
     if rules.get("fairy_trial"):
+        rocks = named("fairy_native_tinted_rock")
+        check(
+            "native_tinted_rock_prerequisite",
+            [
+                len(rocks) == 1
+                and rocks[0]["index"] >= 0
+                and rocks[0]["type"] == 4
+                and rocks[0]["owner_distance"] >= 120
+            ],
+        )
         check(
             "fairy_indicates_native_tinted_rock",
             [
-                any(
-                    e["distance"] < 20 and e["owner_distance"] > 50
+                sum(
+                    e.get("tick", 0) >= 240
+                    and e.get("target_distance", float("inf")) < 1
+                    and e["owner_distance"] > 120
+                    and e["distance"] < 50
                     for e in named("fairy_target_probe")
                 )
+                >= 3
             ],
         )
 
@@ -364,27 +416,53 @@ def interaction_checks(rules, observations, probes, check):
 
     if rules.get("world_collision_trial"):
         trials = named("world_collision_result")
-        control = next((e for e in trials if e["control"]), None)
-        effect = next((e for e in trials if not e["control"]), None)
-        check("native_collision_control_and_item_trial", [control is not None, effect is not None])
-        if control and effect:
-            if rules["world_collision_trial"] == "pit_crossing":
-                check("ordinary_movement_stops_at_pit", [control["x"] < control["obstacle_x"]])
-                check("native_item_crosses_pit", [effect["x"] > effect["obstacle_x"] + 30])
-            else:
-                check(
-                    "native_collision_control_damages_player",
-                    [control["health"] < control["before_health"]],
-                )
-                check(
-                    "item_prevents_native_collision_damage",
-                    [effect["health"] == effect["before_health"]],
-                )
-                if rules["world_collision_trial"] == "explosion":
+        if rules.get("native_pit_trial"):
+            pits = named("native_floor_pit_found")
+            check("generated_floor_has_native_pit", [len(pits) == 1 and pits[0]["collision"] == 1])
+        modes = (
+            ("spike_contact", "creep_contact")
+            if rules["world_collision_trial"] == "spike_and_creep"
+            else (rules["world_collision_trial"],)
+        )
+        for mode in modes:
+            mode_trials = [e for e in trials if e.get("mode", mode) == mode]
+            control = next((e for e in mode_trials if e["control"]), None)
+            effect = next((e for e in mode_trials if not e["control"]), None)
+            check(
+                "native_collision_control_and_item_trial", [control is not None, effect is not None]
+            )
+            if control and effect:
+                if mode == "pit_crossing":
                     check(
-                        "native_bomb_also_tests_explosion_immunity",
-                        [len(named("native_immunity_bomb")) == 2],
+                        "ordinary_movement_stops_at_pit",
+                        [
+                            control["start_room"] == control["end_room"],
+                            control["start_grid_collision"] == 1,
+                            control.get("grid_type") == 7 and control.get("grid_collision") == 1,
+                            control["start_x"] + 10 < control["x"] < control["obstacle_x"],
+                        ],
                     )
+                    check(
+                        "native_item_crosses_pit",
+                        [
+                            effect["start_room"] == effect["end_room"],
+                            effect["x"] > effect["obstacle_x"] + 30,
+                        ],
+                    )
+                else:
+                    check(
+                        "native_collision_control_damages_player",
+                        [control["health"] < control["before_health"]],
+                    )
+                    check(
+                        "item_prevents_native_collision_damage",
+                        [effect["health"] == effect["before_health"]],
+                    )
+                    if mode == "explosion":
+                        check(
+                            "native_bomb_also_tests_explosion_immunity",
+                            [len(named("native_immunity_bomb")) == 2],
+                        )
 
     if rules.get("crafting_trial"):
         values = named("crafting_trial_probe")

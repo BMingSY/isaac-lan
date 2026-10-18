@@ -1,6 +1,6 @@
 return function(report, actor)
     local pending
-    local heartHit
+    local heartHit, heartProjectile
     local function ownedFamiliar(p, variant)
         for _, e in ipairs(Isaac.GetRoomEntities()) do
             local f = e:ToFamiliar()
@@ -20,12 +20,18 @@ return function(report, actor)
         prepare = function()
             pending = nil
             heartHit = nil
+            heartProjectile = nil
         end,
         collision = function(projectile, collider)
             local trial = projectile:GetData().auditDefense
             if trial then
                 trial.collision = true
                 trial.collider = collider.Type
+            end
+            local heart = projectile:GetData().auditHeartCollision
+            if heart then
+                heart.collision = true
+                heart.collider_type, heart.collider_variant = collider.Type, collider.Variant
             end
         end,
         advance = function(case, tick)
@@ -34,26 +40,95 @@ return function(report, actor)
                 return
             end
             actor(case.slot, function(p)
-                if rules.heart_hit and tick == 1590 then
+                local heartStart, heartPeriod = 1590, 60
+                local heartAttempts = rules.heart_trials or 1
+                if
+                    rules.heart_hit
+                    and tick >= heartStart
+                    and tick < heartStart + heartAttempts * heartPeriod
+                    and (tick - heartStart) % heartPeriod == 0
+                then
                     local f = assert(ownedFamiliar(p, FamiliarVariant.ISAACS_HEART))
+                    -- Separate the collision targets before firing: an immune
+                    -- body overlapping the heart consumes the test projectile.
+                    p.Position, p.Velocity = Game():GetRoom():GetCenterPos(), Vector.Zero
+                    f.Position, f.Velocity = p.Position + Vector(0, 60), Vector.Zero
                     p:ResetDamageCooldown()
-                    heartHit = { before = p:GetHearts() + p:GetSoulHearts(), tick = tick }
+                    heartHit = {
+                        before = p:GetHearts() + p:GetSoulHearts(),
+                        tick = tick,
+                        heart_collision = f.EntityCollisionClass,
+                    }
+                    -- Approach from the exposed side. Starting inside the
+                    -- heart can overlap Isaac's immune body, which consumes
+                    -- the projectile before it reaches the familiar.
+                    local outward = f.Position - p.Position
+                    if outward:Length() < 1 then
+                        outward = Vector(0, 1)
+                    end
+                    outward = outward:Normalized()
+                    local room, position, distance = Game():GetRoom(), nil, -1
+                    for _, angle in ipairs({ 0, 90, -90, 180, 45, -45, 135, -135 }) do
+                        local candidate = f.Position + outward:Rotated(angle) * 45
+                        if
+                            room:IsPositionInRoom(candidate, 20)
+                            and room:GetGridCollisionAtPos(candidate) == GridCollisionClass.COLLISION_NONE
+                            and candidate:Distance(p.Position) > distance
+                        then
+                            position, distance = candidate, candidate:Distance(p.Position)
+                        end
+                    end
+                    assert(position, "No unobstructed projectile approach to Isaac's Heart")
+                    heartHit.player_position = { p.Position.X, p.Position.Y }
+                    heartHit.heart_position = { f.Position.X, f.Position.Y }
+                    heartHit.projectile_position = { position.X, position.Y }
                     local q = Isaac.Spawn(
                         EntityType.ENTITY_PROJECTILE,
                         0,
                         0,
-                        f.Position,
-                        Vector.Zero,
+                        position,
+                        (f.Position - position):Resized(8),
                         nil
-                    )
-                        :ToProjectile()
+                    ):ToProjectile()
                     q.Height, q.FallingAccel, q.FallingSpeed = -10, 0, 0
-                elseif rules.heart_hit and tick == 1620 then
+                    q.CollisionDamage = 1
+                    q:GetData().auditHeartCollision = heartHit
+                    heartProjectile = q
+                elseif heartHit and tick == heartHit.tick + 30 then
                     heartHit.after = p:GetHearts() + p:GetSoulHearts()
+                    heartHit.projectile_removed = not heartProjectile:Exists()
+                        or heartProjectile:IsDead()
                     report("heart_familiar_damage", heartHit)
+                    if heartProjectile:Exists() then
+                        heartProjectile:Remove()
+                    end
+                    heartHit, heartProjectile = nil, nil
+                end
+                if
+                    rules.heart_hit
+                    and heartHit
+                    and tick > heartHit.tick
+                    and tick < heartHit.tick + 30
+                    and heartProjectile
+                    and heartProjectile:Exists()
+                then
+                    local f = ownedFamiliar(p, FamiliarVariant.ISAACS_HEART)
+                    if f then
+                        local approach = f.Position - heartProjectile.Position
+                        if approach:Length() > 0 then
+                            heartProjectile.Velocity = approach:Resized(8)
+                        end
+                        heartHit.heart_collision = f.EntityCollisionClass
+                        heartHit.closest_distance =
+                            math.min(heartHit.closest_distance or math.huge, approach:Length())
+                    end
                 end
                 if tick == 75 and rules.kind == "player" then
-                    p:RemoveCollectible(case.id)
+                    if case.kind == "trinket" then
+                        p:TryRemoveTrinket(case.id)
+                    else
+                        p:RemoveCollectible(case.id)
+                    end
                     for _, e in ipairs(Isaac.GetRoomEntities()) do
                         local f = e:ToFamiliar()
                         if
@@ -69,7 +144,11 @@ return function(report, actor)
                     p:AddMaxHearts(24 - p:GetMaxHearts(), false)
                     p:AddSoulHearts(-p:GetSoulHearts())
                 elseif tick == 135 and rules.kind == "player" then
-                    p:AddCollectible(case.id, 0, false)
+                    if case.kind == "trinket" then
+                        p:AddTrinket(case.id, false)
+                    else
+                        p:AddCollectible(case.id, 0, false)
+                    end
                 end
                 if pending then
                     local q = pending.entity

@@ -2,8 +2,9 @@ return function(report, actor, moveRoom, moveFloor)
     local feeding, seen, awardChoices = {}, {}, {}
     local awardGroup
     local combatRooms = {}
-    local contactTrial, contactEntity, obstacleIndex
+    local contactTrial, contactEntity, contactSpawner, obstacleIndex
     local secretOrigin, secretIndex, fairyPosition
+    local fairyOrigin, fairyRockIndex
     local blanketHit
     local previewChest, flipItems
     local astralHit
@@ -11,6 +12,7 @@ return function(report, actor, moveRoom, moveFloor)
     local betrayalActors, betrayalBefore, puppyVictims
     local modemProjectiles
     local dealBoss, devilRoom, sanguineHit
+    local pitRooms, pitRoom
     local function collectCombatRooms(case)
         combatRooms = {}
         local rooms = Game():GetLevel():GetRooms()
@@ -184,8 +186,9 @@ return function(report, actor, moveRoom, moveFloor)
             feeding, seen, awardChoices = {}, {}, {}
             awardGroup = nil
             combatRooms = {}
-            contactTrial, contactEntity, obstacleIndex = nil, nil, nil
+            contactTrial, contactEntity, contactSpawner, obstacleIndex = nil, nil, nil, nil
             secretOrigin, secretIndex, fairyPosition = nil, nil, nil
+            fairyOrigin, fairyRockIndex = nil, nil
             blanketHit = nil
             previewChest, flipItems = nil, {}
             astralHit = nil
@@ -193,6 +196,7 @@ return function(report, actor, moveRoom, moveFloor)
             betrayalActors, betrayalBefore, puppyVictims = nil, nil, {}
             modemProjectiles = {}
             dealBoss, devilRoom, sanguineHit = nil, nil, nil
+            pitRooms, pitRoom = {}, nil
             generation(case, "before", tick)
             if case.trigger_effects and case.trigger_effects.hold_poop_trial then
                 actor(case.slot, function(p)
@@ -211,6 +215,86 @@ return function(report, actor, moveRoom, moveFloor)
             if not rules then
                 return
             end
+            if rules.native_pit_trial then
+                if tick == 90 then
+                    Game()
+                        :GetLevel()
+                        :SetStage(LevelStage[rules.pit_stage] - 1, StageType.STAGETYPE_ORIGINAL)
+                    moveFloor()
+                    return
+                elseif tick == 420 then
+                    local rooms = Game():GetLevel():GetRooms()
+                    for i = 0, rooms.Size - 1 do
+                        local descriptor = rooms:Get(i)
+                        if descriptor.Data and descriptor.Data.Type == RoomType.ROOM_DEFAULT then
+                            pitRooms[#pitRooms + 1] = descriptor.SafeGridIndex
+                        end
+                    end
+                elseif not pitRoom and tick >= 450 and tick < rules.collision_delay then
+                    local index, offset = math.floor((tick - 450) / 30), (tick - 450) % 30
+                    if pitRooms[index + 1] then
+                        if offset == 0 then
+                            assert(_IsaacLan.rooms_move(case.slot, pitRooms[index + 1], 0, -1))
+                            if not case.split then
+                                assert(
+                                    _IsaacLan.rooms_move(1 - case.slot, pitRooms[index + 1], 0, -1)
+                                )
+                            end
+                            actor(case.slot, function(p)
+                                p:SetMinDamageCooldown(case.end_tick * 2)
+                            end)
+                        elseif offset == 15 then
+                            actor(case.slot, function(p, room)
+                                local pitCount = 0
+                                for gridIndex = 0, room:GetGridSize() - 1 do
+                                    local grid = room:GetGridEntity(gridIndex)
+                                    local position = room:GetGridPosition(gridIndex)
+                                    local valid = grid
+                                        and grid:GetType() == GridEntityType.GRID_PIT
+                                        and room:GetGridCollision(gridIndex)
+                                            == GridCollisionClass.COLLISION_PIT
+                                    pitCount = pitCount + (valid and 1 or 0)
+                                    for _, dx in ipairs({ -80, -40, 40, 80 }) do
+                                        valid = valid
+                                            and room:IsPositionInRoom(position + Vector(dx, 0), 30)
+                                            and room:GetGridCollisionAtPos(
+                                                    position + Vector(dx, 0)
+                                                )
+                                                == GridCollisionClass.COLLISION_NONE
+                                    end
+                                    if valid then
+                                        obstacleIndex, pitRoom = gridIndex, pitRooms[index + 1]
+                                        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                                            if entity:IsEnemy() or entity:ToPickup() then
+                                                entity:Remove()
+                                            end
+                                        end
+                                        room:SetClear(true)
+                                        p.Position, p.Velocity =
+                                            position - Vector(80, 0), Vector.Zero
+                                        report("native_floor_pit_found", {
+                                            tick = tick,
+                                            room = pitRoom,
+                                            index = gridIndex,
+                                            x = position.X,
+                                            y = position.Y,
+                                            collision = room:GetGridCollision(gridIndex),
+                                            stage = Game():GetLevel():GetStage(),
+                                        })
+                                        break
+                                    end
+                                end
+                                report("native_floor_pit_search", {
+                                    tick = tick,
+                                    room = pitRooms[index + 1],
+                                    pits = pitCount,
+                                    found = pitRoom ~= nil,
+                                })
+                            end)
+                        end
+                    end
+                end
+            end
             if rules.flesh_prices_trial and tick == 450 then
                 if not case.split then
                     actor(1 - case.slot, function(p, room)
@@ -223,33 +307,89 @@ return function(report, actor, moveRoom, moveFloor)
                 end)
             end
             if rules.deal_item_trial then
-                if tick == 570 then
+                local dealTick = tick - (rules.deal_delay or 0)
+                if dealTick == 570 then
                     actor(case.slot, function()
                         dealBoss = _IsaacLan.rooms_positions()[tostring(case.slot)].index
                         local devil, angel = false, false
                         for slot = 0, DoorSlot.NUM_DOOR_SLOTS - 1 do
                             local door = Game():GetRoom():GetDoor(slot)
                             if door and door.TargetRoomType == RoomType.ROOM_DEVIL then
-                                devilRoom, devil = door.TargetRoomIndex, true
+                                devil = true
                             end
                             if door and door.TargetRoomType == RoomType.ROOM_ANGEL then
                                 angel = true
                             end
+                            if
+                                door
+                                and door.TargetRoomType
+                                    == RoomType[rules.deal_room or "ROOM_DEVIL"]
+                            then
+                                devilRoom = door.TargetRoomIndex
+                            end
                         end
-                        report("native_deal_doors", { tick = tick, devil = devil, angel = angel })
+                        report("native_deal_doors", {
+                            tick = tick,
+                            devil = devil,
+                            angel = angel,
+                            stage = Game():GetLevel():GetStage(),
+                            clear = Game():GetRoom():IsClear(),
+                            chance = Game():GetRoom():GetDevilRoomChance(),
+                        })
                     end)
-                elseif tick == 600 then
-                    assert(devilRoom, "Native devil door prerequisite missing")
-                    assert(_IsaacLan.rooms_move(case.slot, devilRoom, 0, -1))
-                    if not case.split then
-                        assert(_IsaacLan.rooms_move(1 - case.slot, devilRoom, 0, -1))
+                elseif dealTick >= 600 and dealTick <= 624 then
+                    assert(devilRoom, "Native deal door prerequisite missing")
+                    actor(case.slot, function(p, room)
+                        if _IsaacLan.rooms_positions()[tostring(case.slot)].index ~= dealBoss then
+                            return
+                        end
+                        for slot = 0, DoorSlot.NUM_DOOR_SLOTS - 1 do
+                            local door = room:GetDoor(slot)
+                            if
+                                door
+                                and door.TargetRoomType
+                                    == RoomType[rules.deal_room or "ROOM_DEVIL"]
+                            then
+                                -- Touching the native door initializes the special
+                                -- room descriptor before requesting its transition.
+                                local direction = (door.Position - room:GetCenterPos()):Normalized()
+                                p.Position = door.Position - direction * 4
+                                p.Velocity = direction * 6
+                                if dealTick == 600 then
+                                    report("native_deal_entry_requested", {
+                                        tick = tick,
+                                        destination = door.TargetRoomIndex,
+                                        direction = door.Direction,
+                                        open = door:IsOpen(),
+                                    })
+                                end
+                                return
+                            end
+                        end
+                        error("Native devil entrance disappeared before use")
+                    end)
+                elseif dealTick == 630 and not case.split then
+                    local location = _IsaacLan.rooms_positions()[tostring(case.slot)]
+                    if location.index ~= dealBoss then
+                        assert(
+                            _IsaacLan.rooms_move(
+                                1 - case.slot,
+                                location.index,
+                                location.dimension,
+                                -1
+                            )
+                        )
                     end
-                elseif tick == 690 and rules.deal_item_trial ~= "sanguine" then
+                elseif
+                    dealTick == 690
+                    and rules.deal_item_trial ~= "sanguine"
+                    and not rules.stay_in_deal
+                then
                     assert(_IsaacLan.rooms_move(case.slot, dealBoss, 0, -1))
                     if not case.split then
                         assert(_IsaacLan.rooms_move(1 - case.slot, dealBoss, 0, -1))
                     end
-                elseif tick == 750 and rules.deal_item_trial == "redemption" then
+                elseif dealTick == 750 and rules.deal_item_trial == "redemption" then
                     moveFloor()
                 end
             end
@@ -323,9 +463,9 @@ return function(report, actor, moveRoom, moveFloor)
             end
             if
                 rules.reset_entry_combat
-                and tick >= 170
-                and (tick - 170) % 120 == 0
-                and (tick - 170) / 120 < rules.entry_trial - 1
+                and tick >= entryStart + 114
+                and (tick - entryStart - 114) % 120 == 0
+                and (tick - entryStart - 114) / 120 < rules.entry_trial - 1
             then
                 actor(case.slot, function(p)
                     p:UseActiveItem(
@@ -369,35 +509,173 @@ return function(report, actor, moveRoom, moveFloor)
             if rules.moving_box and tick == 180 then
                 moveRoom()
             end
+            if rules.fairy_trial then
+                if tick == 75 then
+                    fairyOrigin = _IsaacLan.rooms_positions()[tostring(case.slot)].index
+                    actor(case.slot, function(_, room)
+                        -- Native hints use the room's selected tinted-rock
+                        -- index; an arbitrary scripted rock is not enough.
+                        fairyRockIndex = room:GetTintedRockIdx()
+                        assert(fairyRockIndex >= 0 and not room:GetGridEntity(fairyRockIndex))
+                        assert(
+                            room:SpawnGridEntity(
+                                fairyRockIndex,
+                                GridEntityType.GRID_ROCKT,
+                                0,
+                                187,
+                                0
+                            )
+                        )
+                        room:GetGridEntity(fairyRockIndex):Update()
+                        room:Update()
+                        fairyPosition = room:GetGridPosition(fairyRockIndex)
+                    end)
+                elseif tick == 150 then
+                    local rooms, destination = Game():GetLevel():GetRooms(), nil
+                    for i = 0, rooms.Size - 1 do
+                        local d = rooms:Get(i)
+                        if
+                            d.Data
+                            and d.Data.Type == RoomType.ROOM_DEFAULT
+                            and d.SafeGridIndex ~= fairyOrigin
+                        then
+                            destination = d.SafeGridIndex
+                            break
+                        end
+                    end
+                    assert(destination, "Fairy trial needs another native room")
+                    for slot = 0, 1 do
+                        actor(slot, function(p)
+                            p:SetMinDamageCooldown(case.end_tick * 2)
+                        end)
+                    end
+                    -- Retain the owned familiar across the real room visit.
+                    -- The generic empty-room helper removes all entities.
+                    assert(_IsaacLan.rooms_move(case.slot, destination, 0, -1))
+                    if not case.split then
+                        assert(_IsaacLan.rooms_move(1 - case.slot, destination, 0, -1))
+                    end
+                elseif tick == 210 then
+                    assert(_IsaacLan.rooms_move(case.slot, fairyOrigin, 0, -1))
+                    if not case.split then
+                        assert(_IsaacLan.rooms_move(1 - case.slot, fairyOrigin, 0, -1))
+                    end
+                elseif tick == 240 then
+                    actor(case.slot, function(p, room)
+                        local position, distance
+                        for _, offset in ipairs({
+                            Vector(160, 0),
+                            Vector(-160, 0),
+                            Vector(0, 160),
+                            Vector(0, -160),
+                        }) do
+                            local candidate = room:GetClampedPosition(fairyPosition + offset, 25)
+                            if not distance or candidate:Distance(fairyPosition) > distance then
+                                position, distance = candidate, candidate:Distance(fairyPosition)
+                            end
+                        end
+                        p.Position, p.Velocity = position, Vector.Zero
+                        p:SetMinDamageCooldown(case.end_tick * 2)
+                        local rock = assert(room:GetGridEntity(fairyRockIndex))
+                        report("fairy_native_tinted_rock", {
+                            tick = tick,
+                            room = fairyOrigin,
+                            index = fairyRockIndex,
+                            type = rock:GetType(),
+                            owner_distance = distance,
+                            source = "fixture_at_native_hint_index",
+                        })
+                    end)
+                end
+            end
             if rules.portal_pair_trial and tick == 180 then
                 moveRoom()
             end
-            if rules.secret_adjacent and tick == 150 then
+            if rules.secret_sound_trial and tick == 90 then
+                moveFloor()
+                return
+            end
+            local secretTick = tick - (rules.secret_sound_delay or 0)
+            if rules.secret_adjacent and secretTick == 150 then
+                local level = Game():GetLevel()
+                local rooms = level:GetRooms()
                 secretOrigin = _IsaacLan.rooms_positions()[tostring(case.slot)].index
-                local rooms = Game():GetLevel():GetRooms()
-                for i = 0, rooms.Size - 1 do
-                    local d = rooms:Get(i)
-                    local delta = d.SafeGridIndex - secretOrigin
-                    if
-                        d.Data
-                        and d.Data.Type == RoomType.ROOM_SECRET
-                        and (math.abs(delta) == 1 or math.abs(delta) == 13)
-                    then
-                        secretIndex = d.SafeGridIndex
-                        break
+                if rules.secret_sound_trial then
+                    secretIndex, secretOrigin = nil, nil
+                    for i = 0, rooms.Size - 1 do
+                        local d = rooms:Get(i)
+                        if d.Data and d.Data.Type == RoomType.ROOM_SECRET then
+                            for _, delta in ipairs({ -1, 1, -13, 13 }) do
+                                local index = d.SafeGridIndex + delta
+                                if
+                                    index >= 0
+                                    and index < 169
+                                    and (
+                                        math.abs(delta) == 13
+                                        or math.floor(index / 13)
+                                            == math.floor(d.SafeGridIndex / 13)
+                                    )
+                                then
+                                    local adjacent = level:GetRoomByIdx(index)
+                                    if
+                                        adjacent.Data
+                                        and adjacent.Data.Type == RoomType.ROOM_DEFAULT
+                                        and adjacent.VisitedCount == 0
+                                    then
+                                        secretOrigin, secretIndex = index, d.SafeGridIndex
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                        if secretIndex then
+                            break
+                        end
+                    end
+                else
+                    for i = 0, rooms.Size - 1 do
+                        local d = rooms:Get(i)
+                        local delta = d.SafeGridIndex - secretOrigin
+                        if
+                            d.Data
+                            and d.Data.Type == RoomType.ROOM_SECRET
+                            and (math.abs(delta) == 1 or math.abs(delta) == 13)
+                        then
+                            secretIndex = d.SafeGridIndex
+                            break
+                        end
                     end
                 end
-                assert(secretIndex, "Adjacent secret prerequisite missing")
-                report(
-                    "secret_neighbor_trial",
-                    { tick = tick, room = secretOrigin, secret = secretIndex }
-                )
-                moveRoom()
-            elseif rules.secret_adjacent and tick == 210 then
+                assert(secretIndex and secretOrigin, "Adjacent secret prerequisite missing")
+                report("secret_neighbor_trial", {
+                    tick = tick,
+                    room = secretOrigin,
+                    secret = secretIndex,
+                    visits = level:GetRoomByIdx(secretOrigin).VisitedCount,
+                })
+                if not rules.secret_sound_trial then
+                    moveRoom()
+                end
+            elseif rules.secret_adjacent and secretTick == 210 then
                 assert(_IsaacLan.rooms_move(case.slot, secretOrigin, 0, -1))
+                if rules.secret_sound_trial and not case.split then
+                    assert(_IsaacLan.rooms_move(1 - case.slot, secretOrigin, 0, -1))
+                end
             end
             actor(case.slot, function(p, room)
-                if rules.deal_item_trial == "duality" and tick == 750 then
+                if rules.secret_sound_trial then
+                    if tick == 60 then
+                        SFXManager():Play(SoundEffect.SOUND_DOG_HOWELL, 0.01, 0, false, 1)
+                    elseif tick == 75 then
+                        report("secret_sound_control", {
+                            tick = tick,
+                            playing = SFXManager():IsPlaying(SoundEffect.SOUND_DOG_HOWELL),
+                        })
+                    elseif tick == 120 then
+                        SFXManager():Stop(SoundEffect.SOUND_DOG_HOWELL)
+                    end
+                end
+                if rules.deal_item_trial == "duality" and tick == 750 + (rules.deal_delay or 0) then
                     local angel = false
                     for slot = 0, DoorSlot.NUM_DOOR_SLOTS - 1 do
                         local door = room:GetDoor(slot)
@@ -406,7 +684,8 @@ return function(report, actor, moveRoom, moveFloor)
                     report("duality_choice_result", { tick = tick, angel = angel })
                 end
                 if rules.deal_item_trial == "sanguine" then
-                    if tick >= 630 and tick <= 1290 and (tick - 630) % 60 == 0 then
+                    local dealTick = tick - (rules.deal_delay or 0)
+                    if dealTick >= 630 and dealTick <= 1290 and (dealTick - 630) % 60 == 0 then
                         local spikes
                         for i = 0, room:GetGridSize() - 1 do
                             local grid = room:GetGridEntity(i)
@@ -667,6 +946,11 @@ return function(report, actor, moveRoom, moveFloor)
                     end
                 end
                 if rules.flip_pedestal_trial then
+                    if tick == 610 or tick == 675 then
+                        -- Leave the empty pedestal before Flip restores its
+                        -- other side, so the new item is observed before pickup.
+                        p.Position, p.Velocity = room:GetCenterPos() - Vector(0, 100), Vector.Zero
+                    end
                     if tick == 480 or tick == 600 or tick == 720 then
                         local real, ghosts = {}, 0
                         for _, e in ipairs(Isaac.GetRoomEntities()) do
@@ -781,11 +1065,42 @@ return function(report, actor, moveRoom, moveFloor)
                 end
                 if rules.recall_trial then
                     local other = p:GetOtherTwin()
+                    if tick == 90 then
+                        local holder = other or p
+                        local thrown = holder:ThrowHeldEntity(Vector(-12, 0))
+                        if thrown then
+                            -- The raw throw API leaves the entity inside its
+                            -- holder's pickup radius until the next update.
+                            thrown.Position = holder.Position - Vector(60, 0)
+                        end
+                        report("recall_native_throw", {
+                            tick = tick,
+                            found = thrown ~= nil,
+                            type = thrown and thrown.Type,
+                        })
+                    end
                     if tick == 150 or tick == 300 then
+                        local bodies = {}
+                        for _, e in ipairs(Isaac.GetRoomEntities()) do
+                            if
+                                e.Type == EntityType.ENTITY_FAMILIAR
+                                and e.Variant == FamiliarVariant.FORGOTTEN_BODY
+                            then
+                                bodies[#bodies + 1] = {
+                                    x = e.Position.X,
+                                    y = e.Position.Y,
+                                    distance = p.Position:Distance(e.Position),
+                                }
+                            end
+                        end
                         report("recall_body_distance", {
                             tick = tick,
                             found = other ~= nil,
                             distance = other and p.Position:Distance(other.Position) or -1,
+                            player_type = p:GetPlayerType(),
+                            other_type = other and other:GetPlayerType(),
+                            same_entity = other and GetPtrHash(p) == GetPtrHash(other),
+                            bodies = bodies,
                         })
                     end
                 end
@@ -822,17 +1137,6 @@ return function(report, actor, moveRoom, moveFloor)
                         total = total,
                     })
                 end
-                if rules.fairy_trial and tick == 75 then
-                    p:RemoveCollectible(case.id)
-                end
-                if rules.fairy_trial and tick == 120 then
-                    p:AddCollectible(case.id, 0, false)
-                end
-                if rules.fairy_trial and tick == 90 then
-                    local index = room:GetGridIndex(p.Position + Vector(80, 0))
-                    room:SpawnGridEntity(index, GridEntityType.GRID_ROCKT, 0, 1, 0)
-                    fairyPosition = room:GetGridPosition(index)
-                end
                 if rules.portal_pair_trial and tick == 90 then
                     report("native_portal_origin", {
                         tick = tick,
@@ -852,7 +1156,7 @@ return function(report, actor, moveRoom, moveFloor)
                                     and e.SubType >= 900
                             )
                         then
-                            p.Position, p.Velocity = e.Position + Vector(0, 40), Vector.Zero
+                            p.Position, p.Velocity = e.Position, Vector.Zero
                             report("native_portal_entry", {
                                 tick = tick,
                                 room = _IsaacLan.rooms_positions()[tostring(case.slot)].index,
@@ -940,39 +1244,78 @@ return function(report, actor, moveRoom, moveFloor)
                     })
                 end
                 local collision = rules.world_collision_trial
+                local collisionTick = tick - (rules.collision_delay or 0)
+                if rules.native_pit_trial and not pitRoom then
+                    collision = nil
+                end
+                if collision == "spike_and_creep" then
+                    collision = tick < 450 and "spike_contact" or "creep_contact"
+                    collisionTick = tick % 450
+                end
                 if collision then
-                    if tick == 75 or tick == 255 then
-                        if tick == 75 then
+                    if collisionTick == 60 then
+                        if case.kind == "trinket" then
+                            p:TryRemoveTrinket(case.id)
+                        else
                             p:RemoveCollectible(case.id)
+                        end
+                    elseif collisionTick == 240 then
+                        if case.kind == "trinket" then
+                            p:AddTrinket(case.id, false)
                         else
                             p:AddCollectible(case.id, 0, false)
                         end
+                    end
+                    if collisionTick == 75 or collisionTick == 255 then
                         p:AddMaxHearts(24 - p:GetMaxHearts(), false)
                         p:AddSoulHearts(-p:GetSoulHearts())
                         p:AddHearts(24 - p:GetHearts())
                         if collision == "pit_crossing" or collision == "spike_contact" then
+                            -- Flush earlier room cleanup before reusing its grid cells.
+                            room:Update()
                             if not obstacleIndex then
                                 obstacleIndex = room:GetGridIndex(room:GetCenterPos())
-                                room:SpawnGridEntity(
-                                    obstacleIndex,
-                                    collision == "pit_crossing" and GridEntityType.GRID_PIT
-                                        or GridEntityType.GRID_SPIKES,
-                                    0,
-                                    1,
-                                    0
+                                assert(
+                                    room:SpawnGridEntity(
+                                        obstacleIndex,
+                                        collision == "pit_crossing" and GridEntityType.GRID_PIT
+                                            or GridEntityType.GRID_SPIKES,
+                                        0,
+                                        1,
+                                        0
+                                    ),
+                                    "Native collision obstacle failed to spawn"
                                 )
+                                room:GetGridEntity(obstacleIndex):Update()
+                                room:Update()
                             end
                             p.Position = room:GetGridPosition(obstacleIndex) - Vector(80, 0)
                         end
                         p.Velocity = Vector.Zero
                     end
-                    if tick == 90 or tick == 270 then
+                    if collisionTick == 90 or collisionTick == 270 then
                         p:ResetDamageCooldown()
                         contactTrial = {
                             tick = tick,
-                            control = tick == 90,
+                            mode = collision,
+                            control = collisionTick == 90,
                             before_health = p:GetHearts() + p:GetSoulHearts(),
+                            start_x = p.Position.X,
+                            start_room = Game():GetLevel():GetCurrentRoomIndex(),
+                            start_grid_collision = obstacleIndex
+                                and room:GetGridCollision(obstacleIndex),
                         }
+                        if obstacleIndex then
+                            local grid = room:GetGridEntity(obstacleIndex)
+                            report("world_collision_obstacle", {
+                                tick = tick,
+                                owned = p:GetCollectibleNum(case.id),
+                                x = p.Position.X,
+                                y = p.Position.Y,
+                                grid_type = grid and grid:GetType(),
+                                grid_collision = grid and grid.CollisionClass,
+                            })
+                        end
                         if collision == "fly_contact" or collision == "spider_contact" then
                             contactEntity = Isaac.Spawn(
                                 collision == "fly_contact" and EntityType.ENTITY_ATTACKFLY
@@ -983,6 +1326,28 @@ return function(report, actor, moveRoom, moveFloor)
                                 Vector.Zero,
                                 nil
                             )
+                        elseif collision == "creep_contact" then
+                            contactSpawner = Isaac.Spawn(
+                                EntityType.ENTITY_GLOBIN,
+                                0,
+                                0,
+                                p.Position + Vector(180, 0),
+                                Vector.Zero,
+                                nil
+                            )
+                            contactSpawner:GetData().auditTriggerTarget = true
+                            contactEntity = Isaac.Spawn(
+                                EntityType.ENTITY_EFFECT,
+                                EffectVariant.CREEP_RED,
+                                0,
+                                p.Position,
+                                Vector.Zero,
+                                contactSpawner
+                            )
+                            contactEntity.CollisionDamage = 1
+                            contactEntity:ToEffect():SetDamageSource(EntityType.ENTITY_GLOBIN)
+                            contactEntity:Update()
+                            contactEntity:ToEffect():SetTimeout(120)
                         elseif collision == "spike_contact" then
                             p.Position = room:GetGridPosition(obstacleIndex)
                         elseif collision == "unused_falling_projectile" then
@@ -1006,15 +1371,34 @@ return function(report, actor, moveRoom, moveFloor)
                     then
                         contactEntity.Position, contactEntity.Velocity = p.Position, Vector.Zero
                     end
-                    if collision == "explosion" and (tick == 90 or tick == 270) then
+                    if
+                        collision == "explosion" and (collisionTick == 90 or collisionTick == 270)
+                    then
                         p:ResetDamageCooldown()
                         local bomb = p:FireBomb(p.Position, Vector.Zero)
                         bomb:SetExplosionCountdown(1)
                         report("native_immunity_bomb", { tick = tick, seed = bomb.InitSeed })
                     end
-                    if tick == 150 or tick == 390 then
+                    if collisionTick == 150 or collisionTick == 390 then
                         contactTrial.health = p:GetHearts() + p:GetSoulHearts()
+                        contactTrial.flying = p.CanFly
+                        contactTrial.player_collision = p.GridCollisionClass
+                        local obstacle = obstacleIndex and room:GetGridEntity(obstacleIndex)
+                        contactTrial.grid_type = obstacle and obstacle:GetType()
+                        contactTrial.grid_collision = obstacle and obstacle.CollisionClass
+                        contactTrial.y = p.Position.Y
                         contactTrial.x = p.Position.X
+                        contactTrial.end_room = Game():GetLevel():GetCurrentRoomIndex()
+                        if collision == "creep_contact" then
+                            contactTrial.creep_exists = contactEntity and contactEntity:Exists()
+                            if contactTrial.creep_exists then
+                                contactTrial.creep_size = contactEntity.Size
+                                contactTrial.creep_scale = contactEntity:ToEffect().Scale
+                                contactTrial.creep_timeout = contactEntity:ToEffect().Timeout
+                                contactTrial.creep_source = contactEntity:ToEffect().DamageSource
+                                contactTrial.creep_damage = contactEntity.CollisionDamage
+                            end
+                        end
                         contactTrial.obstacle_x = obstacleIndex
                                 and room:GetGridPosition(obstacleIndex).X
                             or nil
@@ -1022,7 +1406,10 @@ return function(report, actor, moveRoom, moveFloor)
                         if contactEntity and contactEntity:Exists() then
                             contactEntity:Remove()
                         end
-                        contactTrial, contactEntity = nil, nil
+                        if contactSpawner and contactSpawner:Exists() then
+                            contactSpawner:Remove()
+                        end
+                        contactTrial, contactEntity, contactSpawner = nil, nil, nil
                         if obstacleIndex then
                             p.Position = room:GetGridPosition(obstacleIndex) - Vector(80, 0)
                         end
@@ -1310,6 +1697,8 @@ return function(report, actor, moveRoom, moveFloor)
                                 owner_distance = p.Position:Distance(fairyPosition),
                                 state = f.State,
                                 animation = f:GetSprite():GetAnimation(),
+                                target_distance = f.TargetPosition:Distance(fairyPosition),
+                                rock_index = fairyRockIndex,
                             })
                         end
                     end

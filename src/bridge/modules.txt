@@ -36,6 +36,7 @@ sync/deals
 compat/items/black_candle
 compat/items/crafting_bag
 compat/items/temporary_effects
+compat/items/room_entry
 compat/items/glitched
 compat/routes/crawlspace
 compat/routes/greed

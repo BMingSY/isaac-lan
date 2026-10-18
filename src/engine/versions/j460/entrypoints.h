@@ -4,6 +4,15 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t gameAddPixelation = 0x353cc0;
+inline constexpr std::uint32_t playerUpdateWavyCap = 0x1cb480;
+inline constexpr std::uint32_t playerUsePill = 0x3c4180;
+inline constexpr std::uint32_t playerUseCard = 0x3b2230;
+inline constexpr std::uint32_t hudShowFortune = 0x5a3ac0;
+inline constexpr std::uint32_t stringTableIndexed = 0x626d30;
+inline constexpr std::uint32_t playerAddCollectible = 0x35f0e0;
+inline constexpr std::uint32_t edensBlessingGranted = 0x3be32f;
+inline constexpr std::uint32_t pickupUpdateGhosts = 0x2e17c0;
 inline constexpr std::uint32_t entityLuaSetColor = 0x471f70;
 inline constexpr std::uint32_t entityLuaSetSize = 0x471fa0;
 inline constexpr std::uint32_t tearSetHeight = 0x275fc0;
@@ -84,6 +93,8 @@ inline constexpr std::uint32_t frontendMenuUpdate_51cec0 = 0x51cec0;
 inline constexpr std::uint32_t frontendMenuUpdate_51db00 = 0x51db00;
 inline constexpr std::uint32_t frontendMenuUpdate_51ee90 = 0x51ee90;
 inline constexpr std::uint32_t progressSerialize = 0x5282e0;
+inline constexpr std::uint32_t progressSaveCloud = 0x528ee0;
+inline constexpr std::uint32_t progressSaveFile = 0x5294f0;
 inline constexpr std::uint32_t runtimeNetStartGame = 0x558aa0;
 inline constexpr std::uint32_t managerSave = 0x558ed0;
 inline constexpr std::uint32_t managerDeleteSave = 0x559130;

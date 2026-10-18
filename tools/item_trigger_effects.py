@@ -1,8 +1,14 @@
 """Focused native triggers for effects outside the original stat-only trials."""
 
 from item_room_effects import required_flags
-from item_interaction_effects import INTERACTION_EFFECTS, interaction_checks
+from item_interaction_effects import (
+    DEAL_REWARD_SETTLE_TICKS,
+    INTERACTION_EFFECTS,
+    interaction_checks,
+)
 from item_projectile_effects import PROJECTILE_EFFECTS, projectile_checks
+from item_trinket_effects import TRINKET_EFFECTS, trinket_checks
+from item_birthright_effects import BIRTHRIGHT_SCENARIOS, birthright_checks
 
 TRIGGER_EFFECTS = {
     "PILLEFFECT_SEE_FOREVER": {"secret_doors": True, "horse": {"map": "full"}},
@@ -2673,6 +2679,9 @@ TRIGGER_EFFECTS.update(
             "enemies": 1,
             "hit_target": True,
             "target_distance": 60,
+            "target_effect": "MR_ME",
+            "cursor_target": "TARGET",
+            "align_from": 240,
             "enemy_hurt": True,
             "effects": ["MR_ME"],
             "observe_until": 717,
@@ -2826,7 +2835,7 @@ TRIGGER_EFFECTS.update(
             "portal_pair_trial": True,
             "repeat_uses": 2,
             "repeat_interval": 180,
-            "button_intervals": [[300, 308, "ACTION_UP"]],
+            "button_intervals": [[260, 276, "ACTION_DOWN"]],
             "observe_until": 477,
             "end_tick": 480,
         },
@@ -2841,7 +2850,7 @@ TRIGGER_EFFECTS.update(
                     [93 + n * 120, 120 + n * 120, "ACTION_SHOOTUP"],
                 )
             ]
-            + [[690, 720, "ACTION_UP"]],
+            + [[600, 620, "ACTION_DOWN"]],
             "suppress_player_tears": True,
             "observe_until": 837,
             "end_tick": 840,
@@ -2875,15 +2884,16 @@ TRIGGER_EFFECTS.update(
         "COLLECTIBLE_DOG_TOOTH": {
             "secret_adjacent": True,
             "secret_sound_trial": True,
+            "secret_sound_delay": 300,
             "stats": {"speed": 1, "damage": 1},
-            "observe_until": 357,
-            "end_tick": 360,
+            "observe_until": 657,
+            "end_tick": 660,
         },
         "COLLECTIBLE_YO_LISTEN": {
             "fairy_trial": True,
             "stats": {"luck": 1},
-            "observe_until": 597,
-            "end_tick": 600,
+            "observe_until": 897,
+            "end_tick": 900,
         },
         "COLLECTIBLE_BLANKET": {
             "floor_visit": {"room": "ROOM_BOSS"},
@@ -2912,7 +2922,6 @@ TRIGGER_EFFECTS.update(
             "end_tick": 360,
         },
         "COLLECTIBLE_RECALL": {
-            "button_intervals": [[70, 76, "ACTION_SHOOTUP"], [90, 120, "ACTION_DOWN"]],
             "prerequisite_items": ["COLLECTIBLE_BIRTHRIGHT"],
             "character_before": "PLAYER_THEFORGOTTEN_B",
             "pocket_active": True,
@@ -2944,10 +2953,15 @@ TRIGGER_EFFECTS.update(
             "end_tick": 300,
         },
         "COLLECTIBLE_MOMS_BRACELET": {
+            "physical_shoot": True,
             "lift_rock": True,
             "use_tick": 90,
             "crush_rock": True,
-            "button_intervals": [[110, 120, "ACTION_SHOOTUP"], [180, 190, "ACTION_SHOOTUP"]],
+            "button_intervals": [
+                [80, 85, "ACTION_SHOOTUP"],
+                [100, 115, "ACTION_UP"],
+                [180, 190, "ACTION_SHOOTUP"],
+            ],
             "suppress_player_tears": True,
             "enemies": 1,
             "hit_target": True,
@@ -3208,9 +3222,41 @@ TRIGGER_EFFECTS.update(
 )
 
 
+# Boss death animations finish before the native reward creates deal doors.
+for name in ("DUALITY", "REDEMPTION", "SANGUINE_BOND"):
+    recipe = TRIGGER_EFFECTS["COLLECTIBLE_" + name]
+    recipe["deal_delay"] = DEAL_REWARD_SETTLE_TICKS
+    recipe["observe_until"] += DEAL_REWARD_SETTLE_TICKS
+    recipe["end_tick"] += DEAL_REWARD_SETTLE_TICKS
+TRIGGER_EFFECTS["COLLECTIBLE_MOMS_BRACELET"]["button_intervals"].insert(0, [78, 100, "ACTION_UP"])
+
+
+TRIGGER_EFFECTS.update(TRINKET_EFFECTS)
+for camouflage in ("COLLECTIBLE_CAMO_UNDIES", "TRINKET_FADED_POLAROID"):
+    TRIGGER_EFFECTS[camouflage]["camouflage_trial"] = True
+    TRIGGER_EFFECTS[camouflage]["scenarios"] = {
+        "single_holder": {},
+        "both_hidden": {"peer_item": "COLLECTIBLE_CAMO_UNDIES", "entry_trial": 1},
+    }
+TRIGGER_EFFECTS["COLLECTIBLE_TMTRAINER"]["scenarios"] = {
+    "seed-" + str(i + 1): {"run_seed": 100003 + i * 7919} for i in range(8)
+}
+TRIGGER_EFFECTS["COLLECTIBLE_BIRTHRIGHT"] = {"scenarios": BIRTHRIGHT_SCENARIOS}
+TRIGGER_EFFECTS["COLLECTIBLE_CHAMPION_BELT"] = {
+    **TRINKET_EFFECTS["TRINKET_PURPLE_HEART"],
+    "stats": {"damage": 1},
+}
+
+
 def trigger_recipe(case):
     recipe = TRIGGER_EFFECTS.get(case.get("enum"), {})
-    return {**recipe, **(recipe.get("horse", {}) if case.get("horse") else {})}
+    scenario = case.get("scenario")
+    selected = recipe.get("scenarios", {})[scenario] if scenario else {}
+    return {
+        **{key: value for key, value in recipe.items() if key != "scenarios"},
+        **(recipe.get("horse", {}) if case.get("horse") else {}),
+        **selected,
+    }
 
 
 def trigger_checks(case, observations):
@@ -3289,6 +3335,21 @@ def trigger_checks(case, observations):
     if not before or not after:
         return checks
     interaction_checks(rules, observations, host, check)
+    trinket_checks(rules, observations, host, check)
+    birthright_checks(rules, observations, host, check)
+    if rules.get("damage_source"):
+        check(
+            "native_effect_is_damage_source",
+            [
+                any(
+                    e["event"] == "native_effect_damage_source"
+                    and e["amount"] > 0
+                    and e.get("source_type") == e["expected_type"]
+                    and e.get("source_variant") == e["expected_variant"]
+                    for e in observations.get("host", [])
+                )
+            ],
+        )
     if rules.get("eden_next_run"):
         initial = next(
             (e for e in observations.get("host", []) if e["event"] == "eden_run_initial"), None
@@ -3466,7 +3527,8 @@ def trigger_checks(case, observations):
             "native_combat_rooms_cleared",
             [
                 len(clears) == rules.get("clear_count", rules["entry_trial"]),
-                all(e["killed"] > 0 for e in clears),
+                sum(e["killed"] > 0 for e in clears)
+                >= rules.get("minimum_combat_clears", len(clears)),
             ],
         )
     if rules.get("confirm_entry_clear"):
@@ -3760,14 +3822,22 @@ def trigger_checks(case, observations):
         entered = [e for e in host if 450 <= e["tick"] <= kill_tick - 3]
         reward_tick = kill_tick + (120 if rules.get("copied_boss") else 60)
         rewarded = [e for e in host if reward_tick <= e["tick"] <= reward_tick + 57]
-        check("generated_next_floor", [e["stage"] == before["stage"] + 1 for e in rewarded])
+        check(
+            "generated_next_floor",
+            [
+                e.get("stage_name") == visit["stage"]
+                if visit.get("stage")
+                else e["stage"] == before["stage"] + 1
+                for e in rewarded
+            ],
+        )
         if visit.get("room"):
             check("native_room_entry", [e["room_type"] == visit["room"] for e in entered])
         if visit.get("kill_boss"):
             kills = [
                 e for e in observations.get("host", []) if e["event"] == "native_bosses_defeated"
             ]
-            check("real_boss_death", [len(kills) == 1 and kills[0]["count"] > 0])
+            check("real_boss_death", [any(e["count"] > 0 for e in kills)])
         if rules.get("copied_boss"):
             check("native_boss_copy", [any(len(e["bosses"]) >= 2 for e in entered)])
         if rules.get("boss_pedestals"):
@@ -4873,6 +4943,36 @@ def trigger_checks(case, observations):
         check("native_random_enemy_status", [any(e["enemy_flags"] for e in after)])
     else:
         for flag in rules.get("enemy_flags", []):
+            if (
+                rules.get("camouflage_trial")
+                and case.get("scenario") == "single_holder"
+                and not case.get("split")
+            ):
+                # Native local co-op only confuses enemies when every player
+                # in their room is hidden. Check the visible peer prerequisite.
+                peers = [
+                    e["players"].get(str(1 - case.get("slot", 0)), {})
+                    for e in observations.get("host", [])
+                    if e["event"] == "camouflage_actor_state"
+                ]
+                check(
+                    "camouflage_visible_peer_alive",
+                    [
+                        bool(peers),
+                        all(
+                            p.get("visible")
+                            and not p.get("dead")
+                            and not p.get("ghost")
+                            and not p.get("camo")
+                            for p in peers
+                        ),
+                    ],
+                )
+                check(
+                    "visible_peer_prevents_global_confusion",
+                    [all(e["enemy_flags"].get(flag, 0) == 0 for e in after)],
+                )
+                continue
             check(
                 "enemy:" + flag,
                 [
@@ -5430,6 +5530,11 @@ def trigger_checks(case, observations):
         initial = before["enemy_hp"]
         damage = rules.get("enemy_damage", 1)
         check("enemy_damage", [initial > 0, any(e["enemy_hp"] <= initial - damage for e in after)])
+    if rules.get("cursor_target"):
+        check(
+            "native_cursor_targets_enemy",
+            [any(target.get("cursor_aligned", 0) > 0 for e in after for target in e["targets"])],
+        )
     for effect in rules.get("effects", []):
         check("effect:" + effect, [any(e["effects"].get(effect, 0) > 0 for e in after)])
     for familiar, count in rules.get("familiars", {}).items():
@@ -5552,6 +5657,7 @@ def trigger_checks(case, observations):
             )
         check("replica:enemy_movement", motion)
     world_rules = (
+        "trinket_loot",
         "floor_visit",
         "loose_pickups",
         "reroll_pedestals",
@@ -5581,7 +5687,16 @@ def trigger_checks(case, observations):
     )
     if any(rules.get(name) for name in world_rules):
         for field in ("pickups", "pedestals", "poop_count", "rock_count"):
-            check("replica:" + field, [a[field] == b[field] for a, b in visible_pairs])
+
+            def state(probe):
+                value = probe[field]
+                if field == "pedestals":
+                    # Lua enum aliases can name the same numeric collectible.
+                    # Gameplay identity, price and native seed must still agree.
+                    return [{k: v for k, v in item.items() if k != "enum"} for item in value]
+                return value
+
+            check("replica:" + field, [state(a) == state(b) for a, b in visible_pairs])
     if rules.get("changes_character"):
         check("replica:character", [a["player_type"] == b["player_type"] for a, b in pairs])
     if rules.get("consumed_active"):

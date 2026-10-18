@@ -208,6 +208,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.pocket-inventory pocket_inventory.lua)
         isaac_add_lua_test(bridge.crafting-bag crafting_bag.lua)
         isaac_add_lua_test(bridge.temporary-effects temporary_effects.lua)
+        isaac_add_lua_test(bridge.item-room-entry item_room_entry.lua)
         isaac_add_lua_test(bridge.keeper keeper.lua)
         isaac_add_lua_test(bridge.greed greed.lua)
         isaac_add_lua_test(bridge.special-visuals special_visuals.lua)
@@ -331,6 +332,8 @@ add_library(
     src/engine/versions/j460/characters.cpp
     src/engine/versions/j460/pause_menu.cpp
     src/engine/versions/j460/item_presentation.cpp
+    src/engine/versions/j460/pickup_preview.cpp
+    src/engine/versions/j460/item_effects.cpp
     src/engine/versions/j460/generated_items.cpp
     src/engine/versions/j460/rewind.cpp
     src/engine/versions/j460/frontend.cpp
@@ -455,6 +458,15 @@ if(NOT EXISTS "${MINHOOK_SOURCE_DIR}/include/MinHook.h")
 endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_item_effects_test tests/item_effects_test.cpp)
+    target_include_directories(isaac_lan_item_effects_test PRIVATE src)
+    target_link_libraries(isaac_lan_item_effects_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_item_effects_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_item_effects_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.item-effects COMMAND isaac_lan_item_effects_test)
+    set_tests_properties(native.item-effects PROPERTIES TIMEOUT 30 LABELS "offline;native")
     add_executable(isaac_lan_generated_items_test tests/generated_items_test.cpp)
     target_include_directories(isaac_lan_generated_items_test PRIVATE src)
     target_link_libraries(isaac_lan_generated_items_test PRIVATE minhook)

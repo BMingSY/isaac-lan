@@ -1,3 +1,4 @@
+#include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "runtime/session.h"
 #include "runtime/session_state.h"
@@ -351,7 +352,7 @@ void startGame(const backend::Call& original) {
         saves.commonProgress = session->settings().progress;
         writeProgress(*saves.commonProgress);
     }
-    original();
+    engine::items::startingRewards(original, networkStart);
     if (networkStart)
         launch.promptsPending = true;
 }
@@ -1541,6 +1542,10 @@ void afterExit(bool save) {
     } else {
         backend::clearSave();
     }
+    // The intercepted native SaveGame cannot persist progression. Flush the
+    // merged local values before the menu reloads them from disk; otherwise
+    // pending next-run rewards can disappear even after a successful exit.
+    backend::persistProgress();
     backend::continueAvailable(saves.soloContinueAvailable);
     saves.soloState.clear();
     saves.networkRun = false;
