@@ -2,8 +2,6 @@
 #include <windows.h>
 #include <objidl.h>
 #include <gdiplus.h>
-#include <algorithm>
-#include <array>
 #include <cstring>
 #include <fstream>
 #include <span>
@@ -25,20 +23,42 @@ struct Imaging {
         Gdiplus::GdiplusShutdown(token);
     }
 };
-std::pair<unsigned, unsigned> dimensions(std::span<const unsigned char> bytes) {
-    constexpr std::array<unsigned char, 8> signature{137, 80, 78, 71, 13, 10, 26, 10};
-    if (bytes.size() < 33 || bytes.size() > maxImageBytes ||
-        !std::equal(signature.begin(), signature.end(), bytes.begin()) ||
-        std::memcmp(bytes.data() + 12, "IHDR", 4) != 0)
-        throw std::runtime_error("invalid_png");
-    auto integer = [&](std::size_t offset) {
-        return (unsigned(bytes[offset]) << 24) | (unsigned(bytes[offset + 1]) << 16) |
-               (unsigned(bytes[offset + 2]) << 8) | unsigned(bytes[offset + 3]);
-    };
-    const auto width = integer(16), height = integer(20);
-    if (!width || !height || width > maxImageEdge || height > maxImageEdge ||
-        width * height > maxImagePixels)
-        throw std::runtime_error("image_dimensions");
+std::vector<unsigned char> readImage(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    const auto size = file.tellg();
+    if (!file || size < 0 || size > static_cast<std::streamoff>(maxImageBytes))
+        throw std::runtime_error("image_file");
+    std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
+    file.seekg(0);
+    if (!file.read(reinterpret_cast<char*>(bytes.data()), bytes.size()))
+        throw std::runtime_error("image_read");
+    return bytes;
+}
+template <typename Writer>
+void write(const std::filesystem::path& path, const Writer& writeContent) {
+    const auto temporary = path.wstring() + L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() {
+            std::error_code ignored;
+            std::filesystem::remove(path, ignored);
+        }
+    } cleanup{temporary};
+    writeContent(cleanup.path);
+    if (!MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
+        throw std::runtime_error("image_cache_replace");
+}
+void write(const std::filesystem::path& path, const char* bytes, std::size_t size) {
+    write(path, [&](const auto& temporary) {
+        std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+        if (!file.write(bytes, size) || !file.flush())
+            throw std::runtime_error("image_cache_write");
+    });
+}
+std::pair<unsigned, unsigned> prepareImage(std::span<const unsigned char> bytes,
+                                           const std::filesystem::path& path) {
+    if (bytes.empty())
+        throw std::runtime_error("image_decode");
     auto memory = GlobalAlloc(GMEM_MOVEABLE, bytes.size());
     if (!memory)
         throw std::runtime_error("image_memory");
@@ -61,43 +81,37 @@ std::pair<unsigned, unsigned> dimensions(std::span<const unsigned char> bytes) {
         throw std::runtime_error("image_stream");
     }
     Gdiplus::Bitmap bitmap(stream.value);
-    if (bitmap.GetLastStatus() != Gdiplus::Ok || bitmap.GetWidth() != width ||
-        bitmap.GetHeight() != height)
+    if (bitmap.GetLastStatus() != Gdiplus::Ok)
         throw std::runtime_error("image_decode");
+    GUID format{};
+    if (bitmap.GetRawFormat(&format) != Gdiplus::Ok ||
+        (format != Gdiplus::ImageFormatPNG && format != Gdiplus::ImageFormatJPEG &&
+         format != Gdiplus::ImageFormatBMP))
+        throw std::runtime_error("image_format");
+    const auto width = bitmap.GetWidth(), height = bitmap.GetHeight();
+    if (!width || !height || width > maxImageEdge || height > maxImageEdge ||
+        width * height > maxImagePixels)
+        throw std::runtime_error("image_dimensions");
+    // Force pixel decoding before publishing the cache, including unchanged PNGs.
     Gdiplus::BitmapData pixels{};
     Gdiplus::Rect area(0, 0, width, height);
     if (bitmap.LockBits(&area, Gdiplus::ImageLockModeRead, PixelFormat32bppARGB, &pixels) !=
         Gdiplus::Ok)
         throw std::runtime_error("image_decode");
     bitmap.UnlockBits(&pixels);
+    std::filesystem::create_directories(path.parent_path());
+    if (format == Gdiplus::ImageFormatPNG) {
+        write(path, reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    } else {
+        // A single PNG frame keeps the existing game Sprite path and opacity rules.
+        constexpr CLSID pngEncoder = {
+            0x557cf406, 0x1a04, 0x11d3, {0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e}};
+        write(path, [&](const auto& temporary) {
+            if (bitmap.Save(temporary.c_str(), &pngEncoder, nullptr) != Gdiplus::Ok)
+                throw std::runtime_error("image_cache_encode");
+        });
+    }
     return {width, height};
-}
-std::vector<unsigned char> readImage(const std::filesystem::path& path) {
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
-    const auto size = file.tellg();
-    if (!file || size < 0 || size > static_cast<std::streamoff>(maxImageBytes))
-        throw std::runtime_error("image_file");
-    std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
-    file.seekg(0);
-    if (!file.read(reinterpret_cast<char*>(bytes.data()), bytes.size()))
-        throw std::runtime_error("image_read");
-    return bytes;
-}
-void write(const std::filesystem::path& path, const char* bytes, std::size_t size) {
-    const auto temporary = path.wstring() + L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
-    struct Cleanup {
-        std::filesystem::path path;
-        ~Cleanup() {
-            std::error_code ignored;
-            std::filesystem::remove(path, ignored);
-        }
-    } cleanup{temporary};
-    std::ofstream file(cleanup.path, std::ios::binary | std::ios::trunc);
-    if (!file.write(bytes, size) || !file.flush())
-        throw std::runtime_error("image_cache_write");
-    file.close();
-    if (!MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
-        throw std::runtime_error("image_cache_replace");
 }
 std::string animation(unsigned width, unsigned height) {
     return "<AnimatedActor><Info CreatedBy=\"Isaac LAN\" Version=\"1\" Fps=\"30\"/>"
@@ -131,10 +145,8 @@ ChatBackground prepareChatBackground(const std::filesystem::path& configDirector
         Imaging imaging;
         const std::u8string selectedPath(selectedImage.begin(), selectedImage.end());
         const auto bytes = readImage(configDirectory / std::filesystem::path(selectedPath));
-        const auto [width, height] = dimensions(bytes);
         const auto cache = configDirectory / L"cache/chat";
-        std::filesystem::create_directories(cache);
-        write(cache / L"background.png", reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        const auto [width, height] = prepareImage(bytes, cache / L"background.png");
         const auto descriptor = animation(width, height);
         const auto path = cache / L"background.anm2";
         write(path, descriptor.data(), descriptor.size());
