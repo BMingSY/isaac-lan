@@ -8,9 +8,16 @@ local function activate()
     scenario = createScenario(fixtures[current])
     caseFrame = _IsaacLanFrame
 end
-activate()
 coordinator = function()
     Options.FoundHUD, Options.ExtraHUDStyle = true, 1
+    if not scenario then
+        local status = originalFrame()
+        if status.scene == 1 and status.phase == 0 then
+            activate()
+            _IsaacLanFrame = coordinator
+        end
+        return status
+    end
     local ok, status = pcall(scenario.call, exiting and originalFrame or caseFrame)
     if not ok then
         local clean, message = pcall(scenario.cleanup)

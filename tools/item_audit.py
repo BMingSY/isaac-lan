@@ -9,6 +9,7 @@ from item_consumable_recipes import CONSUMABLE_RECIPES, consumable_recipe
 from item_room_effects import ROOM_EFFECTS, room_effect_recipe
 from item_damage_effects import DAMAGE_EFFECTS, damage_recipe
 from item_familiar_effects import FAMILIAR_EFFECTS
+from item_trigger_effects import TRIGGER_EFFECTS, trigger_recipe
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "LAN_ITEM_AUDIT "
@@ -149,6 +150,22 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
                 )
                 if item.get("enum") in SHOT_EFFECTS:
                     cases[-1]["end_tick"] = 300
+                if item.get("enum") in TRIGGER_EFFECTS:
+                    rules = trigger_recipe(cases[-1])
+                    cases[-1]["trigger_effects"] = rules
+                    if rules.get("wall_use"):
+                        cases[-1]["wall_use"] = True
+                    if rules.get("moving_use"):
+                        cases[-1]["moving_use"] = True
+                    if "use_tick" in rules:
+                        cases[-1]["use_tick"] = rules["use_tick"]
+                    if "hold_ticks" in rules:
+                        cases[-1]["hold_ticks"] = rules["hold_ticks"]
+                    cases[-1]["recipe"] = {}
+                    cases[-1]["open_room"] = True
+                    cases[-1]["end_tick"] = rules.get(
+                        "end_tick", 300 if rules.get("expire_room") else 180
+                    )
                 if item.get("enum") in DAMAGE_EFFECTS:
                     rules = damage_recipe(cases[-1])
                     cases[-1]["damage_effects"] = rules
@@ -159,7 +176,9 @@ def select_cases(catalog, keys=None, contexts=("host-same", "client-split"), hor
                     cases[-1]["familiar_effects"] = FAMILIAR_EFFECTS[item["enum"]]
                     cases[-1]["recipe"] = {}
                     cases[-1]["open_room"] = True
-                    cases[-1]["end_tick"] = 840
+                    cases[-1]["end_tick"] = 840 * FAMILIAR_EFFECTS[item["enum"]].get(
+                        "timeline_scale", 1
+                    )
                 if item.get("enum") in ROOM_EFFECTS:
                     rules = room_effect_recipe(cases[-1])
                     cases[-1]["room_effects"] = rules
@@ -323,7 +342,11 @@ def summarize_case(case, peers, engine=None):
             missing.append(event)
     if min(samples.get("host", 0), samples.get("client", 0)) < 2:
         missing.append("two_samples_on_each_peer")
-    use_evidence = "native_callback" if any(v["event"] == "use_callback" for v in host) else None
+    use_evidence = (
+        "native_callback"
+        if any(v["event"] == "use_callback" and v.get("tick", use_tick) >= use_tick for v in host)
+        else None
+    )
     acquired = next(
         (
             event
@@ -493,6 +516,15 @@ def build_fixture(path, config):
         + "\nend)()\n"
         + "local createFamiliarEffects = (function()\n"
         + (ROOT / "tests/fixtures/item_audit_familiars.lua").read_text()
+        + "\nend)()\n"
+        + "local createTriggerEffects = (function()\n"
+        + "local createProjectileTrials = (function()\n"
+        + (ROOT / "tests/fixtures/item_audit_projectiles.lua").read_text()
+        + "\nend)()\n"
+        + "local createInteractionEffects = (function()\n"
+        + (ROOT / "tests/fixtures/item_audit_interactions.lua").read_text()
+        + "\nend)()\n"
+        + (ROOT / "tests/fixtures/item_audit_triggers.lua").read_text()
         + "\nend)()\n"
         + (ROOT / "tests/state_item_audit.lua").read_text()
     )

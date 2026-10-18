@@ -165,6 +165,21 @@ python tools/engine_test.py run special-routes -- \
 | 第三方 Mod | [state_mod_ui.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_ui.lua)、[state_mod_integrations.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_integrations.lua)；按支持版本及 `--mod`／`--client-mod`／`--host-mod` 安装组合选择 |
 | 性能与资源 | [诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)：与其他实机分组分开运行，区分实际负载、采集／应用、传输与原生开销 |
 
+## 道具效果专项
+
+[`run_item_audit.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_audit.py) 使用隔离主客机，逐项重新开局清除效果，复用组内进程。默认条件为主机同房、客机分房；药丸另覆盖普通和大颗形态。角色能力、概率生成、跨房／跨层／跨局奖励需要对应触发证据，不能仅凭成功获得道具或进程未崩溃判定兼容。
+
+| 模式 | 检查范围 |
+| --- | --- |
+| `--mode effects` | 逐项效果、资源变化、真实输入与碰撞、持有者归属和双端同步；缺少断言或证据不能通过 |
+| `--mode sweep` | 全清单获得／使用的基础流程；不能作为单独效果通过的证据 |
+| `--mode mega` | 超级蘑菇使用、换房和结束恢复，覆盖四种持有者／房间条件 |
+| `--mode stress` | 大量道具与弹幕压力，须单独执行且明确要求此范围 |
+
+必填参数为 `--host`、`--client`、`--build`、`--output`；`--case` 选单项，`--context` 选持有者／房间条件，`--record` 留存画面，`--continue-after-failure` 在异常清理和资料恢复后另起进程继续。`--injected-bootstrap` 仅验收注入启动的玩法行为，不覆盖代理 DLL 自动加载和安装流程。
+
+每轮冻结 DLL、生成夹具、配方和判定器；复测使用新输出目录。修正判定器后重审已有原始记录，应保留原判定、变更原因、前后哈希及新的审阅报告。触发前提不成立、夹具错误、缺少一端或退出未完成均保留为未通过，不直接归因于道具不兼容。更新 [`item_audit_findings.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_audit_findings.json) 后用 `python tools/render_item_compatibility.py` 生成清单，`--check` 检查一致性；专项结果只写入 `docs/history/` 或 PR。
+
 ## 隔离执行与记录
 
 高层工具使用 WSL 驱动 Windows 进程，主客机分别使用独立的隔离副本。示例中的 `ISAAC_GAME_DIRECTORY`、`ISAAC_HOST_LAB`、`ISAAC_CLIENT_LAB`、`ISAAC_RUN_OUTPUT` 和 `ISAAC_FFMPEG` 由运行者设置为游戏位置、两端副本、当轮输出和录像工具；每轮输出须使用新位置。首次创建两个副本：

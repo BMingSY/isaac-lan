@@ -64,8 +64,9 @@ def test_idle_performance_requires_both_peers_and_frame_budget(client_count, cli
         ("verified", False, 1),
     ],
 )
+@pytest.mark.parametrize("bootstrap", [None, "--injected", "--injected-bootstrap"])
 def test_audit_exit_and_reports_require_case_completion(
-    tmp_path, monkeypatch, status, restored, expected
+    tmp_path, monkeypatch, status, restored, expected, bootstrap
 ):
     import run_item_audit as runner
 
@@ -103,12 +104,15 @@ def test_audit_exit_and_reports_require_case_completion(
             str(output),
             "--mode",
             "catalog",
+            *([bootstrap] if bootstrap else []),
         ],
     )
     assert runner.main() == expected
     summary = json.loads((output / "summary.json").read_text())
     report = json.loads((output / "report.json").read_text())
     assert report == summary
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["automatic_loader"] == (bootstrap is None)
     assert report["passed"] == (expected == 0)
     assert report["status"] == ("passed" if expected == 0 else "failed")
     from xml.etree import ElementTree as ET
@@ -1190,11 +1194,13 @@ def test_held_item_requires_measured_effect_and_charge_without_use_callback():
     ]
     client = [markers[-1], *host[-2:]]
     result = summarize_case(case, {"host": host, "client": client})
-    assert result["status"] == "basic_pass"
+    assert not result["compatibility_verified"]
     assert result["use_evidence"] == "held_charge_and_speed"
     for event in host[-2:]:
         event["players"][0]["charge"] = 90
-    assert summarize_case(case, {"host": host, "client": client})["status"] == "incomplete"
+    result = summarize_case(case, {"host": host, "client": client})
+    assert result["use_evidence"] is None
+    assert "native_use_callback" in result["unconfirmed_checks"]
 
 
 def test_crash_is_distinct_from_forced_cleanup_and_unstarted_cases():
