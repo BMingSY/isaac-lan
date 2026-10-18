@@ -57,6 +57,8 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 聊天输入适配的 `chat_ui_pointer(width, height)` 只在所属窗口处于前台且输入打开时返回鼠标位置和左键状态，客户区坐标换算为逻辑画面坐标；其他状态返回无效位置与松开状态。编辑期间左键事件由界面接管，客户区使用系统箭头光标；拖动范围、HUD 避让和位置状态属于 Lua 表现层。
 
+`chat_ui_copy(text)` 仅在联机输入已启用、打开且所属窗口处于前台时写入 Windows 剪贴板，返回成功与否。文本限制为 2048 字节并校验 UTF-8，拒绝空文本、非法编码和控制字符；换行及制表符保留。消息复制与编辑器复制／剪切共用 `CF_UNICODETEXT` 写入路径：成功后内存交由 Windows 持有，失败时释放自有分配；消息复制不更改编辑器、网络状态或日志。
+
 ## 原版表情轮盘与气泡
 
 [emotes.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/emotes.cpp) 复用游戏已构造的轮盘 `Game+0x25108`，不分配、复制或析构其 Sprite、环形几何和候选容器。原版 `EmoteWheel.Update` RVA `0x4d1f20` 为 `thiscall void(Wheel*)`，原版绘制由 `Game.Render` 调用；选择、分页、开合动画保留原有行为。

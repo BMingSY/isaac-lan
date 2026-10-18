@@ -9,7 +9,7 @@
 namespace isaac::chat {
 inline constexpr std::size_t maxCharacters = 60, maxCommandBytes = 2048, maxHistory = 200,
                              maxInputHistory = 64, maxOutputBytes = 16384;
-inline constexpr unsigned maxDice = 1000000000;
+inline constexpr unsigned maxDice = 999;
 struct Appearance {
     unsigned opacity = 70;
     unsigned background = 0x231b18, border = 0x79604c, text = 0xe8dfcb;

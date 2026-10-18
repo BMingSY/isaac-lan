@@ -220,7 +220,6 @@ return function(deps, wire)
                 "/e /echo 文字：仅自己可见",
                 "/dN：全队掷骰，N 为 1～" .. limits.dice,
                 "/c /console 命令：原版控制台",
-                "/c help：原版命令列表",
                 "/lanbot help：托管命令",
             }) do
                 chat.output(line, { audience = "self" })

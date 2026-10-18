@@ -21,6 +21,8 @@ return function(deps, layout)
     local scale = 0.85
     local shownEmotes = {}
     local position, drag, mouseDown, lastWidth
+    local copyPressed, copyFeedback
+    local copyWidth, copyFeedbackDuration = 16, 700
     local completion = {
         "/h",
         "/help",
@@ -111,12 +113,32 @@ return function(deps, layout)
         rect(x + 1, y + height, width - 2, 1, edgeColor, alpha)
         rect(x, y, width, height, fillColor, alpha)
     end
+    local function copyIcon(x, y, color, alpha, copied, shadow)
+        if assets.background and not shadow then
+            copyIcon(x + 1, y + 1, shadowInk, alpha, copied, true)
+        end
+        if copied then
+            rect(x + 1, y + 4, 1, 2, color, alpha)
+            for step = 0, 4 do
+                rect(x + 2 + step, y + 5 - step, 1, 2, color, alpha)
+            end
+        else
+            rect(x, y, 6, 1, color, alpha)
+            rect(x, y + 1, 1, 5, color, alpha)
+            rect(x + 2, y + 2, 6, 1, color, alpha)
+            rect(x + 2, y + 7, 6, 1, color, alpha)
+            rect(x + 2, y + 3, 1, 4, color, alpha)
+            rect(x + 7, y + 3, 1, 4, color, alpha)
+        end
+    end
     function ui.step(status)
         local available = status.phase == deps.phase.lobby
             or status.phase == deps.phase.running
             or status.phase == deps.phase.waiting
         native.chat_ui_available(available)
         if not available then
+            copyPressed, copyFeedback = nil, nil
+            drag, mouseDown = nil, false
             native.emote_poll(0, false)
             native.chat_ui_modal(false)
             ui.wheel = false
@@ -286,12 +308,16 @@ return function(deps, layout)
         local bounds = layout.panel(width, height, hud, position)
         local inputHeight = 20
         local mouse = native.chat_ui_pointer(width, height)
+        local pressed, released = mouse.down and not mouseDown, not mouse.down and mouseDown
+        if not ui.input.open then
+            copyPressed, copyFeedback = nil, nil
+        end
         if not ui.input.open or not mouse.down then
             drag = nil
         elseif
-            not mouseDown
+            pressed
             and mouse.x >= bounds.x
-            and mouse.x <= bounds.x + bounds.width
+            and mouse.x < bounds.x + bounds.width - copyWidth - 4
             and mouse.y >= bounds.y
             and mouse.y < bounds.bottom - inputHeight
         then
@@ -314,7 +340,8 @@ return function(deps, layout)
             for _, message in ipairs(chat.messages) do
                 local prefix = message.command and "system: "
                     or (message.kind == "team" and ((message.owner + 1) .. "P：") or "")
-                for _, line in ipairs(layout.wrap(prefix .. message.text, panelWidth - 16, measure)) do
+                local textWidth = panelWidth - 16 - (ui.input.open and copyWidth or 0)
+                for _, line in ipairs(layout.wrap(prefix .. message.text, textWidth, measure)) do
                     lines[#lines + 1] = { text = line, message = message }
                 end
             end
@@ -347,7 +374,12 @@ return function(deps, layout)
                         and (row.message.kind == "team" or row.message.bubble)
                         and player.text
                     or foreground
-                rows[#rows + 1] = { text = row.text, alpha = alpha, color = color }
+                rows[#rows + 1] = {
+                    text = row.text,
+                    message = row.message,
+                    alpha = alpha,
+                    color = color,
+                }
             end
         end
         local y = bottom - (ui.input.open and inputHeight or 0) - 4 - #rows * layout.lineHeight
@@ -361,9 +393,43 @@ return function(deps, layout)
                 border
             )
         end
-        for _, row in ipairs(rows) do
+        for index, row in ipairs(rows) do
             text(row.text, x + 8, y, row.color, row.alpha)
+            -- A wrapped message has one action, on its last visible line.
+            if
+                ui.input.open and (not rows[index + 1] or rows[index + 1].message ~= row.message)
+            then
+                local buttonX = x + panelWidth - copyWidth - 4
+                local hovered = mouse.x >= buttonX
+                    and mouse.x < buttonX + copyWidth
+                    and mouse.y >= y
+                    and mouse.y < y + layout.lineHeight
+                if hovered and pressed then
+                    copyPressed = row.message
+                elseif hovered and released and copyPressed == row.message then
+                    copyFeedback = {
+                        message = row.message,
+                        success = native.chat_ui_copy(row.message.text),
+                        untilTime = now + copyFeedbackDuration,
+                    }
+                end
+                local feedback = copyFeedback
+                    and copyFeedback.message == row.message
+                    and now < copyFeedback.untilTime
+                local color = feedback and not copyFeedback.success and playerColors[1].text
+                    or foreground
+                copyIcon(
+                    buttonX + 4,
+                    y + 1,
+                    color,
+                    hovered and 1 or (feedback and 0.9 or 0.45),
+                    feedback and copyFeedback.success
+                )
+            end
             y = y + layout.lineHeight
+        end
+        if released then
+            copyPressed = nil
         end
         if ui.input.open then
             local input = ui.input
@@ -422,6 +488,7 @@ return function(deps, layout)
         native.chat_ui_reset()
         shownEmotes = {}
         drag, mouseDown = nil, false
+        copyPressed, copyFeedback = nil, nil
         ui.wheel, ui.scroll, lastRevision, lastEpoch = false, 0, -1, nil
         ui.input = { open = false, text = "", cursor = 0, anchor = 0 }
     end

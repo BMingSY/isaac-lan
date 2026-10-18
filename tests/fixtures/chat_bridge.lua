@@ -10,7 +10,7 @@ return function(root, native, modules)
         modules[name] = dofile(root .. "/src/bridge/" .. name .. ".lua")
     end
     native.chat_limits = function()
-        return { characters = 60, commandBytes = 2048, history = 200, dice = 1000000000 }
+        return { characters = 60, commandBytes = 2048, history = 200, dice = 999 }
     end
     native.api_nonce = native.api_nonce or function()
         return string.rep("n", 32)
@@ -24,6 +24,9 @@ return function(root, native, modules)
     native.emote_show = function() end
     native.chat_ui_pointer = function()
         return { x = -1000, y = -1000, down = false }
+    end
+    native.chat_ui_copy = function()
+        return false
     end
     native.chat_receive = function() end
     native.chat_send = function()

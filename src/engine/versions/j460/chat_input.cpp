@@ -39,10 +39,11 @@ std::wstring wide(std::string_view input) {
                             result.data(), count);
     return result;
 }
-void clipboard(bool cut) {
-    auto value = wide(editor.selection());
+bool copyText(std::string_view text) {
+    auto value = wide(text);
     if (value.empty() || !OpenClipboard(window))
-        return;
+        return false;
+    bool copied = false;
     const auto bytes = (value.size() + 1) * sizeof(wchar_t);
     auto memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
     if (memory) {
@@ -52,14 +53,27 @@ void clipboard(bool cut) {
             GlobalUnlock(memory);
             if (EmptyClipboard() && SetClipboardData(CF_UNICODETEXT, memory)) {
                 memory = nullptr;
-                if (cut)
-                    editor.insert("");
+                copied = true;
             }
         }
         if (memory)
             GlobalFree(memory);
     }
     CloseClipboard();
+    return copied;
+}
+void clipboard(bool cut) {
+    if (copyText(editor.selection()) && cut)
+        editor.insert("");
+}
+int copy(lua_State* L) {
+    std::size_t length = 0;
+    const auto* value = lua.checkString(L, 1, &length);
+    const std::string_view text(value, length);
+    lua.pushBoolean(L, available && opened && window && GetForegroundWindow() == window &&
+                           length <= chat::maxCommandBytes && chat::boundaries(text) &&
+                           copyText(text));
+    return 1;
 }
 void paste() {
     if (!OpenClipboard(window))
@@ -379,6 +393,7 @@ bool bind(lua_State* L, HMODULE module) {
           {"chat_ui_modal", modal},
           {"chat_ui_caret", caret},
           {"chat_ui_pointer", pointer},
+          {"chat_ui_copy", copy},
           {"chat_ui_reset", clear},
           {"chat_limits", limits},
           {"chat_roll", roll}}) {

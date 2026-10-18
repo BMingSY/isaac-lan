@@ -4,6 +4,7 @@ local layout = dofile(root .. "/src/bridge/presentation/chat_layout.lua")
 local draws, loads, missing = {}, {}, false
 local texts, availability, controlsPolled, sceneReady = {}, {}, 0, false
 local mouse = { x = -1000, y = -1000, down = false }
+local copied, copySucceeds = {}, true
 local screenWidth, screenHeight = 640, 360
 function Vector(x, y)
     return { X = x, Y = y }
@@ -85,6 +86,11 @@ local function create(image, opacity, options, messages)
             chat_ui_pointer = function()
                 return mouse
             end,
+            chat_ui_copy = function(value)
+                copied[#copied + 1] = value
+                return copySucceeds
+            end,
+            chat_ui_reset = function() end,
             chat_ui_available = function(value)
                 availability[#availability + 1] = value
                 if not value then
@@ -370,6 +376,75 @@ assert(
         and shadow.color.G < label.color.G
         and shadow.color.B < label.color.B
 )
+-- Copy is a release action on one button per message, including wrapped history.
+mouse, texts, draws = { x = -1000, y = -1000, down = false }, {}, {}
+local long = string.rep("完整中文消息", 8)
+messages = {
+    { kind = "team", owner = 1, text = long, time = 0 },
+    { kind = "system", owner = 0, text = "/c g c333", command = true, time = 0 },
+}
+ui = create(nil, nil, nil, messages)
+ui.input.text, ui.input.cursor, ui.input.anchor = "保留草稿", #"保留草稿", 0
+ui.render({ phase = 2 })
+local bounds = layout.panel(screenWidth, screenHeight, {}, nil)
+local buttonX, commandY = bounds.x + bounds.width - 10, bounds.bottom - 24 - layout.lineHeight
+local function pointer(x, y, down)
+    mouse, draws, texts = { x = x, y = y, down = down }, {}, {}
+    ui.render({ phase = 2 })
+end
+local function click(y)
+    pointer(buttonX, y + 5, true)
+    pointer(buttonX, y + 5, false)
+end
+local lineY = commandY - layout.lineHeight
+click(lineY - layout.lineHeight)
+assert(#copied == 0, "Every wrapped line received its own copy button")
+pointer(buttonX, lineY + 5, true)
+pointer(buttonX, lineY + 5, true)
+assert(#copied == 0, "Holding a button repeatedly copied text")
+pointer(buttonX, lineY + 5, false)
+assert(#copied == 1 and copied[1] == long, "Copy lost hidden text or added a player prefix")
+assert(draws[5].position.X == bounds.x and draws[5].position.Y == bounds.y, "Copy started a drag")
+assert(ui.input.text == "保留草稿" and ui.input.anchor == 0, "Copy changed the draft selection")
+click(commandY)
+assert(#copied == 2 and copied[2] == "/c g c333", "Copied command contains the system label")
+pointer(buttonX, lineY + 5, true)
+pointer(buttonX, commandY + 5, false)
+assert(#copied == 2, "Releasing over another message copied the wrong message")
+pointer(buttonX, commandY + 5, true)
+pointer(bounds.x + 20, commandY + 5, false)
+assert(#copied == 2, "Releasing outside the button copied text")
+pointer(bounds.x + 30, bounds.y + 10, true)
+pointer(buttonX, commandY + 5, false)
+assert(#copied == 2, "Ending a drag over copy copied a message")
+-- Only part of this message is visible; scrolling must still copy its full original text.
+local previousUI, largeOutput = ui, string.rep("中文记录", 70)
+ui = create(nil, nil, nil, {
+    { kind = "system", owner = 0, text = largeOutput, time = 0 },
+    { kind = "system", owner = 0, text = "last output", time = 0 },
+})
+ui.scroll = 2
+click(commandY)
+assert(#copied == 3 and copied[3] == largeOutput)
+ui = previousUI
+pointer(buttonX, commandY + 5, true)
+ui.input.open = false
+pointer(buttonX, commandY + 5, false)
+assert(#copied == 3, "Closing input retained a pending copy")
+ui.input.open = true
+ui.scroll = 0
+copySucceeds = false
+click(commandY)
+assert(#copied == 4 and ui.input.text == "保留草稿", "Clipboard failure changed the editor")
+copySucceeds = true
+pointer(buttonX, commandY + 5, true)
+ui.reset()
+ui.input = { open = true, text = "", cursor = 0, anchor = 0, composition = "" }
+pointer(buttonX, commandY + 5, false)
+assert(#copied == 4, "Session reset retained a pending copy")
+ui.input.open = false
+click(commandY)
+assert(#copied == 4, "Collapsed history exposed a copy action")
 print(
-    "PASS chat appearance, private history prefix, player colors, LAN-only input, HUD avoidance and dragging"
+    "PASS chat appearance, private history, player colors, LAN input, HUD dragging and message copy"
 )

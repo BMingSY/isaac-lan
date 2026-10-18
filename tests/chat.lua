@@ -2,7 +2,7 @@ local root = assert(arg[1])
 local wire = dofile(root .. "/src/bridge/runtime/chat_wire.lua")
 local factory = dofile(root .. "/src/bridge/runtime/chat.lua")
 local emoteCount = 59
-local limits = { characters = 60, commandBytes = 2048, history = 200, dice = 1000000000 }
+local limits = { characters = 60, commandBytes = 2048, history = 200, dice = 999 }
 local now, rolls, executions = 100, 0, {}
 local blocked, executeHook = {}, nil
 local peers, inbox, packets = {}, { {}, {}, {} }, {}
@@ -127,9 +127,7 @@ assert(#guest.messages == old and host.emotes[1].id == 1 and other.emotes[1].id 
 assert(not guest.sendEmote(emoteCount + 1))
 assert(guest.submit(string.rep("中", 60)))
 assert(not guest.submit(string.rep("中", 61)))
-assert(
-    not guest.submit("/d0") and not guest.submit("/d1000000001") and not guest.submit("/d20 extra")
-)
+assert(not guest.submit("/d0") and not guest.submit("/d1000") and not guest.submit("/d20 extra"))
 assert(not guest.submit("bad\0text") and not guest.submit("\xc0\xaf"))
 assert(guest.parse("/console lua " .. string.rep("x", 1000)).kind == "native")
 assert(guest.parse('/console lua print("a  b", "/e hi")').text == 'lua print("a  b", "/e hi")')
@@ -192,7 +190,42 @@ assert(guest.messages[#guest.messages].text:find("native failure"))
 assert(host.output("after command"))
 assert(host.messages[#host.messages].owner == 0)
 executeHook = nil
-assert(guest.parse("/d1").sides == 1 and guest.parse("/d1000000000").sides == 1000000000)
+assert(guest.parse("/d1").sides == 1 and guest.parse("/d999").sides == 999)
+assert(guest.parse("/c help").text == "help", "Native commands must remain pass-through")
+local beforeRolls, beforePackets = rolls, #packets
+local beforeHost, beforeOther = #host.messages, #other.messages
+local beforeBubble = guest.bubbles[1]
+for _, command in ipairs({ "/d1000", "/d1000000000", "/d" .. string.rep("9", 309) }) do
+    assert(not guest.submit(command))
+    assert(guest.messages[#guest.messages].text == "用法：/dN，N 为 1～999 的整数")
+end
+poll()
+assert(rolls == beforeRolls and #packets == beforePackets, "Rejected dice reached the network")
+assert(#host.messages == beforeHost and #other.messages == beforeOther)
+assert(guest.bubbles[1] == beforeBubble, "Rejected dice replaced a bubble")
+assert(guest.submit("/d999"))
+poll()
+for _, peer in ipairs(peers) do
+    assert(peer.chat.messages[#peer.chat.messages].text == "2P掷出 D999 : 999")
+    assert(peer.chat.bubbles[1].text == "2P掷出 D999 : 999")
+end
+-- The host also enforces the limit when a peer bypasses its local parser.
+beforeRolls, beforeHost, beforeOther = rolls, #host.messages, #other.messages
+inbox[1][#inbox[1] + 1] = {
+    2,
+    wire.encodeRequest({
+        sequence = 1,
+        nonce = string.rep("2", 32),
+        run = peers[3].info.runId,
+        epoch = peers[3].info.worldEpoch,
+        room = 84,
+        dimension = 0,
+        text = "/d1000",
+    }),
+}
+poll()
+assert(rolls == beforeRolls and #host.messages == beforeHost and #other.messages == beforeOther + 1)
+assert(other.messages[#other.messages].text == "用法：/dN，N 为 1～999 的整数")
 -- Silent native commands still leave an exact, private, non-bubble submission record.
 executeHook = function()
     return ""
@@ -262,12 +295,13 @@ for _, alias in ipairs({ "/h", "/help" }) do
         "/dN",
         "/c",
         "/console",
-        "/c help",
         "/lanbot help",
     }) do
         assert(result:find(command, 1, true), "Help omitted " .. command)
     end
     assert(not help or help == result, "Help aliases returned different content")
+    assert(result:find("1～999", 1, true), "Help did not show the current dice range")
+    assert(not result:find("/c help", 1, true), "Help advertised a command absent from vanilla")
     help = result
 end
 poll()
