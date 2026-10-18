@@ -35,6 +35,9 @@ local function doors(t)
     local level = Game():GetLevel()
     if doorPhase == "floor" then
         if selectedRoom then
+            -- Maze may redirect the setup move to a different neighbor. This
+            -- fixture checks the selected aperture and ghost landing only.
+            level:RemoveCurses(level:GetCurses())
             for i = 0, level:GetRooms().Size - 1 do
                 local d = level:GetRooms():Get(i)
                 if d.Data.Shape == RoomShape.ROOMSHAPE_LTL then
@@ -67,13 +70,12 @@ local function doors(t)
     elseif doorPhase == "inspect" and t - doorAt > 30 then
         guest(function(_, room)
             clearRoom()
-            for slot = DoorSlot.RIGHT0, DoorSlot.RIGHT0 do
+            do
+                local slot = DoorSlot.RIGHT0
                 local door = room:GetDoor(slot)
                 if door and door.TargetRoomIndex >= 0 then
                     local source = level:GetRoomByIdx(door.TargetRoomIndex, 0).SafeGridIndex
-                    if slot == DoorSlot.RIGHT0 then
-                        ghostDoor = { target = doorTargets[targetIndex], source = source }
-                    end
+                    ghostDoor = { target = doorTargets[targetIndex], source = source }
                     for _, resident in ipairs({ false, true }) do
                         doorCases[#doorCases + 1] = {
                             target = doorTargets[targetIndex],
@@ -508,7 +510,7 @@ native.net_gate = function(capture, apply, collect, restore, present, stage)
             doorPhase,
             doorMask,
             doorChecked,
-            doorway and doorway.target or -1,
+            doorway and doorway.target or ghostDoor and ghostDoor.target or -1,
             ghostChecks
         )
     end, function(bytes, ...)
@@ -523,6 +525,9 @@ native.net_gate = function(capture, apply, collect, restore, present, stage)
                     "Replica arrival room differs"
                 )
                 assert(room:IsPositionInRoom(p.Position, 5), "Replica arrival outside L room")
+                if doorPhase == "ghost-check" then
+                    assert(p:IsCoopGhost(), "Replica lost ghost state")
+                end
             end)
         end
         return accepted
