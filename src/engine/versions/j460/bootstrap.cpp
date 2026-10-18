@@ -98,7 +98,7 @@ void movePlayer(std::uintptr_t player, std::uintptr_t from, std::uintptr_t to) {
     using InvalidateQuery = void(__attribute__((thiscall))*)(void*, unsigned, unsigned, unsigned);
     engine<InvalidateQuery>(j460::entry::engineRoomsInvalidate)(
         reinterpret_cast<void*>(from + layout::room::entities), 1, 0, 0);
-    field<bool>(player, layout::entity::removed) = false;
+    field<bool>(player, layout::entity::registered) = false;
     field<unsigned>(player, layout::entity::index) =
         field<unsigned>(to, layout::room::nextEntityIndex)++;
     using Add = void(__attribute__((thiscall))*)(void*, void*);

@@ -47,9 +47,7 @@ void prepare() {
             const auto count = at<unsigned>(list, j460::layout::entityList::count);
             for (unsigned i = 0; i < count; ++i) {
                 const auto entity = at<Address>(data, i * sizeof(Address));
-                if (at<unsigned>(entity, j460::layout::entity::type) ==
-                        compat::ids::entity::pickup &&
-                    !at<bool>(entity, j460::layout::entity::removed))
+                if (at<unsigned>(entity, j460::layout::entity::type) == compat::ids::entity::pickup)
                     pickups.push_back(entity);
             }
             for (auto pickup : pickups)

@@ -158,7 +158,7 @@ void localPickupPreview() {
             isaac::compat::ids::entity::pickup;
         *reinterpret_cast<bool*>(rendered[i] + layout::entity::active) = true;
     }
-    *reinterpret_cast<bool*>(rendered[2] + layout::entity::removed) = true;
+    *reinterpret_cast<bool*>(rendered[2] + layout::entity::registered) = true;
     *reinterpret_cast<bool*>(rendered[3] + layout::entity::active) = false;
     *reinterpret_cast<unsigned*>(rendered[4] + layout::entity::type) =
         isaac::compat::ids::entity::effect;
@@ -178,9 +178,9 @@ void localPickupPreview() {
     require(previewed.empty(), "Preview ran before its view was ready");
     isaac::rooms::previewReady = true;
     preview::prepare();
-    require(previewed ==
-                std::vector<void*>({entities[0].data(), entities[1].data(), entities[3].data()}),
-            "Preview missed rendered pickups or included removed/non-pickup entities");
+    require(previewed == std::vector<void*>({entities[0].data(), entities[1].data(),
+                                             entities[2].data(), entities[3].data()}),
+            "Preview missed rendered pickups or included non-pickup entities");
     preview::image = 0;
     preview::originalUpdate = nullptr;
 }
