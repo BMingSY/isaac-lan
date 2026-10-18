@@ -15,6 +15,7 @@ local useSampled = false
 local floorMoved = false
 local cleanupRoom
 local edenInitial, pendingEden
+local edenPendingCounter = 114
 local case = audit.cases[index]
 local journal = assert(io.open(audit.journal[host and "host" or "client"], "a"))
 local function report(event, values)
@@ -68,6 +69,7 @@ local function observeEdenStart(tick)
             end
             report(event, {
                 key = key,
+                slot = slot,
                 tick = tick,
                 count = count,
                 items = items,
@@ -81,6 +83,7 @@ local function observeEdenStart(tick)
     end
     if case.trigger_effects and case.trigger_effects.eden_next_run and not edenInitial then
         edenInitial = inventory(case.slot, "eden_run_initial", case.key)
+        inventory(1 - case.slot, "eden_peer_initial", case.key)
     end
 end
 local function otherRoom(origin)
@@ -179,6 +182,25 @@ end)
 local function sample(label, tick)
     if not native.rooms_ready() then
         return
+    end
+    if case.trigger_effects and case.trigger_effects.eden_next_run then
+        local _, pending = native.progress_values(0, edenPendingCounter)
+        report("eden_pending_reward", { tick = tick, label = label, count = pending })
+    end
+    if case.trigger_effects and case.trigger_effects.visual_review then
+        local slot = _IsaacLanStatus().slot
+        local pose = native.item_presentation_pose(slot)
+        local _, _, _, pixels, duration, dizzy, target, step = string.unpack(">BBI4I4I4fff", pose)
+        report("local_item_presentation", {
+            tick = tick,
+            slot = slot,
+            pixels = pixels,
+            duration = duration,
+            dizzy = dizzy,
+            target = target,
+            step = step,
+            texts = native.item_presentation_state().texts,
+        })
     end
     local records = {}
     local positions = native.rooms_positions()
@@ -648,7 +670,7 @@ local function prepare(tick)
     triggerEffects.prepare(case, tick)
     sample("before", tick)
     poolProbe("before")
-    actor(case.slot, function(p, room)
+    actor(case.shared_holder or case.slot, function(p, room)
         report("give_begin")
         if case.kind == "collectible" then
             local config = assert(Isaac.GetItemConfig():GetCollectible(case.id))
@@ -712,6 +734,18 @@ local function prepare(tick)
         end
         report("give_end")
     end)
+    if case.shared_holder ~= nil then
+        for slot = 0, 1 do
+            actor(slot, function(p)
+                report("team_item_ownership", {
+                    slot = slot,
+                    owned = p:GetCollectibleNum(case.id, true),
+                    holder = case.shared_holder,
+                    beneficiary = case.slot,
+                })
+            end)
+        end
+    end
     sample("acquired", tick)
     poolProbe("acquired")
 end

@@ -1,8 +1,25 @@
 // Private x86 image only: no game process, files, input or hooks are installed.
 #include "test_support.h"
 #include "engine/versions/j460/item_effects.cpp"
+#include "engine/versions/j460/pickup_preview.cpp"
 #include <array>
 #include <cstring>
+
+namespace isaac::rooms {
+bool previewReady = true, localPreviewRoster = false;
+bool viewReady() {
+    return previewReady;
+}
+bool virtualized() {
+    return true;
+}
+void withView(const std::function<void()>& draw, bool localPlayersOnly) {
+    require(localPlayersOnly, "Preview queried another player's inventory");
+    localPreviewRoster = true;
+    draw();
+    localPreviewRoster = false;
+}
+} // namespace isaac::rooms
 
 namespace {
 namespace items = isaac::engine::items;
@@ -115,8 +132,61 @@ void beamDeparture() {
     require(*reinterpret_cast<int*>(f.player.data() + duration) == 123,
             "Departure restarted or consumed the remaining beam duration");
 }
+std::vector<void*> previewed;
+Address previewRoom;
+void __attribute__((thiscall)) previewFixture(void* pickup) {
+    require(isaac::rooms::localPreviewRoster, "Preview escaped the local roster");
+    previewed.push_back(pickup);
+    // Creating a native ghost can replace the room's render array. The
+    // adapter must finish the frozen pickup list without reading new storage.
+    const auto list =
+        previewRoom + native::layout::room::entities + native::layout::entityList::renderArray;
+    *reinterpret_cast<Address*>(list + native::layout::entityList::data) = 0;
+    *reinterpret_cast<unsigned*>(list + native::layout::entityList::count) = 0;
+}
+void localPickupPreview() {
+    namespace preview = isaac::presentation::pickup_preview;
+    namespace layout = native::layout;
+    std::vector<unsigned char> image(native::globals::game + sizeof(Address));
+    std::vector<unsigned char> game(layout::game::room + sizeof(Address));
+    std::vector<unsigned char> room(layout::room::size);
+    std::array<std::array<unsigned char, 0x400>, 5> entities{};
+    std::array<Address, 5> rendered{};
+    for (unsigned i = 0; i < entities.size(); ++i) {
+        rendered[i] = reinterpret_cast<Address>(entities[i].data());
+        *reinterpret_cast<unsigned*>(rendered[i] + layout::entity::type) =
+            isaac::compat::ids::entity::pickup;
+        *reinterpret_cast<bool*>(rendered[i] + layout::entity::active) = true;
+    }
+    *reinterpret_cast<bool*>(rendered[2] + layout::entity::removed) = true;
+    *reinterpret_cast<bool*>(rendered[3] + layout::entity::active) = false;
+    *reinterpret_cast<unsigned*>(rendered[4] + layout::entity::type) =
+        isaac::compat::ids::entity::effect;
+    previewRoom = reinterpret_cast<Address>(room.data());
+    const auto list = previewRoom + layout::room::entities + layout::entityList::renderArray;
+    *reinterpret_cast<Address*>(list + layout::entityList::data) =
+        reinterpret_cast<Address>(rendered.data());
+    *reinterpret_cast<unsigned*>(list + layout::entityList::count) = rendered.size();
+    *reinterpret_cast<Address*>(game.data() + layout::game::room) = previewRoom;
+    *reinterpret_cast<Address*>(image.data() + native::globals::game) =
+        reinterpret_cast<Address>(game.data());
+    preview::image = reinterpret_cast<Address>(image.data());
+    preview::originalUpdate = previewFixture;
+    previewed.clear();
+    isaac::rooms::previewReady = false;
+    preview::prepare();
+    require(previewed.empty(), "Preview ran before its view was ready");
+    isaac::rooms::previewReady = true;
+    preview::prepare();
+    require(previewed == std::vector<void*>({entities[0].data(), entities[1].data()}),
+            "Preview missed rendered pickups or included removed/non-pickup entities");
+    preview::image = 0;
+    preview::originalUpdate = nullptr;
+}
 } // namespace
 int main(int argc, char** argv) {
     return runTests(argc, argv,
-                    {{"starting-rewards", startingRewards}, {"beam-departure", beamDeparture}});
+                    {{"starting-rewards", startingRewards},
+                     {"beam-departure", beamDeparture},
+                     {"local-pickup-preview", localPickupPreview}});
 }

@@ -37,11 +37,12 @@ void prepare() {
         [] {
             const auto game = at<Address>(image, j460::globals::game);
             const auto room = at<Address>(game, j460::layout::game::room);
-            // Freeze the input list: creating/removing a preview can grow the
-            // room's native entity arrays. The engine owns all preview objects.
+            // Pickups live in the render array, not the first update array.
+            // Freeze it: creating/removing a preview can grow the native
+            // arrays. The engine owns all preview objects.
             std::vector<Address> pickups;
             const auto list =
-                room + j460::layout::room::entities + j460::layout::entityList::firstArray;
+                room + j460::layout::room::entities + j460::layout::entityList::renderArray;
             const auto data = at<Address>(list, j460::layout::entityList::data);
             const auto count = at<unsigned>(list, j460::layout::entityList::count);
             for (unsigned i = 0; i < count; ++i) {
