@@ -19,6 +19,7 @@ DIAGNOSTICS = (
     "endings",
     "motion",
     "action-prediction",
+    "attached-motion",
     "entity-fields",
     "local-hud",
     "guest-visuals",
@@ -57,6 +58,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "endings": "state_endings.lua",
             "motion": "state_motion.lua",
             "action-prediction": "state_action_prediction.lua",
+            "attached-motion": "state_attached_motion.lua",
             "entity-fields": "state_entity_fields.lua",
             "local-hud": "state_local_hud.lua",
             "guest-visuals": "state_guest_visuals.lua",
@@ -101,6 +103,15 @@ def build(output, cases=CASES, *, first_floor=False):
         elif name in ("campaign", "victory-lap", "victory-no"):
             options["endingRoutes"] = ["lamb"]
         prelude = ""
+        if name == "attached-motion":
+            prelude = (
+                "local fields = (function()\n"
+                + (ROOT / "src/bridge/sync/fields.lua").read_text()
+                + "\nend)()\n"
+                + "local worldSchema = (function()\n"
+                + (ROOT / "src/bridge/sync/world_schema.lua").read_text()
+                + "\nend)()\n"
+            )
         if name == "entity-fields":
             prelude = (
                 "local createEntityFieldsProbe = (function()\n"

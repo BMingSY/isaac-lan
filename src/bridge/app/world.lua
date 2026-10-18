@@ -98,7 +98,9 @@ local applyInventory = performance.wrap("apply.inventory", inventoryState.apply)
 local actorsPresentation = component("presentation/actors")(native, function(path)
     return Isaac.GetCostumeIdByPath(path)
 end, applySprite)
+local attachments = component("presentation/attachments")(native, Vector, EntityType, EffectVariant)
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
+    attachments = attachments,
     vector = Vector,
     player = function(index)
         return Isaac.GetPlayer(index)
@@ -201,6 +203,7 @@ local replica = component("sync/replica")({
     sameInventory = inventoryState.sameItems,
     actors = actorsPresentation,
     motion = motionPresentation,
+    attachments = attachments,
     poop = poop,
     craftingBag = craftingBag,
     temporaryEffects = temporaryEffects,

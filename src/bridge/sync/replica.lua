@@ -71,6 +71,7 @@ return function(fields)
                 position, m.display or position, velocity, now, tick
             m.actor, m.controller = actor, actor and e:ToPlayer().ControllerIndex or -1
             m.prediction = actor and (m.prediction or prediction.new(position))
+            m.attachment = deps.attachments and deps.attachments.capture(e, v)
             m.track =
                 motionPresentation.track(m.track, position, velocity, now, tick, actor and 60 or 30)
             motion[v[Entity.id]] = m

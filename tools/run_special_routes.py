@@ -236,6 +236,7 @@ def main():
                                 "audio",
                                 "motion",
                                 "action-prediction",
+                                "attached-motion",
                                 "entity-fields",
                                 "floor-items",
                                 "mod-integrations",

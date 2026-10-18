@@ -245,6 +245,9 @@ local function environment()
     modules["presentation/motion"] = function()
         return { present = noop, reset = noop, track = noop }
     end
+    modules["presentation/attachments"] = function()
+        return { capture = noop, present = noop }
+    end
     modules["compat/characters/keeper"] = function()
         return {}
     end
@@ -298,6 +301,7 @@ local function environment()
         "sync/deals",
         "presentation/actors",
         "presentation/motion",
+        "presentation/attachments",
         "compat/characters/lazarus",
         "compat/items/black_candle",
     }) do

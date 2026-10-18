@@ -441,6 +441,32 @@ void laserState() {
                 readLaserPath(r);
             },
             "Malformed laser path accepted");
+    for (unsigned count : {0u, 2u, 2048u}) {
+        const auto bytes = packet(255, 1.25f, count);
+        Reader r(bytes);
+        auto path = readLaserPath(r);
+        isaac::presentation::translateLaserPath(path, 17.0f, -9.0f);
+        require(path.sampleState == 255 && path.samples == 2 &&
+                    std::bit_cast<float>(path.values[0]) == 18.25f &&
+                    std::bit_cast<float>(path.values[1]) == -7.75f &&
+                    path.values[0] == path.values[2] && path.values[1] == path.values[3] &&
+                    std::bit_cast<float>(path.values[4]) == 1.25f &&
+                    path.values[4] == path.values[5],
+                "Laser render translation changed shape or missed its endpoints");
+        for (const auto& points : path.paths)
+            for (unsigned i = 0; i < points.size(); ++i)
+                require(std::bit_cast<float>(points[i]) == (i % 2 ? -12.5f : 13.5f),
+                        "Laser samples did not follow the rendered origin");
+    }
+    for (float offset : {INFINITY, NAN, std::numeric_limits<float>::max()})
+        rejects(
+            [&] {
+                const auto bytes = packet(0, std::numeric_limits<float>::max());
+                Reader r(bytes);
+                auto path = readLaserPath(r);
+                isaac::presentation::translateLaserPath(path, offset, offset);
+            },
+            "Invalid laser render offset or overflowing coordinate accepted");
     const auto bytes = packet(255);
     for (unsigned length = 0; length < bytes.size(); ++length)
         rejects(

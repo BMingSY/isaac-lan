@@ -135,6 +135,8 @@ python tools/engine_test.py run special-routes -- \
 
 `action-prediction` 用正常客机输入和实际拾取覆盖主动、卡牌、正负药丸、道具／饰品／卡牌／药丸拾取及举起类主动，核对房主使用回调、拾取结果、两端动作姿态和客机连续帧移动。`--latency-ms 75` 为两个方向各增加 75 ms；延迟中继本身增加约 150 ms RTT。它检查动作期间及结束后的移动连续性，不预测道具效果或提前确认拾取。
 
+`attached-motion` 用正常客机移动、点按、蓄力和松键覆盖骸骨、妈刀、圣剑、硫磺火、科技、科技 X 与虚空之喉。它检查武器相对预测身体的位置、激光世界路径／终点及命中特效，并确认独立激光不被绑定到身体。推荐与 `--latency-ms 75 --record-client --heap-check` 配合；场景逐项核对两端实际生成的攻击，不以仅完成会话视为通过。
+
 受保护的实机入口在 `finally` 中等待所属后端收尾，再恢复资料并核对哈希，统一输出 `report.json`、`restored.json` 和 `junit.xml`。报告的 `schema_version` 为 `1`，`status` 区分 `passed`、`failed` 和 `error`，保留各套件原有双端证据和详细结果。JUnit 表示整次套件结果；道具效果、路线与 Boss 覆盖仍读取详细报告。未完成的子项、原生异常或恢复失败不能由一个完成标记覆盖。
 
 ### 验证安排

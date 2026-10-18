@@ -35,6 +35,14 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
 
+## 激光路径呈现
+
+[`laser_path(sprite)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rooms.cpp) 读取活动激光的采样状态、起点／终点、形状／缩放、采样数量与两组路径坐标。要求实体借用 Sprite，回溯所属对象后核对激光类型；不接受自有 Sprite 或其他实体类型，不跨调用保留指针。
+
+`laser_path(sprite, bytes[, dx, dy])` 仅允许客机写入。可选偏移必须同时提供，只平移世界坐标，不修改形状、缩放或采样数量；调用方每次传入原始权威字节，避免重复渲染累积平移。公开 `EndPoint` 属性由桥接层同步设置。路径载荷沿用原格式，协议字段不增加。
+
+J460 的采样状态位于实体 `+0x45d`，允许 `0`、`1` 与原生未初始化值 `255`；起点／终点位于 `+0x468` 至 `+0x474`，形状值为 `+0x478`、缩放为 `+0x4e0`，采样数量为 `+0x47c`，两个游戏自有向量位于 `+0x480`／`+0x48c`。采样数量及每个路径向量各限制 2048 个点，所有浮点数及平移结果必须有限；完整解析、边界和偏移校验完成后才写入。向量通过现有游戏分配接口调整，所有权和析构仍由游戏管理；可移植校验见 [laser_state.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/laser_state.h)。
+
 ## 转场与暂停
 
 Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；普通 `Game::StartRoomTransition` 同时选路并启动转场，不能直接作为客机结果回放接口。

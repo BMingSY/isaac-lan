@@ -197,6 +197,9 @@ return function(fields)
                     e.Position = position
                 end
             end
+            if view.attachments then
+                view.attachments.present(motion, ref)
+            end
         end
         return {
             track = track,
