@@ -51,10 +51,10 @@ def render(catalog, findings):
         "",
         "## 已知不兼容",
         "",
-        "这里只列效果异常及其影响；“待确认”表示尚未复现或尚不能确定原因，不等同已确认不兼容。",
+        "这里只列已记录的效果异常及其影响；修复后的实机复验通过前保留原结论。“待确认”表示尚未复现或尚不能确定原因，不等同已确认不兼容。",
         "",
-        "| 类型 | ID | 名称 | 状态 | 触发条件 | 影响 |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| 类型 | ID | 名称 | 状态 | 触发条件 | 影响 | 当前处理 |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for item in items:
         entry = conclusion(known.get(item["key"], {}), audit.get(item["key"], {}))
@@ -71,6 +71,7 @@ def render(catalog, findings):
                     STATUSES[entry["status"]],
                     entry.get("trigger", "尚未确定稳定触发条件"),
                     entry.get("impact", "影响待确认"),
+                    entry.get("fix", "—"),
                 )
             )
             + " |"
@@ -79,7 +80,7 @@ def render(catalog, findings):
         "",
         "## 额外兼容",
         "",
-        "这里汇总 Mod 对原版效果的调整。全队共享效果在分房时也生效。",
+        "这里汇总 Mod 对原版效果的调整。全队共享效果在分房时也生效；本表验证状态针对调整后的效果，不能用旧版个人效果验收替代共享规则验收。",
         "",
         "| ID | 名称 | 兼容验证 | Mod 效果调整 |",
         "| --- | --- | --- | --- |",
@@ -94,7 +95,7 @@ def render(catalog, findings):
                     for value in (
                         item["id"],
                         item_name(item, entry),
-                        STATUSES[entry.get("status", "untested")],
+                        STATUSES[entry.get("effect_status", entry.get("status", "untested"))],
                         entry["effect"],
                     )
                 )
@@ -125,12 +126,19 @@ def render(catalog, findings):
             entry = conclusion(known.get(item["key"], {}), audit.get(item["key"], {}))
             subtype = "<颜色>" if kind == "pill" else item["entity_subtype"]
             entity = f"{item['entity_type']}.{item['entity_variant']}.{subtype}"
-            status = STATUSES[entry.get("status", "untested")]
+            recorded_status = entry.get("status", "untested")
+            status = STATUSES[
+                recorded_status
+                if recorded_status in ISSUE_STATUSES
+                else entry.get("effect_status", recorded_status)
+            ]
             impact = (
                 entry.get("impact", "待确认")
                 if entry.get("status") in ISSUE_STATUSES
                 else entry.get("limitation", "—")
             )
+            if recorded_status == "verified" and entry.get("effect_status") == "untested":
+                impact = "调整后的共享效果尚未实机复验；原独立效果验收记录保留。"
             effect = entry.get("effect", "—")
             lines.append(
                 "| "

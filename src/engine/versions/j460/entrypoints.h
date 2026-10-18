@@ -4,6 +4,15 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t gameAddPixelation = 0x353cc0;
+inline constexpr std::uint32_t playerUpdateWavyCap = 0x1cb480;
+inline constexpr std::uint32_t playerUsePill = 0x3c4180;
+inline constexpr std::uint32_t playerUseCard = 0x3b2230;
+inline constexpr std::uint32_t hudShowFortune = 0x5a3ac0;
+inline constexpr std::uint32_t stringTableIndexed = 0x626d30;
+inline constexpr std::uint32_t playerAddCollectible = 0x35f0e0;
+inline constexpr std::uint32_t edensBlessingGranted = 0x3be32f;
+inline constexpr std::uint32_t pickupUpdateGhosts = 0x2e17c0;
 inline constexpr std::uint32_t bossHeldBombsResize = 0x4bd80;
 inline constexpr std::uint32_t entityPtrAssignTwin = 0xcf1d0;
 inline constexpr std::uint32_t playerManagerAddExistingPlayer = 0x5b9f60;

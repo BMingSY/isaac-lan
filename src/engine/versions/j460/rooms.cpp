@@ -1,3 +1,4 @@
+#include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/rooms.h"
 #include "engine/pause_menu.h"
@@ -7,6 +8,7 @@
 #include "engine/rewind.h"
 #include "engine/presentation.h"
 #include "engine/item_presentation.h"
+#include "engine/pickup_preview.h"
 #include "runtime/session.h"
 #include "net/protocol.h"
 #include "core/laser_state.h"
@@ -1006,7 +1008,7 @@ void __attribute__((fastcall)) playerUpdate(void* player, void*) {
     }
     const auto before = actor;
     actor = reinterpret_cast<Address>(player);
-    originalPlayerUpdate(player);
+    presentation::items::withActor(player, [&] { originalPlayerUpdate(player); });
     actor = before;
 }
 Address currentActor(void* explicitActor = nullptr) {
@@ -2600,7 +2602,8 @@ bool render(void* g, RoomCall original, int slot) {
         return false;
     withView([&] {
         audio::present();
-        original(g);
+        presentation::pickup_preview::prepare();
+        presentation::items::withScreen([&] { original(g); });
     });
     return true;
 }
@@ -3004,7 +3007,7 @@ void finishFrame() {
                     rewind::remember(slot, -1, locations);
             });
         }
-        beforeStart();
+        beforeStart(true);
         resumeStage = true;
         // A Big Chest either changes floors or ends the run. Only the host
         // evaluates that native decision; a terminal chest must not also send
@@ -3142,9 +3145,12 @@ void finishFrame() {
             // Game::ChangeRoom normally performs this before Level::ChangeRoom.
             // Door transitions queued by our adapter bypass that wrapper. Run
             // its native per-player cleanup once, including room-limited stats.
-            for (auto player : actors)
+            for (auto player : actors) {
                 if (!preparedDepartures.contains(player))
                     originalLeave(reinterpret_cast<void*>(player), false);
+                if (!runtime::replica())
+                    engine::items::leaveRoom(reinterpret_cast<void*>(player));
+            }
         }
         for (auto player : actors) {
             for (auto entity : followers(player, *from))
@@ -3364,11 +3370,11 @@ bool prepareRewind(unsigned slot) {
     beforeStart();
     return true;
 }
-void beforeStart() {
+void beforeStart(bool preserveItemPixels) {
     replicaCompanions.clear();
     floorSource.reset();
     replicaDeals.reset();
-    presentation::items::reset();
+    presentation::items::reset(preserveItemPixels);
     replicaMapEntities.clear();
     for (const auto& [entry, original] : entityUpdates) {
         (void)original;

@@ -1,3 +1,4 @@
+#include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "runtime/session.h"
 #include "runtime/session_state.h"
@@ -310,7 +311,7 @@ void startGame(const backend::Call& original) {
         saves.commonProgress = session->settings().progress;
         writeProgress(*saves.commonProgress);
     }
-    original();
+    engine::items::startingRewards(original, networkStart);
     if (networkStart)
         launch.promptsPending = true;
 }

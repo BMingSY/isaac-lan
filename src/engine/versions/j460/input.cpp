@@ -1,3 +1,4 @@
+#include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/input.h"
 #include "engine/frontend.h"
@@ -373,6 +374,7 @@ int spawn(lua_State* L) {
     // initializes its starting inventory, stats and companion actors.
     using Initialize = void(__attribute__((thiscall))*)(void*);
     reinterpret_cast<Initialize>(image + j460::entry::engineInputInitialize)(result);
+    engine::items::grantStartingRewards(result, static_cast<unsigned>(controller - 1));
     const auto begin = at<std::uintptr_t>(manager, 0), end = at<std::uintptr_t>(manager, 4);
     const auto first = at<std::uintptr_t>(begin, 0);
     for (auto index = before; index < (end - begin) / 4; ++index) {

@@ -192,7 +192,8 @@
       "impact": "提示文字只在主机画面出现；客机使用后卡牌被消耗，但使用者看不到提示，分房的主机反而收到提示。",
       "evidence": "item-effects-20261018/triggers-06；双端 card:44/host-same、card:44/client-split 原生录像，使用前及使用后约第 90、150 帧。",
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
-      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136"
+      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
+      "fix": "规则提示按使用者发送并在接收者语言表解析；已实现修复，待实机复验。"
     },
     "pill:37": {
       "status": "problem",
@@ -201,7 +202,8 @@
       "checks": "普通／大药丸、主机同房／客机分房四组：核对使用前、使用后及持续时间结束后的双端录像。",
       "evidence": "item-effects-20261018/triggers-06；visual-reviewed/triggers-06-retro-* 原生画面对照。",
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
-      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136"
+      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
+      "fix": "普通与大颗药丸的像素化计时按使用者保存和同步；已实现修复，待实机复验。"
     },
     "pill:41": {
       "status": "problem",
@@ -210,7 +212,8 @@
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
       "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
       "evidence": "item-effects-20261018/input-and-time-01；drowsy-review.json；triggers-06 对照。",
-      "checks": "主客机、同房分房、普通和大颗共 8 组：原生目标速度基线 2，使用后 1；大颗同房换房后仍为 1，分房换房后变为 2；新层均恢复 2。"
+      "checks": "主客机、同房分房、普通和大颗共 8 组：原生目标速度基线 2，使用后 1；大颗同房换房后仍为 1，分房换房后变为 2；新层均恢复 2。",
+      "fix": "进房时根据原生楼层标记恢复大颗药丸减速；已实现修复，待实机复验。"
     },
     "collectible:582": {
       "status": "problem",
@@ -218,7 +221,8 @@
       "impact": "射速和移速变化归属正确，但画面扭曲施加在另一房间的主机画面；客机使用者没有对应视觉效果，主机受到无关的视野干扰。",
       "evidence": "item-effects-20261018/active-effects-12；visual-reviewed/wavy-cap-review.json；主客机使用后约第 120 帧画面对照。",
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
-      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136"
+      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
+      "fix": "画面扭曲按使用者保存和同步；已实现修复，待实机复验。"
     },
     "collectible:665": {
       "status": "crash",
@@ -226,7 +230,10 @@
       "impact": "客机发生原生访问冲突并退出，联机会话中断。两次独立携带测试均复现；相同箱子流程在移除该道具后，两组对照均正常结束。",
       "evidence": "item-effects-20261018/runs/native-preview-and-flip-49；guppy-preview-control-52。",
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
-      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136"
+      "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
+      "fix": "预览改为本机持有者生成，不传输原生预览实体；已实现修复，待实机复验。",
+      "effect": "内容预览只在本机持有者的视图生成，不向其他玩家同步预览实体。",
+      "effect_status": "untested"
     },
     "collectible:381": {
       "status": "problem",
@@ -235,7 +242,10 @@
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
       "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
       "evidence": "item-effects-20261018/runs/native-eden-physical-pickup-65；native-eden-independent-contexts-67",
-      "summary_sha256": "726d27a255eff83bc0e42335183caceb143ba7d8ed06836c2bd0e8ffc9f08011"
+      "summary_sha256": "726d27a255eff83bc0e42335183caceb143ba7d8ed06836c2bd0e8ffc9f08011",
+      "fix": "下一局原生奖励共享给各玩家，射速仍独立；已实现调整，待实机复验。",
+      "effect": "全队共享下一局的原生额外道具奖励；射速提升只属于伊甸的祝福持有者。",
+      "effect_status": "untested"
     },
     "collectible:590": {
       "status": "problem",
@@ -244,7 +254,8 @@
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
       "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
       "evidence": "item-effects-20261018/runs/native-observation-rechecks-66；native-map-and-rooms-46",
-      "summary_sha256": "573eb011c59de6136b766c2f66ccb27a85cadc59e7bef72af36abbed04050b5c"
+      "summary_sha256": "573eb011c59de6136b766c2f66ccb27a85cadc59e7bef72af36abbed04050b5c",
+      "fix": "通用战斗关门后恢复当前房间持有者允许的普通出口；已实现修复，待实机复验。"
     },
     "collectible:441": {
       "status": "problem",
@@ -253,7 +264,20 @@
       "candidate": "624461c8bf2d6da4fc0f8ddd4c75bd5be5ad06c7",
       "dll_sha256": "11543e2eeaadcbb233b4b143e26818aede0ae7497e96e67a491bf6235523e136",
       "evidence": "item-effects-20261018/runs/native-extra-context-retries-62；combat-and-lifecycle-rechecks-24",
-      "summary_sha256": "6426f6dd18779c82d9e8df97cec68e36547b875cf55b694a093fd387bbd62044"
+      "summary_sha256": "6426f6dd18779c82d9e8df97cec68e36547b875cf55b694a093fd387bbd62044",
+      "fix": "离房时通过原生接口移除旧激光并解除引用，保留剩余持续时间；已实现修复，待实机复验。"
+    },
+    "collectible:249": {
+      "effect": "白选：全队共享 Boss 奖励二选一，背包仍归实际拾取者。",
+      "effect_status": "untested"
+    },
+    "collectible:414": {
+      "effect": "金选：全队共享宝箱房道具二选一，背包仍归实际拾取者。",
+      "effect_status": "untested"
+    },
+    "collectible:670": {
+      "effect": "铁选：全队共享清房掉落二选一，背包仍归实际拾取者。",
+      "effect_status": "untested"
     }
   },
   "audit": {

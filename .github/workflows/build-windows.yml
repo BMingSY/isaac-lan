@@ -128,6 +128,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Frontend menu ABI tests failed' }
           & ./ci/isaac_lan_generated_items_test.exe 2>&1 | Tee-Object test-runs/windows/generated-items.log
           if ($LASTEXITCODE -ne 0) { throw 'Generated item ABI tests failed' }
+          & ./ci/isaac_lan_item_effects_test.exe 2>&1 | Tee-Object test-runs/windows/item-effects.log
+          if ($LASTEXITCODE -ne 0) { throw 'Item effect ABI tests failed' }
           & ./ci/isaac_lan_lua_api_test.exe 2>&1 | Tee-Object test-runs/windows/lua-api.log
           if ($LASTEXITCODE -ne 0) { throw 'Lua ABI tests failed' }
           & ./ci/isaac_lan_rewind_home_test.exe 2>&1 | Tee-Object test-runs/windows/rewind-home.log

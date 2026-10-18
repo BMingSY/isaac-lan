@@ -67,5 +67,12 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 小夜灯显示 | Room::Render 的 RVA `0x410dad` 查询按所在房间筛选；角色姿态携带 `Player+0x1ae4` 的有限角度，不改变减速判定 |
 | 特殊房间描述符 | 列表编号允许特殊房间使用自己的负房间编号，普通房间使用非负下标；描述符仍通过原生查找取得 |
 | 临时效果 | [temporary_effects.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/temporary_effects.lua) 通过原版 Lua API 按层数差值恢复巨大化和护盾；不重放使用动作 |
+| 本机拾取预览 | `Pickup::UpdateGhosts` RVA `0x2e17c0`，`thiscall(Pickup*)`；只在本机名单内生成 `PICKUP_GHOST`。原生持有 LootList、ANM2 与实体引用，普通实体快照排除该效果；预览查询不推进掉落 RNG |
+| 跨房持续激光 | `Player+0x1458` 是受注册的激光 `EntityPtr`。在来源房间内调用实体原生 Remove，再以 `EntityPtr::Assign` RVA `0x2b5b50`（ECX 引用、EDX 新实体）解除引用；不复制指针、不释放原生内存、不重置剩余时间 |
+| 跨局共享奖励 | `Player::AddCollectible` RVA `0x35f0e0` 的具名调用点 `0x3be32f` 标识原生祝福奖励。只在新建联机局时记录至多两项 ID，原生初始化后向其他控制器各发放一次；不复制初始库存，不重放宿主奖励或修改个人射速 |
+| 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；绘制时借入本机状态并完整恢复全局标量 |
+| 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
+
+世界 schema 24 的道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。网络消息版本仍为 30；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。

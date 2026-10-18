@@ -26,7 +26,7 @@ void presentCamera();
 void requestExit(bool save);
 void playEnding(unsigned ending);
 void finishChallenge();
-void beforeStart();
+void beforeStart(bool preserveItemPixels = false);
 bool prepareRewind(unsigned slot);
 void resumeAfterTransition(std::vector<SavedLocation> locations);
 std::vector<SavedLocation> captureLocations();

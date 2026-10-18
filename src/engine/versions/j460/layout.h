@@ -22,6 +22,7 @@ inline constexpr unsigned progress = 0x14;
 inline constexpr unsigned saveState = 0xfa4;
 inline constexpr unsigned continueAvailable = 0x20dcc;
 inline constexpr unsigned cinematicActive = 0x21618;
+inline constexpr unsigned stringTable = 0x4a920;
 inline constexpr unsigned continueRequested = 0x4b131;
 inline constexpr unsigned deleteSaveRequested = 0x4b284;
 inline constexpr unsigned menuRequested = 0x4b288;
@@ -35,6 +36,11 @@ inline constexpr unsigned achievements = 0x38;
 inline constexpr unsigned counters = 0x2bc;
 } // namespace progress
 namespace game {
+inline constexpr unsigned pixelation = 0x269e0;
+inline constexpr unsigned pixelationDuration = 0x269e4;
+inline constexpr unsigned dizzyIntensity = 0x67738;
+inline constexpr unsigned dizzyTarget = 0x6773c;
+inline constexpr unsigned dizzyStep = 0x67740;
 inline constexpr unsigned stage = 0x0;
 inline constexpr unsigned stageType = 0x4;
 inline constexpr unsigned room = 0x18300;
@@ -67,6 +73,7 @@ inline constexpr unsigned data = 0x4;
 inline constexpr unsigned count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned removeMethod = 0x28;
 inline constexpr unsigned index = 0x20;
 inline constexpr unsigned type = 0x28;
 inline constexpr unsigned sprite = 0x48;
@@ -87,6 +94,8 @@ inline constexpr unsigned animationOwner = 0x30;
 inline constexpr unsigned overlayOwner = 0x50;
 } // namespace sprite
 namespace player {
+inline constexpr unsigned megaBlastLaser = 0x1458;
+inline constexpr unsigned megaBlastDuration = 0x18f4;
 inline constexpr unsigned type = 0x13c0;
 inline constexpr unsigned controller = 0x1618;
 inline constexpr unsigned index = 0x161c;
