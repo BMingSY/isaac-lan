@@ -342,7 +342,11 @@ function _IsaacLanCommand(action, value)
 end
 local chatSession = false
 function _IsaacLanFrame()
+    local previousPhase = status.phase
     status = native.net_poll()
+    if status.phase == Phase.lobby and previousPhase ~= Phase.lobby then
+        savedPlayers = native.net_saved_info()
+    end
     if
         status.phase == Phase.lobby
         or status.phase == Phase.running

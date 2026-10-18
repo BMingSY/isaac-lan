@@ -12,7 +12,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 33;
+constexpr std::uint16_t protocolVersion = 34;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -48,7 +48,8 @@ enum class Message : std::uint8_t {
     cinematic,
     communication,
     lifecycle,
-    restart
+    restart,
+    returnLobby
 };
 constexpr std::size_t maxIntegrationSize = 2048;
 constexpr std::size_t maxCommunicationSize = 3072;
@@ -68,8 +69,9 @@ enum class Phase {
     loading = 7,
     leaving = 8,
     waiting = 9,
+    returning = 10,
 };
-inline constexpr std::array<std::pair<const char*, Phase>, 10> phaseValues{{
+inline constexpr std::array<std::pair<const char*, Phase>, 11> phaseValues{{
     {"idle", Phase::idle},
     {"connecting", Phase::connecting},
     {"lobby", Phase::lobby},
@@ -80,6 +82,7 @@ inline constexpr std::array<std::pair<const char*, Phase>, 10> phaseValues{{
     {"loading", Phase::loading},
     {"leaving", Phase::leaving},
     {"waiting", Phase::waiting},
+    {"returning", Phase::returning},
 }};
 enum class Command : std::uint8_t { none = 0, pause = 1, resume = 2, saveExit = 3, leave = 4 };
 inline constexpr std::array<std::pair<const char*, Command>, 5> commandValues{{

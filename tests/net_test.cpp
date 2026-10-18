@@ -467,6 +467,111 @@ void endingEvents() {
     std::puts(
         "PASS authoritative ending survives immediate finish/EOF and plays once on all peers");
 }
+void returnLobby() {
+    for (unsigned count : {2u, 4u}) {
+        Group g(count);
+        g.ready();
+        g.step(0);
+        require(!g.peers[0]->returnToLobby() && !g.peers[1]->returnToLobby(),
+                "Live game returned to selection");
+        const auto port = g.peers[0]->port();
+        std::array<std::string, maxPlayers> identities;
+        for (unsigned slot = 0; slot < count; ++slot)
+            identities[slot] = g.peers[slot]->identity();
+        for (bool hostFirst : {true, false, true}) {
+            const auto oldRun = g.peers[0]->runId();
+            require(g.peers[0]->beginEnding(ending::firstCinematic), "Ending failed");
+            for (unsigned slot = 1; slot < count; ++slot) {
+                until([&] {
+                    g.poll();
+                    return g.peers[slot]->takeEnding().has_value();
+                });
+            }
+            const auto first = hostFirst ? 0u : count - 1;
+            require(g.peers[first]->returnToLobby() && g.peers[first]->returnToLobby(),
+                    "Local return was not idempotent");
+            for (unsigned attempt = 0; attempt < 30; ++attempt)
+                g.poll();
+            require(g.peers[first]->phase() == Phase::returning &&
+                        g.peers[hostFirst ? count - 1 : 0]->phase() == Phase::running,
+                    "First finisher interrupted a teammate's ending");
+            auto settings = g.peers[0]->settings();
+            require(!g.peers[0]->start(settings), "New game started over an unfinished ending");
+            for (unsigned slot = 0; slot < count; ++slot)
+                if (slot != first)
+                    require(g.peers[slot]->returnToLobby(), "Remaining return failed");
+            until([&] {
+                g.poll();
+                return std::all_of(g.peers.begin(), g.peers.begin() + count,
+                                   [](const auto& peer) { return peer->phase() == Phase::lobby; });
+            });
+            for (unsigned slot = 0; slot < count; ++slot) {
+                const auto& peer = g.peers[slot];
+                require(peer->identity() == identities[slot] && peer->slot() == slot &&
+                            peer->players() == count && !peer->takeEnding() && !peer->takeState() &&
+                            !peer->takeRestart(),
+                        "Lobby retained old gameplay or changed identities");
+                require(!peer->choices()[slot].ready, "Lobby kept previous ready state");
+                require(peer->choose({static_cast<std::uint16_t>(slot), false}),
+                        "Lobby cannot change characters");
+            }
+            require(g.peers[0]->port() == port && !g.peers[0]->start(settings),
+                    "Room replaced or unready roster started");
+            for (unsigned slot = 0; slot < count; ++slot)
+                require(g.peers[slot]->choose({static_cast<std::uint16_t>(slot), true}),
+                        "New selection failed");
+            until([&] {
+                g.poll();
+                for (unsigned slot = 0; slot < count; ++slot)
+                    if (!g.peers[0]->choices()[slot].ready)
+                        return false;
+                return true;
+            });
+            settings.characters = {0, 1, 2, 3};
+            settings.seed = hostFirst ? "QWERTY12" : "YV039KQF";
+            require(g.peers[0]->start(settings), "Next lobby start failed");
+            until([&] {
+                g.poll();
+                return g.peers[count - 1]->phase() == Phase::running;
+            });
+            for (unsigned slot = 0; slot < count; ++slot)
+                require(g.peers[slot]->runId() != oldRun &&
+                            g.peers[slot]->runId() == g.peers[0]->runId() &&
+                            g.peers[slot]->settings().characters == settings.characters,
+                        "Next run reused old state or ignored new selection");
+            g.ready();
+            require(g.step(0).tick == 0, "Next run did not reset simulation");
+        }
+        require(g.peers[0]->beginEnding(ending::gameOver), "Game over failed");
+        until([&] {
+            g.poll();
+            return g.peers[1]->takeEnding().has_value();
+        });
+        require(!g.peers[0]->returnToLobby() && !g.peers[1]->returnToLobby(),
+                "Death result replaced restart voting with lobby return");
+    }
+    Group g(4);
+    g.ready();
+    g.step(0);
+    require(g.peers[0]->beginEnding(ending::lastCinematic), "Ending failed");
+    for (unsigned slot = 1; slot < 4; ++slot)
+        until([&] {
+            g.poll();
+            return g.peers[slot]->takeEnding().has_value();
+        });
+    const auto identity = g.peers[3]->identity();
+    for (unsigned slot : {0u, 2u, 3u})
+        require(g.peers[slot]->returnToLobby(), "Return with disconnected peer failed");
+    g.peers[1]->close();
+    until([&] {
+        g.poll();
+        return g.peers[3]->phase() == Phase::lobby;
+    });
+    require(g.peers[0]->players() == 3 && g.peers[3]->slot() == 2 &&
+                g.peers[3]->identity() == identity && g.peers[0]->connectedMask() == 7,
+            "Departed seat blocked or corrupted the new lobby");
+    std::puts("PASS completed runs return to selection together, retaining room and identities");
+}
 void restartRuns() {
     for (unsigned count : {2u, 4u}) {
         Group g(count, 1, "127.0.0.1", {}, {0, 1, 2, 3});
@@ -2003,6 +2108,7 @@ int main(int argc, char** argv) {
                                   {"ending-events", endingEvents},
                                   {"ending-liveness", endingLiveness},
                                   {"restart", restartRuns},
+                                  {"return-lobby", returnLobby},
                                   {"cinematic-events", cinematicEvents},
                                   {"stage-during-rejoin", stageDuringRejoin},
                                   {"rewind", rewindTransaction},

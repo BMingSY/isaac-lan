@@ -344,6 +344,7 @@ if(BUILD_TESTING)
         ending-events
         ending-liveness
         restart
+        return-lobby
         cinematic-events
         stage-during-rejoin
         rewind

@@ -1251,9 +1251,12 @@ int close(lua_State* L) {
     const bool gameExit = lua.getTop(L) > 0 && lua.checkInteger(L, 1) == 1;
     const bool guestExit = gameExit && session && !session->isHost() && view.gated;
     const bool retry = guestExit && session->phase() == lan::Phase::failed;
-    const bool keep = gameExit && session &&
-                      (restartState.exiting || session->phase() == lan::Phase::waiting || retry);
-    if (guestExit && !restartState.exiting)
+    const bool returning = gameExit && view.playingEnding && !restartState.exiting && session &&
+                           session->returnToLobby();
+    const bool keep =
+        gameExit && session &&
+        (returning || restartState.exiting || session->phase() == lan::Phase::waiting || retry);
+    if (returning || (guestExit && !restartState.exiting))
         frontend::returnToLobby();
     rejoinAt =
         retry ? std::optional{InputClock::now() + std::chrono::milliseconds(250)} : std::nullopt;

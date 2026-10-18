@@ -701,7 +701,13 @@ function _IsaacLanFrame()
         )
     native.test_gamepad(confirm and renders % 30 < 5 and 4096 or 0)
     if wins == caseIndex then
-        if now - lastExitMs > 3000 and s.phase == 0 and not s.prepared and s.scene == 1 then
+        if
+            now - lastExitMs > 3000
+            and s.phase == native.net_phases().lobby
+            and not s.prepared
+            and s.scene == 1
+        then
+            assert(s.players == 2 and s.connected == 3, "Ending lost the LAN room")
             local progress = native.net_progress()
             local diffs = {}
             for i = 2, 643 do
@@ -756,7 +762,7 @@ function _IsaacLanFrame()
                 chestContacts = 0
                 chestMove = -1
                 lastChestInput = -1
-                linked, chosen, started = false, false, false
+                chosen, started = false, false
                 step, stepAt, lastFloor, contact, shoot = "init", 0, nil, nil, -1
                 lastExit = 0
                 snapshots, floorEvents, observed, bosses = 0, 0, {}, {}

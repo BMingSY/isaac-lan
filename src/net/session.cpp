@@ -83,6 +83,7 @@ struct Session::Impl {
     std::uint32_t integrationEpoch = 0;
     SideChannel integration, communication, lifecycle;
     bool restartPending = false;
+    unsigned returnedMask = 0;
     std::size_t worldSize = 0, snapshotSize = 0;
     bool assemblingDelta = false;
     std::uint32_t assemblingBase = 0, takenWorldEpoch = 0;
@@ -118,6 +119,8 @@ struct Session::Impl {
         lifecycle = {};
     }
     void resetRun() {
+        returnedMask = 0;
+        restartPending = false;
         localReady = initialStarted = false;
         nextInput = nextConsume = committed = 0;
         consumedLocal.reset();
@@ -280,6 +283,7 @@ struct Session::Impl {
                 ++next;
             }
         playerCount = next;
+        activeMask = (1u << playerCount) - 1;
         for (unsigned i = 0; i < playerCount; ++i) {
             auto& choice = choices[i];
             if (runRules.character != 65535)
@@ -307,6 +311,42 @@ struct Session::Impl {
         }
         lobbyDirty = false;
         updateMods(true);
+    }
+    void finishReturn() {
+        if (!hosting || state != Phase::returning || (returnedMask & activeMask) != activeMask)
+            return;
+        // A disconnected/rejoining seat has no completed local run. It is not
+        // part of this barrier or the next lobby's compact, connected roster.
+        for (unsigned slot = 1; slot < maxPlayers; ++slot)
+            if (peers[slot] && !(activeMask & (1u << slot))) {
+                Writer finish(Message::finish);
+                finish.u32(committed);
+                try {
+                    peers[slot]->sendMessage(finish);
+                    peers[slot]->flush();
+                } catch (...) {
+                }
+                remove(slot);
+            }
+        incoming.clear();
+        resetRun();
+        for (unsigned slot = 1; slot < maxPlayers; ++slot)
+            if (!peers[slot]) {
+                identities[slot].clear();
+                access[slot] = {};
+                choices[slot] = {};
+            }
+        ++rulesRevision;
+        choicesRequired = true;
+        for (auto& choice : choices)
+            choice.ready = false;
+        for (auto& peer : peers)
+            if (peer)
+                peer->loadingAt.reset();
+        state = Phase::lobby;
+        lobbyDirty = true;
+        if (logger)
+            logger("network_return=LOBBY");
     }
     Writer startMessage(Message type, const Start& value) {
         Writer w(type);
@@ -437,6 +477,13 @@ struct Session::Impl {
             }
             if (!p.accepted)
                 throw std::runtime_error("Handshake required");
+            if (type == Message::returnLobby) {
+                const auto run = r.string();
+                if (run == integrationRun && ending && *ending != ending::gameOver &&
+                    (state == Phase::running || state == Phase::returning))
+                    returnedMask |= 1u << slot;
+                return;
+            }
             if (type == Message::cinematic && state == Phase::running) {
                 const auto epoch = r.u32();
                 if (!cinematicEpoch || epoch != *cinematicEpoch || r.u8() != 1 ||
@@ -499,7 +546,8 @@ struct Session::Impl {
                 }
                 return;
             }
-            if (type == Message::input && (state == Phase::running || state == Phase::finishing)) {
+            if (type == Message::input && (state == Phase::running || state == Phase::finishing ||
+                                           state == Phase::returning)) {
                 const auto sequence = r.u32();
                 const auto value = r.input();
                 std::optional<InputRoom> room;
@@ -516,7 +564,7 @@ struct Session::Impl {
                     if (room->index < -20 || room->index >= 169 || room->dimension > 2)
                         throw std::runtime_error("Invalid input room");
                 }
-                if (!p.ready || p.waiting || state == Phase::finishing)
+                if (!p.ready || p.waiting || state != Phase::running)
                     return;
                 if (p.hasInput && sequence <= p.inputSequence)
                     throw std::runtime_error("Duplicate input sequence");
@@ -532,16 +580,18 @@ struct Session::Impl {
                 sequences[slot] = sequence;
                 return;
             }
-            if (type == Message::control && state == Phase::running) {
+            if (type == Message::control &&
+                (state == Phase::running || state == Phase::returning)) {
                 const auto c = r.u8();
                 if (!c || c > static_cast<unsigned>(Command::leave) ||
                     c == static_cast<unsigned>(Command::saveExit))
                     throw std::runtime_error("Unauthorized shared command");
-                if (p.ready)
+                if (p.ready && state == Phase::running)
                     commands[slot] = static_cast<Command>(c);
                 return;
             }
-            if (type == Message::roomRequest && state == Phase::running) {
+            if (type == Message::roomRequest &&
+                (state == Phase::running || state == Phase::returning)) {
                 RoomRequest value;
                 value.stage = r.u8();
                 value.type = r.u8();
@@ -556,14 +606,16 @@ struct Session::Impl {
                     teleport > 1)
                     throw std::runtime_error("Invalid room command");
                 value.teleport = teleport != 0;
-                if (p.ready && !p.waiting && !p.rejoining)
+                if (p.ready && !p.waiting && !p.rejoining && state == Phase::running)
                     roomRequests[slot] = value;
                 return;
             }
-            if (type == Message::applied &&
-                (state == Phase::running || state == Phase::finishing)) {
+            if (type == Message::applied && (state == Phase::running || state == Phase::finishing ||
+                                             state == Phase::returning)) {
                 const auto epoch = r.u32();
                 const auto tick = r.u32();
+                if (state == Phase::returning)
+                    return;
                 // A receipt sent before a reliable floor boundary may arrive
                 // after its caches were retired. It cannot establish a new base.
                 if (epoch < integrationEpoch)
@@ -636,7 +688,12 @@ struct Session::Impl {
             assemblingStage.reset();
             return;
         }
-        if (type == Message::lobby && state == Phase::lobby) {
+        if (type == Message::lobby && (state == Phase::lobby || state == Phase::returning)) {
+            if (state == Phase::returning) {
+                resetRun();
+                p.loadingAt.reset();
+                state = Phase::lobby;
+            }
             playerCount = r.u8();
             localSlot = r.u8();
             rulesRevision = r.u32();
@@ -655,6 +712,7 @@ struct Session::Impl {
                 value = r.access();
             if (access[localSlot] != localAccess)
                 throw std::runtime_error("Lobby changed local profile access");
+            activeMask = (1u << playerCount) - 1;
             return;
         }
         if (type == Message::waitFloor) {
@@ -1379,6 +1437,7 @@ void Session::poll() {
                     }
                 }
             }
+        impl->finishReturn();
         if (impl->hosting && impl->lobbyDirty)
             impl->lobby();
         if (impl->hosting) {
@@ -1407,7 +1466,8 @@ void Session::poll() {
                 impl->state = Phase::closed;
             }
         }
-        if (!impl->hosting && impl->state == Phase::running && impl->localReady &&
+        if (!impl->hosting && (impl->state == Phase::running || impl->state == Phase::returning) &&
+            impl->localReady &&
             Clock::now() - ((impl->cinematicEpoch || impl->ending) && impl->peers[0]
                                 ? impl->peers[0]->packetAt
                                 : impl->progress) >
@@ -1429,6 +1489,20 @@ void Session::close() {
         }
     impl->shutdown();
     impl->state = Phase::closed;
+}
+bool Session::returnToLobby() {
+    if (impl->state == Phase::returning)
+        return true;
+    if (impl->state != Phase::running || !impl->ending || *impl->ending == ending::gameOver)
+        return false;
+    if (!impl->hosting) {
+        Writer request(Message::returnLobby);
+        request.string(impl->integrationRun);
+        impl->peers[0]->sendMessage(request);
+    }
+    impl->returnedMask |= 1u << impl->localSlot;
+    impl->state = Phase::returning;
+    return true;
 }
 void Session::finish() {
     if (!impl->hosting || impl->state != Phase::running) {

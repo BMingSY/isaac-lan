@@ -32,6 +32,9 @@ class Session {
     void poll();
     void close();
     void finish();
+    // Called after a completed run exits locally. Keep the room until every
+    // connected participant has finished its native ending/exit boundary.
+    bool returnToLobby();
     void abort(const std::string& reason);
     bool start(const Start& settings);
     // Admit waiting guests from a native current-floor save. Loading never

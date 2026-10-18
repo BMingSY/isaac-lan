@@ -382,9 +382,15 @@ for _, phase in ipairs({ 9, 7, 3, 9 }) do
     end
 end
 -- A new lobby returns to its own selections rather than retaining the run.
+status.phase, status.prepared = 10, false
+_IsaacLanMenuOpen(true)
+draw()
+assert(labels["等待队友结算结束"] and labels["离开房间"])
+assert(not labels["开始游戏"] and not labels["队友可以继续游戏"])
 status.phase, status.players = 2, 2
 draw()
 assert(labels["以撒"] and not labels["里·该隐"])
+assert(labels["准备"] and labels["开始游戏"] and not labels["等待队友结算结束"])
 assert(renderedPortraits[1][2] == "01_Isaac" and renderedPortraits[2][2] == "01_Isaac")
 -- Native MainMenu can remain behind the returning LAN page. Two Back presses
 -- close the LAN/mode overlay without invoking a lobby action.
