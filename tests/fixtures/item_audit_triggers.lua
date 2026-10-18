@@ -1,5 +1,7 @@
 -- Effect-specific native prerequisites and observations. No production hooks.
 return function(report, actor, moveRoom, moveFloor)
+    local birthrightTrials = createBirthrightTrials(report, actor, moveRoom, moveFloor)
+    local trinketTrials = createTrinketTrials(report, actor, moveRoom, moveFloor)
     local interactions = createInteractionEffects(report, actor, moveRoom, moveFloor)
     local projectileTrials = createProjectileTrials(report, actor)
     local current, moved, rockIndex, crushed, obstacleIndex, attractionPickup
@@ -11,12 +13,21 @@ return function(report, actor, moveRoom, moveFloor)
     local seen, spawned, entityCounts = {}, {}, {}
     local effectNames, familiarNames, pickupNames, collectibleNames = {}, {}, {}, {}
     local roomNames, gridNames, playerNames, tearNames = {}, {}, {}, {}
+    local stageNames = {}
+    for name, id in pairs(LevelStage) do
+        if name:match("^STAGE") and not name:find("_GREED", 1, true) then
+            stageNames[id] = name
+        end
+    end
     for name, id in pairs(TearVariant) do
         tearNames[id] = name
     end
     for name, id in pairs(PlayerType) do
         playerNames[id] = name
     end
+    -- Legacy XXX aliases share these IDs; pairs() order is not stable.
+    playerNames[PlayerType.PLAYER_BLUEBABY] = "PLAYER_BLUEBABY"
+    playerNames[PlayerType.PLAYER_BLUEBABY_B] = "PLAYER_BLUEBABY_B"
     for name, id in pairs(RoomType) do
         roomNames[id] = name
     end
@@ -33,7 +44,9 @@ return function(report, actor, moveRoom, moveFloor)
         pickupNames[id] = name
     end
     for name, id in pairs(CollectibleType) do
-        collectibleNames[id] = name
+        if not collectibleNames[id] or name < collectibleNames[id] then
+            collectibleNames[id] = name
+        end
     end
     local function enabled(case)
         return case and case.trigger_effects
@@ -84,6 +97,7 @@ return function(report, actor, moveRoom, moveFloor)
             -- or descriptor. Only the authority and the visible replica own these.
             local roomObserved = label ~= "replica" or roomVisible
             local effects, familiars, tearFlags, enemyFlags = {}, {}, {}, {}
+            local stompingFeet = {}
             local familiarPositions = {}
             local projectiles = {}
             local enemyHp, enemies, familiarCount, returnedPills = 0, 0, 0, 0
@@ -147,6 +161,20 @@ return function(report, actor, moveRoom, moveFloor)
                     end
                     if e.Type == EntityType.ENTITY_EFFECT then
                         increment(effects, effectNames[e.Variant] or tostring(e.Variant))
+                        if
+                            rules.shovel_feet_trial
+                            and e.Variant == EffectVariant.MOM_FOOT_STOMP
+                        then
+                            stompingFeet[#stompingFeet + 1] = {
+                                seed = e.InitSeed,
+                                age = e.FrameCount,
+                                animation = e:GetSprite():GetAnimation(),
+                                frame = e:GetSprite():GetFrame(),
+                                visible = e.Visible,
+                                x = e.Position.X,
+                                y = e.Position.Y,
+                            }
+                        end
                     end
                     if e.Type == EntityType.ENTITY_LASER then
                         laserCount = laserCount + 1
@@ -236,6 +264,9 @@ return function(report, actor, moveRoom, moveFloor)
                             damage = tear.CollisionDamage,
                             height = tear.Height,
                             scale = tear.Scale,
+                            scale_x = tear.SpriteScale.X,
+                            scale_y = tear.SpriteScale.Y,
+                            knockback = tear.KnockbackMultiplier,
                             flags = flags,
                             color = {
                                 color.R,
@@ -264,10 +295,13 @@ return function(report, actor, moveRoom, moveFloor)
                             frame = e.FrameCount,
                             updates = e:GetData().auditTriggerUpdates or 0,
                             aligned = e:GetData().auditAligned or 0,
+                            cursor_aligned = e:GetData().auditCursorAligned or 0,
                             x = e.Position.X,
                             y = e.Position.Y,
                         }
-                        enemies, enemyHp = enemies + 1, enemyHp + e.HitPoints
+                        -- A dying replica may remain for one update with negative HP.
+                        -- Corpses have no remaining damage budget.
+                        enemies, enemyHp = enemies + 1, enemyHp + math.max(0, e.HitPoints)
                         for _, flag in ipairs(rules.enemy_flags or {}) do
                             if e:HasEntityFlags(assert(EntityFlag[flag], flag)) then
                                 increment(enemyFlags, flag)
@@ -396,6 +430,25 @@ return function(report, actor, moveRoom, moveFloor)
                     generatedOwned = math.max(1, generatedOwned)
                 end
             end
+            if rules.camouflage_trial and label == "captured" then
+                local players = {}
+                for slot, head in pairs(_IsaacLan.rooms_heads()) do
+                    local player = Isaac.GetPlayer(head)
+                    local color, spriteColor = player.Color, player:GetSprite().Color
+                    players[slot] = {
+                        no_target = player:HasEntityFlags(EntityFlag.FLAG_NO_TARGET),
+                        camo = player:HasCollectible(CollectibleType.COLLECTIBLE_CAMO_UNDIES),
+                        faded = player:HasTrinket(TrinketType.TRINKET_FADED_POLAROID),
+                        visible = player.Visible,
+                        alpha = color.A,
+                        sprite_alpha = spriteColor.A,
+                        speed = player.MoveSpeed,
+                        dead = player:IsDead(),
+                        ghost = player:IsCoopGhost(),
+                    }
+                end
+                report("camouflage_actor_state", { tick = tick, players = players })
+            end
             report("trigger_probe", {
                 tick = tick,
                 label = label,
@@ -403,6 +456,7 @@ return function(report, actor, moveRoom, moveFloor)
                 room_visible = roomVisible,
                 room_type = roomObserved and roomNames[room:GetType()] or nil,
                 stage = Game():GetLevel():GetStage(),
+                stage_name = stageNames[Game():GetLevel():GetStage()],
                 watch_state = roomObserved
                         and (rules.watch_trial and room:GetBrokenWatchState() or 0)
                     or nil,
@@ -461,6 +515,7 @@ return function(report, actor, moveRoom, moveFloor)
                 pill_conversions = pillConversions,
                 pill_mapping = pillMapping,
                 effects = effects,
+                stomping_feet = stompingFeet,
                 tear_flags = tearFlags,
                 tear_count = tearCount,
                 laser_count = laserCount,
@@ -562,14 +617,56 @@ return function(report, actor, moveRoom, moveFloor)
             end
             error("No ordinary room adjacent to a secret room")
         end,
+        damage = birthrightTrials.damage,
+        pickupInit = birthrightTrials.pickupInit,
         holdTarget = function(npc)
+            if npc:GetData().auditTrinketKnockback then
+                -- Suppress steering while preserving native collision impulses.
+                local data = npc:GetData()
+                if data.auditTrinketKnockbackOrigin then
+                    npc.Position = Vector(table.unpack(data.auditTrinketKnockbackOrigin))
+                    npc.Velocity = Vector.Zero
+                    data.auditTrinketKnockbackOrigin = nil
+                    data.auditTrinketKnockbackPeak = 0
+                end
+                data.auditTrinketKnockbackPeak =
+                    math.max(data.auditTrinketKnockbackPeak or 0, npc.Velocity:Length())
+                return true
+            end
             if enabled(current) and npc:GetData().auditTriggerTarget then
+                if npc:IsDead() then
+                    -- Death updates own native kill rewards and timer extensions.
+                    return false
+                end
                 local rules = current.trigger_effects
                 local data = npc:GetData()
+                if data.auditTargetWarmupHealth then
+                    if npc.FrameCount < 3 then
+                        return false
+                    end
+                    npc.MaxHitPoints, npc.HitPoints =
+                        data.auditTargetWarmupHealth, data.auditTargetWarmupHealth
+                    data.auditTargetWarmupHealth = nil
+                end
                 data.auditTriggerUpdates = (data.auditTriggerUpdates or 0) + 1
                 npc.Velocity = rules.movement_rate and Vector(2, 0) or Vector.Zero
                 if rules.target_velocity then
                     npc.Velocity = Vector(table.unpack(rules.target_velocity))
+                end
+                if rules.lift_rock and nativeTick >= 75 and rockIndex then
+                    npc.Position = Game():GetRoom():GetGridPosition(rockIndex) - Vector(0, 60)
+                end
+                if rules.cursor_target and nativeTick >= 70 and nativeTick <= 180 then
+                    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                        if
+                            entity.Type == EntityType.ENTITY_EFFECT
+                            and entity.Variant == EffectVariant[rules.cursor_target]
+                        then
+                            npc.Position = entity.Position
+                            data.auditCursorAligned = (data.auditCursorAligned or 0) + 1
+                            break
+                        end
+                    end
                 end
                 if rules.taurus_trial then
                     local head = _IsaacLan.rooms_heads()[tostring(current.slot)]
@@ -646,6 +743,23 @@ return function(report, actor, moveRoom, moveFloor)
             reset(case)
             interactions.prepare(case, tick)
             projectileTrials.prepare(case, tick)
+            trinketTrials.prepare(case, tick)
+            birthrightTrials.prepare(case, tick)
+            if rules.camouflage_trial then
+                actor(1 - case.slot, function(p)
+                    p:SetMinDamageCooldown(2 * case.end_tick + 60)
+                end)
+            end
+            if rules.peer_item then
+                actor(1 - case.slot, function(p)
+                    local id = assert(CollectibleType[rules.peer_item])
+                    p:AddCollectible(id, 0, true)
+                    report(
+                        "native_peer_prerequisite",
+                        { tick = tick, item = id, owned = p:HasCollectible(id) }
+                    )
+                end)
+            end
             actor(case.slot, function(p, room)
                 if rules.character_before then
                     assert(
@@ -677,7 +791,11 @@ return function(report, actor, moveRoom, moveFloor)
                     end
                 end
                 for _, name in ipairs(rules.prerequisite_items or {}) do
-                    p:AddCollectible(assert(CollectibleType[name]), 0, false)
+                    p:AddCollectible(
+                        assert(CollectibleType[name]),
+                        0,
+                        rules.prerequisite_first_time == true
+                    )
                 end
                 if rules.trinket_before then
                     p:AddTrinket(assert(TrinketType[rules.trinket_before]), false)
@@ -828,6 +946,10 @@ return function(report, actor, moveRoom, moveFloor)
                 for i = 1, rules.enemies or rules.kill_before or 0 do
                     local position = p.Position
                         + (rules.aim_target and Vector(25, -100) or Vector((i - 1.5) * 25, -25))
+                    if rules.target_offset then
+                        position = p.Position
+                            + Vector(rules.target_offset[1], rules.target_offset[2])
+                    end
                     if rules.spectral_target then
                         position = p.Position - Vector(0, rules.piercing and 100 + i * 40 or 100)
                     elseif rules.piercing then
@@ -856,6 +978,7 @@ return function(report, actor, moveRoom, moveFloor)
                     if i == 1 and rules.first_enemy_hp then
                         e.MaxHitPoints, e.HitPoints = rules.first_enemy_hp, rules.first_enemy_hp
                     end
+                    e:GetData().auditTargetWarmupHealth = e.HitPoints
                 end
                 if rules.attract_pickup then
                     attractionPickup = Isaac.Spawn(
@@ -878,6 +1001,8 @@ return function(report, actor, moveRoom, moveFloor)
             end
             interactions.advance(case, tick)
             projectileTrials.advance(case, tick)
+            trinketTrials.advance(case, tick)
+            birthrightTrials.advance(case, tick)
             if rules.native_door and tick == 210 then
                 actor(case.slot, function(p)
                     for _, e in ipairs(Isaac.GetRoomEntities()) do
@@ -908,7 +1033,16 @@ return function(report, actor, moveRoom, moveFloor)
             if rules.floor_visit then
                 local visit = rules.floor_visit
                 if tick == 90 then
-                    moveFloor()
+                    if visit.stage then
+                        actor(case.slot, function(p)
+                            Game()
+                                :GetLevel()
+                                :SetStage(LevelStage[visit.stage], StageType.STAGETYPE_ORIGINAL)
+                            Game():StartStageTransition(true, 0, p)
+                        end)
+                    else
+                        moveFloor()
+                    end
                 end
                 if tick == 420 and visit.room then
                     local rooms = Game():GetLevel():GetRooms()
@@ -920,20 +1054,46 @@ return function(report, actor, moveRoom, moveFloor)
                             break
                         end
                     end
+                    if not destination and visit.optional then
+                        report(
+                            "native_room_prerequisite_missing",
+                            { tick = tick, room_type = visit.room }
+                        )
+                        return
+                    end
                     assert(destination, "Generated floor lacks required native room")
                     actor(case.slot, function(p)
                         p:SetMinDamageCooldown(600)
                     end)
-                    assert(_IsaacLan.rooms_move(case.slot, destination, 0, -1))
-                    if not case.split then
-                        assert(_IsaacLan.rooms_move(1 - case.slot, destination, 0, -1))
+                    if visit.native_transition then
+                        actor(case.slot, function(p)
+                            Game():StartRoomTransition(
+                                destination,
+                                Direction.NO_DIRECTION,
+                                RoomTransitionAnim.TELEPORT,
+                                p,
+                                -1
+                            )
+                        end)
+                    else
+                        assert(_IsaacLan.rooms_move(case.slot, destination, 0, -1))
+                        if not case.split then
+                            assert(_IsaacLan.rooms_move(1 - case.slot, destination, 0, -1))
+                        end
                     end
                     report(
                         "floor_room_visit",
                         { tick = tick, target = destination, kind = visit.room }
                     )
                 end
-                if tick == (visit.kill_boss and (visit.kill_tick or 480) or 480) then
+                local killTick = visit.kill_tick or 480
+                if
+                    tick == (visit.kill_boss and killTick or 480)
+                    or visit.kill_repeated
+                        and tick > killTick
+                        and tick <= killTick + 150
+                        and (tick - killTick) % 15 == 0
+                then
                     actor(case.slot, function(p, room)
                         if visit.kill_boss then
                             local count = 0
@@ -1264,9 +1424,41 @@ return function(report, actor, moveRoom, moveFloor)
                     p:TakeDamage(1, 0, EntityRef(p), 0)
                 end)
             end
+            if rules.revive_chance and tick == 85 then
+                actor(case.slot, function(p)
+                    local rng = p:GetTrinketRNG(case.id)
+                    for seed = 1, 1000 do
+                        rng:SetSeed(seed, 35)
+                        local roll = rng:RandomFloat()
+                        if roll < rules.revive_chance then
+                            rng:SetSeed(seed, 35)
+                            report(
+                                "revival_rng_prerequisite",
+                                { seed = seed, roll = roll, tick = tick }
+                            )
+                            break
+                        end
+                    end
+                end)
+            end
             if rules.revive and tick == 90 then
                 actor(case.slot, function(p)
-                    p:Kill()
+                    if rules.revive_natural_damage then
+                        p:ResetDamageCooldown()
+                        p:TakeDamage(1000, 0, EntityRef(p), 0)
+                    else
+                        p:Kill()
+                    end
+                end)
+            end
+            if rules.toenail_trial and tick == 75 then
+                actor(case.slot, function(_, room)
+                    room:SetClear(false)
+                    report("toenail_hostile_prerequisite", {
+                        tick = tick,
+                        clear = room:IsClear(),
+                        enemies = room:GetAliveEnemiesCount(),
+                    })
                 end)
             end
             if (rules.kill_before and tick == 45) or (rules.kill_after and tick == 100) then
@@ -1457,7 +1649,9 @@ return function(report, actor, moveRoom, moveFloor)
                         p.Luck = rules.luck
                     end
                     if rules.rng_seed then
-                        p:GetCollectibleRNG(case.id):SetSeed(rules.rng_seed, 35)
+                        local rng = case.kind == "trinket" and p:GetTrinketRNG(case.id)
+                            or p:GetCollectibleRNG(case.id)
+                        rng:SetSeed(rules.rng_seed, 35)
                     end
                     if rules.range_before then
                         p.TearRange = rules.range_before
@@ -1493,9 +1687,12 @@ return function(report, actor, moveRoom, moveFloor)
                         assert(room:SpawnGridEntity(index, GridEntityType.GRID_POOP, 0, 187 + i, 0))
                     end
                     if rules.crush_rock then
+                        room:Update()
                         rockIndex = room:GetGridIndex(room:GetCenterPos() + Vector(80, -80))
                         assert(not room:GetGridEntity(rockIndex), "Giant trial grid occupied")
                         assert(room:SpawnGridEntity(rockIndex, GridEntityType.GRID_ROCK, 0, 187, 0))
+                        room:GetGridEntity(rockIndex):Update()
+                        room:Update()
                     end
                 end)
             end
@@ -1510,7 +1707,20 @@ return function(report, actor, moveRoom, moveFloor)
                     end
                 end)
             end
-            if rules.crush_rock and tick == 105 then
+            if rules.lift_rock and (tick == 89 or tick == 105 or tick == 135) then
+                actor(case.slot, function(p, room)
+                    report("bracelet_native_aim", {
+                        tick = tick,
+                        direction = p:GetHeadDirection(),
+                        x = p.Position.X,
+                        y = p.Position.Y,
+                        rock_x = room:GetGridPosition(rockIndex).X,
+                        rock_y = room:GetGridPosition(rockIndex).Y,
+                        collision = room:GetGridCollision(rockIndex),
+                    })
+                end)
+            end
+            if rules.crush_rock and not rules.lift_rock and tick == 105 then
                 actor(case.slot, function(p, room)
                     p.Position, p.Velocity =
                         room:GetGridPosition(rockIndex)
@@ -1560,6 +1770,10 @@ return function(report, actor, moveRoom, moveFloor)
         end,
         input = function(case, tick)
             local rules = enabled(case)
+            local trinketInput = trinketTrials.input(case, tick)
+            if trinketInput then
+                return trinketInput
+            end
             if rules and rules.button_intervals then
                 local mask = 0
                 for _, interval in ipairs(rules.button_intervals) do

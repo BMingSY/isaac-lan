@@ -4,6 +4,12 @@ local native, json = assert(_IsaacLan), require("json")
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local Phase, Command = native.net_phases(), native.net_commands()
 local GamepadButton = { bomb = 0x0100, consumable = 0x0200 }
+local GamepadShot = {
+    ACTION_SHOOTUP = 0x8000,
+    ACTION_SHOOTDOWN = 0x1000,
+    ACTION_SHOOTLEFT = 0x4000,
+    ACTION_SHOOTRIGHT = 0x2000,
+}
 local baseFrame, baseGate = _IsaacLanFrame, native.net_gate
 local owner = { Name = "Isolated item compatibility audit" }
 local index, renders, linked, chosen, started = 1, 0, false, false, false
@@ -25,7 +31,9 @@ local function report(event, values)
     local line = "LAN_ITEM_AUDIT " .. json.encode(values)
     journal:write(line .. "\n")
     journal:flush()
-    Isaac.DebugString(line)
+    if event == "case_begin" or event == "case_end" or event == "problem" then
+        Isaac.DebugString(line)
+    end
 end
 local stress = createStress(report)
 local roomEffects = createRoomEffects(report)
@@ -125,6 +133,11 @@ end
 local damageEffects = createDamageEffects(report, actor, moveHolderRoom, moveHolderFloor)
 local familiarEffects = createFamiliarEffects(report, actor, moveHolderRoom, moveHolderFloor)
 local triggerEffects = createTriggerEffects(report, actor, moveHolderRoom, moveHolderFloor)
+Isaac.AddCallback(owner, ModCallbacks.MC_POST_PICKUP_INIT, function(_, pickup)
+    if host then
+        triggerEffects.pickupInit(pickup)
+    end
+end)
 Isaac.AddCallback(owner, ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD, function()
     if host then
         familiarEffects.clearAward()
@@ -144,6 +157,40 @@ end)
 Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, e, amount, _, source)
     if host then
         familiarEffects.damage(e, amount, source)
+        triggerEffects.damage(e, amount, source)
+        local trinketRule = case and case.trigger_effects and case.trigger_effects.trinket_trial
+        local damageEntity = source and source.Entity
+        if
+            trinketRule
+            and trinketRule.mode == "locust"
+            and e:ToNPC()
+            and damageEntity
+            and damageEntity.Type == EntityType.ENTITY_FAMILIAR
+            and damageEntity.Variant == FamiliarVariant.BLUE_FLY
+        then
+            local familiar = damageEntity:ToFamiliar()
+            report("native_locust_damage", {
+                tick = lastTick,
+                amount = amount,
+                subtype = damageEntity.SubType,
+                source_seed = damageEntity.InitSeed,
+                target_seed = e.InitSeed,
+                owner = familiar.Player and familiar.Player.ControllerIndex,
+                holder_damage = familiar.Player and familiar.Player.Damage,
+            })
+        end
+        local sourceRule = case and case.trigger_effects and case.trigger_effects.damage_source
+        if sourceRule and e:ToNPC() and e:GetData().auditTriggerTarget then
+            local entity = source and source.Entity
+            report("native_effect_damage_source", {
+                tick = lastTick,
+                amount = amount,
+                source_type = entity and entity.Type,
+                source_variant = entity and entity.Variant,
+                expected_type = EntityType[sourceRule.type],
+                expected_variant = EffectVariant[sourceRule.variant],
+            })
+        end
         if
             case
             and case.trigger_effects
@@ -207,6 +254,13 @@ local function sample(label, tick)
     local view = positions[tostring(_IsaacLanStatus().slot)]
     for slot = 0, 1 do
         local available = actor(slot, function(p, room)
+            if
+                case.trigger_effects
+                and case.trigger_effects.birthright_twin
+                and slot == case.slot
+            then
+                p = assert(p:GetOtherTwin(), "Birthright observation requires Esau")
+            end
             local count, tears, projectiles, effects = 0, 0, 0, 0
             local entities = {}
             local familiarCounts = { blue_flies = 0, blue_spiders = 0 }
@@ -416,6 +470,38 @@ local function poolProbe(label)
     end
 end
 local function observedUse(kind, id, p)
+    local trial = case and case.trigger_effects and case.trigger_effects.trinket_trial
+    local birthright = case and case.trigger_effects and case.trigger_effects.birthright_trial
+    if
+        birthright
+        and birthright.mode == "void"
+        and kind == "collectible"
+        and id == CollectibleType.COLLECTIBLE_VOID
+    then
+        report(
+            "birthright_void_use",
+            { tick = lastTick, correct_actor = p.ControllerIndex == case.slot + 1 }
+        )
+    end
+    if
+        trial
+        and (
+            trial.mode == "expansion"
+            or trial.mode == "endless"
+            or trial.reward == "dice"
+            or trial.reward == "pocket"
+        )
+    then
+        local config = kind == "collectible" and Isaac.GetItemConfig():GetCollectible(id)
+        report("trinket_triggered_use", {
+            tick = lastTick,
+            kind = kind,
+            id = id,
+            controller = p.ControllerIndex,
+            correct_actor = p.ControllerIndex == case.slot + 1,
+            max_charges = config and config.MaxCharges,
+        })
+    end
     if case and case.kind == kind and case.id == id then
         useCount = useCount + 1
         report("use_callback", {
@@ -671,6 +757,9 @@ local function prepare(tick)
     sample("before", tick)
     poolProbe("before")
     actor(case.shared_holder or case.slot, function(p, room)
+        if case.trigger_effects and case.trigger_effects.birthright_twin then
+            p = assert(p:GetOtherTwin(), "Native Birthright receiving twin missing")
+        end
         report("give_begin")
         if case.kind == "collectible" then
             local config = assert(Isaac.GetItemConfig():GetCollectible(case.id))
@@ -931,7 +1020,9 @@ local function advance(tick)
     local endTick = observationEnd()
     local deadline = (case.mega or case.companion or case.kind == "stress") and 65000 or 16000
     if case.end_tick then
-        deadline = math.max(deadline, endTick * 1000 / 30 + 15000)
+        -- Native stage loading pauses simulation ticks. Allow background pairs
+        -- to finish the same observations without treating a slow host as proof.
+        deadline = math.max(deadline, endTick * 1000 / 15 + 30000)
     end
     if used and (tick >= endTick or elapsed >= deadline) then
         sample("after", tick)
@@ -1021,9 +1112,12 @@ function _IsaacLanFrame()
         started = true
         local character = case and case.trigger_effects and case.trigger_effects.character_before
         local selected = character and assert(PlayerType[character]) or 0
+        local requestedSeed = case.trigger_effects and case.trigger_effects.run_seed
+        local seed = requestedSeed and Seeds.Seed2String(requestedSeed):gsub(" ", "") or "YV039KQF"
         _IsaacLanCommand(
             "start",
-            "YV039KQF:0:"
+            seed
+                .. ":0:"
                 .. (case.slot == 0 and selected or 0)
                 .. ":"
                 .. (case.slot == 1 and selected or 0)
@@ -1058,6 +1152,14 @@ function _IsaacLanFrame()
     local extraCard = extraUse and rules.use_pocket
     local extraActive = extraUse and rules.use_existing_active
     local scheduledDrop = false
+    local familiarRules = case and case.familiar_effects
+    if holder and familiarRules and familiarRules.drop_window then
+        scheduledDrop = s.verified >= familiarRules.drop_window[1]
+            and s.verified < familiarRules.drop_window[2]
+    end
+    if holder and familiarRules and familiarRules.physical_remove then
+        scheduledDrop = scheduledDrop or s.verified >= 780 and s.verified < 855
+    end
     if holder and rules then
         for _, action in ipairs(rules.input_schedule or {}) do
             if s.verified >= action[1] and s.verified < action[2] then
@@ -1078,12 +1180,22 @@ function _IsaacLanFrame()
         and rules
         and rules.overcharge
         and ((s.verified >= 180 and s.verified < 186) or (s.verified >= 240 and s.verified < 246))
+    local shotButtons = 0
+    if holder and rules and rules.physical_shoot then
+        for _, interval in ipairs(rules.button_intervals or {}) do
+            if s.verified >= interval[1] and s.verified < interval[2] then
+                shotButtons = shotButtons | (GamepadShot[interval[3]] or 0)
+            end
+        end
+    end
     native.test_gamepad(
-        bomb and GamepadButton.bomb
+        (
+            bomb and GamepadButton.bomb
             or extraCard and GamepadButton.consumable
             or active and rules and rules.pocket_active and GamepadButton.consumable
             or active and (case.kind == "card" or case.kind == "pill") and GamepadButton.consumable
-            or 0,
+            or 0
+        ) | shotButtons,
         (
             (active and case.kind == "collectible" and not (rules and rules.pocket_active))
             or priorActive

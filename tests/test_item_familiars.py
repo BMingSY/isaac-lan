@@ -1,4 +1,5 @@
 from copy import deepcopy
+from math import cos, sin
 from pathlib import Path
 import shutil
 import subprocess
@@ -10,6 +11,70 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from item_familiar_effects import FAMILIAR_EFFECTS, familiar_checks
 
 
+@pytest.mark.parametrize(
+    "enum,check",
+    [
+        ("TRINKET_DUCT_TAPE", "familiar_fixed_offset_while_owner_moves"),
+        ("TRINKET_FRIENDSHIP_NECKLACE", "familiar_familiar_actually_orbits_owner"),
+        ("TRINKET_RC_REMOTE", "familiar_drop_holds_familiar_while_owner_moves"),
+    ],
+)
+def test_familiar_trinkets_require_their_actual_motion(enum, check):
+    case, peers = evidence(enum)
+    for e in peers["host"]:
+        if e["event"] == "familiar_probe" and 80 <= e["tick"] <= 140:
+            for f in e["familiars"]:
+                if enum == "TRINKET_DUCT_TAPE":
+                    f["x"] += e["tick"]
+                else:
+                    f["x"], f["y"] = e["x"] - 20, e["y"]
+    assert next(c for c in familiar_checks(case, peers) if c["name"] == check)["status"] == "failed"
+
+
+def test_remote_control_fixture_moves_player_during_native_drop_hold():
+    executable = shutil.which("lua5.3") or shutil.which("lua")
+    assert executable, "Lua 5.3 is required"
+    subprocess.run(
+        [executable, "-"],
+        input="""
+ButtonAction = { ACTION_RIGHT = 2, ACTION_SHOOTUP = 4 }
+local factory = dofile("tests/fixtures/item_audit_familiars.lua")
+local fixture = factory(function() end, function() end, function() end, function() end)
+local case = { familiar_effects = { drop_window = {120, 139} } }
+assert(fixture.input(case, 125) == 1 << ButtonAction.ACTION_RIGHT)
+assert(fixture.input(case, 140) == 0)
+""",
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
+
+
+def test_lil_clot_drop_preserves_the_clot_until_native_damage_kills_it():
+    case, peers = evidence("TRINKET_LIL_CLOT")
+    assert all(c["status"] == "passed" for c in familiar_checks(case, peers))
+    dropped = next(e for e in peers["host"] if e["event"] == "familiar_probe" and e["tick"] == 880)
+    dropped["familiars"] = []
+    assert (
+        next(
+            c
+            for c in familiar_checks(case, peers)
+            if c["name"] == "familiar_trinket_dropped_clot_remains"
+        )["status"]
+        == "failed"
+    )
+    case, peers = evidence("TRINKET_LIL_CLOT")
+    peers["host"] = [e for e in peers["host"] if e["event"] != "familiar_drop_collision"]
+    assert (
+        next(
+            c
+            for c in familiar_checks(case, peers)
+            if c["name"] == "familiar_dropped_clot_takes_three_projectile_hits"
+        )["status"]
+        == "failed"
+    )
+
+
 def evidence(enum="COLLECTIBLE_BROTHER_BOBBY"):
     rules = FAMILIAR_EFFECTS[enum]
     host = []
@@ -17,26 +82,43 @@ def evidence(enum="COLLECTIBLE_BROTHER_BOBBY"):
     def probe(tick, *, shots=None):
         removed = tick >= 780
         moved = tick > 110
+        player_x, familiar_x, familiar_y = 150 if moved else 100, 130 if moved else 80, 100
+        if rules.get("fixed_offset") or rules.get("native_orbit") or rules.get("drop_window"):
+            player_x = 100 + max(0, min(tick, 140) - 100) * 2
+            familiar_x = player_x - 20
+            if rules.get("native_orbit"):
+                familiar_x, familiar_y = player_x + 40 * cos(tick / 10), 100 + 40 * sin(tick / 10)
+            elif rules.get("drop_window") and 120 <= tick < 139:
+                familiar_x = 120
         return {
             "event": "familiar_probe",
             "tick": tick,
             "room": 85 if 300 < tick < 390 else 84,
             "stage": 2 if tick > 390 else 1,
-            "x": 150 if moved else 100,
+            "x": player_x,
             "y": 100,
             "owned": 0 if removed else 1,
             "teammate_owned": 0,
             "room_visible": True,
             "familiars": []
-            if removed and not rules.get("modifier")
+            if removed
+            and not rules.get("modifier")
+            and (not rules.get("persists_after_drop") or tick >= 1080)
             else [
-                {"x": (130 if moved else 80) + i * 5, "y": 100, "controller": 1}
+                {"x": familiar_x + i * 5, "y": familiar_y, "controller": 1}
                 for i in range(rules.get("count", 1))
             ],
             "shots": shots or [],
         }
 
-    host.extend(probe(t) for t in (90, 140, 360, 610, 820))
+    host.extend(probe(t) for t in (90, 140, 360, 610, 880 if rules.get("physical_remove") else 820))
+    if rules.get("persists_after_drop"):
+        host.extend({"event": "familiar_drop_collision", "tick": t} for t in (901, 946, 991))
+        host.extend(probe(t) for t in (1080, 1110))
+    if rules.get("remove_room_tick"):
+        host.extend(probe(rules["remove_room_tick"] + t) for t in (60, 90))
+    if rules.get("fixed_offset") or rules.get("native_orbit") or rules.get("drop_window"):
+        host.extend(probe(t) for t in (95, 110, 117, 124, 130, 135, 137))
     damage = rules.get("damage", 3.5 * rules.get("damage_factor", 1))
     directions = {
         None: [(0, -8)] * rules.get("count", 1),

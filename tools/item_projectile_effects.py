@@ -1,5 +1,7 @@
 """Collision-based defense trials with a native damaging control projectile."""
 
+ENTITY_FAMILIAR = 3
+ISAACS_HEART_FAMILIAR = 62
 PROJECTILE_EFFECTS = {}
 for name, kind, familiar, extra in (
     ("INFAMY", "player", None, {}),
@@ -22,14 +24,14 @@ for name, kind, familiar, extra in (
     ("TINYTOMA", "familiar", "TINYTOMA", {"splits": True}),
     ("SWARM", "familiar", "SWARM_FLY_ORBITAL", {"blue_fly": True}),
     ("PUNCHING_BAG", "familiar", "PUNCHING_BAG", {}),
-    ("ISAACS_HEART", "player", "ISAACS_HEART", {"heart_hit": True}),
+    ("ISAACS_HEART", "player", "ISAACS_HEART", {"heart_hit": True, "heart_trials": 3}),
 ):
     PROJECTILE_EFFECTS["COLLECTIBLE_" + name] = {
         "projectile_trial": {"kind": kind, "familiar": familiar, **extra},
         "shoot": extra.get("shoot", False),
         "shoot_until": 1620,
-        "observe_until": 1620,
-        "end_tick": 1650,
+        "observe_until": 1740 if extra.get("heart_hit") else 1620,
+        "end_tick": 1770 if extra.get("heart_hit") else 1650,
         **{
             key: value
             for key, value in extra.items()
@@ -95,7 +97,15 @@ def projectile_checks(rules, observations, probes, check):
         check("swarm_converts_blocker_to_attack_fly", [any(e["blue_flies"] > 0 for e in values)])
     if trial.get("heart_hit"):
         hits = [e for e in events if e["event"] == "heart_familiar_damage"]
+        contacts = [
+            e
+            for e in hits
+            if e.get("collision")
+            and e.get("collider_type") == ENTITY_FAMILIAR
+            and e.get("collider_variant") == ISAACS_HEART_FAMILIAR
+        ]
+        check("heart_projectiles_reach_familiar", [len(contacts) >= 2])
         check(
             "heart_familiar_still_takes_owner_damage",
-            [len(hits) == 1 and hits[0]["after"] < hits[0]["before"]],
+            [bool(contacts) and all(e["after"] < e["before"] for e in contacts)],
         )
