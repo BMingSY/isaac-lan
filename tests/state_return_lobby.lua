@@ -10,7 +10,7 @@ local run, wins, exits, lobbyRun, visibleRun = 0, 0, 0, 0, 0
 local checkedRun = 0
 local lobbyAt, movieAt, runId, baseline = nil, nil, nil, nil
 local GAMEPAD_CONFIRM, FIRST_CINEMATIC = 0x1000, 2
-local MAGDALENE_ACHIEVEMENT = 1
+local alternate = 0
 local function report(message)
     Isaac.DebugString("LAN_NETWORK RETURN_LOBBY " .. message)
 end
@@ -49,11 +49,8 @@ function _IsaacLanFrame()
     if not joined and Isaac.GetTime() - startedAt > 15000 then
         joined = true
         baseline = native.net_progress()
-        -- The isolated profile starts empty. Unlock this fixture's second
-        -- character before lobby access is captured; ProtectedLabs restores it.
-        local flag = MAGDALENE_ACHIEVEMENT + 2
-        assert(native.net_progress(baseline:sub(1, flag - 1) .. "\1" .. baseline:sub(flag + 1)))
-        baseline = native.net_progress()
+        local choices = native.net_characters()
+        alternate = choices[2] or 0
         Isaac.DebugString("LAN_NETWORK MENU_READY")
         _IsaacLanCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)
     end
@@ -69,8 +66,8 @@ function _IsaacLanFrame()
     if s.phase == Phase.lobby and not chosen and canChoose then
         assert(run == 0 or visibleRun == wins, "LAN selection was not automatically visible")
         chosen = true
-        -- Switch both players from Isaac to Maggy, then back to Isaac.
-        _IsaacLanCommand("choose", (wins % 2) .. ":1")
+        -- Respect this profile's unlocked choices; empty profiles only have Isaac.
+        _IsaacLanCommand("choose", (wins % 2 == 1 and alternate or 0) .. ":1")
     end
     if
         host
@@ -81,14 +78,13 @@ function _IsaacLanFrame()
         and s.ready1 == 1
     then
         started = true
-        local character = wins % 2
         _IsaacLanCommand(
             "start",
             (wins % 2 == 0 and "N024KHNP" or "YV039KQF")
                 .. ":0:"
-                .. character
+                .. s.choice0
                 .. ":"
-                .. character
+                .. s.choice1
                 .. ":0:0"
         )
     end
@@ -115,9 +111,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         assert(s.runId ~= runId, "Next run reused its identity")
         runId = s.runId
         local p = Isaac.GetPlayer(assert(native.rooms_heads()[tostring(s.slot)]))
-        assert(p:GetPlayerType() == (run - 1) % 2, "New character selection ignored")
+        assert(
+            p:GetPlayerType() == (run % 2 == 0 and alternate or 0),
+            "New character selection ignored"
+        )
         assert(not p:HasCollectible(333), "Inventory survived the ending")
-        report("FRESH_ROSTER run=" .. run)
+        report("FRESH_ROSTER run=" .. run .. " character=" .. p:GetPlayerType())
         if run == 3 then
             assert(wins == 2 and exits == 2 and visibleRun == 2, "Missing ending/selection cycle")
             complete = true
