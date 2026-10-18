@@ -65,7 +65,7 @@ background_opacity = 70
 ; 自定义背景：PNG、JPG/JPEG、BMP；相对 config.ini 的路径或绝对路径。
 ; 留空使用纯色；按框大小缩放，保留透明区域，原图不修改。
 background_image =
-; 纯色背景、边框／分隔线与文字颜色：六位 RGB 十六进制，不加 #。
+; 纯色背景、边框／分隔线与通用界面文字颜色：六位 RGB 十六进制，不加 #。
 background_color = 231B18
 border_color = 79604C
 text_color = E8DFCB
