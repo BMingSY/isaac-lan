@@ -75,6 +75,14 @@ return function(report, actor, moveRoom, moveFloor)
         end
         reset(case)
         actor(case.slot, function(p, room)
+            local positions = _IsaacLan.rooms_positions()
+            local location = positions[tostring(case.slot)]
+            local view = positions[tostring(_IsaacLanStatus().slot)]
+            local roomVisible = location.index == view.index
+                and location.dimension == view.dimension
+            -- Remote replica shells contain actors, but no initialized room grid
+            -- or descriptor. Only the authority and the visible replica own these.
+            local roomObserved = label ~= "replica" or roomVisible
             local effects, familiars, tearFlags, enemyFlags = {}, {}, {}, {}
             local familiarPositions = {}
             local projectiles = {}
@@ -91,7 +99,7 @@ return function(report, actor, moveRoom, moveFloor)
             local explosives = {}
             local knives = {}
             local lasers = {}
-            for slot = 0, DoorSlot.NUM_DOOR_SLOTS - 1 do
+            for slot = 0, (roomObserved and DoorSlot.NUM_DOOR_SLOTS or 0) - 1 do
                 local door = room:GetDoor(slot)
                 if door then
                     doors[#doors + 1] = {
@@ -102,7 +110,7 @@ return function(report, actor, moveRoom, moveFloor)
                     }
                 end
             end
-            for i = 0, room:GetGridSize() - 1 do
+            for i = 0, (roomObserved and room:GetGridSize() or 0) - 1 do
                 local grid = room:GetGridEntity(i)
                 if grid then
                     increment(grids, gridNames[grid:GetType()] or tostring(grid:GetType()))
@@ -114,7 +122,7 @@ return function(report, actor, moveRoom, moveFloor)
                     rockCount = rockCount + 1
                 end
             end
-            for _, e in ipairs(Isaac.GetRoomEntities()) do
+            for _, e in ipairs(roomObserved and Isaac.GetRoomEntities() or {}) do
                 if e:Exists() then
                     if e:IsBoss() then
                         bosses[#bosses + 1] =
@@ -391,12 +399,13 @@ return function(report, actor, moveRoom, moveFloor)
             report("trigger_probe", {
                 tick = tick,
                 label = label,
-                room = _IsaacLan.rooms_positions()[tostring(case.slot)].index,
-                room_visible = _IsaacLan.rooms_positions()[tostring(case.slot)].index
-                    == _IsaacLan.rooms_positions()[tostring(_IsaacLanStatus().slot)].index,
-                room_type = roomNames[room:GetType()],
+                room = location.index,
+                room_visible = roomVisible,
+                room_type = roomObserved and roomNames[room:GetType()] or nil,
                 stage = Game():GetLevel():GetStage(),
-                watch_state = rules.watch_trial and room:GetBrokenWatchState() or 0,
+                watch_state = roomObserved
+                        and (rules.watch_trial and room:GetBrokenWatchState() or 0)
+                    or nil,
                 curses = Game():GetLevel():GetCurses(),
                 grids = grids,
                 doors = doors,
@@ -489,9 +498,9 @@ return function(report, actor, moveRoom, moveFloor)
                         and attractionPickup:Exists()
                         and attractionPickup.Position.X
                     or nil,
-                obstacle_intact = obstacleIndex ~= nil
-                    and room:GetGridCollision(obstacleIndex)
-                        == GridCollisionClass.COLLISION_SOLID,
+                obstacle_intact = roomObserved and obstacleIndex ~= nil and room:GetGridCollision(
+                    obstacleIndex
+                ) == GridCollisionClass.COLLISION_SOLID,
             })
         end)
     end

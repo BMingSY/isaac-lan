@@ -17,6 +17,8 @@
 
 实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
 
+`rooms_with_player` 可以切换到客机的远端角色存储壳；该对象不保证网格尺寸、门或房间描述符已经初始化。房间内容只能在主机权威房间或客机当前可见房间查询，可见性须同时比较房间编号和 dimension。远端角色的库存、属性与位置仍可采集，不能将存储壳视为完整房间。
+
 ## 转场与暂停
 
 Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；普通 `Game::StartRoomTransition` 同时选路并启动转场，不能直接作为客机结果回放接口。

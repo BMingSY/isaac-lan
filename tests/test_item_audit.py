@@ -380,6 +380,79 @@ def test_familiar_counts_follow_the_replica_room_and_reappear_on_reunion():
     assert next(c for c in checks() if c["name"] == "familiar_reunion")["status"] == "missing"
 
 
+def test_trigger_probe_never_reads_remote_room_shells():
+    import shutil
+    import subprocess
+
+    executable = shutil.which("lua5.3") or shutil.which("lua")
+    if not executable:
+        pytest.skip("Lua is unavailable")
+    script = r"""
+        TearVariant, PlayerType, RoomType = {}, {}, {ROOM_DEFAULT=1}
+        GridEntityType = {GRID_ROCK=2, GRID_POOP=14}
+        EffectVariant, FamiliarVariant, PickupVariant, CollectibleType = {}, {}, {}, {}
+        TrinketType, PillColor, NullItemID, PlayerForm = {}, {}, {}, {}
+        DoorSlot = {NUM_DOOR_SLOTS=8}
+        function createInteractionEffects() return {sample=function() end} end
+        function createProjectileTrials() return {sample=function() end} end
+        local location, view = {index=84, dimension=0}, {index=97, dimension=0}
+        _IsaacLan = {rooms_positions=function() return {["0"]=location, ["1"]=view} end}
+        function _IsaacLanStatus() return {slot=1} end
+        local allowed, reads, records = false, 0, {}
+        local function roomRead()
+            assert(allowed, "Remote replica shell was queried as an initialized room")
+            reads = reads + 1
+        end
+        local room = {
+            GetGridSize=function() roomRead(); return 2 end,
+            GetGridEntity=function(_, index)
+                roomRead()
+                if index == 0 then return {
+                    State=0, GetType=function() return 2 end, ToRock=function() return true end
+                } end
+            end,
+            GetDoor=function() roomRead() end,
+            GetType=function() roomRead(); return 1 end,
+            GetBrokenWatchState=function() roomRead(); return 2 end,
+        }
+        Isaac = {GetRoomEntities=function() roomRead(); return {} end}
+        local level = {GetStage=function() return 2 end, GetCurses=function() return 0 end}
+        function Game() return {GetLevel=function() return level end} end
+        local player = setmetatable({Position={X=10,Y=20}, Velocity={X=0,Y=0},
+            SpriteScale={X=1,Y=1}, Damage=3.5, MaxFireDelay=10, MoveSpeed=1,
+            TearRange=260, ShotSpeed=1, Luck=0, Visible=true, CanFly=false,
+            GetHearts=function() return 6 end}, {__index=function() return function() return 0 end end})
+        local probe = dofile("tests/fixtures/item_audit_triggers.lua")(
+            function(event, value) if event == "trigger_probe" then records[#records+1]=value end end,
+            function(_, callback) callback(player, room) end, function() end, function() end)
+        local case = {slot=0, id=249, trigger_effects={watch_trial=true}}
+        local function sample(host, visible)
+            allowed, reads = host or visible, 0
+            probe.sample(case, 450, host)
+            local result = records[#records]
+            assert(result.room_visible == visible)
+            assert(result.room == location.index and result.hearts == 6 and result.x == 10,
+                "Offscreen actor observations must remain available")
+            if allowed then
+                assert(reads > 0 and result.grids.GRID_ROCK == 1 and result.rock_count == 1)
+                assert(result.room_type == "ROOM_DEFAULT" and result.watch_state == 2)
+            else
+                assert(reads == 0 and next(result.grids) == nil and #result.doors == 0)
+                assert(result.room_type == nil and result.watch_state == nil)
+            end
+        end
+        sample(false, false)
+        sample(true, false)
+        view.index = location.index
+        sample(false, true)
+        view.dimension = 1
+        sample(false, false)
+        view.dimension = 0
+        sample(false, true)
+    """
+    subprocess.run([executable, "-"], input=script, text=True, cwd=ROOT, check=True)
+
+
 def test_all_effect_scenarios_build_a_parseable_native_fixture(tmp_path):
     import shutil
     import subprocess
