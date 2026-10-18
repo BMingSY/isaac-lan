@@ -85,15 +85,23 @@ return function(deps, layout)
         assets.fill.Color = Color(0, 0, 0, alpha or 1, color[1] - 1, color[2] - 1, color[3] - 1)
         assets.fill:Render(Vector(x, y))
     end
-    local function panel(x, y, width, height, alpha, fillColor, edgeColor)
+    local function panel(bounds, y, height, alpha, fillColor, edgeColor)
+        local x, width = bounds.x, bounds.width
         if assets.background then
             local padding = 6
-            assets.background.Scale = Vector(
+            local imageScale = Vector(
                 (width + padding * 2) / style.image_width,
-                (height + padding * 2) / style.image_height
+                (bounds.height + padding * 2) / style.image_height
             )
+            assets.background.Scale = imageScale
             assets.background.Color = Color(1, 1, 1, alpha)
-            assets.background:Render(Vector(x - padding, y - padding))
+            -- Render clamps are distances before Sprite.Scale. Keep the full
+            -- image anchored to the expanded panel and reveal only its bottom.
+            assets.background:Render(
+                Vector(x - padding, bounds.y - padding),
+                Vector(0, math.max(0, y - bounds.y) / imageScale.Y),
+                Vector(0, 0)
+            )
             return
         end
         -- Border strips avoid stacking translucent fills into an opaque panel.
@@ -317,16 +325,7 @@ return function(deps, layout)
             lastWidth = panelWidth
         end
         if ui.input.open then
-            local panelHeight = layout.expandedLines * layout.lineHeight + inputHeight + 10
-            panel(
-                x,
-                bottom - panelHeight,
-                panelWidth,
-                panelHeight,
-                backgroundAlpha,
-                background,
-                border
-            )
+            panel(bounds, bounds.y, bounds.height, backgroundAlpha, background, border)
             rect(x + 6, bottom - inputHeight, panelWidth - 12, 1, border, backgroundAlpha)
         end
         local shown = ui.input.open and layout.expandedLines or layout.recentLines
@@ -351,12 +350,11 @@ return function(deps, layout)
                 rows[#rows + 1] = { text = row.text, alpha = alpha, color = color }
             end
         end
-        local y = bottom - (ui.input.open and inputHeight + 4 or 0) - #rows * layout.lineHeight
+        local y = bottom - (ui.input.open and inputHeight or 0) - 4 - #rows * layout.lineHeight
         if not ui.input.open and #rows > 0 then
             panel(
-                x,
+                bounds,
                 y - 4,
-                panelWidth,
                 #rows * layout.lineHeight + 8,
                 backgroundAlpha * backgroundFade,
                 background,

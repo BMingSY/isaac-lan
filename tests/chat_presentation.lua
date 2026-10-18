@@ -25,9 +25,15 @@ function Sprite()
         IsLoaded = function(self)
             return self.path ~= nil
         end,
-        Render = function(self, position)
-            draws[#draws + 1] =
-                { path = self.path, color = self.Color, scale = self.Scale, position = position }
+        Render = function(self, position, topLeft, bottomRight)
+            draws[#draws + 1] = {
+                path = self.path,
+                color = self.Color,
+                scale = self.Scale,
+                position = position,
+                topLeft = topLeft,
+                bottomRight = bottomRight,
+            }
         end,
     }
 end
@@ -149,12 +155,70 @@ assert(
     draws[1].color.R == 1 and draws[1].scale.X * 420 >= 210,
     "Image was tinted or incorrectly fitted"
 )
+local expanded = draws[1]
 ui.render({ phase = 2 })
 assert(loads["custom.anm2"] == 1, "Image was reloaded every frame")
 draws = {}
 ui.input.open = false
 ui.render({ phase = 2 })
 assert(draws[1].path == "custom.anm2", "Recent messages lost their image background")
+local collapsed = draws[1]
+assert(
+    collapsed.scale.X == expanded.scale.X and collapsed.scale.Y == expanded.scale.Y,
+    "Collapsing chat squeezed the whole image instead of cropping it"
+)
+assert(
+    collapsed.position.X == expanded.position.X and collapsed.position.Y == expanded.position.Y,
+    "Collapsing chat moved the background image"
+)
+assert(expanded.topLeft.Y == 0 and collapsed.topLeft.Y > 0, "Upper image was not cropped")
+assert(collapsed.bottomRight.Y == 0, "Collapsing chat cropped the bottom of the image")
+assert(
+    math.abs((192 - collapsed.topLeft.Y) * collapsed.scale.Y - 31) < 0.001,
+    "Crop did not leave the single recent line and its padding"
+)
+local recent = {
+    { kind = "team", owner = 0, text = "one", time = 0 },
+    { kind = "team", owner = 1, text = "two", time = 0 },
+    { kind = "team", owner = 2, text = "three", time = 0 },
+}
+ui, draws = create("custom.anm2", 45, nil, recent), {}
+ui.input.open = false
+ui.render({ phase = 2 })
+assert(draws[1].scale.Y == collapsed.scale.Y and draws[1].topLeft.Y < collapsed.topLeft.Y)
+-- Expired rows change only the crop; the surviving row also fades the background.
+recent[1].time, recent[2].time, recent[3].time = -6000, -6000, -4500
+draws = {}
+ui.render({ phase = 2 })
+assert(draws[1].topLeft.Y == collapsed.topLeft.Y and draws[1].scale.Y == expanded.scale.Y)
+assert(draws[1].color.A > 0 and draws[1].color.A < expanded.color.A)
+ui.input.open, draws = true, {}
+ui.render({ phase = 2 })
+assert(draws[1].topLeft.Y == 0 and draws[1].scale.Y == expanded.scale.Y)
+local beforeDrag = draws[1]
+mouse = { x = beforeDrag.position.X + 30, y = beforeDrag.position.Y + 20, down = true }
+ui.render({ phase = 2 })
+mouse.x, mouse.y, draws = mouse.x + 40, mouse.y - 20, {}
+ui.render({ phase = 2 })
+local moved = draws[1]
+assert(
+    moved.position.X == beforeDrag.position.X + 40
+        and moved.position.Y == beforeDrag.position.Y - 20
+)
+mouse.down, ui.input.open, draws = false, false, {}
+ui.render({ phase = 2 })
+assert(draws[1].position.Y == moved.position.Y and draws[1].topLeft.Y == collapsed.topLeft.Y)
+screenWidth, screenHeight, draws = 480, 270, {}
+ui.render({ phase = 2 })
+local resizedImage = draws[1]
+ui.input.open, draws = true, {}
+ui.render({ phase = 2 })
+assert(resizedImage.scale.X == draws[1].scale.X and resizedImage.scale.Y == draws[1].scale.Y)
+assert(resizedImage.position.Y == draws[1].position.Y and draws[1].topLeft.Y == 0)
+ui.input.open, recent[3].time, draws = false, -6000, {}
+ui.render({ phase = 2 })
+assert(#draws == 0, "Expired messages left an image panel behind")
+screenWidth, screenHeight = 640, 360
 missing, draws = true, {}
 create("custom.anm2", 45).render({ phase = 2 })
 assert(#draws > 0)
