@@ -64,8 +64,22 @@ void __cdecl deleteHook() {
 void __cdecl rerunHook() {
     callbacks.saveRerun(originalRerun);
 }
+void redirectRestart() {
+    constexpr int gameOverRestart = 5, heldRestart = 6;
+    if (!gameReady())
+        return;
+    const auto action = at<int>(game(), layout::game::fadeAction);
+    if ((action == gameOverRestart || action == heldRestart) &&
+        callbacks.restartRequest(action == heldRestart)) {
+        // Consume the intent before Game::Update advances its fade into Exit.
+        at<int>(game(), layout::game::fadeAction) = 0;
+        at<float>(game(), layout::game::fadeAlpha) = 0;
+        at<unsigned char>(game(), layout::game::restartHeldFrames) = 0;
+    }
+}
 void __cdecl controlsHook() {
     callbacks.controls(originalControls);
+    redirectRestart();
 }
 void __attribute__((fastcall)) serializeHook(void* object, void*) {
     auto original = [=] { originalSerialize(object); };
@@ -225,6 +239,7 @@ std::string executeConsole(std::string_view command) {
 }
 void controls() {
     originalControls();
+    redirectRestart();
 }
 std::uint32_t parseSeed(std::string_view text) {
     constexpr unsigned seedGroupLength = 4;

@@ -12,6 +12,7 @@ local ui = {
 }
 local Phase = _IsaacLan.net_phases()
 local Command = _IsaacLan.net_commands()
+local renderRestart = _IsaacLanModules["presentation/restart"]()
 local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
 -- menu_key reports Windows virtual-key codes from the native frontend.
 local Key =
@@ -206,6 +207,7 @@ function _IsaacLanMenuRender(
     end
     if not visible then
         renderPing(status, assets[10])
+        renderRestart(status, assets[10])
         local banner
         if phase == Phase.waiting then
             banner = "正在当前层归队 · 队友继续游戏"
@@ -247,6 +249,7 @@ function _IsaacLanMenuRender(
         or phase == Phase.running
         or phase == Phase.loading
         or phase == Phase.waiting
+        or phase == Phase.returning
     )
             and (status.players or 0)
         or 0
@@ -264,6 +267,8 @@ function _IsaacLanMenuRender(
     })
     if notice == "unavailable" then
         centered("全员需解锁底片与里该隐", 240, 250, 10, red)
+    elseif notice == "returning" then
+        centered("等待队友结算结束", 110, 100, 12)
     elseif notice == "waiting" then
         centered(
             phase == Phase.waiting and "正在当前层归队" or "正在连接或加载…",
@@ -273,7 +278,12 @@ function _IsaacLanMenuRender(
         )
         centered("队友可以继续游戏", 110, 124, 10)
     end
-    local yStart = (phase == Phase.waiting or phase == Phase.loading or phase == Phase.connecting)
+    local yStart = (
+        phase == Phase.waiting
+        or phase == Phase.loading
+        or phase == Phase.connecting
+        or phase == Phase.returning
+    )
             and 157
         or 89
     local gap = #rows > 6 and 19 or 23

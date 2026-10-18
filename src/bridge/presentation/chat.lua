@@ -147,6 +147,13 @@ return function(deps, layout)
         end
         ui.input = native.chat_ui_state()
         local controls = native.chat_controls()
+        if controls.restart and status.prepared then
+            native.chat_ui_open(false)
+            native.emote_poll(0, false)
+            native.chat_ui_modal(false)
+            ui.wheel, ui.input.open = false, false
+            return
+        end
         if controls.chat then
             native.chat_ui_open(not ui.input.open)
             ui.input = native.chat_ui_state()

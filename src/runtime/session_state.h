@@ -2,7 +2,17 @@
 #include "runtime/session_archive.h"
 #include "runtime/pending_archive.h"
 #include <optional>
+#include <chrono>
 namespace isaac::runtime {
+struct RestartState {
+    bool requested = false, exiting = false, heldVoted = false;
+    std::optional<std::chrono::steady_clock::time_point> heldAt;
+    void close(bool preserveConnection) {
+        requested = false;
+        if (!preserveConnection)
+            *this = {};
+    }
+};
 struct LaunchState {
     bool requested = false, resume = false, promptsPending = false;
 };

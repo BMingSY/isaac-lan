@@ -9,7 +9,7 @@
 - [core/chat.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/chat.h) 持有字符／字节限制、UTF-8 编辑和历史记录；Win32 输入适配在版本后端，处理 `~`、剪贴板和 IME，编辑期间隔离本机玩法输入，关闭后需释放已按住的动作键。
 - [runtime/chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat.lua) 持有命令队列、消息记录、输出归属和去重。`/console`、`/c` 后的文本直接交给原版解析，不维护原版命令白名单；`/e` 在本机完成，掷骰由房主使用独立随机源生成一次。
 - [presentation/chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/chat.lua) 只处理本机输入状态、布局、滚动和绘制；文字气泡只渲染同房角色，使用半透明的原版气泡素材。表情选择、动画和气泡复用游戏已有轮盘及角色表情组件；原版资源从游戏读取，不重新分发。背景配置通过启动装配注入，不参与联网一致性。
-- [chat_wire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat_wire.lua) 编解码请求、输出、表情。底层 `communication` 是独立于 Mod 动作与世界快照的可靠字节消息；网络层不解析聊天内容。协议版本为 31，同版本扩展才可联机。
+- [chat_wire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat_wire.lua) 编解码请求、输出、表情。底层 `communication` 是独立于 Mod 动作与世界快照的可靠字节消息；网络层不解析聊天内容。协议版本以 [protocol.h](https://github.com/BMingSY/isaac-lan/blob/main/src/net/protocol.h) 为准，同版本扩展才可联机。
 
 输入者的连接槽由传输层确定。原版命令在房主的更新安全边界执行，使用输入者的角色与房间上下文；排队时记录局次、世界代次、房间和维度，执行前不再匹配则取消。`rewind` 使用既有回退事务。没有玩家权限分级；同步方式不改变成员使用命令的资格。
 

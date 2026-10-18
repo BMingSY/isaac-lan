@@ -463,18 +463,25 @@ void floorRejoin() {
 }
 void endingEvents() {
     for (unsigned count = 2; count <= 4; ++count)
-        for (unsigned scenario = 0; scenario < 3; ++scenario) {
-            const RunRules rules = scenario ? RunRules{1001, 2, 23, 0, true} : RunRules{};
+        for (unsigned scenario = 0; scenario < 5; ++scenario) {
+            const RunRules rules = scenario == 1 || scenario == 2 || scenario == 4
+                                       ? RunRules{1001, 2, 23, 0, true}
+                                       : RunRules{};
             const bool completed = scenario == 2;
+            const unsigned id = scenario >= 3 ? ending::gameOver : 6;
             Group group(count, 0, "127.0.0.1", rules);
             group.ready();
             group.step(0);
             if (!scenario)
                 require(!group.peers[0]->beginEnding(6, {}, true),
                         "Ordinary run declared explicit rule completion");
-            require(group.peers[0]->beginEnding(6, {}, completed), "Terminal event rejected");
-            require(group.peers[0]->beginEnding(6, {}, completed), "Terminal replay rejected");
-            require(!group.peers[0]->beginEnding(6, {}, !completed),
+            require(!group.peers[1]->beginEnding(id), "Replica published a terminal event");
+            if (id == ending::gameOver)
+                require(!group.peers[0]->beginEnding(id, {}, true),
+                        "Game over was accepted as challenge completion");
+            require(group.peers[0]->beginEnding(id, {}, completed), "Terminal event rejected");
+            require(group.peers[0]->beginEnding(id, {}, completed), "Terminal replay rejected");
+            require(!group.peers[0]->beginEnding(id, {}, !completed),
                     "Same ending ID changed native ending into explicit completion");
             for (unsigned slot = 1; slot < count; ++slot) {
                 std::optional<Ending> event;
@@ -483,45 +490,285 @@ void endingEvents() {
                     event = group.peers[slot]->takeEnding();
                     return event.has_value();
                 });
-                require(event == Ending{6, {}, completed},
+                require(event == Ending{id, {}, completed},
                         "Native ending and explicit completion were conflated on a replica");
+                require(!group.peers[slot]->takeEnding(), "Terminal event was applied twice");
             }
         }
-    Group g(4);
-    g.ready();
-    g.step(0);
-    g.publish(0, 40000);
-    require(!g.peers[1]->beginEnding(8), "Client could choose the shared ending");
-    for (auto invalid : {0u, 1u, 15u, 255u})
-        require(!g.peers[0]->beginEnding(invalid), "Invalid ending was accepted");
-    Progress progress;
-    progress.achievements[7] = 1;
-    progress.counters[21] = 5;
-    require(g.peers[0]->beginEnding(8, progress), "Ending broadcast failed");
-    require(g.peers[0]->beginEnding(8), "Duplicate native ending was not idempotent");
-    require(!g.peers[0]->beginEnding(13), "A terminal event changed its ending");
-    require(!g.peers[0]->beginStage({1, 2, 0, 0, false, {}, {}}),
-            "A floor change followed the terminal event");
-    WorldState obsolete;
-    obsolete.tick = 0;
-    obsolete.bytes = {1};
-    require(!g.peers[0]->publish(1, obsolete), "World publication continued after the ending");
-    // The engine closes immediately after its native exit callback. Every
-    // replica must retain the ending even if finish and EOF arrive together.
-    g.peers[0]->finish();
-    until([&] {
-        g.poll();
-        return g.peers[1]->phase() == Phase::closed && g.peers[2]->phase() == Phase::closed &&
-               g.peers[3]->phase() == Phase::closed;
-    });
-    for (unsigned slot = 1; slot < 4; ++slot) {
-        require(g.peers[slot]->takeEnding() == Ending{8, progress},
-                "Finish/EOF lost the native ending or its earned progress");
-        require(!g.peers[slot]->takeEnding(), "A replica received the ending twice");
-        require(!g.peers[slot]->takeState(), "Old world state survived the terminal event");
+    for (const auto id : {8u, ending::gameOver}) {
+        Group g(4);
+        g.ready();
+        g.step(0);
+        g.publish(0, 40000);
+        require(!g.peers[1]->beginEnding(id), "Client could choose the shared ending");
+        for (auto invalid : {0u, 15u, 255u})
+            require(!g.peers[0]->beginEnding(invalid), "Invalid ending was accepted");
+        Progress progress;
+        progress.achievements[7] = 1;
+        progress.counters[21] = 5;
+        require(g.peers[0]->beginEnding(id, progress), "Ending broadcast failed");
+        require(g.peers[0]->beginEnding(id), "Duplicate native ending was not idempotent");
+        require(!g.peers[0]->beginEnding(13), "A terminal event changed its ending");
+        require(!g.peers[0]->beginStage({1, 2, 0, 0, false, {}, {}}),
+                "A floor change followed the terminal event");
+        WorldState obsolete;
+        obsolete.tick = 0;
+        obsolete.bytes = {1};
+        require(!g.peers[0]->publish(1, obsolete), "World publication continued after the ending");
+        // The engine closes immediately after its native exit callback. Every
+        // replica must retain the ending even if finish and EOF arrive together.
+        g.peers[0]->finish();
+        until([&] {
+            g.poll();
+            return g.peers[1]->phase() == Phase::closed && g.peers[2]->phase() == Phase::closed &&
+                   g.peers[3]->phase() == Phase::closed;
+        });
+        for (unsigned slot = 1; slot < 4; ++slot) {
+            require(g.peers[slot]->takeEnding() == Ending{id, progress},
+                    "Finish/EOF lost the native ending or its earned progress");
+            require(!g.peers[slot]->takeEnding(), "A replica received the ending twice");
+            require(!g.peers[slot]->takeState(), "Old world state survived the terminal event");
+        }
     }
     std::puts(
         "PASS authoritative ending survives immediate finish/EOF and plays once on all peers");
+}
+void returnLobby() {
+    for (unsigned count : {2u, 4u}) {
+        Group g(count);
+        g.ready();
+        g.step(0);
+        require(!g.peers[0]->returnToLobby() && !g.peers[1]->returnToLobby(),
+                "Live game returned to selection");
+        const auto port = g.peers[0]->port();
+        std::array<std::string, maxPlayers> identities;
+        for (unsigned slot = 0; slot < count; ++slot)
+            identities[slot] = g.peers[slot]->identity();
+        for (bool hostFirst : {true, false, true}) {
+            const auto oldRun = g.peers[0]->runId();
+            require(g.peers[0]->beginEnding(ending::firstCinematic), "Ending failed");
+            for (unsigned slot = 1; slot < count; ++slot) {
+                until([&] {
+                    g.poll();
+                    return g.peers[slot]->takeEnding().has_value();
+                });
+            }
+            const auto first = hostFirst ? 0u : count - 1;
+            require(g.peers[first]->returnToLobby() && g.peers[first]->returnToLobby(),
+                    "Local return was not idempotent");
+            for (unsigned attempt = 0; attempt < 30; ++attempt)
+                g.poll();
+            require(g.peers[first]->phase() == Phase::returning &&
+                        g.peers[hostFirst ? count - 1 : 0]->phase() == Phase::running,
+                    "First finisher interrupted a teammate's ending");
+            auto settings = g.peers[0]->settings();
+            require(!g.peers[0]->start(settings), "New game started over an unfinished ending");
+            for (unsigned slot = 0; slot < count; ++slot)
+                if (slot != first)
+                    require(g.peers[slot]->returnToLobby(), "Remaining return failed");
+            until([&] {
+                g.poll();
+                return std::all_of(g.peers.begin(), g.peers.begin() + count,
+                                   [](const auto& peer) { return peer->phase() == Phase::lobby; });
+            });
+            for (unsigned slot = 0; slot < count; ++slot) {
+                const auto& peer = g.peers[slot];
+                require(peer->identity() == identities[slot] && peer->slot() == slot &&
+                            peer->players() == count && !peer->takeEnding() && !peer->takeState() &&
+                            !peer->takeRestart(),
+                        "Lobby retained old gameplay or changed identities");
+                require(!peer->choices()[slot].ready, "Lobby kept previous ready state");
+                require(peer->choose({static_cast<std::uint16_t>(slot), false}),
+                        "Lobby cannot change characters");
+            }
+            require(g.peers[0]->port() == port && !g.peers[0]->start(settings),
+                    "Room replaced or unready roster started");
+            for (unsigned slot = 0; slot < count; ++slot)
+                require(g.peers[slot]->choose({static_cast<std::uint16_t>(slot), true}),
+                        "New selection failed");
+            until([&] {
+                g.poll();
+                for (unsigned slot = 0; slot < count; ++slot)
+                    if (!g.peers[0]->choices()[slot].ready)
+                        return false;
+                return true;
+            });
+            settings.characters = {0, 1, 2, 3};
+            settings.seed = hostFirst ? "QWERTY12" : "YV039KQF";
+            require(g.peers[0]->start(settings), "Next lobby start failed");
+            until([&] {
+                g.poll();
+                return g.peers[count - 1]->phase() == Phase::running;
+            });
+            for (unsigned slot = 0; slot < count; ++slot)
+                require(g.peers[slot]->runId() != oldRun &&
+                            g.peers[slot]->runId() == g.peers[0]->runId() &&
+                            g.peers[slot]->settings().characters == settings.characters,
+                        "Next run reused old state or ignored new selection");
+            g.ready();
+            require(g.step(0).tick == 0, "Next run did not reset simulation");
+        }
+        require(g.peers[0]->beginEnding(ending::gameOver), "Game over failed");
+        until([&] {
+            g.poll();
+            return g.peers[1]->takeEnding().has_value();
+        });
+        require(!g.peers[0]->returnToLobby() && !g.peers[1]->returnToLobby(),
+                "Death result replaced restart voting with lobby return");
+    }
+    Group g(4);
+    g.ready();
+    g.step(0);
+    require(g.peers[0]->beginEnding(ending::lastCinematic), "Ending failed");
+    for (unsigned slot = 1; slot < 4; ++slot)
+        until([&] {
+            g.poll();
+            return g.peers[slot]->takeEnding().has_value();
+        });
+    const auto identity = g.peers[3]->identity();
+    for (unsigned slot : {0u, 2u, 3u})
+        require(g.peers[slot]->returnToLobby(), "Return with disconnected peer failed");
+    g.peers[1]->close();
+    until([&] {
+        g.poll();
+        return g.peers[3]->phase() == Phase::lobby;
+    });
+    require(g.peers[0]->players() == 3 && g.peers[3]->slot() == 2 &&
+                g.peers[3]->identity() == identity && g.peers[0]->connectedMask() == 7,
+            "Departed seat blocked or corrupted the new lobby");
+    std::puts("PASS completed runs return to selection together, retaining room and identities");
+}
+void restartRuns() {
+    for (unsigned count : {2u, 4u}) {
+        Group g(count, 1, "127.0.0.1", {}, {0, 1, 2, 3});
+        g.ready();
+        g.step(0);
+        const auto identities = [&] {
+            std::array<std::string, maxPlayers> values;
+            for (unsigned slot = 0; slot < count; ++slot)
+                values[slot] = g.peers[slot]->identity();
+            return values;
+        }();
+        for (bool ended : {false, true, false}) {
+            g.publish(0, 12000);
+            g.poll();
+            // Leave previous-run input and receipt traffic in flight.
+            for (unsigned slot = 1; slot < count; ++slot) {
+                if (auto world = g.peers[slot]->takeState())
+                    g.peers[slot]->applied(world->tick);
+                require(g.peers[slot]->submit(0, {}), "Old input not queued");
+            }
+            if (ended)
+                require(g.peers[0]->beginEnding(ending::gameOver), "Game over failed");
+            const auto oldRun = g.peers[0]->runId();
+            const auto oldEpoch = g.peers[0]->worldEpoch();
+            auto settings = g.peers[0]->settings();
+            settings.seed = settings.seed == "YV039KQF" ? "QWERTY12" : "YV039KQF";
+            require(!g.peers[1]->restart(settings), "Guest initiated authoritative reset");
+            require(g.peers[0]->restart(settings), "Host restart failed");
+            require(!g.peers[0]->restart(settings), "Repeated restart accepted before readiness");
+            until([&] {
+                g.poll();
+                for (unsigned slot = 1; slot < count; ++slot)
+                    if (g.peers[slot]->runId() == oldRun)
+                        return false;
+                return true;
+            });
+            for (unsigned slot = 0; slot < count; ++slot) {
+                auto& peer = *g.peers[slot];
+                require(peer.takeRestart() && !peer.takeRestart(), "Reset was not one-shot");
+                require(peer.identity() == identities[slot] && peer.slot() == slot &&
+                            peer.players() == count && peer.connectedMask() == (1u << count) - 1,
+                        "Restart changed the room membership");
+                require(peer.settings().seed == settings.seed && peer.settings().difficulty == 1 &&
+                            peer.settings().characters == settings.characters &&
+                            peer.worldEpoch() > oldEpoch && !peer.takeEnding() && !peer.takeState(),
+                        "New run retained old state or lost settings");
+            }
+            require(!g.peers[0]->take(), "New run simulated before readiness");
+            require(!g.peers[0]->sendLifecycle(1, "initial vote state") &&
+                        !g.peers[1]->sendLifecycle(0, "consent"),
+                    "Lifecycle delivery reported success before local readiness");
+            require(g.peers[0]->ready(), "Host could not load the fresh run");
+            require(!g.peers[0]->sendLifecycle(1, "initial vote state"),
+                    "Initial vote state would be lost while guest loads");
+            g.ready();
+            require(g.step(0).tick == 0, "New run did not reset simulation ticks");
+            require(g.peers[1]->sendLifecycle(0, "consent"), "Lifecycle channel failed");
+            std::optional<IntegrationMessage> vote;
+            until([&] {
+                g.poll();
+                vote = g.peers[0]->takeLifecycle();
+                return vote.has_value();
+            });
+            require(vote->sender == 1 && vote->bytes == "consent", "Vote sender was not preserved");
+        }
+    }
+    {
+        Group g(3);
+        g.ready();
+        g.step(0);
+        const auto identity = g.peers[1]->identity();
+        g.peers[1]->close();
+        g.peers[1].reset();
+        until([&] {
+            g.poll();
+            return g.peers[0]->connectedMask() == 5;
+        });
+        auto settings = g.peers[0]->settings();
+        settings.seed = "QWERTY12";
+        require(g.peers[0]->restart(settings), "A disconnected seat prevented restart");
+        until([&] {
+            g.poll();
+            return g.peers[2]->runId() == g.peers[0]->runId();
+        });
+        require(g.peers[2]->slot() == 2 && g.peers[2]->connectedMask() == 5,
+                "Restart compacted or revived an absent seat");
+        require(g.peers[0]->ready() && g.peers[2]->ready(), "Survivors could not load new run");
+        g.step(0);
+        g.peers[1] = std::make_unique<Session>();
+        require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {},
+                                 testAccess()),
+                "Returning seat could not reconnect after restart");
+        until([&] {
+            g.poll();
+            return g.peers[1]->phase() == Phase::waiting;
+        });
+        require(g.peers[1]->slot() == 1, "Restart lost a returning player's identity");
+        require(!g.peers[0]->restart(settings), "Restart interrupted checkpoint admission");
+    }
+    std::puts(
+        "PASS repeated new-run barriers preserve seats, reject stale state, and clear endings");
+}
+void endingLiveness() {
+    Group g(4);
+    g.ready();
+    g.step(0);
+    g.publish(0);
+    for (unsigned slot = 1; slot < g.count; ++slot)
+        until([&] {
+            g.poll();
+            if (const auto state = g.peers[slot]->takeState()) {
+                g.peers[slot]->applied(state->tick);
+                return true;
+            }
+            return false;
+        });
+    require(g.peers[0]->beginEnding(ending::gameOver), "Game-over event rejected");
+    // Outlive both gameplay watchdogs (15 s inputs, 20 s snapshots). Terminal
+    // screens exchange only transport heartbeats until the user dismisses them.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(22);
+    while (std::chrono::steady_clock::now() < deadline) {
+        g.poll();
+        require(g.peers[0]->connectedMask() == 15, "Game-over screen lost a healthy peer");
+        Sleep(5);
+    }
+    for (unsigned slot = 1; slot < g.count; ++slot) {
+        require(g.peers[slot]->takeEnding() == Ending{ending::gameOver, {}},
+                "Waiting on game over lost its event");
+        require(g.peers[slot]->phase() == Phase::running,
+                "Terminal heartbeat did not preserve the connection");
+    }
 }
 void cinematicEvents() {
     Group g(4);
@@ -1993,6 +2240,9 @@ int main(int argc, char** argv) {
                                   {"floor-rejoin", floorRejoin},
                                   {"stage-events", stageEvents},
                                   {"ending-events", endingEvents},
+                                  {"ending-liveness", endingLiveness},
+                                  {"restart", restartRuns},
+                                  {"return-lobby", returnLobby},
                                   {"cinematic-events", cinematicEvents},
                                   {"stage-during-rejoin", stageDuringRejoin},
                                   {"rewind", rewindTransaction},

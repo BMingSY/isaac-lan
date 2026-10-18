@@ -177,7 +177,12 @@ function _IsaacLanFrame()
     end
     native.test_gamepad(campaign and won and status.scene == 3 and renders % 30 < 5 and 4096 or 0)
     if campaign and won and not finished and native.api_info().nowMs - endedAt > 3000 then
-        if status.phase == 0 and not status.prepared and status.scene == 1 then
+        if
+            status.phase == native.net_phases().lobby
+            and not status.prepared
+            and status.scene == 1
+        then
+            assert(status.players == 2 and status.connected == 3, "Ending lost the LAN room")
             local progress = native.net_progress()
             for i = 2, 643 do
                 assert(

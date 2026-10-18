@@ -80,7 +80,9 @@ struct Session::Impl {
     std::array<std::optional<RoomRequest>, maxPlayers> roomRequests{};
     std::string integrationRun;
     std::uint32_t integrationEpoch = 0;
-    SideChannel integration, communication;
+    SideChannel integration, communication, lifecycle;
+    bool restartPending = false;
+    unsigned returnedMask = 0;
     std::size_t worldSize = 0, snapshotSize = 0;
     bool assemblingDelta = false;
     std::uint32_t assemblingBase = 0, takenWorldEpoch = 0;
@@ -113,6 +115,47 @@ struct Session::Impl {
         incoming.clear();
         integration = {};
         communication = {};
+        lifecycle = {};
+    }
+    void resetRun() {
+        returnedMask = 0;
+        restartPending = false;
+        localReady = initialStarted = false;
+        nextInput = nextConsume = committed = 0;
+        consumedLocal.reset();
+        verified.reset();
+        latest = {};
+        inputRooms = {};
+        sequences = {};
+        commands = {};
+        roomRequests = {};
+        receivedState.reset();
+        assembling.reset();
+        receivedStage.reset();
+        assemblingStage.reset();
+        cinematicEpoch.reset();
+        cinematicReadyMask = 0;
+        ending.reset();
+        endingCompleted = false;
+        receivedEnding.reset();
+        integration = {};
+        communication = {};
+        lifecycle = {};
+        takenWorldEpoch = integrationEpoch;
+        for (auto& p : peers)
+            if (p) {
+                p->ready = p->hasInput = false;
+                p->inputSequence = 0;
+                p->acknowledged.reset();
+                p->resetWorldCache();
+                p->pending.reset();
+                p->sending.reset();
+                p->sendingStage.reset();
+                p->floorAfterLoad.reset();
+                p->checkpoint.reset();
+                p->loadingAt = Clock::now();
+            }
+        progress = Clock::now();
     }
     void connectNextAddress() {
         peers[0].reset();
@@ -239,6 +282,7 @@ struct Session::Impl {
                 ++next;
             }
         playerCount = next;
+        activeMask = (1u << playerCount) - 1;
         for (unsigned i = 0; i < playerCount; ++i) {
             auto& choice = choices[i];
             if (runRules.character != 65535)
@@ -266,6 +310,42 @@ struct Session::Impl {
         }
         lobbyDirty = false;
         updateMods(true);
+    }
+    void finishReturn() {
+        if (!hosting || state != Phase::returning || (returnedMask & activeMask) != activeMask)
+            return;
+        // A disconnected/rejoining seat has no completed local run. It is not
+        // part of this barrier or the next lobby's compact, connected roster.
+        for (unsigned slot = 1; slot < maxPlayers; ++slot)
+            if (peers[slot] && !(activeMask & (1u << slot))) {
+                Writer finish(Message::finish);
+                finish.u32(committed);
+                try {
+                    peers[slot]->sendMessage(finish);
+                    peers[slot]->flush();
+                } catch (...) {
+                }
+                remove(slot);
+            }
+        incoming.clear();
+        resetRun();
+        for (unsigned slot = 1; slot < maxPlayers; ++slot)
+            if (!peers[slot]) {
+                identities[slot].clear();
+                access[slot] = {};
+                choices[slot] = {};
+            }
+        ++rulesRevision;
+        choicesRequired = true;
+        for (auto& choice : choices)
+            choice.ready = false;
+        for (auto& peer : peers)
+            if (peer)
+                peer->loadingAt.reset();
+        state = Phase::lobby;
+        lobbyDirty = true;
+        if (logger)
+            logger("network_return=LOBBY");
     }
     Writer startMessage(Message type, const Start& value) {
         Writer w(type);
@@ -303,7 +383,7 @@ struct Session::Impl {
         commands[slot] = Command::none;
         roomRequests[slot].reset();
         peers[slot].reset();
-        for (auto* channel : {&integration, &communication})
+        for (auto* channel : {&integration, &communication, &lifecycle})
             std::erase_if(channel->queue,
                           [slot](const auto& message) { return message.sender == slot; });
         if (state == Phase::lobby) {
@@ -341,7 +421,9 @@ struct Session::Impl {
     void message(unsigned slot, Reader& r) {
         const auto type = static_cast<Message>(r.u8());
         auto& p = *peers[slot];
-        if ((type == Message::integration || type == Message::communication) && p.accepted) {
+        if ((type == Message::integration || type == Message::communication ||
+             type == Message::lifecycle) &&
+            p.accepted) {
             const bool chat = type == Message::communication;
             auto bytes = r.blob(chat ? maxCommunicationSize : maxIntegrationSize);
             r.finish();
@@ -351,7 +433,9 @@ struct Session::Impl {
             if (!chat && hosting && state == Phase::running &&
                 (!p.ready || p.waiting || p.rejoining))
                 return;
-            (chat ? communication : integration)
+            (chat                         ? communication
+             : type == Message::lifecycle ? lifecycle
+                                          : integration)
                 .receive(hosting ? slot : 0, {bytes.begin(), bytes.end()});
             return;
         }
@@ -392,6 +476,13 @@ struct Session::Impl {
             }
             if (!p.accepted)
                 throw std::runtime_error("Handshake required");
+            if (type == Message::returnLobby) {
+                const auto run = r.string();
+                if (run == integrationRun && ending && *ending != ending::gameOver &&
+                    (state == Phase::running || state == Phase::returning))
+                    returnedMask |= 1u << slot;
+                return;
+            }
             if (type == Message::cinematic && state == Phase::running) {
                 const auto epoch = r.u32();
                 if (!cinematicEpoch || epoch != *cinematicEpoch || r.u8() != 1 ||
@@ -426,7 +517,10 @@ struct Session::Impl {
                 return;
             }
             if (type == Message::ready && state == Phase::running) {
+                const auto run = r.string();
                 const auto epoch = r.u32();
+                if (run != integrationRun)
+                    return;
                 if (epoch != (p.checkpoint ? p.checkpoint->firstTick : startSettings.firstTick) ||
                     (p.checkpoint && !p.loaded))
                     throw std::runtime_error("Invalid engine readiness");
@@ -451,12 +545,13 @@ struct Session::Impl {
                 }
                 return;
             }
-            if (type == Message::input && (state == Phase::running || state == Phase::finishing)) {
+            if (type == Message::input && (state == Phase::running || state == Phase::finishing ||
+                                           state == Phase::returning)) {
                 const auto sample = readInput(r);
                 const auto sequence = sample.sequence;
                 const auto& value = sample.input;
                 const auto& room = sample.room;
-                if (!p.ready || p.waiting || state == Phase::finishing)
+                if (!p.ready || p.waiting || state != Phase::running)
                     return;
                 if (p.hasInput && sequence <= p.inputSequence)
                     throw std::runtime_error("Duplicate input sequence");
@@ -470,16 +565,18 @@ struct Session::Impl {
                 sequences[slot] = sequence;
                 return;
             }
-            if (type == Message::control && state == Phase::running) {
+            if (type == Message::control &&
+                (state == Phase::running || state == Phase::returning)) {
                 const auto c = r.u8();
                 if (!c || c > static_cast<unsigned>(Command::leave) ||
                     c == static_cast<unsigned>(Command::saveExit))
                     throw std::runtime_error("Unauthorized shared command");
-                if (p.ready)
+                if (p.ready && state == Phase::running)
                     commands[slot] = static_cast<Command>(c);
                 return;
             }
-            if (type == Message::roomRequest && state == Phase::running) {
+            if (type == Message::roomRequest &&
+                (state == Phase::running || state == Phase::returning)) {
                 RoomRequest value;
                 value.stage = r.u8();
                 value.type = r.u8();
@@ -494,14 +591,16 @@ struct Session::Impl {
                     teleport > 1)
                     throw std::runtime_error("Invalid room command");
                 value.teleport = teleport != 0;
-                if (p.ready && !p.waiting && !p.rejoining)
+                if (p.ready && !p.waiting && !p.rejoining && state == Phase::running)
                     roomRequests[slot] = value;
                 return;
             }
-            if (type == Message::applied &&
-                (state == Phase::running || state == Phase::finishing)) {
+            if (type == Message::applied && (state == Phase::running || state == Phase::finishing ||
+                                             state == Phase::returning)) {
                 const auto epoch = r.u32();
                 const auto tick = r.u32();
+                if (state == Phase::returning)
+                    return;
                 // A receipt sent before a reliable floor boundary may arrive
                 // after its caches were retired. It cannot establish a new base.
                 if (epoch < integrationEpoch)
@@ -559,7 +658,8 @@ struct Session::Impl {
         if (type == Message::ending && state == Phase::running) {
             const auto value = r.u8();
             const auto completed = r.u8();
-            if (value < 2 || value > 14 || ending || completed > 1 || (completed && !runRules.id))
+            if (value < ending::gameOver || value > ending::lastCinematic || ending ||
+                completed > 1 || (completed && (!runRules.id || value == ending::gameOver)))
                 throw std::runtime_error("Invalid authoritative ending");
             const auto progress = r.progress();
             if (!progress)
@@ -573,7 +673,12 @@ struct Session::Impl {
             assemblingStage.reset();
             return;
         }
-        if (type == Message::lobby && state == Phase::lobby) {
+        if (type == Message::lobby && (state == Phase::lobby || state == Phase::returning)) {
+            if (state == Phase::returning) {
+                resetRun();
+                p.loadingAt.reset();
+                state = Phase::lobby;
+            }
             playerCount = r.u8();
             localSlot = r.u8();
             rulesRevision = r.u32();
@@ -592,6 +697,7 @@ struct Session::Impl {
                 value = r.access();
             if (access[localSlot] != localAccess)
                 throw std::runtime_error("Lobby changed local profile access");
+            activeMask = (1u << playerCount) - 1;
             return;
         }
         if (type == Message::waitFloor) {
@@ -606,7 +712,10 @@ struct Session::Impl {
             receivedState.reset();
             return;
         }
-        if (type == Message::start && (state == Phase::lobby || state == Phase::waiting)) {
+        if ((type == Message::start && (state == Phase::lobby || state == Phase::waiting)) ||
+            (type == Message::restart && state == Phase::running)) {
+            const bool restarting = type == Message::restart;
+            const auto previousEpoch = integrationEpoch;
             Start value;
             value.rules = readRules(r);
             value.seed = r.string();
@@ -616,6 +725,8 @@ struct Session::Impl {
             value.progress = r.progress();
             integrationRun = r.string();
             integrationEpoch = r.u32();
+            if (restarting && integrationEpoch <= previousEpoch)
+                throw std::runtime_error("Invalid new run epoch");
             if (integrationRun.size() != 32)
                 throw std::runtime_error("Invalid integration run identity");
             integration.queue.clear();
@@ -632,6 +743,14 @@ struct Session::Impl {
                  value.characters[localSlot] != value.rules.character) ||
                 (value.rules.difficulty != 255 && value.difficulty != value.rules.difficulty))
                 throw std::runtime_error("Start is unavailable for the local profile");
+            if (restarting) {
+                if (snapshotSize || value.firstTick || value.rules != runRules ||
+                    value.characters != startSettings.characters ||
+                    value.difficulty != startSettings.difficulty)
+                    throw std::runtime_error("Invalid new run settings");
+                resetRun();
+                restartPending = true;
+            }
             localReady = false;
             receivedState.reset();
             assembling.reset();
@@ -1121,8 +1240,9 @@ bool Session::cinematicReady() {
     return true;
 }
 bool Session::beginEnding(unsigned ending, const Progress& progress, bool completed) {
-    if (!impl->hosting || impl->state != Phase::running || ending < 2 || ending > 14 ||
-        (completed && !impl->runRules.id))
+    if (!impl->hosting || impl->state != Phase::running || ending < ending::gameOver ||
+        ending > ending::lastCinematic ||
+        (completed && (!impl->runRules.id || ending == ending::gameOver)))
         return false;
     if (impl->ending)
         return *impl->ending == ending && impl->endingCompleted == completed;
@@ -1277,7 +1397,8 @@ void Session::poll() {
                         Clock::now() - *p.loadingAt > std::chrono::seconds(60))
                         throw ConnectionLost("Player loading timed out");
                     if (impl->hosting && impl->initialStarted && p.ready &&
-                        Clock::now() - (impl->cinematicEpoch ? p.packetAt : p.inputAt) >
+                        Clock::now() -
+                                (impl->cinematicEpoch || impl->ending ? p.packetAt : p.inputAt) >
                             std::chrono::seconds(15))
                         throw ConnectionLost("Player connection timed out");
                 } catch (const std::exception& e) {
@@ -1298,6 +1419,7 @@ void Session::poll() {
                     }
                 }
             }
+        impl->finishReturn();
         if (impl->hosting && impl->lobbyDirty)
             impl->lobby();
         if (impl->hosting) {
@@ -1326,9 +1448,11 @@ void Session::poll() {
                 impl->state = Phase::closed;
             }
         }
-        if (!impl->hosting && impl->state == Phase::running && impl->localReady &&
-            Clock::now() - (impl->cinematicEpoch && impl->peers[0] ? impl->peers[0]->packetAt
-                                                                   : impl->progress) >
+        if (!impl->hosting && (impl->state == Phase::running || impl->state == Phase::returning) &&
+            impl->localReady &&
+            Clock::now() - ((impl->cinematicEpoch || impl->ending) && impl->peers[0]
+                                ? impl->peers[0]->packetAt
+                                : impl->progress) >
                 std::chrono::seconds(impl->verified ? 20 : 90))
             throw std::runtime_error("Host state transfer timed out");
     } catch (const std::exception& e) {
@@ -1347,6 +1471,20 @@ void Session::close() {
         }
     impl->shutdown();
     impl->state = Phase::closed;
+}
+bool Session::returnToLobby() {
+    if (impl->state == Phase::returning)
+        return true;
+    if (impl->state != Phase::running || !impl->ending || *impl->ending == ending::gameOver)
+        return false;
+    if (!impl->hosting) {
+        Writer request(Message::returnLobby);
+        request.string(impl->integrationRun);
+        impl->peers[0]->sendMessage(request);
+    }
+    impl->returnedMask |= 1u << impl->localSlot;
+    impl->state = Phase::returning;
+    return true;
 }
 void Session::finish() {
     if (!impl->hosting || impl->state != Phase::running) {
@@ -1409,6 +1547,57 @@ bool Session::start(const Start& settings) {
     impl->state = Phase::running;
     impl->progress = Clock::now();
     return true;
+}
+bool Session::restart(const Start& settings) {
+    if (!impl->hosting || impl->state != Phase::running || !impl->localReady ||
+        impl->cinematicEpoch || settings.seed.size() != 8 || !settings.snapshot.empty() ||
+        settings.rules != impl->runRules || settings.characters != impl->startSettings.characters ||
+        settings.difficulty != impl->startSettings.difficulty)
+        return false;
+    // A checkpoint loader still owns its previous run transaction. Wait for
+    // that boundary rather than interrupting a partially transferred archive.
+    for (const auto& peer : impl->peers)
+        if (peer && peer->accepted && (!peer->ready || peer->waiting || peer->rejoining))
+            return false;
+    for (unsigned slot = 0; slot < impl->playerCount; ++slot)
+        if ((impl->activeMask & (1u << slot)) &&
+            (!impl->access[slot].allowsRules(settings.rules) ||
+             !impl->access[slot].allowsCharacter(settings.characters[slot]) ||
+             (slot && (!impl->peers[slot] || !impl->peers[slot]->ready))))
+            return false;
+    ++impl->integrationEpoch;
+    impl->integrationRun = randomIdentity();
+    impl->startSettings = settings;
+    impl->startSettings.firstTick = 0;
+    impl->startSettings.connected = impl->activeMask;
+    const auto message = impl->startMessage(Message::restart, impl->startSettings);
+    for (unsigned slot = 1; slot < impl->playerCount; ++slot)
+        if ((impl->activeMask & (1u << slot)) && impl->peers[slot])
+            impl->peers[slot]->sendMessage(message);
+    impl->resetRun();
+    impl->restartPending = true;
+    return true;
+}
+bool Session::takeRestart() {
+    const bool pending = impl->restartPending;
+    impl->restartPending = false;
+    return pending;
+}
+bool Session::sendLifecycle(unsigned destination, const std::string& bytes) {
+    // Consumers discard lifecycle messages until their new run is ready.
+    // Report that boundary to the caller so initial vote state is retried.
+    if (impl->state != Phase::running || !impl->localReady || destination >= impl->playerCount)
+        return false;
+    if (impl->hosting && destination) {
+        const auto& peer = impl->peers[destination];
+        if (!peer || !peer->ready || peer->waiting || peer->rejoining)
+            return false;
+    }
+    return impl->sendSideChannel(Message::lifecycle, impl->lifecycle, maxIntegrationSize,
+                                 destination, bytes);
+}
+std::optional<IntegrationMessage> Session::takeLifecycle() {
+    return impl->lifecycle.take();
 }
 bool Session::checkpoint(const Start& settings, std::uint32_t tick) {
     if (!impl->hosting || impl->state != Phase::running || settings.snapshot.empty() ||
@@ -1541,7 +1730,7 @@ std::optional<Frame> Session::take() {
     // The runtime already has its native roster when localReady is true.
     if (!impl->initialStarted && impl->commands[0] != Command::saveExit) {
         for (unsigned i = 1; i < impl->playerCount; ++i)
-            if (impl->peers[i] && !impl->peers[i]->ready)
+            if ((impl->activeMask & (1u << i)) && impl->peers[i] && !impl->peers[i]->ready)
                 return {};
         impl->initialStarted = true;
         for (auto& p : impl->peers)
@@ -1582,6 +1771,7 @@ bool Session::ready() {
     impl->progress = Clock::now();
     if (!impl->hosting) {
         Writer w(Message::ready);
+        w.string(impl->integrationRun);
         w.u32(impl->startSettings.firstTick);
         impl->peers[0]->sendMessage(w);
     }
