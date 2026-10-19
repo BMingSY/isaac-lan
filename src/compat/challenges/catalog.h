@@ -1,12 +1,13 @@
 #pragma once
 #include "compat/game_ids.h"
-#include "core/run_rules.h"
 #include <array>
 #include <cstdint>
 #include <span>
 #include <string_view>
 
 namespace isaac::compat::challenges {
+// The core run-rules regression checks this sentinel against the lobby contract.
+inline constexpr std::uint16_t unrestrictedCharacter = 65535;
 struct Definition {
     std::uint16_t id, version, character;
     std::uint8_t difficulty;
@@ -35,7 +36,7 @@ inline constexpr std::array definitions{
     Definition{
         1002,
         1,
-        RunRules{}.character,
+        unrestrictedCharacter,
         0,
         true,
         "运气游戏",
