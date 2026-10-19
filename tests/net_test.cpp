@@ -1,4 +1,5 @@
 #include "net/session.h"
+#include "compat/challenges/catalog.h"
 #include "runtime/progression.h"
 #include "net/compression.h"
 #include "net/peer.h"
@@ -17,7 +18,7 @@
 using namespace isaac::lan;
 namespace {
 LobbyAccess testAccess() {
-    return {{0, 1, 2, 3, 7, 23}, {{1001, 2}, {1001, 3}}, {0, 1, 2, 3, 7, 23}};
+    return {{0, 1, 2, 3, 7, 23}, {{1001, 2}, {1001, 3}, {1002, 1}}, {0, 1, 2, 3, 7, 23}};
 }
 template <class F>
 void until(F f, const std::source_location location = std::source_location::current()) {
@@ -65,9 +66,10 @@ struct Group {
                 return std::all_of(peers.begin(), peers.begin() + n,
                                    [&](const auto& peer) { return peer->rules() == rules; });
             });
-            start.characters.fill(rules.character);
+            if (rules.character != RunRules{}.character)
+                start.characters.fill(rules.character);
             for (unsigned i = 0; i < n; ++i)
-                require(peers[i]->choose({rules.character, true}), "Locked choice failed");
+                require(peers[i]->choose({start.characters[i], true}), "Rule choice failed");
             until([&] {
                 poll();
                 for (unsigned i = 0; i < n; ++i)
@@ -489,6 +491,30 @@ void floorRejoin() {
               "loading; no input-history replay");
 }
 void endingEvents() {
+    // Exercise the catalog's actual terminal IDs: a rule must never encode
+    // explicit completion as the protocol's game-over event.
+    for (const auto& definition : isaac::compat::challenges::definitions) {
+        const RunRules rules{definition.id, definition.version, definition.character,
+                             definition.difficulty, definition.transient};
+        Group group(4, definition.difficulty, "127.0.0.1", rules, {0, 1, 2, 3});
+        group.ready();
+        group.step(0);
+        require(group.peers[0]->beginEnding(definition.ending, {}, true),
+                "Catalog challenge completion was rejected");
+        for (unsigned slot = 1; slot < group.count; ++slot) {
+            std::optional<Ending> event;
+            until([&] {
+                group.poll();
+                event = group.peers[slot]->takeEnding();
+                return event.has_value();
+            });
+            require(event == Ending{definition.ending, {}, true},
+                    "Catalog challenge completion did not reach a peer");
+            if (definition.character == RunRules{}.character)
+                require(group.peers[slot]->settings().characters[slot] == slot,
+                        "Unrestricted challenge replaced a player's character");
+        }
+    }
     for (unsigned count = 2; count <= 4; ++count)
         for (unsigned scenario = 0; scenario < 5; ++scenario) {
             const RunRules rules = scenario == 1 || scenario == 2 || scenario == 4

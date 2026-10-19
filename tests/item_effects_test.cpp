@@ -7,6 +7,22 @@
 #include <array>
 #include <cstring>
 
+namespace isaac::runtime {
+bool replica() {
+    return false;
+}
+bool divertPickup = false;
+unsigned pickupCalls = 0;
+bool takeCollectiblePickup(int owner, unsigned seed, int id, int charge, bool touched, int data,
+                           int pool) {
+    require(owner == 1 && seed == 123 && id == 12 && charge == 7 && touched && data == 9 &&
+                pool == 10,
+            "Confirmed pickup lost owner, seed, charge or per-item data");
+    ++pickupCalls;
+    return divertPickup;
+}
+} // namespace isaac::runtime
+
 namespace isaac::rooms {
 bool previewReady = true, localPreviewRoster = false;
 bool viewReady() {
@@ -14,6 +30,9 @@ bool viewReady() {
 }
 bool virtualized() {
     return true;
+}
+unsigned connected() {
+    return 15;
 }
 std::uintptr_t presentationPlayer(void*) {
     throw std::runtime_error("Item ABI fixture must not execute console commands");
@@ -105,6 +124,54 @@ struct Fixture {
                                                                                   item);
     }
 };
+unsigned nativeQueues = 0;
+void __attribute__((thiscall)) queueFixture(void* player, void* config, int charge,
+                                            unsigned char flags, int data, int pool) {
+    require(player == expectedPlayer && config && charge == 7 && flags == 1 && data == 9 &&
+                pool == 10,
+            "Native QueueItem ABI changed");
+    ++nativeQueues;
+}
+void collectiblePickup() {
+    Fixture f;
+    items::originalQueue = queueFixture;
+    nativeQueues = isaac::runtime::pickupCalls = 0;
+    *reinterpret_cast<int*>(f.player.data() + native::layout::player::controller) = 2;
+    *reinterpret_cast<unsigned*>(f.player.data() + native::layout::entity::initSeed) = 123;
+    std::array<int, 2> config{1, 12};
+    const unsigned char setup[] = {0x8b, 0x44, 0x24, 0x04, 0x6a, 10,  0x6a,
+                                   9,    0x6a, 1,    0x6a, 7,    0x50};
+    auto call = f.image + native::entry::pickupQueuedCollectible - 5;
+    std::memcpy(call - sizeof(setup), setup, sizeof(setup));
+    call[0] = 0xe8;
+    const auto delta = static_cast<unsigned>(reinterpret_cast<Address>(items::queue) -
+                                             reinterpret_cast<Address>(call + 5));
+    std::memcpy(call + 1, &delta, 4);
+    call[5] = 0xc2;
+    call[6] = 4;
+    call[7] = 0;
+    require(FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size) != 0,
+            "Cannot publish the pickup queue call site");
+    using Acquire = void(__attribute__((thiscall))*)(void*, void*);
+    auto acquire = reinterpret_cast<Acquire>(call - sizeof(setup));
+    isaac::runtime::divertPickup = true;
+    acquire(f.player.data(), config.data());
+    require(isaac::runtime::pickupCalls == 1 && nativeQueues == 0,
+            "Intercepted pickup was also granted to its collector");
+    isaac::runtime::divertPickup = false;
+    acquire(f.player.data(), config.data());
+    require(isaac::runtime::pickupCalls == 2 && nativeQueues == 1,
+            "Ordinary pickup was swallowed by the challenge hook");
+    isaac::runtime::divertPickup = true;
+    config[0] = native::layout::itemConfig::trinket;
+    acquire(f.player.data(), config.data());
+    config[0] = 1;
+    items::queue(f.player.data(), nullptr, config.data(), 7, 1, 9, 10);
+    require(isaac::runtime::pickupCalls == 2 && nativeQueues == 3,
+            "Trinket, scripted grant or restored queue entered the pickup lottery");
+    items::originalQueue = nullptr;
+    isaac::runtime::divertPickup = false;
+}
 void* expectedProgress;
 std::vector<int> progressWrites;
 isaac::lan::Progress expectedLocalProgress;
@@ -241,7 +308,8 @@ void localPickupPreview() {
 } // namespace
 int main(int argc, char** argv) {
     return runTests(argc, argv,
-                    {{"starting-rewards", startingRewards},
+                    {{"collectible-pickup", collectiblePickup},
+                     {"starting-rewards", startingRewards},
                      {"beam-departure", beamDeparture},
                      {"pending-reward-persistence", pendingRewardPersistence},
                      {"local-pickup-preview", localPickupPreview}});

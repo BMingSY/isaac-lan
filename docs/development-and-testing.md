@@ -164,6 +164,8 @@ python tools/engine_test.py run special-routes -- \
 
 ## 开发专项入口
 
+运气游戏使用 [run_luck_game.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_luck_game.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`，可加 `--heap-check --record`。同一组主客机覆盖挑战开局、开局吞下禁令、非主动底座拾取、购买代价与二选一、主动拾取跳过掷骰、主动转移充能、幸运上升药丸、换层赠送、分房发放、重连和妈腿奖杯退出；工具保护并恢复隔离资料。离线对应 `bridge.luck_game`、`bridge.challenges`、`bridge.challenge_menu`、`bridge.chat`、`core.challenge-rules` 与 Windows `native.item-effects`。
+
 以下入口用于开发修复时的定向回归，不属于发版清单。只选择受改动影响、需要排查或用户明确要求的场景，记录具体用例，不自动运行整个专项目录。
 
 | 领域 | 入口与范围 |

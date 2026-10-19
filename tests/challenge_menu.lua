@@ -440,3 +440,39 @@ assert(commands[#commands][1] == "retry_save", "Pending snapshot offered no retr
 status.pendingSave, status.saveError = 0, ""
 draw()
 assert(labels["创建房间"] and not labels["重试保存联机存档"])
+
+-- An unrestricted challenge keeps ordinary character cycling on both peers.
+local phaseValues = dofile(root .. "/tests/fixtures/net_phases.lua")
+local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
+    phaseValues,
+    dofile(root .. "/tests/fixtures/net_commands.lua")
+)
+for _, host in ipairs({ 0, 1 }) do
+    local selected
+    local rows = model.rows(
+        { page = "lan", difficulty = 0, seed = "" },
+        {
+            phase = phaseValues.lobby,
+            hosting = host,
+            players = 2,
+            slot = 0,
+            challenge = 1002,
+            choice0 = 0,
+            ready0 = 0,
+        },
+        { 0, 1, 23 },
+        { ["1002"] = { id = 1002, name = "运气游戏", character = 65535, difficulty = 0 } },
+        {
+            character = tostring,
+            command = function(action, value)
+                selected = { action, value }
+            end,
+            connected = function()
+                return true
+            end,
+        }
+    )
+    assert(rows[1].enabled and rows[1].label == "0")
+    rows[1].change(1)
+    assert(selected[1] == "choose" and selected[2] == "1:0")
+end

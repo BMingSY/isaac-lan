@@ -337,3 +337,20 @@ end
 print(
     "PASS private command history, player dice labels, visibility, deduplication, native dispatch, stale world, emotes, bounds and layout"
 )
+
+-- Injected challenge dice use the same party output and authority checks.
+for _, peer in ipairs(peers) do
+    peer.chat.reset()
+end
+local previousRolls = rolls
+assert(host.roll(1, 100) == 100)
+poll()
+for _, peer in ipairs(peers) do
+    assert(#peer.chat.messages == 1 and peer.chat.messages[1].text == "2P掷出 D100 : 100")
+    assert(peer.chat.messages[1].owner == 1 and peer.chat.messages[1].bubble)
+end
+assert(rolls == previousRolls + 1)
+assert(guest.roll(1, 100) == nil and host.roll(3, 100) == nil)
+assert(host.roll(0, 0) == nil and host.roll(0, 1000) == nil and host.roll(0, 1.5) == nil)
+peers[1].info.connected = 1
+assert(host.roll(1, 100) == nil and rolls == previousRolls + 1)

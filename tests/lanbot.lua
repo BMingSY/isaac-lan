@@ -1843,8 +1843,8 @@ test(
 )
 test("embedded console entry dispatches lanbot and returns nil", function()
     modules["runtime/challenges"] = dofile(root .. "/src/bridge/runtime/challenges.lua")
-    modules["compat/routes/challenge_lamb"] =
-        dofile(root .. "/src/bridge/compat/routes/challenge_lamb.lua")
+    modules["compat/routes/challenge_goal"] =
+        dofile(root .. "/src/bridge/compat/routes/challenge_goal.lua")
     native.net_phases = function()
         return dofile(root .. "/tests/fixtures/net_phases.lua")
     end
@@ -1889,6 +1889,7 @@ test("embedded console entry dispatches lanbot and returns nil", function()
         MC_POST_PICKUP_INIT = 6,
         MC_POST_PICKUP_UPDATE = 7,
         MC_POST_NEW_LEVEL = 8,
+        MC_PRE_SPAWN_CLEAN_AWARD = 9,
     }
     dofile(root .. "/tests/fixtures/app_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
     dofile(root .. "/src/bridge/app/main.lua")

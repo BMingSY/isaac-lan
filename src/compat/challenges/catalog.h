@@ -1,5 +1,6 @@
 #pragma once
 #include "compat/game_ids.h"
+#include "core/run_rules.h"
 #include <array>
 #include <cstdint>
 #include <span>
@@ -31,6 +32,20 @@ inline constexpr std::array definitions{
         true,
         {78, 476},
     },
+    Definition{
+        1002,
+        1,
+        RunRules{}.character,
+        0,
+        true,
+        "运气游戏",
+        "mom",
+        ids::ending::epilogue,
+        ids::stage::chapterThreeSecond,
+        ids::stageType::original,
+        false,
+        {},
+    },
 };
 inline const Definition* find(unsigned id) {
     for (const auto& definition : definitions)
@@ -43,7 +58,7 @@ inline int nextSeat(unsigned slot, unsigned players) {
 }
 inline bool available(const Definition& definition, std::span<const std::uint8_t> achievements) {
     for (const auto id : definition.requiredAchievements)
-        if (id >= achievements.size() || !achievements[id])
+        if (id && (id >= achievements.size() || !achievements[id]))
             return false;
     return true;
 }

@@ -1,14 +1,32 @@
 -- Authority-only route and reward policy. State lives in the native room and
 -- pickup, so checkpoints and hourglass restores carry the same objective.
-return function(deps)
+return function(deps, goal)
     local game, enums = deps.game, deps.enums
     local pickup = enums.pickup
-    local function lambRoom()
+    local goals = {
+        lamb = {
+            floor = function(level)
+                return level:GetStage() == enums.stage.STAGE6
+                    and level:GetStageType() == enums.stageType.STAGETYPE_ORIGINAL
+            end,
+            boss = enums.entity.ENTITY_THE_LAMB,
+        },
+        mom = {
+            floor = function(level)
+                return level:GetStage() == enums.stage.STAGE3_2
+                    or (
+                        level:GetStage() == enums.stage.STAGE4_2
+                        and level:GetStageType() >= enums.stageType.STAGETYPE_REPENTANCE
+                    )
+            end,
+            boss = enums.entity.ENTITY_MOM,
+            spawn = true,
+        },
+    }
+    goal = assert(goals[goal])
+    local function goalRoom()
         local level = game():GetLevel()
-        if
-            level:GetStage() ~= enums.stage.STAGE6
-            or level:GetStageType() ~= enums.stageType.STAGETYPE_ORIGINAL
-        then
+        if not goal.floor(level) then
             return false
         end
         local data = level:GetCurrentRoomDesc().Data
@@ -18,7 +36,7 @@ return function(deps)
         for i = 0, data.SpawnCount - 1 do
             local spawn = data.Spawns:Get(i)
             for j = 0, spawn.EntryCount - 1 do
-                if spawn.Entries:Get(j).Type == enums.entity.ENTITY_THE_LAMB then
+                if spawn.Entries:Get(j).Type == goal.boss then
                     return true
                 end
             end
@@ -26,7 +44,7 @@ return function(deps)
         return false
     end
     local function eligible()
-        return lambRoom() and game():GetRoom():IsClear()
+        return goalRoom() and game():GetRoom():IsClear()
     end
     local function reward(p)
         if
@@ -65,7 +83,33 @@ return function(deps)
             end
         end
     end
+    local function clearAward()
+        if not goal.spawn or not goalRoom() then
+            return
+        end
+        for _, entity in ipairs(deps.entities()) do
+            if
+                entity:Exists()
+                and entity.Type == enums.entity.ENTITY_PICKUP
+                and entity.Variant == pickup.PICKUP_TROPHY
+            then
+                return
+            end
+        end
+        local room = game():GetRoom()
+        local position = room:FindFreePickupSpawnPosition(room:GetCenterPos(), 0, true)
+        local trophy = deps.spawn(
+            enums.entity.ENTITY_PICKUP,
+            pickup.PICKUP_TROPHY,
+            0,
+            position,
+            deps.zero(),
+            nil
+        ):ToPickup()
+        trophy.Wait = 30
+    end
     return {
+        clearAward = clearAward,
         handles = function(p)
             return p.Variant == pickup.PICKUP_TROPHY or p.Variant == pickup.PICKUP_BIGCHEST
         end,
@@ -86,7 +130,7 @@ return function(deps)
             if p.Variant ~= pickup.PICKUP_BIGCHEST then
                 return
             end
-            if lambRoom() then
+            if goalRoom() then
                 reward(p)
                 return true
             end

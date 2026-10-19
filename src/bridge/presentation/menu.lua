@@ -386,7 +386,7 @@ function _IsaacLanMenuRender(
     local message = status.saveError and status.saveError ~= "" and status.saveError
         or (ui.errorText ~= "" and ui.errorText or networkError)
     local messageColor = red
-    if message == "" and phase == Phase.lobby and challenge then
+    if message == "" and phase == Phase.lobby and challenge and challenge.nextBag == 1 then
         local missing = {}
         for i = 0, count - 1 do
             if status["eligible" .. i] ~= true then

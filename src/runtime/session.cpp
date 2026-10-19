@@ -762,6 +762,7 @@ void updateOne(const backend::Call& original) {
     }
     presentation::items::advance();
     rooms::finishFrame();
+    integrationCallback("_IsaacLanChallengeStep");
     view.pendingHalf = view.gated && !view.playingCinematic;
 }
 void update(const backend::Call& original) {
@@ -1609,6 +1610,28 @@ bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimensio
     const bool allowed = lua.type(state, -1) == 1 && lua.toBoolean(state, -1);
     lua.setTop(state, top);
     return allowed;
+}
+bool takeCollectiblePickup(int owner, unsigned actorSeed, int item, int charge, bool touched,
+                           int varData, int pool) {
+    if (!state || !challengeActive() || replica() || !view.gated || !rooms::viewReady())
+        return false;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanCollectiblePickup") != 6) {
+        lua.setTop(state, top);
+        return false;
+    }
+    lua.pushInteger(state, owner);
+    lua.pushInteger(state, actorSeed);
+    lua.pushInteger(state, item);
+    lua.pushInteger(state, charge);
+    lua.pushBoolean(state, touched);
+    lua.pushInteger(state, varData);
+    lua.pushInteger(state, pool);
+    if (!call(0, 7, 1, top))
+        return false;
+    const bool taken = lua.type(state, -1) == 1 && lua.toBoolean(state, -1);
+    lua.setTop(state, top);
+    return taken;
 }
 std::array<int, 2> challengeDestination() {
     const auto* definition =

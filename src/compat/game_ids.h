@@ -60,7 +60,11 @@ inline constexpr int options = 670;
 inline constexpr int sacredOrb = 691;
 inline constexpr int tmtrainer = 721;
 } // namespace collectible
+namespace ending {
+inline constexpr unsigned epilogue = 2;
+} // namespace ending
 namespace stage {
+inline constexpr int chapterThreeSecond = 6;
 inline constexpr int greedFinal = 7;
 inline constexpr int chapterFourSecond = 8;
 inline constexpr int blueWomb = 9;

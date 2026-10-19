@@ -128,6 +128,12 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 ## 道具与效果
 
+底座拾取适配位于 [item_effects.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/item_effects.cpp)。`Player::QueueItem` RVA `0x35e050` 使用 `thiscall`，只在底座确认拾取的返回点 `0x2ebe11` 通知运行层，传递玩家栏位、实体种子、道具 ID、充能、Touched、VarData 与来源池。兼容组件接受时不再向原拾取者入队；其他调用点、饰品、开局和恢复沿用原生方法。通知期间不切换房间；结算在模拟作用域退出后、发布视图前完成。源对象和配置指针不进入 Lua，不由适配器释放。
+
+`items_take_collectible(sprite, id)` 在当前角色作用域调用原生 `Player::DropCollectible`（RVA `0x390530`，`thiscall(Player*, int, Pickup*, bool)`），复制充能、VarData 和来源池，再由实体的原生 Remove 消除临时底座。`items_give_collectible(sprite, id, charge, first, data, pool)` 通过原生掉落保存被替换的主动，再用原生 AddCollectible 发放。入口只接受主机就绪视图中当前名单的玩家 Sprite 包装和有效配置；角色与掉落的分配、注销由游戏管理。底座字段 `+0x524/+0x52c/+0x530/+0x59c` 分别为充能、Touched、来源池和 VarData。入口、调用点和布局常量统一定义在版本后端并受签名校验。
+
+`items_collectible_name(id)` 读取配置名称并解析本机 `Items` 翻译键，返回最多 1024 字节的文本；不暴露配置或字符串指针。上述能力不增加同步字段或网络消息，库存、药丸映射与实体沿用现有契约，扩展指纹包含后端与嵌入 Lua 的变更。
+
 | 能力 | 边界与参考 |
 | --- | --- |
 | 错误道具定义与负编号库存 | 有序种子恢复、注册表和真实数量查询见[错误道具定义](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md) |
