@@ -193,6 +193,7 @@ inline constexpr unsigned charge = 0x524, touched = 0x52c, pool = 0x530, varData
 namespace player {
 inline constexpr unsigned primaryActive = 0x1580;
 inline constexpr unsigned megaBlastLaser = 0x1458;
+inline constexpr unsigned redemptionEffect = 0x1f04;
 inline constexpr unsigned megaBlastDuration = 0x18f4;
 inline constexpr unsigned emote = 0x26d8;
 inline constexpr unsigned type = 0x13c0;

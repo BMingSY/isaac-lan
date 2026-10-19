@@ -74,7 +74,13 @@ function _IsaacLanRoomEntered()
         modules["compat/bosses/room_entry"],
         GridEntityType.GRID_TRAPDOOR
     )
-    modules["compat/items/room_entry"](Game(), Isaac.GetPlayer, RoomType, CollectibleType)
+    modules["compat/items/room_entry"](
+        Game(),
+        Isaac.GetPlayer,
+        RoomType,
+        CollectibleType,
+        TrinketType
+    )
 end
 local worldSchema = assert(modules["sync/world_schema"])
 local itemPresentation = assert(modules["presentation/items"])(native, function()

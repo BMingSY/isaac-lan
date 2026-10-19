@@ -1,10 +1,10 @@
 #include "engine/item_effects.h"
+#include "engine/rooms.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "compat/items/starting_rewards.h"
 #include <MinHook.h>
 #include "engine/lua_api.h"
-#include "engine/rooms.h"
 #include "runtime/session.h"
 #include <cstring>
 #include <array>
@@ -29,6 +29,27 @@ template <class T> T& at(Address p, unsigned offset) {
 }
 using Add = void(__attribute__((thiscall)) *)(void*, int, int, bool, int, int, int);
 Add originalAdd;
+using ReviveCollectible = void(__attribute__((thiscall)) *)(void*, unsigned, bool);
+// J460 consumes two stack words (RET 8). The second is an unused caller
+// scratch word, absent from older public prototypes; preserve it verbatim.
+using ReviveTrinket = void(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
+ReviveCollectible originalReviveCollectible;
+ReviveTrinket originalReviveTrinket;
+void inRevivalRoom(void* player, const std::function<void()>& revive) {
+    const auto controller =
+        at<unsigned>(reinterpret_cast<Address>(player), layout::player::controller);
+    // PlayerManager resolves pending deaths outside Room::Update. Its current
+    // viewport is not necessarily the revived actor's room. Existing scopes
+    // and solo play already own the correct native context.
+    if (!rooms::withPlayer(controller - 1, revive))
+        revive();
+}
+void __attribute__((fastcall)) reviveCollectible(void* player, void*, unsigned item, bool owned) {
+    inRevivalRoom(player, [&] { originalReviveCollectible(player, item, owned); });
+}
+void __attribute__((fastcall)) reviveTrinket(void* player, void*, unsigned item, unsigned scratch) {
+    inRevivalRoom(player, [&] { originalReviveTrinket(player, item, scratch); });
+}
 void __attribute__((fastcall)) add(void* player, void*, int item, int charge, bool first, int slot,
                                    int data, int unknown) {
     // Only the checked native Blessing grant site is a starting reward. Other
@@ -161,14 +182,17 @@ int name(lua_State* L) {
 } // namespace
 bool install(Address base) {
     image = base;
-    const auto target = reinterpret_cast<void*>(image + j460::entry::playerAddCollectible);
-    return MH_CreateHook(target, reinterpret_cast<void*>(add),
-                         reinterpret_cast<void**>(&originalAdd)) == MH_OK &&
-           MH_EnableHook(target) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::playerQueueItem),
-                         reinterpret_cast<void*>(queue),
-                         reinterpret_cast<void**>(&originalQueue)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::playerQueueItem)) == MH_OK;
+    auto hook = [&](unsigned entry, auto replacement, auto& original) {
+        const auto target = reinterpret_cast<void*>(image + entry);
+        return MH_CreateHook(target, reinterpret_cast<void*>(replacement),
+                             reinterpret_cast<void**>(&original)) == MH_OK &&
+               MH_EnableHook(target) == MH_OK;
+    };
+    return hook(j460::entry::playerAddCollectible, add, originalAdd) &&
+           hook(j460::entry::playerQueueItem, queue, originalQueue) &&
+           hook(j460::entry::playerReviveCollectible, reviveCollectible,
+                originalReviveCollectible) &&
+           hook(j460::entry::playerReviveTrinket, reviveTrinket, originalReviveTrinket);
 }
 bool bind(lua_State* L, HMODULE module) {
     using S = isaac::lua::Symbol;
@@ -195,6 +219,11 @@ void startingRewards(const std::function<void()>& start, bool shared) {
 void grantStartingRewards(void* player, unsigned slot) {
     for (const int item : rewards.take(slot))
         originalAdd(player, item, -1, true, 0, 0, 0);
+}
+bool initializeBlueRoom(void* game, int source, int destination, int direction) {
+    using Initialize = bool(__attribute__((thiscall))*)(void*, int, int, int);
+    return reinterpret_cast<Initialize>(image + j460::entry::levelTryInitializeBlueRoom)(
+        game, source, destination, direction);
 }
 void leaveRoom(void* player) {
     const auto address = reinterpret_cast<Address>(player);

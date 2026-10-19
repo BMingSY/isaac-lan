@@ -144,6 +144,11 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 临时效果 | [temporary_effects.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/temporary_effects.lua) 通过原版 Lua API 按层数差值恢复巨大化和护盾；不重放使用动作 |
 | 本机拾取预览 | `Pickup::UpdateGhosts` RVA `0x2e17c0`，`thiscall(Pickup*)`；只在本机名单内生成 `PICKUP_GHOST`。遍历 Room 的绘制实体数组（`+0x1258`），先冻结拾取物列表再调用；Entity `+0x170` 表示已注册，不能作为删除标志过滤。原生持有 LootList、ANM2 与实体引用，普通实体快照排除该效果；预览查询不推进掉落 RNG |
 | 跨房持续激光 | `Player+0x1458` 是受注册的激光 `EntityPtr`。在来源房间内调用实体原生 Remove，再以 `EntityPtr::Assign` RVA `0x2b5b50`（ECX 引用、EDX 新实体）解除引用；不复制指针、不释放原生内存、不重置剩余时间 |
+| 道具／饰品复活上下文 | `Player::ReviveFromCollectible` RVA `0x3a23a0` 为 `thiscall void(Player*, unsigned item, bool owned)`；`ReviveFromTrinket` RVA `0x3a3430` 为 `thiscall void(Player*, unsigned trinket, unsigned scratch)`。后者的第二个栈字未参与 J460 逻辑，但原生以 `RET 8` 清栈，必须原样透传，不能沿用旧版单参数声明。PlayerManager 在房间更新之外处理死亡时，按角色控制器借入所属房间与名单，再调用一次原入口；已有作用域及单人模式沿用原上下文，不重放复活效果。入口受版本签名校验，角色及效果实体仍由游戏拥有 |
+| 蓝色房间初始化 | `Level::TryInitializeBlueRoom` RVA `0x34d4a0` 为 `thiscall bool(Game*, int source, int destination, int direction)`。仅在步行且同维度转场的角色房间中调用；资格、描述符、房门标记与出口由原生实现维护，成功时采用原生蓝色房间编号 `-16`，不自行创建或释放描述符 |
+| 换层随行效果 | `Player+0x1f04` 是赎罪效果的注册 `EntityPtr`。兼容策略仅选择类型 `1000`、变体 `185` 且与该引用相同的实体；换层收拢名单时，从旧房间迁入原生离场房间，随后交由原生换层更新与清理。普通换房不保留该例外，不复制或重新绑定引用，不手动结算奖励 |
+
+房间年龄使用 `Game+0x264f8` 的游戏帧减去 `Room+0x11f0` 的进入帧。后端为每个房间记录上次观察的游戏帧，房间进场屏障暂停期间仅将经过的帧数补入进入帧；初始化／接管房间时重设观察点，重复游戏帧不补偿。原生玩家更新仍负责首帧道具效果和充能，运行层不代替这些效果结算。
 | 跨局共享奖励 | `Player::AddCollectible` RVA `0x35f0e0` 的具名调用点 `0x3be32f` 标识原生祝福奖励。只在新建联机局时记录至多两项 ID，原生初始化后向其他控制器各发放一次；不复制初始库存，不重放宿主奖励或修改个人射速 |
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；绘制时借入本机状态并完整恢复全局标量 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
