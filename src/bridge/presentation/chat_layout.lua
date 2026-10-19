@@ -5,6 +5,9 @@ function layout.panel(screenWidth, screenHeight, hud, position)
     local left = hud.stats and statsWidth + offset or panelMargin
     local right = screenWidth - (hud.items and inventoryWidth + offset or panelMargin)
     local top, bottom = 48 + offset, screenHeight - 16
+    if position then
+        left, right, top, bottom = 0, screenWidth, 0, screenHeight
+    end
     local width = math.min(210, screenWidth * 0.42, right - left)
     local height = layout.expandedLines * layout.lineHeight + 30
     local x = math.max(left, math.min(right - width, position and position.x or left))

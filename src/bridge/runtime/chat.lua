@@ -84,7 +84,7 @@ return function(deps, wire)
         end
         text = text:gsub("[\r\n\t]", " ")
         if text:match("^%s*$") then
-            return nil, "请输入内容"
+            return nil
         end
         if text:sub(1, 1) ~= "/" then
             if count > limits.characters then
@@ -194,7 +194,9 @@ return function(deps, wire)
         end
         local parsed, reason = chat.parse(request.text)
         if not parsed then
-            errorTo(reason, sender)
+            if reason then
+                errorTo(reason, sender)
+            end
         elseif parsed.kind == "text" then
             chat.output(
                 parsed.text,
@@ -221,7 +223,9 @@ return function(deps, wire)
         local parsed, reason = chat.parse(text)
         local info = deps.info()
         if not parsed then
-            errorTo(reason)
+            if reason then
+                errorTo(reason)
+            end
             return false
         end
         if parsed.kind ~= "text" then

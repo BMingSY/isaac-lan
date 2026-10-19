@@ -74,6 +74,37 @@ local function poll()
     end
 end
 local host, guest, other = peers[1].chat, peers[2].chat, peers[3].chat
+local function ignoreEmptySubmissions()
+    local beforePackets, beforeRolls, beforeExecutions = #packets, rolls, #executions
+    for _, peer in ipairs(peers) do
+        local chat = peer.chat
+        local beforeMessages, beforeRevision = #chat.messages, chat.revision
+        local beforeBubble = chat.bubbles[peer.info.slot]
+        for _, text in ipairs({ "", "   ", "\t\r\n" }) do
+            assert(not chat.submit(text), "Empty input was accepted")
+            assert(#chat.messages == beforeMessages and chat.revision == beforeRevision)
+            assert(chat.bubbles[peer.info.slot] == beforeBubble, "Empty input changed a bubble")
+        end
+    end
+    poll()
+    assert(#packets == beforePackets and rolls == beforeRolls and #executions == beforeExecutions)
+end
+ignoreEmptySubmissions()
+-- A peer that bypasses its local editor must not produce an empty-input error either.
+inbox[1][1] = {
+    1,
+    wire.encodeRequest({
+        sequence = 1,
+        epoch = 1,
+        room = 84,
+        dimension = 0,
+        nonce = string.rep("b", 32),
+        run = peers[2].info.runId,
+        text = " \t ",
+    }),
+}
+poll()
+assert(#packets == 0 and #host.messages == 0 and #guest.messages == 0 and #other.messages == 0)
 assert(guest.submit("/e 只有我看到"))
 assert(#guest.messages == 2 and #host.messages == 0 and #other.messages == 0)
 assert(guest.messages[1].command and guest.messages[1].text == "/e 只有我看到")
@@ -82,6 +113,7 @@ assert(guest.submit("你好，队友"))
 poll()
 assert(#host.messages == 1 and #guest.messages == 3 and #other.messages == 1)
 assert(guest.bubbles[1].text == "你好，队友" and host.bubbles[1].text == "你好，队友")
+ignoreEmptySubmissions()
 assert(guest.submit("/d20"))
 local replay = packets[#packets][2]
 poll()
