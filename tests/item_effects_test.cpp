@@ -233,8 +233,9 @@ void __attribute__((thiscall)) reviveCollectibleFixture(void* player, unsigned i
             "Collectible revival escaped its actor scope");
     ++revivalCalls;
 }
-void __attribute__((thiscall)) reviveTrinketFixture(void* player, unsigned id) {
-    require(player == expectedPlayer && id == 23, "Trinket revival changed native arguments");
+void __attribute__((thiscall)) reviveTrinketFixture(void* player, unsigned id, unsigned scratch) {
+    require(player == expectedPlayer && id == 23 && scratch == 0x12345678,
+            "Trinket revival changed native arguments or dropped J460's second stack word");
     require(isaac::rooms::revivalScoped == isaac::rooms::scopeAvailable,
             "Trinket revival escaped its actor scope");
     ++revivalCalls;
@@ -248,7 +249,7 @@ void revivalRoom() {
     for (bool available : {true, false}) {
         isaac::rooms::scopeAvailable = available;
         items::reviveCollectible(f.player.data(), nullptr, 619, true);
-        items::reviveTrinket(f.player.data(), nullptr, 23);
+        items::reviveTrinket(f.player.data(), nullptr, 23, 0x12345678);
     }
     require(revivalCalls == 4 && isaac::rooms::revivalSlot == 1 && !isaac::rooms::revivalScoped,
             "Revival was replayed, used another controller or retained its scope");

@@ -17,7 +17,9 @@ template <class T> T& at(Address p, unsigned offset) {
 using Add = void(__attribute__((thiscall)) *)(void*, int, int, bool, int, int, int);
 Add originalAdd;
 using ReviveCollectible = void(__attribute__((thiscall)) *)(void*, unsigned, bool);
-using ReviveTrinket = void(__attribute__((thiscall)) *)(void*, unsigned);
+// J460 consumes two stack words (RET 8). The second is an unused caller
+// scratch word, absent from older public prototypes; preserve it verbatim.
+using ReviveTrinket = void(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 ReviveCollectible originalReviveCollectible;
 ReviveTrinket originalReviveTrinket;
 void inRevivalRoom(void* player, const std::function<void()>& revive) {
@@ -32,8 +34,8 @@ void inRevivalRoom(void* player, const std::function<void()>& revive) {
 void __attribute__((fastcall)) reviveCollectible(void* player, void*, unsigned item, bool owned) {
     inRevivalRoom(player, [&] { originalReviveCollectible(player, item, owned); });
 }
-void __attribute__((fastcall)) reviveTrinket(void* player, void*, unsigned item) {
-    inRevivalRoom(player, [&] { originalReviveTrinket(player, item); });
+void __attribute__((fastcall)) reviveTrinket(void* player, void*, unsigned item, unsigned scratch) {
+    inRevivalRoom(player, [&] { originalReviveTrinket(player, item, scratch); });
 }
 void __attribute__((fastcall)) add(void* player, void*, int item, int charge, bool first, int slot,
                                    int data, int unknown) {

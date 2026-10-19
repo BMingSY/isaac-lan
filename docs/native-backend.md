@@ -138,7 +138,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 临时效果 | [temporary_effects.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/temporary_effects.lua) 通过原版 Lua API 按层数差值恢复巨大化和护盾；不重放使用动作 |
 | 本机拾取预览 | `Pickup::UpdateGhosts` RVA `0x2e17c0`，`thiscall(Pickup*)`；只在本机名单内生成 `PICKUP_GHOST`。遍历 Room 的绘制实体数组（`+0x1258`），先冻结拾取物列表再调用；Entity `+0x170` 表示已注册，不能作为删除标志过滤。原生持有 LootList、ANM2 与实体引用，普通实体快照排除该效果；预览查询不推进掉落 RNG |
 | 跨房持续激光 | `Player+0x1458` 是受注册的激光 `EntityPtr`。在来源房间内调用实体原生 Remove，再以 `EntityPtr::Assign` RVA `0x2b5b50`（ECX 引用、EDX 新实体）解除引用；不复制指针、不释放原生内存、不重置剩余时间 |
-| 道具／饰品复活上下文 | `Player::ReviveFromCollectible` RVA `0x3a23a0` 为 `thiscall void(Player*, unsigned item, bool owned)`；`ReviveFromTrinket` RVA `0x3a3430` 为 `thiscall void(Player*, unsigned trinket)`。PlayerManager 在房间更新之外处理死亡时，按角色控制器借入所属房间与名单，再调用一次原入口；已有作用域及单人模式沿用原上下文，不重放复活效果。入口受版本签名校验，角色及效果实体仍由游戏拥有 |
+| 道具／饰品复活上下文 | `Player::ReviveFromCollectible` RVA `0x3a23a0` 为 `thiscall void(Player*, unsigned item, bool owned)`；`ReviveFromTrinket` RVA `0x3a3430` 为 `thiscall void(Player*, unsigned trinket, unsigned scratch)`。后者的第二个栈字未参与 J460 逻辑，但原生以 `RET 8` 清栈，必须原样透传，不能沿用旧版单参数声明。PlayerManager 在房间更新之外处理死亡时，按角色控制器借入所属房间与名单，再调用一次原入口；已有作用域及单人模式沿用原上下文，不重放复活效果。入口受版本签名校验，角色及效果实体仍由游戏拥有 |
 | 蓝色房间初始化 | `Level::TryInitializeBlueRoom` RVA `0x34d4a0` 为 `thiscall bool(Game*, int source, int destination, int direction)`。仅在步行且同维度转场的角色房间中调用；资格、描述符、房门标记与出口由原生实现维护，成功时采用原生蓝色房间编号 `-16`，不自行创建或释放描述符 |
 | 换层随行效果 | `Player+0x1f04` 是赎罪效果的注册 `EntityPtr`。兼容策略仅选择类型 `1000`、变体 `185` 且与该引用相同的实体；换层收拢名单时，从旧房间迁入原生离场房间，随后交由原生换层更新与清理。普通换房不保留该例外，不复制或重新绑定引用，不手动结算奖励 |
 
