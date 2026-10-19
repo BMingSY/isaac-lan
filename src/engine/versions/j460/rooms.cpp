@@ -20,6 +20,8 @@
 #include "compat/routes/home.h"
 #include "compat/items/deal_chances.h"
 #include "compat/items/death_certificate.h"
+#include "compat/items/room_transitions.h"
+#include "runtime/room_clock.h"
 #include "compat/items/crafting_bag.h"
 #include "compat/items/team_effects.h"
 #include "compat/characters/traits.h"
@@ -137,6 +139,7 @@ constexpr std::array<unsigned, 27> renderImages = {
     0x8797cc, 0x8797d4, 0x8797dc, 0x8797e4, 0x8797ec, 0x8797f4, 0x8797fc, 0x879804, 0x87980c,
     0x879814, 0x87981c, 0x879824, 0x87982c, 0x879834, 0x87983c, 0x879844, 0x87984c, 0x879854};
 struct Room {
+    RoomClock clock;
     Key key;
     Address pointer;
     bool owned;
@@ -894,7 +897,7 @@ void moveEntity(Address entity, Room& from, Room& to) {
     engine<Add>(j460::entry::engineRoomsAdd)(reinterpret_cast<void*>(to.pointer + 0x1218),
                                              reinterpret_cast<void*>(entity));
 }
-std::vector<Address> followers(Address player, const Room& room) {
+std::vector<Address> followers(Address player, const Room& room, bool departingFloor = false) {
     std::vector<Address> candidates, result;
     // J460 keeps attached knives in the persistence list along with familiars;
     // transient weapons can also occur in the ordinary list. Dark Esau is an
@@ -951,6 +954,10 @@ std::vector<Address> followers(Address player, const Room& room) {
             (type == 8 &&
              (owned(at<Address>(entity, 0x3bc)) || owned(at<Address>(entity, 0x3c8)))) ||
             darkEsau ||
+            (departingFloor &&
+             compat::items::floorFollower(
+                 type, at<unsigned>(entity, 0x2c),
+                 at<Address>(player, j460::layout::player::redemptionEffect) == entity)) ||
             compat::routes::escapeFollower(type, room.key.dimension,
                                            (at<unsigned>(game(), 0x1839c) & (1u << 22)) != 0,
                                            lastOccupant))
@@ -1257,8 +1264,16 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
     // RoomTransition::ChangeRoom restores visibility. Our per-actor transfer
     // bypasses that process-wide screen, including when the previous room is
     // already the actor's current room.
-    if (animation >= 5 && animation <= 10 && who)
+    if (compat::items::revivalTransition(animation) && who)
         pendingItemRevival.insert(slotOf(who));
+    // StartRoomTransition normally initializes the Blue Key encounter before
+    // switching rooms. Keep its native descriptor/door rules in this scope.
+    if (who &&
+        compat::items::blueRoomTransition(animation, at<int>(game(), j460::layout::game::dimension),
+                                          dimension) &&
+        engine::items::initializeBlueRoom(g, at<int>(game(), j460::layout::game::roomIndex), index,
+                                          direction))
+        index = compat::items::blueRoomIndex;
     const int leave = at<int>(game(), 0x18318);
     int enter = leave >= 0 && leave < 8 ? (leave % 4 + 2) % 4 + (leave / 4) * 4 : -1;
     if (enter >= 0) {
@@ -1484,6 +1499,7 @@ bool adopt() {
     room->pointer = at<Address>(game(), 0x18300);
     room->owned = true;
     room->key = {at<int>(game(), 0x1830c), at<int>(game(), 0x18304)};
+    room->clock.reset(at<int>(game(), j460::layout::game::frame));
     room->capture();
     sharedOwner = room.get(); // Adopt the state already owned by the native game.
     for (auto player : values(roster()))
@@ -2598,8 +2614,13 @@ bool update(void* pointer, RoomCall original) {
             gatherForTransition([] {});
             continue;
         }
-        if (!runtime::replica() && presentation::roomPaused())
-            continue;
+        if (!runtime::replica()) {
+            const bool paused = presentation::roomPaused();
+            room->clock.advance(at<int>(game(), j460::layout::game::frame), paused,
+                                at<int>(room->pointer, j460::layout::room::enteredFrame));
+            if (paused)
+                continue;
+        }
         restorePositions(room->pointer);
         // Game::Update decrements this before Room::Update, outside our room
         // scopes. Each room restores its own value here, so advance it once
@@ -3148,8 +3169,10 @@ struct RoomTransfer {
             if (player != request.player)
                 arrival(player, *to, request.door, {}, protect, landing);
         runtime::roomEntered();
-        if (created)
+        if (created) {
+            to->clock.reset(at<int>(game(), j460::layout::game::frame));
             presentation::roomEntered(to->pointer);
+        }
         if (!created) {
             // J460's native POST_NEW_ROOM dispatcher (callback 19). A
             // resident room needs the entry notification without Init;
@@ -3568,7 +3591,7 @@ void beforeStart(bool preserveItemPixels) {
     if (root) {
         for (const auto& [player, room] : location)
             if (room != root) {
-                for (auto entity : followers(player, *room))
+                for (auto entity : followers(player, *room, true))
                     moveEntity(entity, *room, *root);
                 moveEntity(player, *room, *root);
             }

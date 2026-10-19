@@ -21,6 +21,8 @@
 #include "compat/items/rewind_targets.h"
 #include "compat/items/deal_chances.h"
 #include "compat/items/death_certificate.h"
+#include "compat/items/room_transitions.h"
+#include "runtime/room_clock.h"
 #include "compat/items/crafting_bag.h"
 #include "compat/challenges/catalog.h"
 #include "compat/items/team_effects.h"
@@ -170,6 +172,16 @@ void compatibilityTargets() {
                 items::deathCertificateTeleport(16, 2) && !items::deathCertificateTeleport(20, 2) &&
                 !items::deathCertificateTeleport(0, 2) && !items::deathCertificateTeleport(3, 0),
             "Death Certificate card confinement captured its native return or a normal teleport");
+    for (int animation = 0; animation <= 20; ++animation)
+        require(items::revivalTransition(animation) ==
+                    ((animation >= 5 && animation <= 10) || animation == 14),
+                "A revival remained hidden or another transition restored visibility");
+    require(items::blueRoomTransition(0, 0, -1) && items::blueRoomTransition(0, 1, 1) &&
+                !items::blueRoomTransition(0, 0, 1) && !items::blueRoomTransition(3, 0, 0),
+            "Blue Key routing captured a teleport or cross-dimension transition");
+    require(items::floorFollower(1000, 185, true) && !items::floorFollower(1000, 185, false) &&
+                !items::floorFollower(1000, 144, true) && !items::floorFollower(3, 185, true),
+            "Floor gathering lost an attached reward or retained another room's effect");
     require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
             "Lazarus form matching crossed another character");
     require(characters::taintedJacob(37) && characters::taintedJacob(39) &&
@@ -276,6 +288,23 @@ void roomScopeOwnership() {
             "A new room operation retained the old full roster");
 }
 void roomTransitionContext() {
+    isaac::rooms::RoomClock bossClock, residentClock;
+    int bossEntered = 100, residentEntered = 80;
+    bossClock.reset(100);
+    residentClock.reset(100);
+    for (int frame = 101; frame <= 204; ++frame) {
+        bossClock.advance(frame, true, bossEntered);
+        bossClock.advance(frame, true, bossEntered);
+        residentClock.advance(frame, false, residentEntered);
+        require(frame - bossEntered == 0, "Paused boss room aged or counted a half-frame twice");
+    }
+    bossClock.advance(205, false, bossEntered);
+    require(205 - bossEntered == 1 && residentEntered == 80,
+            "Boss entry missed its first active frame or froze the resident's clock");
+    bossClock.reset(400);
+    bossEntered = 400;
+    bossClock.advance(401, false, bossEntered);
+    require(401 - bossEntered == 1, "A new room inherited the previous intro pause");
     {
         using namespace isaac::compat::characters;
         std::array<GhostRoomActor, 3> actors{{
