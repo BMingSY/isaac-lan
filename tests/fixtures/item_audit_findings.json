@@ -78519,6 +78519,9 @@
       "automatic_loader": false,
       "evidence": "item-effects-20261018",
       "scope": "待验证道具、卡牌、药丸的逐项效果验收；注入启动的隔离实例，不作为自动加载验收。"
+    },
+    "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b": {
+      "commit": "804f257a123047b8ec8ed7445bd9116854606936"
     }
   },
   "resolved_issues": {
@@ -80445,6 +80448,209 @@
       "commit": "d29d9e108d298e98db5afc1368b032d580ffafa3",
       "dll_sha256": "fb7307fe5784e36451ca886117e38014c833d2e4892066ba308b437074c0617e",
       "evidence": "input-cleanup-audit-20261017-01"
+    },
+    {
+      "item": "collectible:619",
+      "previous": {
+        "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+        "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+        "status": "problem",
+        "effect_status": "problem",
+        "trigger": "客机分房使用里游魂，持有长子名分并受到致命伤害，触发本房复活。",
+        "impact": "复活本身成功，但同房近处敌人没有受到应有的200点复活爆炸伤害；主机同房／分房和客机同房对照可造成伤害。",
+        "fix": "未修复。",
+        "evidence": [
+          "item-effects-completion-20261018/native-followup-16-a",
+          "item-effects-completion-20261018/native-followup-16-b",
+          "item-effects-completion-20261018/native-followup-18-a",
+          "item-effects-completion-20261018/reviews/lost18-client/review-input.json"
+        ],
+        "verified_cases": [
+          "collectible:619/host-same/isaac",
+          "collectible:619/host-same/magdalene",
+          "collectible:619/host-same/cain",
+          "collectible:619/host-same/judas",
+          "collectible:619/host-same/blue_baby",
+          "collectible:619/host-same/eve",
+          "collectible:619/host-same/samson",
+          "collectible:619/host-same/azazel",
+          "collectible:619/host-same/lazarus",
+          "collectible:619/host-same/eden",
+          "collectible:619/host-same/lost",
+          "collectible:619/host-same/lilith",
+          "collectible:619/host-same/keeper",
+          "collectible:619/host-same/bethany",
+          "collectible:619/host-same/jacob",
+          "collectible:619/host-same/esau",
+          "collectible:619/host-same/tainted_magdalene",
+          "collectible:619/host-same/tainted_cain",
+          "collectible:619/host-same/tainted_blue_baby",
+          "collectible:619/host-same/tainted_eden",
+          "collectible:619/host-same/tainted_lost",
+          "collectible:619/host-same/tainted_bethany",
+          "collectible:619/host-same/tainted_jacob",
+          "collectible:619/host-same/apollyon",
+          "collectible:619/host-same/forgotten",
+          "collectible:619/host-same/tainted_isaac",
+          "collectible:619/host-same/tainted_judas",
+          "collectible:619/host-same/tainted_eve",
+          "collectible:619/host-same/tainted_samson",
+          "collectible:619/host-same/tainted_azazel",
+          "collectible:619/host-same/tainted_lazarus",
+          "collectible:619/host-same/tainted_lilith",
+          "collectible:619/host-same/tainted_keeper",
+          "collectible:619/host-same/tainted_apollyon",
+          "collectible:619/host-same/tainted_forgotten",
+          "collectible:619/client-split/isaac",
+          "collectible:619/client-split/magdalene",
+          "collectible:619/client-split/cain",
+          "collectible:619/client-split/judas",
+          "collectible:619/client-split/blue_baby",
+          "collectible:619/client-split/eve",
+          "collectible:619/client-split/samson",
+          "collectible:619/client-split/azazel",
+          "collectible:619/client-split/lazarus",
+          "collectible:619/client-split/eden",
+          "collectible:619/client-split/lost",
+          "collectible:619/client-split/lilith",
+          "collectible:619/client-split/keeper",
+          "collectible:619/client-split/bethany",
+          "collectible:619/client-split/jacob",
+          "collectible:619/client-split/esau",
+          "collectible:619/client-split/tainted_magdalene",
+          "collectible:619/client-split/tainted_cain",
+          "collectible:619/client-split/tainted_blue_baby",
+          "collectible:619/client-split/tainted_eden",
+          "collectible:619/client-split/tainted_bethany",
+          "collectible:619/client-split/tainted_jacob",
+          "collectible:619/client-split/apollyon",
+          "collectible:619/client-split/forgotten",
+          "collectible:619/client-split/tainted_isaac",
+          "collectible:619/client-split/tainted_judas",
+          "collectible:619/client-split/tainted_eve",
+          "collectible:619/client-split/tainted_samson",
+          "collectible:619/client-split/tainted_azazel",
+          "collectible:619/client-split/tainted_lazarus",
+          "collectible:619/client-split/tainted_lilith",
+          "collectible:619/client-split/tainted_keeper",
+          "collectible:619/client-split/tainted_apollyon",
+          "collectible:619/client-split/tainted_forgotten"
+        ]
+      },
+      "fix": "remaining-room-item-effects",
+      "commit": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "evidence": "remaining-8082c79-20261019/acceptance-02"
+    },
+    {
+      "item": "collectible:673",
+      "previous": {
+        "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+        "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+        "status": "problem",
+        "effect_status": "problem",
+        "trigger": "客机分房持有赎罪，实际进入原生恶魔房，出现十字标记，未取走任何交易道具或掉落物后离开并换层。",
+        "impact": "下一层没有获得伤害提升和魂心奖励；主机同房／分房、客机同房对照均获得奖励。",
+        "fix": "未修复。",
+        "evidence": [
+          "item-effects-completion-20261018/native-remaining-05",
+          "item-effects-completion-20261018/trinket-followup-06b",
+          "item-effects-completion-20261018/reviews/redemption-06b-visual/review-input.json",
+          "item-effects-completion-20261018/serial-recovery-14"
+        ],
+        "verified_cases": [
+          "collectible:673/host-same"
+        ]
+      },
+      "fix": "remaining-room-item-effects",
+      "commit": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "evidence": "remaining-8082c79-20261019/acceptance-02"
+    },
+    {
+      "item": "trinket:23",
+      "previous": {
+        "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+        "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+        "status": "problem",
+        "effect_status": "problem",
+        "trigger": "主机同房或客机分房持有寻人启事，受到致命伤害并触发原生复活。",
+        "impact": "复活后的游魂仍存活且不是联机幽灵，但角色持续不可见，影响复活后的角色辨识与位置判断；本轮未据此断言移动或射击失效。",
+        "fix": "未修复。",
+        "evidence": [
+          "item-effects-completion-20261018/trinket-lifecycle-04",
+          "item-effects-completion-20261018/native-remaining-05",
+          "item-effects-completion-20261018/reviews/missing-poster-05/review.json"
+        ],
+        "verified_cases": []
+      },
+      "fix": "remaining-room-item-effects",
+      "commit": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "evidence": "remaining-8082c79-20261019/acceptance-02"
+    },
+    {
+      "item": "trinket:120",
+      "previous": {
+        "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+        "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+        "status": "problem",
+        "effect_status": "problem",
+        "trigger": "主机或客机持有发夹，以空充能的六面骰实际穿过房门进入尚有Boss的房间；另一名玩家留在门外。",
+        "impact": "进入Boss房后六面骰充能仍为0，无法获得发夹提供的进房充满主动道具效果。",
+        "fix": "未修复。",
+        "evidence": [
+          "item-effects-completion-20261018/serial-recovery-14",
+          "item-effects-completion-20261018/reviews/hairpin-14/review-input.json"
+        ],
+        "verified_cases": []
+      },
+      "fix": "remaining-room-item-effects",
+      "commit": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "evidence": "remaining-8082c79-20261019/acceptance-03"
+    },
+    {
+      "item": "trinket:124",
+      "previous": {
+        "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+        "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+        "status": "problem",
+        "effect_status": "problem",
+        "trigger": "主机或客机持有门挡，通过正常方向输入穿门进入仍有敌人的普通房间；队友留在原房。",
+        "impact": "进入后原入口关闭，门挡未能保持入口开启，战斗结束前无法按预期从入口退回。",
+        "fix": "未修复。",
+        "evidence": [
+          "item-effects-completion-20261018/serial-recovery-14",
+          "item-effects-completion-20261018/reviews/door-stop-14/review-input.json"
+        ],
+        "verified_cases": []
+      },
+      "fix": "remaining-room-item-effects",
+      "commit": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "evidence": "remaining-8082c79-20261019/acceptance-02"
+    },
+    {
+      "item": "trinket:150",
+      "previous": {
+        "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
+        "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
+        "status": "problem",
+        "effect_status": "problem",
+        "trigger": "主机或客机持有蓝钥匙，在无钥匙状态通过普通房间到未进入过的宝箱房的上锁房门。",
+        "impact": "无饰品时门仍锁住，持有后可直接进入宝箱房且不消耗钥匙；跳过了应生成的蓝色战斗房及其中战斗。",
+        "fix": "未修复。",
+        "evidence": [
+          "item-effects-completion-20261018/serial-recovery-14",
+          "item-effects-completion-20261018/reviews/blue-key-14/review-input.json"
+        ],
+        "verified_cases": []
+      },
+      "fix": "remaining-room-item-effects",
+      "commit": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "evidence": "remaining-8082c79-20261019/acceptance-02"
     }
   ],
   "extra_compatibility_verification": {
@@ -80662,22 +80868,29 @@
       ]
     },
     "collectible:673": {
-      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
-      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
-      "status": "problem",
-      "effect_status": "problem",
-      "trigger": "客机分房持有赎罪，实际进入原生恶魔房，出现十字标记，未取走任何交易道具或掉落物后离开并换层。",
-      "impact": "下一层没有获得伤害提升和魂心奖励；主机同房／分房、客机同房对照均获得奖励。",
-      "fix": "未修复。",
+      "candidate": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "status": "verified",
+      "effect_status": "verified",
+      "checks": "实际恶魔房空手离开，由持有者或队友发起换层后持有者获得伤害与魂心奖励，双端属性一致。",
+      "contexts": [
+        "host-same",
+        "client-same",
+        "host-split",
+        "client-split"
+      ],
+      "one_way_latency_ms": 75,
       "evidence": [
-        "item-effects-completion-20261018/native-remaining-05",
-        "item-effects-completion-20261018/trinket-followup-06b",
-        "item-effects-completion-20261018/reviews/redemption-06b-visual/review-input.json",
-        "item-effects-completion-20261018/serial-recovery-14"
+        "remaining-8082c79-20261019/acceptance-02",
+        "remaining-8082c79-20261019/visual-review.json"
       ],
       "verified_cases": [
-        "collectible:673/host-same"
-      ]
+        "collectible:673/host-same",
+        "collectible:673/client-same",
+        "collectible:673/host-split",
+        "collectible:673/client-split"
+      ],
+      "limitation": "—"
     },
     "collectible:692": {
       "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
@@ -80939,19 +81152,29 @@
       ]
     },
     "trinket:23": {
-      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
-      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
-      "status": "problem",
-      "effect_status": "problem",
-      "trigger": "主机同房或客机分房持有寻人启事，受到致命伤害并触发原生复活。",
-      "impact": "复活后的游魂仍存活且不是联机幽灵，但角色持续不可见，影响复活后的角色辨识与位置判断；本轮未据此断言移动或射击失效。",
-      "fix": "未修复。",
-      "evidence": [
-        "item-effects-completion-20261018/trinket-lifecycle-04",
-        "item-effects-completion-20261018/native-remaining-05",
-        "item-effects-completion-20261018/reviews/missing-poster-05/review.json"
+      "candidate": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "status": "verified",
+      "effect_status": "verified",
+      "checks": "受到致命伤害后成为可见的游魂且不是联机幽灵，复活后的双端状态与画面一致。",
+      "contexts": [
+        "host-same",
+        "client-same",
+        "host-split",
+        "client-split"
       ],
-      "verified_cases": []
+      "one_way_latency_ms": 75,
+      "evidence": [
+        "remaining-8082c79-20261019/acceptance-02",
+        "remaining-8082c79-20261019/visual-review.json"
+      ],
+      "verified_cases": [
+        "trinket:23/host-same",
+        "trinket:23/client-same",
+        "trinket:23/host-split",
+        "trinket:23/client-split"
+      ],
+      "limitation": "—"
     },
     "trinket:24": {
       "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
@@ -82717,90 +82940,29 @@
       ]
     },
     "collectible:619": {
-      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
-      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
-      "status": "problem",
-      "effect_status": "problem",
-      "trigger": "客机分房使用里游魂，持有长子名分并受到致命伤害，触发本房复活。",
-      "impact": "复活本身成功，但同房近处敌人没有受到应有的200点复活爆炸伤害；主机同房／分房和客机同房对照可造成伤害。",
-      "fix": "未修复。",
+      "candidate": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "status": "verified",
+      "effect_status": "verified",
+      "checks": "里游魂持有者复活、近处敌人受到原生200点爆炸伤害，归属与双端状态一致。",
+      "contexts": [
+        "host-same",
+        "client-same",
+        "host-split",
+        "client-split"
+      ],
+      "one_way_latency_ms": 75,
       "evidence": [
-        "item-effects-completion-20261018/native-followup-16-a",
-        "item-effects-completion-20261018/native-followup-16-b",
-        "item-effects-completion-20261018/native-followup-18-a",
-        "item-effects-completion-20261018/reviews/lost18-client/review-input.json"
+        "remaining-8082c79-20261019/acceptance-02",
+        "remaining-8082c79-20261019/visual-review.json"
       ],
       "verified_cases": [
-        "collectible:619/host-same/isaac",
-        "collectible:619/host-same/magdalene",
-        "collectible:619/host-same/cain",
-        "collectible:619/host-same/judas",
-        "collectible:619/host-same/blue_baby",
-        "collectible:619/host-same/eve",
-        "collectible:619/host-same/samson",
-        "collectible:619/host-same/azazel",
-        "collectible:619/host-same/lazarus",
-        "collectible:619/host-same/eden",
-        "collectible:619/host-same/lost",
-        "collectible:619/host-same/lilith",
-        "collectible:619/host-same/keeper",
-        "collectible:619/host-same/bethany",
-        "collectible:619/host-same/jacob",
-        "collectible:619/host-same/esau",
-        "collectible:619/host-same/tainted_magdalene",
-        "collectible:619/host-same/tainted_cain",
-        "collectible:619/host-same/tainted_blue_baby",
-        "collectible:619/host-same/tainted_eden",
         "collectible:619/host-same/tainted_lost",
-        "collectible:619/host-same/tainted_bethany",
-        "collectible:619/host-same/tainted_jacob",
-        "collectible:619/host-same/apollyon",
-        "collectible:619/host-same/forgotten",
-        "collectible:619/host-same/tainted_isaac",
-        "collectible:619/host-same/tainted_judas",
-        "collectible:619/host-same/tainted_eve",
-        "collectible:619/host-same/tainted_samson",
-        "collectible:619/host-same/tainted_azazel",
-        "collectible:619/host-same/tainted_lazarus",
-        "collectible:619/host-same/tainted_lilith",
-        "collectible:619/host-same/tainted_keeper",
-        "collectible:619/host-same/tainted_apollyon",
-        "collectible:619/host-same/tainted_forgotten",
-        "collectible:619/client-split/isaac",
-        "collectible:619/client-split/magdalene",
-        "collectible:619/client-split/cain",
-        "collectible:619/client-split/judas",
-        "collectible:619/client-split/blue_baby",
-        "collectible:619/client-split/eve",
-        "collectible:619/client-split/samson",
-        "collectible:619/client-split/azazel",
-        "collectible:619/client-split/lazarus",
-        "collectible:619/client-split/eden",
-        "collectible:619/client-split/lost",
-        "collectible:619/client-split/lilith",
-        "collectible:619/client-split/keeper",
-        "collectible:619/client-split/bethany",
-        "collectible:619/client-split/jacob",
-        "collectible:619/client-split/esau",
-        "collectible:619/client-split/tainted_magdalene",
-        "collectible:619/client-split/tainted_cain",
-        "collectible:619/client-split/tainted_blue_baby",
-        "collectible:619/client-split/tainted_eden",
-        "collectible:619/client-split/tainted_bethany",
-        "collectible:619/client-split/tainted_jacob",
-        "collectible:619/client-split/apollyon",
-        "collectible:619/client-split/forgotten",
-        "collectible:619/client-split/tainted_isaac",
-        "collectible:619/client-split/tainted_judas",
-        "collectible:619/client-split/tainted_eve",
-        "collectible:619/client-split/tainted_samson",
-        "collectible:619/client-split/tainted_azazel",
-        "collectible:619/client-split/tainted_lazarus",
-        "collectible:619/client-split/tainted_lilith",
-        "collectible:619/client-split/tainted_keeper",
-        "collectible:619/client-split/tainted_apollyon",
-        "collectible:619/client-split/tainted_forgotten"
-      ]
+        "collectible:619/client-same/tainted_lost",
+        "collectible:619/host-split/tainted_lost",
+        "collectible:619/client-split/tainted_lost"
+      ],
+      "limitation": "本轮复验里游魂复活爆炸；其他角色效果沿用既有记录。"
     },
     "collectible:681": {
       "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
@@ -83265,18 +83427,29 @@
       ]
     },
     "trinket:120": {
-      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
-      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
-      "status": "problem",
-      "effect_status": "problem",
-      "trigger": "主机或客机持有发夹，以空充能的六面骰实际穿过房门进入尚有Boss的房间；另一名玩家留在门外。",
-      "impact": "进入Boss房后六面骰充能仍为0，无法获得发夹提供的进房充满主动道具效果。",
-      "fix": "未修复。",
-      "evidence": [
-        "item-effects-completion-20261018/serial-recovery-14",
-        "item-effects-completion-20261018/reviews/hairpin-14/review-input.json"
+      "candidate": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "status": "verified",
+      "effect_status": "verified",
+      "checks": "空充能六面骰实际穿门进入未清理Boss房，首个活动帧充满主动道具，双端一致。",
+      "contexts": [
+        "host-same",
+        "client-same",
+        "host-split",
+        "client-split"
       ],
-      "verified_cases": []
+      "one_way_latency_ms": 75,
+      "evidence": [
+        "remaining-8082c79-20261019/acceptance-03",
+        "remaining-8082c79-20261019/visual-review.json"
+      ],
+      "verified_cases": [
+        "trinket:120/host-same",
+        "trinket:120/client-same",
+        "trinket:120/host-split",
+        "trinket:120/client-split"
+      ],
+      "limitation": "—"
     },
     "trinket:123": {
       "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
@@ -83294,18 +83467,29 @@
       ]
     },
     "trinket:124": {
-      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
-      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
-      "status": "problem",
-      "effect_status": "problem",
-      "trigger": "主机或客机持有门挡，通过正常方向输入穿门进入仍有敌人的普通房间；队友留在原房。",
-      "impact": "进入后原入口关闭，门挡未能保持入口开启，战斗结束前无法按预期从入口退回。",
-      "fix": "未修复。",
-      "evidence": [
-        "item-effects-completion-20261018/serial-recovery-14",
-        "item-effects-completion-20261018/reviews/door-stop-14/review-input.json"
+      "candidate": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "status": "verified",
+      "effect_status": "verified",
+      "checks": "正常输入进入战斗房后原入口保持开放，其他出口继续封闭，双端门状态一致。",
+      "contexts": [
+        "host-same",
+        "client-same",
+        "host-split",
+        "client-split"
       ],
-      "verified_cases": []
+      "one_way_latency_ms": 75,
+      "evidence": [
+        "remaining-8082c79-20261019/acceptance-02",
+        "remaining-8082c79-20261019/visual-review.json"
+      ],
+      "verified_cases": [
+        "trinket:124/host-same",
+        "trinket:124/client-same",
+        "trinket:124/host-split",
+        "trinket:124/client-split"
+      ],
+      "limitation": "—"
     },
     "trinket:135": {
       "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
@@ -83399,18 +83583,29 @@
       ]
     },
     "trinket:150": {
-      "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
-      "dll_sha256": "ef5783255e6b42bbdb6bf1a06783063d61a639485d17cb9afc7c3ea4819cc5f3",
-      "status": "problem",
-      "effect_status": "problem",
-      "trigger": "主机或客机持有蓝钥匙，在无钥匙状态通过普通房间到未进入过的宝箱房的上锁房门。",
-      "impact": "无饰品时门仍锁住，持有后可直接进入宝箱房且不消耗钥匙；跳过了应生成的蓝色战斗房及其中战斗。",
-      "fix": "未修复。",
-      "evidence": [
-        "item-effects-completion-20261018/serial-recovery-14",
-        "item-effects-completion-20261018/reviews/blue-key-14/review-input.json"
+      "candidate": "804f257a123047b8ec8ed7445bd9116854606936",
+      "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+      "status": "verified",
+      "effect_status": "verified",
+      "checks": "无钥匙穿过上锁宝箱房入口时先进入有敌人的蓝色房间，清场后抵达目标房间，双端一致。",
+      "contexts": [
+        "host-same",
+        "client-same",
+        "host-split",
+        "client-split"
       ],
-      "verified_cases": []
+      "one_way_latency_ms": 75,
+      "evidence": [
+        "remaining-8082c79-20261019/acceptance-02",
+        "remaining-8082c79-20261019/visual-review.json"
+      ],
+      "verified_cases": [
+        "trinket:150/host-same",
+        "trinket:150/client-same",
+        "trinket:150/host-split",
+        "trinket:150/client-split"
+      ],
+      "limitation": "—"
     },
     "trinket:151": {
       "candidate": "422474516ed5e3b45beaf2ea389151e47a5a95ea",
@@ -83787,5 +83982,24 @@
       "suspected": 2
     },
     "complete": true
+  },
+  "remaining_acceptance": {
+    "date": "2026-10-19",
+    "candidate": "804f257a123047b8ec8ed7445bd9116854606936",
+    "dll_sha256": "f58e592773349bb2b54670addfbdd46c3023a3dc73350e6df3c32073454d689b",
+    "items": 6,
+    "cases": 24,
+    "status": "verified",
+    "history": "docs/history/2026-10-19-remaining-item-fixes.md",
+    "evidence": [
+      "remaining-8082c79-20261019/acceptance-02",
+      "remaining-8082c79-20261019/acceptance-03"
+    ],
+    "fixture_candidate": "9fea517",
+    "excluded": [
+      "collectible:635",
+      "collectible:721",
+      "scene visual differences"
+    ]
   }
 }
