@@ -251,6 +251,7 @@ def test_hairpin_requires_empty_active_and_physical_hostile_boss_entry():
         "room": 85,
         "target": 85,
         "room_type": 5,
+        "room_updates": 1,
         "keys": 0,
         "enemies": 1,
         "owned": True,
@@ -259,7 +260,13 @@ def test_hairpin_requires_empty_active_and_physical_hostile_boss_entry():
         "max_charge": 6,
     }
     assert all(results(trial, [entry]).values())
-    for invalid in ({"charge_before": 6}, {"charge_after": 0}, {"room": 84}, {"enemies": 0}):
+    for invalid in (
+        {"charge_before": 6},
+        {"charge_after": 0},
+        {"room": 84},
+        {"enemies": 0},
+        {"room_updates": 0},
+    ):
         assert not all(results(trial, [{**entry, **invalid}]).values())
 
 

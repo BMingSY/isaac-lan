@@ -693,7 +693,18 @@ return function(report, actor, moveRoom, moveFloor)
                         })
                     elseif tick == 600 and keyControl then
                         p:AddTrinket(case.id, false)
-                    elseif tick == 750 then
+                    elseif tick >= 750 and not doorTrial.reported then
+                        local location = _IsaacLan.rooms_positions()[tostring(case.slot)]
+                        -- The versus-screen acknowledgement can arrive on this
+                        -- tick. Sample after the destination actually updated,
+                        -- not immediately before its first Player::Update.
+                        if
+                            rules.reward == "charge"
+                            and (location.index ~= doorTrial.target or location.updates == 0)
+                        then
+                            return
+                        end
+                        doorTrial.reported = true
                         local entryOpen = false
                         local activeConfig = Isaac.GetItemConfig():GetCollectible(p:GetActiveItem())
                         for slot = 0, DoorSlot.NUM_DOOR_SLOTS - 1 do
@@ -707,6 +718,8 @@ return function(report, actor, moveRoom, moveFloor)
                             room = Game():GetLevel():GetCurrentRoomIndex(),
                             target = doorTrial.target,
                             room_type = room:GetType(),
+                            room_updates = location.updates,
+                            room_frame = room:GetFrameCount(),
                             keys = p:GetNumKeys(),
                             enemies = room:GetAliveEnemiesCount(),
                             entry_open = entryOpen,

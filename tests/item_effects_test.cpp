@@ -9,6 +9,17 @@
 
 namespace isaac::rooms {
 bool previewReady = true, localPreviewRoster = false;
+bool revivalScoped = false, scopeAvailable = true;
+unsigned revivalSlot = 0;
+bool withPlayer(unsigned slot, const std::function<void()>& call) {
+    if (!scopeAvailable)
+        return false;
+    revivalSlot = slot;
+    revivalScoped = true;
+    call();
+    revivalScoped = false;
+    return true;
+}
 bool viewReady() {
     return previewReady;
 }
@@ -186,6 +197,65 @@ void beamDeparture() {
     require(*reinterpret_cast<int*>(f.player.data() + duration) == 123,
             "Departure restarted or consumed the remaining beam duration");
 }
+void* expectedGame;
+bool blueRoomCreated;
+unsigned blueRoomCalls;
+bool __attribute__((thiscall)) blueRoomFixture(void* game, int source, int destination,
+                                               int direction) {
+    require(game == expectedGame && source == 84 && destination == 85 && direction == 2,
+            "Blue room initialization changed its native receiver or arguments");
+    ++blueRoomCalls;
+    return blueRoomCreated;
+}
+void blueRoomEntry() {
+    Fixture f;
+    expectedGame = f.manager.data();
+    auto call = f.image + native::entry::levelTryInitializeBlueRoom;
+    call[0] = 0xe9;
+    const auto displacement = static_cast<unsigned>(reinterpret_cast<Address>(blueRoomFixture) -
+                                                    reinterpret_cast<Address>(call + 5));
+    std::memcpy(call + 1, &displacement, 4);
+    require(FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size) != 0,
+            "Cannot publish the native blue room initializer");
+    blueRoomCalls = 0;
+    for (bool eligible : {false, true}) {
+        blueRoomCreated = eligible;
+        require(items::initializeBlueRoom(expectedGame, 84, 85, 2) == eligible,
+                "Blue room adapter lost the native eligibility result");
+    }
+    require(blueRoomCalls == 2, "Blue room initialization was skipped or replayed");
+}
+unsigned revivalCalls;
+void __attribute__((thiscall)) reviveCollectibleFixture(void* player, unsigned id, bool owned) {
+    require(player == expectedPlayer && id == 619 && owned,
+            "Collectible revival changed native arguments");
+    require(isaac::rooms::revivalScoped == isaac::rooms::scopeAvailable,
+            "Collectible revival escaped its actor scope");
+    ++revivalCalls;
+}
+void __attribute__((thiscall)) reviveTrinketFixture(void* player, unsigned id, unsigned scratch) {
+    require(player == expectedPlayer && id == 23 && scratch == 0x12345678,
+            "Trinket revival changed native arguments or dropped J460's second stack word");
+    require(isaac::rooms::revivalScoped == isaac::rooms::scopeAvailable,
+            "Trinket revival escaped its actor scope");
+    ++revivalCalls;
+}
+void revivalRoom() {
+    Fixture f;
+    *reinterpret_cast<unsigned*>(f.player.data() + native::layout::player::controller) = 2;
+    items::originalReviveCollectible = reviveCollectibleFixture;
+    items::originalReviveTrinket = reviveTrinketFixture;
+    revivalCalls = 0;
+    for (bool available : {true, false}) {
+        isaac::rooms::scopeAvailable = available;
+        items::reviveCollectible(f.player.data(), nullptr, 619, true);
+        items::reviveTrinket(f.player.data(), nullptr, 23, 0x12345678);
+    }
+    require(revivalCalls == 4 && isaac::rooms::revivalSlot == 1 && !isaac::rooms::revivalScoped,
+            "Revival was replayed, used another controller or retained its scope");
+    items::originalReviveCollectible = nullptr;
+    items::originalReviveTrinket = nullptr;
+}
 std::vector<void*> previewed;
 Address previewRoom;
 void __attribute__((thiscall)) previewFixture(void* pickup) {
@@ -243,6 +313,8 @@ int main(int argc, char** argv) {
     return runTests(argc, argv,
                     {{"starting-rewards", startingRewards},
                      {"beam-departure", beamDeparture},
+                     {"blue-room-entry", blueRoomEntry},
+                     {"revival-room", revivalRoom},
                      {"pending-reward-persistence", pendingRewardPersistence},
                      {"local-pickup-preview", localPickupPreview}});
 }

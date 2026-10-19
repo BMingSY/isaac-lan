@@ -1184,6 +1184,7 @@ def trinket_checks(rules, observations, probes, check):
                     and entries[0]["room"] == entries[0]["target"]
                     and entries[0]["room_type"] == 5
                     and entries[0]["enemies"] > 0
+                    and entries[0].get("room_updates", 1) > 0
                     and entries[0]["charge_before"] == 0
                     and entries[0]["charge_after"] == entries[0]["max_charge"] > 0
                     and entries[0]["owned"]

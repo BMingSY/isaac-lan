@@ -185,6 +185,7 @@ inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x2
 } // namespace color
 namespace player {
 inline constexpr unsigned megaBlastLaser = 0x1458;
+inline constexpr unsigned redemptionEffect = 0x1f04;
 inline constexpr unsigned megaBlastDuration = 0x18f4;
 inline constexpr unsigned emote = 0x26d8;
 inline constexpr unsigned type = 0x13c0;

@@ -13,6 +13,7 @@ local redirected, occupied, redirectedOccupied, hostWalks = 0, 0, 0, 0
 local ghostWalks, ghostRedirects, ghostMode = 0, 0, false
 local marker, markerSeed, residentFrames, snapshots = nil, nil, 0, 0
 local residentEnemy = nil
+local acceptedPositions = {}
 local inward = { Vector(1, 0), Vector(0, 1), Vector(-1, 0), Vector(0, -1) }
 local buttons = { 1, 4, 2, 8 }
 local function report(message)
@@ -50,13 +51,16 @@ local function coherent(slot)
             assert(
                 room:IsPositionInRoom(p.Position, 0),
                 string.format(
-                    "Arrival outside native room: role=%s slot=%d phase=%s room=%d x=%.2f y=%.2f",
+                    "Arrival outside native room: role=%s slot=%d phase=%s room=%d x=%.2f y=%.2f snapshot=%s shape=%d frame=%d",
                     host and "host" or "client",
                     slot,
                     phase,
                     location.index,
                     p.Position.X,
-                    p.Position.Y
+                    p.Position.Y,
+                    tostring(acceptedPositions[slot]),
+                    room:GetRoomShape(),
+                    room:GetFrameCount()
                 )
             )
         end
@@ -154,6 +158,11 @@ local function advance(t)
             local d = list:Get(i)
             if d.Data.Type == RoomType.ROOM_DEFAULT then
                 rooms[#rooms + 1] = d.SafeGridIndex
+            else
+                -- The native Maze pool includes uncleared terminal bosses.
+                -- Their team-gathering lifecycle invalidates the resident-room
+                -- prerequisite, so keep this routing trial on ordinary rooms.
+                level:GetRoomByIdx(d.SafeGridIndex, 0).Clear = true
             end
         end
         assert(#rooms >= 4)
@@ -361,6 +370,13 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         local meta = _IsaacLanState.decode(bytes:sub(pos))
         masks, phase = meta[1], meta[2]
+        local fields = _IsaacLanModules["sync/fields"]
+        local value = _IsaacLanModules["sync/world_schema"].unpack(_IsaacLanState.decode(body), t)
+        for _, actor in ipairs(value.actors) do
+            local position = actor[fields.actor.entity][fields.entity.position]
+            acceptedPositions[actor[fields.actor.controller] - 1] =
+                string.format("%.2f,%.2f", position[1], position[2])
+        end
         coherent(1)
         snapshots = snapshots + 1
         if meta[3] and not finished then
