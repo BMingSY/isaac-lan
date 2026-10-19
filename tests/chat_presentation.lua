@@ -6,6 +6,7 @@ local texts, availability, controlsPolled, sceneReady = {}, {}, 0, false
 local mouse = { x = -1000, y = -1000, down = false }
 local copied, copySucceeds = {}, true
 local restartChord, emoteEnabled, modal = false, false, false
+local acceptedInputs, confirmInput = 0, false
 local screenWidth, screenHeight = 640, 360
 function Vector(x, y)
     return { X = x, Y = y }
@@ -64,7 +65,7 @@ Isaac = {
         return position
     end,
 }
-local function create(image, opacity, options, messages)
+local function create(image, opacity, options, messages, service)
     local input = { open = true, text = "", cursor = 0, anchor = 0, composition = "", scroll = 0 }
     local bubbles = {}
     for _, message in ipairs(messages or {}) do
@@ -92,6 +93,9 @@ local function create(image, opacity, options, messages)
                 return copySucceeds
             end,
             chat_ui_reset = function() end,
+            chat_ui_accept = function()
+                acceptedInputs = acceptedInputs + 1
+            end,
             chat_ui_available = function(value)
                 availability[#availability + 1] = value
                 if not value then
@@ -103,7 +107,7 @@ local function create(image, opacity, options, messages)
             end,
             chat_controls = function()
                 controlsPolled = controlsPolled + 1
-                return { restart = restartChord }
+                return { restart = restartChord, confirm = confirmInput }
             end,
             chat_ui_open = function(value)
                 input.open = value
@@ -136,12 +140,13 @@ local function create(image, opacity, options, messages)
                 callback()
             end,
         },
-        chat = {
-            revision = 1,
-            messages = messages or { { kind = "team", owner = 0, text = "你好", time = 0 } },
-            bubbles = bubbles,
-            emotes = {},
-        },
+        chat = service
+            or {
+                revision = 1,
+                messages = messages or { { kind = "team", owner = 0, text = "你好", time = 0 } },
+                bubbles = bubbles,
+                emotes = {},
+            },
         phase = { lobby = 2, running = 3, waiting = 9 },
         clock = function()
             return 1000
@@ -246,6 +251,7 @@ ui = create(nil, nil, options)
 ui.render(status)
 local initial = draws[5].position
 assert(initial.X >= 96, "Chat overlaps the stat HUD at maximum HUD offset")
+assert(initial.X + draws[5].scale.X * 480 <= screenWidth - 84)
 mouse = { x = initial.X + 30, y = initial.Y + 20, down = true }
 ui.render(status)
 mouse.x, mouse.y = mouse.x + 80, mouse.y - 20
@@ -262,15 +268,42 @@ assert(draws[5].position.X == initial.X + 80, "Closing input lost the chosen pos
 ui.input.open, draws = true, {}
 ui.render(status)
 assert(draws[5].position.Y == initial.Y - 20, "Reopening input lost the chosen position")
+-- A manual position can cross both HUD columns and the top/bottom HUD margins.
+mouse = { x = initial.X + 110, y = initial.Y, down = true }
+ui.render(status)
+mouse.x, mouse.y, draws = -1000, -1000, {}
+ui.render(status)
+assert(draws[5].position.X == 0 and draws[5].position.Y == 0, "HUD blocked a drag to the edge")
+mouse.down, draws = false, {}
+ui.render(status)
+for _, enabled in ipairs({ false, true }) do
+    options.FoundHUD, options.ExtraHUDStyle, options.HUDOffset =
+        enabled, enabled and 1 or 0, enabled and 1 or 0
+    draws = {}
+    ui.render(status)
+    assert(draws[5].position.X == 0 and draws[5].position.Y == 0, "HUD moved a manual position")
+end
+ui.input.open, draws = false, {}
+ui.render(status)
+ui.input.open, draws = true, {}
+ui.render(status)
+assert(draws[5].position.X == 0 and draws[5].position.Y == 0)
+mouse = { x = 30, y = 20, down = true }
+ui.render(status)
+mouse.x, mouse.y, draws = 1000, 1000, {}
+ui.render(status)
+assert(draws[5].position.X + draws[5].scale.X * 480 == screenWidth)
+assert(draws[5].position.Y + draws[5].scale.Y * 270 == screenHeight)
+mouse.down = false
 screenWidth, screenHeight, draws = 480, 270, {}
 ui.render(status)
 local resized = draws[5]
 assert(
-    resized.position.X >= 96 and resized.position.X + resized.scale.X * 480 <= 396,
-    "Resized panel overlaps the stats or inventory HUD"
+    resized.position.X >= 0 and resized.position.X + resized.scale.X * 480 <= 480,
+    "Resized panel left the screen horizontally"
 )
 assert(
-    resized.position.Y >= 68 and resized.position.Y + resized.scale.Y * 270 <= 254,
+    resized.position.Y >= 0 and resized.position.Y + resized.scale.Y * 270 <= 270,
     "Resized panel left the screen"
 )
 mouse = {
@@ -282,6 +315,34 @@ ui.render(status)
 mouse.x, draws = mouse.x - 70, {}
 ui.render(status)
 assert(draws[5].position.X == resized.position.X, "Clicking the input line started a drag")
+-- Enter and controller confirmation use the real service without accepting an empty draft.
+local service = dofile(root .. "/src/bridge/runtime/chat.lua")({
+    limits = { characters = 60, commandBytes = 2048, history = 200, dice = 999 },
+    nonce = function()
+        return string.rep("0", 32)
+    end,
+    info = function()
+        return { slot = 0, hosting = 1, players = 1, connected = 1 }
+    end,
+    clock = function()
+        return 1000
+    end,
+    send = function()
+        error("Empty input reached the network")
+    end,
+}, dofile(root .. "/src/bridge/runtime/chat_wire.lua"))
+ui = create(nil, nil, nil, nil, service)
+for _, text in ipairs({ "", "   ", "\t" }) do
+    for _, keyboard in ipairs({ true, false }) do
+        ui.input.text, ui.input.cursor, ui.input.anchor = text, #text, 0
+        ui.input.submit, confirmInput, ui.scroll = keyboard, not keyboard, 2
+        ui.step({ phase = 2 })
+        assert(ui.input.open and ui.input.text == text and ui.input.cursor == #text)
+        assert(ui.input.anchor == 0 and ui.scroll == 2 and acceptedInputs == 0)
+        assert(#service.messages == 0 and service.revision == 0 and next(service.bubbles) == nil)
+    end
+end
+confirmInput = false
 -- Only LAN lobby/game/waiting may capture input or draw the chat interface.
 ui = create()
 for _, phase in ipairs({ 2, 3, 9 }) do

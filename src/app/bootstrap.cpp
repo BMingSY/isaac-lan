@@ -380,6 +380,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* 
         return 0;
     if (!isaac::runtime::bind(L, module))
         return 0;
+    if (!isaac::engine::items::bind(L, module))
+        return 0;
     if (!isaac::generated_items::bind(L, module))
         return 0;
     if (!isaac::rooms::bind(L, module))

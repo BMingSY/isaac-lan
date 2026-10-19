@@ -1,5 +1,5 @@
 local root = assert(arg[1])
-local routeFactory = dofile(root .. "/src/bridge/compat/routes/challenge_lamb.lua")
+local routeFactory = dofile(root .. "/src/bridge/compat/routes/challenge_goal.lua")
 local coordinator = dofile(root .. "/src/bridge/runtime/challenges.lua")
 local stage, kind, clear, enemy = 11, 0, true, 273
 local finish, morphs, transitions, layouts = 0, 0, {}, 0
@@ -138,7 +138,7 @@ local route = routeFactory({
     entities = function()
         return effects
     end,
-})
+}, "lamb")
 local rule = coordinator({
     native = native,
     game = function()
@@ -381,3 +381,78 @@ assert(pendingRemoval[8] and gridRemovals == 5)
 print(
     "PASS challenge authority, Lamb trophy/exits, all collectors, rollback/reconnect, vanilla routes and map hooks"
 )
+
+-- Mom uses the same endpoint cleanup, but creates a trophy from the actual
+-- clear award rather than waiting for a terminal chest.
+enums.entity.ENTITY_MOM = 45
+enums.stageType.STAGETYPE_REPENTANCE = 4
+local oldRoom = game.GetRoom
+function game:GetRoom()
+    local room = oldRoom()
+    room.GetCenterPos = function()
+        return 1
+    end
+    room.FindFreePickupSpawnPosition = function(_, position)
+        assert(position == 1)
+        return 2
+    end
+    return room
+end
+effects, grids, pendingRemoval = {}, {}, {}
+local spawned = 0
+local mom = routeFactory({
+    game = function()
+        return game
+    end,
+    enums = enums,
+    finish = function()
+        finish = finish + 1
+        return true
+    end,
+    chestEnding = function()
+        return chestEnding
+    end,
+    entities = function()
+        return effects
+    end,
+    zero = function()
+        return 0
+    end,
+    spawn = function(t, v, subtype, position, velocity)
+        assert(t == 5 and v == 370 and subtype == 0 and position == 2 and velocity == 0)
+        spawned = spawned + 1
+        local p = { Type = t, Variant = v, Wait = 0 }
+        function p:ToPickup()
+            return self
+        end
+        function p:Exists()
+            return true
+        end
+        effects[#effects + 1] = p
+        return p
+    end,
+}, "mom")
+for _, wrong in ipairs({ { 5, 0, 45 }, { 6, 0, 273 }, { 8, 0, 45 } }) do
+    stage, kind, enemy = table.unpack(wrong)
+    mom.clearAward()
+end
+assert(spawned == 0)
+stage, kind, enemy, clear = 6, 0, 45, false
+mom.clearAward()
+mom.clearAward()
+assert(spawned == 1 and effects[1].Wait == 30)
+local momTrophy = effects[1]
+local finishedBefore = finish
+mom.collide(momTrophy, player)
+assert(finish == finishedBefore)
+clear, momTrophy.Wait = true, 0
+grids[1] = grid(17, 0, 0)
+mom.pickup(momTrophy)
+assert(pendingRemoval[1])
+mom.collide(momTrophy, player)
+assert(finish == finishedBefore + 1)
+-- A restored trophy blocks another spawn, including the alternate Mom room.
+stage, kind = 8, 4
+mom.clearAward()
+assert(spawned == 1)
+print("PASS Mom clear reward, duplicate callbacks, goal identity, exits and trophy completion")

@@ -72,7 +72,8 @@ runtime/party
 runtime/restart
 sync/capture
 sync/replica
-compat/routes/challenge_lamb
+compat/routes/challenge_goal
+compat/challenges/luck_game
 runtime/challenges
 runtime/chat_wire
 runtime/chat

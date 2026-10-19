@@ -183,7 +183,15 @@ inline constexpr unsigned red = 0x0, green = 0x4, blue = 0x8, alpha = 0xc;
 inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
+namespace itemConfig {
+inline constexpr unsigned type = 0, id = 4, name = 8;
+inline constexpr int active = 3, trinket = 2;
+} // namespace itemConfig
+namespace pickup {
+inline constexpr unsigned charge = 0x524, touched = 0x52c, pool = 0x530, varData = 0x59c;
+} // namespace pickup
 namespace player {
+inline constexpr unsigned primaryActive = 0x1580;
 inline constexpr unsigned megaBlastLaser = 0x1458;
 inline constexpr unsigned redemptionEffect = 0x1f04;
 inline constexpr unsigned megaBlastDuration = 0x18f4;

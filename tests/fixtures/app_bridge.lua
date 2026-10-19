@@ -1,7 +1,11 @@
 -- Main-bridge fixtures use real UI/lifecycle components with no local requests.
 return function(root, native, modules)
+    EntityType = EntityType or {}
+    ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD = ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD or 9
     native.chat_style = { opacity = 70, background = 0x231b18, border = 0x79604c, text = 0xe8dfcb }
     for _, name in ipairs({
+        "compat/challenges/luck_game",
+        "compat/items/glitched",
         "runtime/restart",
         "runtime/chat_wire",
         "runtime/chat",

@@ -1,3 +1,4 @@
+local UNRESTRICTED_CHARACTER = 65535
 -- Menu decisions and actions are independent of fonts, sprites and mouse geometry.
 return function(Phase, Command)
     local CHALLENGE_MODE, MODE_COUNT = 4, 5
@@ -138,9 +139,16 @@ return function(Phase, Command)
                 end
                 command("choose", choices[(index - 1 + delta) % #choices + 1] .. ":0")
             end
-            row(deps.character(choice), function()
-                cycle(1)
-            end, not ready and not challenge and #choices > 0, cycle)
+            row(
+                deps.character(choice),
+                function()
+                    cycle(1)
+                end,
+                not ready
+                    and (not challenge or challenge.character == UNRESTRICTED_CHARACTER)
+                    and #choices > 0,
+                cycle
+            )
             row(ready and "取消准备" or "准备", function()
                 command("choose", choice .. (ready and ":0" or ":1"))
             end, ready or status["eligible" .. localSlot] == true)

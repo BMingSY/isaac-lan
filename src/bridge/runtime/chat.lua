@@ -84,7 +84,7 @@ return function(deps, wire)
         end
         text = text:gsub("[\r\n\t]", " ")
         if text:match("^%s*$") then
-            return nil, "请输入内容"
+            return nil
         end
         if text:sub(1, 1) ~= "/" then
             if count > limits.characters then
@@ -129,6 +129,34 @@ return function(deps, wire)
         end
         return nil, "未知聊天命令；原版命令请使用 /console 命令"
     end
+    -- Shared authority dice path for chat commands and injected gameplay rules.
+    function chat.roll(owner, sides)
+        local info = deps.info()
+        if
+            info.hosting ~= 1
+            or type(sides) ~= "number"
+            or sides % 1 ~= 0
+            or sides < 1
+            or sides > limits.dice
+            or type(owner) ~= "number"
+            or owner % 1 ~= 0
+            or owner < 0
+            or owner >= info.players
+            or (info.connected & (1 << owner)) == 0
+        then
+            return nil
+        end
+        local result = deps.roll(sides)
+        if not result then
+            errorTo("掷骰失败，请重试", owner)
+            return nil
+        end
+        chat.output(
+            (owner + 1) .. "P掷出 D" .. sides .. " : " .. result,
+            { owner = owner, audience = "party", bubble = true }
+        )
+        return result
+    end
     local function accept(sender, request)
         local ledger = seen[sender]
         if not ledger or ledger.nonce ~= request.nonce then
@@ -166,22 +194,16 @@ return function(deps, wire)
         end
         local parsed, reason = chat.parse(request.text)
         if not parsed then
-            errorTo(reason, sender)
+            if reason then
+                errorTo(reason, sender)
+            end
         elseif parsed.kind == "text" then
             chat.output(
                 parsed.text,
                 { owner = sender, audience = "party", bubble = true, kind = "team" }
             )
         elseif parsed.kind == "dice" then
-            local result = deps.roll(parsed.sides)
-            if not result then
-                errorTo("掷骰失败，请重试", sender)
-                return
-            end
-            chat.output(
-                (sender + 1) .. "P掷出 D" .. parsed.sides .. " : " .. result,
-                { owner = sender, audience = "party", bubble = true }
-            )
+            chat.roll(sender, parsed.sides)
         elseif parsed.kind == "native" then
             if deps.info().ready ~= 1 then
                 errorTo("命令未执行：游戏尚未就绪", sender)
@@ -201,7 +223,9 @@ return function(deps, wire)
         local parsed, reason = chat.parse(text)
         local info = deps.info()
         if not parsed then
-            errorTo(reason)
+            if reason then
+                errorTo(reason)
+            end
             return false
         end
         if parsed.kind ~= "text" then

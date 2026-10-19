@@ -1421,7 +1421,12 @@ void challengeRules() {
     require(definition && definition->character == 23 && definition->difficulty == 0 &&
                 definition->transient && definition->nextBag,
             "Challenge definition changed");
-    require(!isaac::compat::challenges::find(1002), "Unknown challenge accepted");
+    const auto* luck = isaac::compat::challenges::find(1002);
+    require(luck && luck->character == RunRules{}.character && luck->difficulty == 0 &&
+                luck->goalStage == 6 && luck->route == "mom" && !luck->nextBag && luck->transient &&
+                isaac::compat::challenges::available(*luck, {}),
+            "Luck challenge must allow ordinary character selection without achievement gates");
+    require(!isaac::compat::challenges::find(1003), "Unknown challenge accepted");
     std::array<std::uint8_t, 642> achievements{};
     require(!isaac::compat::challenges::available(*definition, achievements),
             "Locked save entered the challenge");

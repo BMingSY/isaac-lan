@@ -9,23 +9,65 @@ local function callback(id, fn)
     Isaac.AddCallback(owner, id, fn)
 end
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
-local challenge = _IsaacLanModules["runtime/challenges"]({
+local challenge, chat
+local function goalRoute(goal)
+    return _IsaacLanModules["compat/routes/challenge_goal"]({
+        game = Game,
+        finish = native.net_finish_challenge,
+        chestEnding = native.rooms_chest_ending,
+        entities = Isaac.GetRoomEntities,
+        spawn = Isaac.Spawn,
+        zero = function()
+            return Vector(0, 0)
+        end,
+        enums = {
+            pickup = PickupVariant,
+            entity = EntityType,
+            grid = GridEntityType,
+            effect = EffectVariant,
+            room = RoomType,
+            stage = LevelStage,
+            stageType = StageType,
+        },
+    }, goal)
+end
+challenge = _IsaacLanModules["runtime/challenges"]({
     native = native,
     game = Game,
     routes = {
-        lamb = _IsaacLanModules["compat/routes/challenge_lamb"]({
+        lamb = goalRoute("lamb"),
+        mom = goalRoute("mom"),
+    },
+    effects = {
+        [1002] = _IsaacLanModules["compat/challenges/luck_game"]({
+            native = native,
             game = Game,
-            finish = native.net_finish_challenge,
-            chestEnding = native.rooms_chest_ending,
-            entities = Isaac.GetRoomEntities,
+            player = Isaac.GetPlayer,
+            config = Isaac.GetItemConfig,
+            spawn = Isaac.Spawn,
+            zero = function()
+                return Vector(0, 0)
+            end,
+            random = math.random,
+            items = _IsaacLanModules["compat/items/glitched"](native),
+            chat = {
+                output = function(...)
+                    return chat.output(...)
+                end,
+                roll = function(...)
+                    return chat.roll(...)
+                end,
+            },
             enums = {
+                item = ItemType,
+                trinket = TrinketType,
+                collectible = CollectibleType,
+                use = UseFlag,
+                active = ActiveSlot,
+                pill = PillEffect,
                 pickup = PickupVariant,
                 entity = EntityType,
-                grid = GridEntityType,
-                effect = EffectVariant,
-                stage = LevelStage,
                 stageType = StageType,
-                room = RoomType,
             },
         }),
     },
@@ -44,6 +86,15 @@ end)
 callback(ModCallbacks.MC_POST_NEW_LEVEL, function()
     challenge.level()
 end)
+callback(ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD, function()
+    challenge.clearAward()
+end)
+function _IsaacLanCollectiblePickup(...)
+    return challenge.collect(...)
+end
+function _IsaacLanChallengeStep()
+    challenge.step()
+end
 function _IsaacLanCanEnterRoom(...)
     return challenge.canEnter(...)
 end
@@ -91,7 +142,7 @@ local bot = _IsaacLanModules["lanbot"]({
 }, _IsaacLanModules)
 local chatLimits = native.chat_limits()
 local emotes = native.emote_count()
-local chat = _IsaacLanModules["runtime/chat"]({
+chat = _IsaacLanModules["runtime/chat"]({
     limits = chatLimits,
     nonce = native.api_nonce,
     clock = Isaac.GetTime,
@@ -144,6 +195,7 @@ function _IsaacLanBotFrame(frame)
 end
 local registeredMods = _IsaacLanModules["compat/mods/observation"](registry, native.debug or debug)
 function _IsaacLanViewCommitted()
+    challenge.view()
     integration.commit()
 end
 function _IsaacLanActionStep()
@@ -222,6 +274,7 @@ callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
             continued and 1 or 0
         )
     end
+    challenge.reset()
     _IsaacLanState.reset()
     continuedRun = continued
     if lifecycle.gameStarted(continued) then
@@ -240,6 +293,7 @@ callback(ModCallbacks.MC_POST_UPDATE, function()
     prepareCheckpoint()
 end)
 callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
+    challenge.reset()
     bot.reset()
     integration.reset("session_ended")
     if lifecycle.active() then
