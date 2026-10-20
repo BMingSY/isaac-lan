@@ -39,11 +39,14 @@ def measure(path):
                 break
         else:
             send_delays.append(math.inf)
-        if "before_vx" in row and row["time"] > previous["time"]:
+        if "after_vx" in row and row["time"] > previous["time"]:
             acceleration_transitions += 1
             change_x, change_y = raw[0] - previous["raw_x"], raw[1] - previous["raw_y"]
-            response = (row["after_vx"] - row["before_vx"]) * change_x + (
-                row["after_vy"] - row["before_vy"]
+            # confirm() can set the step-entry velocity to an older authority
+            # sample. Compare completed render predictions across the input
+            # transition, not authority velocity against replayed velocity.
+            response = (row["after_vx"] - previous["after_vx"]) * change_x + (
+                row["after_vy"] - previous["after_vy"]
             ) * change_y
             acceleration_responses += response > 0.01
         for later in rows[i : i + 5]:
