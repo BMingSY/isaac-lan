@@ -11,6 +11,8 @@ bool beginRun(const std::string& seed, const std::string& role, bool continued);
 void endRun();
 void shutdown();
 std::filesystem::path directory();
+// isaac-lan/logs/<launch>; empty before initialize().
+std::filesystem::path currentLaunch();
 void nativeFileOpened(const wchar_t* name);
 void write(const std::string& message);
 } // namespace isaac::logging

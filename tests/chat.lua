@@ -6,6 +6,7 @@ local emoteCount = 59
 local limits = { characters = 60, commandBytes = 2048, history = 200, dice = 999 }
 local now, rolls, executions = 100, 0, {}
 local blocked, executeHook, rollHook = {}, nil, nil
+local feedbackCalls = {}
 local peers, inbox, packets = {}, { {}, {}, {} }, {}
 for slot = 0, 2 do
     local info = {
@@ -70,6 +71,10 @@ for slot = 0, 2 do
         end,
         bot = function(args)
             return "bot " .. args
+        end,
+        feedback = function(text)
+            feedbackCalls[#feedbackCalls + 1] = { slot, text }
+            return "反馈：" .. text
         end,
     }, wire)
     peers[slot + 1] = { chat = chat, info = info, context = context }
@@ -476,6 +481,8 @@ for _, alias in ipairs({ "/h", "/help" }) do
         "/c",
         "/console",
         "/lanbot help",
+        "/feedback",
+        "/fb",
     }) do
         assert(result:find(command, 1, true), "Help omitted " .. command)
     end
@@ -484,6 +491,18 @@ for _, alias in ipairs({ "/h", "/help" }) do
     assert(not result:find("/c help", 1, true), "Help advertised a command absent from vanilla")
     help = result
 end
+-- Feedback runs on the submitting machine only, including before readiness.
+for _, text in ipairs({ "/feedback 进房后卡住", "/FB 进房后卡住", "/feedback" }) do
+    local first = #guest.messages + 1
+    assert(guest.submit(text))
+    assert(guest.messages[first].command and guest.messages[first].text == text)
+    local reply = guest.messages[first + 1]
+    assert(reply.kind == "system" and not reply.bubble and reply.owner == 1)
+    assert(reply.text == "反馈：" .. (text == "/feedback" and "" or "进房后卡住"))
+end
+assert(
+    #feedbackCalls == 3 and feedbackCalls[1][1] == 1 and feedbackCalls[1][2] == "进房后卡住"
+)
 poll()
 assert(#packets == packetCount and #executions == executionCount)
 assert(#host.messages == hostCount and #other.messages == otherCount and next(guest.bubbles) == nil)

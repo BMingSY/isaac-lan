@@ -12,6 +12,7 @@ return function(root, native, modules)
         "runtime/chat",
         "presentation/chat_layout",
         "presentation/chat",
+        "diagnostics/feedback",
     }) do
         modules[name] = dofile(root .. "/src/bridge/" .. name .. ".lua")
     end
@@ -57,4 +58,8 @@ return function(root, native, modules)
     native.chat_controls = function()
         return {}
     end
+    native.feedback_submit = function()
+        error("Unexpected feedback without a local request")
+    end
+    native.feedback_poll = function() end
 end

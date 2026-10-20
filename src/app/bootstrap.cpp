@@ -28,6 +28,8 @@
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
 #include "diagnostics/crash_signal.h"
+#include "diagnostics/feedback.h"
+#include "core/feedback.h"
 #include "app/configuration.h"
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* L);
@@ -252,6 +254,14 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         return 14;
     for (const auto& warning : config.warnings)
         log("config_warning=" + warning);
+    // Isolated lab profiles reach a receiver only through an explicit endpoint.
+    auto feedbackEndpoint = settings.feedbackEndpoint;
+    if (feedbackEndpoint.empty() && !isolated)
+        feedbackEndpoint = isaac::feedback::defaultEndpoint;
+    if (!isaac::feedback::configure({directory / L"isaac-lan/config.ini", feedbackEndpoint,
+                                     "isaac-lan/" ISAAC_LAN_VERSION,
+                                     std::string(isaac::build::version)}))
+        log("config_warning=invalid_value=feedback.endpoint");
     const auto chatBackground = isaac::presentation::prepareChatBackground(
         directory / L"isaac-lan", settings.chat.backgroundImage);
     isaac::frontend::configureChat(settings.chat, chatBackground);
@@ -394,6 +404,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* 
     if (!isaac::rewind::bind(L, module))
         return 0;
     if (!isaac::input::bind(L, module))
+        return 0;
+    if (!isaac::feedback::bind(L, module))
         return 0;
     return 1;
 }

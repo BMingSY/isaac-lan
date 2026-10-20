@@ -9,7 +9,7 @@ local function callback(id, fn)
     Isaac.AddCallback(owner, id, fn)
 end
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
-local challenge, chat
+local challenge, chat, feedback
 local function goalRoute(goal)
     return _IsaacLanModules["compat/routes/challenge_goal"]({
         game = Game,
@@ -152,6 +152,11 @@ chat = _IsaacLanModules["runtime/chat"]({
     roll = native.chat_roll,
     dice = _IsaacLanModules["runtime/chat_dice"],
     bot = bot.command,
+    feedback = function(text)
+        return feedback.submit(text, function(message)
+            chat.output(message, { audience = "self" })
+        end)
+    end,
     emotes = emotes,
     info = function()
         local info = native.api_info()
@@ -188,6 +193,17 @@ end
 callback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, args)
     if command == "lanbot" then
         _IsaacLanBotCommand(args)
+    elseif command == "feedback" then
+        -- Single-player entry; LAN sessions use the chat command, where /c
+        -- would otherwise run this on the host for another player.
+        local phase = status.phase
+        if phase == Phase.lobby or phase == Phase.running or phase == Phase.waiting then
+            Isaac.ConsoleOutput("联机中请在聊天中使用 /feedback\n")
+        else
+            Isaac.ConsoleOutput(feedback.submit(args, function(message)
+                Isaac.ConsoleOutput(message .. "\n")
+            end) .. "\n")
+        end
     end
     -- MC_EXECUTE_CMD must return nil, including for unhandled commands.
 end)
@@ -195,6 +211,31 @@ function _IsaacLanBotFrame(frame)
     bot.step(frame)
 end
 local registeredMods = _IsaacLanModules["compat/mods/observation"](registry, native.debug or debug)
+local phaseNames = {}
+for name, value in pairs(Phase) do
+    phaseNames[value] = name
+end
+feedback = _IsaacLanModules["diagnostics/feedback"]({
+    submit = native.feedback_submit,
+    poll = native.feedback_poll,
+    mods = function()
+        local names = {}
+        for _, mod in ipairs(registeredMods) do
+            names[#names + 1] = mod.Name or ""
+        end
+        return names
+    end,
+    context = function()
+        local info = native.api_info()
+        return table.concat({
+            "phase=" .. tostring(phaseNames[status.phase] or status.phase),
+            "hosting=" .. tostring(status.hosting or 0),
+            "players=" .. tostring(info.players),
+            "slot=" .. tostring(info.slot),
+            "ready=" .. tostring(info.ready),
+        }, "\n")
+    end,
+})
 function _IsaacLanViewCommitted()
     challenge.view()
     integration.commit()
@@ -398,6 +439,7 @@ function _IsaacLanFrame()
     restart.poll(status)
     integration.poll()
     chat.poll()
+    feedback.poll()
     bot.poll()
     if status.phase == Phase.running then
         lifecycle.launch()

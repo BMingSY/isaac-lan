@@ -17,7 +17,7 @@
 | [`src/bridge/lanbot.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot.lua)、[`src/bridge/lanbot/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/lanbot) | 读取已有视图并合成正常输入 |
 | [`src/core/`](https://github.com/BMingSY/isaac-lan/tree/main/src/core) | 可离线执行的数据规则，不依赖游戏布局或 Hook |
 | [`src/engine/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine)、[`src/engine/versions/j460/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j460) | 能力接口、版本检测、原生调用、布局、Hook 与对象所有权 |
-| [`src/diagnostics/`](https://github.com/BMingSY/isaac-lan/tree/main/src/diagnostics) | 日志、性能和隔离采集；诊断开关不控制玩法 |
+| [`src/diagnostics/`](https://github.com/BMingSY/isaac-lan/tree/main/src/diagnostics) | 日志、性能、隔离采集与反馈上传；诊断开关不控制玩法 |
 | [`tests/`](https://github.com/BMingSY/isaac-lan/tree/main/tests)、[`tools/`](https://github.com/BMingSY/isaac-lan/tree/main/tools) | 回归夹具、构建与验收；不得成为生产玩法依赖 |
 
 装配层注入运行、同步、兼容与表现组件。运行协调器通过 [`engine/session_backend.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/session_backend.h) 调用具名能力；J460 后端安装 Hook，回调只传普通值和限同步调用的原版操作，不向运行层暴露原生对象。Lua ABI 声明与符号加载共用 [`engine/lua_api.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。

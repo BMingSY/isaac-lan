@@ -89,6 +89,10 @@ std::filesystem::path directory() {
     std::lock_guard lock(mutex);
     return output.parent_path();
 }
+std::filesystem::path currentLaunch() {
+    std::lock_guard lock(mutex);
+    return launchDirectory;
+}
 bool beginRun(const std::string& seed, const std::string& role, bool continued) {
     std::lock_guard lock(mutex);
     std::string clean;

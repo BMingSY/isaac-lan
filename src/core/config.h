@@ -15,6 +15,8 @@ struct Settings {
     bool performance = false;
     unsigned sampleIntervalMs = 1000;
     chat::Appearance chat;
+    // Lab fixtures only, absent from the default template; empty keeps the release endpoint.
+    std::string feedbackEndpoint;
 };
 struct Parsed {
     Settings settings;
@@ -157,6 +159,12 @@ inline Parsed parse(std::string_view source) {
                 result.settings.chat.border = color;
             else
                 result.settings.chat.text = color;
+        } else if (key == "feedback.endpoint") {
+            // The feedback component validates the URL itself.
+            if (!value.empty() && value.size() <= 512 && chat::boundaries(value))
+                result.settings.feedbackEndpoint = value;
+            else
+                warn("invalid_value=" + key);
         } else
             warn("unknown_key=" + key);
     }

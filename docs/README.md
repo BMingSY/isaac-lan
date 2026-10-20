@@ -24,6 +24,7 @@
 | 挑战规则与接入 | [联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md) |
 | 第三方接口与示例 | [Mod API](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md) |
 | 托管命令与范围 | [LANBOT 使用](https://github.com/BMingSY/isaac-lan/blob/main/docs/lanbot.md) |
+| 游戏内反馈、收集范围与上传 | [反馈上传](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md) |
 
 ## 开发与验收
 

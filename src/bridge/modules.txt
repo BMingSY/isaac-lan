@@ -2,6 +2,7 @@ sync/fields
 sync/entity_schema
 sync/pills
 diagnostics/performance
+diagnostics/feedback
 sync/entity_codec
 sync/entity_links
 sync/world_schema

@@ -151,6 +151,9 @@ return function(deps, wire)
         if lower == "lanbot" then
             return { kind = "bot", text = args }
         end
+        if lower == "feedback" or lower == "fb" then
+            return { kind = "feedback", text = args }
+        end
         if lower == "console" or lower == "c" then
             args = args:gsub("^%s+", "")
             if args == "" then
@@ -295,6 +298,7 @@ return function(deps, wire)
                 "聊天／掷骰末尾加 --room：仅当前房间共享",
                 "/c /console 命令：原版控制台",
                 "/lanbot help：托管命令",
+                "/feedback /fb 描述：上传日志并反馈问题",
             }) do
                 chat.output(line, { audience = "self" })
             end
@@ -304,6 +308,9 @@ return function(deps, wire)
             return true
         elseif parsed.kind == "bot" then
             chat.output(deps.bot(parsed.text), { audience = "self" })
+            return true
+        elseif parsed.kind == "feedback" then
+            chat.output(deps.feedback(parsed.text), { audience = "self" })
             return true
         end
         local context = deps.context(info.slot) or {}
