@@ -110,17 +110,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end)
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
-        local v = _IsaacLanState.decode(bytes)
+        local bytes, stable = collect(slot, t)
+        local v = _IsaacLanState.decode(bytes, stable)
         local actor = v[9][2][3]
         authority, velocity = Vector(table.unpack(actor[6])), Vector(table.unpack(actor[7]))
         roomIndex = native.rooms_positions()["1"].index
-        return bytes
-    end, function(bytes, t, sequence, betweenUpdates)
-        if restore(bytes, t, sequence, betweenUpdates) == false then
+        return bytes, stable
+    end, function(bytes, t, sequence, betweenUpdates, stable)
+        if restore(bytes, t, sequence, betweenUpdates, stable) == false then
             return false
         end
-        local v = _IsaacLanState.decode(bytes)
+        local v = _IsaacLanState.decode(bytes, stable)
         local actor = v[9][2][3]
         authority, velocity = Vector(table.unpack(actor[6])), Vector(table.unpack(actor[7]))
         roomIndex, ack = native.rooms_positions()["1"].index, sequence

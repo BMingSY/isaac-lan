@@ -21,8 +21,9 @@ local names = {
     "deals",
     "pills",
     "glitched",
+    "captured",
 }
-local version = 27
+local version = 28
 local VERSION_FIELD, TICK_FIELD = 1, 2
 return {
     VERSION = version,
@@ -30,6 +31,9 @@ return {
         local values = { [VERSION_FIELD] = version }
         for index = TICK_FIELD, #names do
             local value = view[names[index]]
+            if names[index] == "captured" and value == nil then
+                value = 0 -- Portable fixtures may have no monotonic clock.
+            end
             assert(value ~= nil, "Missing world field: " .. names[index])
             values[index] = value
         end
@@ -47,6 +51,7 @@ return {
         for index, name in ipairs(names) do
             view[name] = values[index]
         end
+        assert(type(view.captured) == "number" and view.captured >= 0, "Invalid capture clock")
         return view
     end,
 }

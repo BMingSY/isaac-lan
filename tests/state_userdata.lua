@@ -79,8 +79,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report("HOST tick=" .. t)
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
-        for _, e in ipairs(_IsaacLanState.decode(bytes)[11][3]) do
+        local bytes, stable = collect(slot, t)
+        for _, e in ipairs(_IsaacLanState.decode(bytes, stable)[11][3]) do
             if e[2] == 7 then
                 laserSamples = laserSamples + 1
             end
@@ -90,13 +90,13 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             out:write(bytes)
             out:close()
         end
-        return bytes
-    end, function(bytes, t, ack, betweenUpdates)
-        if restore(bytes, t, ack, betweenUpdates) == false then
+        return bytes, stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
+        if restore(bytes, t, ack, betweenUpdates, stable) == false then
             return false
         end
         corrected = corrected + 1
-        local v = _IsaacLanState.decode(bytes)
+        local v = _IsaacLanState.decode(bytes, stable)
         assert(native.rooms_connected() == v[6], "Roster not restored")
         for _, actor in ipairs(v[9]) do
             local p = Isaac.GetPlayer(actor[1])

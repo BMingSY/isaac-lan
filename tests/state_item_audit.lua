@@ -1286,7 +1286,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             sample("captured", tick)
         end
         local began = Isaac.GetTime()
-        local bytes = collect(...)
+        local bytes, stable = collect(...)
         verifyCodec(bytes, tick)
         if case.recipe and useCount > 0 and not useSampled then
             useSampled = true
@@ -1299,7 +1299,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             stress.record("capture", Isaac.GetTime() - began)
             stress.record("raw_bytes", #bytes)
         end
-        return bytes
+        return bytes, stable
     end, function(bytes, tick, ...)
         verifyCodec(bytes, tick)
         local began = Isaac.GetTime()

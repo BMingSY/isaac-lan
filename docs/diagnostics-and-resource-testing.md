@@ -22,15 +22,17 @@
 | 阶段耗时 | 渲染间隔，采集／应用、编码／解码、库存、实体、网格、精灵、压缩／解压；应用另分位置、角色、地图、房间和提交阶段 |
 | 对象与队列 | Lua 堆、实体／网格／地图规模、连接、队列／状态容量、退休会话 |
 | `cached_world_bytes` | 完整视图历史的分配容量 |
-| `world_in_flight_bytes`／`world_in_flight_states` | 未确认载荷／视图数 |
+| `world_in_flight_bytes`／`world_in_flight_states` | 发送窗口中的未确认载荷／视图数；不含记录超时后仍在重传的 UDP 恢复包 |
 | `world_delivery_window`／`world_oldest_unapplied_ms` | 有在途视图的连接窗口总和／最旧未确认视图的年龄 |
-| `input_coalesced` | 当前连接合并的未发送输入数量；不包含 TCP 已接收的字节 |
+| `input_coalesced` | 当前连接合并的未发送输入数量；不包含已交给传输协议的输入 |
 | `world_snapshots_total`／`world_delta_snapshots_total` | 当前会话累计视图数／增量数 |
-| `world_raw_bytes_total`／`world_wire_bytes_total`／`world_full_wire_bytes_total` | 原始字节／实际载荷／同批完整压缩对照量 |
+| `world_raw_bytes_total`／`world_wire_bytes_total`／`world_full_wire_bytes_total` | 原始字节／已发布压缩载荷／同批完整压缩对照量 |
 
-载荷不含 TCP、frp 或可靠存档流量。`compress` 已包含 `delta.encode`，二者不能相加。DEBUG 的 `state_transfer` 提供 `raw`、`wire`、`full_wire`、`delta`、`base`。
+载荷计数包含实际发送的低频依赖以及大视图校验片和片头；不含 TCP／UDP／ENet 封装、重传、frp 或可靠存档流量；实际链路用量以中继记录为准。`compress` 已包含 `delta.encode`，二者不能相加。DEBUG 的 `state_transfer` 提供 `raw`、`wire`、`full_wire`、`delta`、`base`。
 
 网络压缩／解压计时由工作线程产生，通过有界队列交回主线程；队列已满时丢弃诊断样本，不阻塞传输。`checkpoint_capture` 区分主线程原生采集与存档封装耗时；`checkpoint_pack` 记录原始／压缩字节数与后台耗时；`checkpoint_received` 记录后台还原耗时及从启动头到还原完成的时间。这些数据不包含后续原生 Continue 和首份实时视图应用，不能当成完整重连耗时。
+
+`input.present` 测量本机采样到首次绘制回调完成，`input.ack` 测量采样到包含对应确认号的权威视图应用完成；两者都使用本机单调时钟，不包含操作系统送达前的硬件输入时间，也不证明某个射击效果实际触发。`view.age` 是时钟映射估算的采集到应用年龄，不能替代同机日志的实测视图年龄。`prediction.corrections` 记录重放后的纠偏次数，`sum_millipixels`／`max_millipixels` 以千分之一坐标单位记录总量／最大值；`prediction.bucket1`～`bucket5` 分别统计 ≤1、(1,4]、(4,16]、(16,64]、>64 的纠偏幅度。计数包含零偏差，按会话清理，不写入游戏界面。
 
 均值与最大值使用窗口收到的全部样本；p50／p95／p99 使用最近 512 个样本，成本名及计数器各最多 64 个并按窗口清理。Lua 堆为只读采样，不强制游戏 GC；关闭统计时直接调用原函数。
 
@@ -44,7 +46,7 @@ python3 tools/check_performance.py "$ISAAC_RUN_OUTPUT" --output "$ISAAC_PERFORMA
 
 ## 带宽测量
 
-[`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，上行有独立共享预算，默认不限速；375000 字节／秒对应十进制 3 Mbps。`--relay-control` 接受 JSON 中的 `downstream_bytes_per_second`、`upstream_bytes_per_second`、`delay_ms`、`jitter_ms`、`stall_every_ms` 与 `stall_ms`，配置先完整校验再应用。抖动和停传保持字节顺序，不删除 TCP 流内容，也不代表真实 IP 丢包。`run_network_engine.py --record-relay` 保存主机原始字节流；逐秒中继记录包含双向字节数与实际配置。弱网功能与状态年龄验收见[开发测试说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
+TCP 的 [`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，上行有独立共享预算，默认不限速；375000 字节／秒对应十进制 3 Mbps。`--relay-control` 接受 JSON 中的 `downstream_bytes_per_second`、`upstream_bytes_per_second`、`delay_ms`、`jitter_ms`、`stall_every_ms` 与 `stall_ms`，配置先完整校验再应用。抖动和停传保持字节顺序，不删除 TCP 流内容，也不代表真实 IP 丢包。UDP 使用 [`tools/datagram_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/datagram_relay.py)，另支持真实报文丢失、复制和重排。`run_network_engine.py --record-relay` 按所选协议保存 TCP 字节流或带时间戳的 UDP 报文；逐秒中继记录包含双向转发字节数与实际配置。弱网功能与状态年龄验收见[开发测试说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 
 `isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。它支持旧字节补丁和 Zstd prefix 记录；`full_wire` 始终是当前 Zstd 完整帧对照，CSV 的 `full_codec` 标明算法，不能将旧记录的比值解释为同算法的增量收益。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
 

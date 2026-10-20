@@ -154,9 +154,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, between)
+        function(bytes, t, ack, between, stable)
             lastTick = t
-            return restore(bytes, t, ack, between)
+            return restore(bytes, t, ack, between, stable)
         end,
         present,
         beginFloor

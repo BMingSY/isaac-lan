@@ -3,6 +3,7 @@
 namespace isaac::input::action {
 inline constexpr int moveLeft = 0, moveRight = 1, moveUp = 2, moveDown = 3;
 inline constexpr int shootLeft = 4, shootRight = 5, shootUp = 6, shootDown = 7;
+inline constexpr int bomb = 8, item = 9, pillCard = 10;
 inline constexpr int drop = 11;
 inline constexpr int menuPause = 12, menuConfirm = 14, menuBack = 15;
 inline constexpr int restart = 18, emote = 30;

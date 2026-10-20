@@ -216,9 +216,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             assert(t < 1200, "Last survivor's death did not reach native game over")
         end,
         collect,
-        function(bytes, tick, ack, between)
+        function(bytes, tick, ack, between, stable)
             lastTick, snapshots = tick, snapshots + 1
-            return restore(bytes, tick, ack, between)
+            return restore(bytes, tick, ack, between, stable)
         end,
         present,
         beginFloor

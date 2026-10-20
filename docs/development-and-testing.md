@@ -58,7 +58,7 @@ ctest --test-dir build-core --output-on-failure
 | --- | --- | --- |
 | C++／Lua 组件 | 编码、协议、存档、作用域、生命周期、库存、实体与 API | 不验证原生 ABI、物理和画面 |
 | pytest／Hypothesis | 工具、生成动作序列、持续移动与固定失败回放 | 模型给出独立预期；不等同游戏引擎 |
-| Windows 传输 | 真正的 TCP、输入边沿、积压、重连和事务顺序 | 不启动游戏 |
+| Windows 传输 | 真实 TCP／UDP、输入事件、积压、重连、事务顺序及 UDP 丢包／乱序 | 不启动游戏 |
 | 隔离实机／正常操作 | 原生机制、入口与连续画面 | 结果限定于所用版本、夹具和采样范围 |
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
@@ -129,7 +129,7 @@ python tools/engine_test.py run special-routes -- \
 
 连续玩法组合器在同一局内切换兼容场景，保持绝对网络 tick，仅为夹具转换相对时间；路线组合器在同一组进程中等待原生退出与菜单恢复后再切换。独立启动配置、真实键盘焦点和性能隔离要求仍属于套件执行边界，不能将任意套件直接合并。
 
-`special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存传输原始流，供离线解压和状态回放。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
+`special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存原始传输；TCP 字节流可用于现有离线状态回放，UDP 的 `datagrams.bin` 按大端 `double 时间戳 + u8 方向 + u16 长度 + 原始报文` 记录。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
 
 `entity-fields` 使用泪弹、跟班和效果实体，对照游戏 Lua 属性、原生数组与数值块的读写结果，检查完整动画往返、错误输入不写入及外层编解码；它不作性能验收，可与其他功能场景共用进程。`lazarus` 在启动前仅为隔离客机准备所需角色解锁，并在进入联机前核对菜单可选项；存档仍由套件备份和恢复。
 
@@ -137,7 +137,9 @@ python tools/engine_test.py run special-routes -- \
 
 `attached-motion` 用正常客机移动、点按、蓄力和松键覆盖骸骨、妈刀、圣剑、硫磺火、科技、科技 X 与虚空之喉。它检查武器相对预测身体的位置、激光世界路径／终点及命中特效，并确认独立激光不被绑定到身体。推荐与 `--latency-ms 75 --record-client --heap-check` 配合；场景逐项核对两端实际生成的攻击，不以仅完成会话视为通过。
 
-`weak-network` 用正常客机输入核对八次主动道具使用不丢失、不重复，以及状态／库存恢复和停止后的预测收敛。可选择 `--latency-ms 45 --relay-control tests/fixtures/tcp_weak_network.json --case weak-network --case motion`，在同一对进程追加碰墙／松键回归。[中继配置](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/tcp_weak_network.json)设置基础 RTT 90 ms、每方向 ±20 ms 抖动、双向限速及每四秒一次 250 ms 停传；现场游戏 Ping 还包含调度开销。中继保持 TCP 字节及顺序，停传模拟应用可见的交付间隙，不等同于 IP 丢包率或真实重传测试。
+`weak-network` 用正常客机输入核对八次主动道具使用不丢失、不重复，以及状态／库存恢复和停止后的预测收敛。TCP 对照选择 `--transport tcp --latency-ms 45 --relay-control tests/fixtures/tcp_weak_network.json --case weak-network --case motion`，在同一对进程追加碰墙／松键回归。[中继配置](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/tcp_weak_network.json)设置基础 RTT 90 ms、每方向 ±20 ms 抖动、双向限速及每四秒一次 250 ms 停传；现场游戏 Ping 还包含调度开销。中继保持 TCP 字节及顺序，停传模拟应用可见的交付间隙，不等同于 IP 丢包率或真实重传测试。
+
+UDP 选择 `--transport udp --latency-ms 45 --relay-control tests/fixtures/udp_weak_network.json --case weak-network --case motion`。[UDP 中继](https://github.com/BMingSY/isaac-lan/blob/main/tools/datagram_relay.py)实际丢弃完整报文、复制报文并按抖动后的时间重排；配置中的停传窗口表示突发丢包，排队超过 500 ms 或容量上限也会丢弃。[UDP 配置](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/udp_weak_network.json)使用同样的延迟／限速，另加 5% 丢包和 2% 重复。无损对照移除丢包、抖动与限速，不能把 TCP 停传和 UDP 丢包视为同一种链路。离线 `net.udp.udp-loss` 通过真实套接字覆盖缺片、重排、重复、可靠按键计数、压缩基线恢复和换层。`net.udp.udp-large-recovery` 使用约 88 KiB 的变化区，验证大量缺片时的完整恢复与按键推进；它不将低频恢复判定为可游玩的刷新率。
 
 弱网报告同时记录到达时的状态年龄、相邻应用间隔和按时间加权的视图年龄；后者计入等待下一份状态期间持续变旧的时间，避免降低发送频率后仅靠到达样本得出改善结论。时间来自同一 Windows 机器上的隔离主客机，不能直接用于不同机器而未校准的时钟。对照须使用相同场景和中继配置，分别冻结构建及夹具，保留每轮失败和恢复记录。
 

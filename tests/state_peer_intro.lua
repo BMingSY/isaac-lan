@@ -76,14 +76,14 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report("NATIVE_BOSS_ROOM")
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if t >= 110 and t < 150 and slot == 1 then
             local events = native.presentation_events(slot)
             assert(#events > 0, "Native boss did not emit intro event")
             sent = sent + 1
             assert(#native.presentation_events(0) == 0, "Host received remote intro event")
         end
-        return bytes
+        return bytes, stable
     end, restore, present, beginFloor)
 end
 

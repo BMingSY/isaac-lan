@@ -1,5 +1,6 @@
 #pragma once
 #include "net/protocol.h"
+#include "net/transport.h"
 #include <memory>
 #include <optional>
 
@@ -13,7 +14,7 @@ struct TransportResources {
                   fullWorldBytes = 0;
 };
 // Main-thread session coordinator. Socket/byte workers exchange owned values;
-// no worker invokes Lua or touches game objects. TCP_NODELAY is always enabled.
+// no worker invokes Lua or touches game objects. TCP mode enables TCP_NODELAY.
 class Session {
     struct Impl;
     std::unique_ptr<Impl> impl;
@@ -22,7 +23,7 @@ class Session {
   public:
     using Observer = void (*)(std::string_view, double);
     explicit Session(void (*logger)(const std::string&) = nullptr, Observer observer = nullptr,
-                     bool debugLogs = false);
+                     bool debugLogs = false, Transport transport = Transport::udp);
     ~Session();
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;

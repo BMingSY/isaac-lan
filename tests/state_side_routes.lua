@@ -593,12 +593,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
             snapshots = snapshots + 1
-            local value = _IsaacLanState.decode(bytes)
+            local value = _IsaacLanState.decode(bytes, stable)
             if route == "poop" then
                 for _, a in ipairs(value[9]) do
                     if a[4][1] == 25 then

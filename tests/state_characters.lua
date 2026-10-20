@@ -138,11 +138,11 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
-            local v = _IsaacLanState.decode(bytes)
+            local v = _IsaacLanState.decode(bytes, stable)
             for _, actor in ipairs(v[9]) do
                 local player = Isaac.GetPlayer(actor[1])
                 assert(

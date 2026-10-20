@@ -141,8 +141,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, between)
-            local result = restore(bytes, t, ack, between)
+        function(bytes, t, ack, between, stable)
+            local result = restore(bytes, t, ack, between, stable)
             check(t)
             return result
         end,

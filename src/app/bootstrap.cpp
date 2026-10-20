@@ -245,7 +245,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         return 14;
     const auto config = isaac::configuration::load(directory / L"isaac-lan/config.ini");
     settings = config.settings;
-    isaac::runtime::configureInput(settings.inputHz);
+    isaac::runtime::configureNetwork(settings.inputHz, settings.udp);
     isaac::logging::configure(settings.logLevel);
     isaac::diagnostics::configure(settings);
     if (!isaac::logging::initialize(logDirectory))
@@ -258,6 +258,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     if (!chatBackground.warning.empty())
         log("chat_background_warning=" + chatBackground.warning);
     log("network_input_hz=" + std::to_string(settings.inputHz));
+    log(std::string("network_transport=") + (settings.udp ? "udp" : "tcp"));
     if (isolated) {
         root = env;
     } else {

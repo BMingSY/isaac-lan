@@ -329,17 +329,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         before(t, n, bytes)
         advance(t)
     end, function(slot, t)
-        local body = collect(slot, t)
+        local body, stable = collect(slot, t)
         if not body then
-            return body
+            return body, stable
         end
-        return string.pack(">s4", body) .. _IsaacLanState.encode({ step, finished })
-    end, function(bytes, tick, ack, betweenUpdates)
+        return string.pack(">s4", body) .. _IsaacLanState.encode({ step, finished }), stable
+    end, function(bytes, tick, ack, betweenUpdates, stable)
         local body, pos = string.unpack(">s4", bytes)
-        if restore(body, tick, ack, betweenUpdates) == false then
+        if restore(body, tick, ack, betweenUpdates, stable) == false then
             return false
         end
-        local value = _IsaacLanState.decode(body)
+        local value = _IsaacLanState.decode(body, stable)
         local total, angel = native.deal_chances()
         assert(
             equal(total, value[19][1]) and equal(angel, value[19][2]),

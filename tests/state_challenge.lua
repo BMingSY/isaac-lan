@@ -139,11 +139,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
-            local value = _IsaacLanState.decode(bytes)
+            local value = _IsaacLanState.decode(bytes, stable)
             if value[2] >= 0 then
                 local flag =
                     io.open("D:/isaac-lan-lab/client-002/game/lan-test-challenge-done.txt", "r")

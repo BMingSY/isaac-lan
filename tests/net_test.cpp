@@ -5,6 +5,7 @@
 #include "net/peer.h"
 #include "net/wire_codec.h"
 #include "test_support.h"
+#include "udp_relay.h"
 #include <winsock2.h>
 #include <windows.h>
 #include <algorithm>
@@ -17,6 +18,10 @@
 #include <source_location>
 using namespace isaac::lan;
 namespace {
+Transport testTransport = Transport::tcp;
+struct TestSession : Session {
+    explicit TestSession(Transport mode = testTransport) : Session(nullptr, nullptr, false, mode) {}
+};
 LobbyAccess testAccess() {
     return {{0, 1, 2, 3, 7, 23}, {{1001, 2}, {1001, 3}, {1002, 1}}, {0, 1, 2, 3, 7, 23}};
 }
@@ -30,17 +35,21 @@ void until(F f, const std::source_location location = std::source_location::curr
     }
 }
 struct Group {
-    std::array<std::unique_ptr<Session>, 4> peers;
+    std::array<std::unique_ptr<TestSession>, 4> peers;
+    std::unique_ptr<UdpRelay> relay;
     unsigned count;
     explicit Group(unsigned n, std::uint8_t difficulty = 0, const char* address = "127.0.0.1",
-                   RunRules rules = {}, std::array<std::uint16_t, maxPlayers> characters = {})
+                   RunRules rules = {}, std::array<std::uint16_t, maxPlayers> characters = {},
+                   bool relayed = false)
         : count(n) {
         for (unsigned i = 0; i < n; ++i)
-            peers[i] = std::make_unique<Session>();
+            peers[i] = std::make_unique<TestSession>();
         require(peers[0]->host(0, "state-test", "host-mods", testAccess()), "Host failed");
+        if (relayed)
+            relay = std::make_unique<UdpRelay>(peers[0]->port());
         for (unsigned i = 1; i < n; ++i) {
-            require(peers[i]->join(address, peers[0]->port(), "state-test", {}, "cosmetic-mods",
-                                   testAccess()),
+            require(peers[i]->join(address, relay ? relay->port : peers[0]->port(), "state-test",
+                                   {}, "cosmetic-mods", testAccess()),
                     "Join failed");
             // Seat assignment follows accepted connections, not thread start order.
             until([&] {
@@ -164,7 +173,7 @@ void greedSettings() {
             return g.peers[0]->connectedMask() == 1;
         });
         g.step(2);
-        g.peers[1] = std::make_unique<Session>();
+        g.peers[1] = std::make_unique<TestSession>();
         require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {},
                                  testAccess()),
                 "Greed guest could not rejoin");
@@ -233,6 +242,149 @@ void codec() {
     require(r.u32() == 0x12345678 && r.blob().size() == 409, "State codec failed");
     r.finish();
     std::puts("PASS bounded state codec rejects truncated packets");
+}
+void udpLossRecoveryImpl(bool large) {
+    require(testTransport == Transport::udp, "UDP fixture requires --udp");
+    Group g(2, 0, "127.0.0.1", {}, {}, true);
+    g.ready();
+    g.step(0);
+    std::mt19937 random(103);
+    std::vector<std::uint8_t> data(large ? 100000 : 32000);
+    const unsigned changingBytes = large ? 88000 : 2600;
+    for (auto& byte : data)
+        byte = static_cast<std::uint8_t>(random());
+    const auto dependency = [&](unsigned tick) {
+        std::vector<std::uint8_t> bytes(data.begin(), data.begin() + 4000);
+        // Adjacent revisions while the previous reliable packet is in flight.
+        bytes[0] = static_cast<std::uint8_t>(tick / 30);
+        bytes[1] = static_cast<std::uint8_t>(tick % 30 == 0);
+        return bytes;
+    };
+    if (large) {
+        // Establish the shared baseline before the busy room starts changing
+        // ~88 KiB per update. The smaller fixture also covers lossy bootstrap.
+        WorldState initial;
+        initial.connected = 3;
+        initial.bytes = data;
+        initial.stable = dependency(0);
+        require(g.peers[0]->publish(1, initial), "Large baseline rejected");
+        bool applied = false;
+        until([&] {
+            g.poll();
+            if (auto arrived = g.peers[1]->takeState()) {
+                require(arrived->bytes == data, "Large baseline changed bytes");
+                g.peers[1]->applied(arrived->tick);
+                applied = true;
+            }
+            return applied && g.peers[0]->resources().inFlightStates == 0;
+        });
+    }
+    g.relay->impaired.store(true);
+    constexpr auto actionBit = 1u << isaac::input::action::item;
+    unsigned actions = 0, received = 0, lastTick = 0, largestGap = 0;
+    const auto collect = [&] {
+        g.poll();
+        if (auto arrived = g.peers[1]->takeState()) {
+            require(arrived->tick > lastTick && arrived->bytes.size() == data.size() &&
+                        arrived->bytes[0] == (arrived->tick & 255),
+                    "UDP duplicate/reordering regressed or corrupted a snapshot");
+            require(arrived->stable == dependency(arrived->tick),
+                    "Lost/reordered dependency changed an authoritative view");
+            for (unsigned i = 1; i < data.size(); ++i)
+                require(arrived->bytes[i] ==
+                            (data[i] ^ (arrived->tick > 60 && i < changingBytes
+                                            ? static_cast<std::uint8_t>(arrived->tick)
+                                            : 0)),
+                        "Fragmented prefix recovery changed world bytes");
+            largestGap = std::max(largestGap, arrived->tick - lastTick);
+            lastTick = arrived->tick;
+            ++received;
+            g.peers[1]->applied(arrived->tick);
+        }
+    };
+    const auto publish = [&](unsigned sequence) {
+        auto frame = g.step(sequence);
+        actions += (frame.inputs[1].triggered & actionBit) != 0;
+        WorldState state;
+        state.tick = frame.tick;
+        state.connected = 3;
+        state.inputSequences = g.peers[0]->inputSequences();
+        state.bytes = data;
+        state.stable = dependency(sequence);
+        // A busy room changes enough data to fragment even prefix-compressed
+        // frames. Exercise transitions between small and multi-datagram views.
+        if (sequence > 60)
+            for (unsigned i = 1; i < changingBytes; ++i)
+                state.bytes[i] ^= static_cast<std::uint8_t>(sequence);
+        state.bytes[0] = sequence;
+        require(g.peers[0]->publish(1, state), "Impaired world rejected");
+    };
+    for (unsigned sequence = 1; sequence <= 180; ++sequence) {
+        const auto began = std::chrono::steady_clock::now();
+        InputFrame input;
+        input.values[isaac::input::action::moveRight] = sequence < 150 ? maxInputValue : 0;
+        if (sequence <= 120 && sequence % 15 == 0)
+            input.triggered = actionBit;
+        require(g.peers[1]->submit(sequence - 1, input, InputRoom{0, 84, 0}),
+                "Impaired input rejected");
+        publish(sequence);
+        do {
+            collect();
+            Sleep(1);
+        } while (std::chrono::steady_clock::now() - began < std::chrono::milliseconds(33));
+    }
+    std::printf(
+        "UDP observed received=%u last=%u largest_gap=%u actions=%u dropped=%u duplicates=%u\n",
+        received, lastTick, largestGap, actions, g.relay->dropped.load(),
+        g.relay->duplicated.load());
+    const auto delivery = g.peers[0]->resources();
+    std::printf("UDP states=%llu delta=%llu raw=%llu wire=%llu\n",
+                static_cast<unsigned long long>(delivery.worldSnapshots),
+                static_cast<unsigned long long>(delivery.deltaSnapshots),
+                static_cast<unsigned long long>(delivery.rawWorldBytes),
+                static_cast<unsigned long long>(delivery.wireWorldBytes));
+    if (large) {
+        require(received > 50 && lastTick > 165 && largestGap <= 15,
+                "Large realtime views stalled despite recoverable datagram loss");
+        // Keep impairing the link after the measurement window. The final
+        // publication is still allowed to be lost; subsequent views must recover.
+        unsigned sequence = 180;
+        until([&] {
+            publish(++sequence);
+            collect();
+            Sleep(33);
+            return lastTick > 180;
+        });
+    } else
+        require(received > 75 && lastTick > 165 && largestGap <= 12,
+                "Lost fragments or baseline receipts stalled subsequent UDP snapshots");
+    require(actions == 8, "Lost or duplicated a reliable one-shot action under UDP loss");
+    require(g.relay->dropped > 20 && g.relay->duplicated > 20 && g.relay->maxBytes <= 1200,
+            "Fixture did not exercise MTU-sized datagram loss and duplication");
+    require(g.peers[0]->resources().inFlightStates <= WorldTransfer::maxInFlightStates,
+            "Dropped receipts grew the UDP state cache");
+    const Stage stage{1, 2, 0, 0, false, {}, {}};
+    require(g.peers[0]->beginStage(stage), "Impaired floor event rejected");
+    until([&] {
+        g.poll();
+        if (auto arrived = g.peers[1]->takeStage()) {
+            require(*arrived == stage, "UDP floor recovery changed state");
+            return true;
+        }
+        return false;
+    });
+    std::printf(
+        "UDP received=%u last=%u largest_gap=%u actions=%u dropped=%u duplicates=%u mtu=%u\n",
+        received, lastTick, largestGap, actions, g.relay->dropped.load(),
+        g.relay->duplicated.load(), g.relay->maxBytes.load());
+}
+void udpLossRecovery() {
+    udpLossRecoveryImpl(false);
+}
+void udpFragmentedRecovery() {
+    // Opaque ~88 KiB changes exercise FEC, sequence-window crossings, paced
+    // bursts and receipts while every seventh physical datagram is dropped.
+    udpLossRecoveryImpl(true);
 }
 void loadingExit() {
     Group g(2);
@@ -447,7 +599,7 @@ void floorRejoin() {
         return g.peers[0]->connectedMask() == 1;
     });
     require(g.step(1).connected == 1, "Departure did not remove guest from active roster");
-    g.peers[1] = std::make_unique<Session>();
+    g.peers[1] = std::make_unique<TestSession>();
     require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, "other-mods",
                              testAccess()),
             "Returning connection failed");
@@ -808,7 +960,7 @@ void restartRuns() {
                 "Restart compacted or revived an absent seat");
         require(g.peers[0]->ready() && g.peers[2]->ready(), "Survivors could not load new run");
         g.step(0);
-        g.peers[1] = std::make_unique<Session>();
+        g.peers[1] = std::make_unique<TestSession>();
         require(g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {},
                                  testAccess()),
                 "Returning seat could not reconnect after restart");
@@ -1022,7 +1174,7 @@ void stageDuringRejoin() {
         return g.peers[0]->connectedMask() == 1;
     });
     g.step(1);
-    g.peers[1] = std::make_unique<Session>();
+    g.peers[1] = std::make_unique<TestSession>();
     require(
         g.peers[1]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {}, testAccess()),
         "Returning connection failed");
@@ -1254,7 +1406,7 @@ void compressionLimits() {
     rejects([&] { compression.expand(invalid); }, "Incorrect expanded size accepted");
 }
 void lobby() {
-    Session host, guest;
+    TestSession host, guest;
     require(!host.ready() && !host.submit(0, {}) && !host.command(Command::pause),
             "Idle session accepted gameplay");
     require(host.host(0, "test", "mods", testAccess()), "Host failed");
@@ -1304,7 +1456,7 @@ void lobby() {
 }
 void runRules() {
     const RunRules rules{1001, 2, 23, 0, true};
-    Session host, guest;
+    TestSession host, guest;
     require(host.host(0, "test", {}, testAccess()), "Host failed");
     require(guest.join("127.0.0.1", host.port(), "test", {}, {}, testAccess()), "Join failed");
     auto poll = [&] {
@@ -1371,7 +1523,7 @@ void runRules() {
             return g.peers[0]->connectedMask() == mask;
         });
         require(g.step(1).connected == mask, "Disconnected seat remained active");
-        g.peers[slot] = std::make_unique<Session>();
+        g.peers[slot] = std::make_unique<TestSession>();
         require(g.peers[slot]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {},
                                     testAccess()),
                 "Challenge rejoin failed");
@@ -1426,7 +1578,7 @@ void accessWireValidation() {
     const LobbyAccess basic{{0}, {}, {0}};
     // Bypass Session::choose to exercise the authority's untrusted wire boundary.
     {
-        Session host;
+        TestSession host(Transport::tcp);
         require(host.host(0, "wire-access", {}, testAccess()), "Wire host failed");
         WireSocket remote;
         remote.value = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -1469,7 +1621,7 @@ void accessWireValidation() {
     }
     // A host cannot replace this peer's declaration or force an inaccessible start.
     for (unsigned scenario = 0; scenario < 5; ++scenario) {
-        Session guest;
+        TestSession guest(Transport::tcp);
         WireSocket listener, remote;
         listener.value = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         sockaddr_in address{};
@@ -1588,7 +1740,7 @@ void lobbyAccess() {
     for (const auto& invalid : invalidAccess) {
         require(!invalid.valid(), "Invalid access IDs accepted");
         rejects([&] { single.access(invalid); }, "Invalid access encoded");
-        Session rejected;
+        TestSession rejected;
         require(!rejected.host(0, "access-test", {}, invalid), "Host accepted invalid access");
     }
     maximum.characters.push_back(256);
@@ -1609,9 +1761,9 @@ void lobbyAccess() {
             "Malformed access wire data accepted");
 
     struct Lobby {
-        std::vector<std::unique_ptr<Session>> peers;
+        std::vector<std::unique_ptr<TestSession>> peers;
         explicit Lobby(const std::vector<LobbyAccess>& profiles) {
-            peers.push_back(std::make_unique<Session>());
+            peers.push_back(std::make_unique<TestSession>());
             require(peers[0]->host(0, "access-test", {}, profiles[0]), "Access host failed");
             for (std::size_t i = 1; i < profiles.size(); ++i)
                 add(profiles[i]);
@@ -1624,7 +1776,7 @@ void lobbyAccess() {
                 }
         }
         void add(const LobbyAccess& profile) {
-            peers.push_back(std::make_unique<Session>());
+            peers.push_back(std::make_unique<TestSession>());
             require(
                 peers.back()->join("127.0.0.1", peers[0]->port(), "access-test", {}, {}, profile),
                 "Access guest failed");
@@ -1723,7 +1875,7 @@ void lobbyAccess() {
             lobby.poll();
             return lobby.peers[0]->connectedMask() == 1;
         });
-        lobby.peers[1] = std::make_unique<Session>();
+        lobby.peers[1] = std::make_unique<TestSession>();
         require(lobby.peers[1]->join("127.0.0.1", lobby.peers[0]->port(), "access-test", identity,
                                      {}, noResource),
                 "Unlocked rejoin failed");
@@ -1814,7 +1966,7 @@ void lobbyAccess() {
                 denied.characters.pop_back();
                 denied.unlockedCharacters.pop_back();
             }
-            Session rejected;
+            TestSession rejected;
             require(rejected.join("127.0.0.1", group.peers[0]->port(), "state-test", identity, {},
                                   denied),
                     "Denied rejoin did not connect");
@@ -1826,7 +1978,7 @@ void lobbyAccess() {
             require(rejected.error().find("unavailable") != std::string::npos,
                     "Rejoin failed for an unrelated reason");
         }
-        group.peers[slot] = std::make_unique<Session>();
+        group.peers[slot] = std::make_unique<TestSession>();
         require(group.peers[slot]->join("127.0.0.1", group.peers[0]->port(), "state-test", identity,
                                         {}, testAccess()),
                 "Eligible rejoin failed");
@@ -1861,7 +2013,7 @@ void lobbyAccess() {
     }
 }
 void handshake() {
-    Session host, rejected;
+    TestSession host, rejected;
     require(host.host(0, "supported", {}, testAccess()), "Host failed");
     require(rejected.join("127.0.0.1", host.port(), "incompatible", {}, {}, testAccess()),
             "Connection failed");
@@ -1872,7 +2024,7 @@ void handshake() {
     });
     require(host.phase() == Phase::lobby && host.players() == 1 && !rejected.error().empty(),
             "Rejected handshake damaged host");
-    Session guest;
+    TestSession guest;
     require(guest.join("127.0.0.1", host.port(), "supported", {}, {}, testAccess()),
             "Valid join after rejection failed");
     until([&] {
@@ -1880,7 +2032,7 @@ void handshake() {
         guest.poll();
         return host.players() == 2 && guest.phase() == Phase::lobby;
     });
-    Session badAddress, badIdentity;
+    TestSession badAddress, badIdentity;
     require(!badAddress.join("not a host", host.port(), "supported", {}, {}, testAccess()),
             "Invalid host address accepted");
     require(!badIdentity.join("127.0.0.1", host.port(), "supported", "not-an-identity", {},
@@ -1903,7 +2055,7 @@ void hostNames() {
         return g.peers[1]->phase() == Phase::waiting;
     });
     require(g.peers[1]->identity() == identity, "Host name reconnect changed identity");
-    Session missing;
+    TestSession missing;
     require(missing.join("isaac-lan-does-not-exist.invalid", g.peers[0]->port(), "state-test", {},
                          {}, testAccess()),
             "Valid host name syntax rejected");
@@ -1913,7 +2065,7 @@ void hostNames() {
     });
     require(missing.error().find("resolve") != std::string::npos,
             "DNS failure lost its explanation");
-    Session cancelled;
+    TestSession cancelled;
     require(cancelled.join("localhost", g.peers[0]->port(), "state-test", {}, {}, testAccess()),
             "DNS cancellation setup failed");
     cancelled.close();
@@ -2087,7 +2239,7 @@ void integrations() {
         g.peers[0]->poll();
         return g.peers[0]->connectedMask() == 3;
     });
-    g.peers[2] = std::make_unique<Session>();
+    g.peers[2] = std::make_unique<TestSession>();
     require(
         g.peers[2]->join("127.0.0.1", g.peers[0]->port(), "state-test", identity, {}, testAccess()),
         "Integration rejoin failed");
@@ -2282,10 +2434,12 @@ void worldDeltas() {
     g.ready();
     std::mt19937 random(73);
     std::array<std::vector<std::uint8_t>, 4> expected;
+    std::array<std::vector<std::uint8_t>, 4> dependencies;
     for (unsigned slot = 1; slot < 4; ++slot) {
         expected[slot].resize(140000);
         for (auto& byte : expected[slot])
             byte = static_cast<std::uint8_t>(random());
+        dependencies[slot].resize(20000, static_cast<std::uint8_t>(slot));
     }
     std::array<unsigned, 4> received{};
     received.fill(UINT32_MAX);
@@ -2301,6 +2455,9 @@ void worldDeltas() {
             state.tick = tick;
             state.connected = 15;
             state.bytes = expected[slot];
+            if (tick % 10 == 0)
+                dependencies[slot][tick] = static_cast<std::uint8_t>(tick + slot);
+            state.stable = dependencies[slot];
             require(g.peers[0]->publish(slot, state), "Delta publication failed");
         }
         // Leave one guest unacknowledged while other players keep consuming.
@@ -2309,6 +2466,8 @@ void worldDeltas() {
             for (unsigned slot = 1; slot < 3; ++slot)
                 if (auto state = g.peers[slot]->takeState()) {
                     require(state->bytes == expected[slot], "Delta changed a complete view");
+                    require(state->stable == dependencies[slot],
+                            "Realtime view used the wrong reliable dependency revision");
                     g.peers[slot]->applied(state->tick);
                     received[slot] = state->tick;
                 }
@@ -2331,7 +2490,8 @@ void worldDeltas() {
     });
     const auto resources = g.peers[0]->resources();
     require(resources.deltaSnapshots > 180 &&
-                resources.wireWorldBytes < resources.fullWorldBytes / 8,
+                resources.wireWorldBytes <
+                    resources.fullWorldBytes / (testTransport == Transport::udp ? 2 : 8),
             "Confirmed sparse snapshots did not reduce actual compressed traffic");
     std::printf("DELTA snapshots=%llu deltas=%llu full_wire=%llu actual_wire=%llu\n",
                 static_cast<unsigned long long>(resources.worldSnapshots),
@@ -2509,6 +2669,16 @@ void resourceLifecycle() {
                 static_cast<unsigned long long>(retained()), beforeHandles, handles());
 }
 int main(int argc, char** argv) {
+    if (argc > 1 && std::string_view(argv[1]) == "--udp") {
+        testTransport = Transport::udp;
+        --argc;
+        ++argv;
+    }
+    if (argc == 2 && (std::string_view(argv[1]) == "udp-loss" ||
+                      std::string_view(argv[1]) == "udp-large-recovery"))
+        return runTests(
+            argc, argv,
+            {{"udp-loss", udpLossRecovery}, {"udp-large-recovery", udpFragmentedRecovery}});
     const auto result = runTests(argc, argv,
                                  {{"codec", codec},
                                   {"world-deltas", worldDeltas},

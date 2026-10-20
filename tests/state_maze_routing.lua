@@ -359,19 +359,21 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             advance(t)
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if bytes then
-            return string.pack(">s4", bytes) .. _IsaacLanState.encode({ masks, phase, finished })
+            return string.pack(">s4", bytes) .. _IsaacLanState.encode({ masks, phase, finished }),
+                stable
         end
-    end, function(bytes, t, ack, betweenUpdates)
+    end, function(bytes, t, ack, betweenUpdates, stable)
         local body, pos = string.unpack(">s4", bytes)
-        if restore(body, t, ack, betweenUpdates) == false then
+        if restore(body, t, ack, betweenUpdates, stable) == false then
             return false
         end
         local meta = _IsaacLanState.decode(bytes:sub(pos))
         masks, phase = meta[1], meta[2]
         local fields = _IsaacLanModules["sync/fields"]
-        local value = _IsaacLanModules["sync/world_schema"].unpack(_IsaacLanState.decode(body), t)
+        local value =
+            _IsaacLanModules["sync/world_schema"].unpack(_IsaacLanState.decode(body, stable), t)
         for _, actor in ipairs(value.actors) do
             local position = actor[fields.actor.entity][fields.entity.position]
             acceptedPositions[actor[fields.actor.controller] - 1] =

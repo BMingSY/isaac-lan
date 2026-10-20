@@ -198,9 +198,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report("FLOOR_BAGS")
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if t % 30 == 0 then
-            local value = _IsaacLanState.decode(bytes)
+            local value = _IsaacLanState.decode(bytes, stable)
             report(
                 "AUTHORITY tick="
                     .. t
@@ -210,13 +210,13 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     .. count(value[9][2][8] and value[9][2][8][1] or string.rep("\0", 12))
             )
         end
-        return bytes
-    end, function(bytes, t, ack, betweenUpdates)
-        if restore(bytes, t, ack, betweenUpdates) == false then
+        return bytes, stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
+        if restore(bytes, t, ack, betweenUpdates, stable) == false then
             return false
         end
         snapshots = snapshots + 1
-        local value = _IsaacLanState.decode(bytes)
+        local value = _IsaacLanState.decode(bytes, stable)
         local filled = 0
         for _, a in ipairs(value[9]) do
             local p = Isaac.GetPlayer(a[1])

@@ -284,11 +284,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, tick, ack, betweenUpdates)
-            if restore(bytes, tick, ack, betweenUpdates) == false then
+        function(bytes, tick, ack, betweenUpdates, stable)
+            if restore(bytes, tick, ack, betweenUpdates, stable) == false then
                 return false
             end
-            local value = worldSchema.unpack(_IsaacLanState.decode(bytes), tick)
+            local value = worldSchema.unpack(_IsaacLanState.decode(bytes, stable), tick)
             latest = { entities = {}, tick = tick }
             for _, actor in ipairs(value.actors) do
                 if

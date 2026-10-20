@@ -10,9 +10,10 @@ import subprocess
 from testing.special_routes import CASES, DIAGNOSTICS, build
 from testing.results import finish_run
 from testing.delivery import analyze_delivery
+from testing.input_response import measure as measure_response, passed as response_passed
 from testing.engine import configure_interrupts, engine_command, run_engine
 from lab_profile import validate_labs as validate_owned_labs
-from lab_profile import ProtectedLabs, idle
+from lab_profile import ProtectedLabs, idle, validate_startup
 from game_logs import log_path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,9 +39,12 @@ def main():
         help="Start the Lamb ending on the first floor within the six-route suite",
     )
     parser.add_argument("--port", type=int, default=30220)
+    parser.add_argument("--transport", choices=("udp", "tcp"), default="udp")
     parser.add_argument("--latency-ms", type=int, default=75)
     parser.add_argument(
-        "--relay-control", type=Path, help="Owned JSON profile for TCP jitter, limits and stalls"
+        "--relay-control",
+        type=Path,
+        help="Owned JSON profile for delay, jitter, limits and UDP loss/duplication",
     )
     parser.add_argument(
         "--record-relay",
@@ -92,6 +96,7 @@ def main():
         [args.host.resolve(), args.client.resolve()], args.output.resolve(), count=None
     )
     idle(labs)
+    validate_startup(labs)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     script = output / "suite.lua"
@@ -110,6 +115,8 @@ def main():
         "--progress-fixture",
         "--alt-path-fixture",
         "--hush-fixture",
+        "--transport",
+        args.transport,
         "--latency-ms",
         str(args.latency_ms),
         "--menu-port",
@@ -267,10 +274,16 @@ def main():
         if "weak-network" in cases and all(
             peer["passed"] for peer in report["cases"]["weak-network"].values()
         ):
-            report["tcp_delivery"] = analyze_delivery(
+            report["delivery"] = analyze_delivery(
                 (output / "engine/host/log.txt").read_text(errors="replace"),
                 (output / "engine/client/log.txt").read_text(errors="replace"),
             )
+        if "input-response" in cases and all(
+            peer["passed"] for peer in report["cases"]["input-response"].values()
+        ):
+            report["input_response"] = measure_response(output / "engine/client/log.txt")
+            report["input_response_passed"] = response_passed(report["input_response"])
+            report["passed"] = report["passed"] and report["input_response_passed"]
         if "victory-lap" in cases:
             lap = report["cases"]["victory-lap"]
             report["victory_lap_passed"] = all(

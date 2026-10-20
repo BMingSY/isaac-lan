@@ -194,11 +194,11 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
+        function(bytes, t, ack, betweenUpdates, stable)
             if not departed and t >= 60 then
                 error("isolated disconnect fixture")
             end
-            return restore(bytes, t, ack, betweenUpdates)
+            return restore(bytes, t, ack, betweenUpdates, stable)
         end,
         present,
         beginFloor

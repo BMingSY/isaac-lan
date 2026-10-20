@@ -25,6 +25,7 @@ FILES = BINARIES | {
     "licenses/imgui-LICENSE.txt",
     "licenses/miniz-LICENSE.txt",
     "licenses/zstd-LICENSE.txt",
+    "licenses/ENet-LICENSE.txt",
 }
 SYSTEM_DLLS = {
     "bcrypt.dll",
@@ -39,6 +40,7 @@ SYSTEM_DLLS = {
     "shell32.dll",
     "user32.dll",
     "ws2_32.dll",
+    "winmm.dll",
     "advapi32.dll",
     "ole32.dll",
     "oleaut32.dll",

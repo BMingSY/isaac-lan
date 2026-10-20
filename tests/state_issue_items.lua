@@ -551,16 +551,19 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         before(t, n, bytes)
         advance(t)
     end, function(slot, t)
-        local bytes = collect(slot, t)
-        return bytes
-            and string.pack(">s4", bytes)
-                .. _IsaacLanState.encode({ step, completed, savedDefinitions or false })
-    end, function(bytes, t, ack, betweenUpdates)
+        local bytes, stable = collect(slot, t)
+        return bytes and string.pack(">s4", bytes) .. _IsaacLanState.encode({
+            step,
+            completed,
+            savedDefinitions or false,
+        }),
+            stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
         local body, cursor = string.unpack(">s4", bytes)
-        if restore(body, t, ack, betweenUpdates) == false then
+        if restore(body, t, ack, betweenUpdates, stable) == false then
             return false
         end
-        local view = schema.unpack(_IsaacLanState.decode(body), t)
+        local view = schema.unpack(_IsaacLanState.decode(body, stable), t)
         assert(native.generated_items() == view.glitched, "Replica generated definitions differ")
         for _, a in ipairs(view.actors) do
             for _, field in ipairs({

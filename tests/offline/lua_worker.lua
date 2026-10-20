@@ -27,6 +27,7 @@ local function stateEnvironment()
         _IsaacLanPrediction = {},
         _IsaacLanModules = {
             ["sync/codec"] = codec,
+            ["sync/layers"] = dofile(root .. "/src/bridge/sync/layers.lua"),
             ["sync/fields"] = dofile(root .. "/src/bridge/sync/fields.lua"),
             ["sync/capture"] = dofile(root .. "/src/bridge/sync/capture.lua"),
             ["sync/replica"] = dofile(root .. "/src/bridge/sync/replica.lua"),
@@ -37,6 +38,7 @@ local function stateEnvironment()
             ["presentation/actors"] = dofile(root .. "/src/bridge/presentation/actors.lua"),
             ["presentation/audio"] = dofile(root .. "/src/bridge/presentation/audio.lua"),
             ["presentation/motion"] = dofile(root .. "/src/bridge/presentation/motion.lua"),
+            ["presentation/timeline"] = dofile(root .. "/src/bridge/presentation/timeline.lua"),
             ["presentation/attachments"] = dofile(
                 root .. "/src/bridge/presentation/attachments.lua"
             ),
@@ -148,7 +150,8 @@ local actions = {
         local state = assert(env._IsaacLanState)
         return {
             state.encode == codec.encode,
-            state.decode == codec.decode,
+            state.encode(state.decode(codec.encode({ 1, true, "view" })))
+                == codec.encode({ 1, true, "view" }),
             type(state.apply),
             type(state.capture),
             type(state.present),

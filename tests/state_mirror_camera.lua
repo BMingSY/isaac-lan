@@ -140,8 +140,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
             if t >= 65 and t < 350 then

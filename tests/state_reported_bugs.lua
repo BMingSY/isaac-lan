@@ -753,17 +753,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end)
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if round == 1 and t == 600 then
             check("20 offscreen pickup fixture", #native.map_pickups(origin, 0) >= 8 + 3 * 24)
             report("CHECK 20 offscreen pickup icons")
         end
-        return bytes
-    end, function(bytes, t, ack, betweenUpdates)
-        if restore(bytes, t, ack, betweenUpdates) == false then
+        return bytes, stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
+        if restore(bytes, t, ack, betweenUpdates, stable) == false then
             return false
         end
-        local value = _IsaacLanState.decode(bytes)
+        local value = _IsaacLanState.decode(bytes, stable)
         if round == 1 and t >= 670 and t < 1050 then
             for _, e in ipairs(value[11][3]) do
                 segmentSamples[e[2]] = (segmentSamples[e[2]] or 0) + 1

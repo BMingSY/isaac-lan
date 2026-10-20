@@ -1544,36 +1544,36 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             advance(t)
         end,
         function(slot, t)
-            local bytes = collect(slot, t)
+            local bytes, stable = collect(slot, t)
             if not bytes then
-                return bytes
+                return bytes, stable
             end
             if homeOnly and slot == 0 then
-                checkHomeVisual(_IsaacLanState.decode(bytes)[16])
+                checkHomeVisual(_IsaacLanState.decode(bytes, stable)[16])
             end
-            return string.pack(">s4", bytes)
-                .. _IsaacLanState.encode({
-                    caseIndex,
-                    step,
-                    shoot,
-                    homeWalking,
-                    terminalWalking,
-                    debug10BeastWalking,
-                    crawlspaceReturns,
-                    chestMove,
-                })
+            return string.pack(">s4", bytes) .. _IsaacLanState.encode({
+                caseIndex,
+                step,
+                shoot,
+                homeWalking,
+                terminalWalking,
+                debug10BeastWalking,
+                crawlspaceReturns,
+                chestMove,
+            }),
+                stable
         end,
-        function(bytes, t, ack, betweenUpdates)
+        function(bytes, t, ack, betweenUpdates, stable)
             local body, pos = string.unpack(">s4", bytes)
             local meta = _IsaacLanState.decode(bytes:sub(pos))
-            local ok = restore(body, t, ack, betweenUpdates)
+            local ok = restore(body, t, ack, betweenUpdates, stable)
             if ok == false then
                 return false
             end
             if crawlspaceTest then
                 assert(native.api_with_local_view(function()
                     assert(
-                        returnContext.capture() == _IsaacLanState.decode(body)[11][7],
+                        returnContext.capture() == _IsaacLanState.decode(body, stable)[11][7],
                         "Replica crawlspace return context differs"
                     )
                 end))
@@ -1589,7 +1589,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             snapshots = snapshots + 1
             observeFloor()
             if homeOnly then
-                checkHomeVisual(_IsaacLanState.decode(body)[16])
+                checkHomeVisual(_IsaacLanState.decode(body, stable)[16])
             end
             observed[meta[2]] = (observed[meta[2]] or 0) + 1
             shoot = meta[3]
@@ -1640,7 +1640,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             assert(native.api_with_local_view(function()
                 local warnings, replicasByID = {}, {}
                 if dogmaWarning then
-                    for _, v in ipairs(_IsaacLanState.decode(body)[11][3]) do
+                    for _, v in ipairs(_IsaacLanState.decode(body, stable)[11][3]) do
                         if v[2] == 1000 and v[3] == 172 and (v[4] == 1 or v[4] == 2) then
                             warnings[v[1]] = v
                         end

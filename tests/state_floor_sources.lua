@@ -168,8 +168,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, tick, ack)
-            if restore(bytes, tick, ack) == false then
+        function(bytes, tick, ack, betweenUpdates, stable)
+            if restore(bytes, tick, ack, betweenUpdates, stable) == false then
                 return false
             end
             snapshots = snapshots + 1

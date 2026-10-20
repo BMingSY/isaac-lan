@@ -78,9 +78,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report("CHARGE_INPUT_BEGIN")
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if t == 60 then
-            local value = _IsaacLanState.decode(bytes)
+            local value = _IsaacLanState.decode(bytes, stable)
             for _, actor in ipairs(value[9]) do
                 if actor[2] == 2 then
                     local equipped = false
@@ -93,13 +93,13 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 end
             end
         end
-        return bytes
-    end, function(bytes, t, ack, betweenUpdates)
-        if restore(bytes, t, ack, betweenUpdates) == false then
+        return bytes, stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
+        if restore(bytes, t, ack, betweenUpdates, stable) == false then
             return false
         end
         Options.ChargeBars = true
-        local v = _IsaacLanState.decode(bytes)
+        local v = _IsaacLanState.decode(bytes, stable)
         for _, actor in ipairs(v[9]) do
             if actor[2] == 2 and actor[6] then
                 local expected = weapons(actor[6])

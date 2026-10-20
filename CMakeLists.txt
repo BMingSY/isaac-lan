@@ -47,6 +47,25 @@ if(BUILD_TESTING AND ISAAC_LAN_LZ4_SOURCE_DIR)
     endif()
 endif()
 if(BUILD_TESTING)
+    add_executable(isaac_lan_world_dependencies_test tests/world_dependencies_test.cpp)
+    target_include_directories(isaac_lan_world_dependencies_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_world_dependencies_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+    endif()
+    add_test(NAME net.world-dependencies COMMAND isaac_lan_world_dependencies_test)
+    set_tests_properties(net.world-dependencies PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_world_shards_test tests/world_shards_test.cpp)
+    target_include_directories(isaac_lan_world_shards_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_world_shards_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    foreach(test_case erasures cleanup)
+        add_test(NAME net.world-shards-${test_case} COMMAND isaac_lan_world_shards_test
+                                                            ${test_case})
+        set_tests_properties(net.world-shards-${test_case} PROPERTIES TIMEOUT 60 LABELS
+                                                                      "offline;core")
+    endforeach()
     add_executable(isaac_lan_mailbox_test tests/mailbox_test.cpp)
     target_include_directories(isaac_lan_mailbox_test PRIVATE src)
     if(MINGW)
@@ -168,6 +187,8 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.party-startup party_startup.lua)
         isaac_add_lua_test(bridge.restart restart.lua)
         isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
+        isaac_add_lua_test(bridge.state-layers state_layers.lua)
+        isaac_add_lua_test(presentation.timeline presentation_timeline.lua)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
         isaac_add_lua_test(bridge.challenges challenges.lua)
         isaac_add_lua_test(bridge.luck_game luck_game.lua)
@@ -366,11 +387,26 @@ add_library(
     "${IMGUI_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp")
 target_include_directories(isaac_lan_ui PUBLIC "${IMGUI_SOURCE_DIR}" "${IMGUI_SOURCE_DIR}/backends")
 target_link_libraries(isaac_lan_ui PUBLIC opengl32 gdi32 dwmapi)
-add_library(isaac_lan_net STATIC src/net/session.cpp src/net/network_io.cpp src/net/byte_worker.cpp
-                                 src/net/compression.cpp src/net/host_resolution.cpp)
+add_library(
+    isaac_lan_enet STATIC
+    vendor/enet/callbacks.c
+    vendor/enet/compress.c
+    vendor/enet/host.c
+    vendor/enet/list.c
+    vendor/enet/packet.c
+    vendor/enet/peer.c
+    vendor/enet/protocol.c
+    vendor/enet/win32.c)
+target_include_directories(isaac_lan_enet PUBLIC vendor/enet/include)
+target_link_libraries(isaac_lan_enet PUBLIC ws2_32 winmm)
+add_library(
+    isaac_lan_net STATIC
+    src/net/session.cpp src/net/network_io.cpp src/net/udp_io.cpp src/net/byte_worker.cpp
+    src/net/compression.cpp src/net/host_resolution.cpp)
 target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate isaac_lan_zstd)
+target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate isaac_lan_zstd
+                                           isaac_lan_enet)
 add_executable(isaac_lan_replay_world tools/replay_world_states.cpp)
 target_link_libraries(isaac_lan_replay_world PRIVATE isaac_lan_net)
 if(MINGW)
@@ -450,6 +486,32 @@ if(BUILD_TESTING)
         set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;network")
     endforeach()
     set_tests_properties(net.loading-timeout PROPERTIES TIMEOUT 75)
+    foreach(
+        test_case
+        udp-loss
+        udp-large-recovery
+        world-deltas
+        async-network
+        inputs-2
+        inputs-3
+        inputs-4
+        render-inputs
+        floor-rejoin
+        stage-events
+        delta-floor-boundary
+        restart
+        return-lobby
+        rewind
+        r-key
+        input-rooms
+        communication
+        integrations
+        host-disconnect
+        resource-lifecycle)
+        add_test(NAME net.udp.${test_case} COMMAND isaac_lan_net_test --udp ${test_case})
+        set_tests_properties(net.udp.${test_case} PROPERTIES TIMEOUT 45 LABELS
+                                                             "offline;network;udp")
+    endforeach()
 endif()
 set(MINHOOK_SOURCE_DIR
     ""

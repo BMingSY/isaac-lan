@@ -1,5 +1,6 @@
 #include "app/configuration.h"
 #include "core/performance.h"
+#include "diagnostics/input_latency.h"
 #include "test_support.h"
 #include <chrono>
 #include <filesystem>
@@ -11,6 +12,7 @@ void defaults() {
     const auto parsed = isaac::configuration::parse(isaac::configuration::defaults);
     require(parsed.warnings.empty(), "Default configuration is invalid");
     require(parsed.settings.inputHz == 60, "Default guest input rate changed");
+    require(parsed.settings.udp, "UDP is not the default transport");
     require(parsed.settings.chat.backgroundImage.empty() && parsed.settings.chat.opacity == 70,
             "Default chat background is not a translucent solid color");
     require(isaac::configuration::missingDefaults(parsed).empty(),
@@ -21,6 +23,10 @@ void defaults() {
 }
 void validation() {
     using isaac::configuration::parse;
+    require(!parse("[network]\ntransport=tcp").settings.udp &&
+                parse("[network]\ntransport=udp").settings.udp &&
+                parse("[network]\ntransport=unknown").warnings.size() == 1,
+            "Transport selection or invalid-value fallback changed");
     const auto chat =
         parse("[chat]\nbackground_opacity=45\nbackground_color=Ab3400\n"
               "border_color=123456\ntext_color=FFFFFF\nbackground_image=背景/my panel.png\n");
@@ -145,6 +151,22 @@ void preservation() {
             "Oversized configuration was read without a bound");
 }
 void metrics() {
+    using Clock = std::chrono::steady_clock;
+    using namespace std::chrono_literals;
+    isaac::diagnostics::InputLatency latency;
+    const auto start = Clock::time_point{};
+    latency.capture(1, start);
+    require(latency.present(1, start + 8ms) == 8 && !latency.present(1, start + 16ms),
+            "Presentation latency duplicated one input sample");
+    require(latency.confirm(1, start + 90ms) == 90 && !latency.confirm(1, start + 100ms),
+            "Repeated state acknowledgement duplicated latency");
+    latency.capture(129, start + 1s);
+    require(!latency.present(1, start + 1s) && !latency.confirm(2, start + 1s),
+            "Evicted sample was mistaken for a newer input");
+    latency = {};
+    latency.capture(0, start);
+    require(latency.confirm(0, start + 40ms) == 40,
+            "New session retained old input sequence metrics");
     isaac::diagnostics::Window window;
     for (unsigned i = 1; i <= 100; ++i)
         window.add(i);

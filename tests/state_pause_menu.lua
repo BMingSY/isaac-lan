@@ -585,13 +585,13 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
             snapshots = snapshots + 1
             if read("first-prepared.txt") then
-                local value = _IsaacLanState.decode(bytes)
+                local value = _IsaacLanState.decode(bytes, stable)
                 for _, entry in ipairs(value[9]) do
                     if t > 35 then
                         checkPlayer(Isaac.GetPlayer(entry[1]), entry[2] - 1)

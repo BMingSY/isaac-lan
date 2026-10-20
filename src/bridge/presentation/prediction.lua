@@ -1,105 +1,132 @@
--- Render-only movement. Authority remains responsible for all gameplay.
 local prediction = {}
 _IsaacLanPrediction = prediction
 local methods = {}
 methods.__index = methods
-function prediction.new(position)
-    return setmetatable({
-        base = position,
-        display = position,
-        correction = Vector(0, 0),
-        velocity = Vector(0, 0),
-        pending = {},
-        acknowledged = -1,
-    }, methods)
+local teleportDistance = 96
+local maxHistory = 120
+local function zero()
+    return Vector(0, 0)
 end
-local function target(self)
-    local position = self.base
-    for _, input in pairs(self.pending) do
-        position = position + input.offset
-    end
-    return position
+function prediction.new(position)
+    local self = setmetatable({}, methods)
+    self:reset(position, -1)
+    return self
 end
 function methods:reset(position, sequence, velocity)
-    self.base, self.display = position, position
-    self.pending, self.correction = {}, Vector(0, 0)
-    self.velocity = velocity or Vector(0, 0)
+    self.base, self.display, self.position = position, position, position
+    self.pending, self.correction = {}, zero()
+    self.velocity = velocity or zero()
     self.acknowledged = sequence
+    self.authority, self.authorityVelocity = position, self.velocity
+    self.rebuild, self.confirmedTick = false, nil
+    self.teleported = true
 end
-function methods:confirm(position, sequence, velocity)
-    if self.authority and (position - self.authority):LengthSquared() >= 96 * 96 then
-        self:reset(position, sequence, velocity)
-    end
-    self.authority = position
-    if sequence <= self.acknowledged then
+function methods:confirm(position, sequence, velocity, tick)
+    if
+        sequence < self.acknowledged or (tick and self.confirmedTick and tick <= self.confirmedTick)
+    then
         return
     end
-    local expected = self.base
-    for key, input in pairs(self.pending) do
-        if key <= sequence then
-            expected = expected + input.offset
-        end
-    end
-    self.acknowledged = math.max(self.acknowledged, sequence)
-    for key in pairs(self.pending) do
-        if key <= self.acknowledged then
-            self.pending[key] = nil
-        end
-    end
-    local error = position - expected
-    local tolerance = self.velocity:LengthSquared() < 1 and 0.25
-        or math.max(4, math.sqrt(self.velocity:LengthSquared()) / 30)
-    -- Advance our own history. Ordinary snapshot noise does not replace the
-    -- local path or velocity; compare at the acknowledged input, not "now".
-    self.base = expected
-    if error:LengthSquared() >= 96 * 96 then
+    if (position - self.authority):LengthSquared() >= teleportDistance * teleportDistance then
         self:reset(position, sequence, velocity)
-    elseif error:LengthSquared() > tolerance * tolerance then
-        self.base = position
-        self.correction = self.display - target(self)
+        self.confirmedTick = tick
+        return
+    end
+    velocity = velocity or self.velocity
+    if
+        not tick
+        and sequence == self.acknowledged
+        and (position - self.authority):LengthSquared() == 0
+        and (velocity - self.authorityVelocity):LengthSquared() == 0
+    then
+        return
+    end
+    self.authority, self.authorityVelocity = position, velocity
+    self.confirmedTick, self.acknowledged = tick, sequence
+    local remaining = {}
+    for _, input in ipairs(self.pending) do
+        if input.sequence > sequence then
+            remaining[#remaining + 1] = input
+        end
+    end
+    self.pending = remaining
+    self.base, self.velocity, self.rebuild = position, velocity, true
+end
+local function advance(self, input, resolve)
+    if input.locked then
+        self.velocity = zero()
+        return
+    end
+    local elapsed = input.dt
+    while elapsed > 0 do
+        local dt = math.min(elapsed, 1 / 60)
+        local retain = 0.775 ^ (dt * 30)
+        self.velocity = self.velocity * retain + input.direction * (input.speed * (1 - retain))
+        local wanted = self.position + self.velocity * dt
+        local position = resolve and resolve(self.position, wanted) or wanted
+        if math.abs(position.X - wanted.X) > 0.001 then
+            self.velocity.X = 0
+        end
+        if math.abs(position.Y - wanted.Y) > 0.001 then
+            self.velocity.Y = 0
+        end
+        self.position = position
+        elapsed = elapsed - dt
     end
 end
-function methods:step(direction, sequence, speed, dt, locked)
+function methods:step(direction, sequence, speed, dt, locked, resolve)
     dt = math.max(0, math.min(dt, 0.05))
+    self.errorSquared = nil
+    if self.rebuild then
+        self.position, self.velocity = self.base, self.authorityVelocity
+        for _, input in ipairs(self.pending) do
+            advance(self, input, resolve)
+        end
+        self.correction = self.display - self.position
+        self.errorSquared = self.correction:LengthSquared()
+        self.rebuild = false
+    end
     self.sequence = sequence
     if locked then
-        -- An action blocks new walking, not acknowledgement of earlier input.
-        -- Keep the current path and reconcile it against real host replies.
-        self.velocity = Vector(0, 0)
+        self.velocity = zero()
     end
     if sequence > self.acknowledged then
-        local input = self.pending[sequence]
-        if not input then
-            input = { offset = Vector(0, 0), dt = 0 }
-            self.pending[sequence] = input
+        local elapsed = 0
+        for index = #self.pending, 1, -1 do
+            local input = self.pending[index]
+            if input.sequence ~= sequence then
+                break
+            end
+            elapsed = elapsed + input.dt
         end
-        local elapsed = math.min(dt, math.max(0, 0.1 - input.dt))
-        input.dt = input.dt + elapsed
-        -- J460 ordinary walking: velocity retains .775 per 30 Hz update;
-        -- terminal speed is MoveSpeed * 4.4117647 per rendered 60 Hz frame.
-        -- Split stalls into render-sized steps so acceleration is consistent.
-        while not locked and elapsed > 0 do
-            local step = math.min(elapsed, 1 / 60)
-            local retain = 0.775 ^ (step * 30)
-            self.velocity = self.velocity * retain + direction * speed * (1 - retain)
-            input.offset = input.offset + self.velocity * step
-            elapsed = elapsed - step
+        elapsed = math.min(dt, math.max(0, 0.1 - elapsed))
+        if elapsed > 0 then
+            -- The sequence acknowledges a sampled held state, not a host tick.
+            -- Preserve each preview's direction and duration for approximate
+            -- replay from the next authority position AND velocity.
+            local input = {
+                sequence = sequence,
+                direction = direction,
+                speed = speed,
+                dt = elapsed,
+                locked = locked,
+            }
+            self.pending[#self.pending + 1] = input
+            advance(self, input, resolve)
+            if #self.pending > maxHistory then
+                table.remove(self.pending, 1)
+            end
         end
     end
-    -- Smooth only the error introduced by a new authoritative snapshot.
-    -- Fresh local movement is added in full, independently of this decay.
     self.correction = self.correction * math.exp(-dt / 0.06)
-    self.display = target(self) + self.correction
+    self.display = self.position + self.correction
     return self.display
 end
 function methods:clip(position)
     local delta = position - self.display
-    local input = self.pending[self.sequence]
-    if input then
-        input.offset = input.offset + delta
-    else
-        self.correction = self.correction + delta
-    end
+    -- Presentation correction is also clipped, but never becomes new input
+    -- history. Replay rechecks grids at the authoritative starting position.
+    self.correction = self.correction + delta
     if math.abs(delta.X) > 0.001 then
         self.velocity.X = 0
     end

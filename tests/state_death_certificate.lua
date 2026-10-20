@@ -257,13 +257,14 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         before(t, n, bytes)
         advance(t)
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if bytes then
-            return string.pack(">s4", bytes) .. _IsaacLanState.encode({ step, round, finished })
+            return string.pack(">s4", bytes) .. _IsaacLanState.encode({ step, round, finished }),
+                stable
         end
-    end, function(bytes, t, ack)
+    end, function(bytes, t, ack, betweenUpdates, stable)
         local body, cursor = string.unpack(">s4", bytes)
-        if restore(body, t, ack) == false then
+        if restore(body, t, ack, betweenUpdates, stable) == false then
             return false
         end
         local meta = _IsaacLanState.decode(bytes:sub(cursor))

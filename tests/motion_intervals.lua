@@ -28,11 +28,12 @@ local motion = dofile(root .. "/src/bridge/presentation/motion.lua")(
     end,
 }, {}, {
     vector = Vector,
+    timeline = dofile(root .. "/src/bridge/presentation/timeline.lua")(),
     clock = function()
         return now * 1000
     end,
     status = function()
-        return { pause = pause, slot = 1 }
+        return { pause = pause, slot = 1, ping1 = 90 }
     end,
     room = function()
         return {
@@ -152,6 +153,8 @@ local prediction = assert(loadfile(root .. "/src/bridge/presentation/prediction.
     setmetatable = setmetatable,
     math = math,
     pairs = pairs,
+    ipairs = ipairs,
+    table = table,
 }))()
 local animation, extraFinished, enabled, ghost = "PickupWalkRight", false, true, false
 local player = { ControlsEnabled = true, MoveSpeed = 1, Size = 10, ControllerIndex = 2 }
@@ -549,3 +552,41 @@ assert(forgotten.predictMovement(player), "Tainted soul lost local walking predi
 kind = types.PLAYER_THEFORGOTTEN
 assert(forgotten.predictMovement(player), "Ordinary Forgotten lost local walking prediction")
 print("PASS flying walls, flyable grids, tainted body authority, dungeon and form transitions")
+
+-- A narrow obstacle lies between the start and the high-speed endpoint.
+-- Radius-aware swept movement must stop before its near edge and slide.
+kind, roomType = types.PLAYER_ISAAC, 1
+player.CanFly, player.MoveSpeed = false, 50
+room.GetGridCollisionAtPos = function(_, position)
+    return position.X >= 120 and position.X < 160 and collision.COLLISION_WALL
+        or collision.COLLISION_NONE
+end
+localState.target, localState.display = Vector(100, 100), Vector(100, 100)
+localState.prediction = prediction.new(localState.target)
+localMotion.reset()
+for s = 0, 10 do
+    assert(localRender(s) <= 110, "High-speed prediction crossed a grid or ignored body radius")
+end
+player.GetMovementInput = function()
+    return Vector(0.6, 0.8)
+end
+for s = 11, 20 do
+    localRender(s)
+    assert(player.Position.X <= 110, "Diagonal slide entered a blocked grid")
+end
+assert(player.Position.Y > 110, "Collision prevented sliding along the wall")
+localState.prediction:confirm(Vector(200, 100), 20, Vector(0, 0), 300)
+localRender(21)
+assert(player.Position.X >= 200, "Authoritative teleport was swept through the old obstacle")
+print("PASS high-speed swept collision, body radius and diagonal wall sliding")
+-- Receipt jitter must not restart a remote projectile's simulation clock.
+motion.reset(true)
+state, pause = {}, 0
+motion.observe(1000, 20.045)
+accept(20.045, 1, 0, 100)
+close(render(20.045), 4.5, "Network travel time omitted from presentation")
+motion.observe(1033, 20.095)
+accept(20.095, 2, 3.3, 100)
+close(render(20.095), 9.5, "Receipt jitter changed the authority timeline")
+close(render(20.3), 13.3, "Old views extrapolated past the bounded horizon")
+print("PASS shared capture clock and bounded projectile extrapolation")

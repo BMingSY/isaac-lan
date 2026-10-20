@@ -1,4 +1,4 @@
-"""Measure same-machine TCP view freshness from the weak-network fixture."""
+"""Measure same-machine view freshness from the weak-network fixture."""
 
 import math
 import re
@@ -48,18 +48,20 @@ def time_weighted_age(intervals):
 
 def analyze_delivery(host_log, client_log, *, minimum_samples=100):
     sources = {}
-    for tick, timestamp in re.findall(r"WEAK_TCP VIEW tick=(\d+) ms=([\d.]+)", host_log):
+    for tick, timestamp in re.findall(r"WEAK_(?:TCP|NET) VIEW tick=(\d+) ms=([\d.]+)", host_log):
         tick, timestamp = int(tick), float(timestamp)
         if tick in sources and sources[tick] != timestamp:
             raise ValueError("Conflicting source timestamps for one view")
         sources[tick] = timestamp
     applied = [
         (int(tick), float(timestamp))
-        for tick, timestamp in re.findall(r"WEAK_TCP APPLY tick=(\d+) ms=([\d.]+)", client_log)
+        for tick, timestamp in re.findall(
+            r"WEAK_(?:TCP|NET) APPLY tick=(\d+) ms=([\d.]+)", client_log
+        )
     ]
     applied = [(tick, timestamp) for tick, timestamp in applied if tick >= 60]
     if len(applied) < minimum_samples:
-        raise ValueError("Incomplete TCP delivery evidence")
+        raise ValueError("Incomplete delivery evidence")
     if any(b[0] <= a[0] or b[1] <= a[1] for a, b in zip(applied, applied[1:])):
         raise ValueError("Non-monotonic applied state evidence")
     if any(tick not in sources for tick, _ in applied):

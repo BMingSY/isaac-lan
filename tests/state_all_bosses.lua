@@ -363,12 +363,13 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         assert(tick - at < 6000, "Boss encounter stalled: " .. case.key .. " phase=" .. phase)
     end, function(slot, tick)
-        return string.pack(">s4", collect(slot, tick))
-            .. _IsaacLanState.encode({ caseIndex, phase, finished })
-    end, function(bytes, tick, ack, betweenUpdates)
+        local bytes, stable = collect(slot, tick)
+        return string.pack(">s4", bytes) .. _IsaacLanState.encode({ caseIndex, phase, finished }),
+            stable
+    end, function(bytes, tick, ack, betweenUpdates, stable)
         local body, offset = string.unpack(">s4", bytes)
         local meta = _IsaacLanState.decode(bytes:sub(offset))
-        if restore(body, tick, ack, betweenUpdates) == false then
+        if restore(body, tick, ack, betweenUpdates, stable) == false then
             return false
         end
         views = views + 1
@@ -388,7 +389,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     observe(entity, case)
                     entities[entity:GetData().__isaac_lan_replica or -1] = entity
                 end
-                for _, entity in ipairs(_IsaacLanState.decode(body)[11][3]) do
+                for _, entity in ipairs(_IsaacLanState.decode(body, stable)[11][3]) do
                     if entity[2] == case.entity then
                         local actual = assert(entities[entity[1]], "Boss replica is missing")
                         assert(

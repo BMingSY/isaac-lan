@@ -606,12 +606,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             advance(t)
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
             snapshots = snapshots + 1
-            local value = _IsaacLanState.decode(bytes)
+            local value = _IsaacLanState.decode(bytes, stable)
             local epoch = tonumber(read("used-" .. current .. ".txt"))
             if epoch and value[14] > epoch then
                 local level = Game():GetLevel()
