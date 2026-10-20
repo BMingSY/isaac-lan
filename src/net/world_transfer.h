@@ -69,6 +69,9 @@ class WorldTransfer {
     void publish(WorldState value) {
         pending = std::move(value);
     }
+    bool hasBaseline() const {
+        return baseline.has_value();
+    }
     std::size_t cachedBytes() const {
         std::size_t size = baseline ? baseline->bytes->capacity() : 0;
         if (recovery)

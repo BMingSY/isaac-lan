@@ -278,7 +278,15 @@ struct DatagramConnection {
         // A large reliable recovery may outlive the lossy flight records.
         // Reserve its byte budget until ENet finishes it; publishing another
         // large unreliable copy every expiry would compete with its retries.
-        if (!closingAt && bulk.empty() &&
+        // Removing the last bulk chunk from our deque only means it entered
+        // ENet. Its accounted bytes remain until acknowledged; let that tail
+        // drain before realtime traffic competes for the same path again.
+        if (!closingAt && bulk.empty() && pipe->queued.load() < bulkChunkSize &&
+            // Without an application receipt every view is a full copy.
+            // Bootstrap one reliable candidate and wait for its receipt, or
+            // retry after the recovery interval if it crossed a generation fence.
+            (world.hasBaseline() || (recoveryComplete->load() &&
+                                     Clock::now() - recoveryAt >= WorldTransfer::lostStateAge)) &&
             (recoveryComplete->load() || recoveryBytes < WorldTransfer::maxInFlightBytes)) {
             if (auto state = world.next(worldCodec, pipe->minimumLatency.load())) {
                 // One complete recovery view may be retried on its own channel.
@@ -287,7 +295,7 @@ struct DatagramConnection {
                 // can deliver independently, but share bandwidth and ENet's
                 // reliable window. Stale decodes never replace newer state.
                 const bool recovery = !world.trace.delta && recoveryComplete->load() &&
-                                      Clock::now() - recoveryAt >= std::chrono::milliseconds(500);
+                                      Clock::now() - recoveryAt >= WorldTransfer::lostStateAge;
                 if (recovery) {
                     recoveryComplete->store(false);
                     recoveryAt = Clock::now();
