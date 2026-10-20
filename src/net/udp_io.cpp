@@ -89,7 +89,10 @@ struct DatagramConnection {
     std::size_t recoveryBytes = 0;
     DatagramConnection(ENetPeer* value, std::shared_ptr<ConnectionPipe> connection, bool host)
         : peer(value), pipe(std::move(connection)), authority(host) {
-        enet_peer_timeout(peer, 8, 3000, 10000);
+        // Keep ENet's default retry budget for reliable checkpoints on slow
+        // links. Session input/loading deadlines still own game liveness.
+        enet_peer_timeout(peer, ENET_PEER_TIMEOUT_LIMIT, ENET_PEER_TIMEOUT_MINIMUM,
+                          ENET_PEER_TIMEOUT_MAXIMUM);
         enet_peer_ping_interval(peer, 250);
     }
     ~DatagramConnection() {
