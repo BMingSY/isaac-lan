@@ -14,4 +14,8 @@ inline bool floorFollower(unsigned type, unsigned variant, bool attached) {
     constexpr unsigned effect = 1000, redemption = 185;
     return type == effect && variant == redemption && attached;
 }
+inline bool roomFollower(unsigned type, unsigned variant, bool attached) {
+    constexpr unsigned effect = 1000, spearOfDestiny = 83;
+    return type == effect && variant == spearOfDestiny && attached;
+}
 } // namespace isaac::compat::items

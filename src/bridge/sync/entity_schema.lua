@@ -25,6 +25,7 @@ return function(types)
             "TearFallingAcceleration",
             "HeadFrameDelay",
             "ControlsEnabled",
+            "ControlsCooldown",
         },
         [types.ENTITY_TEAR] = {
             "FallingAcceleration",

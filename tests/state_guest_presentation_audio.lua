@@ -303,7 +303,11 @@ function checkPresentation(t)
     end
     if t >= 650 and (t < 660 or t >= 950 and t < 980 or t >= 1240 and t < 1270) then
         local inBoss = t < 670 and not host or t >= 950 and host
-        local expected = Music.MUSIC_BASEMENT
+        local expected = ({
+            [StageType.STAGETYPE_ORIGINAL] = Music.MUSIC_BASEMENT,
+            [StageType.STAGETYPE_WOTL] = Music.MUSIC_CELLAR,
+            [StageType.STAGETYPE_AFTERBIRTH] = Music.MUSIC_BURNING_BASEMENT,
+        })[Game():GetLevel():GetStageType()]
         local audible = audio()
         local bossOver = false
         if inBoss and Game():GetRoom():IsClear() then

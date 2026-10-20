@@ -36,6 +36,8 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
 
+角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先移除原房间各实体列表中的引用，再调用原生添加入口；对象仍由游戏持有和销毁，不复制效果、不重放道具使用。没有对应持有者的效果及房间独立效果不随角色迁移。
+
 `rooms_with_player` 可以切换到客机的远端角色存储壳；该对象不保证网格尺寸、门或房间描述符已经初始化。房间内容只能在主机权威房间或客机当前可见房间查询，可见性须同时比较房间编号和 dimension。远端角色的库存、属性与位置仍可采集，不能将存储壳视为完整房间。
 
 房间转移请求可以携带目标房间中的落点，与入口门槽分开保存；明确的入口门槽优先。落点随单次请求消费，楼层和会话清理同时丢弃请求。后端读取 J460 Player `+0x20a9` 的联机幽灵标记、连接状态、房间键和坐标，将普通值交给[幽灵随队策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/characters/ghost.h)；返回的队友坐标通过既有到达路径写入，不改变对象分配、释放或门的目的地。
@@ -48,9 +50,19 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 J460 的采样状态位于实体 `+0x45d`，允许 `0`、`1` 与原生未初始化值 `255`；起点／终点位于 `+0x468` 至 `+0x474`，形状值为 `+0x478`、缩放为 `+0x4e0`，采样数量为 `+0x47c`，两个游戏自有向量位于 `+0x480`／`+0x48c`。采样数量及每个路径向量各限制 2048 个点，所有浮点数及平移结果必须有限；完整解析、边界和偏移校验完成后才写入。向量通过现有游戏分配接口调整，所有权和析构仍由游戏管理；可移植校验见 [laser_state.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/laser_state.h)。
 
+## 房间音乐
+
+[`music_state()`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/audio.cpp) 返回当前房间的 13 字节音乐请求：`mode:u8`、`id:u32`、`parameter:f32`、`queued:u32`，均为大端，浮点按 IEEE 754 位模式编码。模式为无请求、Play 或 Crossfade，排队 ID 为零表示无后续曲目。写入仅限客机；拒绝未知模式、超出有符号整数范围的曲目 ID、非有限参数和长度不匹配，完整校验后替换请求。不传递流、资源或游戏对象指针。
+
+J460 音乐管理器位于 `Manager+0x29fbc`，当前／排队 ID 分别为 `+0x30c/+0x310`，音量为 `+0x398`，布局常量归入版本后端。房间作用域借入该房间的两个虚拟 ID；房主在采集和作用域退出前保存原生直接写入的排队 ID，再恢复外层或实际播放 ID。未知房间以空 ID 选择曲目，不借用其他房间的缓存。实际流仍由游戏管理，不复制、释放或在后台房间播放。
+
+客机只由已提交的权威请求选择房间音乐；原生房间初始化不能覆盖该请求。物理队列在作用域外自然完成，既不修改权威缓存，也不把重复快照视为新请求。进入另一房间时直接选择其排队曲目（若有）；同房的新请求保留原生过渡。
+
 ## 转场与暂停
 
 Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；普通 `Game::StartRoomTransition` 同时选路并启动转场，不能直接作为客机结果回放接口。
+
+镜子过门调用 `Game::StartRoomTransition` 时，目标已从 `ROOM_MIRROR_IDX` 解析为实际描述符索引和维度；识别依据是 `RoomTransitionAnim.FADE_MIRROR`（18）。[镜像路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/mirror.h)仅对有效门槽位保留原门作为目标入口；屏幕反射不改变世界空间的门槽位。普通过门继续按相邻描述符选择入口。
 
 [`room_routing`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_routing.h) 在 `Level::ChangeRoom` 的 RVA `0x3404ec` 同步提供最终房间索引、维度、入口及原生改送标志（当前原生栈帧 `EBP+0xb`）。改送标志也覆盖同一大房间的不同子格，不能仅通过标准房间索引是否改变推断。此处原生混乱诅咒的临时容器已析构，目的房间尚未初始化。调用方先选择或创建真实目标、迁移进入者并切换房间作用域；返回 `true` 继续原生初始化，返回 `false` 经 RVA `0x340814` 的原生公共尾部返回，再由联机运行组件执行已加载房间的进入效果。拦截保存通用寄存器、标志与 XMM0–7；公共尾部恢复原生 SEH 栈并清理两个栈参数。回调只在当前主线程调用中借用，错误在原生栈退出后重新抛出，不跨原生帧展开 C++ 异常。
 
@@ -153,6 +165,6 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；绘制时借入本机状态并完整恢复全局标量 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 28、网络消息版本为 37；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 29、网络消息版本为 38；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。

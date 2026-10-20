@@ -8,6 +8,18 @@ local copied, copySucceeds = {}, true
 local restartChord, emoteEnabled, modal = false, false, false
 local acceptedInputs, confirmInput = 0, false
 local screenWidth, screenHeight = 640, 360
+local mirror = false
+function Game()
+    return {
+        GetRoom = function()
+            return {
+                IsMirrorWorld = function()
+                    return mirror
+                end,
+            }
+        end,
+    }
+end
 function Vector(x, y)
     return { X = x, Y = y }
 end
@@ -74,6 +86,7 @@ local function create(image, opacity, options, messages, service)
         end
     end
     local ui = factory({
+        game = Game,
         native = {
             chat_style = {
                 opacity = opacity or 70,
@@ -427,6 +440,21 @@ assert(
     #diceRows == 2 and colorKey(diceRows[2]) == colorKey(drawn("1P：发言1")),
     "Dice history lost its owner color"
 )
+for _, reflected in ipairs({ false, true, false }) do
+    mirror, draws = reflected, {}
+    local bubbleUI = create(nil, nil, nil, {
+        { kind = "team", owner = 0, text = "镜子", time = 0, bubble = true },
+    })
+    bubbleUI.input.open = false
+    bubbleUI.render({ phase = 3, prepared = true, slot = 0, connected = 1 })
+    local bubbleX
+    for _, draw in ipairs(draws) do
+        if draw.path == "gfx/OnlineEmotes.anm2" then
+            bubbleX = draw.position.X
+        end
+    end
+    assert(bubbleX == (reflected and 500 or 140), "Chat bubble detached from its mirrored actor")
+end
 sceneReady, texts = false, {}
 ui = create("custom.anm2", 70, nil, messages)
 ui.render({ phase = 2 })

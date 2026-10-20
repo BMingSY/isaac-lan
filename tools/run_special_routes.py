@@ -32,6 +32,8 @@ def main():
     parser.add_argument("--build", type=Path, default=ROOT / "build-win32")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--mod", type=Path, action="append", default=[])
+    parser.add_argument("--host-mod", type=Path, action="append", default=[])
+    parser.add_argument("--client-mod", type=Path, action="append", default=[])
     parser.add_argument("--case", choices=CASES + DIAGNOSTICS, action="append")
     parser.add_argument(
         "--first-floor",
@@ -169,8 +171,9 @@ def main():
         command += ["--native-record-both", "--frame-ms", str(args.frame_ms)]
     elif args.record_client:
         command += ["--native-record-view", "1", "--frame-ms", str(args.frame_ms)]
-    for mod in args.mod:
-        command += ["--mod", str(mod.resolve())]
+    for option in ("mod", "host_mod", "client_mod"):
+        for mod in getattr(args, option):
+            command += ["--" + option.replace("_", "-"), str(mod.resolve())]
     report = {"passed": False, "restored": False, "cases": {}, "command": command}
     try:
         if any(

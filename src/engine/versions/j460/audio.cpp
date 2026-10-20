@@ -11,9 +11,12 @@
 #include <map>
 #include <optional>
 #include <cmath>
+#include <climits>
 
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/layout.h"
 namespace j460 = isaac::engine::j460;
+namespace musicLayout = j460::layout::music;
 
 namespace isaac::audio {
 namespace {
@@ -41,6 +44,7 @@ struct MusicState {
     unsigned mode = 0;
     int id = 0;
     float parameter = 0;
+    unsigned queued = 0;
     bool operator==(const MusicState&) const = default;
 };
 std::map<Key, MusicState> music;
@@ -53,17 +57,33 @@ unsigned playedSounds = 0, filteredSounds = 0;
 unsigned playedMusic = 0, fadedMusic = 0;
 int lastSoundID = 0;
 std::map<int, unsigned> playedSoundIDs;
+void captureQueuedMusic(std::uintptr_t manager) {
+    if (runtime::replica())
+        return;
+    const auto found = music.find(roomKey());
+    if (found != music.end() &&
+        at<unsigned>(manager, musicLayout::currentId) == static_cast<unsigned>(found->second.id))
+        found->second.queued = at<unsigned>(manager, musicLayout::queuedId);
+}
 void musicCall(void* manager, int id, float parameter, unsigned mode, MusicCall original) {
     const auto audience = rooms::soundAudience();
     if (audience) {
         if (runtime::replica() && !audible(audience, runtime::localViewSlot()))
             return;
+        if (runtime::replica()) {
+            // Room initialization cannot replace the authoritative selection.
+            // Physical queue completion runs outside room scopes; let it play,
+            // without turning a repeated snapshot into a fresh jingle request.
+            if (!scopeDepth)
+                original(manager, id, parameter);
+            return;
+        }
         music[roomKey()] = {mode, id, parameter};
         if (scopeDepth) {
             // Native room music selection reads these IDs directly. Give it
             // its own request, without making a background room audible.
-            at<unsigned>(reinterpret_cast<std::uintptr_t>(manager), 0x30c) = id;
-            at<unsigned>(reinterpret_cast<std::uintptr_t>(manager), 0x310) = 0;
+            at<unsigned>(reinterpret_cast<std::uintptr_t>(manager), musicLayout::currentId) = id;
+            at<unsigned>(reinterpret_cast<std::uintptr_t>(manager), musicLayout::queuedId) = 0;
             return;
         }
         if (!audible(audience, runtime::localViewSlot()))
@@ -112,24 +132,29 @@ void ensureRoomMusic() {
     // A later room can also request the already selected track and skip Play.
     // Evaluate that room once with empty virtual IDs, without changing the
     // physical channels. Its native selector supplies the correct room track.
-    const auto manager = at<std::uintptr_t>(image, j460::globals::manager) + 0x29fbc;
-    const auto previous = std::array{at<unsigned>(manager, 0x30c), at<unsigned>(manager, 0x310)};
-    at<unsigned>(manager, 0x30c) = at<unsigned>(manager, 0x310) = 0;
+    const auto manager =
+        at<std::uintptr_t>(image, j460::globals::manager) + j460::layout::manager::music;
+    const auto previous = std::array{at<unsigned>(manager, musicLayout::currentId),
+                                     at<unsigned>(manager, musicLayout::queuedId)};
+    at<unsigned>(manager, musicLayout::currentId) = at<unsigned>(manager, musicLayout::queuedId) =
+        0;
     const auto g = at<std::uintptr_t>(image, j460::globals::game);
     using RoomMusic = void(__attribute__((thiscall))*)(void*);
     reinterpret_cast<RoomMusic>(image + j460::entry::roomUpdateMusic)(
         reinterpret_cast<void*>(at<std::uintptr_t>(g, 0x18300)));
     if (!music.contains(roomKey()))
         music[roomKey()] = {0, 0, 0};
-    at<unsigned>(manager, 0x30c) = previous[0];
-    at<unsigned>(manager, 0x310) = previous[1];
+    captureQueuedMusic(manager);
+    at<unsigned>(manager, musicLayout::currentId) = previous[0];
+    at<unsigned>(manager, musicLayout::queuedId) = previous[1];
 }
 int status(lua_State* L) {
-    const auto manager = at<std::uintptr_t>(image, j460::globals::manager) + 0x29fbc;
+    const auto manager =
+        at<std::uintptr_t>(image, j460::globals::manager) + j460::layout::manager::music;
     lan::Writer w(lan::Message::world);
-    for (auto value :
-         {scopeDepth ? audibleIDs[0] : at<unsigned>(manager, 0x30c), at<unsigned>(manager, 0x30c),
-          playedSounds, filteredSounds, static_cast<unsigned>(lastSoundID)})
+    for (auto value : {scopeDepth ? audibleIDs[0] : at<unsigned>(manager, musicLayout::currentId),
+                       at<unsigned>(manager, musicLayout::currentId), playedSounds, filteredSounds,
+                       static_cast<unsigned>(lastSoundID)})
         w.u32(value);
     if (lua.getTop(L)) {
         const auto id = static_cast<int>(lua.checkInteger(L, 1));
@@ -146,12 +171,16 @@ int musicState(lua_State* L) {
         const auto key = roomKey();
         if (lua.getTop(L) == 0) {
             ensureRoomMusic();
+            if (scopeDepth)
+                captureQueuedMusic(at<std::uintptr_t>(image, j460::globals::manager) +
+                                   j460::layout::manager::music);
             const auto found = music.find(key);
             const auto value = found == music.end() ? MusicState{} : found->second;
             lan::Writer w(lan::Message::world);
             w.u8(value.mode);
             w.u32(value.id);
             w.u32(std::bit_cast<unsigned>(value.parameter));
+            w.u32(value.queued);
             lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
                             w.bytes.size() - 1);
             return 1;
@@ -165,8 +194,10 @@ int musicState(lua_State* L) {
         value.mode = r.u8();
         value.id = r.u32();
         value.parameter = std::bit_cast<float>(r.u32());
+        value.queued = r.u32();
         r.finish();
-        if (value.mode > 2 || value.id < 0 || !std::isfinite(value.parameter))
+        if (value.mode > 2 || value.id < 0 || value.queued > INT_MAX ||
+            !std::isfinite(value.parameter))
             throw std::runtime_error("Invalid room music");
         music[key] = value;
         lua.pushBoolean(L, true);
@@ -247,22 +278,29 @@ void reset() {
 RoomScope::RoomScope() {
     if (!image)
         return;
-    manager = at<std::uintptr_t>(image, j460::globals::manager) + 0x29fbc;
-    previous = {at<unsigned>(manager, 0x30c), at<unsigned>(manager, 0x310)};
+    manager = at<std::uintptr_t>(image, j460::globals::manager) + j460::layout::manager::music;
+    previous = {at<unsigned>(manager, musicLayout::currentId),
+                at<unsigned>(manager, musicLayout::queuedId)};
     if (!scopeDepth)
         audibleIDs = previous;
     if (const auto found = music.find(roomKey()); found != music.end() && found->second.mode) {
-        at<unsigned>(manager, 0x30c) = found->second.id;
-        at<unsigned>(manager, 0x310) = 0;
+        at<unsigned>(manager, musicLayout::currentId) = found->second.id;
+        at<unsigned>(manager, musicLayout::queuedId) = found->second.queued;
+    } else {
+        at<unsigned>(manager, musicLayout::currentId) =
+            at<unsigned>(manager, musicLayout::queuedId) = 0;
     }
     ++scopeDepth;
 }
 RoomScope::~RoomScope() {
     if (!manager)
         return;
+    // Queue() and native room transitions write the next track directly,
+    // bypassing Play/Crossfade. Preserve it before restoring another room.
+    captureQueuedMusic(manager);
     const auto ids = scopeDepth == 1 ? audibleIDs : previous;
-    at<unsigned>(manager, 0x30c) = ids[0];
-    at<unsigned>(manager, 0x310) = ids[1];
+    at<unsigned>(manager, musicLayout::currentId) = ids[0];
+    at<unsigned>(manager, musicLayout::queuedId) = ids[1];
     --scopeDepth;
 }
 void present() {
@@ -273,32 +311,46 @@ void present() {
     const auto next = std::pair{key, found->second};
     if (played == next)
         return;
-    const auto manager = at<std::uintptr_t>(image, j460::globals::manager) + 0x29fbc;
+    const auto manager =
+        at<std::uintptr_t>(image, j460::globals::manager) + j460::layout::manager::music;
     const auto& m = found->second;
-    const std::array virtualIDs = {at<unsigned>(manager, 0x30c), at<unsigned>(manager, 0x310)};
+    const std::array virtualIDs = {at<unsigned>(manager, musicLayout::currentId),
+                                   at<unsigned>(manager, musicLayout::queuedId)};
     const auto channels = scopeDepth ? audibleIDs : virtualIDs;
-    if (played && continueRoomTrack(played->first, key, m.id, channels)) {
+    if (played &&
+        continueRoomTrack(played->first, key, {static_cast<unsigned>(m.id), m.queued}, channels)) {
+        played = next;
+        return;
+    }
+    if (played && played->first == key &&
+        completedQueuedTrack({static_cast<unsigned>(played->second.id), played->second.queued},
+                             {static_cast<unsigned>(m.id), m.queued}, channels)) {
         played = next;
         return;
     }
     if (scopeDepth) {
-        at<unsigned>(manager, 0x30c) = audibleIDs[0];
-        at<unsigned>(manager, 0x310) = audibleIDs[1];
+        at<unsigned>(manager, musicLayout::currentId) = audibleIDs[0];
+        at<unsigned>(manager, musicLayout::queuedId) = audibleIDs[1];
     }
     // Entering another room must not wait for the preceding room's queued
     // jingle/crossfade. Changes within one room retain native fading.
-    if (!played || played->first != key) {
+    const bool entering = !played || played->first != key;
+    if (entering) {
         ++playedMusic;
-        originalMusicPlay(reinterpret_cast<void*>(manager), m.id, at<float>(manager, 0x398));
+        originalMusicPlay(reinterpret_cast<void*>(manager),
+                          roomEntryTrack({static_cast<unsigned>(m.id), m.queued}),
+                          at<float>(manager, musicLayout::volume));
     } else {
         (m.mode == 1 ? playedMusic : fadedMusic)++;
         (m.mode == 1 ? originalMusicPlay : originalMusicFade)(reinterpret_cast<void*>(manager),
                                                               m.id, m.parameter);
     }
+    at<unsigned>(manager, musicLayout::queuedId) = entering ? 0 : m.queued;
     if (scopeDepth) {
-        audibleIDs = {at<unsigned>(manager, 0x30c), at<unsigned>(manager, 0x310)};
-        at<unsigned>(manager, 0x30c) = virtualIDs[0];
-        at<unsigned>(manager, 0x310) = virtualIDs[1];
+        audibleIDs = {at<unsigned>(manager, musicLayout::currentId),
+                      at<unsigned>(manager, musicLayout::queuedId)};
+        at<unsigned>(manager, musicLayout::currentId) = virtualIDs[0];
+        at<unsigned>(manager, musicLayout::queuedId) = virtualIDs[1];
     }
     played = next;
 }

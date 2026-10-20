@@ -22,6 +22,7 @@ inline constexpr unsigned progress = 0x14;
 inline constexpr unsigned saveState = 0xfa4;
 inline constexpr unsigned continueAvailable = 0x20dcc;
 inline constexpr unsigned cinematicActive = 0x21618;
+inline constexpr unsigned music = 0x29fbc;
 inline constexpr unsigned stringTable = 0x4a920;
 inline constexpr unsigned continueRequested = 0x4b131;
 inline constexpr unsigned deleteSaveRequested = 0x4b284;
@@ -32,6 +33,11 @@ inline constexpr unsigned chatFont = 0x4ae74;
 inline constexpr unsigned pendingEmote = 0x4ccac;
 inline constexpr unsigned menuInputBlock = 0x4d074;
 } // namespace manager
+namespace music {
+inline constexpr unsigned currentId = 0x30c;
+inline constexpr unsigned queuedId = 0x310;
+inline constexpr unsigned volume = 0x398;
+} // namespace music
 namespace progress {
 inline constexpr unsigned achievements = 0x38;
 inline constexpr unsigned counters = 0x2bc;
