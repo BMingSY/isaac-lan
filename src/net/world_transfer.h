@@ -21,6 +21,7 @@ class WorldTransfer {
         std::size_t wireBytes = 0;
         bool complete = false;
         Clock::time_point started = Clock::now();
+        std::uint32_t revision = 0;
     };
     struct Totals {
         std::uint64_t snapshots = 0, deltas = 0, raw = 0, wire = 0, full = 0;
@@ -73,6 +74,9 @@ class WorldTransfer {
     }
     bool hasBaseline() const {
         return baseline.has_value();
+    }
+    std::uint32_t acknowledgedRevision() const {
+        return baseline ? baseline->revision : 0;
     }
     std::size_t cachedBytes() const {
         std::size_t size = baseline ? baseline->bytes->capacity() : 0;
@@ -220,6 +224,7 @@ class WorldTransfer {
             sending->bytes = std::move(full);
             sendEpoch = sending->epoch;
             flight.push_back({sending->tick, std::move(raw), sending->bytes.size()});
+            flight.back().revision = sending->revision;
             compressMs = std::chrono::duration<double, std::milli>(Clock::now() - began).count();
         }
         if (!sending)

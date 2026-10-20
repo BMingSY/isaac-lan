@@ -9,7 +9,7 @@ import subprocess
 import time
 
 from testing.gameplay import build
-from check_input_response import measure as response_measure
+from testing.input_response import measure as response_measure
 from check_local_movement import measure as movement_measure
 from check_state_motion import measure as motion_measure
 from check_mirror_camera import check as camera_measure

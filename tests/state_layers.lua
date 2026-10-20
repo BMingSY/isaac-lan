@@ -8,6 +8,8 @@ for _, workload in ipairs(workloads) do
     local view = schema.unpack(codec.decode(codec.encode(workload.value)), 42)
     -- Workload actors predate the specialized state fields.
     for _, actor in ipairs(view.actors) do
+        actor[fields.actor.inventory][fields.inventory.resources] = { 0, 0, 0, 0, 0, 0, 0 }
+        actor[fields.actor.inventory][fields.inventory.trinkets] = {}
         actor[fields.actor.poop] = false
         actor[fields.actor.craftingBag] = { "bag", false }
         actor[fields.actor.temporaryEffects] = { 0, 1, 2 }
@@ -21,8 +23,18 @@ for _, workload in ipairs(workloads) do
     assert(codec.encode(schema.pack(restored)) == complete, "Split changed authoritative fields")
     view.tick, view.frame = 43, 86
     view.actors[1][fields.actor.entity][fields.entity.position] = { 100, 200 }
+    local actor = view.actors[1]
+    actor[fields.actor.inventory][fields.inventory.active] = { { 33, 6 } }
+    actor[fields.actor.inventory][fields.inventory.resources] = { 99, 10, 1, 0, 0, 0, 0 }
+    actor[fields.actor.inventory][fields.inventory.hearts] = { 0, 6, 0, 6, 0, 0, 0, 8, 0 }
+    actor[fields.actor.temporaryEffects] = { 1, 2, 3 }
+    actor[fields.actor.poop] = { 1, 2 }
+    actor[fields.actor.craftingBag] = { "changed", false }
     local _, same = layers.split(view)
-    assert(codec.encode(same) == stableBytes, "Movement changed the reliable dependency")
+    assert(
+        codec.encode(same) == stableBytes,
+        "Dynamic player state changed the reliable dependency"
+    )
     view.actors[1][fields.actor.inventory][fields.inventory.items] = { { 25, 2 } }
     local _, changed = layers.split(view)
     assert(codec.encode(changed) ~= stableBytes, "Inventory change lost its revision")

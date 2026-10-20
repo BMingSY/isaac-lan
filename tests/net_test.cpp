@@ -253,12 +253,20 @@ void udpLossRecoveryImpl(bool large) {
     const unsigned changingBytes = large ? 88000 : 2600;
     for (auto& byte : data)
         byte = static_cast<std::uint8_t>(random());
+    const auto dependency = [&](unsigned tick) {
+        std::vector<std::uint8_t> bytes(data.begin(), data.begin() + 4000);
+        // Adjacent revisions while the previous reliable packet is in flight.
+        bytes[0] = static_cast<std::uint8_t>(tick / 30);
+        bytes[1] = static_cast<std::uint8_t>(tick % 30 == 0);
+        return bytes;
+    };
     if (large) {
         // Establish the shared baseline before the busy room starts changing
         // ~88 KiB per update. The smaller fixture also covers lossy bootstrap.
         WorldState initial;
         initial.connected = 3;
         initial.bytes = data;
+        initial.stable = dependency(0);
         require(g.peers[0]->publish(1, initial), "Large baseline rejected");
         bool applied = false;
         until([&] {
@@ -280,6 +288,8 @@ void udpLossRecoveryImpl(bool large) {
             require(arrived->tick > lastTick && arrived->bytes.size() == data.size() &&
                         arrived->bytes[0] == (arrived->tick & 255),
                     "UDP duplicate/reordering regressed or corrupted a snapshot");
+            require(arrived->stable == dependency(arrived->tick),
+                    "Lost/reordered dependency changed an authoritative view");
             for (unsigned i = 1; i < data.size(); ++i)
                 require(arrived->bytes[i] ==
                             (data[i] ^ (arrived->tick > 60 && i < changingBytes
@@ -300,6 +310,7 @@ void udpLossRecoveryImpl(bool large) {
         state.connected = 3;
         state.inputSequences = g.peers[0]->inputSequences();
         state.bytes = data;
+        state.stable = dependency(sequence);
         // A busy room changes enough data to fragment even prefix-compressed
         // frames. Exercise transitions between small and multi-datagram views.
         if (sequence > 60)

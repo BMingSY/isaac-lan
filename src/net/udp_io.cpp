@@ -82,8 +82,10 @@ struct DatagramConnection {
     std::deque<std::vector<std::uint8_t>> outgoingShards;
     std::size_t outgoingShardBytes = 0;
     std::optional<WorldState> publication;
-    std::vector<std::uint8_t> sentDependency;
-    std::uint32_t dependencyRevision = 0;
+    std::vector<std::uint8_t> currentDependency, sentDependency, receivedDependency;
+    std::uint32_t dependencyRevision = 0, sentDependencyRevision = 0,
+                  receivedDependencyRevision = 0;
+    std::size_t dependencyBytes = 0;
     std::uint64_t dependencyRaw = 0, dependencyWire = 0, dependencyFull = 0, redundancyWire = 0;
     std::shared_ptr<std::atomic<bool>> dependencyComplete =
         std::make_shared<std::atomic<bool>>(true);
@@ -167,8 +169,10 @@ struct DatagramConnection {
         latestReceipt.reset();
         outgoingShards.clear();
         outgoingShardBytes = 0;
+        currentDependency.clear();
         sentDependency.clear();
-        dependencyRevision = 0;
+        dependencyRevision = sentDependencyRevision = 0;
+        dependencyBytes = 0;
         dependencyComplete = std::make_shared<std::atomic<bool>>(true);
         if (authority) {
             ++fence;
@@ -187,6 +191,8 @@ struct DatagramConnection {
             fence = context;
             world.resetReceiver();
             dependencies.reset();
+            receivedDependency.clear();
+            receivedDependencyRevision = 0;
             shards.reset();
             latestReceipt.reset();
             return;
@@ -226,8 +232,13 @@ struct DatagramConnection {
             const auto revision = r.u32();
             const auto bytes = r.blob(maxWorldSize + StateCompression::headerSize);
             r.finish();
-            incoming.world = dependencies.receive(
-                revision, worldCodec.expand(bytes, dependencies.latestBytes()));
+            if (revision <= receivedDependencyRevision)
+                throw std::runtime_error("Invalid reliable dependency revision");
+            // The reliable prefix chain is independent of inline copies that
+            // can overtake it. Coalescing may skip intermediate revisions.
+            receivedDependency = worldCodec.expand(bytes, receivedDependency);
+            receivedDependencyRevision = revision;
+            incoming.world = dependencies.receive(revision, receivedDependency);
         } else if (kind == Envelope::message) {
             auto bytes = decodeWire(packet.subspan(5), codec);
             const auto type = static_cast<Message>(bytes.at(0));
@@ -249,7 +260,8 @@ struct DatagramConnection {
     }
     void observe() {
         pipe->world.cached.store(world.cachedBytes() + dependencies.cachedBytes() +
-                                 sentDependency.capacity() + shards.buffered());
+                                 currentDependency.capacity() + sentDependency.capacity() +
+                                 receivedDependency.capacity() + shards.buffered());
         pipe->world.flightBytes.store(world.inFlightBytes());
         pipe->world.flightStates.store(world.inFlightStates());
         pipe->world.worldBytes.store(world.worldBytes() + outgoingShardBytes);
@@ -319,35 +331,40 @@ struct DatagramConnection {
             if (latest->generation == generation)
                 publication = std::move(latest->value);
         }
-        if (!closingAt && publication && bulk.empty() &&
-            (publication->stable.empty() || publication->stable == sentDependency ||
-             dependencyComplete->load())) {
+        if (!closingAt && publication && bulk.empty()) {
             auto& value = *publication;
-            if (!value.stable.empty() && value.stable != sentDependency) {
-                if (++dependencyRevision == 0)
-                    throw std::runtime_error("World dependency revision exhausted");
-                Writer dependency(Message::world);
-                dependency.u32(dependencyRevision);
-                dependencyFull += worldCodec.compress(value.stable).size();
-                dependency.blob(worldCodec.compress(value.stable, sentDependency));
-                sentDependency = std::move(value.stable);
-                value.stable.clear();
-                dependencyRaw += sentDependency.size();
-                dependencyWire += dependency.bytes.size() - 1;
-                const auto accounted = dependency.bytes.size() + 1;
-                pipe->queued.fetch_add(accounted);
-                dependencyComplete->store(false);
-                // Same reliable channel as the fence: a dependency cannot be
-                // acknowledged and then discarded for overtaking its generation.
-                send(std::span(dependency.bytes).subspan(1), reliableChannel, Envelope::dependency,
-                     accounted, dependencyComplete);
+            if (!value.stable.empty()) {
+                if (value.stable != currentDependency) {
+                    if (++dependencyRevision == 0)
+                        throw std::runtime_error("World dependency revision exhausted");
+                    currentDependency = value.stable;
+                }
                 value.revision = dependencyRevision;
-            } else if (!value.stable.empty()) {
-                value.stable.clear();
-                value.revision = dependencyRevision;
+                // Bootstrap once through reliable delivery. Thereafter each
+                // unacknowledged revision is self-contained in newer views;
+                // loss of the ordered copy cannot freeze realtime state.
+                if (!world.hasBaseline() || world.acknowledgedRevision() == dependencyRevision)
+                    value.stable.clear();
             }
             world.publish(std::move(value));
             publication.reset();
+        }
+        if (!closingAt && bulk.empty() && dependencyComplete->load() &&
+            sentDependencyRevision != dependencyRevision) {
+            Writer dependency(Message::world);
+            dependency.u32(dependencyRevision);
+            dependencyFull += worldCodec.compress(currentDependency).size();
+            dependency.blob(worldCodec.compress(currentDependency, sentDependency));
+            sentDependency = currentDependency;
+            sentDependencyRevision = dependencyRevision;
+            dependencyRaw += sentDependency.size();
+            dependencyWire += dependency.bytes.size() - 1;
+            dependencyBytes = dependency.bytes.size() + 1;
+            pipe->queued.fetch_add(dependencyBytes);
+            dependencyComplete->store(false);
+            // Same reliable channel as the fence; at most one pending copy.
+            send(std::span(dependency.bytes).subspan(1), reliableChannel, Envelope::dependency,
+                 dependencyBytes, dependencyComplete);
         }
         for (unsigned part = 0;
              !closingAt && !bulk.empty() && part < 8 && pipe->queued.load() < 16384; ++part) {
@@ -375,8 +392,10 @@ struct DatagramConnection {
         // Removing the last bulk chunk from our deque only means it entered
         // ENet. Its accounted bytes remain until acknowledged; let that tail
         // drain before realtime traffic competes for the same path again.
+        const auto queued = pipe->queued.load();
+        const auto dependencyQueued = dependencyComplete->load() ? 0 : dependencyBytes;
         if (!closingAt && bulk.empty() && outgoingShards.empty() &&
-            pipe->queued.load() < bulkChunkSize &&
+            queued - std::min(queued, dependencyQueued) < bulkChunkSize &&
             // Without an application receipt every view is a full copy.
             // Bootstrap one reliable candidate and wait for its receipt, or
             // retry after the recovery interval if it crossed a generation fence.

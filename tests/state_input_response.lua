@@ -1,11 +1,16 @@
 -- Native held bindings and render positions, including unsent input changes.
 local native = assert(_IsaacLan)
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port
+if _IsaacLanTest then
+    host, port = _IsaacLanTest.host, _IsaacLanTest.port
+else
+    local f = assert(io.open("./lan-test-role.txt", "r"))
+    host = f:read("*l") == "host"
+    f:close()
+    f = assert(io.open("./lan-test-menu-port.txt", "r"))
+    port = f:read("*l")
+    f:close()
+end
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end
@@ -27,7 +32,29 @@ _IsaacLanPrediction.new = function(position)
     end
     return model
 end
-local out = not host and assert(io.open("./lan-test-digest-response.csv", "w"))
+local out
+if not host then
+    if io then
+        out = assert(io.open("./lan-test-digest-response.csv", "w"))
+    else
+        -- No filesystem API under --no-luadebug. Buffer until measurement
+        -- finishes so logging does not change the measured render timings.
+        local lines = {}
+        out = {
+            write = function(_, line)
+                assert(#lines < 10000, "Input response sample limit exceeded")
+                lines[#lines + 1] = line:gsub("\n$", "")
+            end,
+            flush = function()
+                for _, line in ipairs(lines) do
+                    report("INPUT_RESPONSE_CSV " .. line)
+                end
+                lines = {}
+            end,
+            close = function() end,
+        }
+    end
+end
 if out then
     out:write(
         "time,frame,tick,capture,sequence,sent_x,sent_y,raw_x,raw_y,preview_x,preview_y,x,y,before_vx,before_vy,after_vx,after_vy\n"
@@ -137,7 +164,7 @@ Isaac.AddCallback(
     { Name = "Isolated native input response observer" },
     ModCallbacks.MC_POST_RENDER,
     function()
-        if host or not _IsaacLanStatus().prepared or not native.rooms_ready() then
+        if finished or host or not _IsaacLanStatus().prepared or not native.rooms_ready() then
             return
         end
         -- ViewScope reads native bindings without consuming press edges.
@@ -179,6 +206,7 @@ return {
         return finished
     end,
     cleanup = function()
+        _IsaacLanPrediction.new = makePrediction
         if out then
             out:close()
             out = nil

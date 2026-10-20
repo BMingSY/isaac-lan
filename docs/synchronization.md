@@ -52,7 +52,7 @@ flowchart LR
 
 采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
 
-[分层投影](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/layers.lua)把库存、便便／合成袋／临时效果、地图、进度、诅咒、交易、药丸、生成道具定义、房间布局／轨道／夹层信息编码为低频依赖；位置、实体、网格、动画及一次性表现留在实时部分。采集仍逐 tick 执行，低频指传输按变化发送，不延后读取权威状态。UDP 依赖使用连续修订号和可靠有序交付，可引用上一份可靠依赖压缩；一次最多有一份未确认依赖，其间的新变化合并为最新候选。实时视图明确引用修订号，客机仅在对应数据齐全时还原完整视图，不能套用最新库存或跨房间拼接。依赖缓存、未完成视图和修订号在代次屏障清理。TCP 把两部分打包后沿用完整／参考帧传输。
+[分层投影](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/layers.lua)把道具列表、饰品、地图、进度、诅咒、交易、药丸、生成道具定义、房间布局／轨道／夹层信息编码为低频依赖；充能、血量、消耗品、便便／合成袋／临时效果、位置、实体、网格、动画及一次性表现留在实时部分。采集仍逐 tick 执行，低频指传输按变化发送，不延后读取权威状态。UDP 依赖使用递增修订号和可靠有序交付，可引用上一份可靠依赖压缩；一次最多有一份未确认的可靠副本，其间的新变化合并为最新候选，允许跳过中间修订。初始视图可靠交付；建立应用确认基线后，尚未被应用确认的新修订同时内嵌于实时视图，避免可靠副本丢包阻塞整帧。内嵌副本可先于可靠副本到达，接收缓存按修订号合并，可靠压缩字典独立维护。实时视图明确引用修订号，客机仅在对应数据齐全时还原完整视图，不能套用最新库存或跨房间拼接。依赖缓存、未完成视图和修订号在代次屏障清理。TCP 把两部分打包后沿用完整／参考帧传输。
 
 世界 schema 为 28，顶层末字段 `captured` 是主机开始本轮采集的单调时钟毫秒数；离线生成的无时钟状态使用 0。采集回调返回实时字节和可选依赖字节，应用回调的第五个参数接收对应依赖。完整状态的诊断采集仍由 `state.capture` 提供；生产传输使用 `state.captureTransfer`。
 

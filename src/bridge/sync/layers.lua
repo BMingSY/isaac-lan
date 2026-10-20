@@ -1,14 +1,10 @@
 -- Split complete views by update frequency. Only this module knows game fields;
 -- the transport carries two opaque byte strings and an exact revision dependency.
 return function(fields)
-    local Actor, Room, Entity = fields.actor, fields.room, fields.entity
+    local Actor, Room, Entity, Inventory =
+        fields.actor, fields.room, fields.entity, fields.inventory
     local shared = { "map", "progress", "curses", "deals", "pills", "glitched" }
-    local actorFields = {
-        Actor.inventory,
-        Actor.poop,
-        Actor.craftingBag,
-        Actor.temporaryEffects,
-    }
+    local inventoryFields = { Inventory.items, Inventory.trinkets }
     local roomFields = { Room.layout, Room.rails, Room.crawlspace }
     local function copy(value)
         local result = {}
@@ -26,8 +22,10 @@ return function(fields)
         for index, actor in ipairs(view.actors) do
             local value = copy(actor)
             local stable = { actor[Actor.index], actor[Actor.entity][Entity.id] }
-            for _, field in ipairs(actorFields) do
-                stable[#stable + 1], value[field] = actor[field], false
+            value[Actor.inventory] = copy(actor[Actor.inventory])
+            for _, field in ipairs(inventoryFields) do
+                stable[#stable + 1], value[Actor.inventory][field] =
+                    actor[Actor.inventory][field], false
             end
             actors[index], realtime.actors[index] = stable, value
         end
@@ -53,14 +51,14 @@ return function(fields)
         for index, actor in ipairs(view.actors) do
             local saved = stable[2][index]
             assert(
-                #saved == #actorFields + 2
+                #saved == #inventoryFields + 2
                     and saved[1] == actor[Actor.index]
                     and saved[2] == actor[Actor.entity][Entity.id],
                 "View actor dependency mismatch"
             )
-            for offset, field in ipairs(actorFields) do
-                assert(actor[field] == false, "Duplicate actor field")
-                actor[field] = saved[offset + 2]
+            for offset, field in ipairs(inventoryFields) do
+                assert(actor[Actor.inventory][field] == false, "Duplicate inventory field")
+                actor[Actor.inventory][field] = saved[offset + 2]
             end
         end
         for index, field in ipairs(roomFields) do
