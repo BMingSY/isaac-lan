@@ -187,26 +187,10 @@ end
 function _IsaacLanChatMessages()
     return chat.messages
 end
+-- Automation entry for lab fixtures; players use /lanbot in the LAN chat.
 function _IsaacLanBotCommand(args)
     Isaac.ConsoleOutput(bot.command(args) .. "\n")
 end
-callback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, args)
-    if command == "lanbot" then
-        _IsaacLanBotCommand(args)
-    elseif command == "feedback" then
-        -- Single-player entry; LAN sessions use the chat command, where /c
-        -- would otherwise run this on the host for another player.
-        local phase = status.phase
-        if phase == Phase.lobby or phase == Phase.running or phase == Phase.waiting then
-            Isaac.ConsoleOutput("联机中请在聊天中使用 /feedback\n")
-        else
-            Isaac.ConsoleOutput(feedback.submit(args, function(message)
-                Isaac.ConsoleOutput(message .. "\n")
-            end) .. "\n")
-        end
-    end
-    -- MC_EXECUTE_CMD must return nil, including for unhandled commands.
-end)
 function _IsaacLanBotFrame(frame)
     bot.step(frame)
 end

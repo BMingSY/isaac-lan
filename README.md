@@ -109,6 +109,6 @@ python3 tools/build_package.py --build build-win32 --output dist/Isaac-LAN-J460
 
 ## 问题与建议
 
-可以在游戏内直接反馈：联机时在聊天中输入 `/feedback 问题描述`，单人游戏时在原版控制台输入 `feedback 问题描述`。扩展会把本次和上一次启动的日志、原版 `log.txt` 与 `config.ini` 上传到作者服务器，成功后显示反馈编号，报告问题时附上编号即可。日志只有作者查看，不会公开，路径中的 Windows 用户名会被替换；上传失败时会提示本地保存的反馈包位置。收集范围见[反馈上传](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)。
+可以在游戏内直接反馈：联机时在聊天中输入 `/feedback 问题描述`。扩展会把本次和上一次启动的日志、原版 `log.txt` 与 `config.ini` 上传到作者服务器，成功后显示反馈编号，报告问题时附上编号即可。日志只有作者查看，不会公开，路径中的 Windows 用户名会被替换；上传失败时会提示本地保存的反馈包位置。收集范围见[反馈上传](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)。
 
 也可以提交到 [Issues](https://github.com/BMingSY/isaac-lan/issues)，写明游戏版本、主客机、复现步骤和使用的其他 Mod；遇到联机异常时可以附上对应启动的完整日志归档。

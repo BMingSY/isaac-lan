@@ -10,7 +10,4 @@ inline std::optional<std::string_view> consoleArguments(std::string_view command
         return {};
     return separator == std::string_view::npos ? std::string_view{} : command.substr(separator + 1);
 }
-inline std::optional<std::string_view> botConsoleArguments(std::string_view command) {
-    return consoleArguments(command, "lanbot");
-}
 } // namespace isaac::input

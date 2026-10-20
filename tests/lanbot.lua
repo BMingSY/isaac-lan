@@ -1841,7 +1841,7 @@ test(
         entities = {}
     end
 )
-test("embedded console entry dispatches lanbot and returns nil", function()
+test("only the LAN chat offers lanbot; the automation entry still drives it", function()
     modules["runtime/challenges"] = dofile(root .. "/src/bridge/runtime/challenges.lua")
     modules["compat/routes/challenge_goal"] =
         dofile(root .. "/src/bridge/compat/routes/challenge_goal.lua")
@@ -1893,13 +1893,13 @@ test("embedded console entry dispatches lanbot and returns nil", function()
     }
     dofile(root .. "/tests/fixtures/app_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
     dofile(root .. "/src/bridge/app/main.lua")
-    assert(callbacks[1](nil, "another_command", "on") == nil and #output == 0)
-    assert(callbacks[1](nil, "lanbot", "on") == nil and output[1]:find("running"))
+    assert(callbacks[ModCallbacks.MC_EXECUTE_CMD] == nil, "Vanilla console entry registered")
+    assert(_IsaacLanBotCommand("on") == nil and output[1]:find("running"))
     _IsaacLanBotFrame(1)
     assert(source.active)
-    callbacks[1](nil, "lanbot", "pause")
+    _IsaacLanBotCommand("pause")
     assert(not source.active and source.mask == 0)
-    callbacks[1](nil, "lanbot", "resume")
+    _IsaacLanBotCommand("resume")
     _IsaacLanBotFrame(2)
     assert(source.active)
     assert(_IsaacLanBotCommand("off") == nil and output[#output]:find("LANBOT off"))

@@ -95,7 +95,7 @@ return function(env, modules)
         end
         local command = words[1] or "help"
         if command == "help" and #words <= 1 then
-            return "LANBOT on | pause | resume | off | status | next\nlanbot mode run|explore|hold\nlanbot style aggressive|balanced|cautious"
+            return "/lanbot on | pause | resume | off | status | next\n/lanbot mode run|explore|hold\n/lanbot style aggressive|balanced|cautious"
         end
         if command == "mode" or command == "style" then
             local allowed = command == "mode" and modes or combat.styles

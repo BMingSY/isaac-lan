@@ -6,7 +6,7 @@
 #include "core/state_codec.h"
 #include "core/menu_input.h"
 #include "core/bootstrap_profile.h"
-#include "core/lanbot_console.h"
+#include "core/console_command.h"
 #include "runtime/progression.h"
 #include "runtime/session_archive.h"
 #include "runtime/pending_archive.h"
@@ -870,20 +870,12 @@ void introBarrier() {
             "Guest-only intro completed controls for an unrelated host");
 }
 void automationInput() {
-    using isaac::input::botConsoleArguments;
     using isaac::input::consoleArguments;
     require(consoleArguments("rewind", "rewind") == std::string_view{} &&
                 consoleArguments("rewind\t ", "rewind") == " " &&
                 !consoleArguments("rewindsomething", "rewind") &&
                 !consoleArguments("lua rewind", "rewind"),
             "Console rewind dispatch confused a prefix or Lua expression with the native command");
-    require(botConsoleArguments("lanbot") == std::string_view{} &&
-                botConsoleArguments("lanbot on") == "on" &&
-                botConsoleArguments("lanbot\tmode hold") == "mode hold",
-            "Native console must forward complete LANBOT arguments, including bare help");
-    require(!botConsoleArguments("lanbotscript on") && !botConsoleArguments("lua lanbot on") &&
-                !botConsoleArguments("spawn 5.100.1") && !botConsoleArguments(""),
-            "Native LANBOT dispatch must preserve other console commands");
     isaac::input::AutomationInput bot;
     InputFrame manual;
     manual.values[0] = 65535;
