@@ -1,4 +1,5 @@
 #include "net/network_io.h"
+#include "net/message_receiver.h"
 #include "net/messages.h"
 #include "net/world_transfer.h"
 #include "net/wire_codec.h"
@@ -211,43 +212,15 @@ struct NetworkIo::Connection {
                         packet.world = world.receive(r, worldCodec);
                         if (packet.world)
                             pipe->samples.push({"decompress", world.expandMs});
-                    } else if (type == Message::snapshot) {
-                        Reader r(std::span<const std::uint8_t>(bytes).subspan(1));
-                        packet.bulk = reliable.snapshot(r);
-                    } else if (type == Message::stage) {
-                        Reader r(std::span<const std::uint8_t>(bytes).subspan(1));
-                        packet.bulk = reliable.floor(r);
-                        if (packet.bulk)
-                            world.resetReceiver();
-                    } else if (type == Message::ping && pipe->answerPing.load()) {
-                        Reader r(std::span<const std::uint8_t>(bytes).subspan(1));
-                        Writer pong(Message::pong);
-                        pong.u32(r.u32());
-                        r.finish();
-                        auto response = frame(std::move(pong.bytes), codec);
-                        pipe->queued.fetch_add(response.size());
-                        sending.append(std::move(response));
-                        again = true;
                     } else {
-                        bool deliver = true;
-                        if (type == Message::applied) {
-                            Reader r(std::span<const std::uint8_t>(bytes).subspan(1));
-                            const auto epoch = r.u32(), tick = r.u32();
-                            r.finish();
-                            deliver = world.acknowledge(epoch, tick);
-                        }
-                        if (type == Message::start || type == Message::restart ||
-                            type == Message::ending || type == Message::returnLobby) {
-                            world.resetReceiver();
-                            reliable.reset();
-                        }
-                        if (type == Message::start || type == Message::restart) {
-                            Reader r(std::span<const std::uint8_t>(bytes).subspan(1));
-                            reliable.begin(readStart(r));
-                            r.finish();
-                        }
-                        if (deliver)
-                            packet.bytes = std::move(bytes);
+                        packet = receiveMessage(std::move(bytes), world, reliable,
+                                                pipe->answerPing.load(), [&](Writer pong) {
+                                                    auto response =
+                                                        frame(std::move(pong.bytes), codec);
+                                                    pipe->queued.fetch_add(response.size());
+                                                    sending.append(std::move(response));
+                                                    again = true;
+                                                });
                     }
                     if (packet.size()) {
                         pipe->incomingBytes.fetch_add(packet.size(), std::memory_order_acq_rel);
@@ -309,7 +282,7 @@ struct NetworkIo::Listener {
             WSACloseEvent(event);
     }
 };
-NetworkIo::NetworkIo() {
+NetworkIo::NetworkIo(Transport mode) : transport(mode) {
     thread = CreateThread(nullptr, 0, run, this, 0, nullptr);
     if (!thread)
         throw std::runtime_error("Cannot start network worker");
@@ -348,6 +321,10 @@ std::shared_ptr<ListenerPipe> NetworkIo::listen(SOCKET socket) {
 }
 DWORD WINAPI NetworkIo::run(void* argument) {
     auto& self = *static_cast<NetworkIo*>(argument);
+    if (self.transport == Transport::udp) {
+        self.runDatagrams();
+        return 0;
+    }
     try {
         std::vector<std::unique_ptr<Connection>> connections;
         std::vector<std::unique_ptr<Listener>> listeners;

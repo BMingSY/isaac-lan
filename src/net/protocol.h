@@ -13,7 +13,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 35;
+constexpr std::uint16_t protocolVersion = 36;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -50,7 +50,8 @@ enum class Message : std::uint8_t {
     communication,
     lifecycle,
     restart,
-    returnLobby
+    returnLobby,
+    inputEdges
 };
 constexpr std::size_t maxIntegrationSize = 2048;
 constexpr std::size_t maxCommunicationSize = 3072;

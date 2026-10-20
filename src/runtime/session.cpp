@@ -223,6 +223,7 @@ std::uint32_t nextInputTick = 0;
 using InputClock = std::chrono::steady_clock;
 InputSchedule inputSchedule;
 unsigned inputHz = 60;
+lan::Transport networkTransport = lan::Transport::udp;
 std::optional<InputClock::time_point> rejoinAt;
 // Survives the native exit tail and failed attempts, until a live view is applied
 // or the player explicitly leaves. Never restart a failed restore in a loop.
@@ -783,9 +784,9 @@ int host(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(logger,
-                                             diagnostics::enabled() ? diagnostics::sample : nullptr,
-                                             logging::enabled(logging::Level::debug));
+    session = std::make_unique<lan::Session>(
+        logger, diagnostics::enabled() ? diagnostics::sample : nullptr,
+        logging::enabled(logging::Level::debug), networkTransport);
     sessionFingerprint = fingerprint;
     lua.pushBoolean(
         L, session->host(static_cast<std::uint16_t>(port), fingerprint, mods, personalAccess()));
@@ -800,9 +801,9 @@ int join(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(logger,
-                                             diagnostics::enabled() ? diagnostics::sample : nullptr,
-                                             logging::enabled(logging::Level::debug));
+    session = std::make_unique<lan::Session>(
+        logger, diagnostics::enabled() ? diagnostics::sample : nullptr,
+        logging::enabled(logging::Level::debug), networkTransport);
     sessionFingerprint = fingerprint;
     try {
         const auto path = archivePath().parent_path() / L"player-id.txt";
@@ -1565,8 +1566,9 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
                                     executeStart, startGame, update, consoleUpdate, consoleCommand,
                                     controls, executeMenu, requestRestart});
 }
-void configureInput(unsigned hz) {
+void configureNetwork(unsigned hz, bool udp) {
     inputHz = hz;
+    networkTransport = udp ? lan::Transport::udp : lan::Transport::tcp;
     inputSchedule = InputSchedule(hz);
 }
 bool halfAllowed() {

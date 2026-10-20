@@ -309,7 +309,7 @@ return function(fields)
             performance.counter("map_rooms", #value.map)
             for _, m in pairs(motion) do
                 if m.actor and m.controller == value.slot + 1 then
-                    m.prediction:confirm(m.target, ack, m.velocity * 60)
+                    m.prediction:confirm(m.target, ack, m.velocity * 60, tick)
                 end
             end
             assert(native.rooms_with_player(value.slot, function()

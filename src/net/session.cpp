@@ -37,6 +37,7 @@ bool validIdentity(const std::string& value) {
 struct Session::Impl {
     Observer observer = nullptr;
     bool debugLogs = false;
+    Transport transport;
     std::shared_ptr<NetworkIo> io;
     std::unique_ptr<BulkWorker> bulk;
     std::shared_ptr<ByteResult<Stage>> encodingStage, decodingStage;
@@ -96,13 +97,14 @@ struct Session::Impl {
     std::uint64_t snapshotChecksum = 0;
     Clock::time_point progress = Clock::now(), checkpointAt = Clock::now();
 
-    explicit Impl(void (*log)(const std::string&), Observer observe = nullptr, bool debug = false)
-        : observer(observe), debugLogs(debug), logger(log) {
+    explicit Impl(void (*log)(const std::string&), Observer observe = nullptr, bool debug = false,
+                  Transport mode = Transport::udp)
+        : observer(observe), debugLogs(debug), transport(mode), logger(log) {
         WSADATA data{};
         winsock = WSAStartup(MAKEWORD(2, 2), &data) == 0;
         if (winsock) {
             try {
-                io = std::make_shared<NetworkIo>();
+                io = std::make_shared<NetworkIo>(transport);
             } catch (...) {
                 WSACleanup();
                 throw;
@@ -184,6 +186,8 @@ struct Session::Impl {
             if (p) {
                 p->ready = p->hasInput = false;
                 p->inputSequence = 0;
+                p->edgeSequence.reset();
+                p->inputEdges.clear();
                 p->acknowledged.reset();
                 p->resetWorldCache(integrationEpoch);
                 p->sendingStage.reset();
@@ -198,6 +202,11 @@ struct Session::Impl {
         peers[0].reset();
         while (nextHostAddress < hostAddresses.size()) {
             const auto& address = hostAddresses[nextHostAddress++];
+            if (transport == Transport::udp) {
+                peers[0] = std::make_unique<Peer>(io, io->connectDatagram(address));
+                connecting = true;
+                return;
+            }
             Socket setup(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
             if (setup.handle == INVALID_SOCKET)
                 throw std::runtime_error("Cannot create LAN socket");
@@ -568,6 +577,8 @@ struct Session::Impl {
                 p.inputAt = Clock::now();
                 p.hasInput = false;
                 p.inputSequence = 0;
+                p.edgeSequence.reset();
+                p.inputEdges.clear();
                 latest[slot] = {};
                 inputRooms[slot].reset();
                 // A slow loader may have an older floor checkpoint. Deliver
@@ -583,16 +594,33 @@ struct Session::Impl {
                 }
                 return;
             }
-            if (type == Message::input && (state == Phase::running || state == Phase::finishing ||
-                                           state == Phase::returning)) {
+            if ((type == Message::input || type == Message::inputEdges) &&
+                (state == Phase::running || state == Phase::finishing ||
+                 state == Phase::returning)) {
                 const auto sample = readInput(r);
                 const auto sequence = sample.sequence;
                 const auto& value = sample.input;
                 const auto& room = sample.room;
                 if (!p.ready || p.waiting || state != Phase::running)
                     return;
-                if (p.hasInput && sequence <= p.inputSequence)
+                if (type == Message::inputEdges) {
+                    if (transport != Transport::udp)
+                        throw std::runtime_error("Unexpected input event transport");
+                    if (p.edgeSequence && sequence <= *p.edgeSequence)
+                        return;
+                    p.edgeSequence = sequence;
+                    if (p.inputEdges.size() >= 128)
+                        throw std::runtime_error("Input event queue limit exceeded");
+                    p.inputEdges.push_back(sample);
+                    return;
+                }
+                if (p.hasInput && sequence <= p.inputSequence) {
+                    if (transport == Transport::udp)
+                        return;
                     throw std::runtime_error("Duplicate input sequence");
+                }
+                if (transport == Transport::udp && value.triggered)
+                    throw std::runtime_error("Unreliable input contains one-shot actions");
                 p.hasInput = true;
                 p.inputSequence = sequence;
                 p.inputAt = Clock::now();
@@ -978,33 +1006,39 @@ struct Session::Impl {
         }
     }
 };
-Session::Session(void (*logger)(const std::string&), Observer observer, bool debugLogs)
-    : impl(std::make_unique<Impl>(logger, observer, debugLogs)) {}
+Session::Session(void (*logger)(const std::string&), Observer observer, bool debugLogs,
+                 Transport transport)
+    : impl(std::make_unique<Impl>(logger, observer, debugLogs, transport)) {}
 Session::~Session() = default;
 bool Session::host(std::uint16_t port, const std::string& fingerprint, const std::string& mods,
                    const LobbyAccess& access) {
     if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty() || !access.valid())
         return false;
     try {
-        Socket setup(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
-        const auto listener = setup.handle;
-        if (listener == INVALID_SOCKET)
-            throw std::runtime_error("Cannot create LAN socket");
-        configure(listener);
-        BOOL exclusive = TRUE;
-        setsockopt(listener, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
-                   reinterpret_cast<const char*>(&exclusive), sizeof(exclusive));
-        sockaddr_in a{};
-        a.sin_family = AF_INET;
-        a.sin_port = htons(port);
-        a.sin_addr.s_addr = INADDR_ANY;
-        if (bind(listener, reinterpret_cast<sockaddr*>(&a), sizeof(a)) || listen(listener, 3))
-            throw std::runtime_error("LAN port is unavailable");
-        int size = sizeof(a);
-        if (getsockname(listener, reinterpret_cast<sockaddr*>(&a), &size))
-            throw std::runtime_error("Cannot inspect LAN port");
-        impl->listener = impl->io->listen(std::exchange(setup.handle, INVALID_SOCKET));
-        impl->boundPort = ntohs(a.sin_port);
+        if (impl->transport == Transport::udp) {
+            impl->listener = impl->io->listenDatagram(port);
+            impl->boundPort = impl->listener->port;
+        } else {
+            Socket setup(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+            const auto listener = setup.handle;
+            if (listener == INVALID_SOCKET)
+                throw std::runtime_error("Cannot create LAN socket");
+            configure(listener);
+            BOOL exclusive = TRUE;
+            setsockopt(listener, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+                       reinterpret_cast<const char*>(&exclusive), sizeof(exclusive));
+            sockaddr_in a{};
+            a.sin_family = AF_INET;
+            a.sin_port = htons(port);
+            a.sin_addr.s_addr = INADDR_ANY;
+            if (bind(listener, reinterpret_cast<sockaddr*>(&a), sizeof(a)) || listen(listener, 3))
+                throw std::runtime_error("LAN port is unavailable");
+            int size = sizeof(a);
+            if (getsockname(listener, reinterpret_cast<sockaddr*>(&a), &size))
+                throw std::runtime_error("Cannot inspect LAN port");
+            impl->listener = impl->io->listen(std::exchange(setup.handle, INVALID_SOCKET));
+            impl->boundPort = ntohs(a.sin_port);
+        }
         impl->hosting = true;
         impl->fingerprint = fingerprint;
         impl->mods = mods;
@@ -1063,11 +1097,12 @@ bool Session::reconnect() {
     const auto logger = impl->logger;
     const auto observer = impl->observer;
     const auto debug = impl->debugLogs;
+    const auto transport = impl->transport;
     const auto choices = impl->choices;
     const auto access = impl->localAccess;
     impl->shutdown();
     retiring.push_back(std::move(impl));
-    impl = std::make_unique<Impl>(logger, observer, debug);
+    impl = std::make_unique<Impl>(logger, observer, debug, transport);
     impl->choices = choices;
     return join(ip, port, fingerprint, identity, mods, access);
 }
@@ -1277,6 +1312,11 @@ void Session::poll() {
                             p.packetAt = Clock::now();
                         },
                         [&](WorldState value) {
+                            if (impl->transport == Transport::udp && !impl->hosting &&
+                                (impl->state != Phase::running ||
+                                 value.epoch != impl->integrationEpoch ||
+                                 (impl->verified && value.tick <= *impl->verified)))
+                                return;
                             if (impl->hosting || impl->state != Phase::running ||
                                 value.epoch != impl->integrationEpoch ||
                                 value.connected >= (1u << impl->playerCount) ||
@@ -1317,6 +1357,9 @@ void Session::poll() {
                 } catch (const std::exception& e) {
                     if (!impl->hosting)
                         throw;
+                    if (impl->logger)
+                        impl->logger("network_peer_removed slot=" + std::to_string(i) +
+                                     " reason=" + e.what());
                     try {
                         Writer w(Message::error);
                         w.string(std::string(e.what()).substr(0, 240));
@@ -1487,10 +1530,10 @@ bool Session::restart(const Start& settings) {
     impl->startSettings.firstTick = 0;
     impl->startSettings.connected = impl->activeMask;
     const auto message = impl->startMessage(Message::restart, impl->startSettings);
+    impl->resetRun();
     for (unsigned slot = 1; slot < impl->playerCount; ++slot)
         if ((impl->activeMask & (1u << slot)) && impl->peers[slot])
             impl->peers[slot]->sendMessage(message);
-    impl->resetRun();
     impl->restartPending = true;
     return true;
 }
@@ -1677,6 +1720,8 @@ std::optional<Frame> Session::take() {
         if (impl->activeMask & (1u << i))
             frame.inputs[i] = impl->latest[i];
         frame.inputRooms[i] = impl->inputRooms[i];
+        if (impl->peers[i] && (impl->activeMask & (1u << i)))
+            impl->peers[i]->consumeEdges(frame.inputs[i], frame.inputRooms[i]);
         impl->latest[i].triggered = 0;
     }
     impl->progress = Clock::now();

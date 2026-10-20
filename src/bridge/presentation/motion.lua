@@ -73,6 +73,66 @@ return function(fields)
                 or (flying and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT or collision == GridCollisionClass.COLLISION_SOLID))
                 or (aperture and collision == GridCollisionClass.COLLISION_WALL)
         end
+        local footprint = {
+            { 1, 0 },
+            { -1, 0 },
+            { 0, 1 },
+            { 0, -1 },
+            { 0.7071, 0.7071 },
+            { -0.7071, 0.7071 },
+            { 0.7071, -0.7071 },
+            { -0.7071, -0.7071 },
+        }
+        local maxSweepStep, maxSweepDistance = 4, 256
+        local function sweep(room, from, wanted, radius, flying, controls)
+            local function clear(position)
+                local aperture = controls and doorCorridor(room, position) ~= nil
+                if not clearForPlayer(room, position, aperture, flying) then
+                    return false
+                end
+                for _, offset in ipairs(footprint) do
+                    if
+                        not clearForPlayer(
+                            room,
+                            position + Vector(offset[1] * radius, offset[2] * radius),
+                            aperture,
+                            flying
+                        )
+                    then
+                        return false
+                    end
+                end
+                return true
+            end
+            local aperture = controls and doorCorridor(room, wanted) ~= nil
+            if not aperture then
+                wanted = room:GetClampedPosition(wanted, radius)
+            end
+            local delta = wanted - from
+            local distance = math.max(math.abs(delta.X), math.abs(delta.Y))
+            if distance > maxSweepDistance then
+                delta = delta * (maxSweepDistance / distance)
+                distance = maxSweepDistance
+            end
+            local steps = math.max(1, math.ceil(distance / maxSweepStep))
+            local increment = delta * (1 / steps)
+            local position = from
+            for _ = 1, steps do
+                local nextPosition = position + increment
+                if clear(nextPosition) then
+                    position = nextPosition
+                else
+                    local x = Vector(nextPosition.X, position.Y)
+                    local y = Vector(position.X, nextPosition.Y)
+                    if clear(x) then
+                        position = x
+                    elseif clear(y) then
+                        position = y
+                    end
+                end
+            end
+            return position
+        end
         local function present(input, sequence, actorVisuals, motion, ref, receivedTick)
             if receivedTick < 0 then
                 return
@@ -133,15 +193,20 @@ return function(fields)
                         if not controls then
                             m.doorway = nil
                         end
-                        position = m.prediction:step(
-                            controls and direction or Vector(0, 0),
-                            sequence,
-                            p.MoveSpeed * (4.4117647 * 60),
-                            dt,
-                            not controls
-                        )
                         assert(native.rooms_with_player(status.slot, function()
                             local room = view.room()
+                            local radius = math.max(5, e.Size)
+                            local function resolve(from, wanted)
+                                return sweep(room, from, wanted, radius, p.CanFly, controls)
+                            end
+                            position = m.prediction:step(
+                                controls and direction or Vector(0, 0),
+                                sequence,
+                                p.MoveSpeed * (4.4117647 * 60),
+                                dt,
+                                not controls,
+                                resolve
+                            )
                             if m.doorway then
                                 local door = room:GetDoor(m.doorway.slot)
                                 if
@@ -174,24 +239,11 @@ return function(fields)
                                 position = m.doorway.position
                                 m.prediction.velocity = Vector(0, 0)
                             end
-                            if not aperture then
-                                position = room:GetClampedPosition(position, math.max(5, e.Size))
-                            end
-                            if not clearForPlayer(room, position, aperture, p.CanFly) then
-                                -- Slide along blocked grids; returning to the older
-                                -- authority position on every blocked frame flickers.
-                                local x = Vector(position.X, m.display.Y)
-                                local y = Vector(m.display.X, position.Y)
-                                if clearForPlayer(room, x, aperture, p.CanFly) then
-                                    position = x
-                                elseif clearForPlayer(room, y, aperture, p.CanFly) then
-                                    position = y
-                                elseif clearForPlayer(room, m.display, aperture, p.CanFly) then
-                                    position = m.display
-                                else
-                                    position = m.target
-                                end
-                            end
+                            position = resolve(
+                                m.prediction.teleported and m.prediction.base or m.display,
+                                position
+                            )
+                            m.prediction.teleported = false
                         end))
                         m.prediction:clip(position)
                     else

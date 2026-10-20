@@ -5,9 +5,11 @@
 #include "net/reliable_transfer.h"
 #include "net/reliable_receiver.h"
 #include "net/world_transfer.h"
+#include "net/transport.h"
 #include <deque>
 
 namespace isaac::lan {
+class DatagramHost;
 inline constexpr std::size_t maxSocketQueueBytes = 262144;
 inline constexpr std::size_t maxIncomingBytes = 2 * maxWorldSize;
 struct IncomingPacket {
@@ -43,6 +45,8 @@ struct WorldObservation {
 struct ConnectionPipe {
     enum State { connecting, connected, closed, failed };
     SOCKET handle;
+    bool unreliable = false;
+    std::shared_ptr<DatagramHost> datagrams;
     std::optional<sockaddr_in> address;
     SpscQueue<OutgoingPacket, 128> outgoing;
     SpscQueue<IncomingPacket, 128> incoming;
@@ -63,6 +67,8 @@ struct ConnectionPipe {
 };
 struct ListenerPipe {
     SOCKET handle;
+    std::shared_ptr<DatagramHost> datagrams;
+    std::uint16_t port = 0;
     SpscQueue<std::shared_ptr<ConnectionPipe>, 4> accepted;
     std::atomic<bool> closing{false}, failed{false};
     explicit ListenerPipe(SOCKET socket) : handle(socket) {}
@@ -80,9 +86,11 @@ class NetworkIo {
     std::string failure;
     HANDLE thread = nullptr;
     static DWORD WINAPI run(void* self);
+    void runDatagrams();
+    Transport transport;
 
   public:
-    NetworkIo();
+    explicit NetworkIo(Transport mode = Transport::tcp);
     ~NetworkIo();
     NetworkIo(const NetworkIo&) = delete;
     void stop() {
@@ -98,6 +106,8 @@ class NetworkIo {
     }
     std::shared_ptr<ConnectionPipe> attach(SOCKET socket, std::optional<sockaddr_in> address = {});
     std::shared_ptr<ListenerPipe> listen(SOCKET socket);
+    std::shared_ptr<ConnectionPipe> connectDatagram(const sockaddr_in& address);
+    std::shared_ptr<ListenerPipe> listenDatagram(std::uint16_t port);
     void signal() {
         wake.signal();
     }

@@ -35,9 +35,8 @@ def main():
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--extra-client", type=Path, action="append", default=[])
-    parser.add_argument(
-        "--record-relay", action="store_true", help="Archive owned host TCP streams"
-    )
+    parser.add_argument("--transport", choices=("udp", "tcp"), default="udp")
+    parser.add_argument("--record-relay", action="store_true", help="Archive owned relay traffic")
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--script", type=Path, required=True, help="State-sync Lua scenario")
@@ -185,7 +184,7 @@ def main():
         "--menu-port",
         type=int,
         default=29506,
-        help="TCP port entered through the native menu; non-default values also exercise validation",
+        help="Port entered through the native menu; non-default values also exercise validation",
     )
     parser.add_argument(
         "--latency-ms",
@@ -530,9 +529,12 @@ def main():
     signal.signal(signal.SIGHUP, interrupted)
     try:
         if args.latency_ms:
-            from delayed_relay import DelayedRelay
+            if args.transport == "udp":
+                from datagram_relay import DatagramRelay as Relay
+            else:
+                from delayed_relay import DelayedRelay as Relay
 
-            relay = DelayedRelay(
+            relay = Relay(
                 args.menu_port + 1,
                 args.menu_port,
                 args.latency_ms,
@@ -641,7 +643,12 @@ def main():
                 *(["--automatic"] if args.automatic or args.installed else []),
                 *(["--no-luadebug"] if args.no_luadebug else []),
             ]
-            if args.performance is not None or args.debug_logs or args.client_input_hz:
+            if (
+                args.transport
+                or args.performance is not None
+                or args.debug_logs
+                or args.client_input_hz
+            ):
                 config = lab / "game/isaac-lan/config.ini"
                 config.parent.mkdir(parents=True, exist_ok=True)
                 config.write_text(
@@ -650,11 +657,8 @@ def main():
                     + "\n[diagnostics]\nperformance="
                     + str(bool(args.performance)).lower()
                     + "\nsample_interval_ms=1000\n"
-                    + (
-                        f"\n[network]\ninput_hz={60 if role == 'host' else args.client_input_hz}\n"
-                        if args.client_input_hz
-                        else ""
-                    )
+                    + f"\n[network]\ntransport={args.transport}\n"
+                    + f"input_hz={args.client_input_hz if role != 'host' and args.client_input_hz else 60}\n"
                 )
             if args.progress_fixture:
                 prepare_progress_fixture(
@@ -1156,6 +1160,7 @@ def main():
                 result.setdefault("close_errors", []).append(str(error))
         if relay:
             relay.close()
+            result["relay_profile"] = relay.settings()
             if "relay_samples" in locals():
                 (args.output / "relay-samples.json").write_text(json.dumps(relay_samples, indent=2))
         for role, watcher, path in process_watchers:
