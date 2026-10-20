@@ -121,7 +121,7 @@ local function advance()
         mark("passive")
     elseif step == "passive" and elapsed > 90 then
         assert(count(0, 1) == 0 and count(1, 1) == 1, "Passive winner differs from luck scores")
-        assert(winnings() == 1 and has("1P掷出 D100") and has("2P掷出 D100"))
+        assert(winnings() == 1 and has("1P 掷骰：D100") and has("2P 掷骰：D100"))
         assert(has("拾取到了野生的") and has("+500="))
         for _, message in ipairs(_IsaacLanChatMessages()) do
             report("CHAT " .. message.text)

@@ -1,5 +1,6 @@
 return function(deps, wire)
     local limits = deps.limits
+    local dice = deps.dice
     local chat = { messages = {}, bubbles = {}, emotes = {}, revision = 0 }
     local nonce, sequence, outputSequence = deps.nonce(), 0, 0
     local executingOwner
@@ -36,10 +37,15 @@ return function(deps, wire)
         return true
     end
     -- Visibility and bubble presentation are independent. Host output may be
-    -- addressed to the command's owner or shared with the entire party.
+    -- addressed to the command's owner, room or entire party.
     function chat.output(text, options)
         options = options or {}
-        assert(options.audience == nil or options.audience == "self" or options.audience == "party")
+        assert(
+            options.audience == nil
+                or options.audience == "self"
+                or options.audience == "party"
+                or options.audience == "room"
+        )
         local info = deps.info()
         local count = length(text)
         if not count or #text > limits.commandBytes or text == "" then
@@ -49,9 +55,29 @@ return function(deps, wire)
         if type(owner) ~= "number" or owner % 1 ~= 0 or owner < 0 or owner >= info.players then
             return false
         end
-        local party = options.audience == "party"
-        if (party or owner ~= info.slot) and info.hosting ~= 1 then
+        local party, room = options.audience == "party", options.audience == "room"
+        if (party or room or owner ~= info.slot) and info.hosting ~= 1 then
             return false
+        end
+        local origin
+        if room then
+            origin = info.ready == 1 and deps.context(owner)
+            if not origin or origin.index == nil or origin.dimension == nil then
+                return false
+            end
+            text = "【房间】" .. text
+            if #text > limits.commandBytes then
+                return false
+            end
+        end
+        local function receives(slot)
+            if room then
+                local context = deps.context(slot)
+                return context
+                    and context.index == origin.index
+                    and context.dimension == origin.dimension
+            end
+            return party or slot == owner
         end
         local value = {
             text = text,
@@ -59,15 +85,15 @@ return function(deps, wire)
             kind = options.kind or "system",
             bubble = options.bubble == true,
         }
-        if party or owner == info.slot then
+        if receives(info.slot) then
             append(value)
         end
-        if party or owner ~= info.slot then
+        if party or room or owner ~= info.slot then
             outputSequence = outputSequence + 1
             value.sequence, value.nonce = outputSequence, nonce
             local bytes = wire.encodeOutput(value)
             for slot = 1, info.players - 1 do
-                if (party or slot == owner) and (info.connected & (1 << slot)) ~= 0 then
+                if (info.connected & (1 << slot)) ~= 0 and receives(slot) then
                     send(slot, bytes)
                 end
             end
@@ -76,6 +102,13 @@ return function(deps, wire)
     end
     local function errorTo(text, owner)
         return chat.output(text, { owner = owner, audience = "self" })
+    end
+    local function scope(text)
+        local body = text:match("^(.-)%s+%-%-room%s*$")
+        if body then
+            return body, "room"
+        end
+        return text, "party"
     end
     function chat.parse(text)
         local count = length(text)
@@ -90,7 +123,11 @@ return function(deps, wire)
             if count > limits.characters then
                 return nil, "每条聊天最多 " .. limits.characters .. " 字"
             end
-            return { kind = "text", text = text }
+            local body, audience = scope(text)
+            if body:match("^%s*$") or text:match("^%-%-room%s*$") then
+                return nil, "请输入内容"
+            end
+            return { kind = "text", text = body, audience = audience }
         end
         local name, args = text:match("^/([^%s]+)%s?(.*)$")
         if not name then
@@ -103,19 +140,13 @@ return function(deps, wire)
         if lower == "e" or lower == "echo" then
             return { kind = "echo", text = args }
         end
-        local dice = lower:match("^d(%d+)$")
-        if dice then
-            local sides = tonumber(dice)
-            if
-                not sides
-                or sides < 1
-                or sides > limits.dice
-                or sides % 1 ~= 0
-                or args:match("%S")
-            then
-                return nil, "用法：/dN，N 为 1～" .. limits.dice .. " 的整数"
+        if lower:match("^[%dd]") then
+            local body, audience = scope(text:sub(2))
+            local parsed, reason = dice.parse(body, limits.dice)
+            if not parsed then
+                return nil, reason
             end
-            return { kind = "dice", sides = sides }
+            return { kind = "dice", dice = parsed, audience = audience }
         end
         if lower == "lanbot" then
             return { kind = "bot", text = args }
@@ -129,15 +160,10 @@ return function(deps, wire)
         end
         return nil, "未知聊天命令；原版命令请使用 /console 命令"
     end
-    -- Shared authority dice path for chat commands and injected gameplay rules.
-    function chat.roll(owner, sides)
+    local function rollExpression(owner, parsed, audience)
         local info = deps.info()
         if
             info.hosting ~= 1
-            or type(sides) ~= "number"
-            or sides % 1 ~= 0
-            or sides < 1
-            or sides > limits.dice
             or type(owner) ~= "number"
             or owner % 1 ~= 0
             or owner < 0
@@ -146,16 +172,23 @@ return function(deps, wire)
         then
             return nil
         end
-        local result = deps.roll(sides)
+        local result, total = dice.roll(parsed, deps.roll)
         if not result then
             errorTo("掷骰失败，请重试", owner)
             return nil
         end
         chat.output(
-            (owner + 1) .. "P掷出 D" .. sides .. " : " .. result,
-            { owner = owner, audience = "party", bubble = true }
+            (owner + 1) .. "P 掷骰：" .. result,
+            { owner = owner, audience = audience, bubble = true }
         )
-        return result
+        return total
+    end
+    -- Gameplay callers retain the numeric single-die API and party audience.
+    function chat.roll(owner, sides)
+        if type(sides) ~= "number" or sides % 1 ~= 0 or sides < 1 or sides > limits.dice then
+            return nil
+        end
+        return rollExpression(owner, dice.parse(string.format("d%d", sides), limits.dice), "party")
     end
     local function accept(sender, request)
         local ledger = seen[sender]
@@ -193,6 +226,22 @@ return function(deps, wire)
             return
         end
         local parsed, reason = chat.parse(request.text)
+        if parsed and parsed.audience == "room" then
+            local info, context = deps.info(), deps.context(sender)
+            if info.ready ~= 1 or not context then
+                errorTo("房间消息未发送：游戏尚未就绪", sender)
+                return
+            end
+            if
+                info.runId ~= request.run
+                or info.worldEpoch ~= request.epoch
+                or context.index ~= request.room
+                or context.dimension ~= request.dimension
+            then
+                errorTo("房间消息未发送：角色或房间已变化", sender)
+                return
+            end
+        end
         if not parsed then
             if reason then
                 errorTo(reason, sender)
@@ -200,10 +249,10 @@ return function(deps, wire)
         elseif parsed.kind == "text" then
             chat.output(
                 parsed.text,
-                { owner = sender, audience = "party", bubble = true, kind = "team" }
+                { owner = sender, audience = parsed.audience, bubble = true, kind = "team" }
             )
         elseif parsed.kind == "dice" then
-            chat.roll(sender, parsed.sides)
+            rollExpression(sender, parsed.dice, parsed.audience)
         elseif parsed.kind == "native" then
             if deps.info().ready ~= 1 then
                 errorTo("命令未执行：游戏尚未就绪", sender)
@@ -242,7 +291,8 @@ return function(deps, wire)
             for _, line in ipairs({
                 "/h /help：命令帮助",
                 "/e /echo 文字：仅自己可见",
-                "/dN：全队掷骰，N 为 1～" .. limits.dice,
+                table.concat(dice.help(limits.dice), "\n"),
+                "聊天／掷骰末尾加 --room：仅当前房间共享",
                 "/c /console 命令：原版控制台",
                 "/lanbot help：托管命令",
             }) do

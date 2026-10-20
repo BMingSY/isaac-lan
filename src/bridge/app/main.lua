@@ -150,6 +150,7 @@ chat = _IsaacLanModules["runtime/chat"]({
     receive = native.chat_receive,
     execute = native.chat_execute,
     roll = native.chat_roll,
+    dice = _IsaacLanModules["runtime/chat_dice"],
     bot = bot.command,
     emotes = emotes,
     info = function()

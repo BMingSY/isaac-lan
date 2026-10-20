@@ -78,6 +78,7 @@ compat/routes/challenge_goal
 compat/challenges/luck_game
 runtime/challenges
 runtime/chat_wire
+runtime/chat_dice
 runtime/chat
 presentation/chat_layout
 presentation/chat

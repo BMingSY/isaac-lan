@@ -148,7 +148,7 @@ function _IsaacLanFrame()
         end
         report("CHAT native command and private output verified")
     elseif playing == 450 then
-        local dice = assert(has("2P掷出 D20 : "), "Shared dice result missing")
+        local dice = assert(has("2P 掷骰：D20 = "), "Shared dice result missing")
         assert(dice.bubble and dice.owner == 1)
         report("CHAT dice=" .. dice.text)
         native.chat_ui_open(false)
