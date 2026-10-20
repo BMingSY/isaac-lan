@@ -46,6 +46,7 @@ SYSTEM_DLLS = {
     "oleaut32.dll",
     "psapi.dll",
     "comdlg32.dll",
+    "winhttp.dll",
 }
 
 

@@ -13,7 +13,7 @@
 #include "engine/rooms.h"
 #include "engine/rewind.h"
 #include "engine/input.h"
-#include "core/lanbot_console.h"
+#include "core/console_command.h"
 #include "core/menu_input.h"
 #include "core/chat.h"
 #include "engine/save.h"
@@ -267,20 +267,6 @@ void consoleCommand(std::string_view command, const backend::Call& original) {
         if (logger)
             logger(queued ? "console_rewind=QUEUED" : "console_rewind=IGNORED unavailable");
         return;
-    }
-    const auto args = input::botConsoleArguments(command);
-    if (args && state) {
-        const int top = lua.getTop(state);
-        if (lua.getGlobal(state, "_IsaacLanBotCommand") == 6) {
-            lua.pushLString(state, args->data(), args->size());
-            if (lua.pcall(state, 1, 0, 0, 0, nullptr) && logger) {
-                const auto reason = lua.toString(state, -1, nullptr);
-                logger(std::string("lanbot_console_error=") + (reason ? reason : "Lua error"));
-            }
-            lua.setTop(state, top);
-            return;
-        }
-        lua.setTop(state, top);
     }
     original();
 }

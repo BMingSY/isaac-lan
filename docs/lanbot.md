@@ -4,26 +4,24 @@ LANBOT 通过正常输入接管本机玩家的移动与射击，便于“人机�
 
 ## 启用
 
-启动游戏前，在当前存档目录的 `options.ini` 设置 `EnableDebugConsole=1`。Windows 默认位置为 `%USERPROFILE%\Documents\My Games\Binding of Isaac Repentance+\options.ini`；隔离或自定义存档使用各自目录。扩展不会自动改配置。同机双实例需要后台继续运行时，设置 `PauseOnFocusLost=0`。
-
-进入 LAN 游戏，打开原生控制台（通常为 `~`／反引号键），输入 `lanbot on`，关闭控制台后开始托管。默认 `run + balanced`，只影响本机所属玩家。
+进入 LAN 游戏，在[联机聊天](https://github.com/BMingSY/isaac-lan/blob/main/docs/chat-console.md)中输入 `/lanbot on` 开始托管；原版控制台不提供该命令。默认 `run + balanced`，只影响本机所属玩家。同机双实例需要后台继续运行时，在存档目录的 `options.ini` 设置 `PauseOnFocusLost=0`。
 
 ## 命令
 
 | 命令 | 行为 |
 | --- | --- |
-| `lanbot on` | 开启或继续托管；重复开启不会叠加控制器 |
-| `lanbot mode run` | 收集免费资源、探索当前层正常可达分支，再寻找普通出口 |
-| `lanbot mode explore` | 探索当前层，完成后等待，不自动换层 |
-| `lanbot mode hold` | 当前房间战斗与恢复，清房后留守 |
-| `lanbot style aggressive` | 更积极争取输出位置 |
-| `lanbot style balanced` | 平衡危险、距离与进度 |
-| `lanbot style cautious` | 增加危险裕量，偏好较远的有效输出位置 |
-| `lanbot pause`／`resume` | 释放按键供人工操作／恢复托管，保留配置 |
-| `lanbot off` | 清除任务并交还人工，保留本次会话配置 |
-| `lanbot next` | `run`／`explore` 沿正常路线前往已知出口，跳过本次队友等待；`hold` 拒绝 |
-| `lanbot status` | 查看任务、等待原因、阶段和决策统计 |
-| `lanbot help` 或 `lanbot` | 帮助 |
+| `/lanbot on` | 开启或继续托管；重复开启不会叠加控制器 |
+| `/lanbot mode run` | 收集免费资源、探索当前层正常可达分支，再寻找普通出口 |
+| `/lanbot mode explore` | 探索当前层，完成后等待，不自动换层 |
+| `/lanbot mode hold` | 当前房间战斗与恢复，清房后留守 |
+| `/lanbot style aggressive` | 更积极争取输出位置 |
+| `/lanbot style balanced` | 平衡危险、距离与进度 |
+| `/lanbot style cautious` | 增加危险裕量，偏好较远的有效输出位置 |
+| `/lanbot pause`／`/lanbot resume` | 释放按键供人工操作／恢复托管，保留配置 |
+| `/lanbot off` | 清除任务并交还人工，保留本次会话配置 |
+| `/lanbot next` | `run`／`explore` 沿正常路线前往已知出口，跳过本次队友等待；`hold` 拒绝 |
+| `/lanbot status` | 查看任务、等待原因、阶段和决策统计 |
+| `/lanbot help` 或 `/lanbot` | 帮助 |
 
 模式和风格可预先设置，不会自行启动。`on`／`resume` 要求 LAN 已开局；关闭状态须先 `on`。普通换层默认等存活队友进入出口房间，`next` 不生成出口，也不绕过原版限制。
 

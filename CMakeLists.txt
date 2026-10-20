@@ -24,6 +24,12 @@ target_compile_definitions(isaac_lan_miniz PUBLIC MINIZ_NO_ARCHIVE_APIS MINIZ_NO
 add_library(isaac_lan_deflate STATIC src/core/deflate.cpp)
 target_include_directories(isaac_lan_deflate PUBLIC src)
 target_link_libraries(isaac_lan_deflate PUBLIC isaac_lan_miniz)
+add_library(isaac_lan_feedback STATIC src/core/feedback.cpp)
+target_include_directories(isaac_lan_feedback PUBLIC src)
+target_link_libraries(isaac_lan_feedback PUBLIC isaac_lan_miniz)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(isaac_lan_feedback PRIVATE -Wall -Wextra -Werror)
+endif()
 file(GLOB ISAAC_LAN_ZSTD_SOURCES CONFIGURE_DEPENDS vendor/zstd/common/*.c vendor/zstd/compress/*.c
      vendor/zstd/decompress/*.c)
 add_library(isaac_lan_zstd_vendor STATIC ${ISAAC_LAN_ZSTD_SOURCES})
@@ -151,6 +157,27 @@ if(BUILD_TESTING)
         add_test(NAME core.deflate-${test_case} COMMAND isaac_lan_deflate_test ${test_case})
         set_tests_properties(core.deflate-${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;core")
     endforeach()
+    add_executable(isaac_lan_feedback_test tests/feedback_test.cpp)
+    target_link_libraries(isaac_lan_feedback_test PRIVATE isaac_lan_feedback)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_feedback_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    if(MINGW)
+        target_link_options(isaac_lan_feedback_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    foreach(
+        test_case
+        zip-layout
+        zip-names
+        tails
+        redaction
+        launch-selection
+        validation
+        json
+        outcomes)
+        add_test(NAME core.feedback-${test_case} COMMAND isaac_lan_feedback_test ${test_case})
+        set_tests_properties(core.feedback-${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    endforeach()
     add_executable(isaac_lan_delta_test tests/snapshot_delta_test.cpp)
     target_include_directories(isaac_lan_delta_test PRIVATE src)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -183,6 +210,7 @@ if(BUILD_TESTING)
     if(ISAAC_LAN_LUA)
         isaac_add_lua_test(bridge.chat chat.lua)
         isaac_add_lua_test(bridge.chat-dice chat_dice.lua)
+        isaac_add_lua_test(bridge.feedback feedback.lua)
         isaac_add_lua_test(presentation.chat-render chat_presentation.lua)
         isaac_add_lua_test(bridge.session_lifecycle session_lifecycle.lua)
         isaac_add_lua_test(bridge.party-startup party_startup.lua)
@@ -341,6 +369,7 @@ add_library(
     src/diagnostics/runtime_log.cpp
     src/diagnostics/performance.cpp
     src/diagnostics/crash_signal.cpp
+    src/diagnostics/feedback.cpp
     src/runtime/session.cpp
     src/runtime/session_store.cpp
     src/engine/versions/j460/rooms.cpp
@@ -608,10 +637,13 @@ if(BUILD_TESTING)
 endif()
 
 set_target_properties(isaac_lan_probe PROPERTIES PREFIX "")
-target_compile_definitions(isaac_lan_probe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_definitions(isaac_lan_probe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
+                                                   ISAAC_LAN_VERSION="${ISAAC_LAN_VERSION}")
 target_link_libraries(
     isaac_lan_probe
     PRIVATE bcrypt
+            winhttp
+            isaac_lan_feedback
             iphlpapi
             imm32
             gdiplus

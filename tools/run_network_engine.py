@@ -111,6 +111,10 @@ def main():
         help="Observe owned games and preserve full crash dumps",
     )
     parser.add_argument(
+        "--feedback-endpoint",
+        help="Feedback receiver written to the owned lab configs (use a protected runner)",
+    )
+    parser.add_argument(
         "--performance",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -659,6 +663,12 @@ def main():
                     + "\nsample_interval_ms=1000\n"
                     + f"\n[network]\ntransport={args.transport}\n"
                     + f"input_hz={args.client_input_hz if role != 'host' and args.client_input_hz else 60}\n"
+                    # Isolated labs upload feedback only to an explicit receiver.
+                    + (
+                        f"\n[feedback]\nendpoint={args.feedback_endpoint}\n"
+                        if args.feedback_endpoint
+                        else ""
+                    )
                 )
             if args.progress_fixture:
                 prepare_progress_fixture(
