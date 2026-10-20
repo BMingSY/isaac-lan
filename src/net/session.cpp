@@ -1743,7 +1743,8 @@ bool Session::ready() {
 bool Session::publish(unsigned slot, const WorldState& state) {
     if (!impl->hosting || impl->state != Phase::running || impl->ending || impl->cinematicEpoch ||
         !slot || slot >= impl->playerCount || state.bytes.empty() ||
-        state.bytes.size() > maxWorldSize || state.tick >= impl->nextConsume)
+        state.bytes.size() + state.stable.size() + (state.stable.empty() ? 0 : 4) > maxWorldSize ||
+        state.tick >= impl->nextConsume)
         return false;
     if (auto& p = impl->peers[slot]; p && p->ready)
         p->pending = state;

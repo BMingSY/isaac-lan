@@ -77,9 +77,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             effect.Timeout = 500
         end
     end, function(slot, tick)
-        local bytes = collect(slot, tick)
+        local bytes, stable = collect(slot, tick)
         verify(bytes, tick)
-        return bytes
+        return bytes, stable
     end, function(bytes, tick, ...)
         local result = restore(bytes, tick, ...)
         if result ~= false then

@@ -13,7 +13,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 36;
+constexpr std::uint16_t protocolVersion = 37;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -247,6 +247,10 @@ struct WorldState {
     bool paused = false;
     std::array<std::uint32_t, maxPlayers> inputSequences{};
     std::vector<std::uint8_t> bytes;
+    // Opaque, less frequently changing dependency. The UDP worker assigns its
+    // revision and only delivers a view with the exact matching dependency.
+    std::vector<std::uint8_t> stable;
+    std::uint32_t revision = 0;
 };
 
 class Writer {

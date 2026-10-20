@@ -340,8 +340,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ackSequence, betweenUpdates)
-            if restore(bytes, t, ackSequence, betweenUpdates) == false then
+        function(bytes, t, ackSequence, betweenUpdates, stable)
+            if restore(bytes, t, ackSequence, betweenUpdates, stable) == false then
                 return false
             end
             if phase == "lan" and not lanChecked and t >= 150 and native.rooms_ready() then

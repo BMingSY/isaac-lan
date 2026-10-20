@@ -87,11 +87,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, tick, ack, betweenUpdates)
-            if restore(bytes, tick, ack, betweenUpdates) == false then
+        function(bytes, tick, ack, betweenUpdates, stable)
+            if restore(bytes, tick, ack, betweenUpdates, stable) == false then
                 return false
             end
-            local value = _IsaacLanState.decode(bytes)
+            local value = _IsaacLanState.decode(bytes, stable)
             authorityX, authorityY = table.unpack(value[9][1][3][6])
             return true
         end,

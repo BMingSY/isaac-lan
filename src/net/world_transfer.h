@@ -43,9 +43,10 @@ class WorldTransfer {
     std::size_t sent = 0, total = 0;
     std::uint32_t sendingBase = 0, receivingBase = 0, sendEpoch = 0;
     std::optional<std::uint32_t> lastDecoded;
-    bool sendingDelta = false, receivingDelta = false;
+    bool sendingDelta = false, receivingDelta = false, sendingStable = false,
+         receivingStable = false;
     bool datagram;
-    Clock::time_point fullAt{}, baselineAt{};
+    Clock::time_point fullAt{}, baselineAt{}, sentAt{};
 
   public:
     explicit WorldTransfer(bool lossy = false) : datagram(lossy) {}
@@ -60,6 +61,7 @@ class WorldTransfer {
         flight.clear();
         pending.reset();
         sending.reset();
+        sentAt = {};
     }
     void resetReceiver() {
         decoded.clear();
@@ -156,6 +158,13 @@ class WorldTransfer {
     }
     std::optional<Writer> next(StateCompression& codec, int minimumLatency) {
         if (!sending && pending) {
+            // Reduce publication frequency when receipts fall behind. Keep
+            // parity groups intact instead of throttling individual datagrams.
+            constexpr auto congestedInterval = std::chrono::milliseconds(100);
+            const auto receiptBudget = std::max(200, 2 * std::max(0, minimumLatency));
+            if (datagram && oldestMs() > static_cast<unsigned>(receiptBudget) &&
+                Clock::now() - sentAt < congestedInterval)
+                return {};
             // Bound outstanding work even on a lossy link. Dropping a receipt
             // must not hold this window forever, but retiring every old frame
             // immediately would flood a congested path with newer snapshots.
@@ -171,6 +180,16 @@ class WorldTransfer {
             pending.reset();
             sent = 0;
             const auto began = Clock::now();
+            sentAt = began;
+            sendingStable = !sending->stable.empty();
+            if (sendingStable) {
+                Writer bundle(Message::world);
+                bundle.blob(sending->stable);
+                bundle.bytes.insert(bundle.bytes.end(), sending->bytes.begin(),
+                                    sending->bytes.end());
+                sending->bytes.assign(bundle.bytes.begin() + 1, bundle.bytes.end());
+                sending->stable.clear();
+            }
             auto raw = std::make_shared<const std::vector<std::uint8_t>>(std::move(sending->bytes));
             auto full = codec.compress(*raw);
             const auto fullSize = full.size();
@@ -212,8 +231,9 @@ class WorldTransfer {
         w.u32(value.bytes.size());
         if (!sent) {
             w.u32(value.epoch);
-            w.u8(sendingDelta);
+            w.u8((sendingDelta ? 1 : 0) | (sendingStable ? 2 : 0));
             w.u32(sendingBase);
+            w.u32(value.revision);
             w.u8(value.connected);
             w.u8(value.pauseOwner);
             w.u8(value.paused);
@@ -241,9 +261,11 @@ class WorldTransfer {
             assembling->epoch = r.u32();
             const auto mode = r.u8();
             receivingBase = r.u32();
-            if (mode > 1 || (!mode && receivingBase))
+            if (mode > 3 || (!(mode & 1) && receivingBase))
                 throw std::runtime_error("Invalid world encoding header");
-            receivingDelta = mode != 0;
+            receivingDelta = (mode & 1) != 0;
+            receivingStable = (mode & 2) != 0;
+            assembling->revision = r.u32();
             assembling->connected = r.u8();
             assembling->pauseOwner = r.u8();
             const auto paused = r.u8();
@@ -294,6 +316,14 @@ class WorldTransfer {
         lastDecoded = tick;
         auto result = std::move(assembling);
         assembling.reset();
+        if (receivingStable) {
+            Reader bundle(result->bytes);
+            result->stable = bundle.blob(maxWorldSize);
+            const auto offset = sizeof(std::uint32_t) + result->stable.size();
+            if (result->stable.empty() || offset >= result->bytes.size())
+                throw std::runtime_error("Invalid world dependency payload");
+            result->bytes.erase(result->bytes.begin(), result->bytes.begin() + offset);
+        }
         return result;
     }
 };

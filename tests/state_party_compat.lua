@@ -475,12 +475,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         before(t, n, bytes)
         advance(t)
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if not bytes then
-            return bytes
+            return bytes, stable
         end
         local unique, familiarIDs = 0, {}
-        for _, v in ipairs(_IsaacLanState.decode(bytes)[11][3]) do
+        for _, v in ipairs(_IsaacLanState.decode(bytes, stable)[11][3]) do
             if v[2] == EntityType.ENTITY_FAMILIAR and not familiarIDs[v[1]] then
                 familiarIDs[v[1]] = true
                 unique = unique + 1
@@ -490,21 +490,22 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             lastPopulation = unique
             report("AUTHORITATIVE_FAMILIARS unique=" .. unique .. " requested=" .. desiredFamiliars)
         end
-        return string.pack(">s4", bytes)
-            .. _IsaacLanState.encode({
-                step,
-                finished,
-                desiredFamiliars,
-                pillColor or 0,
-                pocketBytes or "",
-                unique,
-            })
-    end, function(bytes, t, ack, betweenUpdates)
+        return string.pack(">s4", bytes) .. _IsaacLanState.encode({
+            step,
+            finished,
+            desiredFamiliars,
+            pillColor or 0,
+            pocketBytes or "",
+            unique,
+        }),
+            stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
         local body, cursor = string.unpack(">s4", bytes)
-        if restore(body, t, ack, betweenUpdates) == false then
+        if restore(body, t, ack, betweenUpdates, stable) == false then
             return false
         end
-        local value, meta = _IsaacLanState.decode(body), _IsaacLanState.decode(bytes:sub(cursor))
+        local value, meta =
+            _IsaacLanState.decode(body, stable), _IsaacLanState.decode(bytes:sub(cursor))
         snapshots = snapshots + 1
         if meta[3] > 0 and step == meta[1] then
             assert(liveFamiliars() >= meta[6], "Replica lost authoritative familiars above 64")

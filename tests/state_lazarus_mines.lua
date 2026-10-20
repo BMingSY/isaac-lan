@@ -268,16 +268,16 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             kill(1)
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if t < 3 then
-            for _, a in ipairs(_IsaacLanState.decode(bytes)[9]) do
+            for _, a in ipairs(_IsaacLanState.decode(bytes, stable)[9]) do
                 report(
                     "AUTH_ROSTER index=" .. a[1] .. " controller=" .. a[2] .. " type=" .. a[4][1]
                 )
             end
         end
-        return bytes
-    end, function(bytes, t, ack, betweenUpdates)
+        return bytes, stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
         if t < 3 then
             for i = 0, Game():GetNumPlayers() - 1 do
                 local p = Isaac.GetPlayer(i)
@@ -291,11 +291,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 )
             end
         end
-        if restore(bytes, t, ack, betweenUpdates) == false then
+        if restore(bytes, t, ack, betweenUpdates, stable) == false then
             return false
         end
         snapshots = snapshots + 1
-        local value = _IsaacLanState.decode(bytes)
+        local value = _IsaacLanState.decode(bytes, stable)
         for _, a in ipairs(value[9]) do
             local p, slot = Isaac.GetPlayer(a[1]), a[2] - 1
             assert(

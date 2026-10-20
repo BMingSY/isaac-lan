@@ -333,9 +333,10 @@ void udpLossRecoveryImpl(bool large) {
                 static_cast<unsigned long long>(delivery.rawWorldBytes),
                 static_cast<unsigned long long>(delivery.wireWorldBytes));
     if (large) {
-        // This case proves eventual complete recovery, not realtime delivery
-        // of an ~80-fragment view. Keep publishing and impairing the link:
-        // an unreliable final packet alone has no guaranteed delivery.
+        require(received > 50 && lastTick > 165 && largestGap <= 15,
+                "Large realtime views stalled despite recoverable datagram loss");
+        // Keep impairing the link after the measurement window. The final
+        // publication is still allowed to be lost; subsequent views must recover.
         unsigned sequence = 180;
         until([&] {
             publish(++sequence);
@@ -344,7 +345,7 @@ void udpLossRecoveryImpl(bool large) {
             return lastTick > 180;
         });
     } else
-        require(received > 60 && lastTick > 160 && largestGap < 60,
+        require(received > 75 && lastTick > 165 && largestGap <= 12,
                 "Lost fragments or baseline receipts stalled subsequent UDP snapshots");
     require(actions == 8, "Lost or duplicated a reliable one-shot action under UDP loss");
     require(g.relay->dropped > 20 && g.relay->duplicated > 20 && g.relay->maxBytes <= 1200,
@@ -370,9 +371,8 @@ void udpLossRecovery() {
     udpLossRecoveryImpl(false);
 }
 void udpFragmentedRecovery() {
-    // Reliability under extreme fragmentation, not a playability benchmark:
-    // almost no ~88 KiB delta survives losing every seventh datagram.
-    // Full recovery and one-shot input must still make progress.
+    // Opaque ~88 KiB changes exercise FEC, sequence-window crossings, paced
+    // bursts and receipts while every seventh physical datagram is dropped.
     udpLossRecoveryImpl(true);
 }
 void loadingExit() {
@@ -2423,10 +2423,12 @@ void worldDeltas() {
     g.ready();
     std::mt19937 random(73);
     std::array<std::vector<std::uint8_t>, 4> expected;
+    std::array<std::vector<std::uint8_t>, 4> dependencies;
     for (unsigned slot = 1; slot < 4; ++slot) {
         expected[slot].resize(140000);
         for (auto& byte : expected[slot])
             byte = static_cast<std::uint8_t>(random());
+        dependencies[slot].resize(20000, static_cast<std::uint8_t>(slot));
     }
     std::array<unsigned, 4> received{};
     received.fill(UINT32_MAX);
@@ -2442,6 +2444,9 @@ void worldDeltas() {
             state.tick = tick;
             state.connected = 15;
             state.bytes = expected[slot];
+            if (tick % 10 == 0)
+                dependencies[slot][tick] = static_cast<std::uint8_t>(tick + slot);
+            state.stable = dependencies[slot];
             require(g.peers[0]->publish(slot, state), "Delta publication failed");
         }
         // Leave one guest unacknowledged while other players keep consuming.
@@ -2450,6 +2455,8 @@ void worldDeltas() {
             for (unsigned slot = 1; slot < 3; ++slot)
                 if (auto state = g.peers[slot]->takeState()) {
                     require(state->bytes == expected[slot], "Delta changed a complete view");
+                    require(state->stable == dependencies[slot],
+                            "Realtime view used the wrong reliable dependency revision");
                     g.peers[slot]->applied(state->tick);
                     received[slot] = state->tick;
                 }

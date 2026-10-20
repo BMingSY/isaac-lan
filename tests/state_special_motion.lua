@@ -504,15 +504,17 @@ native.net_gate = function(capture, apply, collect, restore, present, stage)
             end
         end
     end, function(...)
+        local bytes, stable = collect(...)
         return string.pack(
             ">s4s2i4i4i4i4",
-            collect(...),
+            bytes,
             doorPhase,
             doorMask,
             doorChecked,
             doorway and doorway.target or ghostDoor and ghostDoor.target or -1,
             ghostChecks
-        )
+        ),
+            stable
     end, function(bytes, ...)
         local data, target
         data, doorPhase, doorMask, doorChecked, target, ghostChecks =

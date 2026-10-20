@@ -17,7 +17,8 @@ struct IncomingPacket {
     std::optional<WorldState> world;
     std::optional<ReceivedBulk> bulk;
     std::size_t size() const {
-        return bytes.size() + (world ? world->bytes.size() : 0) + (bulk ? bulk->size() : 0);
+        return bytes.size() + (world ? world->bytes.size() + world->stable.size() : 0) +
+               (bulk ? bulk->size() : 0);
     }
 };
 struct OutgoingPacket {

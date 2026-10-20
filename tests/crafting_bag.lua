@@ -177,6 +177,8 @@ local function environment()
     local modules = {}
     for _, name in ipairs({
         "sync/codec",
+        "sync/layers",
+        "presentation/timeline",
         "sync/world_schema",
         "sync/fields",
         "sync/capture",
@@ -291,7 +293,7 @@ local function environment()
     end
     modules["sync/room"] = function()
         return function()
-            return { true, 20, {}, {}, false, "layout", false, { 0, 0 } }
+            return { true, 20, {}, {}, false, "layout", false, { 0, 0 }, "rails" }
         end
     end
     for _, name in ipairs({
@@ -370,7 +372,7 @@ for tick = 1, 5 do
         local bytes = host.state.capture(slot, tick)
         local view = host.state.decode(bytes)
         assert(
-            view[1] == 27 and view[9][1][8][1] == first and view[9][2][8][1] == second,
+            view[1] == 28 and view[9][1][8][1] == first and view[9][2][8][1] == second,
             "World snapshot omitted or mixed the two players' crafting bags"
         )
         assert(view[9][1][8][2] == (tick % 2 == 0) and view[9][2][8][2] == (tick % 2 ~= 0))
@@ -380,6 +382,16 @@ for tick = 1, 5 do
             "Inventory setters erased bag state or the guest restored only its own bag"
         )
         assert(guest.state.apply(bytes, tick, 0), "Repeated views must be safe")
+        local dynamic, stable = host.state.captureTransfer(slot, tick)
+        assert(
+            host.state.encode(host.state.decode(dynamic, stable)) == bytes,
+            "Layered capture changed the complete actor state"
+        )
+        assert(guest.state.apply(dynamic, tick, 0, false, stable))
+        assert(
+            guest.players[0].bag == first and guest.players[1].bag == second,
+            "Layered capture lost private crafting materials"
+        )
     end
     assert(
         host.players[0].reads == tick and host.players[1].reads == tick,

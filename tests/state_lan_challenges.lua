@@ -1090,13 +1090,13 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             advance(t)
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
             snapshots = snapshots + 1
             if case.challenge then
-                local value = _IsaacLanState.decode(bytes)
+                local value = _IsaacLanState.decode(bytes, stable)
                 local level, epoch = Game():GetLevel(), value[14]
                 local fullAt =
                     tonumber(read(challengeCoordination .. "/fill-done-" .. current .. ".txt"))

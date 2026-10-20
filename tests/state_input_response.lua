@@ -115,8 +115,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, tick, ack, betweenUpdates)
-            local applied = restore(bytes, tick, ack, betweenUpdates)
+        function(bytes, tick, ack, betweenUpdates, stable)
+            local applied = restore(bytes, tick, ack, betweenUpdates, stable)
             if applied ~= false then
                 if betweenUpdates then
                     fastApplies = fastApplies + 1

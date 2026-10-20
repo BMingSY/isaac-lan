@@ -28,11 +28,12 @@ local motion = dofile(root .. "/src/bridge/presentation/motion.lua")(
     end,
 }, {}, {
     vector = Vector,
+    timeline = dofile(root .. "/src/bridge/presentation/timeline.lua")(),
     clock = function()
         return now * 1000
     end,
     status = function()
-        return { pause = pause, slot = 1 }
+        return { pause = pause, slot = 1, ping1 = 90 }
     end,
     room = function()
         return {
@@ -578,3 +579,14 @@ localState.prediction:confirm(Vector(200, 100), 20, Vector(0, 0), 300)
 localRender(21)
 assert(player.Position.X >= 200, "Authoritative teleport was swept through the old obstacle")
 print("PASS high-speed swept collision, body radius and diagonal wall sliding")
+-- Receipt jitter must not restart a remote projectile's simulation clock.
+motion.reset(true)
+state, pause = {}, 0
+motion.observe(1000, 20.045)
+accept(20.045, 1, 0, 100)
+close(render(20.045), 4.5, "Network travel time omitted from presentation")
+motion.observe(1033, 20.095)
+accept(20.095, 2, 3.3, 100)
+close(render(20.095), 9.5, "Receipt jitter changed the authority timeline")
+close(render(20.3), 13.3, "Old views extrapolated past the bounded horizon")
+print("PASS shared capture clock and bounded projectile extrapolation")

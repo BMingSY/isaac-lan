@@ -148,11 +148,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
-            local v = _IsaacLanState.decode(bytes)
+            local v = _IsaacLanState.decode(bytes, stable)
             local pos = native.rooms_positions()
             if t >= 150 and t < 180 then
                 assert(pos["1"].index == large and pos["0"].index == 71)

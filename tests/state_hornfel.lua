@@ -226,11 +226,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
-            local view = _IsaacLanState.decode(bytes)
+            local view = _IsaacLanState.decode(bytes, stable)
             local found = false
             assert(native.rooms_with_player(1, function()
                 assert(native.room_rails() == view[11][9], "Room rails differ")

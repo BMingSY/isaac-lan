@@ -114,19 +114,19 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report("HOST tick=" .. t)
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if io and (t == 150 or t == 300) then
             local out = assert(io.open("./authority-" .. t .. ".bin", "wb"))
             out:write(bytes)
             out:close()
         end
-        return bytes
-    end, function(bytes, t, ack, betweenUpdates)
-        if restore(bytes, t, ack, betweenUpdates) == false then
+        return bytes, stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
+        if restore(bytes, t, ack, betweenUpdates, stable) == false then
             return false
         end
         corrected = corrected + 1
-        local v = _IsaacLanState.decode(bytes)
+        local v = _IsaacLanState.decode(bytes, stable)
         lastAuthority = Vector(v[9][2][3][6][1], v[9][2][3][6][2])
         assert(native.rooms_connected() == v[6], "Roster not restored")
         for _, actor in ipairs(v[9]) do

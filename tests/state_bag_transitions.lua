@@ -163,11 +163,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
-            for _, a in ipairs(_IsaacLanState.decode(bytes)[9]) do
+            for _, a in ipairs(_IsaacLanState.decode(bytes, stable)[9]) do
                 if a[2] == 2 then
                     if remoteBag and remoteBag[2] ~= a[8][2] then
                         transitions = transitions + 1

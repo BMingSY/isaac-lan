@@ -322,15 +322,15 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 math.max(introMotion, math.abs(Isaac.GetPlayer(1).Position.X - introStartX))
         end
         return collect(slot, t)
-    end, function(bytes, t, ack, betweenUpdates)
+    end, function(bytes, t, ack, betweenUpdates, stable)
         local began = Isaac.GetTime()
-        if restore(bytes, t, ack, betweenUpdates) == false then
+        if restore(bytes, t, ack, betweenUpdates, stable) == false then
             return false
         end
         cost("restore", Isaac.GetTime() - began)
         Options.ChargeBars = true
         if phase(t) then
-            local value = _IsaacLanState.decode(bytes)
+            local value = _IsaacLanState.decode(bytes, stable)
             for _, actor in ipairs(value[9]) do
                 if actor[2] == 2 and actor[6] then
                     local expected = weapons(actor[6])

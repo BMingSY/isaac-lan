@@ -79,6 +79,12 @@ class UdpRelay {
             bind(socket, reinterpret_cast<sockaddr*>(&address), sizeof(address)) ||
             getsockname(socket, reinterpret_cast<sockaddr*>(&address), &length))
             throw std::runtime_error("Cannot bind UDP fixture");
+        // Keep kernel queue loss separate from the fixture's explicit loss
+        // schedule. Windows' default UDP buffer can be only 8 KiB.
+        const int receiveBytes = 1024 * 1024;
+        if (setsockopt(socket, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&receiveBytes),
+                       sizeof(receiveBytes)))
+            throw std::runtime_error("Cannot size UDP fixture receive queue");
         port = ntohs(address.sin_port);
         target = address;
         target.sin_port = htons(destination);

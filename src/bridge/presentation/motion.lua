@@ -18,10 +18,14 @@ return function(fields)
     -- Render-only movement and interpolation; authority remains on the host.
     return function(native, actorsPresentation, view)
         local Vector = view.vector
-        local lastRender
+        local lastRender, captured
+        local corrections, correctionTotal, correctionMax = 0, 0, 0
+        local buckets = { 0, 0, 0, 0, 0 }
+        local limits = { 1, 4, 16, 64, math.huge }
         local function coordinates(track, now)
             local age = math.max(0, now - track.at)
-            local travel, decay = math.min(age, 0.1), math.exp(-age / (1 / 30))
+            local travel = math.min(age, 0.1)
+            local decay = math.exp(-math.max(0, now - (track.received or track.at)) / (1 / 30))
             return track.x + track.vx * travel + track.cx * decay,
                 track.y + track.vy * travel + track.cy * decay
         end
@@ -36,18 +40,21 @@ return function(fields)
                 return prior
             end
             local x, y = position.X, position.Y
+            local vx, vy = velocity.X * (rate or 1), velocity.Y * (rate or 1)
+            local at = captured or now
+            local travel = math.min(math.max(0, now - at), 0.1)
             local cx, cy = 0, 0
             if prior then
                 local px, py = coordinates(prior, now)
-                cx, cy = px - x, py - y
+                cx, cy = px - (x + vx * travel), py - (y + vy * travel)
                 if cx * cx + cy * cy >= 96 * 96 then
                     cx, cy = 0, 0
                 end
             end
             local result = prior or {}
-            result.target, result.at, result.tick = position, now, tick
+            result.target, result.at, result.tick, result.received = position, at, tick, now
             result.x, result.y, result.cx, result.cy = x, y, cx, cy
-            result.vx, result.vy = velocity.X * (rate or 1), velocity.Y * (rate or 1)
+            result.vx, result.vy = vx, vy
             result.stationary = result.vx == 0 and result.vy == 0 and cx == 0 and cy == 0
             return result
         end
@@ -246,6 +253,31 @@ return function(fields)
                             m.prediction.teleported = false
                         end))
                         m.prediction:clip(position)
+                        if view.metrics and view.metrics.enabled and m.prediction.errorSquared then
+                            local error = math.sqrt(m.prediction.errorSquared)
+                            corrections = corrections + 1
+                            correctionTotal = correctionTotal + error
+                            correctionMax = math.max(correctionMax, error)
+                            for index, limit in ipairs(limits) do
+                                if error <= limit then
+                                    buckets[index] = buckets[index] + 1
+                                    view.metrics.counter(
+                                        "prediction.bucket" .. index,
+                                        buckets[index]
+                                    )
+                                    break
+                                end
+                            end
+                            view.metrics.counter("prediction.corrections", corrections)
+                            view.metrics.counter(
+                                "prediction.sum_millipixels",
+                                math.floor(correctionTotal * 1000)
+                            )
+                            view.metrics.counter(
+                                "prediction.max_millipixels",
+                                math.floor(correctionMax * 1000)
+                            )
+                        end
                     else
                         if m.prediction then
                             -- Drop walking offsets when this body stops accepting
@@ -271,8 +303,28 @@ return function(fields)
             track = track,
             sample = sample,
             present = present,
-            reset = function()
-                lastRender = nil
+            observe = function(sourceMs, now)
+                if view.timeline then
+                    local status = view.status()
+                    captured = view.timeline.observe(
+                        sourceMs,
+                        now,
+                        status.slot and status["ping" .. status.slot]
+                    )
+                    if view.metrics and view.metrics.enabled then
+                        view.metrics.sample("view.age", math.max(0, now - captured) * 1000)
+                    end
+                end
+            end,
+            reset = function(clearMetrics)
+                lastRender, captured = nil, nil
+                if clearMetrics then
+                    corrections, correctionTotal, correctionMax = 0, 0, 0
+                    buckets = { 0, 0, 0, 0, 0 }
+                end
+                if view.timeline then
+                    view.timeline.reset()
+                end
             end,
         }
     end

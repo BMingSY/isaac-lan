@@ -83,6 +83,14 @@ function _IsaacLanRoomEntered()
     )
 end
 local worldSchema = assert(modules["sync/world_schema"])
+local layers = component("sync/layers")
+function state.decode(bytes, stable)
+    local value = decode(bytes)
+    if stable and #stable > 0 then
+        value = worldSchema.pack(layers.join(worldSchema.unpack(value, value[2]), decode(stable)))
+    end
+    return value
+end
 local itemPresentation = assert(modules["presentation/items"])(native, function()
     return Isaac.GetPlayer(0):GetSprite()
 end, sprite, applySprite)
@@ -108,6 +116,8 @@ local actorsPresentation = component("presentation/actors")(native, function(pat
 end, applySprite)
 local attachments = component("presentation/attachments")(native, Vector, EntityType, EffectVariant)
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
+    timeline = assert(modules["presentation/timeline"])(),
+    metrics = performance,
     predictMovement = function(player, room)
         return forgotten.predictMovement(player) and crawlspace.predictMovement(room)
     end,
@@ -133,6 +143,10 @@ local captureState = component("sync/capture")({
     native = native,
     encode = encode,
     schema = worldSchema,
+    layers = layers,
+    clock = function()
+        return Isaac.GetTime()
+    end,
     game = function()
         return Game()
     end,
@@ -174,6 +188,10 @@ function state.capture(slot, tick)
     performance.resources()
     return captureState.capture(slot, tick)
 end
+function state.captureTransfer(slot, tick)
+    performance.resources()
+    return captureState.capture(slot, tick, true)
+end
 local home = assert(modules["compat/routes/home"])(LevelStage, StageType)
 local floor = assert(modules["runtime/floor"])(native, home)
 local transitions = assert(modules["compat/transitions"])({
@@ -187,6 +205,7 @@ local replica = component("sync/replica")({
     encode = encode,
     decode = decode,
     schema = worldSchema,
+    layers = layers,
     floor = floor,
     performance = performance,
     entityCodec = entityCodec,
@@ -239,8 +258,8 @@ end, function()
     replica.resetView()
     captureState.reset()
 end)
-function state.apply(bytes, tick, ack, betweenUpdates)
-    if not replica.apply(bytes, tick, ack, betweenUpdates) then
+function state.apply(bytes, tick, ack, betweenUpdates, stable)
+    if not replica.apply(bytes, tick, ack, betweenUpdates, stable) then
         return false
     end
     state.lastTick = tick

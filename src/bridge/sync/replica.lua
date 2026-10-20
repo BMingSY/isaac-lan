@@ -324,7 +324,8 @@ return function(fields)
         restoreLocations = performance.wrap("apply.locations", restoreLocations)
         restoreMap = performance.wrap("apply.map", restoreMap)
         commit = performance.wrap("apply.commit", commit)
-        local function apply(bytes, tick, ack, betweenUpdates)
+        local stableBytes, stableValue
+        local function apply(bytes, tick, ack, betweenUpdates, stable)
             performance.resources()
             if floor.waiting() then
                 pendingBytes, pendingTick, pendingValue = nil, nil, nil
@@ -335,6 +336,13 @@ return function(fields)
             if pendingBytes ~= bytes or pendingTick ~= tick then
                 pendingBytes, pendingTick, pendingValue = nil, nil, nil
                 local decoded = worldSchema.unpack(decode(bytes), tick)
+                if stable and #stable > 0 then
+                    assert(deps.layers, "Missing view dependency decoder")
+                    if stableBytes ~= stable then
+                        stableValue, stableBytes = decode(stable), stable
+                    end
+                    decoded = deps.layers.join(decoded, stableValue)
+                end
                 pendingBytes, pendingTick, pendingValue = bytes, tick, decoded
             end
             local value = pendingValue
@@ -373,6 +381,9 @@ return function(fields)
             native.state_clock(value.frame)
             assert(native.net_progress(value.progress))
             local now = deps.now()
+            if motionPresentation.observe then
+                motionPresentation.observe(value.captured, now)
+            end
             restoreActors(value, now, tick)
             local cursesChanged = restoreShared(value, level)
             local mapChanged = restoreMap(value, level, roomChanged, cursesChanged)
@@ -396,6 +407,7 @@ return function(fields)
         end
 
         local function resetView()
+            stableBytes, stableValue = nil, nil
             pendingBytes, pendingTick, pendingValue = nil, nil, nil
             motion, actorVisuals, replicaRoom = {}, {}, nil
             appliedLocations = nil
@@ -418,7 +430,7 @@ return function(fields)
                 resetView()
                 replicas, lastInventory, receivedTick = {}, {}, -1
                 actorsPresentation.reset()
-                motionPresentation.reset()
+                motionPresentation.reset(true)
             end,
         }
     end

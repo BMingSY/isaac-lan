@@ -5,6 +5,8 @@ diagnostics/performance
 sync/entity_codec
 sync/entity_links
 sync/world_schema
+sync/layers
+presentation/timeline
 sync/actor_pose
 sync/actor_roster
 presentation/actors

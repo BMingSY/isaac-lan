@@ -241,7 +241,7 @@ lifecycle = assert(_IsaacLanModules["runtime/session"])({
             native.net_gate(
                 capture,
                 apply,
-                _IsaacLanState.capture,
+                _IsaacLanState.captureTransfer,
                 _IsaacLanState.apply,
                 _IsaacLanState.present,
                 _IsaacLanState.beginFloor

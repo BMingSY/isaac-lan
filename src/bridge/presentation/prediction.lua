@@ -76,12 +76,14 @@ local function advance(self, input, resolve)
 end
 function methods:step(direction, sequence, speed, dt, locked, resolve)
     dt = math.max(0, math.min(dt, 0.05))
+    self.errorSquared = nil
     if self.rebuild then
         self.position, self.velocity = self.base, self.authorityVelocity
         for _, input in ipairs(self.pending) do
             advance(self, input, resolve)
         end
         self.correction = self.display - self.position
+        self.errorSquared = self.correction:LengthSquared()
         self.rebuild = false
     end
     self.sequence = sequence

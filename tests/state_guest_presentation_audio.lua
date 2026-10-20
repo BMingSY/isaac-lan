@@ -247,7 +247,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end)
         end
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if t % 30 == 0 and t >= 100 then
             local p = native.item_presentation_state(slot)
             local s = native.item_presentation_sprite(slot, Isaac.GetPlayer(0):GetSprite(), 0)
@@ -264,11 +264,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     .. (s and s:GetFilename() or "none")
             )
         end
-        return bytes
-    end, function(bytes, t, ack, betweenUpdates)
-        local applied = restore(bytes, t, ack, betweenUpdates)
+        return bytes, stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
+        local applied = restore(bytes, t, ack, betweenUpdates, stable)
         if applied and not host then
-            local value = _IsaacLanState.decode(bytes)[16]
+            local value = _IsaacLanState.decode(bytes, stable)[16]
             checkText(value[1])
             assert(
                 native.item_presentation_pose(1) == value[4],

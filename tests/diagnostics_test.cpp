@@ -1,5 +1,6 @@
 #include "app/configuration.h"
 #include "core/performance.h"
+#include "diagnostics/input_latency.h"
 #include "test_support.h"
 #include <chrono>
 #include <filesystem>
@@ -150,6 +151,22 @@ void preservation() {
             "Oversized configuration was read without a bound");
 }
 void metrics() {
+    using Clock = std::chrono::steady_clock;
+    using namespace std::chrono_literals;
+    isaac::diagnostics::InputLatency latency;
+    const auto start = Clock::time_point{};
+    latency.capture(1, start);
+    require(latency.present(1, start + 8ms) == 8 && !latency.present(1, start + 16ms),
+            "Presentation latency duplicated one input sample");
+    require(latency.confirm(1, start + 90ms) == 90 && !latency.confirm(1, start + 100ms),
+            "Repeated state acknowledgement duplicated latency");
+    latency.capture(129, start + 1s);
+    require(!latency.present(1, start + 1s) && !latency.confirm(2, start + 1s),
+            "Evicted sample was mistaken for a newer input");
+    latency = {};
+    latency.capture(0, start);
+    require(latency.confirm(0, start + 40ms) == 40,
+            "New session retained old input sequence metrics");
     isaac::diagnostics::Window window;
     for (unsigned i = 1; i <= 100; ++i)
         window.add(i);

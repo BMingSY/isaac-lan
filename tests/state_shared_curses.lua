@@ -162,17 +162,17 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         before(t, n, bytes)
         advance(t)
     end, function(slot, t)
-        local bytes = collect(slot, t)
+        local bytes, stable = collect(slot, t)
         if not bytes then
-            return bytes
+            return bytes, stable
         end
-        return string.pack(">s4", bytes) .. _IsaacLanState.encode({ step, finished })
-    end, function(bytes, t, ack, betweenUpdates)
+        return string.pack(">s4", bytes) .. _IsaacLanState.encode({ step, finished }), stable
+    end, function(bytes, t, ack, betweenUpdates, stable)
         local body, pos = string.unpack(">s4", bytes)
-        if restore(body, t, ack, betweenUpdates) == false then
+        if restore(body, t, ack, betweenUpdates, stable) == false then
             return false
         end
-        local value = _IsaacLanState.decode(body)
+        local value = _IsaacLanState.decode(body, stable)
         assert(Game():GetLevel():GetCurses() == value[17], "Replica shared curse mask differs")
         snapshots = snapshots + 1
         local meta = _IsaacLanState.decode(bytes:sub(pos))

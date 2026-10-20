@@ -136,16 +136,16 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             player:SetActiveCharge(6)
         end)
     end, function(slot, tick)
-        local bytes = collect(slot, tick)
+        local bytes, stable = collect(slot, tick)
         if slot == 1 then
             report("VIEW tick=" .. tick .. " ms=" .. Isaac.GetTime())
         end
-        return bytes
-    end, function(bytes, tick, ack, betweenUpdates)
-        if restore(bytes, tick, ack, betweenUpdates) == false then
+        return bytes, stable
+    end, function(bytes, tick, ack, betweenUpdates, stable)
+        if restore(bytes, tick, ack, betweenUpdates, stable) == false then
             return false
         end
-        local value = worldSchema.unpack(_IsaacLanState.decode(bytes), tick)
+        local value = worldSchema.unpack(_IsaacLanState.decode(bytes, stable), tick)
         for _, actor in ipairs(value.actors) do
             if actor[A.controller] == 2 then
                 local player = Isaac.GetPlayer(actor[A.index])

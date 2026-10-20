@@ -1,7 +1,7 @@
 -- Instrument existing operations without changing their values or errors.
 return function(native, clock)
     local active = native.diagnostics_enabled and native.diagnostics_enabled()
-    local profile = {}
+    local profile = { enabled = active }
     local sampledAt = -math.huge
     function profile.wrap(name, fn)
         if not active then
@@ -19,6 +19,11 @@ return function(native, clock)
     function profile.counter(name, value)
         if active then
             native.diagnostics_counter(name, value)
+        end
+    end
+    function profile.sample(name, value)
+        if active then
+            native.diagnostics_sample(name, value)
         end
     end
     function profile.resources()

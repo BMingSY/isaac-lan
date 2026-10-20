@@ -2,6 +2,8 @@
 #include "net/message_receiver.h"
 #include "net/messages.h"
 #include "net/wire_codec.h"
+#include "net/world_dependencies.h"
+#include "net/world_shards.h"
 #include <enet/enet.h>
 #include <algorithm>
 #include <map>
@@ -15,7 +17,7 @@ constexpr std::size_t maxDatagramMessage = maxWorldSize + 128;
 constexpr auto closeGrace = std::chrono::seconds(2);
 // This envelope is below the game protocol. A reliable fence invalidates
 // in-flight state and input when the authority changes a run/floor generation.
-enum class Envelope : std::uint8_t { message, world, fence };
+enum class Envelope : std::uint8_t { message, world, fence, dependency, shard };
 struct PacketAccount {
     std::shared_ptr<ConnectionPipe> pipe;
     std::size_t bytes;
@@ -75,6 +77,16 @@ struct DatagramConnection {
     WorldGeneration generation{};
     std::uint32_t fence = 0;
     WorldTransfer world{true};
+    WorldDependencies dependencies;
+    WorldShards shards;
+    std::deque<std::vector<std::uint8_t>> outgoingShards;
+    std::size_t outgoingShardBytes = 0;
+    std::optional<WorldState> publication;
+    std::vector<std::uint8_t> sentDependency;
+    std::uint32_t dependencyRevision = 0;
+    std::uint64_t dependencyRaw = 0, dependencyWire = 0, dependencyFull = 0, redundancyWire = 0;
+    std::shared_ptr<std::atomic<bool>> dependencyComplete =
+        std::make_shared<std::atomic<bool>>(true);
     ReliableReceiver reliable;
     struct Bulk {
         std::shared_ptr<const ReliableTransfer> transfer;
@@ -83,6 +95,8 @@ struct DatagramConnection {
     };
     std::deque<Bulk> bulk;
     std::optional<IncomingPacket> pending;
+    std::optional<std::vector<std::uint8_t>> latestReceipt;
+    Clock::time_point receiptAt{};
     std::optional<Clock::time_point> closingAt;
     std::shared_ptr<std::atomic<bool>> recoveryComplete = std::make_shared<std::atomic<bool>>(true);
     Clock::time_point recoveryAt{};
@@ -113,20 +127,21 @@ struct DatagramConnection {
         pipe->incoming.push(std::move(packet));
     }
     void send(std::span<const std::uint8_t> bytes, enet_uint8 channel, Envelope kind,
-              std::size_t accounted = 0) {
+              std::size_t accounted = 0, std::shared_ptr<std::atomic<bool>> completed = nullptr) {
         Writer envelope(static_cast<Message>(kind));
         envelope.u32(fence);
         envelope.bytes.insert(envelope.bytes.end(), bytes.begin(), bytes.end());
-        auto* packet = enet_packet_create(envelope.bytes.data(), envelope.bytes.size(),
-                                          channel == reliableChannel || channel == recoveryChannel
-                                              ? ENET_PACKET_FLAG_RELIABLE
-                                              : ENET_PACKET_FLAG_UNRELIABLE_FRAGMENT);
+        auto* packet = enet_packet_create(
+            envelope.bytes.data(), envelope.bytes.size(),
+            channel == reliableChannel || channel == recoveryChannel ? ENET_PACKET_FLAG_RELIABLE
+            : kind == Envelope::shard                                ? ENET_PACKET_FLAG_UNSEQUENCED
+                                      : ENET_PACKET_FLAG_UNRELIABLE_FRAGMENT);
         if (!packet)
             throw std::runtime_error("Cannot allocate UDP packet");
-        if (accounted || channel == recoveryChannel) {
+        if (accounted || completed || channel == recoveryChannel) {
             packet->userData =
                 new PacketAccount{accounted ? pipe : nullptr, accounted,
-                                  channel == recoveryChannel ? recoveryComplete : nullptr};
+                                  channel == recoveryChannel ? recoveryComplete : completed};
             packet->freeCallback = releasePacket;
         }
         if (enet_peer_send(peer, channel, packet)) {
@@ -137,7 +152,8 @@ struct DatagramConnection {
     void message(std::vector<std::uint8_t> bytes, StateCompression& codec,
                  std::size_t accounted = 0) {
         const auto type = static_cast<Message>(bytes.at(0));
-        const auto channel = type == Message::input ? inputChannel : reliableChannel;
+        const auto channel =
+            type == Message::input || type == Message::applied ? inputChannel : reliableChannel;
         send(encodeWire(std::move(bytes), codec), channel, Envelope::message, accounted);
     }
     void synchronizeSender() {
@@ -147,6 +163,13 @@ struct DatagramConnection {
         generation = requested;
         world.resetSender();
         world.epoch(generation.epoch);
+        publication.reset();
+        latestReceipt.reset();
+        outgoingShards.clear();
+        outgoingShardBytes = 0;
+        sentDependency.clear();
+        dependencyRevision = 0;
+        dependencyComplete = std::make_shared<std::atomic<bool>>(true);
         if (authority) {
             ++fence;
             send({}, reliableChannel, Envelope::fence);
@@ -163,6 +186,9 @@ struct DatagramConnection {
                 throw std::runtime_error("Invalid UDP generation fence");
             fence = context;
             world.resetReceiver();
+            dependencies.reset();
+            shards.reset();
+            latestReceipt.reset();
             return;
         }
         if (packet.size() <= 5)
@@ -172,24 +198,46 @@ struct DatagramConnection {
         if (channel != reliableChannel && context != fence)
             return;
         IncomingPacket incoming;
-        if (kind == Envelope::world) {
+        if (kind == Envelope::world || kind == Envelope::shard) {
             if ((channel != worldChannel && channel != recoveryChannel) || authority)
                 throw std::runtime_error("Invalid UDP world channel");
-            Reader r(packet.subspan(5));
+            std::optional<std::vector<std::uint8_t>> restored;
+            auto payload = packet.subspan(5);
+            if (kind == Envelope::shard) {
+                if (channel != worldChannel)
+                    throw std::runtime_error("Invalid UDP shard channel");
+                restored = shards.receive(payload);
+                if (!restored)
+                    return;
+                payload = *restored;
+            }
+            Reader r(payload);
             if (static_cast<Message>(r.u8()) != Message::world)
                 throw std::runtime_error("Invalid UDP world message");
             incoming.world = world.receive(r, worldCodec);
-            if (incoming.world)
+            if (incoming.world) {
                 pipe->samples.push({"decompress", world.expandMs});
+                incoming.world = dependencies.receive(std::move(*incoming.world));
+            }
+        } else if (kind == Envelope::dependency) {
+            if (channel != reliableChannel || authority || context != fence)
+                throw std::runtime_error("Invalid UDP dependency channel");
+            Reader r(packet.subspan(5));
+            const auto revision = r.u32();
+            const auto bytes = r.blob(maxWorldSize + StateCompression::headerSize);
+            r.finish();
+            incoming.world = dependencies.receive(
+                revision, worldCodec.expand(bytes, dependencies.latestBytes()));
         } else if (kind == Envelope::message) {
             auto bytes = decodeWire(packet.subspan(5), codec);
             const auto type = static_cast<Message>(bytes.at(0));
-            if ((type == Message::input) != (channel == inputChannel) ||
+            const bool realtime = type == Message::input || type == Message::applied;
+            if (realtime != (channel == inputChannel) ||
                 (channel != inputChannel && channel != reliableChannel))
                 throw std::runtime_error("Invalid UDP message channel");
             // Reliable one-shot input from an old generation must not leak
             // into the next floor/run even if it was waiting for retransmission.
-            if (type == Message::inputEdges && context != fence)
+            if ((type == Message::inputEdges || type == Message::applied) && context != fence)
                 return;
             if (type == Message::world)
                 throw std::runtime_error("Invalid UDP world envelope");
@@ -200,16 +248,17 @@ struct DatagramConnection {
         deliver(std::move(incoming));
     }
     void observe() {
-        pipe->world.cached.store(world.cachedBytes());
+        pipe->world.cached.store(world.cachedBytes() + dependencies.cachedBytes() +
+                                 sentDependency.capacity() + shards.buffered());
         pipe->world.flightBytes.store(world.inFlightBytes());
         pipe->world.flightStates.store(world.inFlightStates());
-        pipe->world.worldBytes.store(world.worldBytes());
+        pipe->world.worldBytes.store(world.worldBytes() + outgoingShardBytes);
         pipe->world.oldestMs.store(world.oldestMs());
         pipe->world.snapshots.store(world.totals.snapshots);
         pipe->world.deltas.store(world.totals.deltas);
-        pipe->world.raw.store(world.totals.raw);
-        pipe->world.wire.store(world.totals.wire);
-        pipe->world.full.store(world.totals.full);
+        pipe->world.raw.store(world.totals.raw + dependencyRaw);
+        pipe->world.wire.store(world.totals.wire + dependencyWire + redundancyWire);
+        pipe->world.full.store(world.totals.full + dependencyFull);
         pipe->receiveCapacity.store(peer->totalWaitingData);
     }
     bool service(StateCompression& codec, StateCompression& worldCodec) {
@@ -223,6 +272,7 @@ struct DatagramConnection {
             return !closingAt;
         synchronizeSender();
         std::optional<std::vector<std::uint8_t>> input;
+        bool receiptChanged = false;
         while (auto packet = pipe->outgoing.pop()) {
             if (packet->transfer) {
                 if (bulk.size() >= 4)
@@ -234,7 +284,11 @@ struct DatagramConnection {
             auto bytes = std::move(packet->bytes);
             const auto type = static_cast<Message>(bytes.at(0));
             const auto accounted = bytes.size() + 2;
-            if (type == Message::input) {
+            if (type == Message::applied) {
+                pipe->queued.fetch_sub(accounted);
+                latestReceipt = std::move(bytes);
+                receiptChanged = true;
+            } else if (type == Message::input) {
                 pipe->queued.fetch_sub(accounted);
                 if (input)
                     pipe->coalescedInputs.fetch_add(1);
@@ -250,10 +304,50 @@ struct DatagramConnection {
         }
         if (input)
             message(std::move(*input), codec);
-        if (auto publication = pipe->publication.take()) {
+        // A receipt is cumulative latest-state feedback, not a transaction.
+        // Ordered retransmission here would stall the UDP publication window
+        // behind an old missing ACK. Repeat the newest receipt so a lost final
+        // ACK also recovers without waiting for a new view.
+        constexpr auto receiptInterval = std::chrono::milliseconds(100);
+        if (!closingAt && latestReceipt &&
+            (receiptChanged || Clock::now() - receiptAt >= receiptInterval)) {
+            message(*latestReceipt, codec);
+            receiptAt = Clock::now();
+        }
+        if (auto latest = pipe->publication.take()) {
             synchronizeSender();
-            if (publication->generation == generation)
-                world.publish(std::move(publication->value));
+            if (latest->generation == generation)
+                publication = std::move(latest->value);
+        }
+        if (!closingAt && publication && bulk.empty() &&
+            (publication->stable.empty() || publication->stable == sentDependency ||
+             dependencyComplete->load())) {
+            auto& value = *publication;
+            if (!value.stable.empty() && value.stable != sentDependency) {
+                if (++dependencyRevision == 0)
+                    throw std::runtime_error("World dependency revision exhausted");
+                Writer dependency(Message::world);
+                dependency.u32(dependencyRevision);
+                dependencyFull += worldCodec.compress(value.stable).size();
+                dependency.blob(worldCodec.compress(value.stable, sentDependency));
+                sentDependency = std::move(value.stable);
+                value.stable.clear();
+                dependencyRaw += sentDependency.size();
+                dependencyWire += dependency.bytes.size() - 1;
+                const auto accounted = dependency.bytes.size() + 1;
+                pipe->queued.fetch_add(accounted);
+                dependencyComplete->store(false);
+                // Same reliable channel as the fence: a dependency cannot be
+                // acknowledged and then discarded for overtaking its generation.
+                send(std::span(dependency.bytes).subspan(1), reliableChannel, Envelope::dependency,
+                     accounted, dependencyComplete);
+                value.revision = dependencyRevision;
+            } else if (!value.stable.empty()) {
+                value.stable.clear();
+                value.revision = dependencyRevision;
+            }
+            world.publish(std::move(value));
+            publication.reset();
         }
         for (unsigned part = 0;
              !closingAt && !bulk.empty() && part < 8 && pipe->queued.load() < 16384; ++part) {
@@ -281,7 +375,8 @@ struct DatagramConnection {
         // Removing the last bulk chunk from our deque only means it entered
         // ENet. Its accounted bytes remain until acknowledged; let that tail
         // drain before realtime traffic competes for the same path again.
-        if (!closingAt && bulk.empty() && pipe->queued.load() < bulkChunkSize &&
+        if (!closingAt && bulk.empty() && outgoingShards.empty() &&
+            pipe->queued.load() < bulkChunkSize &&
             // Without an application receipt every view is a full copy.
             // Bootstrap one reliable candidate and wait for its receipt, or
             // retry after the recovery interval if it crossed a generation fence.
@@ -302,12 +397,46 @@ struct DatagramConnection {
                     recoveryBytes = state->bytes.size();
                     world.retainRecovery();
                 }
-                send(state->bytes, recovery ? recoveryChannel : worldChannel, Envelope::world);
+                constexpr auto fecThreshold = 3 * WorldShards::shardSize;
+                const auto shardCount = WorldShards::packetCount(state->bytes.size());
+                if (!recovery && state->bytes.size() > fecThreshold &&
+                    shardCount <= ENET_PEER_UNSEQUENCED_WINDOW_SIZE) {
+                    // ENet discards the previous 1024-sequence window as soon
+                    // as a newer one arrives. A view must fit within one window;
+                    // otherwise ordinary packet reordering can erase its first
+                    // groups before the last groups finish.
+                    const auto remaining =
+                        std::size_t(ENET_PEER_UNSEQUENCED_WINDOW_SIZE) -
+                        peer->outgoingUnsequencedGroup % ENET_PEER_UNSEQUENCED_WINDOW_SIZE;
+                    if (shardCount >= remaining)
+                        peer->outgoingUnsequencedGroup = static_cast<enet_uint16>(
+                            peer->outgoingUnsequencedGroup + remaining - 1);
+                    std::size_t emitted = 0;
+                    WorldShards::send(world.trace.tick, state->bytes,
+                                      [&](std::span<const std::uint8_t> shard) {
+                                          emitted += shard.size();
+                                          outgoingShards.emplace_back(shard.begin(), shard.end());
+                                          outgoingShardBytes += shard.size();
+                                      });
+                    redundancyWire += emitted - state->bytes.size();
+                } else
+                    send(state->bytes, recovery ? recoveryChannel : worldChannel, Envelope::world);
                 pipe->samples.push({"compress", world.compressMs});
                 pipe->samples.push({"delta.encode", world.prefixMs});
                 if (world.trace.tick % 300 == 0)
                     pipe->traces.push(WorldTransfer::Trace(world.trace));
             }
+        }
+        // Bound each burst as well as total in-flight views. Large FEC frames
+        // must not overflow a receiver's socket queue before its next poll.
+        constexpr unsigned shardsPerService = 16;
+        for (unsigned part = 0;
+             !closingAt && bulk.empty() && !outgoingShards.empty() && part < shardsPerService;
+             ++part) {
+            auto& shard = outgoingShards.front();
+            send(shard, worldChannel, Envelope::shard);
+            outgoingShardBytes -= shard.size();
+            outgoingShards.pop_front();
         }
         observe();
         if (closingAt) {
@@ -404,10 +533,12 @@ void NetworkIo::runDatagrams() {
                         break;
                     auto found = e.connections.find(event.peer);
                     if (event.type == ENET_EVENT_TYPE_CONNECT) {
-                        // Configure only after the ENet handshake: this call
-                        // queues a reliable command, not just local options.
-                        // A short RTT window recovers promptly after path changes.
-                        enet_peer_throttle_configure(event.peer, 500, 4, 2);
+                        // ENet's packet throttle can drop the entire queued
+                        // unsequenced shard group when a single packet loses
+                        // its lottery. Pace complete views in WorldTransfer;
+                        // never randomly discard their parity/data locally.
+                        // This call queues a command, so it follows the handshake.
+                        enet_peer_throttle_configure(event.peer, 500, 4, 0);
                         if (found == e.connections.end()) {
                             if (closing || !e.listener || e.listener->accepted.full() ||
                                 event.data != protocolVersion) {

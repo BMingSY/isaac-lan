@@ -9,6 +9,7 @@ return function(fields)
         local poop, craftingBag = deps.poop, deps.craftingBag
         local captureTick, captureEpoch, captureActors, captureVisuals = nil, nil, {}, {}
         local captureEncoded, locations, shared = {}, nil, nil
+        local captureStarted = 0
         local roomState = deps.roomFactory()
         local function reset()
             captureTick, captureEpoch = nil, nil
@@ -16,12 +17,13 @@ return function(fields)
             locations, shared = nil, nil
             roomState = deps.roomFactory()
         end
-        local function capture(slot, tick)
+        local function capture(slot, tick, layered)
             local game = deps.game()
             local level = game:GetLevel()
             local epoch = native.net_floor_epoch()
             if captureTick ~= tick or captureEpoch ~= epoch then
                 captureTick, captureEpoch = tick, epoch
+                captureStarted = deps.clock and deps.clock() or 0
                 captureActors, captureVisuals, captureEncoded = {}, {}, {}
                 locations, shared = nil, nil
             end
@@ -127,6 +129,7 @@ return function(fields)
                 end
                 shared = {
                     frame = game:GetFrameCount(),
+                    captured = captureStarted,
                     stage = level:GetStage(),
                     stageType = level:GetStageType(),
                     connected = native.rooms_connected(),
@@ -157,6 +160,11 @@ return function(fields)
             value.sound = deps.audio.capture(slot)
             value.presentation = native.presentation_events(slot)
             value.items = deps.items.capture(slot)
+            if layered then
+                local realtime, stable = deps.layers.split(value)
+                return encode(worldSchema.pack(realtime), captureEncoded),
+                    encode(stable, captureEncoded)
+            end
             return encode(worldSchema.pack(value), captureEncoded)
         end
         return { capture = capture, reset = reset }

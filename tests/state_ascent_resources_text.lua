@@ -497,25 +497,25 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         function(slot, t)
-            local bytes = collect(slot, t)
+            local bytes, stable = collect(slot, t)
             if slot == 1 then
                 inspectText(slot)
             end
             if not bytes then
-                return bytes
+                return bytes, stable
             end
-            return string.pack(">s4", bytes)
-                .. _IsaacLanState.encode({
-                    phase,
-                    expectedTexts,
-                    phaseTick,
-                    resourceExpected or false,
-                })
+            return string.pack(">s4", bytes) .. _IsaacLanState.encode({
+                phase,
+                expectedTexts,
+                phaseTick,
+                resourceExpected or false,
+            }),
+                stable
         end,
-        function(bytes, t, ack, betweenUpdates)
+        function(bytes, t, ack, betweenUpdates, stable)
             local body, pos = string.unpack(">s4", bytes)
             local meta = _IsaacLanState.decode(bytes:sub(pos))
-            local ok = restore(body, t, ack, betweenUpdates)
+            local ok = restore(body, t, ack, betweenUpdates, stable)
             if ok == false then
                 return false
             end

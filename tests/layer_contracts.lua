@@ -4,9 +4,9 @@ local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
 end
 local codec, schema = module("sync/codec"), module("sync/world_schema")
--- Schema 27 combines held-entity links, packed fields and per-owner item presentation.
+-- Schema 28 permits split views with revision-matched dependencies.
 local tuple = {
-    27,
+    28,
     42,
     80,
     6,
@@ -27,17 +27,18 @@ local tuple = {
     { 1, 0.5 },
     string.rep(string.pack(">i4B", 0, 0), 15),
     "",
+    0,
 }
 local view = schema.unpack(tuple, 42)
 assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses == 5)
 assert(codec.encode(schema.pack(view)) == codec.encode(tuple))
 assert(not pcall(schema.unpack, tuple, 41))
 local malformed = { table.unpack(tuple) }
-for _, prior in ipairs({ 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26 }) do
+for _, prior in ipairs({ 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27 }) do
     malformed[1] = prior
     assert(not pcall(schema.unpack, malformed, 42))
 end
-malformed[1], malformed[22] = 27, true
+malformed[1], malformed[23] = 28, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))

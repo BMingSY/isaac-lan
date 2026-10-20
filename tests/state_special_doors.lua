@@ -112,12 +112,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end,
         collect,
-        function(bytes, t, ack, betweenUpdates)
-            if restore(bytes, t, ack, betweenUpdates) == false then
+        function(bytes, t, ack, betweenUpdates, stable)
+            if restore(bytes, t, ack, betweenUpdates, stable) == false then
                 return false
             end
             if t >= 70 and t < 90 then
-                local value = _IsaacLanState.decode(bytes)
+                local value = _IsaacLanState.decode(bytes, stable)
                 for _, grid in ipairs(value[11][4]) do
                     if grid[9] and grid[9][4] == RoomType.ROOM_DEVIL then
                         local door = Game():GetRoom():GetDoor(grid[9][1])

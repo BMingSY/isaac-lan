@@ -22,6 +22,7 @@
 #include "runtime/progression.h"
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
+#include "diagnostics/input_latency.h"
 #include "engine/session_backend.h"
 #include <cstring>
 #include <filesystem>
@@ -45,6 +46,7 @@ constexpr auto restartHoldDuration = std::chrono::milliseconds(550);
 
 LaunchState launch;
 SessionView view;
+diagnostics::InputLatency inputLatency;
 SavedRun saves;
 std::string sessionFingerprint;
 bool requestRestart(bool held) {
@@ -398,12 +400,14 @@ void publishState() {
         lua.rawGetI(state, registry, captureStateRef);
         lua.pushInteger(state, slot);
         lua.pushInteger(state, currentTick);
-        if (!call(captureStateRef, 2, 1, top))
+        if (!call(captureStateRef, 2, 2, top))
             return;
         captureCost.sample(began, "capture");
         std::size_t size = 0;
-        const auto bytes = lua.toString(state, -1, &size);
-        if (!bytes || !size || size > lan::maxWorldSize) {
+        const auto bytes = lua.toString(state, -2, &size);
+        std::size_t stableSize = 0;
+        const auto stable = lua.toString(state, -1, &stableSize);
+        if (!bytes || !size || size + stableSize + sizeof(std::uint32_t) > lan::maxWorldSize) {
             lua.setTop(state, top);
             fail("Invalid authoritative world state");
             return;
@@ -415,6 +419,8 @@ void publishState() {
         packet.pauseOwner = input::menuOwner();
         packet.inputSequences = consumedInputSequences;
         packet.bytes.assign(bytes, bytes + size);
+        if (stableSize)
+            packet.stable.assign(stable, stable + stableSize);
         session->publish(slot, packet);
         lua.setTop(state, top);
     }
@@ -461,6 +467,8 @@ bool captureNextInput(bool simulationStep = false) {
         fail("Local input sequence rejected");
         return false;
     }
+    if (!session->isHost() && diagnostics::enabled())
+        inputLatency.capture(nextInputTick);
     ++nextInputTick;
     return true;
 }
@@ -489,7 +497,9 @@ bool applyReplicaView(bool betweenUpdates) {
         lua.pushInteger(state, packet->tick);
         lua.pushInteger(state, packet->inputSequences[session->slot()]);
         lua.pushBoolean(state, betweenUpdates);
-        if (!call(restoreStateRef, 4, 1, top))
+        lua.pushLString(state, reinterpret_cast<const char*>(packet->stable.data()),
+                        packet->stable.size());
+        if (!call(restoreStateRef, 5, 1, top))
             return false;
         applyCost.sample(began, "apply");
         // A valid new-floor snapshot can arrive while the native transition is
@@ -498,6 +508,9 @@ bool applyReplicaView(bool betweenUpdates) {
         lua.setTop(state, top);
         if (!applied)
             return false;
+        if (diagnostics::enabled())
+            if (auto elapsed = inputLatency.confirm(packet->inputSequences[session->slot()]))
+                diagnostics::sample("input.ack", *elapsed);
         currentTick = packet->tick;
         nextTick = currentTick + 1;
         input::setMenuOwner(packet->pauseOwner);
@@ -1259,6 +1272,7 @@ int gate(lua_State* L) {
     localInput = {};
     lastInputRoom.reset();
     consumedInputSequences = {};
+    inputLatency = {};
     captureCost = {};
     applyCost = {};
     inputSchedule = InputSchedule(inputHz);
@@ -1694,8 +1708,12 @@ void present() {
     // Movement displayed between network samples belongs to the upcoming
     // input, not the last sent sample (which the host may already acknowledge).
     lua.pushInteger(state, nextInputTick);
-    if (call(presentRef, 2, 0, top))
+    if (call(presentRef, 2, 0, top)) {
+        if (diagnostics::enabled() && nextInputTick)
+            if (auto elapsed = inputLatency.present(nextInputTick - 1))
+                diagnostics::sample("input.present", *elapsed);
         rooms::presentCamera();
+    }
 }
 void refreshAutomation(std::uint32_t renderFrame) {
     if (!state || !view.gated || !session || session->phase() != lan::Phase::running) {

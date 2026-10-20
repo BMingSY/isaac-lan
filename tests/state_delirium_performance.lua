@@ -420,10 +420,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             advance()
         end
     end, function(slot, tick)
-        local bytes = collect(slot, tick)
+        local bytes, stable = collect(slot, tick)
         rawBytes = #bytes
         native.diagnostics_counter("fixture_world_raw_bytes", rawBytes)
-        return bytes
+        return bytes, stable
     end, function(...)
         local result = restore(...)
         if result ~= false then
