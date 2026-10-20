@@ -8,6 +8,7 @@ return function(root, native, modules)
         "compat/items/glitched",
         "runtime/restart",
         "runtime/chat_wire",
+        "runtime/chat_dice",
         "runtime/chat",
         "presentation/chat_layout",
         "presentation/chat",

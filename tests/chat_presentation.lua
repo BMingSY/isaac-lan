@@ -379,7 +379,7 @@ messages[#messages + 1] = {
 messages[#messages + 1] = {
     kind = "system",
     owner = 0,
-    text = "1P掷出 D6 : 4",
+    text = "1P 掷骰：D6 = 4",
     time = 0,
     bubble = true,
 }
@@ -404,7 +404,7 @@ for owner = 0, 3 do
     assert(not colors[key], "Players share a chat text color")
     assert(math.max(color.R, color.G, color.B) > 0.8, "Chat text is too dark for its panel")
     colors[key] = true
-    local bubble = drawn(owner == 0 and "1P掷出 D6 : 4" or "发言" .. owner + 1)
+    local bubble = drawn(owner == 0 and "1P 掷骰：D6 = 4" or "发言" .. owner + 1)
     key = colorKey(bubble)
     assert(not bubbleColors[key], "Players share a bubble text color")
     assert(
@@ -419,7 +419,7 @@ assert(
 )
 local diceRows = {}
 for _, item in ipairs(texts) do
-    if item.text == "1P掷出 D6 : 4" then
+    if item.text == "1P 掷骰：D6 = 4" then
         diceRows[#diceRows + 1] = item.color
     end
 end
