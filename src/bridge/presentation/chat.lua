@@ -241,6 +241,11 @@ return function(deps, layout)
                 then
                     local player = actor.player
                     local point = Isaac.WorldToScreen(player.Position)
+                    -- WorldToScreen omits the room's final horizontal mirror;
+                    -- chat draws later in the unmirrored HUD coordinate space.
+                    if deps.game():GetRoom():IsMirrorWorld() then
+                        point = Vector(width - point.X, point.Y)
+                    end
                     local message, gesture = chat.bubbles[owner], chat.emotes[owner]
                     if
                         message

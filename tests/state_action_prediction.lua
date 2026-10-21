@@ -250,8 +250,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     player:RemoveCollectible(activeItem)
                 end
                 if case.item then
-                    player:AddCollectible(case.item, 12, false)
-                    player:SetActiveCharge(12)
+                    player:AddCollectible(case.item, 0, false)
+                    player:FullCharge(ActiveSlot.SLOT_PRIMARY, true)
+                    report("CHARGE " .. case.name .. " " .. player:GetActiveCharge())
                 end
                 if case.card then
                     player:SetCard(0, case.card)

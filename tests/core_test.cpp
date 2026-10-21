@@ -15,6 +15,7 @@
 #include "compat/bosses/encounters.h"
 #include "compat/bosses/rotgut.h"
 #include "compat/routes/mines.h"
+#include "compat/routes/mirror.h"
 #include "compat/routes/curses.h"
 #include "compat/characters/traits.h"
 #include "compat/characters/ghost.h"
@@ -182,6 +183,9 @@ void compatibilityTargets() {
     require(items::floorFollower(1000, 185, true) && !items::floorFollower(1000, 185, false) &&
                 !items::floorFollower(1000, 144, true) && !items::floorFollower(3, 185, true),
             "Floor gathering lost an attached reward or retained another room's effect");
+    require(items::roomFollower(1000, 83, true) && !items::roomFollower(1000, 83, false) &&
+                !items::roomFollower(1000, 144, true) && !items::roomFollower(3, 83, true),
+            "Room handoff left an attached spear behind or moved an unrelated effect");
     require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
             "Lazarus form matching crossed another character");
     require(characters::taintedJacob(37) && characters::taintedJacob(39) &&
@@ -341,6 +345,14 @@ void roomTransitionContext() {
     require(!validRoomRequest(-21, 0) && !validRoomRequest(-102, 0) && !validRoomRequest(169, 0) &&
                 !validRoomRequest(84, 3),
             "Invalid native room request was accepted");
+    for (int door = 0; door < 8; ++door) {
+        require(mirrorEntrance(18, door) == door,
+                "Mirror entry swapped the portal to the opposite world-space wall");
+        require(!mirrorEntrance(0, door) && !mirrorEntrance(3, door),
+                "An ordinary door or mineshaft received mirror arrival rules");
+    }
+    require(!mirrorEntrance(18, -1) && !mirrorEntrance(18, 8),
+            "Mirror entry accepted a missing or invalid portal");
     for (const auto& args :
          {std::array{-100, 84, 1}, std::array{-100, 84, 0}, std::array{-101, 162, 1},
           std::array{-101, 55, 0}, std::array{85, 84, 0}, std::array{107, 106, 0},
@@ -667,15 +679,25 @@ void audioOwnership() {
             "Another floor reused the preceding floor's music");
     require(audioRoomKey(1, 0, 84) != audioRoomKey(1, 1, 84),
             "A dimension reused another room's music");
+    require(roomEntryTrack({92, 37}) == 37 && roomEntryTrack({38, 0}) == 38 &&
+                roomEntryTrack({91, 38}) == 38,
+            "Room entry replayed an old outro or discarded the ongoing combat track");
     const auto ordinary = audioRoomKey(1, 0, 84), next = audioRoomKey(1, 0, 85);
-    require(continueRoomTrack(ordinary, next, 1, {1, 0}) &&
-                continueRoomTrack(ordinary, audioRoomKey(1, 1, 84), 1, {1, 0}),
+    require(continueRoomTrack(ordinary, next, {1, 0}, {1, 0}) &&
+                continueRoomTrack(ordinary, audioRoomKey(1, 1, 84), {1, 0}, {1, 0}),
             "Walking between rooms restarted the same running track");
-    require(!continueRoomTrack(ordinary, next, 2, {1, 0}) &&
-                !continueRoomTrack(ordinary, next, 1, {2, 1}) &&
-                !continueRoomTrack(ordinary, ordinary, 1, {1, 0}) &&
-                !continueRoomTrack(ordinary, audioRoomKey(2, 0, 84), 1, {1, 0}),
+    require(!continueRoomTrack(ordinary, next, {2, 0}, {1, 0}) &&
+                !continueRoomTrack(ordinary, next, {1, 0}, {2, 1}) &&
+                !continueRoomTrack(ordinary, next, {1, 35}, {1, 0}) &&
+                !continueRoomTrack(ordinary, ordinary, {1, 0}, {1, 0}) &&
+                !continueRoomTrack(ordinary, audioRoomKey(2, 0, 84), {1, 0}, {1, 0}),
             "Room music suppressed a boss track, queued jingle, local fade or floor selection");
+    require(completedQueuedTrack({91, 38}, {38, 0}, {38, 0}),
+            "A completed room jingle restarted its following track");
+    require(!completedQueuedTrack({91, 38}, {35, 0}, {38, 0}) &&
+                !completedQueuedTrack({91, 38}, {38, 0}, {91, 38}) &&
+                !completedQueuedTrack({91, 38}, {38, 35}, {38, 0}),
+            "Queue completion swallowed a different track or an unfinished request");
 }
 void transitionCharge() {
     InputFrame held;

@@ -16,6 +16,7 @@
 #include "compat/bosses/encounters.h"
 #include "compat/bosses/rotgut.h"
 #include "compat/routes/mines.h"
+#include "compat/routes/mirror.h"
 #include "compat/routes/curses.h"
 #include "compat/routes/home.h"
 #include "compat/items/deal_chances.h"
@@ -900,10 +901,10 @@ void moveEntity(Address entity, Room& from, Room& to) {
 std::vector<Address> followers(Address player, const Room& room, bool departingFloor = false) {
     std::vector<Address> candidates, result;
     // J460 keeps attached knives in the persistence list along with familiars;
-    // transient weapons can also occur in the ordinary list. Dark Esau is an
-    // NPC in the enemy list, despite following a player across rooms. Preserve
-    // native iteration order and avoid transferring an entity twice.
-    for (unsigned offset : {0x30u, 0x20u, 0x40u}) {
+    // transient weapons can also occur in the ordinary/effect lists. Dark Esau
+    // is an NPC in the enemy list, despite following a player across rooms.
+    // Preserve native iteration order and avoid transferring an entity twice.
+    for (unsigned offset : {0x30u, 0x20u, 0x40u, 0x60u}) {
         const auto list = room.pointer + 0x1218 + offset;
         for (unsigned i = 0; i < at<unsigned>(list, 12); ++i) {
             const auto entity = at<Address>(at<Address>(list, 4), i * 4);
@@ -953,6 +954,8 @@ std::vector<Address> followers(Address player, const Room& room, bool departingF
         if ((type == 3 && at<Address>(entity, 0x410) == player) ||
             (type == 8 &&
              (owned(at<Address>(entity, 0x3bc)) || owned(at<Address>(entity, 0x3c8)))) ||
+            compat::items::roomFollower(type, at<unsigned>(entity, 0x2c),
+                                        owned(at<Address>(entity, 0x3bc))) ||
             darkEsau ||
             (departingFloor &&
              compat::items::floorFollower(
@@ -1275,8 +1278,10 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
                                           direction))
         index = compat::items::blueRoomIndex;
     const int leave = at<int>(game(), 0x18318);
-    int enter = leave >= 0 && leave < 8 ? (leave % 4 + 2) % 4 + (leave / 4) * 4 : -1;
-    if (enter >= 0) {
+    const auto mirrorEntry = compat::routes::mirrorEntrance(animation, leave);
+    int enter =
+        mirrorEntry.value_or(leave >= 0 && leave < 8 ? (leave % 4 + 2) % 4 + (leave / 4) * 4 : -1);
+    if (enter >= 0 && !mirrorEntry) {
         using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
         const auto target = reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
             reinterpret_cast<void*>(game()), index, dimension));

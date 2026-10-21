@@ -1,11 +1,14 @@
 -- Local physical movement in a large room and in Downpour's mirror dimension.
 local native = assert(_IsaacLan)
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port = _IsaacLanTest and _IsaacLanTest.host, _IsaacLanTest and _IsaacLanTest.port
+if not _IsaacLanTest then
+    local f = assert(io.open("./lan-test-role.txt", "r"))
+    host = f:read("*l") == "host"
+    f:close()
+    f = assert(io.open("./lan-test-menu-port.txt", "r"))
+    port = f:read("*l")
+    f:close()
+end
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end
@@ -13,7 +16,7 @@ local frame = _IsaacLanFrame
 local renders, linked, chosen, finished = 0, false, false, false
 local large, axis, mirror = false, nil, false
 local mirrorEntry, mirrorSeen, mirrorPrepared
-local out = not host and assert(io.open("./lan-test-digest-camera.csv", "w"))
+local out = not host and io and assert(io.open("./lan-test-digest-camera.csv", "w"))
 local samples, mirrorSamples = 0, 0
 local physical = 0
 function _IsaacLanFrame()
@@ -59,7 +62,9 @@ function _IsaacLanFrame()
                 samples > 70 and mirrorSamples > 20,
                 "Large and mirror movement were not exercised"
             )
-            out:flush()
+            if out then
+                out:flush()
+            end
         end
         finished = true
         report("PASS native mirror direction and large room camera")
@@ -81,6 +86,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         capture,
         function(t, n, b)
             before(t, n, b)
+            if not native.rooms_ready() then
+                return
+            end
             if t == 30 then
                 assert(native.rooms_move(1, large, 0, -1))
             end
@@ -181,20 +189,23 @@ Isaac.AddCallback(
         end
         local position = Isaac.WorldToScreen(p.Position)
         local origin = Isaac.WorldToScreen(Vector.Zero)
-        out:write(
-            string.format(
-                "%.3f,%d,%.6f,%.6f,%.6f,%.6f,%s,%s,%d\n",
-                Isaac.GetTime() / 1000,
-                t,
-                p.Position.X,
-                p.Position.Y,
-                origin.X,
-                origin.Y,
-                axis or "none",
-                tostring(mirror),
-                physical
-            )
+        local row = string.format(
+            "%.3f,%d,%.6f,%.6f,%.6f,%.6f,%s,%s,%d\n",
+            Isaac.GetTime() / 1000,
+            t,
+            p.Position.X,
+            p.Position.Y,
+            origin.X,
+            origin.Y,
+            axis or "none",
+            tostring(mirror),
+            physical
         )
+        if out then
+            out:write(row)
+        else
+            Isaac.DebugString("LAN_CAMERA_FRAME " .. row:gsub("\n$", ""))
+        end
     end
 )
 

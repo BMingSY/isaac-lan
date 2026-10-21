@@ -170,6 +170,14 @@ assert(target.EntityCollisionClass == 0 and target.GridCollisionClass == 0 and l
 component.apply(target, state)
 assert(target.DepthOffset == -9990, "Repeated snapshots must not accumulate the floor offset")
 local actor, replica = entity(1, 1), entity(1, 128)
+-- Replica Player::Update does not count down the native arrival/input lock.
+-- An authoritative zero must release it, while a live cooldown remains locked.
+actor.ControlsEnabled, replica.ControlsEnabled = true, true
+for _, cooldown in ipairs({ 45, 12, 0, 0, 60, 0 }) do
+    actor.ControlsCooldown, replica.ControlsCooldown = cooldown, 90
+    component.apply(replica, component.capture(actor, false))
+    assert(replica.ControlsCooldown == cooldown, "Replica retained an obsolete control lock")
+end
 component.apply(replica, component.capture(actor, false))
 assert(replica.flags == 129, "Replica actor must retain its native lifecycle flags")
 local warning, beam = entity(1000, 1), entity(1000, 0)

@@ -40,6 +40,13 @@ DIAGNOSTICS = (
     "lanbot-spiders",
     "lanbot-greed",
     "room-entry",
+    "mother-controls",
+    "mother-guest",
+    "mother-together",
+    "split-render",
+    "mirror-camera",
+    "mirror-route",
+    "ambush-audio",
     "hornfel",
 )
 
@@ -87,10 +94,19 @@ def build(output, cases=CASES, *, first_floor=False):
             "lanbot-spiders": "state_lanbot_spiders.lua",
             "lanbot-greed": "state_lanbot_greed.lua",
             "room-entry": "state_room_entry.lua",
+            "mother-controls": "state_mother_controls.lua",
+            "mother-guest": "state_mother_controls.lua",
+            "mother-together": "state_mother_controls.lua",
+            "split-render": "state_split_render.lua",
+            "mirror-camera": "state_mirror_camera.lua",
+            "mirror-route": "state_mirror_route.lua",
+            "ambush-audio": "state_ambush_audio.lua",
             "hornfel": "state_hornfel.lua",
         }.get(name, "state_side_routes.lua")
         options = {
             "route": name,
+            "motherEntrant": 1 if name == "mother-guest" else 0,
+            "motherTogether": name == "mother-together",
             "homeOnly": name in ("home", "home-debug", "dogma-warning"),
             "dogmaWarning": name in ("dogma-warning", "ascent-compat"),
             "crawlspace": name == "ascent-compat",
