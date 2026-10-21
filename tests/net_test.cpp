@@ -592,6 +592,14 @@ void floorRejoin() {
     Group g(2, 0, "127.0.0.1", {}, {1, 23});
     g.ready();
     g.step(0);
+    InputFrame held;
+    held.values[isaac::input::action::moveRight] = maxInputValue;
+    for (unsigned sequence = 0; sequence < 64; ++sequence)
+        require(g.peers[1]->submit(sequence, held), "Previous connection input failed");
+    until([&] {
+        g.poll();
+        return g.peers[0]->inputSequences()[1] == 63;
+    });
     const auto identity = g.peers[1]->identity();
     g.peers[1]->close();
     until([&] {
@@ -637,6 +645,23 @@ void floorRejoin() {
         return value.has_value();
     });
     require(value->tick == 30, "Returning client replayed history instead of current state");
+    require(value->inputSequences[1] == 0,
+            "First rejoin view acknowledged input from the previous connection");
+    g.peers[1]->applied(value->tick);
+    require(g.peers[1]->submit(0, {}) && g.peers[1]->submit(1, held),
+            "Rejoined input stream did not restart");
+    until([&] {
+        g.poll();
+        return g.peers[0]->inputSequences()[1] == 1;
+    });
+    require(g.step(31).inputs[1] == held, "New connection input did not move its actor");
+    g.publish(31);
+    until([&] {
+        g.poll();
+        value = g.peers[1]->takeState();
+        return value.has_value();
+    });
+    require(value->inputSequences[1] == 1, "Rejoin input acknowledgements did not advance");
     g.peers[1]->applied(value->tick);
     g.poll();
     std::puts("PASS rejoin loads current checkpoint then latest state; host continues during "

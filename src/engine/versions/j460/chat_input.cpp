@@ -252,9 +252,13 @@ std::optional<LRESULT> event(HWND hwnd, UINT message, WPARAM key, LPARAM data) {
         if (message == WM_KEYDOWN && consumedKeys[key] && !opened)
             return 0;
     }
-    if (available && message == WM_KEYDOWN && key == VK_OEM_3 && !composing) {
+    const auto toggleKey =
+        message == WM_KEYDOWN && key == VK_PROCESSKEY ? ImmGetVirtualKey(hwnd) : key;
+    if (available && message == WM_KEYDOWN && toggleKey == VK_OEM_3) {
         if (!(data & (1ll << 30))) {
             opened = !opened;
+            if (!opened)
+                cancelComposition();
             wheel = false;
             submit = complete = false;
         }

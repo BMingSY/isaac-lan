@@ -973,6 +973,12 @@ void place(Address entity, Vec2 position) {
     at<Vec2>(entity, 0x360) = {0, 0};
     at<bool>(entity, 0x175) = false;
 }
+void clearRoomTransitionTarget(Address player) {
+    // Native full room entry clears the attraction used by holes/chests.
+    // Joining a resident room bypasses that entry, so its departing target
+    // must not keep pulling the arriving actor back during normal movement.
+    at<Vec2>(player, j460::layout::player::roomTransitionTarget) = {0, 0};
+}
 bool occupiedCombat(const Room& room, Address arriving) {
     if (room.replicaShell)
         return false;
@@ -2171,6 +2177,7 @@ int actorCompanions(lua_State* L) {
             throw std::runtime_error("Only an idle replica restores companion actors");
         struct Companion {
             unsigned id, index, parent, controller, kind, variant;
+            int babySkin;
         };
         std::size_t size = 0;
         const auto bytes = lua.checkString(L, 1, &size);
@@ -2181,10 +2188,16 @@ int actorCompanions(lua_State* L) {
         std::vector<Companion> desired;
         std::set<unsigned> ids, indices;
         for (unsigned i = 0; i < count; ++i) {
-            Companion value{reader.u32(), reader.u8(),  reader.u8(),
-                            reader.u8(),  reader.u16(), reader.u16()};
+            Companion value{reader.u32(),
+                            reader.u8(),
+                            reader.u8(),
+                            reader.u8(),
+                            reader.u16(),
+                            reader.u16(),
+                            static_cast<std::int16_t>(reader.u16())};
             if (!value.id || value.index >= 64 || value.parent >= value.index ||
                 value.controller < 1 || value.controller > 4 || value.variant > 1 ||
+                value.babySkin < -1 || value.babySkin > j460::layout::player::lastBabySkin ||
                 !ids.insert(value.id).second || !indices.insert(value.index).second)
                 throw std::runtime_error("Invalid companion actor identity");
             desired.push_back(value);
@@ -2272,6 +2285,10 @@ int actorCompanions(lua_State* L) {
                 location[body] = room;
                 all = values(roster());
             }
+            // Inventory cache evaluation recognizes native baby companions by
+            // both variant and skin. Establish that identity before any parent
+            // inventory setter can decide to allocate a second companion.
+            at<int>(body, j460::layout::player::babySkin) = value.babySkin;
             replicaCompanions[value.id] = body;
             const auto existing = std::find(all.begin(), all.end(), body);
             if (existing == all.end() || value.index >= all.size())
@@ -2853,6 +2870,7 @@ void setConnected(unsigned mask) {
                     place(entity, target);
                 }
                 moveEntity(actor, *parked.room, *root);
+                clearRoomTransitionTarget(actor);
                 place(actor, target);
                 location[actor] = root;
                 all.push_back(actor);
@@ -3118,8 +3136,19 @@ struct RoomTransfer {
         const auto curseBase = at<std::uint32_t>(game(), j460::layout::game::curses);
         const auto curseSeeds = at<std::uint32_t>(game(), j460::layout::game::seedCurses);
         auto change = [&] {
-            originalChange(reinterpret_cast<void*>(game()), request.destination.index,
-                           request.destination.dimension);
+            j460::withResolvedRoomEntry(
+                [&](j460::RoomArrival) {
+                    // Explicit transfers suppress LeaveDoor rerouting. Native
+                    // resolution can then choose a fallback entrance; restore
+                    // the accepted door before Room::Init constructs its exits.
+                    if (request.door >= 0 && request.door < 8)
+                        at<int>(game(), j460::layout::game::enterDoor) = request.door;
+                    return true;
+                },
+                [&] {
+                    originalChange(reinterpret_cast<void*>(game()), request.destination.index,
+                                   request.destination.dimension);
+                });
         };
         if (runtime::replica() || restoringSavedLocations ||
             request.routing == RoomRouting::resolved)
@@ -3149,9 +3178,11 @@ struct RoomTransfer {
         } else {
             // Joining an occupied room must apply the arriving characters'
             // entry effects without reinitializing resident entities.
-            for (auto player : actors)
+            for (auto player : actors) {
+                clearRoomTransitionTarget(player);
                 engine<RoomCall>(j460::entry::engineRoomsRoomCall_3a8350)(
                     reinterpret_cast<void*>(player));
+            }
             for (auto entity : companions)
                 if (at<unsigned>(entity, 0x28) == 3)
                     engine<RoomCall>(j460::entry::engineRoomsRoomCall)(
@@ -3173,6 +3204,15 @@ struct RoomTransfer {
         for (auto player : actors)
             if (player != request.player)
                 arrival(player, *to, request.door, {}, protect, landing);
+        if (!created && !runtime::replica()) {
+            // Native room entry resets each arriving familiar's room-local
+            // state after placement, including its delayed follow history.
+            // Resident companions must retain their current room behavior.
+            for (auto entity : companions)
+                if (at<unsigned>(entity, 0x28) == 3)
+                    engine<RoomCall>(j460::entry::familiarResetRoomState)(
+                        reinterpret_cast<void*>(entity));
+        }
         runtime::roomEntered();
         if (created) {
             to->clock.reset(at<int>(game(), j460::layout::game::frame));
@@ -3222,6 +3262,8 @@ struct RoomTransfer {
                     [&](j460::RoomArrival resolved) {
                         prepare(resolved);
                         scope.enter(*to);
+                        if (request.door >= 0 && request.door < 8)
+                            at<int>(game(), j460::layout::game::enterDoor) = request.door;
                         return created;
                     },
                     [&] {

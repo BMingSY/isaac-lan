@@ -16,16 +16,16 @@ class ViewScope {
     ~ViewScope();
     ViewScope(const ViewScope&) = delete;
 };
-// Supply the current local preview to native per-actor movement queries. The
+// Supply the current local preview to native per-actor movement and aiming queries. The
 // borrowed input lives through this scope; accepted simulation input is untouched.
-class MovementPreviewScope {
+class PresentationInputScope {
     const lan::InputFrame* previous;
     int previousController;
 
   public:
-    MovementPreviewScope(const lan::InputFrame& input, int controller);
-    ~MovementPreviewScope();
-    MovementPreviewScope(const MovementPreviewScope&) = delete;
+    PresentationInputScope(const lan::InputFrame& input, int controller);
+    ~PresentationInputScope();
+    PresentationInputScope(const PresentationInputScope&) = delete;
 };
 class PauseScope {
     ViewScope view;

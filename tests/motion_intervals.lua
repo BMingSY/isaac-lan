@@ -250,7 +250,9 @@ local function localRender(sequence)
     return player.Position.X
 end
 local previous = localRender(0)
-for sequence = 1, 30 do
+close(localRender(1), previous, "Native first half tick integrates the resting velocity")
+assert(localState.prediction.velocity.X > 0, "Held bag blocked local acceleration")
+for sequence = 2, 30 do
     local position = localRender(sequence)
     assert(position > previous, "Held bag froze local motion between snapshots")
     previous = position
@@ -308,7 +310,9 @@ for _, blocked in ipairs({
 end
 extraFinished, enabled, player.ControlsEnabled, ghost = true, true, true, false
 animation = "WalkRight"
-assert(localRender(sequence + 1) > lockedPosition, "Ordinary movement did not resume")
+localRender(sequence + 1)
+assert(localState.prediction.velocity.X > 0, "Ordinary acceleration did not resume")
+assert(localRender(sequence + 2) > lockedPosition, "Ordinary movement did not resume")
 print("PASS pickup/use/raise/lower/pill motion, control locks, gaps, pause and reset")
 
 -- Same-controller bodies must query independently. Native character rules can
@@ -546,6 +550,11 @@ for s = 32, 40 do
 end
 roomType = 1
 specialRender(41)
+assert(
+    localState.prediction.velocity.X > 0,
+    "Walking acceleration did not resume after the dungeon"
+)
+specialRender(42)
 assert(player.Position.X > 100, "Walking did not resume after leaving the dungeon")
 kind = types.PLAYER_THESOUL_B
 assert(forgotten.predictMovement(player), "Tainted soul lost local walking prediction")

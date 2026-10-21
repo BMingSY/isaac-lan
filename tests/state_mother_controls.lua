@@ -7,6 +7,7 @@ local frame, gate = _IsaacLanFrame, native.net_gate
 local renders, linked, chosen, finished = 0, false, false, false
 local prepared, entered, arenaAt, phaseTwoAt, stagedHole
 local movement, movementStart = {}, {}
+local minimumFreeTravel = 200
 local lastObservation = -1
 local staleCooldown, recoveredCooldown = false, false
 local moveLeft, moveRight, shootUp = 0x0004, 0x0008, 0x8000
@@ -115,10 +116,15 @@ function _IsaacLanFrame()
                 else
                     assert(recoveredCooldown, "Stale control cooldown was not exercised")
                 end
-                for _, interval in ipairs({ 3, 4, 10, 11 }) do
+                -- The first interval starts at the arbitrary landing point;
+                -- subsequent sweeps start at opposite edges of the arena.
+                for _, interval in ipairs({ 4, 5, 10, 11 }) do
                     assert(
-                        movement[interval] and movement[interval] > 25,
-                        "Guest input did not move in Mother interval " .. interval
+                        movement[interval] and movement[interval] > minimumFreeTravel,
+                        "Guest could not cross the Mother arena in interval "
+                            .. interval
+                            .. ": travel="
+                            .. tostring(movement[interval])
                     )
                 end
                 report("PASS native hole, gathering, chat close and phase two movement")
@@ -167,8 +173,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     stagedHole = true
                     for slot = 0, 1 do
                         actor(slot, function(p)
+                            -- One actor is already being drawn into the hole
+                            -- when the other starts the room transfer.
                             p.Position = Game():GetRoom():GetCenterPos()
-                                + Vector(slot == 0 and -20 or 20, 70)
+                                + (slot == entrant and Vector(-20, 70) or Vector(55, -15))
                             p.Velocity = Vector.Zero
                         end)
                     end

@@ -808,7 +808,7 @@ void restartPhysicalRouting() {
     require(!input::restartHeld(), "An ordinary menu action submitted a restart");
 }
 
-void movementPreviewRouting() {
+void presentationInputRouting() {
     Fixture f;
     isaac::lan::Frame frame;
     frame.connected = 3;
@@ -817,6 +817,7 @@ void movementPreviewRouting() {
     f.queryController = 2;
     isaac::lan::InputFrame preview;
     preview.values[input::action::moveRight] = 32768;
+    preview.values[input::action::shootUp] = 24000;
     preview.values[input::action::drop] = 65535;
     preview.triggered = 1u << input::action::drop;
     const auto before = preview;
@@ -824,7 +825,7 @@ void movementPreviewRouting() {
     int source = -1;
     {
         input::ViewScope view(1);
-        input::MovementPreviewScope outer(preview, 2);
+        input::PresentationInputScope outer(preview, 2);
         require(f.query(input::action::moveRight, native::entry::inputValue, &value, &source) &&
                     value == 32768 / 65535.0f && source == 2,
                 "Native movement query did not use the current analog preview");
@@ -835,14 +836,19 @@ void movementPreviewRouting() {
                 "Native movement query retained old acknowledged input");
         require(f.queries.empty(), "Preview read physical bindings again");
         f.press(input::action::shootRight);
-        require(f.query(input::action::shootRight),
-                "Movement scope intercepted non-movement UI input");
+        require(!f.query(input::action::shootRight),
+                "Aiming preview read physical input a second time");
+        require(f.query(input::action::shootUp, native::entry::inputValue, &value) &&
+                    value == 24000 / 65535.0f,
+                "Native aiming query ignored the analog preview");
+        f.press(input::action::item);
+        require(f.query(input::action::item), "Presentation scope intercepted an item action");
         f.queryController = 1;
         require(!f.query(input::action::drop), "Movement preview escaped to another controller");
         f.queryController = 2;
         try {
             isaac::lan::InputFrame empty;
-            input::MovementPreviewScope inner(empty, 2);
+            input::PresentationInputScope inner(empty, 2);
             require(!f.query(input::action::drop), "Nested preview retained the outer held input");
             throw 1;
         } catch (int) {
@@ -850,9 +856,10 @@ void movementPreviewRouting() {
         require(f.query(input::action::drop), "Unwinding did not restore the outer preview");
     }
     require(f.query(input::action::moveLeft, native::entry::inputValue, &value) &&
-                value == 12000 / 65535.0f && !f.query(input::action::drop),
+                value == 12000 / 65535.0f && !f.query(input::action::drop) &&
+                !f.query(input::action::shootUp),
             "Movement preview changed subsequent authoritative gameplay input");
-    require(preview == before && input::movementPreview == nullptr,
+    require(preview == before && input::presentationInput == nullptr,
             "Movement query mutated input or retained a borrowed reference");
 }
 
@@ -891,6 +898,6 @@ int main(int argc, char** argv) {
                      {"ordinary-options", ordinaryOptionsRemainLocal},
                      {"gameplay-routing", gameplayRoutingUnchanged},
                      {"restart-physical-routing", restartPhysicalRouting},
-                     {"movement-preview", movementPreviewRouting},
+                     {"movement-preview", presentationInputRouting},
                      {"paused-input", pausedInputPreservesOnlyCharge}});
 }

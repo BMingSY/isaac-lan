@@ -37,6 +37,9 @@ local function environment()
         function p:GetPlayerType()
             return 23
         end
+        function p:GetBabySkin()
+            return -1
+        end
         function p:IsCoopGhost()
             return self.ghost
         end
@@ -179,6 +182,11 @@ local function environment()
         "sync/codec",
         "sync/layers",
         "presentation/timeline",
+        "presentation/attacks",
+        "presentation/attack_prediction",
+        "presentation/tear_motion",
+        "sync/weapon_pose",
+        "compat/items/attack_preview",
         "sync/world_schema",
         "sync/fields",
         "sync/capture",
@@ -250,6 +258,14 @@ local function environment()
     end
     modules["presentation/attachments"] = function()
         return { capture = noop, present = noop }
+    end
+    modules["presentation/attacks"] = function()
+        return function()
+            return { confirm = noop, present = noop, render = noop, reset = noop }
+        end
+    end
+    modules["compat/routes/dice_floor"] = function()
+        return inert
     end
     modules["compat/characters/keeper"] = function()
         return {}
@@ -372,7 +388,9 @@ for tick = 1, 5 do
         local bytes = host.state.capture(slot, tick)
         local view = host.state.decode(bytes)
         assert(
-            view[1] == 29 and view[9][1][8][1] == first and view[9][2][8][1] == second,
+            view[1] == module("sync/world_schema").VERSION
+                and view[9][1][8][1] == first
+                and view[9][2][8][1] == second,
             "World snapshot omitted or mixed the two players' crafting bags"
         )
         assert(view[9][1][8][2] == (tick % 2 == 0) and view[9][2][8][2] == (tick % 2 ~= 0))

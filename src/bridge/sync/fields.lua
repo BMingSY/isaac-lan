@@ -10,6 +10,7 @@ return {
         poop = 7,
         craftingBag = 8,
         temporaryEffects = 9,
+        babySkin = 10,
     },
     inventory = {
         type = 1,

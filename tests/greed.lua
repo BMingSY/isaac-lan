@@ -24,6 +24,9 @@ local function environment(difficulty)
         end,
     }
     local room = {
+        GetType = function()
+            return enums.RoomType.ROOM_DEFAULT
+        end,
         IsClear = function()
             return true
         end,

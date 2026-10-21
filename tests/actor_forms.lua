@@ -82,25 +82,36 @@ local sync = restore({
         return true
     end,
 })
-local function actor(index, controller, identifier, parent, kind, variant)
+local function actor(index, controller, identifier, parent, kind, variant, babySkin)
     return {
         index,
         controller,
         { [1] = identifier, [3] = variant or 0, [11] = parent or 0 },
         { kind or 0 },
+        [wire.actor.babySkin] = babySkin or -1,
     }
 end
 local host, guest = actor(0, 1, 100), actor(1, 2, 200)
 local soul = actor(2, 2, 300, 200, 16)
 sync({ host, guest, soul })
-local count, identifier, index, parent, controller, kind, variant, nextByte =
-    string.unpack(">I1I4I1I1I1I2I2", packets[#packets])
+local count, identifier, index, parent, controller, kind, variant, babySkin, nextByte =
+    string.unpack(">I1I4I1I1I1I2I2i2", packets[#packets])
 assert(count == 1 and identifier == 300 and index == 2 and parent == 1)
-assert(controller == 2 and kind == 16 and variant == 0 and nextByte == #packets[#packets] + 1)
+assert(
+    controller == 2
+        and kind == 16
+        and variant == 0
+        and babySkin == -1
+        and nextByte == #packets[#packets] + 1
+)
 sync({ host, guest, soul })
 assert(packets[1] == packets[2], "Repeated companion snapshots changed identity")
 sync({ host, guest })
 assert(packets[3] == string.pack(">I1", 0), "Missing companions must reach native cleanup")
+sync({ host, guest, actor(2, 2, 400, 200, 0, 1, 59) })
+local _, _, _, _, _, _, actualVariant, actualSkin =
+    string.unpack(">I1I4I1I1I1I2I2i2", packets[#packets])
+assert(actualVariant == 1 and actualSkin == 59, "A native co-op baby lost its identity")
 assert(not pcall(sync, { host, guest, actor(2, 1, 300, 200, 20) }))
 assert(not pcall(sync, { host, actor(1, 1, 200, 300), actor(2, 1, 300) }))
 print("PASS parented actor identities, owner validation, repeated state and cleanup request")

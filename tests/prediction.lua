@@ -26,11 +26,12 @@ assert(loadfile(root .. "/src/bridge/presentation/prediction.lua"))()
 local prediction =
     assert(_IsaacLanPrediction, "Native prediction bootstrap did not publish its API")
 local right, left, stop = Vector(1, 0), Vector(-1, 0), Vector(0, 0)
-local origin, speed, dt = Vector(100, 200), 264.705882, 1 / 60
+local origin, speed, dt = Vector(100, 200), 1, 1 / 60
 local p = prediction.new(origin)
 p:confirm(origin, 0)
 local started = p:step(right, 1, speed, dt)
-assert(started.X > origin.X, "Local start waited for a packet")
+close(started, origin)
+assert(p.velocity.X > 0, "Local acceleration waited for a packet")
 local initialVelocity = p.velocity.X
 p:step(left, 1, speed, dt)
 assert(p.velocity.X < initialVelocity, "Local turn waited for the next sample")
@@ -78,7 +79,10 @@ a:confirm(Vector(120, 200), 0)
 b:confirm(Vector(120, 200), 0)
 a:step(right, 1, speed, dt)
 b:step(stop, 1, speed, dt)
-assert(a.display.X > b.display.X, "Correction filtered fresh input")
+assert(a.velocity.X > b.velocity.X, "Correction filtered fresh input")
+a:step(right, 2, speed, dt)
+b:step(stop, 2, speed, dt)
+assert(a.display.X > b.display.X, "Correction filtered fresh movement")
 for sequence = 2, 60 do
     b:step(stop, sequence, speed, dt)
 end
@@ -91,9 +95,14 @@ for sequence = 1, 20 do
     p:clip(origin)
     p:confirm(origin, sequence)
     close(p.display, origin)
-    close(p.velocity, stop)
+    assert(p.velocity:LengthSquared() < 40 ^ 2, "Wall clipping accumulated hidden velocity")
 end
-close(p:step(stop, 21, speed, dt), origin)
+close(
+    p:step(stop, 21, speed, dt, false, function()
+        return origin
+    end),
+    origin
+)
 -- Teleports and room resets discard history, inertia and corrections.
 p:step(right, 22, speed, dt)
 p:confirm(Vector(600, 200), 22)
@@ -107,7 +116,7 @@ p:step(right, 1, speed, 5)
 p:step(right, 1, speed, 5)
 local capped = p.display
 close(p:step(right, 1, speed, 5), capped)
-assert(capped.X - origin.X < speed * 0.1)
+assert(capped.X - origin.X < 30)
 print("PASS local acceleration, inertia, historical correction, walls and resets")
 
 -- A host tick can move under held input without consuming another sample.
@@ -149,3 +158,36 @@ for sequence = 3, 300 do
 end
 assert(#p.pending <= 120, "Missing acknowledgements grew unbounded history")
 print("PASS same-ack host ticks, stale ticks, authoritative velocity and bounded input replay")
+
+-- Captured from J460 player updates at 30 Hz: starts, releases, reversals and
+-- perpendicular turns at MoveSpeed 0.6, 1, 1.3 and 2. Velocities in the fixture
+-- are native units per half tick; the predictor stores units per second.
+local samples = assert(io.open(root .. "/tests/fixtures/prediction_motion.csv", "r"))
+samples:read("*l")
+local previousTick, previousSpeed, checked = nil, nil, 0
+for line in samples:lines() do
+    local values = {}
+    for value in line:gmatch("[^,]+") do
+        values[#values + 1] = assert(tonumber(value))
+    end
+    local tick, x, y, vx, vy, dx, dy, moveSpeed = table.unpack(values)
+    if previousTick and tick == previousTick + 1 and moveSpeed == previousSpeed then
+        p:step(Vector(dx, dy), tick, moveSpeed, 1 / 30)
+        assert(
+            (p.position - Vector(x, y)):LengthSquared() < 0.002 ^ 2,
+            "Native walking position diverged at speed " .. moveSpeed .. ", tick " .. tick
+        )
+        assert(
+            (p.velocity * (1 / 60) - Vector(vx, vy)):LengthSquared() < 0.00001 ^ 2,
+            "Native walking velocity diverged at speed " .. moveSpeed .. ", tick " .. tick
+        )
+        checked = checked + 1
+    else
+        p = prediction.new(Vector(x, y))
+        p:reset(Vector(x, y), tick, Vector(vx, vy) * 60)
+    end
+    previousTick, previousSpeed = tick, moveSpeed
+end
+samples:close()
+assert(checked == 160, "Missing native walking samples")
+print("PASS native walking traces across speeds, releases, reversals and turns")

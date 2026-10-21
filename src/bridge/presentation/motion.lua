@@ -161,6 +161,9 @@ return function(fields)
             lastRender = now
             local status = view.status()
             if status.pause ~= 0 then
+                if view.attacks then
+                    view.attacks.reset()
+                end
                 -- Paused snapshots retain native velocities. Do not accumulate
                 -- an invisible extrapolation error and release it on resume.
                 for _, m in pairs(motion) do
@@ -209,7 +212,7 @@ return function(fields)
                             position = m.prediction:step(
                                 controls and direction or Vector(0, 0),
                                 sequence,
-                                p.MoveSpeed * (4.4117647 * 60),
+                                p.MoveSpeed,
                                 dt,
                                 not controls,
                                 resolve
@@ -298,6 +301,9 @@ return function(fields)
             if view.attachments then
                 view.attachments.present(motion, ref)
             end
+            if view.attacks then
+                view.attacks.present(motion, ref, now, dt, sequence, status)
+            end
         end
         return {
             track = track,
@@ -318,6 +324,9 @@ return function(fields)
             end,
             reset = function(clearMetrics)
                 lastRender, captured = nil, nil
+                if view.attacks then
+                    view.attacks.reset()
+                end
                 if clearMetrics then
                     corrections, correctionTotal, correctionMax = 0, 0, 0
                     buckets = { 0, 0, 0, 0, 0 }

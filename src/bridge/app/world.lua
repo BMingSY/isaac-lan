@@ -115,6 +115,34 @@ local actorsPresentation = component("presentation/actors")(native, function(pat
     return Isaac.GetCostumeIdByPath(path)
 end, applySprite)
 local attachments = component("presentation/attachments")(native, Vector, EntityType, EffectVariant)
+local attackPolicy = modules["compat/items/attack_preview"](
+    WeaponType,
+    CollectibleType,
+    fields,
+    TearFlags,
+    PlayerForm,
+    PlayerType
+)
+local attacks = component("presentation/attacks")({
+    native = native,
+    metrics = performance,
+    vector = Vector,
+    sprite = Sprite,
+    screen = Isaac.WorldToScreen,
+    screenWidth = Isaac.GetScreenWidth,
+    player = Isaac.GetPlayer,
+    encode = encode,
+    applySprite = applySprite,
+    pose = modules["sync/weapon_pose"],
+    policy = attackPolicy,
+    prediction = modules["presentation/attack_prediction"](attackPolicy),
+    trajectory = modules["presentation/tear_motion"](Vector),
+    tearType = EntityType.ENTITY_TEAR,
+    tearVariants = TearVariant,
+    room = function()
+        return Game():GetRoom()
+    end,
+})
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
     timeline = assert(modules["presentation/timeline"])(),
     metrics = performance,
@@ -122,6 +150,7 @@ local motionPresentation = component("presentation/motion")(native, actorsPresen
         return forgotten.predictMovement(player) and crawlspace.predictMovement(room)
     end,
     attachments = attachments,
+    attacks = attacks,
     vector = Vector,
     player = function(index)
         return Isaac.GetPlayer(index)
@@ -233,6 +262,7 @@ local replica = component("sync/replica")({
     sameInventory = inventoryState.sameItems,
     actors = actorsPresentation,
     motion = motionPresentation,
+    attacks = attacks,
     attachments = attachments,
     poop = poop,
     craftingBag = craftingBag,
@@ -249,6 +279,9 @@ local replica = component("sync/replica")({
     audio = audioPresentation,
     items = itemPresentation,
     pose = modules["sync/actor_pose"],
+    roomPresentation = component("compat/routes/dice_floor")(function()
+        return Game()
+    end, RoomType.ROOM_DICE),
 })
 state.beginFloor = assert(modules["runtime/transitions"])(native, floor, transitions, function()
     return Game():GetLevel()
@@ -274,6 +307,11 @@ function state.present(input, sequence)
     return replica.present(input, sequence)
 end
 state.actorPose = replica.actorPose
+function state.render()
+    if state.lastTick ~= nil and native.api_info().ready == 1 and _IsaacLanStatus().pause == 0 then
+        attacks.render()
+    end
+end
 function state.reset()
     native.sound_reset()
     native.presentation_reset()

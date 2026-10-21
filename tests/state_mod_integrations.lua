@@ -123,6 +123,20 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
             Isaac.GetPlayer(heads["1"]):AddCollectible(CollectibleType.COLLECTIBLE_POLYPHEMUS)
             assert(native.rooms_move(1, 84, 0, -1))
         end
+        -- A wrapped require must still install the Stats+ integration before
+        -- its stat probes see a native companion. Transfer Found Soul between
+        -- peers, including the guest's arrival in an occupied room.
+        if t == 60 or t == 80 or t == 90 or t == 100 then
+            local slot = t <= 80 and 1 or 0
+            assert(native.rooms_with_player(slot, function()
+                local player = Isaac.GetPlayer(native.rooms_heads()[tostring(slot)])
+                if t == 60 or t == 90 then
+                    player:AddTrinket(TrinketType.TRINKET_FOUND_SOUL, false)
+                else
+                    assert(player:TryRemoveTrinket(TrinketType.TRINKET_FOUND_SOUL))
+                end
+            end))
+        end
         if t == 110 then
             for slot = 0, 1 do
                 assert(native.rooms_with_player(slot, function()
@@ -152,7 +166,14 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
     local expectedActors = character == PlayerType.PLAYER_JACOB and 2 or 1
     assert(
         #localPlayers == expectedActors and localPlayers[1].ControllerIndex == (host and 1 or 2),
-        "Public API included another participant"
+        "Public API local actors differ: count="
+            .. #localPlayers
+            .. " expected="
+            .. expectedActors
+            .. " controller="
+            .. tostring(localPlayers[1] and localPlayers[1].ControllerIndex)
+            .. " signature="
+            .. lan:GetContext().playerSignature
     )
     local visibleMod = false
     for _, status in ipairs(api:GetCompatibilityStatus()) do

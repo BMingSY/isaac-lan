@@ -2,6 +2,15 @@
 -- Keep scenario inputs/expected wire values literal so ID drift stays visible.
 -- Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 return {
+    WeaponType = {
+        WEAPON_TEARS = 1,
+        WEAPON_BRIMSTONE = 2,
+        WEAPON_KNIFE = 4,
+        WEAPON_TECH_X = 9,
+    },
+    TearFlags = { TEAR_NORMAL = 0 },
+    TearVariant = { BLUE = 0, BLOOD = 1 },
+    PlayerForm = { PLAYERFORM_BOOK_WORM = 10 },
     EntityType = {
         ENTITY_PLAYER = 1,
         ENTITY_TEAR = 2,
@@ -66,6 +75,8 @@ return {
     LevelStage = { STAGE5 = 10, STAGE8 = 13 },
     StageType = { STAGETYPE_ORIGINAL = 0, STAGETYPE_WOTL = 1 },
     RoomType = {
+        ROOM_DEFAULT = 1,
+        ROOM_DICE = 16,
         ROOM_MINIBOSS = 6,
         ROOM_SECRET = 7,
         ROOM_SUPERSECRET = 8,

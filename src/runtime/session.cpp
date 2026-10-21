@@ -1687,7 +1687,7 @@ void present() {
     lua.rawGetI(state, registry, presentRef);
     lan::Writer packed(lan::Message::input);
     const auto preview = input::previewPhysicalInput();
-    const input::MovementPreviewScope movementPreview(preview, localViewSlot() + 1);
+    const input::PresentationInputScope presentationInput(preview, localViewSlot() + 1);
     packed.input(preview);
     lua.pushLString(state, reinterpret_cast<const char*>(packed.bytes.data() + 1),
                     packed.bytes.size() - 1);

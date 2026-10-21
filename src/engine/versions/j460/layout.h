@@ -197,6 +197,9 @@ namespace pickup {
 inline constexpr unsigned charge = 0x524, touched = 0x52c, pool = 0x530, varData = 0x59c;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned babySkin = 0x1aec;
+inline constexpr int lastBabySkin = 0x47;
+inline constexpr unsigned roomTransitionTarget = 0x1b1c;
 inline constexpr unsigned primaryActive = 0x1580;
 inline constexpr unsigned megaBlastLaser = 0x1458;
 inline constexpr unsigned redemptionEffect = 0x1f04;

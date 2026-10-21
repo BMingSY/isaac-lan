@@ -1890,6 +1890,7 @@ test("only the LAN chat offers lanbot; the automation entry still drives it", fu
         MC_POST_PICKUP_UPDATE = 7,
         MC_POST_NEW_LEVEL = 8,
         MC_PRE_SPAWN_CLEAN_AWARD = 9,
+        MC_POST_RENDER = 10,
     }
     dofile(root .. "/tests/fixtures/app_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
     dofile(root .. "/src/bridge/app/main.lua")

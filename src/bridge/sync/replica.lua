@@ -297,6 +297,9 @@ return function(fields)
             end))
         end
         local function commit(value, tick, ack)
+            if deps.attacks then
+                deps.attacks.confirm(value, tick, ack, deps.now(), ref)
+            end
             for identifier, p in pairs(replicas) do
                 if not p.Ref then
                     replicas[identifier] = nil
@@ -314,6 +317,9 @@ return function(fields)
             end
             assert(native.rooms_with_player(value.slot, function()
                 audioPresentation.apply(value.sound, tick)
+                if deps.roomPresentation then
+                    deps.roomPresentation.apply(value)
+                end
             end))
             assert(native.presentation_events(value.presentation))
             itemPresentation.apply(value.slot, value.items)
@@ -407,10 +413,16 @@ return function(fields)
         end
 
         local function resetView()
+            if deps.attacks then
+                deps.attacks.reset()
+            end
             stableBytes, stableValue = nil, nil
             pendingBytes, pendingTick, pendingValue = nil, nil, nil
             motion, actorVisuals, replicaRoom = {}, {}, nil
             appliedLocations = nil
+            if deps.roomPresentation then
+                deps.roomPresentation.reset()
+            end
         end
         return {
             apply = apply,

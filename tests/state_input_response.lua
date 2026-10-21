@@ -1,5 +1,7 @@
 -- Native held bindings and render positions, including unsent input changes.
 local native = assert(_IsaacLan)
+local calibrateSpeeds = _IsaacLanTest and _IsaacLanTest.inputResponseSpeeds
+local speedChanges = { [60] = 0.6, [220] = 1.3, [380] = 2 }
 local host, port
 if _IsaacLanTest then
     host, port = _IsaacLanTest.host, _IsaacLanTest.port
@@ -116,6 +118,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end,
         function(t, n, b)
             before(t, n, b)
+            if calibrateSpeeds and speedChanges[t] then
+                local p = Isaac.GetPlayer(native.rooms_heads()["1"])
+                p.MoveSpeed = speedChanges[t]
+                p.Position, p.Velocity = Vector(320, 280), Vector.Zero
+                report("INPUT_RESPONSE_SPEED tick=" .. t .. " speed=" .. p.MoveSpeed)
+            end
             if t == 0 then
                 for i = 0, Game():GetNumPlayers() - 1 do
                     local p = Isaac.GetPlayer(i)
