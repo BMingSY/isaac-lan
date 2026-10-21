@@ -12,7 +12,8 @@ local current, localFrames, stepAt, matchedAt, acknowledged = 0, 0, 0, nil, fals
 local acted, nextPulse, pulseCount, pendingButtons = false, 0, 0, 0
 local linked, chosen, started = false, false, false
 local initialPrepared, resumePrepared, rejoined = false, false, false
-local volumeBefore, volumeChanged, exitAt, step, finished
+local volumeBefore, volumeChanged, exitAt, step
+local finished = false
 local shortEdges, previousPause = 0, false
 local owner = { Name = "Native pause menu acceptance" }
 local eidSamples, eidReady, focusAt = 0, false, nil
