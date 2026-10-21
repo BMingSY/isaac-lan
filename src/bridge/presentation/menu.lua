@@ -406,7 +406,12 @@ function _IsaacLanMenuRender(
         if not host then
             text("房主地址：" .. ui.ip, 25, footerY - 12, 10)
         end
-        text("TCP 端口：" .. (host and status.port or ui.port), 25, footerY, 10)
+        text(
+            status.transport:upper() .. " 端口：" .. (host and status.port or ui.port),
+            25,
+            footerY,
+            10
+        )
     elseif phase == Phase.running then
         text("共同楼层 · 分头探索", 25, footerY, 10)
     else

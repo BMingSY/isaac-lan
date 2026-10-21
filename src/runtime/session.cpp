@@ -898,6 +898,9 @@ int poll(lua_State* L) {
     lua.pushString(L, saves.saveError.c_str());
     lua.setField(L, -2, "saveError");
     integer("port", session ? session->port() : 0);
+    // Local menu status uses the same transport selected for session creation.
+    lua.pushString(L, networkTransport == lan::Transport::udp ? "udp" : "tcp");
+    lua.setField(L, -2, "transport");
     integer("tick", nextTick);
     integer("verified", session && session->verifiedTick() ? *session->verifiedTick() : -1ll);
     integer("scene", backend::scene());
