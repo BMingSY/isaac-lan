@@ -7,6 +7,7 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/menu_state.h"
+#include "engine/versions/j460/spatial_queries.h"
 #include <MinHook.h>
 #include <array>
 #include <cstdio>
@@ -386,6 +387,8 @@ int audit(lua_State* L) {
 int installUpdates(std::uintptr_t base, void (*logger)(const std::string&)) {
     image = base;
     log = logger;
+    if (!j460::spatial_queries::install(image))
+        return 18;
     if (MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::roomUpdate),
                       reinterpret_cast<void*>(updateForeground),
                       reinterpret_cast<void**>(&originalRoomUpdate)) != MH_OK ||

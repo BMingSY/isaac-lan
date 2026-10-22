@@ -4,6 +4,14 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t spatialGridQuery = 0x1c490;
+inline constexpr std::uint32_t spatialGridQueryOwner = 0x1c4bd;
+inline constexpr std::uint32_t spatialGridQueryCell = 0x1c50d;
+inline constexpr std::uint32_t spatialGridQueryWidth = 0x1c560;
+inline constexpr std::uint32_t spatialGridQueryBuckets = 0x1c56e;
+inline constexpr std::uint32_t spatialGridQueryBucketStride = 0x1c58c;
+inline constexpr std::uint32_t spatialGridQueryBucketCount = 0x1c597;
+inline constexpr std::uint32_t spatialGridQueryEntityUid = 0x1c5a2;
 inline constexpr std::uint32_t gameAddPixelation = 0x353cc0;
 inline constexpr std::uint32_t playerUpdateWavyCap = 0x1cb480;
 inline constexpr std::uint32_t playerUsePill = 0x3c4180;

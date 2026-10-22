@@ -16,6 +16,14 @@
 
 J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.h)。`Size` 调用原 Lua 属性 setter（cdecl，RVA `0x471fa0`）；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
 
+## 空间网格查询
+
+[`spatial_queries`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/spatial_queries.cpp) 在 `SpatialGrid::Query`（RVA `0x1c490`，`thiscall void(Grid*, Result*, const Vector*, const Vector*)`）处理超过有效桶数四倍的遍历范围。网格前缀的宽度、单元长度、桶数组首尾位于 `+0xc/+0x14/+0x18/+0x1c`；每桶 `0xa4` 字节，最多 40 个借用实体指针。入口受 J460 签名校验，网格、实体、原生去重状态及结果数组仍由游戏拥有。
+
+可移植的[范围算法](https://github.com/BMingSY/isaac-lan/blob/main/src/core/spatial_query.h) 保持 binary32 运算和截断到整数的语义，包括横坐标越界时的行别名及有符号 32 位线性索引回绕。连续范围归并为相同首次访问顺序的有效桶；回绕范围按桶计算首次命中，再排序构成临时只读视图。每桶的回绕计算使用有界整数算法，不逐个枚举坐标或回绕次数。
+
+适配器最多接受 `2^20` 个桶、合法宽度和正的有限单元长度；只在调用期间借用原生前缀及桶内容，不保留或销毁原生容器，不改变实体池和结果数组容量。非空范围通过一次原生 Query 保留 UID 去重与结果追加语义，调用者仍以原始位置／半径执行精确几何过滤。入口及所有者、网格字段、实体 UID 读取位置受签名校验。普通范围原样调用；布局不适用或临时内存分配失败时沿用原生入口，不让临时分配异常跨越原生 ABI，也不保证这些回退条件下的遍历耗时。该边界不修复已有坏指针或其他原生数组的容量不足。
+
 ## 实体引用与房间数据
 
 角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。

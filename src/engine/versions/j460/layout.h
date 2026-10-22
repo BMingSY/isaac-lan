@@ -92,6 +92,14 @@ inline constexpr unsigned renderArray = 0x40;
 inline constexpr unsigned data = 0x4;
 inline constexpr unsigned count = 0xc;
 } // namespace entityList
+namespace spatialGrid {
+inline constexpr unsigned width = 0xc;
+inline constexpr unsigned cellSize = 0x14;
+inline constexpr unsigned begin = 0x18;
+inline constexpr unsigned end = 0x1c;
+inline constexpr unsigned bucketSize = 0xa4;
+inline constexpr unsigned bucketCapacity = 40;
+} // namespace spatialGrid
 namespace entity {
 inline constexpr unsigned removeMethod = 0x28;
 inline constexpr unsigned subtype = 0x30;
