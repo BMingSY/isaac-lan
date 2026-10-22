@@ -37,8 +37,8 @@ bool menuConfirm = false;
 bool localPauseInput = false;
 pause_menu::Intent pauseIntent = pause_menu::Intent::none;
 int viewSlot = -1;
-const lan::InputFrame* movementPreview = nullptr;
-int movementController = -1;
+const lan::InputFrame* presentationInput = nullptr;
+int presentationController = -1;
 struct DeviceId {
     std::uintptr_t device;
     int original, assigned;
@@ -234,14 +234,14 @@ bool __attribute__((fastcall)) query(void* manager, void*, int controller, void*
     }
     if (menuConfirm && kind == j460::entry::inputTriggered && action && *action == 14)
         return true;
-    if (enabled && movementPreview && controller == movementController && action &&
-        ((*action >= input::action::moveLeft && *action <= input::action::moveDown) ||
+    if (enabled && presentationInput && controller == presentationController && action &&
+        ((*action >= input::action::moveLeft && *action <= input::action::shootDown) ||
          *action == input::action::drop) &&
         (kind == j460::entry::inputValue || kind == j460::entry::inputPressed ||
          kind == j460::entry::inputTriggered)) {
-        const auto value = movementPreview->values[*action];
+        const auto value = presentationInput->values[*action];
         const bool pressed = kind == j460::entry::inputTriggered
-                                 ? (movementPreview->triggered & (1u << *action)) != 0
+                                 ? (presentationInput->triggered & (1u << *action)) != 0
                                  : value != 0;
         if (kind == j460::entry::inputValue && result)
             *static_cast<float*>(result) = value / 65535.0f;
@@ -504,14 +504,14 @@ ViewScope::ViewScope(int slot) : previous(viewSlot) {
 ViewScope::~ViewScope() {
     viewSlot = previous;
 }
-MovementPreviewScope::MovementPreviewScope(const lan::InputFrame& input, int controller)
-    : previous(movementPreview), previousController(movementController) {
-    movementPreview = &input;
-    movementController = controller;
+PresentationInputScope::PresentationInputScope(const lan::InputFrame& input, int controller)
+    : previous(presentationInput), previousController(presentationController) {
+    presentationInput = &input;
+    presentationController = controller;
 }
-MovementPreviewScope::~MovementPreviewScope() {
-    movementPreview = previous;
-    movementController = previousController;
+PresentationInputScope::~PresentationInputScope() {
+    presentationInput = previous;
+    presentationController = previousController;
 }
 PauseScope::PauseScope(int slot)
     : view(slot), previous(localPauseInput), previousIntent(pauseIntent) {
@@ -667,11 +667,16 @@ void confirmOriginalMenu(void* menu, void(__attribute__((thiscall)) * update)(vo
     update(menu);
     menuConfirm = false;
 }
-bool menuTriggered(int action) {
-    return hookQuery() &&
-           originalQuery(reinterpret_cast<void*>(image + j460::globals::inputManager), -1,
-                         reinterpret_cast<void*>(image + j460::entry::inputTriggered), &action,
-                         nullptr, nullptr);
+bool menuTriggered(int action, bool controllersOnly) {
+    if (!hookQuery())
+        return false;
+    const int first = controllersOnly ? 1 : -1, last = controllersOnly ? lan::maxPlayers : -1;
+    for (int controller = first; controller <= last; ++controller)
+        if (originalQuery(reinterpret_cast<void*>(image + j460::globals::inputManager), controller,
+                          reinterpret_cast<void*>(image + j460::entry::inputTriggered), &action,
+                          nullptr, nullptr))
+            return true;
+    return false;
 }
 bool restartHeld() {
     const int action = input::action::restart;

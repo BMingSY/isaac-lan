@@ -16,13 +16,14 @@ return function(fields)
                         "Actor owner differs"
                     )
                     companions[#companions + 1] = string.pack(
-                        ">I4I1I1I1I2I2",
+                        ">I4I1I1I1I2I2i2",
                         entity[Entity.id],
                         actor[Actor.index],
                         parent[Actor.index],
                         actor[Actor.controller],
                         actor[Actor.inventory][Inventory.type],
-                        entity[Entity.variant]
+                        entity[Entity.variant],
+                        actor[Actor.babySkin]
                     )
                 end
             end

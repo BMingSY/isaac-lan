@@ -581,6 +581,10 @@ struct Session::Impl {
                 p.inputEdges.clear();
                 latest[slot] = {};
                 inputRooms[slot].reset();
+                // Readiness starts a new input stream after loading/rejoin.
+                // A view can precede its first sample; acknowledging the old
+                // stream would make prediction reject new inputs until catch-up.
+                sequences[slot] = 0;
                 // A slow loader may have an older floor checkpoint. Deliver
                 // the latest native floor event before its first live view.
                 if (p.floorAfterLoad) {

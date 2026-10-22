@@ -17,6 +17,7 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
         MC_POST_PICKUP_UPDATE = 7,
         MC_POST_NEW_LEVEL = 8,
         MC_PRE_SPAWN_CLEAN_AWARD = 9,
+        MC_POST_RENDER = 10,
     }
     Isaac = {
         AddCallback = function(_, id, fn)

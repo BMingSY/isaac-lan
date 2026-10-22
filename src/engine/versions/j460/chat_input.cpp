@@ -4,6 +4,7 @@
 #include "engine/lua_api.h"
 #include "core/chat.h"
 #include "core/input_actions.h"
+#include "net/host_address.h"
 #include <imm.h>
 #include <bcrypt.h>
 #include <array>
@@ -13,6 +14,28 @@ namespace isaac::chat_input {
 namespace {
 lua::API lua;
 chat::Editor editor;
+chat::Editor fieldEditor;
+std::optional<TextField> field;
+int fieldResult = 0;
+chat::Editor& activeEditor() {
+    return field ? fieldEditor : editor;
+}
+void insertText(std::string value) {
+    if (field) {
+        std::string filtered;
+        for (unsigned char c : value) {
+            const bool digit = c >= '0' && c <= '9';
+            const bool letter = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+            if (*field == TextField::address ? lan::hostAddressCharacter(c)
+                                             : digit || (*field == TextField::seed && letter))
+                filtered += *field == TextField::seed && c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c;
+        }
+        if (filtered.empty() && !value.empty())
+            return;
+        value = std::move(filtered);
+    }
+    activeEditor().insert(std::move(value));
+}
 bool available = false, opened = false, composing = false, wheel = false;
 bool submit = false, complete = false;
 bool swallowCharacter = false;
@@ -63,8 +86,8 @@ bool copyText(std::string_view text) {
     return copied;
 }
 void clipboard(bool cut) {
-    if (copyText(editor.selection()) && cut)
-        editor.insert("");
+    if (copyText(activeEditor().selection()) && cut)
+        insertText("");
 }
 int copy(lua_State* L) {
     std::size_t length = 0;
@@ -89,11 +112,11 @@ void paste() {
             while (length < capacity && source[length])
                 ++length;
             if (length < capacity)
-                editor.insert(utf8({source, length}));
+                insertText(utf8({source, length}));
             GlobalUnlock(memory);
         }
     } else if (memory)
-        editor.limit = true;
+        activeEditor().limit = true;
     CloseClipboard();
 }
 void cancelComposition() {
@@ -112,7 +135,8 @@ int configure(lua_State* L) {
     if (!next) {
         opened = wheel = false;
         submit = complete = false;
-        cancelComposition();
+        if (!field)
+            cancelComposition();
     }
     available = next;
     return 0;
@@ -155,7 +179,7 @@ int assign(lua_State* L) {
     return 0;
 }
 int open(lua_State* L) {
-    if (available) {
+    if (available && !field) {
         opened = lua.toBoolean(L, 1);
         wheel = false;
         if (!opened)
@@ -164,7 +188,7 @@ int open(lua_State* L) {
     return 0;
 }
 int modal(lua_State* L) {
-    wheel = available && lua.toBoolean(L, 1);
+    wheel = available && !field && lua.toBoolean(L, 1);
     return 0;
 }
 int pointer(lua_State* L) {
@@ -241,20 +265,27 @@ std::optional<LRESULT> event(HWND hwnd, UINT message, WPARAM key, LPARAM data) {
         cancelComposition();
         opened = wheel = false;
         submit = complete = false;
+        if (field)
+            fieldResult = VK_ESCAPE;
         consumedKeys = {};
         return {};
     }
     if (key < consumedKeys.size()) {
-        if (message == WM_KEYUP && consumedKeys[key]) {
+        if ((message == WM_KEYUP || message == WM_SYSKEYUP) && consumedKeys[key]) {
             consumedKeys[key] = false;
             return 0;
         }
-        if (message == WM_KEYDOWN && consumedKeys[key] && !opened)
+        if ((message == WM_KEYDOWN || message == WM_SYSKEYDOWN) && consumedKeys[key] && !opened &&
+            !field)
             return 0;
     }
-    if (available && message == WM_KEYDOWN && key == VK_OEM_3 && !composing) {
+    const auto toggleKey =
+        message == WM_KEYDOWN && key == VK_PROCESSKEY ? ImmGetVirtualKey(hwnd) : key;
+    if (!field && available && message == WM_KEYDOWN && toggleKey == VK_OEM_3) {
         if (!(data & (1ll << 30))) {
             opened = !opened;
+            if (!opened)
+                cancelComposition();
             wheel = false;
             submit = complete = false;
         }
@@ -268,7 +299,7 @@ std::optional<LRESULT> event(HWND hwnd, UINT message, WPARAM key, LPARAM data) {
         if (key == '`' || key == '~')
             return 0;
     }
-    if (!opened || !available)
+    if (!field && (!opened || !available))
         return {};
     if (message == WM_SETCURSOR && LOWORD(data) == HTCLIENT) {
         SetCursor(LoadCursor(nullptr, IDC_ARROW));
@@ -299,7 +330,7 @@ std::optional<LRESULT> event(HWND hwnd, UINT message, WPARAM key, LPARAM data) {
                 return utf8(text);
             };
             if (data & GCS_RESULTSTR) {
-                editor.insert(read(GCS_RESULTSTR));
+                insertText(read(GCS_RESULTSTR));
                 composition.clear();
             }
             if (data & GCS_COMPSTR)
@@ -309,7 +340,9 @@ std::optional<LRESULT> event(HWND hwnd, UINT message, WPARAM key, LPARAM data) {
         return 0;
     }
     if (composing)
-        return {};
+        return DefWindowProcW(hwnd, message, key, data);
+    if (field && message == WM_SYSCHAR)
+        return 0;
     if (message == WM_CHAR) {
         if (key < 0x20)
             return 0;
@@ -323,7 +356,7 @@ std::optional<LRESULT> event(HWND hwnd, UINT message, WPARAM key, LPARAM data) {
             value.push_back(static_cast<wchar_t>(key));
             auto text = utf8(value);
             if (!text.empty())
-                editor.insert(text);
+                insertText(text);
         }
         return 0;
     }
@@ -331,46 +364,88 @@ std::optional<LRESULT> event(HWND hwnd, UINT message, WPARAM key, LPARAM data) {
         scroll += static_cast<short>(HIWORD(key)) / WHEEL_DELTA;
         return 0;
     }
-    if (message == WM_KEYDOWN) {
+    if (message == WM_KEYDOWN || (field && message == WM_SYSKEYDOWN)) {
+        // Leave window-manager shortcuts (Alt+F4/Tab) to the OS.
+        if (message == WM_SYSKEYDOWN && (key == VK_F4 || key == VK_TAB))
+            return {};
         if (key < consumedKeys.size())
             consumedKeys[key] = true;
+        auto& input = activeEditor();
         const bool control = GetKeyState(VK_CONTROL) < 0, shift = GetKeyState(VK_SHIFT) < 0;
         if (control && key == 'A') {
-            editor.anchor = 0;
-            editor.cursor = editor.text.size();
+            input.anchor = 0;
+            input.cursor = input.text.size();
         } else if (control && (key == 'C' || key == 'X'))
             clipboard(key == 'X');
         else if (control && key == 'V')
             paste();
         else if (key == VK_LEFT || key == VK_RIGHT)
-            editor.move(key == VK_LEFT ? -1 : 1, shift);
+            input.move(key == VK_LEFT ? -1 : 1, shift);
         else if (key == VK_HOME || key == VK_END)
-            editor.move(key == VK_HOME ? -1 : 1, shift, true);
+            input.move(key == VK_HOME ? -1 : 1, shift, true);
         else if (key == VK_BACK || key == VK_DELETE)
-            editor.erase(key == VK_BACK ? -1 : 1);
-        else if (key == VK_UP || key == VK_DOWN)
+            input.erase(key == VK_BACK ? -1 : 1);
+        else if (!field && (key == VK_UP || key == VK_DOWN))
             editor.recall(key == VK_UP ? -1 : 1);
-        else if (key == VK_PRIOR || key == VK_NEXT)
+        else if (!field && (key == VK_PRIOR || key == VK_NEXT))
             scroll += key == VK_PRIOR ? 5 : -5;
         else if (key == VK_ESCAPE) {
-            opened = false;
-            submit = complete = false;
+            if (field)
+                fieldResult = VK_ESCAPE;
+            else {
+                opened = false;
+                submit = complete = false;
+            }
         } else if (!(data & (1ll << 30))) {
-            if (key == VK_RETURN)
-                submit = true;
-            if (key == VK_TAB)
+            if (key == VK_RETURN) {
+                if (field)
+                    fieldResult = VK_RETURN;
+                else
+                    submit = true;
+            }
+            if (!field && key == VK_TAB)
                 complete = true;
         }
         return 0;
     }
-    if (message == WM_KEYUP)
-        return 0;
+    // Releases of keys held before opening must still clear the game's state.
+    // Releases paired with captured presses were consumed above.
     return {};
 }
+void beginField(TextField kind, std::string_view value) {
+    cancelComposition();
+    opened = wheel = submit = complete = false;
+    field = kind;
+    fieldResult = 0;
+    fieldEditor.reset();
+    fieldEditor.characterLimit = kind == TextField::address ? lan::maxHostAddressLength
+                                 : kind == TextField::port  ? 5
+                                                            : 8;
+    insertText(std::string(value));
+}
+void endField() {
+    if (field)
+        cancelComposition();
+    field.reset();
+    fieldResult = 0;
+    fieldEditor.reset();
+}
+bool fieldActive() {
+    return field.has_value();
+}
+std::string_view fieldText() {
+    return fieldEditor.text;
+}
+int fieldKey() {
+    const auto value = fieldResult;
+    fieldResult = 0;
+    return value;
+}
 bool capturesInput() {
-    return available && (opened || wheel);
+    return field || (available && (opened || wheel));
 }
 void reset() {
+    endField();
     cancelComposition();
     editor.reset();
     opened = wheel = available = submit = complete = false;

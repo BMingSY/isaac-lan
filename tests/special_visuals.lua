@@ -72,4 +72,62 @@ for _, invalid in ipairs({
     assert(not pcall(route.apply, invalid))
     assert(route.capture() == origin, "Invalid return contexts must not partially mutate the level")
 end
-print("PASS Dogma warning geometry, unrelated attack effects and special-room return context")
+local diceType = 21
+local kind, used, darkens, shakes = diceType, false, 0, 0
+local dice = dofile(root .. "/src/bridge/compat/routes/dice_floor.lua")(
+    dofile(root .. "/src/bridge/sync/fields.lua")
+)(function()
+    return {
+        GetRoom = function()
+            return {
+                GetType = function()
+                    return kind
+                end,
+                IsSacrificeDone = function()
+                    return used
+                end,
+            }
+        end,
+        Darken = function(_, amount, frames)
+            assert(amount == 1 and frames == 60)
+            darkens = darkens + 1
+        end,
+        ShakeScreen = function(_, frames)
+            assert(frames == 50)
+            shakes = shakes + 1
+        end,
+    }
+end, diceType)
+local view = { slot = 1, epoch = 1, tick = 10, locations = { { 1, 0, 84 } } }
+dice.apply(view)
+used, view.tick = true, 11
+dice.apply(view)
+dice.apply(view)
+view.tick = 12
+dice.apply(view)
+assert(darkens == 1 and shakes == 1, "Dice activation must play once")
+view.tick, used = 10, false
+dice.apply(view)
+view.tick, used = 12, true
+dice.apply(view)
+assert(darkens == 1, "An older view replayed a dice activation")
+view.locations[1][3], view.tick = 85, 13
+dice.apply(view)
+view.locations[1][3], view.tick = 84, 14
+dice.apply(view)
+assert(darkens == 1, "Entering a previously used room replayed its activation")
+dice.reset()
+view.tick = 15
+dice.apply(view)
+assert(darkens == 1, "Reconnect replayed an old activation")
+view.epoch, view.tick, used = 2, 1, false
+dice.apply(view)
+used, view.tick = true, 2
+dice.apply(view)
+assert(darkens == 2, "A new floor retained the previous activation")
+kind, used, view.tick = 13, false, 3
+dice.apply(view)
+used, view.tick = true, 4
+dice.apply(view)
+assert(darkens == 2 and shakes == 2, "Sacrifice rooms received dice presentation")
+print("PASS special entity geometry, room return context and dice activation presentation")

@@ -35,7 +35,15 @@ local function stateEnvironment()
             ["sync/entity_schema"] = dofile(root .. "/src/bridge/sync/entity_schema.lua"),
             ["sync/entity_codec"] = dofile(root .. "/src/bridge/sync/entity_codec.lua"),
             ["sync/world_schema"] = dofile(root .. "/src/bridge/sync/world_schema.lua"),
+            ["sync/weapon_pose"] = dofile(root .. "/src/bridge/sync/weapon_pose.lua"),
             ["presentation/actors"] = dofile(root .. "/src/bridge/presentation/actors.lua"),
+            ["presentation/attacks"] = dofile(root .. "/src/bridge/presentation/attacks.lua"),
+            ["presentation/attack_prediction"] = dofile(
+                root .. "/src/bridge/presentation/attack_prediction.lua"
+            ),
+            ["presentation/tear_motion"] = dofile(
+                root .. "/src/bridge/presentation/tear_motion.lua"
+            ),
             ["presentation/audio"] = dofile(root .. "/src/bridge/presentation/audio.lua"),
             ["presentation/motion"] = dofile(root .. "/src/bridge/presentation/motion.lua"),
             ["presentation/timeline"] = dofile(root .. "/src/bridge/presentation/timeline.lua"),
@@ -45,6 +53,12 @@ local function stateEnvironment()
             ["compat/transitions"] = dofile(root .. "/src/bridge/compat/transitions.lua"),
             ["compat/items/hourglass"] = dofile(root .. "/src/bridge/compat/items/hourglass.lua"),
             ["compat/items/r_key"] = dofile(root .. "/src/bridge/compat/items/r_key.lua"),
+            ["compat/items/attack_preview"] = dofile(
+                root .. "/src/bridge/compat/items/attack_preview.lua"
+            ),
+            ["compat/routes/dice_floor"] = dofile(
+                root .. "/src/bridge/compat/routes/dice_floor.lua"
+            ),
             ["compat/routes/victory_lap"] = dofile(
                 root .. "/src/bridge/compat/routes/victory_lap.lua"
             ),
@@ -101,6 +115,8 @@ local function stateEnvironment()
         },
         ItemType = { ITEM_ACTIVE = 2 },
         NullItemID = { ID_LOST_CURSE = 1 },
+        -- These state checks construct presentation components but never render.
+        Isaac = {},
         Vector = function(x, y)
             return { X = x, Y = y }
         end,

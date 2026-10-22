@@ -4,6 +4,11 @@ local methods = {}
 methods.__index = methods
 local teleportDistance = 96
 local maxHistory = 120
+local nativeRate = 60
+local coastingRetention = math.sqrt(0.775)
+local turningRetention = math.sqrt(0.8)
+local inputBase, inputSpeedScale = 0.75, 0.25
+local walkingAcceleration, reverseAcceleration = 0.6, 0.04
 local function zero()
     return Vector(0, 0)
 end
@@ -52,6 +57,30 @@ function methods:confirm(position, sequence, velocity, tick)
     self.pending = remaining
     self.base, self.velocity, self.rebuild = position, velocity, true
 end
+local function walkingVelocity(velocity, input, dt)
+    local frames = dt * nativeRate
+    local magnitude = math.sqrt(input.direction:LengthSquared())
+    if magnitude == 0 then
+        return velocity * coastingRetention ^ frames
+    end
+    local direction = input.direction * (1 / magnitude)
+    local along = velocity.X * direction.X + velocity.Y * direction.Y
+    local across = velocity - direction * along
+    local strength = magnitude * (inputBase + inputSpeedScale * input.speed)
+    -- Native walking projects onto the speed-scaled input before damping the
+    -- remaining velocity. Consequently retention depends on MoveSpeed while
+    -- holding a direction, and turning damps the perpendicular axis faster.
+    local retain = coastingRetention
+        * (turningRetention + (1 - turningRetention) * strength * strength)
+    if along < 0 and input.speed > 0 then
+        retain = retain * (1 - reverseAcceleration * strength * strength / input.speed)
+    end
+    local decay = retain ^ frames
+    local acceleration = walkingAcceleration * nativeRate * strength * coastingRetention
+    local duration = math.abs(retain - 1) < 0.000001 and frames or (1 - decay) / (1 - retain)
+    return direction * (along * decay + acceleration * duration)
+        + across * (coastingRetention * turningRetention) ^ frames
+end
 local function advance(self, input, resolve)
     if input.locked then
         self.velocity = zero()
@@ -59,10 +88,12 @@ local function advance(self, input, resolve)
     end
     local elapsed = input.dt
     while elapsed > 0 do
-        local dt = math.min(elapsed, 1 / 60)
-        local retain = 0.775 ^ (dt * 30)
-        self.velocity = self.velocity * retain + input.direction * (input.speed * (1 - retain))
+        local dt = math.min(elapsed, 1 / nativeRate)
+        -- Native position integration precedes walking acceleration on each
+        -- half tick. Integrating the new velocity advances starts and reversals
+        -- too early and underestimates the distance travelled after release.
         local wanted = self.position + self.velocity * dt
+        self.velocity = walkingVelocity(self.velocity, input, dt)
         local position = resolve and resolve(self.position, wanted) or wanted
         if math.abs(position.X - wanted.X) > 0.001 then
             self.velocity.X = 0

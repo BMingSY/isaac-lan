@@ -1,11 +1,14 @@
 -- Native charged weapon and raw shooting input; charge UI is rendered locally.
 local native = assert(_IsaacLan)
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local host, port = _IsaacLanTest and _IsaacLanTest.host, _IsaacLanTest and _IsaacLanTest.port
+if not _IsaacLanTest then
+    local f = assert(io.open("./lan-test-role.txt", "r"))
+    host = f:read("*l") == "host"
+    f:close()
+    f = assert(io.open("./lan-test-menu-port.txt", "r"))
+    port = f:read("*l")
+    f:close()
+end
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end

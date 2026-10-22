@@ -40,7 +40,13 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 `rooms_with_player` 可以切换到客机的远端角色存储壳；该对象不保证网格尺寸、门或房间描述符已经初始化。房间内容只能在主机权威房间或客机当前可见房间查询，可见性须同时比较房间编号和 dimension。远端角色的库存、属性与位置仍可采集，不能将存储壳视为完整房间。
 
-房间转移请求可以携带目标房间中的落点，与入口门槽分开保存；明确的入口门槽优先。落点随单次请求消费，楼层和会话清理同时丢弃请求。后端读取 J460 Player `+0x20a9` 的联机幽灵标记、连接状态、房间键和坐标，将普通值交给[幽灵随队策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/characters/ghost.h)；返回的队友坐标通过既有到达路径写入，不改变对象分配、释放或门的目的地。
+`actor_companions` 在空闲客机恢复亲子角色名单。每项为 `id:u32, index:u8, parent:u8, controller:u8, kind:u16, variant:u16, babySkin:i16`，均使用大端；开头为项目数 `u8`，上限 60。父项必须先于子项，控制器必须相同，ID 与索引不得重复。`babySkin` 由 Lua `GetBabySkin()` 采集，限定 `-1..71`，在父角色库存恢复前写入 J460 `Player+0x1aec`；布局由 `GetBabySkin`（RVA `0x2dae00`）签名校验。原生库存缓存通过变体和婴儿身份识别已有伴随角色。角色仍由原生玩家管理器分配、注销，不以本机地址作为线上身份。
+
+房间转移请求可以携带目标房间中的落点，与入口门槽分开保存；明确的入口门槽优先。门槽在原生目的地解析之后、目标房间初始化之前恢复，门布局与角色落点使用同一入口；迷宫重定向保留原生选择的最终方向。落点随单次请求消费，楼层和会话清理同时丢弃请求。后端读取 J460 Player `+0x20a9` 的联机幽灵标记、连接状态、房间键和坐标，将普通值交给[幽灵随队策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/characters/ghost.h)；返回的队友坐标通过既有到达路径写入，不改变对象分配、释放或门的目的地。
+
+进入已有房间或重新接入停放的角色时，后端清空该角色 `Player+0x1b1c/+0x1b20` 的原生转场吸附目标。原生完整入房会将这个向量归零；角色更新对非零目标持续执行位置靠拢。写入仅针对已在迁移名单中的角色，在入房效果之前或重连落点设置时执行一次，不逐帧覆盖，也不改变速度、控制器或对象所有权。布局由 RVA `0x3a4bf2` 的原生清理指令签名校验。
+
+进入已有房间的跟班在落点设置后调用 `Familiar.ResetRoomState`（RVA `0x22bb70`）。这复用原生房间入场对跟随历史、速度及临时状态的处理；仅主机对迁移名单中的跟班调用，不触及留在目标房间中的跟班，也不改变原生分配与回收的所有权。入口签名在启动时校验。
 
 ## 激光路径呈现
 
@@ -101,7 +107,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 百宝袋绘制 | RVA `0x449510`，`ECX=PlayerHUD*`、栈 `Vector*`、`XMM2=scale`，被调方清理 4 字节 | 保留寄存器与 SSE；仅借用目标 receiver，本机位置不变，不写入材料或预览缓存 |
 | HUD 终点 | 绘制标记 RVA `0x5a4eae`，`Game::GetChallengeParams` RVA `0x306940` | 仅在指定 HUD 查询点提供标量目标视图，不进入玩法或原生容器析构 |
 | 挑战完成 | `Game::FinishChallenge`，RVA `0x304f20` | 在可靠结束后的安全边界调用；原版 `Game::Challenge` 为 0，不写入同编号原版挑战解锁 |
-| 移动预测输入 | `input::MovementPreviewScope` 借用当前本机 `InputFrame`；桥接通过 Lua `EntityPlayer:GetMovementInput()` 查询各身体 | 仅在客机呈现回调内覆盖本机控制器的移动与分离键查询，包含托管输入；离开作用域恢复，不消费按键边沿、不改权威输入或角色对象 |
+| 呈现预测输入 | `input::PresentationInputScope` 借用当前本机 `InputFrame`；桥接通过 Lua `EntityPlayer:GetMovementInput()`／`GetShootingInput()` 查询各身体 | 仅在客机呈现回调内覆盖本机控制器的移动、射击与分离键查询，包含托管输入；离开作用域恢复，不消费按键边沿、不改权威输入或角色对象 |
 
 百宝袋目标校验读取 PlayerHUD 绑定、HUD 的八个槽位、Player `+0x1618/+0x20a9`，并使用 `GetActiveItem` 确认持有。绘制只借用引用，不替换绑定、不持有角色或精灵。
 
@@ -112,6 +118,8 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 命令字符串使用游戏自己的 assign／析构接口，遵循 MSVC 24 字节字符串布局，不能使用 MinGW 堆代替。结果立即复制为自有字符串，限制 16 KiB；嵌入层按 UTF-8 边界分段。`Game+console` 的状态字段 `+0` 仅在联机接管输入时清为关闭，离开联机恢复原版更新。原生入口纳入启动签名校验。
 
 [chat_input.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/chat_input.cpp) 接收本机窗口文字、剪贴板与 IME 消息，不向游戏投递输入文本。UTF-16／UTF-8 转换拒绝非法编码；IME 候选位置跟随编辑光标，失焦取消输入法组合并关闭输入。随机掷骰调用 `BCryptGenRandom` 并使用拒绝采样，不消耗游戏 RNG。编辑缓冲、手柄边沿和动作释放状态在所属组件清理，Lua 只接收普通值。
+
+菜单地址、端口和种子通过同一适配器的 `beginField`／`endField` 使用独立编辑缓冲，无需创建原生 Chat 对象；地址上限 253 个 ASCII 字符，端口只收 5 位数字，种子只收 8 位大写字母或数字。编辑期间在原版窗口处理前消费键盘消息，确认／取消通过 `fieldKey` 取一次，文本通过 `fieldText` 借用到下一次编辑操作。菜单暂停键盘动作绑定查询，仅继续查询手柄确认／返回；退出字段后仍消费其已按住键的松开事件，打开前已按住的键则允许原版清理。字段切换、菜单退出与失焦清理编辑和输入法状态，不改变游戏按键配置。
 
 聊天输入适配的 `chat_ui_pointer(width, height)` 只在所属窗口处于前台且输入打开时返回鼠标位置和左键状态，客户区坐标换算为逻辑画面坐标；其他状态返回无效位置与松开状态。编辑期间左键事件由界面接管，客户区使用系统箭头光标；拖动范围、HUD 避让和位置状态属于 Lua 表现层。
 
@@ -165,6 +173,6 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；绘制时借入本机状态并完整恢复全局标量 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 29、网络消息版本为 38；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 30、网络消息版本为 38；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。

@@ -44,6 +44,7 @@ return function(fields)
                         [Actor.poop] = poop.capture(p),
                         [Actor.craftingBag] = craftingBag.capture(p),
                         [Actor.temporaryEffects] = deps.temporaryEffects.capture(p),
+                        [Actor.babySkin] = p:GetBabySkin(),
                     }
                     captureActors[index] = base
                 end
@@ -76,6 +77,7 @@ return function(fields)
                             [Actor.poop] = base[Actor.poop],
                             [Actor.craftingBag] = base[Actor.craftingBag],
                             [Actor.temporaryEffects] = base[Actor.temporaryEffects],
+                            [Actor.babySkin] = base[Actor.babySkin],
                         }
                         captureVisuals[index] = full
                     end

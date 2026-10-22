@@ -20,6 +20,9 @@ for index = 0, 2 do
         GetSprite = function()
             return index
         end,
+        GetBabySkin = function()
+            return -1
+        end,
     }
 end
 local descriptor = {

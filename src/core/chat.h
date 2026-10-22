@@ -63,11 +63,11 @@ inline std::string_view boundedOutput(std::string_view text, std::size_t limit) 
         --end;
     return text.substr(0, end);
 }
-inline bool validInput(std::string_view value) {
+inline bool validInput(std::string_view value, std::size_t characterLimit = maxCharacters) {
     const auto offsets = boundaries(value);
     if (!offsets || value.size() > maxCommandBytes)
         return false;
-    return value.starts_with('/') || offsets->size() - 1 <= maxCharacters;
+    return value.starts_with('/') || offsets->size() - 1 <= characterLimit;
 }
 
 class Editor {
@@ -78,6 +78,7 @@ class Editor {
   public:
     std::string text;
     std::size_t cursor = 0, anchor = 0;
+    std::size_t characterLimit = maxCharacters;
     bool limit = false;
     void assign(std::string value) {
         text = std::move(value);
@@ -91,7 +92,7 @@ class Editor {
                 c = ' ';
         const auto first = std::min(cursor, anchor), last = std::max(cursor, anchor);
         auto next = text.substr(0, first) + value + text.substr(last);
-        if (!validInput(next)) {
+        if (!validInput(next, characterLimit)) {
             limit = true;
             return false;
         }

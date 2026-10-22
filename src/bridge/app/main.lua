@@ -8,6 +8,11 @@ local owner = { Name = "Isaac LAN native extension" }
 local function callback(id, fn)
     Isaac.AddCallback(owner, id, fn)
 end
+callback(ModCallbacks.MC_POST_RENDER, function()
+    if _IsaacLanState then
+        _IsaacLanState.render()
+    end
+end)
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
 local challenge, chat, feedback
 local function goalRoute(goal)
