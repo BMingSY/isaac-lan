@@ -2,6 +2,7 @@
 local native, host, port = _IsaacLan, _IsaacLanTest.host, _IsaacLanTest.port
 local originalFrame = _IsaacLanFrame
 local renders, linked, chosen = 0, false, false
+local selectionConfirmed = false
 local spawned, checked, finished, cleaned = false, false, false, false
 local owned = {}
 
@@ -42,8 +43,11 @@ function _IsaacLanFrame()
     assert(status.phase ~= 4 and status.phase ~= 9, status.error)
     native.test_gamepad(0)
     if status.phase == 2 and not chosen then
-        assert(_IsaacLanCommand("choose", "0:1"))
+        _IsaacLanCommand("choose", "0:1")
         chosen = true
+    end
+    if chosen and status["choice" .. status.slot] == 0 and status["ready" .. status.slot] == 1 then
+        selectionConfirmed = true
     end
     if
         host
@@ -53,6 +57,9 @@ function _IsaacLanFrame()
         and status.ready1 == 1
     then
         _IsaacLanCommand("start", "YV039KQF:0:0:0:0:0")
+    end
+    if status.prepared then
+        assert(selectionConfirmed, "Spatial query fixture character selection was not confirmed")
     end
     if host and status.prepared and status.verified >= 60 and not spawned then
         spawned = true
@@ -86,7 +93,9 @@ function _IsaacLanFrame()
                 .. tostring(#ordinary > 0)
         )
         compare(expected, Isaac.FindInRadius(center, 1000000, EntityPartition.TEAR), "huge")
-        compare(expected, Isaac.FindInRadius(center, 10000000000, EntityPartition.TEAR), "wrapped")
+        -- Audited J460 room grid: width 15, cell 80. Coordinates remain in int32,
+        -- while this radius makes y * width + x cross the 32-bit index boundary.
+        compare(expected, Isaac.FindInRadius(center, 50000000000, EntityPartition.TEAR), "wrapped")
         compare(
             expected,
             Isaac.FindInRadius(Vector(-100000, -100000), 1000000, EntityPartition.TEAR),
