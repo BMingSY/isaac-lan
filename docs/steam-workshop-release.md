@@ -36,6 +36,8 @@ python tools/workshop_release.py prepare \
 
 需要将更新说明放到介绍最前面并更换封面时，在 `prepare` 命令中追加 `--prepend-notes --preview docs/assets/steam-workshop-cover.png`；只有用户明确要求时使用。准备结果额外包含各语言的完整介绍和封面哈希，发布前核对其与已确认文案、原介绍和指定图片一致。该操作在现有介绍前添加一次内容，不自动删除历史版本段落。
 
+Steam 页面封面须小于 1 MB。原图超过限制时，制作同一图片的压缩副本，用 `--preview-upload` 指定；`--preview` 仍指定原图，保留在下载内容中。发布工具分别校验上传副本与内容原图。
+
 检查输出中的 `reviewed-notes.md`、`steam-change-notes.txt` 和 `preparation.json`。文案只写玩家能感知的变化；没有新特性就不保留该分类，不列排查原因、内部同步机制或逐项调试细节。
 
 ## 发布并核对

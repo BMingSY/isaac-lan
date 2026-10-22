@@ -20,6 +20,8 @@ TITLE = "Isaac LAN / 局域网联机"
 LANGUAGES = ("english", "schinese")
 BASE_FILES = ("main.lua", "metadata.xml", "preview.png", "安装说明.txt")
 DESCRIPTION_LIMIT = 8000
+PREVIEW_LIMIT = 1024 * 1024
+PREVIEW_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif")
 
 
 def read_json(path):
@@ -144,7 +146,9 @@ def preview_digest(url):
         return hashlib.sha256(response.read()).hexdigest()
 
 
-def prepare(steam, archive, notes, output, tag, *, prepend_notes=False, preview=None):
+def prepare(
+    steam, archive, notes, output, tag, *, prepend_notes=False, preview=None, preview_upload=None
+):
     if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
         raise ValueError("Expected a release tag such as v0.4.2")
     checked = check_archive(archive, tag)
@@ -152,6 +156,16 @@ def prepare(steam, archive, notes, output, tag, *, prepend_notes=False, preview=
     formatted = steam_notes(reviewed)
     if preview is not None and (preview.is_symlink() or not preview.is_file()):
         raise ValueError("Preview must be a regular local file")
+    if preview_upload is not None and preview is None:
+        raise ValueError("An upload preview requires the original content preview")
+    upload_image = preview_upload if preview_upload is not None else preview
+    if upload_image is not None and (
+        upload_image.is_symlink()
+        or not upload_image.is_file()
+        or upload_image.suffix.lower() not in PREVIEW_SUFFIXES
+        or not 0 < upload_image.stat().st_size < PREVIEW_LIMIT
+    ):
+        raise ValueError("Workshop upload preview must be a regular PNG/JPG/GIF smaller than 1 MB")
     output.mkdir(parents=True, exist_ok=False)
     before = query_metadata(steam, output / "before")
     base = steam.download(output / "base-download")
@@ -203,8 +217,12 @@ def prepare(steam, archive, notes, output, tag, *, prepend_notes=False, preview=
         manifest["presentation"] = {
             "prepend_notes": prepend_notes,
             "descriptions": descriptions,
-            "preview_sha256": digest(preview) if preview is not None else None,
+            "preview_sha256": digest(upload_image) if upload_image is not None else None,
         }
+        if preview_upload is not None:
+            upload_copy = output / f"upload-preview{preview_upload.suffix.lower()}"
+            shutil.copy2(preview_upload, upload_copy)
+            manifest["presentation"]["preview_upload_file"] = upload_copy.name
     write_json(output / "preparation.json", manifest)
     return manifest
 
@@ -253,11 +271,19 @@ def load_prepared(output):
                 raise ValueError("Prepared description changed")
             if path.read_bytes() != expected.encode("utf-8"):
                 raise ValueError("Prepared description differs from reviewed notes and original")
-        if (
-            presentation["preview_sha256"]
-            and digest(output / "content/preview.png") != presentation["preview_sha256"]
-        ):
-            raise ValueError("Prepared preview changed")
+        if presentation["preview_sha256"]:
+            preview_file = presentation.get("preview_upload_file", "content/preview.png")
+            if preview_file not in ("content/preview.png",) + tuple(
+                f"upload-preview{suffix}" for suffix in PREVIEW_SUFFIXES
+            ):
+                raise ValueError("Unexpected prepared preview path")
+            upload_image = output / preview_file
+            if (
+                upload_image.is_symlink()
+                or not upload_image.is_file()
+                or digest(upload_image) != presentation["preview_sha256"]
+            ):
+                raise ValueError("Prepared preview changed")
     return manifest
 
 
@@ -280,7 +306,7 @@ def publish(steam, output):
                 output / ("steam-change-notes.txt" if index == 0 else "silent-change-notes.txt"),
                 language,
                 output / presentation["descriptions"][language]["file"],
-                output / "content/preview.png"
+                output / presentation.get("preview_upload_file", "content/preview.png")
                 if index == 0 and presentation["preview_sha256"]
                 else None,
             )
@@ -341,6 +367,7 @@ def main():
     parser.add_argument("--tag")
     parser.add_argument("--prepend-notes", action="store_true")
     parser.add_argument("--preview", type=Path)
+    parser.add_argument("--preview-upload", type=Path)
     args = parser.parse_args()
     if args.command == "prepare" and not all((args.archive, args.notes, args.tag)):
         parser.error("prepare requires --archive, --notes and --tag")
@@ -354,6 +381,7 @@ def main():
             args.tag,
             prepend_notes=args.prepend_notes,
             preview=args.preview,
+            preview_upload=args.preview_upload,
         )
     else:
         result = {"publish": publish, "verify": verify}[args.command](steam, args.output)

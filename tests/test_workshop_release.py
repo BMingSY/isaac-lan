@@ -318,6 +318,39 @@ def test_wrong_remote_preview_is_rejected(release, monkeypatch):
     assert not list(output.glob("verify-*/verification.json"))
 
 
+def test_large_cover_is_rejected_before_steam_access(release):
+    steam, archive, notes, output = release
+    preview = output.parent / "cover.png"
+    preview.write_bytes(b"x" * workshop.PREVIEW_LIMIT)
+    with pytest.raises(ValueError, match="smaller than 1 MB"):
+        workshop.prepare(steam, archive, notes, output, "v0.4.2", preview=preview)
+    assert steam.calls == []
+    assert not output.exists()
+
+
+def test_upload_copy_keeps_original_cover_in_downloaded_content(release, monkeypatch):
+    steam, archive, notes, output = release
+    preview = output.parent / "cover.png"
+    preview.write_bytes(b"x" * workshop.PREVIEW_LIMIT)
+    upload = output.parent / "cover.jpg"
+    upload.write_bytes(b"compressed upload copy")
+    monkeypatch.setattr(
+        workshop, "preview_digest", lambda _: hashlib.sha256(steam.preview_bytes).hexdigest()
+    )
+    workshop.prepare(
+        steam, archive, notes, output, "v0.4.2", preview=preview, preview_upload=upload
+    )
+    result = workshop.publish(steam, output)
+    assert result["preview_verified"] and result["downloaded_files_match"]
+    assert steam.preview_bytes == upload.read_bytes()
+    assert (steam.base / "preview.png").read_bytes() == preview.read_bytes()
+    (output / "upload-preview.jpg").write_bytes(b"unapproved replacement")
+    steam.calls.clear()
+    with pytest.raises(ValueError, match="Prepared preview changed"):
+        workshop.verify(steam, output)
+    assert not steam.calls
+
+
 def test_description_limit_counts_utf8_bytes(release):
     steam, archive, notes, output = release
     steam.metadata["english"]["description"] = "字" * 2700
