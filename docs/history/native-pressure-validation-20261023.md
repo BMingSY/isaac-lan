@@ -30,7 +30,7 @@
 
 新增组件的 3 组真实 Windows x86／MinHook 回归通过，覆盖原叶函数与 Hook 前后返回、寄存器及标志契约，2500 个图输入、4096 节点长链、循环、地址复用和对象内容不变。`723d20a` 的 Windows x86 构建、21 项原生／核心检查及完整 EXE 签名检查通过，格式检查通过；证据为 `spawner-backend-review-01`、`spawner-win32-tests.xml` 和 `candidate-pressure-04`。这些结果属于离线和原生 ABI 检查，不替代该候选的实机复测。
 
-独立 PR 分支纳入生成者保护后的 `d011429255334d60b5786e33c7a2dd14dd140349` 再次通过 full＋ASan/UBSan：126 项 CTest、530 项 Python 测试及 19 个子测试，格式和脚本检查通过，证据为 `offline-pr-02`。该分支原生源码与冻结候选 `723d20a` 一致；其后只增加本验收记录，没有修改已测实现。
+独立 PR 分支纳入生成者保护后的 `d011429255334d60b5786e33c7a2dd14dd140349` 再次通过 full＋ASan/UBSan：126 项 CTest、530 项 Python 测试及 19 个子测试，格式和脚本检查通过，证据为 `offline-pr-02`。该分支原生源码与冻结候选 `723d20a` 一致；其后仅更新验收记录和 CI 执行清单，没有修改已测实现。新增的七项核心／原生压力测试接入 Windows CI；相同 PowerShell 批次在本地冻结二进制上执行通过，证据为 `workflow-native-pressure-01`。
 
 ## 候选与实机记录
 
