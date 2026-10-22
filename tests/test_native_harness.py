@@ -426,6 +426,7 @@ return {
         "lanbot_greed",
         "local_hud",
         "guest_visuals",
+        "entity_capacity",
     ):
         (tests / f"state_{name}.lua").write_text(source)
     monkeypatch.setattr(lua_support, "ROOT", tmp_path)
@@ -440,6 +441,7 @@ return {
         (["lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed"], False),
         (["campaign", "ascent-compat"], False),
         (["local-hud", "guest-visuals"], False),
+        (["entity-capacity"], False),
     ],
 )
 def test_built_suites_execute_options_and_cleanup(fake_scenarios, cases, first_floor):

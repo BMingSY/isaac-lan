@@ -258,6 +258,7 @@ def main():
                                 "weak-network",
                                 "entity-fields",
                                 "spatial-queries",
+                                "entity-capacity",
                                 "floor-items",
                                 "mod-integrations",
                             )
