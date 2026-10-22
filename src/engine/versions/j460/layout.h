@@ -141,6 +141,9 @@ inline constexpr unsigned scale = 0x420;
 inline constexpr unsigned rotation = 0x458;
 inline constexpr unsigned waitFrames = 0x438;
 } // namespace tear
+namespace laser {
+inline constexpr unsigned parent = 0x52c;
+} // namespace laser
 namespace effect {
 inline constexpr unsigned state = 0x450;
 inline constexpr unsigned timeout = 0x45c;

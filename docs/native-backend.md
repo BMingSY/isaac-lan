@@ -24,6 +24,12 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 适配器最多接受 `2^20` 个桶、合法宽度和正的有限单元长度；只在调用期间借用原生前缀及桶内容，不保留或销毁原生容器，不改变实体池和结果数组容量。非空范围通过一次原生 Query 保留 UID 去重与结果追加语义，调用者仍以原始位置／半径执行精确几何过滤。入口及所有者、网格字段、实体 UID 读取位置受签名校验。普通范围原样调用；布局不适用或临时内存分配失败时沿用原生入口，不让临时分配异常跨越原生 ABI，也不保证这些回退条件下的遍历耗时。该边界不修复已有坏指针或其他原生数组的容量不足。
 
+## 激光父引用
+
+[`laser_links`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/laser_links.cpp) 在 J460 激光原生 Update（RVA `0x577cc0`，虚表槽 `+0xc`，`thiscall void(Laser*)`）入口检查当前专用父链。该引用位于 `+0x52c`，与通用实体 `Parent` 不同；父链必须以空引用结束且不能包含当前激光。无分配的[父链检查](https://github.com/BMingSY/isaac-lan/blob/main/src/core/parent_chain.h) 只借用已有对象；发现自引用、间接循环或已有循环时，通过 `Laser.SetParent`（RVA `0x56d120`，`thiscall void(Laser*, Laser*)`）清空当前激光的父引用，再继续原 Update。有效父链不触发 setter，正常更新仍调用一次原 Update。
+
+该引用由游戏的 EntityPtr 观察者管理。旧引用注销、父引用赋值、新引用注册及对象删除时的失效仍由原生代码负责；适配器不直接写引用，不分配、释放或跨调用持有实体。Update 入口、`+0x52c` 父链读取及原 setter 的注销／注册路径均受版本签名校验。检查覆盖进入 Update 前的内联父引用赋值，不要求调用者经过 setter；它要求原生传入的对象及已有链节点有效，不修复坏指针、更新期间后续写入或实体池容量问题，也不向 Lua 暴露地址。
+
 ## 实体引用与房间数据
 
 角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。

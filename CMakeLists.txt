@@ -53,6 +53,13 @@ if(BUILD_TESTING AND ISAAC_LAN_LZ4_SOURCE_DIR)
     endif()
 endif()
 if(BUILD_TESTING)
+    add_executable(isaac_lan_parent_chain_test tests/parent_chain_test.cpp)
+    target_include_directories(isaac_lan_parent_chain_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_parent_chain_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME core.parent-chain COMMAND isaac_lan_parent_chain_test)
+    set_tests_properties(core.parent-chain PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_spatial_query_test tests/spatial_query_test.cpp)
     target_include_directories(isaac_lan_spatial_query_test PRIVATE src)
     if(MINGW)
@@ -374,6 +381,7 @@ add_library(
     src/engine/state_codec.cpp
     src/engine/versions/j460/entity_fields.cpp
     src/engine/versions/j460/spatial_queries.cpp
+    src/engine/versions/j460/laser_links.cpp
     src/engine/versions/j460/bootstrap.cpp
     src/engine/versions/j460/session_backend.cpp
     src/diagnostics/native_exceptions.cpp
@@ -578,6 +586,15 @@ if(NOT EXISTS "${MINHOOK_SOURCE_DIR}/include/MinHook.h")
 endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_laser_links_test tests/laser_links_test.cpp)
+    target_include_directories(isaac_lan_laser_links_test PRIVATE src)
+    target_link_libraries(isaac_lan_laser_links_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_laser_links_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_laser_links_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.laser-links COMMAND isaac_lan_laser_links_test)
+    set_tests_properties(native.laser-links PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_spatial_queries_test tests/spatial_queries_test.cpp)
     target_include_directories(isaac_lan_spatial_queries_test PRIVATE src)
     target_link_libraries(isaac_lan_spatial_queries_test PRIVATE minhook)

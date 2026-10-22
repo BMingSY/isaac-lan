@@ -4,6 +4,11 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t laserUpdate = 0x577cc0;
+inline constexpr std::uint32_t laserSetParent = 0x56d120;
+inline constexpr std::uint32_t laserSetParentUnregister = 0x56d140;
+inline constexpr std::uint32_t laserSetParentRegister = 0x56d14b;
+inline constexpr std::uint32_t laserParentTraversal = 0x577fb6;
 inline constexpr std::uint32_t spatialGridQuery = 0x1c490;
 inline constexpr std::uint32_t spatialGridQueryOwner = 0x1c4bd;
 inline constexpr std::uint32_t spatialGridQueryCell = 0x1c50d;
