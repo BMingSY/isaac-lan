@@ -62,6 +62,57 @@ assert(ready and not scenario.done())
     )
 
 
+@pytest.mark.parametrize("role", ["host", "client"])
+def test_pause_scenario_is_pending_during_startup(tmp_path, role):
+    role_file = tmp_path / "role.txt"
+    role_file.write_text(role)
+    source = (
+        lua_support.support()
+        + """
+local registered = {}
+Isaac = {
+    AddCallback = function(_, _, callback) registered[callback] = true end,
+    RemoveCallback = function(_, _, callback) registered[callback] = nil end,
+}
+ModCallbacks = { MC_POST_GAME_STARTED = 1, MC_PRE_GAME_EXIT = 2 }
+_IsaacLanTest = { port = "1234" }
+_IsaacLan = {
+    pause_menu_state = function() error("Pause menu read during startup") end,
+    net_gate = function() end,
+    test_gamepad = function(buttons) assert(buttons == 0) end,
+    api_info = function() return { nowMs = 0 } end,
+}
+local status = { phase = 0, scene = 1, prepared = false }
+_IsaacLanFrame = function() return status end
+local open = io.open
+io.open = function(path, mode)
+    if path == "./lan-test-role.txt" then path = ROLE_FILE end
+    return open(path, mode)
+end
+local scenario = createScenario(FACTORY)
+assert(scenario.done() == false)
+for _ = 1, 3 do
+    assert(scenario.call(_IsaacLanFrame) == status)
+    assert(scenario.done() == false)
+end
+assert(next(registered))
+scenario.cleanup()
+assert(not next(registered))
+"""
+    )
+    fixture = lua_support.factory(
+        "state_pause_menu.lua",
+        prelude="local pausePulses = 8\nlocal pauseCoordination = "
+        + lua_support.literal(str(tmp_path)),
+    )
+    run_lua(
+        source.replace("ROLE_FILE", lua_support.literal(str(role_file))).replace(
+            "FACTORY", fixture
+        ),
+        tmp_path,
+    )
+
+
 def test_inventory_covers_every_fixture_and_executor():
     catalog = inventory()
     assert {entry["script"] for entry in catalog["fixtures"]} == {
