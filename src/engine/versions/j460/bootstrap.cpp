@@ -7,6 +7,10 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/menu_state.h"
+#include "engine/versions/j460/spatial_queries.h"
+#include "engine/versions/j460/laser_links.h"
+#include "engine/versions/j460/entity_capacity.h"
+#include "engine/versions/j460/spawner_links.h"
 #include <MinHook.h>
 #include <array>
 #include <cstdio>
@@ -386,6 +390,14 @@ int audit(lua_State* L) {
 int installUpdates(std::uintptr_t base, void (*logger)(const std::string&)) {
     image = base;
     log = logger;
+    if (!j460::entity_capacity::install(image))
+        return 26;
+    if (!j460::spatial_queries::install(image))
+        return 18;
+    if (!j460::laser_links::install(image, runtime::replica))
+        return 19;
+    if (!j460::spawner_links::install(image))
+        return 27;
     if (MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::roomUpdate),
                       reinterpret_cast<void*>(updateForeground),
                       reinterpret_cast<void**>(&originalRoomUpdate)) != MH_OK ||

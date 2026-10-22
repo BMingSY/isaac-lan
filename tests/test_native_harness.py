@@ -62,6 +62,67 @@ assert(ready and not scenario.done())
     )
 
 
+@pytest.mark.parametrize("host", [True, False])
+@pytest.mark.parametrize("confirmed", [True, False])
+def test_spatial_scenario_uses_void_choose_and_confirms_polled_state(tmp_path, host, confirmed):
+    source = """
+local host, confirmed = HOST, CONFIRMED
+local slot = host and 0 or 1
+local status = { phase = 0, players = 2, verified = 0, slot = slot,
+    ready0 = 0, ready1 = 0, choice0 = 0, choice1 = 0 }
+local frames, chooses, starts, ready = 0, 0, 0, false
+_IsaacLanTest = { host = host, port = "1234" }
+_IsaacLan = { test_gamepad = function(buttons) assert(buttons == 0) end }
+_IsaacLanFrame = function() frames = frames + 1; return status end
+Isaac = { DebugString = function(message)
+    assert(message == "LAN_NETWORK MENU_READY")
+    ready = true
+end }
+function _IsaacLanCommand(action, value)
+    if action == "host" or action == "join" then
+        assert(action == (host and "host" or "join"))
+        assert(value == (host and "1234" or "127.0.0.1:1234"))
+        status.phase = 2
+    elseif action == "choose" then
+        assert(ready and value == "0:1")
+        chooses = chooses + 1
+        -- Production wrapper is void; acknowledgement arrives in a later poll.
+    else
+        assert(action == "start" and host and confirmed)
+        assert(status.ready0 == 1 and status.ready1 == 1)
+        assert(value == "YV039KQF:0:0:0:0:0")
+        starts, status.phase = starts + 1, 3
+    end
+end
+local scenario = dofile(FIXTURE)
+for _ = 1, (host and 300 or 360) do _IsaacLanFrame() end
+assert(ready and chooses == 1 and starts == 0 and not scenario.done())
+for _ = 1, 3 do _IsaacLanFrame() end
+assert(chooses == 1 and starts == 0)
+status["ready" .. (1 - slot)] = 1
+status["ready" .. slot] = confirmed and 1 or 0
+_IsaacLanFrame()
+assert(starts == (host and confirmed and 1 or 0))
+status.phase, status.prepared = 3, true
+local ok, failure = pcall(_IsaacLanFrame)
+assert(ok == confirmed, failure)
+if not confirmed then
+    assert(tostring(failure):find("character selection was not confirmed", 1, true))
+end
+scenario.cleanup()
+_IsaacLan.test_gamepad = function() error("Fixture ran after cleanup") end
+local before = frames
+assert(_IsaacLanFrame() == status and frames == before + 1)
+assert(not scenario.done())
+"""
+    run_lua(
+        source.replace("HOST", lua_support.literal(host))
+        .replace("CONFIRMED", lua_support.literal(confirmed))
+        .replace("FIXTURE", lua_support.literal(str(ROOT / "tests/state_spatial_queries.lua"))),
+        tmp_path,
+    )
+
+
 @pytest.mark.parametrize("role", ["host", "client"])
 def test_pause_scenario_is_pending_during_startup(tmp_path, role):
     role_file = tmp_path / "role.txt"
@@ -365,6 +426,7 @@ return {
         "lanbot_greed",
         "local_hud",
         "guest_visuals",
+        "entity_capacity",
     ):
         (tests / f"state_{name}.lua").write_text(source)
     monkeypatch.setattr(lua_support, "ROOT", tmp_path)
@@ -379,6 +441,7 @@ return {
         (["lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed"], False),
         (["campaign", "ascent-compat"], False),
         (["local-hud", "guest-visuals"], False),
+        (["entity-capacity"], False),
     ],
 )
 def test_built_suites_execute_options_and_cleanup(fake_scenarios, cases, first_floor):

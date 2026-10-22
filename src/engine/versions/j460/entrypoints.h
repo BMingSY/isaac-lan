@@ -4,6 +4,27 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t entityListMainAllocation = 0x1795d;
+inline constexpr std::uint32_t entityListPersistentAllocation = 0x17983;
+inline constexpr std::uint32_t entityListUpdateAllocation = 0x179a6;
+inline constexpr std::uint32_t entityListUpdateStorage = 0x179b6;
+inline constexpr std::uint32_t roomConstructEntityList = 0x3e94a8;
+inline constexpr std::uint32_t entityArrayAllocationPrefix = 0x66492d;
+inline constexpr std::uint32_t laserUpdate = 0x577cc0;
+inline constexpr std::uint32_t laserSetParent = 0x56d120;
+inline constexpr std::uint32_t laserSetParentUnregister = 0x56d140;
+inline constexpr std::uint32_t laserSetParentRegister = 0x56d14b;
+inline constexpr std::uint32_t laserParentTraversal = 0x577fb6;
+inline constexpr std::uint32_t entitySpawnerRoot = 0x2a89d0;
+inline constexpr std::uint32_t entitySpawnerRootTraversal = 0x2a89e0;
+inline constexpr std::uint32_t spatialGridQuery = 0x1c490;
+inline constexpr std::uint32_t spatialGridQueryOwner = 0x1c4bd;
+inline constexpr std::uint32_t spatialGridQueryCell = 0x1c50d;
+inline constexpr std::uint32_t spatialGridQueryWidth = 0x1c560;
+inline constexpr std::uint32_t spatialGridQueryBuckets = 0x1c56e;
+inline constexpr std::uint32_t spatialGridQueryBucketStride = 0x1c58c;
+inline constexpr std::uint32_t spatialGridQueryBucketCount = 0x1c597;
+inline constexpr std::uint32_t spatialGridQueryEntityUid = 0x1c5a2;
 inline constexpr std::uint32_t gameAddPixelation = 0x353cc0;
 inline constexpr std::uint32_t playerUpdateWavyCap = 0x1cb480;
 inline constexpr std::uint32_t playerUsePill = 0x3c4180;

@@ -141,6 +141,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Lua ABI tests failed' }
           & ./ci/isaac_lan_rewind_home_test.exe 2>&1 | Tee-Object test-runs/windows/rewind-home.log
           if ($LASTEXITCODE -ne 0) { throw 'Hourglass Home ABI tests failed' }
+      - name: Test native pressure queries, references and update capacity
+        shell: pwsh
+        run: |
+          $pressureTests = @(
+              'parent_chain', 'spatial_query', 'spatial_queries',
+              'laser_links', 'laser_isolation', 'spawner_links', 'entity_capacity'
+          )
+          foreach ($pressureTest in $pressureTests) {
+              & "./ci/isaac_lan_${pressureTest}_test.exe" 2>&1 | Tee-Object "test-runs/windows/pressure-$pressureTest.log"
+              if ($LASTEXITCODE -ne 0) { throw "Native pressure test failed: $pressureTest" }
+          }
       - name: Test configuration and launch/run log isolation
         shell: pwsh
         run: |

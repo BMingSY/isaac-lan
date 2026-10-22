@@ -16,7 +16,31 @@
 
 J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.h)。`Size` 调用原 Lua 属性 setter（cdecl，RVA `0x471fa0`）；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
 
+## 空间网格查询
+
+[`spatial_queries`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/spatial_queries.cpp) 在 `SpatialGrid::Query`（RVA `0x1c490`，`thiscall void(Grid*, Result*, const Vector*, const Vector*)`）处理超过有效桶数四倍的遍历范围。网格前缀的宽度、单元长度、桶数组首尾位于 `+0xc/+0x14/+0x18/+0x1c`；每桶 `0xa4` 字节，最多 40 个借用实体指针。入口受 J460 签名校验，网格、实体、原生去重状态及结果数组仍由游戏拥有。
+
+可移植的[范围算法](https://github.com/BMingSY/isaac-lan/blob/main/src/core/spatial_query.h) 保持 binary32 运算和截断到整数的语义，包括横坐标越界时的行别名及有符号 32 位线性索引回绕。连续范围归并为相同首次访问顺序的有效桶；回绕范围按桶计算首次命中，再排序构成临时只读视图。每桶的回绕计算使用有界整数算法，不逐个枚举坐标或回绕次数。
+
+适配器最多接受 `2^20` 个桶、合法宽度和正的有限单元长度；只在调用期间借用原生前缀及桶内容，不保留或销毁原生容器，不改变实体池和结果数组容量。非空范围通过一次原生 Query 保留 UID 去重与结果追加语义，调用者仍以原始位置／半径执行精确几何过滤。入口及所有者、网格字段、实体 UID 读取位置受签名校验。普通范围原样调用；布局不适用或临时内存分配失败时沿用原生入口，不让临时分配异常跨越原生 ABI，也不保证这些回退条件下的遍历耗时。该边界不修复已有坏指针或其他原生数组的容量不足。
+
+## 激光父引用
+
+[`laser_links`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/laser_links.cpp) 在 J460 激光原生 Update（RVA `0x577cc0`，虚表槽 `+0xc`，`thiscall void(Laser*)`）入口检查当前专用父链。该引用位于 `+0x52c`，与通用实体 `Parent` 不同；父链必须以空引用结束且不能包含当前激光。无分配的[父链检查](https://github.com/BMingSY/isaac-lan/blob/main/src/core/parent_chain.h) 只借用已有对象；发现自引用、间接循环或已有循环时，通过 `Laser.SetParent`（RVA `0x56d120`，`thiscall void(Laser*, Laser*)`）清空当前激光的父引用，再继续原 Update。有效父链不触发 setter，正常更新仍调用一次原 Update。
+
+该引用由游戏的 EntityPtr 观察者管理。旧引用注销、父引用赋值、新引用注册及对象删除时的失效仍由原生代码负责；适配器不直接写引用，不分配、释放或跨调用持有实体。Update 入口、`+0x52c` 父链读取及原 setter 的注销／注册路径均受版本签名校验。检查覆盖进入 Update 前的内联父引用赋值，不要求调用者经过 setter；它要求原生传入的对象及已有链节点有效，不修复坏指针、更新期间后续写入或实体池容量问题，也不向 Lua 暴露地址。
+
+激光 Update Hook 由激光组件持有到进程结束。房间的客机实体隔离扫描遇到该入口时，只登记激光隔离状态，不重复挂接或加入房间的动态 Hook 清理表；`beforeStart` 在撤销动态实体 Hook 的同一位置清除登记。登记期间按注入的实时客机谓词跳过激光原生更新，且不读取或清理父链；主机、单人及未登记阶段保留父链检查与原 Update。角色和房间切换不缓存实体指针，也不重挂激光入口。
+
 ## 实体引用与房间数据
+
+[`spawner_links`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/spawner_links.cpp) 保护 J460 的生成来源根查询（RVA `0x2a89d0`）。输入为非空借用实体，沿 `Entity.SpawnerEntity`（`+0x3c8`）寻找最后一个非空节点；空来源链返回输入实体。无环链调用一次原查询，自引用、间接环或通向已有环的链返回本次查询的起始实体。循环没有可辨识的根；调用者继续按该实体的类型判断来源，不以空返回值替代有效对象。
+
+查询只读，不清空或重挂来源引用，不改变 EntityPtr 观察者、实体所有权或生命周期，不跨调用缓存节点。适配器复用无分配的[链检查](https://github.com/BMingSY/isaac-lan/blob/main/src/core/parent_chain.h)，要求整个查询期间节点有效且链接稳定；不处理坏指针、并发改链或其他原生遍历入口。入口和遍历体均受签名校验。原生调用者依赖扩展寄存器契约：`ECX` 输入，返回时 `EAX=ECX=结果`，保留 `EDX`、非易失寄存器与 XMM/x87 状态，标志位与末尾空链接测试一致。薄汇编入口恢复这些整数寄存器和标志；该组件整个编译单元限制为通用寄存器指令，不向 Lua 暴露接口。
+
+[`entity_capacity`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_capacity.cpp) 只在游戏入口放行前调整 EntityList 构造器的 `+0x40` 数组：容量为原生主列表 16384 与持久列表 256 之和 16640，对应分配参数为 66560 字节。构造器 RVA `0x17930` 由 Room 构造器初始化 `Room+0x1218` 时调用；容量和字节数两条指令、来源容量、分配调用与数据指针存储均经校验，配对写入后刷新指令缓存并恢复保护，失败则还原两处常量并拒绝启动。原生分配器自行添加四字节大小前缀；分配、借用视图、析构及实体所有权继续由游戏管理，不搬移已构造数组，也不提供运行中安装或扩容接口。
+
+该容量只覆盖来源计数合法、实体登记与所属列表一致时的主列表和持久列表合并；原生源数组本身超限或状态已损坏时不构成无条件安全上界。其他列表（包括 `+0x50`、`+0x90`）、Query 结果和实体池容量不变，不截断实体、去重或改变遍历顺序。
 
 角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。
 

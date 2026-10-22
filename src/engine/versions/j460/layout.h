@@ -85,13 +85,26 @@ namespace roomDescriptor {
 inline constexpr unsigned data = 0x10;
 } // namespace roomDescriptor
 namespace entityList {
+inline constexpr unsigned pointerBytes = 4;
+inline constexpr unsigned mainCapacity = 16384;
+inline constexpr unsigned persistentCapacity = 256;
+inline constexpr unsigned initialUpdateCapacity = 2048;
 inline constexpr unsigned firstArray = 0x20;
 inline constexpr unsigned lastArray = 0x90;
 inline constexpr unsigned arrayStride = 0x10;
 inline constexpr unsigned renderArray = 0x40;
 inline constexpr unsigned data = 0x4;
+inline constexpr unsigned capacity = 0x8;
 inline constexpr unsigned count = 0xc;
 } // namespace entityList
+namespace spatialGrid {
+inline constexpr unsigned width = 0xc;
+inline constexpr unsigned cellSize = 0x14;
+inline constexpr unsigned begin = 0x18;
+inline constexpr unsigned end = 0x1c;
+inline constexpr unsigned bucketSize = 0xa4;
+inline constexpr unsigned bucketCapacity = 40;
+} // namespace spatialGrid
 namespace entity {
 inline constexpr unsigned removeMethod = 0x28;
 inline constexpr unsigned subtype = 0x30;
@@ -124,6 +137,7 @@ inline constexpr unsigned positionY = 0x340;
 inline constexpr unsigned previousX = 0x344;
 inline constexpr unsigned previousY = 0x348;
 inline constexpr unsigned parent = 0x3bc;
+inline constexpr unsigned spawner = 0x3c8;
 } // namespace entity
 namespace tear {
 inline constexpr unsigned height = 0x410;
@@ -133,6 +147,9 @@ inline constexpr unsigned scale = 0x420;
 inline constexpr unsigned rotation = 0x458;
 inline constexpr unsigned waitFrames = 0x438;
 } // namespace tear
+namespace laser {
+inline constexpr unsigned parent = 0x52c;
+} // namespace laser
 namespace effect {
 inline constexpr unsigned state = 0x450;
 inline constexpr unsigned timeout = 0x45c;
