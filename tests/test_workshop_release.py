@@ -15,6 +15,7 @@ class FakeSteam:
         self.base = base
         self.calls = []
         self.fail_upload = False
+        self.fail_language = None
         self.metadata = {
             language: {
                 "item_id": workshop.ITEM_ID,
@@ -45,6 +46,22 @@ class FakeSteam:
         shutil.copytree(content, self.base)
         for value in self.metadata.values():
             value["updated"] += 1
+        return {"item_id": workshop.ITEM_ID, "result": 1, "legal_agreement_required": False}
+
+    def update_page(self, prefix, content, notes, language, description, preview):
+        self.calls.append("update-page-" + language)
+        if language == self.fail_language:
+            raise TimeoutError("unknown language update outcome")
+        if content is not None:
+            self.update(prefix, content, notes)
+        else:
+            assert notes.read_bytes() == b""
+        self.metadata[language]["description"] = description.read_bytes().decode("utf-8")
+        if preview is not None:
+            self.preview_bytes = preview.read_bytes()
+            for value in self.metadata.values():
+                value["preview_url"] = "https://steam.example/new-preview"
+        self.metadata[language]["updated"] += 1
         return {"item_id": workshop.ITEM_ID, "result": 1, "legal_agreement_required": False}
 
 
@@ -216,4 +233,94 @@ def test_verify_existing_release_does_not_upload(release):
     result = workshop.verify(steam, output)
     assert result["downloaded_files_match"]
     assert not result["upload_receipt_present"]
+    assert "update" not in steam.calls
+
+
+def prepare_page(release, monkeypatch):
+    steam, archive, notes, output = release
+    preview = output.parent / "cover.png"
+    preview.write_bytes(b"user-selected repository cover")
+    monkeypatch.setattr(
+        workshop, "preview_digest", lambda _: hashlib.sha256(steam.preview_bytes).hexdigest()
+    )
+    return workshop.prepare(
+        steam, archive, notes, output, "v0.4.2", prepend_notes=True, preview=preview
+    )
+
+
+def test_page_prefix_preserves_both_original_descriptions(release, monkeypatch):
+    steam, _, notes, output = release
+    steam.metadata["english"]["description"] = "Existing\r\n\r\nOriginal / 中文\r\n"
+    before = deepcopy(steam.metadata)
+    manifest = prepare_page(release, monkeypatch)
+    assert "update" not in steam.calls
+    for language in workshop.LANGUAGES:
+        expected = (
+            "Isaac LAN v0.4.2\n\n[b]BUG修复[/b]\n\n- 修复崩溃。\n\n-----\n\n"
+            + before[language]["description"]
+        )
+        assert (output / f"description-{language}.txt").read_bytes().decode() == expected
+        assert manifest["presentation"]["descriptions"][language]["text"] == expected
+    result = workshop.publish(steam, output)
+    assert result["metadata_matches_expected"] and result["preview_verified"]
+    assert result["downloaded_files_match"]
+    assert steam.calls.count("update") == 1
+    assert steam.calls.count("update-page-english") == 1
+    assert steam.calls.count("update-page-schinese") == 1
+    assert steam.uploaded_notes == workshop.steam_notes(notes.read_text())
+    assert (output / "upload-result-english.json").exists()
+    assert (output / "upload-result-schinese.json").exists()
+    for language in workshop.LANGUAGES:
+        for field in ("title", "owner", "visibility", "banned"):
+            assert steam.metadata[language][field] == before[language][field]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "description-english.txt",
+        "description-schinese.txt",
+        "silent-change-notes.txt",
+        "content/preview.png",
+    ],
+)
+def test_changed_page_files_prevent_any_public_write(release, monkeypatch, name):
+    prepare_page(release, monkeypatch)
+    steam, _, _, output = release
+    (output / name).write_text("unapproved edit")
+    steam.calls.clear()
+    with pytest.raises(ValueError, match="changed"):
+        workshop.publish(steam, output)
+    assert steam.calls == []
+
+
+def test_partial_language_update_is_neither_success_nor_retried(release, monkeypatch):
+    prepare_page(release, monkeypatch)
+    steam, _, _, output = release
+    steam.fail_language = "schinese"
+    with pytest.raises(TimeoutError):
+        workshop.publish(steam, output)
+    assert (output / "upload-result-english.json").exists()
+    assert not (output / "upload-result.json").exists()
+    with pytest.raises(ValueError, match="already attempted"):
+        workshop.publish(steam, output)
+    with pytest.raises(ValueError, match="schinese description"):
+        workshop.verify(steam, output)
+    assert steam.calls.count("update") == 1
+
+
+def test_wrong_remote_preview_is_rejected(release, monkeypatch):
+    prepare_page(release, monkeypatch)
+    steam, _, _, output = release
+    monkeypatch.setattr(workshop, "preview_digest", lambda _: "wrong")
+    with pytest.raises(ValueError, match="preview differs"):
+        workshop.publish(steam, output)
+    assert not list(output.glob("verify-*/verification.json"))
+
+
+def test_description_limit_counts_utf8_bytes(release):
+    steam, archive, notes, output = release
+    steam.metadata["english"]["description"] = "字" * 2700
+    with pytest.raises(ValueError, match="UTF-8 limit"):
+        workshop.prepare(steam, archive, notes, output, "v0.4.2", prepend_notes=True)
     assert "update" not in steam.calls

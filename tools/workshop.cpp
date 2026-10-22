@@ -192,10 +192,16 @@ struct Steam {
                 details.creator != appId || !std::memchr(details.title, 0, sizeof(details.title)) ||
                 !std::memchr(details.description, 0, sizeof(details.description)))
                 throw std::runtime_error("Unexpected Workshop identity or details layout");
+            char preview[4096]{};
+            if (!function<bool(__cdecl*)(void*, std::uint64_t, std::uint32_t, char*,
+                                         std::uint32_t)>(
+                    "SteamAPI_ISteamUGC_GetQueryUGCPreviewURL")(ugc, handle, 0, preview,
+                                                                sizeof(preview)))
+                throw std::runtime_error("Cannot read Workshop preview URL");
             write(output, "{\"item_id\":" + quote(std::to_string(item)) +
                               ",\"owner\":" + quote(std::to_string(details.owner)) +
-                              ",\"title\":" + quote(details.title) +
-                              ",\"description\":" + quote(details.description) +
+                              ",\"title\":" + quote(details.title) + ",\"description\":" +
+                              quote(details.description) + ",\"preview_url\":" + quote(preview) +
                               ",\"updated\":" + std::to_string(details.updated) +
                               ",\"visibility\":" + std::to_string(details.visibility) +
                               ",\"banned\":" + (details.banned ? "true" : "false") + "}");
@@ -208,20 +214,39 @@ struct Steam {
             ugc, handle);
     }
     void update(std::uint64_t item, const std::filesystem::path& output, const std::string& content,
-                const std::filesystem::path& notesPath) {
+                const std::filesystem::path& notesPath, const std::string& language = "",
+                const std::filesystem::path& descriptionPath = {},
+                const std::string& preview = "") {
         const auto notes = read(notesPath);
-        if (notes.empty() || notes.find('\0') != std::string::npos)
+        if ((notes.empty() && language.empty()) || notes.find('\0') != std::string::npos)
             throw std::runtime_error("Change notes are empty or invalid");
+        const auto description = language.empty() ? std::string() : read(descriptionPath);
+        if (!language.empty() &&
+            ((language != "english" && language != "schinese") || description.empty() ||
+             description.size() >= sizeof(Details::description) ||
+             description.find('\0') != std::string::npos))
+            throw std::runtime_error("Workshop description or language is invalid");
         const auto handle = function<std::uint64_t(__cdecl*)(void*, std::uint32_t, std::uint64_t)>(
             "SteamAPI_ISteamUGC_StartItemUpdate")(ugc, appId, item);
         if (handle == UINT64_MAX ||
-            !function<bool(__cdecl*)(void*, std::uint64_t, const char*)>(
-                "SteamAPI_ISteamUGC_SetItemContent")(ugc, handle, content.c_str()))
+            (!content.empty() &&
+             !function<bool(__cdecl*)(void*, std::uint64_t, const char*)>(
+                 "SteamAPI_ISteamUGC_SetItemContent")(ugc, handle, content.c_str())))
             throw std::runtime_error("Workshop content rejected");
-        // Only content and change notes: preserve title, descriptions, visibility and preview.
+        if (!language.empty() &&
+            (!function<bool(__cdecl*)(void*, std::uint64_t, const char*)>(
+                 "SteamAPI_ISteamUGC_SetItemUpdateLanguage")(ugc, handle, language.c_str()) ||
+             !function<bool(__cdecl*)(void*, std::uint64_t, const char*)>(
+                 "SteamAPI_ISteamUGC_SetItemDescription")(ugc, handle, description.c_str())))
+            throw std::runtime_error("Workshop description rejected");
+        if (!preview.empty() &&
+            !function<bool(__cdecl*)(void*, std::uint64_t, const char*)>(
+                "SteamAPI_ISteamUGC_SetItemPreview")(ugc, handle, preview.c_str()))
+            throw std::runtime_error("Workshop preview rejected");
         SubmitResult result{};
         wait(function<std::uint64_t(__cdecl*)(void*, std::uint64_t, const char*)>(
-                 "SteamAPI_ISteamUGC_SubmitItemUpdate")(ugc, handle, notes.c_str()),
+                 "SteamAPI_ISteamUGC_SubmitItemUpdate")(ugc, handle,
+                                                        notes.empty() ? nullptr : notes.c_str()),
              submitCallback, result);
         write(output, "{\"item_id\":" + quote(std::to_string(result.item)) +
                           ",\"result\":" + std::to_string(result.result) +
@@ -271,11 +296,12 @@ struct Steam {
 int wmain(int argc, wchar_t** argv) {
     try {
         if (argc < 5)
-            throw std::runtime_error("Usage: workshop.exe query|download|update STEAM_API_DLL "
-                                     "ITEM_ID OUTPUT_PREFIX [LANGUAGE | CONTENT NOTES]");
+            throw std::runtime_error("Usage: workshop.exe query|download|update|update-page "
+                                     "STEAM_API_DLL ITEM_ID OUTPUT_PREFIX "
+                                     "[LANGUAGE | CONTENT NOTES [LANGUAGE DESCRIPTION PREVIEW]]");
         const std::wstring command = argv[1];
         if (!((command == L"query" && argc == 6) || (command == L"download" && argc == 5) ||
-              (command == L"update" && argc == 7)))
+              (command == L"update" && argc == 7) || (command == L"update-page" && argc == 10)))
             throw std::runtime_error("Invalid Workshop command arguments");
         std::size_t end = 0;
         const std::uint64_t item = std::stoull(argv[3], &end);
@@ -287,6 +313,14 @@ int wmain(int argc, wchar_t** argv) {
             steam.query(item, argv[4], utf8(argv[5]));
         else if (command == L"download")
             steam.download(item, argv[4]);
+        else if (command == L"update-page")
+            steam.update(
+                item, argv[4],
+                std::wstring(argv[5]) == L"-" ? ""
+                                              : utf8(std::filesystem::absolute(argv[5]).wstring()),
+                argv[6], utf8(argv[7]), argv[8],
+                std::wstring(argv[9]) == L"-" ? ""
+                                              : utf8(std::filesystem::absolute(argv[9]).wstring()));
         else
             steam.update(item, argv[4], utf8(std::filesystem::absolute(argv[5]).wstring()),
                          argv[6]);

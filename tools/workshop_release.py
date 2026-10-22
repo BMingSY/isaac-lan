@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,7 @@ ITEM_ID = "3817760679"
 TITLE = "Isaac LAN / 局域网联机"
 LANGUAGES = ("english", "schinese")
 BASE_FILES = ("main.lua", "metadata.xml", "preview.png", "安装说明.txt")
+DESCRIPTION_LIMIT = 8000
 
 
 def read_json(path):
@@ -93,6 +95,11 @@ class Steam:
     def update(self, prefix, content, notes):
         return self.call("update", prefix, content, notes)
 
+    def update_page(self, prefix, content, notes, language, description, preview):
+        return self.call(
+            "update-page", prefix, content or "-", notes, language, description, preview or "-"
+        )
+
 
 def query_metadata(steam, directory):
     directory.mkdir(parents=True, exist_ok=False)
@@ -123,12 +130,28 @@ def check_archive(archive, tag):
     return json.loads(result.stdout)
 
 
-def prepare(steam, archive, notes, output, tag):
+def description_with_notes(tag, formatted, original):
+    description = f"Isaac LAN {tag}\n\n{formatted.rstrip()}\n\n-----\n\n{original}"
+    if "\0" in description or len(description.encode("utf-8")) >= DESCRIPTION_LIMIT:
+        raise ValueError("Workshop description exceeds the Steam UTF-8 limit")
+    return description
+
+
+def preview_digest(url):
+    if not url.startswith("https://"):
+        raise ValueError("Workshop preview must use HTTPS")
+    with urllib.request.urlopen(url, timeout=30) as response:
+        return hashlib.sha256(response.read()).hexdigest()
+
+
+def prepare(steam, archive, notes, output, tag, *, prepend_notes=False, preview=None):
     if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
         raise ValueError("Expected a release tag such as v0.4.2")
     checked = check_archive(archive, tag)
     reviewed = notes.read_text(encoding="utf-8-sig")
     formatted = steam_notes(reviewed)
+    if preview is not None and (preview.is_symlink() or not preview.is_file()):
+        raise ValueError("Preview must be a regular local file")
     output.mkdir(parents=True, exist_ok=False)
     before = query_metadata(steam, output / "before")
     base = steam.download(output / "base-download")
@@ -148,6 +171,8 @@ def prepare(steam, archive, notes, output, tag):
     if count != 1:
         raise ValueError("Expected one Workshop metadata version")
     (content / "metadata.xml").write_bytes(updated.encode("utf-8"))
+    if preview is not None:
+        shutil.copy2(preview, content / "preview.png")
     for source in (archive, archive.with_suffix(".zip.sha256")):
         shutil.copy2(source, content / source.name)
     if digest(content / archive.name) != checked["sha256"]:
@@ -165,6 +190,21 @@ def prepare(steam, archive, notes, output, tag):
         "steam_notes_sha256": digest(output / "steam-change-notes.txt"),
         "before": before,
     }
+    if prepend_notes or preview is not None:
+        descriptions = {}
+        for language in LANGUAGES if prepend_notes else ("english",):
+            text = before[language]["description"]
+            if prepend_notes:
+                text = description_with_notes(tag, formatted, text)
+            path = output / f"description-{language}.txt"
+            path.write_bytes(text.encode("utf-8"))
+            descriptions[language] = {"file": path.name, "sha256": digest(path), "text": text}
+        (output / "silent-change-notes.txt").write_bytes(b"")
+        manifest["presentation"] = {
+            "prepend_notes": prepend_notes,
+            "descriptions": descriptions,
+            "preview_sha256": digest(preview) if preview is not None else None,
+        }
     write_json(output / "preparation.json", manifest)
     return manifest
 
@@ -189,6 +229,35 @@ def load_prepared(output):
         output / "steam-change-notes.txt"
     ).read_text(encoding="utf-8"):
         raise ValueError("Steam notes differ from reviewed wording")
+    presentation = manifest.get("presentation")
+    if presentation:
+        if (output / "silent-change-notes.txt").read_bytes() != b"":
+            raise ValueError("Silent language update notes changed")
+        expected_languages = LANGUAGES if presentation["prepend_notes"] else ("english",)
+        if set(presentation["descriptions"]) != set(expected_languages):
+            raise ValueError("Prepared description languages changed")
+        for language, value in presentation["descriptions"].items():
+            path = output / f"description-{language}.txt"
+            expected = manifest["before"][language]["description"]
+            if presentation["prepend_notes"]:
+                expected = description_with_notes(
+                    manifest["tag"],
+                    steam_notes((output / "reviewed-notes.md").read_text()),
+                    expected,
+                )
+            if (
+                value["file"] != path.name
+                or value["text"] != expected
+                or digest(path) != value["sha256"]
+            ):
+                raise ValueError("Prepared description changed")
+            if path.read_bytes() != expected.encode("utf-8"):
+                raise ValueError("Prepared description differs from reviewed notes and original")
+        if (
+            presentation["preview_sha256"]
+            and digest(output / "content/preview.png") != presentation["preview_sha256"]
+        ):
+            raise ValueError("Prepared preview changed")
     return manifest
 
 
@@ -202,7 +271,26 @@ def publish(steam, output):
     # Exclusive creation prevents two publishers from submitting this preparation.
     with (output / "upload-started.json").open("x", encoding="utf-8") as marker:
         json.dump({"item_id": ITEM_ID, "tag": manifest["tag"]}, marker)
-    result = steam.update(output / "upload", output / "content", output / "steam-change-notes.txt")
+    presentation = manifest.get("presentation")
+    if presentation:
+        for index, language in enumerate(presentation["descriptions"]):
+            result = steam.update_page(
+                output / f"upload-{language}",
+                output / "content" if index == 0 else None,
+                output / ("steam-change-notes.txt" if index == 0 else "silent-change-notes.txt"),
+                language,
+                output / presentation["descriptions"][language]["file"],
+                output / "content/preview.png"
+                if index == 0 and presentation["preview_sha256"]
+                else None,
+            )
+            write_json(output / f"upload-result-{language}.json", result)
+            if result.get("result") != 1 or result.get("legal_agreement_required") is not False:
+                raise ValueError("Steam did not confirm the language update")
+    else:
+        result = steam.update(
+            output / "upload", output / "content", output / "steam-change-notes.txt"
+        )
     write_json(output / "upload-result.json", result)
     if result.get("result") != 1 or result.get("legal_agreement_required") is not False:
         raise ValueError("Steam did not confirm publication or requires its legal agreement")
@@ -213,10 +301,17 @@ def verify(steam, output):
     manifest = load_prepared(output)
     report = output / f"verify-{time.time_ns()}"
     after = query_metadata(steam, report)
+    presentation = manifest.get("presentation", {})
     for language in LANGUAGES:
         for field in ("item_id", "owner", "title", "description", "visibility", "banned"):
-            if after[language][field] != manifest["before"][language][field]:
+            expected = manifest["before"][language][field]
+            if field == "description" and language in presentation.get("descriptions", {}):
+                expected = presentation["descriptions"][language]["text"]
+            if after[language][field] != expected:
                 raise ValueError(f"Workshop {language} {field} changed")
+    if presentation.get("preview_sha256"):
+        if preview_digest(after["english"]["preview_url"]) != presentation["preview_sha256"]:
+            raise ValueError("Workshop preview differs from prepared image")
     downloaded = steam.download(report / "download")
     if file_hashes(downloaded) != manifest["files"]:
         raise ValueError("Downloaded Workshop files differ from the prepared release")
@@ -225,7 +320,9 @@ def verify(steam, output):
         "tag": manifest["tag"],
         "title": TITLE,
         "downloaded_files_match": True,
-        "metadata_unchanged": True,
+        "metadata_unchanged": not bool(presentation.get("descriptions")),
+        "metadata_matches_expected": True,
+        "preview_verified": bool(presentation.get("preview_sha256")),
         "archive_sha256": manifest["files"][manifest["archive"]],
         "upload_receipt_present": (output / "upload-result.json").is_file(),
     }
@@ -242,12 +339,22 @@ def main():
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--notes", type=Path)
     parser.add_argument("--tag")
+    parser.add_argument("--prepend-notes", action="store_true")
+    parser.add_argument("--preview", type=Path)
     args = parser.parse_args()
     if args.command == "prepare" and not all((args.archive, args.notes, args.tag)):
         parser.error("prepare requires --archive, --notes and --tag")
     steam = Steam(args.helper, args.game)
     if args.command == "prepare":
-        result = prepare(steam, args.archive, args.notes, args.output, args.tag)
+        result = prepare(
+            steam,
+            args.archive,
+            args.notes,
+            args.output,
+            args.tag,
+            prepend_notes=args.prepend_notes,
+            preview=args.preview,
+        )
     else:
         result = {"publish": publish, "verify": verify}[args.command](steam, args.output)
     print(json.dumps(result, ensure_ascii=False, indent=2))
