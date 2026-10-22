@@ -137,6 +137,7 @@ inline constexpr unsigned positionY = 0x340;
 inline constexpr unsigned previousX = 0x344;
 inline constexpr unsigned previousY = 0x348;
 inline constexpr unsigned parent = 0x3bc;
+inline constexpr unsigned spawner = 0x3c8;
 } // namespace entity
 namespace tear {
 inline constexpr unsigned height = 0x410;

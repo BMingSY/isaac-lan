@@ -337,6 +337,10 @@ endif()
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The native engine adapter requires a 32-bit Windows toolchain")
 endif()
+# Preserve the native spawner lookup leaf's untouched XMM/x87 state. Apply this to the entire
+# translation unit, including the core template.
+set_source_files_properties(src/engine/versions/j460/spawner_links.cpp
+                            PROPERTIES COMPILE_OPTIONS "-mgeneral-regs-only")
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/main.lua" ISAAC_LAN_BRIDGE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/world.lua" ISAAC_LAN_STATE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/presentation/prediction.lua" ISAAC_LAN_PREDICTION)
@@ -383,6 +387,7 @@ add_library(
     src/engine/versions/j460/entity_capacity.cpp
     src/engine/versions/j460/spatial_queries.cpp
     src/engine/versions/j460/laser_links.cpp
+    src/engine/versions/j460/spawner_links.cpp
     src/engine/versions/j460/bootstrap.cpp
     src/engine/versions/j460/session_backend.cpp
     src/diagnostics/native_exceptions.cpp
@@ -587,6 +592,16 @@ if(NOT EXISTS "${MINHOOK_SOURCE_DIR}/include/MinHook.h")
 endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_spawner_links_test tests/spawner_links_test.cpp
+                                                src/engine/versions/j460/spawner_links.cpp)
+    target_include_directories(isaac_lan_spawner_links_test PRIVATE src)
+    target_link_libraries(isaac_lan_spawner_links_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_spawner_links_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_spawner_links_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.spawner-links COMMAND isaac_lan_spawner_links_test)
+    set_tests_properties(native.spawner-links PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_entity_capacity_test tests/entity_capacity_test.cpp)
     target_include_directories(isaac_lan_entity_capacity_test PRIVATE src)
     if(MINGW)
