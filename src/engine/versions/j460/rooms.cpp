@@ -50,6 +50,7 @@
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/floor_source.h"
 #include "engine/versions/j460/room_routing.h"
+#include "engine/versions/j460/laser_links.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::rooms {
@@ -2563,7 +2564,7 @@ bool interceptReplicaEntities(Room& room) {
             if (at<unsigned>(entity, 0x28) == 1)
                 continue;
             const auto entry = at<Address>(at<Address>(entity, 0), 0xc);
-            if (entityUpdates.contains(entry))
+            if (j460::laser_links::interceptReplicaUpdate(entry) || entityUpdates.contains(entry))
                 continue;
             RoomCall original = nullptr;
             if (MH_CreateHook(reinterpret_cast<void*>(entry),
@@ -3591,6 +3592,7 @@ void beforeStart(bool preserveItemPixels) {
     replicaDeals.reset();
     presentation::items::reset(preserveItemPixels);
     replicaMapEntities.clear();
+    j460::laser_links::resetReplicaIsolation();
     for (const auto& [entry, original] : entityUpdates) {
         (void)original;
         MH_DisableHook(reinterpret_cast<void*>(entry));

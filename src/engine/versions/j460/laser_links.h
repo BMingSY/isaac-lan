@@ -15,5 +15,7 @@ inline void update(void* laser, SetParent nativeSetParent, Update nativeUpdate) 
         nativeSetParent(laser, nullptr);
     nativeUpdate(laser);
 }
-bool install(std::uintptr_t image);
+bool install(std::uintptr_t image, bool (*replica)());
+bool interceptReplicaUpdate(std::uintptr_t entry);
+void resetReplicaIsolation();
 } // namespace isaac::engine::j460::laser_links

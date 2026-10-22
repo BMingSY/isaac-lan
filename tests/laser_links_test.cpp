@@ -53,6 +53,7 @@ void reset() {
     updated = nullptr;
     nativeSetParent = originalSetter;
     originalUpdate = originalUpdateStub;
+    resetReplicaIsolation();
 }
 
 void destroy(void* value) {

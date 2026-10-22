@@ -390,7 +390,7 @@ int installUpdates(std::uintptr_t base, void (*logger)(const std::string&)) {
     log = logger;
     if (!j460::spatial_queries::install(image))
         return 18;
-    if (!j460::laser_links::install(image))
+    if (!j460::laser_links::install(image, runtime::replica))
         return 19;
     if (MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::roomUpdate),
                       reinterpret_cast<void*>(updateForeground),
