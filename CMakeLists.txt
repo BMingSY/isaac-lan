@@ -380,6 +380,7 @@ add_library(
     src/app/bootstrap.cpp
     src/engine/state_codec.cpp
     src/engine/versions/j460/entity_fields.cpp
+    src/engine/versions/j460/entity_capacity.cpp
     src/engine/versions/j460/spatial_queries.cpp
     src/engine/versions/j460/laser_links.cpp
     src/engine/versions/j460/bootstrap.cpp
@@ -586,6 +587,14 @@ if(NOT EXISTS "${MINHOOK_SOURCE_DIR}/include/MinHook.h")
 endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_entity_capacity_test tests/entity_capacity_test.cpp)
+    target_include_directories(isaac_lan_entity_capacity_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_entity_capacity_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_entity_capacity_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.entity-capacity COMMAND isaac_lan_entity_capacity_test)
+    set_tests_properties(native.entity-capacity PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_laser_links_test tests/laser_links_test.cpp)
     target_include_directories(isaac_lan_laser_links_test PRIVATE src)
     target_link_libraries(isaac_lan_laser_links_test PRIVATE minhook)

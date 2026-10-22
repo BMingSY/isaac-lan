@@ -85,11 +85,16 @@ namespace roomDescriptor {
 inline constexpr unsigned data = 0x10;
 } // namespace roomDescriptor
 namespace entityList {
+inline constexpr unsigned pointerBytes = 4;
+inline constexpr unsigned mainCapacity = 16384;
+inline constexpr unsigned persistentCapacity = 256;
+inline constexpr unsigned initialUpdateCapacity = 2048;
 inline constexpr unsigned firstArray = 0x20;
 inline constexpr unsigned lastArray = 0x90;
 inline constexpr unsigned arrayStride = 0x10;
 inline constexpr unsigned renderArray = 0x40;
 inline constexpr unsigned data = 0x4;
+inline constexpr unsigned capacity = 0x8;
 inline constexpr unsigned count = 0xc;
 } // namespace entityList
 namespace spatialGrid {

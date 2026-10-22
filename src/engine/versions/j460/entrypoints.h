@@ -4,6 +4,12 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t entityListMainAllocation = 0x1795d;
+inline constexpr std::uint32_t entityListPersistentAllocation = 0x17983;
+inline constexpr std::uint32_t entityListUpdateAllocation = 0x179a6;
+inline constexpr std::uint32_t entityListUpdateStorage = 0x179b6;
+inline constexpr std::uint32_t roomConstructEntityList = 0x3e94a8;
+inline constexpr std::uint32_t entityArrayAllocationPrefix = 0x66492d;
 inline constexpr std::uint32_t laserUpdate = 0x577cc0;
 inline constexpr std::uint32_t laserSetParent = 0x56d120;
 inline constexpr std::uint32_t laserSetParentUnregister = 0x56d140;

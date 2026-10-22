@@ -34,6 +34,10 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 ## 实体引用与房间数据
 
+[`entity_capacity`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_capacity.cpp) 只在游戏入口放行前调整 EntityList 构造器的 `+0x40` 数组：容量为原生主列表 16384 与持久列表 256 之和 16640，对应分配参数为 66560 字节。构造器 RVA `0x17930` 由 Room 构造器初始化 `Room+0x1218` 时调用；容量和字节数两条指令、来源容量、分配调用与数据指针存储均经校验，配对写入后刷新指令缓存并恢复保护，失败则还原两处常量并拒绝启动。原生分配器自行添加四字节大小前缀；分配、借用视图、析构及实体所有权继续由游戏管理，不搬移已构造数组，也不提供运行中安装或扩容接口。
+
+该容量只覆盖来源计数合法、实体登记与所属列表一致时的主列表和持久列表合并；原生源数组本身超限或状态已损坏时不构成无条件安全上界。其他列表（包括 `+0x50`、`+0x90`）、Query 结果和实体池容量不变，不截断实体、去重或改变遍历顺序。
+
 角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。
 
 `sprite_state(sprite)` 复制完整精灵层状态为字节串；客机的 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，没有贴图变化时返回 `true`。返回值不持有原生引用；Lua 只在数组非空时替换贴图并调用 `LoadGraphics`。捕获缓冲预留容量不改变字段或编码字节。
