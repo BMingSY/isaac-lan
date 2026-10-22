@@ -90,6 +90,7 @@ local status = {
     ready1 = 0,
     connected = 3,
     port = 29506,
+    transport = "udp",
     savedPlayers = 2,
     eligible0 = true,
     eligible1 = true,
