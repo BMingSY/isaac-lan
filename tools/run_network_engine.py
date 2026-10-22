@@ -182,7 +182,12 @@ def main():
     parser.add_argument(
         "--exercise-menu",
         action="store_true",
-        help="Use original Online entry, native chat typing, lobby ready and start controls",
+        help="Use original Online entry, isolated field typing, lobby ready and start controls",
+    )
+    parser.add_argument(
+        "--exercise-lobby-chat",
+        action="store_true",
+        help="Post lobby chat keys and require the scenario's LOBBY_CHAT marker on both peers",
     )
     parser.add_argument(
         "--menu-port",
@@ -259,14 +264,14 @@ def main():
         parser.error("frame-ms must be 16..1000")
     if args.exercise_official and not args.exercise_menu:
         parser.error("--exercise-official requires --exercise-menu")
+    if args.exercise_lobby_chat and not args.exercise_menu:
+        parser.error("--exercise-lobby-chat requires --exercise-menu")
+    if args.exercise_menu and args.no_luadebug:
+        parser.error("--exercise-menu requires LuaDebug for the scenario's menu input file")
     if not 1 <= args.menu_port <= 65535:
         parser.error("--menu-port must be between 1 and 65535")
-    if args.latency_ms and (
-        not 0 < args.latency_ms <= 1000 or args.menu_port == 65535 or args.exercise_menu
-    ):
-        parser.error(
-            "Latency fixture requires a scripted menu, delay 1..1000 and an available following port"
-        )
+    if args.latency_ms and (not 0 < args.latency_ms <= 1000 or args.menu_port == 65535):
+        parser.error("Latency fixture requires delay 1..1000 and an available following port")
     if args.relay_control and not args.latency_ms:
         parser.error("--relay-control requires the isolated latency relay")
     labs = [args.host.resolve(), args.client.resolve(), *(p.resolve() for p in args.extra_client)]
@@ -601,6 +606,7 @@ def main():
                 scenario_config = {
                     "host": role == "host",
                     "players": len(labs),
+                    "exerciseMenu": args.exercise_menu,
                     "port": str(args.menu_port + (1 if args.latency_ms and role != "host" else 0)),
                 }
                 result.setdefault("scenario_config", {})[role] = scenario_config
@@ -611,6 +617,8 @@ def main():
                     + scenario_config["port"]
                     + '", players = '
                     + str(scenario_config["players"])
+                    + ", exerciseMenu = "
+                    + str(scenario_config["exerciseMenu"]).lower()
                     + " }\n"
                     + tested_script.read_text()
                 )
@@ -822,6 +830,10 @@ def main():
                     if role == "client":
                         menu_control(pid, "{DOWN}")
                         menu_control(pid, "{ENTER}")
+                        # These are also the original mute/fullscreen shortcuts.
+                        # The scenario observes text and options while editing.
+                        for key in ("M", "F", "{BACKSPACE}", "{BACKSPACE}"):
+                            control(pid, "PostKeys", key)
                         for key in "127.0.0.2":
                             control(pid, "PostKeys", key)
                         control(pid, "PostKeys", "{BACKSPACE}")
@@ -830,7 +842,8 @@ def main():
                             control(pid, "Capture", windows(args.output.resolve() / "chat-ip.png"))
                         menu_control(pid, "{ENTER}")
                         menu_control(pid, "{DOWN}")
-                    if args.menu_port != 29506:
+                    field_port = args.menu_port + (1 if args.latency_ms and role != "host" else 0)
+                    if field_port != 29506:
                         if role == "host":
                             menu_control(pid, "{DOWN}")
                             menu_control(pid, "{DOWN}")
@@ -848,7 +861,7 @@ def main():
                             )
                         for _ in range(5):
                             control(pid, "PostKeys", "{BACKSPACE}")
-                        for key in "A." + str(args.menu_port):
+                        for key in "A." + str(field_port):
                             control(pid, "PostKeys", key)
                         if args.capture_ui:
                             control(
@@ -884,6 +897,14 @@ def main():
                 menu_control(pid, "{ENTER}")  # ready
         if args.exercise_menu:
             pid = processes[0]
+            if args.exercise_lobby_chat:
+                for key in ("{CONSOLE}", *"LANLOBBY", "{ENTER}", "{CONSOLE}"):
+                    control(pid, "PostKeys", key)
+                chat_deadline = time.monotonic() + 10
+                while not all("LAN_NETWORK LOBBY_CHAT" in read_log(lab) for lab in labs):
+                    if time.monotonic() >= chat_deadline:
+                        raise RuntimeError("Lobby chat was not observed on every peer")
+                    time.sleep(0.1)
             menu_control(pid, "{DOWN}")
             menu_control(pid, "{DOWN}")
             menu_control(pid, "{ENTER}")  # seed

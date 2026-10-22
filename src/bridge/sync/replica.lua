@@ -73,8 +73,15 @@ return function(fields)
             m.prediction = actor and (m.prediction or prediction.new(position))
             m.attachment = deps.attachments and deps.attachments.capture(e, v)
             m.held = v[Entity.held]
-            m.track =
-                motionPresentation.track(m.track, position, velocity, now, tick, actor and 60 or 30)
+            m.track = motionPresentation.track(
+                m.track,
+                position,
+                velocity,
+                now,
+                tick,
+                actor and 60 or 30,
+                not not v[Entity.npc]
+            )
             motion[v[Entity.id]] = m
         end
 

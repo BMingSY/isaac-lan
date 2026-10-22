@@ -667,11 +667,16 @@ void confirmOriginalMenu(void* menu, void(__attribute__((thiscall)) * update)(vo
     update(menu);
     menuConfirm = false;
 }
-bool menuTriggered(int action) {
-    return hookQuery() &&
-           originalQuery(reinterpret_cast<void*>(image + j460::globals::inputManager), -1,
-                         reinterpret_cast<void*>(image + j460::entry::inputTriggered), &action,
-                         nullptr, nullptr);
+bool menuTriggered(int action, bool controllersOnly) {
+    if (!hookQuery())
+        return false;
+    const int first = controllersOnly ? 1 : -1, last = controllersOnly ? lan::maxPlayers : -1;
+    for (int controller = first; controller <= last; ++controller)
+        if (originalQuery(reinterpret_cast<void*>(image + j460::globals::inputManager), controller,
+                          reinterpret_cast<void*>(image + j460::entry::inputTriggered), &action,
+                          nullptr, nullptr))
+            return true;
+    return false;
 }
 bool restartHeld() {
     const int action = input::action::restart;

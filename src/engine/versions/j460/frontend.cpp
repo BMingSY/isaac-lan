@@ -108,12 +108,6 @@ using MenuRender = void(__cdecl*)();
 MenuRender originalMenuRender;
 using MenuUpdate = void(__attribute__((thiscall)) *)(void*);
 MenuUpdate originalGameMenuUpdate;
-// Private draft using Repentance+'s chat editor and native text layout lifetime.
-// Only UpdateText is called: the chat send/network dispatcher is never invoked.
-alignas(8) std::array<unsigned char, layout::chat::size> chat{};
-bool chatReady = false, chatEditing = false;
-enum class ChatField { ip, port, seed };
-ChatField chatField = ChatField::ip;
 std::string localAddresses;
 std::string addresses() {
     ULONG size = 16384;
@@ -181,41 +175,19 @@ template <class T> T& read(std::uintptr_t p, unsigned offset) {
 bool menuAvailable() {
     return j460::menu_context::ready(image);
 }
-void assignChat(const std::string& value) {
-    using Assign = void*(__attribute__((thiscall))*)(void*, const char*, std::size_t);
-    reinterpret_cast<Assign>(image + j460::entry::frontendAssign)(chat.data() + layout::chat::text,
-                                                                  value.data(), value.size());
-}
 int beginText(lua_State* L) {
     const char* value = lua.string(L, 1, nullptr);
     const char* field = lua.string(L, 2, nullptr);
-    chatField = field && std::strcmp(field, "seed") == 0   ? ChatField::seed
-                : field && std::strcmp(field, "port") == 0 ? ChatField::port
-                                                           : ChatField::ip;
-    const auto manager = read<std::uintptr_t>(image, j460::globals::manager);
-    if (!chatReady) {
-        read<unsigned>(reinterpret_cast<std::uintptr_t>(chat.data()),
-                       layout::chat::text + layout::string::capacity) =
-            layout::string::inlineCapacity;
-        reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate_51cec0)(
-            chat.data() + layout::chat::textLayout);
-        // Copy the game's font, color, scale and text bounds, not its owned containers.
-        std::memcpy(chat.data() + layout::chat::style,
-                    reinterpret_cast<void*>(manager + layout::manager::chat + layout::chat::style),
-                    layout::chat::styleSize);
-        read<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(chat.data()), layout::chat::style) =
-            manager + layout::manager::chatFont;
-        chatReady = true;
-    }
-    std::fill(chat.begin() + layout::chat::inputState, chat.begin() + layout::chat::style, 0);
+    const auto kind = field && std::strcmp(field, "seed") == 0   ? chat_input::TextField::seed
+                      : field && std::strcmp(field, "port") == 0 ? chat_input::TextField::port
+                                                                 : chat_input::TextField::address;
     menuText = value ? value : "";
-    assignChat(menuText);
-    chatEditing = true;
+    chat_input::beginField(kind, menuText);
     logger("native_menu_text=begin");
     return 0;
 }
 int endText(lua_State*) {
-    chatEditing = false;
+    chat_input::endField();
     return 0;
 }
 int officialMenu(lua_State*) {
@@ -236,7 +208,7 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
     if (officialRequested) {
         officialRequested = false;
         visible = false;
-        chatEditing = false;
+        chat_input::endField();
         input::leaveLan();
         input::confirmOriginalMenu(menu, originalGameMenuUpdate);
         logger("native_online_entry=OFFICIAL");
@@ -259,6 +231,18 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
         originalGameMenuUpdate(menu);
         return;
     }
+    if (chat_input::fieldActive()) {
+        // The editor owns keyboard messages. Bound menu actions (Space/letters)
+        // cannot commit a field or move the selection while it is being typed.
+        menuText = chat_input::fieldText();
+        menuKey = chat_input::fieldKey();
+        // Controller confirmation/cancel still work without keyboard bindings.
+        if (input::menuTriggered(input::action::menuConfirm, true))
+            menuKey = VK_RETURN;
+        else if (input::menuTriggered(input::action::menuBack, true))
+            menuKey = VK_ESCAPE;
+        return;
+    }
     if (chat_input::capturesInput())
         return;
     for (const auto& [action, key] : {std::pair{input::action::menuConfirm, VK_RETURN},
@@ -271,32 +255,6 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
             menuKey = key;
             break;
         }
-    if (chatEditing && menuKey != VK_RETURN && menuKey != VK_ESCAPE) {
-        reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate_51ee90)(chat.data());
-        const auto base = reinterpret_cast<std::uintptr_t>(chat.data());
-        const char* value = read<unsigned>(base, layout::chat::text + layout::string::capacity) >
-                                    layout::string::inlineCapacity
-                                ? read<const char*>(base, layout::chat::text)
-                                : reinterpret_cast<const char*>(base + layout::chat::text);
-        menuText.assign(value, read<unsigned>(base, layout::chat::text + layout::string::size));
-        std::string filtered;
-        const bool seed = chatField == ChatField::seed;
-        const auto limit = seed                           ? 8u
-                           : chatField == ChatField::port ? 5u
-                                                          : lan::maxHostAddressLength;
-        for (unsigned char c : menuText) {
-            if (seed ? (c < 128 && std::isalnum(c))
-                     : (chatField == ChatField::ip ? lan::hostAddressCharacter(c)
-                                                   : (c >= '0' && c <= '9')))
-                filtered += seed ? static_cast<char>(std::toupper(c)) : static_cast<char>(c);
-            if (filtered.size() == limit)
-                break;
-        }
-        if (filtered != menuText) {
-            menuText = filtered;
-            assignChat(menuText);
-        }
-    }
 }
 void __attribute__((fastcall)) mapCache(void* config, void*) {
     rooms::withView([&] {
@@ -730,7 +688,7 @@ void poll() {
     if (lobbyRequested && !prepared && j460::menu_context::returnToMain(image)) {
         lobbyRequested = false;
         visible = true;
-        chatEditing = false;
+        chat_input::endField();
         menuKey = 0;
         menuClick = false;
         const int saved = lua.getTop(state);
@@ -841,7 +799,7 @@ void renderNativeMenu() {
     menuKey = 0;
     menuClick = false;
     if (!visible)
-        chatEditing = false;
+        chat_input::endField();
 }
 void renderChat() {
     if (!state || bridgeFailed)
@@ -903,15 +861,6 @@ void __cdecl close(lua_State* L) {
         state = nullptr;
         chat_input::reset();
         emotes::reset();
-        chatEditing = false;
-        if (chatReady) {
-            reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate_51db00)(
-                chat.data() + layout::chat::textLayout);
-            reinterpret_cast<MenuUpdate>(image + j460::entry::frontendMenuUpdate)(
-                chat.data() + layout::chat::text);
-            chat.fill(0);
-            chatReady = false;
-        }
     }
     originalClose(L);
 }

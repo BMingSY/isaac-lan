@@ -1,6 +1,12 @@
 return function(fields)
     local Actor = fields.actor
     local Entity = fields.entity
+    local MAX_EXTRAPOLATION = 0.1
+    local TELEPORT_DISTANCE = 96
+    local CORRECTION_TIME, BRAKING_CORRECTION_TIME = 1 / 30, 1 / 60
+    local BRAKING_SPEED_RATIO = 0.85
+    local BRAKING_ALIGNMENT = math.cos(math.rad(1))
+    local MIN_BRAKING_SPEED = 1
     local walkingExtras = { Pickup = true, UseItem = true, LiftItem = true, HideItem = true }
     local function actionAllowsMovement(player, actor)
         if player:IsCoopGhost() then
@@ -22,10 +28,15 @@ return function(fields)
         local corrections, correctionTotal, correctionMax = 0, 0, 0
         local buckets = { 0, 0, 0, 0, 0 }
         local limits = { 1, 4, 16, 64, math.huge }
+        local function travelTime(age, damping)
+            local travel = math.min(math.max(0, age), MAX_EXTRAPOLATION)
+            return damping > 0 and (1 - math.exp(-damping * travel)) / damping or travel
+        end
         local function coordinates(track, now)
             local age = math.max(0, now - track.at)
-            local travel = math.min(age, 0.1)
-            local decay = math.exp(-math.max(0, now - (track.received or track.at)) / (1 / 30))
+            local travel = travelTime(age, track.damping)
+            local decay =
+                math.exp(-math.max(0, now - (track.received or track.at)) / track.correctionTime)
             return track.x + track.vx * travel + track.cx * decay,
                 track.y + track.vy * travel + track.cy * decay
         end
@@ -35,26 +46,52 @@ return function(fields)
             end
             return Vector(coordinates(track, now))
         end
-        local function track(prior, position, velocity, now, tick, rate)
+        local function track(prior, position, velocity, now, tick, rate, npc)
             if prior and tick <= prior.tick then
                 return prior
             end
             local x, y = position.X, position.Y
             local vx, vy = velocity.X * (rate or 1), velocity.Y * (rate or 1)
             local at = captured or now
-            local travel = math.min(math.max(0, now - at), 0.1)
+            local damping, braking = 0, false
+            if npc and prior and prior.npc then
+                local interval = (tick - prior.tick) / (rate or 1)
+                local previousSpeed = math.sqrt(prior.vx * prior.vx + prior.vy * prior.vy)
+                local speed = math.sqrt(vx * vx + vy * vy)
+                local dx, dy = x - prior.x, y - prior.y
+                if interval <= MAX_EXTRAPOLATION and dx * dx + dy * dy < TELEPORT_DISTANCE ^ 2 then
+                    braking = speed == 0 and previousSpeed > MIN_BRAKING_SPEED
+                    -- Infer only clear, straight-line braking from authority.
+                    -- Turns and acceleration retain the latest velocity; guessing
+                    -- their future would invent a pursuit target or a curved path.
+                    if
+                        speed > MIN_BRAKING_SPEED
+                        and speed < previousSpeed
+                        and (speed / previousSpeed) ^ (1 / (tick - prior.tick)) < BRAKING_SPEED_RATIO
+                        and vx * prior.vx + vy * prior.vy
+                            >= BRAKING_ALIGNMENT * speed * previousSpeed
+                    then
+                        damping = -math.log(speed / previousSpeed) / interval
+                        braking = true
+                    end
+                end
+            end
+            local travel = travelTime(now - at, damping)
             local cx, cy = 0, 0
             if prior then
                 local px, py = coordinates(prior, now)
                 cx, cy = px - (x + vx * travel), py - (y + vy * travel)
-                if cx * cx + cy * cy >= 96 * 96 then
+                if cx * cx + cy * cy >= TELEPORT_DISTANCE ^ 2 then
                     cx, cy = 0, 0
+                    damping, braking = 0, false
                 end
             end
             local result = prior or {}
             result.target, result.at, result.tick, result.received = position, at, tick, now
             result.x, result.y, result.cx, result.cy = x, y, cx, cy
             result.vx, result.vy = vx, vy
+            result.npc, result.damping = npc, damping
+            result.correctionTime = braking and BRAKING_CORRECTION_TIME or CORRECTION_TIME
             result.stationary = result.vx == 0 and result.vy == 0 and cx == 0 and cy == 0
             return result
         end

@@ -85,4 +85,71 @@ int main() {
     call("chat_ui_available", false);
     require(!event(WM_KEYDOWN, VK_OEM_3), "Inactive chat consumed a game key");
     chat::reset();
+
+    chat::beginField(chat::TextField::address, "");
+    call("chat_ui_available", false);
+    require(chat::capturesInput() && chat::fieldActive(), "Idle menu lost its text capture");
+    require(!event(WM_KEYUP, VK_RETURN), "Opening key release was not returned to the game");
+    for (const char key : std::string("MF")) {
+        require(event(WM_KEYDOWN, key).has_value(), "Mute/fullscreen key reached the game");
+        require(event(WM_CHAR, key + 'a' - 'A').has_value(), "Hotkey text reached the game");
+        require(event(WM_KEYUP, key).has_value(), "Mute/fullscreen release reached the game");
+    }
+    require(chat::fieldText() == "mf", "Hotkey suppression also suppressed hostname text");
+    event(WM_KEYDOWN, VK_BACK);
+    event(WM_KEYUP, VK_BACK);
+    event(WM_KEYDOWN, VK_BACK);
+    event(WM_KEYUP, VK_BACK);
+    for (const char c : std::string("192.168.1.20")) {
+        const WPARAM key = c == '.' ? VK_OEM_PERIOD : c;
+        require(event(WM_KEYDOWN, key).has_value(), "Address key leaked to game shortcuts");
+        require(event(WM_CHAR, c).has_value(), "Address text leaked to the native editor");
+        require(event(WM_KEYUP, key).has_value(), "Captured key release leaked");
+    }
+    require(chat::fieldText() == "192.168.1.20", "Address typing lost text");
+    event(WM_KEYDOWN, VK_LEFT);
+    event(WM_KEYUP, VK_LEFT);
+    event(WM_KEYDOWN, VK_DELETE);
+    event(WM_KEYUP, VK_DELETE);
+    require(chat::fieldText() == "192.168.1.2", "Field cursor editing failed");
+    for (auto key : {VK_SPACE, VK_UP, VK_F2, VK_OEM_3}) {
+        require(event(WM_KEYDOWN, key).has_value(), "Text editing leaked a menu shortcut");
+        event(WM_KEYUP, key);
+    }
+    event(WM_CHAR, '~');
+    event(WM_CHAR, ' ');
+    require(chat::fieldKey() == 0 && chat::fieldText() == "192.168.1.2",
+            "Non-text shortcut changed or committed the field");
+    event(WM_KEYDOWN, VK_RETURN);
+    require(chat::fieldKey() == VK_RETURN && chat::fieldKey() == 0,
+            "Field confirmation must be consumed exactly once");
+    chat::endField();
+    require(event(WM_KEYDOWN, VK_RETURN, 1ll << 30).has_value(), "Closing leaked a held key");
+    require(event(WM_KEYUP, VK_RETURN).has_value(), "Closing leaked its key release");
+    require(!event(WM_KEYDOWN, '1'), "Closed field kept suppressing native input");
+
+    chat::beginField(chat::TextField::address, std::string(253, 'a'));
+    require(chat::fieldText().size() == 253, "Address inherited the chat's 60-character limit");
+    event(WM_CHAR, 'b');
+    require(chat::fieldText().size() == 253, "Address exceeded its bound");
+    event(WM_KEYDOWN, VK_BACK);
+    event(WM_KEYUP, VK_BACK);
+    require(chat::fieldText().size() == 252, "Long address could not be edited");
+    chat::beginField(chat::TextField::port, "29506");
+    event(WM_CHAR, '1');
+    event(WM_CHAR, 'A');
+    require(chat::fieldText() == "29506", "Port accepted excess digits or letters");
+    chat::beginField(chat::TextField::seed, "yv03");
+    event(WM_CHAR, '9');
+    event(WM_CHAR, 'k');
+    require(chat::fieldText() == "YV039K", "Seed filtering lost uppercase conversion");
+    event(WM_KILLFOCUS);
+    require(chat::fieldKey() == VK_ESCAPE, "Focus loss did not cancel field editing");
+    chat::endField();
+    require(!chat::capturesInput(), "Finished field retained capture");
+    call("chat_ui_available", true);
+    event(WM_KEYDOWN, VK_OEM_3);
+    require(chat::capturesInput(), "Lobby chat could not open after editing a field");
+    event(WM_KEYUP, VK_OEM_3);
+    chat::reset();
 }
