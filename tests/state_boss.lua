@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated authoritative state regression" }
 local f = assert(io.open("./lan-test-role.txt", "r"))
@@ -44,17 +45,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     end
     return gate(function()
         samples = samples + 1
-        local v = {}
-        for i = 1, 16 do
-            v[i] = 0
-        end
         -- Leave input neutral; spawned enemies may still push players through doors.
-        local pieces = {}
-        for i = 1, 16 do
-            pieces[i] = string.pack(">I2", v[i])
-        end
-        pieces[17] = string.pack(">I2", 0)
-        return table.concat(pieces)
+        return testInput.neutral
     end, function(t, n, b)
         before(t, n, b)
         ticks = t

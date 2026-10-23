@@ -1,5 +1,6 @@
 -- Exercise the real world capture/apply path with two independent crafting bags.
 local root = assert(arg[1])
+local testInput = dofile(root .. "/tests/support/input.lua")
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
@@ -456,6 +457,7 @@ for _, isHost in ipairs({ true, false }) do
     local commands, status, input = {}, { phase = 0, verified = 0 }, nil
     local env = setmetatable({
         _IsaacLanTest = { host = isHost, port = "30240" },
+        _IsaacLanTestInput = testInput,
         _IsaacLan = {
             test_gamepad = noop,
             net_gate = function(capture)
@@ -490,10 +492,9 @@ for _, isHost in ipairs({ true, false }) do
     for _, sample in ipairs({ { 31, 9, true }, { 32, 9, false }, { 40, 7, true }, { 41, 7, false } }) do
         status.verified = sample[1]
         env._IsaacLanFrame()
-        local bytes = input()
-        assert(#bytes == 34)
-        assert(string.unpack(">I2", bytes, sample[2] * 2 + 1) == 65535)
-        local edges = string.unpack(">I2", bytes, 33)
+        local frame = testInput.decode(input())
+        assert(frame.values[sample[2]] == testInput.maxValue)
+        local edges = frame.triggered
         assert(
             ((edges & (1 << sample[2])) ~= 0) == sample[3],
             "Native fixture dropped or repeated the equip/shoot press edge"

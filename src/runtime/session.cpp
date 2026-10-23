@@ -429,13 +429,20 @@ bool captureNextInput(bool simulationStep = false) {
         return false;
     std::size_t size = 0;
     const auto data = lua.toString(state, -1, &size);
-    if (!data || size != lan::actionCount * 2 + 2) {
+    if (!data || size != lan::inputWireSize) {
         lua.setTop(state, top);
         fail("Invalid local controls");
         return false;
     }
-    lan::Reader reader{std::span(reinterpret_cast<const std::uint8_t*>(data), size)};
-    localInput = reader.input();
+    try {
+        lan::Reader reader{std::span(reinterpret_cast<const std::uint8_t*>(data), size)};
+        localInput = reader.input();
+        reader.finish();
+    } catch (const std::exception&) {
+        lua.setTop(state, top);
+        fail("Invalid local controls");
+        return false;
+    }
     lua.setTop(state, top);
     if (backend::pause() != 0)
         localInput = input::pausedInput(localInput);

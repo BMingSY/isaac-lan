@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Embedded by run_lan_challenges.py. All cases reuse the same native processes.
 local native = assert(_IsaacLan)
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
@@ -1063,7 +1064,7 @@ end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return baseGate(
         function()
-            local input, buttons = {}, 0
+            local buttons = 0
             if case.challenge and not fillStart then
                 fillStart = tonumber(read(challengeCoordination .. "/fill-" .. current .. ".txt"))
             end
@@ -1071,19 +1072,18 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             if fillStart and not fillDone then
                 fillDone = read(challengeCoordination .. "/fill-done-" .. current .. ".txt") ~= nil
             end
-            for action = 0, 15 do
+            for action = 0, testInput.actionCount - 1 do
                 local held = case.challenge
                     and action == ButtonAction.ACTION_SHOOTRIGHT
                     and elapsed >= 10
                     and not fillDone
-                input[#input + 1] = string.pack(">I2", held and 65535 or 0)
                 if held then
                     buttons = buttons | (1 << action)
                 end
             end
-            input[#input + 1] = string.pack(">I2", buttons & ~previousButtons)
+            local input = testInput.buttons(buttons, buttons & ~previousButtons)
             previousButtons = buttons
-            return table.concat(input)
+            return input
         end,
         function(t, n, bytes)
             before(t, n, bytes)

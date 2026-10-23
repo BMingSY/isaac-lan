@@ -17,17 +17,115 @@ from testing.special_routes import build as build_special
 from testing.endings import build as build_endings
 from testing import gameplay as build_gameplay_suite
 from testing import discovery
+from run_mouse_input import ready_peers
+from game_logs import log_path
+
+
+def test_mouse_restart_waits_for_new_peers_and_recreated_logs(tmp_path):
+    labs = [tmp_path / role for role in ("host", "client")]
+    for lab in labs:
+        log = log_path(lab)
+        log.parent.mkdir(parents=True)
+        log.write_text("LAN_NETWORK MOUSE READY\n")
+    launch = tmp_path / "round-02.log"
+    launch.write_text("")
+    assert ready_peers(launch, labs) is None
+    launch.write_text("Started isolated host: 100\n")
+    assert ready_peers(launch, labs) is None
+    log_path(labs[1]).unlink()
+    launch.write_text("Started isolated host: 100\nStarted isolated client: 200\n")
+    assert ready_peers(launch, labs) is None
+    log_path(labs[1]).write_text("LAN_NETWORK MENU_READY\n")
+    assert ready_peers(launch, labs) is None
+    log_path(labs[1]).write_text("LAN_NETWORK MOUSE READY\n")
+    assert ready_peers(launch, labs) == {"host": "100", "client": "200"}
 
 
 def run_lua(source, tmp_path):
     script = tmp_path / "check.lua"
-    script.write_text(source)
+    script.write_text(lua_support.bundle_input(source))
     return subprocess.run(
         [shutil.which("lua5.3"), str(script)],
         text=True,
         capture_output=True,
         check=True,
     ).stdout
+
+
+def test_bundled_input_support_is_frozen_and_needs_no_runtime_files(tmp_path, monkeypatch):
+    support = tmp_path / "tests/support/input.lua"
+    support.parent.mkdir(parents=True)
+    shutil.copyfile(ROOT / "tests/support/input.lua", support)
+    monkeypatch.setattr(lua_support, "ROOT", tmp_path)
+    script = tmp_path / "frozen.lua"
+    script.write_text(
+        "io, dofile, loadfile, require, debug = nil, nil, nil, nil, nil\n"
+        + lua_support.bundle_input("""
+local input = assert(_IsaacLanTestInput)
+local packet = input.neutral .. input.buttons(1 << 9, 1 << 9)
+local frame = input.decode(packet, 1)
+assert(frame.values[9] == input.maxValue and frame.triggered == 1 << 9)
+assert(not frame.pointer.active and input.decode(packet).values[9] == 0)
+print("PASS frozen fixture support")
+""")
+    )
+    support.unlink()
+    result = subprocess.run(
+        [shutil.which("lua5.3"), str(script)], capture_output=True, text=True, check=True
+    )
+    assert "PASS frozen fixture support" in result.stdout
+
+
+@pytest.mark.parametrize("host", [True, False])
+def test_recovery_fixture_emits_complete_input_and_releases_movement(tmp_path, host):
+    run_lua(
+        """
+local input, tick = assert(_IsaacLanTestInput), 0
+local function noop() end
+local players = {}
+for slot = 0, 1 do
+    players[slot] = {
+        ControllerIndex = slot + 1,
+        GetPlayerType = function() return slot == 0 and 1 or 0 end,
+        GetNumCoins = function() return 0 end,
+        AddCoins = noop, AddCollectible = noop,
+    }
+end
+Game = function() return {
+    GetRoom = function() return {GetCenterPos = function() return {} end} end,
+    GetLevel = function() return {GetCurrentRoomIndex = function() return 84 end} end,
+} end
+_IsaacLan = {
+    net_phases = function() return {} end,
+    net_gate = function(capture) return capture end,
+    rooms_heads = function() return {["0"] = 0, ["1"] = 1} end,
+    api_info = function() return {nowMs = 0} end,
+}
+_IsaacLanFrame = noop
+_IsaacLanStatus = function() return {verified = tick} end
+CollectibleType, ModCallbacks = {}, {}
+EntityType = {ENTITY_PLAYER = 1}
+Isaac = {AddCallback = noop, DebugString = noop, GetPlayer = function(slot) return players[slot] end}
+_IsaacLanTest = {host = """
+        + lua_support.literal(host)
+        + """, port = "1234"}
+dofile("""
+        + lua_support.literal(str(ROOT / "tests/state_client_recovery.lua"))
+        + """)
+local capture = _IsaacLan.net_gate()
+for _, time in ipairs({0, 1, 19, 20, 21, 40, 100}) do
+    tick = time
+    local frame = input.decode(capture())
+    for action, value in pairs(frame.values) do
+        local moving = time < 20 and action == (_IsaacLanTest.host and 0 or 2)
+        assert(value == (moving and input.maxValue or 0), "Recovery movement changed")
+    end
+    assert(frame.triggered == 0 and not frame.pointer.active)
+    assert(frame.pointer.x == 0 and frame.pointer.y == 0)
+end
+""",
+        tmp_path,
+    )
 
 
 def test_field_scenario_announces_the_ready_lobby_before_gameplay(tmp_path):
@@ -354,7 +452,7 @@ return {
 """
     tests = tmp_path / "tests"
     (tests / "support").mkdir(parents=True)
-    for relative in ("support/scenario.lua", "special_suite_driver.lua"):
+    for relative in ("support/scenario.lua", "support/input.lua", "special_suite_driver.lua"):
         shutil.copyfile(ROOT / "tests" / relative, tests / relative)
     for name in (
         "greed",

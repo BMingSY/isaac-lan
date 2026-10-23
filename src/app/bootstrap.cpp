@@ -265,6 +265,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     const auto chatBackground = isaac::presentation::prepareChatBackground(
         directory / L"isaac-lan", settings.chat.backgroundImage);
     isaac::frontend::configureChat(settings.chat, chatBackground);
+    isaac::frontend::configureConnection(directory / L"isaac-lan/connection.txt");
     if (!chatBackground.warning.empty())
         log("chat_background_warning=" + chatBackground.warning);
     log("network_input_hz=" + std::to_string(settings.inputHz));

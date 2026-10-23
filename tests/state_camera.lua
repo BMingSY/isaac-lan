@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated native frontend test" }
 local file = assert(io.open("./lan-test-role.txt", "r"))
@@ -90,12 +91,7 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
         elseif current.verified >= 100 and current.verified < 230 then
             action = host and 1 or 0
         end
-        local values = {}
-        for i = 0, 15 do
-            values[#values + 1] = string.pack(">I2", i == action and 65535 or 0)
-        end
-        values[#values + 1] = string.pack(">I2", 0)
-        return table.concat(values)
+        return testInput.buttons(action >= 0 and 1 << action or 0)
     end
     return gate(synthetic, function(t, n, b)
         tick = t

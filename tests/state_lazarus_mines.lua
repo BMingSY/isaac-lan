@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- One pair, one connection: native room-clear Flip, active Flip, and Mines.
 local native = assert(_IsaacLan)
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
@@ -145,15 +146,9 @@ local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     local inputTick = 0
     local function input()
-        local values = {}
         local direction = ({ 0, 2, 1, 3 })[math.floor(inputTick / 12) % 4 + 1]
-        for action = 0, 15 do
-            values[#values + 1] =
-                string.pack(">I2", not host and action == direction and 65535 or 0)
-        end
-        values[#values + 1] = string.pack(">I2", 0)
         inputTick = inputTick + 1
-        return table.concat(values)
+        return testInput.buttons(not host and 1 << direction or 0)
     end
     return gate(input, function(t, n, bytes)
         before(t, n, bytes)

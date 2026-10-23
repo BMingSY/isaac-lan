@@ -497,6 +497,7 @@ void renderInputs() {
         InputFrame input;
         input.values[tick % 2] = 65535;
         input.triggered = tick % 3 == 0 ? 1u << 8 : 0;
+        input.pointer = {true, 120.25f + tick, 456.5f};
         require(g.peers[1]->submit(tick * 2, input), "Render press rejected");
         require(g.peers[1]->submit(tick * 2 + 1, {}), "Render release rejected");
         require(g.peers[2]->submit(tick + 1, input), "30 Hz guest input rejected");
@@ -508,7 +509,7 @@ void renderInputs() {
         const auto frame = g.step(tick);
         require(frame.tick == tick, "Render input accelerated simulation");
         require(frame.inputs[1].values == InputFrame{}.values &&
-                    frame.inputs[1].triggered == input.triggered,
+                    frame.inputs[1].triggered == input.triggered && !frame.inputs[1].pointer.active,
                 "Two render samples lost a release or replayed a button edge");
         require(frame.inputs[2] == input, "Mixed input rates changed the slower guest's input");
         require(!g.peers[0]->take(), "A render sample advanced simulation twice");
@@ -594,6 +595,7 @@ void floorRejoin() {
     g.step(0);
     InputFrame held;
     held.values[isaac::input::action::moveRight] = maxInputValue;
+    held.pointer = {true, 321.5f, 278.25f};
     for (unsigned sequence = 0; sequence < 64; ++sequence)
         require(g.peers[1]->submit(sequence, held), "Previous connection input failed");
     until([&] {
@@ -636,7 +638,9 @@ void floorRejoin() {
         g.poll();
         return g.peers[0]->connectedMask() == 3;
     });
-    require(g.step(30).connected == 3, "Ready guest was not restored");
+    const auto rejoined = g.step(30);
+    require(rejoined.connected == 3 && rejoined.inputs[1] == InputFrame{},
+            "Ready guest was not restored with neutral input");
     g.publish(30);
     std::optional<WorldState> value;
     until([&] {

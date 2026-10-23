@@ -7,13 +7,18 @@ return function(Phase, Command)
     end
     local function validPort(ui)
         local number = tonumber(ui.port)
-        if number and number >= 1 and number <= 65535 then
+        if number and number % 1 == 0 and number >= 1 and number <= 65535 then
             ui.port = tostring(number)
             ui.errorText = ""
             return true
         end
         ui.errorText = "端口范围：1–65535"
         return false
+    end
+    local function remember(ui, native)
+        if validPort(ui) then
+            native.menu_connection_save(ui.ip, tonumber(ui.port))
+        end
     end
     local function rows(ui, status, characterChoices, challenges, deps)
         local phase = status.phase or Phase.idle
@@ -82,6 +87,7 @@ return function(Phase, Command)
         elseif idle(phase) then
             row("创建房间", function()
                 if validPort(ui) then
+                    remember(ui, deps.native)
                     command("host", ui.port)
                 end
             end)
@@ -95,6 +101,7 @@ return function(Phase, Command)
             end, true, nil, "port")
             row("加入房间", function()
                 if validPort(ui) then
+                    remember(ui, deps.native)
                     command("join", ui.ip .. ":" .. ui.port)
                 end
             end, ui.ip ~= "")
@@ -247,5 +254,5 @@ return function(Phase, Command)
         end
         return rows, notice
     end
-    return { rows = rows, validPort = validPort, idle = idle }
+    return { rows = rows, validPort = validPort, remember = remember, idle = idle }
 end

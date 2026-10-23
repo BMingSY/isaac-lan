@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- One group of four processes. Native route selection is never patched by the fixture.
 local native, port = assert(_IsaacLan), _IsaacLanTest.port
 local file = assert(io.open("./lan-test-role.txt", "r"))
@@ -591,15 +592,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         function()
             local start = tonumber(read("walk-" .. current .. ".txt"))
             local moving = start and verified >= start and verified < start + 30
-            local values = {}
-            for action = 0, 15 do
-                values[#values + 1] = string.pack(
-                    ">I2",
-                    moving and action == ButtonAction.ACTION_RIGHT and 65535 or 0
-                )
-            end
-            values[#values + 1] = string.pack(">I2", 0)
-            return table.concat(values)
+            return testInput.buttons(moving and 1 << ButtonAction.ACTION_RIGHT or 0)
         end,
         function(t, n, bytes)
             before(t, n, bytes)

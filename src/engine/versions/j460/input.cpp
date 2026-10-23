@@ -15,6 +15,7 @@
 #include <mutex>
 
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/mouse_input.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::input {
@@ -209,6 +210,54 @@ template <std::size_t... I> constexpr auto xinputWrappers(std::index_sequence<I.
 constexpr auto providerWrappers = xinputWrappers(std::make_index_sequence<8>{});
 using Query = bool(__attribute__((thiscall)) *)(void*, int, void*, const int*, void*, int*);
 Query originalQuery = nullptr;
+j460::mouse_input::Aim originalMouseAim = nullptr;
+j460::mouse_input::ShootingEntity shootingEntity() {
+    return reinterpret_cast<j460::mouse_input::ShootingEntity>(image +
+                                                               j460::entry::playerShootingEntity);
+}
+bool __attribute__((fastcall)) mouseAim(void* player, void*, j460::mouse_input::Vector* result,
+                                        bool raw) {
+    if (!enabled)
+        return originalMouseAim(player, result, raw);
+    const auto controller =
+        at<int>(reinterpret_cast<std::uintptr_t>(player), j460::layout::player::controller);
+    if (controller < 1 || controller > accepted.players ||
+        !(accepted.connected & (1u << (controller - 1))))
+        return false;
+    const auto& frame = presentationInput && controller == presentationController
+                            ? *presentationInput
+                            : accepted.inputs[controller - 1];
+    return j460::mouse_input::replay(player, frame.pointer, result, shootingEntity());
+}
+bool hookMouseAim() {
+    if (originalMouseAim)
+        return true;
+    const auto target = reinterpret_cast<void*>(image + j460::entry::playerMouseAim);
+    if (MH_CreateHook(target, reinterpret_cast<void*>(mouseAim),
+                      reinterpret_cast<void**>(&originalMouseAim)) != MH_OK)
+        return false;
+    if (MH_EnableHook(target) == MH_OK)
+        return true;
+    MH_RemoveHook(target);
+    originalMouseAim = nullptr;
+    return false;
+}
+lan::PointerInput captureMouse() {
+    const auto slot = runtime::localViewSlot();
+    const auto game = at<std::uintptr_t>(image, j460::globals::game);
+    if (!originalMouseAim || slot < 0 || !game)
+        return {};
+    const auto roster = game + j460::layout::game::players;
+    const auto end = at<std::uintptr_t>(roster, j460::layout::vector::end);
+    for (auto entry = at<std::uintptr_t>(roster, j460::layout::vector::begin); entry != end;
+         entry += sizeof(std::uintptr_t)) {
+        const auto player = at<std::uintptr_t>(entry, 0);
+        if (player && at<int>(player, j460::layout::player::controller) == slot + 1)
+            return j460::mouse_input::capture(reinterpret_cast<void*>(player), originalMouseAim,
+                                              shootingEntity());
+    }
+    return {};
+}
 bool __attribute__((fastcall)) query(void* manager, void*, int controller, void* callback,
                                      const int* action, void* result, int* source) {
     const auto kind = reinterpret_cast<std::uintptr_t>(callback) - image;
@@ -305,7 +354,7 @@ bool hookQuery() {
 using LuaFn = int(__cdecl*)(lua_State*);
 isaac::lua::API lua{};
 int enable(lua_State* L) {
-    const bool ok = hookDevices() && hookQuery();
+    const bool ok = hookDevices() && hookQuery() && hookMouseAim();
     if (ok)
         virtualDevices = true;
     lua.pushBoolean(L, ok);
@@ -467,6 +516,7 @@ void samplePhysicalInput() {
                 input.triggered |= 1u << action;
         }
         const auto game = at<std::uintptr_t>(image, j460::globals::game);
+        input.pointer = source == 0 ? captureMouse() : lan::PointerInput{};
         if (source == 0 && game)
             keyboardPause(input, at<int>(game, 0x23a74) != 0);
         modalInput[source].filter(input, capturing);
@@ -486,6 +536,8 @@ int capture(lua_State* L) {
         for (int action = 0; action < 16; ++action)
             frame.values[action] = std::max(frame.values[action], physical.values[action]);
         frame.triggered |= physical.triggered;
+        if (physical.pointer.active)
+            frame.pointer = physical.pointer;
         physical.triggered = 0;
     }
     frame.values[13] = 0;
@@ -639,9 +691,12 @@ unsigned physicalFrame() {
 lan::InputFrame previewPhysicalInput() {
     samplePhysicalInput();
     lan::InputFrame preview;
-    for (const auto& physical : physicalInput)
+    for (const auto& physical : physicalInput) {
         for (unsigned action = 0; action < lan::actionCount; ++action)
             preview.values[action] = std::max(preview.values[action], physical.values[action]);
+        if (physical.pointer.active)
+            preview.pointer = physical.pointer;
+    }
     return automation.compose(preview, renderFrame(), false);
 }
 unsigned menuOwner() {

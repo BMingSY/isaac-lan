@@ -1,4 +1,6 @@
 local root = assert(arg[1])
+local testInput = dofile(root .. "/tests/support/input.lua")
+_IsaacLanTestInput = testInput
 LevelStateFlag = { STATE_MINESHAFT_ESCAPE = 22 }
 for _, route in ipairs({ "poop", "knife", "hush" }) do
     for _, host in ipairs({ true, false }) do
@@ -49,9 +51,10 @@ for _, route in ipairs({ "poop", "knife", "hush" }) do
             input = capture()
         end
         local use = not host and route == "poop"
-        assert(string.unpack(">I2", input, 21) == (use and 65535 or 0))
-        assert(string.unpack(">I2", input, 23) == 0, "Poop fixture pressed Drop instead of Use")
-        assert(string.unpack(">I2", input, 33) == (use and 1 << 10 or 0))
+        local frame = testInput.decode(input)
+        assert(frame.values[ButtonAction.ACTION_PILLCARD] == (use and testInput.maxValue or 0))
+        assert(frame.values[11] == 0, "Poop fixture pressed Drop instead of Use")
+        assert(frame.triggered == (use and 1 << ButtonAction.ACTION_PILLCARD or 0))
     end
 end
 for _, host in ipairs({ true, false }) do

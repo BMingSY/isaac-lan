@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Exercise the native ending/exit boundary and reuse one room for three runs.
 -- Game:End selects the cinematic; this fixture does not validate a Boss route.
 local native = assert(_IsaacLan)
@@ -125,7 +126,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     end
     return gate(
         function()
-            return string.rep("\0", 34)
+            return testInput.neutral
         end,
         function(t, n, b)
             before(t, n, b)
