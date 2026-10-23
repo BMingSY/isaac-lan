@@ -22,8 +22,9 @@ local names = {
     "pills",
     "glitched",
     "captured",
+    "combat",
 }
-local version = 31
+local version = 32
 local VERSION_FIELD, TICK_FIELD = 1, 2
 return {
     VERSION = version,
@@ -33,6 +34,9 @@ return {
             local value = view[names[index]]
             if names[index] == "captured" and value == nil then
                 value = 0 -- Portable fixtures may have no monotonic clock.
+            end
+            if names[index] == "combat" and value == nil then
+                value = string.pack(">I4", 0)
             end
             assert(value ~= nil, "Missing world field: " .. names[index])
             values[index] = value

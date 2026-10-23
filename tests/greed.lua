@@ -161,6 +161,12 @@ local function environment(difficulty)
         map_refresh = function()
             return true
         end,
+        combat_reset = function()
+            return true
+        end,
+        combat_present = function()
+            return true
+        end,
         sound_reset = function() end,
         presentation_reset = function() end,
         rewind_reset = function() end,

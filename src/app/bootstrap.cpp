@@ -17,6 +17,7 @@
 #include <fstream>
 #include "runtime/session.h"
 #include "engine/audio.h"
+#include "engine/combat_feedback.h"
 #include "engine/presentation.h"
 #include "engine/rewind.h"
 #include "engine/rooms.h"
@@ -337,6 +338,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         return 27;
     if (!isaac::rooms::install(image, log))
         return 21;
+    if (!isaac::combat_feedback::install(image))
+        return 23;
     if (!isaac::audio::install(image))
         return 23;
     if (!isaac::presentation::install(image))
@@ -397,6 +400,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* 
     if (!isaac::generated_items::bind(L, module))
         return 0;
     if (!isaac::rooms::bind(L, module))
+        return 0;
+    if (!isaac::combat_feedback::bind(L, module))
         return 0;
     if (!isaac::audio::bind(L, module))
         return 0;

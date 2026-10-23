@@ -175,12 +175,16 @@ local function environment()
         end,
         state_clock = noop,
         sound_reset = noop,
+        combat_reset = function()
+            return true
+        end,
         presentation_reset = noop,
         rewind_reset = noop,
     }
     local modules = {}
     for _, name in ipairs({
         "sync/codec",
+        "sync/combat_state",
         "sync/layers",
         "presentation/timeline",
         "presentation/attacks",
@@ -265,6 +269,11 @@ local function environment()
     end
     modules["presentation/doors"] = function()
         return { render = noop }
+    end
+    modules["presentation/hits"] = function()
+        return function()
+            return { confirm = noop, present = noop, reset = noop, validate = noop }
+        end
     end
     modules["presentation/attacks"] = function()
         return function()

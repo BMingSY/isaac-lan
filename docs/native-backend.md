@@ -186,6 +186,21 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；绘制时借入本机状态并完整恢复全局标量 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 31、网络消息版本为 40；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 32、网络消息版本为 41；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
+
+## NPC 命中与受击绘制
+
+[combat_feedback.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/combat_feedback.cpp)仅在 J460 主线程及已建立的房间上下文运行。后端保留原生伤害判定和所有 Mod 回调，不在副本执行伤害。
+
+| 能力 | 契约 |
+| --- | --- |
+| `combat_identity(sprite)` | 仅主机；接收活动实体的借用 Sprite，返回状态与伤害事件共用的递增身份。地址、InitSeed、索引用于检测对象替换；不拥有实体，不返回地址 |
+| `combat_events(slot)` | 仅主机；slot 范围为联机玩家上限，按房间观看者掩码过滤。大端 u32 数量后每项为 `u32 serial,tick,epoch; i32 dimension,room; u32 source,target; u8 accepted,duration`，时长单位为 30 Hz tick，0–6。最多 512 项／90 tick |
+| `combat_present()` / `combat_present(sprite)` | 无参数清空本机绘制选择；有参数仅客机，借用活动 NPC Sprite，在当前呈现帧选择原版受击样式。原生对象仍由游戏拥有 |
+| `combat_reset()` | 会话重置清理身份、事件、序号和绘制选择；不分配／释放游戏对象 |
+
+`NPC::TakeDamage` RVA `0x2d60a0` 为 thiscall，参数为 float、u64、EntityRef 指针和 int，返回 bool。EntityRef 的实体引用位于 `+0x24`；调用前取得来源／目标身份与房间，返回后记录最终接受结果。HP 仍由原生更新消费伤害队列。`Entity::SetColor` RVA `0x2b2fa0` 只有返回地址为 `0x2af895` 的原生伤害闪烁调用被接管，且仅限 LAN 主机的 NPC；其他颜色调用原样转发。三个入口／返回位置受启动签名校验。
+
+房间 renderArray 内的实体由房间持有。绘制作用域保存 44 字节 Sprite.Color，临时使用原版两种伤害样式，离开作用域按 RAII 恢复，不向原生颜色队列插入条目。实体 InitSeed／索引不符及过期记录失效；客机每次呈现先清空上一帧选择，暂停和视图重置也清空。此能力不推进动画、不创建碰撞特效、不播放声音，不适用于任意原生地址或独立创建的 Sprite。

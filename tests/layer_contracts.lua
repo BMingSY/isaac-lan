@@ -29,6 +29,7 @@ local tuple = {
     string.rep(string.pack(">i4B", 0, 0), 15),
     "",
     0,
+    string.pack(">I4", 0),
 }
 local view = schema.unpack(tuple, 42)
 assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses == 5)
@@ -39,7 +40,7 @@ for prior = 16, schema.VERSION - 1 do
     malformed[1] = prior
     assert(not pcall(schema.unpack, malformed, 42))
 end
-malformed[1], malformed[23] = schema.VERSION, true
+malformed[1], malformed[24] = schema.VERSION, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))

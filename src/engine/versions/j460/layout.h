@@ -127,6 +127,9 @@ inline constexpr unsigned previousX = 0x344;
 inline constexpr unsigned previousY = 0x348;
 inline constexpr unsigned parent = 0x3bc;
 } // namespace entity
+namespace entityRef {
+inline constexpr unsigned entity = 0x24;
+} // namespace entityRef
 namespace tear {
 inline constexpr unsigned height = 0x410;
 inline constexpr unsigned fallingSpeed = 0x414;

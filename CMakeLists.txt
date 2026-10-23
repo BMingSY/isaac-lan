@@ -255,6 +255,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.room-capture room_capture.lua)
         isaac_add_lua_test(bridge.motion-intervals motion_intervals.lua)
         isaac_add_lua_test(presentation.npc-motion npc_motion.lua)
+        isaac_add_lua_test(presentation.hit-events hit_events.lua)
         isaac_add_lua_test(presentation.attachments attachments.lua)
         isaac_add_lua_test(presentation.attack-prediction attack_prediction.lua)
         isaac_add_lua_test(presentation.tear-motion tear_motion.lua)
@@ -414,6 +415,7 @@ add_library(
     src/engine/versions/j460/input.cpp
     src/engine/versions/j460/save.cpp
     src/engine/versions/j460/audio.cpp
+    src/engine/versions/j460/combat_feedback.cpp
     src/engine/versions/j460/presentation.cpp
     src/engine/versions/j460/crafting_hud.cpp
     src/engine/versions/j460/challenge_hud.cpp

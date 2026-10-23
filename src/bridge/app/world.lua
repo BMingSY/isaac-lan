@@ -61,7 +61,8 @@ local entityCodec = component("sync/entity_codec")(
     assert(modules["sync/entity_links"])(native, function()
         return Isaac.GetRoomEntities()
     end),
-    tethers
+    tethers,
+    modules["sync/combat_state"](fields, TearVariant, TearFlags, EntityFlag)
 )
 local entity, sprite, applySprite, vec =
     entityCodec.capture, entityCodec.sprite, entityCodec.applySprite, entityCodec.vec
@@ -147,6 +148,17 @@ local attacks = component("presentation/attacks")({
         return Game():GetRoom()
     end,
 })
+local hits = component("presentation/hits")({
+    native = native,
+    ledger = modules["presentation/event_ledger"],
+    contact = modules["presentation/contacts"],
+    decode = modules["sync/combat_events"],
+    metrics = performance,
+    vector = Vector,
+    room = function()
+        return Game():GetRoom()
+    end,
+})
 local doorPresentation = modules["presentation/doors"]({
     clock = Isaac.GetTime,
     sprite = Sprite,
@@ -165,6 +177,7 @@ local motionPresentation = component("presentation/motion")(native, actorsPresen
     end,
     attachments = attachments,
     attacks = attacks,
+    hits = hits,
     vector = Vector,
     player = function(index)
         return Isaac.GetPlayer(index)
@@ -277,6 +290,7 @@ local replica = component("sync/replica")({
     actors = actorsPresentation,
     motion = motionPresentation,
     attacks = attacks,
+    hits = hits,
     attachments = attachments,
     poop = poop,
     craftingBag = craftingBag,
@@ -329,6 +343,7 @@ function state.render()
     end
 end
 function state.reset()
+    assert(native.combat_reset())
     native.sound_reset()
     native.presentation_reset()
     native.rewind_reset()

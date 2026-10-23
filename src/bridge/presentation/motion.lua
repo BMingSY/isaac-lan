@@ -223,6 +223,9 @@ return function(fields)
                 if view.attacks then
                     view.attacks.reset()
                 end
+                if view.hits then
+                    view.hits.suspend(ref)
+                end
                 -- Paused snapshots retain native velocities. Do not accumulate
                 -- an invisible extrapolation error and release it on resume.
                 for _, m in pairs(motion) do
@@ -394,6 +397,9 @@ return function(fields)
             if view.attacks then
                 view.attacks.present(motion, ref, now, dt, sequence, status)
             end
+            if view.hits then
+                view.hits.present(motion, ref, now, dt, sequence, status)
+            end
         end
         return {
             track = track,
@@ -413,6 +419,9 @@ return function(fields)
                 end
             end,
             reset = function(clearMetrics)
+                if view.hits then
+                    view.hits.reset(clearMetrics)
+                end
                 lastRender, captured = nil, nil
                 if view.doors then
                     if clearMetrics then

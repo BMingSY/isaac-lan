@@ -2,7 +2,7 @@ return function(wire)
     local Entity, Sprite, Spritesheet = wire.entity, wire.sprite, wire.spritesheet
     local FLOOR_DEPTH_BIAS = 10000
     -- Engine values become explicit portable fields; this component owns no room or transport.
-    return function(native, schemas, npcState, visualCompatibility, entityLinks, tethers)
+    return function(native, schemas, npcState, visualCompatibility, entityLinks, tethers, combat)
         local function localEffect(e, kind)
             kind = kind or e.Type
             return kind == schemas.types.ENTITY_EFFECT
@@ -24,6 +24,11 @@ return function(wire)
         local function id(e, kind)
             if not e or not e:Exists() or localEffect(e, kind) then
                 return 0
+            end
+            if native.combat_identity then
+                local identifier = assert(native.combat_identity(e:GetSprite()))
+                e:GetData().__isaac_lan_entity = identifier
+                return identifier
             end
             local d = e:GetData()
             if not d.__isaac_lan_entity then
@@ -67,6 +72,7 @@ return function(wire)
                         false, -- Entity.nativeFields
                         false, -- Entity.held
                         false, -- Entity.tether
+                        false, -- Entity.combat
                     }
                     if native.entity_fields_encode then
                         for _, field in ipairs({
@@ -274,8 +280,10 @@ return function(wire)
                     false, -- Entity.nativeFields
                     false, -- Entity.held
                     false, -- Entity.tether
+                    false, -- Entity.combat
                 }
             value[Entity.id] = id(e, kind)
+            value[Entity.combat] = combat and combat(e) or 0
             value[Entity.sprite] = visual and sprite(s) or false
             value[Entity.parent], value[Entity.spawner] = id(e.Parent), id(e.SpawnerEntity)
             value[Entity.child], value[Entity.target] = id(e.Child), id(e.Target)

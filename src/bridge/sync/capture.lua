@@ -162,6 +162,7 @@ return function(fields)
             value.sound = deps.audio.capture(slot)
             value.presentation = native.presentation_events(slot)
             value.items = deps.items.capture(slot)
+            value.combat = native.combat_events and assert(native.combat_events(slot)) or nil
             if layered then
                 local realtime, stable = deps.layers.split(value)
                 return encode(worldSchema.pack(realtime), captureEncoded),

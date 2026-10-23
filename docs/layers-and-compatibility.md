@@ -39,6 +39,7 @@ Lua 嵌入清单在 [`modules.txt`](https://github.com/BMingSY/isaac-lan/blob/ma
 | 实体 `ID → EntityPtr`、库存应用缓存 | [`sync/replica.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/replica.lua) | 实体删除、角色替换、新一局 |
 | 公共字段、角色和编码片段缓存 | [`sync/capture.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/capture.lua) | tick／楼层代次变化、转场、新一局 |
 | 移动与预测轨迹 | 副本与移动表现组件 | 换房、转场、新一局 |
+| 预测命中与确认 | 命中表现组件、事件账本 | 暂停、视图失效、换房／换层、会话重置；房间变化保留去重序号 |
 | 音效序号、装扮与表现缓存 | 对应表现组件 | 新一局；楼层相关缓存另按 epoch 失效 |
 | 每名玩家的沙漏检查点 | 沙漏策略与后端 | 本人进房覆盖、新一局 |
 
