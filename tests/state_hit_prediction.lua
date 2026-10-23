@@ -7,7 +7,7 @@ local json = require("json")
 local base, gate = _IsaacLanFrame, native.net_gate
 local renders, linked, chosen, finished = 0, false, false, false
 local tick, uses, checks = 0, 0, 0
-local damages, early, seenEnemy, retired = 0, {}, {}, {}
+local damages, noFlashDamages, early, seenEnemy, retired = 0, 0, {}, {}, {}
 local hitCounts, noFlashBaseline = {}, nil
 local counter = native.diagnostics_counter
 function native.diagnostics_counter(name, value)
@@ -73,6 +73,9 @@ Isaac.AddCallback(owner, ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, e, amount,
         end
         assert(tick < 1240 or tick >= 1600, "An invulnerable target or missed shot took damage")
         damages = damages + 1
+        if tick >= 1960 then
+            noFlashDamages = noFlashDamages + 1
+        end
         log("damage", {
             id = e:GetData().__isaac_lan_entity,
             type = e.Type,
@@ -224,6 +227,7 @@ function _IsaacLanFrame()
     if tick >= 2150 and not finished then
         if host then
             assert(damages > 5, "No actual monster damage")
+            assert(noFlashDamages >= 3, "No-flash case did not receive actual tear hits")
         else
             assert(damages == 0, "Replica executed authoritative damage")
             assert(
@@ -246,7 +250,13 @@ function _IsaacLanFrame()
         assert(not retired[4] and not retired[5], "An invulnerable or missed monster disappeared")
         log(
             "combat_complete",
-            { damages = damages, early = early, retired = retired, hitCounts = hitCounts }
+            {
+                damages = damages,
+                noFlashDamages = noFlashDamages,
+                early = early,
+                retired = retired,
+                hitCounts = hitCounts,
+            }
         )
         assert(
             checks >= #cases and uses == (host and #cases or 0),
