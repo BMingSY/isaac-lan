@@ -248,16 +248,13 @@ function _IsaacLanFrame()
         end
         assert(retired[3], "Lethal ordinary tears did not retire the monster")
         assert(not retired[4] and not retired[5], "An invulnerable or missed monster disappeared")
-        log(
-            "combat_complete",
-            {
-                damages = damages,
-                noFlashDamages = noFlashDamages,
-                early = early,
-                retired = retired,
-                hitCounts = hitCounts,
-            }
-        )
+        log("combat_complete", {
+            damages = damages,
+            noFlashDamages = noFlashDamages,
+            early = early,
+            retired = retired,
+            hitCounts = hitCounts,
+        })
         assert(
             checks >= #cases and uses == (host and #cases or 0),
             "Missing actual curse pill coverage"

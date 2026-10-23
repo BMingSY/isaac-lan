@@ -7,6 +7,12 @@ local frame = function()
     return s
 end
 local gate = function() end
+local closes = 0
+_IsaacLanCommand = function(command)
+    assert(command == "close" and s.phase == 2 and not s.prepared)
+    closes = closes + 1
+    s = { phase = 0, scene = 1, prepared = false }
+end
 _IsaacLanTest = { host = true }
 _IsaacLanFrame = frame
 _IsaacLan = {
@@ -76,12 +82,37 @@ assert(case == 2 and _IsaacLanFrame == coordinator, "Next fixture replaced the c
 s = { phase = 3, scene = 2, prepared = true }
 flags[2], now = true, 5000
 coordinator()
-now = 7001
+-- A native ending reaches the lobby before the suite's gameplay-exit grace.
+s = { phase = 2, scene = 1, prepared = false }
+now = 8499
 coordinator()
-assert(commands == 2)
-s = { phase = 0, scene = 1, prepared = false }
-now = 8001
+assert(commands == 1 and closes == 0)
+now = 8501
+coordinator()
+assert(closes == 1 and passes == 0, "Native lobby cleanup was skipped or ended early")
 coordinator()
 coordinator()
 assert(passes == 1, "Suite finished early or reported completion more than once")
+
+-- A guest closes the completed lobby before the host's grace period, then
+-- activates the next fixture with clean wrappers in the same process.
+flags, case, now = { false, false }, 0, 0
+s = { phase = 0, scene = 1, prepared = false }
+_IsaacLanTest.host = false
+_IsaacLanFrame, _IsaacLan.net_gate = frame, gate
+dofile(root .. "/tests/special_suite_driver.lua")
+coordinator = _IsaacLanFrame
+coordinator()
+assert(case == 1)
+flags[1], now = true, 1000
+s = { phase = 2, scene = 1, prepared = false }
+coordinator()
+now = 3999
+coordinator()
+assert(closes == 1)
+now = 4001
+coordinator()
+assert(closes == 2 and commands == 1, "Guest did not leave the completed lobby first")
+coordinator()
+assert(case == 2 and _IsaacLanFrame == coordinator)
 print("PASS continuous native suite coordination, completion grace and wrapper cleanup")

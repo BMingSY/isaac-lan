@@ -40,6 +40,18 @@ coordinator = function()
     end
     if
         exiting
+        and status.phase == 2
+        and status.scene == 1
+        and not status.prepared
+        and native.api_info().nowMs - endedAt > (host and 3500 or 3000)
+    then
+        -- Native endings already returned both peers to the lobby. Close that
+        -- completed session before activating a fixture that establishes its own.
+        -- Guests leave first so the host does not disconnect a completed peer.
+        _IsaacLanCommand("close")
+    end
+    if
+        exiting
         and status.phase == 0
         and status.scene == 1
         and not status.prepared
