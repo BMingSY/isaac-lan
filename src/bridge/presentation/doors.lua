@@ -53,10 +53,11 @@ return function(env)
             -- Match the local movement preview during arrival. Keep held fire
             -- intact so the fade cannot release a charged weapon.
             local movementBytes, actionBytes, movementMask = 4 * 2, 16 * 2, 0xf
-            local edges = string.unpack(">I2", bytes, actionBytes + 1)
+            local edges, tail = string.unpack(">I2", bytes, actionBytes + 1)
             return string.rep("\0", movementBytes)
                 .. bytes:sub(movementBytes + 1, actionBytes)
                 .. string.pack(">I2", edges & ~movementMask)
+                .. bytes:sub(tail)
         end,
         alpha = alpha,
         render = function()

@@ -8,7 +8,7 @@ local base, gate = _IsaacLanFrame, native.net_gate
 local renders, linked, chosen, finished = 0, false, false, false
 local tick, uses, checks = 0, 0, 0
 local damages, early, seenEnemy, retired = 0, {}, {}, {}
-local hitCounts = {}
+local hitCounts, noFlashBaseline = {}, nil
 local counter = native.diagnostics_counter
 function native.diagnostics_counter(name, value)
     if name:sub(1, 4) == "hit." then
@@ -115,6 +115,7 @@ function _IsaacLanFrame()
             or tick >= 1450 and tick < 1530
             or tick >= 1630 and tick < 1710
             or tick >= 1810 and tick < 1890
+            or tick >= 1990 and tick < 2070
         )
     then
         buttons = 0x2000
@@ -217,11 +218,18 @@ function _IsaacLanFrame()
             end
         end
     end
-    if tick >= 1970 and not finished then
+    if not host and tick >= 1960 and not noFlashBaseline then
+        noFlashBaseline = hitCounts["hit.predicted"]
+    end
+    if tick >= 2150 and not finished then
         if host then
             assert(damages > 5, "No actual monster damage")
         else
             assert(damages == 0, "Replica executed authoritative damage")
+            assert(
+                noFlashBaseline == hitCounts["hit.predicted"],
+                "No-flash NPC received speculative hurt presentation"
+            )
             assert((hitCounts["hit.predicted"] or 0) > 10, "No local contact prediction")
             assert((hitCounts["hit.confirmed"] or 0) > 5, "No exact hit confirmations")
             assert((hitCounts["hit.rejected"] or 0) >= 3, "Mod veto did not reject predictions")
@@ -315,6 +323,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             or t == 1420
             or t == 1600
             or t == 1780
+            or t == 1960
         then
             actor(1, function(p, room)
                 for _, e in ipairs(Isaac.GetRoomEntities()) do
@@ -340,6 +349,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 if t == 1600 then
                     p.MaxFireDelay = 2
                     e.HitPoints, e.MaxHitPoints = 1000, 1000
+                end
+                if t == 1960 then
+                    e:AddEntityFlags(EntityFlag.FLAG_NO_FLASH_ON_DAMAGE)
                 end
                 if t == 1240 then
                     e.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE

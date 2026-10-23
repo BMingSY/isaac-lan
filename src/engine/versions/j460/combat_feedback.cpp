@@ -22,7 +22,7 @@ using Address = std::uintptr_t;
 using Color = std::array<float, j460::layout::color::size / sizeof(float)>;
 constexpr unsigned retentionTicks = 90, maxEvents = 512;
 constexpr unsigned spriteColor = entity::sprite + j460::layout::sprite::color;
-constexpr unsigned noDamageBlink = 0x02000000u;
+constexpr unsigned noFlashOnDamage = 0x02000000u;
 struct Identity {
     unsigned seed, index, id;
 };
@@ -88,7 +88,7 @@ bool __attribute__((fastcall)) damage(void* object, void*, float amount, std::ui
     const auto game = capture ? at<Address>(image, j460::globals::game) : 0;
     const auto dimension = capture ? at<int>(game, j460::layout::game::dimension) : 0;
     const auto room = capture ? at<int>(game, j460::layout::game::roomIndex) : 0;
-    const bool blink = capture && !(at<unsigned>(target, entity::flags) & noDamageBlink);
+    const bool blink = capture && !(at<unsigned>(target, entity::flags) & noFlashOnDamage);
     const auto accepted = originalDamage(object, amount, flags, source, countdown);
     if (capture && std::isfinite(amount) && amount > 0) {
         events.push_back({++serial, runtime::tick(), runtime::worldEpoch(), audience, sourceID,

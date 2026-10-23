@@ -30,7 +30,16 @@ local doors = dofile(root .. "/src/bridge/presentation/doors.lua")({
 })
 doors.arrive()
 assert(doors.alpha() == 0, "Remote-room entry or teleport invented a local door preview")
-local input = string.rep(string.pack(">I2", 65535), 17)
+local codec = dofile(root .. "/tests/support/input.lua")
+local values = {}
+for action = 0, codec.actionCount - 1 do
+    values[action] = codec.maxValue
+end
+local input = codec.encode({
+    values = values,
+    triggered = 0xffff,
+    pointer = { active = true, x = -123.25, y = 876.5 },
+})
 assert(not doors.movementBlocked() and doors.filterInput(input) == input)
 doors.begin()
 time = 45
@@ -43,10 +52,20 @@ assert(doors.alpha() == 1, "Repeated doorway samples restarted departure")
 doors.arrive()
 assert(doors.movementBlocked(), "Arrival fade allowed invisible local movement")
 local filtered = doors.filterInput(input)
+assert(#filtered == #input, "Arrival truncated the native input frame")
+local decoded = codec.decode(filtered)
 for action = 0, 15 do
-    assert(string.unpack(">I2", filtered, action * 2 + 1) == (action < 4 and 0 or 65535))
+    assert(decoded.values[action] == (action < 4 and 0 or 65535))
 end
-assert(string.unpack(">I2", filtered, 33) == 0xfff0, "Arrival changed fire or menu edges")
+assert(decoded.triggered == 0xfff0, "Arrival changed fire or menu edges")
+assert(
+    decoded.pointer.active and decoded.pointer.x == -123.25 and decoded.pointer.y == 876.5,
+    "Arrival changed pointer input"
+)
+assert(
+    doors.filterInput(input .. "extension") == filtered .. "extension",
+    "Movement filtering discarded fields it does not own"
+)
 time = 160
 assert(math.abs(doors.alpha() - 0.5) < 0.001)
 time = 230

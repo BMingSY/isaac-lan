@@ -121,7 +121,8 @@ local function entity(id, x, isTear)
     function e:IsVulnerableEnemy()
         return self.vulnerable
     end
-    function e:HasEntityFlags()
+    function e:HasEntityFlags(mask)
+        assert(mask == 33554432, "NPC flash eligibility used the player invulnerability flag")
         return self.noBlink
     end
     function e:IsDead()

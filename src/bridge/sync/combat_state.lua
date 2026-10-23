@@ -5,7 +5,7 @@ return function(fields, variants, tearFlags, entityFlags)
     return function(entity)
         if entity:ToNPC() then
             return entity:IsVulnerableEnemy()
-                    and not entity:HasEntityFlags(entityFlags.FLAG_NO_DAMAGE_BLINK)
+                    and not entity:HasEntityFlags(entityFlags.FLAG_NO_FLASH_ON_DAMAGE)
                     and C.target
                 or C.none
         end
