@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Source floors are prepared once; route entrances, drops and exits are native.
 local native = assert(_IsaacLan)
 local host, port, route = _IsaacLanTest.host, _IsaacLanTest.port, _IsaacLanTest.route
@@ -559,24 +560,18 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             local use = not host
                 and route == "poop"
                 and (inputTick == 120 or inputTick == 320 or inputTick == 520)
-            for action = 0, 15 do
-                values[#values + 1] = string.pack(
-                    ">I2",
-                    (
-                        use and action == ButtonAction.ACTION_PILLCARD
-                        or walk and action == direction
-                        or not host
-                            and route == "poop"
-                            and action == 5
-                            and inputTick % 200 > 140
-                    )
-                            and 65535
-                        or 0
+            for action = 0, testInput.actionCount - 1 do
+                values[action] = (
+                    use and action == ButtonAction.ACTION_PILLCARD
+                    or walk and action == direction
+                    or not host and route == "poop" and action == 5 and inputTick % 200 > 140
                 )
+                        and testInput.maxValue
+                    or 0
             end
-            values[#values + 1] = string.pack(">I2", use and 1 << ButtonAction.ACTION_PILLCARD or 0)
+            local triggered = use and 1 << ButtonAction.ACTION_PILLCARD or 0
             inputTick = inputTick + 1
-            return table.concat(values) .. string.pack(">Bff", 0, 0, 0)
+            return testInput.encode({ values = values, triggered = triggered })
         end,
         function(t, n, bytes)
             before(t, n, bytes)

@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- One pair covers fresh ownership, manual reconnect, failed restore, retry,
 -- automatic recovery, restart, ending and leaving. Processes stay throughout.
 local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
@@ -226,11 +227,7 @@ native.net_gate = function(capture, apply, collect, restore, present, stage)
             -- Exercise independent authoritative movement without real window focus.
             local t = _IsaacLanStatus().verified or 0
             local action = (host and 0 or 2) + math.floor(t / 20) % 2
-            local values = {}
-            for i = 0, 16 do
-                values[i + 1] = t < 20 and i == action and 65535 or 0
-            end
-            return string.pack(">" .. string.rep("I2", 17), table.unpack(values))
+            return testInput.buttons(t < 20 and 1 << action or 0)
         end,
         function(t, n, bytes)
             apply(t, n, bytes)

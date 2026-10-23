@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Real action queries: one held controller button must use a charged D6 once.
 local native = assert(_IsaacLan)
 local f = assert(io.open("./lan-test-role.txt", "r"))
@@ -84,9 +85,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             )
         end
         if t >= 110 and t <= 150 then
-            local offset = 1 + ButtonAction.ACTION_ITEM * 2
-            local value = string.unpack(">I2", b, offset)
-            local edge = string.unpack(">I2", b, 33)
+            local input = testInput.decode(b)
+            local value = input.values[ButtonAction.ACTION_ITEM]
+            local edge = input.triggered
             if value ~= 0 or (edge & (1 << ButtonAction.ACTION_ITEM)) ~= 0 then
                 report("ITEM tick=" .. t .. " value=" .. value .. " edge=" .. edge)
             end

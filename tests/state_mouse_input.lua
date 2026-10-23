@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Drive both owned windows with real mouse presses after MOUSE READY.
 -- Finish by creating lan-test-mouse.done in each owned game directory.
 local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
@@ -11,8 +12,8 @@ local function report(value)
     Isaac.DebugString("LAN_NETWORK MOUSE " .. value)
 end
 local function pointer(bytes, slot)
-    local flag, x, y = string.unpack(">Bff", bytes, (slot or 0) * 43 + 35)
-    return flag == 1, Vector(x, y)
+    local target = testInput.decode(bytes, slot).pointer
+    return target.active, Vector(target.x, target.y)
 end
 local expectedAddress, expectedPort = host and "host.example.com" or "127.0.0.1", tonumber(port)
 local preferencesChecked, analogAim = false, false

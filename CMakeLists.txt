@@ -230,6 +230,7 @@ if(BUILD_TESTING)
             COMMAND
                 "${CMAKE_COMMAND}" "-DNATIVE=$<TARGET_FILE:isaac_lan_pointer_input_test>"
                 "-DLUA=${ISAAC_LAN_LUA}"
+                "-DINPUT_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/tests/support/input.lua"
                 "-DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/tests/input_wire.lua" -P
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/input_wire.cmake")
         set_tests_properties(bridge.input-wire PROPERTIES TIMEOUT 30 LABELS "offline;lua")

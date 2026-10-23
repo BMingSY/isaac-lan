@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated native frontend test" }
 local file = assert(io.open("./lan-test-role.txt", "r"))
@@ -66,16 +67,15 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
         if not host and (inputTick == 120 or inputTick == 360) then
             trigger = 1 << 11
         end
-        for action = 0, 15 do
+        for action = 0, testInput.actionCount - 1 do
             local direction = ({ 0, 2, 1, 3 })[math.floor(inputTick / 20) % 4 + 1]
             local v = (action == direction or action == 5 or (action == 11 and trigger ~= 0))
-                    and 65535
+                    and testInput.maxValue
                 or 0
-            values[#values + 1] = string.pack(">I2", v)
+            values[action] = v
         end
-        values[#values + 1] = string.pack(">I2", trigger)
         inputTick = inputTick + 1
-        return table.concat(values) .. string.pack(">Bff", 0, 0, 0)
+        return testInput.encode({ values = values, triggered = trigger })
     end
     return gate(
         synthetic,

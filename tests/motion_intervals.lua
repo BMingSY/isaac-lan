@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local testInput = dofile(root .. "/tests/support/input.lua")
 local vector = {}
 vector.__index = vector
 local allocations = 0
@@ -238,7 +239,7 @@ local localState = {
 local function localRender(sequence)
     now = sequence / 60
     localMotion.present(
-        string.pack(">I2I2I2I2", 0, 65535, 0, 0),
+        testInput.buttons(1 << 1),
         sequence,
         { actor },
         { [1] = localState },
@@ -364,16 +365,9 @@ local pairedMotion = assert(
 })
 local function pairedRender(sequence)
     now = sequence / 60
-    pairedMotion.present(
-        string.pack(">I2I2I2I2", 0, 65535, 0, 0),
-        sequence,
-        {},
-        bodyStates,
-        function(id)
-            return bodies[id]
-        end,
-        1
-    )
+    pairedMotion.present(testInput.buttons(1 << 1), sequence, {}, bodyStates, function(id)
+        return bodies[id]
+    end, 1)
 end
 for sequence = 0, 20 do
     pairedRender(sequence)

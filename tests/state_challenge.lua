@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated challenge room ownership" }
 local f = assert(io.open("./lan-test-role.txt", "r"))
@@ -48,7 +49,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     end
     return gate(
         function()
-            return string.rep("\0", 43)
+            return testInput.neutral
         end,
         function(t, n, b)
             before(t, n, b)

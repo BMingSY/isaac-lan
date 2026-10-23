@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 local native = assert(_IsaacLan)
 local Phase = native.net_phases()
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
@@ -117,7 +118,7 @@ local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(
         function()
-            return string.rep("\0", 43)
+            return testInput.neutral
         end,
         function(t, n, b)
             before(t, n, b)

@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Six terminal routes, one owned pair. Native bosses, loot, doors, exits and
 -- win callbacks are required; debug stage changes only prepare source floors.
 -- Knife/key pieces are declared prerequisites, not knife-chase/angel tests.
@@ -1519,24 +1520,19 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     or 0
                 lastChestInput = chestMove
                 local direction = ({ 0, 2, 1, 3 })[math.floor(native.api_info().tick / 12) % 4 + 1]
-                for action = 0, 15 do
-                    values[#values + 1] = string.pack(
-                        ">I2",
-                        (
-                            (homeWalking or terminalWalking) and action == direction
-                            or not homeWalking and not terminalWalking and chestMove >= 0 and action == chestMove
-                            or not homeWalking
-                                and not terminalWalking
-                                and chestMove < 0
-                                and action == shoot
-                        )
-                                and 65535
-                            or 0
+                for action = 0, testInput.actionCount - 1 do
+                    values[action] = (
+                        (homeWalking or terminalWalking) and action == direction
+                        or not homeWalking and not terminalWalking and chestMove >= 0 and action == chestMove
+                        or not homeWalking
+                            and not terminalWalking
+                            and chestMove < 0
+                            and action == shoot
                     )
+                            and testInput.maxValue
+                        or 0
                 end
-                return table.concat(values)
-                    .. string.pack(">I2", triggered)
-                    .. string.pack(">Bff", 0, 0, 0)
+                return testInput.encode({ values = values, triggered = triggered })
             end
             lastChestInput = -1
             return capture()

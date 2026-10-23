@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Native held bindings and render positions, including unsent input changes.
 local native = assert(_IsaacLan)
 local calibrateSpeeds = _IsaacLanTest and _IsaacLanTest.inputResponseSpeeds
@@ -63,8 +64,11 @@ if out then
     )
 end
 local function direction(bytes)
-    local left, right, up, down = string.unpack(">I2I2I2I2", bytes)
-    return Vector((right - left) / 65535, (down - up) / 65535)
+    local values = testInput.decode(bytes).values
+    return Vector(
+        (values[1] - values[0]) / testInput.maxValue,
+        (values[3] - values[2]) / testInput.maxValue
+    )
 end
 function _IsaacLanFrame()
     renders = renders + 1

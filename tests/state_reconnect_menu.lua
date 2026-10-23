@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- One owned pair: rejoin twice without restarting either game process.
 local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
 local host, port = config.host, config.port
@@ -34,7 +35,7 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
         Isaac.GetPlayer(i):SetMinDamageCooldown(10000)
     end
     return gate(function()
-        return string.rep("\0", 43)
+        return testInput.neutral
     end, apply, collect, restore, present, beginFloor)
 end
 local frame = _IsaacLanFrame

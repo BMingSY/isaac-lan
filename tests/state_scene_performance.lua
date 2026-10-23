@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Focused observation of held crafting bags and native Dross I/II currents.
 local native = assert(_IsaacLan)
 local previousSprite, previousPrediction = native.sprite_state, _IsaacLanPrediction.new
@@ -293,25 +294,25 @@ local function seekFlow(t, start)
 end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(function()
-        local physical = capture()
+        local physical = testInput.decode(capture())
         local input, buttons = {}, 0
-        for action = 0, 15 do
-            local value = string.unpack(">I2", physical, action * 2 + 1)
+        for action = 0, testInput.actionCount - 1 do
+            local value = physical.values[action]
             if action == ButtonAction.ACTION_PILLCARD then
                 value = (
                     (verified >= 390 and verified < 393) or (verified >= 1050 and verified < 1053)
                 )
-                        and 65535
+                        and testInput.maxValue
                     or 0
             end
-            input[#input + 1] = string.pack(">I2", value)
+            input[action] = value
             if value > 0 then
                 buttons = buttons | (1 << action)
             end
         end
-        input[#input + 1] = string.pack(">I2", buttons & ~previousButtons)
+        local bytes = testInput.encode({ values = input, triggered = buttons & ~previousButtons })
         previousButtons = buttons
-        return table.concat(input) .. string.pack(">Bff", 0, 0, 0)
+        return bytes
     end, function(t, n, bytes)
         before(t, n, bytes)
         if t == 30 then

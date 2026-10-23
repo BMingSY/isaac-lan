@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated current-floor reconnect regression" }
 local file = assert(io.open("./lan-test-role.txt", "r"))
@@ -110,7 +111,7 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
     local returned = false
     return gate(
         function()
-            return string.rep("\0", 43)
+            return testInput.neutral
         end,
         function(t, n, b)
             tick = t

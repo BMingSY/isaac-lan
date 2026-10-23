@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Compose with special_suite_driver.lua: each factory sets
 -- _IsaacLanTest.releaseHourglass, appends this source, then returns
 -- function() return finished end. No io, callbacks or debug-Lua API is needed.
@@ -491,18 +492,8 @@ end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(
         function()
-            local values = {}
-            for action = 0, 15 do
-                values[#values + 1] = string.pack(
-                    ">I2",
-                    verified >= WALK_AT
-                            and verified < WALK_END
-                            and action == ButtonAction.ACTION_RIGHT
-                            and 65535
-                        or 0
-                )
-            end
-            return table.concat(values) .. string.pack(">I2", 0) .. string.pack(">Bff", 0, 0, 0)
+            local moving = verified >= WALK_AT and verified < WALK_END
+            return testInput.buttons(moving and 1 << ButtonAction.ACTION_RIGHT or 0)
         end,
         function(t, n, bytes)
             before(t, n, bytes)

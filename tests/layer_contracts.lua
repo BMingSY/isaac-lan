@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local testInput = dofile(root .. "/tests/support/input.lua")
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local function module(name)
     return dofile(root .. "/src/bridge/" .. name .. ".lua")
@@ -190,7 +191,7 @@ local motion = assert(loadfile(root .. "/src/bridge/presentation/motion.lua", "t
         return env.Game():GetRoom()
     end,
 })
-local input = string.pack(">I2I2I2I2", 0, 65535, 0, 0)
+local input = testInput.buttons(1 << 1)
 motion.present(input, 1, {}, {}, function() end, -1)
 assert(rendered == 0 and statusCalls == 0)
 motion.present(input, 1, {}, {}, function() end, 1)

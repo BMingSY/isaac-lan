@@ -9,7 +9,12 @@ int main(int argc, char** argv) {
     input.values[input::action::moveRight] = lan::maxInputValue;
     input.pointer = {true, -123.25f, 876.5f};
     if (argc == 2 && std::string_view(argv[1]) == "--wire") {
-        for (const auto& sample : {lan::InputFrame{}, input}) {
+        lan::InputFrame mixed;
+        for (unsigned action = 0; action < lan::actionCount; ++action)
+            mixed.values[action] = (action + 1) * 997;
+        mixed.triggered = 0xa55a;
+        mixed.pointer = {true, -32768, 32768};
+        for (const auto& sample : {lan::InputFrame{}, input, mixed}) {
             lan::Writer packet(lan::Message::input);
             packet.input(sample);
             for (std::size_t i = 1; i < packet.bytes.size(); ++i)

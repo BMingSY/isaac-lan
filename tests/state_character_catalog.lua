@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- One XML-only Mod, four native processes, three consecutive ordinary sessions.
 local native, port = assert(_IsaacLan), _IsaacLanTest.port
 local roleFile = assert(io.open("./lan-test-role.txt", "r"))
@@ -303,7 +304,7 @@ end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return baseGate(
         function()
-            return string.rep("\0", 43)
+            return testInput.neutral
         end,
         function(t, n, bytes)
             before(t, n, bytes)

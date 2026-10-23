@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Repeated raise/lower transitions, with EID on/off, in one isolated session.
 local native = assert(_IsaacLan)
 local previousSprite, previousPrediction = native.sprite_state, _IsaacLanPrediction.new
@@ -112,27 +113,28 @@ local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(
         function()
-            local physical, input, buttons = capture(), {}, 0
+            local physical, input, buttons = testInput.decode(capture()), {}, 0
             local cycle, offset = scene(verified)
-            for action = 0, 15 do
-                local value = string.unpack(">I2", physical, action * 2 + 1)
+            for action = 0, testInput.actionCount - 1 do
+                local value = physical.values[action]
                 if action == ButtonAction.ACTION_PILLCARD then
                     value = prepared
                             and not host
                             and cycle >= 0
                             and cycle < 8
                             and ((offset >= 6 and offset < 9) or (offset >= 42 and offset < 45))
-                            and 65535
+                            and testInput.maxValue
                         or 0
                 end
-                input[#input + 1] = string.pack(">I2", value)
+                input[action] = value
                 if value > 0 then
                     buttons = buttons | (1 << action)
                 end
             end
-            input[#input + 1] = string.pack(">I2", buttons & ~previousButtons)
+            local bytes =
+                testInput.encode({ values = input, triggered = buttons & ~previousButtons })
             previousButtons = buttons
-            return table.concat(input) .. string.pack(">Bff", 0, 0, 0)
+            return bytes
         end,
         function(t, n, bytes)
             before(t, n, bytes)
