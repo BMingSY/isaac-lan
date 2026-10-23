@@ -282,7 +282,9 @@ end
 local sequence = 90
 actor[8] = false
 for _, extra in ipairs({ "Pickup", "UseItem", "LiftItem", "HideItem", "" }) do
-    for _, body in ipairs(extra == "" and { "Happy", "Sad" } or { "WalkRight", "PickupWalkRight" }) do
+    for _, body in
+        ipairs(extra == "" and { "Happy", "Sad", "Hit" } or { "WalkRight", "PickupWalkRight" })
+    do
         animation, actor[5][1][2], extraFinished = body, extra, false
         sequence = sequence + 1
         local position = localRender(sequence)
@@ -321,7 +323,7 @@ animation = "WalkRight"
 localRender(sequence + 1)
 assert(localState.prediction.velocity.X > 0, "Ordinary acceleration did not resume")
 assert(localRender(sequence + 2) > lockedPosition, "Ordinary movement did not resume")
-print("PASS pickup/use/raise/lower/pill motion, control locks, gaps, pause and reset")
+print("PASS pickup/use/raise/lower/pill/hurt motion, control locks, gaps, pause and reset")
 
 -- Same-controller bodies must query independently. Native character rules can
 -- leave a twin stationary, switch the active body, or mirror one local room.

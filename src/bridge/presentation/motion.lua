@@ -17,9 +17,11 @@ return function(fields)
         local animation = extra and extra[fields.sprite.animation]
         -- These split head/item poses leave native walking enabled, including
         -- the first frames before Walk changes to PickupWalk. Pill reactions
-        -- also animate the body without consuming movement input.
+        -- and ordinary damage reactions also animate the body without
+        -- consuming movement input. Hit is not a control lock: authority
+        -- continues walking and knockback while the hurt sprite is playing.
         return walkingExtras[animation] and (body:match("^Walk") or body:match("^PickupWalk"))
-            or (animation == "" and (body == "Happy" or body == "Sad"))
+            or (animation == "" and (body == "Happy" or body == "Sad" or body == "Hit"))
     end
     -- Render-only movement and interpolation; authority remains on the host.
     return function(native, actorsPresentation, view)
