@@ -46,3 +46,5 @@ Windows x86 `1.9.7.17.J460`，两端普通以撒，相同种子与方向输入�
 | 19 轮键盘夹具 | `130726dc33f1cc0623b1db95b2df24dc7e65bd4780296fc6f32028da74a08ea3` |
 
 私有证据标识为 `feedback-hit-pill-baseline-20261024-16`、`feedback-hit-pill-sameroom-20261024-17`、`feedback-hit-pill-fixed-20261024-18`、`feedback-physical-pill-20261024-19`。原始日志、存档、画面和对照数据未提交。
+
+后续用户明确指出 `???`／混乱诅咒药丸，本记录的八次使用没有覆盖该触发条件，不能据此排除该反馈。正确药效、同房／分房及原生诅咒改送的补测见[怪物受击与混乱诅咒补充核查](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/feedback-monster-maze-20261024.md)，原轮次范围和结论保留。

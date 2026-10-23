@@ -117,3 +117,17 @@ assert(
     "New identity inherited braking"
 )
 print("PASS native NPC braking, skipped/repeated states, stalls, reversals and view reset")
+
+-- Native Horf knockback decays sharply on the next full update. The new
+-- braking packet must not display a further extrapolated forward step.
+motion.reset()
+motion.observe(1000, 1.04)
+track = motion.track(nil, Vector(316, 280), Vector(6.6, 0), 1.04, 30, 30, true)
+local shown = motion.sample(track, 1.05)
+motion.observe(1033.333, 1.073333)
+track = motion.track(track, Vector(316.1, 280), Vector(0.066, 0), 1.073333, 31, 30, true)
+assert(
+    distance(motion.sample(track, 1.073333), shown) < 0.001,
+    "A received braking state invented another unshown knockback step"
+)
+assert(motion.sample(track, 1.09).X < shown.X, "Braking correction did not start promptly")

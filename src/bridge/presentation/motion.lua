@@ -43,10 +43,9 @@ return function(fields)
                 track.y + track.vy * travel + track.cy * decay
         end
         local function sample(track, now)
-            if track.stationary then
-                return track.target
-            end
-            return Vector(coordinates(track, now))
+            local value = track.stationary and track.target or Vector(coordinates(track, now))
+            track.presented, track.presentedAt = value, now
+            return value
         end
         local function track(prior, position, velocity, now, tick, rate, npc)
             if prior and tick <= prior.tick then
@@ -82,6 +81,12 @@ return function(fields)
             local cx, cy = 0, 0
             if prior then
                 local px, py = coordinates(prior, now)
+                if braking and prior.presented and now - prior.presentedAt <= MAX_EXTRAPOLATION then
+                    -- A braking/knockback update has invalidated the old
+                    -- velocity. Anchor to the last displayed point, without
+                    -- inventing another forward step before reconciling it.
+                    px, py = prior.presented.X, prior.presented.Y
+                end
                 cx, cy = px - (x + vx * travel), py - (y + vy * travel)
                 if cx * cx + cy * cy >= TELEPORT_DISTANCE ^ 2 then
                     cx, cy = 0, 0
