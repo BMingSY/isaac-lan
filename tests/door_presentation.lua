@@ -30,21 +30,35 @@ local doors = dofile(root .. "/src/bridge/presentation/doors.lua")({
 })
 doors.arrive()
 assert(doors.alpha() == 0, "Remote-room entry or teleport invented a local door preview")
+local input = string.rep(string.pack(">I2", 65535), 17)
+assert(not doors.movementBlocked() and doors.filterInput(input) == input)
 doors.begin()
 time = 45
 assert(math.abs(doors.alpha() - 0.5) < 0.001)
+assert(not doors.movementBlocked(), "Departure stopped the input needed to cross the door")
 doors.render()
 doors.begin()
 time = 100
 assert(doors.alpha() == 1, "Repeated doorway samples restarted departure")
 doors.arrive()
+assert(doors.movementBlocked(), "Arrival fade allowed invisible local movement")
+local filtered = doors.filterInput(input)
+for action = 0, 15 do
+    assert(string.unpack(">I2", filtered, action * 2 + 1) == (action < 4 and 0 or 65535))
+end
+assert(string.unpack(">I2", filtered, 33) == 0xfff0, "Arrival changed fire or menu edges")
 time = 160
 assert(math.abs(doors.alpha() - 0.5) < 0.001)
 time = 230
 assert(doors.alpha() == 0)
+assert(
+    not doors.movementBlocked() and doors.filterInput(input) == input,
+    "Arrival retained held input"
+)
 doors.begin()
 time = 260
 doors.cancel()
+assert(not doors.movementBlocked(), "Turning back invented an arrival control lock")
 time = 400
 assert(doors.alpha() == 0, "Turning back left the view obscured")
 doors.begin()

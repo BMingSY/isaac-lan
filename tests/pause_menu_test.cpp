@@ -9,14 +9,24 @@
 
 namespace {
 int localViewer = 1;
-}
+bool replicaViewer = false;
+std::vector<isaac::rooms::SavedLocation> playerLocations;
+} // namespace
 namespace isaac::runtime {
+bool replica() {
+    return replicaViewer;
+}
 int localViewSlot() {
     return localViewer;
 }
 void pollLocalConsole() {}
 void refreshAutomation(std::uint32_t) {}
 } // namespace isaac::runtime
+namespace isaac::rooms {
+std::vector<SavedLocation> captureLocations() {
+    return playerLocations;
+}
+} // namespace isaac::rooms
 namespace isaac::frontend {
 bool capturesInput() {
     return false;
@@ -104,6 +114,8 @@ struct Fixture {
         input::viewSlot = -1;
         input::menuConfirm = false;
         localViewer = 1;
+        replicaViewer = false;
+        playerLocations.clear();
     }
     ~Fixture() {
         input::reset();
@@ -879,6 +891,46 @@ void pausedInputPreservesOnlyCharge() {
                 input::pausedInput({}) == isaac::lan::InputFrame{},
             "Repeated/empty paused input introduced new actions");
 }
+
+void roomTransferHalfInput() {
+    Fixture f;
+    isaac::lan::Frame frame;
+    frame.connected = 15;
+    playerLocations = {{0, 84, 320, 280}, {0, 85, 80, 280}, {1, 84, 80, 280}, {0, 84, 80, 280}};
+    for (unsigned slot = 0; slot < 4; ++slot) {
+        frame.inputRooms[slot] = isaac::lan::InputRoom{0, 84};
+        frame.inputs[slot].values[input::action::moveRight] = 65535;
+        frame.inputs[slot].values[input::action::shootUp] = 32768;
+        frame.inputs[slot].triggered = 1u << input::action::item;
+    }
+    f.accept(frame);
+    input::finishUpdate();
+    for (unsigned slot = 0; slot < 4; ++slot) {
+        f.queryController = static_cast<int>(slot + 1);
+        require(f.query(input::action::moveRight, native::entry::inputPressed) ==
+                    (slot == 0 || slot == 3),
+                "Half update moved an arrival using the old room/dimension or blocked a resident");
+        require(f.query(input::action::shootUp, native::entry::inputPressed) &&
+                    !f.query(input::action::item),
+                "Half update released held charge or replayed an item press");
+    }
+    frame.inputRooms[1] = isaac::lan::InputRoom{0, 85};
+    f.accept(frame);
+    input::finishUpdate();
+    f.queryController = 2;
+    require(f.query(input::action::moveRight, native::entry::inputPressed),
+            "Fresh destination input did not resume movement in the half update");
+    frame.inputRooms[1].reset();
+    f.accept(frame);
+    input::finishUpdate();
+    require(!f.query(input::action::moveRight, native::entry::inputPressed),
+            "Unscoped remote input advanced the half update");
+    replicaViewer = true;
+    f.accept(frame);
+    input::finishUpdate();
+    require(f.query(input::action::moveRight, native::entry::inputPressed),
+            "Authoritative room filtering changed replica input");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -899,5 +951,6 @@ int main(int argc, char** argv) {
                      {"gameplay-routing", gameplayRoutingUnchanged},
                      {"restart-physical-routing", restartPhysicalRouting},
                      {"movement-preview", presentationInputRouting},
-                     {"paused-input", pausedInputPreservesOnlyCharge}});
+                     {"paused-input", pausedInputPreservesOnlyCharge},
+                     {"room-transfer-half-input", roomTransferHalfInput}});
 }

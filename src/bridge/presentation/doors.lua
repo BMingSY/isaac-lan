@@ -25,10 +25,13 @@ return function(env)
         end
         return math.min(1, age / fadeOut)
     end
-    local function finish()
+    local function finish(blockMovement)
         local value = alpha()
         departure = nil
-        arrival = value > 0 and { at = now(), alpha = value } or nil
+        arrival = value > 0 and { at = now(), alpha = value, blockMovement = blockMovement } or nil
+    end
+    local function movementBlocked()
+        return alpha() > 0 and arrival ~= nil and arrival.blockMovement
     end
     return {
         begin = function()
@@ -36,8 +39,25 @@ return function(env)
                 departure, arrival = now(), nil
             end
         end,
-        arrive = finish,
-        cancel = finish,
+        arrive = function()
+            finish(true)
+        end,
+        cancel = function()
+            finish(false)
+        end,
+        movementBlocked = movementBlocked,
+        filterInput = function(bytes)
+            if not movementBlocked() then
+                return bytes
+            end
+            -- Match the local movement preview during arrival. Keep held fire
+            -- intact so the fade cannot release a charged weapon.
+            local movementBytes, actionBytes, movementMask = 4 * 2, 16 * 2, 0xf
+            local edges = string.unpack(">I2", bytes, actionBytes + 1)
+            return string.rep("\0", movementBytes)
+                .. bytes:sub(movementBytes + 1, actionBytes)
+                .. string.pack(">I2", edges & ~movementMask)
+        end,
         alpha = alpha,
         render = function()
             local value = alpha()

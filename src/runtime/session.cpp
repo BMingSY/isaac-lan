@@ -693,8 +693,8 @@ void updateOne(const backend::Call& original) {
                        " accepted=" + std::to_string(accepted));
         }
     // A door transfer can finish while source-room input is still in flight.
-    // Keep held movement/fire continuous on this floor, but resume item/button
-    // edges only after the guest sees the destination.
+    // Resume movement/item edges only from destination-room inputs. Held fire
+    // stays continuous so loading cannot discharge a charged weapon.
     const auto locations = rooms::captureLocations();
     for (unsigned slot = 1; slot < frame->players; ++slot) {
         const auto& context = frame->inputRooms[slot];

@@ -241,6 +241,7 @@ return function(fields)
                         local controls = p.ControlsEnabled
                             and p:AreControlsEnabled()
                             and (p:IsExtraAnimationFinished() or extraAnimationMovement[identifier])
+                            and not (view.doors and view.doors.movementBlocked())
                         local direction = Vector(0, 0)
                         if controls then
                             assert(native.rooms_with_player(status.slot, function()

@@ -252,7 +252,7 @@ local function apply(frame)
     tick = frame
 end
 local function capture()
-    return assert(native.input_capture(-1))
+    return _IsaacLanState.filterInput(assert(native.input_capture(-1)))
 end
 lifecycle = assert(_IsaacLanModules["runtime/session"])({
     canStart = function()

@@ -155,6 +155,7 @@ local doorPresentation = modules["presentation/doors"]({
     width = Isaac.GetScreenWidth,
     height = Isaac.GetScreenHeight,
 })
+state.filterInput = doorPresentation.filterInput
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
     doors = doorPresentation,
     timeline = assert(modules["presentation/timeline"])(),

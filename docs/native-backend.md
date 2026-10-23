@@ -105,6 +105,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 `input_ready()` 在控制器锁内检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在；仅借用原生设备列表，设备对象仍由游戏分配和释放。运行协调器在此条件满足后请求开局；角色的槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
 
+`input::finishUpdate` 在每个联机半帧开始前清除已消费的按键边沿。主机同时比较远端输入所属房间与 `rooms::captureLocations()` 返回的位置；完整更新后刚换房或缺少房间上下文的远端角色只保留过渡允许的持有值，收到目的地输入后恢复移动。该检查只读取位置快照并过滤已接受输入，不写角色、房间或原生容器；客机和主机本地槽位不受此过滤。
+
 联机显式返回菜单时，`menu_context::returnToMain` 只在原生已重建菜单、已选存档栏且处于标题／选档／主菜单页时选择主菜单。不构造菜单对象，也不接管其他页面或未选存档的启动流程。
 
 Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择百宝袋的材料来源和绘制位置。[player_hud.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/player_hud.h)、[crafting_hud.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/crafting_hud.cpp) 与 [challenge_hud.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/challenge_hud.cpp) 提供受限能力。

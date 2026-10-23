@@ -202,6 +202,7 @@ local collision = {
 }
 local actor =
     { 1, 2, { 1 }, {}, { { "body", "LiftItem" } }, false, false, { string.rep("\0", 12), true } }
+local doorBlocked = false
 local localMotion = assert(
     loadfile(
         root .. "/src/bridge/presentation/motion.lua",
@@ -214,6 +215,13 @@ local localMotion = assert(
         return true
     end,
 }, { apply = function() end }, {
+    doors = {
+        movementBlocked = function()
+            return doorBlocked
+        end,
+        reset = function() end,
+        arrive = function() end,
+    },
     vector = Vector,
     player = function()
         return player
@@ -629,6 +637,27 @@ for s = 2, 10 do
 end
 assert(player.Position.X > recovered, "Walking did not resume after recovering from a wall")
 print("PASS authority recovery from an overlapping display footprint")
+-- The destination's input is gated for the same interval as its local fade.
+-- Holding a direction through that interval must not accumulate a path which
+-- is replayed at once when the destination becomes visible.
+room.GetGridCollisionAtPos = function()
+    return 0
+end
+localState.target, localState.display = Vector(80, 100), Vector(80, 100)
+localState.prediction = prediction.new(localState.target)
+localMotion.reset()
+doorBlocked = true
+for s = 0, 6 do
+    localState.prediction:confirm(localState.target, math.max(0, s - 3), Vector(0, 0), s)
+    close(localRender(s), 80, "Arrival accumulated invisible movement")
+end
+doorBlocked = false
+close(localRender(7), 80, "Arrival released a deferred movement burst")
+assert(
+    localRender(8) > 80 and player.Position.X < 82,
+    "Arrival failed to resume normal acceleration"
+)
+print("PASS arrival hold, delayed acknowledgement and immediate local acceleration")
 -- Receipt jitter must not restart a remote projectile's simulation clock.
 motion.reset(true)
 state, pause = {}, 0
