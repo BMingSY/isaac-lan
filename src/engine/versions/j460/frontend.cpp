@@ -9,6 +9,7 @@
 #include "engine/rooms.h"
 #include "engine/input.h"
 #include "net/host_address.h"
+#include "presentation/connection_settings.h"
 #include "embedded_bridge.h"
 #include "diagnostics/lab_capture.h"
 #include "diagnostics/performance.h"
@@ -46,6 +47,8 @@ namespace {
 std::uintptr_t image;
 chat::Appearance chatAppearance;
 presentation::ChatBackground chatBackground;
+std::filesystem::path connectionPath;
+presentation::ConnectionSettings connectionSettings;
 std::wstring labRoot;
 void (*logger)(const std::string&);
 int(__cdecl* bindNative)(lua_State*);
@@ -188,6 +191,27 @@ int beginText(lua_State* L) {
 }
 int endText(lua_State*) {
     chat_input::endField();
+    return 0;
+}
+int loadConnection(lua_State* L) {
+    lua.pushString(L, connectionSettings.address.c_str());
+    lua.pushInteger(L, connectionSettings.port);
+    return 2;
+}
+int saveConnection(lua_State* L) {
+    std::size_t size = 0;
+    const auto* address = lua.string(L, 1, &size);
+    const auto port = lua.integer(L, 2, nullptr);
+    if (!address || size > lan::maxHostAddressLength || port < 1 || port > 65535)
+        return 0;
+    const presentation::ConnectionSettings next{std::string(address, size),
+                                                static_cast<unsigned>(port)};
+    if (next != connectionSettings) {
+        if (presentation::saveConnectionSettings(connectionPath, next))
+            connectionSettings = next;
+        else
+            logger("connection_settings_save=FAIL");
+    }
     return 0;
 }
 int officialMenu(lua_State*) {
@@ -947,6 +971,10 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.setField(state, -2, "menu_text_begin");
         lua.pushClosure(state, endText, 0);
         lua.setField(state, -2, "menu_text_end");
+        lua.pushClosure(state, loadConnection, 0);
+        lua.setField(state, -2, "menu_connection");
+        lua.pushClosure(state, saveConnection, 0);
+        lua.setField(state, -2, "menu_connection_save");
         lua.pushClosure(state, officialMenu, 0);
         lua.setField(state, -2, "menu_official");
         lua.setGlobal(state, "_IsaacLan");
@@ -1034,6 +1062,10 @@ void configureChat(const chat::Appearance& appearance,
                    const presentation::ChatBackground& background) {
     chatAppearance = appearance;
     chatBackground = background;
+}
+void configureConnection(const std::filesystem::path& path) {
+    connectionPath = path;
+    connectionSettings = presentation::loadConnectionSettings(path);
 }
 void returnToLobby() {
     lobbyRequested = true;

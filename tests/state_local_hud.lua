@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated local HUD and room animation regression" }
 local host, port
@@ -98,11 +99,7 @@ end
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(function()
-        local v = {}
-        for i = 1, 17 do
-            v[i] = string.pack(">I2", 0)
-        end
-        return table.concat(v)
+        return testInput.neutral
     end, function(t, n, b)
         before(t, n, b)
         for c = 1, 2 do

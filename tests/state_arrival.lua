@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Targeted native fixtures. Normal-menu/raw-input coverage is run separately.
 local native = assert(_IsaacLan)
 local owner = { Name = "Isolated conditional door protection regression" }
@@ -84,7 +85,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end)
     end
     return gate(function()
-        return string.rep("\0", 34)
+        return testInput.neutral
     end, function(t, n, b)
         before(t, n, b)
         -- Native freeze durations are capped. Renew them without touching

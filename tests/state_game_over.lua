@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Embedded by run_game_over.py. Reuse both processes across completed runs.
 local native = assert(_IsaacLan)
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
@@ -153,7 +154,7 @@ end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return baseGate(
         function()
-            return string.rep("\0", 34)
+            return testInput.neutral
         end,
         function(t, n, bytes)
             before(t, n, bytes)

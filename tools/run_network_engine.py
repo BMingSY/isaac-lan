@@ -11,6 +11,7 @@ import signal
 import subprocess
 import time
 from testing.engine import finalize_result
+from testing.lua import bundle_input
 from game_logs import freeze_probe_logs, probe_text, log_path
 from lab_profile import windows
 from check_performance import summarize_tree
@@ -297,13 +298,16 @@ def main():
         parser.error("Requested recording peer does not exist")
     source = Path(__file__).resolve().parent.parent
     script = args.script
+    source_script = script.read_bytes()
+    scenario = bundle_input(source_script.decode("utf-8")).encode("utf-8")
     window = labs[0].parent / "lab_window.ps1"
     processes = []
     result = {
         "pass": False,
         "runs": [],
         "dll_sha256": hashlib.sha256((args.build / "isaac_lan_probe.dll").read_bytes()).hexdigest(),
-        "script_sha256": hashlib.sha256(script.read_bytes()).hexdigest(),
+        "script_sha256": hashlib.sha256(scenario).hexdigest(),
+        "source_script_sha256": hashlib.sha256(source_script).hexdigest(),
     }
     if args.exercise_menu:
         result["menu_port"] = args.menu_port
@@ -313,7 +317,7 @@ def main():
     tested_dll = args.output / "tested-probe.dll"
     tested_script = args.output / "test-harness.lua"
     shutil.copy2(args.build / "isaac_lan_probe.dll", tested_dll)
-    shutil.copy2(script, tested_script)
+    tested_script.write_bytes(scenario)
     if args.automatic or args.installed:
         shutil.copy2(args.build / "winmm.dll", args.output / "tested-loader.dll")
         result["loader_sha256"] = hashlib.sha256(
@@ -620,7 +624,8 @@ def main():
                     + ", exerciseMenu = "
                     + str(scenario_config["exerciseMenu"]).lower()
                     + " }\n"
-                    + tested_script.read_text()
+                    + tested_script.read_text(encoding="utf-8"),
+                    encoding="utf-8",
                 )
             else:
                 (lab / "frontend.test").unlink(missing_ok=True)

@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- One pair covers ordinary sandbox Mod loading, solo, LAN and solo continue.
 local native, api = assert(_IsaacLan), assert(IsaacLAN)
 assert(debug == nil and native.debug.getinfo, "Ordinary sandbox was not exercised")
@@ -154,8 +155,8 @@ native.input_capture = function(controller)
     local bytes = captureInput(controller)
     local t = native.api_info().tick
     if not host and t >= 230 and t <= 260 then
-        local held = { string.unpack(">I2I2I2I2", bytes, 9) }
-        report("CHARGE_CAPTURE tick=" .. t .. " fire=" .. table.concat(held, ",", 1, 4))
+        local held = testInput.decode(bytes).values
+        report("CHARGE_CAPTURE tick=" .. t .. " fire=" .. table.concat(held, ",", 4, 7))
     end
     return bytes
 end
@@ -177,8 +178,8 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
     return gate(capture, function(t, n, bytes)
         apply(t, n, bytes)
         if host and t >= 230 and t <= 260 then
-            local held = { string.unpack(">I2I2I2I2", bytes, 43) }
-            report("CHARGE_APPLY tick=" .. t .. " fire=" .. table.concat(held, ",", 1, 4))
+            local held = testInput.decode(bytes, 1).values
+            report("CHARGE_APPLY tick=" .. t .. " fire=" .. table.concat(held, ",", 4, 7))
         end
         if t == 30 then
             origin = Game():GetLevel():GetCurrentRoomIndex()

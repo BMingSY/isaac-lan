@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- bossCases is supplied by build_boss_suite.py. Native room layouts remain
 -- game-owned; only the four angel variants require explicit fixture spawns.
 local native, host, port = assert(_IsaacLan), _IsaacLanTest.host, _IsaacLanTest.port
@@ -165,7 +166,7 @@ end
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(function()
-        return string.rep("\0", 34)
+        return testInput.neutral
     end, function(tick, count, bytes)
         before(tick, count, bytes)
         if finished or not native.rooms_ready() then

@@ -3,6 +3,8 @@
 #include "core/input_actions.h"
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <cmath>
 #include <cstdint>
 #include <span>
 #include <optional>
@@ -13,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 39;
+constexpr std::uint16_t protocolVersion = 40;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -95,9 +97,22 @@ inline constexpr std::array<std::pair<const char*, Command>, 5> commandValues{{
     {"leave", Command::leave},
 }};
 
+struct PointerInput {
+    bool active = false;
+    float x = 0, y = 0;
+    bool operator==(const PointerInput&) const = default;
+};
+inline bool validPointer(const PointerInput& pointer) {
+    constexpr float coordinateLimit = 32768;
+    return std::isfinite(pointer.x) && std::isfinite(pointer.y) &&
+           std::abs(pointer.x) <= coordinateLimit && std::abs(pointer.y) <= coordinateLimit &&
+           (pointer.active || (pointer.x == 0 && pointer.y == 0));
+}
+constexpr std::size_t inputWireSize = actionCount * 2 + 2 + 1 + 4 * 2;
 struct InputFrame {
     std::array<std::uint16_t, actionCount> values{};
     std::uint16_t triggered = 0;
+    PointerInput pointer;
     bool operator==(const InputFrame&) const = default;
 };
 // Menu requests belong to the session, not to a room's movement epoch.
@@ -288,9 +303,14 @@ class Writer {
         bytes.insert(bytes.end(), s.begin(), s.end());
     }
     void input(const InputFrame& i) {
+        if (!validPointer(i.pointer))
+            throw std::runtime_error("Invalid input pointer");
         for (auto n : i.values)
             u16(n);
         u16(i.triggered);
+        u8(i.pointer.active);
+        u32(std::bit_cast<std::uint32_t>(i.pointer.x));
+        u32(std::bit_cast<std::uint32_t>(i.pointer.y));
     }
     void blob(std::span<const std::uint8_t> value) {
         if (value.size() > maxSnapshotSize)
@@ -379,6 +399,10 @@ class Reader {
         for (auto& n : out.values)
             n = u16();
         out.triggered = u16();
+        const auto active = u8();
+        out.pointer = {active != 0, std::bit_cast<float>(u32()), std::bit_cast<float>(u32())};
+        if (active > 1 || !validPointer(out.pointer))
+            throw std::runtime_error("Invalid input pointer");
         return out;
     }
     std::vector<std::uint8_t> blob(std::size_t maximum = maxSnapshotSize) {

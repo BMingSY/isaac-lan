@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Native partial bags and vanilla HUD in one LAN session.
 local native = assert(_IsaacLan)
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
@@ -93,20 +94,19 @@ end
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(function()
-        local input, buttons = {}, 0
-        for action = 0, 15 do
+        local buttons = 0
+        for action = 0, testInput.actionCount - 1 do
             local held = action == ButtonAction.ACTION_PILLCARD and verified >= 30 and verified < 33
             held = held
                 or action == ButtonAction.ACTION_SHOOTRIGHT
                     and ((verified >= 40 and verified < 270) or (verified >= 350 and verified < 380) or (verified >= 600 and verified < 630))
-            input[#input + 1] = string.pack(">I2", held and 65535 or 0)
             if held then
                 buttons = buttons | (1 << action)
             end
         end
-        input[#input + 1] = string.pack(">I2", buttons & ~previousButtons)
+        local input = testInput.buttons(buttons, buttons & ~previousButtons)
         previousButtons = buttons
-        return table.concat(input)
+        return input
     end, function(t, n, bytes)
         before(t, n, bytes)
         if t == 30 then

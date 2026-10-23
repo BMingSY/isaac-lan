@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- Concentrated two-peer visual acceptance; uses one game per peer throughout.
 local native = assert(_IsaacLan)
 local file = assert(io.open("./lan-test-role.txt", "r"))
@@ -102,7 +103,7 @@ end
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(function()
-        return string.rep(string.pack(">I2", 0), 17)
+        return testInput.neutral
     end, function(t, n, buttons)
         before(t, n, buttons)
         for index = 0, Game():GetNumPlayers() - 1 do

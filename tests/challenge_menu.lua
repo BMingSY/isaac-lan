@@ -4,6 +4,8 @@ local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels = {}
 local noop = function() end
+local remembered = { "", 29506 }
+local savedCount = 0
 local vector = {}
 vector.__index = vector
 local function vec(x, y)
@@ -125,6 +127,13 @@ _IsaacLan = {
         return {}
     end,
     menu_text_end = noop,
+    menu_connection = function()
+        return table.unpack(remembered)
+    end,
+    menu_connection_save = function(address, port)
+        remembered, savedCount = { address, port }, savedCount + 1
+    end,
+    menu_text_begin = noop,
     net_characters = function()
         return characters, catalog
     end,
@@ -331,6 +340,7 @@ local actions = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
 )
 local sent, hidden = {}, 0
 local deps = {
+    native = _IsaacLan,
     command = function(action, value)
         sent[#sent + 1] = { action, value }
     end,
@@ -477,3 +487,39 @@ for _, host in ipairs({ 0, 1 }) do
     rows[1].change(1)
     assert(selected[1] == "choose" and selected[2] == "1:0")
 end
+
+-- Save on confirmed edits/connection attempts and reconstruct a fresh menu VM.
+status = { phase = 0, hosting = 0, players = 0 }
+remembered = { "room.example.com", 31234 }
+dofile(root .. "/src/bridge/presentation/menu.lua")
+_IsaacLanMenuOpen(true)
+draw()
+assert(labels["room.example.com"] and labels["端口：31234"])
+draw(40) -- Address.
+draw(13)
+_IsaacLanMenuRender(true, true, 13, "192.168.1.42", -100, -100, false, "", "")
+assert(remembered[1] == "192.168.1.42" and remembered[2] == 31234)
+draw(40) -- Port.
+draw(13)
+local beforeSave = savedCount
+_IsaacLanMenuRender(true, true, 13, "0", -100, -100, false, "", "")
+assert(savedCount == beforeSave and remembered[2] == 31234)
+_IsaacLanMenuRender(true, true, 13, "32123", -100, -100, false, "", "")
+assert(remembered[2] == 32123)
+dofile(root .. "/src/bridge/presentation/menu.lua")
+_IsaacLanMenuOpen(true)
+draw()
+assert(labels["192.168.1.42"] and labels["端口：32123"])
+for _, port in ipairs({ "", "0", "65536", "123.5" }) do
+    local prefs = { page = "lan", ip = "room.example.com", port = port }
+    local count = savedCount
+    local rows = actions.rows(prefs, status, {}, {}, deps)
+    rows[1].action()
+    rows[4].action()
+    assert(savedCount == count, "Invalid port overwrote saved preferences")
+end
+local prefs = { page = "lan", ip = "host.example.com", port = "01234" }
+local rows = actions.rows(prefs, status, {}, {}, deps)
+rows[4].action()
+assert(remembered[1] == prefs.ip and remembered[2] == 1234)
+assert(sent[#sent][1] == "join" and sent[#sent][2] == "host.example.com:1234")

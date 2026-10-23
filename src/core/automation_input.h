@@ -29,6 +29,7 @@ class AutomationInput {
     lan::InputFrame compose(lan::InputFrame physical, std::uint32_t frame, bool consume) {
         if (!enabled)
             return physical;
+        physical.pointer = {};
         if (frame - updated > 3)
             held = edges = 0;
         for (unsigned action = 0; action < 8; ++action)

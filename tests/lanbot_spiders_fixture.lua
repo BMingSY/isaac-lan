@@ -2,6 +2,7 @@
 -- Damage attempts do not count as hits; health changes do. Player movement
 -- after release and Spider AI are supplied exclusively by this model.
 local root = assert(arg[1])
+local testInput = dofile(root .. "/tests/support/input.lua")
 local vectorMeta = {}
 local function vec(x, y)
     return setmetatable({ X = x, Y = y }, vectorMeta)
@@ -131,6 +132,7 @@ for _, host in ipairs({ true, false }) do
         Vector = Vector,
         _IsaacLan = native,
         _IsaacLanTest = { host = host, port = 30990 },
+        _IsaacLanTestInput = testInput,
         _IsaacLanModules = {
             ["api/public"] = {
                 ready = function()
@@ -227,7 +229,7 @@ for _, host in ipairs({ true, false }) do
         return false
     end
     if host then
-        local input = string.rep("\0", 34) .. string.pack(">I2", 65535) .. string.rep("\0", 32)
+        local input = testInput.neutral .. testInput.buttons(1)
         for tick = 1, 400 do
             clock = tick * 1000 / 30
             hooks[2](tick, 2, input)

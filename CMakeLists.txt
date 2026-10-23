@@ -53,6 +53,23 @@ if(BUILD_TESTING AND ISAAC_LAN_LZ4_SOURCE_DIR)
     endif()
 endif()
 if(BUILD_TESTING)
+    add_executable(isaac_lan_connection_settings_test tests/connection_settings_test.cpp
+                                                      src/presentation/connection_settings.cpp)
+    target_include_directories(isaac_lan_connection_settings_test PRIVATE src)
+    add_executable(isaac_lan_pointer_input_test tests/pointer_input_test.cpp)
+    target_include_directories(isaac_lan_pointer_input_test PRIVATE src)
+    foreach(target isaac_lan_connection_settings_test isaac_lan_pointer_input_test)
+        if(MINGW)
+            target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
+        endif()
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+        endif()
+    endforeach()
+    add_test(NAME presentation.connection-settings COMMAND isaac_lan_connection_settings_test)
+    add_test(NAME core.pointer-input COMMAND isaac_lan_pointer_input_test)
+    set_tests_properties(presentation.connection-settings core.pointer-input
+                         PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_world_dependencies_test tests/world_dependencies_test.cpp)
     target_include_directories(isaac_lan_world_dependencies_test PRIVATE src)
     if(MINGW)
@@ -208,6 +225,15 @@ if(BUILD_TESTING)
         NAMES lua5.3 lua
         NO_CMAKE_FIND_ROOT_PATH)
     if(ISAAC_LAN_LUA)
+        add_test(
+            NAME bridge.input-wire
+            COMMAND
+                "${CMAKE_COMMAND}" "-DNATIVE=$<TARGET_FILE:isaac_lan_pointer_input_test>"
+                "-DLUA=${ISAAC_LAN_LUA}"
+                "-DINPUT_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/tests/support/input.lua"
+                "-DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/tests/input_wire.lua" -P
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/input_wire.cmake")
+        set_tests_properties(bridge.input-wire PROPERTIES TIMEOUT 30 LABELS "offline;lua")
         isaac_add_lua_test(bridge.chat chat.lua)
         isaac_add_lua_test(bridge.chat-dice chat_dice.lua)
         isaac_add_lua_test(bridge.feedback feedback.lua)
@@ -374,6 +400,7 @@ add_library(
     src/engine/versions/j460/session_backend.cpp
     src/diagnostics/native_exceptions.cpp
     src/app/configuration.cpp
+    src/presentation/connection_settings.cpp
     src/presentation/chat_background.cpp
     src/diagnostics/runtime_log.cpp
     src/diagnostics/performance.cpp
@@ -641,6 +668,14 @@ if(BUILD_TESTING)
     add_test(NAME native.pause-menu COMMAND isaac_lan_pause_menu_test)
     set_tests_properties(native.pause-menu PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_frontend_menu_test tests/frontend_menu_test.cpp)
+    add_executable(isaac_lan_mouse_input_test tests/mouse_input_test.cpp)
+    target_include_directories(isaac_lan_mouse_input_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_mouse_input_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_mouse_input_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.mouse-input COMMAND isaac_lan_mouse_input_test)
+    set_tests_properties(native.mouse-input PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     target_include_directories(isaac_lan_frontend_menu_test PRIVATE src)
     if(MINGW)
         target_link_options(isaac_lan_frontend_menu_test PRIVATE -static-libgcc -static-libstdc++)

@@ -1,3 +1,4 @@
+local testInput = assert(_IsaacLanTestInput)
 -- One protected pair: native Hornfel AI/rendering, room recreation, rejoin,
 -- next floor and death. Mines I uses its generated Hornfel encounter;
 -- Mines II fixture-spawns the on-foot variant for allocation/cleanup coverage.
@@ -126,7 +127,7 @@ local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(
         function()
-            return string.rep("\0", 34)
+            return testInput.neutral
         end,
         function(t, n, b)
             before(t, n, b)

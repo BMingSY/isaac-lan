@@ -5,6 +5,8 @@
 namespace isaac::engine::j460 {
 namespace entry {
 inline constexpr std::uint32_t familiarRenderTether = 0x35290;
+inline constexpr std::uint32_t playerMouseAim = 0x3b9f60;
+inline constexpr std::uint32_t playerShootingEntity = 0x379320;
 inline constexpr std::uint32_t gameAddPixelation = 0x353cc0;
 inline constexpr std::uint32_t playerUpdateWavyCap = 0x1cb480;
 inline constexpr std::uint32_t playerUsePill = 0x3c4180;
