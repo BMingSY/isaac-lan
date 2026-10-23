@@ -3,37 +3,29 @@ local definition = {
     id = "isaac-lan.compat.eid",
     adapterVersion = 2,
     modName = "External Item Descriptions",
-    targets = {
-        {
-            workshopId = "836319872",
-            metadataVersion = "5.23",
-            sourceHash = "8f2614a6a4cd58d60345dd0a33072a0bc7822ecf06ad9106234a6a9b2380b3fc",
-        },
-        {
-            workshopId = "836319872",
-            metadataVersion = "5.24",
-            sourceHash = "705a61422ffc09c683d4250dedf2a569b6d76d4eee884dec70b705eedfa898f5",
-        },
-    },
+    targets = { { workshopId = "836319872" } },
 }
 function definition.probe(target)
     local eid = rawget(_G, "EID")
     if eid ~= target.mod then
         return "pending", "exports_not_ready"
     end
-    local expected = target.metadataVersion == "5.24" and { "5.25", "d7aab88" }
-        or { "5.24", "980bb0b" }
-    if tostring(eid.ModVersion) ~= expected[1] or eid.ModVersionCommit ~= expected[2] then
-        return "unsupported", "runtime_version_mismatch"
-    end
-    if type(eid.setPlayer) ~= "function" or type(eid.OnRender) ~= "function" then
-        return "pending", "entry_points_not_ready"
+    for _, name in ipairs({
+        "setPlayer",
+        "OnRender",
+        "getEntityData",
+        "EntitySanityCheck",
+        "IsGridEntity",
+    }) do
+        if type(eid[name]) ~= "function" then
+            return "pending", "entry_points_not_ready"
+        end
     end
     return "ready"
 end
 local function renderReplicas(fn, ...)
     -- The replica room's native radius index can lag behind its committed
-    -- entity list. Supplement only EID's pinned description query, and only
+    -- entity list. Supplement only EID's description query, and only
     -- while its render callback owns the local view.
     local original = Isaac.FindInRadius
     local partitions = EntityPartition.FAMILIAR

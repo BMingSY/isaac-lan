@@ -16,6 +16,8 @@ presentation/menu_model
 presentation/audio
 presentation/motion
 presentation/attachments
+presentation/tethers
+presentation/doors
 presentation/attack_prediction
 presentation/tear_motion
 presentation/attacks

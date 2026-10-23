@@ -24,7 +24,9 @@ return {
         ghost = 9,
         curse = 10,
         pockets = 11,
+        subplayer = 12,
     },
+    subplayer = { type = 1, hearts = 2 },
     input = { left = 1, right = 2, up = 3, down = 4 },
     item = { id = 1, count = 2 },
     active = { id = 1, charge = 2 },
@@ -81,6 +83,7 @@ return {
         minecart = 25,
         nativeFields = 26,
         held = 27,
+        tether = 28,
     },
     room = {
         clear = 1,

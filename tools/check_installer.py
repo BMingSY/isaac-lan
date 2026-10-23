@@ -24,6 +24,17 @@ def check(game, build_directory, output):
     sentinel = target / "mods/keep/main.lua"
     sentinel.parent.mkdir(parents=True)
     sentinel.write_text("-- Unrelated mod must remain byte-identical.\n")
+    preserved = [sentinel]
+    for name in ("bootstp.dll", "language_unlocker.dll"):
+        if (game / name).is_file():
+            shutil.copy2(game / name, target / name)
+            preserved.append(target / name)
+    for mod in (game / "mods").glob("*3568677664*"):
+        if mod.is_dir():
+            destination = target / "mods" / mod.name
+            shutil.copytree(mod, destination)
+            preserved.extend(p for p in destination.rglob("*") if p.is_file())
+    preserved_hashes = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in preserved}
     original_exe = hashlib.sha256((target / "isaac-ng.exe").read_bytes()).hexdigest()
     package = output / "package"
     payload = build(build_directory, package)
@@ -52,6 +63,10 @@ def check(game, build_directory, output):
         transcript.append({"mode": mode, "exit_code": result.returncode, "output": result.stdout})
         (output / "transcript.json").write_text(json.dumps(transcript, indent=2))
         assert (result.returncode == 0) == success, result.stdout
+        assert all(
+            p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest() == digest
+            for p, digest in preserved_hashes.items()
+        ), "Installer changed an unrelated mod or native language patch"
         return result.stdout
 
     def valid_payload():
@@ -156,6 +171,7 @@ def check(game, build_directory, output):
         "reinstall": True,
         "uninstall": True,
         "foreign_proxy_preserved": True,
+        "language_patch_files_preserved": len(preserved_hashes) - 1,
         "changed_file_preserved": True,
         "unsupported_game_rejected": True,
         "session_data_preserved": True,

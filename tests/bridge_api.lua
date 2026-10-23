@@ -365,11 +365,12 @@ assert(registry.status()[1].state == "error" and installs == 2)
 isolated.api:SetCompatibilityEnabled("test.authority-error", false)
 local enabled, enableCode = isolated.api:SetCompatibilityEnabled("test.authority-error", true)
 assert(not enabled and enableCode == "authority_install_failed" and authorityAttempts == 2)
--- Both pinned EID builds preserve native single-player callbacks and select
--- the guest from its LAN view. Metadata/runtime mismatches keep the adapter off.
+-- Released and updated EID builds use the same capability contract. Metadata,
+-- runtime version and source changes alone must not disable local descriptions.
 for _, build in ipairs({
     { "5.23", 5.24, "980bb0b", "8f2614a6a4cd58d60345dd0a33072a0bc7822ecf06ad9106234a6a9b2380b3fc" },
     { "5.24", 5.25, "d7aab88", "705a61422ffc09c683d4250dedf2a569b6d76d4eee884dec70b705eedfa898f5" },
+    { "6.00", 6.01, "new-build", string.rep("a", 64) },
 }) do
     local p = peer(1)
     p.env.ModCallbacks = {
@@ -575,7 +576,9 @@ for _, build in ipairs({
     assert(p.api:SetCompatibilityEnabled(adapter.id, false))
     assert(eid.getEntityData == originalGetEntityData, "EID method was not restored on uninstall")
     eid.ModVersion = 0
-    assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "unsupported")
+    assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "ready")
+    eid.getEntityData = nil
+    assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "pending")
 end
 -- Stats+ may have cached both native actors before the LAN viewport was ready.
 do

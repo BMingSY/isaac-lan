@@ -37,12 +37,13 @@ local expected = {
     false,
     2,
     raw,
+    false,
 }
 -- Setter order is checked above; this round trip fixes every nested tuple position.
 local plain = factory(root)
 expected[11] = false
 plain.apply(expected, true)
-assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Schema-22 inventory bytes changed")
+assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Schema-31 inventory bytes changed")
 plain.apply(expected, false)
 assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Repeated inventory drifted")
 print("PASS all four ordered pockets after inventory setters, repeated views and ghost cleanup")

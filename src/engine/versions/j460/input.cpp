@@ -2,6 +2,7 @@
 #include "engine/lua_api.h"
 #include "engine/input.h"
 #include "engine/frontend.h"
+#include "engine/rooms.h"
 #include "runtime/session.h"
 #include "core/automation_input.h"
 #include "core/menu_input.h"
@@ -681,6 +682,17 @@ void finishUpdate() {
     // keep held values, but never replay an active/card press in the half step.
     for (auto& input : accepted.inputs)
         input.triggered = 0;
+    if (!enabled || runtime::replica())
+        return;
+    // Room transfer finishes after the full update. Its following half update
+    // must not accelerate a remote arrival with the departure room's controls.
+    const auto locations = rooms::captureLocations();
+    for (unsigned slot = 1; slot < accepted.players; ++slot) {
+        const auto& context = accepted.inputRooms[slot];
+        if (!context || slot >= locations.size() || context->index != locations[slot].index ||
+            context->dimension != locations[slot].dimension)
+            accepted.inputs[slot] = transitionInput(accepted.inputs[slot], true);
+    }
 }
 void pollPhysicalInput() {
     samplePhysicalInput();

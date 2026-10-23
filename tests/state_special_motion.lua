@@ -322,6 +322,12 @@ local function sample(label)
             if e.ControllerIndex == 2 then
                 local a = not host and _IsaacLanState.actorPose(e)
                 local d = e:GetMovementInput()
+                if not host and tick >= 845 and tick < 900 then
+                    assert(
+                        a and (e.Position - Vector(a.x, a.y)):Length() < 30,
+                        "Return from crawlspace left the display trapped against the wall"
+                    )
+                end
                 if
                     not host
                     and e:GetPlayerType() == PlayerType.PLAYER_THESOUL_B

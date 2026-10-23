@@ -27,6 +27,12 @@ local prediction =
     assert(_IsaacLanPrediction, "Native prediction bootstrap did not publish its API")
 local right, left, stop = Vector(1, 0), Vector(-1, 0), Vector(0, 0)
 local origin, speed, dt = Vector(100, 200), 1, 1 / 60
+-- Measured J460 web half tick: friction precedes both movement and walking.
+local web = prediction.new(Vector(310.66775512695, 280))
+web:reset(web.position, 0, Vector(2.4830493927002 * 60, 0))
+local slowed = web:step(right, 1, 1, dt, false, nil, 0.86602538824081)
+assert(math.abs(slowed.X - 312.81814575195) < 0.0001)
+assert(math.abs(web.velocity.X / 60 - 2.421275138855) < 0.0001)
 local p = prediction.new(origin)
 p:confirm(origin, 0)
 local started = p:step(right, 1, speed, dt)

@@ -203,6 +203,7 @@ local collision = {
 }
 local actor =
     { 1, 2, { 1 }, {}, { { "body", "LiftItem" } }, false, false, { string.rep("\0", 12), true } }
+local doorBlocked = false
 local localMotion = assert(
     loadfile(
         root .. "/src/bridge/presentation/motion.lua",
@@ -215,6 +216,13 @@ local localMotion = assert(
         return true
     end,
 }, { apply = function() end }, {
+    doors = {
+        movementBlocked = function()
+            return doorBlocked
+        end,
+        reset = function() end,
+        arrive = function() end,
+    },
     vector = Vector,
     player = function()
         return player
@@ -275,7 +283,9 @@ end
 local sequence = 90
 actor[8] = false
 for _, extra in ipairs({ "Pickup", "UseItem", "LiftItem", "HideItem", "" }) do
-    for _, body in ipairs(extra == "" and { "Happy", "Sad" } or { "WalkRight", "PickupWalkRight" }) do
+    for _, body in
+        ipairs(extra == "" and { "Happy", "Sad", "Hit" } or { "WalkRight", "PickupWalkRight" })
+    do
         animation, actor[5][1][2], extraFinished = body, extra, false
         sequence = sequence + 1
         local position = localRender(sequence)
@@ -314,7 +324,7 @@ animation = "WalkRight"
 localRender(sequence + 1)
 assert(localState.prediction.velocity.X > 0, "Ordinary acceleration did not resume")
 assert(localRender(sequence + 2) > lockedPosition, "Ordinary movement did not resume")
-print("PASS pickup/use/raise/lower/pill motion, control locks, gaps, pause and reset")
+print("PASS pickup/use/raise/lower/pill/hurt motion, control locks, gaps, pause and reset")
 
 -- Same-controller bodies must query independently. Native character rules can
 -- leave a twin stationary, switch the active body, or mirror one local room.
@@ -470,6 +480,28 @@ room.GetGridCollisionAtPos = function()
 end
 
 -- Native movement queries return the same input for the tainted skeleton
+-- Co-op ghosts retain CanFly=false in J460 but traverse pits and rocks.
+local wasGhost = player.IsCoopGhost
+player.IsCoopGhost = function()
+    return true
+end
+player.CanFly = false
+room.GetGridCollisionAtPos = function(_, p)
+    return p.X >= 120 and collision.COLLISION_PIT or collision.COLLISION_NONE
+end
+localState.target, localState.display = Vector(100, 100), Vector(100, 100)
+localState.prediction = prediction.new(localState.target)
+localMotion.reset()
+for s = 0, 40 do
+    localRender(s)
+end
+assert(player.Position.X > 120, "Ghost was clipped as a grounded living actor")
+player.IsCoopGhost = wasGhost
+room.GetGridCollisionAtPos = function()
+    return collision.COLLISION_NONE
+end
+
+-- Native movement queries return the same input for the tainted skeleton
 -- and soul, despite only the soul walking. Carrying/throwing still comes
 -- from authority. Dungeon gravity/ladders never use top-down walking.
 local types = dofile(root .. "/tests/fixtures/game_enums.lua").PlayerType
@@ -582,6 +614,46 @@ localState.prediction:confirm(Vector(200, 100), 20, Vector(0, 0), 300)
 localRender(21)
 assert(player.Position.X >= 200, "Authoritative teleport was swept through the old obstacle")
 print("PASS high-speed swept collision, body radius and diagonal wall sliding")
+-- Native arrival can put the old display inside the conservative footprint.
+-- The host then walks away in small steps, never producing a teleport-sized
+-- authority delta. Corrections must escape instead of clipping back forever.
+player.MoveSpeed = 1
+player.GetMovementInput = function()
+    return Vector(1, 0)
+end
+localState.target, localState.display = Vector(180, 100), Vector(155, 100)
+localState.prediction = prediction.new(localState.display)
+localState.prediction:confirm(localState.target, 0, Vector(0, 0), 1)
+localMotion.reset()
+localRender(1)
+assert(player.Position.X >= 170, "Authority correction remained trapped in an invalid origin")
+local recovered = player.Position.X
+for s = 2, 10 do
+    localRender(s)
+end
+assert(player.Position.X > recovered, "Walking did not resume after recovering from a wall")
+print("PASS authority recovery from an overlapping display footprint")
+-- The destination's input is gated for the same interval as its local fade.
+-- Holding a direction through that interval must not accumulate a path which
+-- is replayed at once when the destination becomes visible.
+room.GetGridCollisionAtPos = function()
+    return 0
+end
+localState.target, localState.display = Vector(80, 100), Vector(80, 100)
+localState.prediction = prediction.new(localState.target)
+localMotion.reset()
+doorBlocked = true
+for s = 0, 6 do
+    localState.prediction:confirm(localState.target, math.max(0, s - 3), Vector(0, 0), s)
+    close(localRender(s), 80, "Arrival accumulated invisible movement")
+end
+doorBlocked = false
+close(localRender(7), 80, "Arrival released a deferred movement burst")
+assert(
+    localRender(8) > 80 and player.Position.X < 82,
+    "Arrival failed to resume normal acceleration"
+)
+print("PASS arrival hold, delayed acknowledgement and immediate local acceleration")
 -- Receipt jitter must not restart a remote projectile's simulation clock.
 motion.reset(true)
 state, pause = {}, 0

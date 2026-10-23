@@ -36,6 +36,7 @@ inline constexpr Field common[] = {
     {"InitSeed", Kind::unsignedInteger, layout::entity::initSeed, Write::readOnly},
     {"Position", Kind::vector, layout::entity::positionX},
     {"Velocity", Kind::vector, layout::entity::velocity},
+    {"Friction", Kind::real, layout::entity::friction},
     {"HitPoints", Kind::real, layout::entity::hitPoints},
     {"MaxHitPoints", Kind::real, layout::entity::maxHitPoints},
     {"CollisionDamage", Kind::real, layout::entity::collisionDamage, Write::damage},

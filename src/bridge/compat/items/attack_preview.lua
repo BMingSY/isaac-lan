@@ -1,9 +1,9 @@
 -- Weapon-specific display rules. No attacks, RNG or item effects run here.
 return function(weapons, items, fields, flags, forms, players)
-    local chargeMultipliers = {
-        [weapons.WEAPON_BRIMSTONE] = 1,
-        [weapons.WEAPON_KNIFE] = 4,
-        [weapons.WEAPON_TECH_X] = 3,
+    local chargeWeapons = {
+        [weapons.WEAPON_BRIMSTONE] = true,
+        [weapons.WEAPON_KNIFE] = true,
+        [weapons.WEAPON_TECH_X] = true,
     }
     local excluded = {}
     for _, name in ipairs({
@@ -46,9 +46,8 @@ return function(weapons, items, fields, flags, forms, players)
                 and player.TearFlags == flags.TEAR_NORMAL
         end,
         mode = function(weapon)
-            local multiplier = chargeMultipliers[weapon.kind]
-            if multiplier then
-                return { charge = math.max(0, weapon.maximum * multiplier) }
+            if chargeWeapons[weapon.kind] and weapon.chargeLimit and weapon.chargeLimit > 0 then
+                return { charge = weapon.chargeLimit }
             end
             return { tears = weapon.kind == weapons.WEAPON_TEARS }
         end,

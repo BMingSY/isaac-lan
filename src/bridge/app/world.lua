@@ -46,6 +46,8 @@ local craftingBag = assert(modules["compat/items/crafting_bag"])(native, Collect
 local temporaryEffects = assert(modules["compat/items/temporary_effects"])(CollectibleType)
 local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
+local tethers =
+    modules["presentation/tethers"](native, Vector, Sprite, EntityType, Isaac.GetRoomEntities)
 local entityCodec = component("sync/entity_codec")(
     native,
     assert(modules["sync/entity_schema"])(EntityType),
@@ -58,7 +60,8 @@ local entityCodec = component("sync/entity_codec")(
     ),
     assert(modules["sync/entity_links"])(native, function()
         return Isaac.GetRoomEntities()
-    end)
+    end),
+    tethers
 )
 local entity, sprite, applySprite, vec =
     entityCodec.capture, entityCodec.sprite, entityCodec.applySprite, entityCodec.vec
@@ -100,6 +103,7 @@ local inventoryState = component("sync/inventory")({
     end,
     extraCollectibles = glitched.extraCollectibles,
     collectibleCount = glitched.count,
+    subplayer = forgotten.subplayer,
     activeType = ItemType.ITEM_ACTIVE,
     curse = NullItemID.ID_LOST_CURSE,
     pockets = function(player, value)
@@ -143,7 +147,17 @@ local attacks = component("presentation/attacks")({
         return Game():GetRoom()
     end,
 })
+local doorPresentation = modules["presentation/doors"]({
+    clock = Isaac.GetTime,
+    sprite = Sprite,
+    vector = Vector,
+    color = Color,
+    width = Isaac.GetScreenWidth,
+    height = Isaac.GetScreenHeight,
+})
+state.filterInput = doorPresentation.filterInput
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
+    doors = doorPresentation,
     timeline = assert(modules["presentation/timeline"])(),
     metrics = performance,
     predictMovement = function(player, room)
@@ -310,6 +324,8 @@ state.actorPose = replica.actorPose
 function state.render()
     if state.lastTick ~= nil and native.api_info().ready == 1 and _IsaacLanStatus().pause == 0 then
         attacks.render()
+        tethers.render()
+        doorPresentation.render()
     end
 end
 function state.reset()

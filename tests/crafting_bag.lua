@@ -260,6 +260,12 @@ local function environment()
     modules["presentation/attachments"] = function()
         return { capture = noop, present = noop }
     end
+    modules["presentation/tethers"] = function()
+        return { capture = noop, apply = noop, link = noop, render = noop }
+    end
+    modules["presentation/doors"] = function()
+        return { render = noop }
+    end
     modules["presentation/attacks"] = function()
         return function()
             return { confirm = noop, present = noop, render = noop, reset = noop }

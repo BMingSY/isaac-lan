@@ -364,6 +364,17 @@ void applyAnimation(lan::Reader& r, Address state) {
 constexpr std::array<unsigned, 18> layerNumbers = {0x34, 0x38, 0x3c, 0x40, 0x44, 0x48,
                                                    0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60,
                                                    0x64, 0x68, 0x6c, 0x70, 0x90, 0x94};
+int spriteAnimationLength(lua_State* L) {
+    try {
+        const auto data = at<Address>(sprite(L) + j460::layout::sprite::animation, animation::data);
+        lua.pushInteger(L, data ? count(data, animationData::totalFrames, pose::maxFrames) : 0);
+        return 1;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+}
 int spriteState(lua_State* L) {
     try {
         const auto s = sprite(L);
@@ -507,6 +518,111 @@ int entityShadow(lua_State* L) {
         return 1;
     }
 }
+int familiarTether(lua_State* L) {
+    try {
+        namespace tether = j460::layout::tether;
+        const auto familiar = entitySprite(L, 1);
+        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+        if (at<unsigned>(familiar, j460::layout::entity::type) != 3)
+            throw std::runtime_error("Tether capture requires a familiar");
+        const auto data = at<Address>(familiar, tether::extraData);
+        if (!data || at<Address>(data, 0) != image + tether::dataVtable) {
+            lua.pushBoolean(L, false);
+            return 1;
+        }
+        const auto count = at<unsigned>(data, tether::count);
+        const auto capacity = at<unsigned>(data, tether::capacity);
+        const auto first = at<unsigned>(data, tether::first);
+        if (count > tether::maxPoints || count > capacity || capacity > 4096 ||
+            (count && (!capacity || (capacity & (capacity - 1)))))
+            throw std::runtime_error("Invalid native tether points");
+        lan::Writer w(lan::Message::world);
+        w.u16(count);
+        const auto points = at<Address>(data, tether::points);
+        for (unsigned i = 0; i < count; ++i) {
+            const auto point =
+                at<Address>(points, ((first + i) & (capacity - 1)) * sizeof(Address));
+            for (unsigned axis = 0; axis < 3; ++axis) {
+                const auto value = at<float>(point, axis * sizeof(float));
+                if (!std::isfinite(value))
+                    throw std::runtime_error("Invalid tether coordinate");
+                w.u32(std::bit_cast<unsigned>(value));
+            }
+        }
+        lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1), w.bytes.size() - 1);
+        const auto source = static_cast<Address*>(lua.toUserdata(L, 1));
+        const auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
+        wrapper[0] = source[0];
+        wrapper[1] = data + tether::sprite;
+        lua.getMetatable(L, 1);
+        lua.setMetatable(L, -2);
+        return 2;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+}
+int renderTether(lua_State* L) {
+    try {
+        namespace tether = j460::layout::tether;
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas draw tether snapshots");
+        const auto familiar = entitySprite(L, 1);
+        if (at<unsigned>(familiar, j460::layout::entity::type) != 3)
+            throw std::runtime_error("Tether rendering requires a familiar");
+        const auto spriteSize = lua.rawLength(L, 2);
+        const auto spriteWrapper = static_cast<const Address*>(lua.toUserdata(L, 2));
+        if (!spriteWrapper || (spriteSize != 8 && spriteSize != j460::layout::sprite::size + 8))
+            throw std::runtime_error("Invalid tether Sprite");
+        std::size_t length = 0;
+        const auto bytes = lua.checkString(L, 3, &length);
+        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), length});
+        const auto count = r.u16();
+        if (count > tether::maxPoints)
+            throw std::runtime_error("Too many tether points");
+        std::array<std::array<float, 3>, tether::maxPoints> points{};
+        std::array<Address, tether::maxPoints> map{};
+        for (unsigned i = 0; i < count; ++i) {
+            for (auto& axis : points[i])
+                axis = std::bit_cast<float>(number(r));
+            map[i] = reinterpret_cast<Address>(points[i].data());
+        }
+        r.finish();
+        if (count > 1) {
+            const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+            alignas(Address) std::array<std::byte, tether::size> storage{};
+            const auto data = reinterpret_cast<Address>(storage.data());
+            at<Address>(data, 0) = image + tether::dataVtable;
+            at<Address>(data, tether::points) = reinterpret_cast<Address>(map.data());
+            at<unsigned>(data, tether::capacity) = tether::maxPoints;
+            at<unsigned>(data, tether::count) = count;
+            // The render routine only borrows this ANM2 and point deque. Neither
+            // the stack view nor its shallow Sprite copy is ever destroyed as
+            // a native owner, and no update/weapon gameplay is invoked.
+            std::memcpy(storage.data() + tether::sprite, reinterpret_cast<void*>(spriteWrapper[1]),
+                        j460::layout::sprite::size);
+            struct Borrow {
+                Address& target;
+                Address saved;
+                ~Borrow() {
+                    target = saved;
+                }
+            } borrow{at<Address>(familiar, tether::extraData),
+                     at<Address>(familiar, tether::extraData)};
+            borrow.target = data;
+            const std::array<float, 2> offset{};
+            using Render = void(__attribute__((thiscall))*)(void*, const void*, int);
+            reinterpret_cast<Render>(image + j460::entry::familiarRenderTether)(
+                reinterpret_cast<void*>(familiar), offset.data(), 0);
+        }
+        lua.pushBoolean(L, true);
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
 int actorPose(lua_State* L) {
     try {
         const auto player = sprite(L) - 0x48;
@@ -525,12 +641,21 @@ int actorPose(lua_State* L) {
             // Night Light smooths its beam angle in Player::Update.
             w.u32(at<unsigned>(player, j460::layout::player::nightLightAngle));
             for (unsigned slot = 0; slot < 5; ++slot) {
-                const auto weapon = at<Address>(player, 0x13dc + slot * 4);
+                const auto weapon = at<Address>(player, j460::layout::player::weapons + slot * 4);
                 w.u8(weapon != 0);
                 if (weapon) {
                     w.u32(at<unsigned>(weapon, 0x30));
                     for (auto offset : {0xcu, 0x10u, 0x14u})
                         w.u32(at<unsigned>(weapon, offset));
+                    using MaxCharge = float(__attribute__((thiscall))*)(void*);
+                    const auto query =
+                        at<MaxCharge>(at<Address>(weapon, 0),
+                                      j460::layout::weapon::maxChargeMethod * sizeof(Address));
+                    const auto maximum = query(reinterpret_cast<void*>(weapon));
+                    if (!std::isfinite(maximum) || maximum < 0)
+                        throw std::runtime_error("Invalid native weapon charge limit");
+                    w.u32(std::bit_cast<unsigned>(maximum));
+                    w.u32(at<unsigned>(weapon, j460::layout::weapon::modifiers));
                 }
             }
             w.u16(current.size());
@@ -562,11 +687,14 @@ int actorPose(lua_State* L) {
                 std::array<unsigned, 3> values{};
                 for (auto& value : values)
                     value = number(r);
+                number(r); // Native charge limit is read-only prediction metadata.
+                const auto modifiers = r.u32();
                 const auto weapon = at<Address>(player, 0x13dc + slot * 4);
                 if (weapon && at<unsigned>(weapon, 0x30) == type) {
                     at<unsigned>(weapon, 0xc) = values[0];
                     at<unsigned>(weapon, 0x10) = values[1];
                     at<unsigned>(weapon, 0x14) = values[2];
+                    at<unsigned>(weapon, j460::layout::weapon::modifiers) = modifiers;
                 }
             }
         const auto n = r.u16();
@@ -617,6 +745,8 @@ bool bind(lua_State* L, HMODULE module) {
         return false;
     lua.pushClosure(L, spriteState, 0);
     lua.setField(L, -2, "sprite_state");
+    lua.pushClosure(L, spriteAnimationLength, 0);
+    lua.setField(L, -2, "sprite_animation_length");
     lua.pushClosure(L, bossHeldBombs, 0);
     lua.setField(L, -2, "boss_held_bombs");
     lua.pushClosure(L, entityMinecart, 0);
@@ -627,6 +757,10 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "room_rails");
     lua.pushClosure(L, actorPose, 0);
     lua.setField(L, -2, "actor_pose");
+    lua.pushClosure(L, familiarTether, 0);
+    lua.setField(L, -2, "familiar_tether");
+    lua.pushClosure(L, renderTether, 0);
+    lua.setField(L, -2, "familiar_tether_render");
     lua.pushClosure(L, entityShadow, 0);
     lua.setField(L, -2, "entity_shadow");
     lua.pushClosure(L, prepareEntity, 0);

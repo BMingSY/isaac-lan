@@ -52,15 +52,17 @@ flowchart LR
 
 ## 完整视图与实体身份
 
-每份视图包含全队主要角色状态、共同楼层与地图，以及接收者当前房间的实体、网格和表现。同房角色携带完整外观，异房角色保留多人 HUD 所需状态。角色的 `ControlsEnabled` 与 `ControlsCooldown` 同属权威状态；客机不推进原生角色更新，控制冷却的递减和归零必须随快照恢复。任意 Mod 私有表、Lua 源码和原生指针不进入视图。
+每份视图包含全队主要角色状态、共同楼层与地图，以及接收者当前房间的实体、网格和表现。同房角色携带完整外观，异房角色保留多人 HUD 所需状态。角色的 `ControlsEnabled` 与 `ControlsCooldown` 同属权威状态；客机不推进原生角色更新，控制冷却的递减和归零必须随快照恢复。玩家字段同时携带 `Friction`，供本机重放蜘蛛网、地面减速后的移动。库存字段 12 `subplayer` 为 `false` 或 `{type, hearts}`，只恢复骸骨／灵魂隐藏形态的生命，不重建其道具库存。任意 Mod 私有表、Lua 源码和原生指针不进入视图。
 
 采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
 
 [分层投影](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/layers.lua)把道具列表、饰品、地图、进度、诅咒、交易、药丸、生成道具定义、房间布局／轨道／夹层信息编码为低频依赖；充能、血量、消耗品、便便／合成袋／临时效果、位置、实体、网格、动画及一次性表现留在实时部分。采集仍逐 tick 执行，低频指传输按变化发送，不延后读取权威状态。UDP 依赖使用递增修订号和可靠有序交付，可引用上一份可靠依赖压缩；一次最多有一份未确认的可靠副本，其间的新变化合并为最新候选，允许跳过中间修订。初始视图可靠交付；建立应用确认基线后，尚未被应用确认的新修订同时内嵌于实时视图，避免可靠副本丢包阻塞整帧。内嵌副本可先于可靠副本到达，接收缓存按修订号合并，可靠压缩字典独立维护。实时视图明确引用修订号，客机仅在对应数据齐全时还原完整视图，不能套用最新库存或跨房间拼接。依赖缓存、未完成视图和修订号在代次屏障清理。TCP 把两部分打包后沿用完整／参考帧传输。
 
-世界 schema 为 30，顶层末字段 `captured` 是主机开始本轮采集的单调时钟毫秒数；离线生成的无时钟状态使用 0。采集回调返回实时字节和可选依赖字节，应用回调的第五个参数接收对应依赖。完整状态的诊断采集仍由 `state.capture` 提供；生产传输使用 `state.captureTransfer`。
+世界 schema 为 31，顶层末字段 `captured` 是主机开始本轮采集的单调时钟毫秒数；离线生成的无时钟状态使用 0。采集回调返回实时字节和可选依赖字节，应用回调的第五个参数接收对应依赖。完整状态的诊断采集仍由 `state.capture` 提供；生产传输使用 `state.captureTransfer`。
 
-角色 `pose` 的武器前缀由 [weapon_pose.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/weapon_pose.lua)读取：大端 `BBI4I4f` 头之后为五个武器槽，各槽以一字节存在标记开始；存在时依次为 `I4fff`（类型、冷却、最大冷却、蓄力）。其后的装扮与层状态保持不透明。攻击显示可以构造只替换蓄力的本地副本，不能覆盖冷却、类型、权威快照或后续载荷；此副本不参与状态编码和发送。
+角色 `pose` 的武器前缀由 [weapon_pose.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/weapon_pose.lua)读取：大端 `BBI4I4f` 头之后为五个武器槽，各槽以一字节存在标记开始；存在时依次为 `I4ffffI4`（类型、冷却、最大冷却、蓄力、原生蓄力上限、武器修正标志）。其后的装扮与层状态保持不透明。攻击显示可以构造只替换蓄力的本地副本，不能覆盖冷却、类型、权威快照或后续载荷；此副本不参与状态编码和发送。
+
+实体字段 28 `tether` 为 `false` 或 `{points, sprite, ownerId, ownerPosition, familiarPosition}`；点载荷为大端 `u16` 数量及每点三个 `f32` 坐标。其几何与精灵来自权威跟班，客机仅绘制，并按本机身体与跟班显示位置平移端点。
 
 NPC 字段 `npc` 是 24 字节大端浮点记录，依次保存 `V1`、`V2` 和 `TargetPosition` 的 X／Y。前两个暂存向量保留原生整数哨兵的浮点位模式；目标坐标必须有限，接收端在修改实体前检查整条记录。客机渲染使用同步的目标点，不依赖被暂停的 NPC AI 来补齐几何状态。
 
@@ -68,7 +70,7 @@ NPC 字段 `npc` 是 24 字节大端浮点记录，依次保存 `V1`、`V2` 和 
 
 客机应用完整视图时遵循[恢复顺序](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md#采集与副本恢复)，全部成功后才提交 tick。原生楼层未准备好时保留最新视图，延后应用。普通状态允许在原生半帧边界应用；首次视图、暂停／名单变化、换层、换房及角色替换在完整更新边界处理。`betweenUpdates` 预检不写入房间或角色，返回 `false` 表示继续等待。
 
-客机保留显示和资源清理所需的原生更新，拦截同步实体的玩法更新与碰撞。伤害、拾取、房门决策和道具效果由房主执行；副本恢复不重放使用动作。
+客机保留显示和资源清理所需的原生更新，拦截同步实体的玩法更新与碰撞。伤害、拾取、房门决策和道具效果由房主执行；副本恢复不重放使用动作。恢复及客机原生更新期间暂时关闭进度写入，避免库存重建利用本机收藏历史重新触发成就；主机发布的进度仍可显式应用，个人进度合并保留原有生命周期。
 
 ## 传输、压缩与积压
 
@@ -76,7 +78,7 @@ NPC 字段 `npc` 是 24 字节大端浮点记录，依次保存 `V1`、`V2` 和 
 
 主线程通过有界单生产者／单消费者队列交换拥有独立存储的消息，最新视图使用单值邮箱替换尚未处理的旧值。网络工作线程不调用 Lua、游戏 API、日志回调或诊断回调；诊断样本有界交接后由主线程记录。存档和回退使用独立的 [大数据工作线程](https://github.com/BMingSY/isaac-lan/blob/main/src/net/byte_worker.cpp)，在后台压缩、解压并校验完整性，避免占住网络线程。原生存档采集、Continue 和副本应用必须在主线程执行。取消任务后，已开始的任务只完成其独立字节结果；旧会话退出等待在线程退休阶段完成，不阻塞下一次重连的启动。
 
-协议版本为 39。TCP 消息采用两字节大端长度前缀；UDP 使用消息封套和连接代次，不复用 TCP 字节流分帧。[统一消息封装](https://github.com/BMingSY/isaac-lan/blob/main/src/net/wire_codec.h) 对至少 256 字节的控制、聊天及扩展消息尝试压缩，仅在包含封套后仍更小时使用 `0x80 + 压缩封套`；小消息和不可压缩消息保持原正文。实时视图、检查点和回退载荷先整体压缩再分块，不逐块重复压缩。
+协议版本为 40。TCP 消息采用两字节大端长度前缀；UDP 使用消息封套和连接代次，不复用 TCP 字节流分帧。[统一消息封装](https://github.com/BMingSY/isaac-lan/blob/main/src/net/wire_codec.h) 对至少 256 字节的控制、聊天及扩展消息尝试压缩，仅在包含封套后仍更小时使用 `0x80 + 压缩封套`；小消息和不可压缩消息保持原正文。实时视图、检查点和回退载荷先整体压缩再分块，不逐块重复压缩。
 
 [Zstd 适配器](https://github.com/BMingSY/isaac-lan/blob/main/src/core/zstd.cpp) 使用快速级别 `-1`。实时视图比较独立帧和引用已确认不可变快照的 prefix 帧，选择较小载荷；检查点及回退使用独立帧。无压缩收益时使用原始字节。prefix 直接引用完整快照，不训练字典或另外构造字节补丁。压缩上下文由所属工作线程持有并复用，每次调用结束清除借用的 prefix；不同客机之间不共享基线。实时视图首块标明完整／参考模式、基线 tick 与楼层代次。
 

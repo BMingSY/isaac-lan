@@ -466,6 +466,7 @@ bool captureNextInput(bool simulationStep = false) {
     return true;
 }
 bool applyReplicaView(bool betweenUpdates) {
+    backend::ProgressReadOnlyScope progress;
     pollRestart();
     if (!session || session->phase() != lan::Phase::running || restartState.exiting)
         return false;
@@ -520,6 +521,7 @@ bool applyReplicaView(bool betweenUpdates) {
     return false;
 }
 void updateReplica(const backend::Call& original) {
+    backend::ProgressReadOnlyScope progress;
     // A faster host can finish another floor while this replica is still
     // initializing the previous one. Leave the reliable event in the session
     // until the native roster is ready; keep updating the loading floor below.
@@ -698,8 +700,8 @@ void updateOne(const backend::Call& original) {
                        " accepted=" + std::to_string(accepted));
         }
     // A door transfer can finish while source-room input is still in flight.
-    // Resume movement/items after the guest sees the destination. Held fire
-    // must not become a release that discharges a charged weapon.
+    // Resume movement/item edges only from destination-room inputs. Held fire
+    // stays continuous so loading cannot discharge a charged weapon.
     const auto locations = rooms::captureLocations();
     for (unsigned slot = 1; slot < frame->players; ++slot) {
         const auto& context = frame->inputRooms[slot];

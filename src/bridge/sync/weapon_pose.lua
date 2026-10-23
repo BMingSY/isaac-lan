@@ -1,7 +1,7 @@
 -- The weapon prefix of actor_pose; the remaining costume/layer bytes stay opaque.
 -- This is the existing wire contract, not a native memory layout.
 local prefix = ">BBI4I4f"
-local record = ">I4fff"
+local record = ">I4ffffI4"
 local slots = 5
 local function read(bytes)
     local weapons, cursor = {}, string.packsize(prefix) + 1
@@ -9,9 +9,17 @@ local function read(bytes)
         local exists
         exists, cursor = string.unpack(">B", bytes, cursor)
         if exists ~= 0 then
-            local kind, delay, maximum, charge
-            kind, delay, maximum, charge, cursor = string.unpack(record, bytes, cursor)
-            weapons[slot] = { kind = kind, delay = delay, maximum = maximum, charge = charge }
+            local kind, delay, maximum, charge, chargeLimit, modifiers
+            kind, delay, maximum, charge, chargeLimit, modifiers, cursor =
+                string.unpack(record, bytes, cursor)
+            weapons[slot] = {
+                kind = kind,
+                delay = delay,
+                maximum = maximum,
+                charge = charge,
+                chargeLimit = chargeLimit,
+                modifiers = modifiers,
+            }
         end
     end
     return weapons
@@ -24,13 +32,15 @@ local function display(bytes, weapons)
         exists, cursor = string.unpack(">B", bytes, cursor)
         parts[#parts + 1] = string.pack(">B", exists)
         if exists ~= 0 then
-            local kind, delay, maximum, charge, nextCursor = string.unpack(record, bytes, cursor)
+            local kind, delay, maximum, charge, chargeLimit, modifiers, nextCursor =
+                string.unpack(record, bytes, cursor)
             local value = weapons[slot]
             if value and value.kind == kind then
                 charge = value.charge
             end
             -- Cooldowns are authoritative. Only Render's charge-bar value is replaced.
-            parts[#parts + 1] = string.pack(record, kind, delay, maximum, charge)
+            parts[#parts + 1] =
+                string.pack(record, kind, delay, maximum, charge, chargeLimit, modifiers)
             cursor = nextCursor
         end
     end

@@ -38,8 +38,9 @@ inline bool menuActionTriggered(const lan::InputFrame& input, int button) {
 }
 inline lan::InputFrame transitionInput(const lan::InputFrame& input, bool sameFloor) {
     auto result = lan::menuInput(input);
-    // Stop stale movement/items until the guest sees the destination. Releasing
-    // held fire here would discharge Brimstone and other charged weapons.
+    // Source-room movement cannot advance the actor in an unseen destination.
+    // Preserve held fire on this floor so loading does not discharge a weapon;
+    // item/button edges still belong to the source room and must not be replayed.
     if (sameFloor) {
         result.pointer = input.pointer;
         for (unsigned button = action::shootLeft; button <= action::shootDown; ++button)

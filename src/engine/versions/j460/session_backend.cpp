@@ -189,6 +189,13 @@ void persistProgress() {
     reinterpret_cast<Method>(image + j460::entry::progressSaveCloud)(progress);
     reinterpret_cast<Method>(image + j460::entry::progressSaveFile)(progress);
 }
+ProgressReadOnlyScope::ProgressReadOnlyScope()
+    : previous(at<bool>(manager() + layout::manager::progress, layout::progress::readOnly)) {
+    at<bool>(manager() + layout::manager::progress, layout::progress::readOnly) = true;
+}
+ProgressReadOnlyScope::~ProgressReadOnlyScope() {
+    at<bool>(manager() + layout::manager::progress, layout::progress::readOnly) = previous;
+}
 int pause() {
     return gameReady() ? at<int>(game(), layout::game::pauseMenu) : 0;
 }

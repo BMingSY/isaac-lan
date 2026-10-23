@@ -1,4 +1,4 @@
--- Rules for the fingerprinted original GoodTrip 1.2.8, independent of its UI.
+-- Rules for the original GoodTrip, independent of its UI.
 local bridge, native = _IsaacLanModules["api/public"], _IsaacLan
 local authority = { id = "isaac-lan.compat.goodtrip" }
 local entrances, previous, epoch = {}, {}, nil

@@ -41,7 +41,7 @@ return function(registry, inspection)
         local value = originalRequire(name)
         -- Another Mod can relay require through pcall. In that case the caller
         -- belongs to C/the relay, while exported service methods still identify
-        -- their owning Mod. Registry fingerprint checks remain authoritative.
+        -- their owning Mod. Registry source ownership and interface probes still apply.
         registry.observeRequire(
             exportSource(value) or (caller and caller.source or ""),
             name,
