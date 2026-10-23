@@ -102,7 +102,7 @@ end
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(function()
-        return string.rep(string.pack(">I2", 0), 17)
+        return string.rep("\0", 43)
     end, function(t, n, buttons)
         before(t, n, buttons)
         for index = 0, Game():GetNumPlayers() - 1 do

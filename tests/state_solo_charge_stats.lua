@@ -176,7 +176,7 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
     return gate(capture, function(t, n, bytes)
         apply(t, n, bytes)
         if host and t >= 230 and t <= 260 then
-            local held = { string.unpack(">I2I2I2I2", bytes, 43) }
+            local held = { string.unpack(">I2I2I2I2", bytes, 52) }
             report("CHARGE_APPLY tick=" .. t .. " fire=" .. table.concat(held, ",", 1, 4))
         end
         if t == 30 then

@@ -106,7 +106,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         input[#input + 1] = string.pack(">I2", buttons & ~previousButtons)
         previousButtons = buttons
-        return table.concat(input)
+        return table.concat(input) .. string.pack(">Bff", 0, 0, 0)
     end, function(t, n, bytes)
         before(t, n, bytes)
         if t == 30 then

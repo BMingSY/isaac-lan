@@ -165,7 +165,7 @@ end
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(function()
-        return string.rep("\0", 34)
+        return string.rep("\0", 43)
     end, function(tick, count, bytes)
         before(tick, count, bytes)
         if finished or not native.rooms_ready() then

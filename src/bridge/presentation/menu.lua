@@ -1,8 +1,9 @@
 -- The game's own menu sprites and bitmap fonts. No redistributed game assets.
 local assets
+local savedAddress, savedPort = _IsaacLan.menu_connection()
 local ui = {
-    ip = "",
-    port = "29506",
+    ip = savedAddress,
+    port = tostring(savedPort),
     seed = "",
     difficulty = 0,
     selection = 1,
@@ -319,6 +320,9 @@ function _IsaacLanMenuRender(
             ui.seed = typed:upper():gsub("[^%w]", ""):sub(1, 8)
         end
         if key == Key.enter and (ui.editing ~= "port" or model.validPort(ui)) then
+            if ui.editing ~= "seed" then
+                model.remember(ui, _IsaacLan)
+            end
             ui.editing = nil
             _IsaacLan.menu_text_end()
         end

@@ -163,11 +163,11 @@ local function advance(t, bytes)
         end
         assert(alive == 9 and tears == 0)
         if not released then
-            -- Wire input is 16 big-endian values plus a trigger word per slot.
+            -- Wire input is 16 action values, a trigger word and a pointer per slot.
             -- A real guest movement value proves LANBOT is on before AI starts.
             local movement = 0
             for action = 0, 3 do
-                movement = movement | string.unpack(">I2", bytes, 35 + action * 2)
+                movement = movement | string.unpack(">I2", bytes, 44 + action * 2)
             end
             if t - armedAt >= 90 and movement ~= 0 then
                 released, startTick, startMs = true, t, native.api_info().nowMs

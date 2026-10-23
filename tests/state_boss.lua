@@ -54,7 +54,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             pieces[i] = string.pack(">I2", v[i])
         end
         pieces[17] = string.pack(">I2", 0)
-        return table.concat(pieces)
+        return table.concat(pieces) .. string.pack(">Bff", 0, 0, 0)
     end, function(t, n, b)
         before(t, n, b)
         ticks = t

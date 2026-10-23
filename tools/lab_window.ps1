@@ -27,6 +27,8 @@ public static class LanLabWindow {
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out Rect r);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref Point p);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point point);
   [DllImport("user32.dll")] public static extern bool GetCursorInfo(ref CursorInfo c);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint x, uint y, uint data, UIntPtr extra);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
@@ -89,6 +91,8 @@ if ($Action -eq 'Focus') {
     exit
 }
 if ($Action -eq 'Drag') {
+    # ClientToScreen and mouse_event must agree on physical pixels under desktop scaling.
+    [void][LanLabWindow]::SetProcessDPIAware()
     if ($Value -notmatch '^(\d+),(\d+):(\d+),(\d+)$') {
         throw 'Drag requires startX,startY:endX,endY in client pixels.'
     }
@@ -101,22 +105,35 @@ if ($Action -eq 'Drag') {
     }
     [void][LanLabWindow]::ClientToScreen($process.MainWindowHandle, [ref]$start)
     [void][LanLabWindow]::ClientToScreen($process.MainWindowHandle, [ref]$end)
-    [void][LanLabWindow]::SetCursorPos($start.X, $start.Y)
-    Start-Sleep -Milliseconds 200
     $leftButtonDown = 0x0002
     $leftButtonUp = 0x0004
+    $pressedByLab = $false
     try {
+        [void][LanLabWindow]::SetCursorPos($start.X, $start.Y)
+        Start-Sleep -Milliseconds 200
+        $target = [LanLabWindow]::WindowFromPoint($start)
+        if ($target -ne $process.MainWindowHandle) {
+            [uint32]$targetProcessId = 0
+            [void][LanLabWindow]::GetWindowThreadProcessId($target, [ref]$targetProcessId)
+            throw "Drag target is not inside the owned game window: point=$($start.X),$($start.Y) target_pid=$targetProcessId."
+        }
         [LanLabWindow]::mouse_event($leftButtonDown, 0, 0, 0, [UIntPtr]::Zero)
+        $pressedByLab = $true
         Start-Sleep -Milliseconds 200
         for ($step = 1; $step -le 12; $step++) {
             if ([LanLabWindow]::GetForegroundWindow() -ne $process.MainWindowHandle) {
-                throw 'Owned game lost focus during drag.'
+                [uint32]$nextProcessId = 0
+                [void][LanLabWindow]::GetWindowThreadProcessId([LanLabWindow]::GetForegroundWindow(), [ref]$nextProcessId)
+                $nextProcess = Get-Process -Id $nextProcessId -ErrorAction SilentlyContinue
+                throw "Owned game lost focus during drag: expected=$GameProcessId foreground=$nextProcessId name=$($nextProcess.ProcessName)."
             }
             [void][LanLabWindow]::SetCursorPos($start.X + ($end.X - $start.X) * $step / 12, $start.Y + ($end.Y - $start.Y) * $step / 12)
             Start-Sleep -Milliseconds 30
         }
     } finally {
-        [LanLabWindow]::mouse_event($leftButtonUp, 0, 0, 0, [UIntPtr]::Zero)
+        if ($pressedByLab) {
+            [LanLabWindow]::mouse_event($leftButtonUp, 0, 0, 0, [UIntPtr]::Zero)
+        }
     }
     Start-Sleep -Milliseconds 200
     $cursor = New-Object LanLabWindow+CursorInfo

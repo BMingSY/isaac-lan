@@ -227,7 +227,7 @@ for _, host in ipairs({ true, false }) do
         return false
     end
     if host then
-        local input = string.rep("\0", 34) .. string.pack(">I2", 65535) .. string.rep("\0", 32)
+        local input = string.rep("\0", 43) .. string.pack(">I2", 65535) .. string.rep("\0", 41)
         for tick = 1, 400 do
             clock = tick * 1000 / 30
             hooks[2](tick, 2, input)

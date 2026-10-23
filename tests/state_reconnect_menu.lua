@@ -34,7 +34,7 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
         Isaac.GetPlayer(i):SetMinDamageCooldown(10000)
     end
     return gate(function()
-        return string.rep("\0", 34)
+        return string.rep("\0", 43)
     end, apply, collect, restore, present, beginFloor)
 end
 local frame = _IsaacLanFrame

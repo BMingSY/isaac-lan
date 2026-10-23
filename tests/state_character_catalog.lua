@@ -303,7 +303,7 @@ end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return baseGate(
         function()
-            return string.rep("\0", 34)
+            return string.rep("\0", 43)
         end,
         function(t, n, bytes)
             before(t, n, bytes)

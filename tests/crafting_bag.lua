@@ -491,7 +491,7 @@ for _, isHost in ipairs({ true, false }) do
         status.verified = sample[1]
         env._IsaacLanFrame()
         local bytes = input()
-        assert(#bytes == 34)
+        assert(#bytes == 43)
         assert(string.unpack(">I2", bytes, sample[2] * 2 + 1) == 65535)
         local edges = string.unpack(">I2", bytes, 33)
         assert(

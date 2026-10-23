@@ -17,6 +17,28 @@ from testing.special_routes import build as build_special
 from testing.endings import build as build_endings
 from testing import gameplay as build_gameplay_suite
 from testing import discovery
+from run_mouse_input import ready_peers
+from game_logs import log_path
+
+
+def test_mouse_restart_waits_for_new_peers_and_recreated_logs(tmp_path):
+    labs = [tmp_path / role for role in ("host", "client")]
+    for lab in labs:
+        log = log_path(lab)
+        log.parent.mkdir(parents=True)
+        log.write_text("LAN_NETWORK MOUSE READY\n")
+    launch = tmp_path / "round-02.log"
+    launch.write_text("")
+    assert ready_peers(launch, labs) is None
+    launch.write_text("Started isolated host: 100\n")
+    assert ready_peers(launch, labs) is None
+    log_path(labs[1]).unlink()
+    launch.write_text("Started isolated host: 100\nStarted isolated client: 200\n")
+    assert ready_peers(launch, labs) is None
+    log_path(labs[1]).write_text("LAN_NETWORK MENU_READY\n")
+    assert ready_peers(launch, labs) is None
+    log_path(labs[1]).write_text("LAN_NETWORK MOUSE READY\n")
+    assert ready_peers(launch, labs) == {"host": "100", "client": "200"}
 
 
 def run_lua(source, tmp_path):

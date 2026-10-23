@@ -81,6 +81,10 @@ text_color = E8DFCB
 
 默认使用 **UDP**，端口为 **29506**，可以在界面中修改。
 
+确认输入或创建／加入房间时，IP／域名和端口自动保存到游戏目录的 `isaac-lan/connection.txt`，下次启动自动填入。删除该文件可恢复默认值。
+
+联机支持原版鼠标瞄准与射击；沿用游戏 `options.ini` 中的 `MouseControl=1` 设置，各玩家独立操作自己的角色。
+
 ## 卸载
 
 关闭游戏，运行 `Uninstall.cmd`，选择同一个 `isaac-ng.exe`。卸载会保留联机存档。

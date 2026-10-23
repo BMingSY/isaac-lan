@@ -502,7 +502,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         or 0
                 )
             end
-            return table.concat(values) .. string.pack(">I2", 0)
+            return table.concat(values) .. string.pack(">I2", 0) .. string.pack(">Bff", 0, 0, 0)
         end,
         function(t, n, bytes)
             before(t, n, bytes)

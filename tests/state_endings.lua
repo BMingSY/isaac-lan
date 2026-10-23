@@ -1534,7 +1534,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                             or 0
                     )
                 end
-                return table.concat(values) .. string.pack(">I2", triggered)
+                return table.concat(values)
+                    .. string.pack(">I2", triggered)
+                    .. string.pack(">Bff", 0, 0, 0)
             end
             lastChestInput = -1
             return capture()

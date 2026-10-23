@@ -1,0 +1,6 @@
+execute_process(COMMAND "${NATIVE}" --wire OUTPUT_VARIABLE wire COMMAND_ERROR_IS_FATAL ANY)
+string(REPLACE "\r" "" wire "${wire}")
+string(REPLACE "\n" ";" wire "${wire}")
+list(GET wire 0 neutral)
+list(GET wire 1 pointer)
+execute_process(COMMAND "${LUA}" "${SCRIPT}" "${neutral}" "${pointer}" COMMAND_ERROR_IS_FATAL ANY)

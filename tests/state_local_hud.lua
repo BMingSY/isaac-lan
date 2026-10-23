@@ -102,7 +102,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         for i = 1, 17 do
             v[i] = string.pack(">I2", 0)
         end
-        return table.concat(v)
+        return table.concat(v) .. string.pack(">Bff", 0, 0, 0)
     end, function(t, n, b)
         before(t, n, b)
         for c = 1, 2 do

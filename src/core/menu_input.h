@@ -4,9 +4,11 @@
 namespace isaac::input {
 class ModalInput {
     std::uint16_t held = 0;
+    bool pointerHeld = false;
 
   public:
     void filter(lan::InputFrame& input, bool capturing) {
+        pointerHeld = input.pointer.active && (capturing || pointerHeld);
         std::uint16_t down = input.triggered;
         for (unsigned action = 0; action < lan::actionCount; ++action)
             if (input.values[action])
@@ -20,6 +22,8 @@ class ModalInput {
             if (held & (1u << action))
                 input.values[action] = 0;
         input.triggered &= ~held;
+        if (pointerHeld)
+            input.pointer = {};
     }
 };
 inline bool menuActionTriggered(const lan::InputFrame& input, int button) {
@@ -36,9 +40,11 @@ inline lan::InputFrame transitionInput(const lan::InputFrame& input, bool sameFl
     auto result = lan::menuInput(input);
     // Stop stale movement/items until the guest sees the destination. Releasing
     // held fire here would discharge Brimstone and other charged weapons.
-    if (sameFloor)
+    if (sameFloor) {
+        result.pointer = input.pointer;
         for (unsigned button = action::shootLeft; button <= action::shootDown; ++button)
             result.values[button] = input.values[button];
+    }
     return result;
 }
 inline void captureRoomInput(lan::InputFrame& input, std::optional<lan::InputRoom>& room,
@@ -65,6 +71,7 @@ inline void keyboardPause(lan::InputFrame& input, bool paused) {
 }
 inline lan::InputFrame pausedInput(const lan::InputFrame& input) {
     lan::InputFrame result;
+    result.pointer = input.pointer;
     // Menu navigation stays local. Keep held fire for charged weapons across
     // the authoritative resume boundary, without forwarding item/button edges.
     for (unsigned button = action::shootLeft; button <= action::shootDown; ++button)

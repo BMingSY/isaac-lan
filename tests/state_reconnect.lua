@@ -110,7 +110,7 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
     local returned = false
     return gate(
         function()
-            return string.rep("\0", 34)
+            return string.rep("\0", 43)
         end,
         function(t, n, b)
             tick = t

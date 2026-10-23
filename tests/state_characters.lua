@@ -75,7 +75,7 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
         end
         values[#values + 1] = string.pack(">I2", trigger)
         inputTick = inputTick + 1
-        return table.concat(values)
+        return table.concat(values) .. string.pack(">Bff", 0, 0, 0)
     end
     return gate(
         synthetic,

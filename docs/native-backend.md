@@ -108,6 +108,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | HUD 终点 | 绘制标记 RVA `0x5a4eae`，`Game::GetChallengeParams` RVA `0x306940` | 仅在指定 HUD 查询点提供标量目标视图，不进入玩法或原生容器析构 |
 | 挑战完成 | `Game::FinishChallenge`，RVA `0x304f20` | 在可靠结束后的安全边界调用；原版 `Game::Challenge` 为 0，不写入同编号原版挑战解锁 |
 | 呈现预测输入 | `input::PresentationInputScope` 借用当前本机 `InputFrame`；桥接通过 Lua `EntityPlayer:GetMovementInput()`／`GetShootingInput()` 查询各身体 | 仅在客机呈现回调内覆盖本机控制器的移动、射击与分离键查询，包含托管输入；离开作用域恢复，不消费按键边沿、不改权威输入或角色对象 |
+| 鼠标瞄准 | `Player.MouseAim` RVA `0x3b9f60`，`thiscall bool(Player*, Vector*, bool)`，被调方清理 8 字节；`Player.ShootingEntity` RVA `0x379320`，`thiscall Entity*(Player*)` | 采集只在同步调用期间将本机角色 `+0x1618` 借用为键盘 ID 0，调用原版坐标转换后恢复；不调用控制器分配、不持有实体。目标以射击实体（为空时为角色）的 `+0x33c/+0x340` 为锚点，原版输出为目标差乘 `0.2`。回放按连接槽位选择目标并使用当前射击实体计算差值，继续由原版处理武器；单人调用原入口。坐标校验和生命周期遵循[输入契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#输入与时间) |
 
 百宝袋目标校验读取 PlayerHUD 绑定、HUD 的八个槽位、Player `+0x1618/+0x20a9`，并使用 `GetActiveItem` 确认持有。绘制只借用引用，不替换绑定、不持有角色或精灵。
 
