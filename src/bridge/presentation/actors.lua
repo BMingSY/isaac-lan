@@ -85,8 +85,63 @@ return function(fields)
             -- Native Render derives them from the replicated weapon charge below.
             assert(native.actor_pose(p:GetSprite(), actor[Actor.pose]))
         end
+        local function walk(p, actor, model, direction, dt, controls)
+            local body = p:GetSprite()
+            local prefix = body:GetAnimation():match("^(PickupWalk)")
+                or body:GetAnimation():match("^(Walk)")
+            if not controls or not prefix or p:IsCoopGhost() then
+                model.walk = nil
+                return
+            end
+            local moving = direction:LengthSquared() > 0
+            local velocity = model.prediction.velocity
+            if not moving and velocity:LengthSquared() > 1 then
+                direction, moving = velocity, true
+            end
+            if not moving then
+                model.walk = nil
+                return
+            end
+            local name = prefix
+                .. (
+                    math.abs(direction.X) > math.abs(direction.Y)
+                        and (direction.X < 0 and "Left" or "Right")
+                    or (direction.Y < 0 and "Up" or "Down")
+                )
+            local walking = model.walk
+            if not walking or walking.name ~= name then
+                walking = { name = name, frames = {} }
+                model.walk = walking
+            end
+            local function advance(sprite, key)
+                -- Only locomotion layers are predicted. Extra actions and head
+                -- overlays retain their authority/aiming clocks.
+                if not sprite:GetAnimation():match("^" .. prefix) then
+                    return
+                end
+                sprite:Play(name, true)
+                if sprite:GetAnimation() ~= name then
+                    return
+                end
+                local length = assert(native.sprite_animation_length(sprite))
+                if length == 0 then
+                    return
+                end
+                -- Native locomotion advances at 30 Hz. Keep fractional
+                -- frames locally: SetFrame/GetFrame round them away.
+                local phase = ((walking.frames[key] or 0) + dt * 30 * sprite.PlaybackSpeed) % length
+                sprite:SetFrame(name, math.floor(phase))
+                walking.frames[key] = phase
+            end
+            advance(body, "body")
+            local sprites = assert(native.actor_sprites(actor[Actor.index], body))
+            for i = ActorSprites.firstCostume, #sprites do
+                advance(sprites[i], i .. ":" .. sprites[i]:GetFilename())
+            end
+        end
         return {
             apply = applyActorVisuals,
+            walk = walk,
             reset = function()
                 costumeIDs = {}
             end,

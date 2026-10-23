@@ -32,6 +32,18 @@ void clearSave();
 lan::Progress readProgress();
 void writeProgress(const lan::Progress& value);
 void persistProgress();
+// Native reconstruction and display callbacks must not earn local progress.
+// Direct authority snapshots still writeProgress; destruction restores the flag.
+class ProgressReadOnlyScope {
+  public:
+    ProgressReadOnlyScope();
+    ~ProgressReadOnlyScope();
+    ProgressReadOnlyScope(const ProgressReadOnlyScope&) = delete;
+    ProgressReadOnlyScope& operator=(const ProgressReadOnlyScope&) = delete;
+
+  private:
+    bool previous;
+};
 int pause();
 int scene();
 bool cinematicFinished();

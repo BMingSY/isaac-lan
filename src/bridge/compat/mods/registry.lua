@@ -26,8 +26,8 @@ local function match(definition, target)
     for _, candidate in ipairs(definition.targets) do
         if
             candidate.workshopId == target.workshopId
-            and candidate.metadataVersion == target.metadataVersion
-            and candidate.sourceHash == target.sourceHash
+            and (candidate.metadataVersion == nil or candidate.metadataVersion == target.metadataVersion)
+            and (candidate.sourceHash == nil or candidate.sourceHash == target.sourceHash)
         then
             return true
         end
@@ -161,11 +161,15 @@ function registry.register(definition)
         assert(
             type(target.workshopId) == "string"
                 and #target.workshopId > 0
-                and type(target.metadataVersion) == "string"
-                and #target.metadataVersion > 0
-                and type(target.sourceHash) == "string"
-                and #target.sourceHash == 64
-                and target.sourceHash:match("^[%da-f]+$"),
+                and (target.metadataVersion == nil or (type(target.metadataVersion) == "string" and #target.metadataVersion > 0))
+                and (
+                    target.sourceHash == nil
+                    or (
+                        type(target.sourceHash) == "string"
+                        and #target.sourceHash == 64
+                        and target.sourceHash:match("^[%da-f]+$")
+                    )
+                ),
             "invalid_compatibility_target"
         )
     end

@@ -137,8 +137,9 @@ local function charge(bytes)
         local present
         present, cursor = string.unpack(">B", bytes, cursor)
         if present == 1 then
-            local kind, delay, maximum, current
-            kind, delay, maximum, current, cursor = string.unpack(">I4fff", bytes, cursor)
+            local kind, delay, maximum, current, chargeLimit, modifiers
+            kind, delay, maximum, current, chargeLimit, modifiers, cursor =
+                string.unpack(">I4ffffI4", bytes, cursor)
             if i == 2 then
                 assert(kind == 2, "Brimstone weapon missing")
                 return current

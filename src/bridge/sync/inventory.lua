@@ -1,6 +1,7 @@
 return function(fields)
     local Inventory, Item, Active = fields.inventory, fields.item, fields.active
     local Resource, Heart = fields.resources, fields.hearts
+    local Subplayer = fields.subplayer
     local LAST_ACTIVE_SLOT, FIRST_POCKET_ACTIVE_SLOT, LAST_POCKET_SLOT = 3, 2, 1
     -- Inventory reconciliation, using only the supplied player/config interface.
     return function(env)
@@ -37,6 +38,35 @@ return function(fields)
             { name = "GoldenBomb", field = Resource.goldenBomb },
             { name = "GoldenKey", field = Resource.goldenKey },
         }
+        local function captureHearts(p)
+            local hearts = {}
+            for _, heart in ipairs(heartTypes) do
+                hearts[heart.field] = p["Get" .. heart.name](p)
+            end
+            hearts[Heart.soul] = p:GetSoulHearts()
+            hearts[Heart.black] = p:GetBlackHearts()
+            return hearts
+        end
+        local function applyHearts(p, hearts)
+            for _, heart in ipairs(heartTypes) do
+                local delta = hearts[heart.field] - p["Get" .. heart.name](p)
+                if delta ~= 0 then
+                    p["Add" .. heart.name](p, delta)
+                end
+            end
+            local souls, black = hearts[Heart.soul], hearts[Heart.black]
+            if p:GetSoulHearts() ~= souls or p:GetBlackHearts() ~= black then
+                p:AddSoulHearts(-p:GetSoulHearts())
+                for offset = 0, souls - 1, 2 do
+                    local count = math.min(2, souls - offset)
+                    if (black & (1 << (offset // 2))) ~= 0 then
+                        p:AddBlackHearts(count)
+                    else
+                        p:AddSoulHearts(count)
+                    end
+                end
+            end
+        end
         local function inventory(p)
             local items = {}
             local config = env.config()
@@ -53,17 +83,12 @@ return function(fields)
                     p:GetActiveCharge(slot) + p:GetBatteryCharge(slot), -- Active.charge
                 }
             end
-            local hearts = {}
-            for _, heart in ipairs(heartTypes) do
-                hearts[heart.field] = p["Get" .. heart.name](p)
-            end
-            hearts[Heart.soul] = p:GetSoulHearts()
-            hearts[Heart.black] = p:GetBlackHearts()
+            local sub = env.subplayer and env.subplayer(p)
             return {
                 [Inventory.type] = p:GetPlayerType(),
                 [Inventory.items] = items,
                 [Inventory.active] = active,
-                [Inventory.hearts] = hearts,
+                [Inventory.hearts] = captureHearts(p),
                 [Inventory.resources] = {
                     p:GetNumCoins(), -- Resource.coins
                     p:GetNumBombs(), -- Resource.bombs
@@ -79,6 +104,10 @@ return function(fields)
                 [Inventory.ghost] = p:IsCoopGhost(),
                 [Inventory.curse] = p:GetEffects():GetNullEffectNum(env.curse),
                 [Inventory.pockets] = env.pockets and env.pockets(p) or false,
+                [Inventory.subplayer] = sub and {
+                    [Subplayer.type] = sub:GetPlayerType(),
+                    [Subplayer.hearts] = captureHearts(sub),
+                } or false,
             }
         end
         local function applyResources(p, v)
@@ -169,23 +198,15 @@ return function(fields)
             applyResources(p, v)
             p:AddSoulCharge(v[Inventory.resources][Resource.soulCharge] - p:GetSoulCharge())
             p:AddBloodCharge(v[Inventory.resources][Resource.bloodCharge] - p:GetBloodCharge())
-            for _, heart in ipairs(heartTypes) do
-                local delta = v[Inventory.hearts][heart.field] - p["Get" .. heart.name](p)
-                if delta ~= 0 then
-                    p["Add" .. heart.name](p, delta)
-                end
-            end
-            local souls, black = v[Inventory.hearts][Heart.soul], v[Inventory.hearts][Heart.black]
-            if p:GetSoulHearts() ~= souls or p:GetBlackHearts() ~= black then
-                p:AddSoulHearts(-p:GetSoulHearts())
-                for offset = 0, souls - 1, 2 do
-                    local count = math.min(2, souls - offset)
-                    if (black & (1 << (offset // 2))) ~= 0 then
-                        p:AddBlackHearts(count)
-                    else
-                        p:AddSoulHearts(count)
-                    end
-                end
+            applyHearts(p, v[Inventory.hearts])
+            local sub = v[Inventory.subplayer]
+            if sub then
+                local target = env.subplayer and env.subplayer(p)
+                assert(
+                    target and target:GetPlayerType() == sub[Subplayer.type],
+                    "Cannot restore the other character form's health"
+                )
+                applyHearts(target, sub[Subplayer.hearts])
             end
             for slot = 0, LAST_POCKET_SLOT do
                 if p:GetCard(slot) ~= v[Inventory.cards][slot + 1] then

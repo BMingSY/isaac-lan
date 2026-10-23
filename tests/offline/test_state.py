@@ -47,6 +47,7 @@ def inventory_value(resources=None, passive=None, actives=None, souls=0, black=0
         False,
         0,
         False,
+        False,
     ]
 
 

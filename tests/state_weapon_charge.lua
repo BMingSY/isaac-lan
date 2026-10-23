@@ -49,8 +49,9 @@ local function weapons(bytes)
         local exists
         exists, cursor = string.unpack(">B", bytes, cursor)
         if exists == 1 then
-            local kind, delay, maximum, charge
-            kind, delay, maximum, charge, cursor = string.unpack(">I4fff", bytes, cursor)
+            local kind, delay, maximum, charge, chargeLimit, modifiers
+            kind, delay, maximum, charge, chargeLimit, modifiers, cursor =
+                string.unpack(">I4ffffI4", bytes, cursor)
             result[i] = { kind, delay, maximum, charge }
         end
     end

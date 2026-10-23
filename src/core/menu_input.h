@@ -34,10 +34,11 @@ inline bool menuActionTriggered(const lan::InputFrame& input, int button) {
 }
 inline lan::InputFrame transitionInput(const lan::InputFrame& input, bool sameFloor) {
     auto result = lan::menuInput(input);
-    // Stop stale movement/items until the guest sees the destination. Releasing
-    // held fire here would discharge Brimstone and other charged weapons.
+    // Held directions remain valid across a same-floor handoff. Waiting for
+    // the destination acknowledgement adds a round trip of artificial braking.
+    // Item/button edges still belong to the source room; do not replay them.
     if (sameFloor)
-        for (unsigned button = action::shootLeft; button <= action::shootDown; ++button)
+        for (unsigned button = action::moveLeft; button <= action::shootDown; ++button)
             result.values[button] = input.values[button];
     return result;
 }

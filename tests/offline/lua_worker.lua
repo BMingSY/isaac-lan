@@ -37,6 +37,8 @@ local function stateEnvironment()
             ["sync/world_schema"] = dofile(root .. "/src/bridge/sync/world_schema.lua"),
             ["sync/weapon_pose"] = dofile(root .. "/src/bridge/sync/weapon_pose.lua"),
             ["presentation/actors"] = dofile(root .. "/src/bridge/presentation/actors.lua"),
+            ["presentation/tethers"] = dofile(root .. "/src/bridge/presentation/tethers.lua"),
+            ["presentation/doors"] = dofile(root .. "/src/bridge/presentation/doors.lua"),
             ["presentation/attacks"] = dofile(root .. "/src/bridge/presentation/attacks.lua"),
             ["presentation/attack_prediction"] = dofile(
                 root .. "/src/bridge/presentation/attack_prediction.lua"

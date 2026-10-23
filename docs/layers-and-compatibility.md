@@ -11,7 +11,7 @@
 | [`src/runtime/`](https://github.com/BMingSY/isaac-lan/tree/main/src/runtime)、[`src/bridge/runtime/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/runtime) | 会话推进、存档、启动、房间／楼层生命周期及失效边界 |
 | [`src/bridge/sync/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/sync) | 字段、采集代次、副本恢复、库存／实体／网格一致性 |
 | [`src/compat/`](https://github.com/BMingSY/isaac-lan/tree/main/src/compat)、[`src/bridge/compat/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat) | Boss、角色、道具、路线与挑战规则；C++ 策略只接收普通值，Lua 适配使用游戏 API 或具名原生能力 |
-| [`src/bridge/compat/mods/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/mods) | 第三方 Mod 探测、接入和卸载，保留版本／源码匹配边界 |
+| [`src/bridge/compat/mods/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/mods) | 第三方 Mod 来源识别、接口探测、接入和卸载；内置适配不以发布版本／源码哈希限制可用接口 |
 | [`src/bridge/api/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/api) | 第三方公开契约；不暴露原生指针或任意内存读写 |
 | [`src/presentation/`](https://github.com/BMingSY/isaac-lan/tree/main/src/presentation)、[`src/bridge/presentation/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/presentation) | 菜单、预测、镜头、外观和音画；不决定权威玩法 |
 | [`src/bridge/lanbot.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot.lua)、[`src/bridge/lanbot/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/lanbot) | 读取已有视图并合成正常输入 |

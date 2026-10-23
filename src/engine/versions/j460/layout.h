@@ -39,6 +39,7 @@ inline constexpr unsigned queuedId = 0x310;
 inline constexpr unsigned volume = 0x398;
 } // namespace music
 namespace progress {
+inline constexpr unsigned readOnly = 0x1;
 inline constexpr unsigned achievements = 0x38;
 inline constexpr unsigned counters = 0x2bc;
 } // namespace progress
@@ -97,6 +98,7 @@ inline constexpr unsigned removeMethod = 0x28;
 inline constexpr unsigned subtype = 0x30;
 inline constexpr unsigned initSeed = 0x3ec;
 inline constexpr unsigned velocity = 0x360;
+inline constexpr unsigned friction = 0x36c;
 inline constexpr unsigned hitPoints = 0x380;
 inline constexpr unsigned maxHitPoints = 0x384;
 inline constexpr unsigned collisionDamage = 0x388;
@@ -178,6 +180,7 @@ namespace animationData {
 inline constexpr unsigned layers = 0x18, layerCount = 0x1c;
 inline constexpr unsigned nulls = 0x20, nullCount = 0x24;
 inline constexpr unsigned layerMap = 0x38;
+inline constexpr unsigned totalFrames = 0x30;
 } // namespace animationData
 namespace animationLayer {
 inline constexpr unsigned stride = 0x10, id = 0x0, frameCount = 0x8;
@@ -197,6 +200,7 @@ namespace pickup {
 inline constexpr unsigned charge = 0x524, touched = 0x52c, pool = 0x530, varData = 0x59c;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned weapons = 0x13dc;
 inline constexpr unsigned babySkin = 0x1aec;
 inline constexpr int lastBabySkin = 0x47;
 inline constexpr unsigned roomTransitionTarget = 0x1b1c;
@@ -214,6 +218,17 @@ inline constexpr unsigned nightLightAngle = 0x1ae4;
 inline constexpr unsigned generatedInventoryHead = 0x1fcc;
 inline constexpr unsigned generatedInventorySize = 0x1fd0;
 } // namespace player
+namespace weapon {
+inline constexpr unsigned kind = 0x30;
+inline constexpr unsigned modifiers = 0x34;
+inline constexpr unsigned maxChargeMethod = 6;
+} // namespace weapon
+namespace tether {
+inline constexpr unsigned extraData = 0xee0, points = 0x8, capacity = 0xc;
+inline constexpr unsigned first = 0x10, count = 0x14, sprite = 0x18, size = 0x158;
+inline constexpr unsigned maxPoints = 256;
+inline constexpr unsigned dataVtable = 0x71d264;
+} // namespace tether
 namespace emote {
 inline constexpr unsigned id = 0x4;
 inline constexpr int lastId = 58;

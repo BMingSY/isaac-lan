@@ -265,17 +265,17 @@ end
 | `id` | 唯一命名空间，字符及 64 字节上限与接入 ID 相同 |
 | `adapterVersion` | 正整数，表示适配实现版本；不代替上游版本／指纹 |
 | `modName` | 目标实际 `RegisterMod` 的名称，精确匹配 |
-| `targets` | 支持配置数组，每项为 `{workshopId, metadataVersion, sourceHash}` |
+| `targets` | 支持配置数组，每项必须有 `workshopId`，可选 `metadataVersion`、`sourceHash` |
 | `probe(target)` | 返回 `"ready"`、`"pending"` 或 `"unsupported", reason`；导出尚未完成时等待，接口不符时拒绝 |
 | `install(target, api)` | 探测就绪后安装；必须返回清理函数，不修改上游磁盘源码 |
 | `authority(api)` | 可选，注册独立主机动作；也必须返回清理函数，不依赖本机安装 UI Mod |
 | `dispatch(target, record, ...)` | 可选，包装目标回调；保留参数与返回值，不处理的路径调用并返回 `record.original(...)` |
 
-每个目标必须提供 `workshopId`、`metadataVersion` 和 64 字节 `sourceHash`。加载观察器结合实际 `RegisterMod` 实例、来源目录、启用状态和源码指纹确认目标。只存在目录、同名 Mod 或残留全局不会匹配。`target` 包含 `mod`、目录／版本／指纹和该来源加载的模块导出。`RegisterMod` 第二个参数不是 Mod 发布版本。
+每个目标必须提供 `workshopId`。`metadataVersion` 和 `sourceHash` 为适配器主动选择的可选约束；内置 EID、Stats+、GoodTrip 适配按实际所需接口探测，不锁定发布版本或源码哈希。加载观察器结合实际 `RegisterMod` 实例、来源目录、启用状态和源码指纹确认目标。只存在目录、同名 Mod 或残留全局不会匹配。`target` 包含 `mod`、目录／版本／指纹和该来源加载的模块导出。`RegisterMod` 第二个参数不是 Mod 发布版本。
 
-`workshopId`、`metadataVersion` 为非空字符串，`sourceHash` 是恰好 64 个小写十六进制字符。观察目标 `target` 的公开字段为 `mod`、`directory`、`workshopId`、`metadataVersion`、`sourceHash`、`modules`；`modules` 以实际 `require` 名为键保存来自该目录的已观察模块导出。安装阶段另提供 `target.addCleanup(fn)`。使用 `dispatch` 时，`record` 包含 `id`（游戏回调 ID）、`original`、`param`、`priority` 及包装函数 `wrapper`。
+`workshopId` 为非空字符串；可选 `metadataVersion` 若提供也必须为非空字符串，`sourceHash` 若提供须为恰好 64 个小写十六进制字符。观察目标 `target` 的公开字段为 `mod`、`directory`、`workshopId`、`metadataVersion`、`sourceHash`、`modules`；`modules` 以实际 `require` 名为键保存来自该目录的已观察模块导出。安装阶段另提供 `target.addCleanup(fn)`。使用 `dispatch` 时，`record` 包含 `id`（游戏回调 ID）、`original`、`param`、`priority` 及包装函数 `wrapper`。
 
-源码指纹为 SHA-256：先输入 `Isaac LAN/compat-source-v1` 与零字节，再按相对路径排序输入每个 `.lua` 的相对路径、零字节、文件 SHA-256 的十六进制文本和零字节。`gtconfig.lua`、`eid_config.lua` 是配置文件，不计入源码身份；其余 Lua 包含语言与服务实现。修改源码或新的上游版本必须增加独立支持记录。
+源码指纹为 SHA-256：先输入 `Isaac LAN/compat-source-v1` 与零字节，再按相对路径排序输入每个 `.lua` 的相对路径、零字节、文件 SHA-256 的十六进制文本和零字节。`gtconfig.lua`、`eid_config.lua` 是配置文件，不计入源码身份；其余 Lua 包含语言与服务实现。版本和源码变化仍可用于诊断；只有适配器明确提供对应约束时才影响目标匹配。
 
 `probe` 返回 `ready`、`pending` 或 `unsupported` 及原因。只在 `ready` 后安装一次；`pending` 在初始化后及首次回调前重试。`install` 中可用 `api:RegisterMod(target.mod, options)` 获取归属于该适配器的句柄，不会触发主动接入优先规则；目标 Mod 在安装回调以外主动注册时才让出。`install` 必须返回清理函数并注销自己的句柄，可用 `target.addCleanup(fn)` 提前登记部分安装的清理，确保异常时回滚。`authority` 在加载时注册独立主机能力，不因尚未开局或缺少本机 UI Mod 跳过。
 

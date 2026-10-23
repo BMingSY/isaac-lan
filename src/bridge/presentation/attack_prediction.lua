@@ -11,6 +11,7 @@ return function(policy)
                 delay = weapon.delay,
                 maximum = weapon.maximum,
                 charge = weapon.charge,
+                chargeLimit = weapon.chargeLimit,
                 untilShot = math.max(0, math.floor(weapon.delay) + 1),
             }
         end
@@ -24,7 +25,8 @@ return function(policy)
                 if not input.firing then
                     weapon.charge = 0
                 elseif weapon.delay <= 0 then
-                    weapon.charge = math.min(mode.charge, weapon.charge + frames)
+                    weapon.charge =
+                        math.max(weapon.charge, math.min(mode.charge, weapon.charge + frames))
                 end
                 weapon.delay = math.max(-1, weapon.delay - frames)
             elseif mode.tears then

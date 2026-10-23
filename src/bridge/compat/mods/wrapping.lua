@@ -16,7 +16,7 @@ function wrapping.cleanup(cleanups)
         pcall(cleanups[i])
     end
 end
--- Inspect only closures belonging to the fingerprinted Mod, with bounded depth.
+-- Inspect only closures belonging to the identified Mod, with bounded depth.
 function wrapping.find(fn, predicate)
     local seen, budget = {}, 600
     local priority = { self = 1, boundArgs = 1, callbackFn = 1, record = 1, fn = 2 }

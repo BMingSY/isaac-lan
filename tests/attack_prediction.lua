@@ -7,8 +7,16 @@ local weapons = { WEAPON_TEARS = 1, WEAPON_BRIMSTONE = 2, WEAPON_KNIFE = 4, WEAP
 local policy = module("compat/items/attack_preview")(weapons, {}, fields, {}, {}, {})
 local prediction = module("presentation/attack_prediction")(policy)
 local pose = module("sync/weapon_pose")
-local function snapshot(kind, delay, maximum, charge)
-    return { [2] = { kind = kind, delay = delay, maximum = maximum, charge = charge } }
+local function snapshot(kind, delay, maximum, charge, chargeLimit)
+    return {
+        [2] = {
+            kind = kind,
+            delay = delay,
+            maximum = maximum,
+            charge = charge,
+            chargeLimit = chargeLimit or maximum * (({ [2] = 1, [4] = 4, [9] = 3 })[kind] or 0),
+        },
+    }
 end
 local function close(a, b)
     assert(math.abs(a - b) < 0.00001, a .. " ~= " .. b)
@@ -77,14 +85,36 @@ for _, case in ipairs({ { 2, 32, 32 }, { 4, 10, 40 }, { 9, 10, 30 } }) do
     close(model:step(6, 1 / 60, true, false)[2].charge, 0.5)
 end
 local stalled = prediction.new(snapshot(1, -1, 0, 0), 0, 0)
+-- Character/item modifiers can change charging independently of fire delay.
+local modified = prediction.new(snapshot(2, -1, 10, 35, 40), 0, 0)
+close(modified:step(1, 1 / 60, true, false)[2].charge, 35.5)
+modified:confirm(snapshot(2, -1, 10, 45, 40), 1, 1)
+close(modified:step(2, 1 / 60, true, false)[2].charge, 45)
 for sequence = 1, 5 do
     stalled:step(sequence, 0.05, true, true)
 end
 assert(stalled:step(6, 0.05, true, true) == nil, "A stalled connection kept inventing attacks")
 
 local opaque = "costume and native layer bytes\0\255"
-local bytes = string.pack(">BBI4I4fBBI4fffBBB", 1, 0, 9, 12, 45, 0, 1, 2, -1, 32, 4, 0, 0, 0)
-    .. opaque
+local bytes = string.pack(
+    ">BBI4I4fBBI4ffffI4BBB",
+    1,
+    0,
+    9,
+    12,
+    45,
+    0,
+    1,
+    2,
+    -1,
+    32,
+    4,
+    128,
+    1,
+    0,
+    0,
+    0
+) .. opaque
 local decoded = pose.read(bytes)
 close(decoded[2].charge, 4)
 decoded[2].charge, decoded[2].delay = 7, 123

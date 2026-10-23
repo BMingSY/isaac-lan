@@ -128,7 +128,7 @@ return function(fields)
             { -0.7071, -0.7071 },
         }
         local maxSweepStep, maxSweepDistance = 4, 256
-        local function sweep(room, from, wanted, radius, flying, controls)
+        local function sweep(room, from, wanted, radius, flying, controls, authority)
             local function clear(position)
                 local aperture = controls and doorCorridor(room, position) ~= nil
                 if not clearForPlayer(room, position, aperture, flying) then
@@ -147,6 +147,17 @@ return function(fields)
                     end
                 end
                 return true
+            end
+            -- A native arrival, changed grid or conservative footprint can leave
+            -- the old display overlapping a wall. Sweeping every correction from
+            -- that invalid origin would reject every subsequent step forever.
+            -- Only reconciliation may recover from the host's accepted position;
+            -- ordinary prediction still sweeps every local movement segment.
+            if authority and not clear(from) then
+                from = authority
+                if not clear(from) then
+                    return authority
+                end
             end
             local aperture = controls and doorCorridor(room, wanted) ~= nil
             if not aperture then
@@ -184,11 +195,12 @@ return function(fields)
             -- Native room and Mod presentation updates run after receiving a packet.
             -- Reassert authoritative actor poses at the render boundary so local
             -- callbacks cannot replace a body or start an unrelated dance.
-            local extraAnimationMovement = {}
+            local extraAnimationMovement, actorByID = {}, {}
             for _, actor in ipairs(actorVisuals) do
                 local p = view.player(actor[Actor.index])
                 if p and p.ControllerIndex == actor[Actor.controller] then
                     actorsPresentation.apply(p, actor)
+                    actorByID[actor[Actor.entity][Entity.id]] = actor
                     extraAnimationMovement[actor[Actor.entity][Entity.id]] =
                         actionAllowsMovement(p, actor)
                 end
@@ -198,6 +210,9 @@ return function(fields)
             lastRender = now
             local status = view.status()
             if status.pause ~= 0 then
+                if view.doors then
+                    view.doors.reset()
+                end
                 if view.attacks then
                     view.attacks.reset()
                 end
@@ -238,13 +253,24 @@ return function(fields)
                             end
                         end
                         if not controls then
+                            if m.doorway and view.doors then
+                                view.doors.cancel()
+                            end
                             m.doorway = nil
                         end
                         assert(native.rooms_with_player(status.slot, function()
                             local room = view.room()
                             local radius = math.max(5, e.Size)
-                            local function resolve(from, wanted)
-                                return sweep(room, from, wanted, radius, p.CanFly, controls)
+                            local function resolve(from, wanted, authority)
+                                return sweep(
+                                    room,
+                                    from,
+                                    wanted,
+                                    radius,
+                                    p.CanFly or p:IsCoopGhost(),
+                                    controls,
+                                    authority
+                                )
                             end
                             position = m.prediction:step(
                                 controls and direction or Vector(0, 0),
@@ -252,7 +278,8 @@ return function(fields)
                                 p.MoveSpeed,
                                 dt,
                                 not controls,
-                                resolve
+                                resolve,
+                                p.Friction
                             )
                             if m.doorway then
                                 local door = room:GetDoor(m.doorway.slot)
@@ -263,6 +290,9 @@ return function(fields)
                                     or now - m.doorway.at > 0.5
                                 then
                                     m.doorway = nil
+                                    if view.doors then
+                                        view.doors.cancel()
+                                    end
                                 end
                             end
                             local slot, outward, along = doorCorridor(room, position)
@@ -279,6 +309,9 @@ return function(fields)
                                     at = now,
                                     position = position,
                                 }
+                                if view.doors then
+                                    view.doors.begin()
+                                end
                             end
                             if m.doorway then
                                 -- Await the host's room commit at the doorway. Do not
@@ -288,11 +321,22 @@ return function(fields)
                             end
                             position = resolve(
                                 m.prediction.teleported and m.prediction.base or m.display,
-                                position
+                                position,
+                                m.target
                             )
                             m.prediction.teleported = false
                         end))
                         m.prediction:clip(position)
+                        if actorsPresentation.walk and actorByID[identifier] then
+                            actorsPresentation.walk(
+                                p,
+                                actorByID[identifier],
+                                m,
+                                direction,
+                                dt,
+                                controls
+                            )
+                        end
                         if view.metrics and view.metrics.enabled and m.prediction.errorSquared then
                             local error = math.sqrt(m.prediction.errorSquared)
                             corrections = corrections + 1
@@ -325,6 +369,7 @@ return function(fields)
                             -- later form cannot replay another body's pending path.
                             m.prediction:reset(m.target, m.prediction.acknowledged, m.velocity * 60)
                             m.doorway = nil
+                            m.walk = nil
                         end
                         -- Continue from the same display trajectory across packet
                         -- gaps. Only the authority error is smoothed, without a
@@ -361,6 +406,13 @@ return function(fields)
             end,
             reset = function(clearMetrics)
                 lastRender, captured = nil, nil
+                if view.doors then
+                    if clearMetrics then
+                        view.doors.reset()
+                    else
+                        view.doors.arrive()
+                    end
+                end
                 if view.attacks then
                     view.attacks.reset()
                 end

@@ -89,6 +89,9 @@ local function advance(self, input, resolve)
     local elapsed = input.dt
     while elapsed > 0 do
         local dt = math.min(elapsed, 1 / nativeRate)
+        -- Grid/creep friction is applied before position integration and walking
+        -- acceleration. MoveSpeed alone does not describe a slowed actor.
+        self.velocity = self.velocity * input.friction ^ (dt * nativeRate)
         -- Native position integration precedes walking acceleration on each
         -- half tick. Integrating the new velocity advances starts and reversals
         -- too early and underestimates the distance travelled after release.
@@ -105,7 +108,7 @@ local function advance(self, input, resolve)
         elapsed = elapsed - dt
     end
 end
-function methods:step(direction, sequence, speed, dt, locked, resolve)
+function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
     dt = math.max(0, math.min(dt, 0.05))
     self.errorSquared = nil
     if self.rebuild then
@@ -141,6 +144,7 @@ function methods:step(direction, sequence, speed, dt, locked, resolve)
                 speed = speed,
                 dt = elapsed,
                 locked = locked,
+                friction = math.max(0, math.min(friction or 1, 1)),
             }
             self.pending[#self.pending + 1] = input
             advance(self, input, resolve)

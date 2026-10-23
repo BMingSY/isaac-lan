@@ -150,7 +150,7 @@ local attacks = module("presentation/attacks")(fields)({
 })
 local function weapon(kind, charge)
     return string.pack(
-        ">BBI4I4fBBI4fffBBB",
+        ">BBI4I4fBBI4ffffI4BBB",
         0,
         0,
         0,
@@ -162,6 +162,8 @@ local function weapon(kind, charge)
         -1,
         10,
         charge or 0,
+        kind == 2 and 10 or 0,
+        0,
         0,
         0,
         0

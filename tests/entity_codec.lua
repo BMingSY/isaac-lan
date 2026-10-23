@@ -159,8 +159,9 @@ local expected = {
     0,
     false,
     0,
+    false,
 }
-assert(codec.encode(state) == codec.encode(expected), "Schema-26 entity bytes changed")
+assert(codec.encode(state) == codec.encode(expected), "Schema-31 entity bytes changed")
 assert(state[1] == 1 and state[10] == false and state[20] == "native laser path")
 assert(laserReads == 1 and #state[9] == 11, "SampleLaser userdata must stay outside scalar fields")
 component.apply(target, state)
@@ -310,7 +311,7 @@ local packedNative = {
         return kind == 1000 and template or false
     end,
     entity_fields_capture = function(_, template)
-        assert(#template == 27)
+        assert(#template == 28)
         local value = {}
         for i, field in ipairs(template) do
             value[i] = field ~= false and unpacked[i] or false
@@ -327,7 +328,7 @@ local packedNative = {
         return packedFields
     end,
     entity_fields_apply = function(_, template, value)
-        if #template == 27 then
+        if #template == 28 then
             assert(value[2] == 1000 and value[6][1] == unpacked[6][1])
             applied[#applied + 1] = "outer"
         else

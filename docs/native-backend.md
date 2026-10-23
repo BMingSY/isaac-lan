@@ -24,6 +24,14 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 精灵载荷以格式号 `2` 开头，主动画与叠加动画各保存存在标记、浮点帧、播放标记、当前／历史事件位图、图层与挂点层的 ID／帧索引。可移植契约见 [animation_pose.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/animation_pose.h)：最多 64 个图层、256 个挂点层，帧索引为 `-1` 或小于 65535 的整数；拒绝重复 ID、非法标记与非有限帧。J460 的动画状态 `+0x8/+0xc` 分别引用图层／挂点帧数组，动画数据 `+0x20/+0x24` 为挂点描述数组与数量，每项 16 字节，帧数位于项内 `+0xc`。事件位图位于动画状态 `+0x18/+0x1c`。所有数组由游戏持有，恢复只按本机 ID 与帧数边界写入；空层允许游戏自身使用的初始游标 `0` 和重置游标 `-1`，不将游标用作数组下标。不分配或替换原生数组。动画名未变化时直接恢复这些完整状态，名称变化仍调用游戏动画切换接口。
 
+`sprite_animation_length(sprite)` 只读取当前主动画数据 `+0x30` 的总帧数，限制 `0..65535`，无动画返回 0。接受实体借用或 Lua 自有 Sprite，不分配资源、不推进实体；本地步行动画按该长度和原生 30 Hz 节拍保留小数帧。
+
+`actor_pose` 的五个武器槽来自 `Player+0x13dc`。每个现有槽读取原生虚表第 6 项 `GetMaxCharge`（thiscall，浮点返回）和 `Weapon+0x34` 修正标志；蓄力上限必须有限且非负。写入只针对客机已存在且类型匹配的武器，不创建武器、不执行攻击；上限作为显示元数据，修正标志与蓄力一并恢复。武器记录格式见[状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#完整视图与实体身份)。
+
+`familiar_tether(sprite)` 限定跟班实体借用 Sprite，检查 `Familiar+0xee0` 的 `UmbilicalBabyData` 虚表 RVA `0x71d264`。返回最多 256 个 XYZ 点和绳索借用 Sprite，无此组件返回 `false`。组件 `+0x8/+0xc/+0x10/+0x14` 为原生 deque 的映射、容量、首项和数量，Sprite 位于 `+0x18`；映射容量限定为不超过 4096 的二次幂，所有坐标必须有限。
+
+`familiar_tether_render(entitySprite, ropeSprite, bytes)` 仅允许客机绘制，完整校验点载荷后调用 J460 RVA `0x35290` 的原生绳索绘制方法。只在调用期间借用已有跟班及 Lua 自有绳索 Sprite，构造栈上只读 deque 视图并临时替换组件指针，返回即恢复。不构造／析构原生组件、不转移 Sprite 所有权、不执行跟班 AI 或武器更新。入口字节受启动签名校验。
+
 | 能力与实现 | 原生边界 | 校验与所有权 |
 | --- | --- | --- |
 | [持有炸弹](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/held_bombs.h) `boss_held_bombs` | Lua API 不暴露 NPC `+0xbf0` 的持有容器；Hornfel 为两槽，Horny Boys 为三槽 | 读取本机实体索引，由兼容组件转换为同步 ID；客机写入校验 Boss、炸弹类型和槽数，使用游戏 resize 与 `EntityPtr.Assign`，容器仍由游戏析构 |
@@ -90,6 +98,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 回退使用者源房只在完整权威房间、无借用作用域时激活；不激活客机远端存储壳，不跨清理持有 Room Scope。来源和回放参数由运行事务维护，选路与对象分配／释放由原版负责。
 
 联机拦截 `Manager::SaveGame` 的文件写入时仍执行 `Game::CaptureState`。采集包含原生玩家离房清理，调用方随后恢复进房临时效果；两者必须配对。捕获结果只保存在原生 GameState 中，单人存档由会话备份保护，联机退出写入独立会话存档。个人进度合并完成后，`session::persistProgress` 按原生顺序调用 `Progress::SaveCloud`（RVA `0x528ee0`）和 `Progress::SaveFile`（RVA `0x5294f0`），两者均为 `thiscall void(Manager+0x14)`，由原生打开并关闭流；不能直接调用需要已打开流的 `Serialize`。该接口只保存当前存档槽的进度，不分配角色或写入局内存档。
+
+客机恢复与原生更新使用 `ProgressReadOnlyScope`，按栈保存并恢复 `Manager+0x14` 进度对象的 `+1` 只读位。J460 收藏记录更新（RVA `0x52a2d0`）与成就尝试（RVA `0x529a20`）均先检查此位；复制权威成就／计数不通过这些方法，因此不被拦截。作用域结束恢复原值，不改变主机进度、会话合并或退出持久化。
 
 ## HUD 与本机输入
 
@@ -173,6 +183,6 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；绘制时借入本机状态并完整恢复全局标量 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 30、网络消息版本为 38；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 31、网络消息版本为 39；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。

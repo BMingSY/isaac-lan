@@ -705,9 +705,8 @@ void transitionCharge() {
     held.triggered = 0xffff;
     const auto transfer = isaac::input::transitionInput(held, true);
     for (unsigned action = 0; action < actionCount; ++action)
-        require(transfer.values[action] ==
-                    ((action >= 4 && action < 8) || action == 12 || action == 15 ? 65535 : 0),
-                "Room transfer released charge or retained movement/item controls");
+        require(transfer.values[action] == (action < 8 || action == 12 || action == 15 ? 65535 : 0),
+                "Room transfer stopped held directions or replayed an item control");
     require(transfer.triggered == menuActionMask, "Transfer replayed a gameplay edge");
     require(isaac::input::transitionInput({}, true).values[4] == 0,
             "Real shooting release was swallowed");

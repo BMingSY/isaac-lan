@@ -2,7 +2,7 @@ return function(wire)
     local Entity, Sprite, Spritesheet = wire.entity, wire.sprite, wire.spritesheet
     local FLOOR_DEPTH_BIAS = 10000
     -- Engine values become explicit portable fields; this component owns no room or transport.
-    return function(native, schemas, npcState, visualCompatibility, entityLinks)
+    return function(native, schemas, npcState, visualCompatibility, entityLinks, tethers)
         local function localEffect(e, kind)
             kind = kind or e.Type
             return kind == schemas.types.ENTITY_EFFECT
@@ -66,6 +66,7 @@ return function(wire)
                         false, -- Entity.minecart
                         false, -- Entity.nativeFields
                         false, -- Entity.held
+                        false, -- Entity.tether
                     }
                     if native.entity_fields_encode then
                         for _, field in ipairs({
@@ -272,6 +273,7 @@ return function(wire)
                     false, -- Entity.minecart
                     false, -- Entity.nativeFields
                     false, -- Entity.held
+                    false, -- Entity.tether
                 }
             value[Entity.id] = id(e, kind)
             value[Entity.sprite] = visual and sprite(s) or false
@@ -287,12 +289,16 @@ return function(wire)
                 or false
             value[Entity.minecart] = visual and entityLinks.capture(e, id) or 0
             value[Entity.held] = visual and entityLinks.captureHeld(e, id) or 0
+            value[Entity.tether] = visual and tethers and tethers.capture(e, id, sprite) or false
             value[Entity.nativeFields] = packedPlans[kind]
                     and assert(native.entity_fields_encode(s, packedPlans[kind]))
                 or false
             return value
         end
         local function applyEntity(e, v)
+            if tethers then
+                tethers.apply(e, v[Entity.tether], applySprite)
+            end
             local s = e:GetSprite()
             local kind = v[Entity.type]
             local plan = plans[kind]
@@ -361,6 +367,9 @@ return function(wire)
             capture = entity,
             apply = applyEntity,
             link = function(e, v, ref)
+                if tethers and v[Entity.tether] then
+                    tethers.link(e, v[Entity.tether], ref)
+                end
                 entityLinks.apply(e, v[Entity.minecart], ref)
                 entityLinks.applyHeld(e, v[Entity.held], ref)
                 if visualCompatibility and visualCompatibility.link then

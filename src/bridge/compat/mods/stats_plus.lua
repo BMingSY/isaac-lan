@@ -7,8 +7,6 @@ local definition = {
     targets = {
         {
             workshopId = "2729900570",
-            metadataVersion = "2.1.3",
-            sourceHash = "f9bce56542b60f8f0291cf1fb6d85c059c87f841e1efa7b82ecef794e4a3bab2",
         },
     },
 }
