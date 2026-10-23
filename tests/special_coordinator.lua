@@ -83,11 +83,14 @@ s = { phase = 3, scene = 2, prepared = true }
 flags[2], now = true, 5000
 coordinator()
 -- A native ending reaches the lobby before the suite's gameplay-exit grace.
-s = { phase = 2, scene = 1, prepared = false }
+s = { phase = 2, scene = 1, prepared = false, players = 2 }
 now = 8499
 coordinator()
 assert(commands == 1 and closes == 0)
 now = 8501
+coordinator()
+assert(closes == 0, "Host closed before the guest finished its native ending")
+s.players = 1
 coordinator()
 assert(closes == 1 and passes == 0, "Native lobby cleanup was skipped or ended early")
 coordinator()
