@@ -7,6 +7,15 @@ import re
 
 
 ROOT = Path(__file__).resolve().parents[2]
+MIN_SCENARIO_SECONDS = 3600
+SUITE_OVERHEAD_SECONDS = 120
+SECONDS_PER_CASE = 60
+
+
+def scenario_timeout(case_count):
+    # The overall deadline includes floor loads and transitions for every case.
+    # Per-case progress deadlines remain enforced by the native fixture.
+    return max(MIN_SCENARIO_SECONDS, SUITE_OVERHEAD_SECONDS + SECONDS_PER_CASE * case_count)
 
 
 def catalog():

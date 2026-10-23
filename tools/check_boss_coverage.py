@@ -5,7 +5,27 @@ import argparse
 import json
 from pathlib import Path
 
-from testing.bosses import catalog
+from testing.bosses import catalog, evidence
+
+
+def load_partial_arena(path):
+    value = json.loads(path.read_text())
+    engine = json.loads((path.parent / "engine/result.json").read_text())
+    logs = {
+        role: (path.parent / "engine" / role / "log.txt").read_text(errors="replace")
+        for role in ("host", "client")
+    }
+    value["stop_reason"] = engine.get("error")
+    value["interrupted_cleanly"] = (
+        engine.get("clean_exit") is True
+        and not engine.get("close_errors")
+        and value["stop_reason"]
+        in {"Test interrupted by signal 15", "Two-process engine synchronization test timed out"}
+        and all("LAN_NETWORK FAILED" not in log for log in logs.values())
+    )
+    # Re-read archived assertions; the original failed report remains unchanged.
+    value["peers"] = {role: evidence(log, value["cases"]) for role, log in logs.items()}
+    return value
 
 
 def summarize(arena_reports, ending_reports, special_reports, partial_reports=()):
@@ -55,7 +75,13 @@ def summarize(arena_reports, ending_reports, special_reports, partial_reports=()
             ):
                 accepted.add(key)
         arenas.update(accepted)
-        partial.append({"index": index, "completed_cases": sorted(accepted)})
+        partial.append(
+            {
+                "index": index,
+                "stop_reason": report.get("stop_reason"),
+                "completed_cases": sorted(accepted),
+            }
+        )
     data = catalog()
     missing_arena = [case["key"] for case in data["arena"] if case["key"] not in arenas]
     missing_routes = [
@@ -86,29 +112,11 @@ def main():
         type=Path,
         action="append",
         default=[],
-        help="Retain completed cases from a deliberately interrupted, cleanly closed arena run",
+        help="Retain completed cases after a clean manual stop or overall arena deadline",
     )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    partial = []
-    from testing.bosses import evidence
-
-    for path in args.partial_arena:
-        value = json.loads(path.read_text())
-        engine = json.loads((path.parent / "engine/result.json").read_text())
-        value["interrupted_cleanly"] = (
-            engine.get("clean_exit") is True
-            and engine.get("error") == "Test interrupted by signal 15"
-        )
-        # Re-read the archived per-case assertions, including duplicate markers.
-        value["peers"] = {
-            role: evidence(
-                (path.parent / "engine" / role / "log.txt").read_text(errors="replace"),
-                value["cases"],
-            )
-            for role in ("host", "client")
-        }
-        partial.append(value)
+    partial = [load_partial_arena(path) for path in args.partial_arena]
     report = summarize(
         *[
             [json.loads(path.read_text()) for path in getattr(args, kind)]

@@ -168,6 +168,8 @@ UDP 选择 `--transport udp --latency-ms 45 --relay-control tests/fixtures/udp_w
 | 全部 Boss | [run_bosses.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_bosses.py)：完整 [boss_catalog.json](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/boss_catalog.json)，包含原生阶段机制；用 [check_boss_coverage.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/check_boss_coverage.py) 合并 Boss、结局与贪婪结果，主客机均无缺项 |
 | 正常路线机制 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 选 `greed`、`greedier`、`knife`、`hornfel`：两种贪婪全程、矿车／逃亡、持有炸弹、跨层与重连 |
 
+Boss 整组时限按用例数量预留加载与转场时间，单项进度断言独立生效。整组因人工停止或总时限结束且双端正常退出、资料恢复成功时，覆盖工具可通过 `--partial-arena` 读取原始双端日志，只保留已完成且无重复的单项断言；缺少一端、断言失败和异常退出不计入。原整组报告保持失败，剩余用例用 `--case` 补跑，再汇总全部覆盖。
+
 错误技、达摩剑、创世纪、小夜灯，EID／举袋／水流／切窗口暂停，道具与弹幕压力，输入响应／镜头，以及全道具／卡牌／药丸／角色／Mod 遍历均不列入发版检查，也不因版本包含相关改动而自动追加。用户明确要求时再增加发布专项。已有开发回归结果可以引用，旧验收记录和未决问题保持原结论。完整规则见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md#发布前验收范围)。
 
 ## 开发专项入口
