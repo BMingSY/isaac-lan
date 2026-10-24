@@ -28,7 +28,9 @@ return {
     },
     subplayer = { type = 1, hearts = 2 },
     input = { left = 1, right = 2, up = 3, down = 4 },
+    combat = { none = 0, target = 1, projectile = 2 },
     item = { id = 1, count = 2 },
+    temporaryEffect = { kind = 1, id = 2, count = 3 },
     active = { id = 1, charge = 2 },
     resources = {
         coins = 1,
@@ -84,6 +86,7 @@ return {
         nativeFields = 26,
         held = 27,
         tether = 28,
+        combat = 29,
     },
     room = {
         clear = 1,

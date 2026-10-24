@@ -1,12 +1,13 @@
 """Release evidence must identify missing floors and Bosses, even after a win."""
 
 from pathlib import Path
+import json
 import sys
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from testing.bosses import build, catalog, select_cases
+from testing.bosses import build, catalog, select_cases, scenario_timeout
 from testing.endings import build as build_endings
 from testing.bosses import COMPLETION, evidence
 from testing.endings import route_evidence
@@ -39,6 +40,13 @@ def test_boss_success_requires_every_unique_result():
     assert not evidence("\n".join([COMPLETION, *rows]).replace("visible=90", "visible=0"), cases)[
         "passed"
     ]
+
+
+def test_full_boss_suite_budget_includes_every_encounter_and_floor_load():
+    # A complete 107-case run reached its old 3600-second cap after only 100 cases.
+    cases = select_cases()
+    assert scenario_timeout(len(cases)) >= 60 * len(cases)
+    assert scenario_timeout(7) == 3600
 
 
 def test_mother_win_does_not_hide_missing_alternate_floor():
@@ -131,6 +139,57 @@ def test_interrupted_boss_coverage_requires_both_completed_assertions_and_clean_
     report["interrupted_cleanly"] = False
     assert summarize([], [], [], [report])["arena_passed"] == 0
     assert summarize([], [], [], [report])["rejected_reports"]
+
+
+@pytest.mark.parametrize(
+    "error,clean_exit,failed_marker,cleanup_error,accepted",
+    [
+        ("Test interrupted by signal 15", True, False, False, True),
+        ("Two-process engine synchronization test timed out", True, False, False, True),
+        ("Two-process engine synchronization test timed out", False, False, False, False),
+        ("Two-process engine synchronization test timed out", True, True, False, False),
+        ("Two-process engine synchronization test timed out", True, False, True, False),
+        ("Boss encounter stopped progressing", True, False, False, False),
+        ("Client process exited unexpectedly", False, False, False, False),
+        (None, True, False, False, False),
+    ],
+)
+def test_partial_boss_evidence_retains_only_completed_cases_after_safe_stop(
+    tmp_path, error, clean_exit, failed_marker, cleanup_error, accepted
+):
+    from check_boss_coverage import load_partial_arena, summarize
+
+    cases = select_cases(keys=["boss-1", "boss-82"])
+    path = tmp_path / "report.json"
+    original = json.dumps({"passed": False, "restored": True, "cases": cases})
+    path.write_text(original)
+    for role in ("host", "client"):
+        log = tmp_path / "engine" / role / "log.txt"
+        log.parent.mkdir(parents=True)
+        lines = ["ALL_BOSSES PASS key=boss-1 live=50 visible=50 views=50"]
+        if role == "host":
+            lines.append("ALL_BOSSES PASS key=boss-82 live=50 visible=50 views=50")
+        if failed_marker and role == "client":
+            lines.append("LAN_NETWORK FAILED Boss encounter stopped progressing")
+        log.write_text("\n".join(lines))
+    (tmp_path / "engine/result.json").write_text(
+        json.dumps(
+            {
+                "error": error,
+                "clean_exit": clean_exit,
+                "close_errors": ["host: heap watcher did not finish"] if cleanup_error else [],
+            }
+        )
+    )
+    partial = load_partial_arena(path)
+    result = summarize([], [], [], [partial])
+    assert not result["passed"]
+    assert result["arena_passed"] == (1 if accepted else 0)
+    assert "boss-82" in result["missing_arena"]
+    assert bool(result["rejected_reports"]) is not accepted
+    if accepted:
+        assert result["interrupted_arena_reports"][0]["stop_reason"] == error
+    assert path.read_text() == original
 
 
 def test_current_scene_checks_replica_identity_instead_of_unrelated_effect_count(tmp_path):

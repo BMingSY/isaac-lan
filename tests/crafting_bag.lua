@@ -175,12 +175,16 @@ local function environment()
         end,
         state_clock = noop,
         sound_reset = noop,
+        combat_reset = function()
+            return true
+        end,
         presentation_reset = noop,
         rewind_reset = noop,
     }
     local modules = {}
     for _, name in ipairs({
         "sync/codec",
+        "sync/combat_state",
         "sync/layers",
         "presentation/timeline",
         "presentation/attacks",
@@ -217,7 +221,8 @@ local function environment()
     end
     modules["sync/entity_links"] = dofile(root .. "/src/bridge/sync/entity_links.lua")
     modules["compat/bosses/held_bombs"] = dofile(root .. "/src/bridge/compat/bosses/held_bombs.lua")
-    modules["compat/bosses/visuals"] = dofile(root .. "/src/bridge/compat/bosses/visuals.lua")
+    modules["compat/items/split_body"] = module("compat/items/split_body")
+    modules["compat/visuals"] = dofile(root .. "/src/bridge/compat/visuals.lua")
     modules["compat/bosses/dogma"] = function()
         return {}
     end
@@ -247,12 +252,12 @@ local function environment()
         "compat/routes/crawlspace",
         "compat/characters/forgotten",
         "compat/items/glitched",
-        "compat/items/temporary_effects",
+        "sync/temporary_effects",
     }) do
         modules[name] = inert
     end
     modules["presentation/actors"] = function()
-        return { apply = noop, reset = noop }
+        return { apply = noop, reset = noop, departFloor = noop }
     end
     modules["presentation/motion"] = function()
         return { present = noop, reset = noop, track = noop }
@@ -265,6 +270,11 @@ local function environment()
     end
     modules["presentation/doors"] = function()
         return { render = noop }
+    end
+    modules["presentation/hits"] = function()
+        return function()
+            return { confirm = noop, present = noop, reset = noop, validate = noop }
+        end
     end
     modules["presentation/attacks"] = function()
         return function()
@@ -344,6 +354,9 @@ local function environment()
                 return { confirm = noop }
             end,
         },
+        _IsaacLanStatus = function()
+            return { slot = 1 }
+        end,
         _IsaacLanModules = modules,
         ItemType = { ITEM_ACTIVE = 2 },
         NullItemID = { ID_LOST_CURSE = 1 },

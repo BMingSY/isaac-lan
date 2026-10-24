@@ -29,6 +29,7 @@ local tuple = {
     string.rep(string.pack(">i4B", 0, 0), 15),
     "",
     0,
+    string.pack(">I4", 0),
 }
 local view = schema.unpack(tuple, 42)
 assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses == 5)
@@ -39,7 +40,7 @@ for prior = 16, schema.VERSION - 1 do
     malformed[1] = prior
     assert(not pcall(schema.unpack, malformed, 42))
 end
-malformed[1], malformed[23] = schema.VERSION, true
+malformed[1], malformed[24] = schema.VERSION, true
 assert(not pcall(schema.unpack, malformed, 42))
 view.room = nil
 assert(not pcall(schema.pack, view))
@@ -99,12 +100,14 @@ local begin = module("runtime/transitions")(native, floor, compatibility, functi
     return level
 end, function()
     order[#order + 1] = "reset"
+end, function(animation, same)
+    order[#order + 1] = "departure:" .. animation .. ":" .. tostring(same)
 end)
 assert(begin(8, 4, 4, 0, false, nil, 0, 0, -8))
 assert(sourceRoom == -8, "Floor event lost the authoritative departure room")
-assert(table.concat(order, ",") == "reset,set-stage,floor:0:0")
-assert(not begin(8, 1, 0, 0, false, false, 1) and #order == 3)
-assert(not begin(7, 1, 0, 0, false) and #order == 3)
+assert(table.concat(order, ",") == "reset,set-stage,floor:0:0,departure:0:false")
+assert(not begin(8, 1, 0, 0, false, false, 1) and #order == 4)
+assert(not begin(7, 1, 0, 0, false) and #order == 4)
 assert(sourceRoom == -8, "Rejected events replaced the pending floor source")
 ready = false
 assert(floor.waiting() and not floor.ready(level, 8, 4, 4))

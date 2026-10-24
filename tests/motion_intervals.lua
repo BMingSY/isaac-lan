@@ -19,6 +19,9 @@ end
 function vector:Length()
     return math.sqrt(self.X * self.X + self.Y * self.Y)
 end
+function vector:Dot(other)
+    return self.X * other.X + self.Y * other.Y
+end
 local now, pause = 0, 0
 local motion = dofile(root .. "/src/bridge/presentation/motion.lua")(
     dofile(root .. "/src/bridge/sync/fields.lua")
@@ -204,6 +207,7 @@ local collision = {
 local actor =
     { 1, 2, { 1 }, {}, { { "body", "LiftItem" } }, false, false, { string.rep("\0", 12), true } }
 local doorBlocked = false
+local doorPreview, doorBegins = nil, 0
 local localMotion = assert(
     loadfile(
         root .. "/src/bridge/presentation/motion.lua",
@@ -217,6 +221,13 @@ local localMotion = assert(
     end,
 }, { apply = function() end }, {
     doors = {
+        preview = function()
+            return doorPreview
+        end,
+        begin = function()
+            doorBegins = doorBegins + 1
+        end,
+        cancel = function() end,
         movementBlocked = function()
             return doorBlocked
         end,
@@ -654,6 +665,40 @@ assert(
     "Arrival failed to resume normal acceleration"
 )
 print("PASS arrival hold, delayed acknowledgement and immediate local acceleration")
+local keyDoor = { Position = Vector(200, 100), open = false }
+function keyDoor:IsOpen()
+    return self.open
+end
+room.GetDoor = function(_, slot)
+    return slot == 2 and keyDoor or nil
+end
+room.GetGridCollisionAtPos = function(_, position)
+    return position.X >= 180 and collision.COLLISION_WALL or collision.COLLISION_NONE
+end
+localState.target, localState.display = Vector(150, 100), Vector(150, 100)
+localState.prediction = prediction.new(localState.target)
+localState.doorway = nil
+localMotion.reset()
+for s = 0, 20 do
+    assert(localRender(s) <= 170, "Closed door admitted ordinary prediction")
+end
+doorPreview = 2
+for s = 21, 40 do
+    assert(localRender(s) <= 182.001, "Unlock preview left the source room")
+end
+assert(
+    player.Position.X > 178 and doorBegins == 0,
+    "Key approach froze or hid an unconfirmed unlock"
+)
+keyDoor.open, doorPreview = true, nil
+localRender(41)
+assert(doorBegins == 1, "Confirmed unlock failed to begin the normal room handoff")
+keyDoor.open = false
+localState.doorway = nil
+localState.target = Vector(170, 100)
+localState.prediction:confirm(localState.target, 42, Vector(0, 0), 42)
+assert(localRender(42) <= 170.001, "Rejected approach could not reconcile behind the closed door")
+print("PASS key approach, source-room limit, authority confirmation and denial recovery")
 -- Receipt jitter must not restart a remote projectile's simulation clock.
 motion.reset(true)
 state, pause = {}, 0

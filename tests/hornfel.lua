@@ -59,7 +59,7 @@ for _, kind in ipairs({ 906, 920 }) do
     local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(function(x, y)
         return { X = x, Y = y }
     end, enums.EntityType, enums.EffectVariant)
-    local visual = dofile(root .. "/src/bridge/compat/bosses/visuals.lua")(dogma, hornfel)
+    local visual = dofile(root .. "/src/bridge/compat/visuals.lua")(dogma, hornfel)
     local boss, first, second = entity(kind, 10, 101), entity(4, 11, 102), entity(4, 12, 103)
     local third = entity(4, 13, 104)
     boss.held = { first, second, count == 3 and third or nil }

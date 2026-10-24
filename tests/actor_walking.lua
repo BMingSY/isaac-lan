@@ -83,3 +83,21 @@ body.name = "WalkDown"
 component.walk(player, actor, model, direction(1, 0), 1 / 60, false)
 assert(body.name == "WalkDown" and model.walk == nil)
 print("PASS immediate local walking, fractional frames, costume lengths, aiming and action locks")
+
+local departures = 0
+function player:AnimateTrapdoor()
+    departures = departures + 1
+end
+component.departFloor(player, 0, false)
+assert(departures == 1, "Accepted descent omitted the native departure pose")
+component.departFloor(player, 0, true)
+for animation = 1, 6 do
+    component.departFloor(player, animation, false)
+end
+assert(departures == 1, "Non-descent transition acquired an unrelated jump")
+player.IsCoopGhost = function()
+    return true
+end
+component.departFloor(player, 0, false)
+assert(departures == 1, "Co-op ghost acquired a living body's jump")
+print("PASS floor descent, other transition ownership and ghost presentation")

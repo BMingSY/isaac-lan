@@ -304,6 +304,9 @@ return function(fields)
             end))
         end
         local function commit(value, tick, ack)
+            if deps.hits then
+                deps.hits.confirm(value, tick, deps.now(), ref)
+            end
             if deps.attacks then
                 deps.attacks.confirm(value, tick, ack, deps.now(), ref)
             end
@@ -349,6 +352,9 @@ return function(fields)
             if pendingBytes ~= bytes or pendingTick ~= tick then
                 pendingBytes, pendingTick, pendingValue = nil, nil, nil
                 local decoded = worldSchema.unpack(decode(bytes), tick)
+                if deps.hits then
+                    deps.hits.validate(decoded.combat)
+                end
                 if stable and #stable > 0 then
                     assert(deps.layers, "Missing view dependency decoder")
                     if stableBytes ~= stable then
@@ -420,6 +426,9 @@ return function(fields)
         end
 
         local function resetView()
+            if deps.hits then
+                deps.hits.reset()
+            end
             if deps.attacks then
                 deps.attacks.reset()
             end

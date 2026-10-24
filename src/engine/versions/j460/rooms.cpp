@@ -4,6 +4,7 @@
 #include "engine/pause_menu.h"
 #include "engine/visuals.h"
 #include "engine/audio.h"
+#include "engine/combat_feedback.h"
 #include "engine/input.h"
 #include "engine/rewind.h"
 #include "engine/presentation.h"
@@ -2694,7 +2695,8 @@ bool render(void* g, RoomCall original, int slot) {
     withView([&] {
         audio::present();
         presentation::pickup_preview::prepare();
-        presentation::items::withScreen([&] { original(g); });
+        presentation::items::withScreen(
+            [&] { combat_feedback::withPresentation(room->pointer, [&] { original(g); }); });
     });
     return true;
 }

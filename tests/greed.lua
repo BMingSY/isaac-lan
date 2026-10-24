@@ -161,6 +161,12 @@ local function environment(difficulty)
         map_refresh = function()
             return true
         end,
+        combat_reset = function()
+            return true
+        end,
+        combat_present = function()
+            return true
+        end,
         sound_reset = function() end,
         presentation_reset = function() end,
         rewind_reset = function() end,
@@ -169,7 +175,7 @@ local function environment(difficulty)
         _IsaacLan = native,
         _IsaacLanPrediction = {},
         _IsaacLanStatus = function()
-            return { pause = 1 }
+            return { pause = 1, slot = 1 }
         end,
         _IsaacLanModules = {},
         ItemType = { ITEM_ACTIVE = 2 },
@@ -187,6 +193,10 @@ local function environment(difficulty)
             GetPlayer = function()
                 return {
                     Position = { X = 100, Y = 100 },
+                    IsCoopGhost = function()
+                        return false
+                    end,
+                    AnimateTrapdoor = function() end,
                     GetSprite = function()
                         return {}
                     end,

@@ -71,7 +71,21 @@ void ownedItemEffects() {
     peers[1].pixelate(2700);
     peers[1].target = 0.2f;
     peers[1].pixelate(900);
-    for (unsigned tick = 0; tick < 250; ++tick) {
+    peers[1].bloom = peers[1].bloomDuration = 30;
+    peers[1].bloomIntensity = 0.75f;
+    for (unsigned tick = 0; tick < 6; ++tick)
+        peers[1].advance();
+    require(peers[0].bloom == 0 && peers[1].bloom == 24 && peers[1].bloomDuration == 30,
+            "Pill bloom leaked to another view or used the wrong clock");
+    Writer bloom(Message::world);
+    peers[1].write(bloom);
+    Reader bloomReader(std::span(bloom.bytes).subspan(1));
+    const auto bloomCopy = ItemScreen::read(bloomReader);
+    bloomReader.finish();
+    require(bloomCopy.bloom == 24 && bloomCopy.bloomDuration == 30 &&
+                bloomCopy.bloomIntensity == 0.75f,
+            "A repeated view restarted or omitted the pill bloom");
+    for (unsigned tick = 6; tick < 250; ++tick) {
         for (auto& peer : peers)
             peer.advance();
     }
@@ -90,11 +104,14 @@ void ownedItemEffects() {
     peers[1].target = 0;
     for (unsigned tick = 0; tick < 2450; ++tick)
         peers[1].advance();
-    require(peers[1].pixels == 0 && peers[1].dizzy == 0,
+    require(peers[1].pixels == 0 && peers[1].dizzy == 0 && peers[1].bloom == 0,
             "An expired visual effect survived cleanup");
-    for (const auto bad : {ItemScreen{2, 1}, ItemScreen{0, ItemScreen::maxDuration + 1},
-                           ItemScreen{0, 0, std::numeric_limits<float>::quiet_NaN()},
-                           ItemScreen{0, 0, 0, -1}, ItemScreen{0, 0, 0, 0, -1}}) {
+    for (const auto bad :
+         {ItemScreen{2, 1}, ItemScreen{0, ItemScreen::maxDuration + 1},
+          ItemScreen{0, 0, std::numeric_limits<float>::quiet_NaN()}, ItemScreen{0, 0, 0, -1},
+          ItemScreen{0, 0, 0, 0, -1}, ItemScreen{0, 0, 0, 0, 0, 2, 1},
+          ItemScreen{0, 0, 0, 0, 0, 0, ItemScreen::maxDuration + 1},
+          ItemScreen{0, 0, 0, 0, 0, 0, 0, -1}}) {
         Writer invalid(Message::world);
         bad.write(invalid);
         rejects(

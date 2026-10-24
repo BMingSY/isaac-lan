@@ -45,6 +45,8 @@
 | 骸骨、圣剑及其他武器 | 可用头部动画跟随本机瞄准；已同步的挂载武器跟随预测身体，挥击／发射仍等待主机 |
 | 多发、蓄力泪弹、随机／特殊弹道与未知外观 | 不提前生成单发泪弹精灵，沿用权威攻击状态；不表示这些组合的所有效果均已验证 |
 
+已获得主机实体 ID 的普通蓝／血泪可按接触立即显示受击反馈，主机确认不重播，否决或超时撤销。此规则读取每颗泪弹的实际 TearFlags，普通多发也可逐颗匹配；特殊弹道、激光和近战使用权威事件。范围及生命周期见[命中表现预测](https://github.com/BMingSY/isaac-lan/blob/main/docs/rooms-and-presentation.md#命中表现预测)。
+
 具体筛选由[攻击显示策略](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/attack_preview.lua)维护。
 
 ## 完整清单

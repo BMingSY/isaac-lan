@@ -518,6 +518,58 @@ int entityShadow(lua_State* L) {
         return 1;
     }
 }
+int familiarBody(lua_State* L) {
+    try {
+        namespace body = j460::layout::familiarBody;
+        const auto familiar = entitySprite(L, 1);
+        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+        if (at<unsigned>(familiar, j460::layout::entity::type) != 3)
+            throw std::runtime_error("Body sprites require a familiar");
+        const auto data = at<Address>(familiar, body::extraData);
+        if (!data || at<Address>(data, 0) != image + body::dataVtable) {
+            lua.pushBoolean(L, false);
+            return 1;
+        }
+        if (lua.getTop(L) != 1) {
+            if (!runtime::replica() || lua.getTop(L) != 2)
+                throw std::runtime_error("Only replicas restore familiar body layers");
+            std::size_t size = 0;
+            const auto bytes = lua.checkString(L, 2, &size);
+            lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
+            std::array<int, body::layerCount> layers{};
+            for (unsigned i = 0; i < layers.size(); ++i) {
+                layers[i] = std::bit_cast<int>(r.u32());
+                const auto s = data + body::sprites + (i + 1) * j460::layout::sprite::size;
+                if (layers[i] < -1 || (layers[i] >= 0 && !layer(s, layers[i])))
+                    throw std::runtime_error("Invalid familiar body layer");
+            }
+            r.finish();
+            for (unsigned i = 0; i < layers.size(); ++i)
+                at<int>(data, body::layers + i * sizeof(int)) = layers[i];
+            lua.pushBoolean(L, true);
+            return 1;
+        }
+        lan::Writer w(lan::Message::world);
+        for (unsigned i = 0; i < body::layerCount; ++i)
+            w.u32(at<unsigned>(data, body::layers + i * sizeof(int)));
+        lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1), w.bytes.size() - 1);
+        lua.createTable(L, body::spriteCount, 0);
+        const auto source = static_cast<Address*>(lua.toUserdata(L, 1));
+        for (unsigned i = 0; i < body::spriteCount; ++i) {
+            const auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
+            wrapper[0] = source[0];
+            wrapper[1] = data + body::sprites + i * j460::layout::sprite::size;
+            lua.getMetatable(L, 1);
+            lua.setMetatable(L, -2);
+            lua.rawSetI(L, -2, i + 1);
+        }
+        return 2;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+}
 int familiarTether(lua_State* L) {
     try {
         namespace tether = j460::layout::tether;
@@ -759,6 +811,8 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "actor_pose");
     lua.pushClosure(L, familiarTether, 0);
     lua.setField(L, -2, "familiar_tether");
+    lua.pushClosure(L, familiarBody, 0);
+    lua.setField(L, -2, "familiar_body");
     lua.pushClosure(L, renderTether, 0);
     lua.setField(L, -2, "familiar_tether_render");
     lua.pushClosure(L, entityShadow, 0);

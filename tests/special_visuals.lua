@@ -130,4 +130,50 @@ dice.apply(view)
 used, view.tick = true, 4
 dice.apply(view)
 assert(darkens == 2 and shakes == 2, "Sacrifice rooms received dice presentation")
-print("PASS special entity geometry, room return context and dice activation presentation")
+-- Detached bodies retain their use-time costume when the owner's live appearance changes.
+local function body()
+    local e = effect(3, 48, 0, "")
+    e.layers, e.sprites = string.pack(">i4i4i4i4", 0, 1, -1, -1), {}
+    for i = 1, 5 do
+        e.sprites[i] = { path = "use-time costume " .. i, frame = i }
+    end
+    return e
+end
+local writes = 0
+local splitBody = dofile(root .. "/src/bridge/compat/items/split_body.lua")({
+    familiar_body = function(e, layers)
+        if layers then
+            writes, e.layers = writes + 1, layers
+            return true
+        end
+        return e.layers, e.sprites
+    end,
+}, enums.EntityType, enums.FamiliarVariant)
+local visuals = dofile(root .. "/src/bridge/compat/visuals.lua")(dogma, splitBody)
+local original, copy = body(), body()
+local function captureSprite(s)
+    return { s.path, s.frame }
+end
+local function applySprite(s, value)
+    s.path, s.frame = value[1], value[2]
+end
+local bodyState = codec.decode(codec.encode(visuals.capture(original, nil, captureSprite)))
+for _, s in ipairs(copy.sprites) do
+    s.path, s.frame = "current head only", 0
+end
+copy.layers = string.pack(">i4i4i4i4", -1, -1, -1, -1)
+visuals.apply(copy, bodyState, applySprite)
+visuals.apply(copy, bodyState, applySprite)
+assert(copy.layers == original.layers and writes == 2)
+for i, s in ipairs(copy.sprites) do
+    assert(s.path == original.sprites[i].path and s.frame == i)
+end
+for _, invalid in ipairs({ false, {}, { "short", bodyState[2] }, { bodyState[1], {} } }) do
+    assert(not pcall(visuals.apply, copy, invalid, applySprite))
+end
+assert(writes == 2, "Invalid body state mutated native layers")
+local unrelated = effect(3, 78, 0, "")
+assert(visuals.capture(unrelated, nil, captureSprite) == false)
+visuals.apply(unrelated, false, applySprite)
+assert(not pcall(visuals.apply, unrelated, bodyState, applySprite))
+print("PASS special entity geometry, detached costumes, room return and dice presentation")

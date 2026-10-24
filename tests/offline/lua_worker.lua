@@ -27,6 +27,13 @@ local function stateEnvironment()
         _IsaacLanPrediction = {},
         _IsaacLanModules = {
             ["sync/codec"] = codec,
+            ["presentation/hits"] = dofile(root .. "/src/bridge/presentation/hits.lua"),
+            ["presentation/event_ledger"] = dofile(
+                root .. "/src/bridge/presentation/event_ledger.lua"
+            ),
+            ["presentation/contacts"] = dofile(root .. "/src/bridge/presentation/contacts.lua"),
+            ["sync/combat_events"] = dofile(root .. "/src/bridge/sync/combat_events.lua"),
+            ["sync/combat_state"] = dofile(root .. "/src/bridge/sync/combat_state.lua"),
             ["sync/layers"] = dofile(root .. "/src/bridge/sync/layers.lua"),
             ["sync/fields"] = dofile(root .. "/src/bridge/sync/fields.lua"),
             ["sync/capture"] = dofile(root .. "/src/bridge/sync/capture.lua"),
@@ -87,9 +94,7 @@ local function stateEnvironment()
                 root .. "/src/bridge/compat/characters/keeper.lua"
             ),
             ["compat/items/glitched"] = dofile(root .. "/src/bridge/compat/items/glitched.lua"),
-            ["compat/items/temporary_effects"] = dofile(
-                root .. "/src/bridge/compat/items/temporary_effects.lua"
-            ),
+            ["sync/temporary_effects"] = dofile(root .. "/src/bridge/sync/temporary_effects.lua"),
             ["compat/items/black_candle"] = dofile(
                 root .. "/src/bridge/compat/items/black_candle.lua"
             ),
@@ -104,7 +109,8 @@ local function stateEnvironment()
             ["compat/bosses/held_bombs"] = dofile(
                 root .. "/src/bridge/compat/bosses/held_bombs.lua"
             ),
-            ["compat/bosses/visuals"] = dofile(root .. "/src/bridge/compat/bosses/visuals.lua"),
+            ["compat/items/split_body"] = dofile(root .. "/src/bridge/compat/items/split_body.lua"),
+            ["compat/visuals"] = dofile(root .. "/src/bridge/compat/visuals.lua"),
             ["compat/characters/lazarus"] = dofile(
                 root .. "/src/bridge/compat/characters/lazarus.lua"
             ),

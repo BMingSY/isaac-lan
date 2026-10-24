@@ -47,6 +47,9 @@ namespace roomChangeFrame {
 inline constexpr unsigned mazeRedirected = 0xb;
 } // namespace roomChangeFrame
 namespace game {
+inline constexpr unsigned bloomTime = 0x26528;
+inline constexpr unsigned bloomDuration = 0x2652c;
+inline constexpr unsigned bloomIntensity = 0x26530;
 inline constexpr unsigned pixelation = 0x269e0;
 inline constexpr unsigned pixelationDuration = 0x269e4;
 inline constexpr unsigned dizzyIntensity = 0x67738;
@@ -127,6 +130,13 @@ inline constexpr unsigned previousX = 0x344;
 inline constexpr unsigned previousY = 0x348;
 inline constexpr unsigned parent = 0x3bc;
 } // namespace entity
+namespace entityRef {
+inline constexpr unsigned entity = 0x24;
+} // namespace entityRef
+namespace npc {
+// EntityNPC::IsBoss reads this classification byte, independently of BossID.
+inline constexpr unsigned boss = 0xc3d;
+} // namespace npc
 namespace tear {
 inline constexpr unsigned height = 0x410;
 inline constexpr unsigned fallingSpeed = 0x414;
@@ -229,6 +239,11 @@ inline constexpr unsigned first = 0x10, count = 0x14, sprite = 0x18, size = 0x15
 inline constexpr unsigned maxPoints = 256;
 inline constexpr unsigned dataVtable = 0x71d264;
 } // namespace tether
+namespace familiarBody {
+inline constexpr unsigned extraData = 0xee0, dataVtable = 0x764914;
+inline constexpr unsigned sprites = 0x4, spriteCount = 5;
+inline constexpr unsigned layers = 0x568, layerCount = 4;
+} // namespace familiarBody
 namespace emote {
 inline constexpr unsigned id = 0x4;
 inline constexpr int lastId = 58;

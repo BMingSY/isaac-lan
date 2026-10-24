@@ -8,7 +8,7 @@ return {
         WEAPON_KNIFE = 4,
         WEAPON_TECH_X = 9,
     },
-    TearFlags = { TEAR_NORMAL = 0 },
+    TearFlags = { TEAR_NORMAL = 0, TEAR_PIERCING = 2 },
     TearVariant = { BLUE = 0, BLOOD = 1 },
     PlayerForm = { PLAYERFORM_BOOK_WORM = 10 },
     EntityType = {
@@ -25,7 +25,8 @@ return {
         ENTITY_HORNY_BOYS = 920,
         ENTITY_EFFECT = 1000,
     },
-    EntityFlag = { FLAG_DONT_OVERWRITE = 2097152 },
+    EntityFlag = { FLAG_DONT_OVERWRITE = 2097152, FLAG_NO_FLASH_ON_DAMAGE = 33554432 },
+    FamiliarVariant = { ISAACS_BODY = 48 },
     PickupVariant = { PICKUP_COLLECTIBLE = 100 },
     PlayerType = {
         PLAYER_ISAAC = 0,

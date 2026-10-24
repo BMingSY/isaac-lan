@@ -43,7 +43,7 @@ end, PlayerType)
 local poop = assert(modules["compat/characters/blue_baby"])(native, PlayerType)
 local glitched = assert(modules["compat/items/glitched"])(native)
 local craftingBag = assert(modules["compat/items/crafting_bag"])(native, CollectibleType)
-local temporaryEffects = assert(modules["compat/items/temporary_effects"])(CollectibleType)
+local temporaryEffects = component("sync/temporary_effects")
 local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
 local tethers =
@@ -52,16 +52,18 @@ local entityCodec = component("sync/entity_codec")(
     native,
     assert(modules["sync/entity_schema"])(EntityType),
     npcState,
-    assert(modules["compat/bosses/visuals"])(
+    assert(modules["compat/visuals"])(
         assert(modules["compat/bosses/dogma"])(Vector, EntityType, EffectVariant),
         assert(modules["compat/bosses/held_bombs"])(native, EntityType, function()
             return Isaac.GetRoomEntities()
-        end)
+        end),
+        assert(modules["compat/items/split_body"])(native, EntityType, FamiliarVariant)
     ),
     assert(modules["sync/entity_links"])(native, function()
         return Isaac.GetRoomEntities()
     end),
-    tethers
+    tethers,
+    modules["sync/combat_state"](fields, TearVariant, TearFlags, EntityFlag)
 )
 local entity, sprite, applySprite, vec =
     entityCodec.capture, entityCodec.sprite, entityCodec.applySprite, entityCodec.vec
@@ -147,7 +149,20 @@ local attacks = component("presentation/attacks")({
         return Game():GetRoom()
     end,
 })
+local hits = component("presentation/hits")({
+    native = native,
+    ledger = modules["presentation/event_ledger"],
+    contact = modules["presentation/contacts"],
+    decode = modules["sync/combat_events"],
+    metrics = performance,
+    vector = Vector,
+    room = function()
+        return Game():GetRoom()
+    end,
+})
 local doorPresentation = modules["presentation/doors"]({
+    doorVariants = DoorVariant,
+    gridTypes = GridEntityType,
     clock = Isaac.GetTime,
     sprite = Sprite,
     vector = Vector,
@@ -165,6 +180,7 @@ local motionPresentation = component("presentation/motion")(native, actorsPresen
     end,
     attachments = attachments,
     attacks = attacks,
+    hits = hits,
     vector = Vector,
     player = function(index)
         return Isaac.GetPlayer(index)
@@ -277,6 +293,7 @@ local replica = component("sync/replica")({
     actors = actorsPresentation,
     motion = motionPresentation,
     attacks = attacks,
+    hits = hits,
     attachments = attachments,
     poop = poop,
     craftingBag = craftingBag,
@@ -304,6 +321,12 @@ end, function()
     deals.reset()
     replica.resetView()
     captureState.reset()
+end, function(animation, same)
+    local slot = _IsaacLanStatus().slot
+    assert(native.rooms_with_player(slot, function()
+        local index = assert(native.rooms_heads()[tostring(slot)])
+        actorsPresentation.departFloor(Isaac.GetPlayer(index), animation, same)
+    end))
 end)
 function state.apply(bytes, tick, ack, betweenUpdates, stable)
     if not replica.apply(bytes, tick, ack, betweenUpdates, stable) then
@@ -329,6 +352,7 @@ function state.render()
     end
 end
 function state.reset()
+    assert(native.combat_reset())
     native.sound_reset()
     native.presentation_reset()
     native.rewind_reset()

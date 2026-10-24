@@ -125,6 +125,8 @@ struct Actor {
 };
 void* actionPlayer = nullptr;
 std::array<ItemScreen, 4> screens;
+int screenSlot = -1;
+unsigned screenGeneration = 0;
 Actor owner(void* explicitPlayer) {
     if (!explicitPlayer)
         explicitPlayer = actionPlayer;
@@ -158,8 +160,10 @@ Address player(unsigned slot, unsigned role) {
 ItemScreen readScreen() {
     using namespace j460::layout::game;
     const auto g = game();
-    return {at<unsigned>(g, pixelation), at<unsigned>(g, pixelationDuration),
-            at<float>(g, dizzyIntensity), at<float>(g, dizzyTarget), at<float>(g, dizzyStep)};
+    return {at<unsigned>(g, pixelation),    at<unsigned>(g, pixelationDuration),
+            at<float>(g, dizzyIntensity),   at<float>(g, dizzyTarget),
+            at<float>(g, dizzyStep),        at<unsigned>(g, bloomTime),
+            at<unsigned>(g, bloomDuration), at<float>(g, bloomIntensity)};
 }
 void writeScreen(const ItemScreen& value) {
     using namespace j460::layout::game;
@@ -169,6 +173,9 @@ void writeScreen(const ItemScreen& value) {
     at<float>(g, dizzyIntensity) = value.dizzy;
     at<float>(g, dizzyTarget) = value.target;
     at<float>(g, dizzyStep) = value.step;
+    at<unsigned>(g, bloomTime) = value.bloom;
+    at<unsigned>(g, bloomDuration) = value.bloomDuration;
+    at<float>(g, bloomIntensity) = value.bloomIntensity;
 }
 using Pixelate = void(__attribute__((thiscall)) *)(void*, int);
 using Pill = void(__attribute__((thiscall)) *)(void*, int, int, unsigned);
@@ -184,7 +191,11 @@ void __attribute__((fastcall)) pixelate(void* g, void*, int duration) {
         return;
     }
     if (!runtime::replica() && duration > 0)
-        screens[actor.slot].pixelate(static_cast<unsigned>(duration));
+        withActor(reinterpret_cast<void*>(actor.player), [&] {
+            auto screen = readScreen();
+            screen.pixelate(static_cast<unsigned>(duration));
+            writeScreen(screen);
+        });
 }
 void __attribute__((fastcall)) wavy(void* p, void*) {
     const auto actor = owner(p);
@@ -192,12 +203,8 @@ void __attribute__((fastcall)) wavy(void* p, void*) {
         originalWavy(p);
         return;
     }
-    const auto before = readScreen();
-    writeScreen(screens[actor.slot]);
-    originalWavy(p);
     if (!runtime::replica())
-        screens[actor.slot] = readScreen();
-    writeScreen(before);
+        withActor(p, [&] { originalWavy(p); });
 }
 void __attribute__((fastcall)) pill(void* p, void*, int effect, int color, unsigned flags) {
     withActor(p, [&] { originalPill(p, effect, color, flags); });
@@ -870,8 +877,35 @@ bool bind(lua_State* L, HMODULE module) {
 void withActor(void* player, const std::function<void()>& action) {
     const auto before = actionPlayer;
     actionPlayer = player;
-    action();
-    actionPlayer = before;
+    const auto actor = owner(player);
+    const auto previousSlot = screenSlot;
+    const auto generation = screenGeneration;
+    const bool scoped = rooms::virtualized() && !runtime::replica() && actor.player &&
+                        screenSlot != static_cast<int>(actor.slot);
+    const auto global = scoped ? readScreen() : ItemScreen{};
+    if (scoped) {
+        writeScreen(screens[actor.slot]);
+        screenSlot = static_cast<int>(actor.slot);
+    }
+    const auto restore = [&] {
+        if (scoped) {
+            if (generation == screenGeneration)
+                screens[actor.slot] = readScreen();
+            writeScreen(global);
+            screenSlot = previousSlot;
+        }
+        actionPlayer = before;
+    };
+    // Native player update and nested item/card/pill calls share one owner's
+    // postprocess state. A nested action must not overwrite its caller with a
+    // stale saved screen, or leak a direct Game field write to the host view.
+    try {
+        action();
+    } catch (...) {
+        restore();
+        throw;
+    }
+    restore();
 }
 void withScreen(const std::function<void()>& draw) {
     const auto slot = runtime::localViewSlot();
@@ -880,7 +914,14 @@ void withScreen(const std::function<void()>& draw) {
         return;
     }
     const auto before = readScreen();
-    writeScreen(screens[slot]);
+    auto display = screens[slot];
+    // World/route flashes outside a player action remain global effects.
+    if (before.bloom) {
+        display.bloom = before.bloom;
+        display.bloomDuration = before.bloomDuration;
+        display.bloomIntensity = before.bloomIntensity;
+    }
+    writeScreen(display);
     draw();
     writeScreen(before);
 }
@@ -901,6 +942,7 @@ void advance() {
             rooms::withPlayer(slot, [&] { originalUpdate(owned[slot]->storage.data(), false); });
 }
 void reset(bool preservePixels) {
+    ++screenGeneration;
     for (auto& screen : screens) {
         const auto previous = screen;
         screen = {};

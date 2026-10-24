@@ -8,7 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-from testing.bosses import build
+from testing.bosses import build, scenario_timeout
 from testing.results import finish_run
 from testing.engine import configure_interrupts, engine_command, run_engine
 from lab_profile import validate_labs as validate_owned_labs
@@ -60,7 +60,7 @@ def main():
         "--menu-port",
         str(args.port),
         "--scenario-timeout",
-        "3600",
+        str(scenario_timeout(len(cases))),
     )
     if args.heap_check:
         command.append("--heap-check")
