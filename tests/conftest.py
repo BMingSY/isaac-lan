@@ -41,6 +41,9 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
     if report.failed and "lua" in item.funcargs:
         directory = Path(item.config.getoption("--offline-report-dir"))
+        worker = getattr(item.config, "workerinput", {}).get("workerid")
+        if worker:
+            directory /= worker
         directory.mkdir(parents=True, exist_ok=True)
         name = re.sub(r"[^a-zA-Z0-9_.-]", "_", item.nodeid)
         path = directory / (name + ".json")
