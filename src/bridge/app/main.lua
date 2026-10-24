@@ -33,6 +33,42 @@ callback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, amount, flags, sou
     return friendlyFire.damage(entity, amount, flags, source)
 end)
 local challenge, chat, feedback
+local function lootAllocation()
+    return _IsaacLanModules["compat/rules/loot_roll"]({
+        native = native,
+        player = Isaac.GetPlayer,
+        config = Isaac.GetItemConfig,
+        random = math.random,
+        enums = { item = ItemType },
+        chat = {
+            output = function(...)
+                return chat.output(...)
+            end,
+            roll = function(...)
+                return chat.roll(...)
+            end,
+        },
+    })
+end
+local allocation = lootAllocation()
+local roomRules = _IsaacLanModules["runtime/room_rules"]({
+    native = native,
+    allocation = allocation,
+    charge = _IsaacLanModules["compat/rules/clear_charge"]({
+        native = native,
+        game = Game,
+        party = allocation.party,
+        scoped = allocation.scoped,
+        enums = {
+            shape = RoomShape,
+            room = RoomType,
+            trinket = TrinketType,
+            collectible = CollectibleType,
+            active = ActiveSlot,
+            charge = ItemConfig,
+        },
+    }),
+})
 local function goalRoute(goal)
     return _IsaacLanModules["compat/routes/challenge_goal"]({
         game = Game,
@@ -63,9 +99,9 @@ challenge = _IsaacLanModules["runtime/challenges"]({
     },
     effects = {
         [1002] = _IsaacLanModules["compat/challenges/luck_game"]({
+            allocation = lootAllocation(),
             native = native,
             game = Game,
-            player = Isaac.GetPlayer,
             config = Isaac.GetItemConfig,
             spawn = Isaac.Spawn,
             zero = function()
@@ -73,14 +109,6 @@ challenge = _IsaacLanModules["runtime/challenges"]({
             end,
             random = math.random,
             items = _IsaacLanModules["compat/items/glitched"](native),
-            chat = {
-                output = function(...)
-                    return chat.output(...)
-                end,
-                roll = function(...)
-                    return chat.roll(...)
-                end,
-            },
             enums = {
                 item = ItemType,
                 trinket = TrinketType,
@@ -113,10 +141,18 @@ callback(ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD, function()
     challenge.clearAward()
 end)
 function _IsaacLanCollectiblePickup(...)
-    return challenge.collect(...)
+    local accepted = challenge.collect(...)
+    if accepted ~= nil then
+        return accepted
+    end
+    return roomRules.collect(...)
+end
+function _IsaacLanPlayerRoomCleared(...)
+    roomRules.cleared(...)
 end
 function _IsaacLanChallengeStep()
     challenge.step()
+    roomRules.step()
     friendlyFire.step()
 end
 function _IsaacLanCanEnterRoom(...)
@@ -251,6 +287,7 @@ function _IsaacLanViewCommitted()
 end
 function _IsaacLanActionStep()
     challenge.step()
+    roomRules.step()
     friendlyFire.prepare()
     if native.api_info().ready == 1 then
         _IsaacLanModules["compat/mods/goodtrip/authority"].observe()
@@ -319,6 +356,7 @@ local function prepareCheckpoint()
 end
 callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
     friendlyFire.reset()
+    roomRules.reset()
     game = Game()
     if native.diagnostics_begin then
         native.diagnostics_begin(
@@ -347,6 +385,7 @@ callback(ModCallbacks.MC_POST_UPDATE, function()
 end)
 callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
     friendlyFire.reset()
+    roomRules.reset()
     challenge.reset()
     bot.reset()
     integration.reset("session_ended")
@@ -367,6 +406,7 @@ function _IsaacLanCommand(action, value)
         lifecycle.close()
         assert(native.input_virtual())
         assert(native.net_host(tonumber(value), _IsaacLanFingerprint, modFingerprint()))
+        assert(native.net_configure_options(native.menu_room_options()), "无法载入房间规则")
         savedPlayers, savedOptions = native.net_saved_info()
     elseif action == "join" then
         bot.reset()
@@ -380,6 +420,10 @@ function _IsaacLanCommand(action, value)
         assert(native.net_challenge(assert(tonumber(value))), "无法选择联机挑战")
     elseif action == "room_options" then
         assert(native.net_configure_options(assert(tonumber(value))), "无法修改房间规则")
+        assert(
+            native.menu_room_options_save(tonumber(value)),
+            "规则已应用，但本机保存失败"
+        )
     elseif action == "start" then
         local seed, difficulty, a, b, c, d = value:match("^([%w]+):(%d+):(%d+):(%d+):(%d+):(%d+)$")
         if seed == "RANDOM" then

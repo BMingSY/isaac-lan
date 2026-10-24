@@ -1683,7 +1683,7 @@ bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimensio
 }
 bool takeCollectiblePickup(int owner, unsigned actorSeed, int item, int charge, bool touched,
                            int varData, int pool) {
-    if (!state || !challengeActive() || replica() || !view.gated || !rooms::viewReady())
+    if (!state || !session || replica() || !view.gated || !rooms::viewReady())
         return false;
     const int top = lua.getTop(state);
     if (lua.getGlobal(state, "_IsaacLanCollectiblePickup") != 6) {
@@ -1702,6 +1702,19 @@ bool takeCollectiblePickup(int owner, unsigned actorSeed, int item, int charge, 
     const bool taken = lua.type(state, -1) == 1 && lua.toBoolean(state, -1);
     lua.setTop(state, top);
     return taken;
+}
+void playerRoomCleared(int owner, int dimension, int index) {
+    if (!state || !session || replica() || !view.gated || !rooms::viewReady())
+        return;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanPlayerRoomCleared") != 6) {
+        lua.setTop(state, top);
+        return;
+    }
+    lua.pushInteger(state, owner);
+    lua.pushInteger(state, dimension);
+    lua.pushInteger(state, index);
+    call(0, 3, 0, top);
 }
 std::array<int, 2> challengeDestination() {
     const auto* definition =

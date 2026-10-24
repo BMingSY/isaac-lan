@@ -1526,11 +1526,11 @@ void roomOptionsAndMarks() {
                 !layers(available | (1u << 31)),
             "Unavailable or malformed marks accepted");
     auto archive = sample(2);
-    archive.settings.rules.options = isaac::roomOptions::friendlyFire;
+    archive.settings.rules.options = isaac::roomOptions::known;
     require(archive.settings.rules.valid() &&
                 Archive::decode(archive.encode()).settings.rules == archive.settings.rules,
             "Normal run lost room options when saved");
-    require(!isaac::roomOptions::valid(2), "Runtime accepted an unknown room option");
+    require(!isaac::roomOptions::valid(8), "Runtime accepted an unknown room option");
     // A real v3 archive remains readable, defaulting the absent room flags off.
     Writer legacy(Message::snapshot);
     legacy.string("IsaacLAN/save/3");

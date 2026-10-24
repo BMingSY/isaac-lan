@@ -110,6 +110,30 @@ Address itemConfig(int id) {
                         reinterpret_cast<void*>(config), id)
                   : 0;
 }
+int activeCharge(lua_State* L) {
+    const auto actor = playerArgument(L);
+    const int slot = static_cast<int>(lua.checkInteger(L, 2));
+    if (!actor || slot < 0 || slot >= 4)
+        return 0;
+    using Query = int(__attribute__((thiscall))*)(void*, int);
+    auto player = reinterpret_cast<void*>(actor);
+    lua.pushInteger(L, engine<Query>(j460::entry::playerActiveChargeType)(player, slot));
+    lua.pushInteger(L, engine<Query>(j460::entry::playerActiveMaxCharge)(player, slot));
+    return 2;
+}
+int addActiveCharge(lua_State* L) {
+    const auto actor = playerArgument(L);
+    const int slot = static_cast<int>(lua.checkInteger(L, 2));
+    const int amount = static_cast<int>(lua.checkInteger(L, 3));
+    if (!actor || slot < 0 || slot >= 4 || amount < 0 || amount > 1024)
+        return 0;
+    // J460 thiscall, RET 20. Native owns capacity, charge type, battery overflow
+    // and the charge-complete presentation. No discharge or forced overcharge.
+    using AddCharge = int(__attribute__((thiscall))*)(void*, int, int, bool, bool, bool);
+    lua.pushInteger(L, engine<AddCharge>(j460::entry::playerAddActiveCharge)(
+                           reinterpret_cast<void*>(actor), amount, slot, false, false, false));
+    return 1;
+}
 int take(lua_State* L) {
     const auto actor = playerArgument(L);
     const int id = static_cast<int>(lua.checkInteger(L, 2));
@@ -200,10 +224,12 @@ bool bind(lua_State* L, HMODULE module) {
                   {S::toUserdata, S::rawLength, S::checkInteger, S::toBoolean, S::pushInteger,
                    S::pushBoolean, S::pushString, S::pushClosure, S::setField}))
         return false;
-    for (const auto& [key, fn] : std::array<std::pair<const char*, isaac::lua::Function>, 3>{
+    for (const auto& [key, fn] : std::array<std::pair<const char*, isaac::lua::Function>, 5>{
              {{"items_take_collectible", take},
               {"items_give_collectible", give},
-              {"items_collectible_name", name}}}) {
+              {"items_collectible_name", name},
+              {"items_active_charge", activeCharge},
+              {"items_add_active_charge", addActiveCharge}}}) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, key);
     }

@@ -145,7 +145,7 @@ local native = {
         return player.charge[id] or 0, 17, 5
     end,
 }
-local effect = factory({
+local deps = {
     native = native,
     player = function(index)
         return players[index + 1]
@@ -242,7 +242,9 @@ local effect = factory({
         assert(n >= 1)
         return 1
     end,
-})
+}
+deps.allocation = dofile(root .. "/src/bridge/compat/rules/loot_roll.lua")(deps)
+local effect = factory(deps)
 local function makeRule()
     return coordinator({
         native = native,
@@ -422,4 +424,48 @@ rule.view()
 assert(smelts == priorSmelts + 1)
 print(
     "PASS luck challenge acquisition, corrections, ties, actors, floors, actives, pills and cleanup"
+)
+
+-- The same engine powers a normal room rule, without swallowing No!, luck
+-- modifiers or floor transfers. Actives remain in the native pickup queue.
+info.authority, info.challenge, info.roomOptions, info.worldEpoch = 1, 0, 4, 1
+native.net_room_options = function()
+    return { { key = "lootRoll", flag = 4 }, { key = "sharedClearCharge", flag = 2 } }
+end
+local ordinary = dofile(root .. "/src/bridge/runtime/room_rules.lua")({
+    native = native,
+    allocation = deps.allocation,
+    charge = {
+        reset = function() end,
+        step = function()
+            error("Charge rule is off")
+        end,
+    },
+})
+players[1].Luck, players[2].Luck = -1000, 1000
+rolls = { 100, 1, 2, 3 }
+local oldSmelts, oldTakes, oldGrants = smelts, #takes, #grants
+assert(
+    not ordinary.collect(0, players[1].InitSeed, 2, 7, true, 11, 8),
+    "Active pickup must remain native"
+)
+assert(ordinary.collect(0, players[1].InitSeed, 1, 7, true, 11, 8))
+ordinary.step()
+assert(#grants == oldGrants + 1 and grants[#grants].slot == 0)
+assert(grants[#grants].charge == 7 and not grants[#grants].first and grants[#grants].data == 11)
+assert(messages[#messages].text:find("P1【100】", 1, true))
+assert(smelts == oldSmelts and #takes == oldTakes)
+ordinary.step()
+assert(#grants == oldGrants + 1, "Rule rerolled an acquisition")
+assert(ordinary.collect(0, players[1].InitSeed, 1, 0, false, 0, 0))
+info.worldEpoch = 2
+ordinary.step()
+assert(#grants == oldGrants + 1, "Rewind retained a pending grant")
+info.authority = 0
+assert(not ordinary.collect(0, 1, 1, 0, false, 0, 0))
+ordinary.step()
+info.authority, info.roomOptions = 1, 0
+assert(not ordinary.collect(0, 1, 1, 0, false, 0, 0))
+print(
+    "PASS loot rule no-luck allocation and native active pickup, authority, single grant and epoch cleanup"
 )

@@ -1,5 +1,6 @@
 #include "presentation/connection_settings.h"
 #include "net/host_address.h"
+#include "core/room_options.h"
 #include <charconv>
 #include <fstream>
 #ifdef _WIN32
@@ -18,7 +19,7 @@ bool valid(const ConnectionSettings& settings) {
 ConnectionSettings loadConnectionSettings(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     // Bound reads even if this small preference file has been replaced by a log.
-    std::string source(lan::maxHostAddressLength + 32, '\0');
+    std::string source(lan::maxHostAddressLength + 64, '\0');
     file.read(source.data(), source.size());
     if (file.bad() || !file.eof())
         return {};
@@ -28,13 +29,24 @@ ConnectionSettings loadConnectionSettings(const std::filesystem::path& path) {
         return {};
     ConnectionSettings result;
     result.address = source.substr(8, separator - 8);
-    const auto number =
-        std::string_view(source).substr(separator + 6, source.size() - separator - 7);
+    const auto portEnd = source.find('\n', separator + 6);
+    const auto number = std::string_view(source).substr(separator + 6, portEnd - separator - 6);
     const auto [end, error] =
         std::from_chars(number.data(), number.data() + number.size(), result.port);
-    return error == std::errc{} && end == number.data() + number.size() && valid(result)
-               ? result
-               : ConnectionSettings{};
+    if (error != std::errc{} || end != number.data() + number.size() || !valid(result))
+        return {};
+    const auto tail = std::string_view(source).substr(portEnd + 1);
+    if (!tail.empty()) {
+        if (!tail.starts_with("roomOptions="))
+            return {};
+        const auto options = tail.substr(12, tail.size() - 13);
+        const auto [last, failure] =
+            std::from_chars(options.data(), options.data() + options.size(), result.roomOptions);
+        if (failure != std::errc{} || last != options.data() + options.size())
+            return {};
+        result.roomOptions &= roomOptions::known;
+    }
+    return result;
 }
 bool saveConnectionSettings(const std::filesystem::path& path, const ConnectionSettings& settings) {
     if (path.empty() || !valid(settings))
@@ -59,7 +71,8 @@ bool saveConnectionSettings(const std::filesystem::path& path, const ConnectionS
         }
     } cleanup{temporary};
     std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
-    file << "address=" << settings.address << "\nport=" << settings.port << '\n';
+    file << "address=" << settings.address << "\nport=" << settings.port
+         << "\nroomOptions=" << (settings.roomOptions & roomOptions::known) << '\n';
     file.close();
     if (!file)
         return false;

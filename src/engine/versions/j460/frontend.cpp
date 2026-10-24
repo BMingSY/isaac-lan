@@ -204,8 +204,8 @@ int saveConnection(lua_State* L) {
     const auto port = lua.integer(L, 2, nullptr);
     if (!address || size > lan::maxHostAddressLength || port < 1 || port > 65535)
         return 0;
-    const presentation::ConnectionSettings next{std::string(address, size),
-                                                static_cast<unsigned>(port)};
+    const presentation::ConnectionSettings next{
+        std::string(address, size), static_cast<unsigned>(port), connectionSettings.roomOptions};
     if (next != connectionSettings) {
         if (presentation::saveConnectionSettings(connectionPath, next))
             connectionSettings = next;
@@ -213,6 +213,22 @@ int saveConnection(lua_State* L) {
             logger("connection_settings_save=FAIL");
     }
     return 0;
+}
+int loadRoomOptions(lua_State* L) {
+    lua.pushInteger(L, connectionSettings.roomOptions);
+    return 1;
+}
+int saveRoomOptions(lua_State* L) {
+    auto next = connectionSettings;
+    next.roomOptions = static_cast<std::uint32_t>(lua.integer(L, 1, nullptr));
+    const bool saved =
+        next == connectionSettings || presentation::saveConnectionSettings(connectionPath, next);
+    if (saved)
+        connectionSettings = next;
+    else
+        logger("room_options_save=FAIL");
+    lua.pushBoolean(L, saved);
+    return 1;
 }
 int officialMenu(lua_State*) {
     officialRequested = true;
@@ -975,6 +991,10 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.setField(state, -2, "menu_connection");
         lua.pushClosure(state, saveConnection, 0);
         lua.setField(state, -2, "menu_connection_save");
+        lua.pushClosure(state, loadRoomOptions, 0);
+        lua.setField(state, -2, "menu_room_options");
+        lua.pushClosure(state, saveRoomOptions, 0);
+        lua.setField(state, -2, "menu_room_options_save");
         lua.pushClosure(state, officialMenu, 0);
         lua.setField(state, -2, "menu_official");
         lua.setGlobal(state, "_IsaacLan");

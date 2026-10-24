@@ -6,6 +6,22 @@
 
 开始后不可更改规则。选项与挑战选择互相独立，并随保存、续玩、重连和重开保留；续玩规则与当前大厅不同时，先选择“载入上次规则”，重新准备后继续。
 
+房主每次修改勾选时，将选项保存到本机 IP／端口偏好文件 `connection.txt` 的 `roomOptions` 字段，下次创建房间自动载入。旧文件没有该字段时默认全部关闭；客机接收到的大厅规则不写入本机偏好。IP、端口和规则的保存互相保留其他字段，写入通过临时文件替换完成；保存失败时界面提示，不影响已经应用的大厅选择。
+
+## 清房充能共享
+
+简称“充能”，默认关闭。每次原生清房产生充能时，在线存活队友共享这次进度，包括身处其他房间的队友。原生已处理的玩家不重复领取；分别清理的房间各贡献一次。清房者的主动已满充能，不影响其他队友获得进度。
+
+普通房间按原版增加一格、大房间按原版增加两格；各接收者按自己的主动槽位、充能类型与饰品结算，额外电池槽由原生充能方法处理。定时充能与特殊充能遵循原生清房行为，4.5 伏特和旧电容器仍阻止清房充能。电池拾取、受伤或对敌伤害带来的充能不广播，也不把翻面、治疗、掉落等奖励扩展到其他房间。
+
+## 道具掷骰分配
+
+简称“掷骰”，默认关闭。原版确认底座拾取后，每位在线、存活且非幽灵的玩家各掷一次 D100，最高者得到该道具，同分随机决定；同一玩家的多个身体只掷一次。普通房间规则不加运气修正，只分配被动道具及其重复副本；主动道具继续原版拾取与槽位交换。首次拾取状态和道具内部数据随分配保留。
+
+购买资格、代价和二选一仍由原版处理；开局物品、合成、代码直接发放与状态恢复不掷骰。聊天显示拾取和掷骰结果，客机只接收已经结算的库存，不重新掷骰。
+
+1002「运气游戏」复用同一分配组件，同时保留挑战自己的运气修正、被动拾取范围、换层转移和额外奖励。挑战的拾取策略优先，即使同时勾选本规则，也不会重复分配或把主动拾取变成掷骰。
+
 ## 队友伤害
 
 默认关闭。开启后，同房间内不同玩家拥有的眼泪、刀和激光可伤害队友；攻击归属沿原生生成者、父实体和跟班主人追溯，同一玩家控制的多个身体不互相伤害。普通身体接触、敌人和环境攻击不转换为友伤。
@@ -19,5 +35,7 @@
 ## 状态与职责
 
 选项定义来自 [core/room_options.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/room_options.h)，运行层验证并导出位值、名称和 `shortName` 简称，菜单据此生成摘要与复选行。网络只传输 `RunRules.options`，不解释具体玩法。存档及个人通关标记的生命周期见[会话与状态恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
+
+[room_rules.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_rules.lua) 管理可选效果的会话与世界代次；未结算的事件在失效时清理。[clear_charge.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/clear_charge.lua) 汇总原生清房通知并在房间模拟退出后补发充能；[loot_roll.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/loot_roll.lua) 负责玩家分组、掷骰排序和一次性库存分配，挑战提供自己的运气策略。两项规则沿用主动充能和库存同步，不扩展消息布局。
 
 [friendly_fire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/friendly_fire.lua) 在房主模拟中检查各个有人房间的攻击接触，再调用原版受击接口；客机沿用现有生命、角色动作和受击状态同步。临时接触与低伤害余量由该组件持有，不写进个人存档。共享的扫掠圆碰撞放在 [core/contacts.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/core/contacts.lua)，同一几何函数也供本机命中预测使用。

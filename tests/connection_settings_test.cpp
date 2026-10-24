@@ -20,7 +20,7 @@ int main() {
     const ConnectionSettings first{"room.example.com", 31234};
     require(saveConnectionSettings(path, first), "Cannot save first connection");
     require(loadConnectionSettings(path) == first, "New menu instance lost connection");
-    const ConnectionSettings next{"192.168.1.42", 65535};
+    const ConnectionSettings next{"192.168.1.42", 65535, 7};
     require(saveConnectionSettings(path, next) && loadConnectionSettings(path) == next,
             "Replacing a previous connection failed");
     for (const auto& bad : {ConnectionSettings{"bad\naddress", 123},
@@ -42,6 +42,12 @@ int main() {
     }
     std::ofstream(path, std::ios::binary) << std::string(100000, 'x');
     require(loadConnectionSettings(path) == ConnectionSettings{}, "Oversize preferences accepted");
+    std::ofstream(path, std::ios::binary) << "address=old.example\nport=12345\n";
+    require(loadConnectionSettings(path) == ConnectionSettings{"old.example", 12345, 0},
+            "Legacy IP preferences did not load");
+    std::ofstream(path, std::ios::binary) << "address=new.example\nport=12345\nroomOptions=15\n";
+    require(loadConnectionSettings(path) == ConnectionSettings{"new.example", 12345, 7},
+            "Unknown future option bit lost known preferences");
     const auto blocked = root / "blocked";
     std::filesystem::create_directory(blocked);
     std::ofstream(blocked / "keep") << "keep";

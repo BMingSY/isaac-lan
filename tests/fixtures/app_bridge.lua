@@ -4,12 +4,30 @@ return function(root, native, modules)
     ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD = ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD or 9
     ModCallbacks.MC_ENTITY_TAKE_DMG = ModCallbacks.MC_ENTITY_TAKE_DMG or 11
     native.net_room_options = function()
-        return { { flag = 1, key = "friendlyFire", name = "队友伤害" } }
+        return {
+            { flag = 1, key = "friendlyFire", name = "队友伤害" },
+            { flag = 2, key = "sharedClearCharge" },
+            { flag = 4, key = "lootRoll" },
+        }
     end
+    native.menu_room_options = native.menu_room_options or function()
+        return 0
+    end
+    native.menu_room_options_save = native.menu_room_options_save
+        or function()
+            return true
+        end
+    native.net_configure_options = native.net_configure_options
+        or function()
+            return true
+        end
     native.chat_style = { opacity = 70, background = 0x231b18, border = 0x79604c, text = 0xe8dfcb }
     for _, name in ipairs({
         "core/contacts",
         "compat/rules/friendly_fire",
+        "compat/rules/loot_roll",
+        "compat/rules/clear_charge",
+        "runtime/room_rules",
         "compat/challenges/luck_game",
         "compat/items/glitched",
         "runtime/restart",

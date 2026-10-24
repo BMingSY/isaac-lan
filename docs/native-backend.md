@@ -173,6 +173,10 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 `items_collectible_name(id)` 读取配置名称并解析本机 `Items` 翻译键，返回最多 1024 字节的文本；不暴露配置或字符串指针。上述能力不增加同步字段或网络消息，库存、药丸映射与实体沿用现有契约，扩展指纹包含后端与嵌入 Lua 的变更。
 
+`items_active_charge(sprite, slot)` 返回当前主动的原生充能类型和有效容量，分别调用 `Player::GetActiveChargeType`（RVA `0x391530`）与 `GetActiveMaxCharge`（`0x391320`），均为 `thiscall(Player*, int)`、`RET 4`。`items_add_active_charge(sprite, slot, amount)` 调用 `AddActiveCharge`（`0x3915a0`，`thiscall(Player*, int amount, int slot, bool, bool, bool)`、`RET 20`），三个标志均为 false，返回实际增加量；容量、额外电池槽和充满演出由原生处理。接口沿用发放道具的玩家身份校验，仅接受 0–3 槽和 0–1024 的非负增量，不允许强制溢出或任意内存访问。
+
+原生 `Player::TriggerRoomClear` 返回后通知运行层原调用玩家及清房的维度／房间编号；记录原生已经处理的玩家，实际补发在房间模拟退出后执行。通知只表示清房事件，不在后端解释规则，也不替其他房间调用完整的 `TriggerRoomClear`。客机继续抑制原生清房玩法，接受主机库存状态。
+
 | 能力 | 边界与参考 |
 | --- | --- |
 | 错误道具定义与负编号库存 | 有序种子恢复、注册表和真实数量查询见[错误道具定义](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md) |
