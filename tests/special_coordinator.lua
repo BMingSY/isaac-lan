@@ -49,6 +49,9 @@ for i = 1, 2 do
             done = function()
                 return flags[i]
             end,
+            cleanup = function()
+                _IsaacLanFrame, _IsaacLan.net_gate = frame, gate
+            end,
         }
     end
 end
@@ -69,8 +72,12 @@ coordinator()
 flags[1], now = true, 1000
 coordinator()
 assert(commands == 0)
+assert(
+    _IsaacLanFrame == coordinator and _IsaacLan.net_gate == gate,
+    "Standalone cleanup removed the suite's frame loop"
+)
 now = 2999
-coordinator()
+_IsaacLanFrame()
 assert(commands == 0, "Host exited before the guest completion grace period")
 now = 3001
 coordinator()

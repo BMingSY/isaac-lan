@@ -30,6 +30,8 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 `actor_pose` 的五个武器槽来自 `Player+0x13dc`。每个现有槽读取原生虚表第 6 项 `GetMaxCharge`（thiscall，浮点返回）和 `Weapon+0x34` 修正标志；蓄力上限必须有限且非负。写入只针对客机已存在且类型匹配的武器，不创建武器、不执行攻击；上限作为显示元数据，修正标志与蓄力一并恢复。武器记录格式见[状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#完整视图与实体身份)。
 
+`familiar_body(sprite[, layers])` 限定跟班的原生身体组件，校验 `Familiar+0xee0` 虚表 RVA `0x764914`。读取返回四个大端有符号图层 ID 和五个借用 Sprite；Sprite 位于组件 `+0x4`，间距 `0x114`，图层位于 `+0x568`。写入仅允许客机，完整校验载荷、图层为 `-1` 或对应 Sprite 的有效图层后提交。Lua 道具适配复用普通 Sprite 编解码，先恢复使用道具时缓存的外观，再恢复绘制图层；不借用当前玩家外观，不执行跟班 AI，不分配或转移原生组件所有权。
+
 `familiar_tether(sprite)` 限定跟班实体借用 Sprite，检查 `Familiar+0xee0` 的 `UmbilicalBabyData` 虚表 RVA `0x71d264`。返回最多 256 个 XYZ 点和绳索借用 Sprite，无此组件返回 `false`。组件 `+0x8/+0xc/+0x10/+0x14` 为原生 deque 的映射、容量、首项和数量，Sprite 位于 `+0x18`；映射容量限定为不超过 4096 的二次幂，所有坐标必须有限。
 
 `familiar_tether_render(entitySprite, ropeSprite, bytes)` 仅允许客机绘制，完整校验点载荷后调用 J460 RVA `0x35290` 的原生绳索绘制方法。只在调用期间借用已有跟班及 Lua 自有绳索 Sprite，构造栈上只读 deque 视图并临时替换组件指针，返回即恢复。不构造／析构原生组件、不转移 Sprite 所有权、不执行跟班 AI 或武器更新。入口字节受启动签名校验。
@@ -176,7 +178,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 共享道具生成查询 | 通过受限 PlayerManager 查询范围借用完整名单；达摩剑额外底座调用点 VA `0x6e0ade`，受伤与落剑仍查询实际持有者 |
 | 小夜灯显示 | Room::Render 的 RVA `0x410dad` 查询按所在房间筛选；角色姿态携带 `Player+0x1ae4` 的有限角度，不改变减速判定 |
 | 特殊房间描述符 | 列表编号允许特殊房间使用自己的负房间编号，普通房间使用非负下标；描述符仍通过原生查找取得 |
-| 临时效果 | [temporary_effects.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/temporary_effects.lua) 通过原版 Lua API 按层数差值恢复巨大化和护盾；不重放使用动作 |
+| 临时效果 | [temporary_effects.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/temporary_effects.lua) 通过原版 Lua API 采集道具、饰品及 Null 效果集合，按层数差值恢复并移除已过期效果；不重放使用动作 |
 | 本机拾取预览 | `Pickup::UpdateGhosts` RVA `0x2e17c0`，`thiscall(Pickup*)`；只在本机名单内生成 `PICKUP_GHOST`。遍历 Room 的绘制实体数组（`+0x1258`），先冻结拾取物列表再调用；Entity `+0x170` 表示已注册，不能作为删除标志过滤。原生持有 LootList、ANM2 与实体引用，普通实体快照排除该效果；预览查询不推进掉落 RNG |
 | 跨房持续激光 | `Player+0x1458` 是受注册的激光 `EntityPtr`。在来源房间内调用实体原生 Remove，再以 `EntityPtr::Assign` RVA `0x2b5b50`（ECX 引用、EDX 新实体）解除引用；不复制指针、不释放原生内存、不重置剩余时间 |
 | 道具／饰品复活上下文 | `Player::ReviveFromCollectible` RVA `0x3a23a0` 为 `thiscall void(Player*, unsigned item, bool owned)`；`ReviveFromTrinket` RVA `0x3a3430` 为 `thiscall void(Player*, unsigned trinket, unsigned scratch)`。后者的第二个栈字未参与 J460 逻辑，但原生以 `RET 8` 清栈，必须原样透传，不能沿用旧版单参数声明。PlayerManager 在房间更新之外处理死亡时，按角色控制器借入所属房间与名单，再调用一次原入口；已有作用域及单人模式沿用原上下文，不重放复活效果。入口受版本签名校验，角色及效果实体仍由游戏拥有 |
@@ -185,10 +187,10 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 房间年龄使用 `Game+0x264f8` 的游戏帧减去 `Room+0x11f0` 的进入帧。后端为每个房间记录上次观察的游戏帧，房间进场屏障暂停期间仅将经过的帧数补入进入帧；初始化／接管房间时重设观察点，重复游戏帧不补偿。原生玩家更新仍负责首帧道具效果和充能，运行层不代替这些效果结算。
 | 跨局共享奖励 | `Player::AddCollectible` RVA `0x35f0e0` 的具名调用点 `0x3be32f` 标识原生祝福奖励。只在新建联机局时记录至多两项 ID，原生初始化后向其他控制器各发放一次；不复制初始库存，不重放宿主奖励或修改个人射速 |
-| 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；绘制时借入本机状态并完整恢复全局标量 |
+| 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x26528/+0x2652c/+0x26530` 是泛光剩余时间／初始时间／强度，`+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；角色更新及嵌套的道具／药丸／卡牌调用借入同一所属状态，结束时回收并恢复全局标量；绘制只借入本机状态，角色动作外的世界泛光保留全局归属 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 33、网络消息版本为 42；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 34、网络消息版本为 43；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 

@@ -134,7 +134,6 @@ function _IsaacLanFrame()
             "Missing paid entry, crawlspace or keyless denial"
         )
         if not host then
-            assert(seen.knifeSubframes >= 20, "Returning knife did not advance between snapshots")
             assert(
                 seen.keySamples >= 3 and seen.keyPause < 3,
                 "Key approach stalled before the doorway"

@@ -47,7 +47,8 @@ sync/curses
 sync/deals
 compat/items/black_candle
 compat/items/crafting_bag
-compat/items/temporary_effects
+sync/temporary_effects
+compat/items/split_body
 compat/items/attack_preview
 compat/items/room_entry
 compat/items/glitched
@@ -56,7 +57,7 @@ compat/routes/dice_floor
 compat/routes/greed
 compat/bosses/dogma
 compat/bosses/held_bombs
-compat/bosses/visuals
+compat/visuals
 compat/characters/lazarus
 compat/characters/forgotten
 compat/characters/blue_baby

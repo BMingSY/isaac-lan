@@ -234,7 +234,6 @@ return function(fields)
                 -- Paused snapshots retain native velocities. Do not accumulate
                 -- an invisible extrapolation error and release it on resume.
                 for _, m in pairs(motion) do
-                    m.relative, m.relativeParent = nil, nil
                     m.track.target, m.track.at = m.target, now
                     m.track.x, m.track.y = m.target.X, m.target.Y
                     m.track.vx, m.track.vy, m.track.cx, m.track.cy = 0, 0, 0, 0
@@ -404,7 +403,7 @@ return function(fields)
                 end
             end
             if view.attachments then
-                view.attachments.present(motion, ref, now, track, sample)
+                view.attachments.present(motion, ref)
             end
             if view.attacks then
                 view.attacks.present(motion, ref, now, dt, sequence, status)

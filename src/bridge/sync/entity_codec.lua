@@ -293,7 +293,7 @@ return function(wire)
             value[Entity.shadow] = visual and assert(native.entity_shadow(s)) or false
             value[Entity.compatibility] = visual
                     and visualCompatibility
-                    and visualCompatibility.capture(e, id)
+                    and visualCompatibility.capture(e, id, sprite)
                 or false
             value[Entity.minecart] = visual and entityLinks.capture(e, id) or 0
             value[Entity.held] = visual and entityLinks.captureHeld(e, id) or 0
@@ -365,7 +365,7 @@ return function(wire)
                 e:ToLaser().EndPoint = vec(v[Entity.laserEndPoint])
             end
             if visualCompatibility then
-                visualCompatibility.apply(e, v[Entity.compatibility])
+                visualCompatibility.apply(e, v[Entity.compatibility], applySprite)
             end
             e.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
             e.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE

@@ -25,6 +25,9 @@ coordinator = function()
     end
     if not exiting and scenario.done() then
         scenario.cleanup()
+        -- Standalone fixtures may restore their entrypoints during cleanup.
+        -- The suite still owns the frame loop until it has left this session.
+        _IsaacLanFrame, native.net_gate = coordinator, originalGate
         exiting, endedAt = true, native.api_info().nowMs
         Isaac.DebugString("LAN_NETWORK SPECIAL_CASE_PASS index=" .. current)
     end

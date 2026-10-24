@@ -116,8 +116,8 @@ function _IsaacLanFrame()
                 local sprite = p:GetSprite()
                 local extra = assert(native.actor_sprites(index, sprite))[1]
                 local pose = not host and _IsaacLanState.actorPose(p)
-                local _, _, _, pixels, duration, dizzy, target =
-                    string.unpack(">BBI4I4I4fff", native.item_presentation_pose(slot))
+                local _, _, _, pixels, duration, dizzy, target, _, bloom, bloomDuration =
+                    string.unpack(">BBI4I4I4fffI4I4f", native.item_presentation_pose(slot))
                 players[#players + 1] = {
                     slot = slot,
                     x = p.Position.X,
@@ -138,6 +138,8 @@ function _IsaacLanFrame()
                     pixelDuration = duration,
                     dizzy = dizzy,
                     dizzyTarget = target,
+                    bloom = bloom,
+                    bloomDuration = bloomDuration,
                     room = Game():GetLevel():GetCurrentRoomDesc().SafeGridIndex,
                     authority = pose or false,
                 }
@@ -170,6 +172,14 @@ function _IsaacLanFrame()
                     "Pill text crossed owners or replayed"
                 )
                 local own, other = assert(bySlot[case.slot]), assert(bySlot[1 - case.slot])
+                local localScreen = bySlot[host and 0 or 1]
+                assert(
+                    (localScreen.bloom > 0) == (host == (case.slot == 0)),
+                    "Pill bloom crossed viewports or failed to reach its owner"
+                )
+                if host then
+                    assert(own.bloom > 0 and other.bloom == 0, "Authority bloom ownership differs")
+                end
                 if
                     case.effect == PillEffect.PILLEFFECT_SPEED_DOWN
                     or case.effect == PillEffect.PILLEFFECT_BAD_TRIP
@@ -281,6 +291,26 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             actor(1, function(p)
                 p.Position, p.Velocity = Vector(420, 280), Vector.Zero
             end)
+        elseif t == 320 then
+            local origin = native.rooms_positions()["0"].index
+            for i = 0, Game():GetLevel():GetRooms().Size - 1 do
+                local d = Game():GetLevel():GetRooms():Get(i)
+                if d.SafeGridIndex ~= origin and d.Data.Type == RoomType.ROOM_DEFAULT then
+                    assert(native.rooms_move(1, d.SafeGridIndex, 0, -1))
+                    actor(1, function(_, room)
+                        clear(room)
+                    end)
+                    break
+                end
+            end
+        elseif t == 330 then
+            -- The destination's first native update populates it after rooms_move.
+            -- Remove those enemies before observing pill poses, as in the horse-pill case.
+            actor(1, function(_, room)
+                clear(room)
+            end)
+        elseif t == 450 then
+            assert(native.rooms_move(1, native.rooms_positions()["0"].index, 0, -1))
         elseif t == 1090 then
             actor(1, function(_, room)
                 clear(room)

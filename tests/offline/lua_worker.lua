@@ -94,9 +94,7 @@ local function stateEnvironment()
                 root .. "/src/bridge/compat/characters/keeper.lua"
             ),
             ["compat/items/glitched"] = dofile(root .. "/src/bridge/compat/items/glitched.lua"),
-            ["compat/items/temporary_effects"] = dofile(
-                root .. "/src/bridge/compat/items/temporary_effects.lua"
-            ),
+            ["sync/temporary_effects"] = dofile(root .. "/src/bridge/sync/temporary_effects.lua"),
             ["compat/items/black_candle"] = dofile(
                 root .. "/src/bridge/compat/items/black_candle.lua"
             ),
@@ -111,7 +109,8 @@ local function stateEnvironment()
             ["compat/bosses/held_bombs"] = dofile(
                 root .. "/src/bridge/compat/bosses/held_bombs.lua"
             ),
-            ["compat/bosses/visuals"] = dofile(root .. "/src/bridge/compat/bosses/visuals.lua"),
+            ["compat/items/split_body"] = dofile(root .. "/src/bridge/compat/items/split_body.lua"),
+            ["compat/visuals"] = dofile(root .. "/src/bridge/compat/visuals.lua"),
             ["compat/characters/lazarus"] = dofile(
                 root .. "/src/bridge/compat/characters/lazarus.lua"
             ),

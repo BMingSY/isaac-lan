@@ -43,7 +43,7 @@ end, PlayerType)
 local poop = assert(modules["compat/characters/blue_baby"])(native, PlayerType)
 local glitched = assert(modules["compat/items/glitched"])(native)
 local craftingBag = assert(modules["compat/items/crafting_bag"])(native, CollectibleType)
-local temporaryEffects = assert(modules["compat/items/temporary_effects"])(CollectibleType)
+local temporaryEffects = component("sync/temporary_effects")
 local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
 local tethers =
@@ -52,11 +52,12 @@ local entityCodec = component("sync/entity_codec")(
     native,
     assert(modules["sync/entity_schema"])(EntityType),
     npcState,
-    assert(modules["compat/bosses/visuals"])(
+    assert(modules["compat/visuals"])(
         assert(modules["compat/bosses/dogma"])(Vector, EntityType, EffectVariant),
         assert(modules["compat/bosses/held_bombs"])(native, EntityType, function()
             return Isaac.GetRoomEntities()
-        end)
+        end),
+        assert(modules["compat/items/split_body"])(native, EntityType, FamiliarVariant)
     ),
     assert(modules["sync/entity_links"])(native, function()
         return Isaac.GetRoomEntities()

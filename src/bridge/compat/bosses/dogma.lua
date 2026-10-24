@@ -8,6 +8,7 @@ return function(vector, types, effects)
             and entity.SubType == WARNING_SUBTYPE
     end
     return {
+        matches = matches,
         capture = function(entity)
             if not matches(entity) then
                 return false

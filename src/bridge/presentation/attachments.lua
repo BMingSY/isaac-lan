@@ -10,7 +10,7 @@ return function(fields)
                 -- Native returning knives retain their parent even in flight.
                 -- Synergy projectiles use a distinct subtype and travel freely.
                 if parent ~= 0 and entity.SubType ~= KnifeSubtype.projectile then
-                    return { parent = parent, trajectory = true }
+                    return { parent = parent }
                 end
             elseif entity.Type == types.ENTITY_LASER then
                 local follows = not entity:ToLaser().DisableFollowParent
@@ -31,7 +31,7 @@ return function(fields)
                 return { parent = parent }
             end
         end
-        local function present(motion, ref, now, track, sample)
+        local function present(motion, ref)
             local resolved, visiting = {}, {}
             local holders = {}
             for identifier, model in pairs(motion) do
@@ -55,31 +55,6 @@ return function(fields)
                     value = model.display - model.target
                 elseif model.attachment and model.attachment.parent ~= 0 then
                     value = offset(model.attachment.parent)
-                    local parent = motion[model.attachment.parent]
-                    if value and model.attachment.trajectory and model.track and now then
-                        -- Returning weapons have zero native velocity in flight.
-                        -- Follow their observed path in the parent's frame, then
-                        -- compose it with that parent's current rendered position.
-                        local relative = model.target - parent.target
-                        local prior = model.relative
-                        if model.relativeParent ~= model.attachment.parent then
-                            prior = nil
-                        end
-                        local tick = model.track.tick
-                        local velocity = Vector(0, 0)
-                        if prior and tick > prior.tick then
-                            local interval = tick - prior.tick
-                            velocity = Vector(
-                                (relative.X - prior.x) / interval,
-                                (relative.Y - prior.y) / interval
-                            )
-                        end
-                        model.relative = track(prior, relative, velocity, now, tick, 30)
-                        model.relativeParent = model.attachment.parent
-                        value = value + sample(model.relative, now) - relative
-                    elseif not value then
-                        model.relative, model.relativeParent = nil, nil
-                    end
                 end
                 if not value and model.attachment and model.attachment.path then
                     -- A free laser keeps its own trajectory; its impact still
@@ -93,9 +68,6 @@ return function(fields)
             -- of hash-table order, including a laser's attached impact effect.
             for identifier, model in pairs(motion) do
                 local attachment = model.attachment
-                if not attachment or not attachment.trajectory then
-                    model.relative, model.relativeParent = nil, nil
-                end
                 if attachment or holders[identifier] then
                     local entity = ref(identifier)
                     if entity then

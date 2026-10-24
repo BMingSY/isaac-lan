@@ -221,7 +221,8 @@ local function environment()
     end
     modules["sync/entity_links"] = dofile(root .. "/src/bridge/sync/entity_links.lua")
     modules["compat/bosses/held_bombs"] = dofile(root .. "/src/bridge/compat/bosses/held_bombs.lua")
-    modules["compat/bosses/visuals"] = dofile(root .. "/src/bridge/compat/bosses/visuals.lua")
+    modules["compat/items/split_body"] = module("compat/items/split_body")
+    modules["compat/visuals"] = dofile(root .. "/src/bridge/compat/visuals.lua")
     modules["compat/bosses/dogma"] = function()
         return {}
     end
@@ -251,7 +252,7 @@ local function environment()
         "compat/routes/crawlspace",
         "compat/characters/forgotten",
         "compat/items/glitched",
-        "compat/items/temporary_effects",
+        "sync/temporary_effects",
     }) do
         modules[name] = inert
     end
