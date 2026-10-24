@@ -142,6 +142,14 @@ return function(fields)
         return {
             apply = applyActorVisuals,
             walk = walk,
+            departFloor = function(player, animation, same)
+                -- The authoritative trapdoor starts this pose before issuing
+                -- the floor event. Replica grids never run that gameplay code.
+                local descent = 0
+                if animation == descent and not same and not player:IsCoopGhost() then
+                    player:AnimateTrapdoor()
+                end
+            end,
             reset = function()
                 costumeIDs = {}
             end,

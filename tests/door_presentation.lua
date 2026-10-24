@@ -1,6 +1,8 @@
 local root = assert(arg[1])
 local time, draws = 0, 0
 local doors = dofile(root .. "/src/bridge/presentation/doors.lua")({
+    doorVariants = { DOOR_LOCKED = 1, DOOR_LOCKED_DOUBLE = 2 },
+    gridTypes = { GRID_STAIRS = 18 },
     clock = function()
         return time
     end,
@@ -51,6 +53,7 @@ time = 100
 assert(doors.alpha() == 1, "Repeated doorway samples restarted departure")
 doors.arrive()
 assert(doors.movementBlocked(), "Arrival fade allowed invisible local movement")
+doors.render()
 local filtered = doors.filterInput(input)
 assert(#filtered == #input, "Arrival truncated the native input frame")
 local decoded = codec.decode(filtered)
@@ -86,5 +89,106 @@ assert(doors.alpha() == 0, "Rejected doorway left the view obscured")
 doors.begin()
 time = 1100
 doors.reset()
-assert(doors.alpha() == 0 and draws == 1, "Pause/floor/session reset leaked a transition")
+assert(doors.alpha() == 0 and draws == 2, "Pause/floor/session reset leaked a transition")
+doors.begin()
+time = 1200
+doors.arrive()
+time = 1700
+assert(doors.alpha() == 1 and doors.movementBlocked(), "Room loading consumed the unseen reveal")
+assert(doors.filterInput(input) == filtered, "Loading released the arrival input hold")
+doors.render()
+time = 1760
+assert(math.abs(doors.alpha() - 0.5) < 0.001, "Reveal did not begin on its first actual draw")
+time = 1830
+assert(doors.alpha() == 0 and not doors.movementBlocked())
+doors.reset()
 print("PASS local door departure, confirmed arrival, cancellation, rejection and reset")
+
+local function point(x, y)
+    return { X = x, Y = y }
+end
+local door = { Position = point(100, 0), open = false, variant = 1 }
+function door:IsOpen()
+    return self.open
+end
+function door:IsLocked()
+    return true
+end
+function door:GetVariant()
+    return self.variant
+end
+local player = { keys = 1, golden = false }
+function player:GetNumKeys()
+    return self.keys
+end
+function player:HasGoldenKey()
+    return self.golden
+end
+local stair, hasDoor = nil, true
+local room = {
+    GetDoor = function(_, slot)
+        return hasDoor and slot == 2 and door or nil
+    end,
+    IsClear = function()
+        return true
+    end,
+    GetGridEntityFromPos = function()
+        return stair
+    end,
+}
+time = 2000
+assert(doors.preview(room, player, point(60, 0), point(1, 0)) == 2)
+assert(
+    player.keys == 1 and not door.open and doors.alpha() == 0,
+    "Approach preview spent a key, changed the native door or hid a rejected entry"
+)
+time = 2100
+doors.preview(room, player, point(0, 0), point(1, 0), {})
+time = 2251
+assert(doors.preview(room, player, point(80, 0), point(1, 0)) == nil)
+time = 2300
+assert(
+    doors.preview(room, player, point(80, 0), point(1, 0)) == nil,
+    "Held denial restarted preview"
+)
+doors.preview(room, player, point(60, 0), point(-1, 0))
+assert(doors.preview(room, player, point(60, 0), point(1, 0)) == 2)
+doors.reset()
+player.keys = 0
+assert(doors.preview(room, player, point(60, 0), point(1, 0)) == nil)
+player.keys, door.variant = 1, 2
+assert(doors.preview(room, player, point(60, 0), point(1, 0)) == nil)
+player.keys = 2
+assert(doors.preview(room, player, point(60, 0), point(1, 0)) == 2)
+doors.reset()
+player.keys, player.golden = 0, true
+assert(doors.preview(room, player, point(60, 0), point(1, 0)) == 2)
+door.variant = 5
+assert(
+    doors.preview(room, player, point(60, 0), point(1, 0)) == nil,
+    "Key preview bypassed a different lock"
+)
+hasDoor = false
+stair = {
+    Position = point(100, 0),
+    GetType = function()
+        return 18
+    end,
+}
+doors.preview(room, player, point(76, 0), point(1, 0))
+time = 2345
+assert(math.abs(doors.alpha() - 0.5) < 0.001, "Crawlspace approach omitted its departure")
+doors.preview(room, player, point(106, 0), point(1, 0))
+assert(math.abs(doors.alpha() - 0.5) < 0.001, "Crossing the entrance cancelled its preview")
+doors.preview(room, player, point(0, 0), point(-1, 0), {})
+assert(math.abs(doors.alpha() - 0.5) < 0.001, "A second controlled body cancelled the entrance")
+doors.arrive()
+assert(doors.movementBlocked())
+doors.reset()
+doors.preview(room, player, point(76, 0), point(1, 0))
+time = 2370
+doors.preview(room, player, point(76, 0), point(-1, 0))
+assert(not doors.movementBlocked(), "Turning away from stairs acquired an arrival lock")
+time = 2600
+assert(doors.alpha() == 0)
+print("PASS key affordability, bounded denial, retry, stairs and cancellation")

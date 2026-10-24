@@ -175,7 +175,7 @@ local function environment(difficulty)
         _IsaacLan = native,
         _IsaacLanPrediction = {},
         _IsaacLanStatus = function()
-            return { pause = 1 }
+            return { pause = 1, slot = 1 }
         end,
         _IsaacLanModules = {},
         ItemType = { ITEM_ACTIVE = 2 },
@@ -193,6 +193,10 @@ local function environment(difficulty)
             GetPlayer = function()
                 return {
                     Position = { X = 100, Y = 100 },
+                    IsCoopGhost = function()
+                        return false
+                    end,
+                    AnimateTrapdoor = function() end,
                     GetSprite = function()
                         return {}
                     end,

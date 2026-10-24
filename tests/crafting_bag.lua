@@ -256,7 +256,7 @@ local function environment()
         modules[name] = inert
     end
     modules["presentation/actors"] = function()
-        return { apply = noop, reset = noop }
+        return { apply = noop, reset = noop, departFloor = noop }
     end
     modules["presentation/motion"] = function()
         return { present = noop, reset = noop, track = noop }
@@ -353,6 +353,9 @@ local function environment()
                 return { confirm = noop }
             end,
         },
+        _IsaacLanStatus = function()
+            return { slot = 1 }
+        end,
         _IsaacLanModules = modules,
         ItemType = { ITEM_ACTIVE = 2 },
         NullItemID = { ID_LOST_CURSE = 1 },

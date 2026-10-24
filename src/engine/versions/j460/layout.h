@@ -130,6 +130,10 @@ inline constexpr unsigned parent = 0x3bc;
 namespace entityRef {
 inline constexpr unsigned entity = 0x24;
 } // namespace entityRef
+namespace npc {
+// EntityNPC::IsBoss reads this classification byte, independently of BossID.
+inline constexpr unsigned boss = 0xc3d;
+} // namespace npc
 namespace tear {
 inline constexpr unsigned height = 0x410;
 inline constexpr unsigned fallingSpeed = 0x414;

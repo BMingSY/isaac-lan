@@ -160,6 +160,8 @@ local hits = component("presentation/hits")({
     end,
 })
 local doorPresentation = modules["presentation/doors"]({
+    doorVariants = DoorVariant,
+    gridTypes = GridEntityType,
     clock = Isaac.GetTime,
     sprite = Sprite,
     vector = Vector,
@@ -318,6 +320,12 @@ end, function()
     deals.reset()
     replica.resetView()
     captureState.reset()
+end, function(animation, same)
+    local slot = _IsaacLanStatus().slot
+    assert(native.rooms_with_player(slot, function()
+        local index = assert(native.rooms_heads()[tostring(slot)])
+        actorsPresentation.departFloor(Isaac.GetPlayer(index), animation, same)
+    end))
 end)
 function state.apply(bytes, tick, ack, betweenUpdates, stable)
     if not replica.apply(bytes, tick, ack, betweenUpdates, stable) then

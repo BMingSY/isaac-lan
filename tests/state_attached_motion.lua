@@ -96,8 +96,27 @@ local function observe(entity, actor, value, at, case)
         )
         record.maxError = math.max(record.maxError, (relative - expected):Length())
         if key == case.name .. ":" .. case.weapon and case.attached then
+            local limit = tolerance
+            if entity.Type == EntityType.ENTITY_KNIFE then
+                -- Relative trajectories can lead the last accepted sample.
+                -- Once authority holds a relative pose, they must settle back
+                -- onto that pose instead of drifting with an old flight speed.
+                if not record.expected or (expected - record.expected):Length() > tolerance then
+                    record.changedAt = latest.tick
+                end
+                record.expected = expected
+                limit = latest.tick - record.changedAt >= 6 and 0.5 or 96
+                if
+                    record.renderTick == latest.tick
+                    and record.relative
+                    and (relative - record.relative):Length() > tolerance
+                then
+                    record.subframes = (record.subframes or 0) + 1
+                end
+                record.renderTick, record.relative = latest.tick, relative
+            end
             assert(
-                (relative - expected):Length() < tolerance,
+                (relative - expected):Length() < limit,
                 "Weapon detached from predicted actor: " .. key
             )
         end
@@ -217,8 +236,17 @@ function _IsaacLanFrame()
                     "Independent laser was bound to its owner: " .. entry.name
                 )
             end
+            if not host and entry.name == "knife" then
+                assert(
+                    (record.subframes or 0) >= 5,
+                    "Returning knife still advances only on snapshots"
+                )
+            end
         end
         assert(host or pathSamples >= minimumSamples, "Missing rendered path checks")
+        for _, record in pairs(seen) do
+            record.expected, record.relative = nil, nil
+        end
         report("OBSERVED " .. json.encode(seen))
         report("PATHS samples=" .. pathSamples .. " max_error=" .. maxPathError)
         finished = true

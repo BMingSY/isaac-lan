@@ -1,5 +1,5 @@
 -- Reliable events enter through one epoch barrier before any native operation.
-return function(native, floor, compatibility, level, resetView)
+return function(native, floor, compatibility, level, resetView, presentDeparture)
     return function(
         epoch,
         stage,
@@ -33,6 +33,7 @@ return function(native, floor, compatibility, level, resetView)
             native.rooms_begin_floor(same and 1 or 0, animation, sourceRoom),
             "Native floor event failed"
         )
+        presentDeparture(animation, same)
         return true
     end
 end

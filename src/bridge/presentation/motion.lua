@@ -103,10 +103,10 @@ return function(fields)
             return result
         end
         local outwardDirections = { Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) }
-        local function doorCorridor(room, position)
+        local function doorCorridor(room, position, preview)
             for slot = 0, 7 do
                 local door = room:GetDoor(slot)
-                if door and door:IsOpen() then
+                if door and (door:IsOpen() or slot == preview) then
                     local outward = outwardDirections[slot % 4 + 1]
                     local delta = door.Position - position
                     local along = delta:Dot(outward)
@@ -135,9 +135,9 @@ return function(fields)
             { -0.7071, -0.7071 },
         }
         local maxSweepStep, maxSweepDistance = 4, 256
-        local function sweep(room, from, wanted, radius, flying, controls, authority)
+        local function sweep(room, from, wanted, radius, flying, controls, authority, preview)
             local function clear(position)
-                local aperture = controls and doorCorridor(room, position) ~= nil
+                local aperture = controls and doorCorridor(room, position, preview) ~= nil
                 if not clearForPlayer(room, position, aperture, flying) then
                     return false
                 end
@@ -166,7 +166,12 @@ return function(fields)
                     return authority
                 end
             end
-            local aperture = controls and doorCorridor(room, wanted) ~= nil
+            local slot, outward, along = doorCorridor(room, wanted, preview)
+            local aperture = controls and slot ~= nil
+            if aperture and slot == preview and not room:GetDoor(slot):IsOpen() and along < 18 then
+                -- Stop inside the source room until the real unlock arrives.
+                wanted = room:GetDoor(slot).Position - outward * 18
+            end
             if not aperture then
                 wanted = room:GetClampedPosition(wanted, radius)
             end
@@ -229,6 +234,7 @@ return function(fields)
                 -- Paused snapshots retain native velocities. Do not accumulate
                 -- an invisible extrapolation error and release it on resume.
                 for _, m in pairs(motion) do
+                    m.relative, m.relativeParent = nil, nil
                     m.track.target, m.track.at = m.target, now
                     m.track.x, m.track.y = m.target.X, m.target.Y
                     m.track.vx, m.track.vy, m.track.cx, m.track.cy = 0, 0, 0, 0
@@ -272,6 +278,11 @@ return function(fields)
                         assert(native.rooms_with_player(status.slot, function()
                             local room = view.room()
                             local radius = math.max(5, e.Size)
+                            local preview = controls
+                                    and view.doors
+                                    and view.doors.preview
+                                    and view.doors.preview(room, p, m.display, direction, m)
+                                or nil
                             local function resolve(from, wanted, authority)
                                 return sweep(
                                     room,
@@ -280,7 +291,8 @@ return function(fields)
                                     radius,
                                     p.CanFly or p:IsCoopGhost(),
                                     controls,
-                                    authority
+                                    authority,
+                                    preview
                                 )
                             end
                             position = m.prediction:step(
@@ -392,7 +404,7 @@ return function(fields)
                 end
             end
             if view.attachments then
-                view.attachments.present(motion, ref)
+                view.attachments.present(motion, ref, now, track, sample)
             end
             if view.attacks then
                 view.attacks.present(motion, ref, now, dt, sequence, status)

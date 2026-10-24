@@ -16,6 +16,8 @@
 
 J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.h)。`Size` 调用原 Lua 属性 setter（cdecl，RVA `0x471fa0`）；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
 
+`entity_npc_boss(npc:GetSprite(), boolean)` 仅供客机恢复活动 NPC 的 Boss 分类。J460 `EntityNPC::IsBoss`（RVA `0x2b8470`）读取 NPC `+0xc3d` 的独立布尔值；它与 `GetBossID()` 返回的类型标识不同。接口只接受借用 Sprite、原版 NPC 类型范围与布尔值，不接收地址、不保留引用，不运行 NPC AI。同步组件将 `IsBoss()` 与六个 scratch／目标坐标 float32 一起编码为 25 字节；完整校验后应用，原生血条仍按这些实体及血量计算。
+
 ## 实体引用与房间数据
 
 角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。
@@ -186,7 +188,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；绘制时借入本机状态并完整恢复全局标量 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 32、网络消息版本为 41；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 33、网络消息版本为 42；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 

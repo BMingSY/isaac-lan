@@ -337,7 +337,7 @@ return function(wire)
             end
             if v[Entity.npc] then
                 local npc = assert(e:ToNPC())
-                npcState.apply(npc, v[Entity.npc])
+                npcState.apply(npc, v[Entity.npc], native.entity_npc_boss)
             end
             -- Floor/wall flags tell EntityList::Update to bake and retire a sprite.
             -- Replicas instead keep receiving its pose/lifetime from the host. Baking

@@ -179,3 +179,51 @@ entities[80] = nil
 present()
 close(bone.Position, 110, 215, "Removed holder retained a link")
 print("PASS carried actor/weapon offsets, repeat, throw and holder removal")
+
+-- Real returning-knife snapshots move while Velocity stays zero. Between
+-- packets the flight must still advance, including after a direction reversal.
+models, entities = {}, {}
+add(20, types.ENTITY_PLAYER)
+local flying, flyingModel = add(1, types.ENTITY_KNIFE, 0, 20)
+local function snapshot(tick, x, parentX)
+    now = tick / 30
+    for id, model in pairs(models) do
+        model.target = Vector(id == 20 and parentX or x, 200)
+        model.controller = 1
+        model.track = motion.track(model.track, model.target, Vector(0, 0), now, tick, 30)
+    end
+end
+local function render(at)
+    now = at
+    motion.present("", 0, {}, models, function(id)
+        return entities[id]
+    end, 1)
+    return flying.Position.X
+end
+snapshot(30, 130, 100)
+render(1)
+snapshot(31, 142, 100)
+local first = render(31 / 30)
+local middle = render(31 / 30 + 1 / 120)
+local last = render(31 / 30 + 1 / 60)
+assert(first < middle and middle < last, "Knife flight advanced only on network snapshots")
+assert(render(31 / 30 + 1 / 60) == last, "Repeated knife render accumulated motion")
+snapshot(32, 154, 112)
+render(32 / 30)
+assert(flyingModel.relative.vx == 0, "Parent travel was counted again as knife flight")
+snapshot(33, 142, 112)
+render(33 / 30)
+local returning = render(33 / 30 + 0.05)
+assert(render(33 / 30 + 0.06) < returning, "Returning knife retained its outbound velocity")
+local stalled = render(33 / 30 + 1)
+assert(math.abs(render(33 / 30 + 2) - stalled) < 0.001, "Missing packets extrapolated forever")
+local _, replacement = add(30, types.ENTITY_PLAYER)
+replacement.controller = 1
+replacement.track = motion.track(nil, replacement.target, Vector(0, 0), now, 33, 30)
+flyingModel.attachment = attachments.capture(flying, { [E.parent] = 30 })
+render(now)
+assert(flyingModel.relative.vx == 0, "Parent replacement inherited an old flight velocity")
+entities[30] = nil
+render(now)
+assert(flyingModel.relative == nil, "Missing parent retained a relative trajectory")
+print("PASS returning knife subframe travel, parent movement, reversal and invalidation")
