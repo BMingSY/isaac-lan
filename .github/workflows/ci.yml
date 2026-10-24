@@ -24,19 +24,41 @@ jobs:
     name: Format, scripts and core tests
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.deps/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 256M
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Cache check dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cache/pip
+            .deps/stylua.zip
+          key: ubuntu-24.04-check-tools-${{ hashFiles('tools/requirements-ci.txt', '.github/workflows/ci.yml') }}
+      - name: Cache portable compilation
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .deps/ccache
+          key: ubuntu-24.04-asan-${{ hashFiles('.github/workflows/ci.yml') }}-${{ github.sha }}
+          restore-keys: ubuntu-24.04-asan-${{ hashFiles('.github/workflows/ci.yml') }}-
       - name: Install check tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build lua5.3 liblua5.3-dev python3-venv
+          sudo apt-get install -y cmake ninja-build ccache lua5.3 liblua5.3-dev python3-venv
           python3 -m venv .deps/checks
           .deps/checks/bin/pip install -r tools/requirements-ci.txt
-          curl -fsSL --retry 3 \
-            https://github.com/JohnnyMorganz/StyLua/releases/download/v2.0.2/stylua-linux-x86_64.zip \
-            -o .deps/stylua.zip
+          if [ ! -f .deps/stylua.zip ]; then
+            curl -fsSL --retry 3 \
+              https://github.com/JohnnyMorganz/StyLua/releases/download/v2.0.2/stylua-linux-x86_64.zip \
+              -o .deps/stylua.zip
+          fi
           echo 'ee9f8f9ba7c19079809d017a5d3f265a9575d1313c0fd24562cbabb99ed26f4f  .deps/stylua.zip' | sha256sum --check
           .deps/checks/bin/python -m zipfile -e .deps/stylua.zip .deps/checks/bin
           chmod +x .deps/checks/bin/stylua
@@ -46,7 +68,10 @@ jobs:
           OFFLINE_PROFILE: ${{ inputs.offline_profile || 'fast' }}
         run: |
           python tools/test.py --profile "$OFFLINE_PROFILE" --sanitizers \
-            --build-dir build-core --report-dir test-runs/ci
+            --jobs "$(nproc)" --build-dir build-core --report-dir test-runs/ci
+      - name: Report compiler cache
+        if: always()
+        run: ccache --show-stats
       - name: Preserve offline test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
