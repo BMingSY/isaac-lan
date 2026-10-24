@@ -131,7 +131,7 @@ python tools/engine_test.py run special-routes -- \
 
 连续玩法组合器在同一局内切换兼容场景，保持绝对网络 tick，仅为夹具转换相对时间；路线组合器在同一组进程中等待原生退出与菜单恢复后再切换。独立启动配置、真实键盘焦点和性能隔离要求仍属于套件执行边界，不能将任意套件直接合并。
 
-`special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存原始传输； `datagrams.bin` 按大端 `double 时间戳 + u8 方向 + u16 长度 + 原始报文` 记录。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
+`special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存原始传输；`datagrams.bin` 按大端 `double 时间戳 + u8 方向 + u16 长度 + 原始报文` 记录。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
 
 `entity-fields` 使用泪弹、跟班和效果实体，对照游戏 Lua 属性、原生数组与数值块的读写结果，检查完整动画往返、错误输入不写入及外层编解码；它不作性能验收，可与其他功能场景共用进程。`lazarus` 在启动前仅为隔离客机准备所需角色解锁，并在进入联机前核对菜单可选项；存档仍由套件备份和恢复。
 
@@ -194,7 +194,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 | 全队重开投票 | [run_restart.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_restart.py)：指定 `--host`、`--client`、`--output`，可加 `--record --heap-check`；同一双端进程连续检查结算确认、手柄组合键、键盘长按 R，交替由主客机发起，核对未全票不重开、连接／选角保留和旧背包清除。键盘检查独占前台焦点；离线对应 `bridge.restart` 与 `net.restart` |
 | 通关返回选人 | [run_network_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_network_engine.py) 配合 `--script tests/state_return_lobby.lua --completion "LAN_NETWORK RETURN_LOBBY PASS two endings" --frontend --menu-start --virtual-input`，指定隔离双端、输出目录和独立端口，可加 `--heap-check --native-record-both`；同一房间连续播放两次原生结局，检查自动显示选人页、重新准备、换角色和三次开局。此夹具直接请求结局，不计为 Boss／路线验收；离线对应 `net.return-lobby` 与 `bridge.challenge_menu` |
 | 受伤移动与药丸归属 | [state_hurt_and_pills.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_hurt_and_pills.lua) 配合 `run_network_engine.py --frontend --menu-start --no-luadebug --virtual-input --latency-ms 40 --completion "PASS hurt movement and pill ownership" --native-record-both --heap-check`，指定隔离双端、输出目录与独立端口，由 `ProtectedLabs` 保护和恢复资料。复用同一组进程验证攻击蝇接触伤害、直接受伤期间的本机移动预测，以及重复速度下降、Bad Trip、I Found Pills、复古视野、麻痹、主机速度提升和分房大颗药丸；断言控制锁定、角色动作、提示文字和屏幕效果的归属，核对双端画面。离线对应 `bridge.motion-intervals` |
-| 第三方 Mod | [state_mod_ui.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_ui.lua)、[state_mod_integrations.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_integrations.lua)；按支持版本及 `--mod`／`--client-mod`／`--host-mod` 安装组合选择 |
+| 第三方 Mod | [state_mod_ui.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_ui.lua)、[state_mod_integrations.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_mod_integrations.lua)；`special-routes --case mod-integrations --case mod-integrations-dual` 复用同一对进程验证普通／双角色视图、GoodTrip 去重到达和 API 2 选定身体回执；用 `--mod`／`--client-mod`／`--host-mod` 选择实际安装组合 |
 | 性能与资源 | [诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)：与其他实机分组分开运行，区分实际负载、采集／应用、传输与原生开销 |
 
 ## 道具效果专项

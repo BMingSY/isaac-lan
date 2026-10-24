@@ -9,9 +9,9 @@
 | 句柄方法 | 契约 |
 | --- | --- |
 | `IsAttached()` | 句柄是否尚未关闭 |
-| `IsActive()` | 是否在 LAN 会话中，包括视图准备阶段 |
+| `IsActive()` | 是否在进行中的 LAN 游戏内，包括视图准备阶段；大厅和结局阶段为 `false`，仍禁止单机回退 |
 | `IsReady()` | 当前可读取本机视图；LAN 需要已提交当前代次，单机需要角色存在 |
-| `IsAuthority()` | LAN 房主或单机；关闭后为 `false` |
+| `IsAuthority()` | 进行中的 LAN 游戏房主或单机；大厅、结局及关闭后为 `false` |
 | `View()` | 本机视图副本；未就绪时为 `nil` |
 | `GetLocalPlayers()` | 本机控制的角色数组；包含双角色，未就绪时为空 |
 | `GetOwnerId(player)` | 稳定参与者 ID，从 1 开始；未知对象为 `nil` |
