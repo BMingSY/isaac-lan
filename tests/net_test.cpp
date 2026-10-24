@@ -280,6 +280,7 @@ void udpLossRecoveryImpl(bool large) {
     g.relay->impaired.store(true);
     constexpr auto actionBit = 1u << isaac::input::action::item;
     unsigned actions = 0, received = 0, lastTick = 0, largestGap = 0;
+    unsigned largestGapFrom = 0, largestGapTo = 0;
     const auto collect = [&] {
         g.poll();
         if (auto arrived = g.peers[1]->takeState()) {
@@ -294,7 +295,11 @@ void udpLossRecoveryImpl(bool large) {
                                             ? static_cast<std::uint8_t>(arrived->tick)
                                             : 0)),
                         "Fragmented prefix recovery changed world bytes");
-            largestGap = std::max(largestGap, arrived->tick - lastTick);
+            if (arrived->tick - lastTick > largestGap) {
+                largestGap = arrived->tick - lastTick;
+                largestGapFrom = lastTick;
+                largestGapTo = arrived->tick;
+            }
             lastTick = arrived->tick;
             ++received;
             g.peers[1]->applied(arrived->tick);
@@ -335,6 +340,7 @@ void udpLossRecoveryImpl(bool large) {
         "UDP observed received=%u last=%u largest_gap=%u actions=%u dropped=%u duplicates=%u\n",
         received, lastTick, largestGap, actions, g.relay->dropped.load(),
         g.relay->duplicated.load());
+    std::printf("UDP largest gap from=%u to=%u\n", largestGapFrom, largestGapTo);
     const auto delivery = g.peers[0]->resources();
     std::printf("UDP states=%llu delta=%llu raw=%llu wire=%llu\n",
                 static_cast<unsigned long long>(delivery.worldSnapshots),

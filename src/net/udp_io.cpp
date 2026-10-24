@@ -413,9 +413,17 @@ struct DatagramConnection {
                     recoveryBytes = state->bytes.size();
                     world.retainRecovery();
                 }
-                constexpr auto fecThreshold = 3 * WorldShards::shardSize;
+                // ENet's unreliable fragments are sequenced: a newer view can
+                // retire an incomplete older view before its delayed fragment
+                // arrives. Use independent shards for every fragmented view,
+                // including the common two/three-datagram deltas. Match ENet's
+                // fragmentation budget, including our generation envelope.
+                constexpr auto envelopeHeader = sizeof(std::uint8_t) + sizeof(std::uint32_t);
+                const auto fragmentLimit =
+                    peer->mtu - sizeof(ENetProtocolHeader) - sizeof(ENetProtocolSendFragment) -
+                    (peer->host->checksum ? sizeof(enet_uint32) : 0) - envelopeHeader;
                 const auto shardCount = WorldShards::packetCount(state->bytes.size());
-                if (!recovery && state->bytes.size() > fecThreshold &&
+                if (!recovery && state->bytes.size() > fragmentLimit &&
                     shardCount <= ENET_PEER_UNSEQUENCED_WINDOW_SIZE) {
                     // ENet discards the previous 1024-sequence window as soon
                     // as a newer one arrives. A view must fit within one window;
