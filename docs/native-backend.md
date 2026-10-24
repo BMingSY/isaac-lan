@@ -163,6 +163,8 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 - `MenuCharacter::Available` RVA `0x546cd0` 使用菜单记录作 receiver，栈参数为 0，被调方清理 4 字节。查询期间借入本机 642 个成就字节、523 个计数和 frontend scene；禁止在该作用域内执行 Lua、回调、存档或分配，返回前完整恢复。续玩只临时豁免已消耗的伊甸令牌。
 - 校验配置范围、数量、ID、字符串长度和配对索引；入口和 Mod 枚举锚 RVA `0x54919e` 受签名校验。字符串立即复制，原生 MSVC 字符串由游戏销毁。
 
+`characters::completionPreview` 只读取调用方提供的个人 `Progress`，不写原生存档。J460 原版角色与替身的计数映射集中在 [completion_marks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/completion_marks.h)。每个计数只取低两位的单人记录，屏蔽官方联机记录；十二层按 `gfx/ui/completion_widget.anm2` 排列，含代表 Delirium 的纸张层。预览的低 24 位每两位保存一层，位 24 表示数据可用；解码拒绝额外位和层值 3。未收录的 Mod 角色返回不可用，仍可正常选角，不伪造未通关记录。
+
 ## 道具与效果
 
 底座拾取适配位于 [item_effects.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/item_effects.cpp)。`Player::QueueItem` RVA `0x35e050` 使用 `thiscall`，只在底座确认拾取的返回点 `0x2ebe11` 通知运行层，传递玩家栏位、实体种子、道具 ID、充能、Touched、VarData 与来源池。兼容组件接受时不再向原拾取者入队；其他调用点、饰品、开局和恢复沿用原生方法。通知期间不切换房间；结算在模拟作用域退出后、发布视图前完成。源对象和配置指针不进入 Lua，不由适配器释放。

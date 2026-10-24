@@ -1,7 +1,7 @@
 local root = assert(arg[1])
 local make = dofile(root .. "/src/bridge/presentation/event_ledger.lua")
 local decode = dofile(root .. "/src/bridge/sync/combat_events.lua")
-local contact = dofile(root .. "/src/bridge/presentation/contacts.lua")
+local contact = dofile(root .. "/src/bridge/core/contacts.lua")
 local function event(serial, source, target, accepted, duration)
     return {
         serial = serial,

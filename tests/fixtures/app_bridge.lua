@@ -2,8 +2,14 @@
 return function(root, native, modules)
     EntityType = EntityType or {}
     ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD = ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD or 9
+    ModCallbacks.MC_ENTITY_TAKE_DMG = ModCallbacks.MC_ENTITY_TAKE_DMG or 11
+    native.net_room_options = function()
+        return { { flag = 1, key = "friendlyFire", name = "队友伤害" } }
+    end
     native.chat_style = { opacity = 70, background = 0x231b18, border = 0x79604c, text = 0xe8dfcb }
     for _, name in ipairs({
+        "core/contacts",
+        "compat/rules/friendly_fire",
         "compat/challenges/luck_game",
         "compat/items/glitched",
         "runtime/restart",

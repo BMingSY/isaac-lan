@@ -56,6 +56,16 @@ return function(Phase, Command)
             ui.errorText = ok and "" or tostring(reason):gsub("^.-:%d+: ", "")
             return ok
         end
+        local function ruleRows()
+            for i, definition in ipairs(deps.options or {}) do
+                local enabled = ((status.roomOptions or 0) & definition.flag) ~= 0
+                row(definition.name, function()
+                    command("room_options", tostring((status.roomOptions or 0) ~ definition.flag))
+                end, host)
+                rows[#rows].checked = enabled
+                rows[#rows].section = i == 1 and "房间规则" or nil
+            end
+        end
         if status.pendingSave == 1 then
             row("重试保存联机存档", function()
                 command("retry_save")
@@ -188,6 +198,7 @@ return function(Phase, Command)
                     ui.editing = "seed"
                     deps.native.menu_text_begin(ui.seed, "seed")
                 end, true, nil, "seed")
+                ruleRows()
                 local allReady = count >= 2
                 for i = 0, count - 1 do
                     allReady = allReady
@@ -206,11 +217,17 @@ return function(Phase, Command)
                     end
                 end, allReady)
                 if not challenge and (status.savedPlayers or 0) >= 2 then
-                    row("继续上次联机", function()
-                        if command("resume") then
-                            deps.hide()
-                        end
-                    end, allReady and count == status.savedPlayers)
+                    if (status.savedOptions or 0) ~= (status.roomOptions or 0) then
+                        row("载入上次规则", function()
+                            command("room_options", tostring(status.savedOptions or 0))
+                        end, count == status.savedPlayers)
+                    else
+                        row("继续上次联机", function()
+                            if command("resume") then
+                                deps.hide()
+                            end
+                        end, allReady and count == status.savedPlayers)
+                    end
                 end
             end
             if not host and challenge then
@@ -222,6 +239,9 @@ return function(Phase, Command)
                     nil,
                     deps.accent
                 )
+            end
+            if not host then
+                ruleRows()
             end
             row("离开房间", function()
                 command("close")

@@ -2,7 +2,7 @@ local root = assert(arg[1])
 PlayerType = dofile(root .. "/tests/fixtures/game_enums.lua").PlayerType
 local labels, commands = {}, {}
 local renderedPortraits = {}
-local scaledLabels = {}
+local scaledLabels, renderedMarks = {}, {}
 local noop = function() end
 local remembered = { "", 29506 }
 local savedCount = 0
@@ -46,12 +46,17 @@ Sprite = function()
             self.animation = animation
         end,
         Render = function(self)
-            if self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
+            if self.path == "gfx/ui/completion_widget.anm2" then
+                renderedMarks[#renderedMarks + 1] = { table.unpack(self.layers) }
+            elseif self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
                 renderedPortraits[#renderedPortraits + 1] = { self.path, self.animation }
             end
         end,
         RenderLayer = noop,
-        SetLayerFrame = noop,
+        SetLayerFrame = function(self, layer, frame)
+            self.layers = self.layers or {}
+            self.layers[layer + 1] = frame
+        end,
     }
 end
 Font = function()
@@ -117,6 +122,9 @@ _IsaacLanStatus = function()
     return status
 end
 _IsaacLan = {
+    net_room_options = function()
+        return { { flag = 1, key = "friendlyFire", name = "队友伤害" } }
+    end,
     net_phases = function()
         return dofile(root .. "/tests/fixtures/net_phases.lua")
     end,
@@ -168,6 +176,9 @@ _IsaacLanCommand = function(name, value)
         local character, ready = value:match("^(%d+):(%d+)$")
         status["choice" .. status.slot], status["ready" .. status.slot] =
             tonumber(character), tonumber(ready)
+    elseif name == "room_options" then
+        status.roomOptions = tonumber(value)
+        status.ready0, status.ready1 = 0, 0
     end
 end
 dofile(root .. "/src/bridge/presentation/menu.lua")
@@ -175,6 +186,7 @@ local function draw(key, visible)
     labels = {}
     renderedPortraits = {}
     scaledLabels = {}
+    renderedMarks = {}
     return _IsaacLanMenuRender(true, visible ~= false, key or 0, "", -100, -100, false, "", "")
 end
 _IsaacLanMenuOpen(true)
@@ -241,7 +253,7 @@ for _, label in ipairs(scaledLabels) do
         nameRenders = nameRenders + 1
         local width = utf8.len(longName) * 8 * label.scale
         assert(label.scale > 0 and label.scale < 1)
-        assert(width <= (label.x == 49 and 138 or 92))
+        assert(width <= (label.x == 49 and 138 or 110))
     end
 end
 assert(nameRenders == 2, "Long Mod name did not fit both the row and player card")
@@ -523,3 +535,72 @@ local rows = actions.rows(prefs, status, {}, {}, deps)
 rows[4].action()
 assert(remembered[1] == prefs.ip and remembered[2] == 1234)
 assert(sent[#sent][1] == "join" and sent[#sent][2] == "host.example.com:1234")
+
+-- Each card renders its owner's twelve native single-player layers.
+status = {
+    phase = 2,
+    hosting = 1,
+    players = 2,
+    slot = 0,
+    choice0 = 0,
+    choice1 = 23,
+    ready0 = 1,
+    ready1 = 1,
+    connected = 3,
+    roomOptions = 0,
+    savedPlayers = 2,
+    savedOptions = 1,
+    transport = "udp",
+    port = 29506,
+    marks0 = { 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2 },
+    marks1 = { 2, 1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0 },
+}
+_IsaacLanMenuOpen(true)
+draw()
+assert(#renderedMarks == 2 and renderedMarks[1][1] == 0 and renderedMarks[2][1] == 2)
+assert(labels["房间规则"] and labels["[ ] 队友伤害"] and labels["载入上次规则"])
+for _ = 1, 4 do
+    draw(40)
+end
+draw(13)
+draw()
+assert(status.roomOptions == 1 and status.ready0 == 0 and status.ready1 == 0)
+assert(labels["[x] 队友伤害"] and labels["继续上次联机"])
+status.hosting, status.slot = 0, 1
+_IsaacLanMenuOpen(true)
+draw()
+draw(40)
+draw(40)
+local previousCommands = #commands
+draw(13)
+assert(#commands == previousCommands and status.roomOptions == 1, "guest edited room rules")
+status.phase = phaseValues.waiting
+draw()
+assert(#renderedMarks == 0, "Loading a saved character displayed unrelated lobby-choice marks")
+
+-- Future independent checkboxes retain other flags when toggled.
+local selected
+local rows = model.rows(
+    { page = "lan", difficulty = 0, seed = "" },
+    { phase = 2, hosting = 1, players = 2, slot = 0, roomOptions = 3 },
+    { 0 },
+    {},
+    {
+        character = tostring,
+        connected = function()
+            return true
+        end,
+        command = function(action, value)
+            selected = { action, value }
+        end,
+        options = { { flag = 1, name = "first" }, { flag = 2, name = "second" } },
+    }
+)
+for _, row in ipairs(rows) do
+    if row.label == "first" then
+        assert(row.checked)
+        row.action()
+        assert(selected[1] == "room_options" and selected[2] == "2")
+    end
+end
+print("PASS personal completion layers, host-only independent rules and resume selection")

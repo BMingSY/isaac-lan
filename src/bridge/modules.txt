@@ -21,7 +21,8 @@ presentation/doors
 presentation/attack_prediction
 presentation/tear_motion
 presentation/attacks
-presentation/contacts
+core/contacts
+compat/rules/friendly_fire
 presentation/event_ledger
 presentation/hits
 presentation/ping

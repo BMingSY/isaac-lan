@@ -68,6 +68,7 @@ struct Session::Impl {
     RunRules runRules;
     std::uint32_t rulesRevision = 0;
     std::array<Choice, maxPlayers> choices{};
+    std::optional<std::pair<std::uint32_t, Choice>> publishedPreview;
     std::array<Command, maxPlayers> commands{};
     std::array<InputFrame, maxPlayers> latest{};
     std::array<std::optional<InputRoom>, maxPlayers> inputRooms{};
@@ -155,6 +156,7 @@ struct Session::Impl {
         peer.reset();
     }
     void resetRun() {
+        publishedPreview.reset();
         encodingStage.reset();
         decodingStage.reset();
         decodingCheckpoint.reset();
@@ -315,10 +317,13 @@ struct Session::Impl {
         activeMask = (1u << playerCount) - 1;
         for (unsigned i = 0; i < playerCount; ++i) {
             auto& choice = choices[i];
+            const auto previous = choice.character;
             if (runRules.character != 65535)
                 choice.character = runRules.character;
             else if (!access[i].allowsCharacter(choice.character) && !access[i].characters.empty())
                 choice.character = access[i].characters.front();
+            if (choice.character != previous)
+                choice.preview = 0;
         }
         const bool allowed = rulesAvailable(runRules);
         for (unsigned i = 0; i < playerCount; ++i)
@@ -333,6 +338,7 @@ struct Session::Impl {
             for (auto choice : choices) {
                 w.u16(choice.character);
                 w.u8(choice.ready);
+                w.u32(choice.preview);
             }
             for (const auto& value : access)
                 w.access(value);
@@ -527,6 +533,7 @@ struct Session::Impl {
             if (type == Message::choice && state == Phase::lobby) {
                 const auto revision = r.u32();
                 const auto c = r.u16(), ready = static_cast<std::uint16_t>(r.u8());
+                const auto preview = r.u32();
                 if (ready > 1)
                     throw std::runtime_error("Invalid ready flag");
                 if (revision != rulesRevision)
@@ -535,9 +542,20 @@ struct Session::Impl {
                     return;
                 if (!access[slot].allowsCharacter(c) || (ready && !rulesAvailable(runRules)))
                     return;
-                choices[slot] = {c, ready != 0};
+                choices[slot] = {c, ready != 0, preview};
                 choicesRequired = true;
                 lobbyDirty = true;
+                return;
+            }
+            if (type == Message::choicePreview) {
+                const auto revision = r.u32();
+                const auto character = r.u16();
+                const auto preview = r.u32();
+                if (state == Phase::lobby && revision == rulesRevision &&
+                    choices[slot].character == character && choices[slot].preview != preview) {
+                    choices[slot].preview = preview;
+                    lobbyDirty = true;
+                }
                 return;
             }
             if (type == Message::loaded && p.checkpoint) {
@@ -736,6 +754,7 @@ struct Session::Impl {
                 if (n > 1)
                     throw std::runtime_error("Invalid ready flag");
                 c.ready = n != 0;
+                c.preview = r.u32();
             }
             for (auto& value : access)
                 value = r.access();
@@ -1565,6 +1584,7 @@ bool Session::choose(Choice choice) {
         !impl->localAccess.allowsCharacter(choice.character) ||
         (choice.ready && !impl->rulesAvailable(impl->runRules)))
         return false;
+    impl->publishedPreview.reset();
     if (impl->hosting) {
         impl->choices[0] = choice;
         impl->choicesRequired = true;
@@ -1574,8 +1594,30 @@ bool Session::choose(Choice choice) {
         w.u32(impl->rulesRevision);
         w.u16(choice.character);
         w.u8(choice.ready);
+        w.u32(choice.preview);
         impl->peers[0]->sendMessage(w);
     }
+    return true;
+}
+bool Session::publishChoicePreview(std::uint16_t character, std::uint32_t preview) {
+    if (impl->state != Phase::lobby || impl->choices[impl->localSlot].character != character)
+        return false;
+    const auto value = std::pair{impl->rulesRevision, Choice{character, false, preview}};
+    if (impl->publishedPreview == value)
+        return true;
+    if (impl->hosting) {
+        if (impl->choices[0].preview != preview) {
+            impl->choices[0].preview = preview;
+            impl->lobbyDirty = true;
+        }
+    } else {
+        Writer w(Message::choicePreview);
+        w.u32(impl->rulesRevision);
+        w.u16(character);
+        w.u32(preview);
+        impl->peers[0]->sendMessage(w);
+    }
+    impl->publishedPreview = value;
     return true;
 }
 bool Session::configureRules(const RunRules& rules) {
@@ -1587,12 +1629,15 @@ bool Session::configureRules(const RunRules& rules) {
     ++impl->rulesRevision;
     for (unsigned i = 0; i < maxPlayers; ++i) {
         auto& choice = impl->choices[i];
+        const auto previous = choice.character;
         choice.ready = false;
         if (rules.character != 65535)
             choice.character = rules.character;
         else if (!impl->access[i].allowsCharacter(choice.character) &&
                  !impl->access[i].characters.empty())
             choice.character = impl->access[i].characters.front();
+        if (choice.character != previous)
+            choice.preview = 0;
     }
     impl->choicesRequired = true;
     impl->lobbyDirty = true;

@@ -1488,7 +1488,7 @@ void lobby() {
     require(!host.choose({}) && !guest.choose({}), "Running session changed lobby choice");
 }
 void runRules() {
-    const RunRules rules{1001, 2, 23, 0, true};
+    const RunRules rules{1001, 2, 23, 0, true, 1};
     TestSession host, guest;
     require(host.host(0, "test", {}, testAccess()), "Host failed");
     require(guest.join("127.0.0.1", host.port(), "test", {}, {}, testAccess()), "Join failed");
@@ -1625,12 +1625,85 @@ struct WirePeer {
         enet_host_flush(endpoint);
     }
 };
+void roomOptions() {
+    TestSession host, guest;
+    require(host.host(0, "test", {}, testAccess()), "Host failed");
+    require(guest.join("127.0.0.1", host.port(), "test", {}, {}, testAccess()), "Join failed");
+    auto poll = [&] {
+        host.poll();
+        guest.poll();
+    };
+    until([&] {
+        poll();
+        return host.players() == 2 && guest.phase() == Phase::lobby;
+    });
+    require(host.publishChoicePreview(0, 0x1000001) && guest.publishChoicePreview(0, 0x1000002),
+            "Initial personal preview failed");
+    until([&] {
+        poll();
+        return guest.choices()[0].preview == 0x1000001 && host.choices()[1].preview == 0x1000002;
+    });
+    require(host.choose({0, true, 0x1000001}) && guest.choose({0, true, 0x1000002}),
+            "Ready failed");
+    until([&] {
+        poll();
+        return host.choices()[1].ready;
+    });
+    require(guest.publishChoicePreview(0, 0x1000022), "Preview refresh failed");
+    until([&] {
+        poll();
+        return host.choices()[1].preview == 0x1000022;
+    });
+    require(host.choices()[1].ready && host.choices()[0].preview == 0x1000001,
+            "Preview changed readiness or another peer's card");
+    RunRules enabled;
+    enabled.options = 1;
+    require(!guest.configureRules(enabled) && host.configureRules(enabled),
+            "Room option authority incorrect");
+    until([&] {
+        poll();
+        return guest.rules() == enabled;
+    });
+    require(!host.choices()[0].ready && !host.choices()[1].ready &&
+                guest.choices()[0].preview == 0x1000001,
+            "Option change lost marks or retained readiness");
+    require(guest.choose({1, false, 0x1000010}), "Character selection failed");
+    // An old-character refresh can already be in flight when a new choice arrives.
+    require(guest.publishChoicePreview(0, 0x1000002), "Old local character was not published");
+    until([&] {
+        poll();
+        return guest.choices()[1].character == 1;
+    });
+    require(host.choices()[1].preview == 0x1000010, "Stale preview replaced the new character");
+    require(host.choose({0, true, 0x1000001}) && guest.choose({1, true, 0x1000010}),
+            "New rule readiness failed");
+    until([&] {
+        poll();
+        return host.choices()[1].ready;
+    });
+    Start start;
+    start.seed = "YV039KQF";
+    start.characters[1] = 1;
+    require(!host.start(start), "Stale room options started");
+    start.rules = enabled;
+    // Cosmetic metadata arriving after Start must be harmless.
+    require(guest.publishChoicePreview(1, 0x1000020), "Late preview enqueue failed");
+    require(host.start(start), "Configured normal run did not start");
+    until([&] {
+        poll();
+        return guest.phase() == Phase::running;
+    });
+    require(host.phase() == Phase::running && guest.settings().rules == enabled,
+            "Late metadata interrupted start or dropped room options");
+}
+
 void wireRules(Writer& writer, const RunRules& rules) {
     writer.u16(rules.id);
     writer.u16(rules.version);
     writer.u16(rules.character);
     writer.u8(rules.difficulty);
     writer.u8(rules.transient);
+    writer.u32(rules.options);
 }
 void accessWireValidation() {
     const LobbyAccess basic{{0}, {}, {0}};
@@ -1662,6 +1735,7 @@ void accessWireValidation() {
             choice.u32(0);
             choice.u16(character);
             choice.u8(1);
+            choice.u32(0);
             remote.send(choice);
             Writer marker(Message::integration);
             const std::array<std::uint8_t, 1> bytes{1};
@@ -1702,6 +1776,7 @@ void accessWireValidation() {
         for (unsigned i = 0; i < maxPlayers; ++i) {
             lobby.u16(0);
             lobby.u8(0);
+            lobby.u32(0);
         }
         lobby.access(testAccess());
         lobby.access(scenario == 2 ? testAccess() : basic);
@@ -2752,6 +2827,7 @@ int main(int argc, char** argv) {
                                   {"input-rooms", inputRooms},
                                   {"lobby", lobby},
                                   {"run-rules", runRules},
+                                  {"room-options", roomOptions},
                                   {"lobby-access", lobbyAccess},
                                   {"handshake", handshake},
                                   {"host-names", hostNames},

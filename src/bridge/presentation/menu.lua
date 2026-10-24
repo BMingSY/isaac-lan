@@ -20,6 +20,7 @@ local Key =
     { escape = 27, enter = 13, up = 38, down = 40, tab = 9, space = 32, left = 37, right = 39 }
 local model = _IsaacLanModules["presentation/menu_model"](Phase, Command)
 local challenges = _IsaacLan.net_challenges()
+local roomOptions = _IsaacLan.net_room_options()
 local idle = model.idle
 function _IsaacLanMenuOpen(returning)
     ui.page = not returning and idle(_IsaacLanStatus().phase or Phase.idle) and "modes" or "lan"
@@ -115,6 +116,7 @@ local function load()
     sprite("online", root .. "onlinemenu.anm2", "Idle")
     sprite("sketches", root .. "charactermenubg.anm2", "Idle")
     sprite("portraits", root .. "characterportraits.anm2", "01_Isaac")
+    sprite("marks", "gfx/ui/completion_widget.anm2", "Idle")
     sprite("fill", "gfx/ui/bossoverlay_whiteout.anm2", "Fade")
     assets.fill:SetFrame("Fade", 15)
     for _, size in ipairs({ 10, 12, 16 }) do
@@ -277,6 +279,7 @@ function _IsaacLanMenuRender(
         native = _IsaacLan,
         character = character,
         accent = amber,
+        options = roomOptions,
         hide = function()
             visible = false
         end,
@@ -309,8 +312,8 @@ function _IsaacLanMenuRender(
         or phase == Phase.returning
     )
             and 157
-        or 89
-    local gap = #rows > 6 and 19 or 23
+        or (#rows > 7 and 82 or 89)
+    local gap = #rows > 7 and 17 or (#rows > 6 and 19 or 23)
     if ui.editing then
         if ui.editing == "ip" then
             ui.ip = typed:gsub("[^a-zA-Z0-9%.%-]", ""):sub(1, 253)
@@ -335,8 +338,14 @@ function _IsaacLanMenuRender(
         end
         ui.selection = math.min(ui.selection, #rows)
     end
+    local sectionOffset = 0
     for i, item in ipairs(rows) do
-        local y = yStart + (i - 1) * gap
+        local y = yStart + (i - 1) * gap + sectionOffset
+        if item.section then
+            text(item.section, 49 + shift, y, 10, faded, 138)
+            sectionOffset = sectionOffset + 13
+            y = y + 13
+        end
         if moved and hit(38 + shift, y - 2, 147, 22) and not ui.editing then
             ui.selection = i
         end
@@ -353,6 +362,9 @@ function _IsaacLanMenuRender(
             end
         end
         local label = item.label
+        if item.checked ~= nil then
+            label = (item.checked and "[x] " or "[ ] ") .. label
+        end
         if item.field and ui.editing == item.field then
             label = (item.field == "port" and "端口：" or "") .. ui[item.field] .. "_"
         end
@@ -363,28 +375,38 @@ function _IsaacLanMenuRender(
         end
     end
     for i = 0, (modes and -1 or 3) do
-        local x, y = 224 + (i % 2) * 112, 17 + math.floor(i / 2) * 108
+        local x, y = 198 + (i % 2) * 132, 17 + math.floor(i / 2) * 108
+        assets.cards.Scale = Vector(1.25, 1)
         layer(assets.cards, 0, x, y)
         assets.cards:SetLayerFrame(36, i)
         layer(assets.cards, 36, x, y)
         if i < count then
             local id = status[(phase == Phase.lobby and "choice" or "character") .. i] or 0
-            portrait(id):Render(pos(x + 51, y + 44))
-            centered(character(id), x + 51, y + 60, 10, nil, 92)
+            local marks = phase == Phase.lobby and status["marks" .. i] or nil
+            local portraitX = x + (marks and 34 or 63)
+            portrait(id):Render(pos(portraitX, y + 45))
+            centered(character(id), portraitX, y + 66, 10, nil, marks and 60 or 110)
+            if marks then
+                assets.marks.Scale = Vector(0.65, 0.65)
+                for layerId, state in ipairs(marks) do
+                    assets.marks:SetLayerFrame(layerId - 1, state)
+                end
+                assets.marks:Render(pos(x + 65, y + 26))
+            end
             if phase == Phase.lobby and status["ready" .. i] == 1 then
                 layer(assets.cards, 5, x, y)
-                centered("已准备", x + 51, y + 77, 10, ink)
+                centered("已准备", x + 63, y + 78, 10, ink)
             else
                 centered(
                     phase == Phase.lobby and "选择中"
                         or ((status.connected or 0) & (1 << i) ~= 0 and "在线" or "等待归队"),
-                    x + 51,
-                    y + 77,
+                    x + 63,
+                    y + 78,
                     10
                 )
             end
         else
-            centered("等待玩家", x + 51, y + 52, 10, faded)
+            centered("等待玩家", x + 63, y + 52, 10, faded)
         end
     end
     local message = status.saveError and status.saveError ~= "" and status.saveError

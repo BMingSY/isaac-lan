@@ -14,6 +14,24 @@ callback(ModCallbacks.MC_POST_RENDER, function()
     end
 end)
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
+local friendlyFire = _IsaacLanModules["compat/rules/friendly_fire"]({
+    native = native,
+    player = Isaac.GetPlayer,
+    entities = Isaac.GetRoomEntities,
+    hash = GetPtrHash,
+    ref = EntityRef,
+    frame = function()
+        return Game():GetFrameCount()
+    end,
+    paused = function()
+        return Game():IsPaused()
+    end,
+    contact = _IsaacLanModules["core/contacts"],
+    enums = { entity = EntityType, tear = TearFlags, damage = DamageFlag },
+})
+callback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, amount, flags, source)
+    return friendlyFire.damage(entity, amount, flags, source)
+end)
 local challenge, chat, feedback
 local function goalRoute(goal)
     return _IsaacLanModules["compat/routes/challenge_goal"]({
@@ -99,6 +117,7 @@ function _IsaacLanCollectiblePickup(...)
 end
 function _IsaacLanChallengeStep()
     challenge.step()
+    friendlyFire.step()
 end
 function _IsaacLanCanEnterRoom(...)
     return challenge.canEnter(...)
@@ -118,7 +137,7 @@ local restart = _IsaacLanModules["runtime/restart"]({
 local status, tick = {}, 0
 local lifecycle
 local continuedRun = false
-local savedPlayers = 0
+local savedPlayers, savedOptions = 0, 0
 local bindParty = _IsaacLanModules["runtime/party"](native, Isaac.GetPlayer)
 local function log(s)
     Isaac.DebugString("ISAAC_LAN " .. s)
@@ -232,6 +251,7 @@ function _IsaacLanViewCommitted()
 end
 function _IsaacLanActionStep()
     challenge.step()
+    friendlyFire.prepare()
     if native.api_info().ready == 1 then
         _IsaacLanModules["compat/mods/goodtrip/authority"].observe()
     end
@@ -298,6 +318,7 @@ local function prepareCheckpoint()
     end
 end
 callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
+    friendlyFire.reset()
     game = Game()
     if native.diagnostics_begin then
         native.diagnostics_begin(
@@ -325,6 +346,7 @@ callback(ModCallbacks.MC_POST_UPDATE, function()
     prepareCheckpoint()
 end)
 callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
+    friendlyFire.reset()
     challenge.reset()
     bot.reset()
     integration.reset("session_ended")
@@ -345,7 +367,7 @@ function _IsaacLanCommand(action, value)
         lifecycle.close()
         assert(native.input_virtual())
         assert(native.net_host(tonumber(value), _IsaacLanFingerprint, modFingerprint()))
-        savedPlayers = native.net_saved_info()
+        savedPlayers, savedOptions = native.net_saved_info()
     elseif action == "join" then
         bot.reset()
         chat.reset()
@@ -356,6 +378,8 @@ function _IsaacLanCommand(action, value)
         assert(ip and native.net_join(ip, tonumber(port), _IsaacLanFingerprint, modFingerprint()))
     elseif action == "challenge" then
         assert(native.net_challenge(assert(tonumber(value))), "无法选择联机挑战")
+    elseif action == "room_options" then
+        assert(native.net_configure_options(assert(tonumber(value))), "无法修改房间规则")
     elseif action == "start" then
         local seed, difficulty, a, b, c, d = value:match("^([%w]+):(%d+):(%d+):(%d+):(%d+):(%d+)$")
         if seed == "RANDOM" then
@@ -377,7 +401,7 @@ function _IsaacLanCommand(action, value)
         )
     elseif action == "retry_save" then
         assert(native.net_retry_save(), "联机存档保存失败，请重试保存")
-        savedPlayers = native.net_saved_info()
+        savedPlayers, savedOptions = native.net_saved_info()
     elseif action == "resume" then
         assert(
             native.net_resume(),
@@ -406,7 +430,7 @@ function _IsaacLanFrame()
     local previousPhase = status.phase
     status = native.net_poll()
     if status.phase == Phase.lobby and previousPhase ~= Phase.lobby then
-        savedPlayers = native.net_saved_info()
+        savedPlayers, savedOptions = native.net_saved_info()
     end
     if
         status.phase == Phase.lobby
@@ -437,6 +461,7 @@ function _IsaacLanFrame()
     status.prepared = lifecycle.ready()
     chatUI.step(status)
     status.savedPlayers = savedPlayers
+    status.savedOptions = savedOptions
     if lifecycle.ready() then
         status.positions = native.rooms_positions()
     end

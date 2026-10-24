@@ -105,6 +105,17 @@ class ProgressFixtureTests(unittest.TestCase):
         self.assertEqual(checksum(b""), 0xFEDCBA76)
         self.assertEqual(checksum(bytes(range(256))), 0xE3797CD9)
 
+    def test_completion_fixture_keeps_distinct_personal_and_online_marks(self):
+        source = self.baseline()
+        for host in (True, False):
+            value = patch(source, host=host, completion=True)
+            expected = (1 if host else 2) | (8 if host else 4)
+            self.assertEqual(struct.unpack_from("<I", value, 686 + 27 * 4)[0], expected)
+            self.assertEqual(value[32:672], source[32:672])
+            self.assertEqual(
+                struct.unpack_from("<I", value, len(value) - 4)[0], checksum(value[16:-4])
+            )
+
     def test_host_unlocks_are_ready_before_native_menu_initialization(self):
         source = self.baseline()
         result = patch(source, host=True, endings=True, alt_path=True, hush=True)

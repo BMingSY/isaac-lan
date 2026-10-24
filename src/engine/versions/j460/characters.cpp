@@ -1,11 +1,18 @@
 #include "engine/characters.h"
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/completion_marks.h"
 #include <algorithm>
 #include <cstring>
 #include <optional>
 #include <unordered_set>
 
 namespace isaac::characters {
+std::uint32_t completionPreview(unsigned character, const lan::Progress& personal) {
+    return engine::j460::completion::preview(character, personal);
+}
+std::optional<std::array<std::uint8_t, 12>> completionLayers(std::uint32_t preview) {
+    return engine::j460::completion::layers(preview);
+}
 namespace {
 using Address = std::uintptr_t;
 static_assert(sizeof(Address) == 4);

@@ -1,5 +1,5 @@
 -- Swept circles in relative motion. Returns the first contact along a frame,
--- so a fast projectile cannot skip a small NPC or hit through a nearer one.
+-- so fast projectiles cannot skip a small target or hit through a nearer one.
 return function(ax, ay, bx, by, radius)
     local dx, dy = bx - ax, by - ay
     local c = ax * ax + ay * ay - radius * radius
