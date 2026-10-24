@@ -58,6 +58,8 @@ def run_batch(args, cases, output, labs):
         str(args.port),
         "--scenario-timeout",
         str(args.timeout),
+        "--latency-ms",
+        str(getattr(args, "latency_ms", 0)),
     )
     if not args.injected:
         command.append("--automatic")
@@ -190,6 +192,9 @@ def main():
         choices=("host-same", "host-split", "client-same", "client-split"),
     )
     parser.add_argument("--port", type=int, default=51900)
+    parser.add_argument(
+        "--latency-ms", type=int, default=0, help="Owned relay delay in each direction"
+    )
     parser.add_argument("--timeout", type=int, default=86400)
     parser.add_argument("--record", action="store_true")
     parser.add_argument(
@@ -273,6 +278,8 @@ def main():
                     case["physical"] = True
         if not 1 <= args.port < 65535 or not 10 <= args.timeout <= 86400:
             raise ValueError("Invalid port or timeout")
+        if not 0 <= args.latency_ms <= 5000:
+            raise ValueError("Latency must be between 0 and 5000 ms")
         if args.case_timeout is not None and not 10 <= args.case_timeout <= args.timeout:
             raise ValueError("Case timeout must be between 10 seconds and the suite timeout")
         if not 0 <= args.coins <= 99:

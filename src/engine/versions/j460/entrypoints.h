@@ -25,6 +25,7 @@ inline constexpr std::uint32_t playerReviveCollectible = 0x3a23a0;
 inline constexpr std::uint32_t playerReviveTrinket = 0x3a3430;
 inline constexpr std::uint32_t edensBlessingGranted = 0x3be32f;
 inline constexpr std::uint32_t pickupUpdateGhosts = 0x2e17c0;
+inline constexpr std::uint32_t pickupSetPrice = 0x2e2570;
 inline constexpr std::uint32_t entityLuaSetColor = 0x471f70;
 inline constexpr std::uint32_t entityLuaSetSize = 0x471fa0;
 inline constexpr std::uint32_t tearSetHeight = 0x275fc0;

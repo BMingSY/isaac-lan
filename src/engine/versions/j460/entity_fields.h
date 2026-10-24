@@ -20,7 +20,17 @@ enum class Kind {
     animationFrame,
     overlayFrame
 };
-enum class Write { direct, readOnly, size, damage, tearHeight, tearScale, entityColor };
+enum class Write {
+    direct,
+    readOnly,
+    size,
+    damage,
+    tearHeight,
+    tearScale,
+    entityColor,
+    pickupPrice,
+    shopItem
+};
 struct Field {
     const char* name;
     Kind kind;
@@ -102,9 +112,21 @@ inline constexpr Field familiar[] = {
     {"OrbitLayer", Kind::integer, layout::familiar::orbitLayer},
     {"OrbitSpeed", Kind::real, layout::familiar::orbitSpeed},
 };
+inline constexpr Field pickup[] = {
+    {"AutoUpdatePrice", Kind::boolean, layout::pickup::autoUpdatePrice},
+    {"Charge", Kind::integer, layout::pickup::charge},
+    {"OptionsPickupIndex", Kind::integer, layout::pickup::optionsIndex},
+    {"Price", Kind::integer, layout::pickup::price, Write::pickupPrice},
+    {"ShopItemId", Kind::integer, layout::pickup::shopItemId, Write::shopItem},
+    {"State", Kind::integer, layout::pickup::state},
+    {"Timeout", Kind::integer, layout::pickup::timeout},
+    {"Touched", Kind::boolean, layout::pickup::touched},
+    {"Wait", Kind::integer, layout::pickup::wait},
+};
+inline constexpr int minimumShopItemId = -2, maximumShopItemId = 7;
 inline bool supported(unsigned type) {
     return type == compat::ids::entity::tear || type == compat::ids::entity::familiar ||
-           type == compat::ids::entity::effect;
+           type == compat::ids::entity::effect || type == compat::ids::entity::pickup;
 }
 inline const Field* find(unsigned type, std::string_view name) {
     if (type == spriteType) {
@@ -119,6 +141,7 @@ inline const Field* find(unsigned type, std::string_view name) {
     const std::span<const Field> fields =
         type == compat::ids::entity::tear       ? std::span<const Field>(tear)
         : type == compat::ids::entity::familiar ? std::span<const Field>(familiar)
+        : type == compat::ids::entity::pickup   ? std::span<const Field>(pickup)
                                                 : std::span<const Field>(effect);
     for (const auto& field : fields)
         if (name == field.name)

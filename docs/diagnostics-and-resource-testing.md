@@ -77,7 +77,7 @@ python tools/benchmark_compression.py --runner "$ISAAC_COMPRESSION_RUNNER" \
 
 日常命令见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。CI 覆盖 sanitizer、Lua 实体反复创建／删除与弱引用释放、慢消费者下的有界传输，以及重复分局后的日志句柄清理；不据此推定游戏或未执行 Hook 的资源行为。
 
-性能与压力测试不属于默认发版范围。需要定位相关问题时，单独使用一组隔离主客机，选择对应负载；道具压力套件在启动前和关闭后检查机器上是否还有游戏进程，有其他运行实例时不能计为有效性能轮次。测量期间也不得启动其他游戏或 CPU 密集任务。例如长流程资源检查可运行：
+性能与压力测试不属于默认发版范围。需要定位相关问题时，单独使用一组隔离主客机，选择对应负载；道具压力套件与 `pickup-pressure` 在启动前和关闭后检查机器上是否还有游戏进程，有其他运行实例时不能计为有效性能轮次。测量期间也不得启动其他游戏或 CPU 密集任务。例如长流程资源检查可运行：
 
 ```sh
 python3 tools/run_special_routes.py \
@@ -86,13 +86,24 @@ python3 tools/run_special_routes.py \
   --case campaign --performance --output "$ISAAC_RUN_OUTPUT"
 ```
 
+`pickup-pressure` 在同一局依次保持 0／100／300／500 个真实掉落物，包括心、硬币、钥匙、炸弹和道具底座。每档持续 400 tick，避开生成与收尾后采样 300 tick，双端核对实际数量，输出 `LAN_PICKUP_PRESSURE` 的帧间隔、采集／应用耗时和原始字节数。掉落物保持不可拾取；不据此判断拾取体验。基线与候选使用相同夹具和诊断设置，关闭录像与堆观察：
+
+```sh
+python3 tools/run_special_routes.py \
+  --host "$ISAAC_HOST_LAB" --client "$ISAAC_CLIENT_LAB" \
+  --case pickup-pressure --performance --latency-ms 40 --record-relay \
+  --output "$ISAAC_RUN_OUTPUT"
+```
+
+`--latency-ms` 是每个方向的中继延迟，40 ms 对应约 80 ms RTT；道具审计也接受此选项。实际载荷差异用相同稳定档位中的累计计数差除以视图数，不能直接比较时长不同的整局总量。增量命中率不能替代客机应用耗时：收到的增量仍需还原完整视图并恢复游戏对象。
+
 `engine_test.py run item-audit -- --mode stress ...` 默认开启性能统计、关闭堆观察与录像；原生异常专项可加 `--heap-check`，画面可加 `--record`，两者的测量需与纯性能轮次区分。其他道具审计模式仍保留堆观察。`stress:idle-baseline`、`stress:idle-inventory-100/300/500` 和 `stress:idle-copies-1000` 禁止自动攻击，要求双端至少 100 个渲染样本且 P95 不超过 33.33 ms；原有未带 `idle-` 的场景仍包含短暂攻击，必须分别解释。
 
 `--no-phase-profile` 将本轮隔离配置的详细诊断显式关闭，用于对照默认生产设置；夹具自身仍逐帧记录渲染间隔，并记录每次采集、应用耗时和字节数，验收预算不变。大量实体下，逐实体／精灵的详细计时会干扰结果，基线与候选必须使用同一诊断设置。
 
 较慢的基线可用 `--case-timeout` 延长单用例看门狗，以完成相同目标 tick 的对照；它不改变道具负载、采样起点或帧耗时预算。原超时轮次必须保留。
 
-`--verify-codec` 在每个场景的双端各核对一次真实视图的新旧编码，并保存原始快照及下一 tick 的快照；同时将泪弹、跟班和效果实体的原生批量字段与游戏 Lua API 对照，客机还检查写入结果与非法数组无写入。压力场景在第 150 tick 的统计窗口前执行；`codec_verified`／`entity_fields_verified` 是独立证据，不替代场景完成与退出结果。
+`--verify-codec` 在每个场景的双端各核对一次真实视图的新旧编码，并保存原始快照及下一 tick 的快照；同时将泪弹、跟班、掉落物和效果实体的原生批量字段与游戏 Lua API 对照，客机还检查写入结果与非法数组无写入。`entity-fields` 专项保证四类实体均实际出现，并比较商店价格与槽位的写入结果。压力场景在第 150 tick 的统计窗口前执行；`codec_verified`／`entity_fields_verified` 是独立证据，不替代场景完成与退出结果。
 
 `campaign` 使用固定路线、Boss 房定位、保护和伤害加速，原版战斗、拾取、出口、换层及羔羊结局仍实际执行；不代表随机无辅助通关。默认不录画面，按需 `--record`。隔离资料逐文件备份／恢复，进程非零退出仍判整轮失败。
 

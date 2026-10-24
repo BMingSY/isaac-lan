@@ -704,7 +704,10 @@ int actorPose(lua_State* L) {
                         at<MaxCharge>(at<Address>(weapon, 0),
                                       j460::layout::weapon::maxChargeMethod * sizeof(Address));
                     const auto maximum = query(reinterpret_cast<void*>(weapon));
-                    if (!std::isfinite(maximum) || maximum < 0)
+                    // Native item combinations can return a negative limit.
+                    // It is read-only metadata: preview requires a positive
+                    // limit, while gameplay and cooldowns remain authoritative.
+                    if (!std::isfinite(maximum))
                         throw std::runtime_error("Invalid native weapon charge limit");
                     w.u32(std::bit_cast<unsigned>(maximum));
                     w.u32(at<unsigned>(weapon, j460::layout::weapon::modifiers));

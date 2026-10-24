@@ -99,7 +99,6 @@ struct DatagramConnection {
     std::optional<Clock::time_point> closingAt;
     std::shared_ptr<std::atomic<bool>> recoveryComplete = std::make_shared<std::atomic<bool>>(true);
     Clock::time_point recoveryAt{};
-    std::size_t recoveryBytes = 0;
     DatagramConnection(ENetPeer* value, std::shared_ptr<ConnectionPipe> connection, bool host)
         : peer(value), pipe(std::move(connection)), authority(host) {
         // Keep ENet's default retry budget for reliable checkpoints on slow
@@ -126,15 +125,16 @@ struct DatagramConnection {
         pipe->incoming.push(std::move(packet));
     }
     void send(std::span<const std::uint8_t> bytes, enet_uint8 channel, Envelope kind,
-              std::size_t accounted = 0, std::shared_ptr<std::atomic<bool>> completed = nullptr) {
+              std::size_t accounted = 0, std::shared_ptr<std::atomic<bool>> completed = nullptr,
+              bool unordered = false) {
         Writer envelope(static_cast<Message>(kind));
         envelope.u32(fence);
         envelope.bytes.insert(envelope.bytes.end(), bytes.begin(), bytes.end());
         auto* packet = enet_packet_create(
             envelope.bytes.data(), envelope.bytes.size(),
             channel == reliableChannel || channel == recoveryChannel ? ENET_PACKET_FLAG_RELIABLE
-            : kind == Envelope::shard                                ? ENET_PACKET_FLAG_UNSEQUENCED
-                                      : ENET_PACKET_FLAG_UNRELIABLE_FRAGMENT);
+            : kind == Envelope::shard || unordered                   ? ENET_PACKET_FLAG_UNSEQUENCED
+                                                   : ENET_PACKET_FLAG_UNRELIABLE_FRAGMENT);
         if (!packet)
             throw std::runtime_error("Cannot allocate UDP packet");
         if (accounted || completed || channel == recoveryChannel) {
@@ -153,7 +153,12 @@ struct DatagramConnection {
         const auto type = static_cast<Message>(bytes.at(0));
         const auto channel =
             type == Message::input || type == Message::applied ? inputChannel : reliableChannel;
-        send(encodeWire(std::move(bytes), codec), channel, Envelope::message, accounted);
+        // Receipts and held inputs advance independently. Sharing ENet's
+        // unreliable sequence would let a newer input discard a delayed
+        // receipt (or vice versa). Receipts are cumulative and already checked
+        // against the generation and acknowledged world tick.
+        send(encodeWire(std::move(bytes), codec), channel, Envelope::message, accounted, nullptr,
+             type == Message::applied);
     }
     void synchronizeSender() {
         const auto requested = pipe->generation.load(std::memory_order_acquire);
@@ -383,9 +388,10 @@ struct DatagramConnection {
                 bulk.pop_front();
             }
         }
-        // A large reliable recovery may outlive the lossy flight records.
-        // Reserve its byte budget until ENet finishes it; publishing another
-        // large unreliable copy every expiry would compete with its retries.
+        // At most one reliable full recovery is retained until ENet finishes it.
+        // Once a baseline exists, the independently bounded realtime window must
+        // keep progressing even if that old recovery is still being retried.
+        // Otherwise one large recovery can head-of-line block every newer view.
         // Removing the last bulk chunk from our deque only means it entered
         // ENet. Its accounted bytes remain until acknowledged; let that tail
         // drain before realtime traffic competes for the same path again.
@@ -397,8 +403,7 @@ struct DatagramConnection {
             // Bootstrap one reliable candidate and wait for its receipt, or
             // retry after the recovery interval if it crossed a generation fence.
             (world.hasBaseline() || (recoveryComplete->load() &&
-                                     Clock::now() - recoveryAt >= WorldTransfer::lostStateAge)) &&
-            (recoveryComplete->load() || recoveryBytes < WorldTransfer::maxInFlightBytes)) {
+                                     Clock::now() - recoveryAt >= WorldTransfer::lostStateAge))) {
             if (auto state = world.next(worldCodec, pipe->minimumLatency.load())) {
                 // One complete recovery view may be retried on its own channel.
                 // Large initial views must eventually establish a baseline even
@@ -410,12 +415,19 @@ struct DatagramConnection {
                 if (recovery) {
                     recoveryComplete->store(false);
                     recoveryAt = Clock::now();
-                    recoveryBytes = state->bytes.size();
                     world.retainRecovery();
                 }
-                constexpr auto fecThreshold = 3 * WorldShards::shardSize;
+                // ENet's unreliable fragments are sequenced: a newer view can
+                // retire an incomplete older view before its delayed fragment
+                // arrives. Use independent shards for every fragmented view,
+                // including the common two/three-datagram deltas. Match ENet's
+                // fragmentation budget, including our generation envelope.
+                constexpr auto envelopeHeader = sizeof(std::uint8_t) + sizeof(std::uint32_t);
+                const auto fragmentLimit =
+                    peer->mtu - sizeof(ENetProtocolHeader) - sizeof(ENetProtocolSendFragment) -
+                    (peer->host->checksum ? sizeof(enet_uint32) : 0) - envelopeHeader;
                 const auto shardCount = WorldShards::packetCount(state->bytes.size());
-                if (!recovery && state->bytes.size() > fecThreshold &&
+                if (!recovery && state->bytes.size() > fragmentLimit &&
                     shardCount <= ENET_PEER_UNSEQUENCED_WINDOW_SIZE) {
                     // ENet discards the previous 1024-sequence window as soon
                     // as a newer one arrives. A view must fit within one window;
