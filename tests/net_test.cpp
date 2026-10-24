@@ -322,7 +322,12 @@ void udpLossRecoveryImpl(bool large) {
         state.bytes[0] = sequence;
         require(g.peers[0]->publish(1, state), "Impaired world rejected");
     };
-    for (unsigned sequence = 1; sequence <= 180; ++sequence) {
+    constexpr unsigned measurementTicks = 180, blackoutTicks = 30;
+    const auto finalTick = measurementTicks + (large ? blackoutTicks : 0);
+    unsigned measuredReceived = 0, measuredGap = 0;
+    for (unsigned sequence = 1; sequence <= finalTick; ++sequence) {
+        if (large && sequence == measurementTicks + 1)
+            g.relay->stalled.store(true);
         const auto began = std::chrono::steady_clock::now();
         InputFrame input;
         input.values[isaac::input::action::moveRight] = sequence < 150 ? maxInputValue : 0;
@@ -335,6 +340,10 @@ void udpLossRecoveryImpl(bool large) {
             collect();
             Sleep(1);
         } while (std::chrono::steady_clock::now() - began < std::chrono::milliseconds(33));
+        if (sequence == measurementTicks) {
+            measuredReceived = received;
+            measuredGap = largestGap;
+        }
     }
     std::printf(
         "UDP observed received=%u last=%u largest_gap=%u actions=%u dropped=%u duplicates=%u\n",
@@ -348,17 +357,31 @@ void udpLossRecoveryImpl(bool large) {
                 static_cast<unsigned long long>(delivery.rawWorldBytes),
                 static_cast<unsigned long long>(delivery.wireWorldBytes));
     if (large) {
-        require(received > 50 && lastTick > 165 && largestGap <= 15,
+        require(measuredReceived > 50 && measuredGap <= 15,
                 "Large realtime views stalled despite recoverable datagram loss");
+        require(g.relay->stalledDrops > 0 && lastTick < finalTick - blackoutTicks / 2,
+                "Terminal blackout did not leave an outdated view to recover");
+        g.relay->stalled.store(false);
         // Keep impairing the link after the measurement window. The final
         // publication is still allowed to be lost; subsequent views must recover.
-        unsigned sequence = 180;
+        // After measuring normal loss, black out 30 ticks: a full reliable recovery
+        // may still be retransmitting when the fixed sampling window ends.
+        // Check terminal progress with the bounded wait, not a lastTick cutoff
+        // that can fail before this recovery phase has even run.
+        const auto beforeRecovery = lastTick;
+        const auto recoveryBegan = std::chrono::steady_clock::now();
+        unsigned sequence = finalTick;
         until([&] {
             publish(++sequence);
             collect();
             Sleep(33);
-            return lastTick > 180;
+            return lastTick > finalTick;
         });
+        std::printf("UDP final recovery before=%u after=%u elapsed_ms=%lld\n", beforeRecovery,
+                    lastTick,
+                    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               std::chrono::steady_clock::now() - recoveryBegan)
+                                               .count()));
     } else
         require(received > 75 && lastTick > 165 && largestGap <= 12,
                 "Lost fragments or baseline receipts stalled subsequent UDP snapshots");

@@ -99,7 +99,6 @@ struct DatagramConnection {
     std::optional<Clock::time_point> closingAt;
     std::shared_ptr<std::atomic<bool>> recoveryComplete = std::make_shared<std::atomic<bool>>(true);
     Clock::time_point recoveryAt{};
-    std::size_t recoveryBytes = 0;
     DatagramConnection(ENetPeer* value, std::shared_ptr<ConnectionPipe> connection, bool host)
         : peer(value), pipe(std::move(connection)), authority(host) {
         // Keep ENet's default retry budget for reliable checkpoints on slow
@@ -383,9 +382,10 @@ struct DatagramConnection {
                 bulk.pop_front();
             }
         }
-        // A large reliable recovery may outlive the lossy flight records.
-        // Reserve its byte budget until ENet finishes it; publishing another
-        // large unreliable copy every expiry would compete with its retries.
+        // At most one reliable full recovery is retained until ENet finishes it.
+        // Once a baseline exists, the independently bounded realtime window must
+        // keep progressing even if that old recovery is still being retried.
+        // Otherwise one large recovery can head-of-line block every newer view.
         // Removing the last bulk chunk from our deque only means it entered
         // ENet. Its accounted bytes remain until acknowledged; let that tail
         // drain before realtime traffic competes for the same path again.
@@ -397,8 +397,7 @@ struct DatagramConnection {
             // Bootstrap one reliable candidate and wait for its receipt, or
             // retry after the recovery interval if it crossed a generation fence.
             (world.hasBaseline() || (recoveryComplete->load() &&
-                                     Clock::now() - recoveryAt >= WorldTransfer::lostStateAge)) &&
-            (recoveryComplete->load() || recoveryBytes < WorldTransfer::maxInFlightBytes)) {
+                                     Clock::now() - recoveryAt >= WorldTransfer::lostStateAge))) {
             if (auto state = world.next(worldCodec, pipe->minimumLatency.load())) {
                 // One complete recovery view may be retried on its own channel.
                 // Large initial views must eventually establish a baseline even
@@ -410,7 +409,6 @@ struct DatagramConnection {
                 if (recovery) {
                     recoveryComplete->store(false);
                     recoveryAt = Clock::now();
-                    recoveryBytes = state->bytes.size();
                     world.retainRecovery();
                 }
                 // ENet's unreliable fragments are sequenced: a newer view can

@@ -1,6 +1,7 @@
 #pragma once
 #include <winsock2.h>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -20,7 +21,10 @@ class UdpRelay {
     void run() {
         using Clock = std::chrono::steady_clock;
         std::vector<Packet> pending;
-        unsigned counter = 0;
+        // Each direction has its own path. A shared counter can phase-lock a
+        // sparse upstream receipt to every seventh busy downstream datagram,
+        // accidentally dropping all receipts instead of one in seven.
+        std::array<unsigned, 2> counters{};
         while (!stopping.load()) {
             for (unsigned count = 0; count < 256; ++count) {
                 std::array<char, 65536> buffer;
@@ -35,6 +39,11 @@ class UdpRelay {
                     client = from;
                 if (!client.sin_port)
                     continue;
+                if (stalled.load()) {
+                    ++stalledDrops;
+                    continue;
+                }
+                auto& counter = counters[downstream ? 1 : 0];
                 ++counter;
                 ++received;
                 maxBytes.store(std::max<unsigned>(maxBytes.load(), size));
@@ -66,8 +75,8 @@ class UdpRelay {
     }
 
   public:
-    std::atomic<bool> impaired{false};
-    std::atomic<unsigned> received{0}, dropped{0}, duplicated{0}, maxBytes{0};
+    std::atomic<bool> impaired{false}, stalled{false};
+    std::atomic<unsigned> received{0}, dropped{0}, duplicated{0}, maxBytes{0}, stalledDrops{0};
     std::uint16_t port = 0;
     explicit UdpRelay(std::uint16_t destination) {
         socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
