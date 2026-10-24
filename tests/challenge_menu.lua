@@ -574,9 +574,7 @@ _IsaacLanMenuOpen(true)
 draw()
 assert(#renderedMarks == 2 and renderedMarks[1][1] == 0 and renderedMarks[2][1] == 2)
 assert(
-    labels["房间规则：无"]
-        and not labels["[ ] 队友伤害"]
-        and labels["载入上次规则"]
+    labels["房间规则：无"] and not labels["[ ] 队友伤害"] and labels["载入上次规则"]
 )
 for _ = 1, 4 do
     draw(40)
