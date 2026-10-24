@@ -10,25 +10,12 @@ namespace isaac::lan {
 struct ConnectionLost : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
-inline bool wouldBlock() {
-    return WSAGetLastError() == WSAEWOULDBLOCK;
-}
-inline void configure(SOCKET s) {
-    u_long mode = 1;
-    if (ioctlsocket(s, FIONBIO, &mode) != 0)
-        throw std::runtime_error("Cannot set nonblocking socket");
-    BOOL on = TRUE;
-    if (setsockopt(s, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&on), sizeof(on)) !=
-        0)
-        throw std::runtime_error("Cannot disable TCP buffering");
-}
-// Owns a socket and bounded framed-byte queues, never game or peer policy.
+// Main-thread message handoff; the ENet worker owns the endpoint.
 struct Socket : SendQueue {
     std::shared_ptr<NetworkIo> io;
     std::shared_ptr<ConnectionPipe> pipe;
-    SOCKET handle = INVALID_SOCKET;
     bool finished = false;
-    explicit Socket(SOCKET value = INVALID_SOCKET) : handle(value) {}
+    Socket() = default;
     Socket(std::shared_ptr<NetworkIo> worker, std::shared_ptr<ConnectionPipe> connection)
         : io(std::move(worker)), pipe(std::move(connection)) {}
     Socket(const Socket&) = delete;
@@ -38,8 +25,6 @@ struct Socket : SendQueue {
             pipe->closing.store(true, std::memory_order_release);
             io->signal();
         }
-        if (handle != INVALID_SOCKET)
-            closesocket(handle);
     }
     std::size_t queuedBytes() const {
         return queued + (pipe ? pipe->queued.load(std::memory_order_acquire) : 0);
@@ -53,14 +38,9 @@ struct Socket : SendQueue {
     }
     void sendMessage(const Writer& w) {
         if (w.bytes.empty() || w.bytes.size() > maxMessageSize ||
-            queuedBytes() + w.bytes.size() + 2 > maxSocketQueueBytes)
+            queuedBytes() + w.bytes.size() > maxSocketQueueBytes)
             throw std::runtime_error("Network queue limit exceeded");
-        std::vector<std::uint8_t> data;
-        auto size = static_cast<std::uint16_t>(w.bytes.size());
-        data.push_back(size >> 8);
-        data.push_back(size & 255);
-        data.insert(data.end(), w.bytes.begin(), w.bytes.end());
-        append(std::move(data));
+        append(w.bytes);
         if (pipe)
             flush();
     }
@@ -71,7 +51,6 @@ struct Socket : SendQueue {
                 outgoing.pop_front();
                 queued -= message.size();
                 pipe->queued.fetch_add(message.size(), std::memory_order_acq_rel);
-                message.erase(message.begin(), message.begin() + 2);
                 pipe->outgoing.push({std::move(message), {}});
             }
             io->signal();

@@ -5,7 +5,7 @@
 | 要修改的内容 | 应修改的位置 | 边界 |
 | --- | --- | --- |
 | 自动加载、启动装配、组件注册与调用顺序 | [`src/app/`](https://github.com/BMingSY/isaac-lan/tree/main/src/app)、[`src/bridge/app/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/app) | 组合已有组件，不承载新的玩法规则 |
-| TCP、消息、分块、压缩、连接与协议 | [`src/net/`](https://github.com/BMingSY/isaac-lan/tree/main/src/net) | 不访问游戏对象，不识别 Boss、角色或道具 |
+| UDP、消息、分块、压缩、连接与协议 | [`src/net/`](https://github.com/BMingSY/isaac-lan/tree/main/src/net) | 不访问游戏对象，不识别 Boss、角色或道具 |
 | 状态字段、采集／应用、编码、库存、实体与网格一致性 | [`src/bridge/sync/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/sync) | 负责通用同步契约，特殊玩法通过注入兼容组件处理 |
 | 会话推进、存档／恢复、换层屏障、房间与角色生命周期 | [`src/runtime/`](https://github.com/BMingSY/isaac-lan/tree/main/src/runtime)、[`src/bridge/runtime/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/runtime) | 协调执行时机与状态失效，原生对象的分配／释放由后端处理 |
 | Boss、道具、角色、路线与挑战的特殊规则 | [`src/compat/{bosses,items,characters,routes,challenges}/`](https://github.com/BMingSY/isaac-lan/tree/main/src/compat)、[`src/bridge/compat/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat) 对应分类 | C++ 策略接收普通值；Lua 适配使用游戏 API 和具名原生能力 |

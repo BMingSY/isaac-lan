@@ -5,7 +5,6 @@
 #include "net/reliable_transfer.h"
 #include "net/reliable_receiver.h"
 #include "net/world_transfer.h"
-#include "net/transport.h"
 #include <deque>
 
 namespace isaac::lan {
@@ -45,8 +44,6 @@ struct WorldObservation {
 // incoming. Socket state and queue counters are observations, never ownership.
 struct ConnectionPipe {
     enum State { connecting, connected, closed, failed };
-    SOCKET handle;
-    bool unreliable = false;
     std::shared_ptr<DatagramHost> datagrams;
     std::optional<sockaddr_in> address;
     SpscQueue<OutgoingPacket, 128> outgoing;
@@ -63,22 +60,16 @@ struct ConnectionPipe {
     std::atomic<std::size_t> queued{0}, receiveCapacity{0}, incomingBytes{0};
     std::atomic<std::size_t> checkpointSent{0}, bulkBytes{0};
     std::string error; // Written once, published by terminal state release.
-    explicit ConnectionPipe(SOCKET socket, bool pending)
-        : handle(socket), state(pending ? connecting : connected) {}
+    explicit ConnectionPipe(bool pending) : state(pending ? connecting : connected) {}
 };
 struct ListenerPipe {
-    SOCKET handle;
     std::shared_ptr<DatagramHost> datagrams;
     std::uint16_t port = 0;
     SpscQueue<std::shared_ptr<ConnectionPipe>, 4> accepted;
     std::atomic<bool> closing{false}, failed{false};
-    explicit ListenerPipe(SOCKET socket) : handle(socket) {}
 };
-// One event-driven owner for established sockets and realtime byte processing.
-// Bind/listen/nonblocking-connect are setup operations before ownership transfer.
+// One event-driven owner for ENet endpoints and realtime byte processing.
 class NetworkIo {
-    struct Connection;
-    struct Listener;
     WakeEvent wake;
     SpscQueue<std::shared_ptr<ConnectionPipe>, 8> additions;
     SpscQueue<std::shared_ptr<ListenerPipe>, 2> listeners;
@@ -88,10 +79,9 @@ class NetworkIo {
     HANDLE thread = nullptr;
     static DWORD WINAPI run(void* self);
     void runDatagrams();
-    Transport transport;
 
   public:
-    explicit NetworkIo(Transport mode = Transport::tcp);
+    NetworkIo();
     ~NetworkIo();
     NetworkIo(const NetworkIo&) = delete;
     void stop() {
@@ -105,8 +95,6 @@ class NetworkIo {
         if (failed.load(std::memory_order_acquire))
             throw std::runtime_error(failure);
     }
-    std::shared_ptr<ConnectionPipe> attach(SOCKET socket, std::optional<sockaddr_in> address = {});
-    std::shared_ptr<ListenerPipe> listen(SOCKET socket);
     std::shared_ptr<ConnectionPipe> connectDatagram(const sockaddr_in& address);
     std::shared_ptr<ListenerPipe> listenDatagram(std::uint16_t port);
     void signal() {

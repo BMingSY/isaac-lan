@@ -36,14 +36,12 @@ struct Peer : Socket {
     bool pingPending = false;
     using Socket::Socket;
     void submitInput(InputSample sample) {
-        if (pipe && pipe->unreliable) {
-            if (sample.input.triggered) {
-                auto event = inputMessage(sample);
-                event.bytes[0] = static_cast<std::uint8_t>(Message::inputEdges);
-                sendMessage(event);
-            }
-            sample.input.triggered = 0;
+        if (sample.input.triggered) {
+            auto event = inputMessage(sample);
+            event.bytes[0] = static_cast<std::uint8_t>(Message::inputEdges);
+            sendMessage(event);
         }
+        sample.input.triggered = 0;
         sendMessage(inputMessage(sample));
     }
     void consumeEdges(InputFrame& input, const std::optional<InputRoom>& room) {
@@ -87,7 +85,7 @@ struct Peer : Socket {
         return pipe ? pipe->world.flightBytes.load() : 0;
     }
     std::size_t window() const {
-        return WorldTransfer::window(minimumLatency, pipe && pipe->unreliable);
+        return WorldTransfer::window(minimumLatency);
     }
     void beginStage(const Stage& value, bool reset = true) {
         if (reset)

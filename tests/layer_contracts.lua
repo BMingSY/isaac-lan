@@ -207,16 +207,26 @@ motion.reset()
 -- Consolidated native fixtures must initialize in the ordinary game sandbox.
 -- File exports are optional diagnostics; they cannot gate movement assertions.
 for _, name in ipairs({ "state_motion", "state_floor_items", "state_mod_integrations" }) do
-    local frame, gate = function() end, function() end
+    local capturedInput
+    local frame, gate = function() end, function(capture)
+        capturedInput = capture
+    end
     local sandbox = setmetatable({
         io = false,
         _IsaacLanTest = { host = false, port = "30320" },
+        _IsaacLanTestInput = testInput,
         _IsaacLanFrame = frame,
         _IsaacLan = { net_gate = gate, api_send = function() end, api_receive = function() end },
         _IsaacLanModules = { ["api/codec"] = module("api/codec") },
         IsaacLAN = {
-            RegisterMod = function()
-                return { Unregister = function() end }
+            Attach = function()
+                return {
+                    Close = function() end,
+                    Action = function()
+                        return {}
+                    end,
+                    OnLocalRender = function() end,
+                }
             end,
         },
         Isaac = { AddCallback = function() end },
@@ -224,5 +234,9 @@ for _, name in ipairs({ "state_motion", "state_floor_items", "state_mod_integrat
     }, { __index = _G })
     assert(loadfile(root .. "/tests/" .. name .. ".lua", "t", sandbox))()
     assert(sandbox._IsaacLanFrame ~= frame and sandbox._IsaacLan.net_gate ~= gate)
+    if name == "state_mod_integrations" then
+        sandbox._IsaacLan.net_gate()
+        assert(testInput.decode(capturedInput()).triggered == 0)
+    end
 end
 print("PASS stable world wire fields and coordinated compatibility transitions")

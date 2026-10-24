@@ -48,16 +48,14 @@ def time_weighted_age(intervals):
 
 def analyze_delivery(host_log, client_log, *, minimum_samples=100):
     sources = {}
-    for tick, timestamp in re.findall(r"WEAK_(?:TCP|NET) VIEW tick=(\d+) ms=([\d.]+)", host_log):
+    for tick, timestamp in re.findall(r"WEAK_NET VIEW tick=(\d+) ms=([\d.]+)", host_log):
         tick, timestamp = int(tick), float(timestamp)
         if tick in sources and sources[tick] != timestamp:
             raise ValueError("Conflicting source timestamps for one view")
         sources[tick] = timestamp
     applied = [
         (int(tick), float(timestamp))
-        for tick, timestamp in re.findall(
-            r"WEAK_(?:TCP|NET) APPLY tick=(\d+) ms=([\d.]+)", client_log
-        )
+        for tick, timestamp in re.findall(r"WEAK_NET APPLY tick=(\d+) ms=([\d.]+)", client_log)
     ]
     applied = [(tick, timestamp) for tick, timestamp in applied if tick >= 60]
     if len(applied) < minimum_samples:

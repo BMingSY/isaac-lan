@@ -1,4 +1,4 @@
-local bridge = _IsaacLanModules["api/public"]
+local api = assert(IsaacLAN)
 local wrapping = _IsaacLanModules["compat/mods/wrapping"]
 local definition = {
     id = "isaac-lan.compat.stats-plus",
@@ -38,7 +38,8 @@ function definition.install(target, api)
     target.addCleanup(function()
         wrapping.cleanup(cleanups)
     end)
-    local lan = api:RegisterMod(target.mod, { id = definition.id, integrationVersion = 1 })
+    local lan = api:Attach(target.mod, definition.id)
+    target.integration = lan
     local playerClass = exported(target, "services.PlayerService", "PlayerService")
     local apiClass = exported(target, "services.extension.API", "API")
     local cachedPlayers = playerClass.prototype.getPlayers
@@ -50,7 +51,7 @@ function definition.install(target, api)
             end
             local localPlayers = {}
             for _, player in ipairs(players) do
-                if lan:GetOwnerId(player.entityPlayer) == bridge.info().slot + 1 then
+                if lan:IsLocalPlayer(player.entityPlayer) then
                     localPlayers[#localPlayers + 1] = player
                 end
             end
@@ -70,7 +71,7 @@ function definition.install(target, api)
             if provider.id == "tear-cap-provider" then
                 local compute = provider.computables.computeTearCap
                 provider.computables.computeTearCap = function(self, ...)
-                    if bridge.registry.isEnabled(definition.id) and lan:IsActive() then
+                    if lan:IsAttached() and lan:IsActive() then
                         return "UNKNOWN"
                     end
                     return compute(self, ...)
@@ -78,7 +79,7 @@ function definition.install(target, api)
             elseif provider.id == "d8-multiplier-provider" then
                 local format = provider.display.value.format
                 provider.display.value.format = function(...)
-                    if bridge.registry.isEnabled(definition.id) and lan:IsActive() then
+                    if lan:IsAttached() and lan:IsActive() then
                         return nil
                     end
                     return format(...)
@@ -127,18 +128,19 @@ function definition.install(target, api)
     end)
     return function()
         wrapping.cleanup(cleanups)
-        lan:Unregister()
+        target.integration = nil
+        lan:Close()
     end
 end
 function definition.dispatch(target, record, ...)
-    local lan = bridge.handles[definition.id]
+    local lan = target.integration
     if not lan or not lan:IsActive() then
         return record.original(...)
     end
     local callbacks = ModCallbacks
     if record.id == callbacks.MC_EVALUATE_CACHE then
         local args = table.pack(...)
-        if lan:GetOwnerId(args[2]) ~= bridge.info().slot + 1 then
+        if not lan:IsLocalPlayer(args[2]) then
             return
         end
     end
@@ -159,5 +161,5 @@ function definition.dispatch(target, record, ...)
     end
     return record.original(...)
 end
-bridge.api:RegisterCompatibility(definition)
+api:RegisterAdapter(definition)
 return definition

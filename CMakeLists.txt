@@ -263,6 +263,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.entity-codec entity_codec.lua)
         isaac_add_lua_test(bridge.layers layer_contracts.lua)
         isaac_add_lua_test(bridge.api bridge_api.lua)
+        isaac_add_lua_test(bridge.sdk bridge_sdk.lua)
         isaac_add_lua_test(bridge.compat-observation compat_observation.lua)
         isaac_add_lua_test(bridge.goodtrip goodtrip_rules.lua)
         isaac_add_lua_test(bridge.prediction prediction.lua)
@@ -475,12 +476,6 @@ target_include_directories(isaac_lan_net PUBLIC src)
 target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate isaac_lan_zstd
                                            isaac_lan_enet)
-add_executable(isaac_lan_replay_world tools/replay_world_states.cpp)
-target_link_libraries(isaac_lan_replay_world PRIVATE isaac_lan_net)
-if(MINGW)
-    target_link_options(isaac_lan_replay_world PRIVATE -static-libgcc -static-libstdc++)
-    target_compile_options(isaac_lan_replay_world PRIVATE -Wall -Wextra -Werror)
-endif()
 if(BUILD_TESTING)
     add_executable(isaac_lan_net_test tests/net_test.cpp)
     add_executable(isaac_lan_chat_native_input_test tests/chat_native_input_test.cpp
@@ -565,34 +560,12 @@ if(BUILD_TESTING)
         host-disconnect
         resource-lifecycle)
         add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
-        set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;network")
+        set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 45 LABELS "offline;network;udp")
     endforeach()
     set_tests_properties(net.loading-timeout PROPERTIES TIMEOUT 75)
-    foreach(
-        test_case
-        udp-loss
-        udp-large-recovery
-        world-deltas
-        async-network
-        inputs-2
-        inputs-3
-        inputs-4
-        render-inputs
-        floor-rejoin
-        stage-events
-        delta-floor-boundary
-        restart
-        return-lobby
-        rewind
-        r-key
-        input-rooms
-        communication
-        integrations
-        host-disconnect
-        resource-lifecycle)
-        add_test(NAME net.udp.${test_case} COMMAND isaac_lan_net_test --udp ${test_case})
-        set_tests_properties(net.udp.${test_case} PROPERTIES TIMEOUT 45 LABELS
-                                                             "offline;network;udp")
+    foreach(test_case udp-loss udp-large-recovery)
+        add_test(NAME net.${test_case} COMMAND isaac_lan_net_test ${test_case})
+        set_tests_properties(net.${test_case} PROPERTIES TIMEOUT 45 LABELS "offline;network;udp")
     endforeach()
 endif()
 set(MINHOOK_SOURCE_DIR

@@ -225,7 +225,6 @@ std::uint32_t nextInputTick = 0;
 using InputClock = std::chrono::steady_clock;
 InputSchedule inputSchedule;
 unsigned inputHz = 60;
-lan::Transport networkTransport = lan::Transport::udp;
 std::optional<InputClock::time_point> rejoinAt;
 // Survives the native exit tail and failed attempts, until a live view is applied
 // or the player explicitly leaves. Never restart a failed restore in a loop.
@@ -792,9 +791,9 @@ int host(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(
-        logger, diagnostics::enabled() ? diagnostics::sample : nullptr,
-        logging::enabled(logging::Level::debug), networkTransport);
+    session = std::make_unique<lan::Session>(logger,
+                                             diagnostics::enabled() ? diagnostics::sample : nullptr,
+                                             logging::enabled(logging::Level::debug));
     sessionFingerprint = fingerprint;
     lua.pushBoolean(
         L, session->host(static_cast<std::uint16_t>(port), fingerprint, mods, personalAccess()));
@@ -809,9 +808,9 @@ int join(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(
-        logger, diagnostics::enabled() ? diagnostics::sample : nullptr,
-        logging::enabled(logging::Level::debug), networkTransport);
+    session = std::make_unique<lan::Session>(logger,
+                                             diagnostics::enabled() ? diagnostics::sample : nullptr,
+                                             logging::enabled(logging::Level::debug));
     sessionFingerprint = fingerprint;
     try {
         const auto path = archivePath().parent_path() / L"player-id.txt";
@@ -907,8 +906,8 @@ int poll(lua_State* L) {
     lua.pushString(L, saves.saveError.c_str());
     lua.setField(L, -2, "saveError");
     integer("port", session ? session->port() : 0);
-    // Local menu status uses the same transport selected for session creation.
-    lua.pushString(L, networkTransport == lan::Transport::udp ? "udp" : "tcp");
+    // Expose the session protocol to the local connection menu.
+    lua.pushString(L, "udp");
     lua.setField(L, -2, "transport");
     integer("tick", nextTick);
     integer("verified", session && session->verifiedTick() ? *session->verifiedTick() : -1ll);
@@ -961,6 +960,9 @@ int integrationInfo(lua_State* L) {
         lua.setField(L, -2, key);
     };
     integer("active", active);
+    // A lobby, ending or pending disconnect still belongs to LAN. Integrations
+    // must not execute their single-player fallback while native players remain.
+    integer("networked", session && session->phase() != lan::Phase::idle);
     integer("ready", active && view.gated && rooms::viewReady() &&
                          (session->isHost() || view.authoritative));
     integer("authority", active && session->isHost());
@@ -1578,9 +1580,8 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
                                     executeStart, startGame, update, consoleUpdate, consoleCommand,
                                     controls, executeMenu, requestRestart});
 }
-void configureNetwork(unsigned hz, bool udp) {
+void configureNetwork(unsigned hz) {
     inputHz = hz;
-    networkTransport = udp ? lan::Transport::udp : lan::Transport::tcp;
     inputSchedule = InputSchedule(hz);
 }
 bool halfAllowed() {

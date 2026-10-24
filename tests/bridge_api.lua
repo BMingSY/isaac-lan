@@ -43,8 +43,8 @@ local runtime = assert(loadfile(root .. "/tests/fixtures/api_runtime.lua"))()(ro
 local peer = runtime.peer
 local actor1, actor2 = runtime.actors[1], runtime.actors[2]
 local host, guest = peer(0), peer(1)
-local h = host.api:RegisterMod({}, { id = "test.travel", integrationVersion = 1 })
-local g = guest.api:RegisterMod({}, { id = "test.travel", integrationVersion = 1 })
+local h = host.api:Attach({}, "test.travel")
+local g = guest.api:Attach({}, "test.travel")
 local order = {}
 for _, event in ipairs({
     "StateReset",
@@ -92,13 +92,13 @@ guest.bridge.commit()
 cancel()
 guest.bridge.commit()
 assert(failures == 1 and successes == 2)
-assert(host.api:RegisterMod(h.mod, { id = "test.travel", integrationVersion = 1 }) == h)
+assert(host.api:Attach(h.mod, "test.travel") == h)
 rejects(function()
-    host.api:RegisterMod({}, { id = "test.travel", integrationVersion = 1 })
+    host.api:Attach({}, "test.travel")
 end)
+assert(host.api.API_VERSION == 2 and host.api.RegisterMod == nil and h.RegisterAction == nil)
 local executions = 0
-local unregister = h:RegisterAction("move", {
-    version = 1,
+local authorityMove = h:Action("move", {
     cooldownTicks = 1,
     validate = function(payload)
         return type(payload) == "table" and payload.index == 71
@@ -106,7 +106,7 @@ local unregister = h:RegisterAction("move", {
     execute = function(context, payload)
         assert(context.ownerId == 2 and context.player == actor2 and host.scope == 1)
         executions = executions + 1
-        local operation = assert(h:MovePlayer(context, { index = payload.index, dimension = 0 }))
+        local operation = assert(context:MoveTo({ index = payload.index, dimension = 0 }))
         local poll = operation.poll
         operation.poll = function()
             assert(host.scope == 1, "Operation polled in another participant's room")
@@ -116,15 +116,19 @@ local unregister = h:RegisterAction("move", {
     end,
 })
 rejects(function()
-    h:RegisterAction("move", { version = 1, validate = function() end, execute = function() end })
+    h:Action("move", { execute = function() end })
 end)
+local move = g:Action("move")
 host.bridge.actions.poll()
 guest.bridge.actions.poll()
-assert(g:HasHostAction("move", 1) and not g:HasHostAction("move", 2))
+assert(move:IsAvailable() and g:Action("move") == move)
 local results = {}
-local requestId = assert(g:RequestAction("move", { index = 71, forgedOwner = 1 }, function(result)
-    results[#results + 1] = result
-end))
+local request = move:Request({ index = 71, forgedOwner = 1 }, {
+    onResult = function(result)
+        results[#results + 1] = result
+    end,
+})
+assert(request.status == "pending")
 local packet = guest.sent[#guest.sent].bytes
 host.bridge.actions.poll()
 assert(executions == 0, "request executed during polling/render")
@@ -137,7 +141,8 @@ host.positions["1"].index = 71
 host.queuedMove = nil
 host.bridge.commit()
 guest.bridge.actions.poll()
-assert(#results == 1 and results[1].status == "applied" and results[1].requestId == requestId)
+assert(#results == 1 and results[1].status == "applied" and results[1].requestId == request.id)
+assert(request.status == "applied" and request.code == "arrived")
 host.inbox[#host.inbox + 1] = { sender = 1, bytes = packet }
 host.bridge.actions.step()
 guest.bridge.actions.poll()
@@ -151,94 +156,84 @@ local last = codec.decode(host.sent[#host.sent].bytes)
 assert(last.code == "request_id_reused")
 -- A request captured in the departure room cannot act on a different room.
 host.tick, guest.tick = 10, 10
-assert(g:RequestAction("move", { index = 71 }, function(result)
-    results[#results + 1] = result
-end))
+local departed = move:Request({ index = 71 })
 host.bridge.actions.step()
 guest.bridge.actions.poll()
-assert(results[#results].code == "source_changed" and executions == 1)
+assert(departed.code == "source_changed" and executions == 1)
 host.api:SetActionEnabled("test.travel", "move", false)
 host.bridge.actions.poll()
 guest.bridge.actions.poll()
-assert(not g:HasHostAction("move", 1))
-local unavailable, code = g:RequestAction("move", { index = 71 })
-assert(not unavailable and code == "action_unavailable")
+assert(not move:IsAvailable())
+local callbacks = 0
+local unavailable = move:Request({ index = 71 }, {
+    onResult = function(result)
+        callbacks = callbacks + 1
+        assert(result.status == "rejected" and result.code == "action_unavailable")
+    end,
+})
+assert(unavailable.status == "rejected" and callbacks == 1)
 host.api:SetActionEnabled("test.travel", "move", true)
 host.positions["1"].index = 84
 host.tick = 20
 host.bridge.actions.poll()
 guest.bridge.actions.poll()
-local unknown
-assert(g:RequestAction("move", { index = 71 }, function(result)
-    unknown = result
-end))
+local unknown = move:Request({ index = 71 })
 guest.now = 5001
 guest.bridge.actions.poll()
 assert(unknown.status == "unknown" and unknown.code == "timeout" and executions == 1)
 guest.epoch = 1
 guest.bridge.commit()
-assert(g:GetContext().worldEpoch == 1 and order[#order] == "SessionReady")
-guest.active, guest.ready = 0, 0
+assert(g:View().worldEpoch == 1 and order[#order] == "SessionReady")
+guest.active, guest.ready, guest.networked = 0, 0, 0
 guest.bridge.poll()
-assert(not g:IsActive() and #g:GetLocalPlayers() == 0 and g:GetLocalRoom() == nil)
-local echo = h:RegisterAction("echo", {
-    version = 1,
+assert(not g:IsActive() and #g:GetLocalPlayers() == 2 and not g:View().networked)
+local echo = h:Action("echo", {
     validate = function(value)
         return value == true
     end,
     execute = function(context)
         assert(context.ownerId == 1 and context.player == actor1)
-        return { status = "applied", code = "echo" }
+        return { status = "applied", code = "echo", data = { value = 42 } }
     end,
 })
-local echoed
-assert(h:RequestAction("echo", true, function(result)
-    echoed = result
-end))
+local echoed = echo:Request(true)
 host.bridge.actions.step()
 host.bridge.commit()
-assert(echoed and echoed.status == "applied", "Host bypassed shared request processing")
-echo()
+assert(
+    echoed.status == "applied" and echoed.result.data.value == 42,
+    "Host bypassed shared request processing"
+)
+echo:Close()
 local longId, longName = string.rep("i", 64), string.rep("a", 32)
-local longHost = host.api:RegisterMod({}, { id = longId, integrationVersion = 1 })
-local longGuest = guest.api:RegisterMod({}, { id = longId, integrationVersion = 1 })
-longHost:RegisterAction(longName, {
+local longHost = host.api:Attach({}, longId)
+local longGuest = guest.api:Attach({}, longId)
+local hostAction = longHost:Action(longName, {
     version = 2,
-    validate = function()
-        return true
-    end,
     execute = function()
         return { status = "applied", code = "long" }
     end,
 })
+local guestAction = longGuest:Action(longName, { version = 2 })
 guest.active, guest.ready, guest.epoch = 1, 1, 0
 guest.bridge.commit()
 host.bridge.actions.poll()
 guest.bridge.actions.poll()
-assert(longGuest:HasHostAction(longName, 2), "Allowed long namespace failed capability encoding")
-longHost:Unregister()
-longGuest:Unregister()
-local replacement = host.api:RegisterMod({}, { id = longId, integrationVersion = 1 })
+assert(guestAction:IsAvailable(), "Allowed long namespace failed capability encoding")
+longHost:Close()
+longGuest:Close()
+local replacement = host.api:Attach({}, longId)
 rejects(function()
     longHost:On("ViewUpdated", function() end)
 end)
 rejects(function()
-    longHost:RegisterAction("stale", {
-        version = 1,
-        validate = function()
-            return true
-        end,
-        execute = function()
-            return { status = "applied" }
-        end,
-    })
+    longHost:Action("stale", { execute = function() end })
 end)
-local staleRequest, staleCode = longHost:RequestAction("stale", true)
-assert(not staleRequest and staleCode == "integration_unregistered")
-longHost:Unregister()
+local staleRequest = hostAction:Request()
+assert(staleRequest.status == "rejected" and staleRequest.code == "integration_closed")
+longHost:Close()
 assert(host.bridge.handles[longId] == replacement)
-replacement:Unregister()
-unregister()
+replacement:Close()
+authorityMove:Close()
 -- Original callback identity, parameters and priority survive wrapping/removal.
 local callbacks, removed = {}, {}
 local target = {
@@ -286,13 +281,10 @@ local definition = {
     end,
     install = function(target, api)
         installs = installs + 1
-        compatibilityHandle = api:RegisterMod(target.mod, {
-            id = "test.compat.handle",
-            integrationVersion = 1,
-        })
+        compatibilityHandle = api:Attach(target.mod, "test.compat.handle")
         return function()
             cleanupCount = cleanupCount + 1
-            compatibilityHandle:Unregister()
+            compatibilityHandle:Close()
         end
     end,
 }
@@ -312,11 +304,11 @@ registry.observeMod(mod, "test-source")
 registry.poll()
 registry.poll()
 assert(installs == 1 and registry.status()[1].state == "active")
-isolated.api:SetCompatibilityEnabled("test.compat", false)
+isolated.api:SetAdapterEnabled("test.compat", false)
 assert(cleanupCount == 1)
-isolated.api:SetCompatibilityEnabled("test.compat", true)
+isolated.api:SetAdapterEnabled("test.compat", true)
 assert(installs == 2)
-isolated.api:RegisterMod(mod, { id = "native.test", integrationVersion = 1 })
+isolated.api:Attach(mod, "native.test")
 assert(cleanupCount == 2)
 rejects(function()
     compatibilityHandle:On("ViewUpdated", function() end)
@@ -333,7 +325,7 @@ registry.register({
         return initialized and "ready" or "pending"
     end,
     install = function(target, api)
-        api:RegisterMod(target.mod, { id = "test.late.handle", integrationVersion = 1 })
+        api:Attach(target.mod, "test.late.handle")
         target.mod.patched = true
         target.addCleanup(function()
             target.mod.patched = nil
@@ -362,8 +354,8 @@ end
 registry.register(failingAuthority)
 registry.observeMod({ Name = "Authority error" }, "authority-error-source")
 assert(registry.status()[1].state == "error" and installs == 2)
-isolated.api:SetCompatibilityEnabled("test.authority-error", false)
-local enabled, enableCode = isolated.api:SetCompatibilityEnabled("test.authority-error", true)
+isolated.api:SetAdapterEnabled("test.authority-error", false)
+local enabled, enableCode = isolated.api:SetAdapterEnabled("test.authority-error", true)
 assert(not enabled and enableCode == "authority_install_failed" and authorityAttempts == 2)
 -- Released and updated EID builds use the same capability contract. Metadata,
 -- runtime version and source changes alone must not disable local descriptions.
@@ -573,7 +565,7 @@ for _, build in ipairs({
     assert(not describable(replica), "EID replica override survived leaving LAN")
     assert(callbacks[15](eid, true) == "continued" and continuedGames == 1)
     assert(callbacks[2](eid, 2, nil, "solo") == 2 and soloCalls[2] == 2)
-    assert(p.api:SetCompatibilityEnabled(adapter.id, false))
+    assert(p.api:SetAdapterEnabled(adapter.id, false))
     assert(eid.getEntityData == originalGetEntityData, "EID method was not restored on uninstall")
     eid.ModVersion = 0
     assert(adapter.probe({ mod = eid, metadataVersion = build[1] }) == "ready")
@@ -702,9 +694,10 @@ do
         directory = "goodtrip",
     }
     local id = "isaac-lan.compat.goodtrip"
-    local lan = p.api:RegisterMod({}, { id = id, integrationVersion = 1 })
+    local lan = p.api:Attach({}, id)
     p.env._IsaacLanModules["compat/mods/goodtrip/authority"] = {
         id = id,
+        integration = lan,
         install = function()
             return function() end
         end,
