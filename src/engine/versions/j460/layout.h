@@ -97,6 +97,8 @@ inline constexpr unsigned data = 0x4;
 inline constexpr unsigned count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned damageQueue = 0x8;
+inline constexpr unsigned damageRecordSize = 0x38;
 inline constexpr unsigned removeMethod = 0x28;
 inline constexpr unsigned subtype = 0x30;
 inline constexpr unsigned initSeed = 0x3ec;

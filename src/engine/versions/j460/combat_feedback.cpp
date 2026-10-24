@@ -22,7 +22,6 @@ using Address = std::uintptr_t;
 using Color = std::array<float, j460::layout::color::size / sizeof(float)>;
 constexpr unsigned retentionTicks = 90, maxEvents = 512;
 constexpr unsigned spriteColor = entity::sprite + j460::layout::sprite::color;
-constexpr unsigned noFlashOnDamage = 0x02000000u;
 struct Identity {
     unsigned seed, index, id;
 };
@@ -36,8 +35,14 @@ struct Flash {
     unsigned seed, index, until;
     bool local;
 };
+struct Pending {
+    Event event;
+    std::vector<unsigned> records;
+};
 std::map<Address, Identity> identities;
 std::map<Address, Flash> flashes;
+std::map<unsigned, std::vector<Pending>> pending;
+unsigned pendingCount = 0;
 std::deque<Event> events;
 unsigned nextIdentity = 0, serial = 0;
 Address image = 0;
@@ -45,6 +50,47 @@ lua::API api;
 template <class T> T& at(Address p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }
+unsigned queuedDamage(Address target) {
+    if (!target)
+        return 0;
+    const auto begin = at<Address>(target, entity::damageQueue + j460::layout::vector::begin);
+    const auto end = at<Address>(target, entity::damageQueue + j460::layout::vector::end);
+    return end >= begin ? static_cast<unsigned>((end - begin) / entity::damageRecordSize) : 0;
+}
+struct DamageObservation;
+DamageObservation* observingDamage = nullptr;
+struct DamageObservation {
+    Address target;
+    unsigned before;
+    std::vector<std::pair<unsigned, unsigned>> nested;
+    DamageObservation* previous = observingDamage;
+    explicit DamageObservation(Address target) : target(target), before(queuedDamage(target)) {
+        observingDamage = this;
+    }
+    DamageObservation(const DamageObservation&) = delete;
+    ~DamageObservation() {
+        observingDamage = previous;
+    }
+    std::vector<unsigned> records() {
+        const auto after = queuedDamage(target);
+        for (auto* parent = previous; parent; parent = parent->previous) {
+            if (parent->target == target) {
+                if (after > before)
+                    parent->nested.emplace_back(before, after);
+                break;
+            }
+        }
+        std::vector<unsigned> result;
+        for (unsigned index = before; index < after; ++index) {
+            if (std::any_of(nested.begin(), nested.end(), [&](const auto& range) {
+                    return index >= range.first && index < range.second;
+                }))
+                continue;
+            result.push_back(index);
+        }
+        return result;
+    }
+};
 bool npc(Address p) {
     const auto type = at<unsigned>(p, entity::type);
     return type >= 10 && type < 1000;
@@ -59,10 +105,10 @@ unsigned identify(Address p) {
         it->second = {seed, index, ++nextIdentity};
     return it->second.id;
 }
-unsigned duration(float damage) {
-    // J460's damage presentation: clamp((int(damage + .5) + 2) / 3, 1, 6).
-    return static_cast<unsigned>(
-        std::clamp(std::floor((std::floor(damage + .5f) + 2) / 3), 1.f, 6.f));
+void publish(Event event) {
+    event.serial = ++serial;
+    event.tick = runtime::tick();
+    events.push_back(event);
 }
 void prune() {
     const auto tick = runtime::tick();
@@ -70,6 +116,21 @@ void prune() {
            (events.size() > maxEvents || events.front().epoch != runtime::worldEpoch() ||
             events.front().tick + retentionTicks < tick))
         events.pop_front();
+    for (auto it = pending.begin(); it != pending.end();) {
+        auto& entries = it->second;
+        const auto old = entries.size();
+        entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                     [&](const auto& p) {
+                                         return p.event.epoch != runtime::worldEpoch() ||
+                                                p.event.tick + retentionTicks < tick;
+                                     }),
+                      entries.end());
+        pendingCount -= old - entries.size();
+        if (entries.empty())
+            it = pending.erase(it);
+        else
+            ++it;
+    }
 }
 using Damage = bool(__attribute__((thiscall)) *)(void*, float, std::uint64_t, void*, int);
 Damage originalDamage = nullptr;
@@ -88,24 +149,50 @@ bool __attribute__((fastcall)) damage(void* object, void*, float amount, std::ui
     const auto game = capture ? at<Address>(image, j460::globals::game) : 0;
     const auto dimension = capture ? at<int>(game, j460::layout::game::dimension) : 0;
     const auto room = capture ? at<int>(game, j460::layout::game::roomIndex) : 0;
-    const bool blink = capture && !(at<unsigned>(target, entity::flags) & noFlashOnDamage);
+    DamageObservation observation(capture ? target : 0);
     const auto accepted = originalDamage(object, amount, flags, source, countdown);
+    auto records = capture ? observation.records() : std::vector<unsigned>{};
     if (capture && std::isfinite(amount) && amount > 0) {
-        events.push_back({++serial, runtime::tick(), runtime::worldEpoch(), audience, sourceID,
-                          targetID, dimension, room, accepted,
-                          accepted && blink ? duration(amount) : 0});
         prune();
+        Event event{0,
+                    runtime::tick(),
+                    runtime::worldEpoch(),
+                    audience,
+                    sourceID,
+                    targetID,
+                    dimension,
+                    room,
+                    accepted,
+                    0};
+        if (records.empty()) {
+            publish(event);
+        } else if (pendingCount < maxEvents) {
+            // A positive queued amount is still provisional. NPC Update can
+            // later discard it. Publish once, only when that queue is drained.
+            pending[targetID].push_back({event, std::move(records)});
+            ++pendingCount;
+        }
     }
     return accepted;
 }
 using SetColor = void(__attribute__((thiscall)) *)(void*, const Color*, int, int, bool, bool);
 SetColor originalSetColor = nullptr;
-void __attribute__((fastcall)) setColor(void* object, void*, const Color* color, int frames,
-                                        int priority, bool fade, bool share) {
-    const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
+void setColor(void* object, Address record, Address caller, const Color* color, int frames,
+              int priority, bool fade, bool share) {
     const auto target = reinterpret_cast<Address>(object);
-    if (caller == j460::entry::entityDamageColorReturn && rooms::soundAudience() &&
+    if (caller == image + j460::entry::entityDamageColorReturn && rooms::soundAudience() &&
         !runtime::replica() && npc(target)) {
+        const auto id = identify(target);
+        const auto found = pending.find(id);
+        if (found != pending.end()) {
+            const auto begin = at<Address>(target, entity::damageQueue);
+            const auto index = static_cast<unsigned>((record - begin) / entity::damageRecordSize);
+            for (auto& p : found->second) {
+                if (p.event.epoch == runtime::worldEpoch() &&
+                    std::find(p.records.begin(), p.records.end(), index) != p.records.end())
+                    p.event.duration = static_cast<unsigned>(std::clamp(frames, 1, 6));
+            }
+        }
         // Native damage still runs in full. Its transient visual now belongs
         // to the presentation clock, so it never becomes durable sprite state.
         flashes[target] = {
@@ -114,6 +201,24 @@ void __attribute__((fastcall)) setColor(void* object, void*, const Color* color,
         return;
     }
     originalSetColor(object, color, frames, priority, fade, share);
+}
+void drain(Address target) {
+    if (pending.empty() || runtime::replica() || !rooms::soundAudience())
+        return;
+    const auto identity = identities.find(target);
+    if (identity == identities.end() ||
+        identity->second.seed != at<unsigned>(target, entity::initSeed) ||
+        identity->second.index != at<unsigned>(target, entity::index))
+        return;
+    const auto found = pending.find(identity->second.id);
+    if (found == pending.end())
+        return;
+    for (const auto& p : found->second) {
+        if (p.event.epoch == runtime::worldEpoch())
+            publish(p.event);
+    }
+    pendingCount -= found->second.size();
+    pending.erase(found);
 }
 Address checkedEntity(lua_State* L) {
     auto wrapper = static_cast<Address*>(api.toUserdata(L, 1));
@@ -182,6 +287,8 @@ int present(lua_State* L) {
 int reset(lua_State* L) {
     identities.clear();
     events.clear();
+    pending.clear();
+    pendingCount = 0;
     flashes.clear();
     serial = nextIdentity = 0;
     api.pushBoolean(L, true);
@@ -199,6 +306,44 @@ Color hurtColor(unsigned type) {
 }
 } // namespace
 
+extern "C" {
+void* isaac_lan_damage_drain_original = nullptr;
+__attribute__((used,
+               force_align_arg_pointer)) void __cdecl isaac_lan_damage_drained(Address target) {
+    drain(target);
+}
+__attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_damage_color(
+    void* object, Address record, Address caller, const Color* color, int frames, int priority,
+    bool fade, bool share) {
+    setColor(object, record, caller, color, frames, priority, fade, share);
+}
+// At the audited damage SetColor call ESI is the current queue record. Other
+// callers are forwarded without inspecting ESI. Keep the original thiscall ABI.
+__attribute__((naked)) void isaac_lan_damage_color_thunk() {
+    __asm__ __volatile__("pushl %ebp\n\tmovl %esp, %ebp\n\t"
+                         "pushl 24(%ebp)\n\tpushl 20(%ebp)\n\tpushl 16(%ebp)\n\t"
+                         "pushl 12(%ebp)\n\tpushl 8(%ebp)\n\tpushl 4(%ebp)\n\t"
+                         "pushl %esi\n\tpushl %ecx\n\tcall _isaac_lan_damage_color\n\t"
+                         "addl $32, %esp\n\tpopl %ebp\n\tret $20");
+}
+// This site precedes queue.clear(), including queues skipped by immunity.
+// Preserve the surrounding function's integer, flag and SSE state.
+__attribute__((naked)) void isaac_lan_damage_drain_thunk() {
+    __asm__ __volatile__("pushfl\n\tpushal\n\tsubl $128, %esp\n\t"
+                         "movups %xmm0, 0(%esp)\n\tmovups %xmm1, 16(%esp)\n\t"
+                         "movups %xmm2, 32(%esp)\n\tmovups %xmm3, 48(%esp)\n\t"
+                         "movups %xmm4, 64(%esp)\n\tmovups %xmm5, 80(%esp)\n\t"
+                         "movups %xmm6, 96(%esp)\n\tmovups %xmm7, 112(%esp)\n\t"
+                         "pushl %edi\n\tcall _isaac_lan_damage_drained\n\taddl $4, %esp\n\t"
+                         "movups 0(%esp), %xmm0\n\tmovups 16(%esp), %xmm1\n\t"
+                         "movups 32(%esp), %xmm2\n\tmovups 48(%esp), %xmm3\n\t"
+                         "movups 64(%esp), %xmm4\n\tmovups 80(%esp), %xmm5\n\t"
+                         "movups 96(%esp), %xmm6\n\tmovups 112(%esp), %xmm7\n\t"
+                         "addl $128, %esp\n\tpopal\n\tpopfl\n\t"
+                         "jmp *_isaac_lan_damage_drain_original");
+}
+} // extern "C"
+
 bool install(std::uintptr_t base) {
     image = base;
     return MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::npcTakeDamage),
@@ -206,9 +351,13 @@ bool install(std::uintptr_t base) {
                          reinterpret_cast<void**>(&originalDamage)) == MH_OK &&
            MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::npcTakeDamage)) == MH_OK &&
            MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::entitySetColor),
-                         reinterpret_cast<void*>(setColor),
+                         reinterpret_cast<void*>(isaac_lan_damage_color_thunk),
                          reinterpret_cast<void**>(&originalSetColor)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::entitySetColor)) == MH_OK;
+           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::entitySetColor)) == MH_OK &&
+           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::entityDamageDrain),
+                         reinterpret_cast<void*>(isaac_lan_damage_drain_thunk),
+                         &isaac_lan_damage_drain_original) == MH_OK &&
+           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::entityDamageDrain)) == MH_OK;
 }
 bool bind(lua_State* L, HMODULE module) {
     if (!api.load(module,

@@ -39,6 +39,12 @@ ledger.confirm(event(7, 100, 25, true), 5, 0.04)
 assert(ledger.sample(5.05)[25] and not ledger.sample(5.07)[25])
 ledger.confirm(event(8, 100, 25, true), 6, 0.2)
 assert(not ledger.sample(6)[25])
+-- Accepted native contact is not evidence that the engine played a flash.
+ledger.confirm(event(9, 101, 26, true, 0), 6.1, 0)
+assert(not ledger.sample(6.1)[26], "Contact without native feedback invented a flash")
+assert(ledger.predict(16, 27, 6.2, 0.1))
+ledger.confirm(event(10, 16, 27, true, 0), 6.21, 0)
+assert(not ledger.sample(6.21)[27], "Zero-duration confirmation retained a predicted flash")
 -- Room changes drop visuals but keep the sequence high watermark. Epoch reset
 -- can accept a new session's sequence; neither reset leaks a hidden projectile.
 ledger.clear(false)
