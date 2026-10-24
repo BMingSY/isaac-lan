@@ -50,6 +50,7 @@ class Session {
     std::optional<IntegrationMessage> takeLifecycle();
     bool checkpointNeeded() const;
     bool choose(Choice choice);
+    bool publishChoicePreview(std::uint16_t character, std::uint32_t preview);
     bool configureRules(const RunRules& rules);
     bool rulesAvailable(const RunRules& rules) const;
     const LobbyAccess& localAccess() const;

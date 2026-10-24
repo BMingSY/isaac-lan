@@ -15,7 +15,7 @@
 | [`src/bridge/api/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/api) | 第三方公开契约；不暴露原生指针或任意内存读写 |
 | [`src/presentation/`](https://github.com/BMingSY/isaac-lan/tree/main/src/presentation)、[`src/bridge/presentation/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/presentation) | 菜单、预测、镜头、外观和音画；不决定权威玩法 |
 | [`src/bridge/lanbot.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot.lua)、[`src/bridge/lanbot/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/lanbot) | 读取已有视图并合成正常输入 |
-| [`src/core/`](https://github.com/BMingSY/isaac-lan/tree/main/src/core) | 可离线执行的数据规则，不依赖游戏布局或 Hook |
+| [`src/core/`](https://github.com/BMingSY/isaac-lan/tree/main/src/core)、[`src/bridge/core/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/core) | 可离线执行的数据规则与共享几何，不依赖游戏布局或 Hook |
 | [`src/engine/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine)、[`src/engine/versions/j460/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j460) | 能力接口、版本检测、原生调用、布局、Hook 与对象所有权 |
 | [`src/diagnostics/`](https://github.com/BMingSY/isaac-lan/tree/main/src/diagnostics) | 日志、性能、隔离采集与反馈上传；诊断开关不控制玩法 |
 | [`tests/`](https://github.com/BMingSY/isaac-lan/tree/main/tests)、[`tools/`](https://github.com/BMingSY/isaac-lan/tree/main/tools) | 回归夹具、构建与验收；不得成为生产玩法依赖 |

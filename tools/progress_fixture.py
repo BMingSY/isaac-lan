@@ -26,7 +26,17 @@ def checksum(data):
     return result ^ 0xFFFFFFFF
 
 
-def patch(source, *, host, endings=False, alt_path=False, hush=False, ascent=False, lazarus=False):
+def patch(
+    source,
+    *,
+    host,
+    endings=False,
+    alt_path=False,
+    hush=False,
+    ascent=False,
+    lazarus=False,
+    completion=False,
+):
     if not 2800 <= len(source) <= 4 * 1024 * 1024 or source[:16] != MAGIC:
         raise ValueError("A native J460 persistentgamedata1.dat baseline is required")
     if struct.unpack_from("<I", source, len(source) - 4)[0] != checksum(source[16:-4]):
@@ -59,6 +69,12 @@ def patch(source, *, host, endings=False, alt_path=False, hush=False, ascent=Fal
         achievements[412] = 0
     if lazarus and not host:
         achievements[TAINTED_LAZARUS_ACHIEVEMENT] = 1
+    if completion:
+        # Isaac's twelve original widget layers; online bits deliberately differ
+        # from the single-player marks to catch accidental blue/purple overlays.
+        for layer, identifier in enumerate((173, 27, 41, 55, 69, 83, 97, 116, 130, 144, 423, 457)):
+            value = ((layer + (0 if host else 1)) % 3) | (8 if host else 4)
+            struct.pack_into("<I", data, counters + identifier * 4, value)
     del achievements
     struct.pack_into("<I", data, len(data) - 4, checksum(data[16:-4]))
     return bytes(data)

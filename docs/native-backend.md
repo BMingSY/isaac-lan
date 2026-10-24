@@ -163,6 +163,8 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 - `MenuCharacter::Available` RVA `0x546cd0` 使用菜单记录作 receiver，栈参数为 0，被调方清理 4 字节。查询期间借入本机 642 个成就字节、523 个计数和 frontend scene；禁止在该作用域内执行 Lua、回调、存档或分配，返回前完整恢复。续玩只临时豁免已消耗的伊甸令牌。
 - 校验配置范围、数量、ID、字符串长度和配对索引；入口和 Mod 枚举锚 RVA `0x54919e` 受签名校验。字符串立即复制，原生 MSVC 字符串由游戏销毁。
 
+`characters::completionPreview` 只读取调用方提供的个人 `Progress`，不写原生存档。J460 原版角色与替身的计数映射集中在 [completion_marks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/completion_marks.h)。每个计数只取低两位的单人记录，屏蔽官方联机记录；十二层按 `gfx/ui/completion_widget.anm2` 排列，含代表 Delirium 的纸张层。预览的低 24 位每两位保存一层，位 24 表示数据可用；解码拒绝额外位和层值 3。未收录的 Mod 角色返回不可用，仍可正常选角，不伪造未通关记录。
+
 ## 道具与效果
 
 底座拾取适配位于 [item_effects.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/item_effects.cpp)。`Player::QueueItem` RVA `0x35e050` 使用 `thiscall`，只在底座确认拾取的返回点 `0x2ebe11` 通知运行层，传递玩家栏位、实体种子、道具 ID、充能、Touched、VarData 与来源池。兼容组件接受时不再向原拾取者入队；其他调用点、饰品、开局和恢复沿用原生方法。通知期间不切换房间；结算在模拟作用域退出后、发布视图前完成。源对象和配置指针不进入 Lua，不由适配器释放。
@@ -170,6 +172,10 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 `items_take_collectible(sprite, id)` 在当前角色作用域调用原生 `Player::DropCollectible`（RVA `0x390530`，`thiscall(Player*, int, Pickup*, bool)`），复制充能、VarData 和来源池，再由实体的原生 Remove 消除临时底座。`items_give_collectible(sprite, id, charge, first, data, pool)` 通过原生掉落保存被替换的主动，再用原生 AddCollectible 发放。入口只接受主机就绪视图中当前名单的玩家 Sprite 包装和有效配置；角色与掉落的分配、注销由游戏管理。底座字段 `+0x524/+0x52c/+0x530/+0x59c` 分别为充能、Touched、来源池和 VarData。入口、调用点和布局常量统一定义在版本后端并受签名校验。
 
 `items_collectible_name(id)` 读取配置名称并解析本机 `Items` 翻译键，返回最多 1024 字节的文本；不暴露配置或字符串指针。上述能力不增加同步字段或网络消息，库存、药丸映射与实体沿用现有契约，扩展指纹包含后端与嵌入 Lua 的变更。
+
+`items_active_charge(sprite, slot)` 返回当前主动的原生充能类型和有效容量，分别调用 `Player::GetActiveChargeType`（RVA `0x391530`）与 `GetActiveMaxCharge`（`0x391320`），均为 `thiscall(Player*, int)`、`RET 4`。`items_add_active_charge(sprite, slot, amount)` 调用 `AddActiveCharge`（`0x3915a0`，`thiscall(Player*, int amount, int slot, bool, bool, bool)`、`RET 20`），三个标志均为 false，返回实际增加量；容量、额外电池槽和充满演出由原生处理。接口沿用发放道具的玩家身份校验，仅接受 0–3 槽和 0–1024 的非负增量，不允许强制溢出或任意内存访问。
+
+原生 `Player::TriggerRoomClear` 返回后通知运行层原调用玩家及清房的维度／房间编号；记录原生已经处理的玩家，实际补发在房间模拟退出后执行。通知只表示清房事件，不在后端解释规则，也不替其他房间调用完整的 `TriggerRoomClear`。客机继续抑制原生清房玩法，接受主机库存状态。
 
 | 能力 | 边界与参考 |
 | --- | --- |

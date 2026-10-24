@@ -6,6 +6,10 @@
 
 客机握手携带协议版本、扩展指纹、玩家标识和 Mod 指纹。协议与扩展必须匹配，Mod 差异只提示。房主发布种子、难度、角色顺序和运行规则；每名玩家的角色资格来自自己的存档。规则变化会清空准备状态，旧规则代次的准备请求无效。
 
+房间选项是运行规则中的独立位集合，大厅显示单行摘要，由房主进入规则子菜单修改；客机可查看只读列表。每次勾选即时同步，不依赖退出菜单提交。具体含义由[房间规则](https://github.com/BMingSY/isaac-lan/blob/main/docs/room-rules.md)组件解释，网络只携带位集合。继续上次联机时使用存档规则；与大厅不一致时先载入规则并重新准备。规则随启动、保存、重连和重开保留。
+
+角色卡的通关标记由每名玩家从个人进度生成，随选角资料提交并由房主转发；初次进入大厅也发布当前角色的预览。单独的预览刷新携带规则代次和角色 ID，只能更新发送者当前角色，不改变准备状态。已过期或开局后到达的预览被忽略。共享的游戏内进度不替代大厅的个人记录，卡片只显示未完成、普通、困难三态。
+
 ```mermaid
 sequenceDiagram
     participant C as 客机
@@ -94,7 +98,7 @@ sequenceDiagram
 
 ## 联机存档与续玩
 
-[`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 定义存档封装：扩展指纹、开局设置、运行规则、全队位置、原生 GameState 和完整性哈希。读取须匹配格式与指纹，完整文件上限 8 MiB。
+[`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 定义存档封装：扩展指纹、开局设置、运行规则、全队位置、原生 GameState 和完整性哈希。`IsaacLAN/save/4` 保存房间选项；读取也支持没有选项字段的 `save/3`，缺失时默认关闭。读取须匹配格式与指纹，完整文件上限 8 MiB。
 
 房主三个存档栏分别使用 `session-1.bin`、`session-2.bin`、`session-3.bin`，与单人 Continue 分开管理。写入采用临时文件替换；失败时保留旧文件和进程内待保存快照，重试固定使用原存档栏，成功前不能开始新联机局。
 

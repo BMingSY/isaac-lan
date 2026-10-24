@@ -66,6 +66,11 @@ def main():
         help="Give only the owned lab processes deliberately different unlock/counter states",
     )
     parser.add_argument(
+        "--completion-fixture",
+        action="store_true",
+        help="Give the owned peers distinct single-player completion marks",
+    )
+    parser.add_argument(
         "--solo-fixture",
         action="store_true",
         help="Verify native solo save bytes before and after a LAN session in each owned lab",
@@ -256,7 +261,13 @@ def main():
         parser.error("Release solo GUI checks require frontend and exclude the legacy solo fixture")
     if args.release_solo_coordination and not args.release_solo_coordination.is_dir():
         parser.error("Release solo coordination directory must already exist")
-    if args.endings_fixture or args.hush_fixture or args.ascent_fixture or args.lazarus_fixture:
+    if (
+        args.endings_fixture
+        or args.hush_fixture
+        or args.ascent_fixture
+        or args.lazarus_fixture
+        or args.completion_fixture
+    ):
         args.progress_fixture = True
     if args.alt_path_fixture and not args.progress_fixture:
         parser.error("--alt-path-fixture requires --progress-fixture")
@@ -682,6 +693,7 @@ def main():
                     hush=args.hush_fixture,
                     ascent=args.ascent_fixture,
                     lazarus=args.lazarus_fixture,
+                    completion=args.completion_fixture,
                 )
             response = execute(str(lab / "isaac_lan_lab.exe"), windows(lab), *flags)
             match = re.search(r"(?:bootstrap_status=0|autoload_started=1) pid=(\d+)", response)

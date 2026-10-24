@@ -164,6 +164,8 @@ def main():
     for option in ("heap-check", "performance"):
         if getattr(args, option.replace("-", "_")):
             command.append("--" + option)
+    if any(name.startswith("room-rules") for name in cases):
+        command.append("--completion-fixture")
     if args.record:
         command += ["--native-record-both", "--frame-ms", str(args.frame_ms)]
     elif args.record_client:

@@ -31,7 +31,7 @@ local function stateEnvironment()
             ["presentation/event_ledger"] = dofile(
                 root .. "/src/bridge/presentation/event_ledger.lua"
             ),
-            ["presentation/contacts"] = dofile(root .. "/src/bridge/presentation/contacts.lua"),
+            ["core/contacts"] = dofile(root .. "/src/bridge/core/contacts.lua"),
             ["sync/combat_events"] = dofile(root .. "/src/bridge/sync/combat_events.lua"),
             ["sync/combat_state"] = dofile(root .. "/src/bridge/sync/combat_state.lua"),
             ["sync/layers"] = dofile(root .. "/src/bridge/sync/layers.lua"),

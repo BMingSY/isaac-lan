@@ -6,6 +6,8 @@
 #include "core/state_codec.h"
 #include "core/menu_input.h"
 #include "core/bootstrap_profile.h"
+#include "core/room_options.h"
+#include "engine/versions/j460/completion_marks.h"
 #include "core/console_command.h"
 #include "runtime/progression.h"
 #include "runtime/session_archive.h"
@@ -1499,6 +1501,64 @@ void challengeRules() {
             "Invalid ring accepted");
 }
 
+void roomOptionsAndMarks() {
+    using namespace isaac::engine::j460::completion;
+    Progress host, guest;
+    // Isaac: paper, heart, cross, inverted cross. Higher bits belong to
+    // official online completion and must not change the single-player card.
+    host.counters[173] = 2;
+    host.counters[27] = 1 | 8;
+    host.counters[41] = 2 | 4;
+    host.counters[55] = 8;
+    guest.counters[27] = 2;
+    const auto marks = layers(preview(0, host));
+    require(marks && (*marks)[0] == 2 && (*marks)[1] == 1 && (*marks)[2] == 2 && (*marks)[3] == 0 &&
+                (*marks)[11] == 0,
+            "Single-player marks did not preserve normal/hard or strip online colors");
+    require((*layers(preview(0, guest)))[1] == 2 && (*layers(preview(21, host)))[1] == 0,
+            "Completion crossed a peer or normal/tainted character boundary");
+    host.counters[216] = 1;
+    require((*layers(preview(21, host)))[1] == 1,
+            "Tainted Isaac did not read its own completion counter");
+    host.counters[203] = 2;
+    require(preview(16, host) == preview(17, host), "Forgotten/Soul did not share marks");
+    require(!layers(preview(4096, host)) && !layers(available | 3) &&
+                !layers(available | (1u << 31)),
+            "Unavailable or malformed marks accepted");
+    auto archive = sample(2);
+    archive.settings.rules.options = isaac::roomOptions::known;
+    require(archive.settings.rules.valid() &&
+                Archive::decode(archive.encode()).settings.rules == archive.settings.rules,
+            "Normal run lost room options when saved");
+    require(!isaac::roomOptions::valid(8), "Runtime accepted an unknown room option");
+    // A real v3 archive remains readable, defaulting the absent room flags off.
+    Writer legacy(Message::snapshot);
+    legacy.string("IsaacLAN/save/3");
+    legacy.string(archive.fingerprint);
+    legacy.string(archive.settings.seed);
+    legacy.u8(archive.settings.difficulty);
+    legacy.u16(0);
+    legacy.u16(0);
+    legacy.u16(65535);
+    legacy.u8(255);
+    legacy.u8(0);
+    for (auto c : archive.settings.characters)
+        legacy.u16(c);
+    legacy.progress(archive.settings.progress);
+    legacy.u8(archive.locations.size());
+    for (const auto& p : archive.locations) {
+        legacy.u32(p.dimension);
+        legacy.u32(p.index);
+        legacy.u32(std::bit_cast<std::uint32_t>(p.x));
+        legacy.u32(std::bit_cast<std::uint32_t>(p.y));
+    }
+    legacy.blob(archive.game);
+    legacy.u64(snapshotHash(legacy.bytes));
+    const auto old = Archive::decode(legacy.bytes);
+    require(old.settings.rules == RunRules{} && old.game == archive.game,
+            "Previous save format was lost or enabled friendly fire");
+}
+
 void archiveIntegrity() {
     const auto bytes = sample().encode();
     for (std::size_t length = 0; length < bytes.size(); ++length)
@@ -1600,6 +1660,7 @@ int main(int argc, char** argv) {
                      {"archive-capacity", archiveCapacity},
                      {"archive-retry", archiveRetry},
                      {"challenge-rules", challengeRules},
+                     {"room-options-marks", roomOptionsAndMarks},
                      {"archive-integrity", archiveIntegrity},
                      {"archive-settings", archiveSettings},
                      {"archive-locations", archiveLocations}});

@@ -54,6 +54,7 @@ inline void writeRules(Writer& w, const RunRules& rules) {
     w.u16(rules.character);
     w.u8(rules.difficulty);
     w.u8(rules.transient);
+    w.u32(rules.options);
 }
 inline RunRules readRules(Reader& r) {
     RunRules value;
@@ -63,6 +64,7 @@ inline RunRules readRules(Reader& r) {
     value.difficulty = r.u8();
     const auto transient = r.u8();
     value.transient = transient != 0;
+    value.options = r.u32();
     if (transient > 1 || !value.valid())
         throw std::runtime_error("Invalid run rules");
     return value;

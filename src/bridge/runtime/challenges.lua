@@ -134,7 +134,7 @@ return function(deps)
         then
             return effect.collect(owner, ...)
         end
-        return false
+        return nil
     end
     return {
         reset = reset,

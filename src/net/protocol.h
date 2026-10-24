@@ -15,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 44;
+constexpr std::uint16_t protocolVersion = 45;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -53,7 +53,8 @@ enum class Message : std::uint8_t {
     lifecycle,
     restart,
     returnLobby,
-    inputEdges
+    inputEdges,
+    choicePreview
 };
 constexpr std::size_t maxIntegrationSize = 2048;
 constexpr std::size_t maxCommunicationSize = 3072;
@@ -178,6 +179,8 @@ struct Start {
 struct Choice {
     std::uint16_t character = 0;
     bool ready = false;
+    // Opaque, bounded presentation metadata owned by this participant.
+    std::uint32_t preview = 0;
     bool operator==(const Choice&) const = default;
 };
 struct RuleKey {

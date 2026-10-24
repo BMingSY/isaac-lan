@@ -600,7 +600,13 @@ void __attribute__((fastcall)) playerRoomClear(void* player, void*) {
     // after the authoritative actor state has already been restored.
     if (enabled && runtime::replica())
         return;
+    const auto owner =
+        at<int>(reinterpret_cast<Address>(player), j460::layout::player::controller) - 1;
+    const auto dimension = at<int>(game(), j460::layout::game::dimension);
+    const auto index = at<int>(game(), j460::layout::game::roomIndex);
     originalPlayerRoomClear(player);
+    if (enabled)
+        runtime::playerRoomCleared(owner, dimension, index);
 }
 ReplacePlayer originalReplacePlayer;
 bool __attribute__((fastcall)) replacePlayer(void* manager, void*, void* oldPlayer,

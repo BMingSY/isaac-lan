@@ -20,6 +20,7 @@
 #include "runtime/session_archive.h"
 #include "runtime/pending_archive.h"
 #include "runtime/progression.h"
+#include "core/room_options.h"
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
 #include "diagnostics/input_latency.h"
@@ -91,7 +92,9 @@ lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
 }
 bool validRules(const lan::RunRules& rules) {
     const auto* definition = compat::challenges::find(rules.id);
-    return (!rules.id || definition) && rules == rulesFor(definition);
+    auto expected = rulesFor(definition);
+    expected.options = rules.options;
+    return roomOptions::valid(rules.options) && (!rules.id || definition) && rules == expected;
 }
 bool beginNetworkRun() {
     if (saves.networkRun)
@@ -848,6 +851,12 @@ int poll(lua_State* L) {
     }
     if (session)
         session->poll();
+    if (session && session->phase() == lan::Phase::lobby && backend::managerReady()) {
+        const auto character = session->choices()[session->slot()].character;
+        session->publishChoicePreview(
+            character, characters::completionPreview(
+                           character, saves.localProgress ? *saves.localProgress : readProgress()));
+    }
     pollRestart();
     if (session && diagnostics::enabled()) {
         const auto resource = session->resources();
@@ -919,6 +928,7 @@ int poll(lua_State* L) {
     integer("difficulty", session ? session->settings().difficulty : 0);
     integer("challenge", session ? session->rules().id : 0);
     integer("challengeVersion", session ? session->rules().version : 0);
+    integer("roomOptions", session ? session->rules().options : 0);
     integer("pause", backend::pause());
     integer("pauseOwner", input::menuOwner());
     for (unsigned i = 0; i < lan::maxPlayers; ++i)
@@ -929,6 +939,15 @@ int poll(lua_State* L) {
                 session ? session->choices()[i].character : 0);
         integer(("ready" + std::to_string(i)).c_str(),
                 session && session->choices()[i].ready ? 1 : 0);
+        if (const auto marks =
+                characters::completionLayers(session ? session->choices()[i].preview : 0)) {
+            lua.createTable(L, marks->size(), 0);
+            for (unsigned layer = 0; layer < marks->size(); ++layer) {
+                lua.pushInteger(L, (*marks)[layer]);
+                lua.rawSetI(L, -2, layer + 1);
+            }
+            lua.setField(L, -2, ("marks" + std::to_string(i)).c_str());
+        }
         integer(("ping" + std::to_string(i)).c_str(), session ? session->latency()[i] : -1);
         lua.pushBoolean(L, session && i < session->players() &&
                                session->access()[i].allowsRules(session->rules()));
@@ -972,6 +991,7 @@ int integrationInfo(lua_State* L) {
     integer("worldEpoch", view.floorEpoch);
     integer("challenge", active ? session->settings().rules.id : 0);
     integer("challengeVersion", active ? session->settings().rules.version : 0);
+    integer("roomOptions", active ? session->settings().rules.options : 0);
     integer("restrictedBags", craftingBagViewTarget() != -1);
     integer("tick", currentTick);
     integer("nowMs", GetTickCount64());
@@ -1134,8 +1154,39 @@ int characterList(lua_State* L) {
 int selectChallenge(lua_State* L) {
     const auto id = lua.checkInteger(L, 1);
     const auto* definition = id >= 0 && id <= 65535 ? compat::challenges::find(id) : nullptr;
-    lua.pushBoolean(L, session && (id == 0 || definition) &&
-                           session->configureRules(rulesFor(definition)));
+    auto rules = rulesFor(definition);
+    if (session)
+        rules.options = session->rules().options;
+    lua.pushBoolean(L, session && (id == 0 || definition) && session->configureRules(rules));
+    return 1;
+}
+int roomOptionDefinitions(lua_State* L) {
+    lua.createTable(L, roomOptions::definitions.size(), 0);
+    unsigned index = 0;
+    for (const auto& definition : roomOptions::definitions) {
+        lua.createTable(L, 0, 4);
+        lua.pushInteger(L, definition.flag);
+        lua.setField(L, -2, "flag");
+        lua.pushString(L, definition.key.data());
+        lua.setField(L, -2, "key");
+        lua.pushString(L, definition.name.data());
+        lua.setField(L, -2, "name");
+        lua.pushString(L, definition.shortName.data());
+        lua.setField(L, -2, "shortName");
+        lua.rawSetI(L, -2, ++index);
+    }
+    return 1;
+}
+int configureRoomOptions(lua_State* L) {
+    const auto value = lua.checkInteger(L, 1);
+    bool accepted = false;
+    if (session && value >= 0 && value <= std::numeric_limits<std::uint32_t>::max() &&
+        roomOptions::valid(static_cast<std::uint32_t>(value))) {
+        auto rules = session->rules();
+        rules.options = static_cast<std::uint32_t>(value);
+        accepted = session->configureRules(rules);
+    }
+    lua.pushBoolean(L, accepted);
     return 1;
 }
 int finishChallenge(lua_State* L) {
@@ -1179,9 +1230,12 @@ int start(lua_State* L) {
 }
 int choose(lua_State* L) {
     const auto character = lua.checkInteger(L, 1), ready = lua.checkInteger(L, 2);
-    lua.pushBoolean(L, session && character >= 0 && character <= 65535 &&
-                           (ready == 0 || ready == 1) &&
-                           session->choose({static_cast<std::uint16_t>(character), ready != 0}));
+    lua.pushBoolean(
+        L, session && character >= 0 && character <= 65535 && (ready == 0 || ready == 1) &&
+               session->choose({static_cast<std::uint16_t>(character), ready != 0,
+                                characters::completionPreview(character, saves.localProgress
+                                                                             ? *saves.localProgress
+                                                                             : readProgress())}));
     return 1;
 }
 int progressValues(lua_State* L) {
@@ -1466,7 +1520,8 @@ int restoreRooms(lua_State* L) {
 int savedInfo(lua_State* L) {
     const auto saved = readArchive();
     lua.pushInteger(L, saved ? saved->locations.size() : 0);
-    return 1;
+    lua.pushInteger(L, saved ? saved->settings.rules.options : 0);
+    return 2;
 }
 lan::Archive captureCheckpoint() {
     lan::Archive archive;
@@ -1628,7 +1683,7 @@ bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimensio
 }
 bool takeCollectiblePickup(int owner, unsigned actorSeed, int item, int charge, bool touched,
                            int varData, int pool) {
-    if (!state || !challengeActive() || replica() || !view.gated || !rooms::viewReady())
+    if (!state || !session || replica() || !view.gated || !rooms::viewReady())
         return false;
     const int top = lua.getTop(state);
     if (lua.getGlobal(state, "_IsaacLanCollectiblePickup") != 6) {
@@ -1647,6 +1702,19 @@ bool takeCollectiblePickup(int owner, unsigned actorSeed, int item, int charge, 
     const bool taken = lua.type(state, -1) == 1 && lua.toBoolean(state, -1);
     lua.setTop(state, top);
     return taken;
+}
+void playerRoomCleared(int owner, int dimension, int index) {
+    if (!state || !session || replica() || !view.gated || !rooms::viewReady())
+        return;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanPlayerRoomCleared") != 6) {
+        lua.setTop(state, top);
+        return;
+    }
+    lua.pushInteger(state, owner);
+    lua.pushInteger(state, dimension);
+    lua.pushInteger(state, index);
+    call(0, 3, 0, top);
 }
 std::array<int, 2> challengeDestination() {
     const auto* definition =
@@ -1898,6 +1966,8 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_commands", commandValues);
     function("net_challenges", challengeList);
     function("net_characters", characterList);
+    function("net_room_options", roomOptionDefinitions);
+    function("net_configure_options", configureRoomOptions);
     function("pause_menu_state", pauseMenuState);
     function("net_challenge", selectChallenge);
     function("net_finish_challenge", finishChallenge);

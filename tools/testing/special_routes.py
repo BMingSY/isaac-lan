@@ -6,6 +6,9 @@ import re
 
 CASES = ("lazarus", "poop", "knife", "hush")
 DIAGNOSTICS = (
+    "room-rules-off",
+    "room-rules",
+    "room-rules-resume",
     "item-generation",
     "deep-pockets",
     "party-compat",
@@ -69,6 +72,9 @@ def build(output, cases=CASES, *, first_floor=False):
     fixtures = []
     for name in cases:
         filename = {
+            "room-rules-off": "state_room_rules.lua",
+            "room-rules": "state_room_rules.lua",
+            "room-rules-resume": "state_room_rules.lua",
             "lazarus": "state_lazarus_mines.lua",
             "audio": "state_guest_presentation_audio.lua",
             "home": "state_endings.lua",

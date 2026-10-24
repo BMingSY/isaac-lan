@@ -2,7 +2,9 @@ local root = assert(arg[1])
 PlayerType = dofile(root .. "/tests/fixtures/game_enums.lua").PlayerType
 local labels, commands = {}, {}
 local renderedPortraits = {}
-local scaledLabels = {}
+local scaledLabels, renderedMarks = {}, {}
+local labelPositions = {}
+local options = { { flag = 1, key = "friendlyFire", name = "队友伤害", shortName = "友伤" } }
 local noop = function() end
 local remembered = { "", 29506 }
 local savedCount = 0
@@ -46,12 +48,17 @@ Sprite = function()
             self.animation = animation
         end,
         Render = function(self)
-            if self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
+            if self.path == "gfx/ui/completion_widget.anm2" then
+                renderedMarks[#renderedMarks + 1] = { table.unpack(self.layers) }
+            elseif self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
                 renderedPortraits[#renderedPortraits + 1] = { self.path, self.animation }
             end
         end,
         RenderLayer = noop,
-        SetLayerFrame = noop,
+        SetLayerFrame = function(self, layer, frame)
+            self.layers = self.layers or {}
+            self.layers[layer + 1] = frame
+        end,
     }
 end
 Font = function()
@@ -63,11 +70,13 @@ Font = function()
         GetStringWidthUTF8 = function(_, value)
             return utf8.len(value) * 8
         end,
-        DrawStringUTF8 = function(_, text, _, _, color)
+        DrawStringUTF8 = function(_, text, x, y, color)
             labels[text] = color
+            labelPositions[text] = { x = x, y = y }
         end,
         DrawStringScaledUTF8 = function(_, text, x, y, scale, _, color)
             labels[text] = color
+            labelPositions[text] = { x = x, y = y }
             scaledLabels[#scaledLabels + 1] = { text = text, x = x, y = y, scale = scale }
         end,
     }
@@ -117,6 +126,9 @@ _IsaacLanStatus = function()
     return status
 end
 _IsaacLan = {
+    net_room_options = function()
+        return options
+    end,
     net_phases = function()
         return dofile(root .. "/tests/fixtures/net_phases.lua")
     end,
@@ -168,14 +180,29 @@ _IsaacLanCommand = function(name, value)
         local character, ready = value:match("^(%d+):(%d+)$")
         status["choice" .. status.slot], status["ready" .. status.slot] =
             tonumber(character), tonumber(ready)
+    elseif name == "room_options" then
+        status.roomOptions = tonumber(value)
+        status.ready0, status.ready1 = 0, 0
     end
 end
 dofile(root .. "/src/bridge/presentation/menu.lua")
-local function draw(key, visible)
+local function draw(key, visible, mx, my, clicked)
     labels = {}
     renderedPortraits = {}
     scaledLabels = {}
-    return _IsaacLanMenuRender(true, visible ~= false, key or 0, "", -100, -100, false, "", "")
+    renderedMarks = {}
+    labelPositions = {}
+    return _IsaacLanMenuRender(
+        true,
+        visible ~= false,
+        key or 0,
+        "",
+        mx or -100,
+        my or -100,
+        clicked or false,
+        "",
+        ""
+    )
 end
 _IsaacLanMenuOpen(true)
 draw()
@@ -241,7 +268,7 @@ for _, label in ipairs(scaledLabels) do
         nameRenders = nameRenders + 1
         local width = utf8.len(longName) * 8 * label.scale
         assert(label.scale > 0 and label.scale < 1)
-        assert(width <= (label.x == 49 and 138 or 92))
+        assert(width <= (label.x == 49 and 138 or 110))
     end
 end
 assert(nameRenders == 2, "Long Mod name did not fit both the row and player card")
@@ -523,3 +550,183 @@ local rows = actions.rows(prefs, status, {}, {}, deps)
 rows[4].action()
 assert(remembered[1] == prefs.ip and remembered[2] == 1234)
 assert(sent[#sent][1] == "join" and sent[#sent][2] == "host.example.com:1234")
+
+-- Each card renders its owner's twelve native single-player layers.
+status = {
+    phase = 2,
+    hosting = 1,
+    players = 2,
+    slot = 0,
+    choice0 = 0,
+    choice1 = 23,
+    ready0 = 1,
+    ready1 = 1,
+    connected = 3,
+    roomOptions = 0,
+    savedPlayers = 2,
+    savedOptions = 1,
+    transport = "udp",
+    port = 29506,
+    marks0 = { 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2 },
+    marks1 = { 2, 1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0 },
+}
+_IsaacLanMenuOpen(true)
+draw()
+assert(#renderedMarks == 2 and renderedMarks[1][1] == 0 and renderedMarks[2][1] == 2)
+assert(
+    labels["房间规则：无"] and not labels["[ ] 队友伤害"] and labels["载入上次规则"]
+)
+for _ = 1, 4 do
+    draw(40)
+end
+draw(13)
+draw()
+assert(labels["房间规则"] and labels["已启用 0 项"] and labels["[ ] 队友伤害"])
+assert(status.roomOptions == 0, "Opening rules changed their state")
+draw(13)
+draw()
+assert(status.roomOptions == 1 and status.ready0 == 0 and status.ready1 == 0)
+assert(labels["[x] 队友伤害"] and labels["已启用 1 项"] and labels["返回"])
+draw(27)
+draw()
+assert(labels["房间规则：友伤"] and labels["继续上次联机"])
+draw(13) -- Back restored the rules entry, rather than the character row.
+draw()
+assert(labels["房间规则"])
+draw(27)
+status.hosting, status.slot = 0, 1
+_IsaacLanMenuOpen(true)
+draw()
+draw(40)
+draw(40)
+local previousCommands = #commands
+draw(13)
+draw()
+assert(labels["已启用 1 项 · 只读"] and labels["[x] 队友伤害"])
+draw(13)
+assert(#commands == previousCommands and status.roomOptions == 1, "guest edited room rules")
+status.roomOptions = 0 -- Host changes while the guest's list remains open.
+draw()
+assert(labels["已启用 0 项 · 只读"] and labels["[ ] 队友伤害"])
+draw(27)
+draw()
+assert(labels["房间规则：无"])
+draw(13)
+draw()
+assert(labels["已启用 0 项 · 只读"], "Guest Back did not restore the rules entry")
+status.phase = phaseValues.waiting
+draw()
+assert(#renderedMarks == 0, "Loading a saved character displayed unrelated lobby-choice marks")
+assert(not labels["房间规则"], "Rules page survived a lobby lifecycle change")
+
+-- Future independent checkboxes retain other flags when toggled.
+local selected
+local rows = model.rows(
+    { page = "rules", difficulty = 0, seed = "" },
+    { phase = 2, hosting = 1, players = 2, slot = 0, roomOptions = 3 },
+    { 0 },
+    {},
+    {
+        character = tostring,
+        connected = function()
+            return true
+        end,
+        command = function(action, value)
+            selected = { action, value }
+        end,
+        options = { { flag = 1, name = "first" }, { flag = 2, name = "second" } },
+    }
+)
+for _, row in ipairs(rows) do
+    if row.label == "first" then
+        assert(row.checked)
+        row.action()
+        assert(selected[1] == "room_options" and selected[2] == "2")
+    end
+end
+-- Overflow remains a six-row viewport with an independently positioned Back.
+for i = 1, 11 do
+    options[#options + 1] = { flag = 1 << i, name = "规则 " .. i, shortName = "规" .. i }
+end
+status.phase, status.hosting, status.slot, status.savedPlayers = 2, 1, 0, 0
+status.roomOptions = 1 | (1 << 2) | (1 << 10)
+_IsaacLanMenuOpen(true)
+draw()
+assert(labels["房间规则：友伤 +2"] and not labels["[x] 队友伤害"])
+for _ = 1, 4 do
+    draw(40)
+end
+draw(13)
+draw()
+local function visibleRules()
+    local count = 0
+    for label, point in pairs(labelPositions) do
+        if label:match("^%[[ x]%]") then
+            count = count + 1
+            assert(point.y >= 100 and point.y <= 185, "Rule escaped its viewport")
+        end
+    end
+    assert(count == 6 and labelPositions["返回"].y == 214)
+end
+visibleRules()
+assert(labels["1–6 / 12"] and labels["[ ] 规则 5"] and not labels["[ ] 规则 6"])
+for _ = 1, 6 do
+    draw(40)
+end
+draw()
+visibleRules()
+assert(labels["2–7 / 12"] and not labels["[x] 队友伤害"] and labels["[ ] 规则 6"])
+local previousMask = status.roomOptions
+draw(13)
+draw()
+assert(status.roomOptions == (previousMask | (1 << 6)) and labels["已启用 4 项"])
+for _ = 1, 6 do
+    draw(40)
+end
+draw()
+visibleRules()
+assert(labels["7–12 / 12"] and labels["[ ] 规则 11"])
+draw(13) -- Back stays accessible after the final rule.
+draw()
+assert(labels["房间规则：友伤 +3"])
+draw(13)
+draw()
+assert(labels["1–6 / 12"], "Reopening rules retained an unrelated scroll offset")
+previousCommands = #commands
+draw(0, true, 180, 202, true) -- Mouse page-down control.
+draw()
+visibleRules()
+assert(labels["7–12 / 12"] and #commands == previousCommands)
+draw(0, true, 159, 202, true) -- Mouse page-up control.
+draw()
+assert(labels["1–6 / 12"])
+previousMask = status.roomOptions
+draw(0, true, 70, 117, true) -- Adjacent hitboxes must not toggle two rules.
+assert(#commands == previousCommands + 1 and status.roomOptions == (previousMask ~ 2))
+draw()
+assert(labels["[x] 规则 1"] and labels["[x] 队友伤害"])
+draw(0, true, 70, 217, true) -- Fixed Back also works with the mouse.
+draw()
+assert(labels["房间规则：友伤 +4"])
+-- A challenge adds a guest status row; Back still selects the actual rules entry.
+status.hosting, status.slot, status.challenge = 0, 1, 1001
+_IsaacLanMenuOpen(true)
+draw()
+for _ = 1, 3 do
+    draw(40)
+end
+draw(13)
+draw()
+assert(labels["已启用 5 项 · 只读"])
+previousCommands = #commands
+draw(0, true, 70, 117, true)
+assert(#commands == previousCommands, "Read-only mouse click sent a mutation")
+draw(27)
+draw(13)
+draw()
+assert(labels["已启用 5 项 · 只读"], "Challenge guest returned to the wrong row")
+for i = #options, 2, -1 do
+    options[i] = nil
+end
+print("PASS personal completion layers, host-only independent rules and resume selection")
+print("PASS rules submenu, summaries, scrolling, read-only updates and keyboard/mouse navigation")

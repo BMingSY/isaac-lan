@@ -375,10 +375,84 @@ void localPickupPreview() {
     preview::image = 0;
     preview::originalUpdate = nullptr;
 }
+std::array<Address, 2> chargeWrapper;
+std::vector<long long> chargeResults;
+int chargeSlot = 2, chargeAmount = 3;
+unsigned chargeCalls = 0;
+int __attribute__((thiscall)) chargeTypeFixture(void* player, int slot) {
+    require(player == expectedPlayer && slot == 2, "Charge type receiver/slot ABI changed");
+    return 0;
+}
+int __attribute__((thiscall)) chargeMaxFixture(void* player, int slot) {
+    require(player == expectedPlayer && slot == 2, "Charge capacity receiver/slot ABI changed");
+    return 6;
+}
+int __attribute__((thiscall)) addChargeFixture(void* player, int amount, int slot, bool first,
+                                               bool second, bool third) {
+    require(player == expectedPlayer && amount == 3 && slot == 2 && !first && !second && !third,
+            "AddActiveCharge ABI/flags changed");
+    ++chargeCalls;
+    return amount;
+}
+void activeChargeCapabilities() {
+    Fixture f;
+    namespace layout = native::layout;
+    std::vector<unsigned char> game(layout::game::players + 16);
+    const Address actor = reinterpret_cast<Address>(f.player.data());
+    const std::array<Address, 1> roster{actor};
+    const auto gameAddress = reinterpret_cast<Address>(game.data());
+    items::at<Address>(items::image, native::globals::game) = gameAddress;
+    items::at<Address>(gameAddress + layout::game::players, layout::vector::begin) =
+        reinterpret_cast<Address>(roster.data());
+    items::at<Address>(gameAddress + layout::game::players, layout::vector::end) =
+        reinterpret_cast<Address>(roster.data() + roster.size());
+    items::at<unsigned>(actor, layout::entity::type) = 1;
+    items::at<bool>(actor, layout::entity::active) = true;
+    items::at<int>(actor, layout::player::controller) = 1;
+    chargeWrapper = {0, actor + layout::entity::sprite};
+    items::lua.rawLength = [](lua_State*, int) -> std::size_t { return 8; };
+    items::lua.toUserdata = [](lua_State*, int) -> void* { return chargeWrapper.data(); };
+    items::lua.checkInteger = [](lua_State*, int index) -> long long {
+        return index == 2 ? chargeSlot : chargeAmount;
+    };
+    items::lua.pushInteger = [](lua_State*, long long value) { chargeResults.push_back(value); };
+    auto publish = [&](unsigned offset, auto method) {
+        auto entry = f.image + offset;
+        entry[0] = 0xe9;
+        const auto displacement = static_cast<unsigned>(reinterpret_cast<Address>(method) -
+                                                        reinterpret_cast<Address>(entry + 5));
+        std::memcpy(entry + 1, &displacement, 4);
+    };
+    publish(native::entry::playerActiveChargeType, chargeTypeFixture);
+    publish(native::entry::playerActiveMaxCharge, chargeMaxFixture);
+    publish(native::entry::playerAddActiveCharge, addChargeFixture);
+    require(FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size) != 0,
+            "Cannot publish native charge methods");
+    chargeResults.clear();
+    require(items::activeCharge(nullptr) == 2 && chargeResults == std::vector<long long>({0, 6}),
+            "Charge query changed native values");
+    require(items::addActiveCharge(nullptr) == 1 && chargeResults.back() == 3 && chargeCalls == 1,
+            "Charge grant was not invoked exactly once");
+    chargeSlot = 4;
+    require(items::activeCharge(nullptr) == 0 && items::addActiveCharge(nullptr) == 0,
+            "Invalid active slot reached native code");
+    chargeSlot = 2;
+    chargeAmount = -1;
+    require(items::addActiveCharge(nullptr) == 0, "Charge helper accepted discharge");
+    chargeAmount = 1025;
+    require(items::addActiveCharge(nullptr) == 0, "Charge helper accepted unbounded amount");
+    chargeAmount = 3;
+    chargeWrapper[1] += 16;
+    require(items::activeCharge(nullptr) == 0 && items::addActiveCharge(nullptr) == 0 &&
+                chargeCalls == 1,
+            "Unregistered sprite reached native charge methods");
+    items::lua = {};
+}
 } // namespace
 int main(int argc, char** argv) {
     return runTests(argc, argv,
                     {{"collectible-pickup", collectiblePickup},
+                     {"active-charge", activeChargeCapabilities},
                      {"starting-rewards", startingRewards},
                      {"beam-departure", beamDeparture},
                      {"blue-room-entry", blueRoomEntry},

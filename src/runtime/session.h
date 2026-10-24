@@ -22,6 +22,7 @@ void halfCompleted();
 int localViewSlot();
 bool replica();
 bool challengeActive();
+void playerRoomCleared(int owner, int dimension, int index);
 bool takeCollectiblePickup(int owner, unsigned actorSeed, int item, int charge, bool touched,
                            int varData, int pool);
 std::array<int, 2> challengeDestination();

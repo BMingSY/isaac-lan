@@ -247,6 +247,8 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
         isaac_add_lua_test(bridge.challenges challenges.lua)
         isaac_add_lua_test(bridge.luck_game luck_game.lua)
+        isaac_add_lua_test(bridge.clear-charge clear_charge.lua)
+        isaac_add_lua_test(bridge.friendly-fire friendly_fire.lua)
         isaac_add_lua_test(bridge.challenge_menu challenge_menu.lua)
         isaac_add_lua_test(bridge.ping_hud ping_hud.lua)
         isaac_add_lua_test(bridge.hornfel hornfel.lua)
@@ -342,6 +344,7 @@ if(BUILD_TESTING)
         archive-capacity
         archive-retry
         challenge-rules
+        room-options-marks
         archive-integrity
         archive-settings
         archive-locations)
@@ -548,6 +551,7 @@ if(BUILD_TESTING)
         lobby
         lobby-access
         run-rules
+        room-options
         handshake
         host-names
         commands
