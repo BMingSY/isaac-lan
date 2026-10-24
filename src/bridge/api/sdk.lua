@@ -78,6 +78,21 @@ function SDK.create(mod, id, backend)
     assert(type(mod) == "table" and validId(id), "invalid_registration")
     local handle = { id = id, mod = mod }
     local closed, cleanups, actions = false, {}, {}
+    local cleanupSequence = 0
+    local function own(cleanup)
+        cleanupSequence = cleanupSequence + 1
+        local token = cleanupSequence
+        local function release()
+            if cleanups[token] then
+                cleanups[token] = nil
+                local fn = cleanup
+                cleanup = nil
+                fn()
+            end
+        end
+        cleanups[token] = release
+        return release
+    end
     local function attached()
         assert(not closed, "integration_closed")
     end
@@ -166,9 +181,7 @@ function SDK.create(mod, id, backend)
         attached()
         assert(type(fn) == "function", "invalid_subscription")
         -- Session lifecycle notifications exist only when LAN is installed.
-        local cancel = backend and backend.on(event, fn) or function() end
-        cleanups[#cleanups + 1] = cancel
-        return cancel
+        return own(backend and backend.on(event, fn) or function() end)
     end
     function handle:OnLocalRender(fn)
         attached()
@@ -195,13 +208,12 @@ function SDK.create(mod, id, backend)
             end
         end
         mod:AddCallback(ModCallbacks.MC_POST_RENDER, render)
-        cancel = function()
+        cancel = own(function()
             if active then
                 active = false
                 mod:RemoveCallback(ModCallbacks.MC_POST_RENDER, render)
             end
-        end
-        cleanups[#cleanups + 1] = cancel
+        end)
         return cancel
     end
     function handle:Action(name, definition)
@@ -327,7 +339,7 @@ function SDK.create(mod, id, backend)
             end
             return request
         end
-        function action:Close()
+        action.Close = own(function()
             if not disposed then
                 disposed = true
                 local waiting = pending
@@ -338,14 +350,11 @@ function SDK.create(mod, id, backend)
                 if remove then
                     remove()
                 end
-                if actions[name] == self then
+                if actions[name] == action then
                     actions[name] = nil
                 end
             end
-        end
-        cleanups[#cleanups + 1] = function()
-            action:Close()
-        end
+        end)
         return action
     end
     function handle:Close()
@@ -353,8 +362,18 @@ function SDK.create(mod, id, backend)
             return
         end
         closed = true
-        for index = #cleanups, 1, -1 do
-            local ok, reason = pcall(cleanups[index])
+        local tokens = {}
+        for token in pairs(cleanups) do
+            tokens[#tokens + 1] = token
+        end
+        table.sort(tokens, function(a, b)
+            return a > b
+        end)
+        for _, token in ipairs(tokens) do
+            local ok, reason = true, nil
+            if cleanups[token] then
+                ok, reason = pcall(cleanups[token])
+            end
             if not ok then
                 Isaac.DebugString(
                     "ISAAC_LAN integration " .. id .. " cleanup_error=" .. tostring(reason)

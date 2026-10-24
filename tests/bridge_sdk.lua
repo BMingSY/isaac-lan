@@ -266,6 +266,42 @@ assert(runtime.actors[1].coins == 6)
 local _, soloPress = example(env, sdk)
 soloPress()
 assert(runtime.actors[1].coins == 7)
+-- Cancelling a temporary UI or closing an action must release its captured
+-- state while the integration itself remains alive for subsequent panels.
+for _, temporary in ipairs({
+    sdk.attach(modFixture(), "example.temporary"),
+    hs.attach(modFixture(), "example.temporary"),
+}) do
+    local released = setmetatable({}, { __mode = "v" })
+    local cancelled = {}
+    for index = 1, 32 do
+        local state = { value = index }
+        released[index] = state
+        local cancel = temporary:OnLocalRender(function()
+            return state.value
+        end)
+        cancel()
+        cancelled[#cancelled + 1] = cancel
+        temporary:On("StateReset", function()
+            return state.value
+        end)()
+        temporary
+            :Action("temporary", {
+                execute = function()
+                    return { status = "applied", code = tostring(state.value) }
+                end,
+            })
+            :Close()
+    end
+    collectgarbage("collect")
+    collectgarbage("collect")
+    assert(next(released) == nil, "Disposed SDK registrations retained captured Mod state")
+    for _, cancel in ipairs(cancelled) do
+        cancel()
+    end
+    temporary:Close()
+end
+
 print(
     "PASS API 2 SDK: render cadence, scope/error cleanup, owned bodies, results, versions, late replies, solo fallback"
 )

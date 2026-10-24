@@ -15,6 +15,12 @@ return function(bridge)
         table.insert(listeners[event], listener)
         return function()
             listener.active = false
+            for index, current in ipairs(listeners[event] or {}) do
+                if current == listener then
+                    table.remove(listeners[event], index)
+                    break
+                end
+            end
         end
     end
     function lifecycle.emit(event, context)
@@ -51,12 +57,16 @@ return function(bridge)
         listeners[event] = retained
     end
     function lifecycle.remove(id)
-        for _, list in pairs(listeners) do
+        for event, list in pairs(listeners) do
+            local retained = {}
             for _, listener in ipairs(list) do
                 if listener.id == id then
                     listener.active = false
+                else
+                    retained[#retained + 1] = listener
                 end
             end
+            listeners[event] = retained
         end
     end
     return lifecycle
