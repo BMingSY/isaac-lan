@@ -7,7 +7,7 @@
 | 位置 | 职责与边界 |
 | --- | --- |
 | [`src/app/`](https://github.com/BMingSY/isaac-lan/tree/main/src/app)、[`src/bridge/app/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/app) | 加载、组件注册与调用装配；玩法和状态规则交给所属组件 |
-| [`src/net/`](https://github.com/BMingSY/isaac-lan/tree/main/src/net) | 协议、TCP／UDP、队列、压缩和可靠传输；不访问游戏对象 |
+| [`src/net/`](https://github.com/BMingSY/isaac-lan/tree/main/src/net) | 协议、UDP、队列、压缩和可靠传输；不访问游戏对象 |
 | [`src/runtime/`](https://github.com/BMingSY/isaac-lan/tree/main/src/runtime)、[`src/bridge/runtime/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/runtime) | 会话推进、存档、启动、房间／楼层生命周期及失效边界 |
 | [`src/bridge/sync/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/sync) | 字段、采集代次、副本恢复、库存／实体／网格一致性 |
 | [`src/compat/`](https://github.com/BMingSY/isaac-lan/tree/main/src/compat)、[`src/bridge/compat/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat) | Boss、角色、道具、路线与挑战规则；C++ 策略只接收普通值，Lua 适配使用游戏 API 或具名原生能力 |
@@ -30,7 +30,7 @@ Lua 嵌入清单在 [`modules.txt`](https://github.com/BMingSY/isaac-lan/blob/ma
 
 | 状态 | 管理者 | 失效边界 |
 | --- | --- | --- |
-| TCP／UDP 队列、分块、视图基线 | 网络线程 | 关闭、连接或可靠事务切换 |
+| UDP 队列、分块、视图基线 | 网络线程 | 关闭、连接或可靠事务切换 |
 | 存档压缩／解压任务及完成结果 | 大数据工作线程与主线程结果票据 | 取消、会话退出或楼层事务替换；过期结果不能进入新会话 |
 | 会话身份、输入确认、楼层代次 | 运行协调器 | 新会话、换层、重建和回退 |
 | 桥接启动阶段与准备代次 | [`bridge/runtime/session.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/session.lua) | 关闭、取消；原生错误进入失败阶段 |

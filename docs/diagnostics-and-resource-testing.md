@@ -28,7 +28,7 @@
 | `world_snapshots_total`／`world_delta_snapshots_total` | 当前会话累计视图数／增量数 |
 | `world_raw_bytes_total`／`world_wire_bytes_total`／`world_full_wire_bytes_total` | 原始字节／已发布压缩载荷／同批完整压缩对照量 |
 
-载荷计数包含实际发送的低频依赖以及大视图校验片和片头；不含 TCP／UDP／ENet 封装、重传、frp 或可靠存档流量；实际链路用量以中继记录为准。`compress` 已包含 `delta.encode`，二者不能相加。DEBUG 的 `state_transfer` 提供 `raw`、`wire`、`full_wire`、`delta`、`base`。
+载荷计数包含实际发送的低频依赖以及大视图校验片和片头；不含 UDP／ENet 封装、重传、frp 或可靠存档流量；实际链路用量以中继记录为准。`compress` 已包含 `delta.encode`，二者不能相加。DEBUG 的 `state_transfer` 提供 `raw`、`wire`、`full_wire`、`delta`、`base`。
 
 网络压缩／解压计时由工作线程产生，通过有界队列交回主线程；队列已满时丢弃诊断样本，不阻塞传输。`checkpoint_capture` 区分主线程原生采集与存档封装耗时；`checkpoint_pack` 记录原始／压缩字节数与后台耗时；`checkpoint_received` 记录后台还原耗时及从启动头到还原完成的时间。这些数据不包含后续原生 Continue 和首份实时视图应用，不能当成完整重连耗时。
 
@@ -46,9 +46,9 @@ python3 tools/check_performance.py "$ISAAC_RUN_OUTPUT" --output "$ISAAC_PERFORMA
 
 ## 带宽测量
 
-TCP 的 [`tools/delayed_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/delayed_relay.py) 对所有客机下行共享预算，上行有独立共享预算，默认不限速；375000 字节／秒对应十进制 3 Mbps。`--relay-control` 接受 JSON 中的 `downstream_bytes_per_second`、`upstream_bytes_per_second`、`delay_ms`、`jitter_ms`、`stall_every_ms` 与 `stall_ms`，配置先完整校验再应用。抖动和停传保持字节顺序，不删除 TCP 流内容，也不代表真实 IP 丢包。UDP 使用 [`tools/datagram_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/datagram_relay.py)，另支持真实报文丢失、复制和重排。`run_network_engine.py --record-relay` 按所选协议保存 TCP 字节流或带时间戳的 UDP 报文；逐秒中继记录包含双向转发字节数与实际配置。弱网功能与状态年龄验收见[开发测试说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
+[`tools/datagram_relay.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/datagram_relay.py) 对客机下行共享预算，上行有独立共享预算，默认不限速；375000 字节／秒对应十进制 3 Mbps。`--relay-control` 接受 JSON 中的双向带宽、延迟、抖动、停传、丢包和重复参数，配置先完整校验再应用。中继实际丢弃、复制和重排完整 UDP 报文；停传窗口表示突发丢包。`run_network_engine.py --record-relay` 保存带时间戳的 UDP 报文，逐秒中继记录包含双向转发字节数与实际配置。弱网功能与状态年龄验收见[开发测试说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 
-`isaac_lan_replay_world` 使用生产解码器还原状态，再比较同批、同更新率的 `wire` 与 `full_wire`，无需启动游戏。它支持旧字节补丁和 Zstd prefix 记录；`full_wire` 始终是当前 Zstd 完整帧对照，CSV 的 `full_codec` 标明算法，不能将旧记录的比值解释为同算法的增量收益。[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
+[`tools/analyze_delirium_performance.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/analyze_delirium_performance.py) 汇总载荷、应用频率和帧间隔；状态滞后需要 `tick_ms`／`utc_ms` 时钟校准，战斗成本排除加载窗口。
 
 ## 编解码基准
 

@@ -267,7 +267,7 @@ class Gameplay:
             "scenario",
             seed=seed,
             characters=[7, 7],
-            connection="127.0.0.1:29506 TCP",
+            connection="127.0.0.1:29506 UDP",
             one_way_latency_ms=self.latency_ms,
             mods="disabled",
         )
@@ -683,7 +683,7 @@ class Gameplay:
             "one_way_latency_ms": self.latency_ms,
             "floor_timing": floors,
             "limits": [
-                "Same-machine loopback with optional TCP delay, not actual frp",
+                "Same-machine loopback with optional UDP delay, not actual frp",
                 "Equal configuration with additional Mods disabled",
                 "10 fps may miss a one-frame flash; successful state assertions do not prove visual correctness",
             ],
@@ -726,7 +726,7 @@ def main():
         help="After a full run, archive losslessly and create automatic visual filmstrips",
     )
     ap.add_argument(
-        "--latency-ms", type=int, default=0, help="Add this one-way TCP delay during a complete run"
+        "--latency-ms", type=int, default=0, help="Add this one-way UDP delay during a complete run"
     )
     args = ap.parse_args()
     if args.latency_ms and (args.action != "run" or not 0 < args.latency_ms <= 1000):
@@ -737,9 +737,9 @@ def main():
         relay = None
         try:
             if args.latency_ms:
-                from delayed_relay import DelayedRelay
+                from datagram_relay import DatagramRelay
 
-                relay = DelayedRelay(29507, 29506, args.latency_ms)
+                relay = DatagramRelay(29507, 29506, args.latency_ms)
             g.launch()
             g.run()
             if relay and relay.error:

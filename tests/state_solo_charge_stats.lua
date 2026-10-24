@@ -7,7 +7,7 @@ local function report(value)
     Isaac.DebugString("LAN_NETWORK " .. value)
 end
 local owner = { Name = "Solo charge and Stats integration regression" }
-local lan = api:RegisterMod(owner, { id = "test.solo-charge-stats", integrationVersion = 1 })
+local lan = api:Attach(owner, "test.solo-charge-stats")
 local phase, renders, soloSeed = "start", 0, nil
 local linked, chosen, ended = false, false, false
 local originalWarning
@@ -38,7 +38,7 @@ function registry.observeRequire(source, name, value)
 end
 local function modsReady()
     local active = 0
-    for _, status in ipairs(api:GetCompatibilityStatus()) do
+    for _, status in ipairs(api:GetAdapters()) do
         assert(
             status.state == "active",
             "Mod adaptation failed: " .. status.id .. " " .. status.state

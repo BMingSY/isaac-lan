@@ -36,7 +36,6 @@ def main():
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--extra-client", type=Path, action="append", default=[])
-    parser.add_argument("--transport", choices=("udp", "tcp"), default="udp")
     parser.add_argument("--record-relay", action="store_true", help="Archive owned relay traffic")
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -542,10 +541,7 @@ def main():
     signal.signal(signal.SIGHUP, interrupted)
     try:
         if args.latency_ms:
-            if args.transport == "udp":
-                from datagram_relay import DatagramRelay as Relay
-            else:
-                from delayed_relay import DelayedRelay as Relay
+            from datagram_relay import DatagramRelay as Relay
 
             relay = Relay(
                 args.menu_port + 1,
@@ -660,29 +656,23 @@ def main():
                 *(["--automatic"] if args.automatic or args.installed else []),
                 *(["--no-luadebug"] if args.no_luadebug else []),
             ]
-            if (
-                args.transport
-                or args.performance is not None
-                or args.debug_logs
-                or args.client_input_hz
-            ):
-                config = lab / "game/isaac-lan/config.ini"
-                config.parent.mkdir(parents=True, exist_ok=True)
-                config.write_text(
-                    "[logging]\nlevel="
-                    + ("DEBUG" if args.debug_logs else "INFO")
-                    + "\n[diagnostics]\nperformance="
-                    + str(bool(args.performance)).lower()
-                    + "\nsample_interval_ms=1000\n"
-                    + f"\n[network]\ntransport={args.transport}\n"
-                    + f"input_hz={args.client_input_hz if role != 'host' and args.client_input_hz else 60}\n"
-                    # Isolated labs upload feedback only to an explicit receiver.
-                    + (
-                        f"\n[feedback]\nendpoint={args.feedback_endpoint}\n"
-                        if args.feedback_endpoint
-                        else ""
-                    )
+            config = lab / "game/isaac-lan/config.ini"
+            config.parent.mkdir(parents=True, exist_ok=True)
+            config.write_text(
+                "[logging]\nlevel="
+                + ("DEBUG" if args.debug_logs else "INFO")
+                + "\n[diagnostics]\nperformance="
+                + str(bool(args.performance)).lower()
+                + "\nsample_interval_ms=1000\n"
+                + "\n[network]\n"
+                + f"input_hz={args.client_input_hz if role != 'host' and args.client_input_hz else 60}\n"
+                # Isolated labs upload feedback only to an explicit receiver.
+                + (
+                    f"\n[feedback]\nendpoint={args.feedback_endpoint}\n"
+                    if args.feedback_endpoint
+                    else ""
                 )
+            )
             if args.progress_fixture:
                 prepare_progress_fixture(
                     lab,

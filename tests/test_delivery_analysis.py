@@ -12,7 +12,7 @@ def test_time_weighted_age_includes_stalled_delivery():
 
 
 def test_delivery_analysis_pairs_original_ticks_and_rejects_missing_evidence():
-    host = "WEAK_TCP VIEW tick=60 ms=1000\nWEAK_TCP VIEW tick=63 ms=1100\n"
+    host = "WEAK_NET VIEW tick=60 ms=1000\nWEAK_NET VIEW tick=63 ms=1100\n"
     client = "WEAK_NET APPLY tick=60 ms=1050\nWEAK_NET APPLY tick=63 ms=1150\n"
     result = analyze_delivery(host, client, minimum_samples=2)
     assert result["arrival_age_ms"]["mean"] == 50

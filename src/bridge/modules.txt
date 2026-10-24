@@ -65,6 +65,7 @@ compat/characters/keeper
 api/codec
 api/lifecycle
 api/actions
+api/sdk
 api/public
 lanbot/navigation
 lanbot/hazards

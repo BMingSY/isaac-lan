@@ -1,4 +1,5 @@
 #include "net/network_io.h"
+#include "net/datagram_protocol.h"
 #include "net/message_receiver.h"
 #include "net/messages.h"
 #include "net/wire_codec.h"
@@ -11,13 +12,9 @@
 namespace isaac::lan {
 namespace {
 using Clock = std::chrono::steady_clock;
-constexpr enet_uint8 reliableChannel = 0, inputChannel = 1, worldChannel = 2, recoveryChannel = 3;
-constexpr std::size_t channelCount = 4, datagramMtu = 1200;
+using namespace datagram;
 constexpr std::size_t maxDatagramMessage = maxWorldSize + 128;
 constexpr auto closeGrace = std::chrono::seconds(2);
-// This envelope is below the game protocol. A reliable fence invalidates
-// in-flight state and input when the authority changes a run/floor generation.
-enum class Envelope : std::uint8_t { message, world, fence, dependency, shard };
 struct PacketAccount {
     std::shared_ptr<ConnectionPipe> pipe;
     std::size_t bytes;
@@ -46,7 +43,7 @@ class DatagramHost {
             // Fragment below common tunnel/path MTUs; never rely on IP fragmentation.
             // ENet appends the checksum after its packet-size budget, including
             // packets that aggregate ACKs with data. Reserve those four bytes.
-            handle->mtu = datagramMtu - sizeof(enet_uint32);
+            handle->mtu = mtu - sizeof(enet_uint32);
             handle->maximumPacketSize = maxDatagramMessage;
             handle->maximumWaitingData = 4 * maxWorldSize;
             handle->checksum = enet_crc32;
@@ -76,7 +73,7 @@ struct DatagramConnection {
     bool authority;
     WorldGeneration generation{};
     std::uint32_t fence = 0;
-    WorldTransfer world{true};
+    WorldTransfer world;
     WorldDependencies dependencies;
     WorldShards shards;
     std::deque<std::vector<std::uint8_t>> outgoingShards;
@@ -295,7 +292,7 @@ struct DatagramConnection {
             }
             auto bytes = std::move(packet->bytes);
             const auto type = static_cast<Message>(bytes.at(0));
-            const auto accounted = bytes.size() + 2;
+            const auto accounted = bytes.size();
             if (type == Message::applied) {
                 pipe->queued.fetch_sub(accounted);
                 latestReceipt = std::move(bytes);
@@ -370,7 +367,7 @@ struct DatagramConnection {
              !closingAt && !bulk.empty() && part < 8 && pipe->queued.load() < 16384; ++part) {
             auto& current = bulk.front();
             const auto sendBulk = [&](std::vector<std::uint8_t> bytes) {
-                const auto accounted = bytes.size() + 2;
+                const auto accounted = bytes.size();
                 pipe->queued.fetch_add(accounted);
                 message(std::move(bytes), codec, accounted);
             };
@@ -472,8 +469,7 @@ struct DatagramConnection {
 } // namespace
 
 std::shared_ptr<ConnectionPipe> NetworkIo::connectDatagram(const sockaddr_in& address) {
-    auto pipe = std::make_shared<ConnectionPipe>(INVALID_SOCKET, true);
-    pipe->unreliable = true;
+    auto pipe = std::make_shared<ConnectionPipe>(true);
     pipe->address = address;
     pipe->datagrams = std::make_shared<DatagramHost>(std::nullopt);
     auto queued = pipe;
@@ -483,7 +479,7 @@ std::shared_ptr<ConnectionPipe> NetworkIo::connectDatagram(const sockaddr_in& ad
     return pipe;
 }
 std::shared_ptr<ListenerPipe> NetworkIo::listenDatagram(std::uint16_t port) {
-    auto pipe = std::make_shared<ListenerPipe>(INVALID_SOCKET);
+    auto pipe = std::make_shared<ListenerPipe>();
     pipe->datagrams = std::make_shared<DatagramHost>(port);
     pipe->port = pipe->datagrams->handle->address.port;
     auto queued = pipe;
@@ -564,8 +560,7 @@ void NetworkIo::runDatagrams() {
                                 enet_peer_disconnect_now(event.peer, 0);
                                 continue;
                             }
-                            auto pipe = std::make_shared<ConnectionPipe>(INVALID_SOCKET, false);
-                            pipe->unreliable = true;
+                            auto pipe = std::make_shared<ConnectionPipe>(false);
                             e.connections.emplace(event.peer, std::make_unique<DatagramConnection>(
                                                                   event.peer, pipe, true));
                             e.listener->accepted.push(std::move(pipe));

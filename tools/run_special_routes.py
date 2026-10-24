@@ -41,7 +41,6 @@ def main():
         help="Start the Lamb ending on the first floor within the six-route suite",
     )
     parser.add_argument("--port", type=int, default=30220)
-    parser.add_argument("--transport", choices=("udp", "tcp"), default="udp")
     parser.add_argument("--latency-ms", type=int, default=75)
     parser.add_argument(
         "--relay-control",
@@ -51,7 +50,7 @@ def main():
     parser.add_argument(
         "--record-relay",
         action="store_true",
-        help="Archive the delayed relay stream for offline replay",
+        help="Archive timestamped UDP datagrams from the owned relay",
     )
     parser.add_argument(
         "--heap-check",
@@ -117,8 +116,6 @@ def main():
         "--progress-fixture",
         "--alt-path-fixture",
         "--hush-fixture",
-        "--transport",
-        args.transport,
         "--latency-ms",
         str(args.latency_ms),
         "--menu-port",

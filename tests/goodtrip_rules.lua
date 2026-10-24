@@ -116,7 +116,7 @@ end
 local authority =
     assert(loadfile(root .. "/src/bridge/compat/mods/goodtrip/authority.lua", "t", host.env))()
 authority.install(host.api)
-local lan = guest.api:RegisterMod({}, { id = authority.id, integrationVersion = 1 })
+local lan = guest.api:Attach({}, authority.id)
 resetRooms()
 host.bridge.commit()
 guest.bridge.commit()
@@ -130,15 +130,13 @@ local function execute(options)
     guest.bridge.actions.poll()
     authority.observe()
     local result
-    assert(
-        lan:RequestAction(
-            "travel",
-            { index = options.index or 71, dimension = options.dimension or 0 },
-            function(value)
+    local request = lan:Action("travel")
+        :Request({ index = options.index or 71, dimension = options.dimension or 0 }, {
+            onResult = function(value)
                 result = value
-            end
-        )
-    )
+            end,
+        })
+    assert(request.status == "pending")
     local packet = guest.sent[#guest.sent].bytes
     if options.duplicate then
         host.inbox[#host.inbox + 1] = { sender = 1, bytes = packet }

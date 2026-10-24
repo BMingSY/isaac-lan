@@ -1,4 +1,4 @@
-local bridge, wrapping = _IsaacLanModules["api/public"], _IsaacLanModules["compat/mods/wrapping"]
+local api, wrapping = assert(IsaacLAN), _IsaacLanModules["compat/mods/wrapping"]
 local debug = (_IsaacLan and _IsaacLan.debug) or debug
 local authority = _IsaacLanModules["compat/mods/goodtrip/authority"]
 local definition = {
@@ -36,8 +36,9 @@ function definition.install(target)
         wrapping.cleanup(cleanups)
     end)
     -- UI and authority share the built-in action namespace, on either peer.
-    local lan = assert(bridge.handles[authority.id])
-    local pending, initialized = false, false
+    local lan = assert(authority.integration)
+    local travel = lan:Action("travel")
+    local pending, initialized = nil, false
     local playerIndex
     for i = 1, 64 do
         local name = debug.getupvalue(gt.step, i)
@@ -69,31 +70,18 @@ function definition.install(target)
             if not lan:IsActive() then
                 return original(self, index)
             end
-            if pending or not lan:IsReady() then
-                return
-            end
-            if not lan:HasHostAction("travel", 1) then
-                self:tele_failed()
+            if pending and pending.status == "pending" or not lan:IsReady() then
                 return
             end
             local room = lan:GetLocalRoom()
-            local id, code = lan:RequestAction(
-                "travel",
-                { index = index, dimension = room.dimension },
-                function(result)
-                    pending = false
+            pending = travel:Request({ index = index, dimension = room.dimension }, {
+                onResult = function(result)
                     target.lastResult = result
                     if result.status ~= "applied" then
                         self:tele_failed()
                     end
-                end
-            )
-            if id then
-                pending = true
-            else
-                target.lastResult = { status = "rejected", code = code }
-                self:tele_failed()
-            end
+                end,
+            })
         end
     end)
     wrapping.patch(cleanups, gt, "tab_action", function(original)
@@ -143,7 +131,7 @@ function definition.install(target)
     end
 end
 function definition.dispatch(target, record, ...)
-    local lan = bridge.handles[authority.id]
+    local lan = authority.integration
     local callbacks = ModCallbacks
     local ticking = record.id == callbacks.MC_POST_RENDER or record.id == callbacks.MC_POST_UPDATE
     if not lan or not lan:IsActive() then
@@ -174,5 +162,5 @@ function definition.dispatch(target, record, ...)
     end
     return record.original(...)
 end
-bridge.api:RegisterCompatibility(definition)
+api:RegisterAdapter(definition)
 return definition

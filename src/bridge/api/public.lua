@@ -1,6 +1,6 @@
 local modules, native = assert(_IsaacLanModules), assert(_IsaacLan)
 local bridge = { handles = {}, modHandles = {}, context = nil, players = {}, identities = {} }
-local api = { API_VERSION = 1 }
+local api = { API_VERSION = 2 }
 bridge.api = api
 function bridge.log(message)
     Isaac.DebugString("ISAAC_LAN integration " .. message)
@@ -41,28 +41,7 @@ function bridge.withView(fn)
 end
 bridge.lifecycle = modules["api/lifecycle"](bridge)
 bridge.actions = modules["api/actions"](bridge)
-local methods = {}
-local function registered(handle)
-    return bridge.handles[handle.id] == handle
-end
-function methods:IsActive()
-    return bridge.active()
-end
-function methods:IsReady()
-    return bridge.ready()
-end
-function methods:IsAuthority()
-    return bridge.info().authority == 1
-end
-function methods:GetLocalPlayers()
-    local result = {}
-    if bridge.ready() then
-        for i, player in ipairs(bridge.players) do
-            result[i] = player
-        end
-    end
-    return result
-end
+local sdk = assert(modules["api/sdk"])
 local function identity(player)
     if not bridge.ready() or not player then
         return nil
@@ -70,71 +49,20 @@ local function identity(player)
     local ok, hash = pcall(GetPtrHash, player)
     return ok and bridge.identities[hash] or nil
 end
-function methods:GetOwnerId(player)
-    local id = identity(player)
-    return id and id.owner
-end
-function methods:GetPlayerId(player)
-    local id = identity(player)
-    return id and id.id
-end
-function methods:GetLocalRoom()
-    return bridge.ready() and bridge.copy(bridge.context.room) or nil
-end
-function methods:GetContext()
-    return bridge.ready() and bridge.copy(bridge.context) or nil
-end
-function methods:WithLocalView(fn)
-    return bridge.withView(fn)
-end
-function methods:On(event, fn)
-    assert(registered(self), "integration_unregistered")
-    return bridge.lifecycle.on(self.id, event, fn)
-end
-function methods:RegisterAction(name, definition)
-    assert(registered(self), "integration_unregistered")
-    return bridge.actions.register(self.id, name, definition)
-end
-function methods:HasHostAction(name, version)
-    return registered(self) and bridge.actions.has(self.id, name, version)
-end
-function methods:RequestAction(name, payload, fn)
-    if not registered(self) then
-        return nil, "integration_unregistered"
-    end
-    return bridge.actions.request(self.id, name, payload, fn)
-end
-function methods:CreateOperation(definition)
-    assert(registered(self), "integration_unregistered")
-    return bridge.actions.operation(definition)
-end
-function methods:MovePlayer(context, destination)
-    if not registered(self) then
-        return nil, "integration_unregistered"
-    end
-    return bridge.actions.move(context, destination)
-end
-function methods:Unregister()
-    if bridge.handles[self.id] ~= self then
-        return
-    end
-    bridge.lifecycle.remove(self.id)
-    bridge.actions.remove(self.id)
-    bridge.handles[self.id] = nil
-    if bridge.modHandles[self.mod] == self then
-        bridge.modHandles[self.mod] = nil
+function bridge.actor(ownerId, playerId)
+    for _, actor in ipairs(native.api_actors()) do
+        if actor.owner == ownerId and "p" .. actor.owner .. ":" .. actor.role == playerId then
+            return Isaac.GetPlayer(actor.index)
+        end
     end
 end
-local function register(mod, options, builtin)
-    assert(type(mod) == "table" and type(options) == "table", "invalid_registration")
+function api:Attach(mod, id)
     assert(
-        type(options.id) == "string" and #options.id <= 64 and options.id:match("^[%w_.%-]+$"),
-        "invalid_integration_id"
+        type(mod) == "table" and type(id) == "string" and #id <= 64 and id:match("^[%w_.%-]+$"),
+        "invalid_registration"
     )
-    assert(
-        math.type(options.integrationVersion) == "integer" and options.integrationVersion >= 1,
-        "invalid_integration_version"
-    )
+    local installing = bridge.compatibilityInstalling
+    local builtin = installing ~= nil and installing.target.mod == mod
     if
         not builtin
         and bridge.modHandles[mod]
@@ -143,44 +71,84 @@ local function register(mod, options, builtin)
     then
         bridge.registry.nativeIntegration(mod)
     end
-    local existing = bridge.handles[options.id]
+    local existing = bridge.handles[id]
     if existing then
-        assert(
-            existing.mod == mod and existing.integrationVersion == options.integrationVersion,
-            "duplicate_integration_id"
-        )
+        assert(existing.mod == mod, "duplicate_integration_id")
         return existing
     end
     assert(not bridge.modHandles[mod], "mod_already_registered")
-    local handle = setmetatable({
-        id = options.id,
-        mod = mod,
-        integrationVersion = options.integrationVersion,
-        builtin = builtin,
-    }, { __index = methods })
-    bridge.handles[handle.id], bridge.modHandles[mod] = handle, handle
-    local installing = bridge.compatibilityInstalling
-    if builtin and installing and installing.target.mod == mod then
+    local handle
+    handle = sdk.create(mod, id, {
+        active = bridge.active,
+        solo = function()
+            return bridge.info().networked == 0
+        end,
+        ready = bridge.ready,
+        authority = function()
+            return bridge.info().authority == 1
+        end,
+        view = function()
+            if not bridge.ready() then
+                return nil
+            end
+            local value = bridge.copy(bridge.context)
+            value.players = {}
+            for index, player in ipairs(bridge.players) do
+                value.players[index] = player
+            end
+            value.ownerId, value.networked = bridge.info().slot + 1, true
+            return value
+        end,
+        owner = function(player)
+            local value = identity(player)
+            return value and value.owner
+        end,
+        playerId = function(player)
+            local value = identity(player)
+            return value and value.id
+        end,
+        withView = bridge.withView,
+        on = function(event, fn)
+            return bridge.lifecycle.on(id, event, fn)
+        end,
+        register = function(name, definition)
+            return bridge.actions.register(id, name, definition)
+        end,
+        has = function(name, version)
+            return bridge.actions.has(id, name, version)
+        end,
+        request = function(name, version, payload, playerId, fn)
+            return bridge.actions.request(id, name, version, payload, playerId, fn)
+        end,
+        close = function()
+            bridge.lifecycle.remove(id)
+            bridge.actions.remove(id)
+            if bridge.handles[id] == handle then
+                bridge.handles[id] = nil
+            end
+            if bridge.modHandles[mod] == handle then
+                bridge.modHandles[mod] = nil
+            end
+        end,
+    })
+    handle.builtin = builtin
+    bridge.handles[id], bridge.modHandles[mod] = handle, handle
+    if builtin then
         installing.target.addCleanup(function()
-            handle:Unregister()
+            handle:Close()
         end)
-    end
-    if not builtin and bridge.registry then
+    elseif bridge.registry then
         bridge.registry.nativeIntegration(mod)
     end
     return handle
 end
-function api:RegisterMod(mod, options)
-    local installing = bridge.compatibilityInstalling
-    return register(mod, options, installing ~= nil and installing.target.mod == mod)
-end
-function api:RegisterCompatibility(definition)
+function api:RegisterAdapter(definition)
     return bridge.registry.register(definition)
 end
-function api:GetCompatibilityStatus()
+function api:GetAdapters()
     return bridge.registry.status()
 end
-function api:SetCompatibilityEnabled(id, enabled)
+function api:SetAdapterEnabled(id, enabled)
     return bridge.registry.enable(id, enabled)
 end
 function api:SetActionEnabled(id, name, enabled)

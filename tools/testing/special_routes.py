@@ -32,6 +32,7 @@ DIAGNOSTICS = (
     "floor-items",
     "floor-sources",
     "mod-integrations",
+    "mod-integrations-dual",
     "shared-curses",
     "shared-deals",
     "dogma-warning",
@@ -89,6 +90,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "floor-items": "state_floor_items.lua",
             "floor-sources": "state_floor_sources.lua",
             "mod-integrations": "state_mod_integrations.lua",
+            "mod-integrations-dual": "state_mod_integrations.lua",
             "shared-curses": "state_shared_curses.lua",
             "shared-deals": "state_shared_deals.lua",
             "party-compat": "state_party_compat.lua",
@@ -123,6 +125,7 @@ def build(output, cases=CASES, *, first_floor=False):
         }.get(name, "state_side_routes.lua")
         options = {
             "route": name,
+            "integrationDual": name == "mod-integrations-dual",
             "motherEntrant": 1 if name == "mother-guest" else 0,
             "motherTogether": name == "mother-together",
             "inputResponseSpeeds": name == "input-response-speeds",

@@ -45,7 +45,7 @@ return function(bridge)
             end
         end
     end
-    local function resultFor(message, status, code)
+    local function resultFor(message, status, code, data)
         return {
             kind = "result",
             requestId = message.requestId,
@@ -53,10 +53,14 @@ return function(bridge)
             worldEpoch = message.worldEpoch,
             status = status,
             code = code,
+            data = data,
         }
     end
-    local function complete(request, status, code)
-        local result = resultFor(request.message, status, code)
+    local function complete(request, status, code, data)
+        local result = resultFor(request.message, status, code, data)
+        if not pcall(codec.encode, result) then
+            result = resultFor(request.message, "unknown", "invalid_result_data")
+        end
         if request.record then
             request.record.result = result
         end
@@ -117,7 +121,7 @@ return function(bridge)
         end
         return capabilities[actionKey] == version
     end
-    function actions.request(id, name, payload, callback)
+    function actions.request(id, name, expectedVersion, payload, playerId, callback)
         if not bridge.ready() then
             return nil, "view_not_ready"
         end
@@ -128,7 +132,7 @@ return function(bridge)
                 and definitions[actionKey].enabled
                 and definitions[actionKey].definition.version
             or capabilities[actionKey]
-        if not version then
+        if version ~= expectedVersion then
             return nil, "action_unavailable"
         end
         local count = 0
@@ -145,6 +149,7 @@ return function(bridge)
             key = actionKey,
             version = version,
             payload = payload,
+            playerId = playerId,
             nonce = nonce,
             sequence = sequence,
             requestId = requestId,
@@ -274,6 +279,7 @@ return function(bridge)
                 or message.requestId ~= message.nonce .. ":" .. message.sequence
                 or type(message.key) ~= "string"
                 or type(message.source) ~= "table"
+                or type(message.playerId) ~= "string"
             then
                 return
             end
@@ -397,6 +403,7 @@ return function(bridge)
         queue = {}
         for _, request in ipairs(requests) do
             local message, record = request.message, definitions[request.message.key]
+            local player = bridge.actor(request.sender + 1, message.playerId)
             local position = native.rooms_positions()[tostring(request.sender)]
             local code
             if message.runId ~= info.runId or message.worldEpoch ~= info.worldEpoch then
@@ -413,6 +420,8 @@ return function(bridge)
                 or position.dimension ~= message.source.dimension
             then
                 code = "source_changed"
+            elseif not player then
+                code = "player_unavailable"
             elseif running[request.sender] then
                 code = "operation_busy"
             elseif
@@ -434,16 +443,22 @@ return function(bridge)
                     local success, reason = pcall(function()
                         assert(
                             native.api_with_owner(request.sender, function()
-                                local player = Isaac.GetPlayer(0)
                                 local context = {
                                     ownerId = request.sender + 1,
-                                    playerId = "p" .. (request.sender + 1) .. ":1",
+                                    playerId = message.playerId,
                                     player = player,
                                     room = bridge.copy(position),
                                     runId = info.runId,
                                     worldEpoch = info.worldEpoch,
                                     requestId = message.requestId,
                                 }
+                                function context:MoveTo(destination)
+                                    return actions.move(self, destination)
+                                end
+                                function context:Wait(definition)
+                                    assert(executing == self, "operation_outside_action")
+                                    return actions.operation(definition)
+                                end
                                 request.context = context
                                 executing = context
                                 result = record.definition.execute(context, message.payload)
@@ -469,7 +484,7 @@ return function(bridge)
                         and (result.status == "applied" or result.status == "rejected" or result.status == "cancelled" or result.status == "unknown")
                         and type(result.code) == "string"
                     then
-                        complete(request, result.status, result.code)
+                        complete(request, result.status, result.code, result.data)
                     else
                         complete(request, "unknown", "invalid_handler_result")
                     end
@@ -523,7 +538,8 @@ return function(bridge)
                 complete(
                     task.request,
                     status,
-                    type(result.code) == "string" and result.code or "invalid_operation_result"
+                    type(result.code) == "string" and result.code or "invalid_operation_result",
+                    result.data
                 )
             end
         end

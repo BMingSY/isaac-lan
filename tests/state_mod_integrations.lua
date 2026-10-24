@@ -1,5 +1,6 @@
 -- Actual supported Mods are copied unchanged by --mod / --client-mod.
 local native, api = assert(_IsaacLan), assert(IsaacLAN)
+local testInput = assert(_IsaacLanTestInput)
 local modules = _IsaacLanModules
 local host, port
 if _IsaacLanTest then
@@ -12,14 +13,36 @@ else
     port = f:read("*l")
     f:close()
 end
-local character = 0 -- A Jacob/Esau fixture is generated with character = 19.
+local character = _IsaacLanTest and _IsaacLanTest.integrationDual and PlayerType.PLAYER_JACOB or 0
 local owner = { Name = "Isolated third-party integration contract" }
-local lan = api:RegisterMod(owner, { id = "test.integration.views", integrationVersion = 1 })
+function owner:AddCallback(id, fn)
+    Isaac.AddCallback(self, id, fn)
+end
+function owner:RemoveCallback(id, fn)
+    Isaac.RemoveCallback(self, id, fn)
+end
+local lan = api:Attach(owner, "test.integration.views")
 local function report(message)
     Isaac.DebugString("LAN_NETWORK " .. message)
 end
 local frame, count, linked, chosen, finished = _IsaacLanFrame, 0, false, false, false
 local travel, result, requestCount, replayed = false, nil, 0, false
+local playerService, checks = nil, 0
+local sdkRequest, sdkResult, sdkExecutions
+sdkExecutions = 0
+local bodyAction = lan:Action("selected-body", {
+    execute = function(context)
+        local role = character == PlayerType.PLAYER_JACOB and 2 or 1
+        assert(context.ownerId == 2 and context.playerId == "p2:" .. role)
+        assert(lan:GetPlayerId(context.player) == context.playerId)
+        sdkExecutions = sdkExecutions + 1
+        return {
+            status = "applied",
+            code = "selected_body",
+            data = { playerId = context.playerId, executions = sdkExecutions },
+        }
+    end,
+})
 local codec = modules["api/codec"]
 local send, receive = native.api_send, native.api_receive
 native.api_send = function(slot, bytes)
@@ -41,7 +64,7 @@ native.api_receive = function()
     local sender, bytes = receive()
     if bytes and not host then
         local message = codec.decode(bytes)
-        if message.kind == "result" then
+        if message.kind == "result" and message.code == "arrived" then
             result = message
             report("ACTION_RESULT " .. message.status .. " " .. message.code)
         end
@@ -80,12 +103,33 @@ function _IsaacLanFrame()
         travel = true
         gt:teleport_to_grid_index(71)
     end
+    if status.prepared and status.verified >= 270 and not host and not sdkRequest then
+        local players = lan:GetLocalPlayers()
+        sdkRequest = bodyAction:Request(nil, {
+            player = players[#players],
+            onResult = function(value)
+                sdkResult = value
+                report("SDK_RESULT " .. value.status .. " " .. value.code)
+            end,
+        })
+    end
     if status.prepared and status.verified >= 350 and not finished then
+        assert(checks >= 30, "Local render checks did not run or were disabled by an error")
         if not host then
             assert(
                 travel and replayed and requestCount == 1 and result and result.status == "applied",
                 "GoodTrip action did not complete exactly once"
             )
+            assert(
+                sdkResult and sdkResult.status == "applied" and sdkResult.data.executions == 1,
+                "API 2 selected-body result missing"
+            )
+            assert(
+                sdkResult.data.playerId
+                    == "p2:" .. (character == PlayerType.PLAYER_JACOB and 2 or 1)
+            )
+        else
+            assert(sdkExecutions == 1, "API 2 action did not execute exactly once")
         end
         local positions = native.rooms_positions()
         assert(
@@ -100,7 +144,7 @@ end
 local gate = native.net_gate
 native.net_gate = function(capture, apply, collect, restore, present, beginFloor)
     local function neutral()
-        return string.rep("\0", 16 * 2 + 2)
+        return testInput.neutral
     end
     return gate(neutral, function(t, n, bytes)
         apply(t, n, bytes)
@@ -157,9 +201,8 @@ native.net_gate = function(capture, apply, collect, restore, present, beginFloor
         end
     end, collect, restore, present, beginFloor)
 end
-local playerService, checks = nil, 0
-Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
-    if not lan:IsReady() or lan:GetContext().tick < 120 then
+lan:OnLocalRender(function()
+    if not lan:IsReady() or lan:View().tick < 120 then
         return
     end
     local localPlayers = lan:GetLocalPlayers()
@@ -173,10 +216,10 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_RENDER, function()
             .. " controller="
             .. tostring(localPlayers[1] and localPlayers[1].ControllerIndex)
             .. " signature="
-            .. lan:GetContext().playerSignature
+            .. lan:View().playerSignature
     )
     local visibleMod = false
-    for _, status in ipairs(api:GetCompatibilityStatus()) do
+    for _, status in ipairs(api:GetAdapters()) do
         if status.target then
             assert(
                 status.state == "active",
@@ -246,6 +289,6 @@ return {
     end,
     cleanup = function()
         native.api_send, native.api_receive = send, receive
-        lan:Unregister()
+        lan:Close()
     end,
 }

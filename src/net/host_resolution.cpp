@@ -17,8 +17,8 @@ DWORD WINAPI resolveHost(void* argument) {
     if (!result.error) {
         addrinfo hints{};
         hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_protocol = IPPROTO_TCP;
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_protocol = IPPROTO_UDP;
         addrinfo* found = nullptr;
         result.error = getaddrinfo(request->address.c_str(), nullptr, &hints, &found);
         if (!result.error) {

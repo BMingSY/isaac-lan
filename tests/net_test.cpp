@@ -1,4 +1,6 @@
 #include "net/session.h"
+#include "net/datagram_protocol.h"
+#include <enet/enet.h>
 #include "compat/challenges/catalog.h"
 #include "runtime/progression.h"
 #include "net/compression.h"
@@ -18,10 +20,7 @@
 #include <source_location>
 using namespace isaac::lan;
 namespace {
-Transport testTransport = Transport::tcp;
-struct TestSession : Session {
-    explicit TestSession(Transport mode = testTransport) : Session(nullptr, nullptr, false, mode) {}
-};
+using TestSession = Session;
 LobbyAccess testAccess() {
     return {{0, 1, 2, 3, 7, 23}, {{1001, 2}, {1001, 3}, {1002, 1}}, {0, 1, 2, 3, 7, 23}};
 }
@@ -244,7 +243,6 @@ void codec() {
     std::puts("PASS bounded state codec rejects truncated packets");
 }
 void udpLossRecoveryImpl(bool large) {
-    require(testTransport == Transport::udp, "UDP fixture requires --udp");
     Group g(2, 0, "127.0.0.1", {}, {}, true);
     g.ready();
     g.step(0);
@@ -403,7 +401,7 @@ void loadingTimeout() {
     require(g.peers[1]->ready() && g.peers[1]->submit(0, {}), "Ready guest setup failed");
     const auto started = std::chrono::steady_clock::now();
     while (g.peers[0]->connectedMask() == 7) {
-        // Keep the TCP peer responsive, but never acknowledge engine readiness.
+        // Keep the UDP peer responsive, but never acknowledge engine readiness.
         for (unsigned slot : {2u, 1u, 0u})
             g.peers[slot]->poll();
         require(g.peers[0]->phase() == Phase::running, "Loading timeout killed the host");
@@ -551,31 +549,37 @@ void inputBackpressure() {
         return group.peers[0]->inputSequences()[1] == 10000;
     });
     const auto applied = group.step(1);
-    require(applied.inputs[1].values == InputFrame{}.values &&
-                applied.inputs[1].triggered == press.triggered,
-            "Coalescing lost a press or replayed stale movement");
-    require(group.step(2).inputs[1].triggered == 0, "Retained input edge repeated");
+    require(applied.inputs[1].values == InputFrame{}.values && applied.inputs[1].triggered == 0,
+            "Expired input event survived a 10000-sample backlog");
+    require(group.peers[1]->submit(10001, press, source) &&
+                group.peers[1]->submit(10002, {}, source),
+            "Fresh press/release rejected");
+    until([&] {
+        group.poll();
+        return group.peers[0]->inputSequences()[1] == 10002;
+    });
+    require(group.step(2).inputs[1].triggered == press.triggered,
+            "Fresh reliable input event lost");
+    require(group.step(3).inputs[1].triggered == 0, "Reliable input event repeated");
 
     Peer stalled;
     stalled.submitInput({0, press, source});
     for (unsigned sequence = 1; sequence <= 10000; ++sequence)
         stalled.submitInput({sequence, {}, source});
-    require(stalled.outgoing.size() == 1 && stalled.queued < 256,
+    require(stalled.outgoing.size() == 2 && stalled.queued < 256,
             "Unsent input retained obsolete directions");
     Peer peer;
     peer.submitInput({0, press, source});
     const auto first = peer.outgoing.front();
-    peer.sent = 4;
-    peer.queued -= peer.sent;
     peer.submitInput({1, {}, source});
     peer.submitInput({2, {}, source});
-    require(peer.outgoing.size() == 2 && peer.outgoing.front() == first && peer.sent == 4,
-            "Coalescing modified a partially transmitted TCP frame");
+    require(peer.outgoing.size() == 2 && peer.outgoing.front() == first,
+            "Coalescing changed a reliable button event");
     Writer pause(Message::control);
     pause.u8(static_cast<unsigned>(Command::pause));
     peer.sendMessage(pause);
     peer.submitInput({3, press, source});
-    require(peer.outgoing.size() == 4, "Input replacement crossed an ordered control boundary");
+    require(peer.outgoing.size() == 5, "Input replacement crossed an ordered control boundary");
     auto destination = source;
     destination.index = 85;
     peer.submitInput({4, {}, destination});
@@ -587,7 +591,7 @@ void inputBackpressure() {
     std::size_t remaining = 0;
     for (const auto& message : peer.outgoing)
         remaining += message.size();
-    require(peer.queued == remaining - peer.sent, "Replacement corrupted queued-byte accounting");
+    require(peer.queued == remaining, "Replacement corrupted queued-byte accounting");
 }
 void floorRejoin() {
     Group g(2, 0, "127.0.0.1", {}, {1, 23});
@@ -1581,19 +1585,44 @@ void runRules() {
         });
     }
 }
-struct WireSocket {
-    SOCKET value = INVALID_SOCKET;
-    ~WireSocket() {
-        if (value != INVALID_SOCKET)
-            closesocket(value);
+struct WirePeer {
+    ENetHost* endpoint = nullptr;
+    ENetPeer* peer = nullptr;
+    explicit WirePeer(bool listen = false) {
+        require(enet_initialize() == 0, "Wire fixture initialization failed");
+        ENetAddress address{ENET_HOST_ANY, 0};
+        endpoint = enet_host_create(listen ? &address : nullptr, 1, datagram::channelCount, 0, 0);
+        require(endpoint != nullptr, "Wire fixture endpoint failed");
+        endpoint->checksum = enet_crc32;
+        endpoint->mtu = datagram::mtu - sizeof(enet_uint32);
+    }
+    ~WirePeer() {
+        enet_host_destroy(endpoint);
+        enet_deinitialize();
+    }
+    void connect(std::uint16_t port) {
+        const ENetAddress address{htonl(INADDR_LOOPBACK), port};
+        peer = enet_host_connect(endpoint, &address, datagram::channelCount, protocolVersion);
+        require(peer != nullptr, "Wire fixture connect failed");
+    }
+    void poll() {
+        ENetEvent event{};
+        while (enet_host_service(endpoint, &event, 0) > 0) {
+            if (event.type == ENET_EVENT_TYPE_CONNECT)
+                peer = event.peer;
+            else if (event.type == ENET_EVENT_TYPE_RECEIVE)
+                enet_packet_destroy(event.packet);
+        }
     }
     void send(const Writer& message) {
-        std::vector<std::uint8_t> framed{static_cast<std::uint8_t>(message.bytes.size() >> 8),
-                                         static_cast<std::uint8_t>(message.bytes.size())};
-        framed.insert(framed.end(), message.bytes.begin(), message.bytes.end());
-        require(::send(value, reinterpret_cast<const char*>(framed.data()), framed.size(), 0) ==
-                    static_cast<int>(framed.size()),
+        Writer envelope(static_cast<Message>(datagram::Envelope::message));
+        envelope.u32(0);
+        envelope.bytes.insert(envelope.bytes.end(), message.bytes.begin(), message.bytes.end());
+        auto* packet = enet_packet_create(envelope.bytes.data(), envelope.bytes.size(),
+                                          ENET_PACKET_FLAG_RELIABLE);
+        require(packet && enet_peer_send(peer, datagram::reliableChannel, packet) == 0,
                 "Wire fixture send failed");
+        enet_host_flush(endpoint);
     }
 };
 void wireRules(Writer& writer, const RunRules& rules) {
@@ -1607,16 +1636,15 @@ void accessWireValidation() {
     const LobbyAccess basic{{0}, {}, {0}};
     // Bypass Session::choose to exercise the authority's untrusted wire boundary.
     {
-        TestSession host(Transport::tcp);
+        TestSession host;
         require(host.host(0, "wire-access", {}, testAccess()), "Wire host failed");
-        WireSocket remote;
-        remote.value = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        sockaddr_in address{};
-        address.sin_family = AF_INET;
-        address.sin_port = htons(host.port());
-        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        require(connect(remote.value, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0,
-                "Wire client connect failed");
+        WirePeer remote;
+        remote.connect(host.port());
+        until([&] {
+            host.poll();
+            remote.poll();
+            return remote.peer->state == ENET_PEER_STATE_CONNECTED;
+        });
         Writer hello(Message::hello);
         hello.u16(protocolVersion);
         hello.string("wire-access");
@@ -1626,6 +1654,7 @@ void accessWireValidation() {
         remote.send(hello);
         until([&] {
             host.poll();
+            remote.poll();
             return host.players() == 2;
         });
         const auto choose = [&](std::uint16_t character) {
@@ -1640,6 +1669,7 @@ void accessWireValidation() {
             remote.send(marker);
             until([&] {
                 host.poll();
+                remote.poll();
                 return host.takeIntegration().has_value();
             });
         };
@@ -1650,27 +1680,15 @@ void accessWireValidation() {
     }
     // A host cannot replace this peer's declaration or force an inaccessible start.
     for (unsigned scenario = 0; scenario < 5; ++scenario) {
-        TestSession guest(Transport::tcp);
-        WireSocket listener, remote;
-        listener.value = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        sockaddr_in address{};
-        address.sin_family = AF_INET;
-        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        require(bind(listener.value, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0 &&
-                    listen(listener.value, 1) == 0,
-                "Wire listener failed");
-        int length = sizeof(address);
-        require(getsockname(listener.value, reinterpret_cast<sockaddr*>(&address), &length) == 0,
-                "Wire listener address failed");
-        u_long nonblocking = 1;
-        require(ioctlsocket(listener.value, FIONBIO, &nonblocking) == 0,
-                "Wire listener setup failed");
-        require(guest.join("127.0.0.1", ntohs(address.sin_port), "wire-access", {}, {}, basic),
-                "Wire guest failed");
+        TestSession guest;
+        WirePeer remote(true);
+        require(
+            guest.join("127.0.0.1", remote.endpoint->address.port, "wire-access", {}, {}, basic),
+            "Wire guest failed");
         until([&] {
             guest.poll();
-            remote.value = accept(listener.value, nullptr, nullptr);
-            return remote.value != INVALID_SOCKET;
+            remote.poll();
+            return remote.peer != nullptr;
         });
         Writer welcome(Message::welcome);
         welcome.u8(1);
@@ -1715,6 +1733,7 @@ void accessWireValidation() {
         }
         until([&] {
             guest.poll();
+            remote.poll();
             return guest.phase() == Phase::failed;
         });
         require(guest.error().find(scenario >= 3   ? "Invalid authoritative ending"
@@ -2519,8 +2538,7 @@ void worldDeltas() {
     });
     const auto resources = g.peers[0]->resources();
     require(resources.deltaSnapshots > 180 &&
-                resources.wireWorldBytes <
-                    resources.fullWorldBytes / (testTransport == Transport::udp ? 2 : 8),
+                resources.wireWorldBytes < resources.fullWorldBytes / 2,
             "Confirmed sparse snapshots did not reduce actual compressed traffic");
     std::printf("DELTA snapshots=%llu deltas=%llu full_wire=%llu actual_wire=%llu\n",
                 static_cast<unsigned long long>(resources.worldSnapshots),
@@ -2571,9 +2589,10 @@ void deliveryBackpressure() {
         step(false);
     group.poll();
     const auto throttled = group.peers[0]->resources();
-    require(throttled.worldSnapshots - before <= 14,
+    require(throttled.worldSnapshots - before <=
+                10 + WorldTransfer::window(group.peers[0]->latency()[1]),
             "Delayed receipt refilled an unbounded stale-state window");
-    // Reliable lifecycle messages must still progress through the same TCP
+    // Reliable lifecycle messages must still progress through the same UDP
     // connection while ordinary world publication is throttled.
     const Stage stage{1, 2, 0, 0, false, {}, {}};
     require(group.peers[0]->beginStage(stage), "Congestion blocked a floor event");
@@ -2698,11 +2717,6 @@ void resourceLifecycle() {
                 static_cast<unsigned long long>(retained()), beforeHandles, handles());
 }
 int main(int argc, char** argv) {
-    if (argc > 1 && std::string_view(argv[1]) == "--udp") {
-        testTransport = Transport::udp;
-        --argc;
-        ++argv;
-    }
     if (argc == 2 && (std::string_view(argv[1]) == "udp-loss" ||
                       std::string_view(argv[1]) == "udp-large-recovery"))
         return runTests(

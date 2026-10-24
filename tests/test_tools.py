@@ -4,11 +4,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import socket
 import struct
 import sys
 import tempfile
-import time
 import unittest
 import pytest
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -19,7 +17,6 @@ from testing.gameplay import CASES, CHECKPOINTS, build as build_suite
 from build_package import build
 from build_release import release
 from check_release import FILES, check
-from delayed_relay import DelayedRelay
 from game_logs import freeze_probe_logs, probe_path, probe_text
 from check_performance import summarize
 from testing.engine import finalize_result
@@ -483,59 +480,6 @@ class GameplaySuiteTests(unittest.TestCase):
             self.assertTrue(all(0 <= offset < duration for offset in phase["checkpoints"].values()))
             tick += duration + 90
         self.assertEqual(metadata["end_tick"], tick)
-
-
-class RelayTests(unittest.TestCase):
-    def test_guest_arrives_before_recreated_host_listener(self):
-        with socket.socket() as listener:
-            listener.bind(("127.0.0.1", 0))
-            listener.settimeout(5)
-            relay = DelayedRelay(0, listener.getsockname()[1], 1)
-            try:
-                with socket.create_connection(relay.listener.getsockname(), timeout=5) as client:
-                    client.sendall(b"next lobby")
-                    time.sleep(0.1)
-                    self.assertIsNone(relay.error)
-                    listener.listen()
-                    host, _ = listener.accept()
-                    with host:
-                        host.settimeout(5)
-                        self.assertEqual(host.recv(64), b"next lobby")
-                        host.sendall(b"ready")
-                        self.assertEqual(client.recv(64), b"ready")
-            finally:
-                relay.close()
-            self.assertIsNone(relay.error)
-            self.assertFalse(relay.thread.is_alive())
-
-    def test_bidirectional_bytes_and_clean_half_close(self):
-        with socket.socket() as listener:
-            listener.bind(("127.0.0.1", 0))
-            listener.listen()
-            listener.settimeout(5)
-            relay = DelayedRelay(0, listener.getsockname()[1], 10)
-            try:
-                with socket.create_connection(relay.listener.getsockname(), timeout=5) as client:
-                    host, _ = listener.accept()
-                    with host:
-                        host.settimeout(5)
-                        payload = bytes(range(256)) * 1024
-                        client.sendall(payload)
-                        client.shutdown(socket.SHUT_WR)
-                        received = bytearray()
-                        while chunk := host.recv(65536):
-                            received.extend(chunk)
-                        self.assertEqual(received, payload)
-                        host.sendall(b"finish")
-                        host.shutdown(socket.SHUT_WR)
-                        response = bytearray()
-                        while chunk := client.recv(65536):
-                            response.extend(chunk)
-                        self.assertEqual(response, b"finish")
-            finally:
-                relay.close()
-            self.assertIsNone(relay.error)
-            self.assertFalse(relay.thread.is_alive())
 
 
 if __name__ == "__main__":

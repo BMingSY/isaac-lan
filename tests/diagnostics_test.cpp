@@ -12,7 +12,6 @@ void defaults() {
     const auto parsed = isaac::configuration::parse(isaac::configuration::defaults);
     require(parsed.warnings.empty(), "Default configuration is invalid");
     require(parsed.settings.inputHz == 60, "Default guest input rate changed");
-    require(parsed.settings.udp, "UDP is not the default transport");
     require(parsed.settings.chat.backgroundImage.empty() && parsed.settings.chat.opacity == 70,
             "Default chat background is not a translucent solid color");
     require(isaac::configuration::missingDefaults(parsed).empty(),
@@ -23,10 +22,10 @@ void defaults() {
 }
 void validation() {
     using isaac::configuration::parse;
-    require(!parse("[network]\ntransport=tcp").settings.udp &&
-                parse("[network]\ntransport=udp").settings.udp &&
-                parse("[network]\ntransport=unknown").warnings.size() == 1,
-            "Transport selection or invalid-value fallback changed");
+    const auto legacy = parse("[network]\ntransport=tcp\ninput_hz=30");
+    require(legacy.settings.inputHz == 30 && legacy.warnings.size() == 1 &&
+                legacy.warnings[0].find("unknown_key=network.transport") != std::string::npos,
+            "Obsolete transport setting must not affect loading the remaining configuration");
     const auto chat =
         parse("[chat]\nbackground_opacity=45\nbackground_color=Ab3400\n"
               "border_color=123456\ntext_color=FFFFFF\nbackground_image=背景/my panel.png\n");

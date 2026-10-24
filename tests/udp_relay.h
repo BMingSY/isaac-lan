@@ -6,7 +6,7 @@
 #include <thread>
 #include <vector>
 
-// Real datagrams, not a TCP pause proxy. This fixture owns one loopback route.
+// This fixture owns one loopback route and manipulates complete UDP datagrams.
 class UdpRelay {
     SOCKET socket = INVALID_SOCKET;
     sockaddr_in target{}, client{};

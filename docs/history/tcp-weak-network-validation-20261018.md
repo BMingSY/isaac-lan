@@ -8,7 +8,7 @@
 - 最终冻结构建 `tcp-weak-build-20261018-05`，probe SHA-256：`0b1c22ea219f5b19788181064a4769cd6d35f7e32ab49ba561206901e1f06530`。
 - 对照为先前武器跟随候选，probe SHA-256：`c2a1bcf7b195f4897a7aa986b5f11eac4a3295d3fb8ea3c6fae8a70cec3af7c4`。
 - [弱网夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_weak_network.lua) SHA-256：`c5aa4488ae5b374bcff9e1812da0de443c83492658bf034ff05e2d5d30d98bed`；最终弱网／移动组合夹具 SHA-256：`ba6cf6b3bcfc072c90973f1d0507d98e88dd72228143f8b108d2f0bca51a701b`。
-- [中继配置](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/tcp_weak_network.json) SHA-256：`0ab45a554bd12113189a3868d3e7a8ef32e119ae1cc01cacc1967990d41a75bc`。每方向基础延迟 45 ms、抖动 ±20 ms，下行 32 KiB/s、上行 8 KiB/s，每四秒双向停传 250 ms。游戏 Ping 另含帧调度和排队时间。
+- [中继配置](https://github.com/BMingSY/isaac-lan/blob/v0.5.1/tests/fixtures/tcp_weak_network.json) SHA-256：`0ab45a554bd12113189a3868d3e7a8ef32e119ae1cc01cacc1967990d41a75bc`。每方向基础延迟 45 ms、抖动 ±20 ms，下行 32 KiB/s、上行 8 KiB/s，每四秒双向停传 250 ms。游戏 Ping 另含帧调度和排队时间。
 - 使用有归属的隔离主客机、端口 52480／52481、显式注入。中继保留全部字节及顺序，模拟应用可见的交付停顿，没有注入 IP 丢包或验证真实 TCP 重传。同期有其他隔离游戏，未取得独占性能窗口，不作 FPS 性能结论。
 
 ## 最终检查

@@ -3,7 +3,7 @@
 #include "net/messages.h"
 
 namespace isaac::lan {
-// Both transports share reliable transaction decoding and cache invalidation.
+// Reliable transaction decoding and cache invalidation for the UDP worker.
 // Delivery framing, generation checks and scheduling stay with the transport.
 template <class Respond>
 IncomingPacket receiveMessage(std::vector<std::uint8_t> bytes, WorldTransfer& world,

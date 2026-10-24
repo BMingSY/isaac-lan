@@ -41,6 +41,9 @@ return function(root)
                 GetNumPlayers = function()
                     return p.scope ~= nil and 1 or #p.actors
                 end,
+                GetFrameCount = function()
+                    return p.tick
+                end,
             }
         end
         env.Isaac = {
@@ -54,6 +57,7 @@ return function(root)
         function native.api_info()
             return {
                 active = p.active,
+                networked = p.networked == nil and 1 or p.networked,
                 ready = p.ready,
                 authority = slot == 0 and 1 or 0,
                 slot = slot,
@@ -127,6 +131,7 @@ return function(root)
             "api/codec",
             "api/lifecycle",
             "api/actions",
+            "api/sdk",
             "api/public",
             "compat/mods/wrapping",
             "compat/mods/registry",

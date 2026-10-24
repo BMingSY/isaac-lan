@@ -8,7 +8,7 @@ python3 tools/manual_gameplay.py run \
   --ffmpeg "$ISAAC_FFMPEG"
 ```
 
-增加 `--latency-ms 75` 可在同一流程中给 TCP 的两个方向各加入
+增加 `--latency-ms 75` 可在同一流程中给 UDP 的两个方向各加入
 75 ms 延迟；客机通过原版输入框改填隔离代理端口 `29507`，房主仍监听
 `29506`。代理只在脚本的完整 `run` 期间运行，退出后关闭。
 这代表模拟约 150 ms RTT，不能替代实际 frp 测试。

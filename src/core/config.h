@@ -10,7 +10,6 @@
 namespace isaac::configuration {
 struct Settings {
     unsigned inputHz = 60;
-    bool udp = true;
     logging::Level logLevel = logging::Level::info;
     bool performance = false;
     unsigned sampleIntervalMs = 1000;
@@ -26,8 +25,6 @@ struct Parsed {
 inline constexpr std::string_view defaults =
     "; Isaac LAN：修改后重启游戏生效。\n"
     "[network]\n"
-    "; 联机协议：udp / tcp；同一局所有玩家必须一致。\n"
-    "transport = udp\n"
     "; 客机输入发送频率：30 / 60，默认 60；各端可以不同。\n"
     "; 30 减少输入流量，但可能多等一个渲染帧；主机模拟和本机显示频率不变。\n"
     "input_hz = 60\n\n"
@@ -94,12 +91,7 @@ inline Parsed parse(std::string_view source) {
             continue;
         }
         seen.push_back(key);
-        if (key == "network.transport") {
-            if (value == "udp" || value == "tcp")
-                result.settings.udp = value == "udp";
-            else
-                warn("invalid_value=" + key);
-        } else if (key == "network.input_hz") {
+        if (key == "network.input_hz") {
             if (value == "30" || value == "60")
                 result.settings.inputHz = value == "30" ? 30 : 60;
             else

@@ -1,4 +1,4 @@
-local bridge, wrapping = _IsaacLanModules["api/public"], _IsaacLanModules["compat/mods/wrapping"]
+local api, wrapping = assert(IsaacLAN), _IsaacLanModules["compat/mods/wrapping"]
 local definition = {
     id = "isaac-lan.compat.eid",
     adapterVersion = 2,
@@ -69,7 +69,8 @@ function definition.install(target, api)
     target.addCleanup(function()
         wrapping.cleanup(cleanups)
     end)
-    local lan = api:RegisterMod(eid, { id = definition.id, integrationVersion = 1 })
+    local lan = api:Attach(eid, definition.id)
+    target.integration = lan
     wrapping.patch(cleanups, eid, "getEntityData", function(original)
         return function(self, entity, key, ...)
             local value = original(self, entity, key, ...)
@@ -131,12 +132,13 @@ function definition.install(target, api)
     return function()
         target.pendingLifecycle = {}
         wrapping.cleanup(cleanups)
-        lan:Unregister()
+        target.integration = nil
+        lan:Close()
         clear()
     end
 end
 function definition.dispatch(target, record, ...)
-    local lan = bridge.handles[definition.id]
+    local lan = target.integration
     if not lan or not lan:IsActive() then
         return record.original(...)
     end
@@ -175,5 +177,5 @@ function definition.dispatch(target, record, ...)
     end
     return record.original(...)
 end
-bridge.api:RegisterCompatibility(definition)
+api:RegisterAdapter(definition)
 return definition

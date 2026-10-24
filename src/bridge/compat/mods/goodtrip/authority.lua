@@ -101,14 +101,12 @@ function authority.observe()
     end
 end
 function authority.install(api)
-    local lan = api:RegisterMod(
-        { Name = "Isaac LAN GoodTrip authority" },
-        { id = authority.id, integrationVersion = 1 }
-    )
+    local lan = api:Attach({ Name = "Isaac LAN GoodTrip authority" }, authority.id)
+    authority.integration = lan
     local function reject(code)
         return { status = "rejected", code = code }
     end
-    local unregister = lan:RegisterAction("travel", {
+    local travel = lan:Action("travel", {
         version = 1,
         cooldownTicks = 45,
         validate = function(payload)
@@ -263,7 +261,7 @@ function authority.install(api)
             intermediate(destinationIndex)
             local index = 1
             local move, code =
-                lan:MovePlayer(context, { index = route[index], dimension = payload.dimension })
+                context:MoveTo({ index = route[index], dimension = payload.dimension })
             if not move then
                 return reject(code)
             end
@@ -282,7 +280,7 @@ function authority.install(api)
             end
             -- Native migration uses an explicit destination, so maze never needs
             -- to be removed globally while another participant is simulating.
-            return lan:CreateOperation({
+            return context:Wait({
                 poll = function()
                     if player:IsDead() then
                         return { status = "cancelled", code = "player_dead" }
@@ -295,14 +293,8 @@ function authority.install(api)
                         return result
                     end
                     index = index + 1
-                    local info = bridge.info()
-                    if info.worldEpoch ~= context.worldEpoch then
-                        return { status = "cancelled", code = "stale_world" }
-                    end
-                    local nextMove, nextCode = lan:MovePlayer(
-                        context,
-                        { index = route[index], dimension = payload.dimension }
-                    )
+                    local nextMove, nextCode =
+                        context:MoveTo({ index = route[index], dimension = payload.dimension })
                     if not nextMove then
                         return { status = "unknown", code = nextCode or "route_interrupted" }
                     end
@@ -317,8 +309,9 @@ function authority.install(api)
         end,
     })
     return function()
-        unregister()
-        lan:Unregister()
+        travel:Close()
+        authority.integration = nil
+        lan:Close()
         entrances, previous, epoch = {}, {}, nil
     end
 end
