@@ -19,12 +19,14 @@ local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
 local Key =
     { escape = 27, enter = 13, up = 38, down = 40, tab = 9, space = 32, left = 37, right = 39 }
 local model = _IsaacLanModules["presentation/menu_model"](Phase, Command)
+local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
 local challenges = _IsaacLan.net_challenges()
 local roomOptions = _IsaacLan.net_room_options()
 local idle = model.idle
 function _IsaacLanMenuOpen(returning)
     ui.page = not returning and idle(_IsaacLanStatus().phase or Phase.idle) and "modes" or "lan"
     ui.selection, ui.editing = 1, nil
+    ui.ruleReturn, ui.ruleScroll = nil, nil
     _IsaacLan.menu_text_end()
 end
 local previousMouse = Vector(-1000, -1000)
@@ -202,6 +204,9 @@ function _IsaacLanMenuRender(
             visible = false
         end
         ui.selection, ui.editing, ui.lastPhase = 1, nil, phase
+        if phase ~= Phase.lobby and (ui.page == "rules" or ui.page == "challenges") then
+            ui.page, ui.ruleReturn, ui.ruleScroll = "lan", nil, nil
+        end
         _IsaacLan.menu_text_end()
     end
     if status.recovering then
@@ -213,8 +218,8 @@ function _IsaacLanMenuRender(
             ui.editing = nil
             _IsaacLan.menu_text_end()
             key = 0
-        elseif ui.page == "challenges" then
-            ui.page, ui.selection, key = "lan", 3, 0
+        elseif model.back(ui) then
+            key = 0
         elseif ui.page == "lan" and idle(phase) and not status.recovering then
             ui.page = "modes"
             ui.selection = 2
@@ -253,12 +258,6 @@ function _IsaacLanMenuRender(
     local modes = ui.page == "modes"
     local shift = modes and 128 or 0
     layer(assets.lobby, 9, 9 + shift, 39)
-    centered(
-        modes and "联机模式" or ui.page == "challenges" and "联机挑战" or "局域网联机",
-        110 + shift,
-        58,
-        16
-    )
     local localSlot = status.slot or 0
     -- No seat exists until the host has accepted the connection. Default
     -- session values must not appear as a joined P1 after a failed attempt.
@@ -274,7 +273,7 @@ function _IsaacLanMenuRender(
     local host = status.hosting == 1
     local ready = status["ready" .. localSlot] == 1
     local choice = status["choice" .. localSlot] or 0
-    local rows, notice = model.rows(ui, status, characterChoices, challenges, {
+    local rows, notice, ruleCount = model.rows(ui, status, characterChoices, challenges, {
         command = _IsaacLanCommand,
         native = _IsaacLan,
         character = character,
@@ -284,6 +283,25 @@ function _IsaacLanMenuRender(
             visible = false
         end,
     })
+    local rulesPage = ruleCount ~= nil
+    centered(
+        modes and "联机模式"
+            or rulesPage and "房间规则"
+            or ui.page == "challenges" and "联机挑战"
+            or "局域网联机",
+        110 + shift,
+        58,
+        16
+    )
+    if rulesPage then
+        centered(
+            "已启用 " .. ruleCount .. " 项" .. (host and "" or " · 只读"),
+            110,
+            82,
+            10,
+            faded
+        )
+    end
     if notice == "reconnecting" or notice == "reconnect_failed" then
         centered(
             notice == "reconnecting" and "正在重连…" or "重连失败，请重试",
@@ -338,18 +356,11 @@ function _IsaacLanMenuRender(
         end
         ui.selection = math.min(ui.selection, #rows)
     end
-    local sectionOffset = 0
-    for i, item in ipairs(rows) do
-        local y = yStart + (i - 1) * gap + sectionOffset
-        if item.section then
-            text(item.section, 49 + shift, y, 10, faded, 138)
-            sectionOffset = sectionOffset + 13
-            y = y + 13
-        end
-        if moved and hit(38 + shift, y - 2, 147, 22) and not ui.editing then
+    local function renderRow(i, item, y, height)
+        if moved and hit(38 + shift, y - 2, 147, height) and not ui.editing then
             ui.selection = i
         end
-        if clicked and hit(38 + shift, y - 2, 147, 22) then
+        if clicked and hit(38 + shift, y - 2, 147, height) then
             ui.selection = i
             if item.enabled then
                 item.action()
@@ -372,6 +383,42 @@ function _IsaacLanMenuRender(
         text(label, 49 + shift, y, size, item.color or (item.enabled and ink or faded), 138)
         if i == ui.selection then
             pointer(37 + shift, y + 5)
+        end
+    end
+    if rulesPage then
+        local total = #rows - 1
+        local maxFirst = math.max(1, total - RULE_LIST_ROWS + 1)
+        local first = math.min(ui.ruleScroll or 1, maxFirst)
+        if ui.selection <= total then
+            first = math.min(first, ui.selection)
+            first = math.max(first, ui.selection - RULE_LIST_ROWS + 1)
+        end
+        if total > RULE_LIST_ROWS then
+            local function scroll(x, delta, label, enabled)
+                text(label, x, 198, 10, enabled and ink or faded)
+                if clicked and enabled and hit(x - 3, 195, 18, 16) then
+                    first = math.max(1, math.min(maxFirst, first + delta))
+                    ui.selection = first
+                end
+            end
+            scroll(156, -RULE_LIST_ROWS, "↑", first > 1)
+            scroll(177, RULE_LIST_ROWS, "↓", first < maxFirst)
+            text(
+                first .. "–" .. math.min(total, first + RULE_LIST_ROWS - 1) .. " / " .. total,
+                49,
+                198,
+                10,
+                faded
+            )
+        end
+        ui.ruleScroll = first
+        for i = first, math.min(total, first + RULE_LIST_ROWS - 1) do
+            renderRow(i, rows[i], RULE_LIST_TOP + (i - first) * RULE_LIST_GAP, RULE_LIST_GAP)
+        end
+        renderRow(#rows, rows[#rows], RULE_BACK_Y, 22)
+    else
+        for i, item in ipairs(rows) do
+            renderRow(i, item, yStart + (i - 1) * gap, math.min(gap, 22))
         end
     end
     for i = 0, (modes and -1 or 3) do
@@ -428,7 +475,15 @@ function _IsaacLanMenuRender(
         messageColor = amber
     end
     local footerY = message ~= "" and 235 or 243
-    if phase == Phase.lobby and ui.page ~= "challenges" then
+    if rulesPage then
+        text(
+            host and "方向选择 · 确认勾选 · 返回退出"
+                or "方向查看 · 返回退出",
+            25,
+            footerY,
+            10
+        )
+    elseif phase == Phase.lobby and ui.page ~= "challenges" then
         if not host then
             text("房主地址：" .. ui.ip, 25, footerY - 12, 10)
         end

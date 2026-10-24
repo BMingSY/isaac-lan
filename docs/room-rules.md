@@ -1,6 +1,10 @@
 # 房间规则
 
-房主在选角大厅的“房间规则”栏独立勾选选项；客机查看相同状态。更改规则会取消全员准备，开始后不可更改。选项与挑战选择互相独立，并随保存、续玩、重连和重开保留；续玩规则与当前大厅不同时，先选择“载入上次规则”，重新准备后继续。
+选角大厅用单行“房间规则”入口显示当前摘要：未开启时为“无”，一项时显示规则简称，多项时显示第一项简称及其余数量，例如“友伤 +2”。简称由规则定义提供，不截取名称首字。
+
+房主进入子菜单后独立勾选 `[x]`／`[ ]`，每次更改即时同步并取消全员准备，连续选择不退出列表。客机可进入同一列表查看实时状态，不能修改。列表固定显示六条规则，超出时随方向选择滚动，也可点击上下箭头翻页；“返回”固定在底部，返回大厅后仍选中规则入口。
+
+开始后不可更改规则。选项与挑战选择互相独立，并随保存、续玩、重连和重开保留；续玩规则与当前大厅不同时，先选择“载入上次规则”，重新准备后继续。
 
 ## 队友伤害
 
@@ -14,6 +18,6 @@
 
 ## 状态与职责
 
-选项定义来自 [core/room_options.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/room_options.h)，运行层验证并导出位值及名称，菜单据此生成复选行。网络只传输 `RunRules.options`，不解释具体玩法。存档及个人通关标记的生命周期见[会话与状态恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
+选项定义来自 [core/room_options.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/room_options.h)，运行层验证并导出位值、名称和 `shortName` 简称，菜单据此生成摘要与复选行。网络只传输 `RunRules.options`，不解释具体玩法。存档及个人通关标记的生命周期见[会话与状态恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
 
 [friendly_fire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/friendly_fire.lua) 在房主模拟中检查各个有人房间的攻击接触，再调用原版受击接口；客机沿用现有生命、角色动作和受击状态同步。临时接触与低伤害余量由该组件持有，不写进个人存档。共享的扫掠圆碰撞放在 [core/contacts.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/core/contacts.lua)，同一几何函数也供本机命中预测使用。

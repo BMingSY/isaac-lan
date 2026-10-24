@@ -8,9 +8,10 @@ inline constexpr std::uint32_t friendlyFire = 1u << 0;
 inline constexpr std::uint32_t known = friendlyFire;
 struct Definition {
     std::uint32_t flag;
-    std::string_view key, name;
+    std::string_view key, name, shortName;
 };
-inline constexpr std::array definitions{Definition{friendlyFire, "friendlyFire", "队友伤害"}};
+inline constexpr std::array definitions{
+    Definition{friendlyFire, "friendlyFire", "队友伤害", "友伤"}};
 inline bool valid(std::uint32_t value) {
     return !(value & ~known);
 }

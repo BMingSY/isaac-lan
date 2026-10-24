@@ -1164,13 +1164,15 @@ int roomOptionDefinitions(lua_State* L) {
     lua.createTable(L, roomOptions::definitions.size(), 0);
     unsigned index = 0;
     for (const auto& definition : roomOptions::definitions) {
-        lua.createTable(L, 0, 3);
+        lua.createTable(L, 0, 4);
         lua.pushInteger(L, definition.flag);
         lua.setField(L, -2, "flag");
         lua.pushString(L, definition.key.data());
         lua.setField(L, -2, "key");
         lua.pushString(L, definition.name.data());
         lua.setField(L, -2, "name");
+        lua.pushString(L, definition.shortName.data());
+        lua.setField(L, -2, "shortName");
         lua.rawSetI(L, -2, ++index);
     }
     return 1;

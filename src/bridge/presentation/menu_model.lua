@@ -20,11 +20,22 @@ return function(Phase, Command)
             native.menu_connection_save(ui.ip, tonumber(ui.port))
         end
     end
+    local function back(ui)
+        if ui.page == "rules" then
+            ui.page, ui.selection = "lan", ui.ruleReturn or 1
+            ui.ruleReturn, ui.ruleScroll = nil, nil
+            return true
+        elseif ui.page == "challenges" then
+            ui.page, ui.selection = "lan", 3
+            return true
+        end
+        return false
+    end
     local function rows(ui, status, characterChoices, challenges, deps)
         local phase = status.phase or Phase.idle
         local modes = ui.page == "modes"
         local challenge = challenges[tostring(status.challenge or 0)]
-        local notice
+        local notice, ruleCount
         local localSlot = status.slot or 0
         -- No seat exists until the host has accepted the connection. Default
         -- session values must not appear as a joined P1 after a failed attempt.
@@ -56,15 +67,22 @@ return function(Phase, Command)
             ui.errorText = ok and "" or tostring(reason):gsub("^.-:%d+: ", "")
             return ok
         end
-        local function ruleRows()
-            for i, definition in ipairs(deps.options or {}) do
-                local enabled = ((status.roomOptions or 0) & definition.flag) ~= 0
-                row(definition.name, function()
-                    command("room_options", tostring((status.roomOptions or 0) ~ definition.flag))
-                end, host)
-                rows[#rows].checked = enabled
-                rows[#rows].section = i == 1 and "房间规则" or nil
+        local selectedRules, firstRule = 0, nil
+        for _, definition in ipairs(deps.options or {}) do
+            if ((status.roomOptions or 0) & definition.flag) ~= 0 then
+                selectedRules = selectedRules + 1
+                firstRule = firstRule or definition.shortName or definition.name
             end
+        end
+        local function ruleEntry()
+            local summary = firstRule or "无"
+            if selectedRules > 1 then
+                summary = summary .. " +" .. (selectedRules - 1)
+            end
+            local index = #rows + 1
+            row("房间规则：" .. summary .. (host and " >" or ""), function()
+                ui.page, ui.selection, ui.ruleScroll, ui.ruleReturn = "rules", 1, 1, index
+            end, true, nil, nil, not host and deps.accent or nil)
         end
         if status.pendingSave == 1 then
             row("重试保存联机存档", function()
@@ -119,6 +137,22 @@ return function(Phase, Command)
                 ui.page = "modes"
                 ui.selection = 2
             end)
+        elseif phase == Phase.lobby and ui.page == "rules" then
+            ruleCount = selectedRules
+            for _, definition in ipairs(deps.options or {}) do
+                row(definition.name, function()
+                    if host then
+                        command(
+                            "room_options",
+                            tostring((status.roomOptions or 0) ~ definition.flag)
+                        )
+                    end
+                end, host)
+                rows[#rows].checked = ((status.roomOptions or 0) & definition.flag) ~= 0
+            end
+            row("返回", function()
+                back(ui)
+            end)
         elseif phase == Phase.lobby and ui.page == "challenges" and host then
             local ids = {}
             for id in pairs(challenges) do
@@ -135,7 +169,7 @@ return function(Phase, Command)
                 end, definition.team_available, nil, nil, deps.accent)
             end
             row("返回", function()
-                ui.page, ui.selection = "lan", 3
+                back(ui)
             end)
             local preview = challenges[tostring(ids[ui.selection] or ids[1])]
             if preview and not preview.team_available then
@@ -198,7 +232,7 @@ return function(Phase, Command)
                     ui.editing = "seed"
                     deps.native.menu_text_begin(ui.seed, "seed")
                 end, true, nil, "seed")
-                ruleRows()
+                ruleEntry()
                 local allReady = count >= 2
                 for i = 0, count - 1 do
                     allReady = allReady
@@ -241,7 +275,7 @@ return function(Phase, Command)
                 )
             end
             if not host then
-                ruleRows()
+                ruleEntry()
             end
             row("离开房间", function()
                 command("close")
@@ -272,7 +306,7 @@ return function(Phase, Command)
                 end)
             end
         end
-        return rows, notice
+        return rows, notice, ruleCount
     end
-    return { rows = rows, validPort = validPort, remember = remember, idle = idle }
+    return { rows = rows, validPort = validPort, remember = remember, idle = idle, back = back }
 end
