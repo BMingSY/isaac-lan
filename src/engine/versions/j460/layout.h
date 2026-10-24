@@ -210,6 +210,8 @@ inline constexpr int active = 3, trinket = 2;
 } // namespace itemConfig
 namespace pickup {
 inline constexpr unsigned charge = 0x524, touched = 0x52c, pool = 0x530, varData = 0x59c;
+inline constexpr unsigned optionsIndex = 0x528, price = 0x534, autoUpdatePrice = 0x538;
+inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, state = 0x584;
 } // namespace pickup
 namespace player {
 inline constexpr unsigned weapons = 0x13dc;

@@ -6,15 +6,15 @@
 
 ## 实体字段批量读写
 
-[`entity_fields_plan(type, template)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.cpp)将 Lua 同步组件提供的嵌套字段名数组编译为 userdata。仅支持泪弹、跟班和效果实体的具名属性白名单；`false` 为由 Lua 填充的占位，其他实体类型返回 `false`。模板最多 128 个节点、三层深度，不接受地址或偏移。计划只持有字段描述符，不持有游戏对象；线上的字段顺序仍由 Lua schema 决定。
+[`entity_fields_plan(type, template)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.cpp)将 Lua 同步组件提供的嵌套字段名数组编译为 userdata。仅支持泪弹、跟班、掉落物和效果实体的具名属性白名单；`false` 为由 Lua 填充的占位，其他实体类型返回 `false`。模板最多 128 个节点、三层深度，不接受地址或偏移。计划只持有字段描述符，不持有游戏对象；线上的字段顺序仍由 Lua schema 决定。
 
 `entity_fields_capture(entity:GetSprite(), plan)`返回同形数组。`entity_fields_apply(sprite, plan, value)`只允许客机调用；一次遍历校验整份数组的形状、类型、有限数值与整数范围，将普通值保存在固定大小的栈缓冲后，再按模板顺序写入。两者要求活动实体的借用 Sprite 与计划类型相符，返回后不保留 Sprite、实体或数组引用。对象分配、回收和实体身份仍由原有生命周期管理。
 
-`entity_fields_encode(sprite, plan)` 将数值计划直接编码为与 `state_encode` 相同的数组字节，不生成中间 Lua 表；`entity_fields_apply` 也接受这种字节串。此路径仅支持上述三类实体的数值字段，最多 4864 字节，使用固定栈缓冲；解码按计划核对每个数组、数值范围和结束位置，完整校验后才写入该计划的字段。身份、位置、速度及引用仍单独供 Lua 同步组件使用。编码占位只能为 `false`，不接受精灵名称字段或任意内存数据。
+`entity_fields_encode(sprite, plan)` 将数值计划直接编码为与 `state_encode` 相同的数组字节，不生成中间 Lua 表；`entity_fields_apply` 也接受这种字节串。此路径仅支持上述四类实体的数值字段，最多 4864 字节，使用固定栈缓冲；解码按计划核对每个数组、数值范围和结束位置，完整校验后才写入该计划的字段。身份、位置、速度及引用仍单独供 Lua 同步组件使用。编码占位只能为 `false`，不接受精灵名称字段或任意内存数据。
 
 `sprite_fields_plan(template)`／`sprite_fields_capture(sprite, plan)`／`sprite_fields_apply(sprite, plan, value)`使用同一模板边界处理精灵字段。支持文件名、动画名、帧、翻转、旋转、缩放、偏移及七个颜色通道；字符串与动画字段只读，动画切换、加载和完整层状态继续使用原有接口。接受借用或 Lua 自有 Sprite，不能将实体计划用于精灵。主动画帧按原版取 floor，叠加帧截断；无动画返回空名称与 `-1`。颜色写入与七参数 Lua `Color` 一致，完整 colorize 状态随后由 `sprite_state` 恢复。
 
-J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.h)。`Size` 调用原 Lua 属性 setter（cdecl，RVA `0x471fa0`）；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
+J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.h)。`Size` 调用原 Lua 属性 setter（cdecl，RVA `0x471fa0`）；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。掉落物 `Price` 调用原 thiscall setter（RVA `0x2e2570`），保留商店显示和特殊价格行为；`ShopItemId` 按原 Lua setter 限制在 -2 至 7。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
 
 `entity_npc_boss(npc:GetSprite(), boolean)` 仅供客机恢复活动 NPC 的 Boss 分类。J460 `EntityNPC::IsBoss`（RVA `0x2b8470`）读取 NPC `+0xc3d` 的独立布尔值；它与 `GetBossID()` 返回的类型标识不同。接口只接受借用 Sprite、原版 NPC 类型范围与布尔值，不接收地址、不保留引用，不运行 NPC AI。同步组件将 `IsBoss()` 与六个 scratch／目标坐标 float32 一起编码为 25 字节；完整校验后应用，原生血条仍按这些实体及血量计算。
 
@@ -28,7 +28,7 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 `sprite_animation_length(sprite)` 只读取当前主动画数据 `+0x30` 的总帧数，限制 `0..65535`，无动画返回 0。接受实体借用或 Lua 自有 Sprite，不分配资源、不推进实体；本地步行动画按该长度和原生 30 Hz 节拍保留小数帧。
 
-`actor_pose` 的五个武器槽来自 `Player+0x13dc`。每个现有槽读取原生虚表第 6 项 `GetMaxCharge`（thiscall，浮点返回）和 `Weapon+0x34` 修正标志；蓄力上限必须有限且非负。写入只针对客机已存在且类型匹配的武器，不创建武器、不执行攻击；上限作为显示元数据，修正标志与蓄力一并恢复。武器记录格式见[状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#完整视图与实体身份)。
+`actor_pose` 的五个武器槽来自 `Player+0x13dc`。每个现有槽读取原生虚表第 6 项 `GetMaxCharge`（thiscall，浮点返回）和 `Weapon+0x34` 修正标志；蓄力上限必须有限，允许原生道具组合返回负值，只有正上限参与本地蓄力预测。写入只针对客机已存在且类型匹配的武器，不创建武器、不执行攻击；上限作为只读显示元数据，修正标志与蓄力一并恢复。武器记录格式见[状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#完整视图与实体身份)。
 
 `familiar_body(sprite[, layers])` 限定跟班的原生身体组件，校验 `Familiar+0xee0` 虚表 RVA `0x764914`。读取返回四个大端有符号图层 ID 和五个借用 Sprite；Sprite 位于组件 `+0x4`，间距 `0x114`，图层位于 `+0x568`。写入仅允许客机，完整校验载荷、图层为 `-1` 或对应 Sprite 的有效图层后提交。Lua 道具适配复用普通 Sprite 编解码，先恢复使用道具时缓存的外观，再恢复绘制图层；不借用当前玩家外观，不执行跟班 AI，不分配或转移原生组件所有权。
 
@@ -196,7 +196,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x26528/+0x2652c/+0x26530` 是泛光剩余时间／初始时间／强度，`+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；角色更新及嵌套的道具／药丸／卡牌调用借入同一所属状态，结束时回收并恢复全局标量；绘制只借入本机状态，角色动作外的世界泛光保留全局归属 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 34、网络消息版本为 43；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 35、网络消息版本为 44；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 

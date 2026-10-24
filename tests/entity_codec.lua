@@ -98,6 +98,9 @@ local function entity(kind, flags)
     function e:ToLaser()
         return self
     end
+    function e:ToTear()
+        return self
+    end
     function e:ToPlayer()
         return self
     end
@@ -149,7 +152,7 @@ local expected = {
     { 0, 0 },
     { 1, 1 },
     { 1, 1, 1, 1, 0, 0, 0 },
-    40,
+    false, -- Unused entity-local frame counter is not transmitted.
     7,
     "native laser path",
     { 51, 52 },
@@ -162,7 +165,7 @@ local expected = {
     false,
     0, -- contact eligibility
 }
-assert(codec.encode(state) == codec.encode(expected), "Schema-32 entity bytes changed")
+assert(codec.encode(state) == codec.encode(expected), "Compact entity contract changed")
 assert(state[1] == 1 and state[10] == false and state[20] == "native laser path")
 assert(laserReads == 1 and #state[9] == 11, "SampleLaser userdata must stay outside scalar fields")
 component.apply(target, state)
@@ -201,6 +204,8 @@ for _, e in ipairs({ warning, beam }) do
     function s:RemoveOverlay() end
 end
 local wire = dofile(root .. "/src/bridge/sync/codec.lua")
+assert(component.capture(warning)[18] == false, "Unused entity frame counter reached the wire")
+assert(component.capture(entity(2, 0), false)[18] == 40, "Tear prediction lost its birth age")
 local sourceSprite = {
     GetFilename = function()
         return "test.anm2"
@@ -235,12 +240,12 @@ local expectedSprite = {
     45,
     { 2, 3 },
     { 4, 5 },
-    { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7 },
+    false, -- Native Sprite blob already contains the complete color.
     "",
 }
 assert(
     wire.encode(component.sprite(sourceSprite)) == wire.encode(expectedSprite),
-    "Schema-19 sprite bytes changed"
+    "Compact sprite contract changed"
 )
 local animation, overlay = "Walk", "Glow"
 local animationChanges, overlayChanges = 0, 0

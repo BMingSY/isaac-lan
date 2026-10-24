@@ -211,3 +211,12 @@ function native.net_gate(inputCapture, player, collect, restore, present, beginF
         end
     end, collect, restore, present, beginFloor)
 end
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        _IsaacLanFrame, native.net_gate, native.combat_events = frame, gate, capture
+        native.test_gamepad(0)
+    end,
+}

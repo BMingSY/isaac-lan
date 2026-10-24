@@ -61,7 +61,7 @@ return function(wire)
                         "SpriteOffset",
                         "SpriteScale",
                         "Color",
-                        "FrameCount",
+                        kind == types.ENTITY_TEAR and "FrameCount" or false, -- Prediction birth age.
                         "EntityFlags",
                         false, -- Entity.laserPath
                         false, -- Entity.laserEndPoint
@@ -174,7 +174,7 @@ return function(wire)
                 "Rotation",
                 "Scale",
                 "Offset",
-                "Color",
+                false, -- Sprite Color is already complete in Sprite.native.
                 false,
             })
         local function sprite(s)
@@ -195,7 +195,7 @@ return function(wire)
                 s.Rotation, -- Sprite.rotation
                 vector(s.Scale), -- Sprite.scale
                 vector(s.Offset), -- Sprite.offset
-                color(s.Color), -- Sprite.color
+                false, -- Reserved Sprite.color; carried once in Sprite.native.
                 assert(native.sprite_state(s)), -- Sprite.native
             }
         end
@@ -223,7 +223,6 @@ return function(wire)
                 s.FlipX, s.FlipY, s.Rotation = v[Sprite.flipX], v[Sprite.flipY], v[Sprite.rotation]
                 s.Scale = vec(v[Sprite.scale])
                 s.Offset = vec(v[Sprite.offset])
-                s.Color = col(v[Sprite.color])
             end
             local changed = assert(native.sprite_state(s, v[Sprite.native]))
             if changed ~= true then
@@ -269,7 +268,7 @@ return function(wire)
                     vector(e.SpriteOffset), -- Entity.offset
                     vector(e.SpriteScale), -- Entity.scale
                     false, -- Entity.color
-                    e.FrameCount, -- Entity.frame
+                    kind == types.ENTITY_TEAR and e.FrameCount or false, -- Prediction birth age.
                     e:GetEntityFlags(), -- Entity.flags
                     kind == types.ENTITY_LASER and assert(native.laser_path(s)) or false, -- Entity.laserPath
                     kind == types.ENTITY_LASER and vector(e:ToLaser().EndPoint) or false, -- Entity.laserEndPoint

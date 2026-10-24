@@ -3,7 +3,7 @@
 return function(native, reference, schemas, host)
     local plans, checked, sprites = {}, {}, {}
     local function object(entity)
-        return entity:ToTear() or entity:ToFamiliar() or entity:ToEffect()
+        return entity:ToTear() or entity:ToFamiliar() or entity:ToPickup() or entity:ToEffect()
     end
     local function fields(entity, names)
         local result = {}
@@ -180,6 +180,22 @@ return function(native, reference, schemas, host)
                         value[1][1], value[1][2] = value[1][1] + 3, value[1][2] - 2
                         value[3][4] = not value[3][4] -- Visible
                         value[9] = { 0.3, 0.4, 0.5, 0.6, 0.1, 0.2, 0.3 }
+                        if kind == EntityType.ENTITY_PICKUP then
+                            local changed = {
+                                AutoUpdatePrice = false,
+                                Charge = 7,
+                                OptionsPickupIndex = 29,
+                                Price = 7,
+                                ShopItemId = 99,
+                                State = 3,
+                                Timeout = 200,
+                                Touched = true,
+                                Wait = 40,
+                            }
+                            for i, name in ipairs(schemas.byType[kind]) do
+                                value[4][i] = changed[name]
+                            end
+                        end
                         local ok, message = pcall(function()
                             write(entity, value)
                             local viaLua = reference.encode(read(entity))

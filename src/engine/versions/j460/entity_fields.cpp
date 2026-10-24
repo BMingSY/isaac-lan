@@ -4,6 +4,7 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "runtime/session.h"
 #include <bit>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -274,6 +275,9 @@ void writeReal(Address entity, const properties::Field& field, float value) {
         break;
     case Write::entityColor:
         throw std::runtime_error("Color setter requires a color field");
+    case Write::pickupPrice:
+    case Write::shopItem:
+        throw std::runtime_error("Pickup setter requires an integer field");
     }
 }
 using Values = std::array<std::array<std::uint32_t, std::size(properties::colorOffsets)>, maxNodes>;
@@ -420,9 +424,23 @@ void apply(const Plan& plan, Address entity, const Values& values) {
             writeReal(entity, *field, std::bit_cast<float>(value[0]));
             break;
         case Kind::integer:
-        case Kind::unsignedInteger:
-            at<std::uint32_t>(entity, field->offset) = value[0];
+        case Kind::unsignedInteger: {
+            const auto number = std::bit_cast<std::int32_t>(value[0]);
+            if (field->write == Write::pickupPrice) {
+                // Price owns native shop presentation and special-price rules.
+                // Reuse the public property's setter, including unchanged prices.
+                using SetPrice = void(__attribute__((thiscall))*)(void*, int);
+                reinterpret_cast<SetPrice>(image + j460::entry::pickupSetPrice)(
+                    reinterpret_cast<void*>(entity), number);
+            } else if (field->write == Write::shopItem) {
+                // Exact J460 Lua setter clamp, before writing the shop slot.
+                at<int>(entity, field->offset) = std::clamp(number, properties::minimumShopItemId,
+                                                            properties::maximumShopItemId);
+            } else {
+                at<std::uint32_t>(entity, field->offset) = value[0];
+            }
             break;
+        }
         case Kind::boolean:
             at<bool>(entity, field->offset) = value[0] != 0;
             break;

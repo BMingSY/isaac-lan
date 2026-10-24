@@ -85,6 +85,14 @@ for _, case in ipairs({ { 2, 32, 32 }, { 4, 10, 40 }, { 9, 10, 30 } }) do
     close(model:step(6, 1 / 60, true, false)[2].charge, 0.5)
 end
 local stalled = prediction.new(snapshot(1, -1, 0, 0), 0, 0)
+-- Extreme native combinations can expose a negative, read-only charge limit.
+-- Preserve authority's charge without inventing a prediction or rejecting it.
+for _, limit in ipairs({ -1, -1000, 0 }) do
+    local state = snapshot(2, -1, 10, 4, limit)
+    assert(not policy.mode(state[2]).charge)
+    local model = prediction.new(state, 0, 0)
+    close(model:step(1, 1 / 60, true, false)[2].charge, 4)
+end
 -- Character/item modifiers can change charging independently of fire delay.
 local modified = prediction.new(snapshot(2, -1, 10, 35, 40), 0, 0)
 close(modified:step(1, 1 / 60, true, false)[2].charge, 35.5)

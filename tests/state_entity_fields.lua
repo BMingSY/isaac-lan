@@ -46,7 +46,7 @@ local function verify(bytes, tick)
     end
     local types = probe()
     assert(
-        reference.encode(types) == reference.encode({ 2, 3, 1000 }),
+        reference.encode(types) == reference.encode({ 2, 3, 5, 1000 }),
         "Missing native field types: " .. table.concat(types, ",")
     )
     assert(native.state_encode(reference.decode(bytes)) == bytes, "Native outer encoding differs")
@@ -62,6 +62,16 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         if tick == 99 then
             local player = Isaac.GetPlayer(0)
             local position = Game():GetRoom():GetCenterPos()
+            local pickup = Isaac.Spawn(
+                EntityType.ENTITY_PICKUP,
+                PickupVariant.PICKUP_COLLECTIBLE,
+                CollectibleType.COLLECTIBLE_SAD_ONION,
+                position + Vector(100, 0),
+                Vector.Zero,
+                nil
+            ):ToPickup()
+            pickup.Price, pickup.AutoUpdatePrice, pickup.ShopItemId = 15, false, 3
+            pickup.OptionsPickupIndex, pickup.Charge, pickup.Wait = 12, 4, 100
             local tear = player:FireTear(position, Vector.Zero)
             tear.FallingSpeed, tear.FallingAcceleration, tear.Height = 0, 0, -20
             tear.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE

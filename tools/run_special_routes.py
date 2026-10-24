@@ -96,7 +96,7 @@ def main():
     labs = validate_owned_labs(
         [args.host.resolve(), args.client.resolve()], args.output.resolve(), count=None
     )
-    idle(labs)
+    idle(labs, exclusive="pickup-pressure" in cases)
     validate_startup(labs)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -246,6 +246,10 @@ def main():
                             and "ITEM_GENERATION " in line
                             or name == "deep-pockets"
                             and "DEEP_POCKETS " in line
+                            or name == "pickup-pressure"
+                            and "LAN_PICKUP_PRESSURE " in line
+                            or name == "feedback-b7fs"
+                            and "LAN_B7FS " in line
                             or name in ("greed", "greedier")
                             and ("GREED mode=" + ("3" if name == "greedier" else "2") + " ") in line
                             or name
@@ -337,6 +341,9 @@ def main():
                 )
                 report["native_game_starts"][role] = starts
                 report["passed"] = report["passed"] and starts == len(cases)
+        if "pickup-pressure" in cases:
+            idle(labs, exclusive=True)
+            report["performance_host_exclusive"] = True
     finally:
         finish_run(protected, report, output)
     print(

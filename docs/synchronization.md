@@ -58,7 +58,7 @@ flowchart LR
 
 [分层投影](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/layers.lua)把道具列表、饰品、地图、进度、诅咒、交易、药丸、生成道具定义、房间布局／轨道／夹层信息编码为低频依赖；充能、血量、消耗品、便便／合成袋／临时效果、位置、实体、网格、动画及一次性表现留在实时部分。采集仍逐 tick 执行，低频指传输按变化发送，不延后读取权威状态。UDP 依赖使用递增修订号和可靠有序交付，可引用上一份可靠依赖压缩；一次最多有一份未确认的可靠副本，其间的新变化合并为最新候选，允许跳过中间修订。初始视图可靠交付；建立应用确认基线后，尚未被应用确认的新修订同时内嵌于实时视图，避免可靠副本丢包阻塞整帧。内嵌副本可先于可靠副本到达，接收缓存按修订号合并，可靠压缩字典独立维护。实时视图明确引用修订号，客机仅在对应数据齐全时还原完整视图，不能套用最新库存或跨房间拼接。依赖缓存、未完成视图和修订号在代次屏障清理。
 
-世界 schema 为 34，字段 `captured` 是主机开始本轮采集的单调时钟毫秒数；离线生成的无时钟状态使用 0。采集回调返回实时字节和可选依赖字节，应用回调的第五个参数接收对应依赖。完整状态的诊断采集仍由 `state.capture` 提供；生产传输使用 `state.captureTransfer`。
+世界 schema 为 35，字段 `captured` 是主机开始本轮采集的单调时钟毫秒数；离线生成的无时钟状态使用 0。采集回调返回实时字节和可选依赖字节，应用回调的第五个参数接收对应依赖。完整状态的诊断采集仍由 `state.capture` 提供；生产传输使用 `state.captureTransfer`。
 
 角色的 `temporaryEffects`（字段 9）是按类别和编号排序的实际效果集合，每项为 `{kind, id, count}`：类别 1／2／3 分别为道具、饰品和 Null 效果。编号保留有符号 32 位值，层数为 1～65535，最多 4096 项，同类编号不得重复。副本先校验整组，再复制本机效果身份，按差值增减并清除权威集合中已不存在的效果；原生列表引用不跨越增删操作。这个集合供原生外观和状态查询使用，不调用 UseActiveItem／UsePill，也不在客机推进效果计时或结算玩法。
 
@@ -134,7 +134,7 @@ Lua 决定游戏字段契约、采集与恢复顺序，通过游戏 API 或具�
 
 客机仅在预检尚未进入原生恢复时保留最新解码结果，用于半帧延后到完整更新的同一份状态。字节或 tick 变化、楼层等待、视图重置及开始恢复都会使该缓存失效。库存比较直接检查角色类型、道具种类／数量和饰品槽，仍保留每 30 tick 的原生库存纠偏。
 
-泪弹、跟班和效果实体的 `nativeFields`（实体字段 26）携带数值块，顺序为通用属性数组、类型属性数组、精灵偏移、精灵缩放和颜色；原位置 8、9、15、16、17 为 `false`。数值块沿用相同的标记和大端编码，由具名字段计划在原生端直接采集和恢复，避免逐帧构造、遍历中间 Lua 表。其他实体及离线 Lua 参考路径仍使用展开的属性数组，字段 26 为 `false`。字段名称与顺序由 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua)、[entity_codec.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_codec.lua) 和 [fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 定义，原生白名单不决定玩法或引用关系。
+泪弹、跟班、掉落物和效果实体的 `nativeFields`（实体字段 26）携带数值块，顺序为通用属性数组、类型属性数组、精灵偏移、精灵缩放和颜色；原位置 8、9、15、16、17 为 `false`。数值块沿用相同的标记和大端编码，由具名字段计划在原生端直接采集和恢复，避免逐帧构造、遍历中间 Lua 表。其他实体及离线 Lua 参考路径仍使用展开的属性数组，字段 26 为 `false`。实体字段 18 仅对泪弹携带帧龄，供客机预测识别同次射击；其他实体保留为 `false`，世界时钟仍由顶层帧号恢复。精灵字段 11 同样保留为 `false`，完整颜色（含 colorize）只在原生 Sprite 块中携带和应用一次。字段名称与顺序由 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua)、[entity_codec.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_codec.lua) 和 [fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 定义，原生白名单不决定玩法或引用关系。
 
 ## 校验与失败边界
 
