@@ -125,15 +125,16 @@ struct DatagramConnection {
         pipe->incoming.push(std::move(packet));
     }
     void send(std::span<const std::uint8_t> bytes, enet_uint8 channel, Envelope kind,
-              std::size_t accounted = 0, std::shared_ptr<std::atomic<bool>> completed = nullptr) {
+              std::size_t accounted = 0, std::shared_ptr<std::atomic<bool>> completed = nullptr,
+              bool unordered = false) {
         Writer envelope(static_cast<Message>(kind));
         envelope.u32(fence);
         envelope.bytes.insert(envelope.bytes.end(), bytes.begin(), bytes.end());
         auto* packet = enet_packet_create(
             envelope.bytes.data(), envelope.bytes.size(),
             channel == reliableChannel || channel == recoveryChannel ? ENET_PACKET_FLAG_RELIABLE
-            : kind == Envelope::shard                                ? ENET_PACKET_FLAG_UNSEQUENCED
-                                      : ENET_PACKET_FLAG_UNRELIABLE_FRAGMENT);
+            : kind == Envelope::shard || unordered                   ? ENET_PACKET_FLAG_UNSEQUENCED
+                                                   : ENET_PACKET_FLAG_UNRELIABLE_FRAGMENT);
         if (!packet)
             throw std::runtime_error("Cannot allocate UDP packet");
         if (accounted || completed || channel == recoveryChannel) {
@@ -152,7 +153,12 @@ struct DatagramConnection {
         const auto type = static_cast<Message>(bytes.at(0));
         const auto channel =
             type == Message::input || type == Message::applied ? inputChannel : reliableChannel;
-        send(encodeWire(std::move(bytes), codec), channel, Envelope::message, accounted);
+        // Receipts and held inputs advance independently. Sharing ENet's
+        // unreliable sequence would let a newer input discard a delayed
+        // receipt (or vice versa). Receipts are cumulative and already checked
+        // against the generation and acknowledged world tick.
+        send(encodeWire(std::move(bytes), codec), channel, Envelope::message, accounted, nullptr,
+             type == Message::applied);
     }
     void synchronizeSender() {
         const auto requested = pipe->generation.load(std::memory_order_acquire);
