@@ -35,6 +35,11 @@ python3 -m venv .deps/checks
 | `--list` | 只列 Python 用例 |
 | `--list-engine` | 按文件名发现实机入口和 Lua 场景；不执行场景 |
 | `--sanitizers` | 为可移植 C／C++ 构建启用 ASan／LSan／UBSan；CI 使用此选项 |
+| `--jobs N` | 构建、CTest 和 pytest 的并行数；默认最多 4，`--jobs 1` 顺序执行 |
+
+CI 的 Linux 离线检查与 Windows 交叉编译同时运行；Windows 测试依赖编译产物。构建使用 ccache，缓存按工具链和构建配置隔离；工具依赖按固定版本缓存。pytest 使用独立进程调度用例，失败回放按 worker 分目录保存。
+
+Windows 测试清单以 CMake 的 `add_test` 注册为唯一来源。[bundle_ctest.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/bundle_ctest.py) 打包原生可执行文件、参数、标签、超时和调度属性，生成可搬移的 CTest 目录；Lua 用例由 Linux 检查运行。Windows runner 用 CTest 并行执行该清单，各用例使用独立工作目录，保留 JUnit 和失败日志。网络加载超时、结局与过场保活仍检查真实时间，独立用例的等待可重叠；UDP 丢包和大包恢复同样包含在注册清单中。
 
 Hypothesis 还会运行缓存失败样例和缩减步骤，上述预算不是精确执行次数。按改动选择局部检查：
 

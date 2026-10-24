@@ -20,7 +20,7 @@ def engine_catalog():
     return inventory()
 
 
-def plan(build, report, profile, lua, *, sanitizers=False):
+def plan(build, report, profile, lua, *, sanitizers=False, jobs=2):
     python = sys.executable
     return [
         ("format", [python, "tools/format.py", "--check"]),
@@ -46,7 +46,7 @@ def plan(build, report, profile, lua, *, sanitizers=False):
                 ),
             ],
         ),
-        ("build", ["cmake", "--build", str(build), "--parallel", "2"]),
+        ("build", ["cmake", "--build", str(build), "--parallel", str(jobs)]),
         (
             "core",
             [
@@ -56,6 +56,9 @@ def plan(build, report, profile, lua, *, sanitizers=False):
                 "--output-on-failure",
                 "--output-junit",
                 str(report / "ctest.xml"),
+                "--parallel",
+                str(jobs),
+                "--no-tests=error",
                 "-L",
                 "offline",
             ],
@@ -66,6 +69,10 @@ def plan(build, report, profile, lua, *, sanitizers=False):
                 python,
                 "-m",
                 "pytest",
+                "-n",
+                str(jobs) if jobs > 1 else "0",
+                "--dist",
+                "worksteal",
                 "--offline-profile",
                 profile,
                 "--offline-report-dir",
@@ -85,6 +92,9 @@ def main():
     parser.add_argument("--build-dir", type=Path, default=ROOT / "build-offline")
     parser.add_argument("--report-dir", type=Path)
     parser.add_argument(
+        "--jobs", type=int, default=min(4, os.cpu_count() or 1), help="Build and test parallelism"
+    )
+    parser.add_argument(
         "--sanitizers",
         action="store_true",
         help="Enable ASan/LSan/UBSan for the portable C++ build",
@@ -94,6 +104,8 @@ def main():
     )
     parser.add_argument("--list-engine", action="store_true", help="Read engine inventory only")
     args = parser.parse_args()
+    if args.jobs < 1:
+        parser.error("--jobs must be positive")
     if args.list_engine:
         print(json.dumps(engine_catalog(), ensure_ascii=False, indent=2))
         return 0
@@ -129,13 +141,19 @@ def main():
     summary = {
         "profile": args.profile,
         "sanitizers": args.sanitizers,
+        "jobs": args.jobs,
         "game_started": False,
         "passed": False,
         "stages": [],
     }
     try:
         for name, command in plan(
-            args.build_dir.resolve(), report, args.profile, lua, sanitizers=args.sanitizers
+            args.build_dir.resolve(),
+            report,
+            args.profile,
+            lua,
+            sanitizers=args.sanitizers,
+            jobs=args.jobs,
         ):
             print(f"Running offline stage: {name}", flush=True)
             start = time.monotonic()
