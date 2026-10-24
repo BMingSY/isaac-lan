@@ -574,7 +574,7 @@ _IsaacLanMenuOpen(true)
 draw()
 assert(#renderedMarks == 2 and renderedMarks[1][1] == 0 and renderedMarks[2][1] == 2)
 assert(
-    labels["房间规则：无 >"]
+    labels["房间规则：无"]
         and not labels["[ ] 队友伤害"]
         and labels["载入上次规则"]
 )
@@ -591,7 +591,7 @@ assert(status.roomOptions == 1 and status.ready0 == 0 and status.ready1 == 0)
 assert(labels["[x] 队友伤害"] and labels["已启用 1 项"] and labels["返回"])
 draw(27)
 draw()
-assert(labels["房间规则：友伤 >"] and labels["继续上次联机"])
+assert(labels["房间规则：友伤"] and labels["继续上次联机"])
 draw(13) -- Back restored the rules entry, rather than the character row.
 draw()
 assert(labels["房间规则"])
@@ -654,7 +654,7 @@ status.phase, status.hosting, status.slot, status.savedPlayers = 2, 1, 0, 0
 status.roomOptions = 1 | (1 << 2) | (1 << 10)
 _IsaacLanMenuOpen(true)
 draw()
-assert(labels["房间规则：友伤 +2 >"] and not labels["[x] 队友伤害"])
+assert(labels["房间规则：友伤 +2"] and not labels["[x] 队友伤害"])
 for _ = 1, 4 do
     draw(40)
 end
@@ -690,7 +690,7 @@ visibleRules()
 assert(labels["7–12 / 12"] and labels["[ ] 规则 11"])
 draw(13) -- Back stays accessible after the final rule.
 draw()
-assert(labels["房间规则：友伤 +3 >"])
+assert(labels["房间规则：友伤 +3"])
 draw(13)
 draw()
 assert(labels["1–6 / 12"], "Reopening rules retained an unrelated scroll offset")
@@ -709,7 +709,7 @@ draw()
 assert(labels["[x] 规则 1"] and labels["[x] 队友伤害"])
 draw(0, true, 70, 217, true) -- Fixed Back also works with the mouse.
 draw()
-assert(labels["房间规则：友伤 +4 >"])
+assert(labels["房间规则：友伤 +4"])
 -- A challenge adds a guest status row; Back still selects the actual rules entry.
 status.hosting, status.slot, status.challenge = 0, 1, 1001
 _IsaacLanMenuOpen(true)

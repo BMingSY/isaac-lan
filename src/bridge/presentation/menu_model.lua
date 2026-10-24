@@ -80,7 +80,7 @@ return function(Phase, Command)
                 summary = summary .. " +" .. (selectedRules - 1)
             end
             local index = #rows + 1
-            row("房间规则：" .. summary .. (host and " >" or ""), function()
+            row("房间规则：" .. summary, function()
                 ui.page, ui.selection, ui.ruleScroll, ui.ruleReturn = "rules", 1, 1, index
             end, true, nil, nil, not host and deps.accent or nil)
         end
