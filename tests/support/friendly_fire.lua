@@ -25,6 +25,7 @@ return function(root)
             room = "0:1",
             Damage = 3.5,
             MaxFireDelay = 10,
+            collectibles = {},
         }
         function e:Exists()
             return not self.removed
@@ -65,6 +66,9 @@ return function(root)
         function e:GetEternalHearts()
             return self.eternal
         end
+        function e:HasCollectible(item)
+            return self.collectibles[item] or false
+        end
         function e:GetEffectiveMaxHearts()
             return self.maxHearts + 2 * self.bones
         end
@@ -91,7 +95,10 @@ return function(root)
         end
         function e:TakeDamage(amount, flags, source)
             assert(world.info.authority == 1 and self.room == room, "damage outside authority room")
-            assert((flags & ~(4 | NO_MODIFIERS)) == 0, "native player defenses were bypassed")
+            assert(
+                (flags & ~(4 | (1 << 24) | NO_MODIFIERS)) == 0,
+                "native player defenses were bypassed"
+            )
             if (flags & NO_MODIFIERS) == 0 then
                 amount = amount * (self.damageMultiplier or 1)
                 if self.wafer then
@@ -161,7 +168,7 @@ return function(root)
         end,
         rooms_positions = function()
             return {
-                ["0"] = { dimension = 0, index = 1 },
+                ["0"] = { dimension = 0, index = tonumber(world.host.room:match(":(%d+)$")) },
                 ["1"] = { dimension = 0, index = world.guest.room == "0:1" and 1 or 2 },
                 ["2"] = { dimension = 0, index = 1 },
             }
@@ -180,6 +187,7 @@ return function(root)
         policy = dofile(root .. "/src/bridge/compat/rules/pvp_damage.lua"),
         attacks = dofile(root .. "/src/bridge/compat/rules/pvp_attacks.lua"),
         health = dofile(root .. "/src/bridge/compat/rules/pvp_health.lua"),
+        items = dofile(root .. "/src/bridge/compat/items/pvp.lua"),
         player = function(i)
             return world.players[i + 1]
         end,
@@ -206,12 +214,30 @@ return function(root)
             return result
         end,
         enums = {
-            entity = { ENTITY_TEAR = 2, ENTITY_LASER = 7, ENTITY_KNIFE = 8 },
+            entity = { ENTITY_TEAR = 2, ENTITY_LASER = 7, ENTITY_KNIFE = 8, ENTITY_EFFECT = 1000 },
             damage = { DAMAGE_EXPLOSION = 4, DAMAGE_NO_MODIFIERS = NO_MODIFIERS },
+            collectible = {
+                COLLECTIBLE_NECRONOMICON = 35,
+                COLLECTIBLE_BLOOD_RIGHTS = 186,
+                COLLECTIBLE_BEAN = 111,
+                COLLECTIBLE_TOXIC_SHOCK = 350,
+                COLLECTIBLE_MONSTROS_TOOTH = 86,
+                COLLECTIBLE_CRACK_THE_SKY = 160,
+            },
+            effect = { CRACK_THE_SKY = 19, MONSTROS_TOOTH = 28 },
             tear = { TEAR_PIERCING = 1, TEAR_EXPLOSIVE = 2 },
         },
     })
     world.rules = rules
+    function world:use(item, source, spawn)
+        source = source or self.host
+        room = source.room
+        rules.beforeUseItem(item, source)
+        local value = spawn and spawn()
+        rules.useItem(item, source)
+        room = nil
+        return value
+    end
     function world:step(count)
         for _ = 1, count or 1 do
             if not self.info.paused then

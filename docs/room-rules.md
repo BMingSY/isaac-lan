@@ -24,7 +24,7 @@
 
 ## 队友伤害
 
-默认关闭。开启后，同房间内不同玩家拥有的眼泪、刀和激光可伤害队友；攻击归属沿原生生成者、父实体和跟班主人追溯，同一玩家控制的多个身体不互相伤害。普通身体接触、敌人和环境攻击不转换为友伤。
+默认关闭。开启后，同房间内不同玩家拥有的眼泪、刀、激光和已接入的道具效果可伤害队友；攻击归属沿原生生成者、父实体和跟班主人追溯，同一玩家控制的多个身体不互相伤害。普通身体接触、敌人和环境攻击不转换为友伤。道具的当前接入范围见[道具与效果兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md#pvp-道具效果)。
 
 普通攻击按发射节奏和攻击方式估算输出，再将攻击实体的实际 `CollisionDamage` 换算为半心单位。输出越高，额外攻击力与攻速带来的增益越小；相同理论输出的速射和重击使用相同曲线。换算系数不根据命中率改变。普通眼泪在发射时确定系数，延迟命中不重新定价；暴击和蓄力的单发倍率保留，但仍受爆发上限约束。
 
@@ -34,7 +34,9 @@
 
 单轮攻击及同帧普通命中的结算上限为目标最大有效心量的一半，向下取整到半心，最低半心；原版楼层伤害加成后的数值也受此上限约束。红心采用当前最大容器数；魂心和骨心采用本房间观察到的容量，避免保护上限随扣血递减。单次或同帧累计实际损失至少一颗心时，目标获得十个模拟更新（约三分之一秒）的 PvP 保护，阻挡所有其他玩家的攻击。残血仍可被击倒。超出爆发额度、受保护时接触或被护盾／回调挡住的伤害不形成后续补扣。
 
-爆炸保留原版对玩家的伤害单位和来源标志，通过相同的单轮额度与短保护结算；博士、吐根等不把对怪物的爆炸伤害套入眼泪换算。回调接收到的伤害已包含原版修正，转发时使用 `DAMAGE_NO_MODIFIERS` 避免重复计算减伤或楼层加成，护盾与无敌仍正常判断。关闭友伤时只取消有明确其他玩家归属的爆炸，自伤及无玩家归属的环境爆炸不受规则影响。
+爆炸和已识别的原生道具落地伤害保留原版对玩家的伤害单位和来源标志，通过相同的单轮额度与短保护结算；对怪物的爆炸伤害不套入眼泪换算。回调接收到的伤害已包含原版修正，转发时使用 `DAMAGE_NO_MODIFIERS` 避免重复计算减伤或楼层加成，护盾与无敌仍正常判断。关闭友伤时取消这些具有明确其他玩家归属的伤害，自伤及无玩家归属的环境伤害不受规则影响。
+
+全房间伤害与持续道具效果由道具适配组件选择目标，再逐次提交到相同的小数伤害结算入口。一次使用的关联回调共用额度；原版已产生的玩家伤害只接管归属和限额，不重复补伤。索敌适配保留原版效果实体及表现，按使用记录限定来源和有效期。
 
 连续命中中断超过一秒会丢弃小数余量。离开房间、身体替换、断线、换层、时间回退、关闭规则或会话失效时，清理相应攻击、余量与冷却归属。被忽略的接触不在保护结束后重放。
 
@@ -44,4 +46,4 @@
 
 [room_rules.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_rules.lua) 管理可选效果的会话与世界代次；未结算的事件在失效时清理。[clear_charge.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/clear_charge.lua) 汇总原生清房通知并在房间模拟退出后补发充能；[loot_roll.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/loot_roll.lua) 负责玩家分组、掷骰排序和一次性库存分配，挑战提供自己的运气策略。两项规则沿用主动充能和库存同步，不扩展消息布局。
 
-[friendly_fire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/friendly_fire.lua) 在房主模拟中检查各个有人房间的攻击接触，再调用原版受击接口；客机沿用现有生命、角色动作和受击状态同步。接触与小数伤害由该组件持有；[pvp_attacks.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_attacks.lua) 管理发射记录与单轮额度，[pvp_health.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_health.lua) 管理原版冷却归属与短保护，[pvp_damage.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_damage.lua) 定义纯数值曲线。以上临时状态不写进个人存档。共享的扫掠圆碰撞放在 [core/contacts.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/core/contacts.lua)，同一几何函数也供本机命中预测使用。
+[friendly_fire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/friendly_fire.lua) 在房主模拟中检查各个有人房间的攻击接触，再调用原版受击接口；客机沿用现有生命、角色动作和受击状态同步。接触与小数伤害由该组件持有；[pvp_attacks.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_attacks.lua) 管理发射记录与单轮额度，[pvp_health.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_health.lua) 管理原版冷却归属与短保护，[pvp_damage.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_damage.lua) 定义纯数值曲线。[compat/items/pvp.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/pvp.lua) 持有道具使用、索敌、进房与持续效果状态，使用回调由装配层接入。以上临时状态不写进个人存档。共享的扫掠圆碰撞放在 [core/contacts.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/core/contacts.lua)，同一几何函数也供本机命中预测使用。

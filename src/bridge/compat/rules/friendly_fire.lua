@@ -11,6 +11,7 @@ return function(deps)
     assert(flag, "Missing friendly fire rule")
     local run, epoch, owners, actors, credits, previous = nil, nil, {}, {}, {}, {}
     local lastTick, pending, settling = nil, {}, nil
+    local items
     local function identity(entity)
         return tostring(deps.hash(entity)) .. ":" .. tostring(entity.InitSeed)
     end
@@ -31,6 +32,7 @@ return function(deps)
         lastTick, pending, settling = nil, {}, nil
         attacks.reset()
         health.reset()
+        items.reset()
     end
     local function current()
         local info = native.api_info()
@@ -74,6 +76,7 @@ return function(deps)
         credits = activeCredits
         attacks.retain(actors)
         health.retain(actors)
+        items.retain(actors)
         return info
     end
     local function owner(entity, visited)
@@ -109,6 +112,10 @@ return function(deps)
             return
         end
         local victim, attacker = owners[deps.hash(entity)], owner(source.Entity)
+        local itemSource = items.nativeSource(source.Entity)
+        if itemSource then
+            attacker = items.actor(itemSource.owner)
+        end
         if not victim then
             return
         end
@@ -130,7 +137,13 @@ return function(deps)
             return
         end
         if
-            (flags & enums.damage.DAMAGE_EXPLOSION) ~= 0
+            itemSource
+            and (not attacker or attacker.room ~= itemSource.room or victim.room ~= itemSource.room)
+        then
+            return false
+        end
+        if
+            ((flags & enums.damage.DAMAGE_EXPLOSION) ~= 0 or itemSource)
             and attacker
             and victim.slot ~= attacker.slot
         then
@@ -143,10 +156,11 @@ return function(deps)
             end
             -- Bombs retain native player units, flags, mitigation and immunity.
             -- Their enemy CollisionDamage must never enter the tear conversion.
-            local group =
-                attacks.source(source.Entity, attacker, victim.room, tick, "explosion").group
+            local group = itemSource and itemSource.group
+                or attacks.source(source.Entity, attacker, victim.room, tick, "explosion").group
             local spent = group.spent[victim.id] or 0
-            local count = math.min(math.floor(amount), health.limit(victim) - spent)
+            local limit = math.min(health.limit(victim), group.limit or math.huge)
+            local count = math.min(math.floor(amount), limit - spent)
             if count > 0 then
                 group.spent[victim.id] = spent + count
                 health.apply(
@@ -172,7 +186,7 @@ return function(deps)
             end
             return false
         end
-        local value = entry.entity.CollisionDamage
+        local value = entry.damage
         if not policy.positive(value) then
             return false
         end
@@ -187,13 +201,22 @@ return function(deps)
         end
         local group, limit = entry.group, health.limit(actor)
         local spent = group.spent[id] or 0
-        value = math.min(value * entry.scale, math.max(0, limit - spent))
+        local groupLimit = math.min(limit, entry.limit or limit)
+        value = math.min(value * entry.scale, math.max(0, groupLimit - spent))
         group.spent[id] = spent + value
         credit.amount, credit.at = credit.amount + value, tick
         credits[id] = credit
         pending[id] = { source = entry.entity, limit = limit }
         return true
     end
+    items = deps.items({
+        policy = policy,
+        enums = enums,
+        alive = alive,
+        hit = hit,
+        identity = identity,
+        owner = owner,
+    })
     local function flush(actor, tick)
         local request, credit = pending[actor.id], credits[actor.id]
         pending[actor.id] = nil
@@ -324,6 +347,7 @@ return function(deps)
             credits, previous = {}, {}
             attacks.reset()
             health.reset()
+            items.disabled()
             lastTick, pending = nil, {}
             return
         end
@@ -350,7 +374,8 @@ return function(deps)
         for key, room in pairs(rooms) do
             native.rooms_with_player(room.slot, function()
                 local entries = {}
-                for _, entity in ipairs(deps.entities()) do
+                local entities = deps.entities()
+                for _, entity in ipairs(entities) do
                     local kind, attacker = entity.Type, owner(entity)
                     local tear = kind == enums.entity.ENTITY_TEAR and entity:ToTear()
                     local laser = kind == enums.entity.ENTITY_LASER and entity:ToLaser()
@@ -383,6 +408,7 @@ return function(deps)
                 for _, entry in ipairs(entries) do
                     contacts(entry, room.targets, tick, key, nextPrevious)
                 end
+                items.step(key, tick, entities)
                 for _, actor in ipairs(room.targets) do
                     flush(actor, tick)
                 end
@@ -390,5 +416,24 @@ return function(deps)
         end
         previous = nextPrevious
     end
-    return { prepare = prepare, step = step, damage = damage, reset = reset }
+    return {
+        prepare = prepare,
+        step = step,
+        damage = damage,
+        reset = reset,
+        beforeUseItem = function(item, player)
+            local info = prepare()
+            local source = owners[deps.hash(player)]
+            if info and not deps.paused() and source and alive(player) then
+                items.beforeUse(source, item, deps.frame(), deps.entities())
+            end
+        end,
+        useItem = function(item, player)
+            local info = prepare()
+            local source = owners[deps.hash(player)]
+            if info and not deps.paused() and source and alive(player) then
+                items.use(source, item, deps.frame(), deps.entities(), enabled(info))
+            end
+        end,
+    }
 end

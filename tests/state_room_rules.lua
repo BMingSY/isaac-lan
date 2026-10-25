@@ -1,7 +1,8 @@
 -- Native 80 ms RTT acceptance, with distinct protected personal-save marks.
 local native, host, port = _IsaacLan, _IsaacLanTest.host, _IsaacLanTest.port
 local route = _IsaacLanTest.route
-local enabled, resume = route ~= "room-rules-off", route == "room-rules-resume"
+local enabled = route ~= "room-rules-off" and route ~= "room-rules-items-off"
+local resume = route == "room-rules-resume"
 local base, gate, menu = _IsaacLanFrame, native.net_gate, _IsaacLanMenuRender
 local owner = RegisterMod("Isaac LAN room rules fixture", 1)
 local json = require("json")
@@ -517,6 +518,18 @@ if enabled and not resume then
             )
         end)
     end, 120)
+end
+if route == "room-rules-items" or route == "room-rules-items-off" then
+    cases = {}
+    addPvpItemCases({
+        add = add,
+        actor = actor,
+        health = health,
+        report = report,
+        host = host,
+        enabled = enabled,
+        clear = clear,
+    })
 end
 local function advance(t)
     tick = t
