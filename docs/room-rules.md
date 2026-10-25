@@ -40,6 +40,14 @@
 
 连续命中中断超过一秒会丢弃小数余量。离开房间、身体替换、断线、换层、时间回退、关闭规则或会话失效时，清理相应攻击、余量与冷却归属。被忽略的接触不在保护结束后重放。
 
+## 特殊房间集合
+
+简称“集合”，默认关闭。任意在线玩家进入原版特殊房间后，其他在线玩家自动传送到同一房间、同一维度。包括 Boss、商店、宝箱、隐藏房、天使／恶魔、错误房等全部原版特殊类型；按房间实际类型判断，普通红房间不触发，红隐触发。走门、卡牌和 `/tp` 等方式进入均适用，不生成额外房间。
+
+已在目标房间的玩家不移动，集合到达不再次触发集合。玩家之后可以自由离开；再次进入特殊房间可重新触发。同一轮观察到多人进入不同特殊房间时，按玩家席位顺序选择一次集合；集合进行期间的到达不会另起一轮。离线玩家不参与，续玩、重连或换层恢复的位置只作为初始记录。
+
+规则复用 `/tp` 的原生房间迁移接口，角色的全部身体、跟班与入房效果由现有房间系统处理。发起者离开、连接失效或等待超时会取消尚未执行的请求；局次／楼层切换会丢弃旧记录。
+
 ## 状态与职责
 
 选项定义来自 [core/room_options.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/room_options.h)，运行层验证并导出位值、名称和 `shortName` 简称，菜单据此生成摘要与复选行。网络只传输 `RunRules.options`，不解释具体玩法。存档及个人通关标记的生命周期见[会话与状态恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
@@ -47,3 +55,5 @@
 [room_rules.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_rules.lua) 管理可选效果的会话与世界代次；未结算的事件在失效时清理。[clear_charge.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/clear_charge.lua) 汇总原生清房通知并在房间模拟退出后补发充能；[loot_roll.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/loot_roll.lua) 负责玩家分组、掷骰排序和一次性库存分配，挑战提供自己的运气策略。两项规则沿用主动充能和库存同步，不扩展消息布局。
 
 [friendly_fire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/friendly_fire.lua) 在房主模拟中检查各个有人房间的攻击接触，再调用原版受击接口；客机沿用现有生命、角色动作和受击状态同步。接触与小数伤害由该组件持有；[pvp_attacks.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_attacks.lua) 管理发射记录与单轮额度，[pvp_health.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_health.lua) 管理原版冷却归属与短保护，[pvp_damage.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_damage.lua) 定义纯数值曲线。[compat/items/pvp.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/pvp.lua) 持有道具使用、索敌、进房与持续效果状态，使用回调由装配层接入。以上临时状态不写进个人存档。共享的扫掠圆碰撞放在 [core/contacts.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/core/contacts.lua)，同一几何函数也供本机命中预测使用。
+
+[special_rooms.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/special_rooms.lua) 在房间模拟作用域之外观察已提交的玩家位置，按实际房间类型发起集合并消费到达。位置记录和未完成集合由 `room_rules` 随会话与世界代次清理；规则位沿用 `RunRules.options`，传送结果沿用现有房间同步，不扩展消息或状态字段布局。

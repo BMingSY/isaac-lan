@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate teleport chat commands with one protected native pair."""
+"""Validate teleport commands or special room gathering with one protected pair."""
 
 import argparse
 import json
@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--port", type=int, default=34300)
     parser.add_argument("--heap-check", action="store_true")
     parser.add_argument("--record", action="store_true")
+    parser.add_argument("--gather", action="store_true", help="Validate the special room rule")
     parser.add_argument(
         "--injected", action="store_true", help="Use explicit injection in owned labs"
     )
@@ -37,12 +38,16 @@ def main():
     protected = ProtectedLabs(labs, output)
     report = {"passed": False, "protected": protected.report()}
     try:
+        fixture = "state_special_room_gather.lua" if args.gather else "state_teleport.lua"
+        completion = (
+            "LAN_GATHER PASS special room rule" if args.gather else "LAN_TP PASS teleport commands"
+        )
         command = engine_command(
             labs,
             args.build,
             output / "engine",
-            ROOT / "tests/state_teleport.lua",
-            "LAN_TP PASS teleport commands",
+            ROOT / "tests" / fixture,
+            completion,
             "--frontend",
             "--no-luadebug",
             "--menu-start",

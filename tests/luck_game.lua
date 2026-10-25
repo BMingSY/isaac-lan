@@ -430,11 +430,21 @@ print(
 -- modifiers or floor transfers. Actives remain in the native pickup queue.
 info.authority, info.challenge, info.roomOptions, info.worldEpoch = 1, 0, 4, 1
 native.net_room_options = function()
-    return { { key = "lootRoll", flag = 4 }, { key = "sharedClearCharge", flag = 2 } }
+    return {
+        { key = "lootRoll", flag = 4 },
+        { key = "sharedClearCharge", flag = 2 },
+        { key = "specialRoomGather", flag = 8 },
+    }
 end
 local ordinary = dofile(root .. "/src/bridge/runtime/room_rules.lua")({
     native = native,
     allocation = deps.allocation,
+    gather = {
+        reset = function() end,
+        step = function()
+            error("Gather rule is off")
+        end,
+    },
     charge = {
         reset = function() end,
         step = function()
