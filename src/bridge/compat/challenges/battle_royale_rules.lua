@@ -4,6 +4,7 @@ local rules = {
     width = 13,
     center = 84,
     momRoomVariant = 1060,
+    reviveMachineVariant = 19,
     framesPerSecond = 30,
     survivalFrames = 5 * 60 * 30,
     deathGraceFrames = 3 * 30,

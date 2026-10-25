@@ -100,7 +100,7 @@ return function(deps)
         for slot in pairs(party()) do
             pendingSpawns[slot] = layout.spawns[slot + 1]
             assert(
-                native.api_move(slot, layout.spawns[slot + 1], 0),
+                native.rooms_teleport(slot, layout.spawns[slot + 1], 0),
                 "Battle royale corner placement failed"
             )
         end
@@ -165,7 +165,7 @@ return function(deps)
         scoped(slot, function()
             local room = deps.game():GetRoom()
             deps.rewards(assert(party()[slot]))
-            deps.map.removeExits(room, true)
+            deps.map.restrictRoom(room, true)
             if model.state.phase == phase.trophy then
                 local trophy = deps.spawn(
                     enums.entity.ENTITY_PICKUP,
@@ -195,7 +195,9 @@ return function(deps)
         end)
         portal, moving, bossFrame = nil, true, frame
         encounterRoom = model.state.scores[slot + 1] == 1 and layout.finalBoss or layout.boss
-        assert(native.api_move(slot, encounterRoom, 0), "Battle royale boss entry failed")
+        -- This destination is already chosen by the challenge. Native routing
+        -- would let Curse of the Maze send the winner to an unrelated room.
+        assert(native.rooms_teleport(slot, encounterRoom, 0), "Battle royale boss entry failed")
     end
     local function step(info)
         initialize(info)
@@ -260,7 +262,7 @@ return function(deps)
                             )
                         end
                     end
-                    deps.map.removeExits(room)
+                    deps.map.restrictRoom(room)
                 end)
             end
         end
@@ -289,7 +291,10 @@ return function(deps)
         then
             -- Native extra lives may revive in the previous room. Resume the
             -- same encounter without recreating the boss or the temporary item.
-            assert(native.api_move(slot, encounterRoom, 0), "Battle royale boss return failed")
+            assert(
+                native.rooms_teleport(slot, encounterRoom, 0),
+                "Battle royale boss return failed"
+            )
             return
         end
         if state.phase == phase.boss and at.index == encounterRoom and at.dimension == 0 then

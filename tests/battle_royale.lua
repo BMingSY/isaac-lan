@@ -102,7 +102,7 @@ local enums = {
     stageType = { STAGETYPE_ORIGINAL = 0, STAGETYPE_AFTERBIRTH = 2 },
     transition = { FADE = 0 },
     pool = { POOL_BOSS = 2, POOL_TREASURE = 0 },
-    entity = { ENTITY_PICKUP = 5, ENTITY_MOM = 45, ENTITY_PROJECTILE = 9 },
+    entity = { ENTITY_PICKUP = 5, ENTITY_SLOT = 6, ENTITY_MOM = 45, ENTITY_PROJECTILE = 9 },
     pickup = { PICKUP_COLLECTIBLE = 100, PICKUP_TROPHY = 370, PICKUP_BIGCHEST = 340 },
     room = { ROOM_BOSS = 5, ROOM_DEFAULT = 1, ROOM_SHOP = 2, ROOM_TREASURE = 4 },
     shape = {
@@ -260,6 +260,12 @@ local native = {
         return true
     end,
     api_move = function(slot, index, dimension)
+        -- A native Maze redirect changes a caller-selected room. The challenge
+        -- must use resolved destinations for spawn, boss entry and revival.
+        positions[tostring(slot)] = { index = 136, dimension = dimension }
+        return true
+    end,
+    rooms_teleport = function(slot, index, dimension)
         if index == 101 then
             momSpawns = momSpawns + 1
         end
@@ -356,7 +362,7 @@ local battle = module("compat/challenges/battle_royale")({
         build = function()
             return { boss = 100, finalBoss = 101, spawns = { 0, 168 }, zones = plan }
         end,
-        removeExits = function() end,
+        restrictRoom = function() end,
         openResources = function() end,
         clearSpawn = function()
             local index = positions[tostring(activeSlot)].index
@@ -667,10 +673,29 @@ local testRoom = {
 }
 map.escape(testRoom)
 assert(not opened[0] and opened[1] and opened[7], "Escape keeps boss doors restricted")
-map.removeExits(testRoom)
+map.restrictRoom(testRoom)
 assert(removed[0] and not removed[1], "Exploration retains crawlspace stairs")
-map.removeExits(testRoom, true)
+map.restrictRoom(testRoom, true)
 assert(removed[1], "Boss settlement removes alternative exits")
+for _, variant in ipairs({ rules.reviveMachineVariant, 1, 8, 12, 17 }) do
+    spawnEntities[#spawnEntities + 1] = {
+        Type = enums.entity.ENTITY_SLOT,
+        Variant = variant,
+        Remove = function(self)
+            self.removed = true
+        end,
+    }
+end
+for _ = 1, 2 do
+    map.restrictRoom(testRoom)
+    for _, entity in ipairs(spawnEntities) do
+        assert(
+            not not entity.removed == (entity.Variant == rules.reviveMachineVariant),
+            "Only the revival machine is removed; other interactive machines remain"
+        )
+    end
+end
+spawnEntities = {}
 local resourceDoors, clear = {}, false
 for slot, kind in ipairs({
     enums.room.ROOM_TREASURE,

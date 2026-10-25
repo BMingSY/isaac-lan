@@ -40,6 +40,43 @@ local resources = _IsaacLanBattleResourceChecks({
     report = report,
     rules = rules,
 })
+local retainedMachine
+local function spawnMachineSample()
+    actor(winner, function()
+        local center = Game():GetRoom():GetCenterPos()
+        local machine = Isaac.Spawn(
+            EntityType.ENTITY_SLOT,
+            rules.reviveMachineVariant,
+            0,
+            center + Vector(80, 0),
+            Vector.Zero,
+            nil
+        )
+        local sprite = machine:GetSprite():GetFilename()
+        assert(sprite:lower():find("reviv", 1, true), "Sample is not the native revival machine")
+        report("BATTLE native revival machine sprite=" .. sprite)
+        local DONATION_MACHINE_VARIANT = 8
+        retainedMachine = Isaac.Spawn(
+            EntityType.ENTITY_SLOT,
+            DONATION_MACHINE_VARIANT,
+            0,
+            center + Vector(120, 0),
+            Vector.Zero,
+            nil
+        )
+    end)
+end
+local function checkMachineSample()
+    actor(winner, function()
+        assert(#Isaac.FindByType(EntityType.ENTITY_SLOT, rules.reviveMachineVariant) == 0)
+        assert(retainedMachine:Exists(), "Challenge removed an unrelated machine")
+        retainedMachine:Remove()
+    end)
+    report("BATTLE PASS revival machine removed without removing donation machine")
+end
+local function forceMaze()
+    Game():GetLevel():AddCurse(LevelCurse.CURSE_OF_MAZE, false)
+end
 local function mark(value)
     step, at = value, Game():GetFrameCount()
     report("BATTLE " .. value)
@@ -194,6 +231,12 @@ local function advance()
         resources.start()
         mark("resources")
     elseif step == "resources" and resources.step() then
+        mark("machines-arrive")
+    elseif step == "machines-arrive" and elapsed > 30 then
+        spawnMachineSample()
+        mark("machines")
+    elseif step == "machines" and elapsed > 15 then
+        checkMachineSample()
         actor(loser, function(player)
             player:AddCollectible(CollectibleType.COLLECTIBLE_1UP)
             player:Kill()
@@ -201,6 +244,7 @@ local function advance()
         mark("extra-life")
     elseif step == "extra-life" and elapsed > 300 then
         assert(state.phase == phase.survival, "Natural revival prematurely ended survival")
+        forceMaze()
         actor(loser, function(player)
             assert(not player:IsDead() and not player:IsCoopGhost())
             assert(not player:HasCollectible(CollectibleType.COLLECTIBLE_1UP))
@@ -244,6 +288,9 @@ local function advance()
     then
         if not seen.dogma then
             actor(winner, function(player)
+                assert(Game():GetRoom():GetType() == RoomType.ROOM_BOSS)
+                assert((Game():GetLevel():GetCurses() & LevelCurse.CURSE_OF_MAZE) ~= 0)
+                report("BATTLE PASS ordinary boss destination with native Maze curse retained")
                 assert(player:HasCollectible(CollectibleType.COLLECTIBLE_DOGMA))
                 report(
                     string.format(
@@ -336,6 +383,7 @@ local function advance()
             end)
         end
         assert(state.scores[winner + 1] == 1)
+        forceMaze()
         actor(winner, function(player)
             assert(
                 not player:HasCollectible(CollectibleType.COLLECTIBLE_DOGMA),
@@ -361,6 +409,9 @@ local function advance()
     then
         actor(winner, function()
             if not seen.mom then
+                assert(Game():GetRoom():GetType() == RoomType.ROOM_BOSS)
+                assert((Game():GetLevel():GetCurses() & LevelCurse.CURSE_OF_MAZE) ~= 0)
+                report("BATTLE PASS Mom destination with native Maze curse retained")
                 assert(
                     #Isaac.FindByType(EntityType.ENTITY_MOM) > 0,
                     "Match point did not start Mom"
@@ -379,6 +430,7 @@ local function advance()
         end
     elseif step == "boss-failure" and state.round > baselineRound and state.elapsed > 90 then
         assert(state.phase == phase.survival and state.scores[winner + 1] == 1)
+        forceMaze()
         resources.map(state, native.rooms_positions())
         actor(winner, function(player)
             assert(
@@ -387,10 +439,14 @@ local function advance()
             )
             assert(Game():GetRoom():IsClear(), "New-round spawn room is not clear")
         end)
+        report("BATTLE PASS failed Mom retains match point and starts another round")
+        spawnMachineSample()
+        mark("failure-machines")
+    elseif step == "failure-machines" and elapsed > 15 then
+        checkMachineSample()
         actor(loser, function(player)
             player:Kill()
         end)
-        report("BATTLE PASS failed Mom retains match point and starts another round")
         mark("match-point")
     elseif step == "mom" and state.phase == phase.trophy then
         actor(loser, function(player)

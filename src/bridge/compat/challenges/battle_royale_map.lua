@@ -216,7 +216,7 @@ return function(deps)
         end
         room:SetClear(true)
     end
-    local function removeExits(room, boss)
+    local function restrictRoom(room, boss)
         for index = 0, room:GetGridSize() - 1 do
             local grid = room:GetGridEntity(index)
             if
@@ -231,8 +231,14 @@ return function(deps)
         end
         for _, entity in ipairs(deps.entities()) do
             if
-                entity.Type == enums.entity.ENTITY_EFFECT
-                and entity.Variant == enums.effect.HEAVEN_LIGHT_DOOR
+                (
+                    entity.Type == enums.entity.ENTITY_EFFECT
+                    and entity.Variant == enums.effect.HEAVEN_LIGHT_DOOR
+                )
+                or (
+                    entity.Type == enums.entity.ENTITY_SLOT
+                    and entity.Variant == rules.reviveMachineVariant
+                )
             then
                 entity:Remove()
             end
@@ -243,6 +249,6 @@ return function(deps)
         escape = escape,
         openResources = openResources,
         clearSpawn = clearSpawn,
-        removeExits = removeExits,
+        restrictRoom = restrictRoom,
     }
 end
