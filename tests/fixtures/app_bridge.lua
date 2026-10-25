@@ -47,6 +47,8 @@ return function(root, native, modules)
         "runtime/room_rules",
         "compat/challenges/luck_game",
         "compat/challenges/battle_royale_rules",
+        "compat/challenges/battle_royale_resources",
+        "compat/challenges/battle_royale_rewards",
         "compat/challenges/battle_royale_map",
         "compat/challenges/battle_royale",
         "sync/fields",

@@ -1,10 +1,11 @@
 # 1003 资源房与混沌奖励专项（2026-10-25）
 
-本专项检查资源房配额、出生点资源路径、第一圈供给、特殊房间入口与商品价格，以及 Boss 奖励跨道具池抽取。代码候选为 `011d7794ec14e12cca88b325e2d221c90126b3f7`，原生版本为 `1.9.7.17.J460`。入口为 [run_battle_royale.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_battle_royale.py)，证据包为 `battle-royale-resources-20261025-01` 和 `battle-royale-resources-20261025-02`；原始日志、脚本、双端画面、报告和恢复哈希保留在测试产物。
+本专项检查资源房配额、出生点资源路径、第一圈供给、特殊房间入口与商品价格，以及 Boss 奖励跨道具池抽取。生产实现候选为 `011d7794ec14e12cca88b325e2d221c90126b3f7`，原生版本为 `1.9.7.17.J460`。入口为 [run_battle_royale.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_battle_royale.py)，证据包为 `battle-royale-resources-20261025-01` 和 `battle-royale-resources-20261025-02`；原始日志、脚本、双端画面、报告和恢复哈希保留在测试产物。
 
 ## 检查范围与结果
 
 - 9 项定向 CTest 通过：`bridge.state-layers`、`bridge.challenges`、`bridge.battle-royale`、`bridge.battle-royale-resources`、`bridge.battle-royale-rewards`、`bridge.battle-royale-hud`、`bridge.personal-map`、`bridge.layers`、`bridge.grids`。20 项分层／挑战配置 Python 检查、Windows x86 Release 构建、格式和脚本语法检查通过。
+- CI 运行 `40173300152` 在 `bridge.lanbot`、`bridge.resume` 失败：共用装配夹具遗漏两个新增挑战模块。补齐夹具后，两项离线复测通过，定向通过项合计 11 项；生产实现与实机 DLL 不变。
 - 资源离线用例覆盖 16 个种子、已有资源计数、出生房／Boss 房／最终圈预留、出生点三步内的免费路径、首圈至少半数配额、模板失败重试及重复执行不增加房间。入口用例确认只解锁宝箱房和商店，未清场时不主动打开战斗封门。
 - 奖励离线用例确认原本高品质的 Boss 底座也重新跨池抽取，至少一个品质不低于 3，额外底座可为低品质；已有混沌保留，抽取、变形或生成失败均清除临时副本。
 - 第 02 轮实机初始地图有 16 个宝箱房、8 个商店、4 个书房和 4 个拱廊，第一圈内分别为 9、6、2、2；妈腿失败后的新地图总数相同，第一圈内分别为 8、4、3、3。两张地图均核对实际连接，出生点三步内可达宝箱房。
