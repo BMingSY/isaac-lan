@@ -15,6 +15,7 @@ local frames, linked, chosen, running, finished = 0, false, false, false, false
 local step, at, baselineRound, sawGuest = "start", 0, nil, false
 local seen = {}
 local mapDraws, mapWidths = 0, {}
+local chatAt, chatChecked
 local flow, winner = _IsaacLanBattleFlow, _IsaacLanBattleWinner or 0
 local loser = 1 - winner
 local roomOptions = 0
@@ -94,6 +95,36 @@ local function advance()
             actor(slot, function(player)
                 assert(player:GetPlayerType() == PlayerType.PLAYER_ISAAC)
                 assert(not player:HasCollectible(CollectibleType.COLLECTIBLE_D6))
+                assert(Game():GetRoom():IsClear(), "Spawn room is not clear")
+                for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                    assert(not entity:IsEnemy(), "Enemy remained in spawn room")
+                end
+                for doorSlot = 0, 7 do
+                    local door = Game():GetRoom():GetDoor(doorSlot)
+                    if door then
+                        assert(
+                            door.TargetRoomIndex >= 0 and door.TargetRoomIndex < 169,
+                            "Generated door leads outside the map"
+                        )
+                        assert(
+                            Game():GetRoom():IsDoorSlotAllowed(doorSlot),
+                            "Generated door occupies an invalid slot"
+                        )
+                        report(
+                            string.format(
+                                "BATTLE door owner=%d room=%d slot=%d target=%d types=%d,%d variant=%d sprite=%s",
+                                slot,
+                                positions[tostring(slot)].index,
+                                doorSlot,
+                                door.TargetRoomIndex,
+                                door.CurrentRoomType,
+                                door.TargetRoomType,
+                                door:GetVariant(),
+                                door:GetSprite():GetFilename()
+                            )
+                        )
+                    end
+                end
             end)
         end
         local boss
@@ -166,6 +197,10 @@ local function advance()
             end
         end)
         report("BATTLE PASS natural extra life")
+        actor(winner, function(player)
+            player:AddSoulHearts(-player:GetSoulHearts())
+            player:AddHearts(1 - player:GetHearts())
+        end)
         mark(flow and "winner" or "circles")
     elseif step == "circles" then
         local _, circle = rules.zone(state)
@@ -195,16 +230,66 @@ local function advance()
         and elapsed > 120
         and not Game():IsPaused()
     then
-        actor(winner, function(player)
-            assert(player:HasCollectible(CollectibleType.COLLECTIBLE_DOGMA))
-        end)
+        if not seen.dogma then
+            actor(winner, function(player)
+                assert(player:HasCollectible(CollectibleType.COLLECTIBLE_DOGMA))
+                report(
+                    string.format(
+                        "BATTLE Dogma hearts=%d soul=%d speed=%.3f damage=%.3f fly=%s mantle=%d wafer=%d",
+                        player:GetHearts(),
+                        player:GetSoulHearts(),
+                        player.MoveSpeed,
+                        player.Damage,
+                        tostring(player.CanFly),
+                        player
+                            :GetEffects()
+                            :GetCollectibleEffectNum(CollectibleType.COLLECTIBLE_HOLY_MANTLE),
+                        player
+                            :GetEffects()
+                            :GetCollectibleEffectNum(CollectibleType.COLLECTIBLE_WAFER)
+                    )
+                )
+                assert(
+                    player:GetHearts() + player:GetSoulHearts() >= 12,
+                    "Dogma did not heal to six hearts"
+                )
+                assert(
+                    player.MoveSpeed >= 1.099 and player.Damage >= 6 and player.CanFly,
+                    "Dogma stats or flight missing"
+                )
+                assert(
+                    player
+                        :GetEffects()
+                        :HasCollectibleEffect(CollectibleType.COLLECTIBLE_HOLY_MANTLE),
+                    "Dogma room shield missing"
+                )
+                local health = player:GetHearts() + player:GetSoulHearts()
+                player:ResetDamageCooldown()
+                player:TakeDamage(2, 0, EntityRef(nil), 0)
+                assert(
+                    player:GetHearts() + player:GetSoulHearts() == health,
+                    "Dogma shield did not block damage"
+                )
+                player:ResetDamageCooldown()
+                player:TakeDamage(2, 0, EntityRef(nil), 0)
+                assert(
+                    player:GetHearts() + player:GetSoulHearts() == health - 1,
+                    "Normal-mode Dogma did not apply Wafer"
+                )
+            end)
+            seen.dogma = true
+            report("BATTLE PASS native Dogma healing, speed, damage, flight, shield and Wafer")
+        end
         defeatBoss()
     elseif step == "boss" and state.phase == phase.reward then
         actor(loser, function(player)
             assert(player:IsCoopGhost(), "Boss clear revived the loser")
         end)
         actor(winner, function(player)
-            assert(not player:HasCollectible(CollectibleType.COLLECTIBLE_DOGMA))
+            assert(
+                player:HasCollectible(CollectibleType.COLLECTIBLE_DOGMA),
+                "Dogma was removed before changing floors"
+            )
             local guaranteed = false
             for _, entity in ipairs(Isaac.GetRoomEntities()) do
                 if
@@ -239,6 +324,15 @@ local function advance()
             end)
         end
         assert(state.scores[winner + 1] == 1)
+        actor(winner, function(player)
+            assert(
+                not player:HasCollectible(CollectibleType.COLLECTIBLE_DOGMA),
+                "Temporary Dogma survived a fake floor change"
+            )
+            assert(not player.CanFly, "Temporary flight survived a fake floor change")
+            -- A previously owned copy must survive the following failed boss.
+            player:AddCollectible(CollectibleType.COLLECTIBLE_DOGMA, 0, false)
+        end)
         actor(loser, function(player)
             player:Die()
         end)
@@ -273,6 +367,13 @@ local function advance()
         end
     elseif step == "boss-failure" and state.round > baselineRound and state.elapsed > 90 then
         assert(state.phase == phase.survival and state.scores[winner + 1] == 1)
+        actor(winner, function(player)
+            assert(
+                player:GetCollectibleNum(CollectibleType.COLLECTIBLE_DOGMA) == 1,
+                "Failed boss removed the original Dogma"
+            )
+            assert(Game():GetRoom():IsClear(), "New-round spawn room is not clear")
+        end)
         actor(loser, function(player)
             player:Kill()
         end)
@@ -336,6 +437,34 @@ function _IsaacLanFrame()
     if info.active == 1 and info.ready == 1 then
         running = true
         local state = view()
+        if state and state.phase == phase.survival and state.elapsed > 30 and not chatAt then
+            chatAt = frames
+            local marker = "BATTLE_PRIVATE_" .. info.slot
+            assert(
+                _IsaacLanChatSubmit(" /console lua Isaac.ConsoleOutput('" .. marker .. "_OK\\n')")
+            )
+            assert(_IsaacLanChatSubmit("/c lua error('" .. marker .. "_ERROR')"))
+            assert(not _IsaacLanChatSubmit("alua dofile('D:/private/" .. marker .. ".lua'"))
+        elseif chatAt and not chatChecked and frames - chatAt > 90 then
+            local own, other = "BATTLE_PRIVATE_" .. info.slot, "BATTLE_PRIVATE_" .. (1 - info.slot)
+            local output, failure = false, false
+            for _, message in ipairs(_IsaacLanChatMessages()) do
+                assert(
+                    not message.text:find(other, 1, true),
+                    "Another player's console output leaked"
+                )
+                if message.text:find(own, 1, true) then
+                    assert(not message.bubble, "Console output created a speech bubble")
+                    if not message.command then
+                        output = output or message.text:find(own .. "_OK", 1, true) ~= nil
+                        failure = failure or message.text:find(own .. "_ERROR", 1, true) ~= nil
+                    end
+                end
+            end
+            assert(output and failure, "Local console result or error missing")
+            chatChecked = true
+            report("BATTLE PASS private console commands, errors and no bubbles")
+        end
         if not host and state and state.phase == phase.trophy then
             assert(state.scores[winner + 1] == 2)
             sawGuest = true
@@ -344,9 +473,68 @@ function _IsaacLanFrame()
                 report("BATTLE PASS replica progress and trophy")
             end
         end
+        if
+            not host
+            and state
+            and state.phase == phase.boss
+            and state.scores[winner + 1] == 0
+            and not seen.replicaDogma
+        then
+            actor(winner, function(player)
+                if player:HasCollectible(CollectibleType.COLLECTIBLE_DOGMA) then
+                    assert(
+                        player:GetHearts() + player:GetSoulHearts() >= 12,
+                        "Replica Dogma health missing"
+                    )
+                    assert(
+                        player.MoveSpeed >= 1.099 and player.Damage >= 6 and player.CanFly,
+                        "Replica Dogma stats missing"
+                    )
+                    assert(
+                        player
+                            :GetEffects()
+                            :HasCollectibleEffect(CollectibleType.COLLECTIBLE_HOLY_MANTLE),
+                        "Replica Dogma shield missing"
+                    )
+                    seen.replicaDogma = true
+                    report("BATTLE PASS replica Dogma health, stats, flight and shield")
+                end
+            end)
+        end
+        if
+            not host
+            and state
+            and state.phase == phase.survival
+            and state.elapsed > 45
+            and not seen.replicaDoors
+        then
+            actor(info.slot, function()
+                assert(Game():GetRoom():IsClear(), "Replica spawn room is not clear")
+                for slot = 0, 7 do
+                    local door = Game():GetRoom():GetDoor(slot)
+                    if door then
+                        assert(
+                            door.TargetRoomIndex >= 0 and door.TargetRoomIndex < 169,
+                            "Replica shows an out-of-map door"
+                        )
+                        assert(
+                            Game():GetRoom():IsDoorSlotAllowed(slot),
+                            "Replica shows an invalid door slot"
+                        )
+                    end
+                end
+            end)
+            seen.replicaDoors = true
+            report("BATTLE PASS replica spawn and valid doors")
+        end
     end
     if running and not finished and info.active ~= 1 and status.phase == 2 then
         assert(host and step == "finish" or not host and sawGuest)
+        assert(chatChecked, "Console privacy was not checked")
+        assert(
+            host or seen.replicaDogma and seen.replicaDoors,
+            "Replica effects or doors were not checked"
+        )
         assert(mapDraws > 100, "Native minimap projection did not reach the render callback")
         local widths = 0
         for _ in pairs(mapWidths) do

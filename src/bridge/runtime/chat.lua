@@ -115,11 +115,22 @@ return function(deps, wire)
         if not count or #text > limits.commandBytes then
             return nil, "输入无效或命令过长"
         end
-        text = text:gsub("[\r\n\t]", " ")
+        text = text:gsub("[\r\n\t]", " "):gsub("^%s+", "")
         if text:match("^%s*$") then
             return nil
         end
         if text:sub(1, 1) ~= "/" then
+            -- A pasted Lua command with a missing/mistyped console prefix must
+            -- not expose script paths to the party or create a speech bubble.
+            local command = text:match("^(%S+)")
+            if
+                command == "lua"
+                or command == "luarun"
+                or text:find("%f[%w_]dofile%s*%(")
+                or text:find("%f[%w_]loadfile%s*%(")
+            then
+                return nil, "控制台命令请使用 /console 命令"
+            end
             if count > limits.characters then
                 return nil, "每条聊天最多 " .. limits.characters .. " 字"
             end

@@ -7,6 +7,57 @@ return function(deps)
         local room = level:GetRoomByIdx(index, 0)
         return room and room.Data and room.SafeGridIndex >= 0 and room or nil
     end
+    local function doorTarget(room, slot)
+        -- MakeRedRoomDoor also creates I AM ERROR entrances for invalid slots
+        -- and out-of-map targets. Validate geometry before calling the native API.
+        if (room.Data.Doors & (1 << slot)) == 0 then
+            return nil
+        end
+        local shape, shapes = room.Data.Shape, enums.shape
+        local large = shape >= shapes.ROOMSHAPE_2x2
+        local wide = large or shape == shapes.ROOMSHAPE_2x1 or shape == shapes.ROOMSHAPE_IIH
+        local tall = large or shape == shapes.ROOMSHAPE_1x2 or shape == shapes.ROOMSHAPE_IIV
+        local left, up, right, down = 0, 1, 2, 3
+        local side, second = slot % 4, slot // 4
+        local x, y
+        if side == left or side == right then
+            if second == 1 and not tall then
+                return nil
+            end
+            x, y = side == left and -1 or (wide and 2 or 1), second
+            if
+                (shape == shapes.ROOMSHAPE_LTL and slot == left)
+                or (shape == shapes.ROOMSHAPE_LBL and slot == left + 4)
+            then
+                x = 0
+            elseif
+                (shape == shapes.ROOMSHAPE_LTR and slot == right)
+                or (shape == shapes.ROOMSHAPE_LBR and slot == right + 4)
+            then
+                x = 1
+            end
+        else
+            if second == 1 and not wide then
+                return nil
+            end
+            x, y = second, side == up and -1 or (tall and 2 or 1)
+            if
+                (shape == shapes.ROOMSHAPE_LTL and slot == up)
+                or (shape == shapes.ROOMSHAPE_LTR and slot == up + 4)
+            then
+                y = 0
+            elseif
+                (shape == shapes.ROOMSHAPE_LBL and slot == down)
+                or (shape == shapes.ROOMSHAPE_LBR and slot == down + 4)
+            then
+                y = 1
+            end
+        end
+        x, y = room.GridIndex % width + x, room.GridIndex // width + y
+        if x >= 0 and x < width and y >= 0 and y < width then
+            return y * width + x
+        end
+    end
     local function ordinaryBoss(room)
         -- XL Depths also contains Mom. Its descriptor may sort before the
         -- ordinary boss, but cannot award the first point.
@@ -30,7 +81,10 @@ return function(deps)
                 local room = descriptor(level, index)
                 if room and room.SafeGridIndex == index then
                     for door = 0, 7 do
-                        level:MakeRedRoomDoor(index, door)
+                        local target = doorTarget(room, door)
+                        if target and not descriptor(level, target) then
+                            level:MakeRedRoomDoor(index, door)
+                        end
                     end
                 end
             end
@@ -118,6 +172,31 @@ return function(deps)
             end
         end
     end
+    local function clearSpawn(room)
+        -- Remove without death effects, drops or split enemies. Keep pickups,
+        -- players and the native room connections intact.
+        for _, entity in ipairs(deps.entities()) do
+            if
+                entity:IsEnemy()
+                or entity.Type == enums.entity.ENTITY_PROJECTILE
+                or entity.Type == enums.entity.ENTITY_BOMBDROP
+                or entity.Type == enums.entity.ENTITY_LASER
+            then
+                entity:Remove()
+            end
+        end
+        for index = 0, room:GetGridSize() - 1 do
+            local grid = room:GetGridEntity(index)
+            if
+                grid
+                and grid:GetType() ~= enums.grid.GRID_WALL
+                and grid:GetType() ~= enums.grid.GRID_DOOR
+            then
+                room:RemoveGridEntity(index, 0, false)
+            end
+        end
+        room:SetClear(true)
+    end
     local function removeExits(room, boss)
         for index = 0, room:GetGridSize() - 1 do
             local grid = room:GetGridEntity(index)
@@ -140,5 +219,5 @@ return function(deps)
             end
         end
     end
-    return { build = build, escape = escape, removeExits = removeExits }
+    return { build = build, escape = escape, clearSpawn = clearSpawn, removeExits = removeExits }
 end

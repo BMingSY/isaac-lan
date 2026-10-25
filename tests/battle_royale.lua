@@ -100,7 +100,20 @@ local enums = {
     entity = { ENTITY_PICKUP = 5, ENTITY_MOM = 45, ENTITY_PROJECTILE = 9 },
     pickup = { PICKUP_COLLECTIBLE = 100, PICKUP_TROPHY = 370, PICKUP_BIGCHEST = 340 },
     room = { ROOM_BOSS = 5, ROOM_DEFAULT = 1 },
-    shape = { ROOMSHAPE_1x1 = 1 },
+    shape = {
+        ROOMSHAPE_1x1 = 1,
+        ROOMSHAPE_IH = 2,
+        ROOMSHAPE_IV = 3,
+        ROOMSHAPE_1x2 = 4,
+        ROOMSHAPE_IIV = 5,
+        ROOMSHAPE_2x1 = 6,
+        ROOMSHAPE_IIH = 7,
+        ROOMSHAPE_2x2 = 8,
+        ROOMSHAPE_LTL = 9,
+        ROOMSHAPE_LTR = 10,
+        ROOMSHAPE_LBL = 11,
+        ROOMSHAPE_LBR = 12,
+    },
     damage = { DAMAGE_NO_PENALTIES = 1 },
 }
 local function vector(x, y)
@@ -135,7 +148,13 @@ for slot = 0, 1 do
     function p:HasCollectible(id)
         return self:GetCollectibleNum(id) > 0
     end
-    function p:AddCollectible(id)
+    function p:AddCollectible(id, _, firstTime)
+        if id == 633 and firstTime ~= nil then
+            assert(firstTime, "Temporary Dogma must run the native pickup effects")
+            assert(activeSlot == slot, "Dogma must target the winner")
+            local index = positions[tostring(slot)].index
+            assert(index == 100 or index == 101, "Dogma must be picked up inside the boss room")
+        end
         self.items[id] = self:GetCollectibleNum(id) + 1
     end
     function p:RemoveCollectible(id)
@@ -312,6 +331,10 @@ local battle = module("compat/challenges/battle_royale")({
             return { boss = 100, finalBoss = 101, spawns = { 0, 168 }, zones = plan }
         end,
         removeExits = function() end,
+        clearSpawn = function()
+            local index = positions[tostring(activeSlot)].index
+            assert(index == 0 or index == 168, "Spawn cleanup must wait for arrival")
+        end,
         escape = function()
             escapes = escapes + 1
         end,
@@ -363,7 +386,7 @@ clear = true
 tick(40)
 assert(battle.view().scores[1] == 1 and battle.view().phase == phase.reward)
 assert(entities[1].SubType == 345 and extra.SubType == 2, "Only the base reward is guaranteed")
-assert(players[0]:GetCollectibleNum(633) == 0 and players[1].ghost)
+assert(players[0]:GetCollectibleNum(633) == 1 and players[1].ghost)
 assert(
     not battle.canEnter({ info = info, slot = 0, room = 84, dimension = 0 }),
     "Reward choice stays with the winner"
@@ -377,6 +400,7 @@ tick(1)
 players[0].Position = vector(portal.x, portal.y)
 tick(1)
 assert(floorRequests == 2 and battle.view().scores[1] == 1, "Skipping rewards retains the win")
+assert(players[0]:GetCollectibleNum(633) == 0, "Remove temporary Dogma at the fake floor boundary")
 players[0]:AddCollectible(105)
 players[0]:AddCollectible(633)
 clear, entities = false, {}
@@ -387,9 +411,20 @@ tick(1)
 assert(battle.view().portal)
 tick(32)
 assert(momSpawns == 1, "Match point directly starts Mom")
+players[0].ghost = true
+tick(1)
+assert(
+    floorRequests == 3 and players[0]:GetCollectibleNum(633) == 1,
+    "Failed boss removes only the temporary copy"
+)
+battle.onLayoutReady(info, level)
+assert(not players[0].ghost and players[0]:GetCollectibleNum(633) == 1)
+players[1].ghost = true
+tick(33)
+assert(momSpawns == 2 and players[0]:GetCollectibleNum(633) == 2)
 clear = true
 tick(40)
-assert(battle.view().phase == phase.trophy and players[0]:GetCollectibleNum(633) == 1)
+assert(battle.view().phase == phase.trophy and players[0]:GetCollectibleNum(633) == 2)
 local trophy = entities[#entities]
 trophy.Wait = 0
 battle.collide(trophy, players[1])
@@ -439,10 +474,12 @@ print("battle royale round and adapter tests passed")
 
 -- Expand through native door creation to its fixed point, including lower
 -- indexes introduced after a scan has passed them. Native failures stay closed.
-enums.grid = { GRID_TRAPDOOR = 17, GRID_STAIRS = 18 }
+enums.grid = { GRID_TRAPDOOR = 17, GRID_STAIRS = 18, GRID_WALL = 15, GRID_DOOR = 16 }
 enums.effect = { HEAVEN_LIGHT_DOOR = 39 }
 enums.entity.ENTITY_EFFECT = 1000
-local descriptors = { [84] = { SafeGridIndex = 84, Data = { Type = 1 } } }
+enums.entity.ENTITY_BOMBDROP, enums.entity.ENTITY_LASER = 4, 7
+local descriptors =
+    { [84] = { SafeGridIndex = 84, GridIndex = 84, Data = { Type = 1, Shape = 1, Doors = 15 } } }
 local roomCount = 1
 local generatedLevel = {
     GetRooms = function()
@@ -455,22 +492,20 @@ local generatedLevel = {
         local x, y = index % 13, index // 13
         local offset = { [0] = { -1, 0 }, [1] = { 0, -1 }, [2] = { 1, 0 }, [3] = { 0, 1 } }
         local d = offset[door]
-        if not d then
-            return false
-        end
+        assert(d, "Invalid door slot would create an I AM ERROR entrance")
         x, y = x + d[1], y + d[2]
-        if x < 0 or x >= 13 or y < 0 or y >= 13 then
-            return false
-        end
+        assert(x >= 0 and x < 13 and y >= 0 and y < 13, "Out-of-map red door")
         local target = y * 13 + x
         if target == 0 or descriptors[target] then
             return false
         end
         descriptors[target] = {
             SafeGridIndex = target,
+            GridIndex = target,
             Data = {
                 Type = (target == 83 or target == 85) and 5 or 1,
                 Shape = 1,
+                Doors = 15,
                 Spawns = {
                     Size = target == 83 and 1 or 0,
                     Get = function()
@@ -490,6 +525,7 @@ local generatedLevel = {
         return true
     end,
 }
+local spawnEntities, spawnGrids = {}, {}
 local map = module("compat/challenges/battle_royale_map")({
     native = {
         room_special_template = function(index, kind, variant, seed)
@@ -505,7 +541,7 @@ local map = module("compat/challenges/battle_royale_map")({
         return high or low
     end,
     entities = function()
-        return {}
+        return spawnEntities
     end,
 })
 local built = map.build(generatedLevel)
@@ -519,6 +555,55 @@ for _, index in ipairs(built.spawns) do
     occupied[index] = true
 end
 assert(built.spawns[1] == 1 and built.spawns[4] == 168, "Missing corner uses nearest native room")
+-- Cover large/thin/L room boundaries, including GridIndex != SafeGridIndex.
+-- A rejected generation may not install an error door as a side effect.
+for _, case in ipairs({
+    { shape = enums.shape.ROOMSHAPE_1x1, origin = 0, safe = 0, slots = "2,3" },
+    { shape = enums.shape.ROOMSHAPE_1x2, origin = 0, safe = 0, slots = "2,3,6" },
+    { shape = enums.shape.ROOMSHAPE_IIV, origin = 154, safe = 154, mask = 10, slots = "1" },
+    { shape = enums.shape.ROOMSHAPE_2x1, origin = 0, safe = 0, slots = "2,3,7" },
+    { shape = enums.shape.ROOMSHAPE_IIH, origin = 154, safe = 154, mask = 5, slots = "0" },
+    { shape = enums.shape.ROOMSHAPE_2x2, origin = 154, safe = 154, slots = "0,1,4,5" },
+    { shape = enums.shape.ROOMSHAPE_LTL, origin = 0, safe = 1, slots = "0,1,2,3,6,7" },
+    { shape = enums.shape.ROOMSHAPE_LTR, origin = 154, safe = 154, slots = "0,1,2,4,5" },
+    { shape = enums.shape.ROOMSHAPE_LBL, origin = 154, safe = 154, slots = "0,1,3,4,5" },
+    { shape = enums.shape.ROOMSHAPE_LBR, origin = 154, safe = 154, slots = "0,1,4,5,6,7" },
+}) do
+    descriptors = {}
+    for index = 80, 88 do
+        descriptors[index] = {
+            GridIndex = index,
+            SafeGridIndex = index,
+            Data = {
+                Type = index == 85 and 5 or 1,
+                Shape = 1,
+                Doors = 0,
+                Spawns = { Size = 0 },
+            },
+        }
+    end
+    descriptors[case.safe] = {
+        GridIndex = case.origin,
+        SafeGridIndex = case.safe,
+        Data = {
+            Type = 1,
+            Shape = case.shape,
+            Doors = case.mask or 255,
+            Spawns = { Size = 0 },
+        },
+    }
+    local slots = {}
+    generatedLevel.MakeRedRoomDoor = function(_, index, slot)
+        assert(index == case.safe)
+        slots[#slots + 1] = slot
+        return false
+    end
+    map.build(generatedLevel)
+    assert(
+        table.concat(slots, ",") == case.slots,
+        "Invalid red-door geometry for shape " .. case.shape
+    )
+end
 local opened, removed = {}, {}
 local testRoom = {
     GetDoor = function(_, slot)
@@ -552,4 +637,45 @@ map.removeExits(testRoom)
 assert(removed[0] and not removed[1], "Exploration retains crawlspace stairs")
 map.removeExits(testRoom, true)
 assert(removed[1], "Boss settlement removes alternative exits")
+-- Spawn safety removes invulnerable enemies/traps without invoking death
+-- effects, and leaves resources, players and door allocations intact.
+for index, kind in ipairs({ 10, 33, 9, 4, 7, 5, 1 }) do
+    spawnEntities[index] = {
+        Type = kind,
+        IsEnemy = function()
+            return kind == 10 or kind == 33
+        end,
+        Remove = function(self)
+            self.removed = true
+        end,
+    }
+end
+for index, kind in ipairs({ 2, 7, 12, 15, 16 }) do
+    spawnGrids[index - 1] = {
+        GetType = function()
+            return kind
+        end,
+    }
+end
+local spawnClear = false
+map.clearSpawn({
+    RemoveGridEntity = function(_, index, delay, debris)
+        assert(delay == 0 and not debris)
+        spawnGrids[index] = nil
+    end,
+    GetGridSize = function()
+        return 5
+    end,
+    GetGridEntity = function(_, index)
+        return spawnGrids[index]
+    end,
+    SetClear = function(_, value)
+        spawnClear = value
+    end,
+})
+assert(spawnClear and not spawnGrids[0] and not spawnGrids[1] and not spawnGrids[2])
+assert(spawnGrids[3] and spawnGrids[4], "Keep native walls and door connections")
+for index, entity in ipairs(spawnEntities) do
+    assert(not not entity.removed == (index <= 5))
+end
 print("battle royale map generation and escape tests passed")

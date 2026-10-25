@@ -8,6 +8,7 @@ return function(deps)
     local lastFrame, pressureFrame, bossFrame = nil, nil, nil
     local initialized, deadSince, eliminated, dogma = {}, {}, {}, {}
     local observed = {}
+    local pendingSpawns = {}
     local moving, generated, awardPending = false, false, false
     local finishing = false
     local PORTAL_RADIUS, PORTAL_ARM_FRAMES, AWARD_DELAY = 22, 30, 15
@@ -42,6 +43,7 @@ return function(deps)
         portal, moving, generated, awardPending = nil, false, false, false
         encounterRoom = nil
         deadSince, eliminated = {}, {}
+        pendingSpawns = {}
         local game = deps.game()
         game:GetLevel():SetStage(
             deps.random(1, 5),
@@ -96,6 +98,7 @@ return function(deps)
         model.start(layout.zones)
         generated, moving, lastFrame, pressureFrame, bossFrame = true, false, nil, nil, nil
         for slot in pairs(party()) do
+            pendingSpawns[slot] = layout.spawns[slot + 1]
             assert(
                 native.api_move(slot, layout.spawns[slot + 1], 0),
                 "Battle royale corner placement failed"
@@ -228,7 +231,6 @@ return function(deps)
                 trophy.Wait = PORTAL_ARM_FRAMES
             end
         end)
-        cleanupDogma()
         if model.state.phase == phase.reward then
             makePortal(slot, "next", frame)
         end
@@ -237,9 +239,7 @@ return function(deps)
         if not model.enter(slot) then
             return
         end
-        dogma[slot] = player:GetCollectibleNum(enums.collectible.COLLECTIBLE_DOGMA)
         scoped(slot, function()
-            player:AddCollectible(enums.collectible.COLLECTIBLE_DOGMA, 0, false)
             player:AnimateTeleport(false)
         end)
         portal, moving, bossFrame = nil, true, frame
@@ -283,6 +283,10 @@ return function(deps)
                 end
                 scoped(slot, function()
                     local room = game:GetRoom()
+                    if pendingSpawns[slot] == at.index and at.dimension == 0 then
+                        deps.map.clearSpawn(room)
+                        pendingSpawns[slot] = nil
+                    end
                     if state.phase == phase.survival then
                         if state.elapsed >= rules.shrinkFrames[1] then
                             deps.map.escape(room)
@@ -338,6 +342,12 @@ return function(deps)
         end
         if state.phase == phase.boss and at.index == encounterRoom and at.dimension == 0 then
             if moving then
+                -- Pickup effects (including the room's shield) belong to the
+                -- destination room. Keep the real item through the reward phase.
+                scoped(slot, function()
+                    dogma[slot] = player:GetCollectibleNum(enums.collectible.COLLECTIBLE_DOGMA)
+                    player:AddCollectible(enums.collectible.COLLECTIBLE_DOGMA, 0, true)
+                end)
                 moving, bossFrame = false, frame
             end
             local clear = false
@@ -499,7 +509,7 @@ return function(deps)
             model = rules.new()
             layout, portal, clientView, encounterRoom = nil, nil, nil, nil
             initialized, deadSince, eliminated, dogma = {}, {}, {}, {}
-            observed = {}
+            observed, pendingSpawns = {}, {}
             lastFrame, pressureFrame, bossFrame = nil, nil, nil
             moving, generated, awardPending = false, false, false
             finishing = false
