@@ -34,11 +34,20 @@ class DatagramHost {
   public:
     ENetHost* handle = nullptr;
     WSAEVENT event = WSA_INVALID_EVENT;
-    explicit DatagramHost(std::optional<std::uint16_t> port) {
+    explicit DatagramHost(std::optional<std::uint16_t> port,
+                          enet_uint16 family = ENET_ADDRESS_IPV6) {
         if (enet_initialize())
             throw std::runtime_error("Cannot initialize UDP transport");
-        ENetAddress address{ENET_HOST_ANY, port.value_or(0)};
-        handle = enet_host_create(port ? &address : nullptr, maxPlayers + 1, channelCount, 0, 0);
+        ENetAddress address{};
+        address.port = port.value_or(0);
+        address.family = family;
+        handle = enet_host_create(&address, maxPlayers + 1, channelCount, 0, 0);
+        if (!handle && port && family == ENET_ADDRESS_IPV6 &&
+            (WSAGetLastError() == WSAEAFNOSUPPORT || WSAGetLastError() == WSAEPROTONOSUPPORT)) {
+            // IPv6 can be disabled system-wide; keep IPv4 hosting available.
+            address.family = ENET_ADDRESS_IPV4;
+            handle = enet_host_create(&address, maxPlayers + 1, channelCount, 0, 0);
+        }
         if (handle) {
             // Fragment below common tunnel/path MTUs; never rely on IP fragmentation.
             // ENet appends the checksum after its packet-size budget, including
@@ -480,10 +489,10 @@ struct DatagramConnection {
 };
 } // namespace
 
-std::shared_ptr<ConnectionPipe> NetworkIo::connectDatagram(const sockaddr_in& address) {
+std::shared_ptr<ConnectionPipe> NetworkIo::connectDatagram(const ENetAddress& address) {
     auto pipe = std::make_shared<ConnectionPipe>(true);
     pipe->address = address;
-    pipe->datagrams = std::make_shared<DatagramHost>(std::nullopt);
+    pipe->datagrams = std::make_shared<DatagramHost>(std::nullopt, address.family);
     auto queued = pipe;
     if (!additions.push(std::move(queued)))
         throw std::runtime_error("Connection task queue limit exceeded");
@@ -515,8 +524,7 @@ void NetworkIo::runDatagrams() {
             while (auto value = additions.pop()) {
                 auto pipe = *value;
                 Endpoint endpoint{pipe->datagrams, {}, {}};
-                ENetAddress address{pipe->address->sin_addr.s_addr, ntohs(pipe->address->sin_port)};
-                auto* peer = enet_host_connect(endpoint.host->handle, &address, channelCount,
+                auto* peer = enet_host_connect(endpoint.host->handle, &*pipe->address, channelCount,
                                                protocolVersion);
                 if (!peer)
                     throw std::runtime_error("Cannot connect UDP peer");
@@ -547,6 +555,7 @@ void NetworkIo::runDatagrams() {
                         ++it;
                 }
                 ENetEvent event{};
+                bool endpointFailed = false;
                 for (unsigned count = 0; count < 256; ++count) {
                     const bool blocked = std::any_of(
                         e.connections.begin(), e.connections.end(),
@@ -554,8 +563,19 @@ void NetworkIo::runDatagrams() {
                     if (blocked)
                         break;
                     const auto status = enet_host_service(e.host->handle, &event, 0);
-                    if (status < 0)
-                        throw std::runtime_error("UDP service failed");
+                    if (status < 0) {
+                        // An unreachable address must not stop the worker that
+                        // will service the next DNS candidate.
+                        for (const auto& [peer, connection] : e.connections) {
+                            connection->pipe->error = "UDP service failed";
+                            connection->pipe->state.store(ConnectionPipe::failed,
+                                                          std::memory_order_release);
+                        }
+                        if (e.listener)
+                            e.listener->failed.store(true, std::memory_order_release);
+                        endpointFailed = true;
+                        break;
+                    }
                     if (!status)
                         break;
                     auto found = e.connections.find(event.peer);
@@ -601,8 +621,9 @@ void NetworkIo::runDatagrams() {
                         enet_packet_destroy(event.packet);
                     }
                 }
-                enet_host_flush(e.host->handle);
-                if (e.connections.empty() && (closing || !e.listener))
+                if (!endpointFailed)
+                    enet_host_flush(e.host->handle);
+                if (endpointFailed || (e.connections.empty() && (closing || !e.listener)))
                     endpoint = endpoints.erase(endpoint);
                 else
                     ++endpoint;

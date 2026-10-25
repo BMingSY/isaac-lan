@@ -76,6 +76,8 @@ typedef enum _ENetSocketShutdown
 #define ENET_HOST_ANY       0
 #define ENET_HOST_BROADCAST 0xFFFFFFFFU
 #define ENET_PORT_ANY       0
+#define ENET_ADDRESS_IPV4   0
+#define ENET_ADDRESS_IPV6   6
 
 /**
  * Portable internet address structure. 
@@ -91,7 +93,23 @@ typedef struct _ENetAddress
 {
    enet_uint32 host;
    enet_uint16 port;
+#ifdef _WIN32
+   /* Local Winsock extension; never serialized into ENet protocol packets. */
+   enet_uint16 family;
+   enet_uint8 host6 [16];
+   enet_uint32 scopeID;
+#endif
 } ENetAddress;
+
+#ifdef _WIN32
+ENET_API int enet_address_equal_host (const ENetAddress *, const ENetAddress *);
+ENET_API int enet_address_is_broadcast (const ENetAddress *);
+ENET_API int enet_address_set_sockaddr (ENetAddress *, const struct sockaddr *, int);
+ENET_API ENetSocket enet_socket_create_family (ENetSocketType, enet_uint16);
+#else
+#define enet_address_equal_host(a, b) ((a) -> host == (b) -> host)
+#define enet_address_is_broadcast(a) ((a) -> host == ENET_HOST_BROADCAST)
+#endif
 
 /**
  * Packet flag bit constants.

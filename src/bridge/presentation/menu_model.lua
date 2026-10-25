@@ -1,6 +1,6 @@
 local UNRESTRICTED_CHARACTER = 65535
 -- Menu decisions and actions are independent of fonts, sprites and mouse geometry.
-return function(Phase, Command)
+return function(Phase, Command, endpoint)
     local CHALLENGE_MODE, MODE_COUNT = 4, 5
     local function idle(phase)
         return phase == Phase.idle or phase == Phase.failed or phase == Phase.closed
@@ -130,7 +130,7 @@ return function(Phase, Command)
             row("加入房间", function()
                 if validPort(ui) then
                     remember(ui, deps.native)
-                    command("join", ui.ip .. ":" .. ui.port)
+                    command("join", endpoint.format(ui.ip, ui.port))
                 end
             end, ui.ip ~= "")
             row("返回", function()

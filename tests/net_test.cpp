@@ -1,5 +1,6 @@
 #include "net/session.h"
 #include "net/datagram_protocol.h"
+#include "net/host_resolution.h"
 #include <enet/enet.h>
 #include "compat/challenges/catalog.h"
 #include "core/room_options.h"
@@ -40,7 +41,7 @@ struct Group {
     unsigned count;
     explicit Group(unsigned n, std::uint8_t difficulty = 0, const char* address = "127.0.0.1",
                    RunRules rules = {}, std::array<std::uint16_t, maxPlayers> characters = {},
-                   bool relayed = false)
+                   bool relayed = false, std::array<const char*, maxPlayers> addresses = {})
         : count(n) {
         for (unsigned i = 0; i < n; ++i)
             peers[i] = std::make_unique<TestSession>();
@@ -48,8 +49,9 @@ struct Group {
         if (relayed)
             relay = std::make_unique<UdpRelay>(peers[0]->port());
         for (unsigned i = 1; i < n; ++i) {
-            require(peers[i]->join(address, relay ? relay->port : peers[0]->port(), "state-test",
-                                   {}, "cosmetic-mods", testAccess()),
+            require(peers[i]->join(addresses[i] ? addresses[i] : address,
+                                   relay ? relay->port : peers[0]->port(), "state-test", {},
+                                   "cosmetic-mods", testAccess()),
                     "Join failed");
             // Seat assignment follows accepted connections, not thread start order.
             until([&] {
@@ -447,8 +449,9 @@ void loadingTimeout() {
     require(frame && frame->tick == 0 && frame->connected == 3,
             "Host did not resume after removing the unready peer");
 }
-void inputsAndStates(unsigned n) {
-    Group g(n);
+void inputsAndStates(unsigned n, const char* address = "127.0.0.1",
+                     std::array<const char*, maxPlayers> addresses = {}) {
+    Group g(n, 0, address, {}, {}, false, addresses);
     until([&] {
         g.poll();
         return g.peers[0]->latency()[n - 1] >= 0 && g.peers[n - 1]->latency()[n - 1] >= 0;
@@ -1620,7 +1623,7 @@ struct WirePeer {
     ENetPeer* peer = nullptr;
     explicit WirePeer(bool listen = false) {
         require(enet_initialize() == 0, "Wire fixture initialization failed");
-        ENetAddress address{ENET_HOST_ANY, 0};
+        ENetAddress address{};
         endpoint = enet_host_create(listen ? &address : nullptr, 1, datagram::channelCount, 0, 0);
         require(endpoint != nullptr, "Wire fixture endpoint failed");
         endpoint->checksum = enet_crc32;
@@ -1631,7 +1634,9 @@ struct WirePeer {
         enet_deinitialize();
     }
     void connect(std::uint16_t port) {
-        const ENetAddress address{htonl(INADDR_LOOPBACK), port};
+        ENetAddress address{};
+        address.host = htonl(INADDR_LOOPBACK);
+        address.port = port;
         peer = enet_host_connect(endpoint, &address, datagram::channelCount, protocolVersion);
         require(peer != nullptr, "Wire fixture connect failed");
     }
@@ -2185,29 +2190,35 @@ void handshake() {
         guest.poll();
         return host.players() == 2 && guest.phase() == Phase::lobby;
     });
-    TestSession badAddress, badIdentity;
-    require(!badAddress.join("not a host", host.port(), "supported", {}, {}, testAccess()),
-            "Invalid host address accepted");
+    for (const char* address : {"not a host", "[::1]:29506", "host:29506", "fe80::1%eth0"}) {
+        TestSession badAddress;
+        require(!badAddress.join(address, host.port(), "supported", {}, {}, testAccess()),
+                "Invalid host address accepted");
+    }
+    TestSession badIdentity;
     require(!badIdentity.join("127.0.0.1", host.port(), "supported", "not-an-identity", {},
                               testAccess()),
             "Invalid identity accepted");
 }
-void hostNames() {
-    Group g(2, 0, "localhost");
+void addressRejoin(Group& g) {
     g.ready();
     g.step(0);
     const auto identity = g.peers[1]->identity();
-    g.peers[1]->abort("hostname reconnection test");
+    g.peers[1]->abort("address reconnection test");
     until([&] {
         g.peers[0]->poll();
         return g.peers[0]->connectedMask() == 1;
     });
-    require(g.peers[1]->reconnect(), "Host name reconnect failed");
+    require(g.peers[1]->reconnect(), "Host address reconnect failed");
     until([&] {
         g.poll();
         return g.peers[1]->phase() == Phase::waiting;
     });
-    require(g.peers[1]->identity() == identity, "Host name reconnect changed identity");
+    require(g.peers[1]->identity() == identity, "Host address reconnect changed identity");
+}
+void hostNames() {
+    Group g(2, 0, "localhost");
+    addressRejoin(g);
     TestSession missing;
     require(missing.join("isaac-lan-does-not-exist.invalid", g.peers[0]->port(), "state-test", {},
                          {}, testAccess()),
@@ -2225,6 +2236,74 @@ void hostNames() {
     cancelled.poll();
     require(cancelled.phase() == Phase::closed && cancelled.resources().connections == 0,
             "A cancelled DNS request reopened the session");
+}
+void ipv6Addresses() {
+    WirePeer winsock;
+    constexpr std::uint16_t resolutionPort = 29506;
+    for (const char* host : {"::1", "2001:db8::abcd", "fe80::1%7", "::ffff:127.0.0.1"}) {
+        ENetAddress address{};
+        address.port = resolutionPort;
+        require(!enet_address_set_host_ip(&address, host) && address.family == ENET_ADDRESS_IPV6 &&
+                    address.port == resolutionPort,
+                "IPv6 literal parsing lost its family or port");
+        char formatted[128]{};
+        ENetAddress restored{};
+        require(!enet_address_get_host_ip(&address, formatted, sizeof(formatted)) &&
+                    !enet_address_set_host_ip(&restored, formatted) &&
+                    enet_address_equal_host(&address, &restored),
+                "IPv6 formatting lost address bits or scope");
+        auto different = address;
+        different.host6[0] ^= 1;
+        require(!enet_address_equal_host(&address, &different), "IPv6 prefix was ignored");
+        different = address;
+        different.host6[15] ^= 1;
+        require(!enet_address_equal_host(&address, &different), "IPv6 suffix was ignored");
+        different = address;
+        ++different.scopeID;
+        require(!enet_address_equal_host(&address, &different), "IPv6 interface was ignored");
+        address.host = ENET_HOST_BROADCAST;
+        require(!enet_address_is_broadcast(&address), "IPv6 bypassed peer source validation");
+    }
+    ENetAddress invalid{};
+    for (const char* host : {"2001:::1", "::ffff:999.0.0.1", "host.example"})
+        require(enet_address_set_host_ip(&invalid, host) != 0,
+                (std::string("Invalid literal was accepted: ") + host).c_str());
+    for (const char* host : {"::1", "localhost"}) {
+        const auto result = resolveHost(host, resolutionPort);
+        until([&] { return result->ready.load(std::memory_order_acquire); });
+        require(!result->error && !result->addresses.empty() &&
+                    result->addresses.front().family == ENET_ADDRESS_IPV6,
+                "Host resolution did not retain/prefer IPv6");
+        for (const auto& address : result->addresses)
+            require(address.port == resolutionPort, "DNS resolution lost the requested port");
+        if (std::string_view(host) == "localhost")
+            require(result->addresses.size() >= 2 &&
+                        result->addresses[1].family == ENET_ADDRESS_IPV4,
+                    "Dual-stack resolution did not retain the IPv4 fallback");
+        else
+            require(result->addresses.size() == 1, "IPv6-only resolution fabricated IPv4");
+    }
+}
+void ipv6Rejoin() {
+    Group g(2, 0, "[::1]");
+    addressRejoin(g);
+}
+void hostFallback() {
+    // The relay binds only IPv4, while localhost resolves to IPv6 first.
+    Group g(2, 0, "localhost", {}, {}, true);
+    g.ready();
+    g.step(0);
+    g.publish(0);
+    std::optional<WorldState> received;
+    until([&] {
+        g.poll();
+        received = g.peers[1]->takeState();
+        return received.has_value();
+    });
+    require(received->bytes.size() == 6507, "IPv4 fallback lost fragmented world state");
+    for (std::size_t i = 0; i < received->bytes.size(); ++i)
+        require(received->bytes[i] == static_cast<unsigned char>(i),
+                "IPv4 fallback corrupted world state");
 }
 void commands() {
     Group g(2);
@@ -2827,49 +2906,56 @@ int main(int argc, char** argv) {
         return runTests(
             argc, argv,
             {{"udp-loss", udpLossRecovery}, {"udp-large-recovery", udpFragmentedRecovery}});
-    const auto result = runTests(argc, argv,
-                                 {{"codec", codec},
-                                  {"world-deltas", worldDeltas},
-                                  {"wire-compression", wireCompression},
-                                  {"async-network", asyncNetwork},
-                                  {"bulk-worker", bulkWorker},
-                                  {"reliable-receive", reliableReceive},
-                                  {"delivery-backpressure", deliveryBackpressure},
-                                  {"delta-floor-boundary", deltaFloorBoundary},
-                                  {"compression-limits", compressionLimits},
-                                  {"render-inputs", renderInputs},
-                                  {"input-backpressure", inputBackpressure},
-                                  {"inputs-2", [] { inputsAndStates(2); }},
-                                  {"inputs-3", [] { inputsAndStates(3); }},
-                                  {"inputs-4", [] { inputsAndStates(4); }},
-                                  {"floor-rejoin", floorRejoin},
-                                  {"stage-events", stageEvents},
-                                  {"ending-events", endingEvents},
-                                  {"ending-liveness", endingLiveness},
-                                  {"restart", restartRuns},
-                                  {"return-lobby", returnLobby},
-                                  {"cinematic-events", cinematicEvents},
-                                  {"stage-during-rejoin", stageDuringRejoin},
-                                  {"rewind", rewindTransaction},
-                                  {"progression", progression},
-                                  {"r-key", rKeyTransaction},
-                                  {"room-commands", roomCommands},
-                                  {"input-rooms", inputRooms},
-                                  {"lobby", lobby},
-                                  {"run-rules", runRules},
-                                  {"room-options", roomOptions},
-                                  {"lobby-access", lobbyAccess},
-                                  {"handshake", handshake},
-                                  {"host-names", hostNames},
-                                  {"commands", commands},
-                                  {"loading-exit", loadingExit},
-                                  {"loading-timeout", loadingTimeout},
-                                  {"publication-limits", publicationLimits},
-                                  {"integrations", integrations},
-                                  {"communication", communication},
-                                  {"greed-settings", greedSettings},
-                                  {"host-disconnect", hostDisconnect},
-                                  {"resource-lifecycle", resourceLifecycle}});
+    const auto result = runTests(
+        argc, argv,
+        {{"codec", codec},
+         {"world-deltas", worldDeltas},
+         {"wire-compression", wireCompression},
+         {"async-network", asyncNetwork},
+         {"bulk-worker", bulkWorker},
+         {"reliable-receive", reliableReceive},
+         {"delivery-backpressure", deliveryBackpressure},
+         {"delta-floor-boundary", deltaFloorBoundary},
+         {"compression-limits", compressionLimits},
+         {"render-inputs", renderInputs},
+         {"input-backpressure", inputBackpressure},
+         {"inputs-2", [] { inputsAndStates(2); }},
+         {"inputs-3", [] { inputsAndStates(3); }},
+         {"inputs-4", [] { inputsAndStates(4); }},
+         {"floor-rejoin", floorRejoin},
+         {"stage-events", stageEvents},
+         {"ending-events", endingEvents},
+         {"ending-liveness", endingLiveness},
+         {"restart", restartRuns},
+         {"return-lobby", returnLobby},
+         {"cinematic-events", cinematicEvents},
+         {"stage-during-rejoin", stageDuringRejoin},
+         {"rewind", rewindTransaction},
+         {"progression", progression},
+         {"r-key", rKeyTransaction},
+         {"room-commands", roomCommands},
+         {"input-rooms", inputRooms},
+         {"lobby", lobby},
+         {"run-rules", runRules},
+         {"room-options", roomOptions},
+         {"lobby-access", lobbyAccess},
+         {"handshake", handshake},
+         {"host-names", hostNames},
+         {"ipv6-addresses", ipv6Addresses},
+         {"ipv6-inputs", [] { inputsAndStates(2, "::1"); }},
+         {"ipv6-rejoin", ipv6Rejoin},
+         {"dual-stack",
+          [] { inputsAndStates(4, "::1", {nullptr, "127.0.0.1", "::1", "::ffff:127.0.0.1"}); }},
+         {"host-fallback", hostFallback},
+         {"commands", commands},
+         {"loading-exit", loadingExit},
+         {"loading-timeout", loadingTimeout},
+         {"publication-limits", publicationLimits},
+         {"integrations", integrations},
+         {"communication", communication},
+         {"greed-settings", greedSettings},
+         {"host-disconnect", hostDisconnect},
+         {"resource-lifecycle", resourceLifecycle}});
     if (!result)
         std::puts("ALL STATE TRANSPORT TESTS PASSED");
     return result;

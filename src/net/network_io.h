@@ -6,6 +6,7 @@
 #include "net/reliable_receiver.h"
 #include "net/world_transfer.h"
 #include <deque>
+#include <enet/enet.h>
 
 namespace isaac::lan {
 class DatagramHost;
@@ -45,7 +46,7 @@ struct WorldObservation {
 struct ConnectionPipe {
     enum State { connecting, connected, closed, failed };
     std::shared_ptr<DatagramHost> datagrams;
-    std::optional<sockaddr_in> address;
+    std::optional<ENetAddress> address;
     SpscQueue<OutgoingPacket, 128> outgoing;
     SpscQueue<IncomingPacket, 128> incoming;
     SpscQueue<NetworkSample, 64> samples;
@@ -95,7 +96,7 @@ class NetworkIo {
         if (failed.load(std::memory_order_acquire))
             throw std::runtime_error(failure);
     }
-    std::shared_ptr<ConnectionPipe> connectDatagram(const sockaddr_in& address);
+    std::shared_ptr<ConnectionPipe> connectDatagram(const ENetAddress& address);
     std::shared_ptr<ListenerPipe> listenDatagram(std::uint16_t port);
     void signal() {
         wake.signal();

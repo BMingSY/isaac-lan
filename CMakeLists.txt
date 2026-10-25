@@ -253,6 +253,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.friendly-fire friendly_fire.lua)
         isaac_add_lua_test(bridge.pvp-items pvp_items.lua)
         isaac_add_lua_test(bridge.challenge_menu challenge_menu.lua)
+        isaac_add_lua_test(bridge.endpoint endpoint.lua)
         isaac_add_lua_test(bridge.ping_hud ping_hud.lua)
         isaac_add_lua_test(bridge.hornfel hornfel.lua)
         isaac_add_lua_test(bridge.entity_links entity_links.lua)
@@ -558,6 +559,11 @@ if(BUILD_TESTING)
         room-options
         handshake
         host-names
+        ipv6-addresses
+        ipv6-inputs
+        ipv6-rejoin
+        dual-stack
+        host-fallback
         commands
         loading-exit
         loading-timeout

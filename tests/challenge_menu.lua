@@ -166,6 +166,7 @@ _IsaacLan = {
 _IsaacLanModules = {
     ["presentation/restart"] = dofile(root .. "/src/bridge/presentation/restart.lua"),
     ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
+    ["core/endpoint"] = dofile(root .. "/src/bridge/core/endpoint.lua"),
     ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
 }
 _IsaacLanCommand = function(name, value)
@@ -363,7 +364,8 @@ draw()
 assert(labels["保存并结束联机"])
 local actions = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     _IsaacLan.net_phases(),
-    _IsaacLan.net_commands()
+    _IsaacLan.net_commands(),
+    _IsaacLanModules["core/endpoint"]
 )
 local sent, hidden = {}, 0
 local deps = {
@@ -483,7 +485,8 @@ assert(labels["创建房间"] and not labels["重试保存联机存档"])
 local phaseValues = dofile(root .. "/tests/fixtures/net_phases.lua")
 local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     phaseValues,
-    dofile(root .. "/tests/fixtures/net_commands.lua")
+    dofile(root .. "/tests/fixtures/net_commands.lua"),
+    _IsaacLanModules["core/endpoint"]
 )
 for _, host in ipairs({ 0, 1 }) do
     local selected
@@ -550,6 +553,15 @@ local rows = actions.rows(prefs, status, {}, {}, deps)
 rows[4].action()
 assert(remembered[1] == prefs.ip and remembered[2] == 1234)
 assert(sent[#sent][1] == "join" and sent[#sent][2] == "host.example.com:1234")
+for _, host in ipairs({ "2001:db8::abcd", "[2001:db8::abcd]", "fe80::1%12", "::ffff:127.0.0.1" }) do
+    prefs.ip = host
+    rows = actions.rows(prefs, status, {}, {}, deps)
+    rows[4].action()
+    local address, port = _IsaacLanModules["core/endpoint"].parse(sent[#sent][2])
+    assert(sent[#sent][1] == "join" and port == 1234)
+    assert(address == (host:match("^%[(.*)%]$") or host))
+    assert(remembered[1] == host and remembered[2] == 1234)
+end
 
 -- Each card renders its owner's twelve native single-player layers.
 status = {

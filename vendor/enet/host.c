@@ -48,15 +48,26 @@ enet_host_create (const ENetAddress * address, size_t peerCount, size_t channelL
     }
     memset (host -> peers, 0, peerCount * sizeof (ENetPeer));
 
+#ifdef _WIN32
+    host -> socket = enet_socket_create_family (ENET_SOCKET_TYPE_DATAGRAM,
+                                               address != NULL ? address -> family : ENET_ADDRESS_IPV4);
+#else
     host -> socket = enet_socket_create (ENET_SOCKET_TYPE_DATAGRAM);
+#endif
     if (host -> socket == ENET_SOCKET_NULL || (address != NULL && enet_socket_bind (host -> socket, address) < 0))
     {
+#ifdef _WIN32
+       int socketError = WSAGetLastError ();
+#endif
        if (host -> socket != ENET_SOCKET_NULL)
          enet_socket_destroy (host -> socket);
 
        enet_free (host -> peers);
        enet_free (host);
 
+#ifdef _WIN32
+       WSASetLastError (socketError);
+#endif
        return NULL;
     }
 

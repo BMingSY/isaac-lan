@@ -21,12 +21,26 @@ int main() {
     const ConnectionSettings first{"room.example.com", 31234};
     require(saveConnectionSettings(path, first), "Cannot save first connection");
     require(loadConnectionSettings(path) == first, "New menu instance lost connection");
+    for (const char* host : {"2001:db8::1234", "[2001:db8::1234]", "fe80::abcd%12",
+                             "[fe80::abcd%12]", "::ffff:192.168.1.42"}) {
+        const ConnectionSettings ipv6{host, 31234};
+        require(saveConnectionSettings(path, ipv6) && loadConnectionSettings(path) == ipv6,
+                "IPv6 preferences did not survive a menu restart");
+    }
     const ConnectionSettings next{"192.168.1.42", 65535, isaac::roomOptions::known};
     require(saveConnectionSettings(path, next) && loadConnectionSettings(path) == next,
             "Replacing a previous connection failed");
     for (const auto& bad : {ConnectionSettings{"bad\naddress", 123},
                             {"ok", 0},
                             {"ok", 65536},
+                            {"[room.example.com]", 123},
+                            {"[::1", 123},
+                            {"::1]", 123},
+                            {"[::1]:123", 123},
+                            {"host.example:123", 123},
+                            {"fe80::1%", 123},
+                            {"fe80::1%eth0", 123},
+                            {"fe80::1%4294967296", 123},
                             {std::string(254, 'a'), 10}}) {
         require(!saveConnectionSettings(path, bad) && loadConnectionSettings(path) == next,
                 "Invalid preference replaced the last usable connection");

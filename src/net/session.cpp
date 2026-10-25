@@ -52,9 +52,11 @@ struct Session::Impl {
     Phase state = Phase::idle;
     std::string failure, fingerprint, identity, mods, hostIP;
     std::shared_ptr<HostResolution> resolving;
-    std::vector<sockaddr_in> hostAddresses;
+    std::vector<ENetAddress> hostAddresses;
     std::size_t nextHostAddress = 0;
-    Clock::time_point joinAt;
+    Clock::time_point joinAt, connectUntil;
+    static constexpr auto joinTimeout = std::chrono::seconds(10);
+    static constexpr auto addressTimeout = std::chrono::seconds(2);
     bool modMismatch = false, lobbyDirty = false, choicesRequired = false;
     std::array<std::string, maxPlayers> identities;
     LobbyAccess localAccess;
@@ -202,9 +204,19 @@ struct Session::Impl {
         peers[0].reset();
         while (nextHostAddress < hostAddresses.size()) {
             const auto& address = hostAddresses[nextHostAddress++];
-            peers[0] = std::make_unique<Peer>(io, io->connectDatagram(address));
-            connecting = true;
-            return;
+            try {
+                peers[0] = std::make_unique<Peer>(io, io->connectDatagram(address));
+                connecting = true;
+                const auto now = Clock::now();
+                const auto candidates = hostAddresses.size() - nextHostAddress + 1;
+                connectUntil = now + std::min<Clock::duration>(addressTimeout,
+                                                               (joinTimeout - (now - joinAt)) /
+                                                                   static_cast<int>(candidates));
+                return;
+            } catch (const std::runtime_error&) {
+                if (nextHostAddress == hostAddresses.size())
+                    throw;
+            }
         }
         throw std::runtime_error("Cannot connect to host");
     }
@@ -1043,7 +1055,7 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
         if (!validIdentity(impl->identity))
             throw std::runtime_error("Invalid player identity");
         if (!validHostAddress(ip))
-            throw std::runtime_error("Enter a valid IPv4 address or host name");
+            throw std::runtime_error("Enter a valid IPv4/IPv6 address or host name");
         impl->fingerprint = fingerprint;
         impl->mods = mods;
         impl->localAccess = access;
@@ -1051,14 +1063,14 @@ bool Session::join(const std::string& ip, std::uint16_t port, const std::string&
         impl->boundPort = port;
         impl->state = Phase::connecting;
         impl->joinAt = Clock::now();
-        sockaddr_in address{};
-        address.sin_family = AF_INET;
-        address.sin_port = htons(port);
-        if (InetPtonA(AF_INET, ip.c_str(), &address.sin_addr) == 1) {
+        ENetAddress address{};
+        address.port = port;
+        const std::string host(unbracketHostAddress(ip));
+        if (enet_address_set_host_ip(&address, host.c_str()) == 0) {
             impl->hostAddresses.push_back(address);
             impl->connectNextAddress();
         } else {
-            impl->resolving = resolveHost(ip, port);
+            impl->resolving = resolveHost(host, port);
         }
         return true;
     } catch (const std::exception& e) {
@@ -1234,12 +1246,12 @@ void Session::poll() {
         impl->finishBytes();
         if (impl->resolving) {
             if (!impl->resolving->ready.load(std::memory_order_acquire)) {
-                if (Clock::now() - impl->joinAt > std::chrono::seconds(10))
+                if (Clock::now() - impl->joinAt > Impl::joinTimeout)
                     throw std::runtime_error("Host name resolution timed out");
                 return;
             }
             if (impl->resolving->error || impl->resolving->addresses.empty())
-                throw std::runtime_error("Cannot resolve host name to an IPv4 address");
+                throw std::runtime_error("Cannot resolve host name to an IPv4/IPv6 address");
             impl->hostAddresses = std::move(impl->resolving->addresses);
             impl->resolving.reset();
             impl->connectNextAddress();
@@ -1268,8 +1280,11 @@ void Session::poll() {
                 return;
             }
             if (status != ConnectionPipe::connected) {
-                if (Clock::now() - impl->joinAt > std::chrono::seconds(10))
+                const auto now = Clock::now();
+                if (now - impl->joinAt > Impl::joinTimeout)
                     throw std::runtime_error("Host connection timed out");
+                if (impl->nextHostAddress < impl->hostAddresses.size() && now >= impl->connectUntil)
+                    impl->connectNextAddress();
                 return;
             }
             impl->connecting = false;
