@@ -22,6 +22,8 @@ void halfCompleted();
 int localViewSlot();
 bool replica();
 bool challengeActive();
+bool allowChallengeEvent(const char* event);
+void mapView(bool begin, int slot = -1, bool record = false);
 void playerRoomCleared(int owner, int dimension, int index);
 bool takeCollectiblePickup(int owner, unsigned actorSeed, int item, int charge, bool touched,
                            int varData, int pool);

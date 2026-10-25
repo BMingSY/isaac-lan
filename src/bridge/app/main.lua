@@ -5,12 +5,16 @@ local integration = assert(_IsaacLanModules)["api/public"]
 local registry = _IsaacLanModules["compat/mods/registry"]
 local game
 local owner = { Name = "Isaac LAN native extension" }
+local battleHud
 local function callback(id, fn)
     Isaac.AddCallback(owner, id, fn)
 end
 callback(ModCallbacks.MC_POST_RENDER, function()
     if _IsaacLanState then
         _IsaacLanState.render()
+    end
+    if battleHud then
+        battleHud.render()
     end
 end)
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
@@ -95,14 +99,57 @@ local function goalRoute(goal)
         },
     }, goal)
 end
+local battleRules = _IsaacLanModules["compat/challenges/battle_royale_rules"]
+local battleEnums = {
+    collectible = CollectibleType,
+    stageType = StageType,
+    transition = RoomTransitionAnim,
+    pool = ItemPoolType,
+    entity = EntityType,
+    pickup = PickupVariant,
+    damage = DamageFlag,
+    room = RoomType,
+    shape = RoomShape,
+    grid = GridEntityType,
+    effect = EffectVariant,
+}
+local battleVisibility = _IsaacLanModules["sync/map_visibility"]({
+    native = native,
+    game = Game,
+    fields = _IsaacLanModules["sync/fields"],
+    levelFlags = LevelStateFlag,
+})
+local battle = _IsaacLanModules["compat/challenges/battle_royale"]({
+    native = native,
+    game = Game,
+    player = Isaac.GetPlayer,
+    entities = Isaac.GetRoomEntities,
+    config = Isaac.GetItemConfig,
+    spawn = Isaac.Spawn,
+    vector = Vector,
+    ref = EntityRef,
+    random = math.random,
+    rules = battleRules,
+    enums = battleEnums,
+    visibility = battleVisibility,
+    map = _IsaacLanModules["compat/challenges/battle_royale_map"]({
+        native = native,
+        rules = battleRules,
+        enums = battleEnums,
+        random = math.random,
+        entities = Isaac.GetRoomEntities,
+    }),
+})
 challenge = _IsaacLanModules["runtime/challenges"]({
     native = native,
     game = Game,
     routes = {
         lamb = goalRoute("lamb"),
         mom = goalRoute("mom"),
+        battle_royale = battle,
     },
     effects = {
+        [battleRules.id] = battle,
         [1002] = _IsaacLanModules["compat/challenges/luck_game"]({
             allocation = lootAllocation(),
             native = native,
@@ -127,8 +174,27 @@ challenge = _IsaacLanModules["runtime/challenges"]({
             },
         }),
     },
-    maps = {},
+    maps = { [battleRules.id] = battle },
 })
+_IsaacLanState.setChallenges(challenge)
+battleHud = _IsaacLanModules["presentation/battle_royale"]({
+    native = native,
+    rules = battleRules,
+    view = challenge.viewState,
+    game = Game,
+    sprite = Sprite,
+    vector = Vector,
+    color = Color,
+    screen = Isaac.WorldToScreen,
+    width = Isaac.GetScreenWidth,
+    height = Isaac.GetScreenHeight,
+})
+function _IsaacLanAllowChallengeEvent(event)
+    return challenge.allow(event)
+end
+function _IsaacLanMapView(begin, slot, record)
+    challenge.mapView(begin, slot, record)
+end
 callback(ModCallbacks.MC_POST_PICKUP_INIT, function(_, pickup)
     challenge.pickup(pickup)
 end)

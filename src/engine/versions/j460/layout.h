@@ -87,7 +87,17 @@ inline constexpr unsigned entities = 0x1218;
 } // namespace room
 namespace roomDescriptor {
 inline constexpr unsigned data = 0x10;
+inline constexpr unsigned overrideData = 0x14;
+inline constexpr unsigned visitedCount = 0x40;
 } // namespace roomDescriptor
+namespace roomConfig {
+inline constexpr unsigned type = 0x8;
+inline constexpr unsigned variant = 0xc;
+inline constexpr unsigned shape = 0x48;
+inline constexpr int specialStage = 0;
+inline constexpr int maxType = 29;
+inline constexpr int maxDifficulty = 10;
+} // namespace roomConfig
 namespace entityList {
 inline constexpr unsigned firstArray = 0x20;
 inline constexpr unsigned lastArray = 0x90;

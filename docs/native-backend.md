@@ -54,6 +54,12 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 `rooms_teleport(slot, index, dimension)` 在房主更新安全边界请求传送一个已连接参与者，参数范围为槽位 0–3、房间索引 -20–168、维度 0–2。目标必须具有有效原生房间描述符；入口返回布尔值表示请求是否被接受，不表示已经到达。目标按已确定的房间处理，跳过混乱诅咒选路；迁移、受控身体、随行对象、进入效果和到达动画复用现有房间事务，不增加布局或对象所有权。排队时不启动离开动画，取消不会留下传送中的角色状态。上层负责目标选择、到达确认和失效清理，取消使用 `api_cancel_move`，不对旧楼层执行取消。该内部能力不属于第三方稳定 API。
 
+`rooms_revive_player(slot)` 只接受 0–3 的所属玩家栏位，在主机房间系统启用、没有借用作用域、目标为联机幽灵且挑战允许 `round_revive` 时调用既有 `replicaRevivePlayerGhost` 原生入口。幽灵身份使用 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `player::coopGhost`；复活期间只借用该玩家及其身体的房间名单，不接受或返回原生地址，不自行分配、释放角色。复活时机、回血和资源保留由挑战组件决定。
+
+`room_special_template(index, type, variant, seed)` 为主机未访问、未实例化、没有覆盖配置的主维度房间选择原生特殊房间模板。既有 `roomConfigRandomRoom` Hook 记录当前游戏所属的配置对象；接口限定特殊房间库、精确类型／变种和原房间形状，选择不消耗房间权重。描述符仅借用游戏配置指针，字符串、生成列表与房间对象仍由游戏持有；布局字段归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `roomDescriptor`／`roomConfig`。接口不传递地址、不构造或释放原生配置，不允许替换已加载房间；具体模板与调用时机由挑战地图策略决定。
+
+原生整队复活、死亡结算、楼层跳转和共享清房奖励在既有 Hook 内询问挑战的具名事件许可。Lua 错误使请求失败；单人及没有对应策略的挑战沿用原版行为。逐角色的道具复活不经过整队复活许可。`map_refresh()` 在房间系统启用期间仅刷新原生小地图显示缓存。个人地图在本机绘制前暂借显示／探索字段，绘制后恢复；既有玩家更新 Hook 以所属栏位暂借地图显示、四种揭图标志和全图可见状态，将原生拾取、卡牌／道具使用与受伤效果产生的探索变化交回所属玩家。玩家更新期间不替换权威访问次数，避免改变普通房间的玩法判定；原生对象与房间保存数据的所有权不变。
+
 `actor_companions` 在空闲客机恢复亲子角色名单。每项为 `id:u32, index:u8, parent:u8, controller:u8, kind:u16, variant:u16, babySkin:i16`，均使用大端；开头为项目数 `u8`，上限 60。父项必须先于子项，控制器必须相同，ID 与索引不得重复。`babySkin` 由 Lua `GetBabySkin()` 采集，限定 `-1..71`，在父角色库存恢复前写入 J460 `Player+0x1aec`；布局由 `GetBabySkin`（RVA `0x2dae00`）签名校验。原生库存缓存通过变体和婴儿身份识别已有伴随角色。角色仍由原生玩家管理器分配、注销，不以本机地址作为线上身份。
 
 房间转移请求可以携带目标房间中的落点，与入口门槽分开保存；明确的入口门槽优先。门槽在原生目的地解析之后、目标房间初始化之前恢复，门布局与角色落点使用同一入口；迷宫重定向保留原生选择的最终方向。落点随单次请求消费，楼层和会话清理同时丢弃请求。后端读取 J460 Player `+0x20a9` 的联机幽灵标记、连接状态、房间键和坐标，将普通值交给[幽灵随队策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/characters/ghost.h)；返回的队友坐标通过既有到达路径写入，不改变对象分配、释放或门的目的地。

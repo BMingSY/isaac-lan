@@ -33,6 +33,7 @@ inline constexpr unsigned waterSplash = 99;
 inline constexpr unsigned pickupGhost = 191;
 } // namespace effect
 namespace player {
+inline constexpr int isaac = 0;
 inline constexpr int soulB = 40;
 inline constexpr int cainB = 23;
 inline constexpr int keeper = 14;

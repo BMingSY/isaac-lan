@@ -144,6 +144,7 @@ return function(fields)
                     deals = deps.deals.capture(),
                     pills = deps.pills.capture(),
                     glitched = deps.glitched.capture(),
+                    challenge = deps.challenge and deps.challenge() or false,
                 }
                 -- Memoize only immutable tuples; per-peer event queues still drain
                 -- separately, even when both peers are looking at the same room.
@@ -159,6 +160,9 @@ return function(fields)
                 value[name] = field
             end
             value.tick, value.actors, value.slot, value.room = tick, actors, slot, room
+            if deps.projectMap then
+                value.map = deps.projectMap(shared.map, slot)
+            end
             value.sound = deps.audio.capture(slot)
             value.presentation = native.presentation_events(slot)
             value.items = deps.items.capture(slot)

@@ -147,6 +147,8 @@ Lua 决定游戏字段契约、采集与恢复顺序，通过游戏 API 或具�
 
 协议与字段版本分别由 [protocol.h](https://github.com/BMingSY/isaac-lan/blob/main/src/net/protocol.h) 和 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua) 管理。变更字段时同步更新生产者、消费者、版本／指纹和相关契约。
 
-世界字段版本为 32，精灵原生载荷使用格式 2，包含动画挂点帧和事件状态。角色字段 10 保存 `GetBabySkin()` 的身份，伴随角色在库存之前恢复该值。角色和服装在渲染边界仍恢复权威姿态；同名动画通过完整状态恢复，避免每帧重新初始化动画。不同字段版本不能互相应用，嵌入模块与 DLL 指纹继续参与连接校验。
+世界字段版本为 36，精灵原生载荷使用格式 2，包含动画挂点帧和事件状态。角色字段 10 保存 `GetBabySkin()` 的身份，伴随角色在库存之前恢复该值。角色和服装在渲染边界仍恢复权威姿态；同名动画通过完整状态恢复，避免每帧重新初始化动画。不同字段版本不能互相应用，嵌入模块与 DLL 指纹继续参与连接校验。
+
+世界字段 `challenge` 为 `false` 或 `[规则编号, 规则版本, 组件载荷]`，挑战组件验证并恢复自身的动态进度；具体契约见[联机挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)。启用个人地图策略时，地图的显示与已探索字段按接收者投影；布局、清场与掉落仍由同一权威楼层采集。UDP 消息布局保持协议版本 44，世界字段与嵌入模块通过各自版本和扩展指纹校验。
 
 客机协议或应用错误会结束其当前游戏并返回大厅；房主自身的桥接错误可能结束整场会话，详见[失败边界](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md#失败边界)。Ping 是包含主机消费回包及传输排队的往返时间，不能代替状态处理耗时；测量与排查方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。

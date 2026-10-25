@@ -17,6 +17,7 @@ struct Definition {
     int goalStage, goalStageType;
     bool nextBag;
     std::array<unsigned, 2> requiredAchievements;
+    bool friendlyFire = false;
 };
 inline constexpr std::array definitions{
     Definition{
@@ -46,6 +47,21 @@ inline constexpr std::array definitions{
         ids::stageType::original,
         false,
         {},
+    },
+    Definition{
+        1003,
+        1,
+        ids::player::isaac,
+        0,
+        true,
+        "吃鸡",
+        "battle_royale",
+        ids::ending::epilogue,
+        ids::stage::chapterThreeSecond,
+        ids::stageType::original,
+        false,
+        {},
+        true,
     },
 };
 inline const Definition* find(unsigned id) {

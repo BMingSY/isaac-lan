@@ -86,15 +86,21 @@ void pollRestart() {
 }
 bool retryArchive();
 lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
-    return definition ? lan::RunRules{definition->id, definition->version, definition->character,
-                                      definition->difficulty, definition->transient}
+    return definition ? lan::RunRules{definition->id,
+                                      definition->version,
+                                      definition->character,
+                                      definition->difficulty,
+                                      definition->transient,
+                                      definition->friendlyFire ? roomOptions::friendlyFire : 0}
                       : lan::RunRules{};
 }
 bool validRules(const lan::RunRules& rules) {
     const auto* definition = compat::challenges::find(rules.id);
     auto expected = rulesFor(definition);
+    const auto requiredOptions = expected.options;
     expected.options = rules.options;
-    return roomOptions::valid(rules.options) && (!rules.id || definition) && rules == expected;
+    return roomOptions::valid(rules.options) && (!rules.id || definition) && rules == expected &&
+           (rules.options & requiredOptions) == requiredOptions;
 }
 bool beginNetworkRun() {
     if (saves.networkRun)
@@ -1156,7 +1162,7 @@ int selectChallenge(lua_State* L) {
     const auto* definition = id >= 0 && id <= 65535 ? compat::challenges::find(id) : nullptr;
     auto rules = rulesFor(definition);
     if (session)
-        rules.options = session->rules().options;
+        rules.options |= session->rules().options;
     lua.pushBoolean(L, session && (id == 0 || definition) && session->configureRules(rules));
     return 1;
 }
@@ -1184,6 +1190,7 @@ int configureRoomOptions(lua_State* L) {
         roomOptions::valid(static_cast<std::uint32_t>(value))) {
         auto rules = session->rules();
         rules.options = static_cast<std::uint32_t>(value);
+        rules.options |= rulesFor(compat::challenges::find(rules.id)).options;
         accepted = session->configureRules(rules);
     }
     lua.pushBoolean(L, accepted);
@@ -1660,6 +1667,36 @@ bool replica() {
 bool challengeActive() {
     return session && (session->phase() == lan::Phase::running || saves.networkRun) &&
            session->settings().rules.id != 0;
+}
+bool allowChallengeEvent(const char* event) {
+    if (!challengeActive() || replica())
+        return true;
+    if (!state)
+        return false;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanAllowChallengeEvent") != 6) {
+        lua.setTop(state, top);
+        return false;
+    }
+    lua.pushString(state, event);
+    if (!call(0, 1, 1, top))
+        return false;
+    const bool allowed = lua.type(state, -1) == 1 && lua.toBoolean(state, -1);
+    lua.setTop(state, top);
+    return allowed;
+}
+void mapView(bool begin, int slot, bool record) {
+    if (!state || (begin && (!challengeActive() || !view.gated)))
+        return;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanMapView") != 6) {
+        lua.setTop(state, top);
+        return;
+    }
+    lua.pushBoolean(state, begin);
+    lua.pushInteger(state, slot);
+    lua.pushBoolean(state, record);
+    call(0, 3, 0, top);
 }
 bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimension, int room,
                     bool teleport) {

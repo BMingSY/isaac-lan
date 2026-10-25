@@ -97,6 +97,11 @@ sync/combat_state
 sync/replica
 compat/routes/challenge_goal
 compat/challenges/luck_game
+compat/challenges/battle_royale_rules
+compat/challenges/battle_royale_map
+compat/challenges/battle_royale
+sync/map_visibility
+presentation/battle_royale
 runtime/challenges
 runtime/chat_wire
 runtime/chat_dice

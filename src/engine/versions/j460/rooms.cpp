@@ -485,10 +485,14 @@ int __stdcall getCardEx(unsigned seed, unsigned special, unsigned rune, unsigned
 using RandomRoom = void*(__attribute__((thiscall)) *)(void*, unsigned, bool, int, int, int, int,
                                                       int, int, int, void*, int, int);
 RandomRoom originalRandomRoom;
+void* templateConfig = nullptr;
+Address templateGame = 0;
 void* __attribute__((fastcall)) randomRoom(void* config, void*, unsigned seed, bool reduce,
                                            int stage, int type, int shape, int minimum, int maximum,
                                            int difficultyLow, int difficultyHigh, void* doors,
                                            int subtype, int mode) {
+    templateConfig = config;
+    templateGame = game();
     const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
     if (type == 2 && caller == 0x33a20a) {
         bool keeper = runtime::startingPartyHasCharacter(compat::ids::player::keeperB);
@@ -772,6 +776,10 @@ RoomCall originalAward;
 void __attribute__((fastcall)) award(void* room, void*) {
     if (runtime::replica())
         return;
+    if (!runtime::allowChallengeEvent("shared_award")) {
+        originalAward(room);
+        return;
+    }
     // Loot quantity and shared loot-affecting items use the original complete
     // co-op roster; combat targeting continues to use only room occupants.
     TeamScope team;
@@ -779,7 +787,7 @@ void __attribute__((fastcall)) award(void* room, void*) {
 }
 RoomCall originalReviveAll;
 void __attribute__((fastcall)) reviveAll(void* manager, void*) {
-    if (runtime::replica())
+    if (runtime::replica() || !runtime::allowChallengeEvent("coop_revive"))
         return;
     // Boss completion also revives through Room::TriggerBossDeath, outside
     // the award hook. Include online ghosts in other occupied rooms there.
@@ -791,6 +799,9 @@ Exit originalExit;
 using End = void(__attribute__((thiscall)) *)(void*, int);
 End originalEnd;
 void __attribute__((fastcall)) endGame(void* target, void*, int ending) {
+    if (ending == static_cast<int>(lan::ending::gameOver) &&
+        !runtime::allowChallengeEvent("game_over"))
+        return;
     // LAN challenges complete through their explicit reward transaction.
     // Native terminal routes cannot publish a second completion path.
     if (runtime::challengeActive() && ending >= static_cast<int>(lan::ending::firstCinematic) &&
@@ -1072,7 +1083,13 @@ void __attribute__((fastcall)) playerUpdate(void* player, void*) {
     }
     const auto before = actor;
     actor = reinterpret_cast<Address>(player);
+    const auto slot = slotOf(actor, 4);
+    const bool personalMap = enabled && slot < 4 && runtime::challengeActive();
+    if (personalMap)
+        runtime::mapView(true, slot, true);
     presentation::items::withActor(player, [&] { originalPlayerUpdate(player); });
+    if (personalMap)
+        runtime::mapView(false, slot, true);
     actor = before;
 }
 Address currentActor(void* explicitActor = nullptr) {
@@ -1336,6 +1353,8 @@ void __attribute__((fastcall)) change(void* g, void*, int index, int dimension) 
 }
 void __attribute__((fastcall)) stageTransition(void* g, void*, bool same, int animation,
                                                void* player) {
+    if (enabled && !runtime::replica() && !runtime::allowChallengeEvent("floor"))
+        return;
     if (rewind::captureStage(same, animation))
         return;
     if (!enabled) {
@@ -1351,6 +1370,8 @@ void __attribute__((fastcall)) stageTransition(void* g, void*, bool same, int an
             StageRequest{same, animation, currentActor(player), at<int>(game(), 0x18304)};
 }
 void __cdecl rKey() {
+    if (enabled && !runtime::replica() && !runtime::allowChallengeEvent("floor"))
+        return;
     if (!enabled) {
         originalRKey();
         return;
@@ -1904,6 +1925,41 @@ int roomWaterCurrent(lua_State* L) {
     lua.pushBoolean(L, valid);
     return 1;
 }
+int specialRoomTemplate(lua_State* L) {
+    namespace descriptor = j460::layout::roomDescriptor;
+    namespace config = j460::layout::roomConfig;
+    const auto index = lua.checkInteger(L, 1), type = lua.checkInteger(L, 2);
+    const auto variant = lua.checkInteger(L, 3), seed = lua.checkInteger(L, 4);
+    bool valid = enabled && !runtime::replica() && !scopes.depth() && templateConfig &&
+                 templateGame == game() && index >= 0 && index < 169 && type >= 1 &&
+                 type <= config::maxType && variant >= 0 && variant <= INT_MAX && seed > 0 &&
+                 seed <= UINT_MAX && !loaded.contains({0, static_cast<int>(index)});
+    if (valid) {
+        using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+        const auto desc = reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
+            reinterpret_cast<void*>(game()), static_cast<int>(index), 0));
+        const auto previous = desc ? at<Address>(desc, descriptor::data) : 0;
+        valid = previous && !at<Address>(desc, descriptor::overrideData) &&
+                !at<int>(desc, descriptor::visitedCount);
+        if (valid) {
+            unsigned doors = 0;
+            const auto shape = at<int>(previous, config::shape);
+            const auto selected = reinterpret_cast<Address>(originalRandomRoom(
+                templateConfig, static_cast<unsigned>(seed), false, config::specialStage,
+                static_cast<int>(type), shape, static_cast<int>(variant), static_cast<int>(variant),
+                0, config::maxDifficulty, &doors, -1, -1));
+            valid = selected && at<int>(selected, config::type) == type &&
+                    at<int>(selected, config::variant) == variant &&
+                    at<int>(selected, config::shape) == shape;
+            // Borrow the game's immutable configuration. The descriptor and
+            // spawn vectors keep their native owner; no copied MSVC containers.
+            if (valid)
+                at<Address>(desc, descriptor::data) = selected;
+        }
+    }
+    lua.pushBoolean(L, valid);
+    return 1;
+}
 int roomLayout(lua_State* L) {
     try {
         if (lua.getTop(L) == 0 || lua.getTop(L) == 2) {
@@ -2027,7 +2083,7 @@ int stateClock(lua_State* L) {
     return 0;
 }
 int refreshMap(lua_State* L) {
-    if (!runtime::replica()) {
+    if (!enabled) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -2468,6 +2524,20 @@ int actorGhost(lua_State* L) {
     lua.pushBoolean(L, true);
     return 1;
 }
+int revivePlayer(lua_State* L) {
+    const auto slot = lua.checkInteger(L, 1);
+    const auto head = slot >= 0 && slot < 4 ? participant(slot) : 0;
+    const auto room = head ? findRoom(head) : nullptr;
+    const bool valid = enabled && !runtime::replica() && !scopes.depth() && room &&
+                       at<bool>(head, j460::layout::player::coopGhost) &&
+                       runtime::challengeActive() && runtime::allowChallengeEvent("round_revive");
+    if (valid) {
+        Scope scope(*room, controlledActors(head));
+        engine<RoomCall>(j460::entry::replicaRevivePlayerGhost)(reinterpret_cast<void*>(head));
+    }
+    lua.pushBoolean(L, valid);
+    return 1;
+}
 int laserPath(lua_State* L) {
     auto sprite = static_cast<Address*>(lua.toUserdata(L, 1));
     if (!sprite || lua.rawLength(L, 1) != 8 || sprite[1] < 0x48 ||
@@ -2707,10 +2777,12 @@ bool render(void* g, RoomCall original, int slot) {
     if (!room)
         return false;
     withView([&] {
+        runtime::mapView(true);
         audio::present();
         presentation::pickup_preview::prepare();
         presentation::items::withScreen(
             [&] { combat_feedback::withPresentation(room->pointer, [&] { original(g); }); });
+        runtime::mapView(false);
     });
     return true;
 }
@@ -3822,6 +3894,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_sync", syncLocations);
     function("state_clock", stateClock);
     function("room_layout", roomLayout);
+    function("room_special_template", specialRoomTemplate);
     function("room_water_current", roomWaterCurrent);
     function("map_pickups", mapPickups);
     function("map_refresh", refreshMap);
@@ -3832,6 +3905,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("actor_companions", actorCompanions);
     function("actor_poop", actorPoop);
     function("actor_ghost", actorGhost);
+    function("rooms_revive_player", revivePlayer);
     function("laser_path", laserPath);
     function("rooms_set_connected", setConnections);
     function("rooms_connected", connections);

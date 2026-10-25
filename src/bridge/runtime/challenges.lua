@@ -136,6 +136,32 @@ return function(deps)
         end
         return nil
     end
+    local function effect()
+        local definition = current()
+        return definition and effects[definition.id]
+    end
+    local function snapshot()
+        local definition = authority()
+        local value = definition and effects[definition.id]
+        return value and value.snapshot and { definition.id, definition.version, value.snapshot() }
+            or false
+    end
+    local function apply(value)
+        local definition = current()
+        local active = definition and effects[definition.id]
+        if not active or not active.apply then
+            assert(value == false, "Unexpected challenge view")
+            return
+        end
+        assert(
+            type(value) == "table"
+                and #value == 3
+                and value[1] == definition.id
+                and value[2] == definition.version,
+            "Challenge view identity mismatch"
+        )
+        active.apply(value[3])
+    end
     return {
         reset = reset,
         view = view,
@@ -146,5 +172,25 @@ return function(deps)
         level = level,
         step = step,
         canEnter = canEnter,
+        snapshot = snapshot,
+        apply = apply,
+        viewState = function()
+            local active = effect()
+            return active and active.view and active.view()
+        end,
+        projectMap = function(map, slot)
+            local active = effect()
+            return active and active.projectMap and active.projectMap(map, slot) or map
+        end,
+        allow = function(event)
+            local active = effect()
+            return not active or not active.allow or active.allow(event)
+        end,
+        mapView = function(begin, slot, record)
+            local active = effect()
+            if active and active.mapView then
+                active.mapView(begin, slot, record)
+            end
+        end,
     }
 end

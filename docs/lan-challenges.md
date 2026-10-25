@@ -36,6 +36,22 @@
 
 原版负责拾取资格、购买代价、二选一与底座替换；确认进入道具队列后才分配。因此开局物品、控制台发放、合成、重掷与状态恢复不触发拾取掷骰。角色原生将底座拆成材料等行为仍保留。接收者已有主动时，原生掉落保留其原道具；赠送不触发第二次掷骰。
 
+## 当前规则：1003 吃鸡
+
+| 项目 | 行为 |
+| --- | --- |
+| 开局 | 普通难度、2–4 人、以撒；移除开局自带 D6，后续获得的主动道具正常保留；强制启用现有队友伤害规则 |
+| 地图 | 普通路线第 1–5 层及其普通变种随机抽取；在 13×13 网格内按原生红房间规则展开可生成的位置，保留普通探索资源；玩家随机分配不同角落的可用房间 |
+| 生存 | 90、180、240 秒时，安全区从全图依次缩为居中的 9×9、5×5、一个房间；缩圈后允许逃离未清怪房间。圈外持续受伤，五分钟后最终房间也逐渐增加环境伤害；Boss 战另计时间 |
+| 死亡 | 正常道具复活保留，等待复活结算后判断幸存者；最终死亡者本轮淘汰，Boss 清场不复活队友；重连保留淘汰状态 |
+| 胜场 | 唯一幸存者取得 Boss 挑战资格；首次击败普通 Boss 记一胜并进入赛点，再次吃鸡后直接挑战妈腿，击败后由胜者领取挑战奖杯结束 |
+| Boss 入口 | 平时禁止进入 Boss 房；幸存者通过所在房间的传送门进入，临时获得教条，战后移除临时副本，原有副本保留 |
+| 奖励与推进 | Boss 奖励至少一个底座品质不低于 3，额外底座不保证品质；普通 Boss 胜者可领取或跳过奖励，只有胜者可以进入下一轮出口；站在出口生成位置时须离开后重新进入 |
+| 下一轮 | 假换层重新随机地图；保留道具、属性和资源，淘汰者复活，全员补满当前红心容器，已有魂心／黑心保留且不额外补发。全灭或 Boss 战失败时无人得分，保留之前胜场并继续 |
+| 显示 | 血条上方使用图形胜场进度和赛点奖杯；各自探索地图独立，安全区示意与生存计时用图形显示 |
+
+玩法组件为 [battle_royale.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/battle_royale.lua)，可离线运行的胜场与缩圈规则为 [battle_royale_rules.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/battle_royale_rules.lua)。[地图组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/battle_royale_map.lua)调用游戏红房间生成接口展开地图，并为赛点预留原生妈腿模板房间，保留其入场与战斗机制；普通胜场排除 XL 地图中的妈腿房。Boss、出口和整轮推进由房主裁决。个人地图保留各自探索及原生揭图效果，不提供数据保密或防作弊保证。
+
 ## 规则与生命周期
 
 切换规则清空全员准备状态；加入、选角、准备和启动分别校验本机存档资格及规则代次。普通选角使用原生菜单目录与可选判定，包含本机已加载的 Mod 角色。新开局所需的消耗型资格不重复限制已有角色恢复。
@@ -55,6 +71,8 @@
 | 运气游戏规则 | [compat/challenges/luck_game.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/luck_game.lua) |
 | 菜单与本机显示 | [presentation/menu.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/menu.lua)、[J460 HUD 能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#hud-与本机输入) |
 
-地图策略可通过 `maps[id]` 提供 `onLayoutReady(info, level)` 与 `canEnter(ctx)`。前者在权威布局准备后调用，后者在迁移入队前验证来源／目标和传送类型。1001 和 1002 不配置地图策略；这些回调不提供房间构建或任意布局同步能力。
+地图策略可通过 `maps[id]` 提供 `onLayoutReady(info, level)` 与 `canEnter(ctx)`。前者在权威布局准备后调用，后者在迁移入队前验证来源／目标和传送类型。1001 和 1002 不配置地图策略，1003 通过这些回调展开红房间并限制 Boss 入口。回调只协调游戏 API，新增房间沿用既有布局同步。
+
+有动态进度的挑战通过世界字段 `challenge` 传输规则编号、规则版本和组件载荷，重连恢复后再绘制图形 HUD。1003 的载荷包含轮次、阶段、已用生存帧、胜者、四个栏位的胜场、存活掩码和可选传送门位置；字段位置由可移植规则模块定义，玩法状态由挑战组件统一清理。[个人地图组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/map_visibility.lua)按玩家投影显示／探索字段，不改变权威房间的清场、掉落或布局。
 
 规则变更更新定义版本；启动与恢复均校验规则。恶魔形态专项入口为 [run_lan_challenges.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_lan_challenges.py)，运气游戏专项入口为 [run_luck_game.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_luck_game.py)。使用方法和执行范围见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#开发专项入口)。
