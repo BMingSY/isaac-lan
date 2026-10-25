@@ -1,5 +1,6 @@
 -- Embedded in the native extension. No Workshop registration or mod directory.
 local native = assert(_IsaacLan)
+local endpoint = _IsaacLanModules["core/endpoint"]
 local Phase = native.net_phases()
 local integration = assert(_IsaacLanModules)["api/public"]
 local registry = _IsaacLanModules["compat/mods/registry"]
@@ -451,8 +452,9 @@ function _IsaacLanCommand(action, value)
         chatUI.reset()
         lifecycle.close()
         assert(native.input_virtual())
-        local ip, port = value:match("^([a-zA-Z0-9%.%-]+):(%d+)$")
-        assert(ip and native.net_join(ip, tonumber(port), _IsaacLanFingerprint, modFingerprint()))
+        local ip, port = endpoint.parse(value)
+        assert(ip, "无效的房主地址或端口")
+        assert(native.net_join(ip, port, _IsaacLanFingerprint, modFingerprint()))
     elseif action == "challenge" then
         assert(native.net_challenge(assert(tonumber(value))), "无法选择联机挑战")
     elseif action == "room_options" then

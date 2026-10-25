@@ -63,7 +63,7 @@ ctest --test-dir build-core --output-on-failure
 | --- | --- | --- |
 | C++／Lua 组件 | 编码、协议、存档、作用域、生命周期、库存、实体与 API | 不验证原生 ABI、物理和画面 |
 | pytest／Hypothesis | 工具、生成动作序列、持续移动与固定失败回放 | 模型给出独立预期；不等同游戏引擎 |
-| Windows 传输 | 真实 UDP、输入事件、积压、重连、事务顺序及 UDP 丢包／乱序 | 不启动游戏 |
+| Windows 传输 | IPv4／IPv6 UDP、双栈域名与回退、输入事件、积压、重连、事务顺序及 UDP 丢包／乱序 | 不启动游戏 |
 | 隔离实机／正常操作 | 原生机制、入口与连续画面 | 结果限定于所用版本、夹具和采样范围 |
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
@@ -114,6 +114,8 @@ ctest --test-dir build-win32 --output-on-failure
 ```
 
 测试程序不带用例名时运行全部传输测试，通过标记为 `ALL STATE TRANSPORT TESTS PASSED`。
+
+IPv6 的定向检查为 `net.ipv6-addresses`、`net.ipv6-inputs`、`net.ipv6-rejoin`、`net.dual-stack`、`net.host-fallback` 和 `net.host-names`，覆盖完整地址／接口编号、系统域名解析、双栈混合玩家、输入／分片视图、重连及 IPv6 不可达后的 IPv4 回退。菜单与地址保存同时检查 `bridge.endpoint`、`bridge.challenge_menu`、`presentation.connection-settings` 和 `presentation.chat-native-input`。网络用例使用本机回环地址及 `localhost`，不代表跨公网路由或防火墙已经验证。
 
 队友伤害的定向离线检查为 `bridge.friendly-fire`、`bridge.pvp-items`、`bridge.party-startup`、`bridge.resume` 与 `bridge.layers`，覆盖等输出配置、余数、散射、持续接触、爆发保护、原版防御、道具索敌与毒伤、回调失败与状态清理。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 组合 `--case room-rules-off --case room-rules --case room-rules-resume`，指定隔离双端、独立端口与输出目录，配合 `--latency-ms 40 --heap-check --record`。同一组进程检查友伤开关、普通／成型／等输出配置的实际扣血时间、散射上限、环境与道具保护、减伤、激光／刀、原生爆炸、分房、死亡、续玩与双端生命一致性。道具专项使用 `--case room-rules-items --case room-rules-items-off`，检查已接入主动的实际使用、自身代价、范围、毒性休克进房／重复进房／分房与道具无敌；可与基础组在同一对进程中执行。测试时间以指定配置和连续命中为条件，不作为所有武器、道具或防御组合的保证。
 

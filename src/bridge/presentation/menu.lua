@@ -18,7 +18,8 @@ local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
 -- menu_key reports Windows virtual-key codes from the native frontend.
 local Key =
     { escape = 27, enter = 13, up = 38, down = 40, tab = 9, space = 32, left = 37, right = 39 }
-local model = _IsaacLanModules["presentation/menu_model"](Phase, Command)
+local model =
+    _IsaacLanModules["presentation/menu_model"](Phase, Command, _IsaacLanModules["core/endpoint"])
 local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
 local challenges = _IsaacLan.net_challenges()
 local roomOptions = _IsaacLan.net_room_options()

@@ -1,5 +1,5 @@
 #pragma once
-#include <winsock2.h>
+#include <enet/enet.h>
 #include <atomic>
 #include <memory>
 #include <vector>
@@ -8,7 +8,7 @@
 namespace isaac::lan {
 struct HostResolution {
     std::atomic<bool> ready{false};
-    std::vector<sockaddr_in> addresses;
+    std::vector<ENetAddress> addresses;
     int error = 0;
 };
 std::shared_ptr<HostResolution> resolveHost(const std::string& address, std::uint16_t port);

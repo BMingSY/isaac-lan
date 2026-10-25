@@ -4,6 +4,7 @@
 #include <stdexcept>
 namespace isaac::lan {
 namespace {
+constexpr std::size_t maxHostAddresses = 16;
 struct ResolveRequest {
     std::shared_ptr<HostResolution> result;
     std::string address;
@@ -16,25 +17,36 @@ DWORD WINAPI resolveHost(void* argument) {
     result.error = WSAStartup(MAKEWORD(2, 2), &data);
     if (!result.error) {
         addrinfo hints{};
-        hints.ai_family = AF_INET;
+        hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = SOCK_DGRAM;
         hints.ai_protocol = IPPROTO_UDP;
         addrinfo* found = nullptr;
         result.error = getaddrinfo(request->address.c_str(), nullptr, &hints, &found);
         if (!result.error) {
-            for (auto entry = found; entry && result.addresses.size() < 16;
-                 entry = entry->ai_next) {
-                if (entry->ai_family != AF_INET || entry->ai_addrlen != sizeof(sockaddr_in))
+            std::vector<ENetAddress> ipv6, ipv4;
+            for (auto entry = found; entry; entry = entry->ai_next) {
+                ENetAddress address{};
+                if (enet_address_set_sockaddr(&address, entry->ai_addr,
+                                              static_cast<int>(entry->ai_addrlen)))
                     continue;
-                auto address = *reinterpret_cast<const sockaddr_in*>(entry->ai_addr);
-                address.sin_port = htons(request->port);
-                if (std::none_of(result.addresses.begin(), result.addresses.end(),
-                                 [&](const auto& prior) {
-                                     return prior.sin_addr.s_addr == address.sin_addr.s_addr;
-                                 }))
-                    result.addresses.push_back(address);
+                address.port = request->port;
+                auto& family = address.family == ENET_ADDRESS_IPV6 ? ipv6 : ipv4;
+                if (family.size() < maxHostAddresses &&
+                    std::none_of(family.begin(), family.end(), [&](const auto& prior) {
+                        return enet_address_equal_host(&prior, &address);
+                    }))
+                    family.push_back(address);
             }
             freeaddrinfo(found);
+            // Try both families early, even when DNS returns many AAAA records.
+            for (std::size_t i = 0; i < std::max(ipv6.size(), ipv4.size()); ++i) {
+                if (i < ipv6.size())
+                    result.addresses.push_back(ipv6[i]);
+                if (i < ipv4.size())
+                    result.addresses.push_back(ipv4[i]);
+            }
+            if (result.addresses.size() > maxHostAddresses)
+                result.addresses.resize(maxHostAddresses);
         }
         WSACleanup();
     }

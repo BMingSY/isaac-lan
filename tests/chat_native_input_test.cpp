@@ -128,6 +128,10 @@ int main() {
     require(event(WM_KEYUP, VK_RETURN).has_value(), "Closing leaked its key release");
     require(!event(WM_KEYDOWN, '1'), "Closed field kept suppressing native input");
 
+    chat::beginField(chat::TextField::address, "");
+    for (const char c : std::string("[fe80::abcd%12]"))
+        require(event(WM_CHAR, c).has_value(), "IPv6 typing leaked into the game");
+    require(chat::fieldText() == "[fe80::abcd%12]", "IPv6 address characters were filtered out");
     chat::beginField(chat::TextField::address, std::string(253, 'a'));
     require(chat::fieldText().size() == 253, "Address inherited the chat's 60-character limit");
     event(WM_CHAR, 'b');

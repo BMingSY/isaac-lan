@@ -22,6 +22,7 @@ presentation/attack_prediction
 presentation/tear_motion
 presentation/attacks
 core/contacts
+core/endpoint
 compat/rules/pvp_damage
 compat/rules/pvp_attacks
 compat/rules/pvp_health

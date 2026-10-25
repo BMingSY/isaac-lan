@@ -32,6 +32,7 @@ return function(root, native, modules)
     native.chat_style = { opacity = 70, background = 0x231b18, border = 0x79604c, text = 0xe8dfcb }
     for _, name in ipairs({
         "core/contacts",
+        "core/endpoint",
         "compat/rules/pvp_damage",
         "compat/rules/pvp_attacks",
         "compat/rules/pvp_health",
