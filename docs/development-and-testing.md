@@ -74,6 +74,8 @@ Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，�
 
 聊天改动的直接回归为 CTest `presentation.chat-input`、`presentation.chat-render`、`bridge.chat`、`bridge.chat-dice`、`diagnostics.*`、`bridge.resume`，以及 Windows `presentation.chat-native-input`（输入法组合状态下开关、按键重复与焦点释放）、`presentation.chat-background`、`net.communication`／`net.integrations`：覆盖 UTF-8 编辑、输入释放、背景配置与 PNG 加载／回退、HUD 避让、拖动与尺寸变化、输出可见性、混合骰与奖惩骰、掷骰去重、同房／同维度筛选、原版命令分发和过期上下文。掷骰与房间共享使用 [state_chat_dice.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_chat_dice.lua)，在同一连接中核对普通／混合／奖惩骰、同房接收、分房隔离和汇合后的接收；保留两端画面并对照完整结果。原生执行与画面使用 [state_chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_chat.lua)，由隔离双端 runner 加载并保留双端画面；夹具开启属性栏、物品栏和最大 HUD 偏移，并通过原版轮盘选择 D6。输出 `CHAT KEYBOARD_READY` 后，对各自所属窗口依次输入 `~`、A、Enter、`~`；随后聚焦主机，打开输入并将记录区域向右上拖动，再关闭输入。960×540 客户区可使用 [lab_window.ps1](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_window.ps1) 的 `-Action Drag -Value '220,350:300,320'`，其他尺寸按客户区像素换算。完成键盘与拖动操作后，在两端隔离游戏目录的 `isaac-lan/chat-interaction.done` 写入完成标记；夹具等待该标记后检查结果，避免窗口操作耗时造成提前断言。完成标记为 `LAN_NETWORK PASS chat console`。背景检查可在一端配置自定义 PNG、另一端保留默认值，对照默认纯色、自定义图片和透明度。实机需核对遮挡、光标、D6 滚动与结果画面及双端相同结果；系统输入法候选仍需单独核对，脚本通过不能代表 IME 或画面通过。
 
+`/tp` 的离线定向回归为 `bridge.teleport`、`bridge.chat`、`bridge.resume`、`bridge.party-startup` 与 `bridge.layers`；覆盖实际聊天请求链路、坐标方向、大房间与缺角、维度隔离、已生成特殊房间、重复请求、队友落点及跨层／退出清理。原生迁移与画面使用 [state_teleport.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_teleport.lua)，由 [run_teleport.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_teleport.py) 在一组受保护的主客机进程中验证，指定 `--host`、`--client`、`--build`、`--output`、独立 `--port`，使用 `--heap-check --record` 保留异常与画面证据。
+
 ## 失败记录与回放
 
 统一运行按当轮归档保存阶段日志、耗时、`summary.json`、`ctest.xml`、`pytest.xml` 和失败请求。回放命令：

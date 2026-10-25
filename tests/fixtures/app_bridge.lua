@@ -1,5 +1,10 @@
 -- Main-bridge fixtures use real UI/lifecycle components with no local requests.
 return function(root, native, modules)
+    local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
+    RoomType = RoomType or enums.RoomType
+    RoomShape = RoomShape or enums.RoomShape
+    GridRooms = GridRooms or enums.GridRooms
+    GridCollisionClass = GridCollisionClass or enums.GridCollisionClass
     EntityType = EntityType or {}
     ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD = ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD or 9
     ModCallbacks.MC_ENTITY_TAKE_DMG = ModCallbacks.MC_ENTITY_TAKE_DMG or 11
@@ -33,6 +38,7 @@ return function(root, native, modules)
         "runtime/restart",
         "runtime/chat_wire",
         "runtime/chat_dice",
+        "runtime/teleport",
         "runtime/chat",
         "presentation/chat_layout",
         "presentation/chat",
