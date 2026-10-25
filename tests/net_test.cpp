@@ -23,7 +23,11 @@ using namespace isaac::lan;
 namespace {
 using TestSession = Session;
 LobbyAccess testAccess() {
-    return {{0, 1, 2, 3, 7, 23}, {{1001, 2}, {1001, 3}, {1002, 1}}, {0, 1, 2, 3, 7, 23}};
+    LobbyAccess access{{0, 1, 2, 3, 7, 23}, {{1001, 3}}, {0, 1, 2, 3, 7, 23}};
+    for (const auto& definition : isaac::compat::challenges::definitions)
+        access.rules.push_back({definition.id, definition.version});
+    std::sort(access.rules.begin(), access.rules.end());
+    return access;
 }
 template <class F>
 void until(F f, const std::source_location location = std::source_location::current()) {
@@ -709,8 +713,10 @@ void endingEvents() {
     // Exercise the catalog's actual terminal IDs: a rule must never encode
     // explicit completion as the protocol's game-over event.
     for (const auto& definition : isaac::compat::challenges::definitions) {
-        const RunRules rules{definition.id, definition.version, definition.character,
-                             definition.difficulty, definition.transient};
+        const RunRules rules{
+            definition.id,        definition.version,
+            definition.character, definition.difficulty,
+            definition.transient, definition.friendlyFire ? isaac::roomOptions::friendlyFire : 0};
         Group group(4, definition.difficulty, "127.0.0.1", rules, {0, 1, 2, 3});
         group.ready();
         group.step(0);

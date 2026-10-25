@@ -173,6 +173,7 @@ struct Marker {
 };
 std::vector<Marker> markers;
 std::vector<presentation::MinimapView> mapViews;
+bool invoke(int nargs, int results);
 template <class T> T& read(std::uintptr_t p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }
@@ -470,6 +471,12 @@ void __attribute__((fastcall)) minimapRender(void* map, void*) {
     }
     originalMapRender(map);
     activeMap = 0;
+    if (state && !bridgeFailed && prepared) {
+        const int top = lua.getTop(state);
+        if (lua.getGlobal(state, "_IsaacLanMinimapRender") == luaFunction)
+            invoke(0, 0);
+        lua.setTop(state, top);
+    }
 }
 
 class Hash {

@@ -46,7 +46,7 @@ local hud = dofile(root .. "/src/bridge/presentation/battle_royale.lua")({
         }
     end,
 })
-hud.render()
+hud.renderMap()
 assert(#draws == 0, "A hidden native map must not leave a separate zone diagram")
 maps = {
     {
@@ -62,7 +62,7 @@ maps = {
         dimension = 0,
     },
 }
-hud.render()
+hud.renderMap()
 assert(#draws > 4, "Expected outlines, preview and countdown on the existing minimap")
 for _, draw in ipairs(draws) do
     assert(draw.x >= 100 and draw.x + draw.w <= 180.001)
@@ -71,10 +71,10 @@ for _, draw in ipairs(draws) do
 end
 draws = {}
 maps[1].dimension = 1
-hud.render()
+hud.renderMap()
 assert(#draws == 0, "Main-floor zone must not cover another dimension")
 maps[1].dimension = 0
 state.phase = rules.phase.boss
-hud.render()
+hud.renderMap()
 assert(#draws == 0, "Survival overlay must end with survival")
 print("battle royale native-map overlay tests passed")

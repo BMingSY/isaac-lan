@@ -139,7 +139,6 @@ return function(deps)
                 assets.trophy:Render(deps.vector(x + 39, y + 12))
             end
         end
-        minimap(view)
         local at = deps.native.rooms_positions()[tostring(info.slot)]
         local portal = view.portal
         if portal and at and portal.room == at.index and portal.dimension == at.dimension then
@@ -154,5 +153,16 @@ return function(deps)
             assets.portal:Render(deps.screen(deps.vector(portal.x, portal.y)))
         end
     end
-    return { render = render }
+    local function renderMap()
+        local info = deps.native.api_info()
+        if info.active ~= 1 or info.ready ~= 1 or info.challenge ~= deps.rules.id then
+            return
+        end
+        local view = deps.view()
+        if view then
+            load()
+            minimap(view)
+        end
+    end
+    return { render = render, renderMap = renderMap }
 end

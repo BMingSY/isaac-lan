@@ -359,8 +359,9 @@ function _IsaacLanFrame()
     return status
 end
 
-local overlayOwner = { Name = "Isolated battle royale minimap regression" }
-Isaac.AddCallback(overlayOwner, ModCallbacks.MC_POST_RENDER, function()
+local renderMap = _IsaacLanMinimapRender
+function _IsaacLanMinimapRender()
+    renderMap()
     local current = view()
     if not current or current.phase ~= phase.survival then
         return
@@ -374,4 +375,4 @@ Isaac.AddCallback(overlayOwner, ModCallbacks.MC_POST_RENDER, function()
             report("BATTLE minimap width=" .. width .. " cell=" .. map.cellWidth)
         end
     end
-end)
+end

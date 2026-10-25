@@ -17,6 +17,11 @@ callback(ModCallbacks.MC_POST_RENDER, function()
         battleHud.render()
     end
 end)
+function _IsaacLanMinimapRender()
+    if battleHud then
+        battleHud.renderMap()
+    end
+end
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
 local friendlyFire = _IsaacLanModules["compat/rules/friendly_fire"]({
     native = native,
