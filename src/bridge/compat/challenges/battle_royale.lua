@@ -93,7 +93,7 @@ return function(deps)
                 player:AddHearts(math.max(0, player:GetEffectiveMaxHearts() - player:GetHearts()))
             end)
         end
-        model.start()
+        model.start(layout.zones)
         generated, moving, lastFrame, pressureFrame, bossFrame = true, false, nil, nil, nil
         for slot in pairs(party()) do
             assert(
@@ -107,8 +107,12 @@ return function(deps)
         local player = assert(party()[slot])
         scoped(slot, function()
             local room = deps.game():GetRoom()
-            local position =
-                room:FindFreePickupSpawnPosition(room:GetCenterPos() + deps.vector(90, 0), 0, true)
+            local position = kind == "boss" and player.Position
+                or room:FindFreePickupSpawnPosition(
+                    room:GetCenterPos() + deps.vector(90, 0),
+                    0,
+                    true
+                )
             portal = {
                 dimension = at.dimension,
                 room = at.index,
@@ -119,6 +123,12 @@ return function(deps)
                 armed = (player.Position.X - position.X) ^ 2 + (player.Position.Y - position.Y) ^ 2
                     > PORTAL_RADIUS * PORTAL_RADIUS,
             }
+            if kind == "boss" then
+                player.Velocity = deps.vector(0, 0)
+                player:AddControlsCooldown(PORTAL_ARM_FRAMES)
+                player:SetMinDamageCooldown(PORTAL_ARM_FRAMES)
+                player:AnimateTeleport(true)
+            end
         end)
     end
     local function living(info, players, frame)
@@ -230,7 +240,7 @@ return function(deps)
         dogma[slot] = player:GetCollectibleNum(enums.collectible.COLLECTIBLE_DOGMA)
         scoped(slot, function()
             player:AddCollectible(enums.collectible.COLLECTIBLE_DOGMA, 0, false)
-            player:AnimateTeleport(true)
+            player:AnimateTeleport(false)
         end)
         portal, moving, bossFrame = nil, true, frame
         encounterRoom = model.state.scores[slot + 1] == 1 and layout.finalBoss or layout.boss
@@ -282,7 +292,7 @@ return function(deps)
                             and (not pressureFrame or frame - pressureFrame >= rules.framesPerSecond)
                             and (
                                 at.dimension ~= 0
-                                or rules.outside(at.index, state.elapsed)
+                                or rules.outside(at.index, state)
                                 or state.elapsed >= rules.survivalFrames
                             )
                         then
@@ -304,6 +314,16 @@ return function(deps)
         local slot, player = state.winner, players[state.winner]
         local at = positions[tostring(slot)]
         if not player or not at or player:IsDead() or player:IsCoopGhost() then
+            return
+        end
+        if portal and portal.kind == "boss" then
+            -- Survival has already ended. The portal is a brief automatic
+            -- transition, independent of movement, circle deadlines or items
+            -- teleporting the winner away from the source room.
+            player:AddControlsCooldown(2)
+            if frame >= portal.ready and not reviving then
+                enterBoss(slot, player, frame)
+            end
             return
         end
         if
@@ -342,9 +362,7 @@ return function(deps)
             if dx * dx + dy * dy > PORTAL_RADIUS * PORTAL_RADIUS then
                 portal.armed = true
             elseif portal.armed then
-                if portal.kind == "boss" then
-                    enterBoss(slot, player, frame)
-                elseif model.leave(slot) then
+                if model.leave(slot) then
                     nextRound()
                 end
             end

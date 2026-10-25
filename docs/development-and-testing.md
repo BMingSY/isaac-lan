@@ -115,7 +115,7 @@ ctest --test-dir build-win32 --output-on-failure
 
 ## 最终实机验收
 
-1003「吃鸡」的离线定向回归为 `bridge.battle-royale`、`bridge.personal-map`、`bridge.challenges`、`bridge.friendly-fire`、`bridge.layers`、`bridge.capture_generation` 和 `bridge.replica_pipeline`，覆盖胜场、正常复活等待、同时淘汰、Boss 失败、重复清场、胜者跳过奖励、个人探索与状态恢复。[run_battle_royale.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_battle_royale.py) 使用一组受保护的主客机进程验证红房间展开、分散出生、个人地图、Boss 入口限制、三次实际计时缩圈、普通 Boss、清场不复活、假换层、妈腿与奖杯结束。指定 `--host`、`--client`、`--build`、`--output` 和独立 `--port`，以 `--heap-check --record` 保留异常与双端画面。默认 `--case full` 按生产时钟执行缩圈；`--case flow` 提前淘汰一名玩家，定向验证额外生命和妈腿失败续局，不修改生产计时。`--winner client` 验证客机胜者的奖励与结算权限。
+1003「吃鸡」的离线定向回归为 `bridge.battle-royale`、`bridge.battle-royale-hud`、`presentation.minimap`、`bridge.personal-map`、`bridge.challenges`、`bridge.friendly-fire`、`bridge.layers`、`bridge.capture_generation` 和 `bridge.replica_pipeline`，覆盖随机嵌套缩圈及可用终点、原生地图投影与裁剪、提前自动进入 Boss、胜场、正常复活等待、同时淘汰、Boss 失败、重复清场、胜者跳过奖励、个人探索与状态恢复。[run_battle_royale.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_battle_royale.py) 使用一组受保护的主客机进程验证红房间展开、分散出生、个人地图、Boss 入口限制、三次实际计时缩圈、普通 Boss、清场不复活、假换层、妈腿与奖杯结束。指定 `--host`、`--client`、`--build`、`--output` 和独立 `--port`，以 `--heap-check --record` 保留异常与双端画面。默认 `--case full` 按生产时钟执行缩圈；`--case flow` 提前淘汰一名玩家，不修改生产计时。两者均验证正常额外生命、自动 Boss 入口和妈腿失败续局，并交替展开／收起原生地图供双端画面检查。`--winner client` 验证客机胜者的奖励与结算权限。
 
 ### 用例与执行工具
 

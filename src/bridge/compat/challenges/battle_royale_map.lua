@@ -91,7 +91,23 @@ return function(deps)
             end
         end
         assert(finalBoss, "Battle royale floor is missing a final boss room")
-        return { boss = boss, finalBoss = finalBoss, spawns = spawns }
+        local candidates = {}
+        for _, index in ipairs(available) do
+            local room = descriptor(level, index)
+            if
+                index ~= finalBoss
+                and room.Data.Type == enums.room.ROOM_DEFAULT
+                and room.Data.Shape == enums.shape.ROOMSHAPE_1x1
+            then
+                candidates[#candidates + 1] = index
+            end
+        end
+        return {
+            boss = boss,
+            finalBoss = finalBoss,
+            spawns = spawns,
+            zones = rules.plan(candidates, deps.random),
+        }
     end
     local function escape(room)
         for slot = 0, 7 do

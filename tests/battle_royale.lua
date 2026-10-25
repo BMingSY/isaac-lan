@@ -4,9 +4,10 @@ local function module(name)
 end
 local rules = module("compat/challenges/battle_royale_rules")
 local phase = rules.phase
+local plan = { 0, 14, 42, 56 }
 for _, count in ipairs({ 2, 3, 4 }) do
     local round = rules.new()
-    round.start()
+    round.start(plan)
     assert(not round.step(30, (1 << count) - 1, false))
     assert(not round.step(30, 1, true), "Pending original revival must delay victory")
     assert(round.step(30, 1, false) == "winner")
@@ -16,14 +17,14 @@ for _, count in ipairs({ 2, 3, 4 }) do
     assert(not round.clear(0) and round.state.scores[1] == 1, "Repeated clear must not score twice")
     assert(not round.leave(1), "Only the winner may skip rewards")
     assert(round.leave(0))
-    round.start()
+    round.start(plan)
     assert(round.step(1, 1, false) == "winner" and round.enter(0))
     assert(round.step(1, 0, false) == "next")
     assert(round.state.scores[1] == 1, "Boss defeat must retain the previous match point")
-    round.start()
+    round.start(plan)
     assert(round.step(1, 0, false) == "next", "Simultaneous elimination has no winner")
     assert(round.state.scores[1] == 1)
-    round.start()
+    round.start(plan)
     assert(round.step(1, 1, false) == "winner" and round.enter(0) and round.clear(0))
     assert(round.state.phase == phase.trophy and round.state.scores[1] == 2)
     assert(not round.leave(0), "Championship must finish through the trophy")
@@ -35,15 +36,46 @@ end
 for _, case in ipairs({
     { 0, 0, 12 },
     { 2699, 0, 12 },
-    { 2700, 2, 10 },
-    { 5400, 4, 8 },
-    { 7200, 6, 6 },
+    { 2700, 1, 9 },
+    { 5400, 3, 7 },
+    { 7200, 4, 4 },
 }) do
-    local zone = rules.zone(case[1])
+    local zone = rules.zone({ elapsed = case[1], zones = plan })
     assert(zone.left == case[2] and zone.right == case[3])
 end
-assert(not rules.outside(84, 9000) and rules.outside(83, 7200))
-assert(rules.outside(-3, 0) and rules.pressure(9900) > rules.pressure(9000))
+assert(not rules.outside(56, { elapsed = 9000, zones = plan }))
+assert(rules.outside(84, { elapsed = 7200, zones = plan }), "Center is not always safe")
+assert(rules.outside(-3, { elapsed = 0, zones = plan }))
+assert(rules.pressure(9900) > rules.pressure(9000))
+-- Every allowed final room, including all four edges/corners, can be chosen.
+-- Random offsets must stay nested, retain the chosen room and survive the wire.
+math.randomseed(1003)
+local variations = {}
+for target = 0, rules.width * rules.width - 1 do
+    local zones = rules.plan({ target }, math.random)
+    local round = rules.new()
+    round.start(zones)
+    local copy = rules.read(round.snapshot())
+    assert(copy.zones[4] == target)
+    for step = 1, #rules.zoneSizes do
+        local elapsed = rules.shrinkFrames[step - 1] or 0
+        assert(not rules.outside(target, { zones = zones, elapsed = elapsed }))
+    end
+    variations[zones[2]] = true
+    copy.zones[4] = -1
+    zones[4] = -1
+    assert(round.state.zones[4] == target, "Plans and views must not mutate live zones")
+end
+local variationCount = 0
+for _ in pairs(variations) do
+    variationCount = variationCount + 1
+end
+assert(variationCount > 10, "Shrink locations must vary")
+for _, zones in ipairs({ { 0, 5, 42, 56 }, { 0, 14, 0, 56 }, { 0, 14, 42, 168 }, { 0, 14, 42 } }) do
+    local round = rules.new()
+    round.start(zones)
+    assert(not pcall(rules.read, round.snapshot()), "Invalid zone plan accepted")
+end
 local invalid = rules.new().snapshot()
 invalid[rules.fields.scores][1] = 3
 assert(not pcall(rules.read, invalid))
@@ -125,6 +157,7 @@ for slot = 0, 1 do
         self.hearts = self.hearts - amount
     end
     function p:AnimateTeleport() end
+    function p:SetMinDamageCooldown() end
     players[slot], positions[tostring(slot)] = p, { index = 84, dimension = 0 }
 end
 local clear = false
@@ -266,7 +299,7 @@ local battle = module("compat/challenges/battle_royale")({
     },
     map = {
         build = function()
-            return { boss = 100, finalBoss = 101, spawns = { 0, 168 } }
+            return { boss = 100, finalBoss = 101, spawns = { 0, 168 }, zones = plan }
         end,
         removeExits = function() end,
         escape = function() end,
@@ -294,8 +327,13 @@ tick(1)
 players[1].ghost = true
 tick(1)
 local portal = assert(battle.view().portal)
-players[0].Position = vector(portal.x, portal.y)
+assert(battle.view().phase == phase.portal and battle.view().elapsed < rules.shrinkFrames[1])
+local stoppedAt = battle.view().elapsed
+-- No walking into a portal, even if an item changes the winner's room.
+positions["0"].index = 84
+players[0].Position = vector(10, 10)
 tick(31)
+assert(battle.view().elapsed == stoppedAt, "Automatic portal must stop survival pressure")
 assert(battle.view().phase == phase.boss and players[0]:GetCollectibleNum(633) == 1)
 assert(players[1].ghost and not battle.allow("coop_revive"))
 assert(battle.canEnter({ info = info, slot = 1, room = 100, dimension = 0 }), "Ghost can spectate")
@@ -334,8 +372,7 @@ battle.onLayoutReady(info, level)
 assert(not players[1].ghost and players[0]:HasCollectible(105), "Only the starting D6 is removed")
 players[1].ghost = true
 tick(1)
-portal = assert(battle.view().portal)
-players[0].Position = vector(portal.x, portal.y)
+assert(battle.view().portal)
 tick(32)
 assert(momSpawns == 1, "Match point directly starts Mom")
 clear = true
@@ -420,8 +457,8 @@ local map = module("compat/challenges/battle_royale_map")({
     },
     rules = rules,
     enums = enums,
-    random = function(limit)
-        return limit
+    random = function(low, high)
+        return high or low
     end,
     entities = function()
         return {}
@@ -429,6 +466,9 @@ local map = module("compat/challenges/battle_royale_map")({
 })
 local built = map.build(generatedLevel)
 assert(roomCount == 168 and built.boss == 85)
+local final = built.zones[#rules.zoneSizes]
+assert(final == 168 and descriptors[final].Data.Type == enums.room.ROOM_DEFAULT)
+assert(final ~= built.boss and final ~= built.finalBoss and final ~= 0)
 local occupied = {}
 for _, index in ipairs(built.spawns) do
     assert(descriptors[index] and index ~= built.boss and not occupied[index])

@@ -14,6 +14,7 @@ local frame, action = _IsaacLanFrame, _IsaacLanActionStep
 local frames, linked, chosen, running, finished = 0, false, false, false, false
 local step, at, baselineRound, sawGuest = "start", 0, nil, false
 local seen = {}
+local mapDraws, mapWidths = 0, {}
 local flow, winner = _IsaacLanBattleFlow, _IsaacLanBattleWinner or 0
 local loser = 1 - winner
 local roomOptions = 0
@@ -80,6 +81,15 @@ local function advance()
         local level = Game():GetLevel()
         assert(level:GetStage() >= 1 and level:GetStage() <= 5)
         assert(level:GetRooms().Size >= 100, "Red rooms did not expand across the floor")
+        local final = level:GetRoomByIdx(state.zones[#rules.zoneSizes], 0)
+        assert(
+            final
+                and final.Data
+                and final.Data.Type == RoomType.ROOM_DEFAULT
+                and final.Data.Shape == RoomShape.ROOMSHAPE_1x1,
+            "Final zone is not a playable room"
+        )
+        report("BATTLE zones=" .. table.concat(state.zones, ","))
         for slot = 0, 1 do
             actor(slot, function(player)
                 assert(player:GetPlayerType() == PlayerType.PLAYER_ISAAC)
@@ -105,6 +115,11 @@ local function advance()
         for slot = 0, 1 do
             local bytes = _IsaacLanState.capture(slot, info.tick)
             local value = schema.unpack(_IsaacLanState.decode(bytes), info.tick)
+            local restored = rules.read(value.challenge[3][1])
+            assert(
+                table.concat(restored.zones, ",") == table.concat(state.zones, ","),
+                "Peer zones differ"
+            )
             own[slot] = {}
             for _, entry in ipairs(value.map) do
                 own[slot][entry[fields.index]] = entry[fields.visited]
@@ -136,26 +151,24 @@ local function advance()
         end
         assert(visible[0] > 100 and visible[1] < 30, "World card revealed another player's map")
         report("BATTLE PASS private native mapping effect")
-        if flow then
-            actor(loser, function(player)
-                player:AddCollectible(CollectibleType.COLLECTIBLE_1UP)
-                player:Kill()
-            end)
-            mark("extra-life")
-        else
-            mark("circles")
-        end
+        actor(loser, function(player)
+            player:AddCollectible(CollectibleType.COLLECTIBLE_1UP)
+            player:Kill()
+        end)
+        mark("extra-life")
     elseif step == "extra-life" and elapsed > 300 then
         assert(state.phase == phase.survival, "Natural revival prematurely ended survival")
         actor(loser, function(player)
             assert(not player:IsDead() and not player:IsCoopGhost())
             assert(not player:HasCollectible(CollectibleType.COLLECTIBLE_1UP))
-            player:Kill()
+            if flow then
+                player:Kill()
+            end
         end)
         report("BATTLE PASS natural extra life")
-        mark("winner")
+        mark(flow and "winner" or "circles")
     elseif step == "circles" then
-        local _, circle = rules.zone(state.elapsed)
+        local _, circle = rules.zone(state)
         if not seen[circle] then
             seen[circle] = true
             report("BATTLE circle=" .. circle)
@@ -169,9 +182,12 @@ local function advance()
             report("BATTLE PASS three natural circles and overtime")
             mark("winner")
         end
-    elseif step == "winner" and state.phase == phase.portal and elapsed > 60 then
-        assert(state.winner == winner and state.scores[winner + 1] == 0)
-        enterPortal()
+    elseif step == "winner" and state.phase == phase.boss then
+        assert(
+            state.winner == winner and state.scores[winner + 1] == 0 and elapsed < 180,
+            "Last survivor did not automatically enter the boss flow"
+        )
+        report("BATTLE PASS automatic ordinary boss entry")
         mark("boss")
     elseif
         step == "boss"
@@ -227,8 +243,9 @@ local function advance()
             player:Die()
         end)
         mark("match-point")
-    elseif step == "match-point" and state.phase == phase.portal and elapsed > 60 then
-        enterPortal()
+    elseif step == "match-point" and state.phase == phase.boss then
+        assert(elapsed < 180, "Match-point survivor waited for a manual portal or circle")
+        report("BATTLE PASS automatic Mom entry before the first shrink")
         mark("mom")
     elseif
         step == "mom"
@@ -245,7 +262,7 @@ local function advance()
                 seen.mom = true
             end
         end)
-        if flow and not seen.failure then
+        if not seen.failure then
             seen.failure, baselineRound = true, state.round
             actor(winner, function(player)
                 player:Kill()
@@ -294,7 +311,9 @@ function _IsaacLanFrame()
     end
     local status = frame()
     local mapInput = host and step == "map-effects" and Game():GetFrameCount() - at < 10
-    native.test_gamepad(mapInput and 512 or 0)
+    local current = view()
+    local expandMap = current and current.phase == phase.survival and current.elapsed % 600 < 300
+    native.test_gamepad((mapInput and 512 or 0) | (expandMap and 32 or 0))
     if status.phase == 4 or status.phase == 9 then
         report("FAILED " .. tostring(status.error))
     end
@@ -328,8 +347,31 @@ function _IsaacLanFrame()
     end
     if running and not finished and info.active ~= 1 and status.phase == 2 then
         assert(host and step == "finish" or not host and sawGuest)
+        assert(mapDraws > 100, "Native minimap projection did not reach the render callback")
+        local widths = 0
+        for _ in pairs(mapWidths) do
+            widths = widths + 1
+        end
+        assert(widths >= 2, "Both compact and expanded map views were not exercised")
         finished = true
         report("PASS battle royale")
     end
     return status
 end
+
+local overlayOwner = { Name = "Isolated battle royale minimap regression" }
+Isaac.AddCallback(overlayOwner, ModCallbacks.MC_POST_RENDER, function()
+    local current = view()
+    if not current or current.phase ~= phase.survival then
+        return
+    end
+    for _, map in pairs(native.presentation_minimap()) do
+        assert(map.right > map.left and map.bottom > map.top and map.cellWidth > 0)
+        mapDraws = mapDraws + 1
+        local width = math.floor(map.right - map.left + 0.5)
+        if not mapWidths[width] then
+            mapWidths[width] = true
+            report("BATTLE minimap width=" .. width .. " cell=" .. map.cellWidth)
+        end
+    end
+end)

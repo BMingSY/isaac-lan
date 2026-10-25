@@ -4,10 +4,13 @@
 #include <string>
 #include "core/chat.h"
 #include "presentation/chat_background.h"
+#include "presentation/minimap.h"
 #include <filesystem>
+#include <vector>
 struct lua_State;
 namespace isaac::frontend {
 void prepareView();
+const std::vector<presentation::MinimapView>& minimapViews();
 void render();
 void returnToLobby();
 bool capturesInput();
