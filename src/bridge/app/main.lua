@@ -15,6 +15,9 @@ callback(ModCallbacks.MC_POST_RENDER, function()
 end)
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
 local friendlyFire = _IsaacLanModules["compat/rules/friendly_fire"]({
+    policy = _IsaacLanModules["compat/rules/pvp_damage"],
+    attacks = _IsaacLanModules["compat/rules/pvp_attacks"],
+    health = _IsaacLanModules["compat/rules/pvp_health"],
     native = native,
     player = Isaac.GetPlayer,
     entities = Isaac.GetRoomEntities,
