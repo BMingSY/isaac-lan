@@ -80696,7 +80696,6 @@
       "pill": 26
     },
     "scope": "原清单待验证的道具、卡牌／符文、药丸；每项均有实机尝试。基础流程、前提不成立、夹具失败及证据不足不计效果通过。",
-    "history": "docs/history/2026-10-18-item-effects.md",
     "results": {
       "verified": 685,
       "incomplete": 19,
@@ -83975,7 +83974,6 @@
       "trinket": 183
     },
     "scope": "补齐原清单183个饰品、18个未完成道具及2个历史疑似道具的独立效果验收；卡牌与药丸沿用此前记录。",
-    "history": "docs/history/2026-10-18-item-effect-completion.md",
     "results": {
       "verified": 195,
       "problem": 6,
@@ -83990,7 +83988,6 @@
     "items": 6,
     "cases": 24,
     "status": "verified",
-    "history": "docs/history/2026-10-19-remaining-item-fixes.md",
     "evidence": [
       "remaining-8082c79-20261019/acceptance-02",
       "remaining-8082c79-20261019/acceptance-03"
