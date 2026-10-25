@@ -1,7 +1,8 @@
 -- Authority lifecycle for optional rule effects. Network state carries options
--- and ordinary inventory; pending clear events and dice rolls never run remotely.
+-- and ordinary gameplay state; pending rule effects never run remotely.
 return function(deps)
     local native, allocation, charge = deps.native, deps.allocation, deps.charge
+    local gather = deps.gather
     local flags = {}
     for _, rule in ipairs(native.net_room_options()) do
         flags[rule.key] = rule.flag
@@ -11,6 +12,7 @@ return function(deps)
         run, epoch = nil, nil
         allocation.reset()
         charge.reset()
+        gather.reset()
     end
     local function current()
         local info = native.api_info()
@@ -57,6 +59,11 @@ return function(deps)
             end
             if enabled(info, "sharedClearCharge") then
                 charge.step(info)
+            end
+            if enabled(info, "specialRoomGather") then
+                gather.step(info)
+            else
+                gather.reset()
             end
         end,
     }

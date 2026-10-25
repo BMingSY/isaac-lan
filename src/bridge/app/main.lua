@@ -54,6 +54,11 @@ local allocation = lootAllocation()
 local roomRules = _IsaacLanModules["runtime/room_rules"]({
     native = native,
     allocation = allocation,
+    gather = _IsaacLanModules["compat/rules/special_rooms"]({
+        native = native,
+        game = Game,
+        roomTypes = RoomType,
+    }),
     charge = _IsaacLanModules["compat/rules/clear_charge"]({
         native = native,
         game = Game,

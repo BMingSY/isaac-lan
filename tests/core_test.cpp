@@ -1530,7 +1530,8 @@ void roomOptionsAndMarks() {
     require(archive.settings.rules.valid() &&
                 Archive::decode(archive.encode()).settings.rules == archive.settings.rules,
             "Normal run lost room options when saved");
-    require(!isaac::roomOptions::valid(8), "Runtime accepted an unknown room option");
+    require(!isaac::roomOptions::valid(isaac::roomOptions::known + 1),
+            "Runtime accepted an unknown room option");
     // A real v3 archive remains readable, defaulting the absent room flags off.
     Writer legacy(Message::snapshot);
     legacy.string("IsaacLAN/save/3");
