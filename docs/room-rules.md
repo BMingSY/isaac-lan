@@ -4,7 +4,7 @@
 
 房主进入子菜单后独立勾选 `[x]`／`[ ]`，每次更改即时同步并取消全员准备，连续选择不退出列表。客机可进入同一列表查看实时状态，不能修改。列表固定显示六条规则，超出时随方向选择滚动，也可点击上下箭头翻页；“返回”固定在底部，返回大厅后仍选中规则入口。
 
-开始后不可更改规则。选项与挑战选择互相独立，并随保存、续玩、重连和重开保留；续玩规则与当前大厅不同时，先选择“载入上次规则”，重新准备后继续。
+开始后不可更改规则。普通模式及未固定规则的挑战允许独立选择选项，并随保存、续玩、重连和重开保留；续玩规则与当前大厅不同时，先选择“载入上次规则”，重新准备后继续。[固定规则的挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)使用其定义的选项集合，房间规则入口置灰，主客机的修改请求均被拒绝；切回普通模式后可重新编辑。
 
 房主每次修改勾选时，将选项保存到本机 IP／端口偏好文件 `connection.txt` 的 `roomOptions` 字段，下次创建房间自动载入。旧文件没有该字段时默认全部关闭；客机接收到的大厅规则不写入本机偏好。IP、端口和规则的保存互相保留其他字段，写入通过临时文件替换完成；保存失败时界面提示，不影响已经应用的大厅选择。
 
@@ -50,7 +50,7 @@
 
 ## 状态与职责
 
-选项定义来自 [core/room_options.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/room_options.h)，运行层验证并导出位值、名称和 `shortName` 简称，菜单据此生成摘要与复选行。网络只传输 `RunRules.options`，不解释具体玩法。存档及个人通关标记的生命周期见[会话与状态恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
+选项定义来自 [core/room_options.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/room_options.h)，运行层验证并导出位值、名称和 `shortName` 简称，菜单据此生成摘要与复选行。挑战目录的 `roomOptionsLocked` 由 `net_challenges` 导出给菜单；运行层同时校验固定选项集合，并在修改入口拒绝锁定状态。网络只传输 `RunRules.options`，不解释具体玩法。存档及个人通关标记的生命周期见[会话与状态恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
 
 [room_rules.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_rules.lua) 管理可选效果的会话与世界代次；未结算的事件在失效时清理。[clear_charge.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/clear_charge.lua) 汇总原生清房通知并在房间模拟退出后补发充能；[loot_roll.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/loot_roll.lua) 负责玩家分组、掷骰排序和一次性库存分配，挑战提供自己的运气策略。两项规则沿用主动充能和库存同步，不扩展消息布局。
 

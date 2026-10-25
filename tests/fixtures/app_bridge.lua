@@ -6,6 +6,16 @@ return function(root, native, modules)
     GridRooms = GridRooms or enums.GridRooms
     GridCollisionClass = GridCollisionClass or enums.GridCollisionClass
     EntityType = EntityType or {}
+    LevelStateFlag = LevelStateFlag
+        or {
+            STATE_COMPASS_EFFECT = 7,
+            STATE_MAP_EFFECT = 8,
+            STATE_BLUE_MAP_EFFECT = 9,
+            STATE_FULL_MAP_EFFECT = 10,
+        }
+    if _IsaacLanState then
+        _IsaacLanState.setChallenges = function() end
+    end
     ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD = ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD or 9
     ModCallbacks.MC_ENTITY_TAKE_DMG = ModCallbacks.MC_ENTITY_TAKE_DMG or 11
     ModCallbacks.MC_USE_ITEM = ModCallbacks.MC_USE_ITEM or 12
@@ -43,6 +53,14 @@ return function(root, native, modules)
         "compat/rules/special_rooms",
         "runtime/room_rules",
         "compat/challenges/luck_game",
+        "compat/challenges/battle_royale_rules",
+        "compat/challenges/battle_royale_resources",
+        "compat/challenges/battle_royale_rewards",
+        "compat/challenges/battle_royale_map",
+        "compat/challenges/battle_royale",
+        "sync/fields",
+        "sync/map_visibility",
+        "presentation/battle_royale",
         "compat/items/glitched",
         "runtime/restart",
         "runtime/chat_wire",

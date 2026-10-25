@@ -86,15 +86,22 @@ void pollRestart() {
 }
 bool retryArchive();
 lan::RunRules rulesFor(const compat::challenges::Definition* definition) {
-    return definition ? lan::RunRules{definition->id, definition->version, definition->character,
-                                      definition->difficulty, definition->transient}
+    return definition ? lan::RunRules{definition->id,
+                                      definition->version,
+                                      definition->character,
+                                      definition->difficulty,
+                                      definition->transient,
+                                      definition->friendlyFire ? roomOptions::friendlyFire : 0}
                       : lan::RunRules{};
 }
 bool validRules(const lan::RunRules& rules) {
     const auto* definition = compat::challenges::find(rules.id);
     auto expected = rulesFor(definition);
-    expected.options = rules.options;
-    return roomOptions::valid(rules.options) && (!rules.id || definition) && rules == expected;
+    const auto requiredOptions = expected.options;
+    if (!definition || !definition->roomOptionsLocked)
+        expected.options = rules.options;
+    return roomOptions::valid(rules.options) && (!rules.id || definition) && rules == expected &&
+           (rules.options & requiredOptions) == requiredOptions;
 }
 bool beginNetworkRun() {
     if (saves.networkRun)
@@ -1099,7 +1106,7 @@ int challengeList(lua_State* L) {
     const auto access = session ? session->localAccess() : personalAccess();
     lua.createTable(L, 0, compat::challenges::definitions.size());
     for (const auto& def : compat::challenges::definitions) {
-        lua.createTable(L, 0, 9);
+        lua.createTable(L, 0, 10);
         auto integer = [&](const char* key, long long value) {
             lua.pushInteger(L, value);
             lua.setField(L, -2, key);
@@ -1109,6 +1116,8 @@ int challengeList(lua_State* L) {
         integer("character", def.character);
         integer("difficulty", def.difficulty);
         integer("nextBag", def.nextBag);
+        lua.pushBoolean(L, def.roomOptionsLocked);
+        lua.setField(L, -2, "roomOptionsLocked");
         lua.pushBoolean(L, access.allowsRules(rulesFor(&def)));
         lua.setField(L, -2, "available");
         lua.pushBoolean(L, session ? session->rulesAvailable(rulesFor(&def))
@@ -1155,8 +1164,8 @@ int selectChallenge(lua_State* L) {
     const auto id = lua.checkInteger(L, 1);
     const auto* definition = id >= 0 && id <= 65535 ? compat::challenges::find(id) : nullptr;
     auto rules = rulesFor(definition);
-    if (session)
-        rules.options = session->rules().options;
+    if (session && (!definition || !definition->roomOptionsLocked))
+        rules.options |= session->rules().options;
     lua.pushBoolean(L, session && (id == 0 || definition) && session->configureRules(rules));
     return 1;
 }
@@ -1179,11 +1188,14 @@ int roomOptionDefinitions(lua_State* L) {
 }
 int configureRoomOptions(lua_State* L) {
     const auto value = lua.checkInteger(L, 1);
+    const auto* definition = session ? compat::challenges::find(session->rules().id) : nullptr;
     bool accepted = false;
-    if (session && value >= 0 && value <= std::numeric_limits<std::uint32_t>::max() &&
+    if (session && (!definition || !definition->roomOptionsLocked) && value >= 0 &&
+        value <= std::numeric_limits<std::uint32_t>::max() &&
         roomOptions::valid(static_cast<std::uint32_t>(value))) {
         auto rules = session->rules();
         rules.options = static_cast<std::uint32_t>(value);
+        rules.options |= rulesFor(definition).options;
         accepted = session->configureRules(rules);
     }
     lua.pushBoolean(L, accepted);
@@ -1660,6 +1672,36 @@ bool replica() {
 bool challengeActive() {
     return session && (session->phase() == lan::Phase::running || saves.networkRun) &&
            session->settings().rules.id != 0;
+}
+bool allowChallengeEvent(const char* event) {
+    if (!challengeActive() || replica())
+        return true;
+    if (!state)
+        return false;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanAllowChallengeEvent") != 6) {
+        lua.setTop(state, top);
+        return false;
+    }
+    lua.pushString(state, event);
+    if (!call(0, 1, 1, top))
+        return false;
+    const bool allowed = lua.type(state, -1) == 1 && lua.toBoolean(state, -1);
+    lua.setTop(state, top);
+    return allowed;
+}
+void mapView(bool begin, int slot, bool record) {
+    if (!state || (begin && (!challengeActive() || !view.gated)))
+        return;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanMapView") != 6) {
+        lua.setTop(state, top);
+        return;
+    }
+    lua.pushBoolean(state, begin);
+    lua.pushInteger(state, slot);
+    lua.pushBoolean(state, record);
+    call(0, 3, 0, top);
 }
 bool allowRoomEntry(unsigned slot, int fromDimension, int fromRoom, int dimension, int room,
                     bool teleport) {

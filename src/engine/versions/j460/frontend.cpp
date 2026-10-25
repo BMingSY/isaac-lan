@@ -172,6 +172,8 @@ struct Marker {
     float alpha;
 };
 std::vector<Marker> markers;
+std::vector<presentation::MinimapView> mapViews;
+bool invoke(int nargs, int results);
 template <class T> T& read(std::uintptr_t p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }
@@ -409,6 +411,23 @@ void* __attribute__((fastcall)) textureRender(void* texture, void*, const void* 
                             dy = (q[5] - q[1]) * height;
                 if (dx == 0 || dy == 0 || anchor.index < 0 || anchor.index >= level_grid::cellCount)
                     continue;
+                const float pitchX = read<float>(config, layout::mapConfig::cellWidth) +
+                                     read<float>(config, layout::mapConfig::cellSpacing);
+                const float pitchY = read<float>(config, layout::mapConfig::cellHeight) +
+                                     read<float>(config, layout::mapConfig::cellSpacing);
+                // Native minimaps use axis-aligned texture quads. Export only
+                // this frame's actual draw, including cropping and TAB fades.
+                if (dest[4] == dest[0] && dest[3] == dest[1]) {
+                    const auto view = presentation::projectMinimap(
+                        {left, top, left + dx, top + dy}, {dest[0], dest[1], dest[2], dest[5]},
+                        read<float>(config, layout::mapConfig::anchorX) -
+                            (anchor.index % level_grid::width) * pitchX,
+                        read<float>(config, layout::mapConfig::anchorY) -
+                            (anchor.index / level_grid::width) * pitchY,
+                        pitchX, pitchY, dest[11], anchor.dimension);
+                    if (view)
+                        mapViews.push_back(*view);
+                }
                 for (int slot = 0; slot < count && slot < static_cast<int>(lan::maxPlayers);
                      ++slot) {
                     const auto p = positions[slot];
@@ -452,6 +471,12 @@ void __attribute__((fastcall)) minimapRender(void* map, void*) {
     }
     originalMapRender(map);
     activeMap = 0;
+    if (state && !bridgeFailed && prepared) {
+        const int top = lua.getTop(state);
+        if (lua.getGlobal(state, "_IsaacLanMinimapRender") == luaFunction)
+            invoke(0, 0);
+        lua.setTop(state, top);
+    }
 }
 
 class Hash {
@@ -1054,6 +1079,7 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
 }
 } // namespace
 void prepareView() {
+    mapViews.clear();
     if (!originalMapCache || runtime::localViewSlot() < 0)
         return;
     // CacheMap clears an offscreen target and flushes the shared native draw
@@ -1070,6 +1096,9 @@ void prepareView() {
                                             (i ? layout::minimap::large : layout::minimap::small)),
                     nullptr);
     });
+}
+const std::vector<presentation::MinimapView>& minimapViews() {
+    return mapViews;
 }
 void render() {
     renderNativeMenu();

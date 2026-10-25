@@ -27,7 +27,9 @@ return function(deps)
         return info
     end
     local function enabled(info, key)
-        return info and (info.roomOptions & assert(flags[key])) ~= 0
+        return info
+            and (info.roomOptions & assert(flags[key])) ~= 0
+            and (not deps.allow or deps.allow(key))
     end
     return {
         reset = reset,

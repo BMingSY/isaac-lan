@@ -23,8 +23,9 @@ local names = {
     "glitched",
     "captured",
     "combat",
+    "challenge",
 }
-local version = 35
+local version = 36
 local VERSION_FIELD, TICK_FIELD = 1, 2
 return {
     VERSION = version,
@@ -37,6 +38,9 @@ return {
             end
             if names[index] == "combat" and value == nil then
                 value = string.pack(">I4", 0)
+            end
+            if names[index] == "challenge" and value == nil then
+                value = false
             end
             assert(value ~= nil, "Missing world field: " .. names[index])
             values[index] = value

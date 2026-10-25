@@ -2,6 +2,7 @@
 #include "engine/versions/j460/layout.h"
 #include "compat/game_ids.h"
 #include "engine/presentation.h"
+#include "engine/frontend.h"
 #include "engine/crafting_hud.h"
 #include "engine/challenge_hud.h"
 #include "engine/item_presentation.h"
@@ -159,6 +160,31 @@ void __attribute__((fastcall)) startIntro(void* transition, void*, unsigned firs
     }
 }
 isaac::lua::API lua{};
+int minimap(lua_State* L) {
+    lua.createTable(L, 0, 2);
+    if (runtime::localViewSlot() < 0)
+        return 1;
+    unsigned index = 0;
+    for (const auto& view : frontend::minimapViews()) {
+        lua.createTable(L, 0, 10);
+        for (const auto& [key, value] : {std::pair{"x", view.x},
+                                         {"y", view.y},
+                                         {"cellWidth", view.cellWidth},
+                                         {"cellHeight", view.cellHeight},
+                                         {"left", view.clip.left},
+                                         {"top", view.clip.top},
+                                         {"right", view.clip.right},
+                                         {"bottom", view.clip.bottom},
+                                         {"alpha", view.alpha}}) {
+            lua.pushNumber(L, value);
+            lua.setField(L, -2, key);
+        }
+        lua.pushInteger(L, view.dimension);
+        lua.setField(L, -2, "dimension");
+        lua.setField(L, -2, std::to_string(index++).c_str());
+    }
+    return 1;
+}
 int playerHuds(lua_State* L) {
     lua.createTable(L, 0, 4);
     const auto manager = at<std::uintptr_t>(image, j460::globals::manager);
@@ -334,6 +360,8 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "presentation_active");
     lua.pushClosure(L, playerHuds, 0);
     lua.setField(L, -2, "presentation_player_huds");
+    lua.pushClosure(L, minimap, 0);
+    lua.setField(L, -2, "presentation_minimap");
     lua.pushClosure(L, victoryPrompt, 0);
     lua.setField(L, -2, "victory_lap_prompt");
     return items::bind(L, module);

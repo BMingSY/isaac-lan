@@ -333,6 +333,9 @@ return function(fields)
             end))
             assert(native.presentation_events(value.presentation))
             itemPresentation.apply(value.slot, value.items)
+            if deps.applyChallenge then
+                deps.applyChallenge(value.challenge)
+            end
             actorVisuals, receivedTick = value.actors, tick
         end
         restoreActors = performance.wrap("apply.actors", restoreActors)

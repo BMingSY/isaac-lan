@@ -1459,7 +1459,15 @@ void challengeRules() {
                 luck->goalStage == 6 && luck->route == "mom" && !luck->nextBag && luck->transient &&
                 isaac::compat::challenges::available(*luck, {}),
             "Luck challenge must allow ordinary character selection without achievement gates");
-    require(!isaac::compat::challenges::find(1003), "Unknown challenge accepted");
+    const auto* battle = isaac::compat::challenges::find(1003);
+    require(battle && battle->character == isaac::compat::ids::player::isaac &&
+                battle->difficulty == 0 && battle->friendlyFire && battle->transient &&
+                battle->route == "battle_royale" && battle->roomOptionsLocked &&
+                battle->version == 3 && isaac::compat::challenges::available(*battle, {}),
+            "Battle royale lobby contract mismatch");
+    require(!definition->roomOptionsLocked && !luck->roomOptionsLocked,
+            "Other challenges lost their independent room options");
+    require(!isaac::compat::challenges::find(1004), "Unknown challenge accepted");
     std::array<std::uint8_t, 642> achievements{};
     require(!isaac::compat::challenges::available(*definition, achievements),
             "Locked save entered the challenge");

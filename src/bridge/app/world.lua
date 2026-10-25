@@ -3,6 +3,13 @@
 local native = assert(_IsaacLan)
 local prediction = assert(_IsaacLanPrediction)
 local state = {}
+local challenges
+function state.setChallenges(value)
+    challenges = value
+end
+function state.challengeView()
+    return challenges and challenges.viewState()
+end
 _IsaacLanState = state
 local modules = assert(_IsaacLanModules)
 local fields = assert(modules["sync/fields"])
@@ -199,6 +206,12 @@ local audioPresentation = assert(modules["presentation/audio"])(native, function
     return SFXManager()
 end)
 local captureState = component("sync/capture")({
+    challenge = function()
+        return challenges and challenges.snapshot() or false
+    end,
+    projectMap = function(map, slot)
+        return challenges and challenges.projectMap(map, slot) or map
+    end,
     native = native,
     encode = encode,
     schema = worldSchema,
@@ -260,6 +273,11 @@ local transitions = assert(modules["compat/transitions"])({
     assert(modules["compat/routes/victory_lap"]),
 })
 local replica = component("sync/replica")({
+    applyChallenge = function(value)
+        if challenges then
+            challenges.apply(value)
+        end
+    end,
     native = native,
     encode = encode,
     decode = decode,

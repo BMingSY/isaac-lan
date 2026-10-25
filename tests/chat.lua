@@ -101,6 +101,22 @@ local function ignoreEmptySubmissions()
     assert(#packets == beforePackets and rolls == beforeRolls and #executions == beforeExecutions)
 end
 ignoreEmptySubmissions()
+-- A malformed pasted script stays private before any wire message is created.
+for _, peer in ipairs(peers) do
+    local before = #packets
+    for _, input in ipairs({
+        "lua error('PRIVATE')",
+        "alua dofile('D:/private/preview.lua'",
+        "loadfile('D:/private/preview.lua')()",
+        " /unknown PRIVATE",
+    }) do
+        assert(not peer.chat.submit(input))
+        local message = peer.chat.messages[#peer.chat.messages]
+        assert(message and not message.bubble and not message.command)
+        assert(#packets == before and next(peer.chat.bubbles) == nil)
+    end
+    peer.chat.reset()
+end
 -- A peer that bypasses its local editor must not produce an empty-input error either.
 inbox[1][1] = {
     1,

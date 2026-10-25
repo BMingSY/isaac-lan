@@ -296,7 +296,10 @@ function _IsaacLanMenuRender(
     )
     if rulesPage then
         centered(
-            "已启用 " .. ruleCount .. " 项" .. (host and "" or " · 只读"),
+            "已启用 "
+                .. ruleCount
+                .. " 项"
+                .. (host and not (challenge and challenge.roomOptionsLocked) and "" or " · 只读"),
             110,
             82,
             10,

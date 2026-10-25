@@ -228,4 +228,28 @@ capture.reset()
 local resetView = view(0, 11)
 assert(resetView.stage == 4 and resetView.map[1][8] == "pickups:4")
 assert(first.stage == 1 and first.map[1][8] == "pickups:1", "New generation mutated an old view")
+local Map = dofile(root .. "/src/bridge/sync/fields.lua").map
+deps.challenge = function()
+    count("challenge")
+    return { 1003, 1, { revision } }
+end
+deps.projectMap = function(map, slot)
+    local projected = {}
+    for _, entry in ipairs(map) do
+        local own = { table.unpack(entry) }
+        own[Map.display], own[Map.visited] = slot == 0 and 7 or 0, slot == 0 and 1 or 0
+        projected[#projected + 1] = own
+    end
+    return projected
+end
+capture = factory(deps)
+local own, peer = view(0, 12), view(1, 12)
+assert(calls.challenge == 1 and own.challenge[1] == 1003 and peer.challenge[3][1] == revision)
+assert(own.map[1][Map.display] == 7 and peer.map[1][Map.display] == 0)
+assert(own.map[1][Map.visited] == 1 and peer.map[1][Map.visited] == 0)
+assert(descriptor.DisplayFlags == 1 and descriptor.VisitedCount == 1)
+assert(
+    own.map[1][Map.layout] == peer.map[1][Map.layout],
+    "Personal discovery changed shared layout"
+)
 print("PASS common capture reuse, per-peer projections, wire equivalence and invalidation")
