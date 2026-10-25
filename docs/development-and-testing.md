@@ -181,7 +181,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 房间共享效果使用 [run_room_rules.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_room_rules.py)，指定 `--host`、`--client`、`--build`、`--output` 和独立 `--port`，可加 `--heap-check --record`。工具固定模拟 80 ms RTT，在同一对进程中验证清房充能、分房、主动槽位、充能修正、沙漏回退、普通掷骰与运气挑战，然后仅为启动时读取本机偏好重启一次；两个端口分别用于主机与延迟代理。全部结束后恢复隔离资料，任一阶段失败不计通过。离线对应 `bridge.clear-charge`、`bridge.luck_game`、`presentation.connection-settings`、`core.room-options-marks`。
 
-特殊房间集合使用 [run_teleport.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_teleport.py) 的 `--gather` 模式，复用同样的隔离目录、构建、产物与端口参数，配合 `--heap-check --record`。一组主客机验证走门、Joker 和 `/tp` 触发集合、普通房与普通红房不触发、特殊房离开与重入、地图外房间、同时进房和换层后再次集合；双端均确认到达后才继续。离线对应 `bridge.special-room-gather`、`bridge.teleport`、`bridge.clear-charge`、`bridge.luck_game`、`bridge.challenge_menu`、`presentation.connection-settings`、`core.room-options-marks` 与 Windows `net.room-options`。
+特殊房间集合使用 [run_teleport.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_teleport.py) 的 `--gather` 模式，复用同样的隔离目录、构建、产物与端口参数，配合 `--heap-check --record`。一组主客机验证走门、Joker 和 `/tp` 触发集合、普通房与普通红房不触发、特殊房离开与重入、地图外房间、同时进房、在途卡牌和换层后再次集合；双端均确认到达后才继续。离线对应 `bridge.special-room-gather`、`bridge.teleport`、`bridge.clear-charge`、`bridge.luck_game`、`bridge.challenge_menu`、`presentation.connection-settings`、`core.room-options-marks` 与 Windows `net.room-options`。
 
 运气游戏使用 [run_luck_game.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_luck_game.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`，可加 `--heap-check --record`。同一组主客机覆盖挑战开局、开局吞下禁令、非主动底座拾取、购买代价与二选一、主动拾取跳过掷骰、主动转移充能、幸运上升药丸、换层赠送、分房发放、重连和妈腿奖杯退出；工具保护并恢复隔离资料。离线对应 `bridge.luck_game`、`bridge.challenges`、`bridge.challenge_menu`、`bridge.chat`、`core.challenge-rules` 与 Windows `native.item-effects`。
 
