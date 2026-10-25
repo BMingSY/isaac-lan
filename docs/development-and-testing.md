@@ -113,6 +113,8 @@ ctest --test-dir build-win32 --output-on-failure
 
 测试程序不带用例名时运行全部传输测试，通过标记为 `ALL STATE TRANSPORT TESTS PASSED`。
 
+队友伤害的定向离线检查为 `bridge.friendly-fire`、`bridge.pvp-items`、`bridge.party-startup`、`bridge.resume` 与 `bridge.layers`，覆盖等输出配置、余数、散射、持续接触、爆发保护、原版防御、道具索敌与毒伤、回调失败与状态清理。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 组合 `--case room-rules-off --case room-rules --case room-rules-resume`，指定隔离双端、独立端口与输出目录，配合 `--latency-ms 40 --heap-check --record`。同一组进程检查友伤开关、普通／成型／等输出配置的实际扣血时间、散射上限、环境与道具保护、减伤、激光／刀、原生爆炸、分房、死亡、续玩与双端生命一致性。道具专项使用 `--case room-rules-items --case room-rules-items-off`，检查已接入主动的实际使用、自身代价、范围、毒性休克进房／重复进房／分房与道具无敌；可与基础组在同一对进程中执行。测试时间以指定配置和连续命中为条件，不作为所有武器、道具或防御组合的保证。
+
 ## 最终实机验收
 
 ### 用例与执行工具

@@ -22,6 +22,10 @@ presentation/attack_prediction
 presentation/tear_motion
 presentation/attacks
 core/contacts
+compat/rules/pvp_damage
+compat/rules/pvp_attacks
+compat/rules/pvp_health
+compat/items/pvp
 compat/rules/friendly_fire
 compat/rules/loot_roll
 compat/rules/clear_charge
