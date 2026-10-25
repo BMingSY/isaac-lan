@@ -132,7 +132,19 @@ def check_archive(archive, tag):
     return json.loads(result.stdout)
 
 
-def description_with_notes(tag, formatted, original):
+def description_with_notes(tag, formatted, original, replace_version=None):
+    if replace_version is not None:
+        if not re.fullmatch(r"v\d+\.\d+\.\d+", replace_version):
+            raise ValueError("Expected the version of the leading Workshop notes")
+        previous = re.fullmatch(
+            rf"Isaac LAN {re.escape(replace_version)}\r?\n\r?\n.+?"
+            r"\r?\n\r?\n-----\r?\n\r?\n(.+)",
+            original,
+            flags=re.DOTALL,
+        )
+        if previous is None or not previous[1].strip():
+            raise ValueError(f"Expected leading Workshop notes for {replace_version}")
+        original = previous[1]
     description = f"Isaac LAN {tag}\n\n{formatted.rstrip()}\n\n-----\n\n{original}"
     if "\0" in description or len(description.encode("utf-8")) >= DESCRIPTION_LIMIT:
         raise ValueError("Workshop description exceeds the Steam UTF-8 limit")
@@ -147,10 +159,22 @@ def preview_digest(url):
 
 
 def prepare(
-    steam, archive, notes, output, tag, *, prepend_notes=False, preview=None, preview_upload=None
+    steam,
+    archive,
+    notes,
+    output,
+    tag,
+    *,
+    prepend_notes=False,
+    replace_notes_version=None,
+    preview=None,
+    preview_upload=None,
 ):
     if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
         raise ValueError("Expected a release tag such as v0.4.2")
+    if prepend_notes and replace_notes_version is not None:
+        raise ValueError("Choose either prepend or replacement notes")
+    updates_notes = prepend_notes or replace_notes_version is not None
     checked = check_archive(archive, tag)
     reviewed = notes.read_text(encoding="utf-8-sig")
     formatted = steam_notes(reviewed)
@@ -204,12 +228,12 @@ def prepare(
         "steam_notes_sha256": digest(output / "steam-change-notes.txt"),
         "before": before,
     }
-    if prepend_notes or preview is not None:
+    if updates_notes or preview is not None:
         descriptions = {}
-        for language in LANGUAGES if prepend_notes else ("english",):
+        for language in LANGUAGES if updates_notes else ("english",):
             text = before[language]["description"]
-            if prepend_notes:
-                text = description_with_notes(tag, formatted, text)
+            if updates_notes:
+                text = description_with_notes(tag, formatted, text, replace_notes_version)
             path = output / f"description-{language}.txt"
             path.write_bytes(text.encode("utf-8"))
             descriptions[language] = {"file": path.name, "sha256": digest(path), "text": text}
@@ -219,6 +243,8 @@ def prepare(
             "descriptions": descriptions,
             "preview_sha256": digest(upload_image) if upload_image is not None else None,
         }
+        if replace_notes_version is not None:
+            manifest["presentation"]["replace_notes_version"] = replace_notes_version
         if preview_upload is not None:
             upload_copy = output / f"upload-preview{preview_upload.suffix.lower()}"
             shutil.copy2(preview_upload, upload_copy)
@@ -251,17 +277,22 @@ def load_prepared(output):
     if presentation:
         if (output / "silent-change-notes.txt").read_bytes() != b"":
             raise ValueError("Silent language update notes changed")
-        expected_languages = LANGUAGES if presentation["prepend_notes"] else ("english",)
+        replace_version = presentation.get("replace_notes_version")
+        if presentation["prepend_notes"] and replace_version is not None:
+            raise ValueError("Choose either prepend or replacement notes")
+        updates_notes = presentation["prepend_notes"] or replace_version is not None
+        expected_languages = LANGUAGES if updates_notes else ("english",)
         if set(presentation["descriptions"]) != set(expected_languages):
             raise ValueError("Prepared description languages changed")
         for language, value in presentation["descriptions"].items():
             path = output / f"description-{language}.txt"
             expected = manifest["before"][language]["description"]
-            if presentation["prepend_notes"]:
+            if updates_notes:
                 expected = description_with_notes(
                     manifest["tag"],
                     steam_notes((output / "reviewed-notes.md").read_text()),
                     expected,
+                    replace_version,
                 )
             if (
                 value["file"] != path.name
@@ -365,7 +396,11 @@ def main():
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--notes", type=Path)
     parser.add_argument("--tag")
-    parser.add_argument("--prepend-notes", action="store_true")
+    description = parser.add_mutually_exclusive_group()
+    description.add_argument("--prepend-notes", action="store_true")
+    description.add_argument(
+        "--replace-notes-version", help="Replace the leading notes for this exact version"
+    )
     parser.add_argument("--preview", type=Path)
     parser.add_argument("--preview-upload", type=Path)
     args = parser.parse_args()
@@ -380,6 +415,7 @@ def main():
             args.output,
             args.tag,
             prepend_notes=args.prepend_notes,
+            replace_notes_version=args.replace_notes_version,
             preview=args.preview,
             preview_upload=args.preview_upload,
         )

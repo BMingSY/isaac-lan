@@ -275,6 +275,90 @@ def test_page_prefix_preserves_both_original_descriptions(release, monkeypatch):
             assert steam.metadata[language][field] == before[language][field]
 
 
+def test_replace_notes_updates_both_languages_and_preserves_base_description(release):
+    steam, archive, notes, output = release
+    originals = {
+        "english": "Original installation instructions\r\nFeedback URL / 群号\r\n",
+        "schinese": "原有安装说明\n反馈入口和群号\n",
+    }
+    for language, newline in zip(workshop.LANGUAGES, ("\n", "\r\n")):
+        steam.metadata[language]["description"] = (
+            newline.join(("Isaac LAN v0.4.1", "", "Old release notes", "", "-----", "", ""))
+            + originals[language]
+        )
+    before = deepcopy(steam.metadata)
+    manifest = workshop.prepare(
+        steam, archive, notes, output, "v0.4.2", replace_notes_version="v0.4.1"
+    )
+    assert "update" not in steam.calls
+    assert manifest["before"] == before
+    assert manifest["presentation"]["replace_notes_version"] == "v0.4.1"
+    for language in workshop.LANGUAGES:
+        expected = (
+            "Isaac LAN v0.4.2\n\n[b]BUG修复[/b]\n\n- 修复崩溃。\n\n-----\n\n" + originals[language]
+        )
+        assert (output / f"description-{language}.txt").read_bytes().decode() == expected
+    result = workshop.publish(steam, output)
+    assert result["metadata_matches_expected"] and result["downloaded_files_match"]
+    assert not result["preview_verified"]
+    assert steam.calls.count("update") == 1
+    assert steam.calls.count("update-page-english") == 1
+    assert steam.calls.count("update-page-schinese") == 1
+    for language in workshop.LANGUAGES:
+        assert "v0.4.1" not in steam.metadata[language]["description"]
+        for field in ("title", "owner", "visibility", "banned"):
+            assert steam.metadata[language][field] == before[language][field]
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Isaac LAN v0.4.0\n\nOther version\n\n-----\n\nOriginal",
+        "Isaac LAN v0.4.1\n\nNo separator or base description",
+        "Isaac LAN v0.4.1\n\nNotes\n\n-----\n\n   ",
+        "Original\n\nIsaac LAN v0.4.1\n\nNotes\n\n-----\n\nMore text",
+    ],
+)
+def test_replace_notes_requires_matching_leading_section_in_both_languages(release, description):
+    steam, archive, notes, output = release
+    steam.metadata["english"]["description"] = "Isaac LAN v0.4.1\n\nNotes\n\n-----\n\nOriginal"
+    steam.metadata["schinese"]["description"] = description
+    with pytest.raises(ValueError, match="Expected leading Workshop notes"):
+        workshop.prepare(steam, archive, notes, output, "v0.4.2", replace_notes_version="v0.4.1")
+    assert "update" not in steam.calls
+    assert not (output / "preparation.json").exists()
+
+
+def test_changed_replacement_version_prevents_publication(release):
+    steam, archive, notes, output = release
+    for value in steam.metadata.values():
+        value["description"] = "Isaac LAN v0.4.1\n\nNotes\n\n-----\n\nOriginal"
+    workshop.prepare(steam, archive, notes, output, "v0.4.2", replace_notes_version="v0.4.1")
+    path = output / "preparation.json"
+    manifest = workshop.read_json(path)
+    manifest["presentation"]["replace_notes_version"] = "v0.4.0"
+    workshop.write_json(path, manifest)
+    steam.calls.clear()
+    with pytest.raises(ValueError, match="Expected leading Workshop notes"):
+        workshop.publish(steam, output)
+    assert not steam.calls
+
+
+def test_prepend_and_replace_cannot_be_combined(release):
+    steam, archive, notes, output = release
+    with pytest.raises(ValueError, match="either prepend or replacement"):
+        workshop.prepare(
+            steam,
+            archive,
+            notes,
+            output,
+            "v0.4.2",
+            prepend_notes=True,
+            replace_notes_version="v0.4.1",
+        )
+    assert not steam.calls
+
+
 @pytest.mark.parametrize(
     "name",
     [

@@ -175,7 +175,7 @@ def render(catalog, findings):
     lines += [
         "公共效果的范围由 [`team_effects.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/team_effects.h) 声明。恶魔／天使房概率相关的全队叠加规则见[概率说明](https://github.com/BMingSY/isaac-lan/blob/main/docs/shared-deal-chances.md)。",
         "",
-        "验证操作与默认范围见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#道具效果专项)。逐项结论、未决项及证据范围见[初次验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/2026-10-18-item-effects.md)、[修复复验](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/2026-10-18-item-effect-fixes.md)、[补充验收](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/2026-10-18-item-effect-completion.md)和[遗留问题复验](https://github.com/BMingSY/isaac-lan/blob/main/docs/history/2026-10-19-remaining-item-fixes.md)。",
+        "验证操作与默认范围见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#道具效果专项)。",
         "",
         "清单源数据：[`item_catalog.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_catalog.json)；验证记录与证据标识：[`item_audit_findings.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_audit_findings.json)。运行结果见对应 PR。",
         "",
