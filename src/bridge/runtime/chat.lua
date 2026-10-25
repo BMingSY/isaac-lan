@@ -154,6 +154,13 @@ return function(deps, wire)
         if lower == "feedback" or lower == "fb" then
             return { kind = "feedback", text = args }
         end
+        if lower == "tp" then
+            local target, reason = deps.teleport.parse(args)
+            if not target then
+                return nil, reason
+            end
+            return { kind = "teleport", target = target }
+        end
         if lower == "console" or lower == "c" then
             args = args:gsub("^%s+", "")
             if args == "" then
@@ -256,7 +263,7 @@ return function(deps, wire)
             )
         elseif parsed.kind == "dice" then
             rollExpression(sender, parsed.dice, parsed.audience)
-        elseif parsed.kind == "native" then
+        elseif parsed.kind == "native" or parsed.kind == "teleport" then
             if deps.info().ready ~= 1 then
                 errorTo("命令未执行：游戏尚未就绪", sender)
                 return
@@ -265,7 +272,8 @@ return function(deps, wire)
                 errorTo("命令队列已满", sender)
                 return
             end
-            request.owner, request.command = sender, parsed.text
+            request.owner, request.command, request.kind =
+                sender, parsed.text or parsed.target, parsed.kind
             commands[#commands + 1] = request
         else
             errorTo("此命令在本机执行", sender)
@@ -297,11 +305,15 @@ return function(deps, wire)
                 table.concat(dice.help(limits.dice), "\n"),
                 "聊天／掷骰末尾加 --room：仅当前房间共享",
                 "/c /console 命令：原版控制台",
+                "/tp help：传送命令",
                 "/lanbot help：托管命令",
                 "/feedback /fb 描述：上传日志并反馈问题",
             }) do
                 chat.output(line, { audience = "self" })
             end
+            return true
+        elseif parsed.kind == "teleport" and parsed.target.kind == "help" then
+            chat.output(deps.teleport.help(), { audience = "self" })
             return true
         elseif parsed.kind == "echo" then
             chat.output(parsed.text, { audience = "self" })
@@ -407,6 +419,9 @@ return function(deps, wire)
         end
     end
     function chat.step()
+        if deps.teleport then
+            deps.teleport.step()
+        end
         if #commands == 0 then
             return
         end
@@ -425,7 +440,8 @@ return function(deps, wire)
             return
         end
         executingOwner = request.owner
-        local ok, result = pcall(deps.execute, request.owner, request.command)
+        local execute = request.kind == "teleport" and deps.teleport.execute or deps.execute
+        local ok, result = pcall(execute, request.owner, request.command)
         executingOwner = nil
         if not ok then
             result = "命令执行失败：" .. tostring(result)
@@ -445,6 +461,9 @@ return function(deps, wire)
         end
     end
     function chat.reset()
+        if deps.teleport then
+            deps.teleport.reset()
+        end
         chat.messages, chat.bubbles, chat.emotes = {}, {}, {}
         chat.revision = chat.revision + 1
         seen, outputSeen, commands, outbox = {}, {}, {}, {}

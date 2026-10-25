@@ -99,6 +99,7 @@ compat/challenges/luck_game
 runtime/challenges
 runtime/chat_wire
 runtime/chat_dice
+runtime/teleport
 runtime/chat
 presentation/chat_layout
 presentation/chat

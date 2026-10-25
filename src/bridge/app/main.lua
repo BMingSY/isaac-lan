@@ -211,6 +211,22 @@ chat = _IsaacLanModules["runtime/chat"]({
     execute = native.chat_execute,
     roll = native.chat_roll,
     dice = _IsaacLanModules["runtime/chat_dice"],
+    teleport = _IsaacLanModules["runtime/teleport"]({
+        native = native,
+        game = Game,
+        player = Isaac.GetPlayer,
+        hash = GetPtrHash,
+        vector = Vector,
+        enums = {
+            room = RoomType,
+            shape = RoomShape,
+            grid = GridRooms,
+            collision = GridCollisionClass,
+        },
+        output = function(text, options)
+            return chat.output(text, options)
+        end,
+    }),
     bot = bot.command,
     feedback = function(text)
         return feedback.submit(text, function(message)

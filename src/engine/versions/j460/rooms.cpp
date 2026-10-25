@@ -1576,14 +1576,22 @@ int withLocalView(lua_State* L) {
     lua.pushBoolean(L, true);
     return 1;
 }
-int integrationMove(lua_State* L) {
+int moveParticipant(lua_State* L, RoomRouting routing, bool animateDeparture) {
     const auto slot = lua.checkInteger(L, 1), index = lua.checkInteger(L, 2),
                dimension = lua.checkInteger(L, 3);
     lua.pushBoolean(L, !runtime::replica() && slot >= 0 && slot < 4 && participant(slot) &&
                            (connectedMask & (1u << slot)) && index >= -20 && index < 169 &&
                            dimension >= 0 && dimension <= 2 &&
-                           queue(participant(slot), index, dimension, -1, true));
+                           queue(participant(slot), index, dimension, -1, true, animateDeparture, 0,
+                                 std::nullopt, routing));
     return 1;
+}
+int integrationMove(lua_State* L) {
+    return moveParticipant(L, RoomRouting::native, true);
+}
+int teleportToRoom(lua_State* L) {
+    // A cancellable command must not leave the actor in TeleportOut while queued.
+    return moveParticipant(L, RoomRouting::resolved, false);
 }
 int cancelIntegrationMove(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1), index = lua.checkInteger(L, 2),
@@ -3803,6 +3811,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("pickup_price", pickupPrice);
     function("pill_state", pillState);
     function("rooms_move", request);
+    function("rooms_teleport", teleportToRoom);
     function("rooms_with_player", withPlayer);
     function("rooms_positions", positions);
     function("r_key_begin", beginRKey);
