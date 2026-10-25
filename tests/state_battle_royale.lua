@@ -18,10 +18,12 @@ local mapDraws, mapWidths = 0, {}
 local chatAt, chatChecked
 local flow, winner = _IsaacLanBattleFlow, _IsaacLanBattleWinner or 0
 local loser = 1 - winner
-local roomOptions = 0
+local roomOptions, otherOptions = 0, 0
 for _, option in ipairs(native.net_room_options()) do
-    if option.key == "friendlyFire" or option.key == "specialRoomGather" then
+    if option.key == "friendlyFire" then
         roomOptions = roomOptions | option.flag
+    else
+        otherOptions = otherOptions | option.flag
     end
 end
 local function report(text)
@@ -121,11 +123,11 @@ local function advance()
     park()
     local elapsed = Game():GetFrameCount() - at
     if step == "start" and state.phase == phase.survival and state.elapsed > 90 then
-        assert((info.roomOptions & 1) ~= 0, "Challenge did not force existing PvP")
+        assert(info.roomOptions == roomOptions, "Challenge did not lock its PvP-only rules")
         local positions = native.rooms_positions()
         assert(positions["0"].index ~= positions["1"].index, "Players did not spawn apart")
         local level = Game():GetLevel()
-        assert(level:GetStage() >= 1 and level:GetStage() <= 5)
+        assert(level:GetStage() == LevelStage.STAGE1_1, "The opening round skipped floor one")
         assert(level:GetRooms().Size >= 100, "Red rooms did not expand across the floor")
         local final = level:GetRoomByIdx(state.zones[#rules.zoneSizes], 0)
         assert(
@@ -493,12 +495,35 @@ function _IsaacLanFrame()
     end
     if not running and status.phase == 2 then
         if host and status.challenge ~= rules.id then
+            assert(native.net_configure_options(otherOptions))
+            _IsaacLanCommand("challenge", tostring(rules.id))
+            assert(not native.net_configure_options(otherOptions))
+            _IsaacLanCommand("challenge", "0")
+            assert(
+                native.net_configure_options(otherOptions),
+                "Leaving the challenge kept rules locked"
+            )
             _IsaacLanCommand("challenge", tostring(rules.id))
         end
-        if host and status.challenge == rules.id and status.roomOptions ~= roomOptions then
-            assert(native.net_configure_options(roomOptions))
+        if status.challenge == rules.id and not seen.lobby then
+            assert(status.roomOptions == roomOptions, "Challenge inherited optional room rules")
+            assert(native.net_challenges()[tostring(rules.id)].roomOptionsLocked)
+            local preference = native.menu_room_options()
+            for _, value in ipairs({ 0, roomOptions, roomOptions | otherOptions }) do
+                assert(
+                    not native.net_configure_options(value),
+                    "Locked challenge accepted room rule edits"
+                )
+            end
+            assert(not pcall(_IsaacLanCommand, "room_options", "0"))
+            assert(
+                native.menu_room_options() == preference,
+                "Rejected edit overwrote ordinary rule preferences"
+            )
+            seen.lobby = frames
+            report("BATTLE PASS locked lobby rules, native API rejection and unchanged preferences")
         end
-        if status.challenge == rules.id and status.roomOptions == roomOptions and not chosen then
+        if seen.lobby and frames - seen.lobby > 90 and not chosen then
             chosen = true
             _IsaacLanCommand("choose", "0:1")
         end
@@ -513,6 +538,19 @@ function _IsaacLanFrame()
             resources.observe()
         end
         local state = view()
+        if
+            state
+            and state.phase == phase.survival
+            and state.elapsed > 60
+            and seen.floorRound ~= state.round
+        then
+            local stage = Game():GetLevel():GetStage()
+            assert(stage >= LevelStage.STAGE1_1 and stage <= LevelStage.STAGE3_1)
+            assert(state.round ~= 1 or stage == LevelStage.STAGE1_1)
+            assert(info.roomOptions == roomOptions)
+            seen.floorRound = state.round
+            report("BATTLE PASS round floor round=" .. state.round .. " stage=" .. stage)
+        end
         if state and state.phase == phase.survival and state.elapsed > 30 and not chatAt then
             chatAt = frames
             local marker = "BATTLE_PRIVATE_" .. info.slot
@@ -640,4 +678,12 @@ function _IsaacLanMinimapRender()
             report("BATTLE minimap width=" .. width .. " cell=" .. map.cellWidth)
         end
     end
+end
+
+local renderMenu = _IsaacLanMenuRender
+function _IsaacLanMenuRender(available, visible, ...)
+    if seen.lobby and not running then
+        visible = true
+    end
+    return renderMenu(available, visible, ...)
 end

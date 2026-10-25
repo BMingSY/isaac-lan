@@ -121,7 +121,7 @@ ctest --test-dir build-win32 --output-on-failure
 
 1003「吃鸡」的离线定向回归为 `bridge.battle-royale`、`bridge.battle-royale-resources`、`bridge.battle-royale-rewards`、`bridge.battle-royale-hud`、`presentation.minimap`、`bridge.personal-map`、`bridge.challenges`、`bridge.friendly-fire`、`bridge.layers`、`bridge.capture_generation` 和 `bridge.replica_pipeline`，覆盖随机嵌套缩圈及可用终点、资源配额与出生路径、模板失败重试、免钥匙入口、混沌奖励与异常清理、原生地图投影与裁剪、提前自动进入 Boss、胜场、正常复活等待、同时淘汰、Boss 失败、重复清场、胜者跳过奖励、个人探索与状态恢复。
 
-[run_battle_royale.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_battle_royale.py) 使用一组受保护的主客机进程验证红房间展开、分散出生、个人地图、Boss 入口限制、三次实际计时缩圈、普通 Boss、清场不复活、假换层、妈腿与奖杯结束。资源夹具同时检查首圈配额、出生点三步内可达宝箱房、双端特殊房间内容、零钥匙实际走门、商店不足金币不可购买及正常扣费，并通过原生道具池抽样检查跨池奖励。抽样阶段不消耗道具池权重，正常 Boss 结算仍使用完整生产流程。
+[run_battle_royale.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_battle_royale.py) 使用一组受保护的主客机进程验证大厅规则锁定及修改拒绝、首轮第一层与后续随机层、红房间展开、分散出生、个人地图、Boss 入口限制、三次实际计时缩圈、普通 Boss、清场不复活、假换层、妈腿与奖杯结束。资源夹具同时检查首圈配额、出生点三步内可达宝箱房、双端特殊房间内容、零钥匙实际走门、商店不足金币不可购买及正常扣费，并通过原生道具池抽样检查跨池奖励。抽样阶段不消耗道具池权重，正常 Boss 结算仍使用完整生产流程。
 
 指定 `--host`、`--client`、`--build`、`--output` 和独立 `--port`，以 `--heap-check --record` 保留异常与双端画面。默认 `--case full` 按生产时钟执行缩圈；`--case flow` 提前淘汰一名玩家，不修改生产计时。两者均验证正常额外生命、保留迷宫诅咒时的普通 Boss／妈腿定点入口、跨轮复活机清理且保留其他机器，以及妈腿失败续局，并交替展开／收起原生地图供双端画面检查。`--winner client` 验证客机胜者的奖励与结算权限。
 

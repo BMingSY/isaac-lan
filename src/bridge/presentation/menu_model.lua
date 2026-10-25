@@ -49,6 +49,8 @@ return function(Phase, Command)
                 and (status.players or 0)
             or 0
         local host = status.hosting == 1
+        local rulesLocked = challenge and challenge.roomOptionsLocked
+        local rulesEditable = host and not rulesLocked
         local ready = status["ready" .. localSlot] == 1
         local choice = status["choice" .. localSlot] or 0
         local rows = {}
@@ -81,8 +83,10 @@ return function(Phase, Command)
             end
             local index = #rows + 1
             row("房间规则：" .. summary, function()
-                ui.page, ui.selection, ui.ruleScroll, ui.ruleReturn = "rules", 1, 1, index
-            end, true, nil, nil, not host and deps.accent or nil)
+                if not rulesLocked then
+                    ui.page, ui.selection, ui.ruleScroll, ui.ruleReturn = "rules", 1, 1, index
+                end
+            end, not rulesLocked, nil, nil, not host and not rulesLocked and deps.accent or nil)
         end
         if status.pendingSave == 1 then
             row("重试保存联机存档", function()
@@ -141,13 +145,13 @@ return function(Phase, Command)
             ruleCount = selectedRules
             for _, definition in ipairs(deps.options or {}) do
                 row(definition.name, function()
-                    if host then
+                    if rulesEditable then
                         command(
                             "room_options",
                             tostring((status.roomOptions or 0) ~ definition.flag)
                         )
                     end
-                end, host)
+                end, rulesEditable)
                 rows[#rows].checked = ((status.roomOptions or 0) & definition.flag) ~= 0
             end
             row("返回", function()

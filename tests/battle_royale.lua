@@ -99,6 +99,7 @@ local enums = {
         COLLECTIBLE_SYNTHOIL = 345,
         COLLECTIBLE_CHAOS = 402,
     },
+    stage = { STAGE1_1 = 1, STAGE3_1 = 5 },
     stageType = { STAGETYPE_ORIGINAL = 0, STAGETYPE_AFTERBIRTH = 2 },
     transition = { FADE = 0 },
     pool = { POOL_BOSS = 2, POOL_TREASURE = 0 },
@@ -131,6 +132,7 @@ end
 local players, positions, entities = {}, {}, {}
 local info = { active = 1, authority = 1, ready = 1, connected = 3, players = 2, slot = 0 }
 local frame, activeSlot, floorRequests, finishes, momSpawns = 0, nil, 0, 0, 0
+local requestedStages = {}
 for slot = 0, 1 do
     local p = {
         ControllerIndex = slot + 1,
@@ -212,6 +214,7 @@ local room = {
 local level = {
     SetStage = function(_, stage, kind)
         assert(stage >= 1 and stage <= 5 and kind <= 2)
+        requestedStages[#requestedStages + 1] = stage
     end,
     GetRoomByIdx = function(_, index)
         return { Data = { Type = (index == 100 or index == 101) and 5 or 1 } }
@@ -341,8 +344,8 @@ local battle = module("compat/challenges/battle_royale")({
     entities = function()
         return entities
     end,
-    random = function(low)
-        return low
+    random = function(_, high)
+        return high
     end,
     config = function()
         return {
@@ -381,6 +384,7 @@ local function tick(count)
 end
 battle.onLayoutReady(info, level)
 assert(floorRequests == 1 and players[0]:GetCollectibleNum(105) == 0)
+assert(requestedStages[1] == enums.stage.STAGE1_1, "The opening round must start on floor one")
 battle.onLayoutReady(info, level)
 assert(players[0].hearts == 6 and players[0].soul == 4 and players[0].coins == 19)
 assert(positions["0"].index == 0 and positions["1"].index == 168)
@@ -434,6 +438,10 @@ tick(1)
 players[0].Position = vector(portal.x, portal.y)
 tick(1)
 assert(floorRequests == 2 and battle.view().scores[1] == 1, "Skipping rewards retains the win")
+assert(
+    requestedStages[2] == enums.stage.STAGE3_1,
+    "Later rounds still draw from floors one to five"
+)
 assert(players[0]:GetCollectibleNum(633) == 0, "Remove temporary Dogma at the fake floor boundary")
 players[0]:AddCollectible(105)
 players[0]:AddCollectible(633)
@@ -481,6 +489,10 @@ for _, player in pairs(players) do
 end
 battle.onLayoutReady(info, level)
 battle.onLayoutReady(info, level)
+assert(
+    requestedStages[#requestedStages] == enums.stage.STAGE1_1,
+    "A fresh match resets the opening floor"
+)
 tick(1)
 local roundStart = frame
 positions["0"].index, positions["1"].index = 56, 0

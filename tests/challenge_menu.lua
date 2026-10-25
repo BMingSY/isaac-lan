@@ -728,5 +728,63 @@ assert(labels["已启用 5 项 · 只读"], "Challenge guest returned to the wro
 for i = #options, 2, -1 do
     options[i] = nil
 end
+-- Lock both the lobby entry and a rules page left open when the challenge changes.
+local ordinaryChallenges = _IsaacLan.net_challenges
+_IsaacLan.net_challenges = function()
+    local definitions = ordinaryChallenges()
+    definitions["1003"] = {
+        id = 1003,
+        name = "吃鸡",
+        character = 0,
+        difficulty = 0,
+        roomOptionsLocked = true,
+        available = true,
+        team_available = true,
+    }
+    return definitions
+end
+status.challenge, status.roomOptions = 1003, 1
+status.hosting, status.slot = 1, 0
+draw()
+assert(labels["已启用 1 项 · 只读"])
+previousCommands = #commands
+draw(13)
+draw(0, true, 70, 100, true)
+assert(#commands == previousCommands and status.roomOptions == 1)
+draw(27)
+for _, host in ipairs({ 0, 1 }) do
+    status.hosting, status.slot = host, 1 - host
+    _IsaacLanMenuOpen(true)
+    draw()
+    local point = assert(labelPositions["房间规则：友伤"])
+    draw(0, true, point.x + 5, point.y + 2, true)
+    draw(13)
+    draw()
+    assert(labels["房间规则：友伤"] and not labels["已启用 1 项 · 只读"])
+    local ui = { page = "lan", difficulty = 0, seed = "" }
+    local lockedRows = model.rows(ui, status, { 0 }, _IsaacLan.net_challenges(), {
+        character = tostring,
+        options = options,
+        command = function()
+            error("Locked room rule sent a command")
+        end,
+    })
+    for _, row in ipairs(lockedRows) do
+        if row.label == "房间规则：友伤" then
+            assert(not row.enabled)
+            row.action()
+            assert(ui.page == "lan", "Locked room rules opened their editor")
+        end
+    end
+end
+status.challenge, status.hosting, status.slot = 0, 1, 0
+draw()
+local point = assert(labelPositions["房间规则：友伤"])
+draw(0, true, point.x + 5, point.y + 2, true)
+draw()
+assert(labels["已启用 1 项"] and not labels["已启用 1 项 · 只读"])
+draw(13)
+assert(status.roomOptions == 0, "Leaving the locked challenge did not restore editing")
 print("PASS personal completion layers, host-only independent rules and resume selection")
 print("PASS rules submenu, summaries, scrolling, read-only updates and keyboard/mouse navigation")
+print("PASS locked challenge rules on both peers, stale rules pages and returning to ordinary mode")

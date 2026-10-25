@@ -1462,9 +1462,11 @@ void challengeRules() {
     const auto* battle = isaac::compat::challenges::find(1003);
     require(battle && battle->character == isaac::compat::ids::player::isaac &&
                 battle->difficulty == 0 && battle->friendlyFire && battle->transient &&
-                battle->route == "battle_royale" &&
-                isaac::compat::challenges::available(*battle, {}),
+                battle->route == "battle_royale" && battle->roomOptionsLocked &&
+                battle->version == 3 && isaac::compat::challenges::available(*battle, {}),
             "Battle royale lobby contract mismatch");
+    require(!definition->roomOptionsLocked && !luck->roomOptionsLocked,
+            "Other challenges lost their independent room options");
     require(!isaac::compat::challenges::find(1004), "Unknown challenge accepted");
     std::array<std::uint8_t, 642> achievements{};
     require(!isaac::compat::challenges::available(*definition, achievements),

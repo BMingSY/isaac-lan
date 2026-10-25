@@ -18,6 +18,7 @@ struct Definition {
     bool nextBag;
     std::array<unsigned, 2> requiredAchievements;
     bool friendlyFire = false;
+    bool roomOptionsLocked = false;
 };
 inline constexpr std::array definitions{
     Definition{
@@ -50,7 +51,7 @@ inline constexpr std::array definitions{
     },
     Definition{
         1003,
-        2,
+        3,
         ids::player::isaac,
         0,
         true,
@@ -61,6 +62,7 @@ inline constexpr std::array definitions{
         ids::stageType::original,
         false,
         {},
+        true,
         true,
     },
 };

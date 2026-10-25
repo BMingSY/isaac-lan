@@ -46,7 +46,8 @@ return function(deps)
         pendingSpawns = {}
         local game = deps.game()
         game:GetLevel():SetStage(
-            deps.random(1, 5),
+            model.state.round == 0 and enums.stage.STAGE1_1
+                or deps.random(enums.stage.STAGE1_1, enums.stage.STAGE3_1),
             deps.random(enums.stageType.STAGETYPE_ORIGINAL, enums.stageType.STAGETYPE_AFTERBIRTH)
         )
         game:StartStageTransition(
@@ -75,7 +76,7 @@ return function(deps)
         if model.state.round == 0 and not generated then
             generated = true
             nextRound()
-            -- The first randomized floor still belongs to round one.
+            -- The initial floor setup still belongs to round one.
             generated = true
             return
         end

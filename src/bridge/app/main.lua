@@ -126,6 +126,7 @@ end
 local battleRules = _IsaacLanModules["compat/challenges/battle_royale_rules"]
 local battleEnums = {
     collectible = CollectibleType,
+    stage = LevelStage,
     stageType = StageType,
     transition = RoomTransitionAnim,
     pool = ItemPoolType,
