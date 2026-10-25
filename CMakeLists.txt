@@ -424,6 +424,7 @@ add_library(
     src/engine/versions/j460/audio.cpp
     src/engine/versions/j460/combat_feedback.cpp
     src/engine/versions/j460/presentation.cpp
+    src/engine/versions/j460/player_outlines.cpp
     src/engine/versions/j460/crafting_hud.cpp
     src/engine/versions/j460/challenge_hud.cpp
     src/engine/versions/j460/characters.cpp
@@ -584,6 +585,15 @@ if(NOT EXISTS "${MINHOOK_SOURCE_DIR}/include/MinHook.h")
 endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_player_outlines_test tests/player_outlines_test.cpp)
+    target_include_directories(isaac_lan_player_outlines_test PRIVATE src)
+    target_link_libraries(isaac_lan_player_outlines_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_player_outlines_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_player_outlines_test PRIVATE -Wall -Wextra -Werror -msse2)
+    endif()
+    add_test(NAME native.player-outlines COMMAND isaac_lan_player_outlines_test)
+    set_tests_properties(native.player-outlines PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_combat_feedback_test tests/combat_feedback_test.cpp)
     target_include_directories(isaac_lan_combat_feedback_test PRIVATE src)
     target_link_libraries(isaac_lan_combat_feedback_test PRIVATE minhook)

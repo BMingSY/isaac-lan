@@ -62,6 +62,14 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 进入已有房间的跟班在落点设置后调用 `Familiar.ResetRoomState`（RVA `0x22bb70`）。这复用原生房间入场对跟随历史、速度及临时状态的处理；仅主机对迁移名单中的跟班调用，不触及留在目标房间中的跟班，也不改变原生分配与回收的所有权。入口签名在启动时校验。
 
+## 玩家轮廓
+
+[`outlines::withPlayers(connected, render)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/player_outlines.h) 仅在本机房间绘制期间借用 LAN 在线槽位掩码，退出或异常时恢复外层掩码；不缓存角色地址，不增加同步字段。至少两名玩家在线且 `Player+0x1618` 属于有效槽位时，使用表现层的固定配色。单人、退出会话及不属于在线槽位的实体继续原版路径。
+
+J460 后端在 `Player::Render` 的三个轮廓资格分支接入原生绘制：普通身体 Gate／Draw RVA 为 `0x38c481`／`0x38c4df`，特殊精灵为 `0x38c1ef`／`0x38c249`，幽灵／宝宝为 `0x38c66c`／`0x38c6bc`。各边界的 `EBX` 是当前角色，`[EBP+0xc]` 是主绘制标记，前两个分支还保留 `[EBP-0x6d]` 的原生全息分身限制。跳转适配保存通用寄存器、标志与全部 XMM 寄存器，只替换 Steam 名单资格判断；身体、头部、装扮的四方向偏移绘制和颜色栈清理由原版完成。所有边界及续接入口均纳入启动签名校验。
+
+`PlayerManager` 的颜色转换入口 RVA `0x2d060` 使用 thiscall，接收借用的 `ColorMod*` 输出与 `Player*`，返回同一输出指针并弹出 8 字节参数。只在上述三个原生描边调用点改写输出的 44 字节临时 `ColorMod`（RGBA 乘数、四个 colorize 值、RGB 偏移），不写角色或装扮颜色。其他 HUD／效果调用保留原函数；不修改官方联机状态、原生玩家颜色分配、用户配色选项、对象所有权或存档。布局与接口均仅适用于经校验的 J460 后端。
+
 ## 激光路径呈现
 
 [`laser_path(sprite)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rooms.cpp) 读取活动激光的采样状态、起点／终点、形状／缩放、采样数量与两组路径坐标。要求实体借用 Sprite，回溯所属对象后核对激光类型；不接受自有 Sprite 或其他实体类型，不跨调用保留指针。

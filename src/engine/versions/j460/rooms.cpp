@@ -8,6 +8,7 @@
 #include "engine/input.h"
 #include "engine/rewind.h"
 #include "engine/presentation.h"
+#include "engine/player_outlines.h"
 #include "engine/item_presentation.h"
 #include "engine/pickup_preview.h"
 #include "runtime/session.h"
@@ -2709,8 +2710,11 @@ bool render(void* g, RoomCall original, int slot) {
     withView([&] {
         audio::present();
         presentation::pickup_preview::prepare();
-        presentation::items::withScreen(
-            [&] { combat_feedback::withPresentation(room->pointer, [&] { original(g); }); });
+        presentation::items::withScreen([&] {
+            presentation::outlines::withPlayers(connected(), [&] {
+                combat_feedback::withPresentation(room->pointer, [&] { original(g); });
+            });
+        });
     });
     return true;
 }

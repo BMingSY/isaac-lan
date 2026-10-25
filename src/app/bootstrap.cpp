@@ -18,6 +18,7 @@
 #include "runtime/session.h"
 #include "engine/audio.h"
 #include "engine/combat_feedback.h"
+#include "engine/player_outlines.h"
 #include "engine/presentation.h"
 #include "engine/rewind.h"
 #include "engine/rooms.h"
@@ -343,6 +344,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     if (!isaac::audio::install(image))
         return 23;
     if (!isaac::presentation::install(image))
+        return 24;
+    if (!isaac::presentation::outlines::install(image))
         return 24;
     if (!isaac::rewind::install(image))
         return 25;
