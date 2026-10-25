@@ -173,8 +173,8 @@ function rules.read(value)
             and #value[f.scores] == 4,
         "Invalid battle royale fields"
     )
-    for _, score in ipairs(value[f.scores]) do
-        assert(integer(score, 0, 2), "Invalid battle royale score")
+    for slot = 1, 4 do
+        assert(integer(value[f.scores][slot], 0, 2), "Invalid battle royale score")
     end
     local zones = value[f.zones]
     if zones == false then
@@ -187,7 +187,8 @@ function rules.read(value)
             type(zones) == "table" and #zones == #rules.zoneSizes and zones[1] == 0,
             "Invalid battle royale zones"
         )
-        for step, index in ipairs(zones) do
+        for step = 1, #rules.zoneSizes do
+            local index = zones[step]
             assert(
                 integer(index, 0, rules.width * rules.width - 1),
                 "Invalid battle royale zone position"

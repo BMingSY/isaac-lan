@@ -79,6 +79,16 @@ end
 local invalid = rules.new().snapshot()
 invalid[rules.fields.scores][1] = 3
 assert(not pcall(rules.read, invalid))
+for _, field in ipairs({ rules.fields.zones, rules.fields.scores }) do
+    local round = rules.new()
+    round.start(plan)
+    local sparse = round.snapshot()
+    sparse[field][2] = nil
+    assert(
+        not pcall(rules.read, sparse),
+        "A sparse progress array must be rejected before rendering"
+    )
+end
 
 -- Exercise the actual adapter through layout, normal deaths, portal contact,
 -- native clear awards, optional loot, another floor, Mom and the trophy.
@@ -160,7 +170,7 @@ for slot = 0, 1 do
     function p:SetMinDamageCooldown() end
     players[slot], positions[tostring(slot)] = p, { index = 84, dimension = 0 }
 end
-local clear = false
+local clear, escapes = false, 0
 local room = {
     GetCenterPos = function()
         return vector(320, 280)
@@ -302,7 +312,9 @@ local battle = module("compat/challenges/battle_royale")({
             return { boss = 100, finalBoss = 101, spawns = { 0, 168 }, zones = plan }
         end,
         removeExits = function() end,
-        escape = function() end,
+        escape = function()
+            escapes = escapes + 1
+        end,
     },
 })
 local function tick(count)
@@ -391,6 +403,38 @@ battle.apply(saved)
 assert(battle.view().scores[1] == 2, "Reconnect restores round progress")
 battle.reset()
 assert(battle.view() == nil)
+-- Exercise environment damage through the authoritative room scope, including
+-- cadence, a room which becomes unsafe, and the five-minute final-room limit.
+info.authority = 1
+for _, player in pairs(players) do
+    player.dead, player.ghost = false, false
+    player.hearts = 6
+end
+battle.onLayoutReady(info, level)
+battle.onLayoutReady(info, level)
+tick(1)
+local roundStart = frame
+positions["0"].index, positions["1"].index = 56, 0
+frame = roundStart + rules.shrinkFrames[1] - 1
+tick(1)
+assert(players[0].hearts == 6 and players[1].hearts == 4 and escapes >= 2)
+battle.step(info)
+assert(players[1].hearts == 4, "Repeated update must not repeat circle damage")
+positions["1"].index = 56
+frame = roundStart + rules.shrinkFrames[2] - 1
+tick(1)
+assert(players[1].hearts == 4, "Re-entering the safe zone must stop damage")
+positions["1"].index = 84
+frame = roundStart + rules.shrinkFrames[3] - 1
+tick(1)
+assert(
+    players[0].hearts == 6 and players[1].hearts == 0,
+    "Center must take damage when final zone is elsewhere"
+)
+frame = roundStart + rules.survivalFrames - 1
+tick(1)
+assert(players[0].hearts == 2, "Overtime must also pressure the final safe room")
+battle.reset()
 print("battle royale round and adapter tests passed")
 
 -- Expand through native door creation to its fixed point, including lower
