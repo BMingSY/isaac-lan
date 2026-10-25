@@ -604,6 +604,12 @@ assert(final ~= built.boss and final ~= built.finalBoss and final ~= 0)
 local occupied = {}
 for _, index in ipairs(built.spawns) do
     assert(descriptors[index] and index ~= built.boss and not occupied[index])
+    assert(
+        math.abs(index % rules.width - built.finalBoss % rules.width)
+                + math.abs(index // rules.width - built.finalBoss // rules.width)
+            > rules.resourceDistance,
+        "The locked Mom room must not obstruct a spawn's nearby resource paths"
+    )
     occupied[index] = true
 end
 assert(built.spawns[1] == 1 and built.spawns[4] == 168, "Missing corner uses nearest native room")

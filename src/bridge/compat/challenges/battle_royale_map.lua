@@ -122,7 +122,7 @@ return function(deps)
             local other = deps.random(index)
             spawns[index], spawns[other] = spawns[other], spawns[index]
         end
-        local finalBoss
+        local finalBoss, bestSpawnDistance
         for _, index in ipairs(available) do
             local room = descriptor(level, index)
             if
@@ -131,20 +131,31 @@ return function(deps)
                 and room.Data.Type == enums.room.ROOM_DEFAULT
                 and room.Data.Shape == enums.shape.ROOMSHAPE_1x1
             then
-                assert(
-                    deps.native.room_special_template(
-                        index,
-                        enums.room.ROOM_BOSS,
-                        rules.momRoomVariant,
-                        deps.random(1, 2147483646)
-                    ),
-                    "Battle royale final boss template unavailable"
-                )
-                finalBoss = index
-                break
+                local nearest = width * 2
+                for _, start in ipairs(spawns) do
+                    nearest = math.min(
+                        nearest,
+                        math.abs(index % width - start % width)
+                            + math.abs(index // width - start // width)
+                    )
+                end
+                -- A locked encounter beside a corner can block its only free
+                -- exit. Keep the reserved room away from spawn resource paths.
+                if not finalBoss or nearest > bestSpawnDistance then
+                    finalBoss, bestSpawnDistance = index, nearest
+                end
             end
         end
         assert(finalBoss, "Battle royale floor is missing a final boss room")
+        assert(
+            deps.native.room_special_template(
+                finalBoss,
+                enums.room.ROOM_BOSS,
+                rules.momRoomVariant,
+                deps.random(1, 2147483646)
+            ),
+            "Battle royale final boss template unavailable"
+        )
         local candidates = {}
         for _, index in ipairs(available) do
             local room = descriptor(level, index)

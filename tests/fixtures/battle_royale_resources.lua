@@ -68,7 +68,27 @@ return function(env)
                     end
                 end
             end
-            assert(found, "Spawn lacks a reachable treasure room within three steps")
+            if not found then
+                local reachable = {}
+                for _, entry in ipairs(queue) do
+                    local links = {}
+                    for _, target in ipairs(native.room_connections(entry[1])) do
+                        local desc = level:GetRoomByIdx(target, 0)
+                        links[#links + 1] = target .. ":" .. (desc.Data and desc.Data.Type or -1)
+                    end
+                    reachable[#reachable + 1] = entry[1]
+                        .. "("
+                        .. entry[2]
+                        .. ")->"
+                        .. table.concat(links, ",")
+                end
+                error(
+                    "Spawn "
+                        .. start.index
+                        .. " lacks a reachable treasure within three steps: "
+                        .. table.concat(reachable, "; ")
+                )
+            end
         end
         report("BATTLE PASS native resource quotas, first circle and nearby treasures")
     end
