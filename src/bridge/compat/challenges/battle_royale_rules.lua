@@ -9,6 +9,13 @@ local rules = {
     deathGraceFrames = 3 * 30,
     shrinkFrames = { 90 * 30, 180 * 30, 240 * 30 },
     zoneSizes = { 13, 9, 5, 1 },
+    resourceDistance = 3,
+    resources = {
+        { room = "ROOM_TREASURE", count = 16, firstZone = 8, nearSpawns = true },
+        { room = "ROOM_SHOP", count = 8, firstZone = 4 },
+        { room = "ROOM_LIBRARY", count = 4, firstZone = 2 },
+        { room = "ROOM_ARCADE", count = 4, firstZone = 2 },
+    },
     phase = {
         loading = "loading",
         survival = "survival",

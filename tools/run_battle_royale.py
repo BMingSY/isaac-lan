@@ -36,6 +36,9 @@ def main():
     fixture.write_text(
         f"_IsaacLanBattleFlow = {str(args.case == 'flow').lower()}\n"
         f"_IsaacLanBattleWinner = {0 if args.winner == 'host' else 1}\n"
+        + "_IsaacLanBattleResourceChecks = (function()\n"
+        + (ROOT / "tests/fixtures/battle_royale_resources.lua").read_text(encoding="utf-8")
+        + "\nend)()\n"
         + (ROOT / "tests/state_battle_royale.lua").read_text(encoding="utf-8"),
         encoding="utf-8",
     )

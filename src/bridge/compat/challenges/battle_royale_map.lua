@@ -156,12 +156,31 @@ return function(deps)
                 candidates[#candidates + 1] = index
             end
         end
-        return {
+        local layout = {
             boss = boss,
             finalBoss = finalBoss,
             spawns = spawns,
             zones = rules.plan(candidates, deps.random),
         }
+        deps.resources(level, layout)
+        return layout
+    end
+    local function openResources(room)
+        for slot = 0, 7 do
+            local door = room:GetDoor(slot)
+            if
+                door
+                and (
+                    door.TargetRoomType == enums.room.ROOM_TREASURE
+                    or door.TargetRoomType == enums.room.ROOM_SHOP
+                )
+            then
+                door:SetLocked(false)
+                if room:IsClear() then
+                    door:Open()
+                end
+            end
+        end
     end
     local function escape(room)
         for slot = 0, 7 do
@@ -219,5 +238,11 @@ return function(deps)
             end
         end
     end
-    return { build = build, escape = escape, clearSpawn = clearSpawn, removeExits = removeExits }
+    return {
+        build = build,
+        escape = escape,
+        openResources = openResources,
+        clearSpawn = clearSpawn,
+        removeExits = removeExits,
+    }
 end

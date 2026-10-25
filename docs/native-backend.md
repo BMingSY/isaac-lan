@@ -56,7 +56,9 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 `rooms_revive_player(slot)` 只接受 0–3 的所属玩家栏位，在主机房间系统启用、没有借用作用域、目标为联机幽灵且挑战允许 `round_revive` 时调用既有 `replicaRevivePlayerGhost` 原生入口。幽灵身份使用 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `player::coopGhost`；复活期间只借用该玩家及其身体的房间名单，不接受或返回原生地址，不自行分配、释放角色。复活时机、回血和资源保留由挑战组件决定。
 
-`room_special_template(index, type, variant, seed)` 为主机未访问、未实例化、没有覆盖配置的主维度房间选择原生特殊房间模板。既有 `roomConfigRandomRoom` Hook 记录当前游戏所属的配置对象；接口限定特殊房间库、精确类型／变种和原房间形状，选择不消耗房间权重。描述符仅借用游戏配置指针，字符串、生成列表与房间对象仍由游戏持有；布局字段归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `roomDescriptor`／`roomConfig`。接口不传递地址、不构造或释放原生配置，不允许替换已加载房间；具体模板与调用时机由挑战地图策略决定。
+`room_special_template(index, type, variant, seed)` 为主机未访问、未实例化、没有覆盖配置的主维度房间选择原生特殊房间模板。既有 `roomConfigRandomRoom` Hook 记录当前游戏所属的配置对象；接口限定特殊房间库、精确类型和原房间形状。`variant` 非负时指定精确变种，`-1` 时从普通模式模板中随机选择。既有连接的门掩码参与筛选，结果必须包含所有连接门位；选择不消耗房间权重，失败不替换原配置。描述符仅借用游戏配置指针，字符串、生成列表与房间对象仍由游戏持有；布局字段归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `roomDescriptor`／`roomConfig`。接口不传递地址、不构造或释放原生配置，不允许替换已加载房间；具体模板与调用时机由挑战地图策略决定。
+
+`room_connections(index)` 在主机房间系统启用且没有借用作用域时读取主维度房间的实际门连接。索引限定为 0–168，返回八个门位的目标 `SafeGridIndex`；无门、地图外入口或缺失目标返回 `-1`，无效源房间返回 `false`。接口只返回普通整数，不加载房间或改变连接；上层可据此检查资源房的可达路径。
 
 原生整队复活、死亡结算、楼层跳转和共享清房奖励在既有 Hook 内询问挑战的具名事件许可。Lua 错误使请求失败；单人及没有对应策略的挑战沿用原版行为。逐角色的道具复活不经过整队复活许可。`map_refresh()` 在房间系统启用期间仅刷新原生小地图显示缓存。个人地图在本机绘制前暂借显示／探索字段，绘制后恢复；既有玩家更新 Hook 以所属栏位暂借地图显示、四种揭图标志和全图可见状态，将原生拾取、卡牌／道具使用与受伤效果产生的探索变化交回所属玩家。玩家更新期间不替换权威访问次数，避免改变普通房间的玩法判定；原生对象与房间保存数据的所有权不变。
 

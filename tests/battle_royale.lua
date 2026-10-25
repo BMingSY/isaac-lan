@@ -93,13 +93,18 @@ end
 -- Exercise the actual adapter through layout, normal deaths, portal contact,
 -- native clear awards, optional loot, another floor, Mom and the trophy.
 local enums = {
-    collectible = { COLLECTIBLE_D6 = 105, COLLECTIBLE_DOGMA = 633, COLLECTIBLE_SYNTHOIL = 345 },
+    collectible = {
+        COLLECTIBLE_D6 = 105,
+        COLLECTIBLE_DOGMA = 633,
+        COLLECTIBLE_SYNTHOIL = 345,
+        COLLECTIBLE_CHAOS = 402,
+    },
     stageType = { STAGETYPE_ORIGINAL = 0, STAGETYPE_AFTERBIRTH = 2 },
     transition = { FADE = 0 },
-    pool = { POOL_BOSS = 2 },
+    pool = { POOL_BOSS = 2, POOL_TREASURE = 0 },
     entity = { ENTITY_PICKUP = 5, ENTITY_MOM = 45, ENTITY_PROJECTILE = 9 },
     pickup = { PICKUP_COLLECTIBLE = 100, PICKUP_TROPHY = 370, PICKUP_BIGCHEST = 340 },
-    room = { ROOM_BOSS = 5, ROOM_DEFAULT = 1 },
+    room = { ROOM_BOSS = 5, ROOM_DEFAULT = 1, ROOM_SHOP = 2, ROOM_TREASURE = 4 },
     shape = {
         ROOMSHAPE_1x1 = 1,
         ROOMSHAPE_IH = 2,
@@ -292,6 +297,27 @@ local function spawn(kind, variant, subtype)
     return entity
 end
 local battle = module("compat/challenges/battle_royale")({
+    rewards = module("compat/challenges/battle_royale_rewards")({
+        enums = enums,
+        game = function()
+            return game
+        end,
+        config = function()
+            return {
+                GetCollectible = function(_, id)
+                    return { Quality = id == 345 and 3 or 0 }
+                end,
+            }
+        end,
+        random = function(low)
+            return low
+        end,
+        entities = function()
+            return entities
+        end,
+        spawn = spawn,
+        vector = vector,
+    }),
     native = native,
     rules = rules,
     enums = enums,
@@ -331,6 +357,7 @@ local battle = module("compat/challenges/battle_royale")({
             return { boss = 100, finalBoss = 101, spawns = { 0, 168 }, zones = plan }
         end,
         removeExits = function() end,
+        openResources = function() end,
         clearSpawn = function()
             local index = positions[tostring(activeSlot)].index
             assert(index == 0 or index == 168, "Spawn cleanup must wait for arrival")
@@ -385,7 +412,8 @@ local extra = spawn(5, 100, 2)
 clear = true
 tick(40)
 assert(battle.view().scores[1] == 1 and battle.view().phase == phase.reward)
-assert(entities[1].SubType == 345 and extra.SubType == 2, "Only the base reward is guaranteed")
+assert(entities[1].SubType == 345 and extra.SubType == 345, "Boss rewards use Chaos draws")
+assert(not players[0]:HasCollectible(402), "Reward drawing must clean up its temporary Chaos")
 assert(players[0]:GetCollectibleNum(633) == 1 and players[1].ghost)
 assert(
     not battle.canEnter({ info = info, slot = 0, room = 84, dimension = 0 }),
@@ -527,6 +555,12 @@ local generatedLevel = {
 }
 local spawnEntities, spawnGrids = {}, {}
 local map = module("compat/challenges/battle_royale_map")({
+    resources = function(_, layout)
+        assert(
+            layout.zones and layout.spawns and layout.finalBoss,
+            "Reserve the encounter and zones before resources"
+        )
+    end,
     native = {
         room_special_template = function(index, kind, variant, seed)
             assert(kind == 5 and variant == 1060 and seed > 0)
@@ -637,6 +671,44 @@ map.removeExits(testRoom)
 assert(removed[0] and not removed[1], "Exploration retains crawlspace stairs")
 map.removeExits(testRoom, true)
 assert(removed[1], "Boss settlement removes alternative exits")
+local resourceDoors, clear = {}, false
+for slot, kind in ipairs({
+    enums.room.ROOM_TREASURE,
+    enums.room.ROOM_SHOP,
+    enums.room.ROOM_BOSS,
+    enums.room.ROOM_DEFAULT,
+}) do
+    resourceDoors[slot - 1] = {
+        TargetRoomType = kind,
+        locked = true,
+        opened = false,
+        SetLocked = function(self, value)
+            self.locked = value
+        end,
+        Open = function(self)
+            self.opened = true
+        end,
+    }
+end
+local resourceRoom = {
+    GetDoor = function(_, slot)
+        return resourceDoors[slot]
+    end,
+    IsClear = function()
+        return clear
+    end,
+}
+map.openResources(resourceRoom)
+assert(not resourceDoors[0].locked and not resourceDoors[1].locked)
+for _, door in pairs(resourceDoors) do
+    assert(not door.opened, "Free entrances preserve combat barriers")
+end
+clear = true
+map.openResources(resourceRoom)
+assert(resourceDoors[0].opened and resourceDoors[1].opened)
+for slot = 2, 3 do
+    assert(resourceDoors[slot].locked and not resourceDoors[slot].opened)
+end
 -- Spawn safety removes invulnerable enemies/traps without invoking death
 -- effects, and leaves resources, players and door allocations intact.
 for index, kind in ipairs({ 10, 33, 9, 4, 7, 5, 1 }) do

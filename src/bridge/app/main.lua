@@ -131,8 +131,6 @@ local battle = _IsaacLanModules["compat/challenges/battle_royale"]({
     native = native,
     game = Game,
     player = Isaac.GetPlayer,
-    entities = Isaac.GetRoomEntities,
-    config = Isaac.GetItemConfig,
     spawn = Isaac.Spawn,
     vector = Vector,
     ref = EntityRef,
@@ -140,12 +138,27 @@ local battle = _IsaacLanModules["compat/challenges/battle_royale"]({
     rules = battleRules,
     enums = battleEnums,
     visibility = battleVisibility,
+    rewards = _IsaacLanModules["compat/challenges/battle_royale_rewards"]({
+        game = Game,
+        entities = Isaac.GetRoomEntities,
+        config = Isaac.GetItemConfig,
+        spawn = Isaac.Spawn,
+        vector = Vector,
+        random = math.random,
+        enums = battleEnums,
+    }),
     map = _IsaacLanModules["compat/challenges/battle_royale_map"]({
         native = native,
         rules = battleRules,
         enums = battleEnums,
         random = math.random,
         entities = Isaac.GetRoomEntities,
+        resources = _IsaacLanModules["compat/challenges/battle_royale_resources"]({
+            native = native,
+            rules = battleRules,
+            enums = battleEnums,
+            random = math.random,
+        }),
     }),
 })
 challenge = _IsaacLanModules["runtime/challenges"]({

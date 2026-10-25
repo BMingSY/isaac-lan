@@ -1925,6 +1925,36 @@ int roomWaterCurrent(lua_State* L) {
     lua.pushBoolean(L, valid);
     return 1;
 }
+Address mainRoomDescriptor(int index) {
+    using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+    return reinterpret_cast<Address>(
+        engine<Desc>(j460::entry::engineRoomsDesc)(reinterpret_cast<void*>(game()), index, 0));
+}
+int roomConnections(lua_State* L) {
+    namespace descriptor = j460::layout::roomDescriptor;
+    const auto index = lua.checkInteger(L, 1);
+    const auto desc = enabled && !runtime::replica() && !scopes.depth() && index >= 0 && index < 169
+                          ? mainRoomDescriptor(static_cast<int>(index))
+                          : 0;
+    if (!desc || !at<Address>(desc, descriptor::data)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    lua.createTable(L, descriptor::doorCount, 0);
+    for (unsigned slot = 0; slot < descriptor::doorCount; ++slot) {
+        const auto target = at<int>(desc, descriptor::doors + slot * sizeof(int));
+        int canonical = -1;
+        if ((at<unsigned>(desc, descriptor::allowedDoors) & (1u << slot)) && target >= 0 &&
+            target < 169) {
+            const auto neighbor = mainRoomDescriptor(target);
+            if (neighbor && at<Address>(neighbor, descriptor::data))
+                canonical = at<int>(neighbor, descriptor::safeGridIndex);
+        }
+        lua.pushInteger(L, canonical);
+        lua.rawSetI(L, -2, slot + 1);
+    }
+    return 1;
+}
 int specialRoomTemplate(lua_State* L) {
     namespace descriptor = j460::layout::roomDescriptor;
     namespace config = j460::layout::roomConfig;
@@ -1932,25 +1962,27 @@ int specialRoomTemplate(lua_State* L) {
     const auto variant = lua.checkInteger(L, 3), seed = lua.checkInteger(L, 4);
     bool valid = enabled && !runtime::replica() && !scopes.depth() && templateConfig &&
                  templateGame == game() && index >= 0 && index < 169 && type >= 1 &&
-                 type <= config::maxType && variant >= 0 && variant <= INT_MAX && seed > 0 &&
-                 seed <= UINT_MAX && !loaded.contains({0, static_cast<int>(index)});
+                 type <= config::maxType && variant >= config::anyVariant && variant <= INT_MAX &&
+                 seed > 0 && seed <= UINT_MAX && !loaded.contains({0, static_cast<int>(index)});
     if (valid) {
-        using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-        const auto desc = reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
-            reinterpret_cast<void*>(game()), static_cast<int>(index), 0));
+        const auto desc = mainRoomDescriptor(static_cast<int>(index));
         const auto previous = desc ? at<Address>(desc, descriptor::data) : 0;
         valid = previous && !at<Address>(desc, descriptor::overrideData) &&
                 !at<int>(desc, descriptor::visitedCount);
         if (valid) {
-            unsigned doors = 0;
+            const bool randomVariant = variant == config::anyVariant;
+            const unsigned requiredDoors = at<unsigned>(desc, descriptor::allowedDoors);
+            unsigned doors = requiredDoors;
             const auto shape = at<int>(previous, config::shape);
             const auto selected = reinterpret_cast<Address>(originalRandomRoom(
                 templateConfig, static_cast<unsigned>(seed), false, config::specialStage,
-                static_cast<int>(type), shape, static_cast<int>(variant), static_cast<int>(variant),
-                0, config::maxDifficulty, &doors, -1, -1));
+                static_cast<int>(type), shape, randomVariant ? 0 : static_cast<int>(variant),
+                static_cast<int>(variant), 0, config::maxDifficulty, &doors, -1,
+                randomVariant ? config::normalMode : -1));
             valid = selected && at<int>(selected, config::type) == type &&
-                    at<int>(selected, config::variant) == variant &&
-                    at<int>(selected, config::shape) == shape;
+                    (randomVariant || at<int>(selected, config::variant) == variant) &&
+                    at<int>(selected, config::shape) == shape &&
+                    (at<unsigned>(selected, config::doors) & requiredDoors) == requiredDoors;
             // Borrow the game's immutable configuration. The descriptor and
             // spawn vectors keep their native owner; no copied MSVC containers.
             if (valid)
@@ -3895,6 +3927,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("state_clock", stateClock);
     function("room_layout", roomLayout);
     function("room_special_template", specialRoomTemplate);
+    function("room_connections", roomConnections);
     function("room_water_current", roomWaterCurrent);
     function("map_pickups", mapPickups);
     function("map_refresh", refreshMap);

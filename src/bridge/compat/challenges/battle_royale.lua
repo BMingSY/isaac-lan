@@ -12,7 +12,7 @@ return function(deps)
     local moving, generated, awardPending = false, false, false
     local finishing = false
     local PORTAL_RADIUS, PORTAL_ARM_FRAMES, AWARD_DELAY = 22, 30, 15
-    local VISIBILITY_FRAMES, ITEM_ATTEMPTS, MIN_QUALITY = 15, 128, 3
+    local VISIBILITY_FRAMES = 15
     local function party()
         local result = {}
         for _, actor in ipairs(native.api_actors()) do
@@ -161,59 +161,10 @@ return function(deps)
         end
         return alive, reviving
     end
-    local function highQualityItem()
-        local pool = deps.game():GetItemPool()
-        local fallback = enums.collectible.COLLECTIBLE_SYNTHOIL
-        for _ = 1, ITEM_ATTEMPTS do
-            local seed = deps.random(1, 2147483646)
-            local id = pool:GetCollectible(enums.pool.POOL_BOSS, false, seed, fallback)
-            local config = deps.config():GetCollectible(id)
-            if config and config.Quality >= MIN_QUALITY then
-                -- Only the accepted draw consumes pool weight.
-                return pool:GetCollectible(enums.pool.POOL_BOSS, true, seed, fallback)
-            end
-        end
-        assert(deps.config():GetCollectible(fallback).Quality >= MIN_QUALITY)
-        return fallback
-    end
     local function rewards(slot, frame)
         scoped(slot, function()
             local room = deps.game():GetRoom()
-            local base
-            for _, entity in ipairs(deps.entities()) do
-                if
-                    entity.Type == enums.entity.ENTITY_PICKUP
-                    and entity.Variant == enums.pickup.PICKUP_COLLECTIBLE
-                then
-                    local pickup = entity:ToPickup()
-                    if not base or pickup.InitSeed < base.InitSeed then
-                        base = pickup
-                    end
-                end
-            end
-            local config = base and deps.config():GetCollectible(base.SubType)
-            if not config or config.Quality < MIN_QUALITY then
-                local item = highQualityItem()
-                if base then
-                    base:Morph(
-                        enums.entity.ENTITY_PICKUP,
-                        enums.pickup.PICKUP_COLLECTIBLE,
-                        item,
-                        true,
-                        true,
-                        false
-                    )
-                else
-                    deps.spawn(
-                        enums.entity.ENTITY_PICKUP,
-                        enums.pickup.PICKUP_COLLECTIBLE,
-                        item,
-                        room:FindFreePickupSpawnPosition(room:GetCenterPos(), 0, true),
-                        deps.vector(0, 0),
-                        nil
-                    )
-                end
-            end
+            deps.rewards(assert(party()[slot]))
             deps.map.removeExits(room, true)
             if model.state.phase == phase.trophy then
                 local trophy = deps.spawn(
@@ -283,6 +234,7 @@ return function(deps)
                 end
                 scoped(slot, function()
                     local room = game:GetRoom()
+                    deps.map.openResources(room)
                     if pendingSpawns[slot] == at.index and at.dimension == 0 then
                         deps.map.clearSpawn(room)
                         pendingSpawns[slot] = nil

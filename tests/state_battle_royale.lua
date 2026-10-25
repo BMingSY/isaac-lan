@@ -34,6 +34,12 @@ local function actor(slot, fn)
         fn(player)
     end, 1))
 end
+local resources = _IsaacLanBattleResourceChecks({
+    native = native,
+    actor = actor,
+    report = report,
+    rules = rules,
+})
 local function mark(value)
     step, at = value, Game():GetFrameCount()
     report("BATTLE " .. value)
@@ -45,7 +51,9 @@ local function park()
     for slot = 0, 1 do
         actor(slot, function(player)
             player:SetMinDamageCooldown(10000)
-            player.Velocity = Vector.Zero
+            if step ~= "resources" or slot ~= 0 then
+                player.Velocity = Vector.Zero
+            end
         end)
     end
 end
@@ -91,6 +99,7 @@ local function advance()
             "Final zone is not a playable room"
         )
         report("BATTLE zones=" .. table.concat(state.zones, ","))
+        resources.map(state, positions)
         for slot = 0, 1 do
             actor(slot, function(player)
                 assert(player:GetPlayerType() == PlayerType.PLAYER_ISAAC)
@@ -182,6 +191,9 @@ local function advance()
         end
         assert(visible[0] > 100 and visible[1] < 30, "World card revealed another player's map")
         report("BATTLE PASS private native mapping effect")
+        resources.start()
+        mark("resources")
+    elseif step == "resources" and resources.step() then
         actor(loser, function(player)
             player:AddCollectible(CollectibleType.COLLECTIBLE_1UP)
             player:Kill()
@@ -367,6 +379,7 @@ local function advance()
         end
     elseif step == "boss-failure" and state.round > baselineRound and state.elapsed > 90 then
         assert(state.phase == phase.survival and state.scores[winner + 1] == 1)
+        resources.map(state, native.rooms_positions())
         actor(winner, function(player)
             assert(
                 player:GetCollectibleNum(CollectibleType.COLLECTIBLE_DOGMA) == 1,
@@ -414,7 +427,11 @@ function _IsaacLanFrame()
     local mapInput = host and step == "map-effects" and Game():GetFrameCount() - at < 10
     local current = view()
     local expandMap = current and current.phase == phase.survival and current.elapsed % 600 < 300
-    native.test_gamepad((mapInput and 512 or 0) | (expandMap and 32 or 0))
+    local moveX, moveY = 0, 0
+    if host and step == "resources" then
+        moveX, moveY = resources.input()
+    end
+    native.test_gamepad((mapInput and 512 or 0) | (expandMap and 32 or 0), 0, 0, moveX, moveY)
     if status.phase == 4 or status.phase == 9 then
         report("FAILED " .. tostring(status.error))
     end
@@ -436,6 +453,9 @@ function _IsaacLanFrame()
     local info = native.api_info()
     if info.active == 1 and info.ready == 1 then
         running = true
+        if not host then
+            resources.observe()
+        end
         local state = view()
         if state and state.phase == phase.survival and state.elapsed > 30 and not chatAt then
             chatAt = frames
@@ -531,6 +551,7 @@ function _IsaacLanFrame()
     if running and not finished and info.active ~= 1 and status.phase == 2 then
         assert(host and step == "finish" or not host and sawGuest)
         assert(chatChecked, "Console privacy was not checked")
+        assert(host or resources.checked(), "Replica resource room visits missing")
         assert(
             host or seen.replicaDogma and seen.replicaDoors,
             "Replica effects or doors were not checked"
