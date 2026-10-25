@@ -76,7 +76,7 @@ return function(deps)
         end,
         source = source,
         observe = function(entries, room, tick)
-            local active, power = {}, {}
+            local active, power, rates = {}, {}, {}
             for _, entry in ipairs(entries) do
                 local value = source(entry.entity, entry.actor, room, tick, entry.mode)
                 local group = value.group
@@ -90,6 +90,10 @@ return function(deps)
                     damage = math.min(damage, entry.actor.player.Damage)
                 end
                 power[group] = (power[group] or 0) + damage
+                if group.continuous then
+                    rates[group] = (rates[group] or 0)
+                        + damage * policy.updatesPerSecond / entry.interval
+                end
             end
             for group, damage in pairs(power) do
                 if group.continuous or group.power == 0 then
@@ -102,7 +106,8 @@ return function(deps)
                         room = room,
                         birth = group.continuous and tick or group.birth,
                         interval = group.interval,
-                        dps = group.power * policy.updatesPerSecond / group.interval,
+                        dps = rates[group]
+                            or group.power * policy.updatesPerSecond / group.interval,
                     }
                 end
                 if

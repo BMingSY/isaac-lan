@@ -80,6 +80,9 @@ return function(root)
         function e:ToKnife()
             return self.Type == 8 and self or nil
         end
+        function e:IsFlying()
+            return self.flying or false
+        end
         function e:HasTearFlags(flag)
             return (self.flags & flag) ~= 0
         end

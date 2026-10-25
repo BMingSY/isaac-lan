@@ -275,6 +275,13 @@ w:step(8)
 check(w.guest.hearts == 5, "repeated knife contacts lost their fractional damage")
 
 w = new(root)
+knife = w.entity(8, 100, 3.5)
+knife.SpawnerEntity, knife.flying = w.host, true
+w.entities = { knife }
+w:step(5)
+check(w.guest.hearts == 5, "a thrown knife was priced as an uninterrupted beam")
+
+w = new(root)
 local familiar = w.entity(3, 0)
 familiar.Player = w.host
 for _ = 1, 3 do

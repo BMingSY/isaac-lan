@@ -366,6 +366,16 @@ return function(deps)
                             actor = attacker,
                             damage = entity.CollisionDamage,
                             mode = (knife or laser and not laser.OneHit) and "continuous" or "shot",
+                            -- A thrown knife only crosses its target briefly.
+                            -- Price the firing cycle, while held blades keep
+                            -- the continuous-contact rate and burst limits.
+                            interval = knife
+                                    and knife:IsFlying()
+                                    and math.max(
+                                        policy.continuousInterval,
+                                        attacker.player.MaxFireDelay + 1
+                                    )
+                                or policy.continuousInterval,
                         }
                     end
                 end

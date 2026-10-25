@@ -213,6 +213,7 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_KNIFE_UPDATE, function(_, knife)
                 y = knife.Position.Y,
                 damage = knife.CollisionDamage,
                 rotation = knife.Rotation,
+                flying = knife:IsFlying(),
             })
         end
     end
