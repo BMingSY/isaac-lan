@@ -51,3 +51,11 @@
 - `teleport-20261025-console-control-move`：使用既有 `rooms_move` 将两人送入商店，再 `/c stage 2`。主机复现相同 RVA `0058bf62` 的访问异常，保留一份转储；客机正常退出。这证明相同崩溃不需要调用新传送入口，控制台换层问题尚未修复。
 
 这些重启分别用于启动失败后的恢复、加载修正夹具、异常退出后的复测，以及建立不使用 `/tp` 的独立对照。常规场景没有逐用例重启。本轮未做四人联机、镜像／死亡证明维度和亲子角色的传送实机专项；维度隔离与多身体落点另有离线回归。
+
+## 控制台换层排查记录（暂缓修复）
+
+2026-10-25 复核代码与上述异常记录后，确认 `/c stage` 经 [executeChatCommand](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session.cpp)、`rooms::withPlayer` 和 [executeConsole](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/session_backend.cpp) 执行。调用时原生玩家名单只包含输入者的受控身体。J460 的原版 `stage` 分支设置目标楼层后直接执行楼层重建，没有经过 `Game:StartStageTransition` 对应的联机换层入口；异常轮次也没有正常的 `floor_event`／`floor_transaction` 记录。
+
+初步判断是原版重建绕过了整队换层通知和旧房间清理，单角色作用域进一步限制了原生可见名单。仅让另一名玩家补执行一次命令不能解决旧房间引用与清理顺序问题。崩溃点读取房间描述信息时发生访问异常，旧描述符失效是当前推断，尚未完成对象生命周期的进一步验证。
+
+候选修复方向是将聊天中的 `stage` 参数交给游戏 Lua API 选择楼层，再进入既有整队换层事务，复用全体角色归并、旧房间释放和可靠楼层通知；此方案尚未验证。按用户要求暂不修复，探索性代码和测试注册均已撤回，仅保留本排查记录及原始失败证据。
