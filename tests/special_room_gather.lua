@@ -83,13 +83,19 @@ local unused = {
         error("Unselected rule ran")
     end,
 }
+local allowed = true
 local rules = dofile(root .. "/src/bridge/runtime/room_rules.lua")({
     native = native,
+    allow = function(key)
+        assert(key == "specialRoomGather")
+        return allowed
+    end,
     allocation = unused,
     charge = unused,
     gather = gather,
 })
 local function setup(options)
+    allowed = true
     rules.reset()
     positions, kinds, queued, moves, cancelled, refused = {}, {}, {}, {}, {}, {}
     unavailable = nil
@@ -271,3 +277,12 @@ assert(#moves == 0, "Enabling the rule retroactively treated a baseline as an en
 print(
     "PASS special room gathering: all vanilla types, dimensions, arrivals, concurrency and lifecycle"
 )
+setup()
+allowed = false
+starts(0, 85, types.ROOM_SHOP)
+assert(#moves == 0, "A challenge veto must take precedence over the lobby toggle")
+setup()
+starts(0, 85, types.ROOM_SHOP)
+allowed = false
+rules.step()
+assert(not next(queued), "Challenge veto must cancel a pending gather")

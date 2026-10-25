@@ -284,6 +284,7 @@ battle.onLayoutReady(info, level)
 assert(players[0].hearts == 6 and players[0].soul == 4 and players[0].coins == 19)
 assert(positions["0"].index == 0 and positions["1"].index == 168)
 assert(not battle.allow("coop_revive") and not battle.allow("game_over"))
+assert(not battle.allow("specialRoomGather"), "Battle royale must not gather competitors")
 assert(not battle.allow("floor"))
 players[1].dead, players[1].reviving = true, true
 tick(120)

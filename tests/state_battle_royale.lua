@@ -16,6 +16,12 @@ local step, at, baselineRound, sawGuest = "start", 0, nil, false
 local seen = {}
 local flow, winner = _IsaacLanBattleFlow, _IsaacLanBattleWinner or 0
 local loser = 1 - winner
+local roomOptions = 0
+for _, option in ipairs(native.net_room_options()) do
+    if option.key == "friendlyFire" or option.key == "specialRoomGather" then
+        roomOptions = roomOptions | option.flag
+    end
+end
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end
@@ -296,7 +302,10 @@ function _IsaacLanFrame()
         if host and status.challenge ~= rules.id then
             _IsaacLanCommand("challenge", tostring(rules.id))
         end
-        if status.challenge == rules.id and not chosen then
+        if host and status.challenge == rules.id and status.roomOptions ~= roomOptions then
+            assert(native.net_configure_options(roomOptions))
+        end
+        if status.challenge == rules.id and status.roomOptions == roomOptions and not chosen then
             chosen = true
             _IsaacLanCommand("choose", "0:1")
         end

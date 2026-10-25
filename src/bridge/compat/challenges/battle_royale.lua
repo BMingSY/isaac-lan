@@ -440,7 +440,12 @@ return function(deps)
             end
         end,
         allow = function(event)
-            if event == "coop_revive" or event == "game_over" or event == "shared_award" then
+            if
+                event == "coop_revive"
+                or event == "game_over"
+                or event == "shared_award"
+                or event == "specialRoomGather"
+            then
                 return false
             end
             if event == "floor" or event == "round_revive" then
