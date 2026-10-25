@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 
 // J460 object offsets and native container sizes. No ownership or gameplay policy.
@@ -46,6 +47,10 @@ inline constexpr unsigned counters = 0x2bc;
 namespace roomChangeFrame {
 inline constexpr unsigned mazeRedirected = 0xb;
 } // namespace roomChangeFrame
+namespace playerRenderFrame {
+inline constexpr std::ptrdiff_t mainPass = 0xc;
+inline constexpr std::ptrdiff_t hologram = -0x6d;
+} // namespace playerRenderFrame
 namespace game {
 inline constexpr unsigned bloomTime = 0x26528;
 inline constexpr unsigned bloomDuration = 0x2652c;
