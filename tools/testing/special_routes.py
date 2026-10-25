@@ -9,6 +9,8 @@ DIAGNOSTICS = (
     "room-rules-off",
     "room-rules",
     "room-rules-resume",
+    "room-rules-items",
+    "room-rules-items-off",
     "item-generation",
     "deep-pockets",
     "party-compat",
@@ -33,6 +35,7 @@ DIAGNOSTICS = (
     "pickup-pressure",
     "local-hud",
     "guest-visuals",
+    "player-outlines",
     "feedback-b7fs",
     "floor-items",
     "floor-sources",
@@ -77,6 +80,8 @@ def build(output, cases=CASES, *, first_floor=False):
             "room-rules-off": "state_room_rules.lua",
             "room-rules": "state_room_rules.lua",
             "room-rules-resume": "state_room_rules.lua",
+            "room-rules-items": "state_room_rules.lua",
+            "room-rules-items-off": "state_room_rules.lua",
             "lazarus": "state_lazarus_mines.lua",
             "audio": "state_guest_presentation_audio.lua",
             "home": "state_endings.lua",
@@ -96,6 +101,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "pickup-pressure": "state_pickup_pressure.lua",
             "local-hud": "state_local_hud.lua",
             "guest-visuals": "state_guest_visuals.lua",
+            "player-outlines": "state_player_outlines.lua",
             "feedback-b7fs": "state_feedback_b7fs.lua",
             "floor-items": "state_floor_items.lua",
             "floor-sources": "state_floor_sources.lua",
@@ -156,6 +162,12 @@ def build(output, cases=CASES, *, first_floor=False):
         elif name in ("campaign", "victory-lap", "victory-no"):
             options["endingRoutes"] = ["lamb"]
         prelude = ""
+        if name in ("room-rules-items", "room-rules-items-off"):
+            prelude = (
+                "local addPvpItemCases = (function()\n"
+                + (ROOT / "tests/fixtures/pvp_items.lua").read_text()
+                + "\nend)()\n"
+            )
         if name in ("attached-motion", "weak-network"):
             prelude = (
                 "local fields = (function()\n"

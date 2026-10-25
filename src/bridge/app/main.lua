@@ -24,6 +24,10 @@ function _IsaacLanMinimapRender()
 end
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
 local friendlyFire = _IsaacLanModules["compat/rules/friendly_fire"]({
+    policy = _IsaacLanModules["compat/rules/pvp_damage"],
+    attacks = _IsaacLanModules["compat/rules/pvp_attacks"],
+    health = _IsaacLanModules["compat/rules/pvp_health"],
+    items = _IsaacLanModules["compat/items/pvp"],
     native = native,
     player = Isaac.GetPlayer,
     entities = Isaac.GetRoomEntities,
@@ -36,10 +40,22 @@ local friendlyFire = _IsaacLanModules["compat/rules/friendly_fire"]({
         return Game():IsPaused()
     end,
     contact = _IsaacLanModules["core/contacts"],
-    enums = { entity = EntityType, tear = TearFlags, damage = DamageFlag },
+    enums = {
+        entity = EntityType,
+        tear = TearFlags,
+        damage = DamageFlag,
+        collectible = CollectibleType,
+        effect = EffectVariant,
+    },
 })
 callback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, amount, flags, source)
     return friendlyFire.damage(entity, amount, flags, source)
+end)
+callback(ModCallbacks.MC_USE_ITEM, function(_, item, _, player)
+    friendlyFire.useItem(item, player)
+end)
+callback(ModCallbacks.MC_PRE_USE_ITEM, function(_, item, _, player)
+    friendlyFire.beforeUseItem(item, player)
 end)
 local challenge, chat, feedback
 local function lootAllocation()

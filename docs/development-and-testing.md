@@ -76,6 +76,8 @@ Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，�
 
 `/tp` 的离线定向回归为 `bridge.teleport`、`bridge.chat`、`bridge.resume`、`bridge.party-startup` 与 `bridge.layers`；覆盖实际聊天请求链路、坐标方向、大房间与缺角、维度隔离、已生成特殊房间、重复请求、队友落点及跨层／退出清理。原生迁移与画面使用 [state_teleport.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_teleport.lua)，由 [run_teleport.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_teleport.py) 在一组受保护的主客机进程中验证，指定 `--host`、`--client`、`--build`、`--output`、独立 `--port`，使用 `--heap-check --record` 保留异常与画面证据。
 
+玩家轮廓的 Windows 离线检查为 `native.player-outlines`，覆盖三条原生分支的寄存器／栈保护、四槽位配色、名单重排、全息分身／非主绘制限制、断开与嵌套／异常清理。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-outlines --case guest-visuals`，在同一组受保护主客机进程中检查装扮／缩放、重叠、染色、受击闪烁、双角色、幽灵、分房与换层；使用独立端口以及 `--heap-check --record`，对照双端画面。夹具断言与画面审阅分别记录，不能仅凭脚本完成判定描边可见。
+
 ## 失败记录与回放
 
 统一运行按当轮归档保存阶段日志、耗时、`summary.json`、`ctest.xml`、`pytest.xml` 和失败请求。回放命令：
@@ -112,6 +114,8 @@ ctest --test-dir build-win32 --output-on-failure
 ```
 
 测试程序不带用例名时运行全部传输测试，通过标记为 `ALL STATE TRANSPORT TESTS PASSED`。
+
+队友伤害的定向离线检查为 `bridge.friendly-fire`、`bridge.pvp-items`、`bridge.party-startup`、`bridge.resume` 与 `bridge.layers`，覆盖等输出配置、余数、散射、持续接触、爆发保护、原版防御、道具索敌与毒伤、回调失败与状态清理。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 组合 `--case room-rules-off --case room-rules --case room-rules-resume`，指定隔离双端、独立端口与输出目录，配合 `--latency-ms 40 --heap-check --record`。同一组进程检查友伤开关、普通／成型／等输出配置的实际扣血时间、散射上限、环境与道具保护、减伤、激光／刀、原生爆炸、分房、死亡、续玩与双端生命一致性。道具专项使用 `--case room-rules-items --case room-rules-items-off`，检查已接入主动的实际使用、自身代价、范围、毒性休克进房／重复进房／分房与道具无敌；可与基础组在同一对进程中执行。测试时间以指定配置和连续命中为条件，不作为所有武器、道具或防御组合的保证。
 
 ## 最终实机验收
 

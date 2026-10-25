@@ -27,6 +27,8 @@
 
 ## 本机视图与 HUD
 
+多人 LAN 会话中的角色沿用原版联机描边，颜色固定对应 P1 红、P2 蓝、P3 黄、P4 绿。颜色跟随控制器所属玩家，不随本机 HUD 排序、角色身体替换或分房变化；同一玩家的双角色共用颜色。描边随原生身体、头部与装扮绘制，保留可见性、受击闪烁和正常染色，不额外显示编号。表现策略见 [player_outlines.h](https://github.com/BMingSY/isaac-lan/blob/main/src/presentation/player_outlines.h)，绘制边界见[原生轮廓能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#玩家轮廓)。
+
 `withView` 临时切到本机房间，并将本机控制器角色置于显示名单前部。换层中尚无有效房间时，仍保留本机 HUD 归属；绘制结束恢复原名单。客机接受普通下降楼层事件后，为本机存活角色启动原生跳入动画，再交由原生换层流程推进；同层重置、上行与兼容组件接管的转场保留各自演出。
 
 | 内容 | 归属 |

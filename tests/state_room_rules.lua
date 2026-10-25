@@ -1,7 +1,8 @@
 -- Native 80 ms RTT acceptance, with distinct protected personal-save marks.
 local native, host, port = _IsaacLan, _IsaacLanTest.host, _IsaacLanTest.port
 local route = _IsaacLanTest.route
-local enabled, resume = route ~= "room-rules-off", route == "room-rules-resume"
+local enabled = route ~= "room-rules-off" and route ~= "room-rules-items-off"
+local resume = route == "room-rules-resume"
 local base, gate, menu = _IsaacLanFrame, native.net_gate, _IsaacLanMenuRender
 local owner = RegisterMod("Isaac LAN room rules fixture", 1)
 local json = require("json")
@@ -10,6 +11,7 @@ local tick, lobbyAt, chooseAt, index, began, initialized = 0, nil, 0, 1, nil, fa
 local marksChecked, readOnlyChecked, lastHealth = false, false, {}
 local events, nativeExplosions, results = {}, {}, {}
 local buttons, currentCase, knivesSeen = 0, nil, 0
+local lastCaseAt = -100
 local targetFlag = enabled and 1 or 0
 local function report(event, value)
     Isaac.DebugString(
@@ -59,6 +61,8 @@ local function restoreHealth()
             p:AddEternalHearts(-p:GetEternalHearts())
             p:AddMaxHearts(24 - p:GetMaxHearts())
             p:AddHearts(24)
+            p:AddCacheFlags(CacheFlag.CACHE_ALL)
+            p:EvaluateItems()
             p.Position, p.Velocity = Vector(slot == 0 and 160 or 340, 200), Vector.Zero
         end)
     end
@@ -67,7 +71,7 @@ local function ready()
     local ok = true
     for slot = 0, 1 do
         actor(slot, function(p)
-            ok = ok and p:GetDamageCooldown() == 0
+            ok = ok and p:GetDamageCooldown() == 0 and not p:HasInvincibility()
         end)
     end
     return ok
@@ -210,49 +214,113 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_KNIFE_UPDATE, function(_, knife)
                 y = knife.Position.Y,
                 damage = knife.CollisionDamage,
                 rotation = knife.Rotation,
+                flying = knife:IsFlying(),
             })
         end
     end
 end)
 add("starting_tear", function(at)
-    if at == 0 then
+    if at <= 44 and at % 11 == 0 then
         tear(3.5)
     end
 end, function()
-    assert(health(1) == (enabled and 23 or 24), "Starting tear damage differs")
-end)
+    assert(health(1) == (enabled and 22 or 24), "Starting tear accumulation differs")
+end, 65)
 if enabled and not resume then
     add("guest_attack", function(at)
-        if at == 0 then
+        if at <= 44 and at % 11 == 0 then
             tear(3.5, 1, 0)
         end
     end, function()
-        assert(health(0) == 23, "Guest attack did not hurt host")
-    end)
+        assert(health(0) == 22, "Guest attack did not hurt host")
+    end, 65)
     add("weak_hits", function(at)
-        if at <= 24 and at % 6 == 0 then
+        if at <= 60 and at % 6 == 0 then
             tear(0.7)
         end
-        if at == 23 then
+        if at == 59 then
             assert(health(1) == 24, "Weak damage applied before threshold")
         end
     end, function()
-        assert(health(1) == 23, "Five weak hits did not hurt")
-    end)
-    add("rapid_15_damage", function(at)
-        if at < 150 and at % 6 == 0 then
-            tear(15)
+        assert(health(1) == 23, "Weak hits did not accumulate")
+    end, 80)
+    local duelTimes = {}
+    local function duel(name, interval, damage, count, minimum, maximum)
+        local reached
+        add(name, function(at)
+            if at == 0 then
+                actor(0, function(p)
+                    p.MaxFireDelay, p.Damage = interval - 1, damage
+                end)
+            end
+            if not reached and health(1) <= 18 then
+                reached = at / 30
+            end
+            if not reached and at % interval == 0 then
+                for _ = 1, count do
+                    tear(damage)
+                end
+            end
+        end, function()
+            assert(
+                reached and reached >= minimum and reached <= maximum,
+                name .. " native time differs: " .. tostring(reached)
+            )
+            duelTimes[name] = reached
+            report("pvp_time", { name = name, seconds = reached, health = health(1) })
+            if name == "heavy_equal_dps" then
+                assert(
+                    math.abs(reached - duelTimes.rapid_equal_dps) <= 0.7,
+                    "Equal-DPS native attacks diverged"
+                )
+            end
+        end, 180)
+    end
+    duel("ordinary_duel", 11, 3.5, 1, 4, 5)
+    duel("five_rate_ten_damage", 6, 10, 1, 2.5, 3.5)
+    duel("strong_duel", 3, 10, 1, 2, 3.3)
+    duel("rapid_equal_dps", 3, 1, 1, 3.8, 5)
+    duel("heavy_equal_dps", 30, 10, 1, 3.8, 5)
+    duel("scatter_duel", 11, 3.5, 6, 2, 3.5)
+    add("native_hurt_protection", function(at)
+        if at == 0 then
+            actor(1, function(p)
+                p:TakeDamage(1, 0, EntityRef(nil), 0)
+            end)
+        elseif at == 5 or at == 10 then
+            tear(1000)
         end
     end, function()
-        assert(#events >= 2 and #events <= 6 and health(1) > 0, "Rapid attacks bypassed immunity")
-        for i = 2, #events do
-            assert(
-                events[i].tick - events[i - 1].tick >= 29,
-                "Native hurt protection was shortened"
-            )
+        assert(health(1) == 23, "PvP bypassed native environmental protection")
+    end)
+    add("extended_protection", function(at)
+        if at == 0 then
+            tear(8)
+        elseif at == 5 then
+            assert(health(1) == 23)
+            actor(1, function(p)
+                p:SetMinDamageCooldown(180)
+            end)
+        elseif at == 10 or at == 15 then
+            tear(1000)
         end
-        report("rapid_result", events)
-    end, 150)
+    end, function()
+        assert(health(1) == 23, "PvP shortened extended native protection")
+    end)
+    add("item_invincibility", function(at)
+        if at == 0 then
+            actor(1, function(p)
+                p:UseActiveItem(
+                    CollectibleType.COLLECTIBLE_BOOK_OF_SHADOWS,
+                    UseFlag.USE_NOANIM | UseFlag.USE_NOANNOUNCER
+                )
+            end)
+        elseif at == 5 or at == 15 then
+            tear(1000)
+        end
+    end, function()
+        assert(health(1) == 24, "PvP bypassed Book of Shadows")
+    end)
     add("holy_mantle", function(at)
         if at == 0 then
             actor(1, function(p)
@@ -270,7 +338,7 @@ if enabled and not resume then
         if at == 0 then
             actor(0, function(p)
                 p:AddCollectible(CollectibleType.COLLECTIBLE_WAFER)
-                p:TakeDamage(4, 0, EntityRef(nil), 0)
+                p:TakeDamage(2, 0, EntityRef(nil), 0)
             end)
             actor(1, function(p)
                 p:AddCollectible(CollectibleType.COLLECTIBLE_WAFER)
@@ -288,6 +356,29 @@ if enabled and not resume then
         actor(1, function(p)
             p:RemoveCollectible(CollectibleType.COLLECTIBLE_WAFER)
         end)
+    end)
+    add("wafer_explosion", function(at)
+        if at == 0 then
+            actor(0, function(p)
+                p:AddCollectible(CollectibleType.COLLECTIBLE_WAFER)
+                p:TakeDamage(4, DamageFlag.DAMAGE_EXPLOSION, EntityRef(p), 0)
+            end)
+            local source
+            actor(0, function(p)
+                source = p
+            end)
+            actor(1, function(p)
+                p:AddCollectible(CollectibleType.COLLECTIBLE_WAFER)
+                p:TakeDamage(4, DamageFlag.DAMAGE_EXPLOSION, EntityRef(source), 0)
+            end)
+        end
+    end, function()
+        assert(health(0) == 22 and health(1) == health(0), "Explosion applied Wafer twice")
+        for slot = 0, 1 do
+            actor(slot, function(p)
+                p:RemoveCollectible(CollectibleType.COLLECTIBLE_WAFER)
+            end)
+        end
     end)
     add("continuous_laser", function(at)
         if at == 0 then
@@ -332,7 +423,7 @@ if enabled and not resume then
     add("knife", function(at)
         if at == 0 then
             actor(1, function(p)
-                p.Position = Vector(260, 200)
+                p.Position = Vector(290, 200)
             end)
             actor(0, function(p)
                 p:AddCollectible(CollectibleType.COLLECTIBLE_MOMS_KNIFE)
@@ -402,18 +493,43 @@ for _, kind in ipairs({ "doctor", "ipecac" }) do
     end)
 end
 if enabled and not resume then
-    add("lethal", function(at)
+    add("burst_and_lethal", function(at)
         if at == 0 then
-            tear(84)
+            actor(1, function(p)
+                p:AddMaxHearts(6 - p:GetMaxHearts())
+                p:AddHearts(6)
+            end)
+            for _ = 1, 8 do
+                tear(1000)
+            end
+        elseif at == 5 then
+            assert(health(1) == 3, "Scatter burst exceeded half maximum health")
+            tear(1000)
+        elseif at == 9 then
+            assert(health(1) == 3, "Burst protection did not block a follow-up")
+        elseif at == 15 then
+            tear(1000)
         end
     end, function()
         actor(1, function(p)
             assert(
                 p:IsCoopGhost() or p:IsDead(),
-                "High damage was capped instead of killing a twelve-heart player"
+                "Later PvP attack could not finish a wounded player"
             )
         end)
     end, 120)
+end
+if route == "room-rules-items" or route == "room-rules-items-off" then
+    cases = {}
+    addPvpItemCases({
+        add = add,
+        actor = actor,
+        health = health,
+        report = report,
+        host = host,
+        enabled = enabled,
+        clear = clear,
+    })
 end
 local function advance(t)
     tick = t
@@ -435,7 +551,7 @@ local function advance(t)
     end
     local case = cases[index]
     if not began then
-        if not ready() then
+        if not ready() or t - lastCaseAt <= 31 then
             return
         end
         clear()
@@ -459,7 +575,7 @@ local function advance(t)
         case.check()
         results[#results + 1] = { case.name, health(0), health(1) }
         report("pass", results[#results])
-        index, began = index + 1, nil
+        index, began, lastCaseAt = index + 1, nil, t
         if index > #cases then
             finished = true
         end
