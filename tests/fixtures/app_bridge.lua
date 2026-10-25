@@ -13,6 +13,7 @@ return function(root, native, modules)
             { flag = 1, key = "friendlyFire", name = "队友伤害" },
             { flag = 2, key = "sharedClearCharge" },
             { flag = 4, key = "lootRoll" },
+            { flag = 8, key = "specialRoomGather" },
         }
     end
     native.menu_room_options = native.menu_room_options or function()
@@ -32,6 +33,7 @@ return function(root, native, modules)
         "compat/rules/friendly_fire",
         "compat/rules/loot_roll",
         "compat/rules/clear_charge",
+        "compat/rules/special_rooms",
         "runtime/room_rules",
         "compat/challenges/luck_game",
         "compat/items/glitched",

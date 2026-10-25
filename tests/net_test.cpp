@@ -2,6 +2,7 @@
 #include "net/datagram_protocol.h"
 #include <enet/enet.h>
 #include "compat/challenges/catalog.h"
+#include "core/room_options.h"
 #include "runtime/progression.h"
 #include "net/compression.h"
 #include "net/peer.h"
@@ -1686,7 +1687,7 @@ void roomOptions() {
     require(host.choices()[1].ready && host.choices()[0].preview == 0x1000001,
             "Preview changed readiness or another peer's card");
     RunRules enabled;
-    enabled.options = 1;
+    enabled.options = isaac::roomOptions::known;
     require(!guest.configureRules(enabled) && host.configureRules(enabled),
             "Room option authority incorrect");
     until([&] {

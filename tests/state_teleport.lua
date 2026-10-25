@@ -205,6 +205,9 @@ function _IsaacLanFrame()
     local status = frame()
     if status.phase == 2 and not chosen then
         chosen = true
+        if host then
+            _IsaacLanCommand("room_options", "0")
+        end
         _IsaacLanCommand("choose", "0:1")
     end
     if

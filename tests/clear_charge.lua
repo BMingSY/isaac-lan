@@ -55,7 +55,11 @@ local native = {
         return info
     end,
     net_room_options = function()
-        return { { key = "sharedClearCharge", flag = 2 }, { key = "lootRoll", flag = 4 } }
+        return {
+            { key = "sharedClearCharge", flag = 2 },
+            { key = "lootRoll", flag = 4 },
+            { key = "specialRoomGather", flag = 8 },
+        }
     end,
     items_active_charge = function(p, s)
         assert(scoped == p.slot)
@@ -117,6 +121,12 @@ local clear = dofile(root .. "/src/bridge/compat/rules/clear_charge.lua")({
 local rules = dofile(root .. "/src/bridge/runtime/room_rules.lua")({
     native = native,
     charge = clear,
+    gather = {
+        reset = function() end,
+        step = function()
+            error("Gather disabled")
+        end,
+    },
     allocation = {
         reset = function() end,
         step = function()
