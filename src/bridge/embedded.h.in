@@ -1,5 +1,5 @@
 #pragma once
-namespace isaac::frontend {
+namespace isaac::app {
 struct IntegrationModule {
     const char* name;
     const char* file;
@@ -14,4 +14,4 @@ inline constexpr char stateSource[] = R"IsaacLAN(@ISAAC_LAN_STATE@)IsaacLAN";
 inline constexpr char predictionSource[] = R"IsaacLAN(@ISAAC_LAN_PREDICTION@)IsaacLAN";
 inline constexpr char bridgeSource[] = R"IsaacLAN(@ISAAC_LAN_BRIDGE@)IsaacLAN";
 inline constexpr char menuSource[] = R"IsaacLAN(@ISAAC_LAN_MENU@)IsaacLAN";
-} // namespace isaac::frontend
+} // namespace isaac::app

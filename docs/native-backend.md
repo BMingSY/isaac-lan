@@ -4,6 +4,10 @@
 
 入口与签名以 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entrypoints.h)、[signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/signatures.inc) 为准，布局由版本后端持有。这里的地址不能用于其他游戏版本；桥接和兼容组件仅使用具名能力，不读取任意内存。
 
+版本元数据以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/profile.json) 为唯一来源。PE 节区、版本标记与签名在配置阶段生成；运行时仍在安装游戏 Hook 前校验磁盘版本与内存入口。布局、原函数的调用约定和对象所有权不通过版本描述对上层开放。[room_hooks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_hooks.h) 仅供后端传递借用的原生房间／玩家与原函数。
+
+后端能力 `native_emotes` 表示可使用原版轮盘和表情接口。应用装配只在能力存在时安装与绑定这些接口；文字聊天可在缺少表情接口时使用普通气泡绘制。核心房间、会话和存档能力仍是启动所必需的，不支持时不能以空实现进入联机。
+
 ## 实体字段批量读写
 
 [`entity_fields_plan(type, template)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.cpp)将 Lua 同步组件提供的嵌套字段名数组编译为 userdata。仅支持泪弹、跟班、掉落物和效果实体的具名属性白名单；`false` 为由 Lua 填充的占位，其他实体类型返回 `false`。模板最多 128 个节点、三层深度，不接受地址或偏移。计划只持有字段描述符，不持有游戏对象；线上的字段顺序仍由 Lua schema 决定。
@@ -153,7 +157,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 命令字符串使用游戏自己的 assign／析构接口，遵循 MSVC 24 字节字符串布局，不能使用 MinGW 堆代替。结果立即复制为自有字符串，限制 16 KiB；嵌入层按 UTF-8 边界分段。`Game+console` 的状态字段 `+0` 仅在联机接管输入时清为关闭，离开联机恢复原版更新。原生入口纳入启动签名校验。
 
-[chat_input.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/chat_input.cpp) 接收本机窗口文字、剪贴板与 IME 消息，不向游戏投递输入文本。UTF-16／UTF-8 转换拒绝非法编码；IME 候选位置跟随编辑光标，失焦取消输入法组合并关闭输入。随机掷骰调用 `BCryptGenRandom` 并使用拒绝采样，不消耗游戏 RNG。编辑缓冲、手柄边沿和动作释放状态在所属组件清理，Lua 只接收普通值。
+[chat_input.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/presentation/chat_input.cpp) 接收本机窗口文字、剪贴板与 IME 消息，不向游戏投递输入文本。UTF-16／UTF-8 转换拒绝非法编码；IME 候选位置跟随编辑光标，失焦取消输入法组合并关闭输入。随机掷骰调用 `BCryptGenRandom` 并使用拒绝采样，不消耗游戏 RNG。编辑缓冲、手柄边沿和动作释放状态在所属组件清理，Lua 只接收普通值。
 
 菜单地址、端口和种子通过同一适配器的 `beginField`／`endField` 使用独立编辑缓冲，无需创建原生 Chat 对象；地址上限 253 个 ASCII 字符，端口只收 5 位数字，种子只收 8 位大写字母或数字。编辑期间在原版窗口处理前消费键盘消息，确认／取消通过 `fieldKey` 取一次，文本通过 `fieldText` 借用到下一次编辑操作。菜单暂停键盘动作绑定查询，仅继续查询手柄确认／返回；退出字段后仍消费其已按住键的松开事件，打开前已按住的键则允许原版清理。字段切换、菜单退出与失焦清理编辑和输入法状态，不改变游戏按键配置。
 

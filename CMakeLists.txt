@@ -12,6 +12,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(CTest)
 include(cmake/Tests.cmake)
+include(cmake/Backend.cmake)
 option(ISAAC_LAN_BUILD_ENGINE "Build the Windows x86 engine adapter and tools" ON)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/miniz_export.h"
      "#pragma once\n#define MINIZ_EXPORT\n")
@@ -155,20 +156,7 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME runtime.input-schedule COMMAND isaac_lan_input_schedule_test)
     set_tests_properties(runtime.input-schedule PROPERTIES TIMEOUT 30 LABELS "offline;core")
-    add_executable(isaac_lan_floor_source_test tests/floor_source_test.cpp)
-    target_include_directories(isaac_lan_floor_source_test PRIVATE src)
-    if(MINGW)
-        target_link_options(isaac_lan_floor_source_test PRIVATE -static-libgcc -static-libstdc++)
-    endif()
-    add_test(NAME native.floor-source COMMAND isaac_lan_floor_source_test)
-    set_tests_properties(native.floor-source PROPERTIES TIMEOUT 30 LABELS "offline")
-    add_executable(isaac_lan_player_hud_test tests/player_hud_test.cpp)
-    target_include_directories(isaac_lan_player_hud_test PRIVATE src)
-    if(MINGW)
-        target_link_options(isaac_lan_player_hud_test PRIVATE -static-libgcc -static-libstdc++)
-    endif()
-    add_test(NAME presentation.player-hud COMMAND isaac_lan_player_hud_test)
-    set_tests_properties(presentation.player-hud PROPERTIES TIMEOUT 30 LABELS "offline")
+    include("${ISAAC_LAN_BACKEND_DIR}/tests-portable.cmake")
     add_executable(isaac_lan_deflate_test tests/deflate_test.cpp)
     target_link_libraries(isaac_lan_deflate_test PRIVATE isaac_lan_deflate)
     if(MINGW)
@@ -411,11 +399,12 @@ endforeach()
 configure_file(src/bridge/embedded.h.in generated/embedded_bridge.h @ONLY)
 add_library(
     isaac_lan_probe SHARED
+    ${ISAAC_LAN_BACKEND_SOURCES}
     src/app/bootstrap.cpp
+    src/app/bridge_manifest.cpp
+    src/app/lua_bridge.cpp
+    src/presentation/chat_input.cpp
     src/engine/state_codec.cpp
-    src/engine/versions/j460/entity_fields.cpp
-    src/engine/versions/j460/bootstrap.cpp
-    src/engine/versions/j460/session_backend.cpp
     src/diagnostics/native_exceptions.cpp
     src/app/configuration.cpp
     src/presentation/connection_settings.cpp
@@ -426,30 +415,10 @@ add_library(
     src/diagnostics/feedback.cpp
     src/runtime/session.cpp
     src/runtime/session_store.cpp
-    src/engine/versions/j460/rooms.cpp
-    src/engine/versions/j460/room_routing.cpp
-    src/engine/versions/j460/visuals.cpp
-    src/engine/versions/j460/input.cpp
-    src/engine/versions/j460/save.cpp
-    src/engine/versions/j460/audio.cpp
-    src/engine/versions/j460/combat_feedback.cpp
-    src/engine/versions/j460/presentation.cpp
-    src/engine/versions/j460/player_outlines.cpp
-    src/engine/versions/j460/crafting_hud.cpp
-    src/engine/versions/j460/challenge_hud.cpp
-    src/engine/versions/j460/characters.cpp
-    src/engine/versions/j460/pause_menu.cpp
-    src/engine/versions/j460/item_presentation.cpp
-    src/engine/versions/j460/pickup_preview.cpp
-    src/engine/versions/j460/item_effects.cpp
-    src/engine/versions/j460/generated_items.cpp
-    src/engine/versions/j460/rewind.cpp
-    src/engine/versions/j460/frontend.cpp
-    src/engine/versions/j460/chat_input.cpp
-    src/engine/versions/j460/emotes.cpp
     src/diagnostics/lab_capture.cpp)
 add_library(isaac_lan_build STATIC src/engine/build.cpp)
 target_include_directories(isaac_lan_build PUBLIC src)
+target_link_libraries(isaac_lan_build PUBLIC isaac_lan_profile)
 target_compile_definitions(isaac_lan_build PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_executable(isaac_lan_check tools/game_check.cpp)
 add_executable(isaac_lan_workshop tools/workshop.cpp)
@@ -494,9 +463,19 @@ target_compile_definitions(isaac_lan_net PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(isaac_lan_net PUBLIC ws2_32 bcrypt isaac_lan_deflate isaac_lan_zstd
                                            isaac_lan_enet)
 if(BUILD_TESTING)
+    add_executable(isaac_lan_manifest_test tests/bridge_manifest_test.cpp
+                                           src/app/bridge_manifest.cpp)
+    target_include_directories(isaac_lan_manifest_test PRIVATE src)
+    target_link_libraries(isaac_lan_manifest_test PRIVATE bcrypt)
+    if(MINGW)
+        target_link_options(isaac_lan_manifest_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_manifest_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME app.build-identity COMMAND isaac_lan_manifest_test)
+    set_tests_properties(app.build-identity PROPERTIES TIMEOUT 30 LABELS "offline;native")
     add_executable(isaac_lan_net_test tests/net_test.cpp)
     add_executable(isaac_lan_chat_native_input_test tests/chat_native_input_test.cpp
-                                                    src/engine/versions/j460/chat_input.cpp)
+                                                    src/presentation/chat_input.cpp)
     target_include_directories(isaac_lan_chat_native_input_test PRIVATE src)
     target_compile_definitions(isaac_lan_chat_native_input_test PRIVATE WIN32_LEAN_AND_MEAN
                                                                         NOMINMAX)
@@ -521,7 +500,7 @@ if(BUILD_TESTING)
     add_test(NAME presentation.chat-background COMMAND isaac_lan_chat_background_test)
     set_tests_properties(presentation.chat-background PROPERTIES TIMEOUT 30 LABELS
                                                                  "offline;presentation")
-    foreach(test_case hornfel rails entity_links lua_api)
+    foreach(test_case lua_api)
         add_executable(isaac_lan_${test_case}_test tests/${test_case}_test.cpp)
         target_include_directories(isaac_lan_${test_case}_test PRIVATE src)
         if(MINGW)
@@ -600,115 +579,7 @@ if(NOT EXISTS "${MINHOOK_SOURCE_DIR}/include/MinHook.h")
 endif()
 add_subdirectory("${MINHOOK_SOURCE_DIR}" minhook)
 if(BUILD_TESTING)
-    add_executable(isaac_lan_player_outlines_test tests/player_outlines_test.cpp)
-    target_include_directories(isaac_lan_player_outlines_test PRIVATE src)
-    target_link_libraries(isaac_lan_player_outlines_test PRIVATE minhook)
-    if(MINGW)
-        target_link_options(isaac_lan_player_outlines_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_player_outlines_test PRIVATE -Wall -Wextra -Werror -msse2)
-    endif()
-    add_test(NAME native.player-outlines COMMAND isaac_lan_player_outlines_test)
-    set_tests_properties(native.player-outlines PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_combat_feedback_test tests/combat_feedback_test.cpp)
-    target_include_directories(isaac_lan_combat_feedback_test PRIVATE src)
-    target_link_libraries(isaac_lan_combat_feedback_test PRIVATE minhook)
-    if(MINGW)
-        target_link_options(isaac_lan_combat_feedback_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_combat_feedback_test PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME native.combat-feedback COMMAND isaac_lan_combat_feedback_test)
-    set_tests_properties(native.combat-feedback PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_item_effects_test tests/item_effects_test.cpp)
-    target_include_directories(isaac_lan_item_effects_test PRIVATE src)
-    target_link_libraries(isaac_lan_item_effects_test PRIVATE minhook)
-    if(MINGW)
-        target_link_options(isaac_lan_item_effects_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_item_effects_test PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME native.item-effects COMMAND isaac_lan_item_effects_test)
-    set_tests_properties(native.item-effects PROPERTIES TIMEOUT 30 LABELS "offline;native")
-    add_executable(isaac_lan_generated_items_test tests/generated_items_test.cpp)
-    target_include_directories(isaac_lan_generated_items_test PRIVATE src)
-    target_link_libraries(isaac_lan_generated_items_test PRIVATE minhook)
-    if(MINGW)
-        target_link_options(isaac_lan_generated_items_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_generated_items_test PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME native.generated-items COMMAND isaac_lan_generated_items_test)
-    set_tests_properties(native.generated-items PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_crafting_hud_test tests/crafting_hud_test.cpp
-                                               src/engine/versions/j460/crafting_hud.cpp)
-    target_include_directories(isaac_lan_crafting_hud_test PRIVATE src)
-    target_link_libraries(isaac_lan_crafting_hud_test PRIVATE minhook)
-    if(MINGW)
-        target_link_options(isaac_lan_crafting_hud_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_crafting_hud_test PRIVATE -Wall -Wextra -Werror -msse2)
-    endif()
-    add_executable(isaac_lan_challenge_hud_test tests/challenge_hud_test.cpp)
-    target_include_directories(isaac_lan_challenge_hud_test PRIVATE src)
-    target_link_libraries(isaac_lan_challenge_hud_test PRIVATE minhook)
-    if(MINGW)
-        target_link_options(isaac_lan_challenge_hud_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_challenge_hud_test PRIVATE -Wall -Wextra -Werror -msse2)
-    endif()
-    add_test(NAME native.challenge-hud COMMAND isaac_lan_challenge_hud_test)
-    set_tests_properties(native.challenge-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_room_routing_test tests/room_routing_test.cpp)
-    target_include_directories(isaac_lan_room_routing_test PRIVATE src)
-    target_link_libraries(isaac_lan_room_routing_test PRIVATE minhook)
-    if(MINGW)
-        target_link_options(isaac_lan_room_routing_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_room_routing_test PRIVATE -Wall -Wextra -Werror -msse2)
-    endif()
-    add_test(NAME native.room-routing COMMAND isaac_lan_room_routing_test)
-    set_tests_properties(native.room-routing PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_test(NAME native.crafting-hud COMMAND isaac_lan_crafting_hud_test)
-    set_tests_properties(native.crafting-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_character_catalog_test tests/character_catalog_test.cpp
-                                                    src/engine/versions/j460/characters.cpp)
-    target_include_directories(isaac_lan_character_catalog_test PRIVATE src)
-    if(MINGW)
-        target_link_options(isaac_lan_character_catalog_test PRIVATE -static-libgcc
-                            -static-libstdc++)
-        target_compile_options(isaac_lan_character_catalog_test PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME native.character-catalog COMMAND isaac_lan_character_catalog_test)
-    set_tests_properties(native.character-catalog PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_pause_menu_test tests/pause_menu_test.cpp
-                                             src/engine/versions/j460/pause_menu.cpp)
-    target_include_directories(isaac_lan_pause_menu_test PRIVATE src)
-    target_link_libraries(isaac_lan_pause_menu_test PRIVATE minhook)
-    if(MINGW)
-        target_link_options(isaac_lan_pause_menu_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_pause_menu_test PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME native.pause-menu COMMAND isaac_lan_pause_menu_test)
-    set_tests_properties(native.pause-menu PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_frontend_menu_test tests/frontend_menu_test.cpp)
-    add_executable(isaac_lan_mouse_input_test tests/mouse_input_test.cpp)
-    target_include_directories(isaac_lan_mouse_input_test PRIVATE src)
-    if(MINGW)
-        target_link_options(isaac_lan_mouse_input_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_mouse_input_test PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME native.mouse-input COMMAND isaac_lan_mouse_input_test)
-    set_tests_properties(native.mouse-input PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    target_include_directories(isaac_lan_frontend_menu_test PRIVATE src)
-    if(MINGW)
-        target_link_options(isaac_lan_frontend_menu_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_frontend_menu_test PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME native.frontend-menu COMMAND isaac_lan_frontend_menu_test)
-    set_tests_properties(native.frontend-menu PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_rewind_home_test tests/rewind_home_test.cpp)
-    target_include_directories(isaac_lan_rewind_home_test PRIVATE src)
-    target_link_libraries(isaac_lan_rewind_home_test PRIVATE minhook)
-    if(MINGW)
-        target_link_options(isaac_lan_rewind_home_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_rewind_home_test PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME native.rewind-home COMMAND isaac_lan_rewind_home_test)
-    set_tests_properties(native.rewind-home PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    include("${ISAAC_LAN_BACKEND_DIR}/tests-native.cmake")
 endif()
 
 set_target_properties(isaac_lan_probe PROPERTIES PREFIX "")

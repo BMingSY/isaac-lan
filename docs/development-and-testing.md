@@ -6,6 +6,10 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 
 构建命令见[项目 README](https://github.com/BMingSY/isaac-lan/blob/main/README.md#源码构建)：C++20、Windows x86 工具链，以及指定版本的 Dear ImGui／MinHook 源码。CMake 默认启用 `BUILD_TESTING`，只构建产物可设为 `OFF`。
 
+原生后端由 `-DISAAC_LAN_BACKEND=j460` 在配置时选择，当前可选后端只有 `j460`；未知标识立即失败。每个后端在自己的 `sources.cmake`、`tests-portable.cmake` 和 `tests-native.cmake` 中登记实现与测试。不同后端使用独立构建目录，避免混用二进制和资料。
+
+配置阶段需要 Python 3.10+。[版本生成器](https://github.com/BMingSY/isaac-lan/blob/main/tools/generate_game_profile.py) 将后端的版本描述、入口和签名生成 C++ 描述符及构建目录内的 `game-profile.json`。打包使用该构建快照，缺失时要求重新配置；不从源码默认版本补造元数据。安装包的游戏版本、后端标识、检查器和描述文件必须对应同一个构建。
+
 | 产物 | 用途 |
 | --- | --- |
 | `winmm.dll` | 自动加载与系统导出转发 |
@@ -143,6 +147,8 @@ python tools/engine_test.py run special-routes -- \
 `list` 和 `--list-engine` 通过 [`discovery.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/testing/discovery.py) 自动扫描 `tools/run_*.py` 和 `tests/state_*.lua`；排除底层后端 `run_network_engine.py`，并兼容 `manual_gameplay.py`、`validate_replica.py` 两个旧入口。新增、删除或重命名文件后，下次发现立即生效，无需登记清单。套件名由文件名去掉 `run_` 前缀、将下划线换为短横线得到，例如 `run_release_acceptance.py` 对应 `release-acceptance`。
 
 发现过程不导入执行器或执行 Lua。`plan` 只显示选中入口和命令；`run` 才调用该入口，路径、参数和准备条件由入口校验。文件被发现不代表它能与其他场景组合，也不代表已执行或通过。场景选择、顺序与完成条件在所属执行器／构建器中维护；进程复用与焦点安排见下方验证约定。
+
+[隔离目录准备工具](https://github.com/BMingSY/isaac-lan/blob/main/tools/prepare_lab.py) 将构建的 `game-profile.json` 写入所属实验目录；日志、配置和启动检查通过 [game_profiles.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/game_profiles.py) 读取资料目录和启动条件。双端执行前核对实验目录与构建版本。已有且没有描述文件的旧实验目录按 J460 解释；显式存在但无效的描述文件直接失败。进度夹具按版本资格选择，未提供适配时拒绝写入，不能用 J460 的存档偏移处理另一版本。
 
 公共实现位于 [`tools/testing/`](https://github.com/BMingSY/isaac-lan/tree/main/tools/testing)：启动命令和子进程收尾由 `engine.py` 管理，原生资料准备函数放在 `profiles.py`，报告由 `results.py` 写入。具体入口保留场景选择、必要准备与效果断言，调用公共模块，不从其他执行入口导入共享实现。原有 `run_*.py` 命令可直接使用。
 

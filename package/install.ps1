@@ -4,7 +4,6 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$expectedBuild = '1.9.7.17.J460'
 $ownedFiles = @('winmm.dll', 'isaac_lan_probe.dll')
 function Hash([string]$Path) {
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -22,7 +21,7 @@ try {
     if (!$GameDirectory) {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = [Windows.Forms.OpenFileDialog]::new()
-        $dialog.Title = 'Select The Binding of Isaac Repentance+ / isaac-ng.exe'
+        $dialog.Title = 'Select The Binding of Isaac / isaac-ng.exe'
         $dialog.Filter = 'Isaac executable|isaac-ng.exe'
         if ($dialog.ShowDialog() -ne [Windows.Forms.DialogResult]::OK) {
             exit 0
@@ -56,7 +55,7 @@ try {
     }
     if ($Mode -ne 'Uninstall') {
         $payload = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'payload.json') -Raw | ConvertFrom-Json
-        if ($payload.format -ne 1 -or $payload.game_build -ne $expectedBuild) {
+        if ($payload.format -ne 1 -or [string]::IsNullOrWhiteSpace($payload.game_build)) {
             throw 'Invalid package manifest.'
         }
         foreach ($name in @('winmm.dll', 'isaac_lan_probe.dll', 'isaac_lan_check.exe')) {
@@ -66,6 +65,16 @@ try {
                 throw "Package file failed verification: $name"
             }
         }
+        $profilePath = Join-Path $PSScriptRoot 'game-profile.json'
+        AssertRegular $profilePath
+        if ((Hash $profilePath) -ne $payload.linux_files.'game-profile.json') {
+            throw 'Package game profile failed verification.'
+        }
+        $profile = Get-Content -LiteralPath $profilePath -Raw | ConvertFrom-Json
+        if ($profile.format -ne 1 -or $profile.game_build -ne $payload.game_build -or $profile.backend -ne $payload.backend) {
+            throw 'Package game profile differs from manifest.'
+        }
+        $expectedBuild = $profile.game_build
         # The checker parses the PE as data; it never starts the selected game.
         $checkOutput = (& (Join-Path $PSScriptRoot 'isaac_lan_check.exe') $executable | Out-String).Trim()
         $compatible = $LASTEXITCODE -eq 0

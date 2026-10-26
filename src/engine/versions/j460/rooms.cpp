@@ -1,3 +1,4 @@
+#include "engine/versions/j460/room_hooks.h"
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/rooms.h"
@@ -2872,6 +2873,9 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
 bool checkpointReady() {
     return enabled && !scopes.depth() && !resumeStage && !pendingStage && !pendingRestart &&
            loaded.size() == 1;
+}
+int currentRoomIndex() {
+    return stateReady() ? at<int>(game(), j460::layout::game::roomIndex) : -1;
 }
 bool stateReady() {
     return enabled && !scopes.depth() && !resumeStage && !pendingStage && !pendingRestart;

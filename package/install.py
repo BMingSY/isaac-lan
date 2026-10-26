@@ -48,7 +48,7 @@ def check_game(path, profile):
         or read("<H", optional)[0] != 0x10B
         or image_size < profile["minimum_image_size"]
     ):
-        raise ValueError("Expected Windows Repentance+ J460, 32-bit x86")
+        raise ValueError("Expected a supported Windows Isaac build, 32-bit x86")
     sections = []
     for i in range(count):
         _, virtual_size, rva, raw_size, raw, _, _, _, _, characteristics = read(
@@ -75,7 +75,7 @@ def check_game(path, profile):
 
     marker = profile["game_build"].encode("ascii") + b"-"
     if at(profile["version_rva"], len(marker)) != marker:
-        raise ValueError("Unsupported game version; expected Repentance+ 1.9.7.17.J460")
+        raise ValueError(f"Unsupported game version; expected {profile['game_build']}")
     for signature in profile["signatures"]:
         expected = bytes.fromhex(signature["bytes"])
         actual = at(signature["rva"], len(expected))
@@ -120,7 +120,11 @@ def install(package, game, mode="Install"):
     payload = None
     if mode != "Uninstall":
         payload = json.loads(regular(package / "payload.json").read_text())
-        if payload.get("format") != 1 or payload.get("game_build") != "1.9.7.17.J460":
+        if (
+            payload.get("format") != 1
+            or not isinstance(payload.get("game_build"), str)
+            or not payload["game_build"]
+        ):
             raise ValueError("Invalid package manifest")
         for name in (*OWNED, "isaac_lan_check.exe"):
             if digest(package / name) != payload["files"][name]:
@@ -129,7 +133,11 @@ def install(package, game, mode="Install"):
             if digest(package / name) != payload.get("linux_files", {}).get(name):
                 raise ValueError(f"Package file failed verification: {name}")
         profile = json.loads(regular(package / "game-profile.json").read_text())
-        if profile.get("format") != 1 or profile.get("game_build") != payload["game_build"]:
+        if (
+            profile.get("format") != 1
+            or profile.get("game_build") != payload["game_build"]
+            or profile.get("backend") != payload.get("backend")
+        ):
             raise ValueError("Invalid game profile")
         try:
             check_game(game / "isaac-ng.exe", profile)

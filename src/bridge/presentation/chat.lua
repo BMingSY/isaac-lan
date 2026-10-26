@@ -1,5 +1,11 @@
 return function(deps, layout)
     local native, chat = deps.native, deps.chat
+    local function pollEmotes(...)
+        if native.emote_poll then
+            return native.emote_poll(...)
+        end
+        return { open = false, selected = 0 }
+    end
     local ui = {
         input = { open = false, text = "", cursor = 0, anchor = 0 },
         wheel = false,
@@ -46,8 +52,12 @@ return function(deps, layout)
         font:Load("font/TeamMeatEx/TeamMeatEx10.fnt")
         fill:Load("gfx/ui/bossoverlay_whiteout.anm2", true)
         fill:SetFrame("Fade", 15)
-        bubble:Load("gfx/OnlineEmotes.anm2", true)
-        bubble:SetFrame("Bubble", 0)
+        if native.emote_poll then
+            bubble:Load("gfx/OnlineEmotes.anm2", true)
+            bubble:SetFrame("Bubble", 0)
+        else
+            bubble = nil
+        end
         assets = { font = font, fill = fill, bubble = bubble }
         if
             style.image
@@ -143,7 +153,7 @@ return function(deps, layout)
         if not available then
             copyPressed, copyFeedback = nil, nil
             drag, mouseDown = nil, false
-            native.emote_poll(0, false)
+            pollEmotes(0, false)
             native.chat_ui_modal(false)
             ui.wheel = false
             ui.input = native.chat_ui_state()
@@ -153,7 +163,7 @@ return function(deps, layout)
         local controls = native.chat_controls()
         if controls.restart and status.prepared then
             native.chat_ui_open(false)
-            native.emote_poll(0, false)
+            pollEmotes(0, false)
             native.chat_ui_modal(false)
             ui.wheel, ui.input.open = false, false
             return
@@ -166,10 +176,8 @@ return function(deps, layout)
             native.chat_ui_open(false)
             ui.input.open = false
         end
-        local emotes = native.emote_poll(
-            controls.controller or 0,
-            status.prepared == true and not ui.input.open
-        )
+        local emotes =
+            pollEmotes(controls.controller or 0, status.prepared == true and not ui.input.open)
         ui.wheel = emotes.open
         native.chat_ui_modal(ui.wheel)
         if emotes.selected > 0 then
@@ -178,7 +186,7 @@ return function(deps, layout)
         if status.prepared then
             for owner, value in pairs(chat.emotes) do
                 if shownEmotes[owner] ~= value then
-                    if native.emote_show(owner, value.id) then
+                    if native.emote_show and native.emote_show(owner, value.id) then
                         shownEmotes[owner] = value
                     end
                 end
@@ -284,9 +292,20 @@ return function(deps, layout)
                                 height,
                                 occupied
                             )
-                            assets.bubble.Scale = Vector(sx, sy)
-                            assets.bubble.Color = Color(1, 1, 1, alpha * 0.68)
-                            assets.bubble:Render(Vector(x + 19 * sx, y + 18 * sy))
+                            if assets.bubble then
+                                assets.bubble.Scale = Vector(sx, sy)
+                                assets.bubble.Color = Color(1, 1, 1, alpha * 0.68)
+                                assets.bubble:Render(Vector(x + 19 * sx, y + 18 * sy))
+                            else
+                                rect(
+                                    x,
+                                    y,
+                                    bubbleWidth,
+                                    bubbleHeight,
+                                    { 0.9, 0.85, 0.75 },
+                                    alpha * 0.68
+                                )
+                            end
                             for index, line in ipairs(bubbleLines) do
                                 text(
                                     line,
@@ -500,7 +519,7 @@ return function(deps, layout)
         end
     end
     function ui.reset()
-        native.emote_poll(0, false)
+        pollEmotes(0, false)
         native.chat_ui_reset()
         shownEmotes = {}
         drag, mouseDown = nil, false

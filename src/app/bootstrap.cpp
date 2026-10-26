@@ -2,8 +2,8 @@
 #include "engine/lua_api.h"
 #include "engine/state_codec.h"
 #include "engine/entity_fields.h"
-// J460 native adapter. Lab launches retain explicit profile isolation; ordinary
-// launches require the installer marker, J460 layout and compatible entry points.
+// Selected native adapter. Lab launches retain explicit profile isolation; ordinary
+// launches require the installer marker, matching layout and audited entry points.
 #include <windows.h>
 #include <MinHook.h>
 #include <shlobj.h>
@@ -240,11 +240,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     wchar_t documents[MAX_PATH]{};
     std::filesystem::path logDirectory;
     if (isolated)
-        logDirectory =
-            std::filesystem::path(env) / L"profile/Documents/My Games/Binding of Isaac Repentance+";
+        logDirectory = std::filesystem::path(env) / L"profile/Documents/My Games" /
+                       std::filesystem::path(isaac::engine::profile().documentsDirectory);
     else if (SUCCEEDED(
                  SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documents)))
-        logDirectory = std::filesystem::path(documents) / L"My Games/Binding of Isaac Repentance+";
+        logDirectory = std::filesystem::path(documents) / L"My Games" /
+                       std::filesystem::path(isaac::engine::profile().documentsDirectory);
     else
         return 14;
     const auto config = isaac::configuration::load(directory / L"isaac-lan/config.ini");
@@ -262,7 +263,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         feedbackEndpoint = isaac::feedback::defaultEndpoint;
     if (!isaac::feedback::configure({directory / L"isaac-lan/config.ini", feedbackEndpoint,
                                      "isaac-lan/" ISAAC_LAN_VERSION,
-                                     std::string(isaac::build::version)}))
+                                     std::string(isaac::build::version())}))
         log("config_warning=invalid_value=feedback.endpoint");
     const auto chatBackground = isaac::presentation::prepareChatBackground(
         directory / L"isaac-lan", settings.chat.backgroundImage);
@@ -298,7 +299,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
                         MB_OK | MB_ICONERROR);
         return 13;
     }
-    log("game_compatibility=PASS build=" + std::string(isaac::build::version));
+    log("game_compatibility=PASS build=" + std::string(isaac::build::version()));
     isaac::input::install(image, log, installed);
     if (isolated) {
         profile = utf8(root + L"\\profile");
@@ -327,8 +328,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         return 16;
     if (const auto error = isaac::engine::bootstrap::installUpdates(image, log))
         return error;
-    log(std::string("bootstrap=PASS version=1.9.7.17.J460 isolation=") +
-        (isolated ? "profile_redirect" : "installed"));
+    log(std::string("bootstrap=PASS version=") + isaac::build::version() +
+        " isolation=" + (isolated ? "profile_redirect" : "installed"));
     log(std::string("installation_mode=") + (installed ? "installed" : "lab"));
     if (!isaac::runtime::install(image, log, isaac::engine::bootstrap::halfUpdate,
                                  isaac::engine::bootstrap::restorePositions))
@@ -369,7 +370,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
 extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* L) {
     if (!initialized)
         return 0;
-    HMODULE module = GetModuleHandleW(L"Lua5.3.3r.dll");
+    HMODULE module = GetModuleHandleA(isaac::engine::profile().luaModule);
     if (!module)
         return 0;
     if (!lua.load(module,

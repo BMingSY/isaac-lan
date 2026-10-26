@@ -1,3 +1,4 @@
+#include "engine/versions/j460/room_hooks.h"
 #include "engine/emotes.h"
 #include "engine/input.h"
 #include "engine/lua_api.h"
@@ -21,6 +22,8 @@ template <class T> T& at(std::uintptr_t base, unsigned offset = 0) {
     return *reinterpret_cast<T*>(base + offset);
 }
 std::uintptr_t wheel() {
+    if (!image)
+        return 0;
     const auto game = at<std::uintptr_t>(image, j460::globals::game);
     return game && rooms::stateReady() ? game + layout::game::emoteWheel : 0;
 }

@@ -1,3 +1,4 @@
+#include "engine/versions/j460/room_hooks.h"
 #include "engine/session_backend.h"
 #include "engine/rooms.h"
 #include "core/chat.h"

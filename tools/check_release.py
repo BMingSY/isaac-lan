@@ -71,11 +71,18 @@ def check(archive, tag):
         payload = json.loads(zipped.read(prefix + "payload.json"))
         if (
             payload.get("format") != 1
-            or payload.get("game_build") != "1.9.7.17.J460"
+            or not payload.get("game_build")
             or payload.get("extension_version") != tag[1:]
             or set(payload["files"]) != BINARIES
         ):
             raise ValueError("Release manifest differs")
+        from game_profiles import validate
+
+        profile = validate(json.loads(zipped.read(prefix + "game-profile.json")))
+        if profile["game_build"] != payload["game_build"] or profile["backend"] != payload.get(
+            "backend"
+        ):
+            raise ValueError("Release game profile differs from manifest")
         for name in sorted(BINARIES):
             contents = zipped.read(prefix + name)
             if hashlib.sha256(contents).hexdigest() != payload["files"][name]:

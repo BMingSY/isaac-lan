@@ -4,9 +4,10 @@ from pathlib import Path
 import os
 import struct
 import tempfile
+from game_profiles import lab_profile, profile_directory, source_profile
 
 MAGIC = b"ISAACNGSAVE09R  "
-PROFILE = Path("profile/Documents/My Games/Binding of Isaac Repentance+")
+PROFILE = Path("profile/Documents/My Games") / source_profile()["documents_directory"]
 TAINTED_LAZARUS_ACHIEVEMENT = 482
 
 
@@ -82,7 +83,9 @@ def patch(
 
 def prepare(lab, **options):
     lab = Path(lab).resolve()
-    path = lab / PROFILE / "persistentgamedata1.dat"
+    if lab_profile(lab).get("testing", {}).get("progress_fixture") != "j460":
+        raise ValueError("No audited progress fixture for this game backend")
+    path = profile_directory(lab) / "persistentgamedata1.dat"
     if not (lab / ".isaac-lan-lab").is_file() or not path.resolve().is_relative_to(lab):
         raise ValueError("An owned isolated progress file is required")
     data = patch(path.read_bytes(), **options)

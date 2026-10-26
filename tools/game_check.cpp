@@ -13,7 +13,7 @@ int wmain(int argc, wchar_t** argv) {
         std::printf("%s\n", error.c_str());
         return 1;
     }
-    std::printf("Supported game build: %s%s\n", isaac::build::version,
+    std::printf("Supported game build: %s%s\n", isaac::build::version(),
                 code ? "; engine entry points verified" : "");
     return 0;
 }

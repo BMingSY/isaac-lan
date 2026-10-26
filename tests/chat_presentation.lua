@@ -128,7 +128,7 @@ local function create(image, opacity, options, messages, service)
             chat_ui_modal = function(value)
                 modal = value
             end,
-            emote_poll = function(_, enabled)
+            emote_poll = not (options and options.noEmotes) and function(_, enabled)
                 emoteEnabled = enabled
                 return { open = false, selected = 0 }
             end,
@@ -551,3 +551,21 @@ restartChord = false
 print(
     "PASS chat appearance, private history, player colors, LAN input, HUD dragging and message copy"
 )
+
+texts, draws, sceneReady = {}, {}, true
+local beforeOnlineLoads = loads["gfx/OnlineEmotes.anm2"] or 0
+local withoutEmotes = create(
+    nil,
+    75,
+    { noEmotes = true, FoundHUD = false, ExtraHUDStyle = 0, HUDOffset = 0 },
+    {
+        { kind = "team", owner = 0, text = "fallback bubble", time = 0, bubble = true },
+    }
+)
+withoutEmotes.step({ phase = 3, prepared = true, slot = 0, connected = 15 })
+withoutEmotes.render({ phase = 3, prepared = true, slot = 0, connected = 15 })
+assert(
+    (loads["gfx/OnlineEmotes.anm2"] or 0) == beforeOnlineLoads,
+    "Unavailable emote assets loaded"
+)
+assert(drawn("fallback bubble"), "Chat bubble fallback did not render")

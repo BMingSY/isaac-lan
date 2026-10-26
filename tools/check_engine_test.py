@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check evidence from the isolated in-game room experiment, not network gameplay."""
 
+from game_profiles import profile_directory, lab_profile
 import argparse
 import hashlib
 import json
@@ -19,9 +20,7 @@ def main():
         raise SystemExit("Only a marked isolated lab is supported")
     probe = probe_text(root)
     probe = "bootstrap=" + probe.rsplit("bootstrap=", 1)[-1]
-    game = (root / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt").read_text(
-        errors="replace"
-    )
+    game = (profile_directory(root) / "log.txt").read_text(errors="replace")
     result = re.search(
         r"LAN_ROOM_ISOLATION pass=(\w+) updates=(\d+),(\d+) collisions=(\d+),(\d+) "
         r"hearts=(\d+),(\d+) initial=(\d+),(\d+)",
@@ -35,7 +34,7 @@ def main():
     checks = {
         "single_experiment": game.count("LAN_NATIVE_TEST_STARTED") == 1
         and probe.count("room_create=BEGIN") == 1,
-        "version_and_isolation": "bootstrap=PASS version=1.9.7.17.J460 isolation=profile_redirect"
+        "version_and_isolation": f"bootstrap=PASS version={lab_profile(root)['game_build']} isolation=profile_redirect"
         in probe,
         "native_layout": probe.count("audit=PASS") == 10 and "audit=FAIL" not in probe,
         "native_calls": bool(ticks)

@@ -2,7 +2,10 @@
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 #include "engine/frontend.h"
-#include "engine/chat_input.h"
+#include "app/content_hash.h"
+#include "app/bridge_manifest.h"
+#include "engine/lua_api.h"
+#include "presentation/chat_input.h"
 #include "engine/emotes.h"
 #include "engine/build.h"
 #include "runtime/session.h"
@@ -10,7 +13,7 @@
 #include "engine/input.h"
 #include "net/host_address.h"
 #include "presentation/connection_settings.h"
-#include "embedded_bridge.h"
+#include "app/lua_bridge.h"
 #include "diagnostics/lab_capture.h"
 #include "diagnostics/performance.h"
 #include <MinHook.h>
@@ -54,26 +57,7 @@ void (*logger)(const std::string&);
 int(__cdecl* bindNative)(lua_State*);
 lua_State* state = nullptr;
 constexpr int luaTable = 5, luaFunction = 6;
-struct Lua {
-    void(__cdecl* createTable)(lua_State*, int, int);
-    int(__cdecl* getTop)(lua_State*);
-    void(__cdecl* setTop)(lua_State*, int);
-    int(__cdecl* getGlobal)(lua_State*, const char*);
-    void(__cdecl* setGlobal)(lua_State*, const char*);
-    void(__cdecl* setField)(lua_State*, int, const char*);
-    void(__cdecl* pushClosure)(lua_State*, int(__cdecl*)(lua_State*), int);
-    int(__cdecl* getField)(lua_State*, int, const char*);
-    int(__cdecl* rawGetI)(lua_State*, int, long long);
-    long long(__cdecl* integer)(lua_State*, int, int*);
-    int(__cdecl* boolean)(lua_State*, int);
-    void(__cdecl* pushBoolean)(lua_State*, int);
-    void(__cdecl* pushInteger)(lua_State*, long long);
-    void(__cdecl* pushNumber)(lua_State*, double);
-    const char*(__cdecl* string)(lua_State*, int, std::size_t*);
-    const char*(__cdecl* pushString)(lua_State*, const char*);
-    int(__cdecl* load)(lua_State*, const char*, std::size_t, const char*, const char*);
-    int(__cdecl* pcall)(lua_State*, int, int, int, std::intptr_t, void*);
-} lua;
+isaac::lua::API lua;
 bool bridgeFailed = false, visible = false, guiReady = false;
 bool officialRequested = false;
 std::string error, fingerprint, modFingerprint;
@@ -181,8 +165,8 @@ bool menuAvailable() {
     return j460::menu_context::ready(image);
 }
 int beginText(lua_State* L) {
-    const char* value = lua.string(L, 1, nullptr);
-    const char* field = lua.string(L, 2, nullptr);
+    const char* value = lua.toString(L, 1, nullptr);
+    const char* field = lua.toString(L, 2, nullptr);
     const auto kind = field && std::strcmp(field, "seed") == 0   ? chat_input::TextField::seed
                       : field && std::strcmp(field, "port") == 0 ? chat_input::TextField::port
                                                                  : chat_input::TextField::address;
@@ -202,8 +186,8 @@ int loadConnection(lua_State* L) {
 }
 int saveConnection(lua_State* L) {
     std::size_t size = 0;
-    const auto* address = lua.string(L, 1, &size);
-    const auto port = lua.integer(L, 2, nullptr);
+    const auto* address = lua.toString(L, 1, &size);
+    const auto port = lua.toInteger(L, 2, nullptr);
     if (!address || size > lan::maxHostAddressLength || port < 1 || port > 65535)
         return 0;
     const presentation::ConnectionSettings next{
@@ -222,7 +206,7 @@ int loadRoomOptions(lua_State* L) {
 }
 int saveRoomOptions(lua_State* L) {
     auto next = connectionSettings;
-    next.roomOptions = static_cast<std::uint32_t>(lua.integer(L, 1, nullptr));
+    next.roomOptions = static_cast<std::uint32_t>(lua.toInteger(L, 1, nullptr));
     const bool saved =
         next == connectionSettings || presentation::saveConnectionSettings(connectionPath, next);
     if (saved)
@@ -479,65 +463,15 @@ void __attribute__((fastcall)) minimapRender(void* map, void*) {
     }
 }
 
-class Hash {
-    BCRYPT_ALG_HANDLE algorithm{};
-    BCRYPT_HASH_HANDLE hash{};
-
-  public:
-    Hash() {
-        if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0 ||
-            BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) < 0)
-            throw std::runtime_error("Cannot initialize manifest hash");
-    }
-    ~Hash() {
-        if (hash)
-            BCryptDestroyHash(hash);
-        if (algorithm)
-            BCryptCloseAlgorithmProvider(algorithm, 0);
-    }
-    void add(const void* bytes, std::size_t size) {
-        if (BCryptHashData(hash, reinterpret_cast<PUCHAR>(const_cast<void*>(bytes)),
-                           static_cast<ULONG>(size), 0) < 0)
-            throw std::runtime_error("Cannot hash manifest");
-    }
-    void text(const std::string& value) {
-        add(value.data(), value.size());
-        const char zero = 0;
-        add(&zero, 1);
-    }
-    void file(const std::filesystem::path& path) {
-        std::ifstream stream(path, std::ios::binary);
-        if (!stream)
-            throw std::runtime_error("Cannot read a fingerprinted file");
-        std::array<char, 65536> buffer;
-        while (stream) {
-            stream.read(buffer.data(), buffer.size());
-            add(buffer.data(), static_cast<std::size_t>(stream.gcount()));
-        }
-        if (!stream.eof())
-            throw std::runtime_error("Fingerprinted file read failed");
-    }
-    std::string finish() {
-        std::array<unsigned char, 32> bytes{};
-        if (BCryptFinishHash(hash, bytes.data(), bytes.size(), 0) < 0)
-            throw std::runtime_error("Cannot finish manifest hash");
-        std::string out;
-        for (auto c : bytes) {
-            out += "0123456789abcdef"[c >> 4];
-            out += "0123456789abcdef"[c & 15];
-        }
-        return out;
-    }
-};
 int configurationHash(lua_State* L) {
     std::size_t size = 0;
-    const auto data = lua.string(L, 1, &size);
+    const auto data = lua.toString(L, 1, &size);
     if (!data || size > 16 * 1024 * 1024 || modFingerprint.empty()) {
         lua.pushString(L, "");
         return 1;
     }
     try {
-        Hash hash;
+        app::ContentHash hash;
         hash.text(modFingerprint);
         hash.add(data, size);
         lua.pushString(L, hash.finish().c_str());
@@ -559,7 +493,7 @@ int integrationNonce(lua_State* L) {
     return 1;
 }
 int integrationSetting(lua_State* L) {
-    const auto key = lua.string(L, 1, nullptr);
+    const auto key = lua.toString(L, 1, nullptr);
     if (!key || std::strlen(key) > 80 ||
         std::strspn(key, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") !=
             std::strlen(key))
@@ -569,7 +503,7 @@ int integrationSetting(lua_State* L) {
     const auto path =
         std::filesystem::path(executable).parent_path() / L"isaac-lan" / L"integrations.ini";
     if (lua.getTop(L) >= 2) {
-        std::string value = lua.boolean(L, 2) ? "1" : "0";
+        std::string value = lua.toBoolean(L, 2) ? "1" : "0";
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
         const std::wstring wideKey(key, key + std::strlen(key));
@@ -586,7 +520,7 @@ int integrationSetting(lua_State* L) {
 std::map<std::filesystem::path, std::array<std::string, 4>> modSourceCache;
 int modInfo(lua_State* L) {
     namespace fs = std::filesystem;
-    const auto input = lua.string(L, 1, nullptr);
+    const auto input = lua.toString(L, 1, nullptr);
     if (!input)
         return 0;
     try {
@@ -631,11 +565,11 @@ int modInfo(lua_State* L) {
                     item.path().filename() != L"eid_config.lua")
                     files.push_back(item.path());
             std::sort(files.begin(), files.end());
-            Hash hash;
+            app::ContentHash hash;
             hash.text("Isaac LAN/compat-source-v1");
             for (const auto& file : files) {
                 hash.text(fs::relative(file, root).generic_string());
-                Hash entry;
+                app::ContentHash entry;
                 entry.file(file);
                 hash.text(entry.finish());
             }
@@ -659,50 +593,18 @@ int modInfo(lua_State* L) {
     }
 }
 void manifest() {
-    namespace fs = std::filesystem;
     wchar_t executable[32768]{};
     if (!GetModuleFileNameW(nullptr, executable, std::size(executable)))
         throw std::runtime_error("Cannot locate game directory");
-    const auto directory = fs::path(executable).parent_path();
-    Hash hash;
-    hash.text("Isaac LAN/build-v1");
-    hash.text(build::version);
-    Hash extension;
-    extension.file(directory / L"isaac_lan_probe.dll");
-    hash.text(extension.finish());
-    fingerprint = hash.finish();
-    // Mods are advisory, including unreadable files. They never enter the
-    // required build identity used for joining or restoring a saved session.
-    modFingerprint.clear();
-    try {
-        Hash mods;
-        mods.text("Isaac LAN/mods-v1");
-        std::vector<fs::path> files;
-        if (fs::is_directory(directory / L"mods"))
-            for (const auto& mod : fs::directory_iterator(directory / L"mods")) {
-                if (!mod.is_directory() || fs::exists(mod.path() / L"disable.it"))
-                    continue;
-                for (const auto& item : fs::recursive_directory_iterator(mod.path()))
-                    if (item.is_regular_file())
-                        files.push_back(item.path());
-            }
-        std::sort(files.begin(), files.end());
-        for (const auto& file : files) {
-            mods.text(fs::relative(file, directory / L"mods").generic_string());
-            Hash entry;
-            entry.file(file);
-            mods.text(entry.finish());
-        }
-        logger("mod_manifest files=" + std::to_string(files.size()));
-        modFingerprint = mods.finish();
-    } catch (const std::exception& e) {
-        logger("mod_manifest=UNKNOWN " + std::string(e.what()));
-    }
+    auto value = app::buildManifest(std::filesystem::path(executable).parent_path(),
+                                    build::version(), logger);
+    fingerprint = std::move(value.fingerprint);
+    modFingerprint = std::move(value.mods);
 }
 bool invoke(int nargs, int results) {
     if (lua.pcall(state, nargs, results, 0, 0, nullptr) == 0)
         return true;
-    const char* reason = lua.string(state, -1, nullptr);
+    const char* reason = lua.toString(state, -1, nullptr);
     error = reason ? reason : "Native bridge returned a Lua error";
     logger("frontend_error=" + error);
     return false;
@@ -715,19 +617,19 @@ void openMenu() {
 }
 int number(const char* name) {
     lua.getField(state, -1, name);
-    const auto n = lua.integer(state, -1, nullptr);
+    const auto n = lua.toInteger(state, -1, nullptr);
     lua.setTop(state, -2);
     return static_cast<int>(n);
 }
 bool boolean(const char* name) {
     lua.getField(state, -1, name);
-    const bool n = lua.boolean(state, -1) != 0;
+    const bool n = lua.toBoolean(state, -1) != 0;
     lua.setTop(state, -2);
     return n;
 }
 std::string string(const char* name) {
     lua.getField(state, -1, name);
-    const auto s = lua.string(state, -1, nullptr);
+    const auto s = lua.toString(state, -1, nullptr);
     std::string result = s ? s : "";
     lua.setTop(state, -2);
     return result;
@@ -857,7 +759,7 @@ void renderNativeMenu() {
     lua.pushString(state, localAddresses.c_str());
     lua.pushString(state, error.c_str());
     if (invoke(9, 1))
-        visible = lua.boolean(state, -1) != 0;
+        visible = lua.toBoolean(state, -1) != 0;
     else
         bridgeFailed = true;
     lua.setTop(state, top);
@@ -933,36 +835,18 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
     originalInit(engine, debug);
     state = *reinterpret_cast<lua_State**>(reinterpret_cast<std::uintptr_t>(engine) +
                                            layout::luaEngine::state);
-    const auto module = GetModuleHandleW(L"Lua5.3.3r.dll");
-#define IMPORT(field, name)                                                                        \
-    do {                                                                                           \
-        auto p = GetProcAddress(module, name);                                                     \
-        memcpy(&lua.field, &p, sizeof(p));                                                         \
-        if (!lua.field) {                                                                          \
-            logger("frontend_error=missing_lua_api " name);                                        \
-            state = nullptr;                                                                       \
-            return;                                                                                \
-        }                                                                                          \
-    } while (false)
-    IMPORT(createTable, "lua_createtable");
-    IMPORT(getTop, "lua_gettop");
-    IMPORT(setTop, "lua_settop");
-    IMPORT(getGlobal, "lua_getglobal");
-    IMPORT(setGlobal, "lua_setglobal");
-    IMPORT(setField, "lua_setfield");
-    IMPORT(pushClosure, "lua_pushcclosure");
-    IMPORT(getField, "lua_getfield");
-    IMPORT(rawGetI, "lua_rawgeti");
-    IMPORT(integer, "lua_tointegerx");
-    IMPORT(boolean, "lua_toboolean");
-    IMPORT(pushBoolean, "lua_pushboolean");
-    IMPORT(pushInteger, "lua_pushinteger");
-    IMPORT(pushNumber, "lua_pushnumber");
-    IMPORT(string, "lua_tolstring");
-    IMPORT(pushString, "lua_pushstring");
-    IMPORT(load, "luaL_loadbufferx");
-    IMPORT(pcall, "lua_pcallk");
-#undef IMPORT
+    const auto module = GetModuleHandleA(isaac::engine::profile().luaModule);
+    using Symbol = isaac::lua::Symbol;
+    if (!lua.load(module,
+                  {Symbol::createTable, Symbol::getTop, Symbol::setTop, Symbol::getGlobal,
+                   Symbol::setGlobal, Symbol::setField, Symbol::pushClosure, Symbol::getField,
+                   Symbol::rawGetI, Symbol::toInteger, Symbol::toBoolean, Symbol::pushBoolean,
+                   Symbol::pushInteger, Symbol::pushNumber, Symbol::toString, Symbol::pushString,
+                   Symbol::loadBuffer, Symbol::pcall})) {
+        logger("frontend_error=missing_lua_api");
+        state = nullptr;
+        return;
+    }
     const int top = lua.getTop(state);
     try {
         modSourceCache.clear();
@@ -971,7 +855,7 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
             throw std::runtime_error("Cannot bind native game interfaces");
         if (!chat_input::bind(state, module))
             throw std::runtime_error("Cannot bind chat input");
-        if (!emotes::bind(state, module))
+        if (engine::profile().capabilities.nativeEmotes && !emotes::bind(state, module))
             throw std::runtime_error("Cannot bind original emotes");
         lua.createTable(state, 0, 7);
         for (const auto& [key, value] : {std::pair{"opacity", chatAppearance.opacity},
@@ -1022,36 +906,14 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.setField(state, -2, "menu_room_options_save");
         lua.pushClosure(state, officialMenu, 0);
         lua.setField(state, -2, "menu_official");
+        lua.createTable(state, 0, 1);
+        lua.pushBoolean(state, engine::profile().capabilities.nativeEmotes);
+        lua.setField(state, -2, "native_emotes");
+        lua.setField(state, -2, "capabilities");
         lua.setGlobal(state, "_IsaacLan");
         lua.pushString(state, fingerprint.c_str());
         lua.setGlobal(state, "_IsaacLanFingerprint");
-        if (lua.load(state, predictionSource, sizeof(predictionSource) - 1,
-                     "@isaac-lan/presentation/prediction.lua", "t") != 0 ||
-            !invoke(0, 0))
-            throw std::runtime_error("Cannot initialize local movement prediction");
-        lua.createTable(state, 0, std::size(integrationModules));
-        lua.setGlobal(state, "_IsaacLanModules");
-        for (const auto& module : integrationModules) {
-            lua.getGlobal(state, "_IsaacLanModules");
-            if (lua.load(state, module.source, std::strlen(module.source), module.file, "t") != 0 ||
-                !invoke(0, 1))
-                throw std::runtime_error(std::string("Cannot load integration module ") +
-                                         module.file);
-            lua.setField(state, -2, module.name);
-            lua.setTop(state, -2);
-        }
-        if (lua.load(state, stateSource, sizeof(stateSource) - 1, "@isaac-lan/app/world.lua",
-                     "t") != 0 ||
-            !invoke(0, 0))
-            throw std::runtime_error("Cannot initialize authoritative state bridge");
-        if (lua.load(state, bridgeSource, sizeof(bridgeSource) - 1, "@isaac-lan/app/main.lua",
-                     "t") != 0 ||
-            !invoke(0, 0))
-            throw std::runtime_error("Cannot initialize embedded LAN bridge");
-        if (lua.load(state, menuSource, sizeof(menuSource) - 1, "@isaac-lan/presentation/menu.lua",
-                     "t") != 0 ||
-            !invoke(0, 0))
-            throw std::runtime_error("Cannot initialize native LAN menu");
+        app::loadBridge(state, lua, invoke);
         logger("frontend_bridge=READY manifest=" + fingerprint);
         const auto scenario = std::filesystem::path(labRoot) / L"frontend-scenario.lua";
         if (std::filesystem::exists(std::filesystem::path(labRoot) / L".isaac-lan-lab") &&
@@ -1059,8 +921,8 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
             std::ifstream stream(scenario, std::ios::binary);
             const std::string source((std::istreambuf_iterator<char>(stream)),
                                      std::istreambuf_iterator<char>());
-            if (lua.load(state, source.data(), source.size(), "@isolated-frontend-scenario.lua",
-                         "t") != 0 ||
+            if (lua.loadBuffer(state, source.data(), source.size(),
+                               "@isolated-frontend-scenario.lua", "t") != 0 ||
                 !invoke(0, 0))
                 throw std::runtime_error("Isolated frontend scenario failed to initialize");
         }
@@ -1125,7 +987,7 @@ bool install(std::uintptr_t base, const std::wstring& root, void (*log)(const st
     labRoot = root;
     logger = log;
     bindNative = bind;
-    if (!emotes::install(image))
+    if (engine::profile().capabilities.nativeEmotes && !emotes::install(image))
         return false;
     if (MH_CreateHookApi(L"gdi32.dll", "SwapBuffers", reinterpret_cast<void*>(swap),
                          reinterpret_cast<void**>(&originalSwap)) != MH_OK ||

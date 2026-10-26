@@ -59,6 +59,7 @@ def package_game(tmp_path, monkeypatch):
     payload = {
         "format": 1,
         "game_build": profile["game_build"],
+        "backend": profile["backend"],
         "files": files,
         "linux_files": {
             name: installer.digest(package / name) for name in ("install.py", "game-profile.json")

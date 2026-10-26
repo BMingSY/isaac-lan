@@ -12,6 +12,7 @@ import subprocess
 import time
 from testing.engine import finalize_result
 from testing.lua import bundle_input
+from game_profiles import build_profile, lab_profile
 from game_logs import freeze_probe_logs, probe_text, log_path
 from lab_profile import windows
 from check_performance import summarize_tree
@@ -321,6 +322,11 @@ def main():
     }
     if args.exercise_menu:
         result["menu_port"] = args.menu_port
+    selected_profile = build_profile(args.build)
+    for lab in [args.host, args.client, *args.extra_client]:
+        owned_profile = lab_profile(lab)
+        if any(owned_profile[key] != selected_profile[key] for key in ("backend", "game_build")):
+            raise ValueError("Lab game backend differs from the selected build")
     args.output.mkdir(parents=True, exist_ok=False)
     # Freeze both inputs before launching either peer. A build/edit performed
     # while this test runs must not silently change the second peer's version.
@@ -348,12 +354,19 @@ def main():
         ).hexdigest()
         payload = {
             "format": 1,
-            "game_build": "1.9.7.17.J460",
+            "game_build": selected_profile["game_build"],
+            "backend": selected_profile["backend"],
             "files": {
                 "isaac_lan_probe.dll": result["dll_sha256"],
                 "winmm.dll": result["loader_sha256"],
                 "isaac_lan_check.exe": result["checker_sha256"],
             },
+        }
+        shutil.copy2(args.build / "game-profile.json", package)
+        payload["linux_files"] = {
+            "game-profile.json": hashlib.sha256(
+                (package / "game-profile.json").read_bytes()
+            ).hexdigest()
         }
         (package / "payload.json").write_text(json.dumps(payload))
         result["installed_branch"] = True
@@ -746,9 +759,9 @@ def main():
                     stderr=subprocess.STDOUT,
                 )
                 heap_watchers.append((role, watcher, stream, path))
-                deadline = time.monotonic() + 15
+                heap_deadline = time.monotonic() + 15
                 while f"heap_watch_ready pid={pid}" not in path.read_text(errors="replace"):
-                    if watcher.poll() is not None or time.monotonic() >= deadline:
+                    if watcher.poll() is not None or time.monotonic() >= heap_deadline:
                         raise RuntimeError(
                             f"{role} heap observer failed to initialize: {path.read_text(errors='replace')}"
                         )

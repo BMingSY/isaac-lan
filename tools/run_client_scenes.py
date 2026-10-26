@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check held-bag movement and current ambience in one protected LAN session."""
 
+from game_profiles import profile_directory
 import argparse
 from testing.scenes import measure, measure_bag_transitions
 from testing.scenes import build_scene_suite
@@ -85,10 +86,7 @@ def main():
     report = {"passed": False, "restored": False, "command": command}
     try:
         for lab in labs:
-            path = (
-                lab
-                / "profile/Documents/My Games/Binding of Isaac Repentance+/persistentgamedata1.dat"
-            )
+            path = profile_directory(lab) / "persistentgamedata1.dat"
             path.write_bytes(profile_fixture(path.read_bytes(), tainted_cain=True))
         with (output / "engine.log").open("w") as log:
             report["returncode"] = run_engine(

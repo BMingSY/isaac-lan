@@ -311,7 +311,7 @@ local bot = _IsaacLanModules["lanbot"]({
     end,
 }, _IsaacLanModules)
 local chatLimits = native.chat_limits()
-local emotes = native.emote_count()
+local emotes = native.emote_count and native.emote_count() or 0
 chat = _IsaacLanModules["runtime/chat"]({
     limits = chatLimits,
     nonce = native.api_nonce,

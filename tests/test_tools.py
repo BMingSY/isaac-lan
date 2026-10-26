@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 from testing.gameplay import CASES, CHECKPOINTS, build as build_suite
 from build_package import build
+from game_profiles import source_profile
 from build_release import release
 from check_release import FILES, check
 from game_logs import freeze_probe_logs, probe_path, probe_text
@@ -275,6 +276,7 @@ class PackagingTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.build = self.root / "build"
         self.build.mkdir()
+        (self.build / "game-profile.json").write_text(json.dumps(source_profile()))
         for name in BINARIES:
             (self.build / name).write_bytes(b"fixture:" + name.encode())
         self.tag = "v" + (ROOT / "VERSION").read_text().strip()

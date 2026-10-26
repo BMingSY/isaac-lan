@@ -5,6 +5,7 @@ No gameplay state, rooms, items, health or network input frames are fabricated.
 The Lua observer only reports state; movement and combat use raw XInput buttons.
 """
 
+from game_profiles import profile_directory
 import argparse
 import hashlib
 import json
@@ -122,7 +123,7 @@ class Gameplay:
                     "lan-test-pad.txt",
                 ]:
                     (root / "game" / name).unlink(missing_ok=True)
-                profile = root / "profile/Documents/My Games/Binding of Isaac Repentance+"
+                profile = profile_directory(root)
                 (profile / "gamestate1.dat").unlink(missing_ok=True)
                 (profile / "log.txt").unlink(missing_ok=True)
                 result = subprocess.check_output(
@@ -576,7 +577,7 @@ class Gameplay:
         self.wait(lambda: self.state("client")["pause"] == 1)
         self.capture("final-paused")
         for root in self.roots:
-            log = root / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt"
+            log = profile_directory(root) / "log.txt"
             if "Error in" in log.read_text(errors="replace"):
                 raise RuntimeError("Game callback error in " + str(root))
 
@@ -591,7 +592,7 @@ class Gameplay:
                 (root / "game/lan-human-state.json", f"{role}-final-state.json"),
                 (root / "game/lan-human-floors.jsonl", f"{role}-floors.jsonl"),
                 (
-                    root / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt",
+                    profile_directory(root) / "log.txt",
                     f"{role}-game-before-close.log",
                 ),
             ]:
