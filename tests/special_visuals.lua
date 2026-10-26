@@ -176,4 +176,37 @@ local unrelated = effect(3, 78, 0, "")
 assert(visuals.capture(unrelated, nil, captureSprite) == false)
 visuals.apply(unrelated, false, applySprite)
 assert(not pcall(visuals.apply, unrelated, bodyState, applySprite))
-print("PASS special entity geometry, detached costumes, room return and dice presentation")
+-- Flip changes and clears its alternate independently of the main pedestal.
+local flip = dofile(root .. "/src/bridge/compat/items/flip.lua")({
+    pickup_flip_visual = function(e, visible)
+        if visible ~= nil then
+            e.visible = visible
+            return true
+        end
+        return e.visible, e.alternate
+    end,
+}, enums.EntityType, enums.PickupVariant)
+visuals = dofile(root .. "/src/bridge/compat/visuals.lua")(dogma, splitBody, flip)
+local pedestal, replicaPedestal = effect(5, 100, 1, ""), effect(5, 100, 1, "")
+pedestal.visible, pedestal.alternate = true, { path = "alternate item", frame = 3 }
+replicaPedestal.visible, replicaPedestal.alternate = false, { path = "", frame = 0 }
+local function copyFlip()
+    local value = codec.decode(codec.encode({ visuals.capture(pedestal, nil, captureSprite) }))[1]
+    visuals.apply(replicaPedestal, value, applySprite)
+end
+copyFlip()
+copyFlip()
+assert(replicaPedestal.visible and replicaPedestal.alternate.path == "alternate item")
+pedestal.alternate.path, pedestal.alternate.frame = "flipped item", 7
+copyFlip()
+assert(replicaPedestal.alternate.path == "flipped item" and replicaPedestal.alternate.frame == 7)
+pedestal.SubType = 0 -- The empty pedestal can still hold the alternate item.
+copyFlip()
+assert(replicaPedestal.visible)
+pedestal.visible = false -- Both sides taken, Flip removed, or replica reused after room change.
+copyFlip()
+copyFlip()
+assert(not replicaPedestal.visible)
+assert(visuals.capture(effect(5, 20, 1, ""), nil, captureSprite) == false)
+assert(not pcall(visuals.apply, replicaPedestal, "invalid", applySprite))
+print("PASS special entity geometry, detached costumes, Flip, room return and dice presentation")
