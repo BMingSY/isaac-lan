@@ -1,5 +1,6 @@
 #pragma once
 #include "net/protocol.h"
+#include "net/compatibility.h"
 #include <memory>
 #include <optional>
 
@@ -21,8 +22,8 @@ class Session {
 
   public:
     using Observer = void (*)(std::string_view, double);
-    explicit Session(void (*logger)(const std::string&) = nullptr, Observer observer = nullptr,
-                     bool debugLogs = false);
+    explicit Session(std::string version, void (*logger)(const std::string&) = nullptr,
+                     Observer observer = nullptr, bool debugLogs = false);
     ~Session();
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
@@ -90,6 +91,7 @@ class Session {
     bool isHost() const;
     bool modsDiffer() const;
     const std::string& error() const;
+    const std::optional<CompatibilityFailure>& compatibilityFailure() const;
     const Start& settings() const;
     std::optional<std::uint32_t> verifiedTick() const;
     std::uint16_t port() const;

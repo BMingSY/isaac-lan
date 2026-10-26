@@ -462,6 +462,9 @@ function _IsaacLanMenuRender(
     end
     local message = status.saveError and status.saveError ~= "" and status.saveError
         or (ui.errorText ~= "" and ui.errorText or networkError)
+    local compatibilityLines = (not status.saveError or status.saveError == "")
+        and ui.errorText == ""
+        and model.compatibilityError(status)
     local messageColor = red
     if message == "" and phase == Phase.lobby and challenge and challenge.nextBag == 1 then
         local missing = {}
@@ -478,7 +481,7 @@ function _IsaacLanMenuRender(
         message = "Mod 不一致或无法核对，可能会造成未知的影响"
         messageColor = amber
     end
-    local footerY = message ~= "" and 235 or 243
+    local footerY = compatibilityLines and 206 or (message ~= "" and 235 or 243)
     if rulesPage then
         text(
             host and "方向选择 · 确认勾选 · 返回退出"
@@ -509,7 +512,11 @@ function _IsaacLanMenuRender(
             10
         )
     end
-    if message ~= "" then
+    if compatibilityLines then
+        for i, line in ipairs(compatibilityLines) do
+            centered(line, 240, 212 + i * 12, 10, red, 430)
+        end
+    elseif message ~= "" then
         centered(message:sub(1, 100), 240, 250, 10, messageColor)
     end
     return visible

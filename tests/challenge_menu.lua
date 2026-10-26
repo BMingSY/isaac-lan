@@ -481,6 +481,49 @@ status.pendingSave, status.saveError = 0, ""
 draw()
 assert(labels["创建房间"] and not labels["重试保存联机存档"])
 
+-- Compatibility failures retain full versions, including a long prerelease,
+-- without UTF-8 truncation or colliding with the existing menu controls.
+status.phase, status.hosting, status.players = 4, 0, 1
+_IsaacLanMenuOpen(true)
+local localVersion = "0.6.0-rc." .. string.rep("1", 23)
+for reason, title in pairs({
+    version = "无法加入：Isaac LAN 版本不一致",
+    fingerprint = "无法加入：版本号相同，但构建不一致",
+    protocol = "无法加入：联机协议不一致",
+    unavailable = "无法加入：未能核对房主版本",
+}) do
+    local remote = reason == "unavailable" and ""
+        or (reason == "version" and "0.7.0-rc." .. string.rep("2", 23) or localVersion)
+    status.compatibilityError =
+        { reason = reason, localVersion = localVersion, remoteVersion = remote }
+    draw()
+    local versions = "房主："
+        .. (remote == "" and "未知" or remote)
+        .. "　你的版本："
+        .. localVersion
+    assert(
+        labels[title]
+            and labels[versions]
+            and labels["请确认双方使用相同版本和构建的 Isaac LAN。"]
+    )
+    assert(labels["加入房间"] and not labels["P1"] and not labels["准备"])
+    assert(utf8.len(versions) and labelPositions[title].y > labelPositions["返回"].y)
+    assert(
+        labelPositions[versions].y > labelPositions[title].y and labelPositions[versions].y < 260
+    )
+    assert(
+        remote == "" or #scaledLabels > 0,
+        "Long versions were truncated instead of fitting the footer"
+    )
+end
+status.phase, status.compatibilityError = 1, nil
+draw()
+assert(
+    not labels["无法加入：未能核对房主版本"],
+    "Retry retained the previous mismatch"
+)
+status.phase, status.hosting, status.players = 0, 1, 2
+
 -- An unrestricted challenge keeps ordinary character cycling on both peers.
 local phaseValues = dofile(root .. "/tests/fixtures/net_phases.lua")
 local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(

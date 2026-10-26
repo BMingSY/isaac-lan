@@ -53,6 +53,16 @@ if(BUILD_TESTING AND ISAAC_LAN_LZ4_SOURCE_DIR)
     endif()
 endif()
 if(BUILD_TESTING)
+    add_executable(isaac_lan_compatibility_test tests/compatibility_test.cpp)
+    target_include_directories(isaac_lan_compatibility_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_compatibility_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_compatibility_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME net.compatibility-codec COMMAND isaac_lan_compatibility_test)
+    set_tests_properties(net.compatibility-codec PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_connection_settings_test tests/connection_settings_test.cpp
                                                       src/presentation/connection_settings.cpp)
     target_include_directories(isaac_lan_connection_settings_test PRIVATE src)
@@ -567,6 +577,9 @@ if(BUILD_TESTING)
         run-rules
         room-options
         handshake
+        compatibility-versions
+        compatibility-rejoin
+        compatibility-wire
         host-names
         ipv6-addresses
         ipv6-inputs

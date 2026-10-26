@@ -15,6 +15,7 @@ using Clock = std::chrono::steady_clock;
 using namespace datagram;
 constexpr std::size_t maxDatagramMessage = maxWorldSize + 128;
 constexpr auto closeGrace = std::chrono::seconds(2);
+constexpr auto compatibilityTimeout = std::chrono::seconds(5);
 struct PacketAccount {
     std::shared_ptr<ConnectionPipe> pipe;
     std::size_t bytes;
@@ -80,6 +81,8 @@ struct DatagramConnection {
     ENetPeer* peer;
     std::shared_ptr<ConnectionPipe> pipe;
     bool authority;
+    bool compatible = false, rejected = false;
+    std::optional<Clock::time_point> handshakeAt;
     WorldGeneration generation{};
     std::uint32_t fence = 0;
     WorldTransfer world;
@@ -119,6 +122,29 @@ struct DatagramConnection {
     ~DatagramConnection() {
         // Releasing packets also releases their queue accounting.
         enet_peer_reset(peer);
+    }
+    void beginCompatibility() {
+        handshakeAt = Clock::now();
+        const auto bytes = compatibilityPacket(pipe->build);
+        auto* packet = enet_packet_create(bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
+        if (!packet)
+            throw std::runtime_error("Cannot allocate compatibility packet");
+        if (enet_peer_send(peer, reliableChannel, packet)) {
+            enet_packet_destroy(packet);
+            throw std::runtime_error("Cannot send compatibility packet");
+        }
+    }
+    void rejectCompatibility(CompatibilityFailure failure) {
+        if (rejected)
+            return;
+        rejected = true;
+        closingAt = Clock::now();
+        pipe->error = failure.message();
+        pipe->compatibilityFailure = std::move(failure);
+        pipe->state.store(ConnectionPipe::failed, std::memory_order_release);
+    }
+    void unavailable() {
+        rejectCompatibility({CompatibilityIssue::unavailable, pipe->build.version, {}});
     }
     bool capacity() const {
         return !pipe->incoming.full() && pipe->incomingBytes.load() < maxIncomingBytes;
@@ -192,6 +218,30 @@ struct DatagramConnection {
     }
     void receive(std::span<const std::uint8_t> packet, enet_uint8 channel, StateCompression& codec,
                  StateCompression& worldCodec) {
+        if (rejected)
+            return;
+        if (!compatible) {
+            // Never decode gameplay, compressed bytes or bulk transfers until
+            // both peers have presented the same version, build and protocol.
+            if (channel != reliableChannel) {
+                unavailable();
+                return;
+            }
+            BuildIdentity remote;
+            try {
+                remote = readCompatibility(packet);
+            } catch (const std::exception&) {
+                unavailable();
+                return;
+            }
+            if (auto failure = checkCompatibility(pipe->build, remote))
+                rejectCompatibility(std::move(*failure));
+            else {
+                compatible = true;
+                pipe->state.store(ConnectionPipe::connected, std::memory_order_release);
+            }
+            return;
+        }
         Reader envelope(packet);
         const auto kind = static_cast<Envelope>(envelope.u8());
         const auto context = envelope.u32();
@@ -291,8 +341,19 @@ struct DatagramConnection {
         }
         if (pipe->closing.load() && !closingAt)
             closingAt = Clock::now();
-        if (pipe->state.load() == ConnectionPipe::connecting)
-            return !closingAt;
+        if (!compatible) {
+            if (!rejected && handshakeAt && Clock::now() - *handshakeAt >= compatibilityTimeout)
+                unavailable();
+            // Drain our reliable identity before disconnecting so the other
+            // endpoint can report both versions even when we reject first.
+            if (closingAt) {
+                if (peer->state == ENET_PEER_STATE_CONNECTED)
+                    enet_peer_disconnect_later(peer, 0);
+                return Clock::now() - *closingAt < closeGrace &&
+                       peer->state != ENET_PEER_STATE_DISCONNECTED;
+            }
+            return true;
+        }
         synchronizeSender();
         std::optional<std::vector<std::uint8_t>> input;
         bool receiptChanged = false;
@@ -489,8 +550,12 @@ struct DatagramConnection {
 };
 } // namespace
 
-std::shared_ptr<ConnectionPipe> NetworkIo::connectDatagram(const ENetAddress& address) {
+std::shared_ptr<ConnectionPipe> NetworkIo::connectDatagram(const ENetAddress& address,
+                                                           const BuildIdentity& build) {
+    if (!build.valid())
+        throw std::runtime_error("Invalid local build identity");
     auto pipe = std::make_shared<ConnectionPipe>(true);
+    pipe->build = build;
     pipe->address = address;
     pipe->datagrams = std::make_shared<DatagramHost>(std::nullopt, address.family);
     auto queued = pipe;
@@ -499,8 +564,12 @@ std::shared_ptr<ConnectionPipe> NetworkIo::connectDatagram(const ENetAddress& ad
     wake.signal();
     return pipe;
 }
-std::shared_ptr<ListenerPipe> NetworkIo::listenDatagram(std::uint16_t port) {
+std::shared_ptr<ListenerPipe> NetworkIo::listenDatagram(std::uint16_t port,
+                                                        const BuildIdentity& build) {
+    if (!build.valid())
+        throw std::runtime_error("Invalid local build identity");
     auto pipe = std::make_shared<ListenerPipe>();
+    pipe->build = build;
     pipe->datagrams = std::make_shared<DatagramHost>(port);
     pipe->port = pipe->datagrams->handle->address.port;
     auto queued = pipe;
@@ -525,7 +594,7 @@ void NetworkIo::runDatagrams() {
                 auto pipe = *value;
                 Endpoint endpoint{pipe->datagrams, {}, {}};
                 auto* peer = enet_host_connect(endpoint.host->handle, &*pipe->address, channelCount,
-                                               protocolVersion);
+                                               compatibilityConnectData);
                 if (!peer)
                     throw std::runtime_error("Cannot connect UDP peer");
                 endpoint.connections.emplace(
@@ -567,6 +636,8 @@ void NetworkIo::runDatagrams() {
                         // An unreachable address must not stop the worker that
                         // will service the next DNS candidate.
                         for (const auto& [peer, connection] : e.connections) {
+                            if (connection->rejected)
+                                continue;
                             connection->pipe->error = "UDP service failed";
                             connection->pipe->state.store(ConnectionPipe::failed,
                                                           std::memory_order_release);
@@ -587,22 +658,25 @@ void NetworkIo::runDatagrams() {
                         // This call queues a command, so it follows the handshake.
                         enet_peer_throttle_configure(event.peer, 500, 4, 0);
                         if (found == e.connections.end()) {
-                            if (closing || !e.listener || e.listener->accepted.full() ||
-                                event.data != protocolVersion) {
+                            if (closing || !e.listener || e.listener->accepted.full()) {
                                 enet_peer_disconnect_now(event.peer, 0);
                                 continue;
                             }
-                            auto pipe = std::make_shared<ConnectionPipe>(false);
+                            auto pipe = std::make_shared<ConnectionPipe>(true);
+                            pipe->build = e.listener->build;
                             e.connections.emplace(event.peer, std::make_unique<DatagramConnection>(
                                                                   event.peer, pipe, true));
+                            e.connections.at(event.peer)->beginCompatibility();
                             e.listener->accepted.push(std::move(pipe));
                         } else
-                            found->second->pipe->state.store(ConnectionPipe::connected,
-                                                             std::memory_order_release);
+                            found->second->beginCompatibility();
                     } else if (event.type == ENET_EVENT_TYPE_DISCONNECT) {
                         if (found != e.connections.end()) {
-                            found->second->pipe->state.store(ConnectionPipe::closed,
-                                                             std::memory_order_release);
+                            if (!found->second->compatible && found->second->handshakeAt)
+                                found->second->unavailable();
+                            else
+                                found->second->pipe->state.store(ConnectionPipe::closed,
+                                                                 std::memory_order_release);
                             e.connections.erase(found);
                         }
                     } else if (event.type == ENET_EVENT_TYPE_RECEIVE) {

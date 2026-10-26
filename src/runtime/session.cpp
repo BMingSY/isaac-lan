@@ -801,7 +801,7 @@ int host(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(logger,
+    session = std::make_unique<lan::Session>(ISAAC_LAN_VERSION, logger,
                                              diagnostics::enabled() ? diagnostics::sample : nullptr,
                                              logging::enabled(logging::Level::debug));
     sessionFingerprint = fingerprint;
@@ -818,7 +818,7 @@ int join(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(logger,
+    session = std::make_unique<lan::Session>(ISAAC_LAN_VERSION, logger,
                                              diagnostics::enabled() ? diagnostics::sample : nullptr,
                                              logging::enabled(logging::Level::debug));
     sessionFingerprint = fingerprint;
@@ -930,6 +930,17 @@ int poll(lua_State* L) {
     integer("scene", backend::scene());
     lua.pushString(L, session ? session->error().c_str() : "");
     lua.setField(L, -2, "error");
+    if (session && session->phase() == lan::Phase::failed && session->compatibilityFailure()) {
+        const auto& failure = *session->compatibilityFailure();
+        lua.createTable(L, 0, 3);
+        lua.pushString(L, lan::compatibilityName(failure.issue));
+        lua.setField(L, -2, "reason");
+        lua.pushString(L, failure.localVersion.c_str());
+        lua.setField(L, -2, "localVersion");
+        lua.pushString(L, failure.remoteVersion.c_str());
+        lua.setField(L, -2, "remoteVersion");
+        lua.setField(L, -2, "compatibilityError");
+    }
     lua.pushString(L, session ? session->settings().seed.c_str() : "");
     lua.setField(L, -2, "seed");
     integer("difficulty", session ? session->settings().difficulty : 0);
