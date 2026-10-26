@@ -41,5 +41,43 @@ for _, workload in ipairs(workloads) do
     local invalid = schema.unpack(codec.decode(dynamicBytes), 42)
     invalid.actors[1][fields.actor.entity][fields.entity.id] = -100
     assert(not pcall(layers.join, invalid, codec.decode(stableBytes)))
+
+    for _, layout in ipairs({ "single", "same", "split", "dimension", "disconnected" }) do
+        local source = schema.unpack(codec.decode(complete), 42)
+        source.connected = (layout == "single" or layout == "disconnected") and 3 or 15
+        source.locations = {
+            { 0, 0, 84, 0, 0 },
+            { 1, 0, 84, 0, 0 },
+            { 2, layout == "dimension" and 1 or 0, layout == "split" and 85 or 84, 0, 0 },
+            { 3, 0, 86, 0, 0 },
+        }
+        local memo = {}
+        local peers = source.connected == 3 and 1 or 3
+        for slot = 1, peers do
+            source.slot = slot
+            local dynamic, dependency = layers.split(source, memo)
+            assert(codec.encode(dynamic.room) == codec.encode(layers.split(source).room))
+            local dynamicBytes = codec.encode(schema.pack(dynamic), memo)
+            local dependencyBytes = codec.encode(dependency, memo)
+            local joined = layers.join(
+                schema.unpack(codec.decode(dynamicBytes), 42),
+                codec.decode(dependencyBytes)
+            )
+            assert(codec.encode(schema.pack(joined)) == codec.encode(schema.pack(source)))
+            if slot == 1 then
+                local cached = memo[source.room[fields.room.entities]]
+                if layout == "same" then
+                    assert(
+                        cached and cached.bytes == codec.encode(source.room[fields.room.entities])
+                    )
+                else
+                    assert(cached == nil, "Room fragments cached without another viewer")
+                end
+            end
+        end
+        if peers == 1 then
+            assert(next(memo) == nil, "Single recipient acquired extra encoding fragments")
+        end
+    end
 end
-print("state layers round trips and dependency identity passed")
+print("state layers round trips, dependency identity and connected same-room fragment reuse passed")

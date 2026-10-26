@@ -81,12 +81,14 @@ for _, mode in ipairs({ "client", "not-ready", "custom-price", "free", "shop", "
     assert(writes == 2, "Keeper pricing escaped its authoritative Devil deal scope")
 end
 print("PASS per-buyer native Devil price, replica/readiness and custom-price boundaries")
+local enumerations = 0
 Isaac = {
     GetPlayer = function(index)
         assert(index == 0)
         return player
     end,
     GetRoomEntities = function()
+        enumerations = enumerations + 1
         return {
             {
                 ToPickup = function()
@@ -117,3 +119,15 @@ assert(writes == 4)
 module.present(2)
 assert(writes == 4)
 print("PASS local host and guest price display scopes")
+local scanned = enumerations
+for _, kind in ipairs({ 1, 2, 5 }) do
+    roomType, authority = kind, 1
+    module.update()
+    authority = 0
+    module.present(1)
+end
+assert(enumerations == scanned, "Ordinary rooms scanned entities for Devil prices")
+roomType, nativePrice = 14, -2
+module.present(1)
+assert(enumerations == scanned + 1 and pickup.Price == -2, "Devil entry skipped price refresh")
+print("PASS unrelated rooms skip entity enumeration and Devil entry still refreshes")
