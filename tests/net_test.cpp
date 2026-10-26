@@ -22,7 +22,11 @@
 #include <source_location>
 using namespace isaac::lan;
 namespace {
-using TestSession = Session;
+constexpr auto testVersion = "0.6.0";
+constexpr std::uint16_t legacyProtocolVersion = 45;
+struct TestSession : Session {
+    explicit TestSession(std::string version = testVersion) : Session(std::move(version)) {}
+};
 LobbyAccess testAccess() {
     LobbyAccess access{{0, 1, 2, 3, 7, 23}, {{1001, 3}}, {0, 1, 2, 3, 7, 23}};
     for (const auto& definition : isaac::compat::challenges::definitions)
@@ -1627,6 +1631,8 @@ void runRules() {
 struct WirePeer {
     ENetHost* endpoint = nullptr;
     ENetPeer* peer = nullptr;
+    bool legacy = false;
+    std::vector<std::vector<std::uint8_t>> received;
     explicit WirePeer(bool listen = false) {
         require(enet_initialize() == 0, "Wire fixture initialization failed");
         ENetAddress address{};
@@ -1639,31 +1645,41 @@ struct WirePeer {
         enet_host_destroy(endpoint);
         enet_deinitialize();
     }
-    void connect(std::uint16_t port) {
+    void connect(std::uint16_t port, std::uint32_t connectData = compatibilityConnectData) {
         ENetAddress address{};
         address.host = htonl(INADDR_LOOPBACK);
         address.port = port;
-        peer = enet_host_connect(endpoint, &address, datagram::channelCount, protocolVersion);
+        peer = enet_host_connect(endpoint, &address, datagram::channelCount, connectData);
         require(peer != nullptr, "Wire fixture connect failed");
     }
     void poll() {
         ENetEvent event{};
         while (enet_host_service(endpoint, &event, 0) > 0) {
-            if (event.type == ENET_EVENT_TYPE_CONNECT)
+            if (event.type == ENET_EVENT_TYPE_CONNECT) {
                 peer = event.peer;
-            else if (event.type == ENET_EVENT_TYPE_RECEIVE)
+                if (legacy && event.data != legacyProtocolVersion)
+                    enet_peer_disconnect_now(event.peer, 0);
+            } else if (event.type == ENET_EVENT_TYPE_RECEIVE) {
+                received.emplace_back(event.packet->data,
+                                      event.packet->data + event.packet->dataLength);
                 enet_packet_destroy(event.packet);
+            }
         }
+    }
+    void sendPacket(std::span<const std::uint8_t> bytes) {
+        auto* packet = enet_packet_create(bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
+        require(packet && enet_peer_send(peer, datagram::reliableChannel, packet) == 0,
+                "Wire fixture send failed");
+        enet_host_flush(endpoint);
+    }
+    void identify(const BuildIdentity& build) {
+        sendPacket(compatibilityPacket(build));
     }
     void send(const Writer& message) {
         Writer envelope(static_cast<Message>(datagram::Envelope::message));
         envelope.u32(0);
         envelope.bytes.insert(envelope.bytes.end(), message.bytes.begin(), message.bytes.end());
-        auto* packet = enet_packet_create(envelope.bytes.data(), envelope.bytes.size(),
-                                          ENET_PACKET_FLAG_RELIABLE);
-        require(packet && enet_peer_send(peer, datagram::reliableChannel, packet) == 0,
-                "Wire fixture send failed");
-        enet_host_flush(endpoint);
+        sendPacket(envelope.bytes);
     }
 };
 void roomOptions() {
@@ -1760,6 +1776,7 @@ void accessWireValidation() {
             return remote.peer->state == ENET_PEER_STATE_CONNECTED;
         });
         Writer hello(Message::hello);
+        remote.identify({testVersion, "wire-access"});
         hello.u16(protocolVersion);
         hello.string("wire-access");
         hello.string(std::string(32, 'a'));
@@ -1806,6 +1823,7 @@ void accessWireValidation() {
             return remote.peer != nullptr;
         });
         Writer welcome(Message::welcome);
+        remote.identify({testVersion, "wire-access"});
         welcome.u8(1);
         remote.send(welcome);
         const RunRules rules = scenario == 1 ? RunRules{1001, 2, 23, 0, true} : RunRules{};
@@ -2188,6 +2206,11 @@ void handshake() {
     });
     require(host.phase() == Phase::lobby && host.players() == 1 && !rejected.error().empty(),
             "Rejected handshake damaged host");
+    require(rejected.compatibilityFailure() &&
+                rejected.compatibilityFailure()->issue == CompatibilityIssue::fingerprint &&
+                rejected.compatibilityFailure()->localVersion == testVersion &&
+                rejected.compatibilityFailure()->remoteVersion == testVersion,
+            "Same-version DLL mismatch lost its specific failure");
     TestSession guest;
     require(guest.join("127.0.0.1", host.port(), "supported", {}, {}, testAccess()),
             "Valid join after rejection failed");
@@ -2205,6 +2228,196 @@ void handshake() {
     require(!badIdentity.join("127.0.0.1", host.port(), "supported", "not-an-identity", {},
                               testAccess()),
             "Invalid identity accepted");
+}
+void requireCompatibilityFailure(Session& guest, CompatibilityIssue issue, std::string_view local,
+                                 std::string_view remote) {
+    const auto& failure = guest.compatibilityFailure();
+    require(guest.phase() == Phase::failed && failure && failure->issue == issue &&
+                failure->localVersion == local && failure->remoteVersion == remote,
+            "Compatibility failure lost its reason or versions");
+    require(!guest.takeState().has_value(), "Rejected connection exposed world state");
+}
+void compatibilityVersions() {
+    static std::vector<std::string> logs;
+    for (const auto& versions : {std::pair{"0.6.0", "0.5.1"}, std::pair{"0.5.1", "0.6.0"},
+                                 std::pair{"0.6.0", "0.6.0-rc.1"}}) {
+        logs.clear();
+        Session host(versions.first, [](const std::string& message) { logs.push_back(message); });
+        TestSession existing(versions.first), rejected(versions.second), accepted(versions.first);
+        require(host.host(0, "same-dll", "host-mods", testAccess()), "Host failed");
+        require(
+            existing.join("127.0.0.1", host.port(), "same-dll", {}, "different-mods", testAccess()),
+            "Existing peer join failed");
+        until([&] {
+            host.poll();
+            existing.poll();
+            return existing.phase() == Phase::lobby && host.players() == 2;
+        });
+        require(rejected.join("127.0.0.1", host.port(), "same-dll", {}, {}, testAccess()),
+                "Rejected peer connection failed");
+        until([&] {
+            host.poll();
+            existing.poll();
+            rejected.poll();
+            return rejected.phase() == Phase::failed;
+        });
+        requireCompatibilityFailure(rejected, CompatibilityIssue::version, versions.second,
+                                    versions.first);
+        until([&] {
+            host.poll();
+            return std::any_of(logs.begin(), logs.end(), [&](const auto& log) {
+                return log.find("network_peer_removed") != std::string::npos &&
+                       log.find(versions.first) != std::string::npos &&
+                       log.find(versions.second) != std::string::npos;
+            });
+        });
+        require(host.phase() == Phase::lobby && host.players() == 2 &&
+                    existing.phase() == Phase::lobby && !existing.compatibilityFailure(),
+                "Version rejection disrupted the room or existing peer");
+        require(rejected.reconnect() && !rejected.compatibilityFailure(),
+                "Retry did not clear the prior compatibility failure");
+        until([&] {
+            host.poll();
+            existing.poll();
+            rejected.poll();
+            return rejected.phase() == Phase::failed;
+        });
+        requireCompatibilityFailure(rejected, CompatibilityIssue::version, versions.second,
+                                    versions.first);
+        require(accepted.join("127.0.0.1", host.port(), "same-dll", {}, {}, testAccess()),
+                "Matching version join failed");
+        until([&] {
+            host.poll();
+            existing.poll();
+            accepted.poll();
+            return host.players() == 3 && accepted.phase() == Phase::lobby;
+        });
+        require(accepted.slot() == 2 && host.modsDiffer(),
+                "Rejected peer kept its seat or third-party mods became mandatory");
+    }
+}
+void compatibilityRejoin() {
+    Group group(2);
+    group.ready();
+    group.step(0);
+    const auto identity = group.peers[1]->identity();
+    group.peers[1]->close();
+    until([&] {
+        group.peers[0]->poll();
+        return group.peers[0]->connectedMask() == 1;
+    });
+    for (const bool changedVersion : {true, false}) {
+        TestSession rejected(changedVersion ? "0.6.1" : testVersion);
+        require(rejected.join("127.0.0.1", group.peers[0]->port(),
+                              changedVersion ? "state-test" : "different-dll", identity, {},
+                              testAccess()),
+                "Rejoin connection failed");
+        until([&] {
+            group.peers[0]->poll();
+            rejected.poll();
+            return rejected.phase() == Phase::failed;
+        });
+        requireCompatibilityFailure(rejected,
+                                    changedVersion ? CompatibilityIssue::version
+                                                   : CompatibilityIssue::fingerprint,
+                                    changedVersion ? "0.6.1" : testVersion, testVersion);
+        require(group.peers[0]->phase() == Phase::running && group.peers[0]->connectedMask() == 1 &&
+                    group.peers[0]->players() == 2 && !group.peers[0]->checkpointNeeded(),
+                "Rejected rejoin changed the running room or requested a checkpoint");
+    }
+    require(group.step(1).connected == 1, "Rejected rejoin interrupted host simulation");
+    require(group.peers[1]->reconnect(), "Matching reconnect failed");
+    until([&] {
+        group.poll();
+        return group.peers[1]->phase() == Phase::waiting;
+    });
+    require(!group.peers[1]->compatibilityFailure(),
+            "Reconnect retained a stale compatibility failure");
+    auto checkpoint = group.peers[0]->settings();
+    checkpoint.snapshot.resize(123, 42);
+    require(group.peers[0]->checkpoint(checkpoint, 2), "Rejoin checkpoint failed");
+    until([&] {
+        group.poll();
+        return group.peers[1]->phase() == Phase::running;
+    });
+    require(group.peers[1]->slot() == 1 && group.peers[1]->identity() == identity,
+            "Rejected rejoin displaced the original seat");
+}
+void compatibilityWire() {
+    enum class Scenario { protocol, version, legacy, silent, gameplay, malformed };
+    for (const auto scenario : {Scenario::protocol, Scenario::version, Scenario::legacy,
+                                Scenario::silent, Scenario::gameplay, Scenario::malformed}) {
+        TestSession guest;
+        WirePeer remote(true);
+        remote.legacy = scenario == Scenario::legacy;
+        require(guest.join("127.0.0.1", remote.endpoint->address.port, "wire-compatibility", {}, {},
+                           testAccess()),
+                "Wire join failed");
+        until([&] {
+            guest.poll();
+            remote.poll();
+            return remote.peer != nullptr;
+        });
+        if (scenario == Scenario::protocol || scenario == Scenario::version)
+            remote.identify({scenario == Scenario::version ? "0.7.0" : testVersion,
+                             "wire-compatibility", protocolVersion + 1});
+        else if (scenario == Scenario::gameplay) {
+            Writer start(Message::start);
+            remote.send(start); // Must be rejected before any gameplay decoder runs.
+        } else if (scenario == Scenario::malformed) {
+            auto packet = compatibilityPacket({testVersion, "wire-compatibility"});
+            packet.push_back(0);
+            remote.sendPacket(packet);
+        }
+        until([&] {
+            guest.poll();
+            remote.poll();
+            return guest.phase() == Phase::failed;
+        });
+        requireCompatibilityFailure(guest,
+                                    scenario == Scenario::protocol ? CompatibilityIssue::protocol
+                                    : scenario == Scenario::version
+                                        ? CompatibilityIssue::version
+                                        : CompatibilityIssue::unavailable,
+                                    testVersion,
+                                    scenario == Scenario::protocol  ? testVersion
+                                    : scenario == Scenario::version ? "0.7.0"
+                                                                    : "");
+    }
+    // A legacy guest bypassing the new connect marker still cannot enter a room.
+    TestSession host;
+    require(host.host(0, "wire-compatibility", {}, testAccess()), "Legacy fixture host failed");
+    WirePeer legacy;
+    legacy.connect(host.port(), legacyProtocolVersion);
+    until([&] {
+        host.poll();
+        legacy.poll();
+        return legacy.peer->state == ENET_PEER_STATE_CONNECTED;
+    });
+    Writer hello(Message::hello);
+    hello.u16(legacyProtocolVersion);
+    hello.string("wire-compatibility");
+    hello.string(std::string(32, 'a'));
+    hello.string("");
+    hello.access(testAccess());
+    legacy.send(hello);
+    until([&] {
+        host.poll();
+        legacy.poll();
+        return legacy.peer->state == ENET_PEER_STATE_DISCONNECTED;
+    });
+    require(host.phase() == Phase::lobby && host.players() == 1 && !legacy.received.empty(),
+            "Legacy guest bypassed preflight or did not receive host metadata");
+    require(readCompatibility(legacy.received.front()).version == testVersion,
+            "Host metadata was lost while rejecting a legacy connection");
+    TestSession valid;
+    require(valid.join("127.0.0.1", host.port(), "wire-compatibility", {}, {}, testAccess()),
+            "Join after legacy rejection failed");
+    until([&] {
+        host.poll();
+        valid.poll();
+        return valid.phase() == Phase::lobby && host.players() == 2;
+    });
 }
 void addressRejoin(Group& g) {
     g.ready();
@@ -2946,6 +3159,9 @@ int main(int argc, char** argv) {
          {"room-options", roomOptions},
          {"lobby-access", lobbyAccess},
          {"handshake", handshake},
+         {"compatibility-versions", compatibilityVersions},
+         {"compatibility-rejoin", compatibilityRejoin},
+         {"compatibility-wire", compatibilityWire},
          {"host-names", hostNames},
          {"ipv6-addresses", ipv6Addresses},
          {"ipv6-inputs", [] { inputsAndStates(2, "::1"); }},

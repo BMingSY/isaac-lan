@@ -6,5 +6,5 @@ inline constexpr std::uint8_t reliableChannel = 0, inputChannel = 1, worldChanne
                               recoveryChannel = 3;
 inline constexpr std::size_t channelCount = 4, mtu = 1200;
 // Generation fences precede new run/floor input and state on the reliable channel.
-enum class Envelope : std::uint8_t { message, world, fence, dependency, shard };
+enum class Envelope : std::uint8_t { message, world, fence, dependency, shard, compatibility = 5 };
 } // namespace isaac::lan::datagram

@@ -50,7 +50,8 @@ struct Session::Impl {
     bool winsock = false, hosting = false, connecting = false, localReady = false,
          initialStarted = false;
     Phase state = Phase::idle;
-    std::string failure, fingerprint, identity, mods, hostIP;
+    std::string failure, version, fingerprint, identity, mods, hostIP;
+    std::optional<CompatibilityFailure> compatibilityFailure;
     std::shared_ptr<HostResolution> resolving;
     std::vector<ENetAddress> hostAddresses;
     std::size_t nextHostAddress = 0;
@@ -99,8 +100,9 @@ struct Session::Impl {
     std::uint64_t snapshotChecksum = 0;
     Clock::time_point progress = Clock::now(), checkpointAt = Clock::now();
 
-    explicit Impl(void (*log)(const std::string&), Observer observe = nullptr, bool debug = false)
-        : observer(observe), debugLogs(debug), logger(log) {
+    explicit Impl(std::string modVersion, void (*log)(const std::string&),
+                  Observer observe = nullptr, bool debug = false)
+        : observer(observe), debugLogs(debug), logger(log), version(std::move(modVersion)) {
         WSADATA data{};
         winsock = WSAStartup(MAKEWORD(2, 2), &data) == 0;
         if (winsock) {
@@ -205,7 +207,8 @@ struct Session::Impl {
         while (nextHostAddress < hostAddresses.size()) {
             const auto& address = hostAddresses[nextHostAddress++];
             try {
-                peers[0] = std::make_unique<Peer>(io, io->connectDatagram(address));
+                peers[0] = std::make_unique<Peer>(
+                    io, io->connectDatagram(address, {version, fingerprint}));
                 connecting = true;
                 const auto now = Clock::now();
                 const auto candidates = hostAddresses.size() - nextHostAddress + 1;
@@ -223,6 +226,9 @@ struct Session::Impl {
     void fail(const std::string& reason) {
         if (state == Phase::failed)
             return;
+        if (!hosting && peers[0] &&
+            peers[0]->pipe->state.load(std::memory_order_acquire) == ConnectionPipe::failed)
+            compatibilityFailure = peers[0]->pipe->compatibilityFailure;
         failure = reason;
         state = Phase::failed;
         if (logger)
@@ -991,6 +997,8 @@ struct Session::Impl {
                     slot = i;
                 });
             } catch (const std::exception& e) {
+                if (logger)
+                    logger("network_rejoin_rejected reason=" + std::string(e.what()));
                 try {
                     Writer w(Message::error);
                     w.string(std::string(e.what()).substr(0, 240));
@@ -1024,15 +1032,17 @@ struct Session::Impl {
         }
     }
 };
-Session::Session(void (*logger)(const std::string&), Observer observer, bool debugLogs)
-    : impl(std::make_unique<Impl>(logger, observer, debugLogs)) {}
+Session::Session(std::string version, void (*logger)(const std::string&), Observer observer,
+                 bool debugLogs)
+    : impl(std::make_unique<Impl>(std::move(version), logger, observer, debugLogs)) {}
 Session::~Session() = default;
 bool Session::host(std::uint16_t port, const std::string& fingerprint, const std::string& mods,
                    const LobbyAccess& access) {
-    if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty() || !access.valid())
+    if (!impl->winsock || impl->state != Phase::idle ||
+        !BuildIdentity{impl->version, fingerprint}.valid() || !access.valid())
         return false;
     try {
-        impl->listener = impl->io->listenDatagram(port);
+        impl->listener = impl->io->listenDatagram(port, {impl->version, fingerprint});
         impl->boundPort = impl->listener->port;
         impl->hosting = true;
         impl->fingerprint = fingerprint;
@@ -1048,7 +1058,8 @@ bool Session::host(std::uint16_t port, const std::string& fingerprint, const std
 bool Session::join(const std::string& ip, std::uint16_t port, const std::string& fingerprint,
                    const std::string& identity, const std::string& mods,
                    const LobbyAccess& access) {
-    if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty() || !access.valid())
+    if (!impl->winsock || impl->state != Phase::idle ||
+        !BuildIdentity{impl->version, fingerprint}.valid() || !access.valid())
         return false;
     try {
         impl->identity = identity.empty() ? randomIdentity() : identity;
@@ -1087,7 +1098,7 @@ bool Session::reconnect() {
     if (retiring.size() >= maxRetiringConnections)
         return false;
     const auto ip = impl->hostIP, identity = impl->identity, fingerprint = impl->fingerprint,
-               mods = impl->mods;
+               mods = impl->mods, version = impl->version;
     const auto port = impl->boundPort;
     const auto logger = impl->logger;
     const auto observer = impl->observer;
@@ -1096,7 +1107,7 @@ bool Session::reconnect() {
     const auto access = impl->localAccess;
     impl->shutdown();
     retiring.push_back(std::move(impl));
-    impl = std::make_unique<Impl>(logger, observer, debug);
+    impl = std::make_unique<Impl>(version, logger, observer, debug);
     impl->choices = choices;
     return join(ip, port, fingerprint, identity, mods, access);
 }
@@ -1276,6 +1287,8 @@ void Session::poll() {
             auto& p = *impl->peers[0];
             const auto status = p.pipe->state.load(std::memory_order_acquire);
             if (status == ConnectionPipe::failed || status == ConnectionPipe::closed) {
+                if (status == ConnectionPipe::failed && p.pipe->compatibilityFailure)
+                    throw std::runtime_error(p.pipe->error);
                 impl->connectNextAddress();
                 return;
             }
@@ -1828,6 +1841,9 @@ bool Session::modsDiffer() const {
 }
 const std::string& Session::error() const {
     return impl->failure;
+}
+const std::optional<CompatibilityFailure>& Session::compatibilityFailure() const {
+    return impl->compatibilityFailure;
 }
 const Start& Session::settings() const {
     return impl->startSettings;

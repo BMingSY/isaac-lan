@@ -1,6 +1,7 @@
 #pragma once
 #include "net/byte_worker.h"
 #include "net/protocol.h"
+#include "net/compatibility.h"
 #include "core/latest_mailbox.h"
 #include "net/reliable_transfer.h"
 #include "net/reliable_receiver.h"
@@ -47,6 +48,7 @@ struct ConnectionPipe {
     enum State { connecting, connected, closed, failed };
     std::shared_ptr<DatagramHost> datagrams;
     std::optional<ENetAddress> address;
+    BuildIdentity build; // Immutable after publication to the network worker.
     SpscQueue<OutgoingPacket, 128> outgoing;
     SpscQueue<IncomingPacket, 128> incoming;
     SpscQueue<NetworkSample, 64> samples;
@@ -61,11 +63,13 @@ struct ConnectionPipe {
     std::atomic<std::size_t> queued{0}, receiveCapacity{0}, incomingBytes{0};
     std::atomic<std::size_t> checkpointSent{0}, bulkBytes{0};
     std::string error; // Written once, published by terminal state release.
+    std::optional<CompatibilityFailure> compatibilityFailure; // Published with failed state.
     explicit ConnectionPipe(bool pending) : state(pending ? connecting : connected) {}
 };
 struct ListenerPipe {
     std::shared_ptr<DatagramHost> datagrams;
     std::uint16_t port = 0;
+    BuildIdentity build;
     SpscQueue<std::shared_ptr<ConnectionPipe>, 4> accepted;
     std::atomic<bool> closing{false}, failed{false};
 };
@@ -96,8 +100,9 @@ class NetworkIo {
         if (failed.load(std::memory_order_acquire))
             throw std::runtime_error(failure);
     }
-    std::shared_ptr<ConnectionPipe> connectDatagram(const ENetAddress& address);
-    std::shared_ptr<ListenerPipe> listenDatagram(std::uint16_t port);
+    std::shared_ptr<ConnectionPipe> connectDatagram(const ENetAddress& address,
+                                                    const BuildIdentity& build);
+    std::shared_ptr<ListenerPipe> listenDatagram(std::uint16_t port, const BuildIdentity& build);
     void signal() {
         wake.signal();
     }

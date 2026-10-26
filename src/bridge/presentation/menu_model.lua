@@ -5,6 +5,27 @@ return function(Phase, Command, endpoint)
     local function idle(phase)
         return phase == Phase.idle or phase == Phase.failed or phase == Phase.closed
     end
+    local function compatibilityError(status)
+        local failure = status.compatibilityError
+        if status.phase ~= Phase.failed or not failure then
+            return nil
+        end
+        local reasons = {
+            version = "无法加入：Isaac LAN 版本不一致",
+            fingerprint = "无法加入：版本号相同，但构建不一致",
+            protocol = "无法加入：联机协议不一致",
+            unavailable = "无法加入：未能核对房主版本",
+        }
+        local remote = failure.remoteVersion
+        return {
+            reasons[failure.reason] or reasons.unavailable,
+            "房主："
+                .. (remote and remote ~= "" and remote or "未知")
+                .. "　你的版本："
+                .. failure.localVersion,
+            "请确认双方使用相同版本和构建的 Isaac LAN。",
+        }
+    end
     local function validPort(ui)
         local number = tonumber(ui.port)
         if number and number % 1 == 0 and number >= 1 and number <= 65535 then
@@ -312,5 +333,12 @@ return function(Phase, Command, endpoint)
         end
         return rows, notice, ruleCount
     end
-    return { rows = rows, validPort = validPort, remember = remember, idle = idle, back = back }
+    return {
+        rows = rows,
+        validPort = validPort,
+        remember = remember,
+        idle = idle,
+        back = back,
+        compatibilityError = compatibilityError,
+    }
 end
