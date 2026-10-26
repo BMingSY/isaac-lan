@@ -64,7 +64,8 @@ local entityCodec = component("sync/entity_codec")(
         assert(modules["compat/bosses/held_bombs"])(native, EntityType, function()
             return Isaac.GetRoomEntities()
         end),
-        assert(modules["compat/items/split_body"])(native, EntityType, FamiliarVariant)
+        assert(modules["compat/items/split_body"])(native, EntityType, FamiliarVariant),
+        assert(modules["compat/items/flip"])(native, EntityType, PickupVariant)
     ),
     assert(modules["sync/entity_links"])(native, function()
         return Isaac.GetRoomEntities()

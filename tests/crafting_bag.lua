@@ -222,6 +222,7 @@ local function environment()
     modules["sync/entity_links"] = dofile(root .. "/src/bridge/sync/entity_links.lua")
     modules["compat/bosses/held_bombs"] = dofile(root .. "/src/bridge/compat/bosses/held_bombs.lua")
     modules["compat/items/split_body"] = module("compat/items/split_body")
+    modules["compat/items/flip"] = module("compat/items/flip")
     modules["compat/visuals"] = dofile(root .. "/src/bridge/compat/visuals.lua")
     modules["compat/bosses/dogma"] = function()
         return {}

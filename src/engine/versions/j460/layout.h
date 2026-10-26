@@ -86,6 +86,8 @@ inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
 namespace room {
 inline constexpr unsigned size = 0x7898;
+inline constexpr unsigned descriptor = 0x4, type = 0x8;
+inline constexpr unsigned gridWidth = 0xc, gridHeight = 0x10;
 inline constexpr unsigned enteredFrame = 0x11f0;
 inline constexpr unsigned nextEntityIndex = 0x1214;
 inline constexpr unsigned entities = 0x1218;
@@ -104,6 +106,7 @@ inline constexpr unsigned type = 0x8;
 inline constexpr unsigned variant = 0xc;
 inline constexpr unsigned doors = 0x38;
 inline constexpr unsigned shape = 0x48;
+inline constexpr unsigned width = 0x46, height = 0x47;
 inline constexpr int anyVariant = -1;
 inline constexpr int normalMode = 0;
 inline constexpr int specialStage = 0;
@@ -234,6 +237,7 @@ namespace pickup {
 inline constexpr unsigned charge = 0x524, touched = 0x52c, pool = 0x530, varData = 0x59c;
 inline constexpr unsigned optionsIndex = 0x528, price = 0x534, autoUpdatePrice = 0x538;
 inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, state = 0x584;
+inline constexpr unsigned flipSprite = 0x5d0, flipVisible = 0x6d9;
 } // namespace pickup
 namespace player {
 inline constexpr unsigned weapons = 0x13dc;

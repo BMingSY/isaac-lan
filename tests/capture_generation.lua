@@ -230,6 +230,14 @@ local resetView = view(0, 11)
 assert(resetView.stage == 4 and resetView.map[1][8] == "pickups:4")
 assert(first.stage == 1 and first.map[1][8] == "pickups:1", "New generation mutated an old view")
 local Map = dofile(root .. "/src/bridge/sync/fields.lua").map
+-- Occupied off-map rooms have no Level:GetRooms entry, but every peer needs
+-- their descriptor before reconciling the remote player's inventory.
+positions["0"], positions["1"] = { index = -4, dimension = 0 }, { index = -4, dimension = 0 }
+local specialView = view(2, 12)
+assert(#specialView.map == 2 and specialView.map[2][Map.index] == -4)
+assert(specialView.map[2][Map.layout] and specialView.map[2][Map.dimension] == 0)
+positions["0"], positions["1"] = { index = 84, dimension = 0 }, { index = 84, dimension = 0 }
+assert(#view(2, 13).map == 1, "Unoccupied special-room metadata leaked into a new capture")
 deps.challenge = function()
     count("challenge")
     return { 1003, 1, { revision } }

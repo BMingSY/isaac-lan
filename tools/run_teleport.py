@@ -23,7 +23,13 @@ def main():
     parser.add_argument("--port", type=int, default=34300)
     parser.add_argument("--heap-check", action="store_true")
     parser.add_argument("--record", action="store_true")
-    parser.add_argument("--gather", action="store_true", help="Validate the special room rule")
+    suite = parser.add_mutually_exclusive_group()
+    suite.add_argument("--gather", action="store_true", help="Validate the special room rule")
+    suite.add_argument(
+        "--feedback-regressions",
+        action="store_true",
+        help="Validate crawlspace gathering, remote inventory caches and Flip visuals",
+    )
     parser.add_argument(
         "--injected", action="store_true", help="Use explicit injection in owned labs"
     )
@@ -42,6 +48,11 @@ def main():
         completion = (
             "LAN_GATHER PASS special room rule" if args.gather else "LAN_TP PASS teleport commands"
         )
+        if args.feedback_regressions:
+            fixture, completion = (
+                "state_feedback_regressions.lua",
+                "LAN_FEEDBACK PASS regression probes",
+            )
         command = engine_command(
             labs,
             args.build,

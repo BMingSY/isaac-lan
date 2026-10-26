@@ -518,6 +518,34 @@ int entityShadow(lua_State* L) {
         return 1;
     }
 }
+int pickupFlipVisual(lua_State* L) {
+    try {
+        namespace pickup = j460::layout::pickup;
+        const auto entity = entitySprite(L, 1);
+        if (at<unsigned>(entity, j460::layout::entity::type) != 5 ||
+            at<unsigned>(entity, j460::layout::entity::variant) != 100)
+            throw std::runtime_error("Flip visual requires a collectible pedestal");
+        if (lua.getTop(L) != 1) {
+            if (!runtime::replica() || lua.getTop(L) != 2 || lua.type(L, 2) != 1)
+                throw std::runtime_error("Only replicas restore Flip visibility");
+            at<bool>(entity, pickup::flipVisible) = lua.toBoolean(L, 2);
+            lua.pushBoolean(L, true);
+            return 1;
+        }
+        lua.pushBoolean(L, at<bool>(entity, pickup::flipVisible));
+        const auto source = static_cast<Address*>(lua.toUserdata(L, 1));
+        const auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
+        wrapper[0] = source[0];
+        wrapper[1] = entity + pickup::flipSprite;
+        lua.getMetatable(L, 1);
+        lua.setMetatable(L, -2);
+        return 2;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+}
 int familiarBody(lua_State* L) {
     try {
         namespace body = j460::layout::familiarBody;
@@ -816,6 +844,8 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "familiar_tether");
     lua.pushClosure(L, familiarBody, 0);
     lua.setField(L, -2, "familiar_body");
+    lua.pushClosure(L, pickupFlipVisual, 0);
+    lua.setField(L, -2, "pickup_flip_visual");
     lua.pushClosure(L, renderTether, 0);
     lua.setField(L, -2, "familiar_tether_render");
     lua.pushClosure(L, entityShadow, 0);

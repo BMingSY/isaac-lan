@@ -110,6 +110,7 @@ local function stateEnvironment()
                 root .. "/src/bridge/compat/bosses/held_bombs.lua"
             ),
             ["compat/items/split_body"] = dofile(root .. "/src/bridge/compat/items/split_body.lua"),
+            ["compat/items/flip"] = dofile(root .. "/src/bridge/compat/items/flip.lua"),
             ["compat/visuals"] = dofile(root .. "/src/bridge/compat/visuals.lua"),
             ["compat/characters/lazarus"] = dofile(
                 root .. "/src/bridge/compat/characters/lazarus.lua"
