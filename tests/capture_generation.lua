@@ -4,6 +4,7 @@ local factory =
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local schema = dofile(root .. "/src/bridge/sync/world_schema.lua")
 local epoch, revision, calls = 1, 1, {}
+local connected, playerCount = 7, 3
 local function count(name)
     calls[name] = (calls[name] or 0) + 1
 end
@@ -13,7 +14,7 @@ local positions = {
     ["2"] = { index = 85, dimension = 1 },
 }
 local players = {}
-for index = 0, 2 do
+for index = 0, 3 do
     players[index] = {
         ControllerIndex = index + 1,
         Position = { X = index * 10, Y = 20 },
@@ -64,7 +65,7 @@ local function shared(name)
     }
 end
 local deps = {
-    encode = codec.encode,
+    encode = _IsaacLanCodec and _IsaacLanCodec.state_encode or codec.encode,
     schema = schema,
     game = function()
         return {
@@ -72,7 +73,7 @@ local deps = {
                 return level
             end,
             GetNumPlayers = function()
-                return 3
+                return playerCount
             end,
             GetFrameCount = function()
                 return revision * 2
@@ -137,7 +138,7 @@ local deps = {
         end,
         rooms_heads = function()
             count("heads")
-            return { ["0"] = 0, ["1"] = 1, ["2"] = 2 }
+            return { ["0"] = 0, ["1"] = 1, ["2"] = 2, ["3"] = 3 }
         end,
         actor_sprites = function(index)
             return { index }
@@ -147,7 +148,7 @@ local deps = {
         end,
         rooms_connected = function()
             count("connected")
-            return 7
+            return connected
         end,
         map_pickups = function()
             count("pickups")
@@ -261,3 +262,76 @@ assert(
     "Personal discovery changed shared layout"
 )
 print("PASS common capture reuse, per-peer projections, wire equivalence and invalidation")
+
+-- Exercise the production transfer path, including the split between realtime
+-- and stable fields. Compare every cached view with a fresh complete capture.
+local fields = dofile(root .. "/src/bridge/sync/fields.lua")
+local layers = dofile(root .. "/src/bridge/sync/layers.lua")(fields)
+deps.layers = layers
+deps.inventory = function(player)
+    return {
+        player.ControllerIndex,
+        { { 1, revision } },
+        { { 0, 0 } },
+        {},
+        {},
+        { revision, 0 },
+    }
+end
+deps.roomFactory = function()
+    local rooms, atTick, atEpoch = {}
+    return function(_, tick, floorEpoch, at)
+        if atTick ~= tick or atEpoch ~= floorEpoch then
+            rooms, atTick, atEpoch = {}, tick, floorEpoch
+        end
+        local key = at.dimension .. ":" .. at.index
+        rooms[key] = rooms[key]
+            or { true, revision, { { revision } }, {}, "music", key, false, { 0, 0 }, "rails" }
+        return rooms[key]
+    end
+end
+playerCount, connected = 4, 15
+positions["2"] = { index = 84, dimension = 0 }
+positions["3"] = { index = 84, dimension = 0 }
+local transfer = factory(deps)
+local function transferView(slot, tick)
+    local beforeAudio, beforeEvents = calls["audio:" .. slot] or 0, calls["events:" .. slot] or 0
+    local realtime, stable = transfer.capture(slot, tick, true)
+    assert(
+        calls["audio:" .. slot] == beforeAudio + 1 and calls["events:" .. slot] == beforeEvents + 1
+    )
+    local value = layers.join(schema.unpack(codec.decode(realtime), tick), codec.decode(stable))
+    local complete = codec.encode(schema.pack(value))
+    assert(
+        complete == factory(deps).capture(slot, tick),
+        "Layered cache changed authoritative bytes"
+    )
+    return value, complete
+end
+revision = 5
+local saved, savedBytes
+for slot = 1, 3 do
+    local value, bytes = transferView(slot, 20)
+    assert(value.sound == "sound:" .. slot and value.presentation == "events:" .. slot)
+    saved, savedBytes = value, bytes
+end
+assert(transferView(3, 20).actors[1][fields.actor.inventory][fields.inventory.items][1][2] == 5)
+-- A room index in another dimension is a different view. Keep same-room and
+-- split-room recipients together to detect accidental cross-view fragments.
+revision = 6
+positions["2"] = { index = 84, dimension = 1 }
+for slot = 1, 3 do
+    local value = transferView(slot, 21)
+    assert(value.room[fields.room.layout] == (slot == 2 and "1:84" or "0:84"))
+    assert(value.actors[1][fields.actor.entity][2] == (slot ~= 2))
+end
+assert(codec.encode(schema.pack(saved)) == savedBytes, "Later captures mutated a prior view")
+-- Disconnects leave no second recipient, even if its old room is still listed.
+connected, revision = 3, 7
+assert(transferView(1, 22).connected == 3)
+epoch, revision = epoch + 1, 8
+assert(transferView(1, 22).epoch == epoch)
+revision = 9
+transfer.reset()
+assert(transferView(1, 22).actors[1][fields.actor.inventory][fields.inventory.items][1][2] == 9)
+print("PASS layered transfer bytes, peer events, same/split rooms, disconnect, epoch and reset")

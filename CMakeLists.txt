@@ -142,6 +142,14 @@ if(BUILD_TESTING)
                 isaac_lan_state_codec_runner "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_codec.lua"
                 "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(bridge.native-codec PROPERTIES TIMEOUT 60 LABELS "offline;lua;core")
+        add_test(
+            NAME bridge.native-capture-generation
+            COMMAND
+                isaac_lan_state_codec_runner
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/capture_generation.lua"
+                "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.native-capture-generation PROPERTIES TIMEOUT 60 LABELS
+                                                                         "offline;lua;core")
     endif()
     add_executable(isaac_lan_session_store_test tests/session_store_test.cpp
                                                 src/runtime/session_store.cpp)
