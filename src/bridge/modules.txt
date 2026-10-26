@@ -59,6 +59,7 @@ compat/items/black_candle
 compat/items/crafting_bag
 sync/temporary_effects
 compat/items/split_body
+compat/items/flip
 compat/items/attack_preview
 compat/items/room_entry
 compat/items/glitched

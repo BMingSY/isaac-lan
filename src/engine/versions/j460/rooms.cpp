@@ -1772,18 +1772,45 @@ int heads(lua_State* L) {
     }
     return 1;
 }
-void projectRemote(unsigned slot, const SavedLocation& p) {
+bool projectRemote(unsigned slot, const SavedLocation& p) {
     const auto head = participant(slot);
     Key key{p.dimension, p.index};
     auto found = loaded.find(key);
     if (found == loaded.end()) {
+        using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+        const auto descriptor =
+            reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
+                reinterpret_cast<void*>(game()), key.index, key.dimension));
+        const auto data =
+            descriptor ? at<Address>(descriptor, j460::layout::roomDescriptor::data) : 0;
+        if (!data)
+            return false;
         auto room = std::make_unique<Room>();
         room->key = key;
         room->owned = true;
         room->replicaShell = true;
-        room->pointer = reinterpret_cast<Address>(allocate(0x7898));
+        room->pointer = reinterpret_cast<Address>(allocate(j460::layout::room::size));
+        std::memset(reinterpret_cast<void*>(room->pointer), 0, j460::layout::room::size);
         engine<RoomCall>(j460::entry::engineRoomsRoomCall_3e9400)(
             reinterpret_cast<void*>(room->pointer));
+        // Inventory/cache setters can query Room::GetGridCollision even when
+        // the actor is offscreen. A constructor-only shell has a null descriptor.
+        // Borrow floor metadata without loading entities, grids or room entry AI.
+        at<Address>(room->pointer, j460::layout::room::descriptor) = descriptor;
+        at<int>(room->pointer, j460::layout::room::type) =
+            at<int>(data, j460::layout::roomConfig::type);
+        // Native Init includes the border tiles in both grid dimensions.
+        at<int>(room->pointer, j460::layout::room::gridWidth) =
+            at<unsigned char>(data, j460::layout::roomConfig::width) + 2;
+        at<int>(room->pointer, j460::layout::room::gridHeight) =
+            at<unsigned char>(data, j460::layout::roomConfig::height) + 2;
+        for (unsigned i = 0; i < contextOffsets.size(); ++i) {
+            room->context[i] = at<std::uint32_t>(game(), contextOffsets[i]);
+            if (contextOffsets[i] == j460::layout::game::roomIndex)
+                room->context[i] = key.index;
+            else if (contextOffsets[i] == j460::layout::game::dimension)
+                room->context[i] = key.dimension;
+        }
         found = loaded.emplace(key, std::move(room)).first;
     }
     auto from = findRoom(head);
@@ -1797,6 +1824,7 @@ void projectRemote(unsigned slot, const SavedLocation& p) {
             }
             location[actor] = to;
         }
+    return true;
 }
 int syncLocations(lua_State* L) {
     std::size_t size = 0;
@@ -1830,8 +1858,8 @@ int syncLocations(lua_State* L) {
         finishFrame();
         for (const auto& [slot, p] : values) {
             const auto head = participant(slot);
-            if (slot != static_cast<unsigned>(runtime::localViewSlot()))
-                projectRemote(slot, p);
+            if (slot != static_cast<unsigned>(runtime::localViewSlot()) && !projectRemote(slot, p))
+                throw std::runtime_error("Remote replica room has no authoritative descriptor");
             place(head, {p.x, p.y});
         }
         canonical();
@@ -3093,8 +3121,9 @@ bool restoreLocations(const std::vector<SavedLocation>& saved) {
     }
     finishFrame();
     for (unsigned slot = 0; slot < saved.size(); ++slot) {
-        if (runtime::replica() && slot != static_cast<unsigned>(runtime::localViewSlot()))
-            projectRemote(slot, saved[slot]);
+        if (runtime::replica() && slot != static_cast<unsigned>(runtime::localViewSlot()) &&
+            !projectRemote(slot, saved[slot]))
+            return false;
         const auto head = participants[slot];
         const auto room = findRoom(head);
         const Vec2 target{saved[slot].x, saved[slot].y};
@@ -3181,8 +3210,13 @@ struct RoomTransfer {
             loaded.emplace(request.destination, std::move(room));
         } else {
             to = found->second.get();
-            if (to->replicaShell)
+            if (to->replicaShell) {
                 to->context = from->context;
+                // A storage shell owns no backdrop surfaces. Promotion must
+                // initialize graphics even after native inventory setters ran.
+                to->graphicsRefresh = true;
+                to->sceneSnapshot = 0;
+            }
         }
         protect = !created && occupiedCombat(*to, request.player);
         std::optional<std::array<float, 2>> residentPosition;
@@ -3199,6 +3233,13 @@ struct RoomTransfer {
                   : certificatePosition
                       ? std::optional<Vec2>{{(*certificatePosition)[0], (*certificatePosition)[1]}}
                       : std::nullopt;
+        if (!landing && request.routing == RoomRouting::resolved && request.door < 0 &&
+            residentPosition) {
+            // A resolved gather joins an existing room without native Init.
+            // Source coordinates can lie beyond a crawlspace's side exit and
+            // immediately send the entire gathered party to the Error Room.
+            landing = Vec2{(*residentPosition)[0], (*residentPosition)[1]};
+        }
         if (created)
             prepareDepartureMetadata(
                 std::span<std::uint32_t, 3>(reinterpret_cast<std::uint32_t*>(to->pointer), 3),

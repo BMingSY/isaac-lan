@@ -107,26 +107,43 @@ return function(fields)
                     end
                 end
                 deps.reconcileShared(level, actors)
-                local map = {}
+                local map, included = {}, {}
+                local function addRoom(d, index, dimension)
+                    local key = dimension .. ":" .. index
+                    if included[key] then
+                        return
+                    end
+                    included[key] = true
+                    map[#map + 1] = {
+                        [Map.index] = index,
+                        [Map.display] = d.DisplayFlags,
+                        [Map.visited] = d.VisitedCount,
+                        [Map.clear] = d.Clear,
+                        [Map.clearCount] = d.ClearCount,
+                        [Map.flags] = d.Flags,
+                        [Map.dimension] = dimension,
+                        [Map.pickups] = native.map_pickups(index, dimension),
+                        [Map.layout] = native.room_layout(index, dimension),
+                    }
+                end
                 local rooms = level:GetRooms()
                 for i = 0, rooms.Size - 1 do
                     local d = rooms:Get(i)
                     for dimension = 0, 2 do
                         local match = level:GetRoomByIdx(d.SafeGridIndex, dimension)
                         if match and match.Data and match.ListIndex == d.ListIndex then
-                            map[#map + 1] = {
-                                [Map.index] = d.SafeGridIndex,
-                                [Map.display] = d.DisplayFlags,
-                                [Map.visited] = d.VisitedCount,
-                                [Map.clear] = d.Clear,
-                                [Map.clearCount] = d.ClearCount,
-                                [Map.flags] = d.Flags,
-                                [Map.dimension] = dimension,
-                                [Map.pickups] = native.map_pickups(d.SafeGridIndex, dimension),
-                                [Map.layout] = native.room_layout(d.SafeGridIndex, dimension),
-                            }
+                            addRoom(d, d.SafeGridIndex, dimension)
                             break
                         end
+                    end
+                end
+                -- Off-map descriptors are absent from Level:GetRooms(). Remote
+                -- actor inventory still needs their native room metadata.
+                for _, at in pairs(locations) do
+                    if at.index < 0 then
+                        local d = level:GetRoomByIdx(at.index, at.dimension)
+                        assert(d and d.Data, "Missing occupied special-room descriptor")
+                        addRoom(d, at.index, at.dimension)
                     end
                 end
                 shared = {
