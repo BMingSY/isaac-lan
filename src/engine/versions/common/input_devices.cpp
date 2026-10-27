@@ -70,10 +70,12 @@ bool install(std::uintptr_t image, void (*log)(const std::string&)) {
                    (!bindings.update || hook(bindings.update, update, originalUpdate));
     if (success)
         for (unsigned i = 0; i < created; ++i)
-            if (MH_EnableHook(targets[i]) != MH_OK) {
+            if (MH_QueueEnableHook(targets[i]) != MH_OK) {
                 success = false;
                 break;
             }
+    if (success)
+        success = MH_ApplyQueued() == MH_OK;
     if (!success) {
         while (created)
             MH_RemoveHook(targets[--created]);

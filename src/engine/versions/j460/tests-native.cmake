@@ -76,7 +76,8 @@ set_tests_properties(native.character-catalog PROPERTIES TIMEOUT 30 LABELS "offl
 add_executable(
     isaac_lan_pause_menu_test
     tests/pause_menu_test.cpp ${ISAAC_LAN_BACKEND_DIR}/pause_menu.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/input_devices.cpp ${ISAAC_LAN_BACKEND_DIR}/../common/input_devices.cpp)
+    ${ISAAC_LAN_BACKEND_DIR}/../common/pause_menu.cpp ${ISAAC_LAN_BACKEND_DIR}/input_devices.cpp
+    ${ISAAC_LAN_BACKEND_DIR}/../common/input_devices.cpp)
 target_include_directories(isaac_lan_pause_menu_test PRIVATE src)
 target_link_libraries(isaac_lan_pause_menu_test PRIVATE minhook)
 if(MINGW)

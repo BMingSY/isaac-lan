@@ -22,7 +22,7 @@
 
 装配层注入运行、同步、兼容与表现组件。运行协调器通过 [`engine/session_backend.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/session_backend.h) 调用具名能力；J460 后端安装 Hook，回调只传普通值和限同步调用的原版操作，不向运行层暴露原生对象。Lua ABI 声明与符号加载共用 [`engine/lua_api.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。
 
-版本选择由 [Backend.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/Backend.cmake) 在构建时完成，每个 DLL 只链接一个后端。[Profile](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/profile.h) 提供版本身份、资料目录、Lua 模块和已实现的能力；公共版本检查读取同一份生成描述。ABI、Hook 原函数和借用对象声明留在后端私有头中；运行、表现和诊断组件使用具名能力查询状态。两版已核对一致的原生流 ABI、目录算法、会话回调装配和进度复制使用后端内部的 [common](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/common) 实现；各版绑定仍持有自己的地址、对象偏移、数组边界和调用参数。一个进程内不切换后端。
+版本选择由 [Backend.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/Backend.cmake) 在构建时完成，每个 DLL 只链接一个后端。[Profile](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/profile.h) 提供版本身份、资料目录、Lua 模块和已实现的能力；公共版本检查读取同一份生成描述。ABI、Hook 原函数和借用对象声明留在后端私有头中；运行、表现和诊断组件使用具名能力查询状态。两版已核对一致的原生流 ABI、目录算法、会话回调装配、设备事务、暂停菜单访问和进度复制使用后端内部的 [common](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/common) 实现；各版绑定仍持有自己的地址、对象偏移、数组边界和调用参数。一个进程内不切换后端。
 
 [Lua 装配](https://github.com/BMingSY/isaac-lan/blob/main/src/app/lua_bridge.cpp)与[构建指纹](https://github.com/BMingSY/isaac-lan/blob/main/src/app/bridge_manifest.cpp)由应用组件管理；后端在原生 Lua 初始化后调用装配，并负责状态销毁通知和栈恢复。指纹包含游戏版本及扩展 DLL 的内容，Mod 清单保持独立提示。Windows 文字、剪贴板和输入法处理位于[表现组件](https://github.com/BMingSY/isaac-lan/blob/main/src/presentation/chat_input.cpp)，使用共用 Lua ABI；游戏菜单和 HUD 的内存访问仍由后端负责。
 

@@ -25,6 +25,7 @@ namespace inputDevice {
 inline constexpr unsigned id = 12;
 } // namespace inputDevice
 namespace manager {
+inline constexpr unsigned options = 0x2a33c;
 inline constexpr unsigned characterConfigs = 0x2a678;
 inline constexpr unsigned scene = 0x8;
 inline constexpr unsigned saveSlot = 0x10;
@@ -95,6 +96,12 @@ inline constexpr unsigned fadeAction = 0x265bc;
 inline constexpr unsigned restartHeldFrames = 0x265c4;
 inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
+namespace pauseMenu {
+inline constexpr unsigned selection = 8, options = 0x5b0, playerIndex = 0xfac;
+} // namespace pauseMenu
+namespace pauseOptions {
+inline constexpr unsigned selection = 8, entries = 0x27c;
+} // namespace pauseOptions
 namespace gameState {
 inline constexpr unsigned stream = 0x1fe24;
 inline constexpr std::array<unsigned, 4> fileNames{0x1fdac, 0x1fdc4, 0x1fdf4, 0x1fe0c};

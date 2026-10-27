@@ -15,5 +15,14 @@ inline constexpr int exitGame = 2;
 namespace fadeAction {
 inline constexpr int gameOverRestart = 5, heldRestart = 6;
 }
+namespace pausePage {
+inline constexpr int root = 1, options = 2;
+}
+namespace pauseSelection {
+inline constexpr int resume = 2, exit = 3;
+}
+namespace pauseOption {
+inline constexpr int controller = 1;
+}
 inline constexpr unsigned saveSlotCount = 3;
 } // namespace isaac::engine::j460

@@ -10,6 +10,7 @@ namespace inputDevice {
 inline constexpr unsigned id = 8;
 } // namespace inputDevice
 namespace manager {
+inline constexpr unsigned options = 0x29df8;
 inline constexpr unsigned progress = 0x14, scene = 0x8;
 inline constexpr unsigned stringTable = 0x4a234;
 inline constexpr unsigned characterConfigs = 0x29f90;
@@ -33,12 +34,22 @@ inline constexpr unsigned stream = 0x1fac8;
 inline constexpr std::array<unsigned, 4> fileNames{0x1fa60, 0x1fa78, 0x1fa98, 0x1fab0};
 } // namespace gameState
 namespace game {
+inline constexpr unsigned players = 0x1ba50;
 inline constexpr unsigned stage = 0, stageType = 4;
 inline constexpr unsigned floorSeeds = 0x1bb1c, stateFlags = 0x1c3168;
 inline constexpr unsigned pauseMenu = 0x10203c, console = 0x1bb60;
 inline constexpr unsigned fadeAlpha = 0x1c31a8, fadeAction = 0x1c31b0;
 inline constexpr unsigned restartHeldFrames = 0x1c31b4;
 } // namespace game
+namespace player {
+inline constexpr unsigned controller = 0x154c;
+} // namespace player
+namespace pauseMenu {
+inline constexpr unsigned selection = 8, options = 0x806a8;
+} // namespace pauseMenu
+namespace pauseOptions {
+inline constexpr unsigned selection = 4, entries = 0x260;
+} // namespace pauseOptions
 namespace console {
 inline constexpr unsigned state = 0x20;
 } // namespace console

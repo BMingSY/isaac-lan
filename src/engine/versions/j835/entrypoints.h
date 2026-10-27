@@ -38,6 +38,10 @@ inline constexpr std::uint32_t inputValue = 0x56a6c0;
 inline constexpr std::uint32_t inputEnumerateDevices = 0x59d3b0;
 inline constexpr std::uint32_t inputPollDevices = 0x59d720;
 inline constexpr std::uint32_t inputUpdate = 0x56a150;
+inline constexpr std::uint32_t pauseMenuControls = 0x515ba0;
+inline constexpr std::uint32_t pauseMenuShow = 0x5178e0;
+inline constexpr std::uint32_t pauseMenuHide = 0x517810;
+inline constexpr std::uint32_t optionsSave = 0x4805a0;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;
