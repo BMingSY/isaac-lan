@@ -3,6 +3,7 @@
 #include "engine/versions/j460/item_effects.cpp"
 #include "engine/versions/j460/pickup_preview.cpp"
 #include "engine/versions/j460/session_backend.cpp"
+#include "engine/versions/common/session_backend.cpp"
 #include "runtime/progression.h"
 #include <array>
 #include <cstring>

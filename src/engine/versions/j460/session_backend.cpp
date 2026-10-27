@@ -1,290 +1,78 @@
-#include "engine/versions/j460/room_hooks.h"
-#include "engine/session_backend.h"
-#include "engine/rooms.h"
-#include "core/chat.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/menu_state.h"
-#include <MinHook.h>
-#include <cstring>
+#include "engine/versions/common/session_bindings.h"
 
-namespace isaac::engine::session {
+namespace isaac::engine::native_session {
 namespace {
-namespace layout = j460::layout;
-std::uintptr_t image;
-Callbacks callbacks;
-template <class T> T& at(std::uintptr_t base, unsigned offset = 0) {
-    return *reinterpret_cast<T*>(base + offset);
-}
-std::uintptr_t manager() {
-    return at<std::uintptr_t>(image, j460::globals::manager);
-}
-std::uintptr_t game() {
-    return at<std::uintptr_t>(image, j460::globals::game);
-}
-using Plain = void(__cdecl*)();
-using Method = void(__attribute__((thiscall)) *)(void*);
-Plain originalSave, originalDelete, originalRerun, originalControls;
-Method originalSerialize, originalExecuteStart, originalUpdate, originalConsoleUpdate, originalMenu;
-struct Seeds {
-    static constexpr unsigned wordCount = 23;
-    std::array<std::uint32_t, wordCount> words;
-};
-static_assert(sizeof(Seeds) == 0x5c);
-using Start = void(__attribute__((thiscall)) *)(void*, int, int, Seeds, unsigned);
-Start originalStart;
-using Console = void(__attribute__((thiscall)) *)(void*, const void*, bool, void*);
-Console originalConsole;
-using ConsolePrint = void(__attribute__((thiscall)) *)(void*, const void*, unsigned, unsigned);
-ConsolePrint originalConsolePrint;
-std::string* capturedOutput = nullptr;
-std::string_view nativeText(const void* value) {
-    const auto address = reinterpret_cast<std::uintptr_t>(value);
-    const auto size = at<unsigned>(address, layout::string::size);
-    const auto capacity = at<unsigned>(address, layout::string::capacity);
-    const auto data = capacity <= layout::string::inlineCapacity ? static_cast<const char*>(value)
-                                                                 : at<const char*>(address);
-    return {data, size};
-}
-void __attribute__((fastcall)) consolePrintHook(void* object, void*, const void* text,
-                                                unsigned color, unsigned fade) {
-    if (capturedOutput && capturedOutput->size() < chat::maxOutputBytes) {
-        auto value = nativeText(text);
-        capturedOutput->append(
-            chat::boundedOutput(value, chat::maxOutputBytes - capturedOutput->size()));
-    }
-    originalConsolePrint(object, text, color, fade);
-}
-
-void __cdecl saveHook() {
-    callbacks.save(originalSave);
-}
-void __cdecl deleteHook() {
-    callbacks.deleteSave(originalDelete);
-}
-void __cdecl rerunHook() {
-    callbacks.saveRerun(originalRerun);
-}
-void redirectRestart() {
-    constexpr int gameOverRestart = 5, heldRestart = 6;
-    if (!gameReady())
-        return;
-    const auto action = at<int>(game(), layout::game::fadeAction);
-    if ((action == gameOverRestart || action == heldRestart) &&
-        callbacks.restartRequest(action == heldRestart)) {
-        // Consume the intent before Game::Update advances its fade into Exit.
-        at<int>(game(), layout::game::fadeAction) = 0;
-        at<float>(game(), layout::game::fadeAlpha) = 0;
-        at<unsigned char>(game(), layout::game::restartHeldFrames) = 0;
-    }
-}
-void __cdecl controlsHook() {
-    callbacks.controls(originalControls);
-    redirectRestart();
-}
-void __attribute__((fastcall)) serializeHook(void* object, void*) {
-    auto original = [=] { originalSerialize(object); };
-    if (reinterpret_cast<std::uintptr_t>(object) == manager() + layout::manager::progress)
-        callbacks.serializeProgress(original);
-    else
-        original();
-}
-void __attribute__((fastcall)) executeStartHook(void* object, void*) {
-    callbacks.executeStart([=] { originalExecuteStart(object); });
-}
-void __attribute__((fastcall)) updateHook(void* object, void*) {
-    callbacks.update([=] { originalUpdate(object); });
-}
-void __attribute__((fastcall)) consoleUpdateHook(void* object, void*) {
-    callbacks.consoleUpdate([=] { originalConsoleUpdate(object); });
-}
-void __attribute__((fastcall)) menuHook(void* object, void*) {
-    callbacks.executeMenu([=] { originalMenu(object); });
-}
-void __attribute__((fastcall)) startHook(void* object, void*, int type, int challenge, Seeds seeds,
-                                         unsigned difficulty) {
-    // J460 consumes the 0x5c-byte by-value Seeds once; this POD has no destructor.
-    callbacks.start([=] { originalStart(object, type, challenge, seeds, difficulty); });
-}
-void __attribute__((fastcall)) consoleHook(void* object, void*, const void* text, bool silent,
-                                           void* player) {
-    const auto address = reinterpret_cast<std::uintptr_t>(text);
-    const auto size = at<unsigned>(address, layout::string::size),
-               capacity = at<unsigned>(address, layout::string::capacity);
-    const auto data = capacity <= layout::string::inlineCapacity ? static_cast<const char*>(text)
-                                                                 : at<const char*>(address);
-    callbacks.consoleCommand({data, size}, [=] { originalConsole(object, text, silent, player); });
+namespace backend = j460;
+namespace layout = backend::layout;
+void persistProgress(std::uintptr_t image, std::uintptr_t progress) {
+    using Method = void(__attribute__((thiscall))*)(void*);
+    auto* object = reinterpret_cast<void*>(progress);
+    reinterpret_cast<Method>(image + j460::entry::progressSaveCloud)(object);
+    reinterpret_cast<Method>(image + j460::entry::progressSaveFile)(object);
 }
 } // namespace
-bool install(std::uintptr_t base, const Callbacks& handlers) {
-    image = base;
-    callbacks = handlers;
-    auto hook = [](std::uintptr_t target, auto replacement, auto& original) {
-        return MH_CreateHook(reinterpret_cast<void*>(target), reinterpret_cast<void*>(replacement),
-                             reinterpret_cast<void**>(&original)) == MH_OK &&
-               MH_EnableHook(reinterpret_cast<void*>(target)) == MH_OK;
-    };
-    return hook(image + j460::entry::managerSave, saveHook, originalSave) &&
-           hook(image + j460::entry::managerDeleteSave, deleteHook, originalDelete) &&
-           hook(image + j460::entry::managerSaveRerun, rerunHook, originalRerun) &&
-           hook(image + j460::entry::managerExecuteMenu, menuHook, originalMenu) &&
-           hook(image + j460::entry::progressSerialize, serializeHook, originalSerialize) &&
-           hook(image + j460::entry::gameStart, startHook, originalStart) &&
-           hook(image + j460::entry::managerExecuteStart, executeStartHook, originalExecuteStart) &&
-           hook(image + j460::entry::gameUpdate, updateHook, originalUpdate) &&
-           hook(image + j460::entry::consoleUpdate, consoleUpdateHook, originalConsoleUpdate) &&
-           hook(image + j460::entry::consoleRunCommand, consoleHook, originalConsole) &&
-           hook(image + j460::entry::consolePrint, consolePrintHook, originalConsolePrint) &&
-           hook(image + j460::entry::gameControls, controlsHook, originalControls);
-}
-bool managerReady() {
-    return image && manager();
-}
-bool gameReady() {
-    return image && game();
-}
-bool continueAvailable() {
-    return at<bool>(manager(), layout::manager::continueAvailable);
-}
-void continueAvailable(bool value) {
-    at<bool>(manager(), layout::manager::continueAvailable) = value;
-}
-unsigned saveSlot() {
-    return at<unsigned>(manager(), layout::manager::saveSlot);
-}
-void captureSave() {
-    using Capture = void(__attribute__((thiscall))*)(void*, void*);
-    reinterpret_cast<Capture>(image + j460::entry::runtimeNetCapture)(
-        reinterpret_cast<void*>(game()),
-        reinterpret_cast<void*>(manager() + layout::manager::saveState));
-}
-void suppressDelete() {
-    at<bool>(manager(), layout::manager::deleteSaveRequested) = false;
-}
-void clearSave() {
-    reinterpret_cast<Method>(image + j460::entry::runtimeNetClear)(
-        reinterpret_cast<void*>(manager() + layout::manager::saveState));
-}
-lan::Progress readProgress() {
-    return native_progress::read(manager() + layout::manager::progress, layout::progress::fields);
-}
-void writeProgress(const lan::Progress& value) {
-    native_progress::write(manager() + layout::manager::progress, layout::progress::fields, value);
-}
-void persistProgress() {
-    // Use the same receiver and order as Manager::SaveGame. Each native
-    // method opens/closes its own stream; Serialize alone requires an open
-    // stream and must not be called directly here.
-    auto progress = reinterpret_cast<void*>(manager() + layout::manager::progress);
-    reinterpret_cast<Method>(image + j460::entry::progressSaveCloud)(progress);
-    reinterpret_cast<Method>(image + j460::entry::progressSaveFile)(progress);
-}
-ProgressReadOnlyScope::ProgressReadOnlyScope()
-    : previous(at<bool>(manager() + layout::manager::progress, layout::progress::readOnly)) {
-    at<bool>(manager() + layout::manager::progress, layout::progress::readOnly) = true;
-}
-ProgressReadOnlyScope::~ProgressReadOnlyScope() {
-    at<bool>(manager() + layout::manager::progress, layout::progress::readOnly) = previous;
-}
-int pause() {
-    return gameReady() ? at<int>(game(), layout::game::pauseMenu) : 0;
-}
-int scene() {
-    return managerReady() ? at<int>(manager(), layout::manager::scene) : -1;
-}
-bool cinematicFinished() {
-    return !at<bool>(manager(), layout::manager::cinematicActive) && scene() == j460::scene::game;
-}
-bool exitRequested() {
-    return at<bool>(manager(), layout::manager::menuRequested) &&
-           at<int>(manager(), layout::manager::requestedMenu) == j460::menuRequest::exitGame;
-}
-void cancelExit() {
-    at<bool>(manager(), layout::manager::menuRequested) = false;
-}
-void resetPause() {
-    reinterpret_cast<Method>(image + j460::entry::runtimeNetExecuteStart)(
-        reinterpret_cast<void*>(game() + layout::game::pauseMenu));
-}
-void pollConsole() {
-    if (gameReady() && originalConsoleUpdate)
-        originalConsoleUpdate(reinterpret_cast<void*>(game() + layout::game::console));
-}
-void hideConsole() {
-    if (gameReady())
-        at<int>(game() + layout::game::console, layout::console::state) = 0;
-}
-std::string executeConsole(std::string_view command) {
-    // MSVC owns this string's storage. Allocate and release through the same
-    // native helpers used by the existing menu editor, never the MinGW heap.
-    struct NativeString {
-        std::array<unsigned char, layout::string::size + 2 * sizeof(unsigned)> bytes{};
-        ~NativeString() {
-            reinterpret_cast<Method>(image + j460::entry::frontendMenuUpdate)(this);
-        }
-    } text;
-    at<unsigned>(reinterpret_cast<std::uintptr_t>(&text), layout::string::capacity) =
-        layout::string::inlineCapacity;
-    using Assign = void*(__attribute__((thiscall))*)(void*, const char*, std::size_t);
-    reinterpret_cast<Assign>(image + j460::entry::frontendAssign)(&text, command.data(),
-                                                                  command.size());
-    std::string output;
-    struct Capture {
-        std::string* previous = capturedOutput;
-        explicit Capture(std::string& output) {
-            capturedOutput = &output;
-        }
-        ~Capture() {
-            capturedOutput = previous;
-        }
-    } capture(output);
-    originalConsole(reinterpret_cast<void*>(game() + layout::game::console), &text, false,
-                    reinterpret_cast<void*>(rooms::presentationPlayer()));
-    return output;
-}
-void controls() {
-    originalControls();
-    redirectRestart();
-}
-std::uint32_t parseSeed(std::string_view text) {
-    constexpr unsigned seedGroupLength = 4;
-    struct SmallString {
-        char text[layout::string::inlineBytes]{};
-        unsigned size = seedGroupLength * 2 + 1, capacity = layout::string::inlineCapacity;
-    } value;
-    if (text.size() != seedGroupLength * 2)
-        return 0;
-    std::memcpy(value.text, text.data(), seedGroupLength);
-    value.text[seedGroupLength] = ' ';
-    std::memcpy(value.text + seedGroupLength + 1, text.data() + seedGroupLength, seedGroupLength);
-    using Parse = std::uint32_t(__cdecl*)(const SmallString*);
-    return reinterpret_cast<Parse>(image + j460::entry::runtimeNetParseSeed)(&value);
-}
-void start(std::uint32_t seed, int character, unsigned difficulty) {
-    Seeds seeds{};
-    using Set = void(__attribute__((thiscall))*)(void*, std::uint32_t);
-    reinterpret_cast<Method>(image + j460::entry::runtimeNetSeedConstructor)(&seeds);
-    reinterpret_cast<Set>(image + j460::entry::runtimeNetSetSeed)(&seeds, seed);
-    reinterpret_cast<Start>(image + j460::entry::runtimeNetStartGame)(
-        reinterpret_cast<void*>(manager()), character, 0, seeds, difficulty);
-}
-void requestContinue() {
-    at<bool>(manager(), layout::manager::continueRequested) = true;
-}
-lan::Stage stage() {
-    lan::Stage value;
-    value.level = at<int>(game(), layout::game::stage);
-    value.type = at<int>(game(), layout::game::stageType);
-    std::memcpy(value.seeds.data(), reinterpret_cast<void*>(game() + layout::game::floorSeeds),
-                sizeof(value.seeds));
-    std::memcpy(value.stateFlags.data(), reinterpret_cast<void*>(game() + layout::game::stateFlags),
-                sizeof(value.stateFlags));
-    return value;
-}
-void applyStage(const lan::Stage& value) {
-    std::memcpy(reinterpret_cast<void*>(game() + layout::game::floorSeeds), value.seeds.data(),
-                sizeof(value.seeds));
-    std::memcpy(reinterpret_cast<void*>(game() + layout::game::stateFlags), value.stateFlags.data(),
-                sizeof(value.stateFlags));
-}
-} // namespace isaac::engine::session
+constinit const Bindings bindings{
+    .manager = backend::globals::manager,
+    .game = backend::globals::game,
+    .entry =
+        {
+            .save = backend::entry::managerSave,
+            .deleteSave = backend::entry::managerDeleteSave,
+            .saveRerun = backend::entry::managerSaveRerun,
+            .executeMenu = backend::entry::managerExecuteMenu,
+            .serializeProgress = backend::entry::progressSerialize,
+            .start = backend::entry::gameStart,
+            .executeStart = backend::entry::managerExecuteStart,
+            .update = backend::entry::gameUpdate,
+            .consoleUpdate = backend::entry::consoleUpdate,
+            .consoleCommand = backend::entry::consoleRunCommand,
+            .consolePrint = backend::entry::consolePrint,
+            .controls = backend::entry::gameControls,
+            .capture = backend::entry::runtimeNetCapture,
+            .clear = backend::entry::runtimeNetClear,
+            .resetPause = backend::entry::runtimeNetExecuteStart,
+            .stringAssign = backend::entry::frontendAssign,
+            .stringDestroy = backend::entry::frontendMenuUpdate,
+            .parseSeed = backend::entry::runtimeNetParseSeed,
+            .constructSeeds = backend::entry::runtimeNetSeedConstructor,
+            .setSeed = backend::entry::runtimeNetSetSeed,
+            .startNew = backend::entry::runtimeNetStartGame,
+        },
+    .managerLayout =
+        {
+            .scene = layout::manager::scene,
+            .saveSlot = layout::manager::saveSlot,
+            .progress = layout::manager::progress,
+            .saveState = layout::manager::saveState,
+            .continueAvailable = layout::manager::continueAvailable,
+            .continueRequested = layout::manager::continueRequested,
+            .deleteSaveRequested = layout::manager::deleteSaveRequested,
+            .cinematicActive = layout::manager::cinematicActive,
+            .menuRequested = layout::manager::menuRequested,
+            .requestedMenu = layout::manager::requestedMenu,
+        },
+    .gameLayout =
+        {
+            .pauseMenu = layout::game::pauseMenu,
+            .console = layout::game::console,
+            .stage = layout::game::stage,
+            .stageType = layout::game::stageType,
+            .floorSeeds = layout::game::floorSeeds,
+            .stateFlags = layout::game::stateFlags,
+            .fadeAction = layout::game::fadeAction,
+            .fadeAlpha = layout::game::fadeAlpha,
+            .restartHeldFrames = layout::game::restartHeldFrames,
+        },
+    .progress = layout::progress::fields,
+    .progressReadOnly = layout::progress::readOnly,
+    .consoleState = layout::console::state,
+    .gameScene = backend::scene::game,
+    .exitMenu = backend::menuRequest::exitGame,
+    .gameOverRestart = backend::fadeAction::gameOverRestart,
+    .heldRestart = backend::fadeAction::heldRestart,
+    .persistProgress = persistProgress,
+};
+} // namespace isaac::engine::native_session

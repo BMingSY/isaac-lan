@@ -4,7 +4,7 @@
 
 入口与签名以 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entrypoints.h)、[signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/signatures.inc) 为准，布局由版本后端持有。这里的地址不能用于其他游戏版本；桥接和兼容组件仅使用具名能力，不读取任意内存。
 
-版本元数据以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/profile.json) 为唯一来源。PE 节区、版本标记与签名在配置阶段生成；运行时仍在安装游戏 Hook 前校验磁盘版本与内存入口。布局、原函数的调用约定和对象所有权不通过版本描述对上层开放。[room_hooks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_hooks.h) 仅供后端传递借用的原生房间／玩家与原函数。
+版本元数据以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/profile.json) 为唯一来源。PE 节区、版本标记与签名在配置阶段生成；运行时仍在安装游戏 Hook 前校验磁盘版本与内存入口。布局、原函数的调用约定和对象所有权不通过版本描述对上层开放。[room_hooks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_hooks.h) 仅供后端传递借用的原生房间／玩家与原函数。
 
 后端能力 `native_emotes` 表示可使用原版轮盘和表情接口。应用装配只在能力存在时安装与绑定这些接口；文字聊天可在缺少表情接口时使用普通气泡绘制。核心房间、会话和存档能力仍是启动所必需的，不支持时不能以空实现进入联机。
 
@@ -155,7 +155,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 ## 控制台执行与输入
 
-[session_backend.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/session_backend.cpp) 提供具名 `executeConsole`，仅由运行层在已就绪的权威会话、有效连接槽和角色房间作用域内调用。`Console::RunCommand` RVA `0x28cdc0` 的 J460 ABI 为 `thiscall void(Console*, const NativeString*, bool silent, Player*)`；返回文字由同步 `Console.Print` 捕获，入口 RVA `0x2929e0`，ABI 为 `thiscall void(Console*, const NativeString*, unsigned color, unsigned fade)`。打印仍进入原版记录；捕获不跨命令保留游戏字符串引用。
+[共享会话后端](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/session_backend.cpp) 使用 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/session_backend.cpp) 提供具名 `executeConsole`，仅由运行层在已就绪的权威会话、有效连接槽和角色房间作用域内调用。`Console::RunCommand` RVA `0x28cdc0` 的 J460 ABI 为 `thiscall void(Console*, const NativeString*, bool silent, Player*)`；返回文字由同步 `Console.Print` 捕获，入口 RVA `0x2929e0`，ABI 为 `thiscall void(Console*, const NativeString*, unsigned color, unsigned fade)`。打印仍进入原版记录；捕获不跨命令保留游戏字符串引用。
 
 命令字符串使用游戏自己的 assign／析构接口，遵循 MSVC 24 字节字符串布局，不能使用 MinGW 堆代替。结果立即复制为自有字符串，限制 16 KiB；嵌入层按 UTF-8 边界分段。`Game+console` 的状态字段 `+0` 仅在联机接管输入时清为关闭，离开联机恢复原版更新。原生入口纳入启动签名校验。
 

@@ -12,5 +12,8 @@ inline constexpr int online = 2;
 namespace menuRequest {
 inline constexpr int exitGame = 2;
 }
+namespace fadeAction {
+inline constexpr int gameOverRestart = 5, heldRestart = 6;
+}
 inline constexpr unsigned saveSlotCount = 3;
 } // namespace isaac::engine::j460

@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码和角色目录组件，以及 Lua 初始化入口资料；房间、会话、输入和实体同步尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定和角色目录组件，以及 Lua 初始化入口资料；房间、输入、实体同步和完整启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -24,6 +24,30 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 原生解码失败处理可能请求删除存档文件。[文件名作用域](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/save_file_names.h) 在内存流解码期间临时清空四个本地／Steam 文件名槽，随后逐字节恢复原生字符串和其所有权。文件名偏移在 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/layout.h) 中集中声明。此保护不提供 GameState 内容回滚：失败后会话必须中止恢复，不能把部分加载状态视为完成。
 
 进度位于 `Manager+0x14`；成就数组从 `+0x38` 开始，共 638 字节，计数数组从 `+0x2b8` 开始，共 496 个 uint32。[进度复制组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/progress.h) 只读写这些元素，共同网络结构的剩余元素补零，不触及相邻收藏记录或按忏悔＋的数组长度访问原版对象。
+
+个人进度持久化先标记 `Progress+0` 为脏，再调用 RVA `0x4848f0`，ABI 为 `thiscall void(Progress*, bool backup)`，传入 `true`。原生方法检查初始化标记，保存日期备份，并按 Steam 接口及游戏设置选择云端或本地文件；流的打开、关闭和所有权仍由游戏管理。不能直接调用需要有效输出流的序列化入口 `0x4836a0`。只读作用域临时设置 `Progress+1`，嵌套返回时恢复原值。
+
+## 会话原生绑定
+
+[版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/session_backend.cpp) 为[共享会话实现](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/session_backend.cpp) 提供入口、字段、重开动作和持久化调用。上层仍通过具名回调决定联机存档、退出和重开规则。安装先创建全部 Hook，再启用；失败只移除本组件已经创建的 Hook，允许重新安装，不清理其他组件。
+
+| 操作 | J835 入口与 ABI |
+| --- | --- |
+| 存档／删除／Rerun | `0x4b3850`／`0x4b3b70`／`0x4b3bb0`，无参数、调用方清栈 |
+| 执行开局／菜单请求 | `0x4b3fd0`／`0x4b43d0`，`thiscall void(Manager*)` |
+| 新局请求／Game 开局 | `0x4b3470`／`0x2c97e0`，栈参数为角色、挑战、92 字节 Seeds 值、难度；被调方清理 `0x68` 字节，入口不使用 ECX |
+| 游戏更新／控制 | `0x2cdcf0` 为 `thiscall void(Game*)`；`0x2cda60` 无参数 |
+| 暂停重置 | `0x515b50`，`thiscall void(Game+0x10203c)` |
+| 种子解析 | `0x53e080`，`cdecl uint32(const NativeString*)`；输入是九字节 `XXXX XXXX`，不会取得字符串所有权 |
+| 种子构造／设值 | `0x53bc50`／`0x53e220`，接收 ECX 中的 Seeds；设值另取一个 uint32 栈参数 |
+
+Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩展转发结构没有析构函数，不重复释放、跨调用保留或自行分配该容器。上述接口只借用当前 Manager／Game，不创建或销毁游戏对象。
+
+继续标记位于 `Manager+0x209c4`，继续请求位于 `+0x1ea6c1`；删除路径标记为 `+0x1ea814`。菜单请求为 `+0x1ea818`，目标为 `+0x1ea81c`；退出目标值为 `2`。过场请求标记为 `+0x1ea830`，只有该标记清除且场景 `Manager+8` 为游戏值 `2` 时才认为过场完成。
+
+控制调用返回后检查 `Game+0x1c31b0`：动作 `4` 为死亡后重开，`5` 为长按重开。仅当运行层接受请求时清除动作、`+0x1c31a8` 的淡出透明度和 `+0x1c31b4` 的按住帧数；其他动作及拒绝的请求保持原样。换层采集读取关卡／类型、`Game+0x1bb1c` 的十四个楼层种子及 `+0x1c3168` 的两字路由标记；应用只写种子和标记，实际转场仍由原生房间能力推进。
+
+控制台对象位于 `Game+0x1bb60`，输入状态在对象 `+0x20`。输入入口 `0x263550` 为 `thiscall void(Console*)`，命令入口 `0x2655c0` 为 `thiscall void(Console*, const NativeString*, bool silent, Player*)`，打印入口 `0x26aec0` 为 `thiscall void(Console*, const NativeString*, unsigned color, unsigned fade)`。命令执行要求已就绪的权威会话和角色房间作用域。24 字节 MSVC 字符串通过原生 assign `0x7c80` 与析构 `0x7be0` 配对管理；结果复制为自有字符串，限制 16 KiB，同步嵌套与返回恢复前一捕获目标，不保留原生文本引用。
 
 ## 角色目录与表现
 

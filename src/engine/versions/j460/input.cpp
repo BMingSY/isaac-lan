@@ -1,4 +1,4 @@
-#include "engine/versions/j460/room_hooks.h"
+#include "engine/versions/common/room_hooks.h"
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/input.h"

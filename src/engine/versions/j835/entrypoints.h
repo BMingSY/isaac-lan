@@ -12,6 +12,26 @@ inline constexpr std::uint32_t runtimeNetCapture = 0x2cc850;
 inline constexpr std::uint32_t runtimeNetClear = 0x520160;
 inline constexpr std::uint32_t engineSaveWrite = 0x521a00;
 inline constexpr std::uint32_t engineSaveRead = 0x524320;
+inline constexpr std::uint32_t managerSave = 0x4b3850;
+inline constexpr std::uint32_t managerDeleteSave = 0x4b3b70;
+inline constexpr std::uint32_t managerSaveRerun = 0x4b3bb0;
+inline constexpr std::uint32_t managerExecuteMenu = 0x4b43d0;
+inline constexpr std::uint32_t managerExecuteStart = 0x4b3fd0;
+inline constexpr std::uint32_t progressSerialize = 0x4836a0;
+inline constexpr std::uint32_t progressPersist = 0x4848f0;
+inline constexpr std::uint32_t gameStart = 0x2c97e0;
+inline constexpr std::uint32_t gameUpdate = 0x2cdcf0;
+inline constexpr std::uint32_t gameControls = 0x2cda60;
+inline constexpr std::uint32_t consoleUpdate = 0x263550;
+inline constexpr std::uint32_t consoleRunCommand = 0x2655c0;
+inline constexpr std::uint32_t consolePrint = 0x26aec0;
+inline constexpr std::uint32_t runtimeNetExecuteStart = 0x515b50;
+inline constexpr std::uint32_t frontendAssign = 0x7c80;
+inline constexpr std::uint32_t frontendMenuUpdate = 0x7be0;
+inline constexpr std::uint32_t runtimeNetParseSeed = 0x53e080;
+inline constexpr std::uint32_t runtimeNetSeedConstructor = 0x53bc50;
+inline constexpr std::uint32_t runtimeNetSetSeed = 0x53e220;
+inline constexpr std::uint32_t runtimeNetStartGame = 0x4b3470;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;

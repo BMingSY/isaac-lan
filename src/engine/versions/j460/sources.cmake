@@ -1,5 +1,6 @@
 set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../common/character_catalogue.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/session_backend.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/entity_fields.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/bootstrap.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/session_backend.cpp"

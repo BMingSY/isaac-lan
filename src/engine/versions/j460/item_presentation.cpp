@@ -1,4 +1,4 @@
-#include "engine/versions/j460/room_hooks.h"
+#include "engine/versions/common/room_hooks.h"
 #include "engine/lua_api.h"
 #include "engine/item_presentation.h"
 #include "engine/pickup_preview.h"
