@@ -1,6 +1,7 @@
 set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../common/character_catalogue.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/session_backend.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/input_devices.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/entity_fields.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/bootstrap.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/session_backend.cpp"
@@ -8,6 +9,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/room_routing.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/visuals.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/input.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/input_devices.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/save.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/audio.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/combat_feedback.cpp"

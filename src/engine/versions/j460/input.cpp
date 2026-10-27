@@ -1,5 +1,6 @@
 #include "engine/versions/common/room_hooks.h"
 #include "engine/versions/common/input_query.h"
+#include "engine/versions/common/input_devices.h"
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/input.h"
@@ -15,7 +16,6 @@
 #include <atomic>
 #include <vector>
 #include <optional>
-#include <mutex>
 
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/mouse_input.h"
@@ -43,83 +43,12 @@ pause_menu::Intent pauseIntent = pause_menu::Intent::none;
 int viewSlot = -1;
 const lan::InputFrame* presentationInput = nullptr;
 int presentationController = -1;
-struct DeviceId {
-    std::uintptr_t device;
-    int original, assigned;
-};
-std::vector<DeviceId> lanDeviceIds;
-// J460's background hotplug scan and foreground polling both remove entries
-// from the same native device vector. Keep the entire traversal/callback/free
-// transaction exclusive, including the disconnects after leaving LAN. Locking
-// only XInputGetState/GetCapabilities is too late: both callers already hold
-// a device pointer. Native connect callbacks can reenter polling on this thread.
-std::recursive_mutex deviceMutex;
-using DeviceUpdate = void(__cdecl*)();
-DeviceUpdate originalEnumerateDevices = nullptr, originalPollDevices = nullptr;
-void __cdecl enumerateDevices() {
-    const std::lock_guard lock(deviceMutex);
-    originalEnumerateDevices();
-}
-void __cdecl pollDevices() {
-    const std::lock_guard lock(deviceMutex);
-    originalPollDevices();
-}
 bool hookDevices() {
-    if (originalEnumerateDevices && originalPollDevices)
-        return true;
-    auto scan = reinterpret_cast<void*>(image + j460::entry::inputEnumerateDevices);
-    auto poll = reinterpret_cast<void*>(image + j460::entry::inputPollDevices);
-    const bool created =
-        MH_CreateHook(scan, reinterpret_cast<void*>(enumerateDevices),
-                      reinterpret_cast<void**>(&originalEnumerateDevices)) == MH_OK &&
-        MH_CreateHook(poll, reinterpret_cast<void*>(pollDevices),
-                      reinterpret_cast<void**>(&originalPollDevices)) == MH_OK;
-    if (created && MH_QueueEnableHook(scan) == MH_OK && MH_QueueEnableHook(poll) == MH_OK &&
-        MH_ApplyQueued() == MH_OK)
-        return true;
-    MH_RemoveHook(scan);
-    MH_RemoveHook(poll);
-    originalEnumerateDevices = originalPollDevices = nullptr;
-    return false;
-}
-void restoreDeviceIds() {
-    const std::lock_guard lock(deviceMutex);
-    const auto manager = image + j460::globals::inputManager;
-    for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8) {
-        const auto device = at<std::uintptr_t>(p, 0);
-        for (const auto& saved : lanDeviceIds)
-            if (saved.device == device && at<int>(device, 12) == saved.assigned)
-                at<int>(device, 12) = saved.original;
-    }
-    lanDeviceIds.clear();
+    return engine::native_devices::install(image, logger);
 }
 void assignLanDeviceIds() {
-    const std::lock_guard lock(deviceMutex);
-    if (!virtualDevices || !lanDeviceIds.empty())
-        return;
-    const auto manager = image + j460::globals::inputManager;
-    std::vector<DeviceId> devices;
-    for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8) {
-        const auto device = at<std::uintptr_t>(p, 0);
-        if (at<int>(device, 12) > 0)
-            devices.push_back({device, at<int>(device, 12), 0});
-    }
-    if (devices.size() < 4)
-        return;
-    std::sort(devices.begin(), devices.end(),
-              [](const auto& a, const auto& b) { return a.original < b.original; });
-    // J460 looks up controllers by InputDevice::ID in this vector. Hotplug IDs
-    // increase across reconnects; LAN players require the same 1..4 on every
-    // peer. Restore native IDs before returning to any non-LAN mode.
-    for (unsigned i = 0; i < 4; ++i) {
-        auto device = devices[i];
-        device.assigned = static_cast<int>(i + 1);
-        at<int>(device.device, 12) = device.assigned;
-        lanDeviceIds.push_back(device);
-        if (device.original != device.assigned)
-            logger("input_lan_id=" + std::to_string(device.original) + "->" +
-                   std::to_string(device.assigned));
-    }
+    if (virtualDevices)
+        engine::native_devices::assignLanIds(image);
 }
 lan::Frame accepted;
 unsigned pauseOwner = 0;
@@ -366,14 +295,9 @@ int enable(lua_State* L) {
     return 1;
 }
 bool exists(int index) {
-    const std::lock_guard lock(deviceMutex);
     assignLanDeviceIds();
-    const auto manager = image + j460::globals::inputManager;
-    // The hotplug worker also updates this vector.
-    for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8)
-        if (at<int>(at<std::uintptr_t>(p, 0), 12) == index)
-            return true;
-    return false;
+    const auto ids = engine::native_devices::ids(image);
+    return std::find(ids.begin(), ids.end(), index) != ids.end();
 }
 int assign(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
@@ -395,23 +319,24 @@ int assign(lua_State* L) {
     return 1;
 }
 int ready(lua_State* L) {
-    const std::lock_guard lock(deviceMutex);
+    assignLanDeviceIds();
+    const auto ids = engine::native_devices::ids(image);
     bool available = virtualDevices && originalQuery;
     for (int controller = 1; controller <= 4; ++controller)
-        available = exists(controller) && available;
+        available = std::find(ids.begin(), ids.end(), controller) != ids.end() && available;
     lua.pushBoolean(L, available);
     return 1;
 }
 int devices(lua_State* L) {
-    const std::lock_guard lock(deviceMutex);
-    const auto manager = image + j460::globals::inputManager;
+    assignLanDeviceIds();
+    const auto ids = engine::native_devices::ids(image);
     std::string found = "input_devices=";
-    for (auto p = at<std::uintptr_t>(manager, 8); p != at<std::uintptr_t>(manager, 12); p += 8)
-        found += std::to_string(at<int>(at<std::uintptr_t>(p, 0), 12)) + ",";
+    for (const auto id : ids)
+        found += std::to_string(id) + ",";
     logger(found);
     lua.createTable(L, 0, 5);
     for (int i = 0; i < 5; ++i) {
-        lua.pushBoolean(L, exists(i));
+        lua.pushBoolean(L, std::find(ids.begin(), ids.end(), i) != ids.end());
         lua.setField(L, -2, std::to_string(i).c_str());
     }
     return 1;
@@ -721,7 +646,7 @@ void setMenuOwner(unsigned slot) {
 }
 void leaveLan() {
     reset();
-    restoreDeviceIds();
+    engine::native_devices::restoreIds(image);
     virtualDevices = false;
     if (logger)
         logger("input_virtual=DISABLED");

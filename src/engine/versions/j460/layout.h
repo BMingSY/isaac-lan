@@ -18,6 +18,12 @@ inline constexpr unsigned end = 0x4;
 inline constexpr unsigned capacity = 0x8;
 inline constexpr unsigned words = 0x3;
 } // namespace vector
+namespace inputManager {
+inline constexpr unsigned begin = 8, end = 12, stride = 8;
+} // namespace inputManager
+namespace inputDevice {
+inline constexpr unsigned id = 12;
+} // namespace inputDevice
 namespace manager {
 inline constexpr unsigned characterConfigs = 0x2a678;
 inline constexpr unsigned scene = 0x8;

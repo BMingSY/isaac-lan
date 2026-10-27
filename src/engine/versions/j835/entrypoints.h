@@ -35,11 +35,15 @@ inline constexpr std::uint32_t runtimeNetStartGame = 0x4b3470;
 inline constexpr std::uint32_t inputPressed = 0x56a520;
 inline constexpr std::uint32_t inputTriggered = 0x56a5e0;
 inline constexpr std::uint32_t inputValue = 0x56a6c0;
+inline constexpr std::uint32_t inputEnumerateDevices = 0x59d3b0;
+inline constexpr std::uint32_t inputPollDevices = 0x59d720;
+inline constexpr std::uint32_t inputUpdate = 0x56a150;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;
 inline constexpr std::uint32_t characterMenuEntries = 0x60d6b0;
 inline constexpr std::uint32_t game = 0x7fd65c;
 inline constexpr std::uint32_t manager = 0x7fd680;
+inline constexpr std::uint32_t inputManager = 0x7e7c98;
 } // namespace globals
 } // namespace isaac::engine::j835

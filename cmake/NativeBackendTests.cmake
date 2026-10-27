@@ -12,6 +12,25 @@ add_test(NAME native.input-queries-j835 COMMAND isaac_lan_input_queries_j835_tes
 set_tests_properties(native.input-queries-j835 PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 foreach(backend j460 j835)
     add_executable(
+        isaac_lan_input_devices_${backend}_test
+        tests/input_devices_test.cpp src/engine/versions/common/input_devices.cpp
+        src/engine/versions/${backend}/input_devices.cpp)
+    target_include_directories(isaac_lan_input_devices_${backend}_test PRIVATE src)
+    target_link_libraries(isaac_lan_input_devices_${backend}_test PRIVATE minhook)
+    if(backend STREQUAL "j835")
+        target_compile_definitions(isaac_lan_input_devices_${backend}_test
+                                   PRIVATE ISAAC_LAN_TEST_J835)
+    endif()
+    if(MINGW)
+        target_link_options(isaac_lan_input_devices_${backend}_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+        target_compile_options(isaac_lan_input_devices_${backend}_test PRIVATE -Wall -Wextra
+                                                                               -Werror)
+    endif()
+    add_test(NAME native.input-devices-${backend} COMMAND isaac_lan_input_devices_${backend}_test)
+    set_tests_properties(native.input-devices-${backend} PROPERTIES TIMEOUT 30 LABELS
+                                                                    "offline;native-abi")
+    add_executable(
         isaac_lan_session_${backend}_test
         tests/session_backend_test.cpp src/engine/versions/${backend}/session_backend.cpp
         src/engine/versions/common/session_backend.cpp)

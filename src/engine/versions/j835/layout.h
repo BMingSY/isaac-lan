@@ -3,6 +3,12 @@
 #include <array>
 
 namespace isaac::engine::j835::layout {
+namespace inputManager {
+inline constexpr unsigned begin = 4, end = 8, stride = 4;
+} // namespace inputManager
+namespace inputDevice {
+inline constexpr unsigned id = 8;
+} // namespace inputDevice
 namespace manager {
 inline constexpr unsigned progress = 0x14, scene = 0x8;
 inline constexpr unsigned stringTable = 0x4a234;

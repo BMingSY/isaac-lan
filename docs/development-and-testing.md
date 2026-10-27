@@ -8,9 +8,9 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 
 原生后端由 `-DISAAC_LAN_BACKEND=j460` 在配置时选择，当前可选后端只有 `j460`；未知标识立即失败。每个后端在自己的 `sources.cmake`、`tests-portable.cmake` 和 `tests-native.cmake` 中登记实现与测试。不同后端使用独立构建目录，避免混用二进制和资料。
 
-[`j835`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 包含原版《忏悔》的版本／资源描述、存档编解码、会话原生绑定、输入查询适配和角色目录组件，以及 Lua 初始化参考，尚无可构建的完整后端。配置与版本生成器拒绝将其当成完整实现；状态和接口边界见 [J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md)。
+[`j835`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 包含原版《忏悔》的版本／资源描述、存档编解码、会话原生绑定、输入设备／查询适配和角色目录组件，以及 Lua 初始化参考，尚无可构建的完整后端。配置与版本生成器拒绝将其当成完整实现；状态和接口边界见 [J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md)。
 
-[NativeBackendTests.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/NativeBackendTests.cmake) 可以单独编译未完成后端的组件夹具；不加载游戏程序，也不生成该后端的可安装 DLL。存档定向检查为 `native.save-j460`／`native.save-j835`，验证调用约定、原始编码字节、重复解码、流失败、大小限制及文件名／流字段恢复。`native.character-catalog`／`native.character-catalog-j835` 检查目录、解锁、里角色与 Mod 角色；`native.progress-layouts` 检查两版进度数组边界和网络字段补零。`native.session-j460`／`native.session-j835` 检查 Hook 失败回滚、回调拦截、开局传值 ABI、继续与重开、进度持久化选择，以及控制台嵌套捕获与清理。`native.input-queries-j835` 检查三个查询入口的动作／控制器参数、x87 模拟量返回、物理旁路，以及 Hook 冲突后的清理与重试。共同流、会话和目录算法位于后端的 [common](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/common) 目录，不能当作独立游戏版本选择。
+[NativeBackendTests.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/NativeBackendTests.cmake) 可以单独编译未完成后端的组件夹具；不加载游戏程序，也不生成该后端的可安装 DLL。存档定向检查为 `native.save-j460`／`native.save-j835`，验证调用约定、原始编码字节、重复解码、流失败、大小限制及文件名／流字段恢复。`native.character-catalog`／`native.character-catalog-j835` 检查目录、解锁、里角色与 Mod 角色；`native.progress-layouts` 检查两版进度数组边界和网络字段补零。`native.session-j460`／`native.session-j835` 检查 Hook 失败回滚、回调拦截、开局传值 ABI、继续与重开、进度持久化选择，以及控制台嵌套捕获与清理。`native.input-queries-j835` 检查三个查询入口的动作／控制器参数、x87 模拟量返回、物理旁路，以及 Hook 冲突后的清理与重试。`native.input-devices-j460`／`native.input-devices-j835` 检查设备布局、重复分配／恢复、断开清理、安装失败回滚，以及扫描、轮询和管理器更新之间的互斥与重入。共同流、会话和目录算法位于后端的 [common](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/common) 目录，不能当作独立游戏版本选择。
 
 配置阶段需要 Python 3.10+。[版本生成器](https://github.com/BMingSY/isaac-lan/blob/main/tools/generate_game_profile.py) 将后端的版本描述、入口和签名生成 C++ 描述符及构建目录内的 `game-profile.json`。打包使用该构建快照，缺失时要求重新配置；不从源码默认版本补造元数据。安装包的游戏版本、后端标识、检查器和描述文件必须对应同一个构建。
 
