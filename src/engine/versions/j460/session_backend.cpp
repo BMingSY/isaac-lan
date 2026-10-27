@@ -166,21 +166,10 @@ void clearSave() {
         reinterpret_cast<void*>(manager() + layout::manager::saveState));
 }
 lan::Progress readProgress() {
-    lan::Progress value;
-    const auto base = manager() + layout::manager::progress;
-    std::memcpy(value.achievements.data(),
-                reinterpret_cast<void*>(base + layout::progress::achievements),
-                value.achievements.size());
-    std::memcpy(value.counters.data(), reinterpret_cast<void*>(base + layout::progress::counters),
-                sizeof(value.counters));
-    return value;
+    return native_progress::read(manager() + layout::manager::progress, layout::progress::fields);
 }
 void writeProgress(const lan::Progress& value) {
-    const auto base = manager() + layout::manager::progress;
-    std::memcpy(reinterpret_cast<void*>(base + layout::progress::achievements),
-                value.achievements.data(), value.achievements.size());
-    std::memcpy(reinterpret_cast<void*>(base + layout::progress::counters), value.counters.data(),
-                sizeof(value.counters));
+    native_progress::write(manager() + layout::manager::progress, layout::progress::fields, value);
 }
 void persistProgress() {
     // Use the same receiver and order as Manager::SaveGame. Each native

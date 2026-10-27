@@ -35,7 +35,9 @@ def test_native_compatibility_policies_remain_portable():
         assert all(name.startswith("compat/") for name in includes), (path, includes)
 
 
-@pytest.mark.parametrize("backend", sorted((ROOT / "src/engine/versions").iterdir()))
+@pytest.mark.parametrize(
+    "backend", sorted(path.parent for path in (ROOT / "src/engine/versions").glob("*/profile.json"))
+)
 def test_audited_addresses_and_startup_signatures_share_one_catalog(backend):
     names = set(re.findall(r"std::uint32_t (\w+) =", (backend / "entrypoints.h").read_text()))
     signatures = (backend / "signatures.inc").read_text()

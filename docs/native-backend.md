@@ -125,6 +125,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 联机拦截 `Manager::SaveGame` 的文件写入时仍执行 `Game::CaptureState`。采集包含原生玩家离房清理，调用方随后恢复进房临时效果；两者必须配对。捕获结果只保存在原生 GameState 中，单人存档由会话备份保护，联机退出写入独立会话存档。个人进度合并完成后，`session::persistProgress` 按原生顺序调用 `Progress::SaveCloud`（RVA `0x528ee0`）和 `Progress::SaveFile`（RVA `0x5294f0`），两者均为 `thiscall void(Manager+0x14)`，由原生打开并关闭流；不能直接调用需要已打开流的 `Serialize`。该接口只保存当前存档槽的进度，不分配角色或写入局内存档。
 
+存档编解码共用后端的 [x86 内存流](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/save_stream.h)，J460 默认状态为 `Manager+0xfa4`，临时流字段为 `GameState+0x1fe24`。读取入口 `0x5cc1a0` 为 `thiscall bool(GameState*, Context*, bool)`，联机传入 `false`；此参数不能套用于 J835。解码期间[临时清空四个存档文件名槽](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/save_file_names.h)，阻止原生读档错误清理使用单人文件路径；返回时恢复原生字符串与流指针。输出限制为 8 MiB，短读、越界和写入只读流均使操作失败；部分 GameState 内容不回滚。
+
 客机恢复与原生更新使用 `ProgressReadOnlyScope`，按栈保存并恢复 `Manager+0x14` 进度对象的 `+1` 只读位。J460 收藏记录更新（RVA `0x52a2d0`）与成就尝试（RVA `0x529a20`）均先检查此位；复制权威成就／计数不通过这些方法，因此不被拦截。作用域结束恢复原值，不改变主机进度、会话合并或退出持久化。
 
 ## HUD 与本机输入

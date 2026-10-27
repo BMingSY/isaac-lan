@@ -8,6 +8,10 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 
 原生后端由 `-DISAAC_LAN_BACKEND=j460` 在配置时选择，当前可选后端只有 `j460`；未知标识立即失败。每个后端在自己的 `sources.cmake`、`tests-portable.cmake` 和 `tests-native.cmake` 中登记实现与测试。不同后端使用独立构建目录，避免混用二进制和资料。
 
+[`j835`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 包含原版《忏悔》的版本／资源描述、存档编解码和角色目录组件，以及 Lua 初始化参考，尚无可构建的完整后端。配置与版本生成器拒绝将其当成完整实现；状态和接口边界见 [J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md)。
+
+[NativeBackendTests.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/NativeBackendTests.cmake) 可以单独编译未完成后端的组件夹具；不加载游戏程序，也不生成该后端的可安装 DLL。存档定向检查为 `native.save-j460`／`native.save-j835`，验证调用约定、原始编码字节、重复解码、流失败、大小限制及文件名／流字段恢复。`native.character-catalog`／`native.character-catalog-j835` 检查目录、解锁、里角色与 Mod 角色；`native.progress-layouts` 检查两版进度数组边界和网络字段补零。共同流与目录算法位于后端的 [common](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/common) 目录，不能当作独立游戏版本选择。
+
 配置阶段需要 Python 3.10+。[版本生成器](https://github.com/BMingSY/isaac-lan/blob/main/tools/generate_game_profile.py) 将后端的版本描述、入口和签名生成 C++ 描述符及构建目录内的 `game-profile.json`。打包使用该构建快照，缺失时要求重新配置；不从源码默认版本补造元数据。安装包的游戏版本、后端标识、检查器和描述文件必须对应同一个构建。
 
 | 产物 | 用途 |
@@ -69,6 +73,17 @@ ctest --test-dir build-core --output-on-failure
 | pytest／Hypothesis | 工具、生成动作序列、持续移动与固定失败回放 | 模型给出独立预期；不等同游戏引擎 |
 | Windows 传输 | IPv4／IPv6 UDP、双栈域名与回退、输入事件、积压、重连、事务顺序及 UDP 丢包／乱序 | 不启动游戏 |
 | 隔离实机／正常操作 | 原生机制、入口与连续画面 | 结果限定于所用版本、夹具和采样范围 |
+
+版本资源的离线检查为 `presentation.fonts`、`presentation.chat-render`、`presentation.chat-repentance`、`bridge.challenge_menu` 和 `bridge.menu-repentance`，覆盖资源选择、字体宽度与缩放、菜单操作及缺少官方联机入口时的返回行为。相应夹具会拒绝原版环境访问忏悔＋专属字体／大厅美术；它不证明实际画面或原生后端可用。
+
+原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
+
+```sh
+python tools/inspect_engine.py "$ISAAC_GAME_EXE" \
+  --reference "$ISAAC_NATIVE_REFERENCE" --output "$ISAAC_AUDIT_REPORT"
+```
+
+工具仅读取文件，报告 PE 布局、版本标记、导入和特征码候选，不启动游戏、安装 Hook 或生成可用后端。所有重叠匹配、重载及全局引用目标均保留；同名函数或唯一匹配不等于调用约定、布局和所有权已核验。报告路径必须不存在，避免覆盖旧证据。[native_image.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/native_image.py) 提供 RVA／文件偏移转换与按 PE 重定位屏蔽的 16 字节签名采样，结果仍需人工审核。
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
 

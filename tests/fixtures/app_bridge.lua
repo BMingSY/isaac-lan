@@ -40,6 +40,7 @@ return function(root, native, modules)
             return true
         end
     native.chat_style = { opacity = 70, background = 0x231b18, border = 0x79604c, text = 0xe8dfcb }
+    native.presentation_assets = dofile(root .. "/tests/fixtures/presentation_assets.lua")()
     for _, name in ipairs({
         "core/contacts",
         "core/endpoint",
@@ -68,6 +69,7 @@ return function(root, native, modules)
         "runtime/teleport",
         "runtime/chat",
         "presentation/chat_layout",
+        "presentation/fonts",
         "presentation/chat",
         "diagnostics/feedback",
     }) do

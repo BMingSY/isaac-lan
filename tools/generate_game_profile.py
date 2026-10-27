@@ -34,7 +34,14 @@ def generate(backend, output):
     lines += [
         f"    {hex(profile['version_rva'])}, {hex(profile['minimum_image_size'])},",
         "    selectedSections, selectedSignatures,",
-        "    {" + str(profile["capabilities"]["native_emotes"]).lower() + "}",
+        "    {" + str(profile["capabilities"]["native_emotes"]).lower() + "},",
+        "    {" + str(profile["presentation"]["native_lobby"]).lower() + ",",
+    ]
+    for name in ("small", "normal", "heading"):
+        font = profile["presentation"]["fonts"][name]
+        lines.append(f"        {{{json.dumps(font['path'])}, {float(font['scale'])}f}},")
+    lines += [
+        "    }",
         "};",
         "} // namespace",
         "} // namespace isaac::engine",

@@ -16,6 +16,14 @@ struct Signature {
 struct Capabilities {
     bool nativeEmotes;
 };
+struct MenuFont {
+    const char* path;
+    float scale;
+};
+struct PresentationResources {
+    bool nativeLobby;
+    MenuFont small, normal, heading;
+};
 // The selected build supplies immutable metadata. Native objects and ownership
 // remain private to its backend; consumers cannot select arbitrary addresses.
 struct Profile {
@@ -28,6 +36,7 @@ struct Profile {
     std::span<const RequiredSection> sections;
     std::span<const Signature> signatures;
     Capabilities capabilities;
+    PresentationResources presentation;
 };
 const Profile& profile();
 } // namespace isaac::engine

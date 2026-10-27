@@ -1,6 +1,8 @@
 local root = assert(arg[1])
 local factory = dofile(root .. "/src/bridge/presentation/chat.lua")
 local layout = dofile(root .. "/src/bridge/presentation/chat_layout.lua")
+local fonts = dofile(root .. "/src/bridge/presentation/fonts.lua")
+local resources = dofile(root .. "/tests/fixtures/presentation_assets.lua")(arg[2] == "vanilla")
 local draws, loads, missing = {}, {}, false
 local texts, availability, controlsPolled, sceneReady = {}, {}, 0, false
 local mouse = { x = -1000, y = -1000, down = false }
@@ -54,7 +56,12 @@ function Sprite()
 end
 function Font()
     return {
-        Load = function() end,
+        Load = function(_, path)
+            assert(path == resources.fonts.small.path)
+        end,
+        IsLoaded = function()
+            return true
+        end,
         GetStringWidthUTF8 = function(_, value)
             return (utf8.len(value) or 0) * 5
         end,
@@ -86,6 +93,9 @@ local function create(image, opacity, options, messages, service)
         end
     end
     local ui = factory({
+        font = function()
+            return fonts(resources.fonts)("small")
+        end,
         game = Game,
         native = {
             chat_style = {

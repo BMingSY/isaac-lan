@@ -353,8 +353,12 @@ chat = _IsaacLanModules["runtime/chat"]({
         return native.rooms_positions()[tostring(slot)]
     end,
 }, _IsaacLanModules["runtime/chat_wire"])
+local menuFonts = _IsaacLanModules["presentation/fonts"](native.presentation_assets.fonts)
 local chatUI = _IsaacLanModules["presentation/chat"]({
     native = native,
+    font = function()
+        return menuFonts("small")
+    end,
     game = Game,
     options = Options,
     chat = chat,

@@ -27,6 +27,14 @@
     "capabilities": {
         "native_emotes": true
     },
+    "presentation": {
+        "native_lobby": true,
+        "fonts": {
+            "small": { "path": "font/TeamMeatEx/TeamMeatEx10.fnt", "scale": 1 },
+            "normal": { "path": "font/TeamMeatEx/TeamMeatEx12.fnt", "scale": 1 },
+            "heading": { "path": "font/TeamMeatEx/TeamMeatEx16.fnt", "scale": 1 }
+        }
+    },
     "testing": {
         "progress_fixture": "j460",
         "accepted_beta_option": "AcceptedPublicBeta_v1.9.7.17"

@@ -1,4 +1,6 @@
 #pragma once
+#include "engine/versions/common/progress.h"
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -17,6 +19,7 @@ inline constexpr unsigned capacity = 0x8;
 inline constexpr unsigned words = 0x3;
 } // namespace vector
 namespace manager {
+inline constexpr unsigned characterConfigs = 0x2a678;
 inline constexpr unsigned scene = 0x8;
 inline constexpr unsigned saveSlot = 0x10;
 inline constexpr unsigned progress = 0x14;
@@ -40,6 +43,8 @@ inline constexpr unsigned queuedId = 0x310;
 inline constexpr unsigned volume = 0x398;
 } // namespace music
 namespace progress {
+inline constexpr unsigned achievementCount = 642, counterCount = 523;
+inline constexpr native_progress::Layout fields{0x38, achievementCount, 0x2bc, counterCount};
 inline constexpr unsigned readOnly = 0x1;
 inline constexpr unsigned achievements = 0x38;
 inline constexpr unsigned counters = 0x2bc;
@@ -84,6 +89,10 @@ inline constexpr unsigned fadeAction = 0x265bc;
 inline constexpr unsigned restartHeldFrames = 0x265c4;
 inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
+namespace gameState {
+inline constexpr unsigned stream = 0x1fe24;
+inline constexpr std::array<unsigned, 4> fileNames{0x1fdac, 0x1fdc4, 0x1fdf4, 0x1fe0c};
+} // namespace gameState
 namespace room {
 inline constexpr unsigned size = 0x7898;
 inline constexpr unsigned enteredFrame = 0x11f0;

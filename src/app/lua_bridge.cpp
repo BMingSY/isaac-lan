@@ -1,14 +1,35 @@
 #include "app/lua_bridge.h"
 #include "engine/lua_api.h"
+#include "engine/profile.h"
 #include "embedded_bridge.h"
 #include <cstring>
 #include <iterator>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace isaac::app {
 void loadBridge(lua_State* state, const lua::API& lua,
                 const std::function<bool(int, int)>& invoke) {
+    const auto& resources = engine::profile().presentation;
+    lua.getGlobal(state, "_IsaacLan");
+    lua.createTable(state, 0, 2);
+    lua.pushBoolean(state, resources.nativeLobby);
+    lua.setField(state, -2, "native_lobby");
+    lua.createTable(state, 0, 3);
+    for (const auto& [name, font] :
+         {std::pair{"small", resources.small}, std::pair{"normal", resources.normal},
+          std::pair{"heading", resources.heading}}) {
+        lua.createTable(state, 0, 2);
+        lua.pushString(state, font.path);
+        lua.setField(state, -2, "path");
+        lua.pushNumber(state, font.scale);
+        lua.setField(state, -2, "scale");
+        lua.setField(state, -2, name);
+    }
+    lua.setField(state, -2, "fonts");
+    lua.setField(state, -2, "presentation_assets");
+    lua.setTop(state, -2);
     if (lua.loadBuffer(state, predictionSource, sizeof(predictionSource) - 1,
                        "@isaac-lan/presentation/prediction.lua", "t") != 0 ||
         !invoke(0, 0))

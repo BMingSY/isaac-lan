@@ -1,6 +1,7 @@
 """Version metadata shared by build, packaging and isolated test tools."""
 
 import json
+import math
 from pathlib import Path
 import re
 
@@ -33,16 +34,51 @@ def validate(profile):
             raise ValueError("Game profile section exceeds image size")
     if type(profile.get("capabilities", {}).get("native_emotes")) is not bool:
         raise ValueError("Missing native emote capability")
+    # Older lab snapshots do not carry presentation metadata. They remain
+    # readable for profile protection; configuring a backend requires it below.
+    if "presentation" in profile:
+        presentation = profile["presentation"]
+        if not isinstance(presentation, dict) or type(presentation.get("native_lobby")) is not bool:
+            raise ValueError("Invalid native lobby resource capability")
+        fonts = presentation.get("fonts")
+        if not isinstance(fonts, dict) or set(fonts) != {"small", "normal", "heading"}:
+            raise ValueError("Three named menu fonts are required")
+        for font in fonts.values():
+            if not isinstance(font, dict):
+                raise ValueError("Invalid menu font")
+            path, scale = font.get("path"), font.get("scale")
+            if (
+                not isinstance(path, str)
+                or not path.startswith("font/")
+                or not path.endswith(".fnt")
+                or any(c in path for c in "\\:")
+                or any(ord(c) < 32 for c in path)
+                or any(part in {"", ".", ".."} for part in path.split("/"))
+                or type(scale) not in (int, float)
+                or not math.isfinite(scale)
+                or not 0 < scale <= 4
+            ):
+                raise ValueError("Invalid menu font path or scale")
     return profile
 
 
-def source_profile(backend=DEFAULT_BACKEND, *, root=ROOT):
+def backend_metadata(backend=DEFAULT_BACKEND, *, root=ROOT):
     if not re.fullmatch(r"[a-z0-9_]+", backend):
         raise ValueError("Invalid backend identifier")
     directory = root / "src/engine/versions" / backend
     profile = validate(json.loads((directory / "profile.json").read_text()))
     if profile["backend"] != backend:
         raise ValueError("Backend directory and profile differ")
+    return profile
+
+
+def source_profile(backend=DEFAULT_BACKEND, *, root=ROOT):
+    profile = backend_metadata(backend, root=root)
+    directory = root / "src/engine/versions" / backend
+    if not (directory / "sources.cmake").is_file():
+        raise ValueError(f"Native backend is not implemented: {backend}")
+    if "presentation" not in profile:
+        raise ValueError("Backend requires presentation resource metadata")
     header = (directory / "entrypoints.h").read_text()
     addresses = dict(re.findall(r"std::uint32_t (\w+) = (0x[0-9a-f]+);", header))
     source = (directory / "signatures.inc").read_text()

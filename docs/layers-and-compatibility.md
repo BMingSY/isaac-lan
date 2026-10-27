@@ -22,9 +22,11 @@
 
 装配层注入运行、同步、兼容与表现组件。运行协调器通过 [`engine/session_backend.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/session_backend.h) 调用具名能力；J460 后端安装 Hook，回调只传普通值和限同步调用的原版操作，不向运行层暴露原生对象。Lua ABI 声明与符号加载共用 [`engine/lua_api.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。
 
-版本选择由 [Backend.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/Backend.cmake) 在构建时完成，每个 DLL 只链接一个后端。[Profile](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/profile.h) 提供版本身份、资料目录、Lua 模块和已实现的能力；公共版本检查读取同一份生成描述。ABI、Hook 原函数和借用对象声明留在后端私有头中；运行、表现和诊断组件使用具名能力查询状态。一个进程内不切换后端。
+版本选择由 [Backend.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/Backend.cmake) 在构建时完成，每个 DLL 只链接一个后端。[Profile](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/profile.h) 提供版本身份、资料目录、Lua 模块和已实现的能力；公共版本检查读取同一份生成描述。ABI、Hook 原函数和借用对象声明留在后端私有头中；运行、表现和诊断组件使用具名能力查询状态。两版已核对一致的原生流 ABI、目录算法和进度复制使用后端内部的 [common](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/common) 实现；各版绑定仍持有自己的地址、对象偏移、数组边界和调用参数。一个进程内不切换后端。
 
 [Lua 装配](https://github.com/BMingSY/isaac-lan/blob/main/src/app/lua_bridge.cpp)与[构建指纹](https://github.com/BMingSY/isaac-lan/blob/main/src/app/bridge_manifest.cpp)由应用组件管理；后端在原生 Lua 初始化后调用装配，并负责状态销毁通知和栈恢复。指纹包含游戏版本及扩展 DLL 的内容，Mod 清单保持独立提示。Windows 文字、剪贴板和输入法处理位于[表现组件](https://github.com/BMingSY/isaac-lan/blob/main/src/presentation/chat_input.cpp)，使用共用 Lua ABI；游戏菜单和 HUD 的内存访问仍由后端负责。
+
+菜单字体、缩放和官方大厅美术的可用性由后端描述提供，应用装配将其传给 [字体组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/fonts.lua)与[菜单资源组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/menu_assets.lua)。表现组件不以版本号分支，不加载未声明的官方大厅资源；没有官方联机接口时直接进入局域网页面。菜单规则、聊天和同步契约共用原有实现。
 
 会话视图、启动请求和存档保护分别由 [`session_state.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_state.h) 中的状态组件持有，存档文件操作由 [`session_store.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_store.cpp) 管理。会话协议状态留在主线程的 `net/session.cpp` 与 `net/peer.h`；`net/socket.h` 负责有界数据交接，`net/network_io.cpp`／`net/udp_io.cpp` 的网络线程独占连接、收发和实时压缩上下文。`net/world_transfer.h` 管理实时视图基线与分块，`net/reliable_transfer.h`／`net/reliable_receiver.h` 管理可靠大数据的分块与组装，`net/byte_worker.cpp` 执行存档字节任务；域名解析位于 `net/host_resolution.cpp`。
 

@@ -62,8 +62,10 @@ add_test(NAME native.room-routing COMMAND isaac_lan_room_routing_test)
 set_tests_properties(native.room-routing PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 add_test(NAME native.crafting-hud COMMAND isaac_lan_crafting_hud_test)
 set_tests_properties(native.crafting-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-add_executable(isaac_lan_character_catalog_test tests/character_catalog_test.cpp
-                                                ${ISAAC_LAN_BACKEND_DIR}/characters.cpp)
+add_executable(
+    isaac_lan_character_catalog_test
+    tests/character_catalog_test.cpp ${ISAAC_LAN_BACKEND_DIR}/characters.cpp
+    ${ISAAC_LAN_BACKEND_DIR}/../common/character_catalogue.cpp)
 target_include_directories(isaac_lan_character_catalog_test PRIVATE src)
 if(MINGW)
     target_link_options(isaac_lan_character_catalog_test PRIVATE -static-libgcc -static-libstdc++)

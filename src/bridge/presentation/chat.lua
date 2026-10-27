@@ -48,8 +48,7 @@ return function(deps, layout)
         if assets then
             return
         end
-        local font, fill, bubble = Font(), Sprite(), Sprite()
-        font:Load("font/TeamMeatEx/TeamMeatEx10.fnt")
+        local font, fill, bubble = deps.font(), Sprite(), Sprite()
         fill:Load("gfx/ui/bossoverlay_whiteout.anm2", true)
         fill:SetFrame("Fade", 15)
         if native.emote_poll then

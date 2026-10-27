@@ -7,7 +7,7 @@ local ui = {
     seed = "",
     difficulty = 0,
     selection = 1,
-    page = "modes",
+    page = _IsaacLan.menu_official and "modes" or "lan",
     lastPhase = -1,
     errorText = "",
 }
@@ -25,7 +25,11 @@ local challenges = _IsaacLan.net_challenges()
 local roomOptions = _IsaacLan.net_room_options()
 local idle = model.idle
 function _IsaacLanMenuOpen(returning)
-    ui.page = not returning and idle(_IsaacLanStatus().phase or Phase.idle) and "modes" or "lan"
+    ui.page = not returning
+            and _IsaacLan.menu_official
+            and idle(_IsaacLanStatus().phase or Phase.idle)
+            and "modes"
+        or "lan"
     ui.selection, ui.editing = 1, nil
     ui.ruleReturn, ui.ruleScroll = nil, nil
     _IsaacLan.menu_text_end()
@@ -106,29 +110,11 @@ local function load()
     if assets then
         return
     end
-    assets = { characterPortraits = {} }
-    local function sprite(name, path, animation)
-        local s = Sprite()
-        s:Load(path, true)
-        s:SetFrame(animation, 0)
-        assets[name] = s
-    end
-    local root = "gfx/ui/main menu/"
-    sprite("lobby", root .. "onlinelobby.anm2", "Background")
-    sprite("cards", root .. "onlinelobby.anm2", "PlayerInfo")
-    sprite("online", root .. "onlinemenu.anm2", "Idle")
-    sprite("sketches", root .. "charactermenubg.anm2", "Idle")
-    sprite("portraits", root .. "characterportraits.anm2", "01_Isaac")
-    sprite("marks", "gfx/ui/completion_widget.anm2", "Idle")
-    sprite("fill", "gfx/ui/bossoverlay_whiteout.anm2", "Fade")
-    assets.fill:SetFrame("Fade", 15)
-    for _, size in ipairs({ 10, 12, 16 }) do
-        local font = Font()
-        font:Load("font/TeamMeatEx/TeamMeatEx" .. size .. ".fnt")
-        assert(font:IsLoaded(), "Cannot load the game's menu font")
-        assets[size] = font
-    end
-    Isaac.DebugString("ISAAC_LAN NATIVE_MENU sprites=onlinelobby fonts=TeamMeatEx")
+    local resources = _IsaacLan.presentation_assets
+    assets = _IsaacLanModules["presentation/menu_assets"](
+        resources,
+        _IsaacLanModules["presentation/fonts"](resources.fonts)
+    )
 end
 function _IsaacLanMenuRender(
     available,
@@ -191,11 +177,8 @@ function _IsaacLanMenuRender(
         local width = font:GetStringWidthUTF8(value)
         text(value, x - math.min(width, maxWidth or width) / 2, y, size, color, maxWidth)
     end
-    local function layer(sprite, id, x, y)
-        sprite:RenderLayer(id, pos(x, y))
-    end
     local function pointer(x, y)
-        layer(assets.online, 4, x - 70, y - 68)
+        assets.pointer(origin, x, y)
     end
     local function hit(x, y, w, h)
         return mouse.X >= x and mouse.X < x + w and mouse.Y >= y and mouse.Y < y + h
@@ -221,7 +204,12 @@ function _IsaacLanMenuRender(
             key = 0
         elseif model.back(ui) then
             key = 0
-        elseif ui.page == "lan" and idle(phase) and not status.recovering then
+        elseif
+            _IsaacLan.menu_official
+            and ui.page == "lan"
+            and idle(phase)
+            and not status.recovering
+        then
             ui.page = "modes"
             ui.selection = 2
             key = 0
@@ -241,9 +229,7 @@ function _IsaacLanMenuRender(
                 .. " 暂停了游戏，由发起者恢复"
         end
         if banner then
-            assets.lobby.Scale = Vector(1, 0.4)
-            layer(assets.lobby, 39, 134, -63)
-            assets.lobby.Scale = Vector(1, 1)
+            assets.banner(origin)
             centered(banner, 240, 24, 10)
         end
         return false
@@ -258,7 +244,7 @@ function _IsaacLanMenuRender(
     assets.sketches:RenderLayer(0, origin)
     local modes = ui.page == "modes"
     local shift = modes and 128 or 0
-    layer(assets.lobby, 9, 9 + shift, 39)
+    assets.panel(origin, modes)
     local localSlot = status.slot or 0
     -- No seat exists until the host has accepted the connection. Default
     -- session values must not appear as a joined P1 after a failed attempt.
@@ -427,10 +413,7 @@ function _IsaacLanMenuRender(
     end
     for i = 0, (modes and -1 or 3) do
         local x, y = 198 + (i % 2) * 132, 17 + math.floor(i / 2) * 108
-        assets.cards.Scale = Vector(1.25, 1)
-        layer(assets.cards, 0, x, y)
-        assets.cards:SetLayerFrame(36, i)
-        layer(assets.cards, 36, x, y)
+        assets.seat(origin, x, y, i)
         if i < count then
             local id = status[(phase == Phase.lobby and "choice" or "character") .. i] or 0
             local marks = phase == Phase.lobby and status["marks" .. i] or nil
@@ -445,7 +428,7 @@ function _IsaacLanMenuRender(
                 assets.marks:Render(pos(x + 65, y + 26))
             end
             if phase == Phase.lobby and status["ready" .. i] == 1 then
-                layer(assets.cards, 5, x, y)
+                assets.ready(origin, x, y)
                 centered("已准备", x + 63, y + 78, 10, ink)
             else
                 centered(

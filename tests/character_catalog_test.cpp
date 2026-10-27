@@ -1,7 +1,13 @@
-// Exercise the production J460 catalogue against a private x86 image and ABI.
+// Exercise each production catalogue against a private x86 image and ABI.
 #include "test_support.h"
 #include "engine/characters.h"
+#ifdef ISAAC_LAN_TEST_J835
+#include "engine/versions/j835/entrypoints.h"
+namespace backend = isaac::engine::j835;
+#else
 #include "engine/versions/j460/entrypoints.h"
+namespace backend = isaac::engine::j460;
+#endif
 #include "net/protocol.h"
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -18,8 +24,16 @@
 
 namespace {
 constexpr std::size_t imageSize = 0x880000, managerSize = 0x4a940;
-constexpr unsigned menuOffset = 0x724140, menuStride = 24, configStride = 0x148;
-constexpr unsigned flagsOffset = 0x14 + 0x38, countersOffset = 0x14 + 0x2bc;
+constexpr unsigned menuStride = 24, configStride = 0x148, flagsOffset = 0x14 + 0x38;
+#ifdef ISAAC_LAN_TEST_J835
+constexpr unsigned menuOffset = 0x60d6b0, countersOffset = 0x14 + 0x2b8;
+constexpr unsigned stringTableOffset = 0x4a234, configsOffset = 0x29f90;
+constexpr unsigned achievementCount = 638, counterCount = 496, availableRva = 0x4a1ea0;
+#else
+constexpr unsigned menuOffset = 0x724140, countersOffset = 0x14 + 0x2bc;
+constexpr unsigned stringTableOffset = 0x4a920, configsOffset = 0x2a678;
+constexpr unsigned achievementCount = 642, counterCount = 523, availableRva = 0x546cd0;
+#endif
 constexpr std::array<unsigned, 34> nativeTypes{0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 13,
                                                14, 15, 16, 18, 19, 21, 22, 23, 24, 25, 26, 27,
                                                28, 29, 30, 31, 32, 33, 34, 35, 36, 37};
@@ -62,10 +76,9 @@ bool __attribute__((thiscall)) selectable(void* entry, int unused) {
         reject("Selectable received the wrong stack argument");
     if (read<int>(manager.data(), 8) != 0)
         reject("Catalogue left native run-scene unlock exemptions active");
-    if (std::memcmp(manager.data() + flagsOffset, personal.achievements.data(),
-                    personal.achievements.size()))
+    if (std::memcmp(manager.data() + flagsOffset, personal.achievements.data(), achievementCount))
         reject("Selectable observed shared achievements instead of personal progress");
-    for (unsigned i = 0; i < personal.counters.size(); ++i) {
+    for (unsigned i = 0; i < counterCount; ++i) {
         const auto actual = read<std::uint32_t>(manager.data(), countersOffset + i * 4);
         if (i == 21) {
             if (actual != personal.counters[i] && actual != std::max(1u, personal.counters[i]))
@@ -90,7 +103,8 @@ bool __attribute__((thiscall)) selectable(void* entry, int unused) {
 const char* __attribute__((thiscall)) translate(void* table, const char* section, int language,
                                                 const char* key, bool* missing) {
     ++translationCalls;
-    if (table != manager.data() + 0x4a920 || !section || !key || !missing || language != 7) {
+    if (table != manager.data() + stringTableOffset || !section || !key || !missing ||
+        language != 7) {
         reject("String lookup thiscall receiver or stack arguments differ");
         return nullptr;
     }
@@ -118,8 +132,8 @@ struct PrivateImage {
             image[offset] = 0xe9;
             store(image, offset + 1, displacement);
         };
-        jump(0x546cd0, selectable);
-        jump(isaac::engine::j460::entry::stringTableLookup, translate);
+        jump(availableRva, selectable);
+        jump(backend::entry::stringTableLookup, translate);
         require(FlushInstructionCache(GetCurrentProcess(), image, imageSize) != 0,
                 "Cannot publish private ABI trampolines");
     }
@@ -193,30 +207,29 @@ int main() {
         require(!absent.ready && absent.entries.empty(), "Absent image did not fail closed");
         unavailable(); // No manager during early Lua initialization.
         std::fill(manager.begin(), manager.end(), 0x5a);
-        store(image, isaac::engine::j460::globals::manager,
-              reinterpret_cast<std::uintptr_t>(manager.data()));
+        store(image, backend::globals::manager, reinterpret_cast<std::uintptr_t>(manager.data()));
         store(manager.data(), 8,
               2); // Native run-scene exemptions must be suppressed while probing.
-        store(manager.data(), 0x4a920, 7);
-        std::fill_n(manager.data() + flagsOffset, personal.achievements.size(), 1);
-        for (unsigned i = 0; i < personal.counters.size(); ++i)
+        store(manager.data(), stringTableOffset, 7);
+        std::fill_n(manager.data() + flagsOffset, achievementCount, 1);
+        for (unsigned i = 0; i < counterCount; ++i)
             store(manager.data(), countersOffset + i * 4, 0xf000u + i);
         personal.counters[3] = 13;
         for (auto type : {1u, 9u, 23u, 30u})
             personal.achievements[achievement(type)] = 1;
         const auto begin = reinterpret_cast<std::uintptr_t>(configs.data());
         const auto end = begin + configs.size();
-        store(manager.data(), 0x2a678, begin);
+        store(manager.data(), configsOffset, begin);
         for (auto badEnd : {begin, begin - 1, begin + 40 * configStride, end - 1,
                             begin + 65537u * configStride}) {
-            store(manager.data(), 0x2a67c, badEnd);
+            store(manager.data(), configsOffset + 4, badEnd);
             unavailable();
         }
-        store(manager.data(), 0x2a67c, end);
+        store(manager.data(), configsOffset + 4, end);
         const std::array<std::string, 2> nativePortraits{"gfx/ui/vanilla_normal.anm2",
                                                          "gfx/ui/vanilla_tainted.anm2"};
         for (unsigned page = 0; page < nativePortraits.size(); ++page)
-            store(image, isaac::engine::j460::globals::characterMenuPages + page * 12 + 4,
+            store(image, backend::globals::characterMenuPages + page * 12 + 4,
                   reinterpret_cast<std::uintptr_t>(nativePortraits[page].c_str()));
         std::array<std::string, 36> names;
         for (unsigned index = 0; index < names.size(); ++index) {
@@ -318,8 +331,8 @@ int main() {
         require(reloaded.entries.size() == 38 && find(reloaded, 46).name == "Reloaded Mod" &&
                     find(reloaded, 46).portraitPath == "new.png",
                 "Catalogue reused stale entries or accepted a mismatched config ID");
-        store(manager.data(), 0x2a678, std::uintptr_t{0});
-        store(manager.data(), 0x2a67c, std::uintptr_t{0});
+        store(manager.data(), configsOffset, std::uintptr_t{0});
+        store(manager.data(), configsOffset + 4, std::uintptr_t{0});
         unavailable();
         std::puts(
             "PASS production character catalogue: native thiscall/ret4, Random slots, personal "
