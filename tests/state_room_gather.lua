@@ -1,6 +1,7 @@
 -- One protected pair: actual door input, native cards and chat entries share
 -- the production rule. Both peers assert every destination before advancing.
 local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
+local allRooms = config.gatherAllRooms == true
 local host, base = config.host, _IsaacLanFrame
 local input, controls = native.input_bot, 0
 local frames, linked, configured, chosen, done = 0, false, false, false, false
@@ -8,8 +9,9 @@ local current, caseNumber, seen, acknowledged = nil, 0, 0, {}
 local flag, shopSource
 local cardRetry = false
 for _, rule in ipairs(native.net_room_options()) do
-    if rule.key == "specialRoomGather" then
-        assert(rule.name == "特殊房间集合" and rule.shortName == "集合")
+    if rule.key == (allRooms and "allRoomGather" or "specialRoomGather") then
+        assert(rule.name == (allRooms and "所有房间集合" or "特殊房间集合"))
+        assert(rule.shortName == (allRooms and "全程集合" or "集合"))
         flag = rule.flag
     end
 end
@@ -75,6 +77,28 @@ local function start()
 end
 local inward = { Vector(1, 0), Vector(0, 1), Vector(-1, 0), Vector(0, -1) }
 local movement = { 1, 4, 2, 8 }
+local function walkTo(owner, index)
+    local direction
+    actor(owner, function(player, room, level)
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            if entity:ToNPC() then
+                entity:Remove()
+            end
+        end
+        room:SetClear(true)
+        player:AddKeys(1)
+        for slot = 0, 7 do
+            local door = room:GetDoor(slot)
+            if door and level:GetRoomByIdx(door.TargetRoomIndex, 0).SafeGridIndex == index then
+                player.Position = door.Position + inward[slot % 4 + 1] * 45
+                player.Velocity = Vector.Zero
+                direction = movement[slot % 4 + 1]
+                break
+            end
+        end
+    end)
+    return "walk " .. assert(direction, "Missing actual door"), index
+end
 local cases = {
     {
         name = "ordinary",
@@ -104,33 +128,19 @@ local cases = {
             return coordinate(assert(shopSource)), shopSource
         end,
     },
-    { name = "host-before-door", owner = 0, split = true, setup = start },
+    { name = "host-before-door", owner = 0, split = true, specialOnly = true, setup = start },
     {
         name = "walk-shop",
         setup = function()
-            local shop, direction = existing(RoomType.ROOM_SHOP), nil
-            actor(1, function(player, room, level)
-                for _, entity in ipairs(Isaac.GetRoomEntities()) do
-                    if entity:ToNPC() then
-                        entity:Remove()
-                    end
-                end
-                room:SetClear(true)
-                player:AddKeys(1)
-                for slot = 0, 7 do
-                    local door = room:GetDoor(slot)
-                    if
-                        door
-                        and level:GetRoomByIdx(door.TargetRoomIndex, 0).SafeGridIndex == shop
-                    then
-                        player.Position = door.Position + inward[slot % 4 + 1] * 45
-                        player.Velocity = Vector.Zero
-                        direction = movement[slot % 4 + 1]
-                        break
-                    end
-                end
-            end)
-            return "walk " .. assert(direction, "Missing actual shop door"), shop
+            return walkTo(1, existing(RoomType.ROOM_SHOP))
+        end,
+    },
+    {
+        name = "walk-ordinary",
+        owner = 0,
+        allOnly = true,
+        setup = function()
+            return walkTo(0, assert(shopSource))
         end,
     },
     { name = "ultra-secret", setup = target("/tp us", RoomType.ROOM_ULTRASECRET) },
@@ -146,7 +156,7 @@ local cases = {
         end,
     },
     { name = "host-before-card", owner = 0, split = true, setup = start },
-    { name = "guest-before-card", split = true, setup = start },
+    { name = "guest-before-card", split = true, specialOnly = true, setup = start },
     {
         name = "joker",
         owner = 0,
@@ -210,11 +220,18 @@ local cases = {
     },
     { name = "post-floor-shop", setup = target("/tp sh", RoomType.ROOM_SHOP) },
 }
+local selected = {}
+for _, case in ipairs(cases) do
+    if not (allRooms and case.specialOnly or not allRooms and case.allOnly) then
+        selected[#selected + 1] = case
+    end
+end
+cases = selected
 local function sendCase(number)
     local case = cases[number]
     local command, index = case.setup()
     local owner = case.owner or 1
-    local other = case.split and roomOf(1 - owner).index or index
+    local other = not allRooms and case.split and roomOf(1 - owner).index or index
     _IsaacLanChatOutput(
         string.format("GATHER_CASE %d %d %d %d |%s", number, owner, index, other, command),
         { audience = "party" }
@@ -310,7 +327,7 @@ function _IsaacLanFrame()
             end
             if message.text == "GATHER_ALL_DONE" then
                 done, controls = true, 0
-                report("PASS special room rule")
+                report("PASS " .. (allRooms and "all" or "special") .. " room rule")
             end
         end
     end
@@ -341,6 +358,19 @@ function _IsaacLanFrame()
             assert(position.dimension == 0 and other.dimension == 0)
             if host and case.name == "card-in-flight" then
                 assert(cardRetry, "Fixture did not exercise the pending native card")
+            end
+            if host and allRooms and case.name ~= "floor" then
+                local leader
+                actor(current.owner, function(player)
+                    leader = player.Position
+                end)
+                actor(1 - current.owner, function(player)
+                    local maxLandingDistance = 100
+                    assert(
+                        player.Position:Distance(leader) <= maxLandingDistance,
+                        "Follower did not land near the departing player: " .. case.name
+                    )
+                end)
             end
             current.checked = true
             report(

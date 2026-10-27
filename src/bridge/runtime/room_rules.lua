@@ -62,8 +62,9 @@ return function(deps)
             if enabled(info, "sharedClearCharge") then
                 charge.step(info)
             end
-            if enabled(info, "specialRoomGather") then
-                gather.step(info)
+            local allRooms = enabled(info, "allRoomGather")
+            if allRooms or enabled(info, "specialRoomGather") then
+                gather.step(info, allRooms)
             else
                 gather.reset()
             end

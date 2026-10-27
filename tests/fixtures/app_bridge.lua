@@ -26,6 +26,7 @@ return function(root, native, modules)
             { flag = 2, key = "sharedClearCharge" },
             { flag = 4, key = "lootRoll" },
             { flag = 8, key = "specialRoomGather" },
+            { key = "allRoomGather", flag = 16 },
         }
     end
     native.menu_room_options = native.menu_room_options or function()
@@ -50,7 +51,7 @@ return function(root, native, modules)
         "compat/rules/friendly_fire",
         "compat/rules/loot_roll",
         "compat/rules/clear_charge",
-        "compat/rules/special_rooms",
+        "compat/rules/room_gather",
         "runtime/room_rules",
         "compat/challenges/luck_game",
         "compat/challenges/battle_royale_rules",
@@ -66,6 +67,7 @@ return function(root, native, modules)
         "runtime/chat_wire",
         "runtime/chat_dice",
         "runtime/teleport",
+        "runtime/room_placement",
         "runtime/chat",
         "presentation/chat_layout",
         "presentation/chat",

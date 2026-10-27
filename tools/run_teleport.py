@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate teleport commands or special room gathering with one protected pair."""
+"""Validate teleport commands or room gathering with one protected pair."""
 
 import argparse
 import json
@@ -24,7 +24,13 @@ def main():
     parser.add_argument("--heap-check", action="store_true")
     parser.add_argument("--record", action="store_true")
     suite = parser.add_mutually_exclusive_group()
-    suite.add_argument("--gather", action="store_true", help="Validate the special room rule")
+    suite.add_argument(
+        "--gather",
+        nargs="?",
+        choices=("special", "all"),
+        const="special",
+        help="Validate special-room (default) or all-room gathering",
+    )
     suite.add_argument(
         "--feedback-regressions",
         action="store_true",
@@ -44,20 +50,28 @@ def main():
     protected = ProtectedLabs(labs, output)
     report = {"passed": False, "protected": protected.report()}
     try:
-        fixture = "state_special_room_gather.lua" if args.gather else "state_teleport.lua"
+        fixture = (
+            ROOT / "tests" / ("state_room_gather.lua" if args.gather else "state_teleport.lua")
+        )
+        if args.gather == "all":
+            source = fixture.read_text()
+            fixture = output / "all-room-gather.lua"
+            fixture.write_text("_IsaacLanTest.gatherAllRooms = true\n" + source)
         completion = (
-            "LAN_GATHER PASS special room rule" if args.gather else "LAN_TP PASS teleport commands"
+            f"LAN_GATHER PASS {args.gather} room rule"
+            if args.gather
+            else "LAN_TP PASS teleport commands"
         )
         if args.feedback_regressions:
             fixture, completion = (
-                "state_feedback_regressions.lua",
+                ROOT / "tests/state_feedback_regressions.lua",
                 "LAN_FEEDBACK PASS regression probes",
             )
         command = engine_command(
             labs,
             args.build,
             output / "engine",
-            ROOT / "tests" / fixture,
+            fixture,
             completion,
             "--frontend",
             "--no-luadebug",
