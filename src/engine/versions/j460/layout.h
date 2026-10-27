@@ -182,6 +182,7 @@ inline constexpr unsigned minRadius = 0x454;
 inline constexpr unsigned maxRadius = 0x458;
 } // namespace effect
 namespace familiar {
+inline constexpr unsigned chargeBar = 0xdcc;
 inline constexpr unsigned state = 0xd88;
 inline constexpr unsigned fireCooldown = 0xd4c;
 inline constexpr unsigned headFrameDelay = 0xd50;
