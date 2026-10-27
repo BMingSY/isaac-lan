@@ -38,6 +38,7 @@ inline constexpr std::uint32_t pickupUpdateGhosts = 0x2e17c0;
 inline constexpr std::uint32_t pickupSetPrice = 0x2e2570;
 inline constexpr std::uint32_t entityLuaSetColor = 0x471f70;
 inline constexpr std::uint32_t entityLuaSetSize = 0x471fa0;
+inline constexpr std::uint32_t entitySetSize = 0x2ac2a0;
 inline constexpr std::uint32_t tearSetHeight = 0x275fc0;
 inline constexpr std::uint32_t tearSetScale = 0x276120;
 inline constexpr std::uint32_t bossHeldBombsResize = 0x4bd80;

@@ -68,6 +68,8 @@ ctest --test-dir build-core --output-on-failure
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
 
+实体尺寸恢复的定向检查为 `bridge.entity-codec` 和 Windows `native.entity-size`，覆盖无 XML 配置的实体、重复尺寸、实际尺寸变化、原有碰撞形状与非法输入拒绝。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case entity-size --case entity-fields --mod <Mod目录> --heap-check --record`，在同一对进程验证换层后的复活机、分房重聚、检查点重连及常规字段读写对照；用 Allstars 的旧实体表可覆盖配置缺失路径。Mod 文件只复制到隔离目录，不修改原安装；未订阅的创意工坊副本应准备为无 Workshop ID 的本地测试元数据，避免游戏自动移除它，保留 Lua 和资源文件原样。
+
 Lua 夹具的输入编解码统一使用 [`tests/support/input.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/support/input.lua)：`neutral` 提供空输入，`buttons` 构造按键掩码，`encode`／`decode` 读写 `values`、`triggered` 和 `pointer`。动作索引与 `ButtonAction` 一致，玩家槽位从 0 开始；场景不自行拼接字段或计算字节偏移。实机启动器将该模块注入为 `_IsaacLanTestInput`，与场景一起冻结到测试脚本；离线测试通过同一模块注入依赖。`bridge.input-wire` 对照生产 C++ 编码，检查字段、默认值和多玩家布局，协议调整集中修改该模块并通过契约校验。
 
 Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，执行原生与 Lua 参考编码的逐字节对照、共享片段、边界／非法输入、分配失败及恢复检查；它通过统一离线入口运行，sanitizer 同时检查绑定和缓冲区的释放。性能比较使用 Release 构建，方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md#编解码基准)。

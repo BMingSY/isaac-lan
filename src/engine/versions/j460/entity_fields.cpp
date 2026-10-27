@@ -1,6 +1,7 @@
 #include "engine/entity_fields.h"
 #include "core/state_codec.h"
 #include "engine/versions/j460/entity_fields.h"
+#include "engine/versions/j460/entity_size.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "runtime/session.h"
 #include <bit>
@@ -86,16 +87,21 @@ const Plan& checkedPlan(lua_State* L, int index) {
         throw std::runtime_error("Invalid entity field plan handle");
     return plan;
 }
-Address checkedEntity(lua_State* L, const Plan& plan) {
+Address checkedEntity(lua_State* L) {
     if (api.type(L, 1) != LuaType::userdata || api.rawLength(L, 1) != 8)
         throw std::runtime_error("Expected borrowed entity Sprite");
     const auto wrapper = static_cast<const Address*>(api.toUserdata(L, 1));
     if (wrapper[1] < j460::layout::entity::sprite)
         throw std::runtime_error("Invalid entity Sprite");
     const auto entity = wrapper[1] - j460::layout::entity::sprite;
-    if (at<unsigned>(entity, j460::layout::entity::type) != plan.type ||
-        !at<bool>(entity, j460::layout::entity::active))
-        throw std::runtime_error("Entity field plan type or lifetime mismatch");
+    if (!at<bool>(entity, j460::layout::entity::active))
+        throw std::runtime_error("Entity is no longer active");
+    return entity;
+}
+Address checkedEntity(lua_State* L, const Plan& plan) {
+    const auto entity = checkedEntity(L);
+    if (at<unsigned>(entity, j460::layout::entity::type) != plan.type)
+        throw std::runtime_error("Entity field plan type mismatch");
     return entity;
 }
 Address checkedSprite(lua_State* L) {
@@ -247,18 +253,23 @@ void capturePacked(FieldWriter& writer, const Plan& plan, unsigned index, Addres
         }
     }
 }
+void restoreSize(Address entity, float value) {
+    using SetDefault = void(__cdecl*)(void*, float);
+    using SetExplicit =
+        void(__attribute__((thiscall))*)(void*, float, j460::entity_size::Multiplier, int);
+    j460::entity_size::restore(entity, value,
+                               reinterpret_cast<SetDefault>(image + j460::entry::entityLuaSetSize),
+                               reinterpret_cast<SetExplicit>(image + j460::entry::entitySetSize));
+}
 void writeReal(Address entity, const properties::Field& field, float value) {
     using SetFloat = void(__attribute__((thiscall))*)(void*, float);
     switch (field.write) {
     case Write::direct:
         at<float>(entity, field.offset) = value;
         break;
-    case Write::size: {
-        using SetSize = void(__cdecl*)(void*, float);
-        reinterpret_cast<SetSize>(image + j460::entry::entityLuaSetSize)(
-            reinterpret_cast<void*>(entity), value);
+    case Write::size:
+        restoreSize(entity, value);
         break;
-    }
     case Write::damage:
         reinterpret_cast<SetFloat>(
             at<Address>(at<Address>(entity, 0), j460::layout::entity::damageVtableSlot))(
@@ -475,6 +486,22 @@ void apply(const Plan& plan, Address entity, const Values& values) {
         }
     }
 }
+int entitySize(lua_State* L) {
+    char error[192]{};
+    try {
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas restore entity size");
+        const auto entity = checkedEntity(L);
+        const auto value = real(L, 2);
+        restoreSize(entity, value);
+        api.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& exception) {
+        std::snprintf(error, sizeof(error), "%s", exception.what());
+    }
+    api.pushString(L, error);
+    return api.error(L);
+}
 int npcBoss(lua_State* L) {
     char error[192]{};
     try {
@@ -576,6 +603,8 @@ bool bind(lua_State* L, lua::Module module) {
                    S::error,       S::checkInteger, S::checkStack,  S::pushLString}))
         return false;
     image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+    api.pushClosure(L, entitySize, 0);
+    api.setField(L, -2, "entity_size");
     api.pushClosure(L, npcBoss, 0);
     api.setField(L, -2, "entity_npc_boss");
     api.pushClosure(L, run<0>, 0);

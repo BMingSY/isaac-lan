@@ -13,6 +13,7 @@ local env = setmetatable({
     EntityGridCollisionClass = { GRIDCOLL_NONE = 0 },
 }, { __index = _G })
 local laserReads, laserWrites = 0, 0
+local sizeWrites = 0
 local spriteChanges = true
 local geometry = string.pack(">ff", 520, -180)
 local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
@@ -28,6 +29,15 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
             return kind == 1000 and variant == 99 and subtype == 1
         end,
         entity_prepare = function()
+            return true
+        end,
+        entity_size = function(sprite, value)
+            sizeWrites = sizeWrites + 1
+            if sprite.setSize then
+                sprite.setSize(value)
+            else
+                rawset(sprite.entity, "Size", value)
+            end
             return true
         end,
         entity_shadow = function()
@@ -82,6 +92,7 @@ local function entity(kind, flags)
         data = {},
         sprite = {},
     }
+    e.sprite.entity = e
     for _, name in ipairs(schemas.common) do
         e[name] = 0
     end
@@ -174,6 +185,32 @@ assert(target.Position.X == 12 and target.Velocity.Y == 3 and target.EndPoint.X 
 assert(target.EntityCollisionClass == 0 and target.GridCollisionClass == 0 and laserWrites == 1)
 component.apply(target, state)
 assert(target.DepthOffset == -9990, "Repeated snapshots must not accumulate the floor offset")
+-- A live slot can have no XML definition. Its Size getter works, while the
+-- public property setter dereferences absent defaults even for the same value.
+local slot, slotReplica = entity(7, 0), entity(7, 0)
+slot.Type, slotReplica.Type, slot.Variant, slotReplica.Variant = 6, 6, 19, 19
+local replicaRadius = 1
+slotReplica.Size = nil
+slotReplica.sprite.setSize = function(value)
+    replicaRadius = value
+end
+setmetatable(slotReplica, {
+    __index = function(_, name)
+        assert(name == "Size")
+        return replicaRadius
+    end,
+    __newindex = function(object, name, value)
+        assert(name ~= "Size", "Replica called the unsafe XML-dependent Size setter")
+        rawset(object, name, value)
+    end,
+})
+local beforeSizes = sizeWrites
+for _, radius in ipairs({ 1, 1, 5.5, 5.5, 1 }) do
+    slot.Size = radius
+    component.apply(slotReplica, component.capture(slot, false))
+    assert(slotReplica.Size == radius, "Replica size did not follow the authority")
+end
+assert(sizeWrites == beforeSizes + 5, "Slot bypassed the native size adapter")
 local actor, replica = entity(1, 1), entity(1, 128)
 -- Replica Player::Update does not count down the native arrival/input lock.
 -- An authoritative zero must release it, while a live cooldown remains locked.

@@ -260,6 +260,7 @@ def main():
                                 "attached-motion",
                                 "weak-network",
                                 "entity-fields",
+                                "entity-size",
                                 "floor-items",
                                 "mod-integrations",
                             )
