@@ -1,15 +1,14 @@
 #pragma once
 #include "engine/versions/j460/layout.h"
+#include "engine/versions/common/mouse_query.h"
 #include "net/protocol.h"
 
 namespace isaac::engine::j460::mouse_input {
-struct Vector {
-    float x = 0, y = 0;
-};
-using Aim = bool(__attribute__((thiscall)) *)(void*, Vector*, bool);
-using ShootingEntity = void*(__attribute__((thiscall)) *)(void*);
+using Vector = native_mouse::Vector;
+using Aim = native_mouse::Aim;
+using ShootingEntity = native_mouse::ShootingEntity;
 // Native mouse aiming returns (cursor - shooting entity position) * 0.2.
-inline constexpr float aimScale = 0.2f;
+inline constexpr float aimScale = native_mouse::canonicalScale;
 inline Vector origin(void* player, ShootingEntity shootingEntity) {
     auto entity = shootingEntity(player);
     const auto address = reinterpret_cast<std::uintptr_t>(entity ? entity : player);

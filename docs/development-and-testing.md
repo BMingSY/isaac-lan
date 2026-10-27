@@ -20,6 +20,7 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 | `native.session-j460`／`native.session-j835` | Hook 失败回滚、回调拦截、开局传值 ABI、继续／重开、进度持久化及控制台捕获清理 |
 | `native.input-queries-j835` | 查询参数、x87 模拟量返回、物理旁路、Hook 冲突后的清理与重试 |
 | `native.input-devices-j460`／`native.input-devices-j835` | 设备布局、重复分配／恢复、断开清理、安装失败，以及扫描、轮询和更新之间的互斥与重入 |
+| `native.mouse-j835` | 内联边界的寄存器／栈、SSE／x87 保持、物理旁路与嵌套、像素／世界坐标换算及安装回滚 |
 | `native.pause-backend-j460`／`native.pause-backend-j835` | 原生调用与选项保存顺序、版本选项编号、借用名单和无效条目边界 |
 | `native.pause-menu` | J460 暂停菜单与输入路由的集成行为 |
 

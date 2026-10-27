@@ -42,6 +42,10 @@ inline constexpr std::uint32_t pauseMenuControls = 0x515ba0;
 inline constexpr std::uint32_t pauseMenuShow = 0x5178e0;
 inline constexpr std::uint32_t pauseMenuHide = 0x517810;
 inline constexpr std::uint32_t optionsSave = 0x4805a0;
+inline constexpr std::uint32_t playerMouseBegin = 0x3439ac;
+inline constexpr std::uint32_t playerMouseEnd = 0x343ca2;
+inline constexpr std::uint32_t windowClientHeight = 0x561100;
+inline constexpr std::uint32_t playerShootingEntity = 0x341840;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;
@@ -49,5 +53,6 @@ inline constexpr std::uint32_t characterMenuEntries = 0x60d6b0;
 inline constexpr std::uint32_t game = 0x7fd65c;
 inline constexpr std::uint32_t manager = 0x7fd680;
 inline constexpr std::uint32_t inputManager = 0x7e7c98;
+inline constexpr std::uint32_t viewportReferenceHeight = 0x7aa930;
 } // namespace globals
 } // namespace isaac::engine::j835

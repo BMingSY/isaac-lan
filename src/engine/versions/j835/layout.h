@@ -1,6 +1,7 @@
 #pragma once
 #include "engine/versions/common/progress.h"
 #include <array>
+#include <cstddef>
 
 namespace isaac::engine::j835::layout {
 namespace inputManager {
@@ -44,6 +45,11 @@ inline constexpr unsigned restartHeldFrames = 0x1c31b4;
 namespace player {
 inline constexpr unsigned controller = 0x154c;
 } // namespace player
+namespace mouseFrame {
+inline constexpr std::size_t bytes = 0x240;
+inline constexpr std::ptrdiff_t active = -0x150, aimX = -0x15c, aimY = -0x158;
+inline constexpr float roomScale = 0.65f, pixelScale = 0.02f;
+} // namespace mouseFrame
 namespace pauseMenu {
 inline constexpr unsigned selection = 8, options = 0x806a8;
 } // namespace pauseMenu
