@@ -206,44 +206,7 @@ return function(deps)
         end
         pending[slot] = nil
     end
-    -- Choose a clear tile near the target in the destination's authoritative scope.
-    local function placeNear(slot, target)
-        return inspect(slot, function(game)
-            local room, placements = game:GetRoom(), {}
-            for body = 0, game:GetNumPlayers() - 1 do
-                local player = deps.player(body)
-                local radius, best, distance = player.Size, nil, math.huge
-                for i = 0, room:GetGridSize() - 1 do
-                    local point = room:GetGridPosition(i)
-                    local dx, dy = point.X - target.x, point.Y - target.y
-                    local score = dx * dx + dy * dy
-                    local clear = room:IsPositionInRoom(point, radius)
-                    for _, offset in ipairs({ { 0, 0 }, { -1, -1 }, { -1, 1 }, { 1, -1 }, { 1, 1 } }) do
-                        clear = clear
-                            and room:GetGridCollisionAtPos(
-                                    deps.vector(
-                                        point.X + offset[1] * radius,
-                                        point.Y + offset[2] * radius
-                                    )
-                                )
-                                == deps.enums.collision.COLLISION_NONE
-                    end
-                    if clear and score < distance then
-                        best, distance = point, score
-                    end
-                end
-                if not best then
-                    return false
-                end
-                placements[#placements + 1] = { player = player, position = best }
-            end
-            for _, placement in ipairs(placements) do
-                placement.player.Position = placement.position
-                placement.player.Velocity = deps.vector(0, 0)
-            end
-            return true
-        end)
-    end
+    local placeNear = deps.placeNear
     local function playerTarget(slot)
         local position = native.rooms_positions()[tostring(slot)]
         if not position then

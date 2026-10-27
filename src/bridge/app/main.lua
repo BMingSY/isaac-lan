@@ -77,16 +77,25 @@ local function lootAllocation()
     })
 end
 local allocation = lootAllocation()
+local placeNear = _IsaacLanModules["runtime/room_placement"]({
+    native = native,
+    game = Game,
+    player = Isaac.GetPlayer,
+    vector = Vector,
+    collision = GridCollisionClass,
+})
 local roomRules = _IsaacLanModules["runtime/room_rules"]({
     native = native,
     allocation = allocation,
     allow = function(key)
         return not challenge or challenge.allow(key)
     end,
-    gather = _IsaacLanModules["compat/rules/special_rooms"]({
+    gather = _IsaacLanModules["compat/rules/room_gather"]({
         native = native,
         game = Game,
         roomTypes = RoomType,
+        player = Isaac.GetPlayer,
+        placeNear = placeNear,
     }),
     charge = _IsaacLanModules["compat/rules/clear_charge"]({
         native = native,
@@ -326,12 +335,11 @@ chat = _IsaacLanModules["runtime/chat"]({
         game = Game,
         player = Isaac.GetPlayer,
         hash = GetPtrHash,
-        vector = Vector,
+        placeNear = placeNear,
         enums = {
             room = RoomType,
             shape = RoomShape,
             grid = GridRooms,
-            collision = GridCollisionClass,
         },
         output = function(text, options)
             return chat.output(text, options)

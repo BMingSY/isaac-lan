@@ -110,12 +110,17 @@ for _, peer in ipairs({ host, guest }) do
             room = enums.RoomType,
             shape = enums.RoomShape,
             grid = enums.GridRooms,
-            collision = enums.GridCollisionClass,
         },
         game = peer.env.Game,
         player = peer.env.Isaac.GetPlayer,
         hash = peer.env.GetPtrHash,
-        vector = vector,
+        placeNear = dofile(root .. "/src/bridge/runtime/room_placement.lua")({
+            native = native,
+            game = peer.env.Game,
+            player = peer.env.Isaac.GetPlayer,
+            vector = vector,
+            collision = enums.GridCollisionClass,
+        }),
         output = function(...)
             return peer.chat.output(...)
         end,

@@ -1,6 +1,7 @@
 local root = assert(arg[1])
 local types = dofile(root .. "/tests/fixtures/game_enums.lua").RoomType
 local gatherFlag = 8
+local allGatherFlag = 16
 local info = {
     active = 1,
     authority = 1,
@@ -14,6 +15,10 @@ local info = {
 }
 local positions, kinds, queued, moves, cancelled, refused = {}, {}, {}, {}, {}, {}
 local scope, unavailable
+local actors, placements = {}, {}
+local function vector(x, y)
+    return { X = x, Y = y }
+end
 local function enter(slot, index, kind, dimension)
     positions[tostring(slot)] = { index = index, dimension = dimension or 0 }
     kinds[slot] = kind or types.ROOM_DEFAULT
@@ -27,6 +32,7 @@ local native = {
             { key = "lootRoll", flag = 4 },
             { key = "sharedClearCharge", flag = 2 },
             { key = "specialRoomGather", flag = gatherFlag },
+            { key = "allRoomGather", flag = 16 },
         }
     end,
     rooms_positions = function()
@@ -61,20 +67,51 @@ local native = {
         end
     end,
 }
-local gather = dofile(root .. "/src/bridge/compat/rules/special_rooms.lua")({
+local function game()
+    assert(scope ~= nil)
+    return {
+        GetNumPlayers = function()
+            return #actors[scope]
+        end,
+        GetRoom = function()
+            return {
+                GetType = function()
+                    return kinds[scope]
+                end,
+                GetGridSize = function()
+                    return 10
+                end,
+                GetGridPosition = function(_, index)
+                    return vector(40 + index * 40, 120)
+                end,
+                IsPositionInRoom = function(_, point, radius)
+                    return point.X - radius >= 20 and point.X + radius <= 420
+                end,
+                GetGridCollisionAtPos = function()
+                    return 0
+                end,
+            }
+        end,
+    }
+end
+local function player(index)
+    return actors[assert(scope)][index + 1]
+end
+local placeNear = dofile(root .. "/src/bridge/runtime/room_placement.lua")({
+    native = native,
+    game = game,
+    player = player,
+    vector = vector,
+    collision = { COLLISION_NONE = 0 },
+})
+local gather = dofile(root .. "/src/bridge/compat/rules/room_gather.lua")({
     native = native,
     roomTypes = types,
-    game = function()
-        assert(scope ~= nil)
-        return {
-            GetRoom = function()
-                return {
-                    GetType = function()
-                        return kinds[scope]
-                    end,
-                }
-            end,
-        }
+    game = game,
+    player = player,
+    placeNear = function(slot, target)
+        placements[#placements + 1] = slot
+        return placeNear(slot, target)
     end,
 })
 local unused = {
@@ -87,7 +124,7 @@ local allowed = true
 local rules = dofile(root .. "/src/bridge/runtime/room_rules.lua")({
     native = native,
     allow = function(key)
-        assert(key == "specialRoomGather")
+        assert(key == "specialRoomGather" or key == "allRoomGather")
         return allowed
     end,
     allocation = unused,
@@ -98,11 +135,13 @@ local function setup(options)
     allowed = true
     rules.reset()
     positions, kinds, queued, moves, cancelled, refused = {}, {}, {}, {}, {}, {}
+    actors, placements = {}, {}
     unavailable = nil
     info.active, info.authority, info.ready, info.connected = 1, 1, 1, 15
     info.roomOptions = options == nil and gatherFlag or options
     for slot = 0, 3 do
         enter(slot, 84)
+        actors[slot] = { { Position = vector(40 + slot * 80, 120), Size = 10 } }
     end
     rules.step()
 end
@@ -274,9 +313,6 @@ starts(0, 85, types.ROOM_SHOP)
 info.roomOptions = gatherFlag
 rules.step()
 assert(#moves == 0, "Enabling the rule retroactively treated a baseline as an entry")
-print(
-    "PASS special room gathering: all vanilla types, dimensions, arrivals, concurrency and lifecycle"
-)
 setup()
 allowed = false
 starts(0, 85, types.ROOM_SHOP)
@@ -286,3 +322,146 @@ starts(0, 85, types.ROOM_SHOP)
 allowed = false
 rules.step()
 assert(not next(queued), "Challenge veto must cancel a pending gather")
+
+-- The stronger rule works independently and takes precedence when both are on.
+for _, options in ipairs({ allGatherFlag, allGatherFlag | gatherFlag }) do
+    for owner = 0, 3 do
+        for _, kind in ipairs({ types.ROOM_DEFAULT, types.ROOM_SHOP, types.ROOM_ERROR }) do
+            setup(options)
+            starts(owner, kind == types.ROOM_ERROR and -2 or 85, kind)
+            assert(#moves == 3 and not queued[owner], "Any participant must gather the others")
+            assert(#placements == 0, "Placement preceded the native arrival")
+            rules.step()
+            assert(#moves == 3, "Repeated state duplicated the gathering")
+            complete(kind)
+            assert(#placements == 3)
+            for slot = 0, 3 do
+                assert(actors[slot][1].Position.X == actors[owner][1].Position.X)
+            end
+            rules.step()
+            assert(#moves == 3 and #placements == 3, "Forced arrivals started another gathering")
+            starts((owner + 1) % 4, 84) -- Returning to an ordinary room also gathers.
+            assert(#moves == 6)
+            complete()
+            assert(not next(queued) and #moves == 6)
+        end
+    end
+end
+
+setup(allGatherFlag)
+starts(2, 84, types.ROOM_DEFAULT, 1)
+assert(#moves == 3 and moves[1].dimension == 1, "Dimension-only entry was ignored")
+actors[2][1].Position = vector(360, 120) -- Read the leader at arrival, not at departure.
+actors[1][2] = { Position = vector(40, 120), Size = 20 }
+complete()
+assert(actors[1][2].Position.X == 360 and actors[1][2].Velocity.X == 0)
+assert(actors[0][1].Position.X == 360, "Gather landed at a stale leader position")
+
+-- A new departure during a partially completed batch replaces the old target.
+for _, owner in ipairs({ 0, 1 }) do
+    setup(allGatherFlag)
+    starts(0, 85)
+    arrive(1)
+    rules.step()
+    starts(owner, 86)
+    assert(#moves == 6 and not queued[owner], "An exit during gathering was swallowed")
+    for slot = 0, 3 do
+        assert(slot == owner or queued[slot].index == 86, "Old destination survived retargeting")
+    end
+    complete()
+    assert(#moves == 6 and not next(queued))
+end
+setup(allGatherFlag)
+starts(0, 85)
+arrive(1)
+starts(0, 86) -- Leader exits in the same observation as an automatic arrival.
+assert(#moves == 6 and queued[1].index == 86 and queued[2].index == 86)
+complete()
+
+setup(allGatherFlag)
+info.connected = 7
+enter(0, 85)
+starts(1, 86)
+assert(#moves == 2 and queued[1].index == 85 and queued[2].index == 85 and not queued[3])
+complete()
+assert(not next(queued), "Simultaneous exits bounced players between rooms")
+
+setup(allGatherFlag)
+queued[1] = { slot = 1, index = -1, dimension = 0 }
+starts(0, 85)
+arrive(1, types.ROOM_DEVIL)
+arrive(2)
+arrive(3)
+rules.step()
+assert(#moves == 4 and queued[1].index == 85, "An in-flight card broke all-room gathering")
+complete()
+assert(#moves == 4 and not next(queued))
+
+for _, change in ipairs({
+    function()
+        info.connected = 14
+    end,
+    function()
+        info.nowMs = info.nowMs + 3000
+    end,
+    function()
+        info.roomOptions = 0
+    end,
+    function()
+        info.ready = 0
+    end,
+    function()
+        info.active = 0
+    end,
+    function()
+        allowed = false
+    end,
+}) do
+    setup(allGatherFlag)
+    starts(0, 85)
+    change()
+    rules.step()
+    assert(not next(queued), "Invalid all-room gather retained a request")
+end
+for _, change in ipairs({
+    function()
+        info.worldEpoch = info.worldEpoch + 1
+    end,
+    function()
+        info.runId = info.runId .. "+"
+    end,
+    function()
+        info.authority = 0
+    end,
+}) do
+    setup(allGatherFlag)
+    starts(0, 85)
+    change()
+    queued = {}
+    local count = #cancelled
+    rules.step()
+    assert(#cancelled == count and #moves == 3, "Old gathering crossed a lifecycle boundary")
+end
+setup(allGatherFlag)
+info.connected = 14
+rules.step()
+enter(0, 85)
+info.connected = 15
+rules.step()
+assert(#moves == 0, "Reconnection was treated as a departure")
+info.worldEpoch = info.worldEpoch + 1
+enter(1, 85)
+rules.step()
+assert(#moves == 0, "Restored floor positions caused gathering")
+starts(1, 86)
+assert(#moves == 3, "All-room gathering did not resume on the new floor")
+setup(0)
+starts(0, 85)
+info.roomOptions = allGatherFlag
+rules.step()
+assert(#moves == 0, "Enabling all-room gathering replayed old departures")
+setup(allGatherFlag)
+info.authority = 0
+starts(1, 85)
+assert(#moves == 0, "Replica ran all-room gathering")
+print("PASS room gathering: special/all rooms, safe landing, repeated exits and lifecycle")

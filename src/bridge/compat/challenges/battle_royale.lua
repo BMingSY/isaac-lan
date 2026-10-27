@@ -431,6 +431,7 @@ return function(deps)
                 or event == "game_over"
                 or event == "shared_award"
                 or event == "specialRoomGather"
+                or event == "allRoomGather"
             then
                 return false
             end

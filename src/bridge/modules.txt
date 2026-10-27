@@ -30,7 +30,8 @@ compat/items/pvp
 compat/rules/friendly_fire
 compat/rules/loot_roll
 compat/rules/clear_charge
-compat/rules/special_rooms
+compat/rules/room_gather
+runtime/room_placement
 runtime/room_rules
 presentation/event_ledger
 presentation/hits

@@ -48,6 +48,14 @@
 
 规则复用 `/tp` 的原生房间迁移接口，角色的全部身体、跟班与入房效果由现有房间系统处理。发起者离开、连接失效或等待超时会取消尚未执行的请求；局次／楼层切换会丢弃旧记录。
 
+## 所有房间集合
+
+简称“全程集合”，默认关闭。任意在线玩家换房后，其他在线玩家自动传送到同一房间、同一维度，并落在发起者附近的可站立位置。普通房间、普通红房间和特殊房间均适用，离开特殊房间返回普通房间也会触发；走门、卡牌和 `/tp` 等换房方式使用相同规则。已在目标房间的玩家不移动。
+
+集合到达不会再次触发集合。集合尚未完成时，发起者或已经到达的队友再次换房，会取消旧目标的待执行请求，向新的目的地集合；仍在迁移的队友沿用当前集合目标。同一轮观察到多人换房时按玩家席位顺序选择一次。与“特殊房间集合”同时开启时只执行本规则，不重复传送。
+
+离线玩家不参与；开局、续玩、重连和换层恢复的位置只作为初始记录，后续换房继续触发。连接失效、超时、关闭规则或会话失效会清理待执行请求，旧局次和旧楼层的请求不会影响新状态。附近无可站立位置时保留原生入房落点。
+
 ## 状态与职责
 
 选项定义来自 [core/room_options.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/room_options.h)，运行层验证并导出位值、名称和 `shortName` 简称，菜单据此生成摘要与复选行。挑战目录的 `roomOptionsLocked` 由 `net_challenges` 导出给菜单；运行层同时校验固定选项集合，并在修改入口拒绝锁定状态。网络只传输 `RunRules.options`，不解释具体玩法。存档及个人通关标记的生命周期见[会话与状态恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
@@ -56,4 +64,4 @@
 
 [friendly_fire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/friendly_fire.lua) 在房主模拟中检查各个有人房间的攻击接触，再调用原版受击接口；客机沿用现有生命、角色动作和受击状态同步。接触与小数伤害由该组件持有；[pvp_attacks.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_attacks.lua) 管理发射记录与单轮额度，[pvp_health.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_health.lua) 管理原版冷却归属与短保护，[pvp_damage.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_damage.lua) 定义纯数值曲线。[compat/items/pvp.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/pvp.lua) 持有道具使用、索敌、进房与持续效果状态，使用回调由装配层接入。以上临时状态不写进个人存档。共享的扫掠圆碰撞放在 [core/contacts.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/core/contacts.lua)，同一几何函数也供本机命中预测使用。
 
-[special_rooms.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/special_rooms.lua) 在房间模拟作用域之外观察已提交的玩家位置，按实际房间类型发起集合并消费到达。位置记录和未完成集合由 `room_rules` 随会话与世界代次清理；规则位沿用 `RunRules.options`，传送结果沿用现有房间同步，不扩展消息或状态字段布局。
+[room_gather.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/room_gather.lua) 在房间模拟作用域之外观察已提交的玩家位置，按所选规则限制房间类型或接受所有换房，统一发起集合并消费到达。[room_placement.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_placement.lua) 为玩家目标传送与所有房间集合提供共享的安全落点计算，分别处理同一玩家的全部身体。位置记录和未完成集合由 `room_rules` 随会话与世界代次清理；规则位沿用 `RunRules.options`，传送结果沿用现有房间同步，不扩展消息或状态字段布局，扩展指纹校验区分不同实现。
