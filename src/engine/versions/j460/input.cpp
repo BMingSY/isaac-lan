@@ -1,4 +1,5 @@
 #include "engine/versions/common/room_hooks.h"
+#include "engine/versions/common/input_query.h"
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/input.h"
@@ -210,7 +211,7 @@ template <std::size_t... I> constexpr auto xinputWrappers(std::index_sequence<I.
         XInputWrappers{state<I>, extendedState<I>, capabilities<I>, vibration<I>}...};
 }
 constexpr auto providerWrappers = xinputWrappers(std::make_index_sequence<8>{});
-using Query = bool(__attribute__((thiscall)) *)(void*, int, void*, const int*, void*, int*);
+using Query = engine::native_input::Query;
 Query originalQuery = nullptr;
 j460::mouse_input::Aim originalMouseAim = nullptr;
 j460::mouse_input::ShootingEntity shootingEntity() {

@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定和角色目录组件，以及 Lua 初始化入口资料；房间、输入、实体同步和完整启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定、输入查询适配和角色目录组件，以及 Lua 初始化入口资料；房间、完整设备与玩家输入、实体同步和启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -48,6 +48,14 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 控制调用返回后检查 `Game+0x1c31b0`：动作 `4` 为死亡后重开，`5` 为长按重开。仅当运行层接受请求时清除动作、`+0x1c31a8` 的淡出透明度和 `+0x1c31b4` 的按住帧数；其他动作及拒绝的请求保持原样。换层采集读取关卡／类型、`Game+0x1bb1c` 的十四个楼层种子及 `+0x1c3168` 的两字路由标记；应用只写种子和标记，实际转场仍由原生房间能力推进。
 
 控制台对象位于 `Game+0x1bb60`，输入状态在对象 `+0x20`。输入入口 `0x263550` 为 `thiscall void(Console*)`，命令入口 `0x2655c0` 为 `thiscall void(Console*, const NativeString*, bool silent, Player*)`，打印入口 `0x26aec0` 为 `thiscall void(Console*, const NativeString*, unsigned color, unsigned fade)`。命令执行要求已就绪的权威会话和角色房间作用域。24 字节 MSVC 字符串通过原生 assign `0x7c80` 与析构 `0x7be0` 配对管理；结果复制为自有字符串，限制 16 KiB，同步嵌套与返回恢复前一捕获目标，不保留原生文本引用。
+
+## 输入查询适配
+
+[输入查询适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input_queries.cpp) 把三个原生入口连接到后端内部的统一查询接口。按住 `0x56a520` 和按下沿 `0x56a5e0` 的 ABI 为 `thiscall bool(InputManager*, int action, int controller, int* source)`；模拟量 `0x56a6c0` 参数相同，通过 x87 返回 float。适配器保持动作、控制器和来源指针的顺序，将模拟量转为同步输出参数，再还原原生 float 返回值。
+
+物理输入旁路只接受这三个已安装入口对应的查询标识，通过原函数 trampoline 调用，不重新进入联机路由、不执行任意回调地址。参数与输出对象只在调用期间借用；适配器不分配、销毁或持有原生设备。安装失败只撤销自己创建的 Hook 并清除旁路，允许重试；重复安装不会替换现有旁路。
+
+两版游戏自带枚举中的前十六个动作与菜单方向 `20..23` 相同；原版重开为 `16`，没有原生表情动作。差异集中在 [input_actions.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input_actions.h)，不能把忏悔＋的 UI 动作编号直接传给原版。该组件只提供查询边界，设备创建、玩家分配和完整输入路由仍需后端装配。
 
 ## 角色目录与表现
 

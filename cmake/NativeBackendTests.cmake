@@ -1,5 +1,15 @@
 # Component fixtures can exercise an incomplete backend without linking it into an installable DLL.
 # No fixture loads or starts the game executable.
+add_executable(isaac_lan_input_queries_j835_test tests/input_queries_j835_test.cpp
+                                                 src/engine/versions/j835/input_queries.cpp)
+target_include_directories(isaac_lan_input_queries_j835_test PRIVATE src)
+target_link_libraries(isaac_lan_input_queries_j835_test PRIVATE minhook)
+if(MINGW)
+    target_link_options(isaac_lan_input_queries_j835_test PRIVATE -static-libgcc -static-libstdc++)
+    target_compile_options(isaac_lan_input_queries_j835_test PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME native.input-queries-j835 COMMAND isaac_lan_input_queries_j835_test)
+set_tests_properties(native.input-queries-j835 PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 foreach(backend j460 j835)
     add_executable(
         isaac_lan_session_${backend}_test

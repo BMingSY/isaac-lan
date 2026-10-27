@@ -1,5 +1,6 @@
 #pragma once
-// ButtonAction IDs shared by native input and the compact input frame.
+// LAN action IDs. The first sixteen match both games' compact input frame;
+// version backends adapt differing native UI actions (for example J835 restart).
 namespace isaac::input::action {
 inline constexpr int moveLeft = 0, moveRight = 1, moveUp = 2, moveDown = 3;
 inline constexpr int shootLeft = 4, shootRight = 5, shootUp = 6, shootDown = 7;

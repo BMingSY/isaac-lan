@@ -32,6 +32,9 @@ inline constexpr std::uint32_t runtimeNetParseSeed = 0x53e080;
 inline constexpr std::uint32_t runtimeNetSeedConstructor = 0x53bc50;
 inline constexpr std::uint32_t runtimeNetSetSeed = 0x53e220;
 inline constexpr std::uint32_t runtimeNetStartGame = 0x4b3470;
+inline constexpr std::uint32_t inputPressed = 0x56a520;
+inline constexpr std::uint32_t inputTriggered = 0x56a5e0;
+inline constexpr std::uint32_t inputValue = 0x56a6c0;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;
