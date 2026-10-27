@@ -6,7 +6,7 @@ local host, base = config.host, _IsaacLanFrame
 local input, controls = native.input_bot, 0
 local frames, linked, configured, chosen, done = 0, false, false, false, false
 local current, caseNumber, seen, acknowledged = nil, 0, 0, {}
-local flag, shopSource
+local flag, shopSource, crawlspaceSource, crawlspaceEntrance
 local cardRetry = false
 for _, rule in ipairs(native.net_room_options()) do
     if rule.key == (allRooms and "allRoomGather" or "specialRoomGather") then
@@ -99,7 +99,54 @@ local function walkTo(owner, index)
     end)
     return "walk " .. assert(direction, "Missing actual door"), index
 end
+-- Prepare the native grid before its room update, matching the crawlspace
+-- regression fixture's authority callback boundary.
+local gate = native.net_gate
+native.net_gate = function(capture, apply, collect, restore, present, stage)
+    return gate(capture, function(tick, count, bytes)
+        apply(tick, count, bytes)
+        if host and allRooms and tick == 30 then
+            crawlspaceSource = roomOf(1).index
+            actor(0, function(player)
+                player.Position, player.Velocity = Vector(580, 280), Vector.Zero
+            end)
+            actor(1, function(player, room)
+                for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                    if entity:ToNPC() then
+                        entity:Remove()
+                    end
+                end
+                room:SetClear(true)
+                local index = room:GetGridIndex(Vector(240, 280))
+                room:RemoveGridEntity(index, 0, false)
+                room:Update()
+                assert(room:SpawnGridEntity(index, GridEntityType.GRID_STAIRS, 0, 123, 0))
+                crawlspaceEntrance = room:GetGridPosition(index)
+                player.Position = crawlspaceEntrance + Vector(60, 0)
+                player.Velocity = Vector.Zero
+            end)
+        end
+    end, collect, restore, present, stage)
+end
 local cases = {
+    {
+        name = "crawlspace-enter",
+        allOnly = true,
+        setup = function()
+            local entrance = assert(crawlspaceEntrance, "Missing prepared crawlspace entrance")
+            return string.format("stairs %g %g", entrance.X, entrance.Y), GridRooms.ROOM_DUNGEON_IDX
+        end,
+    },
+    {
+        name = "crawlspace-return",
+        allOnly = true,
+        setup = function()
+            actor(1, function(player)
+                player.Position, player.Velocity = Vector(120, 200), Vector.Zero
+            end)
+            return "walk 4", assert(crawlspaceSource)
+        end,
+    },
     {
         name = "ordinary",
         split = true,
@@ -242,6 +289,9 @@ local function execute(command, owner)
         assert(_IsaacLanChatSubmit(command))
     elseif command:match("^walk ") then
         controls = assert(tonumber(command:match("^walk (%d+)$")))
+    elseif command:match("^stairs ") then
+        local x, y = command:match("^stairs (%S+) (%S+)$")
+        current.entrance = Vector(assert(tonumber(x)), assert(tonumber(y)))
     elseif command == "joker" then
         actor(owner, function(player)
             player:UseCard(Card.CARD_JOKER, UseFlag.USE_NOANIM)
@@ -348,6 +398,23 @@ function _IsaacLanFrame()
         end
         if position.index == expected then
             controls = 0
+        elseif
+            current.entrance and (host and current.owner == 0 or not host and current.owner == 1)
+        then
+            assert(native.rooms_with_player(current.owner, function()
+                local player = Isaac.GetPlayer(0)
+                local delta = current.entrance - player.Position
+                local entryTolerance = 6
+                -- Stand on the entrance until its native opening completes.
+                -- A fixed direction can walk past a still-closed hatch.
+                if math.abs(delta.X) > entryTolerance then
+                    controls = delta.X < 0 and 1 or 2
+                elseif math.abs(delta.Y) > entryTolerance then
+                    controls = delta.Y < 0 and 4 or 8
+                else
+                    controls = 0
+                end
+            end, 1))
         end
         if
             elapsed >= 1200
@@ -358,6 +425,12 @@ function _IsaacLanFrame()
             assert(position.dimension == 0 and other.dimension == 0)
             if host and case.name == "card-in-flight" then
                 assert(cardRetry, "Fixture did not exercise the pending native card")
+            end
+            if host and case.name == "crawlspace-enter" then
+                actor(0, function(player, room, level)
+                    assert(room:GetType() == RoomType.ROOM_DUNGEON and player.Position.X < 400)
+                    assert(level.DungeonReturnRoomIndex == crawlspaceSource)
+                end)
             end
             if host and allRooms and case.name ~= "floor" then
                 local leader
