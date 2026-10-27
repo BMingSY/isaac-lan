@@ -16,6 +16,7 @@
 #include "runtime/room_map.h"
 #include "compat/bosses/encounters.h"
 #include "compat/bosses/rotgut.h"
+#include "compat/enemies/room_transitions.h"
 #include "compat/routes/mines.h"
 #include "compat/routes/mirror.h"
 #include "compat/routes/curses.h"
@@ -139,6 +140,11 @@ void sharedDealChances() {
 }
 void compatibilityTargets() {
     ownedItemEffects();
+    using isaac::compat::enemies::capturedRoomReturn;
+    require(capturedRoomReturn(84, 84, -1, 1, -1) && !capturedRoomReturn(83, 84, -1, 1, -1) &&
+                !capturedRoomReturn(84, 84, 0, 1, -1) && !capturedRoomReturn(84, 84, -1, 3, -1) &&
+                !capturedRoomReturn(84, 84, -1, 1, 0) && !capturedRoomReturn(-1, -1, -1, 1, -1),
+            "Captured room return must preserve the native start-room fade contract");
     using namespace isaac::compat;
     require(isaac::presentation::localAmbientEffect(1000, 99, 1),
             "Native current spray must remain local presentation");
@@ -887,6 +893,9 @@ void introBarrier() {
     barrier.observe(0, 1, false);
     require(!barrier.paused(room, 111, 15), "Completed host intro kept its room frozen");
     barrier.start(room, 2, 100, 7);
+    require(barrier.pending(1, 2, 220) && !barrier.pending(3, 2, 220) &&
+                !barrier.pending(1, 1, 220),
+            "Delayed boss intro must remain deliverable to its waiting audience");
     require(barrier.paused(room, 110, 7) && !barrier.paused(other, 110, 7),
             "Intro froze an unrelated room");
     require(!barrier.observe(1, 1, false) && !barrier.observe(2, 2, true),
@@ -894,6 +903,8 @@ void introBarrier() {
     require(barrier.paused(room, 120, 7), "Stale or active intro released combat");
     require(barrier.observe(1, 2, false) == room && !barrier.observe(1, 2, false),
             "Guest control completion must identify its room exactly once");
+    require(!barrier.pending(1, 2, 221) && barrier.pending(2, 2, 221),
+            "Intro completion must stop retries only for the acknowledging guest");
     barrier.observe(0, 2, false);
     require(barrier.paused(room, 130, 7), "Combat resumed before every guest finished");
     barrier.observe(2, 2, false);
@@ -902,13 +913,19 @@ void introBarrier() {
     barrier.observe(0, 3, false);
     require(!barrier.paused(room, 160, 1), "Disconnected guest froze combat");
     barrier.start(room, 4, 200, 3);
+    require(!barrier.pending(1, 4, 801), "Expired intro remained deliverable");
     require(!barrier.paused(room, 801, 3), "Missing acknowledgement froze combat indefinitely");
     barrier.start(room, 5, 900, 3);
     barrier.clear();
     require(!barrier.paused(room, 901, 3), "Session reset retained an intro");
+    require(!barrier.pending(0, 5, 901), "Session reset retained intro delivery");
     barrier.start(other, 6, 1000, 2);
     require(!barrier.observe(0, 6, false) && barrier.observe(1, 6, false) == other,
             "Guest-only intro completed controls for an unrelated host");
+    barrier.start(room, 7, 1100, 3);
+    barrier.observe(0, 7, false);
+    require(!barrier.paused(room, 1101, 1) && !barrier.pending(1, 7, 1101),
+            "A guest who left the intro room kept its combat paused");
 }
 void automationInput() {
     using isaac::input::consoleArguments;

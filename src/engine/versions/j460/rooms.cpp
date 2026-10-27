@@ -17,6 +17,7 @@
 #include "runtime/room_map.h"
 #include "compat/bosses/encounters.h"
 #include "compat/bosses/rotgut.h"
+#include "compat/enemies/room_transitions.h"
 #include "compat/routes/mines.h"
 #include "compat/routes/mirror.h"
 #include "compat/routes/curses.h"
@@ -268,7 +269,7 @@ struct Request {
     RoomRouting routing;
 };
 std::vector<Request> pending;
-std::set<unsigned> pendingItemRevival;
+std::set<unsigned> pendingArrivalRecovery;
 struct StageRequest {
     bool same;
     int animation;
@@ -1076,7 +1077,8 @@ void __attribute__((fastcall)) playerUpdate(void* player, void*) {
         // need the native animation update after Render changes their pose.
         using UpdateSprite = void(__attribute__((thiscall))*)(void*);
         for (unsigned i = 0; i < 7; ++i)
-            engine<UpdateSprite>(0x9100)(static_cast<char*>(player) + 0x758 + i * 0x114);
+            engine<UpdateSprite>(j460::entry::spriteUpdate)(static_cast<char*>(player) + 0x758 +
+                                                            i * 0x114);
         // Original emote animation, dice result and expiry are local presentation too.
         engine<UpdateSprite>(j460::entry::emoteUpdate)(static_cast<char*>(player) +
                                                        j460::layout::player::emote);
@@ -1218,6 +1220,27 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
         return;
     }
     const auto who = currentActor(player);
+    const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
+    if (!runtime::replica() && !player && scopes.current() &&
+        caller == j460::entry::momsHandTransitionCall + 5 &&
+        compat::enemies::capturedRoomReturn(index, at<int>(game(), 0x182d0), direction, animation,
+                                            dimension)) {
+        // The grabbing NPC requests a room-wide fade without a player argument.
+        // Its native update already cleared the captured flags; complete the
+        // transfer and visibility for this room's party, including resident
+        // destinations. Players in other rooms retain their own state.
+        const auto source = scopes.current();
+        for (const auto head : participants) {
+            const auto found = location.find(head);
+            if (found != location.end() && found->second == source &&
+                (connectedMask & (1u << slotOf(head)))) {
+                if (!queue(head, index, dimension, -1, false, false, animation))
+                    runtime::abort("Cannot return the captured room's players");
+                pendingArrivalRecovery.insert(slotOf(head));
+            }
+        }
+        return;
+    }
     if (!runtime::replica() && !player && scopes.current() &&
         scopes.current()->key.dimension == 0) {
         const auto source = scopes.current();
@@ -1299,7 +1322,7 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
     // bypasses that process-wide screen, including when the previous room is
     // already the actor's current room.
     if (compat::items::revivalTransition(animation) && who)
-        pendingItemRevival.insert(slotOf(who));
+        pendingArrivalRecovery.insert(slotOf(who));
     // StartRoomTransition normally initializes the Blue Key encounter before
     // switching rooms. Keep its native descriptor/door rules in this scope.
     if (who &&
@@ -2693,8 +2716,15 @@ void __attribute__((fastcall)) replicaEntityUpdate(void* entity, void*) {
     const auto address = reinterpret_cast<Address>(entity);
     if (runtime::replica() &&
         !presentation::localAmbientEffect(at<unsigned>(address, 0x28), at<unsigned>(address, 0x2c),
-                                          at<unsigned>(address, 0x30)))
+                                          at<unsigned>(address, 0x30))) {
+        // Familiar::Render starts charging/disappear animations from the
+        // replicated cooldown. Familiar::Update normally advances this owned
+        // sprite; suppressing that UI update leaves the empty ring on screen.
+        if (at<unsigned>(address, j460::layout::entity::type) == 3)
+            engine<RoomCall>(j460::entry::spriteUpdate)(static_cast<char*>(entity) +
+                                                        j460::layout::familiar::chargeBar);
         return;
+    }
     const auto entry = at<Address>(at<Address>(address, 0), 0xc);
     entityUpdates.at(entry)(entity);
 }
@@ -3623,7 +3653,7 @@ void finishFrame() {
                 queue(participant(actor.slot), target->room, target->dimension, -1, false, true, 0,
                       Vec2{target->x, target->y}, RoomRouting::resolved);
     }
-    if (pending.empty() && pendingItemRevival.empty()) {
+    if (pending.empty() && pendingArrivalRecovery.empty()) {
         preparedDepartures.clear();
         if (beginTeamTransition)
             beginTeamTransition();
@@ -3668,7 +3698,7 @@ void finishFrame() {
     preparedDepartures.clear();
     if (beginTeamTransition)
         beginTeamTransition();
-    for (auto slot : pendingItemRevival)
+    for (auto slot : pendingArrivalRecovery)
         if (const auto head = participant(slot)) {
             for (auto player : controlledActors(head)) {
                 // Same visibility exclusion as native RoomTransition::ChangeRoom.
@@ -3679,7 +3709,7 @@ void finishFrame() {
                                                                    90);
             }
         }
-    pendingItemRevival.clear();
+    pendingArrivalRecovery.clear();
     // Empty rooms return to the game's RoomDescriptor save format. Re-entering
     // creates a fresh room through native initialization, preserving cleared
     // enemies/pickups while resetting transient room state as vanilla does.
@@ -3793,7 +3823,7 @@ void beforeStart(bool preserveItemPixels) {
     enabled = false;
     pending.clear();
     preparedDepartures.clear();
-    pendingItemRevival.clear();
+    pendingArrivalRecovery.clear();
     Room* root = nullptr;
     for (auto& [key, room] : loaded) {
         (void)key;

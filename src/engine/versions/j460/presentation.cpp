@@ -228,7 +228,8 @@ int events(lua_State* L) {
             lan::Writer w(lan::Message::world);
             if (slot >= 0 && slot < 4)
                 for (const auto& e : intros) {
-                    if (!(e.audience & (1u << slot)) || runtime::tick() - e.tick > 90)
+                    if (!(e.audience & (1u << slot)) ||
+                        !waiting.pending(slot, e.serial, runtime::tick()))
                         continue;
                     for (auto v :
                          {e.serial, e.tick, static_cast<unsigned>(e.stage),
@@ -249,19 +250,23 @@ int events(lua_State* L) {
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
         const auto game = at<std::uintptr_t>(image, j460::globals::game);
         for (std::size_t i = 0; i < size / 32; ++i) {
-            const auto id = r.u32(), tick = r.u32();
+            const auto id = r.u32();
+            r.u32(); // Event origin tick; delivery remains valid until acknowledged.
             const int stage = r.u32(), type = r.u32(), dimension = r.u32(), room = r.u32();
             const auto first = r.u32(), second = r.u32();
             if (id <= seen)
                 continue;
-            seen = id;
-            if ((runtime::tick() > tick && runtime::tick() - tick > 90) ||
-                stage != at<int>(game, 0) || type != at<int>(game, 4) ||
-                dimension != at<int>(game, 0x1830c) || room != at<int>(game, 0x18304))
-                continue;
             rooms::withView(
-                [&] { playIntro(reinterpret_cast<void*>(game + 0x1b83c), first, second); }, true);
-            played = id;
+                [&] {
+                    if (stage != at<int>(game, 0) || type != at<int>(game, 4) ||
+                        dimension != at<int>(game, 0x1830c) || room != at<int>(game, 0x18304))
+                        return;
+                    playIntro(reinterpret_cast<void*>(game + 0x1b83c), first, second);
+                    // A view can arrive before its room is ready. Only consume an
+                    // event after playing it; the authority retries until completion.
+                    seen = played = id;
+                },
+                true);
         }
         r.finish();
         lua.pushBoolean(L, true);
@@ -298,6 +303,11 @@ IntroSimulationScope::IntroSimulationScope(bool advance) {
         return;
     const auto game = at<std::uintptr_t>(image, j460::globals::game);
     const auto target = game + 0x1b83c;
+    if (at<int>(target, 0) == 0) {
+        observeIntro(0, hostIntro, false);
+        hostIntro = 0;
+        return;
+    }
     if (at<int>(target, 0) != 2 && at<int>(target, 0) != 3)
         return;
     if (advance && at<int>(game, 0x23a74) == 0) {
@@ -404,7 +414,7 @@ bool roomPaused() {
                          at<int>(game, 0x18304)};
     // A missing acknowledgement must not leave a room frozen after a player
     // disconnects or fails to render. Normal completion is event-specific.
-    return waiting.paused(key, runtime::tick(), rooms::connected());
+    return waiting.paused(key, runtime::tick(), rooms::connected() & rooms::soundAudience());
 }
 void roomEntered(std::uintptr_t room) {
     if (runtime::replica())

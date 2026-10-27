@@ -45,12 +45,17 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 | [角色持有引用](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_links.h) `actor_held_entity` | Player `+0x1410` 的 `EntityPtr` 供原生抱起渲染使用，独立于 `Parent`／`Child`；赋值位置 RVA `0x3d23e6` 受签名校验 | 读取返回本机实体索引，无对象时为 `-1`；同步组件转换为稳定 ID。写入仅限客机，接受角色和目标的借用 Sprite 或 `false`，拒绝非角色持有者和自引用；使用原生 `EntityPtr.Assign` 注册、替换和清空，目标释放时由游戏撤销引用，不调用拾取／投掷玩法 |
 | [轨道布局](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rails.h) `room_rails` | `Room:GetGridEntity` 不包含 RailManager；房间 `+0x746c` 为 448 字节数组 | 客机整体验证长度、值、尺寸与所有者后写入；空轨道也恢复，Sprite 仍由房间持有 |
 | 客机实体回收 | `Remove()` 不保证立即释放池槽位；J460 跟班池为 64 槽 | 在房间作用域内通过原生更新完成回收，更新前须启用客机 AI 拦截；不扩容原生池，不手工释放对象 |
+| 跟班蓄力显示 | `Familiar+0xdcc` 为对象自有的蓄力 Sprite；`Sprite.Update` 的 RVA 为 `0x9100`，无栈参数的 `thiscall` | 客机拦截跟班更新时只推进该显示动画，充能值仍使用同步的 `FireCooldown`；不执行跟班 AI、发射或伤害，不复制 Sprite，生命周期由游戏管理 |
 | 玩家清房回调 | `Player::TriggerRoomClear`，RVA `0x3a8fd0`，`thiscall void(Player*)`；Lua 没有阻止原生清房效果的前置回调 | 联机客机房间启用期间跳过玩法触发，角色状态由权威快照恢复；主机、单人及原生加载保留原调用，不分配或替换角色对象 |
 | 口袋槽、合成袋、药丸状态 | 原生载荷分别为 32、12、75 字节 | 在库存恢复后应用，完整校验载荷与玩家归属；写入限客机，主动对象与物品池仍由原版管理 |
 
 实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
 
 角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先移除原房间各实体列表中的引用，再调用原生添加入口；对象仍由游戏持有和销毁，不复制效果、不重放道具使用。没有对应持有者的效果及房间独立效果不随角色迁移。
+
+妈手抓取的原生转场调用点为 RVA `0x134752`，以空玩家参数请求起始房间的淡入淡出，调用字节受启动签名校验。后端识别该调用上下文，交由[抓取转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/enemies/room_transitions.h)验证目的地和参数，只排队源房间内已连接的参与者及其受控身体。安全边界完成迁移后按原生 `RoomTransition::ChangeRoom` 的排除标志恢复可见性并提供到达保护；目的地已加载或就是当前房间时同样完成恢复。恢复请求随会话清理，不改变其他房间的玩家状态。
+
+Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端在房间屏障有效期间持续向尚未完成的观看者发送事件，完成确认按观看者清除；离房、断开和屏障超时结束等待。客机在本机视图匹配后播放并记录序号，房间尚未就绪时保留重试机会。载荷沿用八个大端 `u32` 字段，起始 tick 仅记录事件时间，不作为早于屏障的独立过期条件；无需重建房间或重新连接。
 
 `rooms_with_player` 可以切换到客机的远端角色存储壳。壳对象在构造前清零，借用所属楼层描述符并设置房间类型、编号、维度及含边框的网格尺寸，供库存恢复和属性重算查询；尺寸来自配置 `+0x46/+0x47`，写入 Room `+0xc/+0x10` 时各加二，计算规则受启动签名校验。同步地图同时携带有人占用的地图外特殊房间布局，在恢复角色位置前安装描述符。壳不加载真实网格、门、敌人或背景，也不执行入房逻辑；本机进入时才按权威布局完成原生初始化，并强制建立背景资源，不能沿用空壳的绘制缓存。完整房间内容只能在主机权威房间或客机当前可见房间查询，可见性须同时比较房间编号和 dimension；壳只提供安全的空网格上下文，不能用于预测远端玩法。
 

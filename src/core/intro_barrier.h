@@ -8,6 +8,7 @@ namespace isaac::presentation {
 class IntroBarrier {
   public:
     using Room = std::array<int, 4>;
+    static constexpr unsigned timeoutTicks = 600;
     void start(Room room, unsigned serial, unsigned tick, unsigned audience) {
         if (audience)
             waiting[room] = {serial, tick, audience};
@@ -23,12 +24,21 @@ class IntroBarrier {
         }
         return std::nullopt;
     }
+    bool pending(unsigned slot, unsigned serial, unsigned tick) const {
+        if (slot >= 4)
+            return false;
+        for (const auto& [room, value] : waiting)
+            if (value.serial == serial && (value.audience & (1u << slot)) &&
+                tick - value.tick <= timeoutTicks)
+                return true;
+        return false;
+    }
     bool paused(Room room, unsigned tick, unsigned connected) {
         const auto entry = waiting.find(room);
         if (entry == waiting.end())
             return false;
         entry->second.audience &= connected;
-        if (!entry->second.audience || tick - entry->second.tick > 600) {
+        if (!entry->second.audience || tick - entry->second.tick > timeoutTicks) {
             waiting.erase(entry);
             return false;
         }
