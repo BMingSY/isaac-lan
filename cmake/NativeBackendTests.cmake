@@ -42,6 +42,17 @@ isaac_add_backend_test(
     minhook)
 foreach(backend j460 j835)
     isaac_add_backend_test(
+        crafting-hud
+        ${backend}
+        SOURCES
+        tests/crafting_hud_test.cpp
+        src/engine/versions/common/crafting_hud.cpp
+        src/engine/versions/${backend}/crafting_hud.cpp
+        LIBRARIES
+        minhook
+        COMPILE_OPTIONS
+        -msse2)
+    isaac_add_backend_test(
         challenge-hud
         ${backend}
         SOURCES

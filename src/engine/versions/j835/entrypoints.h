@@ -5,6 +5,9 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t craftingBagHudRender = 0x500570;
+inline constexpr std::uint32_t playerHudPocketRender = 0x4fe8e0;
+inline constexpr std::uint32_t playerGetActiveItem = 0xf3f10;
 inline constexpr std::uint32_t hUDChallengeDestination = 0x5050ab;
 inline constexpr std::uint32_t hUDChallengeParamsRead = 0x505584;
 inline constexpr std::uint32_t npcTakeDamage = 0x2ac370;
@@ -100,6 +103,7 @@ inline constexpr std::uint32_t gameUpdateHalf = 0x2d0400;
 inline constexpr std::uint32_t gameRender = 0x2ce770;
 } // namespace entry
 namespace globals {
+inline constexpr std::uint32_t logicalWidth = 0x7fec08, logicalHeight = 0x7fec68;
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;
 inline constexpr std::uint32_t characterMenuEntries = 0x60d6b0;
 inline constexpr std::uint32_t game = 0x7fd65c;

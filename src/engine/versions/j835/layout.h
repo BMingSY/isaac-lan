@@ -30,6 +30,7 @@ inline constexpr unsigned cinematicActive = 0x1ea830;
 inline constexpr unsigned menuRequested = 0x1ea818, requestedMenu = 0x1ea81c;
 } // namespace manager
 namespace options {
+inline constexpr unsigned hudOffset = 0x44;
 inline constexpr unsigned musicVolume = 0x18;
 } // namespace options
 namespace music {
@@ -156,11 +157,15 @@ inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
 namespace player {
+inline constexpr unsigned index = 0x1550, twin = 0x1d80, coopGhost = 0x1f88;
 inline constexpr unsigned hourglassUses = 0x1cc8, hourglassFloorUses = 0x1ccc;
 inline constexpr unsigned generatedInventoryHead = 0x1ec4, generatedInventorySize = 0x1ec8;
 inline constexpr unsigned primaryActive = 0x14c4, activeStride = 0x1c, megaBlastLaser = 0x13a0;
 inline constexpr unsigned controller = 0x154c;
 } // namespace player
+namespace playerHud {
+inline constexpr unsigned player = 0, root = 4, index = 8, size = 0x6b0;
+} // namespace playerHud
 namespace mouseFrame {
 inline constexpr std::size_t bytes = 0x240;
 inline constexpr std::ptrdiff_t active = -0x150, aimX = -0x15c, aimY = -0x158;

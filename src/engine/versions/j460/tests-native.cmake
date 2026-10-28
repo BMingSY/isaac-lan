@@ -16,16 +16,6 @@ if(MINGW)
 endif()
 add_test(NAME native.item-effects COMMAND isaac_lan_item_effects_test)
 set_tests_properties(native.item-effects PROPERTIES TIMEOUT 30 LABELS "offline;native")
-add_executable(isaac_lan_crafting_hud_test tests/crafting_hud_test.cpp
-                                           ${ISAAC_LAN_BACKEND_DIR}/crafting_hud.cpp)
-target_include_directories(isaac_lan_crafting_hud_test PRIVATE src)
-target_link_libraries(isaac_lan_crafting_hud_test PRIVATE minhook)
-if(MINGW)
-    target_link_options(isaac_lan_crafting_hud_test PRIVATE -static-libgcc -static-libstdc++)
-    target_compile_options(isaac_lan_crafting_hud_test PRIVATE -Wall -Wextra -Werror -msse2)
-endif()
-add_test(NAME native.crafting-hud COMMAND isaac_lan_crafting_hud_test)
-set_tests_properties(native.crafting-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 add_executable(
     isaac_lan_character_catalog_test
     tests/character_catalog_test.cpp ${ISAAC_LAN_BACKEND_DIR}/characters.cpp

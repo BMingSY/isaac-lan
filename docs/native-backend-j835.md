@@ -16,6 +16,19 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 两个边界保存标志、整数寄存器、SSE、x87 与控制字，只修改目标所需的保存槽。未启用联机挑战时保留原生指针与帧数据。Hook 成组安装，冲突撤销已创建的本组件 Hook，保留外部 Hook；重复安装被拒绝。此接口不改变挑战解锁、路线选择或通关条件。
 
+## 百宝袋与副手 HUD
+
+[百宝袋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/crafting_hud.cpp) 复用[共享选择与绘制组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/crafting_hud.cpp)。八个 PlayerHUD 的步长是 `0x6b0`，`+0/+4` 借用玩家和所属 HUD，`+8` 是原生 short 索引。控制器和幽灵标志为 `Player+0x154c/+0x1f88`；`GetActiveItem` RVA `0xf3f10` 使用 thiscall 接收槽号并清栈 4 字节，查询 `Player+0x14c4+slot*0x1c`。适配只查询四个有效槽，不依赖 J460 的槽号保护。
+
+| 绘制 | J835 ABI | 借用边界 |
+| --- | --- | --- |
+| 百宝袋 `0x500570` | `ECX=PlayerHUD`、`XMM2=scale`、栈 `Vector*`，清栈 4 字节 | 仅将 receiver 换为下一栏位的 HUD；原生材料、配方纹理和缓存由该玩家及游戏持有 |
+| 副手 `0x4fe8e0` | `ECX=PlayerHUD`、`XMM2=有符号缩放`、`XMM3=透明度`、栈 `Vector*`，清栈 4 字节 | 保持本机 receiver、透明度和卡牌／药丸；借用临时坐标和完整缩放，不改写原调用方的 Vector |
+
+完整右下角位置遵循原生调用 `0x505f28`：逻辑宽高为 RVA `0x7fec08/0x7fec68`，`m=1-Manager[0x29e3c]`，位置为 `(width-28+16*m, height-18+6*m)`。该选项位于 `Options+0x44`。副手原生入口对正数 HUD 索引翻转对齐，伴生身体通过 `Player+0x1d80` 的另一身体及双方 `+0x1550` 的索引决定例外；适配以缩放符号抵消该翻转，保持绝对缩放 1，不临时改写 HUD 或玩家索引。
+
+普通会话沿用全部原生参数。联机挑战仅显示本机副手，材料目标必须属于不同栏位、不是幽灵且仍持有百宝袋；等待视图提交时隐藏。寄存器、SSE、栈参数和调用方坐标在借用结束后恢复。两个 Hook 成组安装，失败只清理本组件创建的 Hook 和借用指针，允许修复冲突后重试，重复安装被拒绝。
+
 ## 存档与进度
 
 [save.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/save.cpp) 使用游戏的原生序列化格式，不能读取忏悔＋的存档。`Manager`、`Game` 和 `GameState` 都由游戏持有；后端只在同步调用期间借用对象。入口签名和重定位掩码与其他原生入口一起校验。

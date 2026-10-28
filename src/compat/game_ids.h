@@ -45,6 +45,7 @@ inline constexpr int lazarusSecondB = 38;
 inline constexpr int jacobSecondB = 39;
 } // namespace player
 namespace collectible {
+inline constexpr int bagOfCrafting = 710;
 inline constexpr int nightLight = 425;
 inline constexpr int compass = 21;
 inline constexpr int treasureMap = 54;

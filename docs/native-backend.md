@@ -165,7 +165,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 挑战目标的[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/challenge_hud.cpp) 仅在 HUD 内的两个指令边界介入。J460 的目标存在位是 CL，无解锁标志是栈帧 `EBP-0xa2`；参数读取前的 EAX 指向 164 字节借用视图，只有终点 `+0x40` 与路线类型 `+0x80` 非零，其余字段清零。它不替换 `Game::GetChallengeParams` 本身，不写入 Game、每日挑战或原生参数对象。离开联机挑战后原样传递原生寄存器和参数；边界保存整数寄存器、标志位、SSE、x87 与控制字。两处 Hook 成组安装，失败只撤销本组件创建的 Hook，重复安装被拒绝。[J835 绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#挑战目标-hud) 使用自己的内联读取点和旧版路线标志。
 
-百宝袋目标校验读取 PlayerHUD 绑定、HUD 的八个槽位、Player `+0x1618/+0x20a9`，并使用 `GetActiveItem` 确认持有。绘制只借用引用，不替换绑定、不持有角色或精灵。
+百宝袋的[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/crafting_hud.cpp) 使用[J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/crafting_hud.cpp) 校验 PlayerHUD 绑定、HUD 的八个槽位、Player `+0x1618/+0x20a9`，并通过 `GetActiveItem` 查询四个主动槽。目标为固定的下一联机栏位；无已提交视图、目标为幽灵或已失去百宝袋时隐藏材料，仍保留有效本机副手的卡牌／药丸与图标。普通会话原样调用原生入口。绘制只借用引用，不替换绑定、不持有角色或精灵。副手与材料两个 Hook 成组安装，失败清理本组件的 Hook 和函数／视口指针，保留外部 Hook；重复安装被拒绝。
 
 ## 控制台执行与输入
 

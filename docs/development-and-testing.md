@@ -94,6 +94,8 @@ NPC 命中适配使用 `native.combat-feedback-j460`、`native.combat-feedback-j
 
 挑战目标 HUD 的离线检查为 `native.challenge-hud-j460`、`native.challenge-hud-j835`，配合 `core.challenge-rules`、`bridge.challenges` 和 `bridge.challenge_menu`。原生夹具执行实际边界 thunk 和 MinHook 跳板，检查各版字段、普通／联机目标切换、原生对象不变、短分支搬移、寄存器与浮点状态，以及冲突清理和重试；游戏资源和实际绘制画面仍需实机验证。
 
+百宝袋 HUD 使用 `native.crafting-hud-j460`、`native.crafting-hud-j835`，同一夹具分别链接两版后端和共享绘制组件。检查真实 Hook 跳板、2–4 人栏位顺序、各主动槽、幽灵及目标缺失、普通会话、分辨率／HUD 偏移、J835 镜像与伴生身体对齐、透明度、所有 SSE 寄存器、栈参数和对象不变性，以及安装冲突清理。材料纹理、配方预览和实际屏幕位置仍属于实机画面验收。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh
