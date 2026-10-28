@@ -110,6 +110,23 @@ inline constexpr std::uint32_t pickupSetPrice = 0x2b91e0;
 inline constexpr std::uint32_t roomUpdate = 0x3bf630;
 inline constexpr std::uint32_t gameUpdateHalf = 0x2d0400;
 inline constexpr std::uint32_t gameRender = 0x2ce770;
+inline constexpr std::uint32_t aNM2Construct = 0x24b0;
+inline constexpr std::uint32_t itemOverlayConfigConstruct = 0x50c800;
+inline constexpr std::uint32_t itemOverlayDestruct = 0x50c890;
+inline constexpr std::uint32_t itemOverlayLoad = 0x50c930;
+inline constexpr std::uint32_t itemOverlayUpdate = 0x50d5b0;
+inline constexpr std::uint32_t itemOverlayShow = 0x50dd70;
+inline constexpr std::uint32_t itemOverlayRender = 0x50db30;
+inline constexpr std::uint32_t hUDShowItemText = 0x503830;
+inline constexpr std::uint32_t hUDShowItemTextCustomUTF8 = 0x503460;
+inline constexpr std::uint32_t hudShowFortune = 0x504200;
+inline constexpr std::uint32_t stringTableIndexed = 0x56ba70;
+inline constexpr std::uint32_t gameAddPixelation = 0x320430;
+inline constexpr std::uint32_t playerUpdateWavyCap = 0x395620;
+inline constexpr std::uint32_t playerUsePill = 0x3877a0;
+inline constexpr std::uint32_t playerUseCard = 0x376b80;
+inline constexpr std::uint32_t bossOverlayShow = 0x1c130;
+inline constexpr std::uint32_t itemConfigGetTrinket = 0x2fe640;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t logicalWidth = 0x7fec08, logicalHeight = 0x7fec68;

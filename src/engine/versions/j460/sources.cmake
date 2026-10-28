@@ -35,6 +35,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/characters.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/pause_menu.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/item_presentation.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/item_presentation.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/scene_update.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/scene_update.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/pickup_preview.cpp"

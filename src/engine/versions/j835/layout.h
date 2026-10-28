@@ -7,6 +7,13 @@ namespace isaac::engine::j835::layout {
 namespace string {
 inline constexpr unsigned size = 0x10, capacity = 0x14, inlineCapacity = 0xf;
 } // namespace string
+namespace stringTable {
+inline constexpr unsigned categories = 0xc;
+} // namespace stringTable
+namespace stringTree {
+inline constexpr unsigned head = 0, count = 4;
+inline constexpr unsigned left = 0, parent = 4, right = 8, nil = 0xd, key = 0x10, value = 0x14;
+} // namespace stringTree
 namespace vector {
 inline constexpr unsigned begin = 0, end = 4;
 } // namespace vector
@@ -17,6 +24,7 @@ namespace inputDevice {
 inline constexpr unsigned id = 8;
 } // namespace inputDevice
 namespace manager {
+inline constexpr unsigned nightmare = 0x211bc;
 inline constexpr unsigned music = 0x29a78;
 inline constexpr unsigned renderFrame = 0x4a264;
 inline constexpr unsigned options = 0x29df8;
@@ -59,6 +67,10 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
 } // namespace challengeParams
 namespace game {
+inline constexpr unsigned pixelation = 0x24363c, pixelationDuration = 0x243640;
+inline constexpr unsigned dizzyIntensity = 0x283c04, dizzyTarget = 0x283c08, dizzyStep = 0x283c0c;
+inline constexpr unsigned bloomTime = 0x1c3148, bloomDuration = 0x1c314c, bloomIntensity = 0x1c3150;
+inline constexpr unsigned itemOverlay = 0x1bcc0, bossOverlay = 0x1cf20;
 inline constexpr unsigned hud = 0x3da4c;
 inline constexpr unsigned victoryPrompt = 0x1c33fc;
 inline constexpr unsigned rewindBuffers = 0x243648, selectedRewindBuffer = 0x283b78;
@@ -76,6 +88,17 @@ inline constexpr unsigned pauseMenu = 0x10203c, console = 0x1bb60;
 inline constexpr unsigned fadeAlpha = 0x1c31a8, fadeAction = 0x1c31b0;
 inline constexpr unsigned restartHeldFrames = 0x1c31b4;
 } // namespace game
+namespace itemOverlay {
+inline constexpr unsigned size = 0x1260, state = 0, id = 4, book = 8;
+inline constexpr unsigned configs = 0x11c, configCount = 47, configStride = 0x58;
+inline constexpr unsigned mega = 0x114c, delay = 0x1144;
+} // namespace itemOverlay
+namespace bossOverlay {
+inline constexpr unsigned state = 0, id = 4, sprite = 8;
+} // namespace bossOverlay
+namespace nightmare {
+inline constexpr unsigned home = 0x5e8, index = 0x3a0, background = 0x20, bubble = 0x134;
+} // namespace nightmare
 namespace prompt {
 inline constexpr unsigned animation = 0x34, playing = 0x44;
 inline constexpr unsigned selection = 0x80218, result = 0x8021c;
@@ -158,6 +181,8 @@ inline constexpr unsigned moveDirection = 0xca4, shootDirection = 0xca8, lastDir
 inline constexpr unsigned orbitAngleOffset = 0xcb0, orbitLayer = 0xcc0, orbitSpeed = 0xcbc;
 } // namespace familiar
 namespace sprite {
+inline constexpr unsigned animationOwner = 0x30, overlayOwner = 0x50;
+inline constexpr unsigned loaded = 0x109, playing = 0x44, frame = 0x40;
 inline constexpr unsigned size = 0x114, path = 0, animation = 0x30, overlay = 0x50;
 inline constexpr unsigned offset = 0x94, scale = 0x9c, rotation = 0xa4, color = 0xa8;
 inline constexpr unsigned flipX = 0x100, flipY = 0x101;
@@ -172,6 +197,7 @@ inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
 namespace player {
+inline constexpr unsigned controlsEnabled = 0x360;
 inline constexpr unsigned index = 0x1550, twin = 0x1d80, coopGhost = 0x1f88;
 inline constexpr unsigned hourglassUses = 0x1cc8, hourglassFloorUses = 0x1ccc;
 inline constexpr unsigned generatedInventoryHead = 0x1ec4, generatedInventorySize = 0x1ec8;

@@ -104,6 +104,8 @@ NPC 命中适配使用 `native.combat-feedback-j460`、`native.combat-feedback-j
 
 Home 原生更新门控使用 `native.scene-update-j460`、`native.scene-update-j835`。夹具执行实际 Hook，检查普通／客机／结束状态的重复切换、thiscall receiver、内联块继续位置、原生对象不变、栈平衡、GPR／标志／SSE／x87／控制字及 Hook 冲突清理；J835 夹具包含真实边界的字段读取指令。实际路线标记与 Home 结局仍属于实机范围。
 
+道具演出使用 `native.item-presentation-j460`、`native.item-presentation-j835`，配合 `core.compatibility-targets`、`core.localized-text` 和 `bridge.presentation`。同一夹具检查实际 Hook 的调用栈和寄存器、原生构造／析构顺序、配置失败、Mega Mush 动画所有权、文字显示标志与本地化、J835 规则提示索引边界、整批事件校验、固定编码与去重、屏幕嵌套／异常／重置、Game 失效、Home 集合与借用 Sprite。夹具不加载游戏美术，不执行真实治疗、路线推进或实体引用释放；这些仍属于对应实机场景。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh

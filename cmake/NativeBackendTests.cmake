@@ -42,6 +42,15 @@ isaac_add_backend_test(
     minhook)
 foreach(backend j460 j835)
     isaac_add_backend_test(
+        item-presentation
+        ${backend}
+        SOURCES
+        tests/item_presentation_backend_test.cpp
+        tests/native_call.cpp
+        src/engine/versions/${backend}/item_presentation.cpp
+        LIBRARIES
+        minhook)
+    isaac_add_backend_test(
         scene-update
         ${backend}
         SOURCES

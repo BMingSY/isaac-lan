@@ -26,6 +26,7 @@ namespace inputDevice {
 inline constexpr unsigned id = 12;
 } // namespace inputDevice
 namespace manager {
+inline constexpr unsigned nightmare = 0x21628;
 inline constexpr unsigned renderFrame = 0x4abbc, buttonPrompts = 0x4a950;
 inline constexpr unsigned options = 0x2a33c;
 inline constexpr unsigned characterConfigs = 0x2a678;
@@ -68,6 +69,7 @@ inline constexpr std::ptrdiff_t mainPass = 0xc;
 inline constexpr std::ptrdiff_t hologram = -0x6d;
 } // namespace playerRenderFrame
 namespace game {
+inline constexpr unsigned itemOverlay = 0x1c034, bossOverlay = 0x1d2ec;
 inline constexpr unsigned hud = 0x1da04, introPlayer = 0x1bb74, controlRestoreGuard = 0x26614;
 inline constexpr unsigned victoryPrompt = 0x26778;
 inline constexpr unsigned rewindBuffers = 0x269ec, selectedRewindBuffer = 0x676ac;
@@ -105,6 +107,17 @@ inline constexpr unsigned fadeAction = 0x265bc;
 inline constexpr unsigned restartHeldFrames = 0x265c4;
 inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
+namespace itemOverlay {
+inline constexpr unsigned size = 0x12b8, state = 0, id = 4, book = 8;
+inline constexpr unsigned configs = 0x11c, configCount = 48, configStride = 0x58;
+inline constexpr unsigned mega = 0x11a4, delay = 0x119c;
+} // namespace itemOverlay
+namespace bossOverlay {
+inline constexpr unsigned state = 0, id = 4, sprite = 8;
+} // namespace bossOverlay
+namespace nightmare {
+inline constexpr unsigned home = 0x5e8, index = 0x3a0, background = 0x20, bubble = 0x134;
+} // namespace nightmare
 namespace prompt {
 inline constexpr unsigned animation = 0x34, playing = 0x44;
 inline constexpr unsigned selection = 0x128, result = 0x12c, nativeVote = 0x130;
@@ -237,6 +250,7 @@ inline constexpr unsigned orbitSpeed = 0xd6c;
 inline constexpr unsigned orbitLayer = 0xd70;
 } // namespace familiar
 namespace sprite {
+inline constexpr unsigned loaded = 0x109, playing = 0x44, frame = 0x40;
 inline constexpr unsigned size = 0x114;
 inline constexpr unsigned path = 0x0;
 inline constexpr unsigned animation = 0x30;
@@ -283,6 +297,7 @@ inline constexpr unsigned optionsIndex = 0x528, price = 0x534, autoUpdatePrice =
 inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, state = 0x584;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned controlsEnabled = 0x410;
 inline constexpr unsigned hourglassUses = 0x1da8, hourglassFloorUses = 0x1dac;
 inline constexpr unsigned weapons = 0x13dc;
 inline constexpr unsigned babySkin = 0x1aec;

@@ -147,6 +147,22 @@ J460 采集入口为 `0x305ee0`，`stdcall void(int door)`，清栈 4 字节。�
 
 小夜灯只筛选 `Room::Render` 在 `0x410dad` 发起的道具查询，不改其他调用者或道具。玩家 HUD 桥接使用 `Game+0x1da04` 和下方的坐标能力，小地图桥接发布前端实际绘制视图。两个演出 Hook 成组创建，失败只撤销本组件 Hook；其他演出子组件分别管理安装边界，启动装配在任一失败时中止。[J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#入场演出与本机视图) 说明其不同的角色引用、标记和对象布局。
 
+## 道具演出事件与对象
+
+[共享道具演出组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/item_presentation.cpp) 通过[版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/item_presentation_bindings.h) 访问大书、HUD 文字与屏幕效果。J460 [绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/item_presentation.cpp) 使用以下布局；[J835 的布局和不同文字 ABI](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#道具演出与屏幕状态) 独立声明。
+
+J460 全局大书位于 `Game+0x1c034`，对象大小 `0x12b8`；48 个配置从 `+0x11c` 开始、步长 `0x58`，普通／Mega Mush Sprite 为 `+8/+0x11a4`，延迟为 `+0x119c`。扩展按版本分配对齐存储，依次调用两个 ANM2 构造和全部配置构造，再调用原生 Load；加载失败中止会话并立即析构该对象，不显示半初始化动画。字符串、动画资源及玩家引用由原生构造／析构管理，扩展只释放自身存储。Mega Mush 将全局动画交换到所属玩家对象，双方的 `ANM2+0x30/+0x50` 自引用分别重绑到自身，避免共享所有权。
+
+主机每个控制器持有独立大书，在所属房间推进并按本机栏位绘制。Home 睡眠使用全局对象并等待全队集合；终局动画继续执行原生标记。客机普通大书只应用姿态，不在原生 Update 中再次产生治疗、音效或路线副作用。重置和配置重载析构全部独立对象；屏幕作用域在正常及 C++ 异常返回时恢复借用标量，Game 失效时不写回旧对象。重置清除动作归属、事件、翻译来源和去重状态，可仅保留像素化计时。
+
+`HUD::ShowItemText` 使用玩家和 ItemConfig 两个栈参数；接收端通过原生配置查询解析 ID，不能把 EntityConfig 当作 ItemConfig。J460 `ShowItemTextCustomUTF8` 为 `thiscall void(HUD*, Player*, const char*, const char*)`，清栈 12 字节，使用原生固定的粘附文字样式。文字和规则提示只在所属玩家 HUD 播放；翻译按本机 StringTable 解析捕获的节名／键，不保留字符串指针或重新抽取随机提示。规则提示借用 x86 MSVC 循环链表，节点 32 字节、字符串位于 `+8`，接收端的临时节点在原生调用返回后释放。
+
+事件批次先完整解析再执行，最多 24 条，最长 90 个接受帧；每条前缀依次为 `u32 serial/tick/epoch`、`u8 slot/role/kind`，使用网络字节序。种类 1 为大书 ID、延迟和是否绑定玩家，种类 2 为道具 ID／类型，种类 3 为两段文字，种类 4 在文字后携带两组翻译来源，种类 5 为规则提示及索引来源。种类 6 使用种类 4 的字段并追加一个样式字节：位 0 为粘附动画，位 1 为诅咒显示；仅 J835 接收，J460 拒绝该种类。每段文字最多 1024 字节，每个来源字段最多 128 字节，批次最多 65535 字节；接收者、身体角色、代次、年龄和序号共同限制回放。种类 1–5 的编码保持一致。
+
+`item_presentation_pose` 为 `u8 state/id`、`u32 delay` 及 32 字节屏幕标量；状态最多 2，ID 必须小于本版配置数，延迟最多 900。屏幕标量依次为像素化两个计时、扭曲当前／目标／步长、泛光两个计时与强度，整数为 u32，浮点按 IEEE 754 位模式编码；计时有序，浮点有限且非负。`home_scene_pose` 为 `u8 state/id`、`u32 sleepSerial`、`u8 dreamHome`、`i32 dreamIndex`；完整校验后写入显示状态，不调用 Show／Update，也不重新启动已经结束的主机梦境。Sprite 接口只接受八字节借用 userdata 并沿用其元表，不返回原生地址给 Lua。
+
+本组件的 14 个 Hook 成组创建和启用，冲突只清理本组件所建 Hook 与跳板，保留外部 Hook；重复安装被拒绝。Home 更新门控及拾取预览各自管理安装，启动装配在任一组件失败时中止。世界 schema 与网络消息版本以 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[protocol.h](https://github.com/BMingSY/isaac-lan/blob/main/src/net/protocol.h) 为准；现有 Lua 字段仍承载不透明事件字符串，扩展 DLL 指纹阻止不同实现混联，不能据此进行跨版本转换。
+
 ## Home 场景推进
 
 `BossOverlay::Update` RVA `0x212c0` 是 thiscall 无栈参数方法。[更新绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/scene_update.cpp) 交给[共享门控](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/scene_update.cpp)：普通客机在结束状态前不执行原生路线标记，主机和结束状态调用原函数；姿态仍由道具演出同步提供。组件不写入或持有原生对象，Hook 失败只清理自身资源，保留外部 Hook，重复安装被拒绝。[J835](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#home-场景推进) 使用游戏更新函数内的指令边界，不能沿用该方法 ABI。
@@ -257,7 +273,7 @@ J460 发放接口保留六个栈参数，入队接口保留五个栈参数，均
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x26528/+0x2652c/+0x26530` 是泛光剩余时间／初始时间／强度，`+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；角色更新及嵌套的道具／药丸／卡牌调用借入同一所属状态，结束时回收并恢复全局标量；绘制只借入本机状态，角色动作外的世界泛光保留全局归属 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 35、网络消息版本为 44；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具事件、pose 字段、范围校验与资源所有权见[道具演出事件与对象](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#道具演出事件与对象)。屏幕计时的重复快照只恢复状态，不重新开始计时。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 

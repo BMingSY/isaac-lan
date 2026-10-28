@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述可独立测试的原生组件；完整房间调度、实体姿态、表现及启动装配尚未接通。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述可独立测试的原生组件；完整房间调度、实体姿态、前端及启动装配尚未接通。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -29,9 +29,31 @@ HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规
 
 [场景更新绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/scene_update.cpp) 接入[共享更新门控](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/scene_update.cpp)。J835 没有独立的 BossOverlay 更新入口；`Game::Update` 在 RVA `0x2ce36e` 从 EDI 指向的 Game 读取 `+0x1cf20`，随后内联更新动画、处理 Home 路线标记，至 `0x2ce4c1` 进入下一更新块。
 
-普通客机且尚未进入结束状态时，边界直接继续到后一更新块；主机及结束状态执行原始跳板。门控保存整数寄存器、标志位、SSE、x87 和控制字，不写入场景对象或 Game 字段，不创建、推进或持有动画。这样由主机消费路线标记，客机的显示姿态仍交给演出同步；此门控本身不提供完整道具／Home 姿态适配。
+普通客机且尚未进入结束状态时，边界直接继续到后一更新块；主机及结束状态执行原始跳板。门控保存整数寄存器、标志位、SSE、x87 和控制字，不写入场景对象或 Game 字段，不创建、推进或持有动画。这样由主机消费路线标记，客机的显示姿态仍交给演出同步；道具／Home 姿态由下述共享演出组件提供。
 
 入口与继续位置均在启动签名清单中。Hook 冲突保留外部 Hook，失败清理所属 Hook 与跳板，允许重试；重复安装被拒绝。原生 Game／BossOverlay 继续由游戏持有，不能把该内部边界作为可直接调用的函数。
+
+## 道具演出与屏幕状态
+
+[原版道具演出绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/item_presentation.cpp) 提供入口、布局和自定义文字适配；对象所有权、事件编码、显示权限及生命周期见[共享契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#道具演出事件与对象)。组件依赖完整房间调度，不能独立形成可安装后端。
+
+| 原生操作 | J835 入口与 ABI |
+| --- | --- |
+| ANM2／大书配置构造 | `0x24b0`／`0x50c800`，thiscall，无栈参数；大书析构 `0x50c890` 负责动画、配置字符串及登记的玩家引用 |
+| 大书加载／更新 | `0x50c930`，thiscall 接收文件名并返回 bool，清栈 4 字节；`0x50d5b0` 接收结束标志，清栈 4 字节 |
+| 大书显示／绘制 | `0x50dd70` 接收 ID、延迟及可空玩家，清栈 12 字节；`0x50db30` 无栈参数；均以 ECX 接收大书对象 |
+| 道具文字 | `0x503830`，thiscall 接收玩家和 ItemConfig，清栈 8 字节；饰品查询 `0x2fe640` 接收 ID 并清栈 4 字节，返回借用配置 |
+| 自定义文字 | `0x503460`，thiscall 接收标题、说明、粘附标志、诅咒标志，清栈 16 字节；没有玩家参数，使用当前角色动作作用域确定归属，两个显示标志通过种类 6 事件保留 |
+| 规则提示／索引翻译 | `0x504200` 借用字符串链表，清栈 4 字节；`0x56ba70` 接收节名、语言和索引，清栈 12 字节 |
+| 像素化／扭曲 | `0x320430` 以 ECX 接收 Game、栈上接收持续时间并清栈 4 字节；`0x395620` 以 ECX 接收玩家、无栈参数 |
+| 药丸／卡牌作用域 | `0x3877a0` 接收效果、颜色和使用标志，清栈 12 字节；`0x376b80` 接收卡牌和使用标志，清栈 8 字节；ECX 均为玩家，参数原样转发 |
+| Home 场景显示 | `0x1c130` 以 ECX 接收 BossOverlay，栈上为场景 ID，清栈 4 字节；实际更新使用上方内联门控 |
+
+全局大书为 `Game+0x1bcc0`，大小 `0x1260`；配置共 47 个，从 `+0x11c` 开始、步长 `0x58`。普通／Mega Mush Sprite 为 `+8/+0x114c`，延迟 `+0x1144`，原生玩家引用 `+0x1148`；不能沿用忏悔＋的配置数和末尾字段。两类 Sprite 的加载、播放和帧位分别为 `+0x109/+0x44/+0x40`，自引用为 `+0x30/+0x50`。BossOverlay 位于 `Game+0x1cf20`，状态／ID／Sprite 为 `+0/+4/+8`。梦境位于 `Manager+0x211bc`，Home 标志／索引为 `+0x5e8/+0x3a0`，背景／气泡 Sprite 为 `+0x20/+0x134`，仅在 Manager 场景 5 时借用。
+
+原版屏幕标量为 Game 的像素化 `+0x24363c/+0x243640`、扭曲 `+0x283c04/+0x283c08/+0x283c0c`、泛光 `+0x1c3148/+0x1c314c/+0x1c3150`。主机按控制器保存，卡牌／药丸及嵌套动作共用所属状态；绘制与动作作用域在异常时恢复，重置或 Game 释放不会将旧状态写入新对象。
+
+原版索引翻译未检查迭代器越界。接收事件时，绑定先按原生规则将节名的 ASCII 大写和反斜线归一化，再只读检查 `StringTable+0xc` 分类树和对应字符串树的实际元素数；索引无效则使用捕获文字，禁止把越界索引传入原函数。树对象的头／数量为 `+0/+4`，节点的左／父／右指针为 `+0/+4/+8`、哨兵标志为 `+0xd`、键／值为 `+0x10/+0x14`。树和字符串均由游戏持有，绑定不保留节点、不修改容器。
 
 ## 胜利圈提示
 
