@@ -53,6 +53,15 @@ isaac_add_backend_test(
     minhook)
 foreach(backend j460 j835)
     isaac_add_backend_test(
+        frontend-hud
+        ${backend}
+        SOURCES
+        tests/frontend_hud_backend_test.cpp
+        tests/native_call.cpp
+        src/engine/versions/${backend}/frontend_hud.cpp
+        LIBRARIES
+        minhook)
+    isaac_add_backend_test(
         entity-visuals
         ${backend}
         SOURCES

@@ -35,6 +35,7 @@
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/common/frontend_hud.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/menu_state.h"
 #include "engine/versions/j460/menu_context.h"
@@ -61,29 +62,6 @@ isaac::lua::API lua;
 bool bridgeFailed = false, visible = false, guiReady = false;
 bool officialRequested = false;
 std::string error, fingerprint, modFingerprint;
-using StatPlayerId = int(__attribute__((thiscall)) *)(void*, void*);
-StatPlayerId originalStatPlayerId = nullptr;
-int __attribute__((fastcall)) statPlayerId(void* hud, void*, void* player) {
-    const int slot = runtime::localViewSlot();
-    if (slot < 0)
-        return originalStatPlayerId(hud, player);
-    const auto address = reinterpret_cast<std::uintptr_t>(hud);
-    // StatHUD owns two scalar stat caches (Jacob and Esau). Clear a stale
-    // teammate cache from the pre-network startup before selecting our actor.
-    for (unsigned i = 0; i < layout::statHud::cacheCount; ++i) {
-        const auto cached = *reinterpret_cast<std::uintptr_t*>(address + layout::statHud::player +
-                                                               i * layout::statHud::cacheStride);
-        if (cached && *reinterpret_cast<int*>(cached + layout::player::controller) != slot + 1) {
-            using Reset = void(__attribute__((thiscall))*)(void*);
-            reinterpret_cast<Reset>(image + j460::entry::frontendStatHUDReset)(hud);
-            break;
-        }
-    }
-    if (*reinterpret_cast<int*>(reinterpret_cast<std::uintptr_t>(player) +
-                                layout::player::controller) != slot + 1)
-        return -1;
-    return originalStatPlayerId(hud, player);
-}
 int count = 0, draining = 0;
 bool prepared = false;
 bool lobbyRequested = false;
@@ -148,6 +126,7 @@ MapRender originalMapRender;
 using TextureRender = void*(__attribute__((thiscall)) *)(void*, const void*, const void*, bool);
 TextureRender originalTextureRender;
 MapRender originalMapCache;
+MenuUpdate originalMinimapUpdate = nullptr;
 std::uintptr_t activeMap = 0;
 std::array<Location, 2> mapAnchors;
 struct Marker {
@@ -298,78 +277,6 @@ void __attribute__((fastcall)) mapCache(void* config, void*) {
                 reinterpret_cast<void*>(image + j460::globals::renderer), false);
         }
         rooms::withMapPickups([&] { originalMapCache(config); });
-    });
-}
-MenuUpdate originalHudUpdate = nullptr, originalHudPostUpdate = nullptr,
-           originalHudRender = nullptr, originalMinimapUpdate = nullptr;
-StatPlayerId originalHistoryPlayerId = nullptr;
-int __attribute__((fastcall)) historyPlayerId(void* history, void*, void* player) {
-    const int slot = runtime::localViewSlot();
-    if (slot < 0)
-        return originalHistoryPlayerId(history, player);
-    if (read<int>(reinterpret_cast<std::uintptr_t>(player), layout::player::controller) != slot + 1)
-        return -1;
-    int result = -1;
-    rooms::withView([&] { result = originalHistoryPlayerId(history, player); }, true);
-    return result;
-}
-void bindTeamHud(void* hud) {
-    const int slot = runtime::localViewSlot();
-    if (slot < 0)
-        return;
-    const auto game = read<std::uintptr_t>(image, j460::globals::game),
-               address = reinterpret_cast<std::uintptr_t>(hud);
-    std::array<std::uintptr_t, lan::maxPlayers * 2> desired{};
-    unsigned ordinal = 0;
-    for (auto entry = read<std::uintptr_t>(game, layout::game::players);
-         entry < read<std::uintptr_t>(game, layout::game::players + layout::vector::end) &&
-         ordinal < lan::maxPlayers;
-         entry += sizeof(std::uintptr_t)) {
-        const auto p = read<std::uintptr_t>(entry, 0);
-        if (read<int>(p, layout::entity::parent) != 0 || !read<bool>(p, layout::entity::active))
-            continue;
-        const auto twin = read<std::uintptr_t>(p, layout::player::twin);
-        if (twin && twin != p && read<int>(twin, layout::player::index) >= 0 &&
-            read<int>(twin, layout::player::index) < read<int>(p, layout::player::index))
-            continue;
-        desired[ordinal] = p;
-        if (twin && twin != p && read<bool>(twin, layout::entity::active) &&
-            read<int>(twin, layout::player::type) != compat::ids::player::soulB)
-            desired[ordinal + lan::maxPlayers] = twin;
-        ++ordinal;
-    }
-    bool changed = false;
-    for (unsigned i = 0; i < desired.size(); ++i) {
-        const auto part = address + i * layout::playerHud::size;
-        if (read<std::uintptr_t>(part, 0) == desired[i])
-            continue;
-        // Reset owned caches through the native destructor/reset routine. A
-        // pointer-only swap leaves heart and inventory caches from a teammate.
-        reinterpret_cast<MenuUpdate>(image +
-                                     j460::entry::playerHUDReset)(reinterpret_cast<void*>(part));
-        read<std::uintptr_t>(part, 0) = desired[i];
-        read<unsigned short>(part, layout::playerHud::refreshFlags) = layout::playerHud::refreshAll;
-        changed = true;
-    }
-    if (changed) {
-        using Recompute = void(__attribute__((thiscall))*)(void*, bool);
-        reinterpret_cast<Recompute>(image + j460::entry::historyHUDRecomputeAll)(
-            reinterpret_cast<void*>(address + layout::hud::history), true);
-    }
-}
-void __attribute__((fastcall)) hudUpdate(void* hud, void*) {
-    rooms::withView([&] { originalHudUpdate(hud); });
-}
-void __attribute__((fastcall)) hudPostUpdate(void* hud, void*) {
-    rooms::withView([&] {
-        bindTeamHud(hud);
-        originalHudPostUpdate(hud);
-    });
-}
-void __attribute__((fastcall)) hudRender(void* hud, void*) {
-    rooms::withView([&] {
-        bindTeamHud(hud);
-        originalHudRender(hud);
     });
 }
 void __attribute__((fastcall)) minimapUpdate(void* map, void*) {
@@ -1000,29 +907,7 @@ bool install(std::uintptr_t base, const std::wstring& root, void (*log)(const st
     auto target = reinterpret_cast<void*>(image + j460::entry::luaEngineInit);
     return MH_CreateHook(target, reinterpret_cast<void*>(init),
                          reinterpret_cast<void**>(&originalInit)) == MH_OK &&
-           MH_EnableHook(target) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::frontendStatHUDGetPlayerId),
-                         reinterpret_cast<void*>(statPlayerId),
-                         reinterpret_cast<void**>(&originalStatPlayerId)) == MH_OK &&
-           MH_EnableHook(
-               reinterpret_cast<void*>(image + j460::entry::frontendStatHUDGetPlayerId)) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::hUDUpdate),
-                         reinterpret_cast<void*>(hudUpdate),
-                         reinterpret_cast<void**>(&originalHudUpdate)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::hUDUpdate)) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::hUDPostUpdate),
-                         reinterpret_cast<void*>(hudPostUpdate),
-                         reinterpret_cast<void**>(&originalHudPostUpdate)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::hUDPostUpdate)) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::hUDRender),
-                         reinterpret_cast<void*>(hudRender),
-                         reinterpret_cast<void**>(&originalHudRender)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::hUDRender)) == MH_OK &&
-           MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::historyHUDGetPlayerId),
-                         reinterpret_cast<void*>(historyPlayerId),
-                         reinterpret_cast<void**>(&originalHistoryPlayerId)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::historyHUDGetPlayerId)) ==
-               MH_OK &&
+           MH_EnableHook(target) == MH_OK && engine::native_frontend_hud::install(image) &&
            MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::minimapUpdate),
                          reinterpret_cast<void*>(minimapUpdate),
                          reinterpret_cast<void**>(&originalMinimapUpdate)) == MH_OK &&

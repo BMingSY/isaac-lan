@@ -138,6 +138,14 @@ HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规
 
 两个边界保存标志、整数寄存器、SSE、x87 与控制字，只修改目标所需的保存槽。未启用联机挑战时保留原生指针与帧数据。Hook 成组安装，冲突撤销已创建的本组件 Hook，保留外部 Hook；重复安装被拒绝。此接口不改变挑战解锁、路线选择或通关条件。
 
+## 玩家 HUD 绑定
+
+[HUD 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/frontend_hud.cpp)向[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend_hud.cpp)提供原生入口与布局。更新、后更新和绘制分别为 RVA `0x5027e0/0x502a20/0x504610`，均以 ECX 接收 HUD、无栈参数；在当前房间视角内执行。后更新和绘制前，从临时玩家名单选择四个主身体及其四个伴生身体，过滤子实体、已移除实体及重复双子，Soul B 不占伴生栏。
+
+PlayerHUD 步长 `0x6b0`，借用玩家指针为 `+0`，刷新标记为 `+0x6a0`。仅绑定变化时调用 `PlayerHUD::Reset`（RVA `0x4f9780`、thiscall、无参数），随后设置目标指针及 `0x101` 刷新标记；不复制心容器、道具缓存或 Sprite。变化后对 `HUD+0xc45c4` 的 HistoryHUD 调用 `0x507c90`，栈参数为 true、清栈 4 字节。对象、容器及资源仍由游戏管理。
+
+StatHUD／HistoryHUD 玩家查询入口为 `0x508370/0x508000`，以 ECX 接收对应 HUD，栈上一个玩家参数、清栈 4 字节。联机只接受本机控制器，历史栏查询额外使用本机玩家名单。StatHUD 从 `+0x114` 起有两个玩家缓存，步长 `0xcc`；发现旧队友缓存时调用 `0x508400` 原生 Reset，再执行查询。退出联机恢复原生选择行为，空对象不被解引用。五个 Hook 成组安装，冲突只撤销本组件已创建的 Hook。
+
 ## 玩家 HUD 坐标
 
 [坐标组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/player_hud.h) 复用[借用与范围检查](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_hud.h)，只返回控制器栏位、布局和坐标。原生可见位为 `HUD+0xc3eb6`；仅查看前四个主 HUD，不保留指针或写入缓存。空槽、隐藏、无效控制器、非有限或非正视口尺寸及屏幕外位置均不返回坐标。

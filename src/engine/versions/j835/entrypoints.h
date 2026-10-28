@@ -5,6 +5,14 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t frontendStatHUDGetPlayerId = 0x508370;
+inline constexpr std::uint32_t frontendStatHUDReset = 0x508400;
+inline constexpr std::uint32_t historyHUDGetPlayerId = 0x508000;
+inline constexpr std::uint32_t historyHUDRecomputeAll = 0x507c90;
+inline constexpr std::uint32_t playerHUDReset = 0x4f9780;
+inline constexpr std::uint32_t hUDUpdate = 0x5027e0;
+inline constexpr std::uint32_t hUDPostUpdate = 0x502a20;
+inline constexpr std::uint32_t hUDRender = 0x504610;
 inline constexpr std::uint32_t playerOutlineBodyGate = 0x353a89;
 inline constexpr std::uint32_t playerOutlineBodyColor = 0x353aef;
 inline constexpr std::uint32_t playerOutlineSpecialGate = 0x35382e;

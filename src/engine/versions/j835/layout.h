@@ -131,6 +131,7 @@ namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned parent = 0x314;
 inline constexpr unsigned renderPosition = 0x19c;
 inline constexpr unsigned minecart = 0x32c;
 inline constexpr std::array<unsigned, 4> shadow{0x150, 0x154, 0x158, 0x2a8};
@@ -222,6 +223,7 @@ inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
 namespace player {
+inline constexpr unsigned type = 0x130c;
 inline constexpr unsigned heldEntity = 0x1358;
 inline constexpr std::array<unsigned, 2> poseFlags{0x12e8, 0x12ea};
 inline constexpr unsigned blinkTime = 0x1288, damageCooldown = 0x1308;
@@ -235,6 +237,7 @@ inline constexpr unsigned primaryActive = 0x14c4, activeStride = 0x1c, megaBlast
 inline constexpr unsigned controller = 0x154c;
 } // namespace player
 namespace hud {
+inline constexpr unsigned history = 0xc45c4;
 inline constexpr unsigned visible = 0xc3eb6;
 inline constexpr std::array<std::array<float, 2>, 4> heartOrigins{
     {{68, 24}, {-135, 24}, {80, -33}, {-135, -33}}};
@@ -242,8 +245,12 @@ inline constexpr std::array<std::array<float, 2>, 4> heartMargins{
     {{-20, -12}, {24, -12}, {-22, 6}, {16, 6}}};
 } // namespace hud
 namespace playerHud {
+inline constexpr unsigned refreshFlags = 0x6a0, refreshAll = 0x101;
 inline constexpr unsigned player = 0, root = 4, index = 8, size = 0x6b0;
 } // namespace playerHud
+namespace statHud {
+inline constexpr unsigned player = 0x114, cacheStride = 0xcc, cacheCount = 2;
+}
 namespace mouseFrame {
 inline constexpr std::size_t bytes = 0x240;
 inline constexpr std::ptrdiff_t active = -0x150, aimX = -0x15c, aimY = -0x158;

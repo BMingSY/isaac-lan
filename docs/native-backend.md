@@ -191,6 +191,8 @@ J460 全局大书位于 `Game+0x1c034`，对象大小 `0x12b8`；48 个配置从
 
 ## HUD 与本机输入
 
+队伍 HUD 的玩家绑定、StatHUD 和历史栏筛选由[共享 HUD 组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend_hud.cpp)执行，[J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/frontend_hud.cpp)声明入口与布局。八个 PlayerHUD 仅在绑定变化时调用原生 Reset、写入借用玩家和刷新标记，并重新计算历史栏；更新和绘制借用房间视角，单人沿用原生行为。组件不复制或持有心容器、道具和 Sprite 资源。J460 的步长为 `0x6dc`、刷新标记 `+0x6ac`、历史栏 `HUD+0x5c54`；[J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#玩家-hud-绑定)声明其不同布局。
+
 物理采集、虚拟 XInput、权威输入分发、按键沿消费和退出恢复位于[共享输入组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input.cpp)。[J460 输入绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/input.cpp) 提供原生查询／鼠标入口、布局、动作映射与菜单提示重置。查询通过输入管理器虚表 `+0x74` 安装，失败撤销本组件创建的 Hook；鼠标旁路保留原生 thiscall 参数。采集按 `Manager+0x4abbc` 的渲染帧编号去重；重复采集消费按键沿但保留按住值，不更改网络字段与编码顺序。
 
 `input_ready()` 根据同一份受锁保护的设备 ID 快照，检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在。[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化原生扫描 `0x66dab0` 与轮询 `0x66de60` 的完整事务，允许同线程回调重入，离开联机后继续保护断开清理。J460 输入管理器 RVA `0x857b18` 的列表首尾为 `+8/+12`，元素八字节，设备 ID 位于 `+12`；组件不修改元素中的原生所有权字段。退出只恢复仍存在且编号未被独立更改的设备，设备对象仍由游戏分配和释放。运行协调器在就绪后请求开局；角色槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
