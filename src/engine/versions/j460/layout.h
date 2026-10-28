@@ -367,6 +367,7 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, destinationType = 0x80;
 } // namespace challengeParams
 namespace hud {
+inline constexpr unsigned visible = 0x54cc;
 inline constexpr unsigned pocketOffsetX = 0x594c, pocketOffsetY = 0x5950;
 inline constexpr unsigned history = 0x5c54;
 } // namespace hud

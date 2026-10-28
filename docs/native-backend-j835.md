@@ -16,6 +16,12 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 两个边界保存标志、整数寄存器、SSE、x87 与控制字，只修改目标所需的保存槽。未启用联机挑战时保留原生指针与帧数据。Hook 成组安装，冲突撤销已创建的本组件 Hook，保留外部 Hook；重复安装被拒绝。此接口不改变挑战解锁、路线选择或通关条件。
 
+## 玩家 HUD 坐标
+
+[坐标组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/player_hud.h) 复用[借用与范围检查](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_hud.h)，只返回控制器栏位、布局和坐标。原生可见位为 `HUD+0xc3eb6`；仅查看前四个主 HUD，不保留指针或写入缓存。空槽、隐藏、无效控制器、非有限或非正视口尺寸及屏幕外位置均不返回坐标。
+
+J835 没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制调用 `0x505965` 前按 HUD 数组顺序构造四个位置。令 `m=1-HUDOffset`，其坐标分别为 `(68-20*m, 24-12*m)`、`(width-135+24*m, 24-12*m)`、`(80-22*m, height-33+6*m)`、`(width-135+16*m, height-33+6*m)`。组件按原生规则先计算相对坐标，再为负坐标加上视口尺寸；布局编号为对应的 0–3 角位，联机身份独立取自绑定玩家的控制器。调用方须处于与 HUD 绘制一致的本机名单作用域。
+
 ## 百宝袋与副手 HUD
 
 [百宝袋绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/crafting_hud.cpp) 复用[共享选择与绘制组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/crafting_hud.cpp)。八个 PlayerHUD 的步长是 `0x6b0`，`+0/+4` 借用玩家和所属 HUD，`+8` 是原生 short 索引。控制器和幽灵标志为 `Player+0x154c/+0x1f88`；`GetActiveItem` RVA `0xf3f10` 使用 thiscall 接收槽号并清栈 4 字节，查询 `Player+0x14c4+slot*0x1c`。适配只查询四个有效槽，不依赖 J460 的槽号保护。

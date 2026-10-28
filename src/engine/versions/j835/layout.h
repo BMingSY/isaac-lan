@@ -163,6 +163,13 @@ inline constexpr unsigned generatedInventoryHead = 0x1ec4, generatedInventorySiz
 inline constexpr unsigned primaryActive = 0x14c4, activeStride = 0x1c, megaBlastLaser = 0x13a0;
 inline constexpr unsigned controller = 0x154c;
 } // namespace player
+namespace hud {
+inline constexpr unsigned visible = 0xc3eb6;
+inline constexpr std::array<std::array<float, 2>, 4> heartOrigins{
+    {{68, 24}, {-135, 24}, {80, -33}, {-135, -33}}};
+inline constexpr std::array<std::array<float, 2>, 4> heartMargins{
+    {{-20, -12}, {24, -12}, {-22, 6}, {16, 6}}};
+} // namespace hud
 namespace playerHud {
 inline constexpr unsigned player = 0, root = 4, index = 8, size = 0x6b0;
 } // namespace playerHud

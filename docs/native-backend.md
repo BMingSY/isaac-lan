@@ -149,7 +149,7 @@ J460 采集入口为 `0x305ee0`，`stdcall void(int door)`，清栈 4 字节。�
 
 联机显式返回菜单时，`menu_context::returnToMain` 只在原生已重建菜单、已选存档栏且处于标题／选档／主菜单页时选择主菜单。不构造菜单对象，也不接管其他页面或未选存档的启动流程。
 
-Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择百宝袋的材料来源和绘制位置。[player_hud.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/player_hud.h)、[crafting_hud.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/crafting_hud.cpp) 与 [challenge_hud.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/challenge_hud.cpp) 提供受限能力。
+Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择百宝袋的材料来源和绘制位置。玩家坐标的对象借用、可见性和有限正视口检查由[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_hud.h) 负责，各版本提供布局和位置。[player_hud.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/player_hud.h)、[crafting_hud.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/crafting_hud.cpp) 与 [challenge_hud.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/challenge_hud.cpp) 提供受限能力。
 
 | 能力 | 布局／入口 | 约束 |
 | --- | --- | --- |
