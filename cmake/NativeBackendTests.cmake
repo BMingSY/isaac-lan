@@ -33,6 +33,17 @@ isaac_add_backend_test(
     LIBRARIES
     minhook)
 isaac_add_backend_test(
+    player-outlines
+    j835
+    SOURCES
+    tests/player_outlines_j835_test.cpp
+    tests/native_call.cpp
+    src/engine/versions/common/player_outlines.cpp
+    LIBRARIES
+    minhook
+    COMPILE_OPTIONS
+    -msse2)
+isaac_add_backend_test(
     input-queries
     j835
     SOURCES

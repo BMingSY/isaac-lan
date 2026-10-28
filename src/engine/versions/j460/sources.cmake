@@ -38,6 +38,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/victory_prompt.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/victory_prompt.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/player_outlines.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/player_outlines.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/crafting_hud.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/crafting_hud.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/challenge_hud.cpp"

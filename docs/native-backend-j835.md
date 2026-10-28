@@ -82,6 +82,16 @@ Hornfel／Horny Boys 的持有炸弹容器位于 `NPC+0xb40`，分别限定两�
 
 HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规则；小地图只发布前端实际绘制观察到的普通值。两处演出 Hook 成组创建，冲突只撤销本组件 Hook；道具、百宝袋、挑战 HUD 和胜利圈提示各自管理安装，任一失败由启动装配中止。上述组件仍依赖完整房间与前端后端，不能单独作为可安装联机实现。
 
+## 玩家轮廓
+
+[J835 轮廓后端](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/player_outlines.cpp)与 J460 共用[绘制作用域及配色](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_outlines.cpp)。只在本机房间绘制的 `withPlayers` 作用域内启用，至少两个在线槽位，角色 `+0x154c` 的控制器须属于在线槽位；嵌套调用、断开和异常离开均恢复外层名单。
+
+普通身体资格边界为 `0x353a89`、颜色栈调用为 `0x353aef`；特殊精灵分别为 `0x35382e/0x353894`。EDI 是玩家，`[EBP+0xc]` 是主绘制标记，`[EBP-0x79]` 是全息分身标记。符合条件时只填写 `[EBP-0x3c]` 的 44 字节临时 ColorMod，将 ECX 指向它并继续原生颜色压栈。四方向身体、头部与装扮绘制及颜色出栈保留原生实现；全息分身、残影和作用域外调用沿用原生资格判断。
+
+幽灵／宝宝在 `0x353c6c` 的正常 Sprite 绘制前借用当前 ESI 偏移，调用 `Entity::Render`（`0x288480`，thiscall 接收偏移指针、清栈 4 字节）绘制四个单位方向偏移。颜色压栈为 `0x2420`，ECX 接收 ColorMod、无栈参数；原生颜色 deque 位于全局 `0x7fec10`，首项／数量为 `+0xc/+0x10`。作用域结束或 C++ 异常时恢复原颜色数量和玩家 `+0x19c` 的临时屏幕坐标，再继续正常绘制。原生扩容和颜色块仍由游戏拥有，不复制容器或回收资源。
+
+三条边界保存通用寄存器、标志、SSE、x87 和 MXCSR；只有进入颜色调用时按原生约定设置 ECX。安装成组回滚，冲突保留外部 Hook。对象、装扮颜色、官方联机状态与存档不写入，所有边界及原生调用均接受启动签名检查。
+
 ## Home 场景推进
 
 [场景更新绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/scene_update.cpp) 接入[共享更新门控](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/scene_update.cpp)。J835 没有独立的 BossOverlay 更新入口；`Game::Update` 在 RVA `0x2ce36e` 从 EDI 指向的 Game 读取 `+0x1cf20`，随后内联更新动画、处理 Home 路线标记，至 `0x2ce4c1` 进入下一更新块。

@@ -5,6 +5,13 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t playerOutlineBodyGate = 0x353a89;
+inline constexpr std::uint32_t playerOutlineBodyColor = 0x353aef;
+inline constexpr std::uint32_t playerOutlineSpecialGate = 0x35382e;
+inline constexpr std::uint32_t playerOutlineSpecialColor = 0x353894;
+inline constexpr std::uint32_t playerOutlineGhostGate = 0x353c6c;
+inline constexpr std::uint32_t entityRender = 0x288480;
+inline constexpr std::uint32_t colorStackPush = 0x2420;
 inline constexpr std::uint32_t familiarRenderTether = 0x26810;
 inline constexpr std::uint32_t nPCNeedlePrepareVisual = 0x13c430;
 inline constexpr std::uint32_t bossHeldBombsResize = 0x3da10;
@@ -135,6 +142,7 @@ inline constexpr std::uint32_t itemConfigGetTrinket = 0x2fe640;
 inline constexpr std::uint32_t animationStateReset = 0x3740;
 } // namespace entry
 namespace globals {
+inline constexpr std::uint32_t colorStack = 0x7fec10;
 inline constexpr std::uint32_t logicalWidth = 0x7fec08, logicalHeight = 0x7fec68;
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;
 inline constexpr std::uint32_t characterMenuEntries = 0x60d6b0;

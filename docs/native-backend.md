@@ -102,7 +102,7 @@
 
 J460 后端在 `Player::Render` 的三个轮廓资格分支接入原生绘制：普通身体 Gate／Draw RVA 为 `0x38c481`／`0x38c4df`，特殊精灵为 `0x38c1ef`／`0x38c249`，幽灵／宝宝为 `0x38c66c`／`0x38c6bc`。各边界的 `EBX` 是当前角色，`[EBP+0xc]` 是主绘制标记，前两个分支还保留 `[EBP-0x6d]` 的原生全息分身限制。跳转适配保存通用寄存器、标志与全部 XMM 寄存器，只替换 Steam 名单资格判断；身体、头部、装扮的四方向偏移绘制和颜色栈清理由原版完成。所有边界及续接入口均纳入启动签名校验。
 
-`PlayerManager` 的颜色转换入口 RVA `0x2d060` 使用 thiscall，接收借用的 `ColorMod*` 输出与 `Player*`，返回同一输出指针并弹出 8 字节参数。只在上述三个原生描边调用点改写输出的 44 字节临时 `ColorMod`（RGBA 乘数、四个 colorize 值、RGB 偏移），不写角色或装扮颜色。其他 HUD／效果调用保留原函数；不修改官方联机状态、原生玩家颜色分配、用户配色选项、对象所有权或存档。布局与接口均仅适用于经校验的 J460 后端。
+`PlayerManager` 的颜色转换入口 RVA `0x2d060` 使用 thiscall，接收借用的 `ColorMod*` 输出与 `Player*`，返回同一输出指针并弹出 8 字节参数。只在上述三个原生描边调用点改写输出的 44 字节临时 `ColorMod`（RGBA 乘数、四个 colorize 值、RGB 偏移），不写角色或装扮颜色。其他 HUD／效果调用保留原函数；不修改官方联机状态、原生玩家颜色分配、用户配色选项、对象所有权或存档。绘制作用域及配色由[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_outlines.cpp)维护；这些布局与入口仅用于 J460，[原版边界](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#玩家轮廓)使用自己的颜色调用与幽灵绘制。
 
 ## 激光路径呈现
 

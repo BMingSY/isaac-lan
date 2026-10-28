@@ -131,6 +131,7 @@ namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned renderPosition = 0x19c;
 inline constexpr unsigned minecart = 0x32c;
 inline constexpr std::array<unsigned, 4> shadow{0x150, 0x154, 0x158, 0x2a8};
 inline constexpr unsigned damageQueue = 8, damageRecordSize = 0x38, index = 0x20;
@@ -275,6 +276,12 @@ namespace heldBombs {
 inline constexpr unsigned container = 0xb40, map = 4, capacity = 8, first = 0xc, count = 0x10,
                           blockElements = 4;
 } // namespace heldBombs
+namespace playerRenderFrame {
+inline constexpr std::ptrdiff_t mainPass = 0xc, hologram = -0x79, color = -0x3c;
+}
+namespace colorStack {
+inline constexpr unsigned first = 0xc, count = 0x10;
+}
 namespace familiar {
 inline constexpr unsigned extraData = 0xe18;
 }

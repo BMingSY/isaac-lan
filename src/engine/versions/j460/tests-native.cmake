@@ -1,4 +1,6 @@
-add_executable(isaac_lan_player_outlines_test tests/player_outlines_test.cpp)
+add_executable(
+    isaac_lan_player_outlines_test tests/player_outlines_test.cpp
+                                   ${CMAKE_CURRENT_LIST_DIR}/../common/player_outlines.cpp)
 target_include_directories(isaac_lan_player_outlines_test PRIVATE src)
 target_link_libraries(isaac_lan_player_outlines_test PRIVATE minhook)
 if(MINGW)
@@ -71,3 +73,6 @@ foreach(test_case hornfel rails entity_links)
     add_test(NAME native.${test_case} COMMAND isaac_lan_${test_case}_test)
     set_tests_properties(native.${test_case} PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 endforeach()
+target_sources(isaac_lan_hornfel_test PRIVATE ${CMAKE_CURRENT_LIST_DIR}/references.cpp)
+target_sources(isaac_lan_entity_links_test PRIVATE ${CMAKE_CURRENT_LIST_DIR}/references.cpp)
+target_sources(isaac_lan_rails_test PRIVATE ${CMAKE_CURRENT_LIST_DIR}/grid_state.cpp)

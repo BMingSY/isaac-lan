@@ -1,4 +1,5 @@
 #include "engine/player_outlines.h"
+#include "engine/versions/common/player_outlines.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "presentation/player_outlines.h"
@@ -8,10 +9,9 @@
 namespace isaac::presentation::outlines {
 namespace {
 namespace j460 = engine::j460;
+static_assert(sizeof(Color) == j460::layout::color::size);
 using Address = std::uintptr_t;
-using Color = std::array<float, j460::layout::color::size / sizeof(float)>;
 Address image = 0;
-unsigned participants = 0;
 struct Boundary {
     unsigned gate, draw, colorReturn;
     bool checksHologram;
@@ -32,7 +32,7 @@ std::optional<unsigned> slot(Address player) {
     if (!participants || !player)
         return {};
     const auto controller = read<int>(player, j460::layout::player::controller);
-    return controller > 0 ? playerOutlineSlot(controller - 1, participants) : std::nullopt;
+    return controllerSlot(controller);
 }
 using PlayerColor = Color*(__attribute__((thiscall)) *)(void*, Color*, void*);
 PlayerColor originalColor = nullptr;
@@ -43,10 +43,8 @@ Color* colorForCaller(void* manager, Color* result, void* player, Address caller
         outline |= caller == image + boundary.colorReturn;
     if (!owner || !outline)
         return originalColor(manager, result, player);
-    const auto& color = playerOutlineColors[*owner];
     // Native ColorMod: RGBA multiplier, four colorize values, RGB offset.
-    *result = {color.red, color.green, color.blue, 1,           0,         0,
-               0,         0,           color.red,  color.green, color.blue};
+    *result = nativeColor(*owner);
     return result;
 }
 Color* __attribute__((fastcall)) playerColor(void* manager, void*, Color* result, void* player) {
@@ -91,16 +89,6 @@ OUTLINE_BOUNDARY(isaac_lan_outline_body, 0)
 OUTLINE_BOUNDARY(isaac_lan_outline_special, 1)
 OUTLINE_BOUNDARY(isaac_lan_outline_ghost, 2)
 #undef OUTLINE_BOUNDARY
-}
-void withPlayers(unsigned connected, const std::function<void()>& render) {
-    struct Restore {
-        unsigned previous = participants;
-        ~Restore() {
-            participants = previous;
-        }
-    } restore;
-    participants = connected;
-    render();
 }
 bool install(Address base) {
     image = base;
