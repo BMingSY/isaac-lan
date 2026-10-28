@@ -5,6 +5,10 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t roomTransitionStartBossIntro = 0x3e9ab0;
+inline constexpr std::uint32_t roomTransitionUpdate = 0x3ebfd0;
+inline constexpr std::uint32_t playerManagerSetControlsEnabled = 0x51dab0;
+inline constexpr std::uint32_t roomNightLightQuery = 0x3cc985;
 inline constexpr std::uint32_t victoryPromptControls = 0x3f21f0;
 inline constexpr std::uint32_t victoryPromptHide = 0x3f2340;
 inline constexpr std::uint32_t victoryPromptRender = 0x3f1f30;

@@ -68,6 +68,7 @@ inline constexpr std::ptrdiff_t mainPass = 0xc;
 inline constexpr std::ptrdiff_t hologram = -0x6d;
 } // namespace playerRenderFrame
 namespace game {
+inline constexpr unsigned hud = 0x1da04, introPlayer = 0x1bb74, controlRestoreGuard = 0x26614;
 inline constexpr unsigned victoryPrompt = 0x26778;
 inline constexpr unsigned rewindBuffers = 0x269ec, selectedRewindBuffer = 0x676ac;
 inline constexpr unsigned roomTransition = 0x1b83c;
@@ -127,12 +128,15 @@ inline constexpr unsigned stream = 0x1fe24;
 inline constexpr std::array<unsigned, 4> fileNames{0x1fdac, 0x1fdc4, 0x1fdf4, 0x1fe0c};
 } // namespace gameState
 namespace room {
+inline constexpr unsigned firstBoss = 0x1bb0, secondBoss = 0x1bb4;
+inline constexpr unsigned enemies = 0x12c8, delayedEnemies = 0x12cc, descriptor = 4;
 inline constexpr unsigned size = 0x7898;
 inline constexpr unsigned enteredFrame = 0x11f0;
 inline constexpr unsigned nextEntityIndex = 0x1214;
 inline constexpr unsigned entities = 0x1218;
 } // namespace room
 namespace roomDescriptor {
+inline constexpr unsigned flags = 0x44;
 inline constexpr unsigned safeGridIndex = 0x4;
 inline constexpr unsigned data = 0x10;
 inline constexpr unsigned overrideData = 0x14;
@@ -142,6 +146,7 @@ inline constexpr unsigned doorCount = 8;
 inline constexpr unsigned visitedCount = 0x40;
 } // namespace roomDescriptor
 namespace roomConfig {
+inline constexpr unsigned stage = 0;
 inline constexpr unsigned type = 0x8;
 inline constexpr unsigned variant = 0xc;
 inline constexpr unsigned doors = 0x38;

@@ -100,6 +100,8 @@ NPC 命中适配使用 `native.combat-feedback-j460`、`native.combat-feedback-j
 
 胜利圈提示使用 `native.victory-prompt-j460`、`native.victory-prompt-j835`，配合 `bridge.special-menu`、`bridge.challenges`。原生夹具执行实际 Hook，检查主客机权限、普通提示透传、已消费输入、Idle／隐藏阶段、挑战拒绝、两版字段与相邻对象不变、Game 替换、thiscall 栈及寄存器，以及安装冲突清理。实际动画和胜利圈换层需要另行实机验证。
 
+入场与视图适配使用 `native.presentation-j460`、`native.presentation-j835`、`core.intro-barrier` 和 `bridge.presentation`。原生夹具检查 Hook 冲突、普通／主客机入口、后台房间、终局集合、控制恢复的房间与结束边界、嵌套推进／暂停／异常清理、固定事件字节与去重、过期和断线、实体引用登记、HUD 桥接及小夜灯调用者隔离。夹具模拟原生方法，不验证实际 versus 美术、角色移除过程或房间调度；这些随受影响实机场景集中检查。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh

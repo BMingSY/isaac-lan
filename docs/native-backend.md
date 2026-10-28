@@ -137,6 +137,16 @@ J460 采集入口为 `0x305ee0`，`stdcall void(int door)`，清栈 4 字节。�
 
 客机恢复与原生更新使用 `ProgressReadOnlyScope`，按栈保存并恢复 `Manager+0x14` 进度对象的 `+1` 只读位。J460 收藏记录更新（RVA `0x52a2d0`）与成就尝试（RVA `0x529a20`）均先检查此位；复制权威成就／计数不通过这些方法，因此不被拦截。作用域结束恢复原值，不改变主机进度、会话合并或退出持久化。
 
+## 入场演出与本机视图
+
+[共享演出组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/presentation.cpp) 通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/presentation.cpp) 处理原生入场和本机视图。`StartBossIntro` RVA `0x42f1c0` 以 ECX 接收 `Game+0x1b83c` 的转场对象，两个栈参数是 Boss ID，清栈 8 字节。`Update` 为 `0x4318a0`，无栈参数；模式 2／3 对应入场与退出，`+0x238` 是完整 Boss ID，不能按 bool 读取。
+
+本机回放将转场 `+0x14/+0x18` 设置为当前房间／维度，`Game+0x1bb74` 指向当前名单首位角色；该版本由游戏在角色移除时清空此引用。事件保留既有 32 字节网络字节序、房间／楼层身份、序号去重和 90 帧有效期，队列上限 32 条。背景房间不占用主机画面；等待确认只暂停所属房间，断线或超时释放等待。原生推进在房间模拟前执行一次，模拟期间的临时模式在正常或异常退出时恢复，不覆盖更新后的转场或已释放的 Game。
+
+客机完成确认后，主机在事件原房间借用对应角色名单，调用 `PlayerManager::SetControlsEnabled` RVA `0x5bea10`：thiscall receiver 为 `Game+0x1baa8`，栈参数 true，清栈 4 字节。结束状态及 `Game+0x26614 >= 2` 的原生保护阻止恢复。房间 Boss 缓存为 `+0x1bb0/+0x1bb4`，敌人数为 `+0x12c8/+0x12cc`；特殊房间检查沿用原生描述符。
+
+小夜灯只筛选 `Room::Render` 在 `0x410dad` 发起的道具查询，不改其他调用者或道具。玩家 HUD 桥接使用 `Game+0x1da04` 和下方的坐标能力，小地图桥接发布前端实际绘制视图。两个演出 Hook 成组创建，失败只撤销本组件 Hook；其他演出子组件分别管理安装边界，启动装配在任一失败时中止。[J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#入场演出与本机视图) 说明其不同的角色引用、标记和对象布局。
+
 ## 胜利圈提示
 
 [胜利圈组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp) 通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/victory_prompt.cpp) 访问 `Game+0x26778`。Controls、Render、Hide 分别为 RVA `0x437fe0/0x437c10/0x438190`，均为 thiscall，无栈参数。动画 `+0x34`、播放位 `+0x44`、选择 `+0x128`、结果 `+0x12c` 和投票位 `+0x130` 只在该对象上使用；动画、字符串和字体仍由游戏持有。

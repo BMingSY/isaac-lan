@@ -59,6 +59,7 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
 } // namespace challengeParams
 namespace game {
+inline constexpr unsigned hud = 0x3da4c;
 inline constexpr unsigned victoryPrompt = 0x1c33fc;
 inline constexpr unsigned rewindBuffers = 0x243648, selectedRewindBuffer = 0x283b78;
 inline constexpr unsigned roomTransition = 0x1b6c0;
@@ -84,13 +85,22 @@ inline constexpr unsigned valid = 0, state = 4, stride = 0x20298;
 inline constexpr unsigned door = 0x1fad0, tick = 0x1fad4, counters = 0x1fad8;
 } // namespace rewindBuffer
 namespace roomTransition {
+inline constexpr unsigned actor = 0x320, bossIntro = 0x328;
 inline constexpr unsigned state = 0, index = 0x14, direction = 0x10;
 inline constexpr unsigned animation = 0x1c, dimension = 0x18;
 } // namespace roomTransition
 namespace room {
+inline constexpr unsigned firstBoss = 0x1d1c, secondBoss = 0x1d20;
+inline constexpr unsigned enemies = 0x12c8, delayedEnemies = 0x12cc, descriptor = 4;
 inline constexpr unsigned enteredFrame = 0x11f0;
 inline constexpr unsigned entities = 0x1218;
 } // namespace room
+namespace roomDescriptor {
+inline constexpr unsigned data = 0x10, flags = 0x44;
+} // namespace roomDescriptor
+namespace roomConfig {
+inline constexpr unsigned stage = 0, type = 8, variant = 12;
+} // namespace roomConfig
 namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList

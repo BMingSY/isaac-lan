@@ -8,6 +8,23 @@
 
 Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。该游戏导入表没有 `SteamAPI_RestartAppIfNecessary`；隔离启动不能把该导入的存在当成必要条件。资料隔离仍须在游戏入口前完成，不能在 Lua 初始化后才更改存档位置。
 
+## 入场演出与本机视图
+
+[演出绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/presentation.cpp) 为[共享演出组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/presentation.cpp) 提供原生入口、字段与 HUD 坐标。入场事件按房间、维度和楼层筛选，固定每条 32 字节、网络字节序，保留至多 32 条和 90 帧；客机按序号去重。背景房间只通知观看者，主机所在房间才占用本机转场画面；终局集合使用既有 Boss 兼容策略和房间调度。
+
+| 原生操作 | J835 入口与布局 |
+| --- | --- |
+| 开始入场 | `0x3e9ab0`，thiscall 接收 `RoomTransition*` 与两个 Boss ID，清栈 8 字节；转场对象为 `Game+0x1b6c0` |
+| 原生推进 | `0x3ebfd0`，thiscall，无栈参数；模式 `+0` 的 2／3 为入场与退出阶段，Boss 标记是 `+0x328` 的单字节，不是 J460 的完整 Boss ID |
+| 入场角色 | `RoomTransition+0x320` 是登记到实体的 EntityPtr；用已校验的 `0x28cf00` fastcall 赋值，ECX 为引用槽、EDX 为当前房间首位角色，保留移除时清空引用的原生机制 |
+| 控制恢复 | `0x51dab0`，thiscall 接收 `Game+0x1ba40` 的 PlayerManager 与 true，清栈 4 字节；原生从管理器 `+0x10/+0x14` 的名单设置 `Player+0x360` |
+| 房间入场来源 | Boss ID 为 `Room+0x1d1c/+0x1d20`，存活／延迟敌人数为 `+0x12c8/+0x12cc`；特殊房间入口遵循原生描述符检查 |
+| 小夜灯本机查询 | 只筛选 `Room::Render` 内 RVA `0x3cc985` 对 `HasCollectible(425, false)` 的调用；按当前房间观看名单过滤，其他调用者与道具完整透传 |
+
+回放前将转场目标 `+0x14/+0x18` 设置为当前房间／维度，角色按当前名单通过原生引用接口登记。入场推进只在主机、本机房间、状态就绪且未暂停时执行；同步房间模拟期间暂时隐藏模式，正常返回或异常离开恢复，不能覆盖新转场或已释放的 Game。客机完成确认只在事件原房间和非结束状态下恢复对应角色的控制；断线与超时释放等待。J835 不使用 J460 的附加控制保护字段。
+
+HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规则；小地图只发布前端实际绘制观察到的普通值。两处演出 Hook 成组创建，冲突只撤销本组件 Hook；道具、百宝袋、挑战 HUD 和胜利圈提示各自管理安装，任一失败由启动装配中止。上述组件仍依赖完整房间与前端后端，不能单独作为可安装联机实现。
+
 ## 胜利圈提示
 
 [胜利圈绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/victory_prompt.cpp) 使用[共享提示组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp)。原生 Controls、Render、Hide 的 RVA 分别为 `0x3f21f0/0x3f1f30/0x3f2340`，均以 ECX 接收提示对象，无栈参数。只拦截当前 `Game+0x1c33fc` 的胜利圈提示；其他提示和单人会话保留原函数。
