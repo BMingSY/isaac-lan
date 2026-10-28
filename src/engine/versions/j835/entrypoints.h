@@ -51,6 +51,20 @@ inline constexpr std::uint32_t playerAssignController = 0x36b140;
 inline constexpr std::uint32_t playerInitialize = 0x380810;
 inline constexpr std::uint32_t gameGetHUD = 0x127c0;
 inline constexpr std::uint32_t hudAssignPlayers = 0x506f10;
+inline constexpr std::uint32_t playerAddCollectible = 0x32b260;
+inline constexpr std::uint32_t playerQueueItem = 0x32a500;
+inline constexpr std::uint32_t edensBlessingGranted = 0x382207;
+inline constexpr std::uint32_t pickupQueuedCollectible = 0x2c1610;
+inline constexpr std::uint32_t playerReviveCollectible = 0x367370;
+inline constexpr std::uint32_t playerReviveTrinket = 0x3687c0;
+inline constexpr std::uint32_t managerGetItemConfig = 0x27930;
+inline constexpr std::uint32_t itemConfigGetCollectible = 0x2fe5e0;
+inline constexpr std::uint32_t playerHasCollectible = 0x33af30;
+inline constexpr std::uint32_t playerDropCollectible = 0x3570e0;
+inline constexpr std::uint32_t playerActiveMaxCharge = 0x357e40;
+inline constexpr std::uint32_t playerAddActiveCharge = 0x358030;
+inline constexpr std::uint32_t levelTryInitializeBlueRoom = 0x31a1f0;
+inline constexpr std::uint32_t entityPtrAssign = 0x28cf00;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;

@@ -4,6 +4,12 @@
 #include <cstddef>
 
 namespace isaac::engine::j835::layout {
+namespace string {
+inline constexpr unsigned size = 0x10, capacity = 0x14, inlineCapacity = 0xf;
+} // namespace string
+namespace vector {
+inline constexpr unsigned begin = 0, end = 4;
+} // namespace vector
 namespace inputManager {
 inline constexpr unsigned begin = 4, end = 8, stride = 4;
 } // namespace inputManager
@@ -45,10 +51,20 @@ inline constexpr unsigned fadeAlpha = 0x1c31a8, fadeAction = 0x1c31b0;
 inline constexpr unsigned restartHeldFrames = 0x1c31b4;
 } // namespace game
 namespace entity {
+inline constexpr unsigned sprite = 0x3c, type = 0x28, initSeed = 0x344;
+inline constexpr unsigned active = 0x16a, removeMethod = 0x28;
 inline constexpr unsigned positionX = 0x294, positionY = 0x298;
 inline constexpr unsigned previousX = 0x29c, previousY = 0x2a0;
 } // namespace entity
+namespace itemConfig {
+inline constexpr unsigned type = 0, id = 4, name = 8, chargeType = 0xac;
+inline constexpr int active = 3, trinket = 2, specialCharge = 2;
+} // namespace itemConfig
+namespace pickup {
+inline constexpr unsigned charge = 0x474, varData = 0x4e8;
+} // namespace pickup
 namespace player {
+inline constexpr unsigned primaryActive = 0x14c4, activeStride = 0x1c, megaBlastLaser = 0x13a0;
 inline constexpr unsigned controller = 0x154c;
 } // namespace player
 namespace mouseFrame {

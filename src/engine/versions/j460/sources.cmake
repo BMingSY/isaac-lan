@@ -26,6 +26,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/item_presentation.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/pickup_preview.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/item_effects.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/item_effects.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/generated_items.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/rewind.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/frontend.cpp"

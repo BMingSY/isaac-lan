@@ -1,6 +1,7 @@
 // Private x86 image only: no game process, files, input or hooks are installed.
 #include "test_support.h"
 #include "engine/versions/j460/item_effects.cpp"
+#include "engine/versions/common/item_effects.cpp"
 #include "engine/versions/j460/pickup_preview.cpp"
 #include "engine/versions/j460/session_backend.cpp"
 #include "engine/versions/common/session_backend.cpp"
