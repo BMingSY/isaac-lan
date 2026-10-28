@@ -114,6 +114,8 @@ Home 原生更新门控使用 `native.scene-update-j460`、`native.scene-update-
 
 实体引用使用两版 `native.references-*`、`native.entity-links-*` 与 `native.held-bombs-*`，配合 `bridge.hornfel` 和 `bridge.entity_links`。Lua 入口夹具和容器夹具检查权限、包装大小、原生 fastcall 赋值、thiscall resize、重复／替换／清空、目标移除通知、环绕块索引、空快照初始化及非法末项的写入前拒绝。实际矿车玩法、原生实体析构和 Boss 动作仍需实机检查。
 
+跟班视图使用 `native.entity-visuals-j460`、`native.entity-visuals-j835`，配合 `bridge.special-visuals`、`presentation.tethers` 和 `bridge.entity-codec`。检查身体图层固定字节、五个借用 Sprite、非法末项的写入前拒绝、绳索 deque 环绕与空状态、坐标有限性、重复绘制、组件替换／移除、原生调用 ABI、异常指针恢复及 Needle 权限。夹具不加载纹理、不执行真实原生渲染或 NPC AI；游戏画面仍需另行验收。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh

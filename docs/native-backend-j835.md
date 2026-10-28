@@ -44,6 +44,19 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 门包装仅引用现有动画，不能按忏悔＋的附加 Sprite 偏移访问原版对象。恢复已有门时验证其类型、索引和房间归属；清空槽表不销毁网格对象。原生创建失败恢复原目标索引。轨道数组全部校验后一次提交，空轨道同样恢复，不触及随后由游戏持有的 Sprite。房间变化后从当前 Game 重新解析对象，不保留跨房指针。
 
+## 跟班组件与实体绘制准备
+
+[版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entity_visuals.cpp)向[共享实体视图](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_visuals.cpp)提供跟班组件与 Needle 绘制准备入口。Lua 名称、编码和权限遵循[能力契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)，不改变同步字段。实体身份来自 `Entity+0x3c` 的 8 字节借用 Sprite；附加数据位于 `Familiar+0xe18`，不能沿用 J460 的 `+0xee0`。
+
+| 对象或入口 | J835 布局与 ABI |
+| --- | --- |
+| `IsaacsBodyData` | 虚表 RVA `0x746348`，对象 `0x578` 字节；五个 Sprite 从 `+4` 开始、步长 `0x114`，四个身体图层 ID 从 `+0x568` 开始 |
+| `UmbilicalBabyData` | 虚表 RVA `0x73fffc`，对象 `0x158` 字节；deque 映射、容量、首项、数量分别为 `+8/+0xc/+0x10/+0x14`，Sprite 为 `+0x18` |
+| 绳索绘制 | RVA `0x26810`，`thiscall void(Familiar*, Vector*, int part)`，清栈 8 字节；只借用点、Sprite 和当前房间绘制参数 |
+| Needle 图层准备 | RVA `0x13c430`，`thiscall void(NPC*)`，无栈参数；原生 NPC 渲染在绘制该类型前调用，不推进 AI |
+
+身体组件写入只提交完整验证后的四个图层 ID，其余 Sprite、纹理及动画资源仍由游戏持有。绳索原生 deque 每块一个 XYZ 点，快照按环绕索引采集；空、替换或移除组件按本次调用重新判断。绘制只建立调用内的只读容器视图，临时组件指针在返回和 C++ 异常时恢复，浅复制的 Sprite 不进入原生析构，不转移资源或实体所有权。原生入口接受正常房间上下文；组件不能脱离房间视角单独执行真实绘制。
+
 ## 原生实体引用
 
 [引用绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/references.cpp)使用[共享引用组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/references.cpp)，对 Lua 提供 `entity_minecart`、`actor_held_entity` 与 `boss_held_bombs`。接口只接受实体的借用 Sprite／显式 false，捕获返回本机索引，由同步组件换算为同步 ID；不保留对象指针，写入限客机。

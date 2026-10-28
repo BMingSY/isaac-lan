@@ -48,9 +48,11 @@
 
 `familiar_body(sprite[, layers])` 限定跟班的原生身体组件，校验 `Familiar+0xee0` 虚表 RVA `0x764914`。读取返回四个大端有符号图层 ID 和五个借用 Sprite；Sprite 位于组件 `+0x4`，间距 `0x114`，图层位于 `+0x568`。写入仅允许客机，完整校验载荷、图层为 `-1` 或对应 Sprite 的有效图层后提交。Lua 道具适配复用普通 Sprite 编解码，先恢复使用道具时缓存的外观，再恢复绘制图层；不借用当前玩家外观，不执行跟班 AI，不分配或转移原生组件所有权。
 
-`familiar_tether(sprite)` 限定跟班实体借用 Sprite，检查 `Familiar+0xee0` 的 `UmbilicalBabyData` 虚表 RVA `0x71d264`。返回最多 256 个 XYZ 点和绳索借用 Sprite，无此组件返回 `false`。组件 `+0x8/+0xc/+0x10/+0x14` 为原生 deque 的映射、容量、首项和数量，Sprite 位于 `+0x18`；映射容量限定为不超过 4096 的二次幂，所有坐标必须有限。
+`familiar_tether(sprite)` 限定跟班实体借用 Sprite，检查 `Familiar+0xee0` 的 `UmbilicalBabyData` 虚表 RVA `0x71d264`。返回最多 256 个 XYZ 点和绳索借用 Sprite，无此组件返回 `false`。组件 `+0x8/+0xc/+0x10/+0x14` 为原生 deque 的映射、容量、首项和数量，Sprite 位于 `+0x18`；非零映射容量限定为不超过 4096 的二次幂，数量不能超过容量，非空映射及各点不能为空，所有坐标必须有限。空且未分配的 deque 返回零点快照。
 
-`familiar_tether_render(entitySprite, ropeSprite, bytes)` 仅允许客机绘制，完整校验点载荷后调用 J460 RVA `0x35290` 的原生绳索绘制方法。只在调用期间借用已有跟班及 Lua 自有绳索 Sprite，构造栈上只读 deque 视图并临时替换组件指针，返回即恢复。不构造／析构原生组件、不转移 Sprite 所有权、不执行跟班 AI 或武器更新。入口字节受启动签名校验。
+`familiar_tether_render(entitySprite, ropeSprite, bytes)` 仅允许客机绘制，完整校验点载荷后调用 J460 RVA `0x35290` 的原生绳索绘制方法，ABI 为 thiscall，接收零偏移向量指针和分段值 0，清栈 8 字节。零点或单点不调用绘制。只在调用期间借用已有跟班及借用／Lua 自有绳索 Sprite，构造栈上只读 deque 视图并临时替换组件指针，正常返回及 C++ 异常时恢复。不构造／析构原生组件、不转移 Sprite 所有权、不执行跟班 AI 或武器更新。入口字节受启动签名校验。
+
+这些能力由[实体视图组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_visuals.cpp)共享校验、编码和借用边界，版本绑定提供布局与入口；[原版布局](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#跟班组件与实体绘制准备)独立核对。`entity_prepare(sprite)` 仅在权威端为 Needle 调用 `0x14f670`，thiscall 接收实体、无栈参数，准备后台房间中不会进入本机渲染的身体图层；其他实体直接成功，不执行 NPC AI。实体身份只接受 8 字节借用包装，不接受独立 Sprite。
 
 | 能力与实现 | 原生边界 | 校验与所有权 |
 | --- | --- | --- |

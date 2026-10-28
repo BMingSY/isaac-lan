@@ -41,6 +41,15 @@ isaac_add_backend_test(
     LIBRARIES
     minhook)
 foreach(backend j460 j835)
+    isaac_add_backend_test(
+        entity-visuals
+        ${backend}
+        SOURCES
+        tests/entity_visuals_backend_test.cpp
+        tests/native_call.cpp
+        src/engine/versions/${backend}/entity_visuals.cpp
+        src/engine/versions/common/sprite_state.cpp
+        src/engine/versions/${backend}/sprite_state.cpp)
     isaac_add_backend_test(entity-links ${backend} SOURCES tests/entity_links_test.cpp
                            src/engine/versions/${backend}/references.cpp)
     isaac_add_backend_test(held-bombs ${backend} SOURCES tests/hornfel_test.cpp

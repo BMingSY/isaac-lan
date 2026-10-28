@@ -5,6 +5,8 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t familiarRenderTether = 0x26810;
+inline constexpr std::uint32_t nPCNeedlePrepareVisual = 0x13c430;
 inline constexpr std::uint32_t bossHeldBombsResize = 0x3da10;
 inline constexpr std::uint32_t roomRemoveGridEntityImmediate = 0x3d9b00;
 inline constexpr std::uint32_t roomMakeDoor = 0x3ad410;

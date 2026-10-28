@@ -275,4 +275,14 @@ namespace heldBombs {
 inline constexpr unsigned container = 0xb40, map = 4, capacity = 8, first = 0xc, count = 0x10,
                           blockElements = 4;
 } // namespace heldBombs
+namespace familiar {
+inline constexpr unsigned extraData = 0xe18;
+}
+namespace familiarBody {
+inline constexpr unsigned dataVtable = 0x746348, sprites = 4, layers = 0x568;
+}
+namespace tether {
+inline constexpr unsigned dataVtable = 0x73fffc, points = 8, capacity = 0xc;
+inline constexpr unsigned first = 0x10, count = 0x14, sprite = 0x18, size = 0x158;
+} // namespace tether
 } // namespace isaac::engine::j835::layout

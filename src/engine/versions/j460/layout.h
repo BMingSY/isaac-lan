@@ -342,16 +342,17 @@ inline constexpr unsigned kind = 0x30;
 inline constexpr unsigned modifiers = 0x34;
 inline constexpr unsigned maxChargeMethod = 6;
 } // namespace weapon
+namespace familiar {
+inline constexpr unsigned extraData = 0xee0;
+}
 namespace tether {
-inline constexpr unsigned extraData = 0xee0, points = 0x8, capacity = 0xc;
+inline constexpr unsigned points = 0x8, capacity = 0xc;
 inline constexpr unsigned first = 0x10, count = 0x14, sprite = 0x18, size = 0x158;
-inline constexpr unsigned maxPoints = 256;
 inline constexpr unsigned dataVtable = 0x71d264;
 } // namespace tether
 namespace familiarBody {
-inline constexpr unsigned extraData = 0xee0, dataVtable = 0x764914;
-inline constexpr unsigned sprites = 0x4, spriteCount = 5;
-inline constexpr unsigned layers = 0x568, layerCount = 4;
+inline constexpr unsigned dataVtable = 0x764914;
+inline constexpr unsigned sprites = 0x4, layers = 0x568;
 } // namespace familiarBody
 namespace emote {
 inline constexpr unsigned id = 0x4;
