@@ -66,12 +66,14 @@ inline constexpr unsigned fadeAlpha = 0x1c31a8, fadeAction = 0x1c31b0;
 inline constexpr unsigned restartHeldFrames = 0x1c31b4;
 } // namespace game
 namespace room {
+inline constexpr unsigned enteredFrame = 0x11f0;
 inline constexpr unsigned entities = 0x1218;
 } // namespace room
 namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned interpolated = 0x16d;
 inline constexpr unsigned variant = 0x2c, subtype = 0x30;
 inline constexpr unsigned velocity = 0x2b8, friction = 0x2c4;
 inline constexpr unsigned hitPoints = 0x2d8, maxHitPoints = 0x2dc, collisionDamage = 0x2e0;

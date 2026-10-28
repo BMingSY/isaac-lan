@@ -85,6 +85,9 @@ inline constexpr std::uint32_t entityLuaSetColor = 0x40e430;
 inline constexpr std::uint32_t tearSetHeight = 0x2500f0;
 inline constexpr std::uint32_t tearSetScale = 0x250250;
 inline constexpr std::uint32_t pickupSetPrice = 0x2b91e0;
+inline constexpr std::uint32_t roomUpdate = 0x3bf630;
+inline constexpr std::uint32_t gameUpdateHalf = 0x2d0400;
+inline constexpr std::uint32_t gameRender = 0x2ce770;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;

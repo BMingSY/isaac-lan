@@ -8,6 +8,12 @@
 
 后端能力 `native_emotes` 表示可使用原版轮盘和表情接口。应用装配只在能力存在时安装与绑定这些接口；文字聊天可在缺少表情接口时使用普通气泡绘制。核心房间、会话和存档能力仍是启动所必需的，不支持时不能以空实现进入联机。
 
+## 更新入口与诊断实验
+
+正式更新、半帧更新和渲染入口使用[共享更新组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/bootstrap.cpp)。J460 [绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/bootstrap.cpp) 分别提供 `0x402980`、`0x2fd3f0`、`0x2fbc10`；房间与渲染方法使用 ECX 接收对象，半帧方法无参数。更新组安装失败只撤销自身 Hook，渲染安装独立重试；仅成功的半帧推进才通知运行层完成。
+
+[双房间探针](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_probe.cpp) 持有诊断实验的后台房间与计数，保留原生分配／构造／析构／删除和名单借用边界。正式房间调度优先，只有未接管且显式创建实验房间时才执行探针。探针的前台名单临时裁剪和后台房间作用域均在返回及 C++ 异常时恢复；它只用于两个普通玩家、无转场的内部夹具，不是生产房间调度能力。
+
 ## 实体字段批量读写
 
 [`entity_fields_plan(type, template)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_fields.cpp)将 Lua 同步组件提供的嵌套字段名数组编译为 userdata。仅支持泪弹、跟班、掉落物和效果实体的具名属性白名单；`false` 为由 Lua 填充的占位，其他实体类型返回 `false`。模板最多 128 个节点、三层深度，不接受地址或偏移。计划只持有字段描述符，不持有游戏对象；线上的字段顺序仍由 Lua schema 决定。

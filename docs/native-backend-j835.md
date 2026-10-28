@@ -27,6 +27,24 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 个人进度持久化先标记 `Progress+0` 为脏，再调用 RVA `0x4848f0`，ABI 为 `thiscall void(Progress*, bool backup)`，传入 `true`。原生方法检查初始化标记，保存日期备份，并按 Steam 接口及游戏设置选择云端或本地文件；流的打开、关闭和所有权仍由游戏管理。不能直接调用需要有效输出流的序列化入口 `0x4836a0`。只读作用域临时设置 `Progress+1`，嵌套返回时恢复原值。
 
+## 更新与渲染入口
+
+[bootstrap.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/bootstrap.cpp) 向[共享更新组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/bootstrap.cpp) 提供原生入口和对象布局。房间与运行组件决定执行范围、发布时机和本机视图；后端只连接这些组件与原函数。
+
+| 操作 | J835 入口与 ABI |
+| --- | --- |
+| 房间更新 | `0x3bf630`，`thiscall void(Room*)`；来自 `Game::Update` 对当前房间的调用 |
+| 半帧更新 | `0x2d0400`，`cdecl void()`；读取当前 Game，无栈参数 |
+| Game 渲染 | `0x2ce770`，`thiscall void(Game*)` |
+
+更新 Hook 成组创建并启用，失败仅撤销本组已创建的 Hook；渲染入口在更新组安装成功后单独安装。重复安装不会替换已有原函数，外部 Hook 冲突不会被移除。公开 `halfUpdate` 先询问运行层是否允许，完成成功更新后才调用完成通知；异常不会被当成已完成 tick 发布。
+
+渲染顺序为本机输入作用域、视图呈现、前端视图准备、房间渲染、前端叠加；未被房间组件接管时调用原生渲染。返回和 C++ 异常均恢复输入作用域，原生 Game／Room 只在同步调用期间借用。
+
+插值位置恢复沿 `Room+0x125c/+0x1264` 的渲染数组遍历，仅在 `Entity+0x16d` 为真时将 `+0x29c/+0x2a0` 复制回 `+0x294/+0x298` 并清除标记。无当前 Game／Room／数组时返回，不持有实体或数组指针。房间进入帧位于 `Room+0x11f0`，使用与游戏帧相同的 uint32 回绕语义。
+
+诊断接口 `audit` 与 `trace_callback` 可核对当前楼层、房间、帧数、人数及有界回调栈；它们不控制正常玩法。J460 的独立双房间实验仍由 [room_probe.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_probe.cpp) 管理原生对象，J835 不注册尚未适配的实验接口。完整原版房间调度仍需独立后端，不能用诊断实验替代。
+
 ## 会话原生绑定
 
 [版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/session_backend.cpp) 为[共享会话实现](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/session_backend.cpp) 提供入口、字段、重开动作和持久化调用。上层仍通过具名回调决定联机存档、退出和重开规则。安装先创建全部 Hook，再启用；失败只移除本组件已经创建的 Hook，允许重新安装，不清理其他组件。
