@@ -59,6 +59,7 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
 } // namespace challengeParams
 namespace game {
+inline constexpr unsigned victoryPrompt = 0x1c33fc;
 inline constexpr unsigned rewindBuffers = 0x243648, selectedRewindBuffer = 0x283b78;
 inline constexpr unsigned roomTransition = 0x1b6c0;
 inline constexpr unsigned frame = 0x1a30dc;
@@ -74,6 +75,10 @@ inline constexpr unsigned pauseMenu = 0x10203c, console = 0x1bb60;
 inline constexpr unsigned fadeAlpha = 0x1c31a8, fadeAction = 0x1c31b0;
 inline constexpr unsigned restartHeldFrames = 0x1c31b4;
 } // namespace game
+namespace prompt {
+inline constexpr unsigned animation = 0x34, playing = 0x44;
+inline constexpr unsigned selection = 0x80218, result = 0x8021c;
+} // namespace prompt
 namespace rewindBuffer {
 inline constexpr unsigned valid = 0, state = 4, stride = 0x20298;
 inline constexpr unsigned door = 0x1fad0, tick = 0x1fad4, counters = 0x1fad8;

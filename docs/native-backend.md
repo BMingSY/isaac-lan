@@ -137,6 +137,12 @@ J460 采集入口为 `0x305ee0`，`stdcall void(int door)`，清栈 4 字节。�
 
 客机恢复与原生更新使用 `ProgressReadOnlyScope`，按栈保存并恢复 `Manager+0x14` 进度对象的 `+1` 只读位。J460 收藏记录更新（RVA `0x52a2d0`）与成就尝试（RVA `0x529a20`）均先检查此位；复制权威成就／计数不通过这些方法，因此不被拦截。作用域结束恢复原值，不改变主机进度、会话合并或退出持久化。
 
+## 胜利圈提示
+
+[胜利圈组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp) 通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/victory_prompt.cpp) 访问 `Game+0x26778`。Controls、Render、Hide 分别为 RVA `0x437fe0/0x437c10/0x438190`，均为 thiscall，无栈参数。动画 `+0x34`、播放位 `+0x44`、选择 `+0x128`、结果 `+0x12c` 和投票位 `+0x130` 只在该对象上使用；动画、字符串和字体仍由游戏持有。
+
+普通联机只显示主机提示，主机使用已锁存菜单按键沿，并关闭原生 Steam 投票等待；客机不消费提示输入。Idle 动画阶段才可确认，原生结果 1 接受、2 拒绝，然后调用 Hide。联机挑战在各端等到 Idle 后拒绝；其他提示和单人会话保留原函数。`victory_lap_prompt` 返回打开、选择、结果、投票和 Idle 五个普通值，每次从当前 Game 读取，空 Game 返回关闭状态。两个 Hook 成组安装，失败撤销本组件 Hook 和借用指针，保留外部 Hook 并允许重试。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#胜利圈提示) 使用自己的字段，不访问 Steam 投票状态。
+
 ## HUD 与本机输入
 
 物理采集、虚拟 XInput、权威输入分发、按键沿消费和退出恢复位于[共享输入组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input.cpp)。[J460 输入绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/input.cpp) 提供原生查询／鼠标入口、布局、动作映射与菜单提示重置。查询通过输入管理器虚表 `+0x74` 安装，失败撤销本组件创建的 Hook；鼠标旁路保留原生 thiscall 参数。采集按 `Manager+0x4abbc` 的渲染帧编号去重；重复采集消费按键沿但保留按住值，不更改网络字段与编码顺序。

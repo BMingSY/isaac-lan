@@ -68,6 +68,7 @@ inline constexpr std::ptrdiff_t mainPass = 0xc;
 inline constexpr std::ptrdiff_t hologram = -0x6d;
 } // namespace playerRenderFrame
 namespace game {
+inline constexpr unsigned victoryPrompt = 0x26778;
 inline constexpr unsigned rewindBuffers = 0x269ec, selectedRewindBuffer = 0x676ac;
 inline constexpr unsigned roomTransition = 0x1b83c;
 inline constexpr unsigned transitionTailCounter = 0x265c0, transitionTailFlag = 0x67744;
@@ -103,6 +104,10 @@ inline constexpr unsigned fadeAction = 0x265bc;
 inline constexpr unsigned restartHeldFrames = 0x265c4;
 inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
+namespace prompt {
+inline constexpr unsigned animation = 0x34, playing = 0x44;
+inline constexpr unsigned selection = 0x128, result = 0x12c, nativeVote = 0x130;
+} // namespace prompt
 namespace rewindBuffer {
 inline constexpr unsigned valid = 0, state = 4, stride = 0x20660;
 inline constexpr unsigned door = 0x1fe2c, tick = 0x1fe30, counters = 0x1fe34;

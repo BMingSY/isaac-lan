@@ -98,6 +98,8 @@ NPC 命中适配使用 `native.combat-feedback-j460`、`native.combat-feedback-j
 
 `presentation.player-hud` 可在 Linux 和 Windows 离线运行，覆盖两版的 HUD 可见性、身份、边界及无效视口；J460 使用模拟原生布局／位置调用，J835 使用原版心形坐标的固定预期。`bridge.ping_hud`、`bridge.battle-royale-hud` 检查坐标消费者。测试不验证真实 HUD 绘制和字体位置。
 
+胜利圈提示使用 `native.victory-prompt-j460`、`native.victory-prompt-j835`，配合 `bridge.special-menu`、`bridge.challenges`。原生夹具执行实际 Hook，检查主客机权限、普通提示透传、已消费输入、Idle／隐藏阶段、挑战拒绝、两版字段与相邻对象不变、Game 替换、thiscall 栈及寄存器，以及安装冲突清理。实际动画和胜利圈换层需要另行实机验证。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh

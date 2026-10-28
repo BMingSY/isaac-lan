@@ -42,6 +42,14 @@ isaac_add_backend_test(
     minhook)
 foreach(backend j460 j835)
     isaac_add_backend_test(
+        victory-prompt
+        ${backend}
+        SOURCES
+        tests/victory_prompt_test.cpp
+        src/engine/versions/${backend}/victory_prompt.cpp
+        LIBRARIES
+        minhook)
+    isaac_add_backend_test(
         crafting-hud
         ${backend}
         SOURCES

@@ -5,6 +5,9 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t victoryPromptControls = 0x3f21f0;
+inline constexpr std::uint32_t victoryPromptHide = 0x3f2340;
+inline constexpr std::uint32_t victoryPromptRender = 0x3f1f30;
 inline constexpr std::uint32_t craftingBagHudRender = 0x500570;
 inline constexpr std::uint32_t playerHudPocketRender = 0x4fe8e0;
 inline constexpr std::uint32_t playerGetActiveItem = 0xf3f10;

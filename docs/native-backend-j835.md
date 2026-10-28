@@ -8,6 +8,14 @@
 
 Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。该游戏导入表没有 `SteamAPI_RestartAppIfNecessary`；隔离启动不能把该导入的存在当成必要条件。资料隔离仍须在游戏入口前完成，不能在 Lua 初始化后才更改存档位置。
 
+## 胜利圈提示
+
+[胜利圈绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/victory_prompt.cpp) 使用[共享提示组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp)。原生 Controls、Render、Hide 的 RVA 分别为 `0x3f21f0/0x3f1f30/0x3f2340`，均以 ECX 接收提示对象，无栈参数。只拦截当前 `Game+0x1c33fc` 的胜利圈提示；其他提示和单人会话保留原函数。
+
+动画与播放位为提示对象的 `+0x34/+0x44`，选择和结果为 `+0x80218/+0x8021c`。动画名借用原生字符串，长度为 4 且内容为 `Idle` 才能确认；内联与堆字符串只读。原版没有 Steam 投票字段，不能访问 J460 的 `+0x130`。组件每次查询当前 Game，不缓存对象指针或接管动画、字体和字符串的所有权。
+
+普通联机只由主机的已锁存菜单输入改变选择，结果 1 接受、2 拒绝，随后调用原生 Hide；客机不消费选择输入、不绘制该提示。联机挑战在各端等待 Idle 后拒绝，保持原生动画更新。对 Lua 的五个返回值依次为打开、选择、结果、原生投票、Idle，原版投票值恒为 false。两个 Hook 成组安装，失败仅清理本组件创建的 Hook，保留外部 Hook 并允许重试；重复安装被拒绝。换层与胜利圈推进仍由会话同步负责。
+
 ## 挑战目标 HUD
 
 [目标绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/challenge_hud.cpp) 与 J460 共用[显示组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/challenge_hud.cpp)。目标由会话的挑战定义提供；原生 Game／每日挑战参数保持原样，借用视图仅供当前 HUD 绘制消费，不包含拥有所有权的字符串或容器。
