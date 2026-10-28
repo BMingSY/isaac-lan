@@ -38,6 +38,12 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 四个口袋记录从 `+0x16c8` 开始、步长 8；百宝袋八个材料与预览 ID 为 `+0x1e44/+0x1e4c`；里蓝人 mana 与六字节资源队列为 `+0x1e50/+0x1e54`。仅完整名单中的客机玩家可恢复状态，整份载荷先校验再写入，不触及后续随机资源。百宝袋变化经 `Game::GetHUD`（RVA `0x127c0`、thiscall、无参数）取得 HUD，八个 PlayerHUD 步长 `0x6b0`，只设置绑定该角色的 `+0x6a1` 刷新位；重复状态不刷新，缺少 HUD 时保留已恢复材料供后续绑定使用。
 
+## 激光路径
+
+[激光绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/laser_state.cpp)使用[共享路径组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/laser_state.cpp)，编码、平移和完整校验遵循[激光路径契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#激光路径呈现)。采样状态为 `Laser+0x3ad`，原生初始化值为 255；起点／终点四个 float 从 `+0x3b8` 开始，形状／缩放为 `+0x3c8/+0x430`，采样数为 `+0x3cc`。两个 Vector2 向量位于 `+0x3d0/+0x3dc`，各由 begin/end/capacity 三个指针组成，每点 8 字节。
+
+分配与带大小的释放入口为 `0x5eacf8/0x5eb08e`，均 cdecl；参数分别为字节数，以及指针、字节数。共享组件保留 MSVC 大向量的 4096 字节阈值、32 字节对齐及 `0x23` 字节额外空间，释放使用原分配指针，原生析构可继续接管。快照和原生容器完整校验后准备两组空间，分配失败不修改任何旧路径或实体字段；不重建激光、不执行伤害或转移实体所有权。
+
 ## 角色姿态与实体阴影
 
 [实体姿态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entity_pose.cpp)复用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_pose.cpp)。`actor_pose` 与 `entity_shadow` 的编码、校验和所有权遵循[实体姿态契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)，不跨版本交换会话。只接受实体借用 Sprite，写入限客机；捕获和恢复返回后不保留玩家、武器或服装指针。

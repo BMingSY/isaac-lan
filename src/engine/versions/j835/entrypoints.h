@@ -5,6 +5,8 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t nativeAllocate = 0x5eacf8;
+inline constexpr std::uint32_t nativeDelete = 0x5eb08e;
 inline constexpr std::uint32_t menuGameUpdate = 0x4d92c0;
 inline constexpr std::uint32_t menuManagerRender = 0x4e19d0;
 inline constexpr std::uint32_t textureRender = 0x55f990;

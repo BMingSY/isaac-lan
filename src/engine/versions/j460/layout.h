@@ -311,6 +311,11 @@ inline constexpr unsigned charge = 0x524, touched = 0x52c, pool = 0x530, varData
 inline constexpr unsigned optionsIndex = 0x528, price = 0x534, autoUpdatePrice = 0x538;
 inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, state = 0x584;
 } // namespace pickup
+namespace laser {
+inline constexpr unsigned sampleState = 0x45d, samples = 0x47c;
+inline constexpr std::array<unsigned, 6> values{0x468, 0x46c, 0x470, 0x474, 0x478, 0x4e0};
+inline constexpr std::array<unsigned, 2> paths{0x480, 0x48c};
+} // namespace laser
 namespace player {
 inline constexpr unsigned chargeSprites = 0x758, pockets = 0x17a0;
 inline constexpr unsigned bagMaterials = 0x1f44, bagPreview = 0x1f4c;

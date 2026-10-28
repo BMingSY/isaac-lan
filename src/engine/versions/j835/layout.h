@@ -224,6 +224,11 @@ inline constexpr unsigned red = 0, green = 4, blue = 8, alpha = 0xc;
 inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
+namespace laser {
+inline constexpr unsigned sampleState = 0x3ad, samples = 0x3cc;
+inline constexpr std::array<unsigned, 6> values{0x3b8, 0x3bc, 0x3c0, 0x3c4, 0x3c8, 0x430};
+inline constexpr std::array<unsigned, 2> paths{0x3d0, 0x3dc};
+} // namespace laser
 namespace player {
 inline constexpr unsigned chargeSprites = 0x6a8, pockets = 0x16c8;
 inline constexpr unsigned bagMaterials = 0x1e44, bagPreview = 0x1e4c;

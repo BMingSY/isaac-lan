@@ -15,7 +15,7 @@
 #include "engine/pickup_preview.h"
 #include "runtime/session.h"
 #include "net/protocol.h"
-#include "core/laser_state.h"
+#include "engine/versions/common/laser_state.h"
 #include "runtime/room_map.h"
 #include "compat/bosses/encounters.h"
 #include "compat/bosses/rotgut.h"
@@ -2406,62 +2406,6 @@ int revivePlayer(lua_State* L) {
     lua.pushBoolean(L, valid);
     return 1;
 }
-int laserPath(lua_State* L) {
-    auto sprite = static_cast<Address*>(lua.toUserdata(L, 1));
-    if (!sprite || lua.rawLength(L, 1) != 8 || sprite[1] < 0x48 ||
-        at<unsigned>(sprite[1] - 0x48, 0x28) != 7) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    const auto entity = sprite[1] - 0x48;
-    constexpr std::array<unsigned, 6> floats = {0x468, 0x46c, 0x470, 0x474, 0x478, 0x4e0};
-    try {
-        if (lua.getTop(L) == 1) {
-            lan::Writer bytes(lan::Message::world);
-            bytes.u8(at<std::uint8_t>(entity, 0x45d));
-            for (auto offset : floats)
-                bytes.u32(at<std::uint32_t>(entity, offset));
-            bytes.u32(at<unsigned>(entity, 0x47c));
-            for (auto offset : {0x480u, 0x48cu}) {
-                const auto points = at<Vector>(entity, offset);
-                if (points.end < points.begin || points.end > points.capacity ||
-                    (points.end - points.begin) % 8 || points.end - points.begin > 2048 * 8)
-                    throw std::runtime_error("Invalid native laser path");
-                bytes.u16((points.end - points.begin) / 8);
-                for (auto p = points.begin; p < points.end; p += 4)
-                    bytes.u32(at<std::uint32_t>(p, 0));
-            }
-            lua.pushLString(L, reinterpret_cast<const char*>(bytes.bytes.data() + 1),
-                            bytes.bytes.size() - 1);
-            return 1;
-        }
-        if (!runtime::replica()) {
-            lua.pushBoolean(L, false);
-            return 1;
-        }
-        std::size_t size = 0;
-        const auto data = lua.checkString(L, 2, &size);
-        lan::Reader bytes({reinterpret_cast<const std::uint8_t*>(data), size});
-        auto path = presentation::readLaserPath(bytes);
-        if (lua.getTop(L) > 2) {
-            if (lua.getTop(L) != 4)
-                throw std::runtime_error("Laser render offset requires two coordinates");
-            presentation::translateLaserPath(path, static_cast<float>(lua.checkNumber(L, 3)),
-                                             static_cast<float>(lua.checkNumber(L, 4)));
-        }
-        at<std::uint8_t>(entity, 0x45d) = path.sampleState;
-        for (unsigned i = 0; i < floats.size(); ++i)
-            at<std::uint32_t>(entity, floats[i]) = path.values[i];
-        at<unsigned>(entity, 0x47c) = path.samples;
-        assign(at<Vector>(entity, 0x480), path.paths[0]);
-        assign(at<Vector>(entity, 0x48c), path.paths[1]);
-        lua.pushBoolean(L, true);
-    } catch (const std::exception& e) {
-        runtime::abort(e.what());
-        lua.pushBoolean(L, false);
-    }
-    return 1;
-}
 std::map<Address, RoomCall> entityUpdates;
 RoomCall originalNeedleVisual = nullptr;
 void __attribute__((fastcall)) needleVisual(void* npc, void*) {
@@ -3777,7 +3721,6 @@ bool bind(lua_State* L, HMODULE module) {
     function("actor_companions", actorCompanions);
     function("actor_ghost", actorGhost);
     function("rooms_revive_player", revivePlayer);
-    function("laser_path", laserPath);
     function("rooms_set_connected", setConnections);
     function("rooms_connected", connections);
     function("rooms_begin_floor", beginFloor);
@@ -3786,6 +3729,6 @@ bool bind(lua_State* L, HMODULE module) {
                L, module, image, {[](bool team) {
                    return values(team && scopes.teamRoster() ? *scopes.teamRoster() : roster());
                }}) &&
-           visuals::bind(L, module);
+           engine::native_laser_state::bind(L, module, image) && visuals::bind(L, module);
 }
 } // namespace isaac::rooms

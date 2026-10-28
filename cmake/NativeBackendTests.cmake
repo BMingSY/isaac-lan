@@ -52,6 +52,8 @@ isaac_add_backend_test(
     LIBRARIES
     minhook)
 foreach(backend j460 j835)
+    isaac_add_backend_test(laser-state ${backend} SOURCES tests/laser_state_backend_test.cpp
+                           tests/native_call.cpp src/engine/versions/${backend}/laser_state.cpp)
     isaac_add_backend_test(actor-state ${backend} SOURCES tests/actor_state_backend_test.cpp
                            tests/native_call.cpp src/engine/versions/${backend}/actor_state.cpp)
     isaac_add_backend_test(frontend-menu ${backend} SOURCES tests/frontend_menu_test.cpp

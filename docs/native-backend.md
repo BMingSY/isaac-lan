@@ -114,11 +114,11 @@ J460 后端在 `Player::Render` 的三个轮廓资格分支接入原生绘制：
 
 ## 激光路径呈现
 
-[`laser_path(sprite)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rooms.cpp) 读取活动激光的采样状态、起点／终点、形状／缩放、采样数量与两组路径坐标。要求实体借用 Sprite，回溯所属对象后核对激光类型；不接受自有 Sprite 或其他实体类型，不跨调用保留指针。
+[`laser_path(sprite)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/laser_state.cpp) 读取活动激光的采样状态、起点／终点、形状／缩放、采样数量与两组路径坐标。要求实体借用 Sprite，回溯所属对象后核对激光类型；不接受自有 Sprite 或其他实体类型，不跨调用保留指针。
 
 `laser_path(sprite, bytes[, dx, dy])` 仅允许客机写入。可选偏移必须同时提供，只平移世界坐标，不修改形状、缩放或采样数量；调用方每次传入原始权威字节，避免重复渲染累积平移。公开 `EndPoint` 属性由桥接层同步设置。路径载荷沿用原格式，协议字段不增加。
 
-J460 的采样状态位于实体 `+0x45d`，允许 `0`、`1` 与原生未初始化值 `255`；起点／终点位于 `+0x468` 至 `+0x474`，形状值为 `+0x478`、缩放为 `+0x4e0`，采样数量为 `+0x47c`，两个游戏自有向量位于 `+0x480`／`+0x48c`。采样数量及每个路径向量各限制 2048 个点，所有浮点数及平移结果必须有限；完整解析、边界和偏移校验完成后才写入。向量通过现有游戏分配接口调整，所有权和析构仍由游戏管理；可移植校验见 [laser_state.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/laser_state.h)。
+J460 的采样状态位于实体 `+0x45d`，允许 `0`、`1` 与原生未初始化值 `255`；起点／终点位于 `+0x468` 至 `+0x474`，形状值为 `+0x478`、缩放为 `+0x4e0`，采样数量为 `+0x47c`，两个游戏自有向量位于 `+0x480`／`+0x48c`。采样数量及每个路径向量各限制 2048 个点，所有浮点数及平移结果必须有限；完整解析、边界和偏移校验完成后才写入。两组原生向量的长度、容量和分配头也须有效；扩容先为两组准备存储，全部成功后才提交向量和标量，失败释放临时存储并保留旧状态。分配／释放入口分别为 `0x60f4c0/0x6ef15c`，使用 cdecl、参数为字节数／指针和字节数。容量达到 4096 字节时额外申请 `0x23` 字节，返回 32 字节对齐位置并在前四字节保存原分配指针；释放还原原指针及完整字节数，保持原生向量析构约定。清空路径保留可复用容量，所有权和最终析构仍由游戏管理；[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#激光路径)提供独立布局与分配器，可移植校验见 [laser_state.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/laser_state.h)。
 
 ## 房间音乐
 
