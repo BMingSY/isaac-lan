@@ -188,7 +188,9 @@ local function terminalMovement(t)
         terminalWalking, terminalVerified = false, true
     end
 end
+local BOSS_ENTRY_SETTLE_TICKS, BOSS_ENTRY_TIMEOUT_TICKS = 30, 1200
 local bossEntrySlot = 1
+local bossEntryTarget, bossEntryAt
 local function move(index, t, dimension, slot)
     slot = slot or 1
     assert(native.rooms_move(slot, index, dimension or 0, -1))
@@ -238,6 +240,7 @@ local function boss(t, target)
             and 0
         or 1
     move(index, t, nil, bossEntrySlot)
+    bossEntryTarget, bossEntryAt = index, t
     report("BOSS_ENTRY slot=" .. bossEntrySlot)
     mark("boss-enter", t)
 end
@@ -807,6 +810,31 @@ local function advance(t)
     local level, name = Game():GetLevel(), cases[caseIndex]
     local stage, kind = level:GetStage(), level:GetStageType()
     observeFloor()
+    if step == "boss-enter" and bossEntryTarget then
+        if t - stepAt <= BOSS_ENTRY_SETTLE_TICKS then
+            return
+        end
+        local actual = assert(native.rooms_positions()[tostring(bossEntrySlot)])
+        if actual.index ~= bossEntryTarget or actual.dimension ~= 0 then
+            assert(t - bossEntryAt < BOSS_ENTRY_TIMEOUT_TICKS, "Boss entry kept redirecting")
+            report(
+                "BOSS_ENTRY_REDIRECT requested="
+                    .. bossEntryTarget
+                    .. " actual="
+                    .. actual.index
+                    .. " dimension="
+                    .. actual.dimension
+            )
+            -- Curse of the Maze may redirect the queued native entry. Retry
+            -- the generated room before combat or waiting for its loot.
+            move(bossEntryTarget, t, nil, bossEntrySlot)
+            mark("boss-enter", t)
+            return
+        end
+        -- Mother subsequently enters a separate arena through the native
+        -- hole. Only confirm the initial room, before that transition.
+        bossEntryTarget = nil
+    end
     if homeOnly and debug10 and not debug10BeastWalking and level:GetCurrentRoomIndex() == -10 then
         local beast
         actor(1, function()

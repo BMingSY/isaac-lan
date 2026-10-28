@@ -567,6 +567,113 @@ assert(observed[1].endingRoutes[1] == "mother" and observed[1].endingRoutes[2] =
     )
 
 
+@pytest.mark.parametrize("mode", ["normal", "redirect", "dimension", "timeout", "mother"])
+def test_ending_boss_entry_confirms_native_destination(tmp_path, mode):
+    run_lua(
+        "local mode = "
+        + lua_support.literal(mode)
+        + """
+local function noop() end
+local moves, messages, before = {}, {}, nil
+local stage, kind, roomIndex, dimension = 1, 0, 84, 0
+local expectedSlot = mode == "mother" and 0 or 1
+local player = {
+    IsDead = function() return false end,
+    IsCoopGhost = function() return false end,
+    SetMinDamageCooldown = noop, AddEntityFlags = noop, AddCollectible = noop,
+}
+Vector = setmetatable({Zero = {}}, {__call = function(_, x, y) return {X = x, Y = y} end})
+local level = {
+    GetStage = function() return stage end,
+    GetStageType = function() return kind end,
+    SetStage = function(_, nextStage, nextKind) stage, kind = nextStage, nextKind end,
+    GetRooms = function() return {Size = 1, Get = function()
+        return {SafeGridIndex = 135, Data = {Type = 5}}
+    end} end,
+}
+Game = function() return {
+    GetLevel = function() return level end,
+    GetRoom = function() return {
+        GetType = function() return roomIndex == 135 and 5 or 1 end,
+        GetCenterPos = function() return Vector(320, 280) end,
+    } end,
+    SetStateFlag = noop, StartStageTransition = noop,
+} end
+_IsaacLan = {
+    rooms_ready = function() return true end,
+    rooms_with_player = function(_, callback) callback(); return true end,
+    rooms_heads = function() return {["0"] = 0, ["1"] = 1} end,
+    rooms_positions = function() return {
+        ["0"] = {index = roomIndex, dimension = dimension},
+        ["1"] = {index = roomIndex, dimension = dimension},
+    } end,
+    rooms_move = function(slot, index, dim)
+        assert(slot == expectedSlot and index == 135 and dim == 0)
+        moves[#moves + 1] = index
+        -- Native entry commits after the queued request, not inside it.
+        return true
+    end,
+    net_gate = function(_, callback) before = callback end,
+}
+Isaac = {
+    AddCallback = noop, GetPlayer = function() return player end,
+    DebugString = function(message) messages[#messages + 1] = message end,
+    GetRoomEntities = function() return {} end,
+}
+EntityType, EntityFlag, ModCallbacks, PickupVariant, GameStateFlag = {}, {}, {}, {}, {}
+RoomType, StageType = {ROOM_BOSS = 5}, {STAGETYPE_REPENTANCE = 4}
+_IsaacLanFrame = noop
+_IsaacLanTest = {
+    host = true, port = "1234", campaign = mode ~= "mother",
+    endingRoutes = {mode == "mother" and "mother" or "blue-baby"},
+}
+dofile("""
+        + lua_support.literal(str(ROOT / "tests/state_endings.lua"))
+        + """)
+_IsaacLan.net_gate(noop, noop, noop, noop, noop, noop)
+local function saw(fragment)
+    for _, message in ipairs(messages) do
+        if message:find(fragment, 1, true) then return true end
+    end
+    return false
+end
+before(31)
+if mode == "mother" then stage, kind = 8, 4 end
+before(172)
+assert(#moves == 1 and not saw("STEP boss-fight"))
+before(202)
+assert(#moves == 1, "Retried a still-pending native entry")
+roomIndex = (mode == "redirect" or mode == "timeout") and 148 or 135
+dimension = mode == "dimension" and 1 or 0
+before(203)
+if mode == "timeout" then
+    local ok, message = pcall(function()
+        for tick = 234, 1500, 31 do before(tick) end
+    end)
+    assert(not ok and message:find("Boss entry kept redirecting", 1, true), message)
+    assert(not saw("STEP boss-fight"), "Fought in the wrong room")
+else
+    local redirected = mode == "redirect" or mode == "dimension"
+    assert(#moves == (redirected and 2 or 1))
+    assert(saw("BOSS_ENTRY_REDIRECT") == redirected)
+    if redirected then
+        roomIndex, dimension = 135, 0
+        before(234)
+    elseif mode == "mother" then
+        before(213)
+        assert(player.Position.X == 320 and player.Position.Y == 280)
+        -- The native hole moves Mother combat into another arena.
+        roomIndex = -10
+    end
+    before(redirected and 334 or 303)
+    assert(saw("STEP boss-fight"), "Did not advance after confirmed arrival")
+    assert(#moves == (redirected and 2 or 1), "Retried an already-confirmed entry")
+end
+""",
+        tmp_path,
+    )
+
+
 @pytest.mark.parametrize("complete_first", [True, False, "invalid"])
 def test_continuous_suite_requires_completion_and_preserves_absolute_ticks(
     tmp_path, monkeypatch, complete_first
