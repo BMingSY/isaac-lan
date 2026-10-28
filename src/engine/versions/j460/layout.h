@@ -2,6 +2,7 @@
 #include "engine/versions/common/progress.h"
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <cstdint>
 
 // J460 object offsets and native container sizes. No ownership or gameplay policy.
@@ -250,6 +251,8 @@ inline constexpr unsigned orbitSpeed = 0xd6c;
 inline constexpr unsigned orbitLayer = 0xd70;
 } // namespace familiar
 namespace sprite {
+inline constexpr unsigned shadow = 0x10c, speed = 0x104, flags = 0x110;
+inline constexpr unsigned overlayFirst = 0x70, layers = 0x7c, layerCount = 0x80;
 inline constexpr unsigned loaded = 0x109, playing = 0x44, frame = 0x40;
 inline constexpr unsigned size = 0x114;
 inline constexpr unsigned path = 0x0;
@@ -265,6 +268,14 @@ inline constexpr unsigned flipY = 0x101;
 inline constexpr unsigned animationOwner = 0x30;
 inline constexpr unsigned overlayOwner = 0x50;
 } // namespace sprite
+namespace spriteLayer {
+inline constexpr unsigned size = 0xa0, data = 0, id = 0, path = 8, flags = 0x8c;
+inline constexpr std::array<unsigned, 3> booleans{0x32, 0x33, 0x74};
+inline constexpr std::array<unsigned, 18> numbers{0x34, 0x38, 0x3c, 0x40, 0x44, 0x48,
+                                                  0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60,
+                                                  0x64, 0x68, 0x6c, 0x70, 0x90, 0x94};
+inline constexpr std::array<std::optional<unsigned>, 5> blend{0x78, 0x7c, 0x80, 0x84, 0x88};
+} // namespace spriteLayer
 namespace animationState {
 inline constexpr unsigned data = 0x4;
 inline constexpr unsigned layerFrames = 0x8, nullFrames = 0xc;

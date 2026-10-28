@@ -41,6 +41,8 @@ isaac_add_backend_test(
     LIBRARIES
     minhook)
 foreach(backend j460 j835)
+    isaac_add_backend_test(sprite-state ${backend} SOURCES tests/sprite_state_backend_test.cpp
+                           tests/native_call.cpp src/engine/versions/${backend}/sprite_state.cpp)
     isaac_add_backend_test(
         item-presentation
         ${backend}

@@ -2,6 +2,7 @@
 #include "engine/versions/common/progress.h"
 #include <array>
 #include <cstddef>
+#include <optional>
 
 namespace isaac::engine::j835::layout {
 namespace string {
@@ -181,15 +182,34 @@ inline constexpr unsigned moveDirection = 0xca4, shootDirection = 0xca8, lastDir
 inline constexpr unsigned orbitAngleOffset = 0xcb0, orbitLayer = 0xcc0, orbitSpeed = 0xcbc;
 } // namespace familiar
 namespace sprite {
+inline constexpr unsigned shadow = 0x10c, speed = 0x104, flags = 0x110;
+inline constexpr unsigned overlayFirst = 0x70, layers = 0x7c, layerCount = 0x80;
 inline constexpr unsigned animationOwner = 0x30, overlayOwner = 0x50;
 inline constexpr unsigned loaded = 0x109, playing = 0x44, frame = 0x40;
 inline constexpr unsigned size = 0x114, path = 0, animation = 0x30, overlay = 0x50;
 inline constexpr unsigned offset = 0x94, scale = 0x9c, rotation = 0xa4, color = 0xa8;
 inline constexpr unsigned flipX = 0x100, flipY = 0x101;
 } // namespace sprite
+namespace spriteLayer {
+inline constexpr unsigned size = 0x9c, data = 0, id = 0, path = 8, flags = 0x88;
+inline constexpr std::array<unsigned, 3> booleans{0x32, 0x33, 0x74};
+inline constexpr std::array<unsigned, 18> numbers{0x34, 0x38, 0x3c, 0x40, 0x44, 0x48,
+                                                  0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60,
+                                                  0x64, 0x68, 0x6c, 0x70, 0x8c, 0x90};
+inline constexpr std::array<std::optional<unsigned>, 5> blend{0x78, 0x7c, 0x80, 0x84, std::nullopt};
+} // namespace spriteLayer
 namespace animationState {
+inline constexpr unsigned layerFrames = 8, nullFrames = 0xc;
+inline constexpr unsigned playing = 0x14, events = 0x18, previousEvents = 0x1c;
 inline constexpr unsigned data = 4, frame = 0x10;
 } // namespace animationState
+namespace animationData {
+inline constexpr unsigned layers = 0x18, layerCount = 0x1c, nulls = 0x20, nullCount = 0x24;
+inline constexpr unsigned layerMap = 0x38, totalFrames = 0x30;
+} // namespace animationData
+namespace animationLayer {
+inline constexpr unsigned stride = 0x10, id = 0, frameCount = 8, nullFrameCount = 0xc;
+} // namespace animationLayer
 namespace color {
 inline constexpr unsigned size = 0x2c;
 inline constexpr unsigned red = 0, green = 4, blue = 8, alpha = 0xc;

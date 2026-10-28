@@ -32,9 +32,11 @@
 
 角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。
 
-`sprite_state(sprite)` 复制完整精灵层状态为字节串；客机的 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，没有贴图变化时返回 `true`。返回值不持有原生引用；Lua 只在数组非空时替换贴图并调用 `LoadGraphics`。捕获缓冲预留容量不改变字段或编码字节。
+[精灵状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sprite_state.cpp)通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/sprite_state.cpp)实现 `sprite_state(sprite)`，复制完整精灵层状态为字节串；客机的 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，没有贴图变化时返回 `true`。返回值不持有原生引用；Lua 只在数组非空时替换贴图并调用 `LoadGraphics`。捕获缓冲预留容量不改变字段或编码字节。
 
 精灵载荷以格式号 `2` 开头，主动画与叠加动画各保存存在标记、浮点帧、播放标记、当前／历史事件位图、图层与挂点层的 ID／帧索引。可移植契约见 [animation_pose.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/animation_pose.h)：最多 64 个图层、256 个挂点层，帧索引为 `-1` 或小于 65535 的整数；拒绝重复 ID、非法标记与非有限帧。J460 的动画状态 `+0x8/+0xc` 分别引用图层／挂点帧数组，动画数据 `+0x20/+0x24` 为挂点描述数组与数量，每项 16 字节，帧数位于项内 `+0xc`。事件位图位于动画状态 `+0x18/+0x1c`。所有数组由游戏持有，恢复只按本机 ID 与帧数边界写入；空层允许游戏自身使用的初始游标 `0` 和重置游标 `-1`，不将游标用作数组下标。不分配或替换原生数组。动画名未变化时直接恢复这些完整状态，名称变化仍调用游戏动画切换接口。
+
+恢复前先解码并校验完整载荷、两组本机动画数组和贴图路径，截断、尾部字节、非有限数、非法布尔值及重复图层 ID 均在写入前拒绝。动画缺失时通过原生 `AnimationState::Reset`（RVA `0x8830`，thiscall 接收空动画参数，清栈 4 字节）释放该状态持有的帧数组；扩展不自行释放或替换数组。J460 图层步长为 `0xa0`，五个混合参数位于 `+0x78..+0x88`，标志为 `+0x8c`，裁剪偏移为 `+0x90/+0x94`。纹理路径、资源指针、过滤参数和 Sprite 自引用保持游戏所有权；[J835 绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#精灵状态)使用不同图层步长与字段。
 
 `sprite_animation_length(sprite)` 只读取当前主动画数据 `+0x30` 的总帧数，限制 `0..65535`，无动画返回 0。接受实体借用或 Lua 自有 Sprite，不分配资源、不推进实体；本地步行动画按该长度和原生 30 Hz 节拍保留小数帧。
 

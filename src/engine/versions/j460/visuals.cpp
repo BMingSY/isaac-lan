@@ -1,6 +1,6 @@
 #include "engine/lua_api.h"
 #include "core/occurrence_mapping.h"
-#include "core/animation_pose.h"
+#include "engine/versions/common/sprite_state.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/visuals.h"
 #include "net/protocol.h"
@@ -21,11 +21,6 @@ namespace j460 = isaac::engine::j460;
 namespace isaac::visuals {
 namespace {
 using Address = std::uintptr_t;
-namespace pose = core::animation_pose;
-namespace animation = j460::layout::animationState;
-namespace animationData = j460::layout::animationData;
-namespace animationLayer = j460::layout::animationLayer;
-constexpr unsigned spriteFormat = 2;
 template <class T> T& at(Address p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }
@@ -239,16 +234,7 @@ int doorSlot(lua_State* L) {
     return 1;
 }
 std::string_view string(Address p) {
-    const auto length = at<unsigned>(p, 0x10), capacity = at<unsigned>(p, 0x14);
-    if (length > capacity || length > 1024)
-        throw std::runtime_error("Invalid sprite path");
-    return {reinterpret_cast<const char*>(capacity < 16 ? p : at<Address>(p, 0)), length};
-}
-unsigned count(Address p, unsigned offset, unsigned limit = 64) {
-    const auto n = at<unsigned>(p, offset);
-    if (n > limit)
-        throw std::runtime_error("Invalid native visual array");
-    return n;
+    return engine::native_sprite::path(p);
 }
 unsigned number(lan::Reader& r) {
     const auto bits = r.u32();
@@ -263,221 +249,7 @@ unsigned boolean(lan::Reader& r) {
     return v;
 }
 Address layer(Address s, unsigned id) {
-    const auto begin = at<Address>(s, 0x7c);
-    for (unsigned i = 0; i < count(s, 0x80); ++i) {
-        const auto p = begin + i * 0xa0;
-        if (at<unsigned>(at<Address>(p, 0), 0) == id)
-            return p;
-    }
-    return 0;
-}
-void captureAnimation(lan::Writer& w, Address state) {
-    pose::State value;
-    const auto data = at<Address>(state, animation::data);
-    value.present = data != 0;
-    if (data) {
-        value.frame = at<unsigned>(state, animation::frame);
-        value.playing = at<bool>(state, animation::playing);
-        value.events = at<unsigned>(state, animation::events);
-        value.previousEvents = at<unsigned>(state, animation::previousEvents);
-        value.layerCount = count(data, animationData::layerCount, pose::maxLayers);
-        value.nullCount = count(data, animationData::nullCount, pose::maxNullLayers);
-        if ((value.layerCount && (!at<Address>(data, animationData::layers) ||
-                                  !at<Address>(state, animation::layerFrames))) ||
-            (value.nullCount && (!at<Address>(data, animationData::nulls) ||
-                                 !at<Address>(state, animation::nullFrames))))
-            throw std::runtime_error("Missing native animation frame array");
-        for (unsigned i = 0; i < value.layerCount; ++i) {
-            const auto entry =
-                at<Address>(data, animationData::layers) + i * animationLayer::stride;
-            const auto id = at<unsigned>(entry, animationLayer::id);
-            if (id >= pose::maxLayers)
-                throw std::runtime_error("Invalid native animation layer ID");
-            value.layers[i] = {
-                static_cast<std::uint16_t>(id),
-                at<int>(at<Address>(state, animation::layerFrames), i * sizeof(int))};
-        }
-        for (unsigned i = 0; i < value.nullCount; ++i) {
-            const auto entry = at<Address>(data, animationData::nulls) + i * animationLayer::stride;
-            const auto id = at<unsigned>(entry, animationLayer::id);
-            if (id >= pose::maxNullLayers)
-                throw std::runtime_error("Invalid native attachment layer ID");
-            value.nulls[i] = {static_cast<std::uint16_t>(id),
-                              at<int>(at<Address>(state, animation::nullFrames), i * sizeof(int))};
-        }
-    }
-    pose::write(w, value);
-}
-void applyAnimation(lan::Reader& r, Address state) {
-    const auto value = pose::read(r);
-    const auto data = at<Address>(state, animation::data);
-    if (!value.present) {
-        if (data) {
-            using Reset = void(__attribute__((thiscall))*)(void*, void*);
-            reinterpret_cast<Reset>(reinterpret_cast<Address>(GetModuleHandleW(nullptr)) +
-                                    j460::entry::animationStateReset)(
-                reinterpret_cast<void*>(state), nullptr);
-        }
-        return;
-    }
-    if (!data)
-        return;
-    at<unsigned>(state, animation::frame) = value.frame;
-    at<bool>(state, animation::playing) = value.playing;
-    at<unsigned>(state, animation::events) = value.events;
-    at<unsigned>(state, animation::previousEvents) = value.previousEvents;
-    for (unsigned i = 0; i < value.layerCount; ++i) {
-        const auto [id, frameIndex] = value.layers[i];
-        const int order = at<int>(data, animationData::layerMap + id * sizeof(int));
-        if (order < 0 || static_cast<unsigned>(order) >= count(data, animationData::layerCount))
-            continue;
-        const auto frames =
-            count(at<Address>(data, animationData::layers) + order * animationLayer::stride,
-                  animationLayer::frameCount, pose::maxFrames);
-        if (pose::validCursor(frameIndex, frames))
-            at<int>(at<Address>(state, animation::layerFrames), order * sizeof(int)) = frameIndex;
-    }
-    const auto nulls = at<Address>(data, animationData::nulls);
-    const auto frames = at<Address>(state, animation::nullFrames);
-    const auto localCount = count(data, animationData::nullCount, pose::maxNullLayers);
-    if (localCount && (!nulls || !frames))
-        throw std::runtime_error("Missing native attachment frame array");
-    for (unsigned i = 0; i < localCount; ++i)
-        at<int>(frames, i * sizeof(int)) = -1;
-    for (unsigned i = 0; i < value.nullCount; ++i) {
-        const auto [id, frameIndex] = value.nulls[i];
-        unsigned order = i;
-        if (order >= localCount ||
-            at<unsigned>(nulls + order * animationLayer::stride, animationLayer::id) != id) {
-            for (order = 0; order < localCount; ++order)
-                if (at<unsigned>(nulls + order * animationLayer::stride, animationLayer::id) == id)
-                    break;
-        }
-        if (order == localCount)
-            continue;
-        const auto limit = count(nulls + order * animationLayer::stride,
-                                 animationLayer::nullFrameCount, pose::maxFrames);
-        if (pose::validCursor(frameIndex, limit))
-            at<int>(frames, order * sizeof(int)) = frameIndex;
-    }
-}
-constexpr std::array<unsigned, 18> layerNumbers = {0x34, 0x38, 0x3c, 0x40, 0x44, 0x48,
-                                                   0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60,
-                                                   0x64, 0x68, 0x6c, 0x70, 0x90, 0x94};
-int spriteAnimationLength(lua_State* L) {
-    try {
-        const auto data = at<Address>(sprite(L) + j460::layout::sprite::animation, animation::data);
-        lua.pushInteger(L, data ? count(data, animationData::totalFrames, pose::maxFrames) : 0);
-        return 1;
-    } catch (const std::exception& error) {
-        runtime::abort(error.what());
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-}
-int spriteState(lua_State* L) {
-    try {
-        const auto s = sprite(L);
-        if (lua.getTop(L) == 1) {
-            const auto n = count(s, 0x80);
-            // Reserve typical header/layer payloads once; longer paths still
-            // grow normally. This changes allocation, never the wire layout.
-            constexpr std::size_t headerReserve = 256, layerReserve = 256;
-            lan::Writer w(lan::Message::world, headerReserve + n * layerReserve);
-            w.u8(spriteFormat);
-            captureAnimation(w, s + 0x30);
-            captureAnimation(w, s + 0x50);
-            w.u32(at<unsigned>(s, 0x10c));
-            // Colorize/champion colors and rendering flags are not exposed by
-            // the seven Lua Color channels. They affect blood/floor decals.
-            for (unsigned offset = 0xa8; offset < 0x100; offset += 4)
-                w.u32(at<unsigned>(s, offset));
-            w.u32(at<unsigned>(s, 0x104));
-            w.u32(at<unsigned>(s, 0x110));
-            w.u8(at<bool>(s, 0x70));
-            w.u16(n);
-            for (unsigned i = 0; i < n; ++i) {
-                const auto p = at<Address>(s, 0x7c) + i * 0xa0;
-                w.u16(at<unsigned>(at<Address>(p, 0), 0));
-                w.string(string(p + 8));
-                for (auto offset : {0x32u, 0x33u, 0x74u})
-                    w.u8(at<bool>(p, offset));
-                for (auto offset : layerNumbers)
-                    w.u32(at<unsigned>(p, offset));
-                for (unsigned offset = 0x78; offset < 0x8c; offset += 4)
-                    w.u32(at<unsigned>(p, offset));
-                w.u32(at<unsigned>(p, 0x8c));
-            }
-            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                            w.bytes.size() - 1);
-            return 1;
-        }
-        if (!runtime::replica())
-            throw std::runtime_error("Only replicas apply visual state");
-        std::size_t size = 0;
-        const auto bytes = lua.checkString(L, 2, &size);
-        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
-        if (r.u8() != spriteFormat)
-            throw std::runtime_error("Invalid native Sprite format");
-        applyAnimation(r, s + 0x30);
-        applyAnimation(r, s + 0x50);
-        const int shadowLayer = static_cast<int>(r.u32());
-        if (shadowLayer < -1 || shadowLayer >= 64)
-            throw std::runtime_error("Invalid shadow layer");
-        at<int>(s, 0x10c) = shadowLayer >= 0 && !layer(s, shadowLayer) ? -1 : shadowLayer;
-        for (unsigned offset = 0xa8; offset < 0x100; offset += 4)
-            at<unsigned>(s, offset) = number(r);
-        at<unsigned>(s, 0x104) = number(r);
-        at<unsigned>(s, 0x110) = r.u32();
-        at<bool>(s, 0x70) = boolean(r);
-        const auto n = r.u16();
-        if (n > 64)
-            throw std::runtime_error("Too many sprite layers");
-        unsigned changed = 0;
-        for (unsigned i = 0; i < n; ++i) {
-            const auto id = r.u16();
-            const auto path = r.stringView();
-            const auto p = layer(s, id);
-            if (p && path != string(p + 8)) {
-                if (!changed)
-                    lua.createTable(L, 0, 0);
-                lua.createTable(L, 2, 0);
-                lua.pushInteger(L, id);
-                lua.rawSetI(L, -2, 1);
-                lua.pushLString(L, path.data(), path.size());
-                lua.rawSetI(L, -2, 2);
-                lua.rawSetI(L, -2, ++changed);
-            }
-            for (auto offset : {0x32u, 0x33u, 0x74u}) {
-                const auto v = boolean(r);
-                if (p)
-                    at<bool>(p, offset) = v;
-            }
-            for (auto offset : layerNumbers) {
-                const auto v = number(r);
-                if (p)
-                    at<unsigned>(p, offset) = v;
-            }
-            for (unsigned offset = 0x78; offset < 0x8c; offset += 4) {
-                const auto v = r.u32();
-                if (v > 32)
-                    throw std::runtime_error("Invalid sprite blend mode");
-                if (p)
-                    at<unsigned>(p, offset) = v;
-            }
-            const auto flags = r.u32();
-            if (p)
-                at<unsigned>(p, 0x8c) = flags;
-        }
-        r.finish();
-        if (!changed)
-            lua.pushBoolean(L, true);
-        return 1;
-    } catch (const std::exception& e) {
-        runtime::abort(e.what());
-        lua.pushBoolean(L, false);
-        return 1;
-    }
+    return engine::native_sprite::findLayer(s, id);
 }
 std::vector<Address> costumes(Address player) {
     const auto first = at<Address>(player, 0x1220), last = at<Address>(player, 0x1224);
@@ -798,10 +570,9 @@ bool bind(lua_State* L, HMODULE module) {
                            isaac::lua::Symbol::rawSetI, isaac::lua::Symbol::pushClosure,
                            isaac::lua::Symbol::setField}))
         return false;
-    lua.pushClosure(L, spriteState, 0);
-    lua.setField(L, -2, "sprite_state");
-    lua.pushClosure(L, spriteAnimationLength, 0);
-    lua.setField(L, -2, "sprite_animation_length");
+    if (!engine::native_sprite::bind(L, module,
+                                     reinterpret_cast<Address>(GetModuleHandleW(nullptr))))
+        return false;
     lua.pushClosure(L, bossHeldBombs, 0);
     lua.setField(L, -2, "boss_held_bombs");
     lua.pushClosure(L, entityMinecart, 0);

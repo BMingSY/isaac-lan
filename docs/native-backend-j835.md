@@ -1,12 +1,22 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述可独立测试的原生组件；完整房间调度、实体姿态、前端及启动装配尚未接通。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述可独立测试的原生组件；完整房间调度、其余实体姿态、前端及启动装配尚未接通。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
 `LuaEngine::Init` 为 `thiscall void(LuaEngine*, bool)`，入口和签名位于 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entrypoints.h) 与 [signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/signatures.inc)。初始化完成后的 Lua 状态指针位于 `LuaEngine + 0x18`，只可借用；状态的创建、重置和销毁仍由游戏持有。初始化可能在同一进程内重复发生，不能将先前状态的引用、注册表键或回调复用于新状态。该入口资料不授权其他布局读写，也不代表完整 ABI 验收。
 
 Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。该游戏导入表没有 `SteamAPI_RestartAppIfNecessary`；隔离启动不能把该导入的存在当成必要条件。资料隔离仍须在游戏入口前完成，不能在 Lua 初始化后才更改存档位置。
+
+## 精灵状态
+
+[精灵绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/sprite_state.cpp)复用[共享精灵状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sprite_state.cpp)。`sprite_state`、`sprite_animation_length` 的范围、返回值及完整载荷校验见[精灵契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。Sprite 大小 `0x114`，接受 8 字节借用包装或 `0x11c` 字节 Lua 自有包装；仅客机可恢复状态，返回后不保留对象引用。
+
+主／叠加动画为 Sprite `+0x30/+0x50`，图层数组／数量为 `+0x7c/+0x80`，阴影层为 `+0x10c`。J835 图层步长为 `0x9c`，只有 `+0x78/+0x7c/+0x80/+0x84` 四个混合参数；标志 `+0x88`、裁剪偏移 `+0x8c/+0x90`，资源指针 `+0x94/+0x98` 不写入。格式 2 的第五混合槽采集为零，接收非零值即拒绝，不把它写到标志或资源字段。
+
+动画状态的数据、图层帧和挂点帧指针为 `+4/+8/+0xc`；动画数据的图层／数量为 `+0x18/+0x1c`，挂点／数量为 `+0x20/+0x24`，总帧数为 `+0x30`。图层映射从 `+0x38` 开始；描述项步长 `0x10`，图层／挂点帧数分别位于项内 `+8/+0xc`。恢复按本机 ID 和帧数匹配，清空未匹配的挂点游标。两组动画和全部载荷在写入前完成校验。
+
+`AnimationState::Reset` RVA `0x3740` 使用 ECX 接收状态、栈上一个动画参数并清栈 4 字节；空动画通过此入口解除当前动画及帧数组。字符串、图层定义、纹理和帧数组均由游戏管理，扩展只恢复受限标量；贴图变化返回普通路径供 Lua 调用现有游戏加载接口。
 
 ## 入场演出与本机视图
 

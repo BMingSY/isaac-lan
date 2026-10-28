@@ -106,6 +106,8 @@ Home 原生更新门控使用 `native.scene-update-j460`、`native.scene-update-
 
 道具演出使用 `native.item-presentation-j460`、`native.item-presentation-j835`，配合 `core.compatibility-targets`、`core.localized-text` 和 `bridge.presentation`。同一夹具检查实际 Hook 的调用栈和寄存器、原生构造／析构顺序、配置失败、Mega Mush 动画所有权、文字显示标志与本地化、J835 规则提示索引边界、整批事件校验、固定编码与去重、屏幕嵌套／异常／重置、Game 失效、Home 集合与借用 Sprite。夹具不加载游戏美术，不执行真实治疗、路线推进或实体引用释放；这些仍属于对应实机场景。
 
+精灵状态使用 `native.sprite-state-j460`、`native.sprite-state-j835`，配合 `core.animation-pose`、`bridge.entity-codec`、`presentation.attachments`、`presentation.actor-walking` 和 `bridge.presentation`。两版夹具检查固定编码、借用／自有包装、图层步长与资源边界、重复姿态、逐字节截断和非法值的写入前拒绝、图层／挂点重排、缺失游标、贴图请求及原生 Reset 的 ABI 和数组释放边界。夹具不执行真实纹理加载、动画资源析构或画面绘制。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh

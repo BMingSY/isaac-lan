@@ -127,6 +127,7 @@ inline constexpr std::uint32_t playerUsePill = 0x3877a0;
 inline constexpr std::uint32_t playerUseCard = 0x376b80;
 inline constexpr std::uint32_t bossOverlayShow = 0x1c130;
 inline constexpr std::uint32_t itemConfigGetTrinket = 0x2fe640;
+inline constexpr std::uint32_t animationStateReset = 0x3740;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t logicalWidth = 0x7fec08, logicalHeight = 0x7fec68;
