@@ -129,6 +129,7 @@ namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr std::array<unsigned, 4> shadow{0x150, 0x154, 0x158, 0x2a8};
 inline constexpr unsigned damageQueue = 8, damageRecordSize = 0x38, index = 0x20;
 inline constexpr unsigned interpolated = 0x16d;
 inline constexpr unsigned variant = 0x2c, subtype = 0x30;
@@ -217,6 +218,10 @@ inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
 namespace player {
+inline constexpr std::array<unsigned, 2> poseFlags{0x12e8, 0x12ea};
+inline constexpr unsigned blinkTime = 0x1288, damageCooldown = 0x1308;
+inline constexpr unsigned costumesBegin = 0x1170, costumesEnd = 0x1174, costumeLayers = 0x117c;
+inline constexpr unsigned weapons = 0x1328, nightLightAngle = 0x1a04;
 inline constexpr unsigned controlsEnabled = 0x360;
 inline constexpr unsigned index = 0x1550, twin = 0x1d80, coopGhost = 0x1f88;
 inline constexpr unsigned hourglassUses = 0x1cc8, hourglassFloorUses = 0x1ccc;
@@ -251,4 +256,12 @@ inline constexpr unsigned state = 0x20;
 namespace luaEngine {
 inline constexpr unsigned state = 0x18;
 } // namespace luaEngine
+namespace weapon {
+inline constexpr unsigned kind = 0x2c, modifiers = 0x30, maxChargeMethod = 6;
+inline constexpr std::array<unsigned, 3> charge{0xc, 0x10, 0x14};
+} // namespace weapon
+namespace costume {
+inline constexpr unsigned stride = 0x130, path = 0;
+inline constexpr unsigned layerStride = 0x10, index = 0, layerId = 4, priority = 8, body = 0xc;
+} // namespace costume
 } // namespace isaac::engine::j835::layout

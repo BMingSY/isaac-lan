@@ -180,6 +180,7 @@ inline constexpr unsigned data = 0x4;
 inline constexpr unsigned count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr std::array<unsigned, 4> shadow{0x15c, 0x160, 0x164, 0x350};
 inline constexpr unsigned damageQueue = 0x8;
 inline constexpr unsigned damageRecordSize = 0x38;
 inline constexpr unsigned removeMethod = 0x28;
@@ -308,6 +309,9 @@ inline constexpr unsigned optionsIndex = 0x528, price = 0x534, autoUpdatePrice =
 inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, state = 0x584;
 } // namespace pickup
 namespace player {
+inline constexpr std::array<unsigned, 2> poseFlags{0x1398, 0x139a};
+inline constexpr unsigned blinkTime = 0x1338, damageCooldown = 0x13bc;
+inline constexpr unsigned costumesBegin = 0x1220, costumesEnd = 0x1224, costumeLayers = 0x122c;
 inline constexpr unsigned controlsEnabled = 0x410;
 inline constexpr unsigned hourglassUses = 0x1da8, hourglassFloorUses = 0x1dac;
 inline constexpr unsigned weapons = 0x13dc;
@@ -329,6 +333,7 @@ inline constexpr unsigned generatedInventoryHead = 0x1fcc;
 inline constexpr unsigned generatedInventorySize = 0x1fd0;
 } // namespace player
 namespace weapon {
+inline constexpr std::array<unsigned, 3> charge{0xc, 0x10, 0x14};
 inline constexpr unsigned kind = 0x30;
 inline constexpr unsigned modifiers = 0x34;
 inline constexpr unsigned maxChargeMethod = 6;
@@ -430,4 +435,8 @@ inline constexpr unsigned pixels = 0x20;
 namespace luaEngine {
 inline constexpr unsigned state = 0x18;
 } // namespace luaEngine
+namespace costume {
+inline constexpr unsigned stride = 0x130, path = 0;
+inline constexpr unsigned layerStride = 0x10, index = 0, layerId = 4, priority = 8, body = 0xc;
+} // namespace costume
 } // namespace isaac::engine::j460::layout

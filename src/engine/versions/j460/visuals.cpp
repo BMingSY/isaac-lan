@@ -1,5 +1,5 @@
 #include "engine/lua_api.h"
-#include "core/occurrence_mapping.h"
+#include "engine/versions/common/entity_pose.h"
 #include "engine/versions/common/sprite_state.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/visuals.h"
@@ -25,13 +25,6 @@ template <class T> T& at(Address p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }
 isaac::lua::API lua{};
-Address sprite(lua_State* L) {
-    auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
-    const auto size = lua.rawLength(L, 1);
-    if (!wrapper || (size != 8 && size != 0x11c))
-        throw std::runtime_error("Invalid native Sprite wrapper");
-    return wrapper[1];
-}
 int roomRails(lua_State* L) {
     try {
         const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
@@ -233,62 +226,14 @@ int doorSlot(lua_State* L) {
     lua.pushBoolean(L, true);
     return 1;
 }
-std::string_view string(Address p) {
-    return engine::native_sprite::path(p);
-}
 unsigned number(lan::Reader& r) {
     const auto bits = r.u32();
     if (!std::isfinite(std::bit_cast<float>(bits)))
         throw std::runtime_error("Invalid visual number");
     return bits;
 }
-unsigned boolean(lan::Reader& r) {
-    const auto v = r.u8();
-    if (v > 1)
-        throw std::runtime_error("Invalid visual flag");
-    return v;
-}
 Address layer(Address s, unsigned id) {
     return engine::native_sprite::findLayer(s, id);
-}
-std::vector<Address> costumes(Address player) {
-    const auto first = at<Address>(player, 0x1220), last = at<Address>(player, 0x1224);
-    if (last < first || (last - first) % 0x130 || last - first > 4096 * 0x130)
-        throw std::runtime_error("Invalid costume array");
-    std::vector<Address> result;
-    for (auto p = first; p < last; p += 0x130)
-        result.push_back(p);
-    return result;
-}
-int entityShadow(lua_State* L) {
-    try {
-        // EntityList::RenderShadows and Entity::RenderShadowLayer read these
-        // three shadow floats and native altitude in J460. Update initializes them;
-        // replicas must receive them instead of drawing constructor shadows.
-        const auto entity = sprite(L) - 0x48;
-        if (lua.getTop(L) == 1) {
-            lan::Writer w(lan::Message::world, 1 + 4 * sizeof(std::uint32_t));
-            for (auto offset : {0x15cu, 0x160u, 0x164u, 0x350u})
-                w.u32(at<unsigned>(entity, offset));
-            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                            w.bytes.size() - 1);
-            return 1;
-        }
-        if (!runtime::replica())
-            throw std::runtime_error("Only replicas apply entity shadows");
-        std::size_t size = 0;
-        const auto bytes = lua.checkString(L, 2, &size);
-        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
-        for (auto offset : {0x15cu, 0x160u, 0x164u, 0x350u})
-            at<unsigned>(entity, offset) = number(r);
-        r.finish();
-        lua.pushBoolean(L, true);
-        return 1;
-    } catch (const std::exception& e) {
-        runtime::abort(e.what());
-        lua.pushBoolean(L, false);
-        return 1;
-    }
 }
 int familiarBody(lua_State* L) {
     try {
@@ -447,116 +392,6 @@ int renderTether(lua_State* L) {
     }
     return 1;
 }
-int actorPose(lua_State* L) {
-    try {
-        const auto player = sprite(L) - 0x48;
-        if (at<unsigned>(player, 0x28) != 1)
-            throw std::runtime_error("Actor visual state requires a player");
-        const auto current = costumes(player);
-        if (lua.getTop(L) == 1) {
-            lan::Writer w(lan::Message::world);
-            w.u8(at<bool>(player, 0x1398));
-            w.u8(at<bool>(player, 0x139a));
-            w.u32(at<unsigned>(player, 0x1338));
-            // J460 Render reads damageCooldown modulo six to hide the body.
-            // Replica Update is suppressed, so an arrival cooldown otherwise
-            // stays on the same invisible frame until the next floor reload.
-            w.u32(at<unsigned>(player, 0x13bc));
-            // Night Light smooths its beam angle in Player::Update.
-            w.u32(at<unsigned>(player, j460::layout::player::nightLightAngle));
-            for (unsigned slot = 0; slot < 5; ++slot) {
-                const auto weapon = at<Address>(player, j460::layout::player::weapons + slot * 4);
-                w.u8(weapon != 0);
-                if (weapon) {
-                    w.u32(at<unsigned>(weapon, 0x30));
-                    for (auto offset : {0xcu, 0x10u, 0x14u})
-                        w.u32(at<unsigned>(weapon, offset));
-                    using MaxCharge = float(__attribute__((thiscall))*)(void*);
-                    const auto query =
-                        at<MaxCharge>(at<Address>(weapon, 0),
-                                      j460::layout::weapon::maxChargeMethod * sizeof(Address));
-                    const auto maximum = query(reinterpret_cast<void*>(weapon));
-                    // Native item combinations can return a negative limit.
-                    // It is read-only metadata: preview requires a positive
-                    // limit, while gameplay and cooldowns remain authoritative.
-                    if (!std::isfinite(maximum))
-                        throw std::runtime_error("Invalid native weapon charge limit");
-                    w.u32(std::bit_cast<unsigned>(maximum));
-                    w.u32(at<unsigned>(weapon, j460::layout::weapon::modifiers));
-                }
-            }
-            w.u16(current.size());
-            for (auto p : current)
-                w.string(string(p));
-            for (unsigned i = 0; i < 15; ++i) {
-                const auto p = player + 0x122c + i * 0x10;
-                for (auto offset : {0u, 4u, 8u})
-                    w.u32(at<unsigned>(p, offset));
-                w.u8(at<bool>(p, 0xc));
-            }
-            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                            w.bytes.size() - 1);
-            return 1;
-        }
-        if (!runtime::replica())
-            throw std::runtime_error("Only replicas apply actor pose");
-        std::size_t size = 0;
-        const auto bytes = lua.checkString(L, 2, &size);
-        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
-        at<bool>(player, 0x1398) = boolean(r);
-        at<bool>(player, 0x139a) = boolean(r);
-        at<unsigned>(player, 0x1338) = r.u32();
-        at<unsigned>(player, 0x13bc) = r.u32();
-        at<unsigned>(player, j460::layout::player::nightLightAngle) = number(r);
-        for (unsigned slot = 0; slot < 5; ++slot)
-            if (boolean(r)) {
-                const auto type = r.u32();
-                std::array<unsigned, 3> values{};
-                for (auto& value : values)
-                    value = number(r);
-                number(r); // Native charge limit is read-only prediction metadata.
-                const auto modifiers = r.u32();
-                const auto weapon = at<Address>(player, 0x13dc + slot * 4);
-                if (weapon && at<unsigned>(weapon, 0x30) == type) {
-                    at<unsigned>(weapon, 0xc) = values[0];
-                    at<unsigned>(weapon, 0x10) = values[1];
-                    at<unsigned>(weapon, 0x14) = values[2];
-                    at<unsigned>(weapon, j460::layout::weapon::modifiers) = modifiers;
-                }
-            }
-        const auto n = r.u16();
-        if (n > 4096)
-            throw std::runtime_error("Too many costumes");
-        std::vector<std::string_view> localPaths, remotePaths;
-        localPaths.reserve(current.size());
-        remotePaths.reserve(n);
-        for (const auto costume : current)
-            localPaths.push_back(string(costume));
-        for (unsigned i = 0; i < n; ++i)
-            remotePaths.push_back(r.stringView());
-        const auto mapping = core::mapOccurrences(localPaths, remotePaths);
-        for (unsigned i = 0; i < 15; ++i) {
-            const int remote = static_cast<int>(r.u32()), layerID = static_cast<int>(r.u32());
-            const auto priority = r.u32(), body = boolean(r);
-            const auto p = player + 0x122c + i * 0x10;
-            const int local =
-                remote >= 0 && static_cast<unsigned>(remote) < n ? mapping[remote] : -1;
-            // A cosmetic Mod absent on this peer must not leave a dangling
-            // costume index. The native base layer remains a valid fallback.
-            at<int>(p, 0) = local;
-            at<int>(p, 4) = local >= 0 ? layerID : static_cast<int>(i);
-            at<unsigned>(p, 8) = priority;
-            at<bool>(p, 0xc) = body;
-        }
-        r.finish();
-        lua.pushBoolean(L, true);
-        return 1;
-    } catch (const std::exception& e) {
-        runtime::abort(e.what());
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-}
 
 } // namespace
 bool bind(lua_State* L, HMODULE module) {
@@ -581,16 +416,15 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "actor_held_entity");
     lua.pushClosure(L, roomRails, 0);
     lua.setField(L, -2, "room_rails");
-    lua.pushClosure(L, actorPose, 0);
-    lua.setField(L, -2, "actor_pose");
+    if (!engine::native_entity_pose::bind(L, module))
+        return false;
     lua.pushClosure(L, familiarTether, 0);
     lua.setField(L, -2, "familiar_tether");
     lua.pushClosure(L, familiarBody, 0);
     lua.setField(L, -2, "familiar_body");
     lua.pushClosure(L, renderTether, 0);
     lua.setField(L, -2, "familiar_tether_render");
-    lua.pushClosure(L, entityShadow, 0);
-    lua.setField(L, -2, "entity_shadow");
+
     lua.pushClosure(L, prepareEntity, 0);
     lua.setField(L, -2, "entity_prepare");
     lua.pushClosure(L, localAmbientEffect, 0);

@@ -30,7 +30,7 @@
 
 ## 实体引用与房间数据
 
-角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。
+[实体姿态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_pose.cpp)通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_pose.cpp)提供 `actor_pose` 和 `entity_shadow`，仅接受实体的 8 字节借用 Sprite，写入限客机。角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。
 
 [精灵状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sprite_state.cpp)通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/sprite_state.cpp)实现 `sprite_state(sprite)`，复制完整精灵层状态为字节串；客机的 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，没有贴图变化时返回 `true`。返回值不持有原生引用；Lua 只在数组非空时替换贴图并调用 `LoadGraphics`。捕获缓冲预留容量不改变字段或编码字节。
 
@@ -41,6 +41,10 @@
 `sprite_animation_length(sprite)` 只读取当前主动画数据 `+0x30` 的总帧数，限制 `0..65535`，无动画返回 0。接受实体借用或 Lua 自有 Sprite，不分配资源、不推进实体；本地步行动画按该长度和原生 30 Hz 节拍保留小数帧。
 
 `actor_pose` 的五个武器槽来自 `Player+0x13dc`。每个现有槽读取原生虚表第 6 项 `GetMaxCharge`（thiscall，浮点返回）和 `Weapon+0x34` 修正标志；蓄力上限必须有限，允许原生道具组合返回负值，只有正上限参与本地蓄力预测。写入只针对客机已存在且类型匹配的武器，不创建武器、不执行攻击；上限作为只读显示元数据，修正标志与蓄力一并恢复。武器记录格式见[状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#完整视图与实体身份)。
+
+角色姿态完整解码并完成服装映射后才提交字段，拒绝截断、尾部字节、非法标记、非有限武器／角度值及越界图层 ID。服装向量位于 `Player+0x1220/+0x1224`，步长 `0x130`，最多 4096 项；十五项图层映射从 `+0x122c` 开始，步长 `0x10`。绘制标志 `+0x1398/+0x139a`、闪烁计时 `+0x1338`、受击计时 `+0x13bc` 和小夜灯角度 `+0x1ae4` 只恢复标量。武器不创建、不释放，缺失或类型不同的槽保留本机对象。
+
+`entity_shadow` 的四个 float32 字段为 `Entity+0x15c/+0x160/+0x164/+0x350`，分别为阴影大小、XY 偏移和实体高度；固定 16 字节，完整验证后应用。该能力适用于其他实体类型，不只玩家。角色和阴影组件不安装 Hook、不推进 AI、不跨调用缓存对象；[原版布局](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#角色姿态与实体阴影)由对应绑定提供。
 
 `familiar_body(sprite[, layers])` 限定跟班的原生身体组件，校验 `Familiar+0xee0` 虚表 RVA `0x764914`。读取返回四个大端有符号图层 ID 和五个借用 Sprite；Sprite 位于组件 `+0x4`，间距 `0x114`，图层位于 `+0x568`。写入仅允许客机，完整校验载荷、图层为 `-1` 或对应 Sprite 的有效图层后提交。Lua 道具适配复用普通 Sprite 编解码，先恢复使用道具时缓存的外观，再恢复绘制图层；不借用当前玩家外观，不执行跟班 AI，不分配或转移原生组件所有权。
 

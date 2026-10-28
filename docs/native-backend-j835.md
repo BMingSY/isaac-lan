@@ -18,6 +18,19 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 `AnimationState::Reset` RVA `0x3740` 使用 ECX 接收状态、栈上一个动画参数并清栈 4 字节；空动画通过此入口解除当前动画及帧数组。字符串、图层定义、纹理和帧数组均由游戏管理，扩展只恢复受限标量；贴图变化返回普通路径供 Lua 调用现有游戏加载接口。
 
+## 角色姿态与实体阴影
+
+[实体姿态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entity_pose.cpp)复用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_pose.cpp)。`actor_pose` 与 `entity_shadow` 的编码、校验和所有权遵循[实体姿态契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)，不跨版本交换会话。只接受实体借用 Sprite，写入限客机；捕获和恢复返回后不保留玩家、武器或服装指针。
+
+| 对象 | J835 字段 |
+| --- | --- |
+| 实体 | Sprite `+0x3c`；阴影大小、XY 偏移与高度为 `+0x150/+0x154/+0x158/+0x2a8`，固定 16 字节 |
+| 玩家绘制 | 两个姿态标志 `+0x12e8/+0x12ea`，闪烁计时 `+0x1288`，受击计时 `+0x1308`，小夜灯角度 `+0x1a04` |
+| 武器 | 五槽从 `Player+0x1328` 开始；类型 `Weapon+0x2c`，三项蓄力／冷却 `+0xc/+0x10/+0x14`，修正标志 `+0x30` |
+| 服装 | 向量首尾 `Player+0x1170/+0x1174`，步长 `0x130`；十五项映射 `+0x117c`、步长 `0x10`，项内索引／图层／优先级／身体标记为 `+0/+4/+8/+0xc` |
+
+武器虚表第 6 项查询蓄力上限，以 ECX 接收武器，无栈参数，x87 返回 float。允许原生组合返回有限负数，该值只供显示预测；恢复不改上限，也不创建或替换武器。服装同名项按出现顺序映射，未知项退回基础层；原生字符串和 Sprite 保持原所有权。全部载荷与映射在写入前完成校验，新的玩家对象独立解析其服装列表。
+
 ## 入场演出与本机视图
 
 [演出绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/presentation.cpp) 为[共享演出组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/presentation.cpp) 提供原生入口、字段与 HUD 坐标。入场事件按房间、维度和楼层筛选，固定每条 32 字节、网络字节序，保留至多 32 条和 90 帧；客机按序号去重。背景房间只通知观看者，主机所在房间才占用本机转场画面；终局集合使用既有 Boss 兼容策略和房间调度。
