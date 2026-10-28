@@ -7,6 +7,7 @@
 namespace isaac::compat::ids {
 namespace entity {
 inline constexpr unsigned player = 1;
+inline constexpr unsigned minecart = 965;
 inline constexpr unsigned pickup = 5;
 inline constexpr unsigned tear = 2;
 inline constexpr unsigned familiar = 3;

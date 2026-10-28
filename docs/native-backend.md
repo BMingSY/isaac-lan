@@ -54,9 +54,9 @@
 
 | 能力与实现 | 原生边界 | 校验与所有权 |
 | --- | --- | --- |
-| [持有炸弹](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/held_bombs.h) `boss_held_bombs` | Lua API 不暴露 NPC `+0xbf0` 的持有容器；Hornfel 为两槽，Horny Boys 为三槽 | 读取本机实体索引，由兼容组件转换为同步 ID；客机写入校验 Boss、炸弹类型和槽数，使用游戏 resize 与 `EntityPtr.Assign`，容器仍由游戏析构 |
-| [矿车引用](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_links.h) `entity_minecart` | 乘坐者 Entity `+0x3d4` 的反向引用不由矿车 `Child` 表达 | 仅接受矿车 Sprite／空值，使用原生引用注册与撤销；不调用会生成新矿车的玩法方法 |
-| [角色持有引用](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_links.h) `actor_held_entity` | Player `+0x1410` 的 `EntityPtr` 供原生抱起渲染使用，独立于 `Parent`／`Child`；赋值位置 RVA `0x3d23e6` 受签名校验 | 读取返回本机实体索引，无对象时为 `-1`；同步组件转换为稳定 ID。写入仅限客机，接受角色和目标的借用 Sprite 或 `false`，拒绝非角色持有者和自引用；使用原生 `EntityPtr.Assign` 注册、替换和清空，目标释放时由游戏撤销引用，不调用拾取／投掷玩法 |
+| [持有炸弹](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/held_bombs.h) `boss_held_bombs` | Lua API 不暴露 NPC `+0xbf0` 的持有容器；Hornfel 为两槽，Horny Boys 为三槽 | 读取本机实体索引，由兼容组件转换为同步 ID；客机写入校验 Boss、炸弹类型和槽数，使用游戏 resize 与 `EntityPtr.Assign`，容器仍由游戏析构 |
+| [矿车引用](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_links.h) `entity_minecart` | 乘坐者 Entity `+0x3d4` 的反向引用不由矿车 `Child` 表达 | 仅接受矿车 Sprite／空值，使用原生引用注册与撤销；不调用会生成新矿车的玩法方法 |
+| [角色持有引用](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_links.h) `actor_held_entity` | Player `+0x1410` 的 `EntityPtr` 供原生抱起渲染使用，独立于 `Parent`／`Child`；赋值位置 RVA `0x3d23e6` 受签名校验 | 读取返回本机实体索引，无对象时为 `-1`；同步组件转换为稳定 ID。写入仅限客机，接受角色和目标的借用 Sprite 或 `false`，拒绝非角色持有者和自引用；使用原生 `EntityPtr.Assign` 注册、替换和清空，目标释放时由游戏撤销引用，不调用拾取／投掷玩法 |
 | [轨道布局](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rails.h) `room_rails` | `Room:GetGridEntity` 不包含 RailManager；房间 `+0x746c` 为 448 字节数组 | 客机整体验证长度、值、尺寸与所有者后写入；空轨道也恢复，Sprite 仍由房间持有 |
 | 客机实体回收 | `Remove()` 不保证立即释放池槽位；J460 跟班池为 64 槽 | 在房间作用域内通过原生更新完成回收，更新前须启用客机 AI 拦截；不扩容原生池，不手工释放对象 |
 | 玩家清房回调 | `Player::TriggerRoomClear`，RVA `0x3a8fd0`，`thiscall void(Player*)`；Lua 没有阻止原生清房效果的前置回调 | 联机客机房间启用期间跳过玩法触发，角色状态由权威快照恢复；主机、单人及原生加载保留原调用，不分配或替换角色对象 |
@@ -68,7 +68,9 @@
 
 `door_sprite` 仅为门返回附加 Sprite 的 8 字节借用包装，沿用输入的 metatable。J460 的普通／附加 Sprite 为网格 `+0x40/+0x27c`；不复制动画、不创建或析构原生 Sprite。轨道使用房间 `+0x7468` 的所有者检查和 `+0x746c` 的 448 字节网格，完整校验长度、值域和房间尺寸后恢复。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#网格门与轨道)使用不同的附加 Sprite 和轨道偏移。
 
-实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
+[原生引用组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/references.cpp)通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/references.cpp)提供上表的矿车、抱起物和持有炸弹接口。实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
+
+引用赋值统一调用 `EntityPtr::Assign`，ECX 为引用槽、EDX 为目标实体，无栈参数；替换和清空维护原生观察者集合。重复值不重新登记，读取只返回本机实体索引，不暴露指针。持有炸弹容器为空时，即使快照为空也通过原生 resize（RVA `0x4bd80`，thiscall 接收槽数，清栈 4 字节）初始化渲染所需槽位。所有目标类型在分配或赋值前校验；扩展不接管容器分配器或实体生命周期。原生 resize 只用于空容器的扩张，不用它收缩或销毁含引用的容器。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#原生实体引用)提供自身字段与入口。
 
 角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先移除原房间各实体列表中的引用，再调用原生添加入口；对象仍由游戏持有和销毁，不复制效果、不重放道具使用。没有对应持有者的效果及房间独立效果不随角色迁移。
 

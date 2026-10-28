@@ -13,8 +13,7 @@
 #include <vector>
 
 #include "engine/versions/j460/entrypoints.h"
-#include "engine/versions/j460/entity_links.h"
-#include "engine/versions/j460/held_bombs.h"
+#include "engine/versions/common/references.h"
 #include "engine/versions/common/grid_state.h"
 namespace j460 = isaac::engine::j460;
 
@@ -30,77 +29,6 @@ Address entitySprite(lua_State* L, int index) {
     if (!sample || lua.rawLength(L, index) != 8 || sample[1] < 0x48)
         throw std::runtime_error("Invalid entity Sprite wrapper");
     return sample[1] - 0x48;
-}
-int entityMinecart(lua_State* L) {
-    try {
-        const auto entity = entitySprite(L, 1);
-        if (lua.getTop(L) == 1) {
-            lua.pushInteger(L, j460::entity_links::index(entity));
-            return 1;
-        }
-        if (!runtime::replica() || lua.getTop(L) != 2)
-            throw std::runtime_error("Only replicas restore minecart links");
-        const auto cart = lua.type(L, 2) == 1 && !lua.toBoolean(L, 2) ? 0 : entitySprite(L, 2);
-        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
-        using Assign = void(__attribute__((fastcall))*)(void*, void*);
-        j460::entity_links::restore(entity, cart,
-                                    reinterpret_cast<Assign>(image + j460::entry::entityPtrAssign));
-        lua.pushBoolean(L, true);
-    } catch (const std::exception& error) {
-        runtime::abort(error.what());
-        lua.pushBoolean(L, false);
-    }
-    return 1;
-}
-int actorHeldEntity(lua_State* L) {
-    try {
-        const auto player = entitySprite(L, 1);
-        if (lua.getTop(L) == 1) {
-            lua.pushInteger(L, j460::entity_links::heldIndex(player));
-            return 1;
-        }
-        if (!runtime::replica() || lua.getTop(L) != 2)
-            throw std::runtime_error("Only replicas restore player held entity links");
-        const auto held = lua.type(L, 2) == 1 && !lua.toBoolean(L, 2) ? 0 : entitySprite(L, 2);
-        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
-        using Assign = void(__attribute__((fastcall))*)(void*, void*);
-        j460::entity_links::restoreHeld(
-            player, held, reinterpret_cast<Assign>(image + j460::entry::entityPtrAssign));
-        lua.pushBoolean(L, true);
-    } catch (const std::exception& error) {
-        runtime::abort(error.what());
-        lua.pushBoolean(L, false);
-    }
-    return 1;
-}
-int bossHeldBombs(lua_State* L) {
-    try {
-        const auto entity = entitySprite(L, 1);
-        const auto count = j460::held_bombs::slotCount(entity);
-        if (lua.getTop(L) == 1) {
-            const auto indices = j460::held_bombs::indices(entity);
-            for (unsigned i = 0; i < count; ++i)
-                lua.pushInteger(L, indices[i]);
-            return count;
-        }
-        if (!runtime::replica() || lua.getTop(L) != static_cast<int>(count + 1))
-            throw std::runtime_error("Only replicas restore Boss held bombs");
-        std::array<Address, 3> bombs{};
-        for (unsigned i = 0; i < count; ++i)
-            if (lua.type(L, i + 2) != 1 || lua.toBoolean(L, i + 2))
-                bombs[i] = entitySprite(L, i + 2);
-        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
-        using Resize = void(__attribute__((thiscall))*)(void*, unsigned);
-        using Assign = void(__attribute__((fastcall))*)(void*, void*);
-        j460::held_bombs::restore(
-            entity, bombs, reinterpret_cast<Resize>(image + j460::entry::bossHeldBombsResize),
-            reinterpret_cast<Assign>(image + j460::entry::entityPtrAssign));
-        lua.pushBoolean(L, true);
-    } catch (const std::exception& error) {
-        runtime::abort(error.what());
-        lua.pushBoolean(L, false);
-    }
-    return 1;
 }
 int prepareEntity(lua_State* L) {
     auto sample = static_cast<Address*>(lua.toUserdata(L, 1));
@@ -309,12 +237,10 @@ bool bind(lua_State* L, HMODULE module) {
     if (!engine::native_sprite::bind(L, module,
                                      reinterpret_cast<Address>(GetModuleHandleW(nullptr))))
         return false;
-    lua.pushClosure(L, bossHeldBombs, 0);
-    lua.setField(L, -2, "boss_held_bombs");
-    lua.pushClosure(L, entityMinecart, 0);
-    lua.setField(L, -2, "entity_minecart");
-    lua.pushClosure(L, actorHeldEntity, 0);
-    lua.setField(L, -2, "actor_held_entity");
+
+    if (!engine::native_references::bind(L, module,
+                                         reinterpret_cast<Address>(GetModuleHandleW(nullptr))))
+        return false;
     if (!engine::native_grid::bind(L, module, reinterpret_cast<Address>(GetModuleHandleW(nullptr))))
         return false;
     if (!engine::native_entity_pose::bind(L, module))

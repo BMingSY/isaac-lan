@@ -182,6 +182,7 @@ inline constexpr unsigned data = 0x4;
 inline constexpr unsigned count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned minecart = 0x3d4;
 inline constexpr std::array<unsigned, 4> shadow{0x15c, 0x160, 0x164, 0x350};
 inline constexpr unsigned damageQueue = 0x8;
 inline constexpr unsigned damageRecordSize = 0x38;
@@ -311,6 +312,7 @@ inline constexpr unsigned optionsIndex = 0x528, price = 0x534, autoUpdatePrice =
 inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, state = 0x584;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned heldEntity = 0x1410;
 inline constexpr std::array<unsigned, 2> poseFlags{0x1398, 0x139a};
 inline constexpr unsigned blinkTime = 0x1338, damageCooldown = 0x13bc;
 inline constexpr unsigned costumesBegin = 0x1220, costumesEnd = 0x1224, costumeLayers = 0x122c;
@@ -444,4 +446,8 @@ inline constexpr unsigned layerStride = 0x10, index = 0, layerId = 4, priority =
 namespace grid {
 inline constexpr unsigned sprite = 0x40, extraSprite = 0x27c, type = 4, variant = 8, index = 0x24;
 } // namespace grid
+namespace heldBombs {
+inline constexpr unsigned container = 0xbf0, map = 4, capacity = 8, first = 0xc, count = 0x10,
+                          blockElements = 4;
+} // namespace heldBombs
 } // namespace isaac::engine::j460::layout

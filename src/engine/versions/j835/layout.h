@@ -131,6 +131,7 @@ namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned minecart = 0x32c;
 inline constexpr std::array<unsigned, 4> shadow{0x150, 0x154, 0x158, 0x2a8};
 inline constexpr unsigned damageQueue = 8, damageRecordSize = 0x38, index = 0x20;
 inline constexpr unsigned interpolated = 0x16d;
@@ -220,6 +221,7 @@ inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
 namespace player {
+inline constexpr unsigned heldEntity = 0x1358;
 inline constexpr std::array<unsigned, 2> poseFlags{0x12e8, 0x12ea};
 inline constexpr unsigned blinkTime = 0x1288, damageCooldown = 0x1308;
 inline constexpr unsigned costumesBegin = 0x1170, costumesEnd = 0x1174, costumeLayers = 0x117c;
@@ -269,4 +271,8 @@ inline constexpr unsigned layerStride = 0x10, index = 0, layerId = 4, priority =
 namespace grid {
 inline constexpr unsigned sprite = 0x40, extraSprite = 0x164, type = 4, variant = 8, index = 0x24;
 } // namespace grid
+namespace heldBombs {
+inline constexpr unsigned container = 0xb40, map = 4, capacity = 8, first = 0xc, count = 0x10,
+                          blockElements = 4;
+} // namespace heldBombs
 } // namespace isaac::engine::j835::layout

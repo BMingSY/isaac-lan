@@ -44,6 +44,14 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 门包装仅引用现有动画，不能按忏悔＋的附加 Sprite 偏移访问原版对象。恢复已有门时验证其类型、索引和房间归属；清空槽表不销毁网格对象。原生创建失败恢复原目标索引。轨道数组全部校验后一次提交，空轨道同样恢复，不触及随后由游戏持有的 Sprite。房间变化后从当前 Game 重新解析对象，不保留跨房指针。
 
+## 原生实体引用
+
+[引用绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/references.cpp)使用[共享引用组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/references.cpp)，对 Lua 提供 `entity_minecart`、`actor_held_entity` 与 `boss_held_bombs`。接口只接受实体的借用 Sprite／显式 false，捕获返回本机索引，由同步组件换算为同步 ID；不保留对象指针，写入限客机。
+
+矿车引用为 `Entity+0x32c`，目标限定矿车且不得自引用；抱起物引用为 `Player+0x1358`，持有者必须是玩家。两者通过 `EntityPtr::Assign` RVA `0x28cf00` 赋值，ECX 为槽地址、EDX 为目标，无栈参数。相同值不重复登记；目标销毁时由游戏的观察者通知清空槽，不调用产生矿车、拾取或投掷的玩法方法。
+
+Hornfel／Horny Boys 的持有炸弹容器位于 `NPC+0xb40`，分别限定两槽和三槽。MSVC deque 的代理、块表、块表容量、首元素与数量为 `+0/+4/+8/+0xc/+0x10`，每块四个 EntityPtr；块表容量要求 8–65536 的二次幂，逐项检查块和目标类型。空容器调用 RVA `0x3da10`，ECX 为 deque、栈上槽数、清栈 4 字节；该方法仅用于扩张到所需槽数。容器和代理仍由游戏释放，链接使用上述 Assign；完整检查目标后才开始初始化或赋值，不用原生 resize 的收缩路径清理引用。
+
 ## 入场演出与本机视图
 
 [演出绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/presentation.cpp) 为[共享演出组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/presentation.cpp) 提供原生入口、字段与 HUD 坐标。入场事件按房间、维度和楼层筛选，固定每条 32 字节、网络字节序，保留至多 32 条和 90 帧；客机按序号去重。背景房间只通知观看者，主机所在房间才占用本机转场画面；终局集合使用既有 Boss 兼容策略和房间调度。

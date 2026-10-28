@@ -16,6 +16,8 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/room_routing.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/room_routing.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/visuals.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/references.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/references.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/grid_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/grid_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/entity_pose.cpp"

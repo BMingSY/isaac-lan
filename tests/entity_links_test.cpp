@@ -1,11 +1,12 @@
-#include "engine/versions/j460/entity_links.h"
+#include "engine/versions/common/references_bindings.h"
 #include "test_support.h"
 #include <array>
 #include <iostream>
 #include <map>
 #include <set>
 namespace {
-using namespace isaac::engine::j460::entity_links;
+using namespace isaac::engine::native_entity_links;
+const auto& layout = isaac::engine::native_references::bindings.entities;
 std::map<Address, std::set<Address>> observers;
 unsigned writes = 0;
 void __attribute__((fastcall)) assign(void* slot, void* value) {
@@ -29,57 +30,59 @@ int main() {
         field<unsigned>(first, 0x28) = field<unsigned>(second, 0x28) = 965;
         field<int>(first, 0x20) = 17;
         field<int>(second, 0x20) = 81;
-        require(index(owner) == -1, "Fresh owner already has a cart");
-        restore(owner, first, assign);
-        restore(owner, first, assign);
-        require(index(owner) == 17 && writes == 1, "Repeat changed the reference");
-        restore(owner, second, assign);
-        require(index(owner) == 81 && observers[first].empty(), "Old cart retained an observer");
+        require(index(owner, layout) == -1, "Fresh owner already has a cart");
+        restore(owner, layout, first, assign);
+        restore(owner, layout, first, assign);
+        require(index(owner, layout) == 17 && writes == 1, "Repeat changed the reference");
+        restore(owner, layout, second, assign);
+        require(index(owner, layout) == 81 && observers[first].empty(),
+                "Old cart retained an observer");
         field<unsigned>(first, 0x28) = 4;
         bool rejected = false;
         try {
-            restore(owner, first, assign);
+            restore(owner, layout, first, assign);
         } catch (const std::runtime_error&) {
             rejected = true;
         }
-        require(rejected && index(owner) == 81, "Invalid cart changed the owner");
+        require(rejected && index(owner, layout) == 81, "Invalid cart changed the owner");
         // The game's EntityPtr destructor clears every registered slot.
         for (auto slot : observers[second])
             field<Address>(slot, 0) = 0;
         observers[second].clear();
-        require(index(owner) == -1, "Removed cart left a dangling reference");
-        restore(owner, second, assign);
-        restore(owner, 0, assign);
+        require(index(owner, layout) == -1, "Removed cart left a dangling reference");
+        restore(owner, layout, second, assign);
+        restore(owner, layout, 0, assign);
         require(observers[second].empty(), "Dismount retained an observer");
         std::array<unsigned, 0x1420 / 4> actor{};
         const auto player = reinterpret_cast<Address>(actor.data());
         field<unsigned>(player, 0x28) = playerType;
         field<unsigned>(first, 0x28) = playerType;
         const auto previousWrites = writes;
-        restoreHeld(player, first, assign);
-        restoreHeld(player, first, assign);
-        require(heldIndex(player) == 17 && writes == previousWrites + 1,
+        restoreHeld(player, layout, first, assign);
+        restoreHeld(player, layout, first, assign);
+        require(heldIndex(player, layout) == 17 && writes == previousWrites + 1,
                 "Repeated carry changed the registered reference");
-        restoreHeld(player, second, assign);
-        require(observers[first].empty() && heldIndex(player) == 81,
+        restoreHeld(player, layout, second, assign);
+        require(observers[first].empty() && heldIndex(player, layout) == 81,
                 "Replacement retained the previous held entity");
         rejected = false;
         try {
-            restoreHeld(player, player, assign);
+            restoreHeld(player, layout, player, assign);
         } catch (const std::runtime_error&) {
             rejected = true;
         }
-        require(rejected && heldIndex(player) == 81, "Self carry changed the link");
+        require(rejected && heldIndex(player, layout) == 81, "Self carry changed the link");
         for (auto slot : observers[second])
             field<Address>(slot, 0) = 0;
         observers[second].clear();
-        require(heldIndex(player) == -1, "Removed held entity retained a dangling reference");
-        restoreHeld(player, first, assign);
-        restoreHeld(player, 0, assign);
+        require(heldIndex(player, layout) == -1,
+                "Removed held entity retained a dangling reference");
+        restoreHeld(player, layout, first, assign);
+        restoreHeld(player, layout, 0, assign);
         require(observers[first].empty(), "Throw retained the held entity observer");
         rejected = false;
         try {
-            restoreHeld(owner, first, assign);
+            restoreHeld(owner, layout, first, assign);
         } catch (const std::runtime_error&) {
             rejected = true;
         }

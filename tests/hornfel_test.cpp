@@ -1,4 +1,4 @@
-#include "engine/versions/j460/held_bombs.h"
+#include "engine/versions/common/references_bindings.h"
 #include "test_support.h"
 #include <iostream>
 #include <map>
@@ -6,12 +6,14 @@
 #include <vector>
 
 namespace {
-using namespace isaac::engine::j460::held_bombs;
+using namespace isaac::engine::native_held_bombs;
+const auto& layout = isaac::engine::native_references::bindings.bombs;
+const auto bombsOffset = layout.bombs;
 std::array<Address, 8> blocks{};
 std::array<std::array<Address, 4>, 8> elements{};
 std::map<Address, std::set<Address>> observers;
 unsigned resizes = 0, assignments = 0;
-// Match the two actual J460 calling conventions, including stack cleanup.
+// Match the two native calling conventions, including stack cleanup.
 void __attribute__((thiscall)) resize(void* pointer, unsigned count) {
     require(count == 2 || count == 3, "Resize escaped the Boss slot bounds");
     ++resizes;
@@ -59,49 +61,49 @@ int main() {
                                            kind == 920 ? reinterpret_cast<Address>(bombs[2].data())
                                                        : 0};
             field<unsigned>(npc, 0x28) = kind;
-            for (unsigned i = 0; i < slotCount(npc); ++i) {
+            for (unsigned i = 0; i < slotCount(npc, layout); ++i) {
                 field<unsigned>(targets[i], 0x28) = 4;
                 field<int>(targets[i], 0x20) = 71 + i;
             }
-            require(indices(npc) == std::array<int, 3>{-1, -1, -1},
+            require(indices(npc, layout) == std::array<int, 3>{-1, -1, -1},
                     "Empty constructor was dereferenced");
-            restore(npc, {}, resize, assign);
-            require(resizes == 1 && assignments == 0 && slots(npc)[0],
+            restore(npc, layout, {}, resize, assign);
+            require(resizes == 1 && assignments == 0 && slots(npc, layout)[0],
                     "An empty snapshot must still initialize both render slots");
-            restore(npc, targets, resize, assign);
-            require(indices(npc) == std::array<int, 3>{71, 72, kind == 920 ? 73 : -1} &&
-                        assignments == slotCount(npc),
+            restore(npc, layout, targets, resize, assign);
+            require(indices(npc, layout) == std::array<int, 3>{71, 72, kind == 920 ? 73 : -1} &&
+                        assignments == slotCount(npc, layout),
                     "Bomb identity or wrapped slot addressing changed");
-            restore(npc, targets, resize, assign);
-            require(resizes == 1 && assignments == slotCount(npc),
+            restore(npc, layout, targets, resize, assign);
+            require(resizes == 1 && assignments == slotCount(npc, layout),
                     "Repeated snapshot reallocated or relinked");
-            restore(npc, {targets[1], targets[0], targets[2]}, resize, assign);
+            restore(npc, layout, {targets[1], targets[0], targets[2]}, resize, assign);
             require(observers[targets[0]].size() == 1 && observers[targets[1]].size() == 1,
                     "Replacement leaked EntityPtr observers");
             // Native deletion notifies all registered slots before freeing a bomb.
             for (auto slot : observers[targets[1]])
                 field<Address>(slot, 0) = 0;
             observers[targets[1]].clear();
-            require(indices(npc) == std::array<int, 3>{-1, 71, kind == 920 ? 73 : -1},
+            require(indices(npc, layout) == std::array<int, 3>{-1, 71, kind == 920 ? 73 : -1},
                     "Deleted bomb retained a dangling link");
-            restore(npc, {}, resize, assign);
+            restore(npc, layout, {}, resize, assign);
             require(observers[targets[0]].empty() && observers[targets[2]].empty(),
                     "Room cleanup retained bomb references");
             field<unsigned>(npc, 0x28) = 907;
-            rejects([&] { restore(npc, targets, resize, assign); });
+            rejects([&] { restore(npc, layout, targets, resize, assign); });
             field<unsigned>(npc, 0x28) = kind;
             field<unsigned>(targets[1], 0x28) = 1;
-            rejects([&] { restore(npc, targets, resize, assign); });
-            require(indices(npc) == std::array<int, 3>{-1, -1, -1},
+            rejects([&] { restore(npc, layout, targets, resize, assign); });
+            require(indices(npc, layout) == std::array<int, 3>{-1, -1, -1},
                     "Invalid second bomb partially applied");
             field<unsigned>(npc + bombsOffset, 16) = 1;
-            rejects([&] { indices(npc); });
-            field<unsigned>(npc + bombsOffset, 16) = slotCount(npc);
+            rejects([&] { indices(npc, layout); });
+            field<unsigned>(npc + bombsOffset, 16) = slotCount(npc, layout);
             field<unsigned>(npc + bombsOffset, 8) = 7;
-            rejects([&] { indices(npc); });
+            rejects([&] { indices(npc, layout); });
             field<unsigned>(npc + bombsOffset, 8) = 8;
             blocks[7] = 0;
-            rejects([&] { indices(npc); });
+            rejects([&] { indices(npc, layout); });
         }
         std::cout << "PASS Hornfel constructor, native resize/assign ABI, wrapped blocks, repeated "
                      "snapshots, deletion and invalid contexts\n";
