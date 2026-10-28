@@ -52,6 +52,7 @@ namespace roomChangeFrame {
 inline constexpr std::ptrdiff_t mazeRedirected = 0xf;
 } // namespace roomChangeFrame
 namespace game {
+inline constexpr unsigned generatedItems = 0x283c20;
 inline constexpr unsigned room = 0x18190;
 inline constexpr unsigned roomIndex = 0x18194, dimension = 0x1819c, enterDoor = 0x181ac;
 inline constexpr unsigned curses = 0xc, seedCurses = 0x1c3170;
@@ -73,10 +74,18 @@ namespace itemConfig {
 inline constexpr unsigned type = 0, id = 4, name = 8, chargeType = 0xac;
 inline constexpr int active = 3, trinket = 2, specialCharge = 2;
 } // namespace itemConfig
+namespace generatedItem {
+inline constexpr unsigned config = 0, seed = 8, configId = 4;
+} // namespace generatedItem
+namespace inventoryNode {
+inline constexpr unsigned left = 0, parent = 4, right = 8;
+inline constexpr unsigned nil = 0xd, id = 0x10, count = 0x14;
+} // namespace inventoryNode
 namespace pickup {
 inline constexpr unsigned charge = 0x474, varData = 0x4e8;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned generatedInventoryHead = 0x1ec4, generatedInventorySize = 0x1ec8;
 inline constexpr unsigned primaryActive = 0x14c4, activeStride = 0x1c, megaBlastLaser = 0x13a0;
 inline constexpr unsigned controller = 0x154c;
 } // namespace player

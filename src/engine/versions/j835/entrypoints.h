@@ -75,6 +75,10 @@ inline constexpr std::uint32_t audioPlay = 0x488de0;
 inline constexpr std::uint32_t musicPlay = 0x3a2070;
 inline constexpr std::uint32_t musicCrossfade = 0x3a2170;
 inline constexpr std::uint32_t roomUpdateMusic = 0x3a9f20;
+inline constexpr std::uint32_t generatedItemCreate = 0x532980;
+inline constexpr std::uint32_t generatedItemRestoreCall = 0x535cbb;
+inline constexpr std::uint32_t generatedInventoryQuery = 0x33afcf;
+inline constexpr std::uint32_t generatedInventoryCountRead = 0x535e2e;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;

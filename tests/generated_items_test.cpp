@@ -1,11 +1,25 @@
 // Exercise the production x86 registry adapter without launching the game.
 #include "test_support.h"
-#include "engine/versions/j460/generated_items.cpp"
+#include "engine/versions/common/generated_items.cpp"
+#ifdef ISAAC_LAN_TEST_J835
+#include "engine/versions/j835/entrypoints.h"
+#else
+#include "engine/versions/j460/entrypoints.h"
+#endif
 #include <array>
 #include <cstdio>
 
 namespace {
 namespace adapter = isaac::generated_items;
+#ifdef ISAAC_LAN_TEST_J835
+namespace backend = isaac::engine::j835;
+constexpr unsigned registryOffset = 0x283c20, inventoryHead = 0x1ec4, inventorySize = 0x1ec8;
+constexpr unsigned playersOffset = 0x1ba50, spriteOffset = 0x3c;
+#else
+namespace backend = isaac::engine::j460;
+constexpr unsigned registryOffset = 0x67758, inventoryHead = 0x1fcc, inventorySize = 0x1fd0;
+constexpr unsigned playersOffset = 0x1baa8, spriteOffset = 0x48;
+#endif
 using Address = std::uintptr_t;
 static_assert(sizeof(Address) == 4);
 bool replica = false, result = false;
@@ -14,7 +28,14 @@ unsigned arguments = 0, generated = 0;
 std::array<std::array<unsigned, 2>, 1024> configs{};
 std::array<std::array<unsigned, 3>, 1024> entries{};
 std::array<Address, 1024> pointers{};
-std::array<Address, 3> registry{};
+constexpr unsigned imageSize = 0x890000;
+unsigned char* image;
+std::vector<unsigned> nativeGame((registryOffset + 16) / 4);
+auto& registry = *reinterpret_cast<std::array<Address, 3>*>(
+    reinterpret_cast<unsigned char*>(nativeGame.data()) + registryOffset);
+using Generate = int(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
+Generate nativeGenerate, nativeRestore;
+bool failGeneration = false;
 void reset() {
     registry = {reinterpret_cast<Address>(pointers.data()),
                 reinterpret_cast<Address>(pointers.data()),
@@ -26,6 +47,8 @@ void reset() {
 int __attribute__((thiscall)) generateFixture(void* self, unsigned seed, unsigned flags) {
     require(self == registry.data() && !flags,
             "Generator ABI/flags differ from native restoration");
+    if (failGeneration)
+        return 25;
     const unsigned i = (registry[1] - registry[0]) / 4;
     configs[i] = {0, ~i};
     entries[i] = {reinterpret_cast<Address>(configs[i].data()), i, seed};
@@ -51,9 +74,45 @@ void abort(const std::string& message) {
 } // namespace isaac::runtime
 int main() {
     try {
-        Address game = reinterpret_cast<Address>(registry.data()) - 0x67758;
-        adapter::image = reinterpret_cast<Address>(&game) - isaac::engine::j460::globals::game;
-        adapter::originalGenerate = generateFixture;
+        require(!adapter::install(0), "Missing image installed generator");
+        image = static_cast<unsigned char*>(
+            VirtualAlloc(nullptr, imageSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+        require(image && MH_Initialize() == MH_OK, "Create isolated generated item fixture");
+        auto* target = image + backend::entry::generatedItemCreate;
+        target[0] = 0xe9;
+        const auto relative =
+            reinterpret_cast<Address>(generateFixture) - reinterpret_cast<Address>(target + 5);
+        std::memcpy(target + 1, &relative, 4);
+        std::memset(target + 5, 0x90, 11);
+        // Copy both original arguments before CALL. Its return address is the
+        // audited native save-restoration site, then consume the caller's args.
+        auto* restore = image + backend::entry::generatedItemRestoreCall;
+        const std::array<unsigned char, 8> copiedArguments{0xff, 0x74, 0x24, 0x08,
+                                                           0xff, 0x74, 0x24, 0x08};
+        std::memcpy(restore - copiedArguments.size(), copiedArguments.data(),
+                    copiedArguments.size());
+        restore[0] = 0xe8;
+        const auto displacement = target - (restore + 5);
+        std::memcpy(restore + 1, &displacement, 4);
+        const std::array<unsigned char, 3> epilogue{0xc2, 0x08, 0};
+        std::memcpy(restore + 5, epilogue.data(), epilogue.size());
+        FlushInstructionCache(GetCurrentProcess(), image, imageSize);
+        nativeGenerate = reinterpret_cast<Generate>(target);
+        nativeRestore = reinterpret_cast<Generate>(restore - copiedArguments.size());
+        auto& game = *reinterpret_cast<Address*>(image + backend::globals::game);
+        game = reinterpret_cast<Address>(nativeGame.data());
+        require(MH_CreateHook(target, reinterpret_cast<void*>(generateFixture), nullptr) == MH_OK,
+                "Create foreign generator hook");
+        require(!adapter::install(reinterpret_cast<Address>(image)),
+                "Foreign generator conflict was ignored");
+        require(MH_CreateHook(target, reinterpret_cast<void*>(generateFixture), nullptr) ==
+                    MH_ERROR_ALREADY_CREATED,
+                "Generator rollback removed foreign hook");
+        require(MH_RemoveHook(target) == MH_OK &&
+                    adapter::install(reinterpret_cast<Address>(image)),
+                "Generator install did not recover");
+        require(!adapter::install(reinterpret_cast<Address>(image)),
+                "Duplicate generator install succeeded");
         adapter::lua.getTop = [](lua_State*) { return static_cast<int>(arguments); };
         adapter::lua.checkString = [](lua_State*, int, std::size_t* size) {
             *size = input.size();
@@ -93,12 +152,26 @@ int main() {
         input = packed({123, 456, 789});
         adapter::state(nullptr);
         require(result && generated == 3 && error.empty(), "Valid suffix was not appended");
-        require(adapter::generate(registry.data(), nullptr, 100, 0) == 25 &&
-                    adapter::generate(registry.data(), nullptr, 100, 8) == 105 && generated == 3,
+        require(nativeGenerate(registry.data(), 100, 0) == 25 &&
+                    nativeGenerate(registry.data(), 100, 8) == 105 && generated == 3,
                 "Replica room construction appended local definitions");
         replica = false;
-        require(adapter::generate(registry.data(), nullptr, 100, 0) == -4 && generated == 4,
+        require(nativeGenerate(registry.data(), 100, 0) == -4 && generated == 4,
                 "Authority generation was intercepted");
+        replica = true;
+        require(nativeRestore(registry.data(), 101, 0) == -5 && generated == 5,
+                "Native save-restoration call was blocked on replica");
+        input = packed({123, 456, 789, 100, 101, 102});
+        arguments = 1;
+        failGeneration = true;
+        adapter::state(nullptr);
+        require(!result && generated == 5,
+                "Failed generation was accepted or erased existing definitions");
+        failGeneration = false;
+        error.clear();
+        adapter::state(nullptr);
+        require(result && generated == 6 && error.empty(), "Valid generation did not recover");
+        replica = false;
         for (const auto field : {0u, 1u}) {
             auto old = configs[0][field];
             if (field == 1)
@@ -127,7 +200,16 @@ int main() {
             require(!error.empty(), "Malformed native vector bounds were accepted");
         }
         registry[1] = end;
-        std::vector<unsigned> actor(0x2000 / 4), nativeGame(0x68000 / 4);
+        const auto validRegistry = registry;
+        for (const auto invalid :
+             {std::array<Address, 3>{0, 4, 4}, std::array<Address, 3>{1, 1, 1}}) {
+            registry = invalid;
+            error.clear();
+            adapter::state(nullptr);
+            require(!error.empty(), "Null or unaligned registry was accepted");
+        }
+        registry = validRegistry;
+        std::vector<unsigned> actor(0x2100 / 4);
         std::array<unsigned, 6> head{}, root{}, left{}, right{};
         const auto address = [](const auto& value) {
             return reinterpret_cast<Address>(value.data());
@@ -137,8 +219,8 @@ int main() {
         root = {address(left), address(head), address(right), 0, unsigned(-4), 3};
         left = {address(head), address(root), address(head), 0, unsigned(-8), 0};
         right = {address(head), address(root), address(head), 0, unsigned(-1), 1};
-        actor[0x1fcc / 4] = address(head);
-        actor[0x1fd0 / 4] = 3;
+        actor[inventoryHead / 4] = address(head);
+        actor[inventorySize / 4] = 3;
         const auto beforeActor = actor;
         require(adapter::ownedCount(address(actor), -4) == 3 &&
                     adapter::ownedCount(address(actor), -8) == 0 &&
@@ -156,19 +238,21 @@ int main() {
         };
         root[0] = address(root);
         reject();
+        root[0] = address(left) + 1;
+        reject();
         root[0] = address(left);
         left[5] = unsigned(-1);
         reject();
         left[5] = 0;
-        actor[0x1fd0 / 4] = 1025;
+        actor[inventorySize / 4] = 1025;
         reject();
-        actor[0x1fd0 / 4] = 3;
+        actor[inventorySize / 4] = 3;
         std::array<Address, 1> roster{address(actor)};
-        nativeGame[0x1baa8 / 4] = address(roster);
-        nativeGame[0x1baac / 4] = address(roster) + 4;
+        nativeGame[playersOffset / 4] = address(roster);
+        nativeGame[(playersOffset + 4) / 4] = address(roster) + 4;
         game = address(nativeGame);
         actor[0x28 / 4] = 1;
-        std::array<Address, 2> wrapper{0, address(actor) + 0x48};
+        std::array<Address, 2> wrapper{0, address(actor) + spriteOffset};
         static void* spriteWrapper;
         static long long observedCount;
         spriteWrapper = wrapper.data();
@@ -182,6 +266,28 @@ int main() {
         wrapper[1] += 4;
         adapter::count(nullptr);
         require(!error.empty(), "Non-player sprite accepted for generated inventory");
+        wrapper[1] -= 4;
+        nativeGame[playersOffset / 4] = 0;
+        nativeGame[(playersOffset + 4) / 4] = 4;
+        error.clear();
+        adapter::count(nullptr);
+        require(!error.empty(), "Null nonempty roster reached native memory");
+        game = 0;
+        error.clear();
+        adapter::count(nullptr);
+        require(!error.empty(), "Missing Game retained a borrowed player");
+        game = address(nativeGame);
+        reset();
+        arguments = 0;
+        adapter::state(nullptr);
+        require(output.empty() && error.empty(), "New native run reused prior definitions");
+        replica = true;
+        arguments = 1;
+        input = packed({456});
+        adapter::state(nullptr);
+        require(result && generated == 1 && error.empty(), "New run failed to restore new prefix");
+        require(MH_Uninitialize() == MH_OK, "Remove generated item hooks");
+        VirtualFree(image, 0, MEM_RELEASE);
         std::puts("PASS x86 generated item registry, ordering, duplicate and malformed snapshots");
         return 0;
     } catch (const std::exception& exception) {
