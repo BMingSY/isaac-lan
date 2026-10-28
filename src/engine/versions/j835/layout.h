@@ -52,6 +52,7 @@ namespace roomChangeFrame {
 inline constexpr std::ptrdiff_t mazeRedirected = 0xf;
 } // namespace roomChangeFrame
 namespace game {
+inline constexpr unsigned frame = 0x1a30dc;
 inline constexpr unsigned generatedItems = 0x283c20;
 inline constexpr unsigned room = 0x18190;
 inline constexpr unsigned roomIndex = 0x18194, dimension = 0x1819c, enterDoor = 0x181ac;
@@ -71,6 +72,14 @@ namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned variant = 0x2c, subtype = 0x30;
+inline constexpr unsigned velocity = 0x2b8, friction = 0x2c4;
+inline constexpr unsigned hitPoints = 0x2d8, maxHitPoints = 0x2dc, collisionDamage = 0x2e0;
+inline constexpr unsigned visible = 0x169, flipX = 0x13c, depthOffset = 0x2b0;
+inline constexpr unsigned mass = 0x2d4, size = 0x2c8;
+inline constexpr unsigned spriteRotation = 0xe0, spriteOffset = 0xd0, spriteScale = 0xd8;
+inline constexpr unsigned createdFrame = 0x280, flags = 0x160, color = 0x1b0;
+inline constexpr unsigned damageVtableSlot = 0x3c;
 inline constexpr unsigned sprite = 0x3c, type = 0x28, initSeed = 0x344;
 inline constexpr unsigned active = 0x16a, removeMethod = 0x28;
 inline constexpr unsigned positionX = 0x294, positionY = 0x298;
@@ -88,8 +97,42 @@ inline constexpr unsigned left = 0, parent = 4, right = 8;
 inline constexpr unsigned nil = 0xd, id = 0x10, count = 0x14;
 } // namespace inventoryNode
 namespace pickup {
+inline constexpr unsigned touched = 0x47c, optionsIndex = 0x478;
+inline constexpr unsigned price = 0x480, autoUpdatePrice = 0x484, shopItemId = 0x488;
+inline constexpr unsigned timeout = 0x48c, wait = 0x490, state = 0x4d0;
 inline constexpr unsigned charge = 0x474, varData = 0x4e8;
 } // namespace pickup
+namespace npc {
+inline constexpr unsigned boss = 0xb8d;
+} // namespace npc
+namespace tear {
+inline constexpr unsigned height = 0x360, fallingSpeed = 0x364, fallingAcceleration = 0x368;
+inline constexpr unsigned scale = 0x370, rotation = 0x3a8, waitFrames = 0x388;
+} // namespace tear
+namespace effect {
+inline constexpr unsigned state = 0x3a0, timeout = 0x3ac, lifeSpan = 0x3b0;
+inline constexpr unsigned rotation = 0x3c4, scale = 0x3c8;
+inline constexpr unsigned minRadius = 0x3a4, maxRadius = 0x3a8;
+} // namespace effect
+namespace familiar {
+inline constexpr unsigned state = 0xcd4, fireCooldown = 0xc9c, headFrameDelay = 0xca0;
+inline constexpr unsigned moveDirection = 0xca4, shootDirection = 0xca8, lastDirection = 0xcac;
+inline constexpr unsigned orbitAngleOffset = 0xcb0, orbitLayer = 0xcc0, orbitSpeed = 0xcbc;
+} // namespace familiar
+namespace sprite {
+inline constexpr unsigned size = 0x114, path = 0, animation = 0x30, overlay = 0x50;
+inline constexpr unsigned offset = 0x94, scale = 0x9c, rotation = 0xa4, color = 0xa8;
+inline constexpr unsigned flipX = 0x100, flipY = 0x101;
+} // namespace sprite
+namespace animationState {
+inline constexpr unsigned data = 4, frame = 0x10;
+} // namespace animationState
+namespace color {
+inline constexpr unsigned size = 0x2c;
+inline constexpr unsigned red = 0, green = 4, blue = 8, alpha = 0xc;
+inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
+inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
+} // namespace color
 namespace player {
 inline constexpr unsigned generatedInventoryHead = 0x1ec4, generatedInventorySize = 0x1ec8;
 inline constexpr unsigned primaryActive = 0x14c4, activeStride = 0x1c, megaBlastLaser = 0x13a0;

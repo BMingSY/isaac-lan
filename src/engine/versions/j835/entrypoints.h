@@ -80,6 +80,11 @@ inline constexpr std::uint32_t generatedItemRestoreCall = 0x535cbb;
 inline constexpr std::uint32_t generatedInventoryQuery = 0x33afcf;
 inline constexpr std::uint32_t generatedInventoryCountRead = 0x535e2e;
 inline constexpr std::uint32_t pickupUpdateGhosts = 0x2b81c0;
+inline constexpr std::uint32_t entityLuaSetSize = 0x40e460;
+inline constexpr std::uint32_t entityLuaSetColor = 0x40e430;
+inline constexpr std::uint32_t tearSetHeight = 0x2500f0;
+inline constexpr std::uint32_t tearSetScale = 0x250250;
+inline constexpr std::uint32_t pickupSetPrice = 0x2b91e0;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;

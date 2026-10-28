@@ -41,6 +41,8 @@ isaac_add_backend_test(
     LIBRARIES
     minhook)
 foreach(backend j460 j835)
+    isaac_add_backend_test(entity-fields ${backend} SOURCES tests/entity_fields_backend_test.cpp
+                           src/engine/versions/${backend}/entity_fields.cpp)
     isaac_add_backend_test(
         pickup-preview
         ${backend}

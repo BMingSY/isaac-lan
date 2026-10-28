@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定、共享输入路由及设备／查询适配、暂停菜单、玩家创建／分配和角色目录组件，以及 Lua 初始化入口资料；道具发放／拾取／充能及动态定义／负编号库存组件也已具备版本绑定，房间进入边界、声音／音乐及本机掉落物预览也有独立绑定，完整房间、实体同步和启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述可独立测试的原生组件；完整房间调度、实体姿态、表现及启动装配尚未接通。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -115,6 +115,25 @@ Music 位于 `Manager+0x29a78`，当前／排队曲目 ID 为 `+0x30c/+0x310`。
 作用域暂借当前／排队 ID，使后台房间完成原生选曲而不更换实际声道；离开前记录原生直接写入的队列，再恢复外层或实际播放 ID。未知房间在空 ID 下求值一次，失败恢复临时 ID。房间、Music、SFXManager 和实际音频流仍由游戏持有，不复制或释放流对象。嵌套视角恢复外层房间，重复快照不重新请求曲目，跨房加入正在播放的队列目标，跨层及会话重置不复用旧归属。
 
 主机按房间听众记录带序号的声音事件，后台播放仅将本机音量降为零；副本不重新发送事件，也不让原生房间初始化覆盖已提交的权威音乐选择。声音编码及既有的时效、队列上限保持不变。三个 Hook 全部创建后启用，失败只撤销本组件创建的 Hook，清除旁路并允许重试。完整使用仍依赖 J835 房间调度和启动装配。
+
+## 实体字段与 Sprite 属性
+
+[版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entity_fields.cpp) 向[共享字段组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_fields.cpp) 提供原生布局、setter 和属性范围。模板、编码、完整校验、客机限制及对象借用遵循[实体字段契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)。字段顺序仍由 Lua schema 决定，原生偏移不会进入同步载荷。
+
+| 属性 | J835 原生边界 |
+| --- | --- |
+| `Size` | `0x40e460`，`cdecl void(Entity*, float)`；保留碰撞尺寸的原生更新 |
+| `Color` | `0x40e430`，`cdecl void(Entity*, const Color*)`；44 字节临时值包含七个通道和置零的 colorize，由原 setter 调用实体虚方法 |
+| `CollisionDamage` | 实体虚表 `+0x3c`，`thiscall void(Entity*, float)` |
+| 泪弹 `Height`／`Scale` | `0x2500f0`／`0x250250`，`thiscall void(Tear*, float)`；保留高度及精灵缩放的副作用 |
+| 掉落物 `Price` | `0x2b91e0`，`thiscall void(Pickup*, int)`；重复价格仍执行原生显示更新 |
+| 掉落物 `ShopItemId` | Lua setter 直接写入 `Pickup+0x488` 的 int32；J460 的 -2 至 7 限制不适用 |
+
+完整属性偏移集中在 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/layout.h)。实体借用 Sprite 位于 `Entity+0x3c`，存活字节为 `+0x16a`；实体帧数为 `Game+0x1a30dc` 减 `Entity+0x280`，保留 uint32 回绕和有符号返回语义。身份、帧数、标志和精灵名称仍为只读字段。
+
+Sprite 原生对象为 `0x114` 字节，Lua 自有 wrapper 为 `0x11c` 字节、借用 wrapper 为 8 字节。两版动画状态、44 字节颜色和 MSVC 字符串字段具有相同布局，但声明仍属于版本绑定。名称在调用内复制，动画数据、文本缓冲和临时 setter 参数不跨调用保留，不转移资源所有权。
+
+`entity_npc_boss` 只允许客机恢复活动 NPC 的分类字节 `+0xb8d`，与 `EntityNPC::IsBoss`（`0x28f570`）一致。该标记独立于 Boss 类型编号，不触发 AI 或分配实体。完整实体姿态与其他原生引用接口不属于这一字段组件。
 
 ## 本机掉落物预览
 
