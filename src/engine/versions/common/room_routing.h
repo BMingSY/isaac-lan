@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <functional>
 
-namespace isaac::engine::j460 {
+namespace isaac::engine::native_room_routing {
 struct RoomArrival {
     int index, dimension, door;
     bool redirected;
@@ -15,4 +15,4 @@ void withResolvedRoomEntry(const std::function<bool(RoomArrival)>& prepare,
 void withoutRoomCurseRouting(const std::function<void()>& change);
 std::uint32_t currentCurses();
 bool installRoomRouting(std::uintptr_t image);
-} // namespace isaac::engine::j460
+} // namespace isaac::engine::native_room_routing

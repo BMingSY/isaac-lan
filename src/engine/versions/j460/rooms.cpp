@@ -52,7 +52,7 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/floor_source.h"
-#include "engine/versions/j460/room_routing.h"
+#include "engine/versions/common/room_routing.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::rooms {
@@ -3147,7 +3147,7 @@ struct RoomTransfer {
         collect();
     }
 
-    void prepare(std::optional<j460::RoomArrival> resolved = std::nullopt) {
+    void prepare(std::optional<engine::native_room_routing::RoomArrival> resolved = std::nullopt) {
         std::array<std::uint32_t, contextOffsets.size()> nativeContext{};
         if (resolved) {
             const auto final = destination(*from, resolved->index, resolved->dimension);
@@ -3264,8 +3264,8 @@ struct RoomTransfer {
         const auto curseBase = at<std::uint32_t>(game(), j460::layout::game::curses);
         const auto curseSeeds = at<std::uint32_t>(game(), j460::layout::game::seedCurses);
         auto change = [&] {
-            j460::withResolvedRoomEntry(
-                [&](j460::RoomArrival) {
+            engine::native_room_routing::withResolvedRoomEntry(
+                [&](engine::native_room_routing::RoomArrival) {
                     // Explicit transfers suppress LeaveDoor rerouting. Native
                     // resolution can then choose a fallback entrance; restore
                     // the accepted door before Room::Init constructs its exits.
@@ -3280,7 +3280,7 @@ struct RoomTransfer {
         };
         if (runtime::replica() || restoringSavedLocations ||
             request.routing == RoomRouting::resolved)
-            j460::withoutRoomCurseRouting(change);
+            engine::native_room_routing::withoutRoomCurseRouting(change);
         else
             change();
         logger("room_change requested=" + std::to_string(request.destination.index) +
@@ -3386,8 +3386,8 @@ struct RoomTransfer {
             at<int>(game(), j460::layout::game::enterDoor) = request.door;
             {
                 NativeTransfer nativeTransfer;
-                j460::withResolvedRoomEntry(
-                    [&](j460::RoomArrival resolved) {
+                engine::native_room_routing::withResolvedRoomEntry(
+                    [&](engine::native_room_routing::RoomArrival resolved) {
                         prepare(resolved);
                         scope.enter(*to);
                         if (request.door >= 0 && request.door < 8)
@@ -3626,7 +3626,7 @@ void finishFrame() {
         RoomTransfer transfer(request);
         transfer.run(compat::routes::resolveRoomCurse(
             runtime::replica(), restoringSavedLocations || request.routing == RoomRouting::resolved,
-            j460::currentCurses()));
+            engine::native_room_routing::currentCurses()));
     }
     preparedDepartures.clear();
     if (beginTeamTransition)
@@ -3816,7 +3816,7 @@ bool install(Address base, void (*log)(const std::string&)) {
                    MH_OK &&
                MH_EnableHook(reinterpret_cast<void*>(image + rva)) == MH_OK;
     };
-    return j460::installRoomRouting(image) &&
+    return engine::native_room_routing::installRoomRouting(image) &&
            hook(j460::entry::levelSwapRooms, reinterpret_cast<void*>(swapRooms),
                 reinterpret_cast<void**>(&originalSwapRooms)) &&
            hook(j460::entry::entityPlayerAddCoins, reinterpret_cast<void*>(addCoins),

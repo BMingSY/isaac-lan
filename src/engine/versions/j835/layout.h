@@ -41,7 +41,12 @@ inline constexpr unsigned stream = 0x1fac8;
 // preserves these; Read consults them only for logging and failure deletion.
 inline constexpr std::array<unsigned, 4> fileNames{0x1fa60, 0x1fa78, 0x1fa98, 0x1fab0};
 } // namespace gameState
+namespace roomChangeFrame {
+inline constexpr std::ptrdiff_t mazeRedirected = 0xf;
+} // namespace roomChangeFrame
 namespace game {
+inline constexpr unsigned roomIndex = 0x18194, dimension = 0x1819c, enterDoor = 0x181ac;
+inline constexpr unsigned curses = 0xc, seedCurses = 0x1c3170;
 inline constexpr unsigned playerManager = 0x1ba40;
 inline constexpr unsigned players = 0x1ba50;
 inline constexpr unsigned stage = 0, stageType = 4;

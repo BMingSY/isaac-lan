@@ -65,6 +65,12 @@ inline constexpr std::uint32_t playerActiveMaxCharge = 0x357e40;
 inline constexpr std::uint32_t playerAddActiveCharge = 0x358030;
 inline constexpr std::uint32_t levelTryInitializeBlueRoom = 0x31a1f0;
 inline constexpr std::uint32_t entityPtrAssign = 0x28cf00;
+inline constexpr std::uint32_t levelRoomEntryResolved = 0x30d7fe;
+inline constexpr std::uint32_t levelRoomChangeReturn = 0x30db01;
+inline constexpr std::uint32_t levelMazeBranch = 0x30d1a8;
+inline constexpr std::uint32_t levelMazeBranchEnd = 0x30d650;
+inline constexpr std::uint32_t gameAddedSeedCurses = 0x2ccc80;
+inline constexpr std::uint32_t gameRemovedSeedCurses = 0x2cce10;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;

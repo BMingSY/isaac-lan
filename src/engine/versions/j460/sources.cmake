@@ -11,6 +11,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/session_backend.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/rooms.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/room_routing.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/room_routing.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/visuals.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/input.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/input_devices.cpp"

@@ -104,9 +104,9 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 镜子过门调用 `Game::StartRoomTransition` 时，目标已从 `ROOM_MIRROR_IDX` 解析为实际描述符索引和维度；识别依据是 `RoomTransitionAnim.FADE_MIRROR`（18）。[镜像路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/mirror.h)仅对有效门槽位保留原门作为目标入口；屏幕反射不改变世界空间的门槽位。普通过门继续按相邻描述符选择入口。
 
-[`room_routing`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_routing.h) 在 `Level::ChangeRoom` 的 RVA `0x3404ec` 同步提供最终房间索引、维度、入口及原生改送标志（当前原生栈帧 `EBP+0xb`）。改送标志也覆盖同一大房间的不同子格，不能仅通过标准房间索引是否改变推断。此处原生混乱诅咒的临时容器已析构，目的房间尚未初始化。调用方先选择或创建真实目标、迁移进入者并切换房间作用域；返回 `true` 继续原生初始化，返回 `false` 经 RVA `0x340814` 的原生公共尾部返回，再由联机运行组件执行已加载房间的进入效果。拦截保存通用寄存器、标志与 XMM0–7；公共尾部恢复原生 SEH 栈并清理两个栈参数。回调只在当前主线程调用中借用，错误在原生栈退出后重新抛出，不跨原生帧展开 C++ 异常。
+[`room_routing`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_routing.h) 在 `Level::ChangeRoom` 的 RVA `0x3404ec` 同步提供最终房间索引、维度、入口及原生改送标志（当前原生栈帧 `EBP+0xb`）。改送标志也覆盖同一大房间的不同子格，不能仅通过标准房间索引是否改变推断。此处原生混乱诅咒的临时容器已析构，目的房间尚未初始化。调用方先选择或创建真实目标、迁移进入者并切换房间作用域；返回 `true` 继续原生初始化，返回 `false` 经 RVA `0x340814` 的原生公共尾部返回，再由联机运行组件执行已加载房间的进入效果。两版共用回调与安装实现，具体入口、字段和栈帧偏移由版本绑定提供。拦截保存通用寄存器、标志、SSE／x87 状态及控制字；公共尾部恢复原生 SEH 栈并清理两个栈参数。回调只在当前主线程调用中借用，错误在原生栈退出后重新抛出，不跨原生帧展开 C++ 异常。
 
-已确定目的地的回放在 RVA `0x33fea8` 跳过混乱诅咒分支至 `0x34033e`，不改写诅咒位、不消耗该分支的随机数，覆盖普通诅咒与特殊种子的附加诅咒。抑制状态按调用栈恢复；单人及正常主机选路保持原生执行。活动诅咒按原生基础位、种子位及附加／移除种子效果合并。`Level::SwapRooms`（RVA `0x349270`，`thiscall bool(Level*, int, int)`）仅在原生混乱诅咒调用点检查活动房间保护，其他调用保留原行为；是否允许交换由[路线兼容策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/curses.h)决定。入口、返回点和分支均通过启动签名校验。
+已确定目的地的回放在 RVA `0x33fea8` 跳过混乱诅咒分支至 `0x34033e`，不改写诅咒位、不消耗该分支的随机数，覆盖普通诅咒与特殊种子的附加诅咒。抑制状态按调用栈恢复；单人及正常主机选路保持原生执行。活动诅咒按原生基础位、种子位及附加／移除种子效果合并。`Level::SwapRooms`（RVA `0x349270`，`thiscall bool(Level*, int, int)`）仅在原生混乱诅咒调用点检查活动房间保护，其他调用保留原行为；是否允许交换由[路线兼容策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/curses.h)决定。入口、返回点和分支均通过启动签名校验。安装先创建全部 Hook，再启用；失败只撤销本组件创建的 Hook 并清除旁路，可重新安装。
 
 | 能力 | 入口与调用约定 | 约束 |
 | --- | --- | --- |
