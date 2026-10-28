@@ -131,6 +131,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 ## HUD 与本机输入
 
+物理采集、虚拟 XInput、权威输入分发、按键沿消费和退出恢复位于[共享输入组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input.cpp)。[J460 输入绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/input.cpp) 提供原生查询／鼠标入口、布局、动作映射与菜单提示重置。查询通过输入管理器虚表 `+0x74` 安装，失败撤销本组件创建的 Hook；鼠标旁路保留原生 thiscall 参数。采集按 `Manager+0x4abbc` 的渲染帧编号去重；重复采集消费按键沿但保留按住值，不更改网络字段与编码顺序。
+
 `input_ready()` 根据同一份受锁保护的设备 ID 快照，检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在。[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化原生扫描 `0x66dab0` 与轮询 `0x66de60` 的完整事务，允许同线程回调重入，离开联机后继续保护断开清理。J460 输入管理器 RVA `0x857b18` 的列表首尾为 `+8/+12`，元素八字节，设备 ID 位于 `+12`；组件不修改元素中的原生所有权字段。退出只恢复仍存在且编号未被独立更改的设备，设备对象仍由游戏分配和释放。运行协调器在就绪后请求开局；角色槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
 
 `players_spawn` 和 `input_assign` 通过[共享玩家组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_input.cpp) 使用 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/player_input.cpp)。J460 `PlayerManager` 与其玩家向量起点均为 `Game+0x1baa8`；创建 `0x5b9cd0` 接收管理器和角色类型，分配 `0x3a6450` 接收角色、控制器和伴生传播标志，初始化 `0x3bc740` 接收角色，均为 thiscall。初始化和开局奖励后重新读取向量，为新增身体设置控制器与当前／上一位置，然后由 `0x178e0` 取得 HUD 并调用 `0x5a8620` 分配显示槽位。已有角色保持原样；对象和向量由游戏持有，部分原生创建失败不提供回滚。

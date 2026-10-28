@@ -2,7 +2,9 @@
 // Including input.cpp keeps the query hook under test without installing hooks
 // in a process or exposing a production API solely for tests.
 #include "test_support.h"
-#include "engine/versions/j460/input.cpp"
+#include "engine/versions/common/input.cpp"
+#include "engine/versions/j460/entrypoints.h"
+#include <MinHook.h>
 #include <array>
 #include <vector>
 

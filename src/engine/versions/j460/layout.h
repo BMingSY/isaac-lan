@@ -20,11 +20,13 @@ inline constexpr unsigned words = 0x3;
 } // namespace vector
 namespace inputManager {
 inline constexpr unsigned begin = 8, end = 12, stride = 8;
+inline constexpr unsigned queryMethod = 0x74;
 } // namespace inputManager
 namespace inputDevice {
 inline constexpr unsigned id = 12;
 } // namespace inputDevice
 namespace manager {
+inline constexpr unsigned renderFrame = 0x4abbc, buttonPrompts = 0x4a950;
 inline constexpr unsigned options = 0x2a33c;
 inline constexpr unsigned characterConfigs = 0x2a678;
 inline constexpr unsigned scene = 0x8;

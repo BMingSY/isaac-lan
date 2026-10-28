@@ -2,6 +2,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../common/character_catalogue.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/session_backend.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/input_devices.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/input.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/player_input.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/player_input.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/pause_menu.cpp"

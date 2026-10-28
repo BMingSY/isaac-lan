@@ -76,6 +76,7 @@ set_tests_properties(native.character-catalog PROPERTIES TIMEOUT 30 LABELS "offl
 add_executable(
     isaac_lan_pause_menu_test
     tests/pause_menu_test.cpp
+    ${ISAAC_LAN_BACKEND_DIR}/input.cpp
     ${ISAAC_LAN_BACKEND_DIR}/pause_menu.cpp
     ${ISAAC_LAN_BACKEND_DIR}/../common/pause_menu.cpp
     ${ISAAC_LAN_BACKEND_DIR}/input_devices.cpp

@@ -22,6 +22,35 @@ add_test(NAME native.input-queries-j835 COMMAND isaac_lan_input_queries_j835_tes
 set_tests_properties(native.input-queries-j835 PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 foreach(backend j460 j835)
     add_executable(
+        isaac_lan_input_backend_${backend}_test
+        tests/input_backend_test.cpp
+        src/engine/versions/${backend}/input.cpp
+        src/engine/versions/common/player_input.cpp
+        src/engine/versions/${backend}/player_input.cpp
+        src/engine/versions/common/input_devices.cpp
+        src/engine/versions/${backend}/input_devices.cpp
+        src/engine/versions/common/pause_menu.cpp
+        src/engine/versions/${backend}/pause_menu.cpp)
+    target_include_directories(isaac_lan_input_backend_${backend}_test PRIVATE src)
+    target_link_libraries(isaac_lan_input_backend_${backend}_test PRIVATE minhook)
+    if(backend STREQUAL "j835")
+        target_compile_definitions(isaac_lan_input_backend_${backend}_test
+                                   PRIVATE ISAAC_LAN_TEST_J835)
+        target_sources(
+            isaac_lan_input_backend_${backend}_test
+            PRIVATE src/engine/versions/j835/input_queries.cpp
+                    src/engine/versions/j835/mouse_input.cpp)
+    endif()
+    if(MINGW)
+        target_link_options(isaac_lan_input_backend_${backend}_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+        target_compile_options(isaac_lan_input_backend_${backend}_test PRIVATE -Wall -Wextra
+                                                                               -Werror)
+    endif()
+    add_test(NAME native.input-backend-${backend} COMMAND isaac_lan_input_backend_${backend}_test)
+    set_tests_properties(native.input-backend-${backend} PROPERTIES TIMEOUT 30 LABELS
+                                                                    "offline;native-abi")
+    add_executable(
         isaac_lan_player_input_${backend}_test
         tests/player_input_backend_test.cpp src/engine/versions/common/player_input.cpp
         src/engine/versions/${backend}/player_input.cpp)

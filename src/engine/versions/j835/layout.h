@@ -11,6 +11,7 @@ namespace inputDevice {
 inline constexpr unsigned id = 8;
 } // namespace inputDevice
 namespace manager {
+inline constexpr unsigned renderFrame = 0x4a264;
 inline constexpr unsigned options = 0x29df8;
 inline constexpr unsigned progress = 0x14, scene = 0x8;
 inline constexpr unsigned stringTable = 0x4a234;
