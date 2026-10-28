@@ -58,6 +58,9 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/rewind.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/rewind.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/frontend.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/frontend.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/minimap.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/minimap.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/frontend_hud.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/frontend_hud.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/emotes.cpp")

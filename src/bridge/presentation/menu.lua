@@ -217,6 +217,12 @@ function _IsaacLanMenuRender(
             visible = false
         end
     end
+    if not visible and available and _IsaacLan.menu_open then
+        text("局域网 →", 26, 242, 12, hit(24, 238, 100, 22) and red or ink)
+        if clicked and hit(24, 238, 100, 22) then
+            _IsaacLan.menu_open()
+        end
+    end
     if not visible then
         renderPing(status, assets[10])
         renderRestart(status, assets[10])

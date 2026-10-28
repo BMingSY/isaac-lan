@@ -601,6 +601,26 @@ for _, host in ipairs({ "2001:db8::abcd", "[2001:db8::abcd]", "fe80::1%12", "::f
     assert(remembered[1] == host and remembered[2] == 1234)
 end
 
+-- Vanilla has a main-menu mouse entry; title/save/game pages and Plus do not.
+do
+    status = { phase = 0, hosting = 0, players = 0 }
+    local opened = 0
+    _IsaacLan.menu_open = vanilla and function()
+        opened = opened + 1
+    end or nil
+    assert(not draw(0, false, 30, 246, false))
+    assert((labels["局域网 →"] ~= nil) == vanilla)
+    draw(0, false, 30, 246, true)
+    assert(opened == (vanilla and 1 or 0))
+    draw(0, false, 200, 200, true)
+    assert(opened == (vanilla and 1 or 0), "Outside click opened LAN")
+    assert(not _IsaacLanMenuRender(false, false, 0, "", 30, 246, true, "", ""))
+    assert(opened == (vanilla and 1 or 0), "Unavailable game menu opened LAN")
+    _IsaacLanMenuOpen(false)
+    draw(0, true, 30, 246, true)
+    assert(opened == (vanilla and 1 or 0), "Visible overlay reopened itself")
+end
+
 -- Each card renders its owner's twelve native single-player layers.
 status = {
     phase = 2,

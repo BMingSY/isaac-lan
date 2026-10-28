@@ -191,6 +191,10 @@ J460 全局大书位于 `Game+0x1c034`，对象大小 `0x12b8`；48 个配置从
 
 ## HUD 与本机输入
 
+[共享前端](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend.cpp)负责窗口消息、Lua 生命周期和菜单装配，[版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/frontend.cpp)声明游戏入口及布局。J460 的 Online 选择项仍打开模式选择，再由用户选择官方联机或局域网；J835 使用[独立菜单入口](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#主菜单入口)。标题、选档和其他原生页面不接收局域网输入。
+
+[小地图组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/minimap.cpp)在房间绘制前借用本机视角刷新缓存，绘制时只观察纹理四边形并发布普通投影值。J460 的地图为 `Game+0x25ecc`，两配置为 `+0x18/+0x178`；纹理虚表 `+0x10` 接收源、目标和透明参数并清栈 12 字节，宽高为纹理 `+0x10/+0x14`，alpha 为目标第 12 个 float。纹理 ABI 由[J460 适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/minimap.cpp)持有，不用于[J835 绘制](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#小地图绘制)。地图切换只失效缓存归属，不复制或释放原生纹理。
+
 队伍 HUD 的玩家绑定、StatHUD 和历史栏筛选由[共享 HUD 组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend_hud.cpp)执行，[J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/frontend_hud.cpp)声明入口与布局。八个 PlayerHUD 仅在绑定变化时调用原生 Reset、写入借用玩家和刷新标记，并重新计算历史栏；更新和绘制借用房间视角，单人沿用原生行为。组件不复制或持有心容器、道具和 Sprite 资源。J460 的步长为 `0x6dc`、刷新标记 `+0x6ac`、历史栏 `HUD+0x5c54`；[J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#玩家-hud-绑定)声明其不同布局。
 
 物理采集、虚拟 XInput、权威输入分发、按键沿消费和退出恢复位于[共享输入组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input.cpp)。[J460 输入绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/input.cpp) 提供原生查询／鼠标入口、布局、动作映射与菜单提示重置。查询通过输入管理器虚表 `+0x74` 安装，失败撤销本组件创建的 Hook；鼠标旁路保留原生 thiscall 参数。采集按 `Manager+0x4abbc` 的渲染帧编号去重；重复采集消费按键沿但保留按住值，不更改网络字段与编码顺序。

@@ -25,6 +25,7 @@ namespace inputDevice {
 inline constexpr unsigned id = 8;
 } // namespace inputDevice
 namespace manager {
+inline constexpr unsigned menuInputBlock = 0x4a268;
 inline constexpr unsigned nightmare = 0x211bc;
 inline constexpr unsigned music = 0x29a78;
 inline constexpr unsigned renderFrame = 0x4a264;
@@ -68,6 +69,7 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
 } // namespace challengeParams
 namespace game {
+inline constexpr unsigned minimap = 0x1a2ab0;
 inline constexpr unsigned pixelation = 0x24363c, pixelationDuration = 0x243640;
 inline constexpr unsigned dizzyIntensity = 0x283c04, dizzyTarget = 0x283c08, dizzyStep = 0x283c0c;
 inline constexpr unsigned bloomTime = 0x1c3148, bloomDuration = 0x1c314c, bloomIntensity = 0x1c3150;
@@ -299,4 +301,29 @@ namespace tether {
 inline constexpr unsigned dataVtable = 0x73fffc, points = 8, capacity = 0xc;
 inline constexpr unsigned first = 0x10, count = 0x14, sprite = 0x18, size = 0x158;
 } // namespace tether
+namespace minimap {
+inline constexpr unsigned small = 0x18;
+inline constexpr unsigned large = 0x178;
+} // namespace minimap
+namespace mapConfig {
+inline constexpr unsigned texture = 0x114;
+inline constexpr unsigned cellWidth = 0x124;
+inline constexpr unsigned cellHeight = 0x128;
+inline constexpr unsigned cellSpacing = 0x130;
+inline constexpr unsigned anchorX = 0x140;
+inline constexpr unsigned anchorY = 0x144;
+} // namespace mapConfig
+namespace texture {
+inline constexpr unsigned width = 0x80;
+inline constexpr unsigned height = 0x84;
+} // namespace texture
+namespace renderQuad {
+inline constexpr unsigned units = 0x20, normalized = 1;
+} // namespace renderQuad
+namespace menuManager {
+inline constexpr unsigned page = 0x38, inputBlocked = 0x20, starting = 1;
+}
+namespace mainMenu {
+inline constexpr unsigned selection = 4;
+}
 } // namespace isaac::engine::j835::layout

@@ -1,12 +1,26 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述可独立测试的原生组件；完整房间调度、其余实体姿态、前端及启动装配尚未接通。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述原生组件；完整房间调度和启动装配尚未接通。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
 `LuaEngine::Init` 为 `thiscall void(LuaEngine*, bool)`，入口和签名位于 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entrypoints.h) 与 [signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/signatures.inc)。初始化完成后的 Lua 状态指针位于 `LuaEngine + 0x18`，只可借用；状态的创建、重置和销毁仍由游戏持有。初始化可能在同一进程内重复发生，不能将先前状态的引用、注册表键或回调复用于新状态。该入口资料不授权其他布局读写，也不代表完整 ABI 验收。
 
 Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。该游戏导入表没有 `SteamAPI_RestartAppIfNecessary`；隔离启动不能把该导入的存在当成必要条件。资料隔离仍须在游戏入口前完成，不能在 Lua 初始化后才更改存档位置。
+
+## 主菜单入口
+
+[前端绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/frontend.cpp)与 J460 共用[前端装配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend.cpp)和[菜单边界](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/menu_context.h)。J835 没有官方 Online 项；选定存档后的主菜单提供“局域网 →”，鼠标点击或菜单向右动作请求打开局域网界面。确认 Stats 等原生选项不被接管。Lua 只注册 `menu_open`，不注册 `menu_official`；返回直接关闭局域网界面。
+
+MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、主菜单页为 1、2、3。入口要求 Manager 菜单场景、存档栏 1～3、主菜单页，且 MenuManager `+0x20` 输入阻塞、`+1` 启动请求和 Manager `+0x4a268` 阻塞均为空。主菜单更新 RVA `0x4d92c0` 使用 thiscall、无参数；菜单绘制 RVA `0x4e19d0` 无接收对象及栈参数。显式返回大厅只把标题／存档／主菜单页选择为主菜单，不分配菜单或跳过未选存档流程。Lua 状态重建时重新绑定回调并清理旧输入、菜单和地图视图。
+
+## 小地图绘制
+
+[小地图组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/minimap.cpp)使用[J835 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/minimap.cpp)。原生地图为 `Game+0x1a2ab0`，大小地图配置为地图 `+0x18/+0x178`。更新、绘制、缓存入口分别为 `0x4e55f0/0x4e5e50/0x4e2e40`，均 thiscall、无栈参数。房间视角准备期间更新失效缓存，切换渲染目标前对全局 Renderer RVA `0x7c7a30` 调用 Flush `0x565030`，栈参数 false、清栈 4 字节；实际绘制不重建缓存。缓存只有在原生调用成功后才登记房间，Game 替换与断线清空旧归属。
+
+配置的借用纹理、单元宽高、间距和锚点为 `+0x114/+0x124/+0x128/+0x130/+0x140/+0x144`。纹理宽高为 `+0x80/+0x84`。Draw RVA `0x55f990` 的 ECX 为纹理，栈参数为源四边形、目标四边形和四个角的颜色指针，清栈 24 字节；源 `+0x20` 的值 1 表示归一化纹理坐标，目标只有八个 float 坐标，alpha 来自颜色 `+0xc`，不能按 J460 的目标布局读取。
+
+观察仅在当前地图绘制作用域内采集，返回普通屏幕坐标、裁剪、透明度、维度和队员标记；源纹理、颜色及四边形不被写入或持有。原生大小地图使用相同的四角透明度，适配取左上角值。嵌套／异常绘制恢复外层作用域，非有限坐标不进入叠加画面。地图三个 Hook 成组安装；纹理 Hook 在存在纹理时安装，冲突保留外部 Hook 并在后续绘制重试。
 
 ## 精灵状态
 
@@ -80,7 +94,7 @@ Hornfel／Horny Boys 的持有炸弹容器位于 `NPC+0xb40`，分别限定两�
 
 回放前将转场目标 `+0x14/+0x18` 设置为当前房间／维度，角色按当前名单通过原生引用接口登记。入场推进只在主机、本机房间、状态就绪且未暂停时执行；同步房间模拟期间暂时隐藏模式，正常返回或异常离开恢复，不能覆盖新转场或已释放的 Game。客机完成确认只在事件原房间和非结束状态下恢复对应角色的控制；断线与超时释放等待。J835 不使用 J460 的附加控制保护字段。
 
-HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规则；小地图只发布前端实际绘制观察到的普通值。两处演出 Hook 成组创建，冲突只撤销本组件 Hook；道具、百宝袋、挑战 HUD 和胜利圈提示各自管理安装，任一失败由启动装配中止。上述组件仍依赖完整房间与前端后端，不能单独作为可安装联机实现。
+HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规则；小地图只发布前端实际绘制观察到的普通值。两处演出 Hook 成组创建，冲突只撤销本组件 Hook；道具、百宝袋、挑战 HUD 和胜利圈提示各自管理安装，任一失败由启动装配中止。上述组件仍依赖完整房间调度与启动装配，不能单独作为可安装联机实现。
 
 ## 玩家轮廓
 

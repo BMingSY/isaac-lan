@@ -5,6 +5,13 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t menuGameUpdate = 0x4d92c0;
+inline constexpr std::uint32_t menuManagerRender = 0x4e19d0;
+inline constexpr std::uint32_t textureRender = 0x55f990;
+inline constexpr std::uint32_t minimapUpdate = 0x4e55f0;
+inline constexpr std::uint32_t minimapRender = 0x4e5e50;
+inline constexpr std::uint32_t minimapCache = 0x4e2e40;
+inline constexpr std::uint32_t renderingFlush = 0x565030;
 inline constexpr std::uint32_t frontendStatHUDGetPlayerId = 0x508370;
 inline constexpr std::uint32_t frontendStatHUDReset = 0x508400;
 inline constexpr std::uint32_t historyHUDGetPlayerId = 0x508000;
@@ -150,6 +157,8 @@ inline constexpr std::uint32_t itemConfigGetTrinket = 0x2fe640;
 inline constexpr std::uint32_t animationStateReset = 0x3740;
 } // namespace entry
 namespace globals {
+inline constexpr std::uint32_t menuManager = 0x7fd688;
+inline constexpr std::uint32_t renderer = 0x7c7a30;
 inline constexpr std::uint32_t colorStack = 0x7fec10;
 inline constexpr std::uint32_t logicalWidth = 0x7fec08, logicalHeight = 0x7fec68;
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;

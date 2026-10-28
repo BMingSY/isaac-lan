@@ -1,5 +1,9 @@
 #pragma once
 namespace isaac::engine::j835 {
+inline constexpr unsigned saveSlotCount = 3;
+namespace menuPage {
+inline constexpr int title = 1, save = 2, main = 3;
+}
 namespace scene {
 inline constexpr int menu = 1, game = 2;
 }
