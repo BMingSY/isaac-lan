@@ -88,6 +88,8 @@ ctest --test-dir build-core --output-on-failure
 
 版本资源的离线检查为 `presentation.fonts`、`presentation.chat-render`、`presentation.chat-repentance`、`bridge.challenge_menu` 和 `bridge.menu-repentance`，覆盖资源选择、字体宽度与缩放、菜单操作及缺少官方联机入口时的返回行为。相应夹具会拒绝原版环境访问忏悔＋专属字体／大厅美术；它不证明实际画面或原生后端可用。
 
+沙漏原生适配的离线检查为 `native.rewind-home-j460`、`native.rewind-home-j835`，由[同一夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/rewind_home_test.cpp) 分别链接两版绑定，覆盖检查点字节、原生计数边界、Home／普通转场、各版贪婪选择、客机结果回放、跨房来源、重复请求、清理与 Hook 冲突。夹具只执行扩展和合成原生入口；真实 GameState 副作用、完整房间恢复及画面仍属于实机范围。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh

@@ -27,6 +27,23 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 个人进度持久化先标记 `Progress+0` 为脏，再调用 RVA `0x4848f0`，ABI 为 `thiscall void(Progress*, bool backup)`，传入 `true`。原生方法检查初始化标记，保存日期备份，并按 Steam 接口及游戏设置选择云端或本地文件；流的打开、关闭和所有权仍由游戏管理。不能直接调用需要有效输出流的序列化入口 `0x4836a0`。只读作用域临时设置 `Progress+1`，嵌套返回时恢复原值。
 
+## 沙漏检查点与转场
+
+[回退绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/rewind.cpp) 向[共享检查点组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rewind.cpp) 提供缓冲区布局和原生调用。每个控制器保留一份序列化检查点，等待请求由[回退目标策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/rewind_targets.h) 管理；恢复与换层发布仍通过运行和房间组件协调。
+
+| 操作 | J835 入口与 ABI |
+| --- | --- |
+| 原生检查点采集 | `0x2d7f80`，`stdcall void(int door)`，清栈 4 字节；读取全局 Game，不接收对象参数 |
+| 权威选路 | `0x2d07d0`，`thiscall void(Game*, int index, int direction, int animation, Player*, int dimension)`，清栈 20 字节 |
+| 客机结果回放 | `0x3e9650`，相同五个栈参数，receiver 为 `Game+0x1b6c0` 的 RoomTransition |
+| Home 换层 | `0x2d0aa0`，`thiscall void(Game*, bool same, int animation, Player*)`，清栈 12 字节；回退选中 Home 后传入 false、6、null |
+
+两个原生缓冲区从 `Game+0x243648` 开始，步长 `0x20298`；选择编号为 `Game+0x283b78`。缓冲区有效位为 `+0`，GameState 为 `+4`，门、帧和计数数组分别为 `+0x1fad0/+0x1fad4/+0x1fad8`。只复制 496 个计数，既有网络载荷的剩余 27 项补零；接收非零尾项在原生写入前失败。恢复使第一缓冲区有效、第二缓冲区无效并选择第一项，不复制原生容器或代管析构。使用者的两个沙漏计数字段为 `Player+0x1cc8/+0x1ccc`，由原生恢复继续处理各主动槽与库存副作用。
+
+主机先恢复完整名单和使用者的来源房上下文，再恢复 GameState 并调用原生选路。Home 只发布换层事务；其他结果记录 RoomTransition 的实际索引、方向、动画和维度，客机调用下层入口回放，不再按本机视角选路。只有原生动画 12 恢复检查点中的玩家位置，其他动画或原生提前返回保持实际落点。J835 的选路条件与 J460 不同，适配层不重写 Home 或贪婪规则，也不执行 J460 独有的转场尾部字段写入。
+
+全部载荷、校验和、位置与转场范围在原生恢复前检查；GameState 部分恢复仍不提供回滚，失败交给运行层中止。检查点重置只清除持有的字节与位置，不破坏调用栈内的 Home 捕获作用域。采集 Hook 在虚拟房间运行时阻止其他房间替换全局缓冲区，显式采集通过原函数执行；单人完整透传，安装失败只清理自己的 Hook 并允许重试。该组件不提供完整房间后端，实际使用仍依赖来源房激活和转场完成调度。
+
 ## 更新与渲染入口
 
 [bootstrap.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/bootstrap.cpp) 向[共享更新组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/bootstrap.cpp) 提供原生入口和对象布局。房间与运行组件决定执行范围、发布时机和本机视图；后端只连接这些组件与原函数。

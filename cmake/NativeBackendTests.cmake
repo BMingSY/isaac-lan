@@ -42,6 +42,14 @@ isaac_add_backend_test(
     minhook)
 foreach(backend j460 j835)
     isaac_add_backend_test(
+        rewind-home
+        ${backend}
+        SOURCES
+        tests/rewind_home_test.cpp
+        src/engine/versions/${backend}/rewind.cpp
+        LIBRARIES
+        minhook)
+    isaac_add_backend_test(
         bootstrap
         ${backend}
         SOURCES

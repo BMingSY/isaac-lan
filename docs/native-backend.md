@@ -127,7 +127,9 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 `input::restartHeld` 通过既有原生动作查询读取本机 `ACTION_RESTART=18`，不使用网络模拟输入；XInput 手柄同时按住双肩键和双摇杆时识别为重开组合。组合包含聊天／表情快捷键时，界面关闭其临时输入状态，以重开组合操作为先。运行层负责按住时长和松开后才可重复提交的规则，不改写角色控制器身份。
 
-回退使用者源房只在完整权威房间、无借用作用域时激活；不激活客机远端存储壳，不跨清理持有 Room Scope。来源和回放参数由运行事务维护，选路与对象分配／释放由原版负责。
+回退使用者源房只在完整权威房间、无借用作用域时激活；不激活客机远端存储壳，不跨清理持有 Room Scope。来源和回放参数由运行事务维护，选路与对象分配／释放由原版负责。[共享检查点组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rewind.cpp) 通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rewind.cpp) 执行采集、恢复与原生选择；Home 只发布换层事务，客机仅回放主机实际选择，只有动画 12 恢复旧玩家位置。
+
+J460 采集入口为 `0x305ee0`，`stdcall void(int door)`，清栈 4 字节。两个缓冲区从 `Game+0x269ec` 开始，步长 `0x20660`，选择编号为 `+0x676ac`；有效位为缓冲区 `+0`，GameState 为 `+4`，门／帧／523 项计数分别为 `+0x1fe2c/+0x1fe30/+0x1fe34`。使用者计数为 `Player+0x1da8/+0x1dac`。客机下层回放完成后，绑定按原生包装函数的条件清除 `Game+0x265c0`，并清除 `+0x67744`；这些字段不适用于 J835。原生对象仍由游戏持有，检查点只保存序列化字节和普通位置。载荷完整校验后才恢复，失败不回滚已加载的 GameState；Hook 冲突保留外部 Hook，失败清理自己的旁路后可重试。
 
 联机拦截 `Manager::SaveGame` 的文件写入时仍执行 `Game::CaptureState`。采集包含原生玩家离房清理，调用方随后恢复进房临时效果；两者必须配对。捕获结果只保存在原生 GameState 中，单人存档由会话备份保护，联机退出写入独立会话存档。个人进度合并完成后，`session::persistProgress` 按原生顺序调用 `Progress::SaveCloud`（RVA `0x528ee0`）和 `Progress::SaveFile`（RVA `0x5294f0`），两者均为 `thiscall void(Manager+0x14)`，由原生打开并关闭流；不能直接调用需要已打开流的 `Serialize`。该接口只保存当前存档槽的进度，不分配角色或写入局内存档。
 

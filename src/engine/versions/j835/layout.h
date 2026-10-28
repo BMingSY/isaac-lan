@@ -52,6 +52,8 @@ namespace roomChangeFrame {
 inline constexpr std::ptrdiff_t mazeRedirected = 0xf;
 } // namespace roomChangeFrame
 namespace game {
+inline constexpr unsigned rewindBuffers = 0x243648, selectedRewindBuffer = 0x283b78;
+inline constexpr unsigned roomTransition = 0x1b6c0;
 inline constexpr unsigned frame = 0x1a30dc;
 inline constexpr unsigned generatedItems = 0x283c20;
 inline constexpr unsigned room = 0x18190;
@@ -65,6 +67,14 @@ inline constexpr unsigned pauseMenu = 0x10203c, console = 0x1bb60;
 inline constexpr unsigned fadeAlpha = 0x1c31a8, fadeAction = 0x1c31b0;
 inline constexpr unsigned restartHeldFrames = 0x1c31b4;
 } // namespace game
+namespace rewindBuffer {
+inline constexpr unsigned valid = 0, state = 4, stride = 0x20298;
+inline constexpr unsigned door = 0x1fad0, tick = 0x1fad4, counters = 0x1fad8;
+} // namespace rewindBuffer
+namespace roomTransition {
+inline constexpr unsigned state = 0, index = 0x14, direction = 0x10;
+inline constexpr unsigned animation = 0x1c, dimension = 0x18;
+} // namespace roomTransition
 namespace room {
 inline constexpr unsigned enteredFrame = 0x11f0;
 inline constexpr unsigned entities = 0x1218;
@@ -136,6 +146,7 @@ inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
 namespace player {
+inline constexpr unsigned hourglassUses = 0x1cc8, hourglassFloorUses = 0x1ccc;
 inline constexpr unsigned generatedInventoryHead = 0x1ec4, generatedInventorySize = 0x1ec8;
 inline constexpr unsigned primaryActive = 0x14c4, activeStride = 0x1c, megaBlastLaser = 0x13a0;
 inline constexpr unsigned controller = 0x154c;

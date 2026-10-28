@@ -5,6 +5,10 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t gameStoreHourglass = 0x2d7f80;
+inline constexpr std::uint32_t engineRoomsTransition = 0x2d07d0;
+inline constexpr std::uint32_t engineRoomsStageTransition = 0x2d0aa0;
+inline constexpr std::uint32_t roomTransitionStart = 0x3e9650;
 inline constexpr std::uint32_t menuCharacterAvailable = 0x4a1ea0;
 inline constexpr std::uint32_t stringTableLookup = 0x56b880;
 inline constexpr std::uint32_t luaEngineInit = 0x3fcb00;

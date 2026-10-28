@@ -68,6 +68,9 @@ inline constexpr std::ptrdiff_t mainPass = 0xc;
 inline constexpr std::ptrdiff_t hologram = -0x6d;
 } // namespace playerRenderFrame
 namespace game {
+inline constexpr unsigned rewindBuffers = 0x269ec, selectedRewindBuffer = 0x676ac;
+inline constexpr unsigned roomTransition = 0x1b83c;
+inline constexpr unsigned transitionTailCounter = 0x265c0, transitionTailFlag = 0x67744;
 inline constexpr unsigned bloomTime = 0x26528;
 inline constexpr unsigned bloomDuration = 0x2652c;
 inline constexpr unsigned bloomIntensity = 0x26530;
@@ -100,6 +103,14 @@ inline constexpr unsigned fadeAction = 0x265bc;
 inline constexpr unsigned restartHeldFrames = 0x265c4;
 inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
+namespace rewindBuffer {
+inline constexpr unsigned valid = 0, state = 4, stride = 0x20660;
+inline constexpr unsigned door = 0x1fe2c, tick = 0x1fe30, counters = 0x1fe34;
+} // namespace rewindBuffer
+namespace roomTransition {
+inline constexpr unsigned state = 0, index = 0x14, direction = 0x10;
+inline constexpr unsigned animation = 0x1c, dimension = 0x18, active = 0x238;
+} // namespace roomTransition
 namespace pauseMenu {
 inline constexpr unsigned selection = 8, options = 0x5b0, playerIndex = 0xfac;
 } // namespace pauseMenu
@@ -262,6 +273,7 @@ inline constexpr unsigned optionsIndex = 0x528, price = 0x534, autoUpdatePrice =
 inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, state = 0x584;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned hourglassUses = 0x1da8, hourglassFloorUses = 0x1dac;
 inline constexpr unsigned weapons = 0x13dc;
 inline constexpr unsigned babySkin = 0x1aec;
 inline constexpr int lastBabySkin = 0x47;
