@@ -133,6 +133,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 `input_ready()` 根据同一份受锁保护的设备 ID 快照，检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在。[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化原生扫描 `0x66dab0` 与轮询 `0x66de60` 的完整事务，允许同线程回调重入，离开联机后继续保护断开清理。J460 输入管理器 RVA `0x857b18` 的列表首尾为 `+8/+12`，元素八字节，设备 ID 位于 `+12`；组件不修改元素中的原生所有权字段。退出只恢复仍存在且编号未被独立更改的设备，设备对象仍由游戏分配和释放。运行协调器在就绪后请求开局；角色槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
 
+`players_spawn` 和 `input_assign` 通过[共享玩家组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_input.cpp) 使用 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/player_input.cpp)。J460 `PlayerManager` 与其玩家向量起点均为 `Game+0x1baa8`；创建 `0x5b9cd0` 接收管理器和角色类型，分配 `0x3a6450` 接收角色、控制器和伴生传播标志，初始化 `0x3bc740` 接收角色，均为 thiscall。初始化和开局奖励后重新读取向量，为新增身体设置控制器与当前／上一位置，然后由 `0x178e0` 取得 HUD 并调用 `0x5a8620` 分配显示槽位。已有角色保持原样；对象和向量由游戏持有，部分原生创建失败不提供回滚。
+
 `input::finishUpdate` 在每个联机半帧开始前清除已消费的按键边沿。主机同时比较远端输入所属房间与 `rooms::captureLocations()` 返回的位置；完整更新后刚换房或缺少房间上下文的远端角色只保留过渡允许的持有值，收到目的地输入后恢复移动。该检查只读取位置快照并过滤已接受输入，不写角色、房间或原生容器；客机和主机本地槽位不受此过滤。
 
 联机显式返回菜单时，`menu_context::returnToMain` 只在原生已重建菜单、已选存档栏且处于标题／选档／主菜单页时选择主菜单。不构造菜单对象，也不接管其他页面或未选存档的启动流程。

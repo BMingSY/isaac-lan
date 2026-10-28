@@ -1,6 +1,7 @@
 #include "engine/versions/common/room_hooks.h"
 #include "engine/versions/common/input_query.h"
 #include "engine/versions/common/input_devices.h"
+#include "engine/versions/common/player_input.h"
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/input.h"
@@ -302,20 +303,13 @@ bool exists(int index) {
 int assign(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
     const auto controller = lua.checkInteger(L, 2);
-    const auto g = at<std::uintptr_t>(image, j460::globals::game);
-    const auto begin = at<std::uintptr_t>(g, 0x1baa8), end = at<std::uintptr_t>(g, 0x1baac);
-    if (!originalQuery || slot < 0 || static_cast<unsigned>(slot) >= (end - begin) / 4 ||
-        controller < 1 || controller > 4 || !exists(static_cast<int>(controller))) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    using Assign = void(__attribute__((thiscall))*)(void*, int, bool);
-    auto player = at<std::uintptr_t>(begin, static_cast<unsigned>(slot) * 4);
-    reinterpret_cast<Assign>(image + j460::entry::engineRoomsAssign)(
-        reinterpret_cast<void*>(player), static_cast<int>(controller), true);
+    const bool assigned = originalQuery && slot >= 0 && controller >= 1 && controller <= 4 &&
+                          exists(static_cast<int>(controller)) &&
+                          engine::native_players::assign(image, static_cast<unsigned>(slot),
+                                                         static_cast<int>(controller));
     logger("input_assign slot=" + std::to_string(slot) +
            " controller=" + std::to_string(controller));
-    lua.pushBoolean(L, at<int>(player, 0x1618) == controller);
+    lua.pushBoolean(L, assigned);
     return 1;
 }
 int ready(lua_State* L) {
@@ -348,40 +342,16 @@ int spawn(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    const auto g = at<std::uintptr_t>(image, j460::globals::game), manager = g + 0x1baa8;
-    const auto before = (at<std::uintptr_t>(manager, 4) - at<std::uintptr_t>(manager, 0)) / 4;
-    using Spawn = void*(__attribute__((thiscall))*)(void*, int);
-    const auto result = reinterpret_cast<Spawn>(image + j460::entry::engineInputSpawn)(
-        reinterpret_cast<void*>(manager), static_cast<int>(type));
-    if (!result) {
+    const auto slot =
+        engine::native_players::spawn(image, static_cast<int>(type), static_cast<int>(controller),
+                                      engine::items::grantStartingRewards);
+    if (!slot) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    using Assign = void(__attribute__((thiscall))*)(void*, int, bool);
-    reinterpret_cast<Assign>(image + j460::entry::engineRoomsAssign)(
-        result, static_cast<int>(controller), true);
-    // SpawnCoPlayer2 creates the entity; the native join/console path then
-    // initializes its starting inventory, stats and companion actors.
-    using Initialize = void(__attribute__((thiscall))*)(void*);
-    reinterpret_cast<Initialize>(image + j460::entry::engineInputInitialize)(result);
-    engine::items::grantStartingRewards(result, static_cast<unsigned>(controller - 1));
-    const auto begin = at<std::uintptr_t>(manager, 0), end = at<std::uintptr_t>(manager, 4);
-    const auto first = at<std::uintptr_t>(begin, 0);
-    for (auto index = before; index < (end - begin) / 4; ++index) {
-        const auto player = at<std::uintptr_t>(begin, index * 4);
-        reinterpret_cast<Assign>(image + j460::entry::engineRoomsAssign)(
-            reinterpret_cast<void*>(player), static_cast<int>(controller), true);
-        at<float>(player, 0x33c) = at<float>(player, 0x344) =
-            at<float>(first, 0x33c) + 12 * controller;
-        at<float>(player, 0x340) = at<float>(player, 0x348) = at<float>(first, 0x340);
-    }
-    using GetHUD = void*(__attribute__((thiscall))*)(void*);
-    reinterpret_cast<Initialize>(image + j460::entry::engineRoomsRoomCall_5a8620)(
-        reinterpret_cast<GetHUD>(image +
-                                 j460::entry::engineRoomsGetHUD)(reinterpret_cast<void*>(g)));
     logger("player_spawn type=" + std::to_string(type) +
            " controller=" + std::to_string(controller));
-    lua.pushInteger(L, before);
+    lua.pushInteger(L, *slot);
     return 1;
 }
 int testGamepad(lua_State* L) {

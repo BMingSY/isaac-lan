@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定、输入设备／查询适配、暂停菜单和角色目录组件，以及 Lua 初始化入口资料；房间、完整玩家输入、实体同步和启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定、输入设备／查询适配、暂停菜单、玩家创建／分配和角色目录组件，以及 Lua 初始化入口资料；房间、完整玩家输入、实体同步和启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -59,11 +59,19 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 物理输入旁路只接受这三个已安装入口对应的查询标识，通过原函数 trampoline 调用，不重新进入联机路由、不执行任意回调地址。参数与输出对象只在调用期间借用；适配器不分配、销毁或持有原生设备。安装失败只撤销自己创建的 Hook 并清除旁路，允许重试；重复安装不会替换现有旁路。
 
-两版游戏自带枚举中的前十六个动作与菜单方向 `20..23` 相同；原版重开为 `16`，没有原生表情动作。差异集中在 [input_actions.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input_actions.h)，不能把忏悔＋的 UI 动作编号直接传给原版。设备与查询组件仍需完整后端装配，玩家分配和完整输入路由尚未接通。
+两版游戏自带枚举中的前十六个动作与菜单方向 `20..23` 相同；原版重开为 `16`，没有原生表情动作。差异集中在 [input_actions.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input_actions.h)，不能把忏悔＋的 UI 动作编号直接传给原版。设备与查询组件仍需完整后端装配，完整输入路由尚未接通。
 
 [鼠标适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/mouse_input.cpp) 只借入 `Player::Controls` 内联鼠标块的 `0x3439ac`／`0x343ca2` 两个边界，保留其余玩家控制流程。该块以 EDI 接收角色、EBP 指向局部帧，鼠标生效位为 `EBP-0x150`，输出为 `-0x15c/-0x158`。物理查询借用独立的有界局部帧运行原生鼠标块，在结束边界直接返回，不继续执行玩家控制；嵌套查询按线程恢复前一借用帧。适配器不分配原生角色、不修改控制器身份，也不持有角色指针。
 
 原版输出为像素差乘 `0.02`。组件按 `WindowClientHeight / referenceHeight × 0.65 × 0.02` 换算世界位移，再与公共查询的 `0.2` 标度互换；窗口高度来自无参数入口 `0x561100`，参考高度读取 RVA `0x7aa930`。原生鼠标块继续负责屏幕取整、镜像与镜头偏移；接收端按本机比例恢复原版输出。无效比例和非有限输出不写入局部帧。无联机覆盖时完整透传原生块，无有效指针时保留此前的输入局部值。边界回调保存并恢复通用寄存器、标志、SSE／x87 与控制字；该适配尚需完整输入路由装配。
+
+## 玩家创建与控制器分配
+
+[玩家绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/player_input.cpp) 连接[共享创建组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_input.cpp)。`PlayerManager` 位于 `Game+0x1ba40`，玩家向量位于 `Game+0x1ba50`，两者不能混用。创建 `0x518810` 为 `thiscall Player*(PlayerManager*, int type)`；分配 `0x36b140` 为 `thiscall void(Player*, int controller, bool companions)`，控制器字段为 `+0x154c`。LAN 控制器范围为 `1..4`。
+
+创建后先分配控制器，再调用无栈参数的原生初始化 `0x380810`，随后通知所属开局奖励组件。初始化或奖励可能追加伴生角色并扩容向量，因此必须重新取得列表，为所有新增身体分配相同控制器和邻近主玩家的出生位置。位置为 `Entity+0x294/+0x298`，上一位置为 `+0x29c/+0x2a0`；两者同步设置。最后通过 `Game::GetHUD` 的 `0x127c0` 取得 `Game+0x3da4c`，调用 `0x506f10` 分配原生 HUD，两者都以 ECX 接收对象，无栈参数。
+
+组件校验图像、当前 Game、槽位、类型范围和向量边界；游戏对象、角色及列表仍由游戏持有，不保留迭代器、不自行分配或释放。原生创建失败时不继续初始化；初始化期间 Game 失效时停止后续访问。失败不提供原生对象回滚，调用方不能将部分创建视为加入成功。该组件不替代尚未实现的 J835 开局奖励和完整输入装配。
 
 ## 暂停菜单
 

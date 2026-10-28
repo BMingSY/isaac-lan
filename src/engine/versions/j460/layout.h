@@ -83,7 +83,7 @@ inline constexpr unsigned dimension = 0x1830c;
 inline constexpr unsigned previousDimension = 0x18310;
 inline constexpr unsigned leaveDoor = 0x18318;
 inline constexpr unsigned enterDoor = 0x1831c;
-inline constexpr unsigned players = 0x1baa8;
+inline constexpr unsigned playerManager = 0x1baa8, players = playerManager;
 inline constexpr unsigned floorSeeds = 0x1bb84;
 inline constexpr unsigned pauseMenu = 0x23a74;
 inline constexpr unsigned emoteWheel = 0x25108;

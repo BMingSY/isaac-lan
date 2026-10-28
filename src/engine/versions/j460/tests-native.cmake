@@ -75,9 +75,13 @@ add_test(NAME native.character-catalog COMMAND isaac_lan_character_catalog_test)
 set_tests_properties(native.character-catalog PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 add_executable(
     isaac_lan_pause_menu_test
-    tests/pause_menu_test.cpp ${ISAAC_LAN_BACKEND_DIR}/pause_menu.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/../common/pause_menu.cpp ${ISAAC_LAN_BACKEND_DIR}/input_devices.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/../common/input_devices.cpp)
+    tests/pause_menu_test.cpp
+    ${ISAAC_LAN_BACKEND_DIR}/pause_menu.cpp
+    ${ISAAC_LAN_BACKEND_DIR}/../common/pause_menu.cpp
+    ${ISAAC_LAN_BACKEND_DIR}/input_devices.cpp
+    ${ISAAC_LAN_BACKEND_DIR}/../common/input_devices.cpp
+    ${ISAAC_LAN_BACKEND_DIR}/player_input.cpp
+    ${ISAAC_LAN_BACKEND_DIR}/../common/player_input.cpp)
 target_include_directories(isaac_lan_pause_menu_test PRIVATE src)
 target_link_libraries(isaac_lan_pause_menu_test PRIVATE minhook)
 if(MINGW)

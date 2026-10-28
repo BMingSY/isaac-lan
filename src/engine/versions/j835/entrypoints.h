@@ -46,6 +46,11 @@ inline constexpr std::uint32_t playerMouseBegin = 0x3439ac;
 inline constexpr std::uint32_t playerMouseEnd = 0x343ca2;
 inline constexpr std::uint32_t windowClientHeight = 0x561100;
 inline constexpr std::uint32_t playerShootingEntity = 0x341840;
+inline constexpr std::uint32_t playerManagerSpawn = 0x518810;
+inline constexpr std::uint32_t playerAssignController = 0x36b140;
+inline constexpr std::uint32_t playerInitialize = 0x380810;
+inline constexpr std::uint32_t gameGetHUD = 0x127c0;
+inline constexpr std::uint32_t hudAssignPlayers = 0x506f10;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;
