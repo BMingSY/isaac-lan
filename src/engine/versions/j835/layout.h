@@ -83,6 +83,7 @@ namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned damageQueue = 8, damageRecordSize = 0x38, index = 0x20;
 inline constexpr unsigned interpolated = 0x16d;
 inline constexpr unsigned variant = 0x2c, subtype = 0x30;
 inline constexpr unsigned velocity = 0x2b8, friction = 0x2c4;
@@ -97,6 +98,9 @@ inline constexpr unsigned active = 0x16a, removeMethod = 0x28;
 inline constexpr unsigned positionX = 0x294, positionY = 0x298;
 inline constexpr unsigned previousX = 0x29c, previousY = 0x2a0;
 } // namespace entity
+namespace entityRef {
+inline constexpr unsigned entity = 0x24;
+} // namespace entityRef
 namespace itemConfig {
 inline constexpr unsigned type = 0, id = 4, name = 8, chargeType = 0xac;
 inline constexpr int active = 3, trinket = 2, specialCharge = 2;

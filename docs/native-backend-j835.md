@@ -170,6 +170,21 @@ Sprite 原生对象为 `0x114` 字节，Lua 自有 wrapper 为 `0x11c` 字节、
 
 `entity_npc_boss` 只允许客机恢复活动 NPC 的分类字节 `+0xb8d`，与 `EntityNPC::IsBoss`（`0x28f570`）一致。该标记独立于 Boss 类型编号，不触发 AI 或分配实体。完整实体姿态与其他原生引用接口不属于这一字段组件。
 
+## NPC 命中与受击绘制
+
+[J835 命中绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/combat_feedback.cpp) 使用[共享事件和绘制组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/combat_feedback.cpp)。Lua 接口、序号、房间观看者过滤和字节布局遵循[命中反馈契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#npc-命中与受击绘制)，不改变原生伤害队列、HP 或回调返回值。
+
+| 原生边界 | J835 ABI 与布局 |
+| --- | --- |
+| `NPC::TakeDamage` | `0x2ac370`，`thiscall bool(NPC*, float, uint64, EntityRef*, int)`，清栈 20 字节；来源实体位于 EntityRef `+0x24` |
+| `Entity::SetColor` | `0x28a380`，`thiscall void(Entity*, Color*, int frames, int priority, bool fade, bool share)`，清栈 20 字节 |
+| 伤害颜色调用 | 返回点 `0x286ff9`，ESI 为当前队列项，ECX 为实体；只接管这一来源的权威 NPC 闪烁，其他颜色调用完整透传 |
+| 队列清空边界 | `0x28701d`，EDI 为实体；发布确认后由原生代码清空队列，旁路保留通用寄存器、标志和 SSE 状态 |
+
+队列为 `Entity+8/+12` 的首尾指针，每项 `0x38` 字节；事件只保留队列索引及调用前取得的来源／目标身份，回调移除来源后不再解引用它。嵌套命中各自归属，真实颜色调用决定时长；队列无闪烁地结算时仍保持零时长，未结算或旧楼层观察按共享边界清理。
+
+身份使用实体初始种子 `+0x344` 和索引 `+0x20`；本机绘制从房间渲染数组 `+0x125c/+0x1264` 借用实体，临时替换 Sprite `+0x3c` 的颜色 `+0xa8`。44 字节颜色在正常返回、嵌套绘制及 C++ 异常退出时恢复，不调用原生颜色入队方法，不持有或释放实体。Hook 安装成组回滚并保留外部 Hook，组件完整使用仍依赖 J835 房间调度与呈现。
+
 ## 本机掉落物预览
 
 [预览绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/pickup_preview.cpp) 通过[共享预览组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/pickup_preview.cpp) 调用 `0x2b81c0`，ABI 为 `thiscall void(Pickup*)`，无栈参数。原生方法读取当前玩家名单的道具，创建或移除预览并维护实体引用；组件不复制 LootList、Sprite 或其他原生对象，也不分配、释放预览资源。

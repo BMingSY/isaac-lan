@@ -5,6 +5,10 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t npcTakeDamage = 0x2ac370;
+inline constexpr std::uint32_t entitySetColor = 0x28a380;
+inline constexpr std::uint32_t entityDamageColorReturn = 0x286ff9;
+inline constexpr std::uint32_t entityDamageDrain = 0x28701d;
 inline constexpr std::uint32_t gameStoreHourglass = 0x2d7f80;
 inline constexpr std::uint32_t engineRoomsTransition = 0x2d07d0;
 inline constexpr std::uint32_t engineRoomsStageTransition = 0x2d0aa0;

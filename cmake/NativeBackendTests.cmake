@@ -42,6 +42,16 @@ isaac_add_backend_test(
     minhook)
 foreach(backend j460 j835)
     isaac_add_backend_test(
+        combat-feedback
+        ${backend}
+        SOURCES
+        tests/combat_feedback_test.cpp
+        src/engine/versions/${backend}/combat_feedback.cpp
+        LIBRARIES
+        minhook
+        COMPILE_OPTIONS
+        -msse2)
+    isaac_add_backend_test(
         rewind-home
         ${backend}
         SOURCES

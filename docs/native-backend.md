@@ -241,7 +241,7 @@ J460 发放接口保留六个栈参数，入队接口保留五个栈参数，均
 
 ## NPC 命中与受击绘制
 
-[combat_feedback.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/combat_feedback.cpp)仅在 J460 主线程及已建立的房间上下文运行。后端保留原生伤害判定和所有 Mod 回调，不在副本执行伤害。
+[共享命中组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/combat_feedback.cpp) 通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/combat_feedback.cpp) 使用下述原生边界；[J835 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/combat_feedback.cpp) 提供自己的入口和字段。观察仅在主线程及已建立的权威房间上下文运行，保留原生伤害判定和所有 Mod 回调，不在副本重放伤害。
 
 | 能力 | 契约 |
 | --- | --- |
@@ -255,3 +255,5 @@ J460 发放接口保留六个栈参数，入队接口保留五个栈参数，均
 `accepted` 保留原生接触返回值；演出确认等待原生更新结算。接触时只记录新增伤害队列项的索引与已取得的来源／目标身份，不保留实体或队列项的可解引用指针。队列位于 `Entity + 0x8`，每项 `0x38` 字节；嵌套伤害独立归属。原生伤害 `SetColor` 调用点的 ESI 指向当前队列项，只有实际调用发生才登记其演出时长。队列清空位置 `0x2af8c6`（EDI 为实体）统一发布一次确认：免疫、回调否决、禁止闪烁等没有产生原生演出的命中时长为零。未入队的接触直接确认；未结算观察有数量和过期限制，重置／世界切换清理。序号在发布时分配，避免嵌套或延迟结算被客机高水位跳过。入口与寄存器契约由启动签名校验覆盖；原生伤害队列、HP 和返回值均不修改。
 
 房间 renderArray 内的实体由房间持有。绘制作用域保存 44 字节 Sprite.Color，临时使用原版两种伤害样式，离开作用域按 RAII 恢复，不向原生颜色队列插入条目。实体 InitSeed／索引不符及过期记录失效；客机每次呈现先清空上一帧选择，暂停和视图重置也清空。此能力不推进动画、不创建碰撞特效、不播放声音，不适用于任意原生地址或独立创建的 Sprite。
+
+三个 Hook 全部创建后才启用，安装失败只撤销本组件已创建的 Hook 并清空旁路，允许重试；重复安装不会覆盖正在使用的原函数。无 Game 时原生伤害仍透传，但不产生缺少房间归属的事件；无 Room 或渲染数组时仍执行原绘制回调。

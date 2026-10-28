@@ -90,6 +90,8 @@ ctest --test-dir build-core --output-on-failure
 
 沙漏原生适配的离线检查为 `native.rewind-home-j460`、`native.rewind-home-j835`，由[同一夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/rewind_home_test.cpp) 分别链接两版绑定，覆盖检查点字节、原生计数边界、Home／普通转场、各版贪婪选择、客机结果回放、跨房来源、重复请求、清理与 Hook 冲突。夹具只执行扩展和合成原生入口；真实 GameState 副作用、完整房间恢复及画面仍属于实机范围。
 
+NPC 命中适配使用 `native.combat-feedback-j460`、`native.combat-feedback-j835` 和 `presentation.hit-events`：原生夹具覆盖 Hook 调用栈、颜色来源、队列结算、嵌套命中、来源移除、身份替换、房间观看者、固定编码与临时颜色恢复，Lua 检查消费和本机演出顺序。原生夹具不运行游戏伤害逻辑或绘制资源，实机画面与真实回调另行验证。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh
