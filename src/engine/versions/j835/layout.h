@@ -69,6 +69,9 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
 } // namespace challengeParams
 namespace game {
+inline constexpr unsigned descriptors = 0x14, mapOffsets = 0x1796c, roomCount = 0x1815c;
+inline constexpr std::array<unsigned, 2> mapCaches{0x1a2ac8, 0x1a2c28};
+inline constexpr unsigned mapState = 0x101904, mapTimer = 0x10190c;
 inline constexpr unsigned minimap = 0x1a2ab0;
 inline constexpr unsigned pixelation = 0x24363c, pixelationDuration = 0x243640;
 inline constexpr unsigned dizzyIntensity = 0x283c04, dizzyTarget = 0x283c08, dizzyStep = 0x283c0c;
@@ -116,6 +119,7 @@ inline constexpr unsigned state = 0, index = 0x14, direction = 0x10;
 inline constexpr unsigned animation = 0x1c, dimension = 0x18;
 } // namespace roomTransition
 namespace room {
+inline constexpr unsigned waterX = 0x7344, waterY = 0x7348;
 inline constexpr unsigned gridCells = 0x24, doors = 0x724, doorIndices = 0x744;
 inline constexpr unsigned width = 0xc, height = 0x10, railGrid = 0x7350, railOwner = 0x734c;
 inline constexpr unsigned firstBoss = 0x1d1c, secondBoss = 0x1d20;
@@ -124,11 +128,24 @@ inline constexpr unsigned enteredFrame = 0x11f0;
 inline constexpr unsigned entities = 0x1218;
 } // namespace room
 namespace roomDescriptor {
+inline constexpr unsigned safeGridIndex = 4, overrideData = 0x14, allowedDoors = 0x18, doors = 0x1c,
+                          doorCount = 8;
+inline constexpr int minimumRoom = -18;
+inline constexpr unsigned size = 0xb8, gridIndex = 0, listIndex = 8, dimension = 0xc;
+inline constexpr unsigned seeds = 0x58, savedEntities = 0x74;
 inline constexpr unsigned data = 0x10, flags = 0x44;
 } // namespace roomDescriptor
 namespace roomConfig {
+inline constexpr unsigned shape = 0x48;
+inline constexpr unsigned size = 0x5c, width = 0x46, height = 0x47, stringCapacity = 0x28;
+inline constexpr std::array<unsigned, 10> scalarFields{0,    4,    8,    0xc,  0x10,
+                                                       0x2c, 0x38, 0x3c, 0x48, 0x4c};
 inline constexpr unsigned stage = 0, type = 8, variant = 12;
 } // namespace roomConfig
+namespace savedEntity {
+inline constexpr unsigned size = 0x68;
+inline constexpr std::array<unsigned, 6> mapFields{0, 4, 8, 0x14, 0x28, 0x2c};
+} // namespace savedEntity
 namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList

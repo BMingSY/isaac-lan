@@ -32,6 +32,14 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 `AnimationState::Reset` RVA `0x3740` 使用 ECX 接收状态、栈上一个动画参数并清栈 4 字节；空动画通过此入口解除当前动画及帧数组。字符串、图层定义、纹理和帧数组均由游戏管理，扩展只恢复受限标量；贴图变化返回普通路径供 Lua 调用现有游戏加载接口。
 
+## 房间描述符与地图缓存
+
+[房间数据绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_data.cpp)使用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_data.cpp)。编码、校验、稳定配置存储和缓存借用见[房间数据契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#房间描述符与地图缓存)。原生描述符查询 RVA `0x30e0f0` 使用 thiscall 接收索引、维度，清栈 8 字节；特殊房间只支持 `-18..-1`，更小索引在调用前拒绝，不能按 J460 范围写原生共享占位对象。
+
+普通描述符数组为 `Game+0x14`、步长 `0xb8`；格子映射为 `+0x1796c`，房间数量为 `+0x1815c`。当前房间／索引／维度为 `+0x18190/+0x18194/+0x1819c`。描述符与配置标量偏移同上方契约，但保存实体记录步长是 `0x68`；小地图只读取六个具名字段，其余位置保持零值，不复制原生对象。别名或嵌套缓存逆序恢复借用，接收更新与换层清理不会提前释放正在绘制的记录。
+
+水流向量为 `Room+0x7344/+0x7348`，帧钟为 `Game+0x1a30dc`。小地图缓存入口 `0x4e2e40` 使用 thiscall、无参数，两个目标为 `Game+0x1a2ac8/+0x1a2c28`；显示状态／计时为 `+0x101904/+0x10190c`。对象从本次调用的 Game 和调度作用域取得，缺少 Game、未启用或未初始化的房间不写入；不以原生内存地址作为网络身份。
+
 ## 角色附属状态
 
 [角色状态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/actor_state.cpp)复用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/actor_state.cpp)，Lua 名称、快照字节和名单限制遵循[角色附属状态契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#角色附属状态)。附属 Sprite 为 `Player+0x36c/+0xf48/+0xe34`，七个蓄力条从 `+0x6a8` 开始、步长 `0x114`；服装向量为 `+0x1170/+0x1174/+0x1178`，步长 `0x130`。借用包装沿用原生 metatable，不接管动画资源。

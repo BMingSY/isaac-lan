@@ -96,6 +96,18 @@
 
 进入已有房间的跟班在落点设置后调用 `Familiar.ResetRoomState`（RVA `0x22bb70`）。这复用原生房间入场对跟随历史、速度及临时状态的处理；仅主机对迁移名单中的跟班调用，不触及留在目标房间中的跟班，也不改变原生分配与回收的所有权。入口签名在启动时校验。
 
+## 房间描述符与地图缓存
+
+[房间数据组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_data.cpp)复用[J460 布局绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_data.cpp)，由房间调度注入启用、空闲和可写房间状态。`room_layout([index, dimension])` 采集当前或指定描述符；`room_layout(bytes)` 仅客机恢复。载荷依次为四个大端 int32（维度、规范索引、网格索引、列表索引）、单字节格子数量及格子编号、十个配置 uint32、宽高字节、门掩码、八个门目标和四个种子。大房间按单元映射输出规范索引；不传递名称、生成对象、容器或地址。
+
+J460 描述符数组为 `Game+0x14`、步长 `0xb8`，三个维度共 507 项；格子映射为 `+0x17adc`，已登记数量为 `+0x182cc`。原生查询 `0x340bc0` 使用 thiscall 接收索引、维度并清栈 8 字节。普通房间写入已构造的数组项，再登记对应格子；特殊房间限定 `-20..-1` 并使用原生查询，不写缺失房间的共享占位对象。完整载荷、维度、索引、单元覆盖、形状及尺寸先校验再提交。
+
+描述符的配置／覆盖配置为 `+0x10/+0x14`，门掩码／门为 `+0x18/+0x1c`，种子为 `+0x58` 的四字。配置为 `0x5c` 字节，仅恢复 `0/4/8/0xc/0x10/0x2c/0x38/0x3c/0x48/0x4c` 的标量和 `+0x46/+0x47` 的宽高；名称保持空内联字符串，无初始生成列表。组件按房间键持有稳定存储，跨原生楼层清理保持地址有效，同键快照只复制标量；配置不进入原生析构。
+
+`map_pickups(index, dimension)` 捕获保存实体中的拾取物和槽机，`map_pickups(bytes)` 仅客机接收，返回成功及内容是否变化。载荷为维度和索引两字，加至多 4096 组六个 uint32；字段取自记录 `+0/+4/+8/+0x14/+0x28/+0x2c`。J460 保存向量在描述符 `+0x74`、记录步长 `0x78`，原版使用不同步长。接收不修改游戏保存向量；只在小地图缓存期间借用零初始化的记录，其余字段为空。嵌套缓存、同描述符别名及异常按逆序恢复原向量，正在借用的存储保持到作用域结束，换层清理只失效接收缓存。
+
+`room_water_current(x, y)` 只为已初始化的客机当前房间写入 `Room+0x7460/+0x7464`，拒绝存储壳、非有限坐标及长度大于单位向量的值。`state_clock(frame)` 恢复客机 `Game+0x264f8` 的 uint32 帧钟；销毁后的 Game 不访问。`map_refresh()` 仅在启用时调用 `0x58b5e0`（thiscall、无参数）刷新 `Game+0x25ee4/+0x26044`，并维护 `+0x22ed4/+0x22edc` 的显示状态，不执行可见性玩法。布局与缓存的[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#房间描述符与地图缓存)独立核对。
+
 ## 角色附属状态
 
 [共享角色状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/actor_state.cpp)由房间后端注入本次调用的本地／完整队伍名单，使用[J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/actor_state.cpp)访问现有角色。`actor_sprites(index, sprite)` 返回三个附属 Sprite、七个蓄力条及服装 Sprite，顺序固定；只接受当前名单对应的 8 字节借用包装，服装向量完整验证容量、步长和 4096 项上限后才创建借用包装。J460 三个附属 Sprite 为 `+0x41c/+0xff8/+0xee4`，蓄力条从 `+0x758` 开始、步长 `0x114`，服装从 `+0x1220` 的向量取得、步长 `0x130`；不复制资源或转移析构责任。

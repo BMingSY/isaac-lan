@@ -15,6 +15,8 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/rooms.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/laser_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/laser_state.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/room_data.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/room_data.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/actor_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/actor_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/room_routing.cpp"

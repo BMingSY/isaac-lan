@@ -1,5 +1,6 @@
 #include "engine/versions/common/room_hooks.h"
 #include "engine/versions/common/actor_state.h"
+#include "engine/versions/common/room_data.h"
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/rooms.h"
@@ -1842,119 +1843,10 @@ int syncLocations(lua_State* L) {
     }
     return 1;
 }
-// Replica room initialization uses an explicit layout from the authority.
-// Special rooms are created lazily by gameplay (Devil/Angel, Error, etc.);
-// generating the floor from the same seed does not create these descriptors.
-// No process pointers, STL containers or spawn configuration cross the wire.
-std::map<Key, std::array<std::uint8_t, 0x5c>> replicaLayouts;
-// The native minimap reads saved entities, which replicas never simulate or
-// save. Supply pickup metadata only while caching the map; room loading and
-// saving must retain their original owned vectors.
-using MapEntity = std::array<std::uint32_t, 0x78 / 4>;
-std::map<Key, std::vector<MapEntity>> replicaMapEntities;
-constexpr std::array<unsigned, 6> mapFields{0, 4, 8, 0x14, 0x28, 0x2c};
-int mapPickups(lua_State* L) {
-    try {
-        if (lua.getTop(L) == 2) {
-            const int index = lua.checkInteger(L, 1), dimension = lua.checkInteger(L, 2);
-            using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-            const auto desc = reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
-                reinterpret_cast<void*>(game()), index, dimension));
-            if (!desc)
-                throw std::runtime_error("Map descriptor is unavailable");
-            lan::Writer w(lan::Message::world);
-            w.u32(dimension);
-            w.u32(index);
-            const auto received = replicaMapEntities.find({dimension, index});
-            if (runtime::replica() && received != replicaMapEntities.end()) {
-                for (const auto& entity : received->second)
-                    for (auto offset : mapFields)
-                        w.u32(entity[offset / 4]);
-            } else {
-                const auto saved = at<Vector>(desc, 0x74);
-                for (auto entity = saved.begin; entity < saved.end; entity += 0x78)
-                    if (at<unsigned>(entity, 0) == 5 || at<unsigned>(entity, 0) == 6)
-                        for (auto offset : mapFields)
-                            w.u32(at<unsigned>(entity, offset));
-            }
-            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                            w.bytes.size() - 1);
-            return 1;
-        }
-        if (!runtime::replica())
-            throw std::runtime_error("Only replicas receive map pickups");
-        std::size_t size = 0;
-        const auto bytes = lua.checkString(L, 1, &size);
-        if (size < 8 || (size - 8) % 24 || size > 8 + 4096 * 24)
-            throw std::runtime_error("Invalid map pickups");
-        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
-        Key key{static_cast<int>(r.u32()), static_cast<int>(r.u32())};
-        if (key.dimension < 0 || key.dimension > 2 || key.index < -20 || key.index >= 169)
-            throw std::runtime_error("Invalid map room");
-        std::vector<MapEntity> entities((size - 8) / 24);
-        for (auto& entity : entities) {
-            for (auto offset : mapFields)
-                entity[offset / 4] = r.u32();
-            if (entity[0] != 5 && entity[0] != 6)
-                throw std::runtime_error("Invalid map entity");
-        }
-        r.finish();
-        auto& previous = replicaMapEntities[key];
-        const bool changed = previous != entities;
-        previous = std::move(entities);
-        lua.pushBoolean(L, true);
-        lua.pushBoolean(L, changed);
-        return 2;
-    } catch (const std::exception& error) {
-        runtime::abort(error.what());
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-}
-int roomWaterCurrent(lua_State* L) {
-    const auto x = lua.checkNumber(L, 1), y = lua.checkNumber(L, 2);
-    const auto room = scopes.current();
-    const bool valid = enabled && runtime::replica() && room && !room->replicaShell &&
-                       std::isfinite(x) && std::isfinite(y) && x * x + y * y <= 1.000001;
-    if (valid) {
-        // J460 Room::GetWaterCurrent exposes these two floats but has no Lua
-        // setter. Replica layouts omit the spawn marker that initializes them.
-        // Restore the room vector before its native ambient-effect update.
-        at<float>(room->pointer, 0x7460) = static_cast<float>(x);
-        at<float>(room->pointer, 0x7464) = static_cast<float>(y);
-    }
-    lua.pushBoolean(L, valid);
-    return 1;
-}
 Address mainRoomDescriptor(int index) {
     using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
     return reinterpret_cast<Address>(
         engine<Desc>(j460::entry::engineRoomsDesc)(reinterpret_cast<void*>(game()), index, 0));
-}
-int roomConnections(lua_State* L) {
-    namespace descriptor = j460::layout::roomDescriptor;
-    const auto index = lua.checkInteger(L, 1);
-    const auto desc = enabled && !runtime::replica() && !scopes.depth() && index >= 0 && index < 169
-                          ? mainRoomDescriptor(static_cast<int>(index))
-                          : 0;
-    if (!desc || !at<Address>(desc, descriptor::data)) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    lua.createTable(L, descriptor::doorCount, 0);
-    for (unsigned slot = 0; slot < descriptor::doorCount; ++slot) {
-        const auto target = at<int>(desc, descriptor::doors + slot * sizeof(int));
-        int canonical = -1;
-        if ((at<unsigned>(desc, descriptor::allowedDoors) & (1u << slot)) && target >= 0 &&
-            target < 169) {
-            const auto neighbor = mainRoomDescriptor(target);
-            if (neighbor && at<Address>(neighbor, descriptor::data))
-                canonical = at<int>(neighbor, descriptor::safeGridIndex);
-        }
-        lua.pushInteger(L, canonical);
-        lua.rawSetI(L, -2, slot + 1);
-    }
-    return 1;
 }
 int specialRoomTemplate(lua_State* L) {
     namespace descriptor = j460::layout::roomDescriptor;
@@ -1991,146 +1883,6 @@ int specialRoomTemplate(lua_State* L) {
         }
     }
     lua.pushBoolean(L, valid);
-    return 1;
-}
-int roomLayout(lua_State* L) {
-    try {
-        if (lua.getTop(L) == 0 || lua.getTop(L) == 2) {
-            using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-            const int dimension = lua.getTop(L) ? lua.checkInteger(L, 2) : at<int>(game(), 0x1830c);
-            const int index = lua.getTop(L) ? lua.checkInteger(L, 1) : at<int>(game(), 0x18304);
-            const auto desc =
-                lua.getTop(L)
-                    ? reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
-                          reinterpret_cast<void*>(game()), lua.checkInteger(L, 1), dimension))
-                    : at<Address>(at<Address>(game(), 0x18300), 4);
-            const auto override = at<Address>(desc, 0x14);
-            const auto config = override ? override : at<Address>(desc, 0x10);
-            lan::Writer w(lan::Message::world);
-            w.u32(dimension);
-            w.u32(index < 0 ? index : at<int>(desc, 4));
-            w.u32(at<int>(desc, 0));
-            w.u32(at<int>(desc, 8));
-            // Large rooms occupy several cells; the minimap uses this native
-            // cell-to-descriptor table rather than GetRoomByIdx's fallback.
-            std::vector<unsigned> cells;
-            if (index >= 0)
-                for (unsigned cell = 0; cell < 169; ++cell)
-                    if (at<int>(game(), 0x17adc + (dimension * 169 + cell) * 4) == at<int>(desc, 8))
-                        cells.push_back(cell);
-            w.u8(cells.size());
-            for (auto cell : cells)
-                w.u8(cell);
-            for (auto offset : {0u, 4u, 8u, 12u, 16u, 0x2cu, 0x38u, 0x3cu, 0x48u, 0x4cu})
-                w.u32(at<unsigned>(config, offset));
-            w.u8(at<unsigned char>(config, 0x46));
-            w.u8(at<unsigned char>(config, 0x47));
-            w.u32(at<unsigned>(desc, 0x18));
-            for (unsigned offset = 0x1c; offset < 0x3c; offset += 4)
-                w.u32(at<unsigned>(desc, offset));
-            for (unsigned offset = 0x58; offset <= 0x64; offset += 4)
-                w.u32(at<unsigned>(desc, offset));
-            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                            w.bytes.size() - 1);
-            return 1;
-        }
-        if (!runtime::replica())
-            throw std::runtime_error("Only replicas receive room layouts");
-        std::size_t size;
-        const auto data = lua.checkString(L, 1, &size);
-        lan::Reader r({reinterpret_cast<const std::uint8_t*>(data), size});
-        Key key{static_cast<int>(r.u32()), static_cast<int>(r.u32())};
-        const int gridIndex = r.u32(), listIndex = r.u32();
-        std::vector<unsigned> cells(r.u8());
-        for (auto& cell : cells)
-            cell = r.u8();
-        std::array<std::uint8_t, 0x5c> config{};
-        auto address = reinterpret_cast<Address>(config.data());
-        for (auto offset : {0u, 4u, 8u, 12u, 16u, 0x2cu, 0x38u, 0x3cu, 0x48u, 0x4cu})
-            at<unsigned>(address, offset) = r.u32();
-        at<unsigned char>(address, 0x46) = r.u8();
-        at<unsigned char>(address, 0x47) = r.u8();
-        // An empty native MSVC small string and no initial spawns. Entity and
-        // grid state is installed by the authoritative snapshot after Init.
-        at<unsigned>(address, 0x28) = 15;
-        const auto allowed = r.u32();
-        std::array<unsigned, 8> doors{};
-        for (auto& door : doors)
-            door = r.u32();
-        std::array<unsigned, 4> seeds{};
-        for (auto& seed : seeds)
-            seed = r.u32();
-        r.finish();
-        if (!validLayoutIndices(key.dimension, key.index, gridIndex, listIndex) ||
-            (key.index >= 0 && std::find(cells.begin(), cells.end(), key.index) == cells.end()) ||
-            std::any_of(cells.begin(), cells.end(), [](auto cell) { return cell >= 169; }) ||
-            at<unsigned>(address, 0x48) < 1 || at<unsigned>(address, 0x48) > 12 ||
-            at<unsigned>(address, 8) < 1 || at<unsigned>(address, 8) > 32 ||
-            !at<unsigned char>(address, 0x46) || at<unsigned char>(address, 0x46) > 26 ||
-            !at<unsigned char>(address, 0x47) || at<unsigned char>(address, 0x47) > 14)
-            throw std::runtime_error(
-                "Invalid authoritative room layout dimension=" + std::to_string(key.dimension) +
-                " index=" + std::to_string(key.index) + " grid=" + std::to_string(gridIndex) +
-                " list=" + std::to_string(listIndex));
-        using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-        // All floor descriptors are constructed by the game at startup. A new
-        // red room has no replica index yet: GetRoomByIdx returns a shared
-        // sentinel in that case, which must never be populated as a real room.
-        const auto desc =
-            key.index >= 0 ? game() + 0x14 + listIndex * 0xb8
-                           : reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
-                                 reinterpret_cast<void*>(game()), key.index, key.dimension));
-        if (!desc)
-            throw std::runtime_error("Replica descriptor is unavailable");
-        {
-            auto& stored = replicaLayouts[key];
-            stored = config;
-            at<Address>(desc, 0x10) = reinterpret_cast<Address>(stored.data());
-            at<Address>(desc, 0x14) = 0;
-            at<int>(desc, 0) = gridIndex;
-            at<int>(desc, 4) = key.index;
-            at<int>(desc, 8) = listIndex;
-            at<int>(desc, 0xc) = key.dimension;
-            if (key.index >= 0) {
-                registerMapRoom(std::span<int, 507>(reinterpret_cast<int*>(game() + 0x17adc), 507),
-                                at<unsigned>(game(), 0x182cc), key.dimension, key.index, listIndex,
-                                cells);
-            }
-            at<unsigned>(desc, 0x18) = allowed;
-            for (unsigned i = 0; i < doors.size(); ++i)
-                at<unsigned>(desc, 0x1c + 4 * i) = doors[i];
-            for (unsigned i = 0; i < seeds.size(); ++i)
-                at<unsigned>(desc, 0x58 + 4 * i) = seeds[i];
-        }
-        lua.pushBoolean(L, true);
-        return 1;
-    } catch (const std::exception& error) {
-        runtime::abort(error.what());
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-}
-int stateClock(lua_State* L) {
-    if (runtime::replica())
-        at<unsigned>(game(), 0x264f8) = static_cast<unsigned>(lua.checkInteger(L, 1));
-    return 0;
-}
-int refreshMap(lua_State* L) {
-    if (!enabled) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    // J460 Game::UpdateVisibility ends by refreshing these two map caches.
-    // Use that display-only step after applying authoritative DisplayFlags;
-    // its preceding door walk would recompute visibility from replica doors.
-    const auto g = game();
-    for (auto offset : {0x25ee4u, 0x26044u})
-        engine<RoomCall>(j460::entry::minimapCache)(reinterpret_cast<void*>(g + offset));
-    if (at<int>(g, 0x22ed4) != 2) {
-        at<int>(g, 0x22ed4) = 1;
-        at<int>(g, 0x22edc) = 2;
-    }
-    lua.pushBoolean(L, true);
     return 1;
 }
 int actorCompanions(lua_State* L) {
@@ -3496,7 +3248,7 @@ void beforeStart(bool preserveItemPixels) {
     floorSource.reset();
     replicaDeals.reset();
     presentation::items::reset(preserveItemPixels);
-    replicaMapEntities.clear();
+    engine::native_room_data::resetMap();
     for (const auto& [entry, original] : entityUpdates) {
         (void)original;
         MH_DisableHook(reinterpret_cast<void*>(entry));
@@ -3561,30 +3313,7 @@ void beforeStart(bool preserveItemPixels) {
     participants.clear();
 }
 void withMapPickups(const std::function<void()>& cache) {
-    if (!runtime::replica()) {
-        cache();
-        return;
-    }
-    struct Restore {
-        std::vector<std::pair<Address, Vector>> vectors;
-        ~Restore() {
-            for (const auto& [descriptor, vector] : vectors)
-                at<Vector>(descriptor, 0x74) = vector;
-        }
-    } restore;
-    using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-    for (const auto& [key, entities] : replicaMapEntities) {
-        const auto descriptor =
-            reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
-                reinterpret_cast<void*>(game()), key.index, key.dimension));
-        if (!descriptor || !at<Address>(descriptor, 0x10))
-            continue;
-        restore.vectors.emplace_back(descriptor, at<Vector>(descriptor, 0x74));
-        const auto begin = reinterpret_cast<Address>(entities.data());
-        const auto end = begin + entities.size() * sizeof(MapEntity);
-        at<Vector>(descriptor, 0x74) = {begin, end, end};
-    }
-    cache();
+    engine::native_room_data::withMapPickups(cache);
 }
 bool install(Address base, void (*log)(const std::string&)) {
     image = base;
@@ -3710,13 +3439,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_ready", ready);
     function("rooms_heads", heads);
     function("rooms_sync", syncLocations);
-    function("state_clock", stateClock);
-    function("room_layout", roomLayout);
     function("room_special_template", specialRoomTemplate);
-    function("room_connections", roomConnections);
-    function("room_water_current", roomWaterCurrent);
-    function("map_pickups", mapPickups);
-    function("map_refresh", refreshMap);
     function("actor_form", actorForm);
     function("actor_companions", actorCompanions);
     function("actor_ghost", actorGhost);
@@ -3725,7 +3448,15 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_connected", connections);
     function("rooms_begin_floor", beginFloor);
     function("rooms_begin_cinematic", beginCinematic);
-    return engine::native_actor_state::bind(
+    return engine::native_room_data::bind(L, module, image,
+                                          {[] { return enabled; }, [] { return !scopes.depth(); },
+                                           [] {
+                                               const auto room = scopes.current();
+                                               return enabled && room && !room->replicaShell
+                                                          ? room->pointer
+                                                          : 0;
+                                           }}) &&
+           engine::native_actor_state::bind(
                L, module, image, {[](bool team) {
                    return values(team && scopes.teamRoster() ? *scopes.teamRoster() : roster());
                }}) &&
