@@ -17,6 +17,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/input_devices.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/save.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/audio.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/audio.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/combat_feedback.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/presentation.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/player_outlines.cpp"

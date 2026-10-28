@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定、共享输入路由及设备／查询适配、暂停菜单、玩家创建／分配和角色目录组件，以及 Lua 初始化入口资料；道具发放／拾取／充能组件也已具备版本绑定，房间进入边界已有独立绑定，完整房间、实体同步和启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定、共享输入路由及设备／查询适配、暂停菜单、玩家创建／分配和角色目录组件，以及 Lua 初始化入口资料；道具发放／拾取／充能组件也已具备版本绑定，房间进入边界及声音／音乐也有独立绑定，完整房间、实体同步和启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -103,6 +103,16 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 已经确定目的地的回放通过作用域跳过 `0x30d1a8..0x30d650` 的整个混乱诅咒分支，包括改送和内容交换；不改写诅咒位、不消耗该分支的随机数。原生改送标志在分支之前已清零。作用域支持嵌套及异常恢复，普通主机选路继续执行原生分支。活动诅咒为 `(Game+0xc | Game+0x1c3170 | added) & ~removed`，附加／移除查询分别为无参数 cdecl `0x2ccc80`、`0x2cce10`；没有 Game 时返回零且不调用原生查询。
 
 两个 Hook 全部创建后才启用，失败仅回滚本组件创建的 Hook，清除旁路并允许重试。这些边界不负责房间对象分配、释放或玩家迁移，尚不能替代完整 J835 房间后端。
+
+## 声音与房间音乐
+
+[声音绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/audio.cpp) 连接[共享声音组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/audio.cpp)。音效入口 `0x488de0` 为 `thiscall void(SFXManager*, int id, float volume, int delay, bool loop, float pitch, float pan)`，清理 24 字节栈参数；即使原生实现未消费某个参数，转发仍保留完整调用栈。音乐播放 `0x3a2070` 与渐变 `0x3a2170` 均接收 Music、ID 与 float 参数，清理八字节；房间选曲 `0x3a9f20` 以 ECX 接收 Room，无栈参数。
+
+Music 位于 `Manager+0x29a78`，当前／排队曲目 ID 为 `+0x30c/+0x310`。进入房间的播放音量来自设置对象 `Manager+0x29df8` 的 `+0x18`，即原生选曲实际读取的位置。该字段属于设置对象，不作为 Music 的内部成员访问。房间键由当前楼层代次、`Game+0x1819c` 维度及 `+0x18194` 索引组成，借用 Room 指针来自 `+0x18190`。
+
+作用域暂借当前／排队 ID，使后台房间完成原生选曲而不更换实际声道；离开前记录原生直接写入的队列，再恢复外层或实际播放 ID。未知房间在空 ID 下求值一次，失败恢复临时 ID。房间、Music、SFXManager 和实际音频流仍由游戏持有，不复制或释放流对象。嵌套视角恢复外层房间，重复快照不重新请求曲目，跨房加入正在播放的队列目标，跨层及会话重置不复用旧归属。
+
+主机按房间听众记录带序号的声音事件，后台播放仅将本机音量降为零；副本不重新发送事件，也不让原生房间初始化覆盖已提交的权威音乐选择。声音编码及既有的时效、队列上限保持不变。三个 Hook 全部创建后启用，失败只撤销本组件创建的 Hook，清除旁路并允许重试。完整使用仍依赖 J835 房间调度和启动装配。
 
 ## 暂停菜单
 

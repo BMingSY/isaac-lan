@@ -46,10 +46,12 @@ inline constexpr unsigned chatFont = 0x4ae74;
 inline constexpr unsigned pendingEmote = 0x4ccac;
 inline constexpr unsigned menuInputBlock = 0x4d074;
 } // namespace manager
+namespace options {
+inline constexpr unsigned musicVolume = 0x18;
+} // namespace options
 namespace music {
 inline constexpr unsigned currentId = 0x30c;
 inline constexpr unsigned queuedId = 0x310;
-inline constexpr unsigned volume = 0x398;
 } // namespace music
 namespace progress {
 inline constexpr unsigned achievementCount = 642, counterCount = 523;

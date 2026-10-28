@@ -71,6 +71,10 @@ inline constexpr std::uint32_t levelMazeBranch = 0x30d1a8;
 inline constexpr std::uint32_t levelMazeBranchEnd = 0x30d650;
 inline constexpr std::uint32_t gameAddedSeedCurses = 0x2ccc80;
 inline constexpr std::uint32_t gameRemovedSeedCurses = 0x2cce10;
+inline constexpr std::uint32_t audioPlay = 0x488de0;
+inline constexpr std::uint32_t musicPlay = 0x3a2070;
+inline constexpr std::uint32_t musicCrossfade = 0x3a2170;
+inline constexpr std::uint32_t roomUpdateMusic = 0x3a9f20;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;

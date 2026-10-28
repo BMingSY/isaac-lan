@@ -17,6 +17,7 @@ namespace inputDevice {
 inline constexpr unsigned id = 8;
 } // namespace inputDevice
 namespace manager {
+inline constexpr unsigned music = 0x29a78;
 inline constexpr unsigned renderFrame = 0x4a264;
 inline constexpr unsigned options = 0x29df8;
 inline constexpr unsigned progress = 0x14, scene = 0x8;
@@ -28,6 +29,12 @@ inline constexpr unsigned continueRequested = 0x1ea6c1, deleteSaveRequested = 0x
 inline constexpr unsigned cinematicActive = 0x1ea830;
 inline constexpr unsigned menuRequested = 0x1ea818, requestedMenu = 0x1ea81c;
 } // namespace manager
+namespace options {
+inline constexpr unsigned musicVolume = 0x18;
+} // namespace options
+namespace music {
+inline constexpr unsigned currentId = 0x30c, queuedId = 0x310;
+} // namespace music
 namespace progress {
 inline constexpr unsigned dirty = 0, readOnly = 1;
 inline constexpr unsigned achievements = 0x38, counters = 0x2b8;
@@ -45,6 +52,7 @@ namespace roomChangeFrame {
 inline constexpr std::ptrdiff_t mazeRedirected = 0xf;
 } // namespace roomChangeFrame
 namespace game {
+inline constexpr unsigned room = 0x18190;
 inline constexpr unsigned roomIndex = 0x18194, dimension = 0x1819c, enterDoor = 0x181ac;
 inline constexpr unsigned curses = 0xc, seedCurses = 0x1c3170;
 inline constexpr unsigned playerManager = 0x1ba40;
