@@ -25,6 +25,14 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规则；小地图只发布前端实际绘制观察到的普通值。两处演出 Hook 成组创建，冲突只撤销本组件 Hook；道具、百宝袋、挑战 HUD 和胜利圈提示各自管理安装，任一失败由启动装配中止。上述组件仍依赖完整房间与前端后端，不能单独作为可安装联机实现。
 
+## Home 场景推进
+
+[场景更新绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/scene_update.cpp) 接入[共享更新门控](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/scene_update.cpp)。J835 没有独立的 BossOverlay 更新入口；`Game::Update` 在 RVA `0x2ce36e` 从 EDI 指向的 Game 读取 `+0x1cf20`，随后内联更新动画、处理 Home 路线标记，至 `0x2ce4c1` 进入下一更新块。
+
+普通客机且尚未进入结束状态时，边界直接继续到后一更新块；主机及结束状态执行原始跳板。门控保存整数寄存器、标志位、SSE、x87 和控制字，不写入场景对象或 Game 字段，不创建、推进或持有动画。这样由主机消费路线标记，客机的显示姿态仍交给演出同步；此门控本身不提供完整道具／Home 姿态适配。
+
+入口与继续位置均在启动签名清单中。Hook 冲突保留外部 Hook，失败清理所属 Hook 与跳板，允许重试；重复安装被拒绝。原生 Game／BossOverlay 继续由游戏持有，不能把该内部边界作为可直接调用的函数。
+
 ## 胜利圈提示
 
 [胜利圈绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/victory_prompt.cpp) 使用[共享提示组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp)。原生 Controls、Render、Hide 的 RVA 分别为 `0x3f21f0/0x3f1f30/0x3f2340`，均以 ECX 接收提示对象，无栈参数。只拦截当前 `Game+0x1c33fc` 的胜利圈提示；其他提示和单人会话保留原函数。

@@ -42,6 +42,16 @@ isaac_add_backend_test(
     minhook)
 foreach(backend j460 j835)
     isaac_add_backend_test(
+        scene-update
+        ${backend}
+        SOURCES
+        tests/scene_update_test.cpp
+        src/engine/versions/${backend}/scene_update.cpp
+        LIBRARIES
+        minhook
+        COMPILE_OPTIONS
+        -msse2)
+    isaac_add_backend_test(
         presentation
         ${backend}
         SOURCES

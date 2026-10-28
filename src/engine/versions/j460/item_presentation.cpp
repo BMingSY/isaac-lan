@@ -1,4 +1,5 @@
 #include "engine/versions/common/room_hooks.h"
+#include "engine/versions/common/scene_update.h"
 #include "engine/lua_api.h"
 #include "engine/item_presentation.h"
 #include "engine/pickup_preview.h"
@@ -49,18 +50,10 @@ ItemText originalItemText;
 CustomText originalCustomText;
 LookupText originalLookupText;
 Call originalRender;
-Call originalSceneUpdate;
 using SceneShow = void(__attribute__((thiscall)) *)(void*, int);
 SceneShow originalSceneShow;
 std::string configuration = "resources/giantbook.xml";
 unsigned homeSleepSerial = 0;
-void __attribute__((fastcall)) sceneUpdate(void* scene, void*) {
-    // Boss overlays and the TV sequence contain native route markers. Replicas
-    // render the authoritative pose instead of firing those markers again.
-    if (runtime::replica() && !runtime::ending())
-        return;
-    originalSceneUpdate(scene);
-}
 void __attribute__((fastcall)) sceneShow(void* scene, void*, int id) {
     if (!runtime::replica() && rooms::virtualized() && id == 3 && at<int>(game(), 0) == 13 &&
         at<int>(game(), 4) == 1) {
@@ -818,7 +811,7 @@ bool install(Address base) {
         const auto target = reinterpret_cast<void*>(image + offset);
         return MH_CreateHook(target, callback, original) == MH_OK && MH_EnableHook(target) == MH_OK;
     };
-    return pickup_preview::install(base) &&
+    return engine::native_scene_update::install(base) && pickup_preview::install(base) &&
            hook(j460::entry::hudShowFortune, reinterpret_cast<void*>(fortune),
                 reinterpret_cast<void**>(&originalFortune)) &&
            hook(j460::entry::stringTableIndexed, reinterpret_cast<void*>(indexedText),
@@ -831,8 +824,6 @@ bool install(Address base) {
                 reinterpret_cast<void**>(&originalPill)) &&
            hook(j460::entry::playerUseCard, reinterpret_cast<void*>(card),
                 reinterpret_cast<void**>(&originalCard)) &&
-           hook(j460::entry::bossOverlayUpdate, reinterpret_cast<void*>(sceneUpdate),
-                reinterpret_cast<void**>(&originalSceneUpdate)) &&
            hook(j460::entry::bossOverlayShow, reinterpret_cast<void*>(sceneShow),
                 reinterpret_cast<void**>(&originalSceneShow)) &&
            hook(j460::entry::stringTableLookup, reinterpret_cast<void*>(lookupText),

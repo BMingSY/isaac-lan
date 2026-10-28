@@ -147,6 +147,10 @@ J460 采集入口为 `0x305ee0`，`stdcall void(int door)`，清栈 4 字节。�
 
 小夜灯只筛选 `Room::Render` 在 `0x410dad` 发起的道具查询，不改其他调用者或道具。玩家 HUD 桥接使用 `Game+0x1da04` 和下方的坐标能力，小地图桥接发布前端实际绘制视图。两个演出 Hook 成组创建，失败只撤销本组件 Hook；其他演出子组件分别管理安装边界，启动装配在任一失败时中止。[J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#入场演出与本机视图) 说明其不同的角色引用、标记和对象布局。
 
+## Home 场景推进
+
+`BossOverlay::Update` RVA `0x212c0` 是 thiscall 无栈参数方法。[更新绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/scene_update.cpp) 交给[共享门控](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/scene_update.cpp)：普通客机在结束状态前不执行原生路线标记，主机和结束状态调用原函数；姿态仍由道具演出同步提供。组件不写入或持有原生对象，Hook 失败只清理自身资源，保留外部 Hook，重复安装被拒绝。[J835](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#home-场景推进) 使用游戏更新函数内的指令边界，不能沿用该方法 ABI。
+
 ## 胜利圈提示
 
 [胜利圈组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp) 通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/victory_prompt.cpp) 访问 `Game+0x26778`。Controls、Render、Hide 分别为 RVA `0x437fe0/0x437c10/0x438190`，均为 thiscall，无栈参数。动画 `+0x34`、播放位 `+0x44`、选择 `+0x128`、结果 `+0x12c` 和投票位 `+0x130` 只在该对象上使用；动画、字符串和字体仍由游戏持有。

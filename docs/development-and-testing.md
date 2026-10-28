@@ -102,6 +102,8 @@ NPC 命中适配使用 `native.combat-feedback-j460`、`native.combat-feedback-j
 
 入场与视图适配使用 `native.presentation-j460`、`native.presentation-j835`、`core.intro-barrier` 和 `bridge.presentation`。原生夹具检查 Hook 冲突、普通／主客机入口、后台房间、终局集合、控制恢复的房间与结束边界、嵌套推进／暂停／异常清理、固定事件字节与去重、过期和断线、实体引用登记、HUD 桥接及小夜灯调用者隔离。夹具模拟原生方法，不验证实际 versus 美术、角色移除过程或房间调度；这些随受影响实机场景集中检查。
 
+Home 原生更新门控使用 `native.scene-update-j460`、`native.scene-update-j835`。夹具执行实际 Hook，检查普通／客机／结束状态的重复切换、thiscall receiver、内联块继续位置、原生对象不变、栈平衡、GPR／标志／SSE／x87／控制字及 Hook 冲突清理；J835 夹具包含真实边界的字段读取指令。实际路线标记与 Home 结局仍属于实机范围。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh
