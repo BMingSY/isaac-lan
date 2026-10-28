@@ -114,6 +114,8 @@ inline constexpr unsigned state = 0, index = 0x14, direction = 0x10;
 inline constexpr unsigned animation = 0x1c, dimension = 0x18;
 } // namespace roomTransition
 namespace room {
+inline constexpr unsigned gridCells = 0x24, doors = 0x724, doorIndices = 0x744;
+inline constexpr unsigned width = 0xc, height = 0x10, railGrid = 0x7350, railOwner = 0x734c;
 inline constexpr unsigned firstBoss = 0x1d1c, secondBoss = 0x1d20;
 inline constexpr unsigned enemies = 0x12c8, delayedEnemies = 0x12cc, descriptor = 4;
 inline constexpr unsigned enteredFrame = 0x11f0;
@@ -264,4 +266,7 @@ namespace costume {
 inline constexpr unsigned stride = 0x130, path = 0;
 inline constexpr unsigned layerStride = 0x10, index = 0, layerId = 4, priority = 8, body = 0xc;
 } // namespace costume
+namespace grid {
+inline constexpr unsigned sprite = 0x40, extraSprite = 0x164, type = 4, variant = 8, index = 0x24;
+} // namespace grid
 } // namespace isaac::engine::j835::layout

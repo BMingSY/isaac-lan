@@ -142,6 +142,8 @@ inline constexpr unsigned stream = 0x1fe24;
 inline constexpr std::array<unsigned, 4> fileNames{0x1fdac, 0x1fdc4, 0x1fdf4, 0x1fe0c};
 } // namespace gameState
 namespace room {
+inline constexpr unsigned gridCells = 0x24, doors = 0x724, doorIndices = 0x744;
+inline constexpr unsigned width = 0xc, height = 0x10, railGrid = 0x746c, railOwner = 0x7468;
 inline constexpr unsigned firstBoss = 0x1bb0, secondBoss = 0x1bb4;
 inline constexpr unsigned enemies = 0x12c8, delayedEnemies = 0x12cc, descriptor = 4;
 inline constexpr unsigned size = 0x7898;
@@ -439,4 +441,7 @@ namespace costume {
 inline constexpr unsigned stride = 0x130, path = 0;
 inline constexpr unsigned layerStride = 0x10, index = 0, layerId = 4, priority = 8, body = 0xc;
 } // namespace costume
+namespace grid {
+inline constexpr unsigned sprite = 0x40, extraSprite = 0x27c, type = 4, variant = 8, index = 0x24;
+} // namespace grid
 } // namespace isaac::engine::j460::layout

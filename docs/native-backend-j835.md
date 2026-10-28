@@ -31,6 +31,19 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 武器虚表第 6 项查询蓄力上限，以 ECX 接收武器，无栈参数，x87 返回 float。允许原生组合返回有限负数，该值只供显示预测；恢复不改上限，也不创建或替换武器。服装同名项按出现顺序映射，未知项退回基础层；原生字符串和 Sprite 保持原所有权。全部载荷与映射在写入前完成校验，新的玩家对象独立解析其服装列表。
 
+## 网格、门与轨道
+
+[网格绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/grid_state.cpp)复用[共享网格组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/grid_state.cpp)，接口范围与所有权见[网格契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)。当前房间为 `Game+0x18190`；网格表 `Room+0x24` 持有对象，`+0x724` 的八个门槽只借用指针，`+0x744` 保存对应网格索引。写入限客机，空 Game／房间不能执行原生调用。
+
+| 原生操作 | J835 ABI／字段 |
+| --- | --- |
+| 立即删除网格 | RVA `0x3d9b00`，ECX 为房间，栈参数为 index、0、false，清栈 12 字节 |
+| 创建门 | RVA `0x3ad410`，ECX 为房间，栈参数 slot，清栈 4 字节，AL 返回成功；重复已有槽返回 false |
+| 网格与门 Sprite | 普通 Sprite `Grid+0x40`，附加 Sprite `Door+0x164`；类型／变种／索引为 `+4/+8/+0x24` |
+| RailManager | 房间 `+0x734c` 为所有者指针，`+0x7350` 为 448 字节轨道网格；宽高为房间 `+0xc/+0x10` |
+
+门包装仅引用现有动画，不能按忏悔＋的附加 Sprite 偏移访问原版对象。恢复已有门时验证其类型、索引和房间归属；清空槽表不销毁网格对象。原生创建失败恢复原目标索引。轨道数组全部校验后一次提交，空轨道同样恢复，不触及随后由游戏持有的 Sprite。房间变化后从当前 Game 重新解析对象，不保留跨房指针。
+
 ## 入场演出与本机视图
 
 [演出绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/presentation.cpp) 为[共享演出组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/presentation.cpp) 提供原生入口、字段与 HUD 坐标。入场事件按房间、维度和楼层筛选，固定每条 32 字节、网络字节序，保留至多 32 条和 90 帧；客机按序号去重。背景房间只通知观看者，主机所在房间才占用本机转场画面；终局集合使用既有 Boss 兼容策略和房间调度。

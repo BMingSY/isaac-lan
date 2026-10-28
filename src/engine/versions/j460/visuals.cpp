@@ -15,7 +15,7 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/entity_links.h"
 #include "engine/versions/j460/held_bombs.h"
-#include "engine/versions/j460/rails.h"
+#include "engine/versions/common/grid_state.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::visuals {
@@ -25,28 +25,6 @@ template <class T> T& at(Address p, unsigned offset) {
     return *reinterpret_cast<T*>(p + offset);
 }
 isaac::lua::API lua{};
-int roomRails(lua_State* L) {
-    try {
-        const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
-        const auto game = at<Address>(image, j460::globals::game);
-        const auto room = game ? at<Address>(game, 0x18300) : 0;
-        if (!lua.getTop(L)) {
-            const auto value = j460::rails::grid(room);
-            lua.pushLString(L, reinterpret_cast<const char*>(value.data()), value.size());
-            return 1;
-        }
-        if (!runtime::replica() || lua.getTop(L) != 1)
-            throw std::runtime_error("Only replicas restore room rails");
-        std::size_t size = 0;
-        const auto data = lua.checkString(L, 1, &size);
-        j460::rails::restore(room, {reinterpret_cast<const std::uint8_t*>(data), size});
-        lua.pushBoolean(L, true);
-    } catch (const std::exception& error) {
-        runtime::abort(error.what());
-        lua.pushBoolean(L, false);
-    }
-    return 1;
-}
 Address entitySprite(lua_State* L, int index) {
     auto sample = static_cast<Address*>(lua.toUserdata(L, index));
     if (!sample || lua.rawLength(L, index) != 8 || sample[1] < 0x48)
@@ -147,83 +125,6 @@ int localAmbientEffect(lua_State* L) {
     // query accepts ordinary IDs and never borrows or changes a game object.
     lua.pushBoolean(L, presentation::localAmbientEffect(
                            lua.checkInteger(L, 1), lua.checkInteger(L, 2), lua.checkInteger(L, 3)));
-    return 1;
-}
-int doorSprite(lua_State* L) {
-    // ExtraSprite's Lua property returns an owning copy in J460. Expose the
-    // door-owned ANM2 through the same non-owning wrapper as GetSprite().
-    auto sample = static_cast<Address*>(lua.toUserdata(L, 1));
-    if (!sample || lua.rawLength(L, 1) != 8) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
-    wrapper[0] = sample[0];
-    wrapper[1] = sample[1] - 0x40 + 0x27c;
-    lua.getMetatable(L, 1);
-    lua.setMetatable(L, -2);
-    return 1;
-}
-int gridVariant(lua_State* L) {
-    auto sample = static_cast<Address*>(lua.toUserdata(L, 1));
-    if (!runtime::replica() || !sample || lua.rawLength(L, 1) != 8) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    at<int>(sample[1] - 0x40, 8) = static_cast<int>(lua.checkInteger(L, 2));
-    lua.pushBoolean(L, true);
-    return 1;
-}
-int removeGrid(lua_State* L) {
-    const auto index = lua.checkInteger(L, 1);
-    if (!runtime::replica() || index < 0 || index >= 448) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
-    const auto room = at<Address>(at<Address>(image, j460::globals::game), 0x18300);
-    using Remove = void(__attribute__((thiscall))*)(void*, int, int, bool);
-    // Lua RemoveGridEntity queues removal for a later Room::Update. That
-    // pending index would delete a replacement installed by this snapshot.
-    reinterpret_cast<Remove>(image + j460::entry::roomRemoveGridEntityImmediate)(
-        reinterpret_cast<void*>(room), static_cast<int>(index), 0, false);
-    lua.pushBoolean(L, true);
-    return 1;
-}
-int doorSlot(lua_State* L) {
-    if (!runtime::replica()) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    const auto image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
-    const auto room = at<Address>(at<Address>(image, j460::globals::game), 0x18300);
-    const auto slot = lua.checkInteger(L, 1);
-    if (slot == -1) {
-        for (unsigned i = 0; i < 8; ++i)
-            at<Address>(room, 0x724 + i * 4) = 0;
-    } else {
-        const auto index = lua.checkInteger(L, 2);
-        if (slot < 0 || slot > 7 || index < 0 || index >= 448) {
-            lua.pushBoolean(L, false);
-            return 1;
-        }
-        at<unsigned>(room, 0x744 + slot * 4) = static_cast<unsigned>(index);
-        if (lua.getTop(L) < 3) {
-            using MakeDoor = bool(__attribute__((thiscall))*)(void*, int);
-            lua.pushBoolean(L, reinterpret_cast<MakeDoor>(image + j460::entry::roomMakeDoor)(
-                                   reinterpret_cast<void*>(room), static_cast<int>(slot)));
-            return 1;
-        }
-        auto sample = static_cast<Address*>(lua.toUserdata(L, 3));
-        if (!sample || lua.rawLength(L, 3) != 8) {
-            lua.pushBoolean(L, false);
-            return 1;
-        }
-        // The room grid vector owns the door; Room::GetDoor/Render use a
-        // separate borrowed slot table. Late Devil/Angel doors need both.
-        at<Address>(room, 0x724 + slot * 4) = sample[1] - 0x40;
-    }
-    lua.pushBoolean(L, true);
     return 1;
 }
 unsigned number(lan::Reader& r) {
@@ -414,8 +315,8 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "entity_minecart");
     lua.pushClosure(L, actorHeldEntity, 0);
     lua.setField(L, -2, "actor_held_entity");
-    lua.pushClosure(L, roomRails, 0);
-    lua.setField(L, -2, "room_rails");
+    if (!engine::native_grid::bind(L, module, reinterpret_cast<Address>(GetModuleHandleW(nullptr))))
+        return false;
     if (!engine::native_entity_pose::bind(L, module))
         return false;
     lua.pushClosure(L, familiarTether, 0);
@@ -429,14 +330,7 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "entity_prepare");
     lua.pushClosure(L, localAmbientEffect, 0);
     lua.setField(L, -2, "presentation_local_effect");
-    lua.pushClosure(L, gridVariant, 0);
-    lua.setField(L, -2, "grid_variant");
-    lua.pushClosure(L, removeGrid, 0);
-    lua.setField(L, -2, "grid_remove");
-    lua.pushClosure(L, doorSprite, 0);
-    lua.setField(L, -2, "door_sprite");
-    lua.pushClosure(L, doorSlot, 0);
-    lua.setField(L, -2, "door_slot");
+
     return true;
 }
 } // namespace isaac::visuals

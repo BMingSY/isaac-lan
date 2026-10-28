@@ -57,10 +57,16 @@
 | [持有炸弹](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/held_bombs.h) `boss_held_bombs` | Lua API 不暴露 NPC `+0xbf0` 的持有容器；Hornfel 为两槽，Horny Boys 为三槽 | 读取本机实体索引，由兼容组件转换为同步 ID；客机写入校验 Boss、炸弹类型和槽数，使用游戏 resize 与 `EntityPtr.Assign`，容器仍由游戏析构 |
 | [矿车引用](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_links.h) `entity_minecart` | 乘坐者 Entity `+0x3d4` 的反向引用不由矿车 `Child` 表达 | 仅接受矿车 Sprite／空值，使用原生引用注册与撤销；不调用会生成新矿车的玩法方法 |
 | [角色持有引用](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_links.h) `actor_held_entity` | Player `+0x1410` 的 `EntityPtr` 供原生抱起渲染使用，独立于 `Parent`／`Child`；赋值位置 RVA `0x3d23e6` 受签名校验 | 读取返回本机实体索引，无对象时为 `-1`；同步组件转换为稳定 ID。写入仅限客机，接受角色和目标的借用 Sprite 或 `false`，拒绝非角色持有者和自引用；使用原生 `EntityPtr.Assign` 注册、替换和清空，目标释放时由游戏撤销引用，不调用拾取／投掷玩法 |
-| [轨道布局](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rails.h) `room_rails` | `Room:GetGridEntity` 不包含 RailManager；房间 `+0x746c` 为 448 字节数组 | 客机整体验证长度、值、尺寸与所有者后写入；空轨道也恢复，Sprite 仍由房间持有 |
+| [轨道布局](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rails.h) `room_rails` | `Room:GetGridEntity` 不包含 RailManager；房间 `+0x746c` 为 448 字节数组 | 客机整体验证长度、值、尺寸与所有者后写入；空轨道也恢复，Sprite 仍由房间持有 |
 | 客机实体回收 | `Remove()` 不保证立即释放池槽位；J460 跟班池为 64 槽 | 在房间作用域内通过原生更新完成回收，更新前须启用客机 AI 拦截；不扩容原生池，不手工释放对象 |
 | 玩家清房回调 | `Player::TriggerRoomClear`，RVA `0x3a8fd0`，`thiscall void(Player*)`；Lua 没有阻止原生清房效果的前置回调 | 联机客机房间启用期间跳过玩法触发，角色状态由权威快照恢复；主机、单人及原生加载保留原调用，不分配或替换角色对象 |
 | 口袋槽、合成袋、药丸状态 | 原生载荷分别为 32、12、75 字节 | 在库存恢复后应用，完整校验载荷与玩家归属；写入限客机，主动对象与物品池仍由原版管理 |
+
+[网格状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/grid_state.cpp)通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/grid_state.cpp)访问当前 `Game+0x18300` 的房间。`grid_variant` 只改原生变种字段；`grid_remove(index)` 调用立即删除入口 `0x41e980`，避免队列中的旧删除操作影响后续替代物。该入口使用 thiscall，栈参数为索引、0、false，由被调方清理 12 字节；网格分配与析构由游戏管理。
+
+`door_slot(-1)` 清空房间 `+0x724` 的八个借用门指针，保留 `+0x24` 网格表中的所有权。`door_slot(slot, index, sprite)` 验证门类型、网格索引及当前房间持有该对象后，恢复槽指针和 `+0x744` 的索引。缺少第三参数时调用 `Room::MakeDoor`（RVA `0x3eea90`，thiscall 接收槽号、清栈 4 字节）；失败恢复先前目标索引。写入仅限客机，槽号限 0–7、网格索引限 0–447；组件每次查询当前房间，不缓存旧 Game 或房间。
+
+`door_sprite` 仅为门返回附加 Sprite 的 8 字节借用包装，沿用输入的 metatable。J460 的普通／附加 Sprite 为网格 `+0x40/+0x27c`；不复制动画、不创建或析构原生 Sprite。轨道使用房间 `+0x7468` 的所有者检查和 `+0x746c` 的 448 字节网格，完整校验长度、值域和房间尺寸后恢复。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#网格门与轨道)使用不同的附加 Sprite 和轨道偏移。
 
 实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
 

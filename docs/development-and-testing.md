@@ -110,6 +110,8 @@ Home 原生更新门控使用 `native.scene-update-j460`、`native.scene-update-
 
 角色姿态与阴影使用 `native.entity-pose-j460`、`native.entity-pose-j835`，配合 `core.occurrence-mapping`、`bridge.actor-costumes`、`bridge.actor-forms`、`presentation.actor-walking`、`presentation.attacks` 和 `bridge.entity-codec`。夹具检查两版固定编码、五槽武器与 x87 返回、缺失／类型不符槽、重复服装与基础层回退、逐字节截断和非法值的写入前拒绝、玩家替换及资源相邻字段；不执行原生武器 AI、服装加载或实际阴影绘制。
 
+网格与轨道使用 `native.grid-state-j460`、`native.grid-state-j835`、`native.rails-j460`、`native.rails-j835`，配合 `bridge.grids`、`bridge.room-capture` 和 `presentation.doors`。夹具检查 448 字节轨道、值域与所属房间、跨房／空状态、附加 Sprite 借用包装、门槽登记与重复恢复、立即删除后替换、失败目标回滚、版本字段和 thiscall 栈／寄存器。夹具不验证真实网格构造／析构、特殊门玩法或轨道美术。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh

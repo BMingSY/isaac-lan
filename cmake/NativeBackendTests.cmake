@@ -41,6 +41,10 @@ isaac_add_backend_test(
     LIBRARIES
     minhook)
 foreach(backend j460 j835)
+    isaac_add_backend_test(rails ${backend} SOURCES tests/rails_test.cpp
+                           src/engine/versions/${backend}/grid_state.cpp)
+    isaac_add_backend_test(grid-state ${backend} SOURCES tests/grid_state_backend_test.cpp
+                           tests/native_call.cpp src/engine/versions/${backend}/grid_state.cpp)
     isaac_add_backend_test(
         entity-pose ${backend} SOURCES tests/entity_pose_backend_test.cpp
         src/engine/versions/${backend}/entity_pose.cpp
