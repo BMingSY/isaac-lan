@@ -96,6 +96,14 @@
 
 进入已有房间的跟班在落点设置后调用 `Familiar.ResetRoomState`（RVA `0x22bb70`）。这复用原生房间入场对跟随历史、速度及临时状态的处理；仅主机对迁移名单中的跟班调用，不触及留在目标房间中的跟班，也不改变原生分配与回收的所有权。入口签名在启动时校验。
 
+## 角色附属状态
+
+[共享角色状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/actor_state.cpp)由房间后端注入本次调用的本地／完整队伍名单，使用[J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/actor_state.cpp)访问现有角色。`actor_sprites(index, sprite)` 返回三个附属 Sprite、七个蓄力条及服装 Sprite，顺序固定；只接受当前名单对应的 8 字节借用包装，服装向量完整验证容量、步长和 4096 项上限后才创建借用包装。J460 三个附属 Sprite 为 `+0x41c/+0xff8/+0xee4`，蓄力条从 `+0x758` 开始、步长 `0x114`，服装从 `+0x1220` 的向量取得、步长 `0x130`；不复制资源或转移析构责任。
+
+`actor_pockets(sprite[, bytes])` 以固定 32 字节传递四组大端 `id:u32, kind:u32`，来自 `Player+0x17a0`；种类为 0～2，种类 2 仅接受槽 ID 3、4。`actor_crafting_bag(sprite[, bytes])` 传递八个材料字节和大端预览 ID，共 12 字节，分别来自 `+0x1f44/+0x1f4c`。两者要求完整队伍中的玩家，写入仅限客机；先验证整份载荷再提交，不执行拾取或创建主动道具。
+
+百宝袋内容变化时，通过 `Game::GetHUD`（RVA `0x178e0`、thiscall、无参数）取得现有 HUD，仅对绑定该角色的八个 PlayerHUD 槽设置 `+0x6ad` 刷新位，槽步长 `0x6dc`；重复快照保留缓存和动画。`actor_poop(sprite, bytes)` 仅为完整名单中的客机里蓝人恢复 10 字节资源快照，四字节大端 mana 和六个队列字节写入 `+0x1f54/+0x1f58`，不改未来随机队列。各接口不跨调用保留玩家、HUD 或 Sprite；[原版布局](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#角色附属状态)独立提供偏移。
+
 ## 玩家轮廓
 
 [`outlines::withPlayers(connected, render)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/player_outlines.h) 仅在本机房间绘制期间借用 LAN 在线槽位掩码，退出或异常时恢复外层掩码；不缓存角色地址，不增加同步字段。至少两名玩家在线且 `Player+0x1618` 属于有效槽位时，使用表现层的固定配色。单人、退出会话及不属于在线槽位的实体继续原版路径。

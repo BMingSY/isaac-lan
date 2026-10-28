@@ -225,6 +225,10 @@ inline constexpr unsigned colorize = 0x10, colorizeChannels = 4;
 inline constexpr unsigned redOffset = 0x20, greenOffset = 0x24, blueOffset = 0x28;
 } // namespace color
 namespace player {
+inline constexpr unsigned chargeSprites = 0x6a8, pockets = 0x16c8;
+inline constexpr unsigned bagMaterials = 0x1e44, bagPreview = 0x1e4c;
+inline constexpr unsigned poopMana = 0x1e50, poopQueue = 0x1e54;
+inline constexpr std::array<unsigned, 3> syncSprites{0x36c, 0xf48, 0xe34};
 inline constexpr unsigned type = 0x130c;
 inline constexpr unsigned heldEntity = 0x1358;
 inline constexpr std::array<unsigned, 2> poseFlags{0x12e8, 0x12ea};
@@ -247,6 +251,7 @@ inline constexpr std::array<std::array<float, 2>, 4> heartMargins{
     {{-20, -12}, {24, -12}, {-22, 6}, {16, 6}}};
 } // namespace hud
 namespace playerHud {
+inline constexpr unsigned bagDirty = 0x6a1;
 inline constexpr unsigned refreshFlags = 0x6a0, refreshAll = 0x101;
 inline constexpr unsigned player = 0, root = 4, index = 8, size = 0x6b0;
 } // namespace playerHud

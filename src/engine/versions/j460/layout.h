@@ -312,6 +312,10 @@ inline constexpr unsigned optionsIndex = 0x528, price = 0x534, autoUpdatePrice =
 inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, state = 0x584;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned chargeSprites = 0x758, pockets = 0x17a0;
+inline constexpr unsigned bagMaterials = 0x1f44, bagPreview = 0x1f4c;
+inline constexpr unsigned poopMana = 0x1f54, poopQueue = 0x1f58;
+inline constexpr std::array<unsigned, 3> syncSprites{0x41c, 0xff8, 0xee4};
 inline constexpr unsigned heldEntity = 0x1410;
 inline constexpr std::array<unsigned, 2> poseFlags{0x1398, 0x139a};
 inline constexpr unsigned blinkTime = 0x1338, damageCooldown = 0x13bc;
@@ -400,6 +404,7 @@ inline constexpr unsigned cacheStride = 0xcc;
 inline constexpr unsigned cacheCount = 0x2;
 } // namespace statHud
 namespace playerHud {
+inline constexpr unsigned bagDirty = 0x6ad;
 inline constexpr unsigned size = 0x6dc;
 inline constexpr unsigned player = 0x0;
 inline constexpr unsigned root = 0x4;

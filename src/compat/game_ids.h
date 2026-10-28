@@ -39,6 +39,7 @@ namespace player {
 inline constexpr int isaac = 0;
 inline constexpr int soulB = 40;
 inline constexpr int cainB = 23;
+inline constexpr int blueBabyB = 25;
 inline constexpr int keeper = 14;
 inline constexpr int keeperB = 33;
 inline constexpr int lostB = 31;

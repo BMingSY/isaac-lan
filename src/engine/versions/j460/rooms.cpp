@@ -1,4 +1,5 @@
 #include "engine/versions/common/room_hooks.h"
+#include "engine/versions/common/actor_state.h"
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/rooms.h"
@@ -26,7 +27,6 @@
 #include "compat/items/death_certificate.h"
 #include "compat/items/room_transitions.h"
 #include "runtime/room_clock.h"
-#include "compat/items/crafting_bag.h"
 #include "compat/items/team_effects.h"
 #include "compat/characters/traits.h"
 #include "compat/characters/ghost.h"
@@ -34,7 +34,6 @@
 #include "compat/characters/team_effects.h"
 #include "runtime/actor_roster.h"
 #include "runtime/room_scope.h"
-#include "core/poop_state.h"
 #include "presentation/ambient_effects.h"
 #include <MinHook.h>
 #include <algorithm>
@@ -2134,148 +2133,6 @@ int refreshMap(lua_State* L) {
     lua.pushBoolean(L, true);
     return 1;
 }
-int actorSprites(lua_State* L) {
-    const auto index = lua.checkInteger(L, 1);
-    const auto all = values(roster());
-    auto sample = static_cast<Address*>(lua.toUserdata(L, 2));
-    if (index < 0 || static_cast<std::size_t>(index) >= all.size() || !sample ||
-        lua.rawLength(L, 2) != 8 || sample[1] != all[index] + 0x48) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    const auto player = all[index];
-    const auto costumes = at<Vector>(player, 0x1220);
-    if (costumes.end < costumes.begin || (costumes.end - costumes.begin) % 0x130 ||
-        costumes.end - costumes.begin > 0x130 * 4096) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    lua.createTable(L, 10 + (costumes.end - costumes.begin) / 0x130, 0);
-    unsigned ordinal = 1;
-    auto push = [&](Address sprite) {
-        // Clone the game's non-owning LuaBridge Sprite wrapper, retaining its
-        // native metatable/destructor. The ANM2 remains owned by the player.
-        auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
-        wrapper[0] = sample[0];
-        wrapper[1] = sprite;
-        lua.getMetatable(L, 2);
-        lua.setMetatable(L, -2);
-        lua.rawSetI(L, -2, ordinal++);
-    };
-    for (auto offset : {0x41cu, 0xff8u, 0xee4u})
-        push(player + offset);
-    // The seven native charge-bar sprites advance in Player::Update, which
-    // replicas suppress. Their charged/flash overlays must follow the host.
-    for (unsigned i = 0; i < 7; ++i)
-        push(player + 0x758 + i * 0x114);
-    for (auto address = costumes.begin; address < costumes.end; address += 0x130)
-        push(address);
-    return 1;
-}
-int actorPockets(lua_State* L) {
-    try {
-        auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
-        if (!wrapper || lua.rawLength(L, 1) != 8 || !wrapper[1])
-            throw std::runtime_error("Invalid actor pocket wrapper");
-        const auto player = wrapper[1] - 0x48;
-        const auto all = values(scopes.teamRoster() ? *scopes.teamRoster() : roster());
-        if (std::find(all.begin(), all.end(), player) == all.end() ||
-            at<unsigned>(player, 0x28) != 1)
-            throw std::runtime_error("Pocket state requires a listed player");
-        if (lua.getTop(L) == 1) {
-            lan::Writer w(lan::Message::world);
-            for (unsigned i = 0; i < 4; ++i) {
-                w.u32(at<unsigned>(player, 0x17a0 + i * 8));
-                w.u32(at<unsigned>(player, 0x17a4 + i * 8));
-            }
-            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                            w.bytes.size() - 1);
-            return 1;
-        }
-        if (!runtime::replica())
-            throw std::runtime_error("Only replicas restore pocket state");
-        std::size_t size = 0;
-        const auto bytes = lua.checkString(L, 2, &size);
-        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
-        std::array<std::array<unsigned, 2>, 4> pockets;
-        for (auto& value : pockets) {
-            value = {r.u32(), r.u32()};
-            if (value[0] > 65535 || value[1] > 2 ||
-                (value[1] == 2 && (value[0] < 3 || value[0] > 4)))
-                throw std::runtime_error("Invalid ordered pocket state");
-        }
-        r.finish();
-        // Only scalar pocket ID/kind records move. The active-item objects,
-        // item acquisition and gameplay remain with inventory reconciliation.
-        for (unsigned i = 0; i < pockets.size(); ++i) {
-            at<unsigned>(player, 0x17a0 + i * 8) = pockets[i][0];
-            at<unsigned>(player, 0x17a4 + i * 8) = pockets[i][1];
-        }
-        lua.pushBoolean(L, true);
-        return 1;
-    } catch (const std::exception& e) {
-        runtime::abort(e.what());
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-}
-int actorCraftingBag(lua_State* L) {
-    try {
-        auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
-        if (!wrapper || lua.rawLength(L, 1) != 8 || wrapper[1] < 0x48)
-            throw std::runtime_error("Invalid crafting bag actor wrapper");
-        const auto player = wrapper[1] - 0x48;
-        const auto all = values(scopes.teamRoster() ? *scopes.teamRoster() : roster());
-        if (std::find(all.begin(), all.end(), player) == all.end() ||
-            at<unsigned>(player, 0x28) != 1)
-            throw std::runtime_error("Crafting bag state requires a listed player");
-        if (lua.getTop(L) == 1) {
-            lan::Writer w(lan::Message::world);
-            for (unsigned i = 0; i < 8; ++i)
-                w.u8(at<std::uint8_t>(player, 0x1f44 + i));
-            w.u32(at<unsigned>(player, 0x1f4c));
-            lua.pushLString(L, reinterpret_cast<const char*>(w.bytes.data() + 1),
-                            w.bytes.size() - 1);
-            return 1;
-        }
-        if (!runtime::replica())
-            throw std::runtime_error("Only replicas restore crafting bag state");
-        std::size_t size = 0;
-        const auto bytes = lua.checkString(L, 2, &size);
-        lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
-        compat::items::CraftingBagState value;
-        for (auto& material : value.materials)
-            material = r.u8();
-        value.preview = r.u32();
-        r.finish();
-        if (!compat::items::validCraftingBagState(value))
-            throw std::runtime_error("Invalid crafting bag state");
-        bool changed = at<unsigned>(player, 0x1f4c) != value.preview;
-        for (unsigned i = 0; i < value.materials.size(); ++i)
-            changed |= at<std::uint8_t>(player, 0x1f44 + i) != value.materials[i];
-        if (changed) {
-            for (unsigned i = 0; i < value.materials.size(); ++i)
-                at<std::uint8_t>(player, 0x1f44 + i) = value.materials[i];
-            at<unsigned>(player, 0x1f4c) = value.preview;
-            // Vanilla acquisition marks only this actor's owned HUD cache dirty.
-            // Repeated snapshots leave its native animation/cache intact.
-            using GetHUD = void*(__attribute__((thiscall))*)(void*);
-            const auto hud = reinterpret_cast<Address>(
-                engine<GetHUD>(j460::entry::engineRoomsGetHUD)(reinterpret_cast<void*>(game())));
-            for (unsigned i = 0; i < 8; ++i) {
-                const auto part = hud + i * 0x6dc;
-                if (at<Address>(part, 0) == player)
-                    at<bool>(part, 0x6ad) = true;
-            }
-        }
-        lua.pushBoolean(L, true);
-        return 1;
-    } catch (const std::exception& e) {
-        runtime::abort(e.what());
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-}
 int actorCompanions(lua_State* L) {
     try {
         if (!runtime::replica() || !enabled || scopes.depth())
@@ -2504,29 +2361,6 @@ int actorForm(lua_State* L) {
         logger("actor_form=REPLACED index=" + std::to_string(index) +
                " type=" + std::to_string(desired));
     lua.pushBoolean(L, ready);
-    return 1;
-}
-int actorPoop(lua_State* L) {
-    auto sprite = static_cast<Address*>(lua.toUserdata(L, 1));
-    if (!runtime::replica() || !sprite || lua.rawLength(L, 1) != 8 || sprite[1] < 0x48 ||
-        at<unsigned>(sprite[1] - 0x48, 0x28) != 1 || at<int>(sprite[1] - 0x48, 0x13c0) != 25) {
-        lua.pushBoolean(L, false);
-        return 1;
-    }
-    try {
-        std::size_t size;
-        const auto bytes = lua.checkString(L, 2, &size);
-        lan::Reader reader({reinterpret_cast<const std::uint8_t*>(bytes), size});
-        const auto value = actors::readPoopState(reader);
-        const auto player = sprite[1] - 0x48;
-        at<int>(player, 0x1f54) = value.mana;
-        for (unsigned i = 0; i < value.queue.size(); ++i)
-            at<std::uint8_t>(player, 0x1f58 + i) = value.queue[i];
-        lua.pushBoolean(L, true);
-    } catch (const std::exception& e) {
-        runtime::abort(e.what());
-        lua.pushBoolean(L, false);
-    }
     return 1;
 }
 int actorGhost(lua_State* L) {
@@ -3939,12 +3773,8 @@ bool bind(lua_State* L, HMODULE module) {
     function("room_water_current", roomWaterCurrent);
     function("map_pickups", mapPickups);
     function("map_refresh", refreshMap);
-    function("actor_sprites", actorSprites);
-    function("actor_pockets", actorPockets);
-    function("actor_crafting_bag", actorCraftingBag);
     function("actor_form", actorForm);
     function("actor_companions", actorCompanions);
-    function("actor_poop", actorPoop);
     function("actor_ghost", actorGhost);
     function("rooms_revive_player", revivePlayer);
     function("laser_path", laserPath);
@@ -3952,6 +3782,10 @@ bool bind(lua_State* L, HMODULE module) {
     function("rooms_connected", connections);
     function("rooms_begin_floor", beginFloor);
     function("rooms_begin_cinematic", beginCinematic);
-    return visuals::bind(L, module);
+    return engine::native_actor_state::bind(
+               L, module, image, {[](bool team) {
+                   return values(team && scopes.teamRoster() ? *scopes.teamRoster() : roster());
+               }}) &&
+           visuals::bind(L, module);
 }
 } // namespace isaac::rooms
