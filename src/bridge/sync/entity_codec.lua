@@ -159,7 +159,11 @@ return function(wire)
         local function writeFields(object, names, values)
             assert(#names == #values, "Entity schema mismatch")
             for i, name in ipairs(names) do
-                object[name] = values[i]
+                if name == "Size" then
+                    assert(native.entity_size(object:GetSprite(), values[i]))
+                else
+                    object[name] = values[i]
+                end
             end
         end
         local spritePlan = native.sprite_fields_plan
