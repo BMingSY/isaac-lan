@@ -359,6 +359,12 @@ inline constexpr unsigned player = 0x0;
 inline constexpr unsigned refreshFlags = 0x6ac;
 inline constexpr unsigned refreshAll = 0x101;
 } // namespace playerHud
+namespace challengeHudFrame {
+inline constexpr std::ptrdiff_t noUnlocks = -0xa2;
+} // namespace challengeHudFrame
+namespace challengeParams {
+inline constexpr unsigned stage = 0x40, destinationType = 0x80;
+} // namespace challengeParams
 namespace hud {
 inline constexpr unsigned history = 0x5c54;
 } // namespace hud

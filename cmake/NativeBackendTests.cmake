@@ -42,6 +42,16 @@ isaac_add_backend_test(
     minhook)
 foreach(backend j460 j835)
     isaac_add_backend_test(
+        challenge-hud
+        ${backend}
+        SOURCES
+        tests/challenge_hud_test.cpp
+        src/engine/versions/${backend}/challenge_hud.cpp
+        LIBRARIES
+        minhook
+        COMPILE_OPTIONS
+        -msse2)
+    isaac_add_backend_test(
         combat-feedback
         ${backend}
         SOURCES

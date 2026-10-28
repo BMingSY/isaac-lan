@@ -51,6 +51,12 @@ inline constexpr std::array<unsigned, 4> fileNames{0x1fa60, 0x1fa78, 0x1fa98, 0x
 namespace roomChangeFrame {
 inline constexpr std::ptrdiff_t mazeRedirected = 0xf;
 } // namespace roomChangeFrame
+namespace challengeHudFrame {
+inline constexpr std::ptrdiff_t noUnlocks = -0x99;
+} // namespace challengeHudFrame
+namespace challengeParams {
+inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
+} // namespace challengeParams
 namespace game {
 inline constexpr unsigned rewindBuffers = 0x243648, selectedRewindBuffer = 0x283b78;
 inline constexpr unsigned roomTransition = 0x1b6c0;

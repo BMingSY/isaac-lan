@@ -8,6 +8,14 @@
 
 Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。该游戏导入表没有 `SteamAPI_RestartAppIfNecessary`；隔离启动不能把该导入的存在当成必要条件。资料隔离仍须在游戏入口前完成，不能在 Lua 初始化后才更改存档位置。
 
+## 挑战目标 HUD
+
+[目标绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/challenge_hud.cpp) 与 J460 共用[显示组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/challenge_hud.cpp)。目标由会话的挑战定义提供；原生 Game／每日挑战参数保持原样，借用视图仅供当前 HUD 绘制消费，不包含拥有所有权的字符串或容器。
+
+`HUD::Render` 的存在位边界为 RVA `0x5050ab`，使用 DL 和栈帧 `EBP-0x99` 的无解锁标志。原生普通挑战和每日挑战分支在 `0x505584` 汇合，ECX 指向参数对象；此处替换为扩展持有的 164 字节标量视图，不 Hook 全局查询函数。终点为 `+0x40`，备用路线和秘密路线分别是字节 `+0x6d/+0x88`，对应 J460 目标类型 1／2；其余字段清零。J835 `+0x80` 属于诅咒掩码，不能按 J460 的路线类型写入。
+
+两个边界保存标志、整数寄存器、SSE、x87 与控制字，只修改目标所需的保存槽。未启用联机挑战时保留原生指针与帧数据。Hook 成组安装，冲突撤销已创建的本组件 Hook，保留外部 Hook；重复安装被拒绝。此接口不改变挑战解锁、路线选择或通关条件。
+
 ## 存档与进度
 
 [save.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/save.cpp) 使用游戏的原生序列化格式，不能读取忏悔＋的存档。`Manager`、`Game` 和 `GameState` 都由游戏持有；后端只在同步调用期间借用对象。入口签名和重定位掩码与其他原生入口一起校验。

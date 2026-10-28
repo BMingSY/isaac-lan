@@ -92,6 +92,8 @@ ctest --test-dir build-core --output-on-failure
 
 NPC 命中适配使用 `native.combat-feedback-j460`、`native.combat-feedback-j835` 和 `presentation.hit-events`：原生夹具覆盖 Hook 调用栈、颜色来源、队列结算、嵌套命中、来源移除、身份替换、房间观看者、固定编码与临时颜色恢复，Lua 检查消费和本机演出顺序。原生夹具不运行游戏伤害逻辑或绘制资源，实机画面与真实回调另行验证。
 
+挑战目标 HUD 的离线检查为 `native.challenge-hud-j460`、`native.challenge-hud-j835`，配合 `core.challenge-rules`、`bridge.challenges` 和 `bridge.challenge_menu`。原生夹具执行实际边界 thunk 和 MinHook 跳板，检查各版字段、普通／联机目标切换、原生对象不变、短分支搬移、寄存器与浮点状态，以及冲突清理和重试；游戏资源和实际绘制画面仍需实机验证。
+
 原生入口的只读检查使用 [inspect_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/inspect_engine.py)，传入游戏程序、明确选择的参考源码和新报告路径：
 
 ```sh

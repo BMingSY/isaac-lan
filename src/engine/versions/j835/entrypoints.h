@@ -5,6 +5,8 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t hUDChallengeDestination = 0x5050ab;
+inline constexpr std::uint32_t hUDChallengeParamsRead = 0x505584;
 inline constexpr std::uint32_t npcTakeDamage = 0x2ac370;
 inline constexpr std::uint32_t entitySetColor = 0x28a380;
 inline constexpr std::uint32_t entityDamageColorReturn = 0x286ff9;
