@@ -79,6 +79,7 @@ inline constexpr std::uint32_t generatedItemCreate = 0x532980;
 inline constexpr std::uint32_t generatedItemRestoreCall = 0x535cbb;
 inline constexpr std::uint32_t generatedInventoryQuery = 0x33afcf;
 inline constexpr std::uint32_t generatedInventoryCountRead = 0x535e2e;
+inline constexpr std::uint32_t pickupUpdateGhosts = 0x2b81c0;
 } // namespace entry
 namespace globals {
 inline constexpr std::uint32_t characterMenuPages = 0x60d698;

@@ -22,6 +22,25 @@ add_test(NAME native.input-queries-j835 COMMAND isaac_lan_input_queries_j835_tes
 set_tests_properties(native.input-queries-j835 PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 foreach(backend j460 j835)
     add_executable(
+        isaac_lan_pickup_preview_${backend}_test
+        tests/pickup_preview_backend_test.cpp src/engine/versions/common/pickup_preview.cpp
+        src/engine/versions/${backend}/pickup_preview.cpp)
+    target_include_directories(isaac_lan_pickup_preview_${backend}_test PRIVATE src)
+    target_link_libraries(isaac_lan_pickup_preview_${backend}_test PRIVATE minhook)
+    if(backend STREQUAL "j835")
+        target_compile_definitions(isaac_lan_pickup_preview_${backend}_test
+                                   PRIVATE ISAAC_LAN_TEST_J835)
+    endif()
+    if(MINGW)
+        target_link_options(isaac_lan_pickup_preview_${backend}_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+        target_compile_options(isaac_lan_pickup_preview_${backend}_test PRIVATE -Wall -Wextra
+                                                                                -Werror)
+    endif()
+    add_test(NAME native.pickup-preview-${backend} COMMAND isaac_lan_pickup_preview_${backend}_test)
+    set_tests_properties(native.pickup-preview-${backend} PROPERTIES TIMEOUT 30 LABELS
+                                                                     "offline;native-abi")
+    add_executable(
         isaac_lan_generated_items_${backend}_test
         tests/generated_items_test.cpp src/engine/versions/${backend}/generated_items.cpp)
     target_include_directories(isaac_lan_generated_items_${backend}_test PRIVATE src)

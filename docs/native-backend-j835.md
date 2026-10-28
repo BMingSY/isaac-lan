@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定、共享输入路由及设备／查询适配、暂停菜单、玩家创建／分配和角色目录组件，以及 Lua 初始化入口资料；道具发放／拾取／充能及动态定义／负编号库存组件也已具备版本绑定，房间进入边界及声音／音乐也有独立绑定，完整房间、实体同步和启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供版本／资源描述、存档编解码、会话原生绑定、共享输入路由及设备／查询适配、暂停菜单、玩家创建／分配和角色目录组件，以及 Lua 初始化入口资料；道具发放／拾取／充能及动态定义／负编号库存组件也已具备版本绑定，房间进入边界、声音／音乐及本机掉落物预览也有独立绑定，完整房间、实体同步和启动装配尚未接通。组件可单独参与离线测试，CMake 和版本生成器仍拒绝把它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -115,6 +115,14 @@ Music 位于 `Manager+0x29a78`，当前／排队曲目 ID 为 `+0x30c/+0x310`。
 作用域暂借当前／排队 ID，使后台房间完成原生选曲而不更换实际声道；离开前记录原生直接写入的队列，再恢复外层或实际播放 ID。未知房间在空 ID 下求值一次，失败恢复临时 ID。房间、Music、SFXManager 和实际音频流仍由游戏持有，不复制或释放流对象。嵌套视角恢复外层房间，重复快照不重新请求曲目，跨房加入正在播放的队列目标，跨层及会话重置不复用旧归属。
 
 主机按房间听众记录带序号的声音事件，后台播放仅将本机音量降为零；副本不重新发送事件，也不让原生房间初始化覆盖已提交的权威音乐选择。声音编码及既有的时效、队列上限保持不变。三个 Hook 全部创建后启用，失败只撤销本组件创建的 Hook，清除旁路并允许重试。完整使用仍依赖 J835 房间调度和启动装配。
+
+## 本机掉落物预览
+
+[预览绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/pickup_preview.cpp) 通过[共享预览组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/pickup_preview.cpp) 调用 `0x2b81c0`，ABI 为 `thiscall void(Pickup*)`，无栈参数。原生方法读取当前玩家名单的道具，创建或移除预览并维护实体引用；组件不复制 LootList、Sprite 或其他原生对象，也不分配、释放预览资源。
+
+联机玩法更新期间跳过原生预览更新，在本机视角就绪后借用本机玩家名单执行。Room 指针为 `Game+0x18190`；实体列表位于 `Room+0x1218`，渲染数组为列表 `+0x40`，数据／数量为数组 `+4/+0xc`。先复制本次类型为掉落物的实体指针，再依次调用原生更新，允许原生预览创建期间更换数组。无效视角、空 Game／Room／列表不执行更新；已经移除但仍在渲染列表中的掉落物仍交给原生方法清理预览，不能仅按活动位跳过。
+
+这些指针只在当前同步视角调用内借用，不保留到下帧；房间切换、异常退出与重连沿用房间视角的恢复边界。Hook 失败清除自身旁路并允许重试，单人原生更新完整透传。该组件仍依赖尚未接通的完整 J835 房间调度。
 
 ## 暂停菜单
 

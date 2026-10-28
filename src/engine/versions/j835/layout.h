@@ -64,6 +64,12 @@ inline constexpr unsigned pauseMenu = 0x10203c, console = 0x1bb60;
 inline constexpr unsigned fadeAlpha = 0x1c31a8, fadeAction = 0x1c31b0;
 inline constexpr unsigned restartHeldFrames = 0x1c31b4;
 } // namespace game
+namespace room {
+inline constexpr unsigned entities = 0x1218;
+} // namespace room
+namespace entityList {
+inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
+} // namespace entityList
 namespace entity {
 inline constexpr unsigned sprite = 0x3c, type = 0x28, initSeed = 0x344;
 inline constexpr unsigned active = 0x16a, removeMethod = 0x28;
