@@ -236,12 +236,13 @@ return function(
         inventory.apply(player, value, refresh)
         return fixture.read()
     end
-    function fixture.read()
-        return { inventory.capture(player), player.itemMutations, player.resourceDelta }
+    function fixture.read(catalog)
+        return { inventory.capture(player, catalog), player.itemMutations, player.resourceDelta }
     end
     function fixture.player()
         return player
     end
+    fixture.config = config
     fixture.reset()
     return fixture
 end

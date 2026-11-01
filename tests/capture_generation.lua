@@ -4,6 +4,7 @@ local factory =
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local schema = dofile(root .. "/src/bridge/sync/world_schema.lua")
 local epoch, revision, calls = 1, 1, {}
+local catalogs = {}
 local connected, playerCount = 7, 3
 local function count(name)
     calls[name] = (calls[name] or 0) + 1
@@ -87,8 +88,10 @@ local deps = {
         count("entity")
         return { player.ControllerIndex, full == nil, revision }
     end,
-    inventory = function(player)
+    inventory = function(player, catalog)
         count("inventory")
+        assert(type(catalog) == "table")
+        catalogs[#catalogs + 1] = catalog
         return { player.ControllerIndex, revision }
     end,
     sprite = function(value)
@@ -176,8 +179,10 @@ local function view(slot, tick)
     return result, bytes
 end
 local first = view(0, 10)
+assert(calls.entity == 3, "Visible actors were captured twice for one view")
 local second = view(1, 10)
 local third = view(2, 10)
+assert(catalogs[1] == catalogs[2] and catalogs[2] == catalogs[3])
 for _, name in ipairs({
     "map",
     "positions",
@@ -221,12 +226,17 @@ end
 revision = 2
 assert(view(0, 10).stage == 1)
 assert(view(0, 11).stage == 2)
+local nextCatalog = catalogs[#catalogs]
+assert(nextCatalog ~= catalogs[1], "Next tick reused a stale collectible catalog")
 epoch, revision = 2, 3
 local floorView = view(0, 11)
+assert(catalogs[#catalogs] ~= nextCatalog, "New floor reused a collectible catalog")
 assert(floorView.epoch == 2 and floorView.stage == 3 and floorView.actors[1][4][2] == 3)
 revision = 4
+local priorCatalog = catalogs[#catalogs]
 capture.reset()
 local resetView = view(0, 11)
+assert(catalogs[#catalogs] ~= priorCatalog, "New session reused a collectible catalog")
 assert(resetView.stage == 4 and resetView.map[1][8] == "pickups:4")
 assert(first.stage == 1 and first.map[1][8] == "pickups:1", "New generation mutated an old view")
 local Map = dofile(root .. "/src/bridge/sync/fields.lua").map
@@ -294,9 +304,12 @@ playerCount, connected = 4, 15
 positions["2"] = { index = 84, dimension = 0 }
 positions["3"] = { index = 84, dimension = 0 }
 local transfer = factory(deps)
+local transferEntityReads = 0
 local function transferView(slot, tick)
     local beforeAudio, beforeEvents = calls["audio:" .. slot] or 0, calls["events:" .. slot] or 0
+    local beforeEntities = calls.entity
     local realtime, stable = transfer.capture(slot, tick, true)
+    transferEntityReads = transferEntityReads + calls.entity - beforeEntities
     assert(
         calls["audio:" .. slot] == beforeAudio + 1 and calls["events:" .. slot] == beforeEvents + 1
     )
@@ -315,6 +328,7 @@ for slot = 1, 3 do
     assert(value.sound == "sound:" .. slot and value.presentation == "events:" .. slot)
     saved, savedBytes = value, bytes
 end
+assert(transferEntityReads == 4, "Same-room captures performed redundant entity reads")
 assert(transferView(3, 20).actors[1][fields.actor.inventory][fields.inventory.items][1][2] == 5)
 -- A room index in another dimension is a different view. Keep same-room and
 -- split-room recipients together to detect accidental cross-view fragments.

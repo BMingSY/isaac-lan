@@ -8,12 +8,14 @@ return function(fields)
         local entity, inventory, sprite = deps.entity, deps.inventory, deps.sprite
         local poop, craftingBag = deps.poop, deps.craftingBag
         local captureTick, captureEpoch, captureActors, captureVisuals = nil, nil, {}, {}
+        local inventoryCatalog = {}
         local captureEncoded, locations, shared = {}, nil, nil
         local captureStarted = 0
         local roomState = deps.roomFactory()
         local function reset()
             captureTick, captureEpoch = nil, nil
             captureActors, captureVisuals, captureEncoded = {}, {}, {}
+            inventoryCatalog = {}
             locations, shared = nil, nil
             roomState = deps.roomFactory()
         end
@@ -25,6 +27,7 @@ return function(fields)
                 captureTick, captureEpoch = tick, epoch
                 captureStarted = deps.clock and deps.clock() or 0
                 captureActors, captureVisuals, captureEncoded = {}, {}, {}
+                inventoryCatalog = {}
                 locations, shared = nil, nil
             end
             locations = locations or native.rooms_positions()
@@ -37,8 +40,7 @@ return function(fields)
                     base = {
                         [Actor.index] = index,
                         [Actor.controller] = p.ControllerIndex,
-                        [Actor.entity] = entity(p, false),
-                        [Actor.inventory] = inventory(p),
+                        [Actor.inventory] = inventory(p, inventoryCatalog),
                         [Actor.visuals] = {},
                         [Actor.pose] = false,
                         [Actor.poop] = poop.capture(p),
@@ -83,6 +85,9 @@ return function(fields)
                     end
                     actors[#actors + 1] = full
                 else
+                    -- A visible actor already has a complete entity tuple. Only
+                    -- collect its nonvisual tuple if another room needs it.
+                    base[Actor.entity] = base[Actor.entity] or entity(p, false)
                     actors[#actors + 1] = base
                 end
                 local shared = actors[#actors]
