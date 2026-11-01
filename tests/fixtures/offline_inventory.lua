@@ -6,7 +6,8 @@ return function(
     extraCollectibles,
     collectibleCount,
     subplayer,
-    restoreForm
+    restoreForm,
+    activeData
 )
     local module = dofile(root .. "/src/bridge/sync/inventory.lua")(
         dofile(root .. "/src/bridge/sync/fields.lua")
@@ -36,6 +37,7 @@ return function(
         pockets = pockets,
         subplayer = subplayer,
         restoreForm = restoreForm,
+        activeData = activeData,
     })
     local player
     function fixture.reset(ghost)

@@ -8,6 +8,9 @@
 #include <cstring>
 
 namespace isaac::runtime {
+void abort(const std::string& error) {
+    throw std::runtime_error(error);
+}
 bool replica() {
     return false;
 }

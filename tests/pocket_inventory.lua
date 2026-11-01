@@ -38,12 +38,13 @@ local expected = {
     2,
     raw,
     false,
+    false,
 }
 -- Setter order is checked above; this round trip fixes every nested tuple position.
 local plain = factory(root)
 expected[11] = false
 plain.apply(expected, true)
-assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Schema-31 inventory bytes changed")
+assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Inventory tuple bytes changed")
 plain.apply(expected, false)
 assert(codec.encode(plain.read()[1]) == codec.encode(expected), "Repeated inventory drifted")
 print("PASS all four ordered pockets after inventory setters, repeated views and ghost cleanup")
@@ -79,3 +80,41 @@ value[2], value[3][1] = {}, { 0, 0 }
 first.apply(value, true)
 assert(#first.read()[1][2] == 0, "Removed glitched items survived inventory reconciliation")
 print("PASS generated passive/active inventory, repeated views, removal and per-picker ownership")
+
+local data, activeWrites = { 1 << 16, 12, 9 << 16, 0 }, 0
+local active = factory(root, nil, nil, nil, nil, nil, nil, function(p, value)
+    if value then
+        for slot = 0, 3 do
+            local id, state = string.unpack(">i4i4", value, slot * 8 + 1)
+            assert(id == p:GetActiveItem(slot), "Active data restored before slot identity")
+            data[slot + 1] = state
+        end
+        activeWrites = activeWrites + 1
+        return true
+    end
+    local bytes = {}
+    for slot = 0, 3 do
+        bytes[#bytes + 1] = string.pack(">i4i4", p:GetActiveItem(slot), data[slot + 1])
+    end
+    return table.concat(bytes)
+end)
+local wanted = active.read()[1]
+wanted[3] = { { 2, 6 }, { 4, 12 }, { 2, 2 }, { 0, 0 } }
+wanted[13] = string.pack(">i4i4i4i4i4i4i4i4", 2, 4 << 16, 4, 12, 2, 7 << 16, 0, 0)
+data = { 0, 0, 0, 0 }
+local p = active.player()
+local setCharge = p.SetActiveCharge
+p.SetActiveCharge = function(self, charge, slot)
+    assert(data[1] == 4 << 16 and data[3] == 7 << 16, "Charge restored before active mode data")
+    setCharge(self, charge, slot)
+end
+active.apply(wanted, true)
+assert(active.read()[1][13] == wanted[13])
+local mutations = active.read()[2]
+active.apply(wanted, false)
+assert(active.read()[1][13] == wanted[13] and active.read()[2] == mutations and activeWrites == 2)
+active.reset(true)
+wanted[9] = true
+active.apply(wanted, false)
+assert(activeWrites == 2, "Ghost active data was overwritten")
+print("PASS four active states after identity and before charges, repeated views and ghosts")

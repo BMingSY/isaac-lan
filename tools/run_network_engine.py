@@ -933,6 +933,7 @@ def main():
         exercised = False
         pause_keys = set()
         focus_cycles = set()
+        focus_sets = set()
         recorded = False
         solo_saved, solo_continued, solo_hashes = set(), set(), {}
         release_solo_requests, release_solo_files, release_solo_networks = set(), set(), set()
@@ -1005,6 +1006,15 @@ def main():
                             "ready"
                         )
             if args.focus_cycle:
+                for number, role in re.findall(
+                    r"LAN_NETWORK FOCUS_SET_REQUEST (\d+) (host|client)", logs[0]
+                ):
+                    if number not in focus_sets:
+                        control(processes[roles.index(role)], "Focus")
+                        focus_sets.add(number)
+                        result.setdefault("focus_sets", []).append(
+                            {"request": int(number), "role": role}
+                        )
                 for number in re.findall(r"LAN_NETWORK FOCUS_CYCLE_REQUEST (\d+)", logs[0]):
                     if number not in focus_cycles:
                         for role in ("client", "host", "client"):

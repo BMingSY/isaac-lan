@@ -14,4 +14,7 @@ inline bool forgotten(int kind) {
 inline bool taintedJacob(int kind) {
     return kind == ids::player::jacobB || kind == ids::player::jacobSecondB;
 }
+inline bool taintedJacobPursuer(unsigned type, unsigned variant) {
+    return type == darkEsau && variant == 0;
+}
 } // namespace isaac::compat::characters

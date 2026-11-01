@@ -58,6 +58,7 @@ inline constexpr int mind = 333;
 inline constexpr int restock = 376;
 inline constexpr int chaos = 402;
 inline constexpr int moreOptions = 414;
+inline constexpr int dInfinity = 489;
 inline constexpr int damoclesPassive = 656;
 inline constexpr int options = 670;
 inline constexpr int sacredOrb = 691;

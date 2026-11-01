@@ -125,6 +125,12 @@ local inventoryState = component("sync/inventory")({
     restoreForm = forgotten.restoreForm,
     activeType = ItemType.ITEM_ACTIVE,
     curse = NullItemID.ID_LOST_CURSE,
+    activeData = function(player, value)
+        if value == nil then
+            return native.items_active_data(player:GetSprite())
+        end
+        return native.items_active_data(player:GetSprite(), value)
+    end,
     pockets = function(player, value)
         if value == nil then
             return native.actor_pockets(player:GetSprite())

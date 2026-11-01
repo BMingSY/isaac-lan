@@ -371,6 +371,47 @@ void nativePauseDrift() {
     require(f.page() == 1 && f.shows == 2, "Native hide escaped the authority's pause");
 }
 
+void focusPauseDoesNotReopenReplica() {
+    Fixture f;
+    auto& option = field<bool>(f.manager.data(), native::layout::manager::options +
+                                                     native::layout::options::pauseOnFocusLost);
+    auto backgroundUpdate = [&] {
+        if (option && f.page() == 0)
+            menu::show(f.base());
+    };
+    for (bool configured : {true, false}) {
+        option = configured;
+        const auto before = f.manager;
+        for (unsigned frame = 0; frame < 120; ++frame) {
+            menu::synchronize(f.base(), false);
+            {
+                menu::FocusPauseScope replica(f.base());
+                backgroundUpdate();
+                {
+                    menu::FocusPauseScope nested(f.base());
+                    backgroundUpdate();
+                }
+                require(!option, "Nested focus scope restored the option too early");
+            }
+            require(f.page() == 0 && f.shows == 0 && f.hides == 0,
+                    "Background replica oscillated between open and closed pause menus");
+            require(f.manager == before, "Replica update changed the user's pause option");
+        }
+        try {
+            menu::FocusPauseScope replica(f.base());
+            throw std::runtime_error("native update failed");
+        } catch (const std::runtime_error&) {
+        }
+        require(f.manager == before, "Failed replica update leaked focus-pause suppression");
+    }
+    option = true;
+    backgroundUpdate();
+    require(f.shows == 1 && f.page() == 1, "Scope changed focus pause outside replica simulation");
+    menu::FocusPauseScope absent(0);
+    field<Address>(f.image, native::globals::manager) = 0;
+    menu::FocusPauseScope missing(f.base());
+}
+
 template <unsigned Marker> DWORD WINAPI physicalState(DWORD index, XINPUT_STATE* result) {
     if (index != 2 || !result)
         return ERROR_DEVICE_NOT_CONNECTED;
@@ -938,6 +979,7 @@ int main(int argc, char** argv) {
                     {{"native-calls", nativeCallsAndState},
                      {"options-save-before-hide", optionsSaveBeforeHide},
                      {"native-pause-drift", nativePauseDrift},
+                     {"replica-focus-pause", focusPauseDoesNotReopenReplica},
                      {"xinput-provider-routing", xinputProviderRouting},
                      {"input-disconnect-transactions", inputDisconnectTransactions},
                      {"viewer-scopes", viewerScopes},

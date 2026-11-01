@@ -1,5 +1,6 @@
 #include "engine/pause_menu.h"
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/layout.h"
 
 namespace isaac::pause_menu {
 namespace {
@@ -83,6 +84,19 @@ void synchronize(Address image, bool paused) {
         show(image);
     else
         hide(image);
+}
+FocusPauseScope::FocusPauseScope(Address image) {
+    if (image)
+        if (const auto manager = at<Address>(image, engine::j460::globals::manager)) {
+            option = manager + engine::j460::layout::manager::options +
+                     engine::j460::layout::options::pauseOnFocusLost;
+            previous = at<bool>(option);
+            at<bool>(option) = false;
+        }
+}
+FocusPauseScope::~FocusPauseScope() {
+    if (option)
+        at<bool>(option) = previous;
 }
 Intent intent(Address image, int action) {
     const auto p = menu(image);
