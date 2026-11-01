@@ -548,9 +548,12 @@ def test_special_suite_rejects_invalid_selection(tmp_path):
     assert not output.exists()
 
 
-def test_ending_builder_passes_selected_routes_without_source_rewriting(fake_scenarios):
+@pytest.mark.parametrize("bundled", [False, True])
+def test_ending_builder_passes_selected_routes_without_source_rewriting(fake_scenarios, bundled):
     output = fake_scenarios / "ending.lua"
     build_endings(output, ["mother", "lamb"], first_floor=True)
+    if bundled:
+        output.write_text(lua_support.bundle_input(output.read_text()))
     run_lua(
         """
 observed = {}

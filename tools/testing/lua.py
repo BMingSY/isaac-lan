@@ -9,10 +9,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def bundle_input(source):
     """Embed test input support for either native sandbox or offline execution."""
+    # A scenario starting with '(' must not continue the preceding function call.
     return (
         "_IsaacLanTestInput = (function()\n"
         + (ROOT / "tests/support/input.lua").read_text(encoding="utf-8")
-        + "\nend)()\n"
+        + "\nend)();\n"
         + source
     )
 
