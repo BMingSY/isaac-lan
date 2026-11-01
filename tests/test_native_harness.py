@@ -567,7 +567,9 @@ assert(observed[1].endingRoutes[1] == "mother" and observed[1].endingRoutes[2] =
     )
 
 
-@pytest.mark.parametrize("mode", ["normal", "redirect", "dimension", "timeout", "mother"])
+@pytest.mark.parametrize(
+    "mode", ["normal", "redirect", "dimension", "timeout", "mother", "doorway"]
+)
 def test_ending_boss_entry_confirms_native_destination(tmp_path, mode):
     run_lua(
         "local mode = "
@@ -645,6 +647,9 @@ before(202)
 assert(#moves == 1, "Retried a still-pending native entry")
 roomIndex = (mode == "redirect" or mode == "timeout") and 148 or 135
 dimension = mode == "dimension" and 1 or 0
+if mode == "doorway" then
+    player.Position, player.Velocity = Vector(320, 440), Vector(0, 1)
+end
 before(203)
 if mode == "timeout" then
     local ok, message = pcall(function()
@@ -668,6 +673,10 @@ else
     before(redirected and 334 or 303)
     assert(saw("STEP boss-fight"), "Did not advance after confirmed arrival")
     assert(#moves == (redirected and 2 or 1), "Retried an already-confirmed entry")
+    if mode == "doorway" then
+        assert(player.Position.Y < 400 and player.Velocity == Vector.Zero,
+            "Scripted combat left the entrant drifting against the exit door")
+    end
 end
 """,
         tmp_path,
@@ -710,6 +719,7 @@ Game = function() return {
     GetRoom = function() return {
         GetType = function() return roomIndex == 135 and 5 or 1 end,
         IsClear = function() return true end,
+        GetCenterPos = function() return Vector(320, 280) end,
     } end,
 } end
 _IsaacLan = {

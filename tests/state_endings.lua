@@ -979,6 +979,11 @@ local function advance(t)
             boss(t)
         end
     elseif step == "boss-enter" and t - stepAt > 130 then
+        actor(bossEntrySlot, function(p)
+            -- Native entry can leave the actor against a closed door with
+            -- residual velocity. Keep scripted combat inside when it opens.
+            p.Position, p.Velocity = Game():GetRoom():GetCenterPos(), Vector.Zero
+        end)
         mark("boss-fight", t)
     elseif step == "boss-enter" and name == "mega-satan" and stage == 11 and t - stepAt > 40 then
         actor(1, function(p)
