@@ -32,7 +32,21 @@ function methods:confirm(position, sequence, velocity, tick)
     then
         return
     end
-    if (position - self.authority):LengthSquared() >= teleportDistance * teleportDistance then
+    local expected = self.position
+    for i = #self.pending, 1, -1 do
+        local input = self.pending[i]
+        if input.sequence == sequence then
+            expected = input.position
+            break
+        end
+    end
+    -- Sparse confirmations can span a long ordinary walk which is already
+    -- represented by pending inputs. Only snap when the new authority also
+    -- lies outside that predicted path; otherwise retain input and correction.
+    if
+        (position - self.authority):LengthSquared() >= teleportDistance * teleportDistance
+        and (position - expected):LengthSquared() >= teleportDistance * teleportDistance
+    then
         self:reset(position, sequence, velocity)
         self.confirmedTick = tick
         return
@@ -115,6 +129,7 @@ function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
         self.position, self.velocity = self.base, self.authorityVelocity
         for _, input in ipairs(self.pending) do
             advance(self, input, resolve)
+            input.position = self.position
         end
         self.correction = self.display - self.position
         self.errorSquared = self.correction:LengthSquared()
@@ -148,6 +163,7 @@ function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
             }
             self.pending[#self.pending + 1] = input
             advance(self, input, resolve)
+            input.position = self.position
             if #self.pending > maxHistory then
                 table.remove(self.pending, 1)
             end

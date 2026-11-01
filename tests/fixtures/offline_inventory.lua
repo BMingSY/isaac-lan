@@ -1,5 +1,13 @@
 -- Deliberately small player/config contract. Unknown methods fail immediately.
-return function(root, sharedResources, pockets, extraCollectibles, collectibleCount, subplayer)
+return function(
+    root,
+    sharedResources,
+    pockets,
+    extraCollectibles,
+    collectibleCount,
+    subplayer,
+    restoreForm
+)
     local module = dofile(root .. "/src/bridge/sync/inventory.lua")(
         dofile(root .. "/src/bridge/sync/fields.lua")
     )
@@ -27,6 +35,7 @@ return function(root, sharedResources, pockets, extraCollectibles, collectibleCo
         curse = 1,
         pockets = pockets,
         subplayer = subplayer,
+        restoreForm = restoreForm,
     })
     local player
     function fixture.reset(ghost)

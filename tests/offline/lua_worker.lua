@@ -79,6 +79,7 @@ local function stateEnvironment()
             ["compat/bosses/rotgut"] = dofile(root .. "/src/bridge/compat/bosses/rotgut.lua"),
             ["runtime/transitions"] = dofile(root .. "/src/bridge/runtime/transitions.lua"),
             ["runtime/room_entry"] = dofile(root .. "/src/bridge/runtime/room_entry.lua"),
+            ["runtime/room_placement"] = dofile(root .. "/src/bridge/runtime/room_placement.lua"),
             ["compat/items/room_entry"] = dofile(root .. "/src/bridge/compat/items/room_entry.lua"),
             ["sync/inventory"] = dofile(root .. "/src/bridge/sync/inventory.lua"),
             ["sync/entities"] = dofile(root .. "/src/bridge/sync/entities.lua"),

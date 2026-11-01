@@ -254,6 +254,7 @@ local function environment()
         "compat/characters/forgotten",
         "compat/items/glitched",
         "sync/temporary_effects",
+        "runtime/room_placement",
     }) do
         modules[name] = inert
     end

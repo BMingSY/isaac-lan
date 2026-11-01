@@ -3,12 +3,14 @@ return function(level, vector, dungeonType)
     local function finite(value)
         return value == value and math.abs(value) < math.huge
     end
+    local function topDown(room)
+        return room:GetType() ~= dungeonType
+    end
     return {
         -- Native ladders, gravity and platform collisions use a different
         -- movement model from ordinary rooms, including for flying players.
-        predictMovement = function(room)
-            return room:GetType() ~= dungeonType
-        end,
+        predictMovement = topDown,
+        gridPlacement = topDown,
         capture = function()
             local current = level()
             local position = current.DungeonReturnPosition

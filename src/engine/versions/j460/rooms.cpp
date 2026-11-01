@@ -53,6 +53,7 @@
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/floor_source.h"
 #include "engine/versions/j460/room_routing.h"
+#include "engine/versions/j460/forgotten_form.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::rooms {
@@ -2556,6 +2557,25 @@ int actorForm(lua_State* L) {
     lua.pushBoolean(L, ready);
     return 1;
 }
+int actorForgottenForm(lua_State* L) {
+    const auto desired = lua.checkInteger(L, 2);
+    const auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
+    if (!runtime::replica() || !enabled || !scopes.current() ||
+        (desired != compat::ids::player::forgotten && desired != compat::ids::player::soul) ||
+        !wrapper || lua.rawLength(L, 1) != 8 || wrapper[1] < j460::layout::entity::sprite) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    const auto player = wrapper[1] - j460::layout::entity::sprite;
+    const auto actors = values(roster());
+    const bool listed = std::find(actors.begin(), actors.end(), player) != actors.end();
+    const bool ready = listed && findRoom(player) == scopes.current() &&
+                       j460::forgotten_form::restore(player, desired,
+                                                     engine<j460::forgotten_form::Swap>(
+                                                         j460::entry::playerSwapForgottenForm));
+    lua.pushBoolean(L, ready);
+    return 1;
+}
 int actorPoop(lua_State* L) {
     auto sprite = static_cast<Address*>(lua.toUserdata(L, 1));
     if (!runtime::replica() || !sprite || lua.rawLength(L, 1) != 8 || sprite[1] < 0x48 ||
@@ -3408,7 +3428,7 @@ struct RoomTransfer {
                     engine<RoomCall>(j460::entry::familiarResetRoomState)(
                         reinterpret_cast<void*>(entity));
         }
-        runtime::roomEntered();
+        runtime::roomEntered(request.door);
         if (created) {
             to->clock.reset(at<int>(game(), j460::layout::game::frame));
             presentation::roomEntered(to->pointer);
@@ -4010,6 +4030,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("actor_pockets", actorPockets);
     function("actor_crafting_bag", actorCraftingBag);
     function("actor_form", actorForm);
+    function("actor_forgotten_form", actorForgottenForm);
     function("actor_companions", actorCompanions);
     function("actor_poop", actorPoop);
     function("actor_ghost", actorGhost);

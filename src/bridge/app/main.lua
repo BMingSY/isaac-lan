@@ -83,7 +83,7 @@ local placeNear = _IsaacLanModules["runtime/room_placement"]({
     player = Isaac.GetPlayer,
     vector = Vector,
     collision = GridCollisionClass,
-})
+}).near
 local roomRules = _IsaacLanModules["runtime/room_rules"]({
     native = native,
     allocation = allocation,

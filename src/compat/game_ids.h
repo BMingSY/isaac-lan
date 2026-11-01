@@ -34,6 +34,8 @@ inline constexpr unsigned pickupGhost = 191;
 } // namespace effect
 namespace player {
 inline constexpr int isaac = 0;
+inline constexpr int forgotten = 16;
+inline constexpr int soul = 17;
 inline constexpr int soulB = 40;
 inline constexpr int cainB = 23;
 inline constexpr int keeper = 14;

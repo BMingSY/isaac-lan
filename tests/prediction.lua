@@ -165,6 +165,32 @@ end
 assert(#p.pending <= 120, "Missing acknowledgements grew unbounded history")
 print("PASS same-ack host ticks, stale ticks, authoritative velocity and bounded input replay")
 
+-- A delayed packet may cover more than the teleport threshold while the guest
+-- has already predicted that ordinary walk. Keep the still-unacknowledged path
+-- and reconcile from the displayed point instead of snapping back to the packet.
+p = prediction.new(origin)
+p:confirm(origin, 0, stop, 0)
+local delayedPosition, delayedVelocity
+for sequence = 1, 120 do
+    p:step(right, sequence, speed, dt)
+    if sequence == 50 then
+        delayedPosition, delayedVelocity = p.position, p.velocity
+    end
+end
+local beforeDelayed = p.display
+assert((delayedPosition - origin):LengthSquared() > 96 ^ 2)
+assert((delayedPosition - beforeDelayed):LengthSquared() > 96 ^ 2)
+p:confirm(delayedPosition, 50, delayedVelocity, 25)
+close(p.display, beforeDelayed)
+assert(#p.pending == 70, "Delayed walking confirmation discarded unacknowledged input")
+close(p:step(stop, 120, speed, 0), beforeDelayed)
+-- A genuine displacement away from both the previous authority and the
+-- predicted walk must still discard that path immediately.
+p:confirm(Vector(600, 400), 120, stop, 60)
+close(p:step(stop, 121, speed, dt), Vector(600, 400))
+assert(#p.pending == 1)
+print("PASS sparse walking confirmations preserve movement and true teleports reset it")
+
 -- Captured from J460 player updates at 30 Hz: starts, releases, reversals and
 -- perpendicular turns at MoveSpeed 0.6, 1, 1.3 and 2. Velocities in the fixture
 -- are native units per half tick; the predictor stores units per second.

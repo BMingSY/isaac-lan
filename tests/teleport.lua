@@ -120,7 +120,7 @@ for _, peer in ipairs({ host, guest }) do
             player = peer.env.Isaac.GetPlayer,
             vector = vector,
             collision = enums.GridCollisionClass,
-        }),
+        }).near,
         output = function(...)
             return peer.chat.output(...)
         end,

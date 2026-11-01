@@ -52,7 +52,7 @@ flowchart LR
 
 ## 完整视图与实体身份
 
-每份视图包含全队主要角色状态、共同楼层与地图，以及接收者当前房间的实体、网格和表现。同房角色携带完整外观，异房角色保留多人 HUD 所需状态。角色的 `ControlsEnabled` 与 `ControlsCooldown` 同属权威状态；客机不推进原生角色更新，控制冷却的递减和归零必须随快照恢复。玩家字段同时携带 `Friction`，供本机重放蜘蛛网、地面减速后的移动。库存字段 12 `subplayer` 为 `false` 或 `{type, hearts}`，只恢复骸骨／灵魂隐藏形态的生命，不重建其道具库存。任意 Mod 私有表、Lua 源码和原生指针不进入视图。
+每份视图包含全队主要角色状态、共同楼层与地图，以及接收者当前房间的实体、网格和表现。同房角色携带完整外观，异房角色保留多人 HUD 所需状态。角色的 `ControlsEnabled` 与 `ControlsCooldown` 同属权威状态；客机不推进原生角色更新，控制冷却的递减和归零必须随快照恢复。玩家字段同时携带 `Friction`，供本机重放蜘蛛网、地面减速后的移动。库存字段 12 `subplayer` 为 `false` 或 `{type, hearts}`；骸骨兼容组件先恢复原生形态配对，再分别恢复当前与隐藏形态生命，不重建隐藏身体的道具库存。任意 Mod 私有表、Lua 源码和原生指针不进入视图。
 
 采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。分层投影复制角色与房间容器，编码缓存复用其不变的子表。仅有一个客机时不增加这类片段；多个客机共享角色字段，同房且同维度的客机还共享实体与网格编码。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
 
