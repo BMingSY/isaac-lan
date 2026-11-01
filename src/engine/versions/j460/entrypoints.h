@@ -48,6 +48,7 @@ inline constexpr std::uint32_t playerManagerRemovePlayer = 0x5ba000;
 inline constexpr std::uint32_t playerGetPoopMana = 0x353c20;
 inline constexpr std::uint32_t playerGetPoopSpell = 0x441cd0;
 inline constexpr std::uint32_t playerManagerReplacePlayer = 0x5bee80;
+inline constexpr std::uint32_t playerSwapForgottenForm = 0x3cc200;
 inline constexpr std::uint32_t playerTriggerRoomClear = 0x3a8fd0;
 inline constexpr std::uint32_t playerActiveMaxCharge = 0x391320;
 inline constexpr std::uint32_t playerActiveChargeType = 0x391530;

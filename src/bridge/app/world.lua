@@ -43,7 +43,7 @@ end)
 local crawlspace = assert(modules["compat/routes/crawlspace"])(function()
     return Game():GetLevel()
 end, Vector, RoomType.ROOM_DUNGEON)
-local forgotten = assert(modules["compat/characters/forgotten"])(PlayerType)
+local forgotten = assert(modules["compat/characters/forgotten"])(PlayerType, native)
 local forms = component("compat/characters/lazarus")(native, function(index)
     return Isaac.GetPlayer(index)
 end, PlayerType)
@@ -79,7 +79,15 @@ entity = performance.wrap("capture.entity", entity)
 sprite = performance.wrap("capture.sprite", sprite)
 applySprite = performance.wrap("apply.sprite", applySprite)
 entityCodec.apply = performance.wrap("apply.entity", entityCodec.apply)
-function _IsaacLanRoomEntered()
+local roomPlacement = assert(modules["runtime/room_placement"])({
+    game = Game,
+    player = Isaac.GetPlayer,
+    vector = Vector,
+    collision = GridCollisionClass,
+    canPlace = crawlspace.gridPlacement,
+})
+function _IsaacLanRoomEntered(door)
+    assert(roomPlacement.arrive(door), "Cannot find a safe room arrival")
     modules["compat/bosses/rotgut"](Game(), Isaac.GetPlayer, RoomType.ROOM_DUNGEON)
     modules["runtime/room_entry"](
         Game():GetRoom(),
@@ -114,6 +122,7 @@ local inventoryState = component("sync/inventory")({
     extraCollectibles = glitched.extraCollectibles,
     collectibleCount = glitched.count,
     subplayer = forgotten.subplayer,
+    restoreForm = forgotten.restoreForm,
     activeType = ItemType.ITEM_ACTIVE,
     curse = NullItemID.ID_LOST_CURSE,
     pockets = function(player, value)

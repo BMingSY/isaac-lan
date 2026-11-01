@@ -51,9 +51,13 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 | 玩家清房回调 | `Player::TriggerRoomClear`，RVA `0x3a8fd0`，`thiscall void(Player*)`；Lua 没有阻止原生清房效果的前置回调 | 联机客机房间启用期间跳过玩法触发，角色状态由权威快照恢复；主机、单人及原生加载保留原调用，不分配或替换角色对象 |
 | 口袋槽、合成袋、药丸状态 | 原生载荷分别为 32、12、75 字节 | 在库存恢复后应用，完整校验载荷与玩家归属；写入限客机，主动对象与物品池仍由原版管理 |
 
+`actor_forgotten_form(playerSprite, desiredType)` 仅供客机在该玩家的房间作用域内恢复骸骨／灵魂形态，接受当前名单中玩家的借用 Sprite，目标类型限定为 16／17。后端检查 `Player+0x1d98` 的隐藏身体及两者互补类型，拒绝合作幽灵和无效配对；相同目标不再次切换。调用 `Player::SwapForgottenForm`（RVA `0x3cc200`，`thiscall bool(Player*, bool force, bool quiet)`、`RET 8`），两个标志均为 true，以跳过输入冷却和切换演出。原生交换当前／隐藏身体状态并维护骨架引用，两份分配和所有权均留给游戏；随后同步组件分别恢复两种形态的生命。接口不接受地址、不分配或替换角色，入口受启动签名校验。
+
 实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
 
 角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先移除原房间各实体列表中的引用，再调用原生添加入口；对象仍由游戏持有和销毁，不复制效果、不重放道具使用。没有对应持有者的效果及房间独立效果不随角色迁移。
+
+原生放置完成后，主机在仅含本次抵达身体的目的房间作用域内通知 `_IsaacLanRoomEntered(door)`。无门到达（`door < 0`）由[落点组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_placement.lua)检查房间边界、碰撞范围和飞行能力，只把无效位置移到最近的安全网格；有效位置和常驻玩家保持原状。地窖等横版房间由路线兼容策略保留原生落点。常规门口位置仍由原生入口处理，客机接受主机最终位置。
 
 妈手抓取的原生转场调用点为 RVA `0x134752`，以空玩家参数请求起始房间的淡入淡出，调用字节受启动签名校验。后端识别该调用上下文，交由[抓取转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/enemies/room_transitions.h)验证目的地和参数，只排队源房间内已连接的参与者及其受控身体。安全边界完成迁移后按原生 `RoomTransition::ChangeRoom` 的排除标志恢复可见性并提供到达保护；目的地已加载或就是当前房间时同样完成恢复。恢复请求随会话清理，不改变其他房间的玩家状态。
 

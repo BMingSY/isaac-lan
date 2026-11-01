@@ -132,7 +132,9 @@ return function(fields)
                 return
             end -- Native ghost conversion owns its hidden inventory.
             if p:GetPlayerType() ~= v[Inventory.type] then
-                p:ChangePlayerType(v[Inventory.type])
+                if not (env.restoreForm and env.restoreForm(p, v[Inventory.type])) then
+                    p:ChangePlayerType(v[Inventory.type])
+                end
             end
             local effects = p:GetEffects()
             local delta = v[Inventory.curse] - effects:GetNullEffectNum(env.curse)

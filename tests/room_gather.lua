@@ -103,7 +103,7 @@ local placeNear = dofile(root .. "/src/bridge/runtime/room_placement.lua")({
     player = player,
     vector = vector,
     collision = { COLLISION_NONE = 0 },
-})
+}).near
 local gather = dofile(root .. "/src/bridge/compat/rules/room_gather.lua")({
     native = native,
     roomTypes = types,

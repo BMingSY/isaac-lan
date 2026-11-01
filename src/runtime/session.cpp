@@ -29,6 +29,7 @@
 #include <filesystem>
 #include <fstream>
 #include <chrono>
+#include <optional>
 
 namespace backend = isaac::engine::session;
 
@@ -370,13 +371,18 @@ bool call(int reference, int arguments, int results, int stackBefore) {
     lua.setTop(state, stackBefore);
     return false;
 }
-void integrationCallback(const char* name) {
+void integrationCallback(const char* name, std::optional<int> argument = std::nullopt) {
     if (!state || !view.gated || !session)
         return;
     const int top = lua.getTop(state);
-    if (lua.getGlobal(state, name) == 6 && lua.pcall(state, 0, 0, 0, 0, nullptr) && logger) {
-        const auto reason = lua.toString(state, -1, nullptr);
-        logger(std::string("integration_error=") + name + " " + (reason ? reason : "Lua error"));
+    if (lua.getGlobal(state, name) == 6) {
+        if (argument)
+            lua.pushInteger(state, *argument);
+        if (lua.pcall(state, argument ? 1 : 0, 0, 0, 0, nullptr) && logger) {
+            const auto reason = lua.toString(state, -1, nullptr);
+            logger(std::string("integration_error=") + name + " " +
+                   (reason ? reason : "Lua error"));
+        }
     }
     lua.setTop(state, top);
 }
@@ -1944,9 +1950,9 @@ void requestWindowClose() {
 void abort(const std::string& error) {
     fail(error);
 }
-void roomEntered() {
+void roomEntered(int door) {
     if (!replica())
-        integrationCallback("_IsaacLanRoomEntered");
+        integrationCallback("_IsaacLanRoomEntered", door);
 }
 void halfStarted() {
     if (view.gated)
