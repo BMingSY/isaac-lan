@@ -146,6 +146,8 @@ def main():
         command.append("--ascent-fixture")
     if "lazarus" in cases:
         command.append("--lazarus-fixture")
+    if "knife" in cases:
+        command.append("--knife-fixture")
     if any(
         name in cases
         for name in (

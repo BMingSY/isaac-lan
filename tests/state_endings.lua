@@ -979,6 +979,11 @@ local function advance(t)
             boss(t)
         end
     elseif step == "boss-enter" and t - stepAt > 130 then
+        actor(bossEntrySlot, function(p)
+            -- Native entry can leave the actor against a closed door with
+            -- residual velocity. Keep scripted combat inside when it opens.
+            p.Position, p.Velocity = Game():GetRoom():GetCenterPos(), Vector.Zero
+        end)
         mark("boss-fight", t)
     elseif step == "boss-enter" and name == "mega-satan" and stage == 11 and t - stepAt > 40 then
         actor(1, function(p)
@@ -1016,7 +1021,13 @@ local function advance(t)
     elseif step == "boss-loot" and t - stepAt > 100 then
         if stage == 6 and kind < 4 then
             photo = (name == "blue-baby" or name == "ascent") and 327 or 328
-            if pick(PickupVariant.PICKUP_COLLECTIBLE, photo) then
+            local owned
+            actor(1, function(p)
+                owned = p:HasCollectible(photo)
+            end)
+            -- Native collision may collect the photo during the loot delay,
+            -- removing its pedestal before this scan starts.
+            if owned or pick(PickupVariant.PICKUP_COLLECTIBLE, photo) then
                 mark("photo", t)
             end
         elseif name == "mother" and stage == 6 and kind >= 4 then

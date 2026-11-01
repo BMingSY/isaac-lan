@@ -106,6 +106,11 @@ def main():
         help="Unlock Tainted Lazarus on the owned guest before character menus initialize",
     )
     parser.add_argument(
+        "--knife-fixture",
+        action="store_true",
+        help="Unlock Azazel on the owned guest before the knife-route character selection",
+    )
+    parser.add_argument(
         "--automatic",
         action="store_true",
         help="Use the automatically loaded DLL instead of remote-thread injection",
@@ -266,6 +271,7 @@ def main():
         or args.hush_fixture
         or args.ascent_fixture
         or args.lazarus_fixture
+        or args.knife_fixture
         or args.completion_fixture
     ):
         args.progress_fixture = True
@@ -693,6 +699,7 @@ def main():
                     hush=args.hush_fixture,
                     ascent=args.ascent_fixture,
                     lazarus=args.lazarus_fixture,
+                    knife=args.knife_fixture,
                     completion=args.completion_fixture,
                 )
             response = execute(str(lab / "isaac_lan_lab.exe"), windows(lab), *flags)

@@ -548,9 +548,12 @@ def test_special_suite_rejects_invalid_selection(tmp_path):
     assert not output.exists()
 
 
-def test_ending_builder_passes_selected_routes_without_source_rewriting(fake_scenarios):
+@pytest.mark.parametrize("bundled", [False, True])
+def test_ending_builder_passes_selected_routes_without_source_rewriting(fake_scenarios, bundled):
     output = fake_scenarios / "ending.lua"
     build_endings(output, ["mother", "lamb"], first_floor=True)
+    if bundled:
+        output.write_text(lua_support.bundle_input(output.read_text()))
     run_lua(
         """
 observed = {}
@@ -567,7 +570,9 @@ assert(observed[1].endingRoutes[1] == "mother" and observed[1].endingRoutes[2] =
     )
 
 
-@pytest.mark.parametrize("mode", ["normal", "redirect", "dimension", "timeout", "mother"])
+@pytest.mark.parametrize(
+    "mode", ["normal", "redirect", "dimension", "timeout", "mother", "doorway"]
+)
 def test_ending_boss_entry_confirms_native_destination(tmp_path, mode):
     run_lua(
         "local mode = "
@@ -645,6 +650,9 @@ before(202)
 assert(#moves == 1, "Retried a still-pending native entry")
 roomIndex = (mode == "redirect" or mode == "timeout") and 148 or 135
 dimension = mode == "dimension" and 1 or 0
+if mode == "doorway" then
+    player.Position, player.Velocity = Vector(320, 440), Vector(0, 1)
+end
 before(203)
 if mode == "timeout" then
     local ok, message = pcall(function()
@@ -668,6 +676,108 @@ else
     before(redirected and 334 or 303)
     assert(saw("STEP boss-fight"), "Did not advance after confirmed arrival")
     assert(#moves == (redirected and 2 or 1), "Retried an already-confirmed entry")
+    if mode == "doorway" then
+        assert(player.Position.Y < 400 and player.Velocity == Vector.Zero,
+            "Scripted combat left the entrant drifting against the exit door")
+    end
+end
+""",
+        tmp_path,
+    )
+
+
+@pytest.mark.parametrize("route", ["lamb", "blue-baby", "ascent"])
+@pytest.mark.parametrize("pickup_state", ["owned", "pedestal", "missing", "other-player"])
+def test_ending_photo_accepts_native_pickup_before_loot_scan(tmp_path, route, pickup_state):
+    run_lua(
+        "local route, pickupState = "
+        + lua_support.literal(route)
+        + ", "
+        + lua_support.literal(pickup_state)
+        + """
+local function noop() end
+local before, stage, roomIndex = nil, 1, 84
+local messages, entities = {}, {}
+local photo = route == "lamb" and 328 or 327
+local function player(owned)
+    return {
+        IsDead = function() return false end,
+        IsCoopGhost = function() return false end,
+        SetMinDamageCooldown = noop, AddEntityFlags = noop,
+        HasCollectible = function(_, id) return owned and id == photo end,
+    }
+end
+local players = {[0] = player(pickupState == "other-player"), [1] = player(pickupState == "owned")}
+Vector = setmetatable({Zero = {}}, {__call = function(_, x, y) return {X = x, Y = y} end})
+EntityPtr = function(entity) return {Ref = entity} end
+local level = {
+    GetStage = function() return stage end,
+    GetStageType = function() return 0 end,
+    GetRooms = function() return {Size = 1, Get = function()
+        return {SafeGridIndex = 135, Data = {Type = 5}}
+    end} end,
+}
+Game = function() return {
+    GetLevel = function() return level end,
+    GetRoom = function() return {
+        GetType = function() return roomIndex == 135 and 5 or 1 end,
+        IsClear = function() return true end,
+        GetCenterPos = function() return Vector(320, 280) end,
+    } end,
+} end
+_IsaacLan = {
+    rooms_ready = function() return true end,
+    rooms_with_player = function(_, callback) callback(); return true end,
+    rooms_heads = function() return {["0"] = 0, ["1"] = 1} end,
+    rooms_positions = function() return {["1"] = {index = roomIndex, dimension = 0}} end,
+    rooms_move = function(slot, index)
+        assert(slot == 1 and index == 135)
+        roomIndex = index
+        return true
+    end,
+    net_gate = function(_, callback) before = callback end,
+}
+Isaac = {
+    AddCallback = noop, GetPlayer = function(index) return players[index] end,
+    DebugString = function(message) messages[#messages + 1] = message end,
+    GetRoomEntities = function() return entities end,
+}
+EntityType, EntityFlag, ModCallbacks, GameStateFlag = {}, {}, {}, {}
+PickupVariant, RoomType = {PICKUP_COLLECTIBLE = 100}, {ROOM_BOSS = 5}
+_IsaacLanFrame = noop
+_IsaacLanTest = {host = true, port = "1234", campaign = true, endingRoutes = {route}}
+dofile("""
+        + lua_support.literal(str(ROOT / "tests/state_endings.lua"))
+        + """)
+_IsaacLan.net_gate(noop, noop, noop, noop, noop, noop)
+before(31)
+stage = 6
+before(172)
+before(303)
+local boss = {
+    Type = 45, Variant = 0, InitSeed = 1, HitPoints = 645, MaxHitPoints = 645,
+    FrameCount = 0, State = 1, V2 = {X = 0},
+    ToNPC = function(self) return self end,
+    IsBoss = function() return true end,
+    GetSprite = function() return {GetAnimation = function() return "Idle" end} end,
+}
+entities = {boss}
+before(424)
+entities = pickupState == "pedestal" and {{
+    Type = 5, Variant = 100, SubType = photo, Position = Vector(320, 280),
+    ToNPC = function() end, ToPickup = function(self) return self end,
+    Exists = function() return false end,
+}} or {}
+before(525)
+local advanced = false
+for _, message in ipairs(messages) do
+    if message:find("STEP photo ", 1, true) then advanced = true end
+end
+assert(advanced == (pickupState == "owned" or pickupState == "pedestal"),
+    "Photo acquisition must accept earlier native pickup and require guest ownership or pedestal")
+if not advanced then
+    local ok, message = pcall(function() before(1924) end)
+    assert(not ok and message:find("Route stalled at boss-loot", 1, true), message)
 end
 """,
         tmp_path,

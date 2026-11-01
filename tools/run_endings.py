@@ -19,6 +19,11 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     configure_interrupts()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--injected",
+        action="store_true",
+        help="Use the isolated injection backend; skip autoload validation",
+    )
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--build", type=Path, default=ROOT / "build-win32")
@@ -56,7 +61,6 @@ def main():
         "--menu-start",
         "--virtual-input",
         "--no-luadebug",
-        "--automatic",
         "--endings-fixture",
         "--native-record-both",
         "--frame-ms",
@@ -68,6 +72,8 @@ def main():
         "--scenario-timeout",
         "1800",
     )
+    if not args.injected:
+        command.append("--automatic")
     if args.heap_check:
         command.append("--heap-check")
     for mod in args.mod:
