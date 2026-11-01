@@ -124,6 +124,7 @@ return function(fields)
                     [Subplayer.type] = sub:GetPlayerType(),
                     [Subplayer.hearts] = captureHearts(sub),
                 } or false,
+                [Inventory.activeData] = env.activeData and env.activeData(p) or false,
             }
         end
         local function applyResources(p, v)
@@ -194,7 +195,15 @@ return function(fields)
                         end
                     end
                 end
-                p:SetActiveCharge(active[Active.charge], slot)
+            end
+            if v[Inventory.activeData] then
+                assert(
+                    env.activeData and env.activeData(p, v[Inventory.activeData]),
+                    "Cannot restore active item data"
+                )
+            end
+            for i, active in ipairs(v[Inventory.active]) do
+                p:SetActiveCharge(active[Active.charge], i - 1)
             end
             for slot = 0, LAST_POCKET_SLOT do
                 if p:GetTrinket(slot) ~= v[Inventory.trinkets][slot + 1] then

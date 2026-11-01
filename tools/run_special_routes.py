@@ -146,6 +146,8 @@ def main():
         command.append("--ascent-fixture")
     if "lazarus" in cases:
         command.append("--lazarus-fixture")
+    if "tainted-feedback" in cases:
+        command.append("--focus-cycle")
     if "knife" in cases:
         command.append("--knife-fixture")
     if any(
@@ -252,6 +254,10 @@ def main():
                             and "LAN_PICKUP_PRESSURE " in line
                             or name == "feedback-b7fs"
                             and "LAN_B7FS " in line
+                            or name == "tainted-feedback"
+                            and "TAINTED_FEEDBACK " in line
+                            or name == "d-infinity"
+                            and "D_INFINITY " in line
                             or name in ("greed", "greedier")
                             and ("GREED mode=" + ("3" if name == "greedier" else "2") + " ") in line
                             or name
@@ -305,6 +311,13 @@ def main():
                 "VICTORY_LAP_GUEST_INPUT_IGNORED" in line for line in lap["host"]["checkpoints"]
             )
             report["passed"] = report["passed"] and report["victory_lap_passed"]
+        if "tainted-feedback" in cases:
+            engine = json.loads((output / "engine" / "result.json").read_text())
+            report["focus_sets"] = engine.get("focus_sets", [])
+            report["passed"] &= report["focus_sets"] == [
+                {"request": number, "role": role}
+                for number, role in enumerate(("client", "host", "client", "host", "client"), 1)
+            ]
         if "victory-no" in cases:
             report["victory_no_passed"] = all(
                 any(

@@ -1029,7 +1029,9 @@ void arrival(Address player, const Room& room, int door, const std::vector<Addre
     if (landing) {
         place(player, *landing);
         for (auto entity : companions)
-            if (at<unsigned>(entity, 0x28) != 867)
+            if (at<unsigned>(entity, 0x28) != compat::ids::entity::mothersShadow &&
+                !compat::characters::taintedJacobPursuer(at<unsigned>(entity, 0x28),
+                                                         at<unsigned>(entity, 0x2c)))
                 place(entity, *landing);
     }
     if (protect) {
@@ -3402,18 +3404,27 @@ struct RoomTransfer {
                 if (at<unsigned>(entity, 0x28) == 3)
                     engine<RoomCall>(j460::entry::engineRoomsRoomCall)(
                         reinterpret_cast<void*>(entity));
-                else if (at<unsigned>(entity, 0x28) == 867) {
-                    const auto previousIndex = at<int>(game(), 0x18308);
-                    const auto previousDimension = at<int>(game(), 0x18310);
-                    at<int>(game(), 0x18308) = from->key.index;
-                    at<int>(game(), 0x18310) = from->key.dimension;
-                    // Native NPC entry translates the chasing Shadow into
-                    // the destination's coordinates, away from the actor.
-                    engine<RoomCall>(j460::entry::engineRoomsNPCNewRoom)(
-                        reinterpret_cast<void*>(entity));
-                    at<int>(game(), 0x18308) = previousIndex;
-                    at<int>(game(), 0x18310) = previousDimension;
-                }
+        }
+        for (auto entity : companions) {
+            // Dark Esau is transferred after native Init, so its own room
+            // entry must run here even for a newly loaded destination. Keep
+            // the original NPC and let native entry translate its pursuit
+            // position; placing it at the player's landing causes a hit.
+            const auto type = at<unsigned>(entity, 0x28);
+            const bool esau =
+                compat::characters::taintedJacobPursuer(type, at<unsigned>(entity, 0x2c));
+            if ((esau && !runtime::replica()) ||
+                (type == compat::ids::entity::mothersShadow && !created)) {
+                auto& previousIndex = at<int>(game(), j460::layout::game::previousRoomIndex);
+                auto& previousDimension = at<int>(game(), j460::layout::game::previousDimension);
+                const auto savedIndex = previousIndex, savedDimension = previousDimension;
+                previousIndex = from->key.index;
+                previousDimension = from->key.dimension;
+                engine<RoomCall>(j460::entry::engineRoomsNPCNewRoom)(
+                    reinterpret_cast<void*>(entity));
+                previousIndex = savedIndex;
+                previousDimension = savedDimension;
+            }
         }
         arrival(request.player, *to, request.door, companions, protect, landing);
         for (auto player : actors)

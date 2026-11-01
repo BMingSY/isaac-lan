@@ -586,7 +586,10 @@ void updateReplica(const backend::Call& original) {
     presentation.players = session->players();
     presentation.connected = session->connectedMask();
     input::apply(presentation);
-    original();
+    {
+        pause_menu::FocusPauseScope focusPause(executableImage);
+        original();
+    }
     rooms::finishFrame();
     if (committedView)
         integrationCallback("_IsaacLanViewCommitted");

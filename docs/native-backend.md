@@ -83,6 +83,8 @@ Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端
 
 进入已有房间的跟班在落点设置后调用 `Familiar.ResetRoomState`（RVA `0x22bb70`）。这复用原生房间入场对跟随历史、速度及临时状态的处理；仅主机对迁移名单中的跟班调用，不触及留在目标房间中的跟班，也不改变原生分配与回收的所有权。入口签名在启动时校验。
 
+黑暗以扫（类型 866、变体 0）随所属角色迁移时，主机调用 `NPC.NewRoom`（RVA `0x2d6d80`，`thiscall void(NPC*)`），让原版按两间房的坐标换算追赶位置。新房间中在原生初始化及 NPC 迁移之后调用；加入已有房间时同样调用一次。调用期间暂借 `Game+0x18308/+0x18310` 的来源房间与维度，返回后恢复；实体保持原有身份和引用，不重新生成，也不放到玩家落点。客机从权威快照恢复 NPC，不执行该角色的原生入房玩法。妈妈的影子加入已有房间时复用同一原生入口和来源上下文。入口受启动签名校验，对象分配与回收仍由游戏管理。
+
 ## 玩家轮廓
 
 [`outlines::withPlayers(connected, render)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/player_outlines.h) 仅在本机房间绘制期间借用 LAN 在线槽位掩码，退出或异常时恢复外层掩码；不缓存角色地址，不增加同步字段。至少两名玩家在线且 `Player+0x1618` 属于有效槽位时，使用表现层的固定配色。单人、退出会话及不属于在线槽位的实体继续原版路径。
@@ -125,6 +127,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 | 原生菜单提示清理 | `input::resetMenuPrompts`，RVA `0x239b0`，`thiscall void(Manager+0x4a950, false)` | 联网启动销毁菜单后调用一次，被调方清理 4 字节，不影响随后暂停菜单提示 |
 | 原生结束回放 | `Game::End`，RVA `0x2f9770`，`thiscall void(Game*, int id)` | `1` 为死亡结算，`2～14` 为结局；房主原生确认后发送可靠结束事件，客机在安全更新边界调用原入口。本机名单只在调用期间借用，不复制结算 Sprite、角色或原生容器；单人保留原调用 |
 | 返回联机菜单 | `menu_context::returnToMain`，仅由待处理的联机返回请求调用 | 等待 `Manager+0x8` 为菜单场景、`+0x10` 为有效存档栏 `1～3` 且菜单对象存在；将 `MenuManager+0x40` 从标题／存档／主菜单页 `1～3` 设为主菜单 `3`，再显示联机界面。结局场景和其他菜单页不写入，不分配或释放原生菜单对象 |
+
+客机在副本 `Game::Update` 调用期间使用 `pause_menu::FocusPauseScope`，暂时关闭原生失焦自动暂停，结束或异常退栈时恢复原值。选项位于 `Manager+0x2a33c` 的配置对象内 `+0x69`；`Game.Update.focusPauseOption`（RVA `0x2fb840`）校验实际读取该字节的指令及条件分支。暂停状态仍由联机权威决定，本机菜单操作、选项保存、主机及单人更新不进入该作用域；不持久修改用户配置，不分配原生对象。
 
 `session_backend` 在原版 `Game::Controls` 返回后检查 `Game+0x265bc` 的重开淡出动作：`5` 为结算确认，`6` 为长按重开。只有运行层接收联机请求时才清除该动作、`+0x265b0` 的淡出透明度和 `+0x265c4` 的按住帧数；其他转场及单人调用原样保留。不会调用或复制带原生容器的 `Manager::RestartGame` 参数。
 
@@ -199,6 +203,10 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 ## 道具与效果
 
+`items_active_data(sprite[, bytes])` 接受当前原生名单中玩家的借用 Sprite，读取或恢复四个主动槽的 `{id:i32, data:i32}` 大端记录，共 32 字节。写入只允许客机；完整解析后核对四个 ID 与已恢复的库存一致、空槽状态为 0，并通过[道具状态校验](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/active_data.h)后才提交。D 无限高 16 位为十种骰子的索引，低 16 位保留充能状态。原生描述符位于 `Player+0x1580`，槽间隔 `0x20`，状态在槽内 `+0x1c`；布局由 RVA `0x391519` 的原生写入指令校验。
+
+状态变化只清空该玩家对应槽的原生 HUD 图标键。PlayerHUD 数组起于 `Game+0x1da04`，共 8 项、每项 `0x6dc`，首字段为借用玩家指针；四个主动图标缓存起于 `+0x190`，间隔 `0x1c`。根、步长、清空操作和槽间隔受原生指令签名校验。重复状态不触及缓存；图片加载、释放和绘制继续由原生 HUD 负责，不借用队友图标，也不执行主动道具玩法。实现见 [active_items.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/active_items.h)。
+
 底座拾取适配位于 [item_effects.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/item_effects.cpp)。`Player::QueueItem` RVA `0x35e050` 使用 `thiscall`，只在底座确认拾取的返回点 `0x2ebe11` 通知运行层，传递玩家栏位、实体种子、道具 ID、充能、Touched、VarData 与来源池。兼容组件接受时不再向原拾取者入队；其他调用点、饰品、开局和恢复沿用原生方法。通知期间不切换房间；结算在模拟作用域退出后、发布视图前完成。源对象和配置指针不进入 Lua，不由适配器释放。
 
 `items_take_collectible(sprite, id)` 在当前角色作用域调用原生 `Player::DropCollectible`（RVA `0x390530`，`thiscall(Player*, int, Pickup*, bool)`），复制充能、VarData 和来源池，再由实体的原生 Remove 消除临时底座。`items_give_collectible(sprite, id, charge, first, data, pool)` 通过原生掉落保存被替换的主动，再用原生 AddCollectible 发放。入口只接受主机就绪视图中当前名单的玩家 Sprite 包装和有效配置；角色与掉落的分配、注销由游戏管理。底座字段 `+0x524/+0x52c/+0x530/+0x59c` 分别为充能、Touched、来源池和 VarData。入口、调用点和布局常量统一定义在版本后端并受签名校验。
@@ -228,7 +236,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x26528/+0x2652c/+0x26530` 是泛光剩余时间／初始时间／强度，`+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；角色更新及嵌套的道具／药丸／卡牌调用借入同一所属状态，结束时回收并恢复全局标量；绘制只借入本机状态，角色动作外的世界泛光保留全局归属 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 35、网络消息版本为 44；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 38、网络消息版本为 47；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 

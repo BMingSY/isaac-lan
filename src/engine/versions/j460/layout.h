@@ -24,6 +24,7 @@ inline constexpr unsigned saveState = 0xfa4;
 inline constexpr unsigned continueAvailable = 0x20dcc;
 inline constexpr unsigned cinematicActive = 0x21618;
 inline constexpr unsigned music = 0x29fbc;
+inline constexpr unsigned options = 0x2a33c;
 inline constexpr unsigned stringTable = 0x4a920;
 inline constexpr unsigned continueRequested = 0x4b131;
 inline constexpr unsigned deleteSaveRequested = 0x4b284;
@@ -34,6 +35,9 @@ inline constexpr unsigned chatFont = 0x4ae74;
 inline constexpr unsigned pendingEmote = 0x4ccac;
 inline constexpr unsigned menuInputBlock = 0x4d074;
 } // namespace manager
+namespace options {
+inline constexpr unsigned pauseOnFocusLost = 0x69;
+} // namespace options
 namespace music {
 inline constexpr unsigned currentId = 0x30c;
 inline constexpr unsigned queuedId = 0x310;
@@ -72,6 +76,7 @@ inline constexpr unsigned previousDimension = 0x18310;
 inline constexpr unsigned leaveDoor = 0x18318;
 inline constexpr unsigned enterDoor = 0x1831c;
 inline constexpr unsigned players = 0x1baa8;
+inline constexpr unsigned playerHuds = 0x1da04;
 inline constexpr unsigned floorSeeds = 0x1bb84;
 inline constexpr unsigned pauseMenu = 0x23a74;
 inline constexpr unsigned emoteWheel = 0x25108;
@@ -84,6 +89,9 @@ inline constexpr unsigned fadeAction = 0x265bc;
 inline constexpr unsigned restartHeldFrames = 0x265c4;
 inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
+namespace activeItem {
+inline constexpr unsigned count = 4, stride = 0x20, data = 0x1c;
+} // namespace activeItem
 namespace room {
 inline constexpr unsigned size = 0x7898;
 inline constexpr unsigned descriptor = 0x4, type = 0x8;
@@ -327,6 +335,8 @@ inline constexpr unsigned cacheCount = 0x2;
 namespace playerHud {
 inline constexpr unsigned size = 0x6dc;
 inline constexpr unsigned player = 0x0;
+inline constexpr unsigned count = 8;
+inline constexpr unsigned activeItems = 0x190, activeStride = 0x1c;
 inline constexpr unsigned refreshFlags = 0x6ac;
 inline constexpr unsigned refreshAll = 0x101;
 } // namespace playerHud
