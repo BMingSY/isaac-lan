@@ -67,15 +67,31 @@ return function(fields)
                 end
             end
         end
-        local function inventory(p)
+        local function inventory(p, catalog)
             local items = {}
-            local config = env.config()
-            eachCollectible(config, function(item)
+            local function ownedItem(item)
                 local owned = count(p, item)
                 if owned > 0 then
                     items[#items + 1] = { item, owned } -- Item.id, Item.count
                 end
-            end)
+            end
+            if catalog then
+                -- Capture owns this cache for one immutable tick/floor generation.
+                -- Share only IDs, never native config objects or player counts;
+                -- Mod and generated definitions are enumerated again next tick.
+                if not catalog.items then
+                    local ids = {}
+                    eachCollectible(env.config(), function(item)
+                        ids[#ids + 1] = item
+                    end)
+                    catalog.items = ids
+                end
+                for _, item in ipairs(catalog.items) do
+                    ownedItem(item)
+                end
+            else
+                eachCollectible(env.config(), ownedItem)
+            end
             local active = {}
             for slot = 0, LAST_ACTIVE_SLOT do
                 active[#active + 1] = {

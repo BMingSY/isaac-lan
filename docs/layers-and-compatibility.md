@@ -53,7 +53,7 @@ J460 `Scope` 按深度选择独立的临时名单，恢复原生标量与名单�
 
 ## 采集与副本恢复
 
-[`sync/capture.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/capture.lua) 以 `(epoch, tick)` 标识一次不可变采集代次；同轮发布期间不得推进玩法。公共字段采集一次，角色基础状态与完整表现分别缓存，[`sync/room.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/room.lua) 按房间复用实体／网格视图。声音、演出及道具表现仍按客机采集。采集缓存不跨 tick；同步层按字段投影，网络层只根据两份不透明字节的内容和修订号决定传输。低频依赖仍逐 tick 采集，变化时可靠发送，并在未被应用确认的新视图中携带恢复副本；客机在对应依赖齐全后恢复完整状态。
+[`sync/capture.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/capture.lua) 以 `(epoch, tick)` 标识一次不可变采集代次；同轮发布期间不得推进玩法。公共字段采集一次，角色基础实体状态与完整表现按接收者房间需要分别采集并缓存。同代次内所有角色共享仅包含 ID 的道具目录，各角色的道具数量、生命与充能仍独立读取；目录随 tick、楼层代次或会话重置失效，不保留原生配置对象。[`sync/room.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/room.lua) 按房间复用实体／网格视图。声音、演出及道具表现仍按客机采集。采集缓存不跨 tick；同步层按字段投影，网络层只根据两份不透明字节的内容和修订号决定传输。低频依赖仍逐 tick 采集，变化时可靠发送，并在未被应用确认的新视图中携带恢复副本；客机在对应依赖齐全后恢复完整状态。
 
 [`sync/replica.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/replica.lua) 的顺序为：
 
