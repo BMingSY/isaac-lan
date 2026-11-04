@@ -125,6 +125,11 @@ jobs:
           }
           ./tools/format_powershell.ps1 -Check
           if ($LASTEXITCODE -ne 0) { throw 'PowerShell formatting check failed' }
+      - name: Test installer errors and recovery without the game
+        shell: pwsh
+        run: |
+          python tests/test_windows_installer.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer tests failed' }
       - name: Run registered native and UDP tests in parallel
         shell: pwsh
         run: |

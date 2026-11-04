@@ -76,9 +76,9 @@ def build(build_directory, output):
     for mode in ("Install", "Uninstall"):
         (output / f"{mode}.cmd").write_bytes(
             (
-                '@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" -Mode '
+                '@echo off\r\nsetlocal\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" -Mode '
                 + mode
-                + "\r\npause\r\n"
+                + '\r\nset "installer_exit=%errorlevel%"\r\npause\r\nexit /b %installer_exit%\r\n'
             ).encode("ascii")
         )
     shutil.copytree(source / "third_party", output / "licenses")
