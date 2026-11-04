@@ -4,6 +4,7 @@ local fields = assert(_IsaacLanModules["sync/fields"])
 local schema = assert(_IsaacLanModules["sync/world_schema"])
 local A, E, I, M, R = fields.actor, fields.entity, fields.inventory, fields.map, fields.room
 local base, gate = _IsaacLanFrame, native.net_gate
+local firing = _IsaacLanTestInput.buttons(1 << ButtonAction.ACTION_SHOOTRIGHT)
 local renders, linked, chosen, finished = 0, false, false, false
 local checks, tetherViews, emptyViews, returnedViews, floorViews = 0, 0, 0, 0, 0
 local draws, emptyDraws = 0, nil
@@ -114,23 +115,25 @@ local function verify(bytes, tick, stable)
 end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(function()
-        return _IsaacLanTestInput.neutral
+        return firing
     end, function(tick, ...)
         before(tick, ...)
         for i = 0, Game():GetNumPlayers() - 1 do
             local player = Isaac.GetPlayer(i)
-            player:SetMinDamageCooldown(10000)
-            if tick == 30 or tick == 280 then
-                player:ChangePlayerType(PlayerType.PLAYER_LILITH_B)
-                player:AddCollectible(CollectibleType.COLLECTIBLE_SAD_ONION)
-                player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
-                player:EvaluateItems()
-            elseif tick == 180 then
-                player:ChangePlayerType(PlayerType.PLAYER_ISAAC)
-                player:RemoveCollectible(CollectibleType.COLLECTIBLE_SAD_ONION, true)
-                player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
-                player:EvaluateItems()
-            end
+            assert(native.rooms_with_player(player.ControllerIndex - 1, function()
+                player:SetMinDamageCooldown(10000)
+                if tick == 30 or tick == 280 then
+                    player:ChangePlayerType(PlayerType.PLAYER_LILITH_B)
+                    player:AddCollectible(CollectibleType.COLLECTIBLE_SAD_ONION)
+                    player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
+                    player:EvaluateItems()
+                elseif tick == 180 then
+                    player:ChangePlayerType(PlayerType.PLAYER_ISAAC)
+                    player:RemoveCollectible(CollectibleType.COLLECTIBLE_SAD_ONION, true)
+                    player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
+                    player:EvaluateItems()
+                end
+            end, 1))
         end
         if tick == 420 then
             Isaac.ExecuteCommand("stage 2")

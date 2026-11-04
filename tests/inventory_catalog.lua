@@ -84,7 +84,7 @@ print(
     "PASS shared catalog, independent live inventory, Mod/generated definitions and immutable bytes"
 )
 
-local methodReads, countReads = 0, 0
+local methodReads, countReads, typeReads = 0, 0, 0
 local glitched = dofile(root .. "/src/bridge/compat/items/glitched.lua")({
     generated_item_count = function(player, id)
         return player.items[id] or 0
@@ -97,7 +97,13 @@ function bound.config:GetCollectibles()
     return { Size = 2001 }
 end
 function bound.config:GetCollectible()
-    return { Type = 1 }
+    return setmetatable({}, {
+        __index = function(_, name)
+            assert(name == "Type")
+            typeReads = typeReads + 1
+            return 1
+        end,
+    })
 end
 local sharedCatalog = {}
 for actor = 1, 4 do
@@ -125,6 +131,7 @@ for actor = 1, 4 do
     assert(captured[fields.inventory.items][2][2] == actor + 1)
 end
 assert(methodReads == 4 and countReads == 8000, "Count methods were not bound per actor")
+assert(typeReads == 0, "Capture read item types needed only during replica repair")
 -- Same total count can represent a completely different inventory. Replacing
 -- the method between operations and generated-item changes remain visible.
 local p = bound.player()

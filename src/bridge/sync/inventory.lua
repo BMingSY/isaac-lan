@@ -35,18 +35,18 @@ return function(fields)
                 visit(item, assert(get(config, item)))
             end
         end
-        local function catalogItems(catalog)
-            if not catalog.items then
-                local items, passive = {}, {}
+        local function catalogItems(catalog, passive)
+            local key = passive and "passive" or "items"
+            if not catalog[key] then
+                local items = {}
                 eachCollectible(env.config(), function(item, value)
-                    items[#items + 1] = item
-                    if value.Type ~= env.activeType then
-                        passive[#passive + 1] = item
+                    if not passive or value.Type ~= env.activeType then
+                        items[#items + 1] = item
                     end
                 end)
-                catalog.items, catalog.passive = items, passive
+                catalog[key] = items
             end
-            return catalog.items, catalog.passive
+            return catalog[key]
         end
         local heartTypes = {
             { field = Heart.broken, name = "BrokenHearts" },
@@ -190,7 +190,7 @@ return function(fields)
                     desired[entry[Item.id]] = entry[Item.count]
                 end
                 local ownedCount = reader(p)
-                local _, passive = catalogItems(catalog or {})
+                local passive = catalogItems(catalog or {}, true)
                 for _, item in ipairs(passive) do
                     local difference = (desired[item] or 0) - ownedCount(item)
                     for _ = 1, math.abs(difference) do
