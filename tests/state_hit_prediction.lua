@@ -277,6 +277,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end
         if t == 30 then
+            -- Seeded curses also depend on isolated profile progress. Establish
+            -- this fixture's precondition before observing pill preservation.
+            Game():GetLevel():AddCurse(LevelCurse.CURSE_OF_MAZE, false)
             actor(1, function(p)
                 local mapping = {}
                 for color = 1, 13 do

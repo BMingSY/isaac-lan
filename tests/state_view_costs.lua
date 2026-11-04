@@ -136,7 +136,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end, 1))
         end
         if tick == 420 then
-            Isaac.ExecuteCommand("stage 2")
+            assert(native.api_with_owner(0, function()
+                Game():StartStageTransition(false, RoomTransitionAnim.FADE, Isaac.GetPlayer(0))
+            end))
         end
     end, function(slot, tick)
         local bytes, stable = collect(slot, tick)
