@@ -341,6 +341,20 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         e:Remove()
                     end
                 end
+                -- The destination template may contain rocks in the firing
+                -- lane. These cases exercise contact, veto and flash policy;
+                -- the offline regression separately keeps blocked-line checks.
+                for index = 0, room:GetGridSize() - 1 do
+                    local grid = room:GetGridEntity(index)
+                    if
+                        grid
+                        and grid:GetType() ~= GridEntityType.GRID_WALL
+                        and grid:GetType() ~= GridEntityType.GRID_DOOR
+                        and room:GetGridCollision(index) ~= GridCollisionClass.COLLISION_WALL
+                    then
+                        room:RemoveGridEntity(index, 0, false)
+                    end
+                end
                 p.Position, p.Velocity = Vector(260, 280), Vector.Zero
                 local e = Isaac.Spawn(
                     EntityType.ENTITY_HORF,
