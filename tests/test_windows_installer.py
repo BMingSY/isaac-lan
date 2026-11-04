@@ -157,6 +157,25 @@ public class Checker {
         self.assertEqual((self.game / "isaac-lan/session.keep").read_bytes(), b"session")
         self.assertFalse(list(self.game.glob(".isaac-lan-transaction-*")))
 
+    def test_hash_verification_without_get_file_hash(self):
+        # Reproduce the missing Get-FileHash function observed in Windows CI
+        # while keeping the other core cmdlets available.
+        inject = r"""
+ConvertFrom-Json '{}' | Out-Null
+Remove-Item Function:\Get-FileHash -ErrorAction SilentlyContinue
+$PSModuleAutoLoadingPreference = 'None'
+if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) { throw 'Get-FileHash still available' }
+"""
+        self.run_installer(inject=inject)
+        self.run_installer(inject=inject)
+        before = self.installed_files()
+        (self.package / "winmm.dll").write_bytes(b"tampered package file")
+        output = self.run_installer(code="PACKAGE_INVALID", inject=inject)
+        self.assertIn("Package file failed verification: winmm.dll", output)
+        self.assertEqual(self.installed_files(), before)
+        self.run_installer("Uninstall", inject=inject)
+        self.assertTrue(all(value is None for value in self.installed_files().values()))
+
     def test_path_package_and_checker_errors(self):
         self.run_installer(code="GAME_PATH", game=self.game / "missing")
         original = (self.package / "payload.json").read_bytes()
