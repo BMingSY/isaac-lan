@@ -5,38 +5,69 @@ return function(fields)
     -- Native costume ownership stays in the engine; cached IDs belong to this view.
     return function(native, costumeLookup, applySprite)
         local costumeIDs = {}
+        local costumes = {}
+        local desiredViews = setmetatable({}, { __mode = "k" })
         local function costumeID(path)
             if costumeIDs[path] == nil then
                 costumeIDs[path] = costumeLookup(path)
             end
             return costumeIDs[path]
         end
-        local function indexCostumes(sprites)
-            local byPath = {}
+        local function desiredCostumes(visuals)
+            local desired = desiredViews[visuals]
+            if desired then
+                return desired
+            end
+            desired = { counts = {}, occurrences = {} }
+            for i = ActorSprites.firstCostume, #visuals do
+                local path = visuals[i][Sprite.path]
+                local count = (desired.counts[path] or 0) + 1
+                desired.counts[path], desired.occurrences[i] = count, count
+            end
+            desiredViews[visuals] = desired
+            return desired
+        end
+        local function indexCostumes(sprites, index)
+            local cached = costumes[index] or { paths = {} }
+            local changed = cached.size ~= #sprites
+            -- Read the live names on every call: callbacks can replace the
+            -- vector without a new authority view, even at the same size.
             for i = ActorSprites.firstCostume, #sprites do
                 local path = sprites[i]:GetFilename()
+                changed = changed or cached.paths[i] ~= path
+                cached.paths[i] = path
+            end
+            if not changed then
+                return cached.byPath
+            end
+            for i = #sprites + 1, cached.size or #sprites do
+                cached.paths[i] = nil
+            end
+            local byPath = {}
+            for i = ActorSprites.firstCostume, #sprites do
+                local path = cached.paths[i]
                 local entries = byPath[path]
                 if not entries then
-                    entries = { next = 1 }
+                    entries = {}
                     byPath[path] = entries
                 end
-                entries[#entries + 1] = sprites[i]
+                -- Store indices only, never borrowed native Sprite wrappers.
+                entries[#entries + 1] = i
             end
+            cached.byPath, cached.size = byPath, #sprites
+            costumes[index] = cached
             return byPath
         end
         local function actorSprites(p, actor)
             local sprites = assert(native.actor_sprites(actor[Actor.index], p:GetSprite()))
-            local existing, desired = indexCostumes(sprites), {}
+            local existing = indexCostumes(sprites, actor[Actor.index])
+            local desired = desiredCostumes(actor[Actor.visuals])
             local changed = false
-            for i = ActorSprites.firstCostume, #actor[Actor.visuals] do
-                local path = actor[Actor.visuals][i][Sprite.path]
-                desired[path] = (desired[path] or 0) + 1
-            end
             -- Replica-side callbacks can add a null costume based on a provisional
             -- room before its authoritative contents arrive. The host owns actor
             -- appearance too; discard those stale costumes, not only ones we added.
             for path in pairs(existing) do
-                if not desired[path] then
+                if not desired.counts[path] then
                     local id = costumeID(path)
                     if id >= 0 then
                         p:TryRemoveNullCostume(id)
@@ -44,7 +75,7 @@ return function(fields)
                     end
                 end
             end
-            for path, count in pairs(desired) do
+            for path, count in pairs(desired.counts) do
                 local id = costumeID(path)
                 if id >= 0 then
                     for _ = 1, count - (existing[path] and #existing[path] or 0) do
@@ -57,15 +88,15 @@ return function(fields)
             -- its non-owning Sprite references before applying any animation state.
             if changed then
                 sprites = assert(native.actor_sprites(actor[Actor.index], p:GetSprite()))
-                existing = indexCostumes(sprites)
+                existing = indexCostumes(sprites, actor[Actor.index])
             end
-            return sprites, existing
+            return sprites, existing, desired.occurrences
         end
         local function applyActorVisuals(p, actor)
             if not actor[Actor.pose] then
                 return
             end
-            local sprites, byPath = actorSprites(p, actor)
+            local sprites, byPath, occurrences = actorSprites(p, actor)
             -- Costume changes can rebuild the base body layers as well.
             applySprite(p:GetSprite(), actor[Actor.entity][Entity.sprite])
             for i, v in ipairs(actor[Actor.visuals]) do
@@ -73,9 +104,8 @@ return function(fields)
                     applySprite(sprites[i], v)
                 elseif i >= ActorSprites.firstCostume then
                     local entries = byPath[v[Sprite.path]]
-                    if entries and entries[entries.next] then
-                        applySprite(entries[entries.next], v)
-                        entries.next = entries.next + 1
+                    if entries and entries[occurrences[i]] then
+                        applySprite(sprites[entries[occurrences[i]]], v)
                     end
                 end
             end
@@ -152,6 +182,8 @@ return function(fields)
             end,
             reset = function()
                 costumeIDs = {}
+                costumes = {}
+                desiredViews = setmetatable({}, { __mode = "k" })
             end,
         }
     end

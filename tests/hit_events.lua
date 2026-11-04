@@ -165,6 +165,7 @@ local hits = dofile(root .. "/src/bridge/presentation/hits.lua")(fields)({
     vector = vector,
     decode = decode,
     contact = contact,
+    candidates = dofile(root .. "/src/bridge/presentation/hit_candidates.lua"),
     native = {
         combat_present = function(id)
             if id then

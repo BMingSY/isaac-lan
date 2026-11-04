@@ -401,3 +401,13 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, collect, restore, present, beginFloor)
 end
+
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        _IsaacLanFrame, native.net_gate = base, gate
+        native.diagnostics_counter = counter
+    end,
+}

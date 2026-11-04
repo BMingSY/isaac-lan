@@ -22,7 +22,11 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 ## 实体引用与房间数据
 
-角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。
+角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层缓存名称与索引映射，每次应用仍重新取得 Sprite 列表并核对本机名称；增删服装后再次取得列表，渲染前恢复权威姿态。权威服装映射仅随不可变视图复用，视图不再被引用时释放。
+
+`room_layout` 的房间元数据和 `map_pickups` 的地图掉落物由 [room_metadata.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_metadata.h) 校验、复用。布局载荷包含维度、房间／网格／列表索引、占用格子、配置标量、门与种子；校验维度、索引、格子、尺寸、形状与载荷结束位置后才替换缓存。相同字节复用解析值，每次调用仍恢复原生描述符及格子登记。配置缓冲由后端持有，描述符只借用其稳定地址；开始楼层、重启或回退时清除解析缓存，保留原生清理仍可能引用的配置存储。
+
+主机房间占格索引逐次比较对应维度的 169 个原生格子值，变化时重建，仅缓存复制值。地图掉落物每房最多 4096 项，每项仅接受原生类型 5／6 的六个元数据字段；相同已校验字节复用本机地图缓存向量。该向量只在地图缓存调用期间借给描述符，随后恢复原有保存向量，楼层与会话清理时释放。缓存不延后读取主机字段，不改变同步格式或原生对象所有权。
 
 `sprite_state(sprite)` 复制完整精灵层状态为字节串；客机的 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，没有贴图变化时返回 `true`。返回值不持有原生引用；Lua 只在数组非空时替换贴图并调用 `LoadGraphics`。捕获缓冲预留容量不改变字段或编码字节。
 
@@ -39,6 +43,8 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 `familiar_tether(sprite)` 限定跟班实体借用 Sprite，检查 `Familiar+0xee0` 的 `UmbilicalBabyData` 虚表 RVA `0x71d264`。返回最多 256 个 XYZ 点和绳索借用 Sprite，无此组件返回 `false`。组件 `+0x8/+0xc/+0x10/+0x14` 为原生 deque 的映射、容量、首项和数量，Sprite 位于 `+0x18`；映射容量限定为不超过 4096 的二次幂，所有坐标必须有限。
 
 `familiar_tether_render(entitySprite, ropeSprite, bytes)` 仅允许客机绘制，完整校验点载荷后调用 J460 RVA `0x35290` 的原生绳索绘制方法。只在调用期间借用已有跟班及 Lua 自有绳索 Sprite，构造栈上只读 deque 视图并临时替换组件指针，返回即恢复。不构造／析构原生组件、不转移 Sprite 所有权、不执行跟班 AI 或武器更新。入口字节受启动签名校验。
+
+Lua 绘制组件按权威实体 ID 维护实际绳索记录，以 `EntityPtr` 解析跟班和拥有者；绘制只访问这些记录。权威绳索消失、引用失效、换房、换层和会话重置移除记录，不跨视图保留借用 Sprite。
 
 | 能力与实现 | 原生边界 | 校验与所有权 |
 | --- | --- | --- |

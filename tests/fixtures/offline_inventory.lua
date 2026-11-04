@@ -7,7 +7,8 @@ return function(
     collectibleCount,
     subplayer,
     restoreForm,
-    activeData
+    activeData,
+    collectibleReader
 )
     local module = dofile(root .. "/src/bridge/sync/inventory.lua")(
         dofile(root .. "/src/bridge/sync/fields.lua")
@@ -32,6 +33,7 @@ return function(
         end,
         extraCollectibles = extraCollectibles,
         collectibleCount = collectibleCount,
+        collectibleReader = collectibleReader,
         activeType = 2,
         curse = 1,
         pockets = pockets,
@@ -234,8 +236,8 @@ return function(
             self.black = self.black | (1 << i)
         end
     end
-    function fixture.apply(value, refresh)
-        inventory.apply(player, value, refresh)
+    function fixture.apply(value, refresh, catalog)
+        inventory.apply(player, value, refresh, catalog)
         return fixture.read()
     end
     function fixture.read(catalog)

@@ -9,16 +9,44 @@ return function(fields)
             or function(p, item)
                 return p:GetCollectibleNum(item, true)
             end
+        local function reader(p)
+            if env.collectibleReader then
+                return env.collectibleReader(p)
+            end
+            if env.collectibleCount then
+                return function(item)
+                    return count(p, item)
+                end
+            end
+            local get = p.GetCollectibleNum
+            return function(item)
+                return get(p, item, true)
+            end
+        end
         local function eachCollectible(config, visit)
+            local get = config.GetCollectible
             for item = 1, config:GetCollectibles().Size - 1 do
-                local value = config:GetCollectible(item)
+                local value = get(config, item)
                 if value then
                     visit(item, value)
                 end
             end
             for _, item in ipairs(env.extraCollectibles and env.extraCollectibles(config) or {}) do
-                visit(item, assert(config:GetCollectible(item)))
+                visit(item, assert(get(config, item)))
             end
+        end
+        local function catalogItems(catalog)
+            if not catalog.items then
+                local items, passive = {}, {}
+                eachCollectible(env.config(), function(item, value)
+                    items[#items + 1] = item
+                    if value.Type ~= env.activeType then
+                        passive[#passive + 1] = item
+                    end
+                end)
+                catalog.items, catalog.passive = items, passive
+            end
+            return catalog.items, catalog.passive
         end
         local heartTypes = {
             { field = Heart.broken, name = "BrokenHearts" },
@@ -69,8 +97,9 @@ return function(fields)
         end
         local function inventory(p, catalog)
             local items = {}
+            local ownedCount = reader(p)
             local function ownedItem(item)
-                local owned = count(p, item)
+                local owned = ownedCount(item)
                 if owned > 0 then
                     items[#items + 1] = { item, owned } -- Item.id, Item.count
                 end
@@ -79,14 +108,7 @@ return function(fields)
                 -- Capture owns this cache for one immutable tick/floor generation.
                 -- Share only IDs, never native config objects or player counts;
                 -- Mod and generated definitions are enumerated again next tick.
-                if not catalog.items then
-                    local ids = {}
-                    eachCollectible(env.config(), function(item)
-                        ids[#ids + 1] = item
-                    end)
-                    catalog.items = ids
-                end
-                for _, item in ipairs(catalog.items) do
+                for _, item in ipairs(catalogItems(catalog)) do
                     ownedItem(item)
                 end
             else
@@ -143,7 +165,7 @@ return function(fields)
                 end
             end
         end
-        local function applyInventory(p, v, refreshItems)
+        local function applyInventory(p, v, refreshItems, catalog)
             if v[Inventory.ghost] then
                 applyResources(p, v)
                 return
@@ -167,19 +189,18 @@ return function(fields)
                 for _, entry in ipairs(v[Inventory.items]) do
                     desired[entry[Item.id]] = entry[Item.count]
                 end
-                local config = env.config()
-                eachCollectible(config, function(item, itemConfig)
-                    if itemConfig.Type ~= env.activeType then
-                        local difference = (desired[item] or 0) - count(p, item)
-                        for _ = 1, math.abs(difference) do
-                            if difference > 0 then
-                                p:AddCollectible(item, 0, false)
-                            else
-                                p:RemoveCollectible(item, true)
-                            end
+                local ownedCount = reader(p)
+                local _, passive = catalogItems(catalog or {})
+                for _, item in ipairs(passive) do
+                    local difference = (desired[item] or 0) - ownedCount(item)
+                    for _ = 1, math.abs(difference) do
+                        if difference > 0 then
+                            p:AddCollectible(item, 0, false)
+                        else
+                            p:RemoveCollectible(item, true)
                         end
                     end
-                end)
+                end
             end
             for i, active in ipairs(v[Inventory.active]) do
                 local slot = i - 1

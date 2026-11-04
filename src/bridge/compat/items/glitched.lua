@@ -2,6 +2,17 @@
 local MAX_DEFINITIONS = 1024
 return function(native)
     return {
+        reader = function(player)
+            local get = player.GetCollectibleNum
+            -- Bind methods for this operation only; counts and generated IDs
+            -- remain live, and a Mod may replace a method before the next call.
+            return function(id)
+                if id < 0 then
+                    return assert(native.generated_item_count(player:GetSprite(), id))
+                end
+                return get(player, id, true)
+            end
+        end,
         count = function(player, id)
             if id < 0 then
                 return assert(native.generated_item_count(player:GetSprite(), id))
