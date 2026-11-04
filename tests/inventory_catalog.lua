@@ -83,3 +83,110 @@ assert(#capture()[fields.inventory.items] == 1)
 print(
     "PASS shared catalog, independent live inventory, Mod/generated definitions and immutable bytes"
 )
+
+local methodReads, countReads, typeReads = 0, 0, 0
+local glitched = dofile(root .. "/src/bridge/compat/items/glitched.lua")({
+    generated_item_count = function(player, id)
+        return player.items[id] or 0
+    end,
+})
+local bound = dofile(root .. "/tests/fixtures/offline_inventory.lua")(root, nil, nil, function()
+    return { -1 }
+end, glitched.count, nil, nil, nil, glitched.reader)
+function bound.config:GetCollectibles()
+    return { Size = 2001 }
+end
+function bound.config:GetCollectible()
+    return setmetatable({}, {
+        __index = function(_, name)
+            assert(name == "Type")
+            typeReads = typeReads + 1
+            return 1
+        end,
+    })
+end
+local sharedCatalog = {}
+for actor = 1, 4 do
+    bound.reset()
+    local p = bound.player()
+    local original = getmetatable(p).__index
+    setmetatable(p, {
+        __index = function(self, name)
+            local value = original(self, name)
+            if name == "GetCollectibleNum" then
+                methodReads = methodReads + 1
+                return function(player, id, onlyTrueItems)
+                    assert(onlyTrueItems)
+                    countReads = countReads + 1
+                    return value(player, id)
+                end
+            end
+            return value
+        end,
+    })
+    p.items[1], p.items[-1] = actor, actor + 1
+    local captured = bound.read(sharedCatalog)[1]
+    assert(captured[fields.inventory.items][1][2] == actor)
+    assert(captured[fields.inventory.items][2][1] == -1)
+    assert(captured[fields.inventory.items][2][2] == actor + 1)
+end
+assert(methodReads == 4 and countReads == 8000, "Count methods were not bound per actor")
+assert(typeReads == 0, "Capture read item types needed only during replica repair")
+-- Same total count can represent a completely different inventory. Replacing
+-- the method between operations and generated-item changes remain visible.
+local p = bound.player()
+p.GetCollectibleNum = function(_, id)
+    return id == 2 and 4 or 0
+end
+p.items[-1] = 7
+local changed = bound.read({})[1][fields.inventory.items]
+assert(changed[1][1] == 2 and changed[1][2] == 4 and changed[2][2] == 7)
+print("PASS four method resolutions for 8000 live counts, replaced methods and generated counts")
+
+-- Several actors need full repair together after a checkpoint. Share the
+-- operation's catalog while preserving each actor's actual counts and slots.
+local repair = dofile(root .. "/tests/fixtures/offline_inventory.lua")(root, nil, nil, function()
+    return { -1 }
+end, glitched.count, nil, nil, nil, glitched.reader)
+local snapshots = {}
+for actor = 1, 4 do
+    repair.reset()
+    local p = repair.player()
+    p.items[1], p.items[-1], p.actives[1] = actor, actor + 1, { 2, actor }
+    snapshots[actor] = repair.read()[1]
+end
+local repairs = dofile(root .. "/src/bridge/sync/inventory.lua")(fields)({
+    config = function()
+        return repair.config
+    end,
+    extraCollectibles = function()
+        return { -1 }
+    end,
+    collectibleReader = glitched.reader,
+    activeType = 2,
+    curse = 1,
+})
+local configReads, configLists = 0, 0
+local getConfig, getList = repair.config.GetCollectible, repair.config.GetCollectibles
+function repair.config:GetCollectible(id)
+    configReads = configReads + 1
+    return getConfig(self, id)
+end
+function repair.config:GetCollectibles()
+    configLists = configLists + 1
+    return getList(self)
+end
+local repairCatalog, observed = {}, {}
+for actor = 1, 4 do
+    repair.reset()
+    local p = repair.player()
+    p.items[1], p.items[5], p.items[-1], p.actives[1] = 9, 3, 1, { 4, 0 }
+    repairs.apply(p, snapshots[actor], true, repairCatalog)
+    observed[actor] = p
+end
+assert(configLists == 1 and configReads == 9, "Replica repairs enumerated one catalog per actor")
+for actor, p in ipairs(observed) do
+    assert(p.items[1] == actor and p.items[5] == 0 and p.items[-1] == actor + 1)
+    assert(p.actives[1][1] == 2 and p.actives[1][2] == actor)
+end
+print("PASS shared repair catalog, independent passive/generated counts and active slots")

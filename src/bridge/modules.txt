@@ -35,6 +35,7 @@ runtime/room_placement
 runtime/room_rules
 presentation/event_ledger
 presentation/hits
+presentation/hit_candidates
 presentation/ping
 presentation/restart
 compat/transitions

@@ -107,11 +107,15 @@ return function(fields)
                 motion = {}
                 replicaRoom = key
                 motionPresentation.reset()
+                if entityCodec.resetView then
+                    entityCodec.resetView()
+                end
             end
             return roomChanged
         end
         local function restoreActors(value, now, tick)
             deps.restoreActorRoster(value.actors)
+            local inventoryCatalog = {}
             for _, actor in ipairs(value.actors) do
                 local p = forms.resolve(
                     actor[Actor.index],
@@ -151,7 +155,8 @@ return function(fields)
                                 lastInventory[actor[Actor.entity][Entity.id]],
                                 inventory
                             )
-                            or tick % INVENTORY_REFRESH_TICKS == 0
+                            or tick % INVENTORY_REFRESH_TICKS == 0,
+                        inventoryCatalog
                     )
                     deps.temporaryEffects.apply(p, actor[Actor.temporaryEffects])
                 end, 1))
@@ -400,6 +405,9 @@ return function(fields)
             pendingBytes, pendingTick, pendingValue = nil, nil, nil
             deps.glitched.apply(value.glitched)
             local roomChanged = restoreLocations(value)
+            if entityCodec.beginView then
+                entityCodec.beginView()
+            end
             native.state_clock(value.frame)
             assert(native.net_progress(value.progress))
             local now = deps.now()
@@ -410,6 +418,9 @@ return function(fields)
             local cursesChanged = restoreShared(value, level)
             local mapChanged = restoreMap(value, level, roomChanged, cursesChanged)
             restoreRoom(value, game, now, tick, mapChanged)
+            if entityCodec.endView then
+                entityCodec.endView()
+            end
             -- Reclaiming removed NPCs runs a native room update and can advance
             -- Greed waves. Finish the snapshot with the authoritative counter.
             greed.apply(value.greed)
@@ -429,6 +440,9 @@ return function(fields)
         end
 
         local function resetView()
+            if entityCodec.resetView then
+                entityCodec.resetView()
+            end
             if deps.hits then
                 deps.hits.reset()
             end

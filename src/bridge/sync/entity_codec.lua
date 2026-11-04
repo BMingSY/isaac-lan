@@ -308,7 +308,7 @@ return function(wire)
         end
         local function applyEntity(e, v)
             if tethers then
-                tethers.apply(e, v[Entity.tether], applySprite)
+                tethers.apply(e, v[Entity.tether], applySprite, v[Entity.id])
             end
             local s = e:GetSprite()
             local kind = v[Entity.type]
@@ -379,7 +379,7 @@ return function(wire)
             apply = applyEntity,
             link = function(e, v, ref)
                 if tethers and v[Entity.tether] then
-                    tethers.link(e, v[Entity.tether], ref)
+                    tethers.link(e, v[Entity.tether], ref, v[Entity.id])
                 end
                 entityLinks.apply(e, v[Entity.minecart], ref)
                 entityLinks.applyHeld(e, v[Entity.held], ref)
@@ -393,6 +393,24 @@ return function(wire)
             vec = vec,
             reset = function()
                 nextID = 1
+                if tethers then
+                    tethers.reset()
+                end
+            end,
+            resetView = function()
+                if tethers then
+                    tethers.reset()
+                end
+            end,
+            beginView = function()
+                if tethers then
+                    tethers.beginView()
+                end
+            end,
+            endView = function()
+                if tethers then
+                    tethers.endView()
+                end
             end,
         }
     end

@@ -28,6 +28,9 @@ local function stateEnvironment()
         _IsaacLanModules = {
             ["sync/codec"] = codec,
             ["presentation/hits"] = dofile(root .. "/src/bridge/presentation/hits.lua"),
+            ["presentation/hit_candidates"] = dofile(
+                root .. "/src/bridge/presentation/hit_candidates.lua"
+            ),
             ["presentation/event_ledger"] = dofile(
                 root .. "/src/bridge/presentation/event_ledger.lua"
             ),

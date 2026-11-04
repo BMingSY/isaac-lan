@@ -53,8 +53,7 @@ local craftingBag = assert(modules["compat/items/crafting_bag"])(native, Collect
 local temporaryEffects = component("sync/temporary_effects")
 local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
-local tethers =
-    modules["presentation/tethers"](native, Vector, Sprite, EntityType, Isaac.GetRoomEntities)
+local tethers = modules["presentation/tethers"](native, Vector, Sprite, EntityType, EntityPtr)
 local entityCodec = component("sync/entity_codec")(
     native,
     assert(modules["sync/entity_schema"])(EntityType),
@@ -121,6 +120,7 @@ local inventoryState = component("sync/inventory")({
     end,
     extraCollectibles = glitched.extraCollectibles,
     collectibleCount = glitched.count,
+    collectibleReader = glitched.reader,
     subplayer = forgotten.subplayer,
     restoreForm = forgotten.restoreForm,
     activeType = ItemType.ITEM_ACTIVE,
@@ -176,6 +176,7 @@ local hits = component("presentation/hits")({
     native = native,
     ledger = modules["presentation/event_ledger"],
     contact = modules["core/contacts"],
+    candidates = modules["presentation/hit_candidates"],
     decode = modules["sync/combat_events"],
     metrics = performance,
     vector = Vector,

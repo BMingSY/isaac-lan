@@ -13,7 +13,7 @@ end
 function V.__mul(a, b)
     return Vector(a.X * b, a.Y * b)
 end
-local data, rendered = {}, {}
+local rendered, pointers = {}, {}
 local owner = {
     Position = Vector(20, 10),
     Exists = function()
@@ -24,8 +24,8 @@ local entity = {
     Type = 3,
     Visible = true,
     Position = Vector(60, 10),
-    GetData = function()
-        return data
+    Exists = function()
+        return true
     end,
     GetSprite = function()
         return "body"
@@ -45,18 +45,20 @@ local module = dofile(root .. "/src/bridge/presentation/tethers.lua")(
         return {}
     end,
     { ENTITY_FAMILIAR = 3 },
-    function()
-        return { entity }
+    function(value)
+        local pointer = { Ref = value }
+        pointers[#pointers + 1] = pointer
+        return pointer
     end
 )
 local value = { bytes, { path = "native cord" }, 7, { 20, 10 }, { 60, 10 } }
 module.apply(entity, value, function(sprite, pose)
     sprite.path = pose.path
-end)
+end, 11)
 module.link(entity, value, function(id)
     assert(id == 7)
     return owner
-end)
+end, 11)
 owner.Position = Vector(23, 12)
 entity.Position = Vector(65, 8)
 module.render()
@@ -65,7 +67,46 @@ assert(n == 3 and x == 23 and y == 12 and tx == 65 and ty == 8 and mx == 44 and 
 assert(z == -8 and mz == -12 and tz == -6, "Tether interpolation changed its altitude")
 module.render()
 assert(rendered[2] == rendered[1] and value[1] == bytes, "Repeated drawing accumulated prediction")
-module.apply(entity, false)
+module.apply(entity, false, nil, 11)
 module.render()
 assert(#rendered == 2, "Removed tether survived the next snapshot")
+for id = 1, 500 do
+    module.apply({}, false, nil, id)
+end
+for _ = 1, 60 do
+    module.render()
+end
+assert(#pointers == 2, "Tether-free entities allocated render records")
+local function install()
+    module.apply(entity, value, function(sprite)
+        sprite.path = "native cord"
+    end, 11)
+    module.link(entity, value, function()
+        return owner
+    end, 11)
+end
+install()
+module.render()
+assert(#rendered == 3)
+pointers[#pointers - 1].Ref = nil
+module.render()
+assert(#rendered == 3, "Expired entity pointer was rendered")
+install()
+module.reset()
+module.render()
+assert(#rendered == 3, "Room/floor reset retained an offscreen tether")
+install()
+module.render()
+assert(#rendered == 4, "Reused authority ID lost its new tether")
+-- A familiar can remain alive in another loaded room after its owner leaves.
+-- Current-view membership, not pointer lifetime, decides what may render.
+module.beginView()
+module.endView()
+module.render()
+assert(#rendered == 4, "An offscreen live familiar retained its rope")
+module.beginView()
+install()
+module.endView()
+module.render()
+assert(#rendered == 5, "A returning live familiar lost its rope")
 print("PASS independent tether endpoints, native altitude, repeated render and removal")

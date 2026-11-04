@@ -54,6 +54,7 @@
 #include "engine/versions/j460/floor_source.h"
 #include "engine/versions/j460/room_routing.h"
 #include "engine/versions/j460/forgotten_form.h"
+#include "engine/versions/j460/room_metadata.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::rooms {
@@ -1900,13 +1901,14 @@ int syncLocations(lua_State* L) {
 // Special rooms are created lazily by gameplay (Devil/Angel, Error, etc.);
 // generating the floor from the same seed does not create these descriptors.
 // No process pointers, STL containers or spawn configuration cross the wire.
-std::map<Key, std::array<std::uint8_t, 0x5c>> replicaLayouts;
+std::map<Key, j460::room_metadata::Layout> replicaLayouts;
+j460::room_metadata::CellIndex layoutCells;
 // The native minimap reads saved entities, which replicas never simulate or
 // save. Supply pickup metadata only while caching the map; room loading and
 // saving must retain their original owned vectors.
-using MapEntity = std::array<std::uint32_t, 0x78 / 4>;
-std::map<Key, std::vector<MapEntity>> replicaMapEntities;
-constexpr std::array<unsigned, 6> mapFields{0, 4, 8, 0x14, 0x28, 0x2c};
+using MapEntity = j460::room_metadata::MapEntity;
+std::map<Key, j460::room_metadata::Pickups> replicaMapEntities;
+constexpr auto mapFields = j460::room_metadata::pickupFields;
 int mapPickups(lua_State* L) {
     try {
         if (lua.getTop(L) == 2) {
@@ -1921,7 +1923,7 @@ int mapPickups(lua_State* L) {
             w.u32(index);
             const auto received = replicaMapEntities.find({dimension, index});
             if (runtime::replica() && received != replicaMapEntities.end()) {
-                for (const auto& entity : received->second)
+                for (const auto& entity : received->second.entities)
                     for (auto offset : mapFields)
                         w.u32(entity[offset / 4]);
             } else {
@@ -1945,17 +1947,8 @@ int mapPickups(lua_State* L) {
         Key key{static_cast<int>(r.u32()), static_cast<int>(r.u32())};
         if (key.dimension < 0 || key.dimension > 2 || key.index < -20 || key.index >= 169)
             throw std::runtime_error("Invalid map room");
-        std::vector<MapEntity> entities((size - 8) / 24);
-        for (auto& entity : entities) {
-            for (auto offset : mapFields)
-                entity[offset / 4] = r.u32();
-            if (entity[0] != 5 && entity[0] != 6)
-                throw std::runtime_error("Invalid map entity");
-        }
-        r.finish();
-        auto& previous = replicaMapEntities[key];
-        const bool changed = previous != entities;
-        previous = std::move(entities);
+        const bool changed =
+            replicaMapEntities[key].update({reinterpret_cast<const std::uint8_t*>(bytes), size});
         lua.pushBoolean(L, true);
         lua.pushBoolean(L, changed);
         return 2;
@@ -2067,11 +2060,15 @@ int roomLayout(lua_State* L) {
             w.u32(at<int>(desc, 8));
             // Large rooms occupy several cells; the minimap uses this native
             // cell-to-descriptor table rather than GetRoomByIdx's fallback.
-            std::vector<unsigned> cells;
-            if (index >= 0)
-                for (unsigned cell = 0; cell < 169; ++cell)
-                    if (at<int>(game(), 0x17adc + (dimension * 169 + cell) * 4) == at<int>(desc, 8))
-                        cells.push_back(cell);
+            static const std::vector<unsigned> noCells;
+            const auto& cells =
+                index < 0
+                    ? noCells
+                    : layoutCells.get(dimension, at<int>(desc, 8),
+                                      std::span<const int, j460::room_metadata::cellsPerDimension>(
+                                          reinterpret_cast<const int*>(game() + 0x17adc) +
+                                              dimension * j460::room_metadata::cellsPerDimension,
+                                          j460::room_metadata::cellsPerDimension));
             w.u8(cells.size());
             for (auto cell : cells)
                 w.u8(cell);
@@ -2094,38 +2091,19 @@ int roomLayout(lua_State* L) {
         const auto data = lua.checkString(L, 1, &size);
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(data), size});
         Key key{static_cast<int>(r.u32()), static_cast<int>(r.u32())};
-        const int gridIndex = r.u32(), listIndex = r.u32();
-        std::vector<unsigned> cells(r.u8());
-        for (auto& cell : cells)
-            cell = r.u8();
-        std::array<std::uint8_t, 0x5c> config{};
-        auto address = reinterpret_cast<Address>(config.data());
-        for (auto offset : {0u, 4u, 8u, 12u, 16u, 0x2cu, 0x38u, 0x3cu, 0x48u, 0x4cu})
-            at<unsigned>(address, offset) = r.u32();
-        at<unsigned char>(address, 0x46) = r.u8();
-        at<unsigned char>(address, 0x47) = r.u8();
-        // An empty native MSVC small string and no initial spawns. Entity and
-        // grid state is installed by the authoritative snapshot after Init.
-        at<unsigned>(address, 0x28) = 15;
-        const auto allowed = r.u32();
-        std::array<unsigned, 8> doors{};
-        for (auto& door : doors)
-            door = r.u32();
-        std::array<unsigned, 4> seeds{};
-        for (auto& seed : seeds)
-            seed = r.u32();
-        r.finish();
-        if (!validLayoutIndices(key.dimension, key.index, gridIndex, listIndex) ||
-            (key.index >= 0 && std::find(cells.begin(), cells.end(), key.index) == cells.end()) ||
-            std::any_of(cells.begin(), cells.end(), [](auto cell) { return cell >= 169; }) ||
-            at<unsigned>(address, 0x48) < 1 || at<unsigned>(address, 0x48) > 12 ||
-            at<unsigned>(address, 8) < 1 || at<unsigned>(address, 8) > 32 ||
-            !at<unsigned char>(address, 0x46) || at<unsigned char>(address, 0x46) > 26 ||
-            !at<unsigned char>(address, 0x47) || at<unsigned char>(address, 0x47) > 14)
-            throw std::runtime_error(
-                "Invalid authoritative room layout dimension=" + std::to_string(key.dimension) +
-                " index=" + std::to_string(key.index) + " grid=" + std::to_string(gridIndex) +
-                " list=" + std::to_string(listIndex));
+        if (key.dimension < 0 ||
+            key.dimension >= static_cast<int>(j460::room_metadata::dimensions) || key.index < -20 ||
+            key.index >= static_cast<int>(j460::room_metadata::cellsPerDimension))
+            throw std::runtime_error("Invalid authoritative room key");
+        // Reuse validated value data, while reasserting native descriptors on
+        // every apply: room construction and callbacks can change them locally.
+        auto& stored = replicaLayouts[key];
+        stored.update({reinterpret_cast<const std::uint8_t*>(data), size});
+        const auto gridIndex = stored.gridIndex, listIndex = stored.listIndex;
+        const auto& cells = stored.cells;
+        const auto& doors = stored.doors;
+        const auto& seeds = stored.seeds;
+        const auto allowed = stored.allowed;
         using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
         // All floor descriptors are constructed by the game at startup. A new
         // red room has no replica index yet: GetRoomByIdx returns a shared
@@ -2137,9 +2115,7 @@ int roomLayout(lua_State* L) {
         if (!desc)
             throw std::runtime_error("Replica descriptor is unavailable");
         {
-            auto& stored = replicaLayouts[key];
-            stored = config;
-            at<Address>(desc, 0x10) = reinterpret_cast<Address>(stored.data());
+            at<Address>(desc, 0x10) = reinterpret_cast<Address>(stored.config.data());
             at<Address>(desc, 0x14) = 0;
             at<int>(desc, 0) = gridIndex;
             at<int>(desc, 4) = key.index;
@@ -3817,6 +3793,14 @@ void beforeStart(bool preserveItemPixels) {
     replicaDeals.reset();
     presentation::items::reset(preserveItemPixels);
     replicaMapEntities.clear();
+    layoutCells.reset();
+    for (auto& [key, layout] : replicaLayouts) {
+        (void)key;
+        // Native descriptors may still borrow config during teardown. Keep
+        // that storage alive, but invalidate every decoded dependency.
+        layout.bytes.clear();
+        layout.cells.clear();
+    }
     for (const auto& [entry, original] : entityUpdates) {
         (void)original;
         MH_DisableHook(reinterpret_cast<void*>(entry));
@@ -3893,7 +3877,8 @@ void withMapPickups(const std::function<void()>& cache) {
         }
     } restore;
     using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-    for (const auto& [key, entities] : replicaMapEntities) {
+    for (const auto& [key, metadata] : replicaMapEntities) {
+        const auto& entities = metadata.entities;
         const auto descriptor =
             reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
                 reinterpret_cast<void*>(game()), key.index, key.dimension));
