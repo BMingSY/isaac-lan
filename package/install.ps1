@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $expectedBuild = '1.9.7.17.J460'
 $ownedFiles = @('winmm.dll', 'isaac_lan_probe.dll')
-$win32Errors = @{ AccessDenied = 5; SharingViolation = 32; LockViolation = 33; HandleDiskFull = 39; DiskFull = 112 }
+$win32Errors = @{ AccessDenied = 5; SharingViolation = 32; LockViolation = 33; HandleDiskFull = 39; FileExists = 80; DiskFull = 112; AlreadyExists = 183 }
 $failureCode = 'GAME_PATH'
 $hints = @{
     GAME_PATH = 'Select the game folder containing isaac-ng.exe (Steam > Manage > Browse local files).'
@@ -18,6 +18,7 @@ $hints = @{
     FILE_CONFLICT = 'Back up the named file and identify its owner. Uninstall another extension with its own installer, or restore the matching Isaac LAN file from your backup, then retry.'
     PERMISSION_DENIED = 'Close programs using the named file, then check write permissions and security-software blocks. Retry as administrator only if this folder requires it.'
     FILE_IN_USE = 'Close Isaac and any program using the named file, then retry.'
+    FILE_EXISTS = 'The destination already exists. Close programs using the named file and retry. If it still fails, keep the full error; do not delete the file to bypass this check.'
     DISK_FULL = 'Free space on the game drive, then retry.'
     IO_ERROR = 'Check the named path, available disk space and drive access, then retry. Keep the full error if it persists.'
     ROLLBACK_FAILED = 'Do not start the game yet. Keep the recovery folder; use recovery.json to restore the listed backups to their original paths, then retry.'
@@ -98,6 +99,9 @@ function FailureMessage($Failure, [string]$Code) {
             }
             if ($nativeCode -in @($win32Errors.SharingViolation, $win32Errors.LockViolation)) {
                 $Code = 'FILE_IN_USE'; break
+            }
+            if ($nativeCode -in @($win32Errors.FileExists, $win32Errors.AlreadyExists)) {
+                $Code = 'FILE_EXISTS'; break
             }
             if ($nativeCode -in @($win32Errors.HandleDiskFull, $win32Errors.DiskFull)) {
                 $Code = 'DISK_FULL'; break

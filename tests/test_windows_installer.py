@@ -50,6 +50,24 @@ def powershell(script, *args):
 class WindowsInstallerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.temp_parent = None
+        if os.name != "nt":
+            # Use the Windows filesystem for lock/replace behavior even under WSL.
+            parent = subprocess.check_output(
+                [
+                    POWERSHELL,
+                    "-NoProfile",
+                    "-Command",
+                    '[IO.Path]::Combine([Environment]::GetFolderPath("LocalApplicationData"), "Temp")',
+                ],
+                text=True,
+                timeout=30,
+            ).strip()
+            cls.temp_parent = subprocess.check_output(
+                ["wslpath", "-u", parent],
+                text=True,
+                timeout=30,
+            ).strip()
         cls.shared = tempfile.TemporaryDirectory(prefix="isaac-lan-checker-")
         cls.addClassCleanup(cls.shared.cleanup)
         root = Path(cls.shared.name)
@@ -77,7 +95,7 @@ public class Checker {
             raise RuntimeError(result.stdout + result.stderr)
 
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory(prefix="isaac-lan-installer-")
+        temporary = tempfile.TemporaryDirectory(prefix="isaac-lan-installer-", dir=self.temp_parent)
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.package = self.root / "package [test]"
@@ -176,6 +194,18 @@ if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) { throw 'Get-FileHas
         self.run_installer("Uninstall", inject=inject)
         self.assertTrue(all(value is None for value in self.installed_files().values()))
 
+    @unittest.skipIf(os.name == "nt", "WSL supplies the UNC fixture")
+    def test_unc_game_path(self):
+        with tempfile.TemporaryDirectory(prefix="isaac-lan-unc-", dir="/tmp") as temporary:
+            game = Path(temporary) / "game [test]"
+            shutil.copytree(self.game, game)
+            self.run_installer(game=game)
+            for name in OWNED:
+                self.assertEqual((game / name).read_bytes(), (self.package / name).read_bytes())
+            self.run_installer("Uninstall", game=game)
+            self.assertFalse((game / ".isaac-lan-install").exists())
+            self.assertEqual((game / "save.dat").read_bytes(), b"preserve saves")
+
     def test_path_package_and_checker_errors(self):
         self.run_installer(code="GAME_PATH", game=self.game / "missing")
         original = (self.package / "payload.json").read_bytes()
@@ -239,13 +269,14 @@ function Get-Process { [pscustomobject]@{Path = (Join-Path $GameDirectory 'isaac
         )
         self.run_installer()
         before = self.installed_files()
-        self.run_installer(
-            code=("FILE_IN_USE", "PERMISSION_DENIED"),
+        output = self.run_installer(
+            code=("FILE_IN_USE", "PERMISSION_DENIED", "FILE_EXISTS"),
             inject="""
 $lock = [IO.File]::Open((Join-Path $GameDirectory 'winmm.dll'), 'Open', 'Read', 'Read')
 """,
         )
         # A failed replacement of an unchanged file does not require a restore.
+        self.assertIn("Close", output)
         self.assertEqual(self.installed_files(), before)
         self.assertFalse(list(self.game.glob(".isaac-lan-transaction-*")))
 
@@ -276,7 +307,9 @@ function Remove-Item {
         for native_code, code in (
             (5, "PERMISSION_DENIED"),
             (32, "FILE_IN_USE"),
+            (80, "FILE_EXISTS"),
             (112, "DISK_FULL"),
+            (183, "FILE_EXISTS"),
         ):
             with self.subTest(code=code):
                 self.run_installer(

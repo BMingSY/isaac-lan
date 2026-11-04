@@ -11,6 +11,7 @@ A：脚本会输出 `Isaac LAN [错误类别]`、具体原因和 `Next step` 处
 | `GAME_INCOMPATIBLE` | 核对游戏为 Windows Repentance+ `1.9.7.17.J460`，必要时通过 Steam 验证文件；Linux／Steam Deck 使用 Proton 版。 |
 | `CHECKER_FAILED` | 游戏检查程序未正常运行。确认安装包已完整解压，检查安全软件的拦截记录；仍失败时保留完整报错。 |
 | `GAME_RUNNING`、`FILE_IN_USE` | 退出游戏以及占用报错文件的程序，等待进程退出后重试。 |
+| `FILE_EXISTS` | Windows 在替换被占用的文件时也可能返回「文件已存在」。先关闭占用程序后重试；仍失败时保留完整报错，不要手动删除目标文件来绕过检查。 |
 | `PERMISSION_DENIED` | 先关闭占用报错文件的程序，再检查目录写入权限和安全软件拦截。Windows 仅在目录权限确有要求时以管理员身份重试；Linux 使用 Steam 游戏库所属账户。 |
 | `DISK_FULL`、`IO_ERROR` | 检查报错路径、游戏所在磁盘的剩余空间及读写状态，再重试。 |
 | `FILE_CONFLICT` | 保留并备份报错 DLL，确认它属于哪个扩展。其他扩展用其自己的卸载方式处理；被改动的 Isaac LAN 文件需从对应安装备份恢复。 |
