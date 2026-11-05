@@ -5,7 +5,7 @@
 using namespace isaac::lan;
 static void erasures() {
     std::mt19937 random(103);
-    for (const auto size : {1u, 1023u, 2048u, 8192u, 88001u, 2097152u}) {
+    for (const auto size : {1u, 1023u, 1200u, 2048u, 3072u, 3073u, 8192u, 88001u, 2097152u}) {
         std::vector<std::uint8_t> input(size);
         for (auto& byte : input)
             byte = random();
@@ -25,8 +25,9 @@ static void erasures() {
                     const auto group = (packet[8] << 8) | packet[9];
                     const auto count = std::min<std::size_t>(8, (size + 1023) / 1024 - group * 8);
                     const auto index = packet[10];
-                    // Single-data groups carry one parity and tolerate one loss.
-                    if (index == first || (count > 1 && index == second))
+                    // Views up to three shards and single-data tail groups
+                    // tolerate one erasure; larger groups tolerate two.
+                    if (index == first || (size > 3072 && count > 1 && index == second))
                         continue;
                     if (auto value = receiver.receive(packet))
                         output = std::move(value);
@@ -35,6 +36,21 @@ static void erasures() {
                 require(output && *output == input, "Erasure recovery changed complete bytes");
             }
         }
+    }
+}
+static void overhead() {
+    for (const auto& [size, count] :
+         {std::pair{1200u, 3u}, {2048u, 3u}, {3072u, 4u}, {3073u, 6u}, {8192u, 10u}}) {
+        std::vector<std::uint8_t> bytes(size, 42);
+        std::size_t packets = 0, wire = 0;
+        WorldShards::send(1, bytes, [&](auto packet) {
+            ++packets;
+            wire += packet.size();
+        });
+        require(packets == count && packets == WorldShards::packetCount(size),
+                "Small-view parity or sequence-window packet budget differs");
+        if (size <= 3072)
+            require(wire == size + 1024 + count * 11, "Small view sent redundant second parity");
     }
 }
 static void cleanup() {
@@ -77,5 +93,6 @@ static void cleanup() {
     rejects([&] { receiver.receive(malformed); }, "Invalid shard accepted");
 }
 int main(int argc, char** argv) {
-    return runTests(argc, argv, {{"erasures", erasures}, {"cleanup", cleanup}});
+    return runTests(argc, argv,
+                    {{"erasures", erasures}, {"cleanup", cleanup}, {"overhead", overhead}});
 }

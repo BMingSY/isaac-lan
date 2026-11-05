@@ -3,13 +3,14 @@
 #include <map>
 
 namespace isaac::lan {
-// Independent MTU-sized shards. Two parity shards recover any two erasures in
-// each eight-data group, without retransmitting an obsolete realtime view.
+// Independent MTU-sized shards. Small views use one parity shard; larger views
+// recover two erasures per eight-data group without retransmitting old state.
 class WorldShards {
   public:
     static constexpr std::size_t shardSize = 1024, dataShards = 8, parityShards = 2;
     static constexpr std::size_t maxSize = maxWorldSize + 128;
     static constexpr std::size_t maxBuffered = 4 * maxWorldSize, maxViews = 8;
+    static constexpr std::size_t headerSize = 11, smallViewShards = 3;
 
   private:
     struct Field {
@@ -56,10 +57,14 @@ class WorldShards {
     std::optional<std::uint32_t> completed;
 
   public:
+    static std::size_t redundancy(std::size_t bytes) {
+        return bytes <= smallViewShards * shardSize ? 1 : parityShards;
+    }
     static std::size_t packetCount(std::size_t bytes) {
         const auto shards = (bytes + shardSize - 1) / shardSize;
         const auto groups = (shards + dataShards - 1) / dataShards;
-        return shards + groups * parityShards - (shards % dataShards == 1 ? 1 : 0);
+        const auto parity = redundancy(bytes);
+        return shards + groups * parity - (parity > 1 && shards % dataShards == 1 ? 1 : 0);
     }
     std::size_t buffered() const {
         std::size_t result = 0;
@@ -98,7 +103,7 @@ class WorldShards {
                 output(i, data);
             }
             output(dataShards, parity[0]);
-            if (count > 1)
+            if (count > 1 && redundancy(bytes.size()) > 1)
                 output(dataShards + 1, parity[1]);
         }
     }

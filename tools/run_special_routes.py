@@ -9,7 +9,7 @@ import re
 import subprocess
 from testing.special_routes import CASES, DIAGNOSTICS, build
 from testing.results import finish_run
-from testing.delivery import analyze_delivery
+from testing.delivery import analyze_delivery, assess_delivery, validate_delivery_limits
 from testing.input_response import measure as measure_response, passed as response_passed
 from testing.engine import configure_interrupts, engine_command, run_engine
 from lab_profile import validate_labs as validate_owned_labs
@@ -48,6 +48,12 @@ def main():
         help="Owned JSON profile for delay, jitter, limits and UDP loss/duplication",
     )
     parser.add_argument(
+        "--delivery-limits",
+        type=Path,
+        default=ROOT / "tests/fixtures/weak_network_limits.json",
+        help="Explicit freshness budgets for the weak-network case",
+    )
+    parser.add_argument(
         "--record-relay",
         action="store_true",
         help="Archive timestamped UDP datagrams from the owned relay",
@@ -73,6 +79,10 @@ def main():
     )
     args = parser.parse_args()
     cases = args.case or CASES
+    delivery_limits = None
+    if "weak-network" in cases:
+        delivery_limits = json.loads(args.delivery_limits.read_text())
+        validate_delivery_limits(delivery_limits)
     if not 0 <= args.latency_ms <= 5000:
         parser.error("Latency must be between 0 and 5000 ms")
     if args.record_relay and not args.latency_ms:
@@ -100,6 +110,8 @@ def main():
     validate_startup(labs)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
+    if delivery_limits is not None:
+        (output / "delivery-limits.json").write_text(json.dumps(delivery_limits, indent=2) + "\n")
     script = output / "suite.lua"
     build(script, cases, first_floor=args.first_floor)
     protected = ProtectedLabs(labs, output, roles=("host", "client"))
@@ -293,6 +305,8 @@ def main():
                 (output / "engine/host/log.txt").read_text(errors="replace"),
                 (output / "engine/client/log.txt").read_text(errors="replace"),
             )
+            report["delivery_acceptance"] = assess_delivery(report["delivery"], delivery_limits)
+            report["passed"] = report["passed"] and report["delivery_acceptance"]["passed"]
         if "input-response" in cases and all(
             peer["passed"] for peer in report["cases"]["input-response"].values()
         ):
