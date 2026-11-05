@@ -90,6 +90,8 @@ struct DatagramConnection {
     WorldShards shards;
     std::deque<std::vector<std::uint8_t>> outgoingShards;
     std::size_t outgoingShardBytes = 0;
+    std::uint32_t outgoingTick = 0;
+    Envelope outgoingKind = Envelope::shard;
     std::optional<WorldState> publication;
     std::vector<std::uint8_t> currentDependency, sentDependency, receivedDependency;
     std::uint32_t dependencyRevision = 0, sentDependencyRevision = 0,
@@ -334,6 +336,12 @@ struct DatagramConnection {
         pipe->world.full.store(world.totals.full + dependencyFull);
         pipe->receiveCapacity.store(peer->totalWaitingData);
     }
+    std::size_t datagramCost(std::size_t bytes) const {
+        constexpr std::size_t ipv4Header = 20, ipv6Header = 40, udpHeader = 8, envelopeHeader = 5;
+        return bytes + envelopeHeader + sizeof(ENetProtocolSendUnsequenced) +
+               sizeof(ENetProtocolHeader) + sizeof(enet_uint32) + udpHeader +
+               (peer->address.family == ENET_ADDRESS_IPV6 ? ipv6Header : ipv4Header);
+    }
     bool service(StateCompression& codec, StateCompression& worldCodec) {
         if (pending && capacity()) {
             deliver(std::move(*pending));
@@ -509,16 +517,36 @@ struct DatagramConnection {
                     if (shardCount >= remaining)
                         peer->outgoingUnsequencedGroup = static_cast<enet_uint16>(
                             peer->outgoingUnsequencedGroup + remaining - 1);
-                    std::size_t emitted = 0;
+                    outgoingTick = world.trace.tick;
+                    outgoingKind = Envelope::shard;
+                    std::size_t emitted = 0, wire = 0;
                     WorldShards::send(world.trace.tick, state->bytes,
                                       [&](std::span<const std::uint8_t> shard) {
                                           emitted += shard.size();
+                                          wire += datagramCost(shard.size());
                                           outgoingShards.emplace_back(shard.begin(), shard.end());
                                           outgoingShardBytes += shard.size();
                                       });
                     redundancyWire += emitted - state->bytes.size();
-                } else
+                    world.accountWire(world.trace.tick, wire);
+                } else if (recovery || state->bytes.size() > fragmentLimit) {
+                    // Reliable recovery (and exceptionally large ENet fragments)
+                    // consumes path capacity before new realtime traffic resumes.
+                    const auto fragments =
+                        (state->bytes.size() + fragmentLimit - 1) / fragmentLimit;
+                    const auto wire =
+                        state->bytes.size() +
+                        fragments * (datagramCost(0) + sizeof(ENetProtocolSendFragment));
+                    world.accountWire(world.trace.tick, wire, true);
                     send(state->bytes, recovery ? recoveryChannel : worldChannel, Envelope::world);
+                    world.transmitted(world.trace.tick);
+                } else {
+                    outgoingTick = world.trace.tick;
+                    outgoingKind = Envelope::world;
+                    world.accountWire(outgoingTick, datagramCost(state->bytes.size()));
+                    outgoingShardBytes += state->bytes.size();
+                    outgoingShards.push_back(std::move(state->bytes));
+                }
                 pipe->samples.push({"compress", world.compressMs});
                 pipe->samples.push({"delta.encode", world.prefixMs});
                 if (world.trace.tick % 300 == 0)
@@ -527,12 +555,14 @@ struct DatagramConnection {
         }
         // Bound each burst as well as total in-flight views. Large FEC frames
         // must not overflow a receiver's socket queue before its next poll.
-        constexpr unsigned shardsPerService = 16;
-        for (unsigned part = 0;
-             !closingAt && bulk.empty() && !outgoingShards.empty() && part < shardsPerService;
+        for (unsigned part = 0; !closingAt && bulk.empty() && !outgoingShards.empty() &&
+                                part < WorldPacing::maximumBurstDatagrams;
              ++part) {
             auto& shard = outgoingShards.front();
-            send(shard, worldChannel, Envelope::shard);
+            if (!world.permitDatagram(datagramCost(shard.size())))
+                break;
+            send(shard, worldChannel, outgoingKind);
+            world.transmitted(outgoingTick);
             outgoingShardBytes -= shard.size();
             outgoingShards.pop_front();
         }
@@ -709,7 +739,8 @@ void NetworkIo::runDatagrams() {
                 handles.push_back(e.host->event);
             // ENet timers need service even without socket readiness. Main-thread
             // publication/input wakes this wait immediately.
-            if (WaitForMultipleObjects(handles.size(), handles.data(), FALSE, 5) == WAIT_FAILED)
+            if (WaitForMultipleObjects(handles.size(), handles.data(), FALSE,
+                                       WorldPacing::serviceInterval.count()) == WAIT_FAILED)
                 throw std::runtime_error("UDP event wait failed");
         }
     } catch (const std::exception& error) {

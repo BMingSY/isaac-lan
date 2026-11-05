@@ -12,8 +12,38 @@ def distribution(values):
         "samples": len(ordered),
         "mean": round(sum(ordered) / len(ordered), 3),
         "p95": round(ordered[math.ceil(len(ordered) * 0.95) - 1], 3),
+        "p99": round(ordered[math.ceil(len(ordered) * 0.99) - 1], 3),
         "max": round(ordered[-1], 3),
     }
+
+
+def validate_delivery_limits(limits):
+    metrics = {"arrival_age_ms", "update_gap_ms", "view_age_ms"}
+    statistics = {"mean", "p95", "p99", "max"}
+    if not limits or set(limits) != metrics:
+        raise ValueError("Delivery limits must cover arrival age, update gaps and view age")
+    for metric, bounds in limits.items():
+        if not bounds or not set(bounds) <= statistics:
+            raise ValueError("Invalid delivery limit statistic")
+        for statistic, bound in bounds.items():
+            if type(bound) not in (int, float) or not math.isfinite(bound) or bound <= 0:
+                raise ValueError("Invalid delivery limit")
+
+
+def assess_delivery(result, limits):
+    """Apply explicit scenario budgets; successful recovery alone is insufficient."""
+    validate_delivery_limits(limits)
+    failures = []
+    for metric, bounds in limits.items():
+        for statistic, bound in bounds.items():
+            value = result[metric][statistic]
+            if not math.isfinite(value) or value < 0:
+                raise ValueError("Invalid delivery measurement")
+            if value > bound:
+                failures.append(
+                    {"metric": metric, "statistic": statistic, "actual": value, "limit": bound}
+                )
+    return {"passed": not failures, "limits": limits, "failures": failures}
 
 
 def time_weighted_age(intervals):

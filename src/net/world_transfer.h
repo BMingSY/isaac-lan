@@ -1,6 +1,7 @@
 #pragma once
 #include "net/bulk_transfer.h"
 #include "net/compression.h"
+#include "net/world_pacing.h"
 #include <chrono>
 #include <deque>
 #include <optional>
@@ -22,6 +23,7 @@ class WorldTransfer {
         bool complete = false;
         Clock::time_point started = Clock::now();
         std::uint32_t revision = 0;
+        Clock::time_point transmitted = started;
     };
     struct Totals {
         std::uint64_t snapshots = 0, deltas = 0, raw = 0, wire = 0, full = 0;
@@ -47,6 +49,8 @@ class WorldTransfer {
     bool sendingDelta = false, receivingDelta = false, sendingStable = false,
          receivingStable = false;
     Clock::time_point fullAt{}, baselineAt{}, sentAt{};
+    WorldPacing pacing;
+    int minimumLatency = 0;
 
   public:
     void resetSender() {
@@ -61,6 +65,7 @@ class WorldTransfer {
         pending.reset();
         sending.reset();
         sentAt = {};
+        pacing = {};
     }
     void resetReceiver() {
         decoded.clear();
@@ -93,6 +98,26 @@ class WorldTransfer {
     }
     std::size_t inFlightStates() const {
         return flight.size();
+    }
+    bool permitDatagram(std::size_t bytes) {
+        return pacing.consume(bytes, Clock::now());
+    }
+    void accountWire(std::uint32_t tick, std::size_t bytes, bool reliable = false) {
+        for (auto& value : flight)
+            if (value.tick == tick)
+                value.wireBytes = bytes;
+        if (recovery && recovery->tick == tick)
+            recovery->wireBytes = bytes;
+        if (reliable)
+            pacing.reserve(bytes, Clock::now());
+    }
+    void transmitted(std::uint32_t tick) {
+        const auto now = Clock::now();
+        for (auto& value : flight)
+            if (value.tick == tick)
+                value.transmitted = now;
+        if (recovery && recovery->tick == tick)
+            recovery->transmitted = now;
     }
     std::size_t worldBytes() const {
         std::size_t size = 0;
@@ -132,6 +157,11 @@ class WorldTransfer {
             baseline = std::move(recovery);
             recovery.reset();
             baselineAt = Clock::now();
+            pacing.acknowledge(
+                baseline->wireBytes,
+                std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted)
+                    .count(),
+                minimumLatency, baselineAt);
             while (!flight.empty() && flight.front().tick <= tick)
                 flight.pop_front();
             return true;
@@ -145,6 +175,10 @@ class WorldTransfer {
             return false;
         baseline = *found;
         baselineAt = Clock::now();
+        pacing.acknowledge(
+            baseline->wireBytes,
+            std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted).count(),
+            minimumLatency, baselineAt);
         flight.erase(flight.begin(), std::next(found));
         return true;
     }
@@ -156,11 +190,14 @@ class WorldTransfer {
             recovery = flight.back();
     }
     std::optional<Writer> next(StateCompression& codec, int minimumLatency) {
+        this->minimumLatency = minimumLatency;
         if (!sending && pending) {
             // Reduce publication frequency when receipts fall behind. Keep
             // parity groups intact instead of throttling individual datagrams.
             constexpr auto congestedInterval = std::chrono::milliseconds(100);
             const auto receiptBudget = std::max(200, 2 * std::max(0, minimumLatency));
+            if (oldestMs() > static_cast<unsigned>(receiptBudget))
+                pacing.congested(Clock::now());
             if (oldestMs() > static_cast<unsigned>(receiptBudget) &&
                 Clock::now() - sentAt < congestedInterval)
                 return {};
@@ -169,7 +206,8 @@ class WorldTransfer {
             // immediately would flood a congested path with newer snapshots.
             while (!flight.empty() && Clock::now() - flight.front().started >= lostStateAge)
                 flight.pop_front();
-            if (flight.size() >= window(minimumLatency) || inFlightBytes() >= maxInFlightBytes ||
+            if (!pacing.ready(datagram::mtu, Clock::now()) ||
+                flight.size() >= window(minimumLatency) || inFlightBytes() >= maxInFlightBytes ||
                 cachedBytes() + pending->bytes.capacity() > maxCachedBytes)
                 return {};
             sending = std::move(pending);

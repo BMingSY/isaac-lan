@@ -7,6 +7,7 @@ return function(fields)
     local BRAKING_SPEED_RATIO = 0.85
     local BRAKING_ALIGNMENT = math.cos(math.rad(1))
     local MIN_BRAKING_SPEED = 1
+    local MIN_RECOVERY_SPEED, RECOVERY_SPEED_SCALE, RECOVERY_SETTLED_DISTANCE = 120, 1.5, 1
     local walkingExtras = { Pickup = true, UseItem = true, LiftItem = true, HideItem = true }
     local function actionAllowsMovement(player, actor)
         if player:IsCoopGhost() then
@@ -37,8 +38,15 @@ return function(fields)
         local function coordinates(track, now)
             local age = math.max(0, now - track.at)
             local travel = travelTime(age, track.damping)
-            local decay =
-                math.exp(-math.max(0, now - (track.received or track.at)) / track.correctionTime)
+            local elapsed = math.max(0, now - (track.received or track.at))
+            local decay = math.exp(-elapsed / track.correctionTime)
+            if track.correctionSpeed and track.correctionDistance > 0 then
+                -- A late authority must not release the whole stalled distance
+                -- in one render. Bound correction speed, retaining the short
+                -- exponential tail once the display catches up.
+                decay =
+                    math.max(decay, 1 - elapsed * track.correctionSpeed / track.correctionDistance)
+            end
             return track.x + track.vx * travel + track.cx * decay,
                 track.y + track.vy * travel + track.cy * decay
         end
@@ -79,7 +87,11 @@ return function(fields)
             end
             local travel = travelTime(now - at, damping)
             local cx, cy = 0, 0
+            local recovering = false
             if prior then
+                recovering = now - prior.received > MAX_EXTRAPOLATION
+                    or now - at > MAX_EXTRAPOLATION
+                    or prior.correctionSpeed ~= nil
                 local px, py = coordinates(prior, now)
                 if braking and prior.presented and now - prior.presentedAt <= MAX_EXTRAPOLATION then
                     -- A braking/knockback update has invalidated the old
@@ -91,6 +103,7 @@ return function(fields)
                 if cx * cx + cy * cy >= TELEPORT_DISTANCE ^ 2 then
                     cx, cy = 0, 0
                     damping, braking = 0, false
+                    recovering = false
                 end
             end
             local result = prior or {}
@@ -99,6 +112,14 @@ return function(fields)
             result.vx, result.vy = vx, vy
             result.npc, result.damping = npc, damping
             result.correctionTime = braking and BRAKING_CORRECTION_TIME or CORRECTION_TIME
+            result.correctionDistance = math.sqrt(cx * cx + cy * cy)
+            result.correctionSpeed = recovering
+                    and result.correctionDistance > RECOVERY_SETTLED_DISTANCE
+                    and math.max(
+                        MIN_RECOVERY_SPEED,
+                        math.sqrt(vx * vx + vy * vy) * RECOVERY_SPEED_SCALE
+                    )
+                or nil
             result.stationary = result.vx == 0 and result.vy == 0 and cx == 0 and cy == 0
             return result
         end
