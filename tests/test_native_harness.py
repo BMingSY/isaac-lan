@@ -784,6 +784,150 @@ end
     )
 
 
+@pytest.mark.parametrize(
+    "route,beam_direction",
+    [("lamb", direction) for direction in ("none", "right", "left", "above", "below", "chest")]
+    + [("blue-baby", "chest"), ("blue-baby", "light")],
+)
+def test_ending_exit_approach_preserves_native_contact(tmp_path, route, beam_direction):
+    run_lua(
+        "local beamDirection = "
+        + lua_support.literal(beam_direction)
+        + "\nlocal route = "
+        + lua_support.literal(route)
+        + """
+local function noop() end
+local before, collect, metadata, stage, kind, roomIndex = nil, nil, nil, 1, 0, 84
+local entities, messages = {}, {}
+local isChest = beamDirection == "chest"
+local isLight = beamDirection == "light"
+local vector = {}
+vector.__index = vector
+function vector.__add(a, b) return Vector(a.X + b.X, a.Y + b.Y) end
+function vector.__sub(a, b) return Vector(a.X - b.X, a.Y - b.Y) end
+function vector.__mul(a, b) return Vector(a.X * b, a.Y * b) end
+function vector:LengthSquared() return self.X * self.X + self.Y * self.Y end
+function vector:Normalized() return self * (1 / math.sqrt(self:LengthSquared())) end
+Vector = setmetatable({}, {__call = function(_, x, y)
+    return setmetatable({X = x, Y = y}, vector)
+end})
+Vector.Zero = Vector(0, 0)
+local players = {}
+for slot = 0, 1 do players[slot] = {
+    IsDead = function() return false end, IsCoopGhost = function() return false end,
+    SetMinDamageCooldown = noop, AddEntityFlags = noop,
+    Position = Vector(320, 320),
+} end
+local player = players[1]
+local exit = Vector(320, 320)
+local beam = ({right = Vector(80, 0), left = Vector(-80, 0),
+    above = Vector(0, -80), below = Vector(0, 80)})[beamDirection]
+beam = isLight and exit + Vector(80, 0) or beam and exit + beam
+local level = {
+    GetStage = function() return stage end, GetStageType = function() return kind end,
+    GetRooms = function() return {Size = 1, Get = function()
+        return {SafeGridIndex = 135, Data = {Type = 5}}
+    end} end,
+}
+Game = function() return {
+    GetLevel = function() return level end,
+    GetRoom = function() return {
+        GetType = function() return roomIndex == 135 and 5 or 1 end,
+        IsClear = function() return true end,
+        GetCenterPos = function() return Vector(320, 280) end,
+        GetGridSize = function() return 1 end,
+        GetGridEntity = function() return {Position = exit, GetType = function() return 17 end} end,
+    } end,
+} end
+_IsaacLan = {
+    rooms_ready = function() return true end,
+    rooms_with_player = function(_, callback) callback(); return true end,
+    rooms_heads = function() return {["0"] = 0, ["1"] = 1} end,
+    rooms_positions = function() return {["1"] = {index = roomIndex, dimension = 0}} end,
+    rooms_move = function(_, index) roomIndex = index; return true end,
+    net_gate = function(_, callback, collector) before, collect = callback, collector end,
+}
+Isaac = {
+    AddCallback = noop, GetPlayer = function(index) return players[index] end,
+    DebugString = function(message) messages[#messages + 1] = message end,
+    GetRoomEntities = function() return entities end,
+}
+EntityType, EntityFlag, ModCallbacks, PickupVariant, GameStateFlag = {ENTITY_EFFECT = 1000}, {}, {}, {PICKUP_BIGCHEST = 340}, {}
+EffectVariant, GridEntityType, RoomType = {HEAVEN_LIGHT_DOOR = 39}, {GRID_TRAPDOOR = 17}, {ROOM_BOSS = 5}
+EntityPtr = function(entity) return {Ref = entity} end
+_IsaacLanState = {encode = function(value) metadata = value; return "" end}
+_IsaacLanFrame = noop
+_IsaacLanTest = {host = true, port = "1234", campaign = true, endingRoutes = {route}}
+dofile("""
+        + lua_support.literal(str(ROOT / "tests/state_endings.lua"))
+        + """)
+_IsaacLan.net_gate(noop, noop, function() return "body" end, noop, noop, noop)
+before(31)
+stage = isChest and 10 or 8
+kind = isChest and route == "blue-baby" and 1 or 0
+before(172)
+before(303)
+entities = {{
+    Type = 78, Variant = 1, InitSeed = 1, HitPoints = 1, MaxHitPoints = 1,
+    FrameCount = 0, State = 1, V2 = {X = 0},
+    ToNPC = function(self) return self end, IsBoss = function() return true end,
+    GetSprite = function() return {GetAnimation = function() return "Idle" end} end,
+}}
+before(424)
+entities = isChest and {{
+    Type = 5, Variant = 340, SubType = 0, Position = exit,
+    ToNPC = noop, ToPickup = function(self) return self end,
+    Exists = function() return true end, IsDead = function() return false end,
+}} or beam and {{
+    Type = 1000, Variant = 39, Position = beam, ToNPC = noop,
+    Exists = function() return true end, IsDead = function() return false end,
+}} or {}
+before(525)
+if isLight then
+    player.Position = Vector(160, 220)
+    before(526)
+    assert((player.Position - beam):LengthSquared() == 4 * 4,
+        "Lost contact before the native Cathedral light became ready")
+    stage, kind = 10, 1
+    player.Position = Vector(160, 220)
+    before(527)
+    assert(player.Position.X == 160 and player.Position.Y == 220,
+        "Reused the previous floor's entrance contact after arrival")
+    return
+end
+if isChest then
+    assert((players[0].Position - exit):LengthSquared() >= 80 * 80,
+        "Host still overlaps the chest and resets its native cooldown")
+    assert((player.Position - exit):LengthSquared() == 60 * 60,
+        "Guest was teleported into the solid chest instead of approaching it")
+    before(560)
+    collect(1, 560)
+    assert(metadata[8] == 0, "Guest did not receive normal input towards the chest")
+    stage = 11
+    before(561)
+    assert(messages[#messages]:find("NATIVE_PHOTO_CHEST destination=11:", 1, true),
+        "Did not observe the native photo chest destination")
+    return
+end
+assert((player.Position - exit):LengthSquared() == 0, "Did not contact the native trapdoor")
+for tick = 526, 614 do
+    before(tick)
+    if beam then
+        assert((player.Position - beam):LengthSquared() > 30 * 30,
+            "Trapdoor fixture contacted the adjacent Cathedral light")
+    end
+end
+assert((player.Position - exit):LengthSquared() == 4 * 4,
+    "Did not return to the trapdoor after its opening animation")
+stage = 10
+before(615)
+assert(messages[#messages]:find("ARRIVED stage=10 type=0", 1, true),
+    "Did not observe the native Sheol arrival")
+""",
+        tmp_path,
+    )
+
+
 @pytest.mark.parametrize("complete_first", [True, False, "invalid"])
 def test_continuous_suite_requires_completion_and_preserves_absolute_ticks(
     tmp_path, monkeypatch, complete_first

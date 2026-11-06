@@ -15,7 +15,8 @@ local localProgress
 local linked, chosen, started, finished = false, false, false, false
 local step, stepAt, floorAt, seenBoss, photo, contact, shoot = "init", 0, 0, false, nil, nil, -1
 local previousStage, previousType, lastFloor, bedroom, living
-local exitContact
+local exitContact, exitDirection
+local EXIT_APPROACH_DISTANCE, EXIT_CONTACT_OFFSET = 60, 4
 local chestMove = -1
 local lastChestInput = -1
 local observed, snapshots, floorEvents = {}, 0, 0
@@ -261,6 +262,23 @@ local function pick(variant, subtype)
     end)
     return found
 end
+local function useChest(nextStep, t)
+    if not pick(PickupVariant.PICKUP_BIGCHEST) then
+        return
+    end
+    mark(nextStep, t)
+    -- Native pickup cooldown restarts while ANY player touches a newly
+    -- spawned chest. Clear both actors before the guest walks towards it.
+    for slot = 0, 1 do
+        actor(slot, function(p)
+            p.Position = contact.Ref.Position + Vector(slot == 0 and -80 or 60, 0)
+            p.Velocity = Vector.Zero
+        end)
+    end
+end
+local function approachingChest()
+    return step == "ending-chest" or step == "chest-floor"
+end
 local function exitPosition(kind)
     local result
     actor(1, function()
@@ -280,13 +298,38 @@ local function useExit(kind, t)
     if not pos then
         return false
     end
+    contact = nil
     actor(1, function(p)
+        exitDirection = Vector(1, 0)
+        for _, e in ipairs(Isaac.GetRoomEntities()) do
+            if
+                e.Type == EntityType.ENTITY_EFFECT
+                and e.Variant == EffectVariant.HEAVEN_LIGHT_DOOR
+            then
+                local away = pos - e.Position
+                if away:LengthSquared() > 0 then
+                    exitDirection = away:Normalized()
+                end
+                break
+            end
+        end
         p.Position, p.Velocity = pos, Vector.Zero
     end)
     exitContact = pos
     previousStage, previousType = Game():GetLevel():GetStage(), Game():GetLevel():GetStageType()
     mark("floor-wait", t)
-    report("NATIVE_EXIT kind=" .. kind .. " from=" .. previousStage .. ":" .. previousType)
+    report(
+        "NATIVE_EXIT kind="
+            .. kind
+            .. " from="
+            .. previousStage
+            .. ":"
+            .. previousType
+            .. " approach_x="
+            .. exitDirection.X
+            .. " approach_y="
+            .. exitDirection.Y
+    )
     return true
 end
 local function useEffect(variant, t)
@@ -294,6 +337,7 @@ local function useEffect(variant, t)
     actor(1, function(p)
         for _, e in ipairs(Isaac.GetRoomEntities()) do
             if e.Type == EntityType.ENTITY_EFFECT and e.Variant == variant then
+                contact = EntityPtr(e)
                 p.Position, p.Velocity = e.Position, Vector(1, 0)
                 found = true
                 break
@@ -900,7 +944,7 @@ local function advance(t)
         end
     elseif step == "floor-wait" then
         if stage ~= previousStage or kind ~= previousType then
-            exitContact = nil
+            contact, exitContact, exitDirection = nil, nil, nil
             mark("floor-arrived", t)
             report("ARRIVED stage=" .. stage .. " type=" .. kind)
             lastFloor = stage .. ":" .. kind
@@ -908,9 +952,12 @@ local function advance(t)
             actor(1, function(p)
                 -- Walk into the native exit after its opening animation.
                 -- A stationary overlap can miss its first collision.
+                -- Approach away from the adjacent Cathedral light so the
+                -- fixture cannot select that route while backing off.
                 local away = (t - stepAt) % 90 < 20
-                p.Position = exitContact + (away and Vector(60, 0) or Vector(4, 0))
-                p.Velocity = Vector(away and -1 or 1, 0)
+                p.Position = exitContact
+                    + exitDirection * (away and EXIT_APPROACH_DISTANCE or EXIT_CONTACT_OFFSET)
+                p.Velocity = exitDirection * (away and -1 or 1)
                 if (t - stepAt) % 120 == 0 then
                     local room = Game():GetRoom()
                     local grid = room:GetGridEntity(room:GetGridIndex(exitContact))
@@ -1045,26 +1092,13 @@ local function advance(t)
                 mark("mother-door", t)
             end
         elseif stage == 11 or stage == 12 or name == "mother" and stage == 8 and kind >= 4 then
-            if pick(PickupVariant.PICKUP_BIGCHEST) then
-                mark("ending-chest", t)
-                -- Native pickup cooldown restarts while ANY player touches
-                -- the newly spawned chest. Clear both actors before the
-                -- guest approaches; leaving the host against it blocks both.
-                for slot = 0, 1 do
-                    actor(slot, function(p)
-                        p.Position = contact.Ref.Position + Vector(slot == 0 and -80 or 60, 0)
-                        p.Velocity = Vector.Zero
-                    end)
-                end
-            end
+            useChest("ending-chest", t)
         elseif name == "delirium" and stage == 8 then
             specialEntrance(GridRooms.ROOM_BLUE_WOOM_IDX, t)
         elseif name == "delirium" and stage == 9 then
             specialEntrance(-9, t)
         elseif stage == 10 then
-            if pick(PickupVariant.PICKUP_BIGCHEST) then
-                mark("chest-floor", t)
-            end
+            useChest("chest-floor", t)
         elseif name == "mother" and (stage == 2 or stage == 4) then
             specialEntrance(GridRooms.ROOM_SECRET_EXIT_IDX, t)
         elseif stage == 8 and name == "blue-baby" then
@@ -1446,7 +1480,7 @@ local function advance(t)
             contact = nil
         else
             actor(1, function(p)
-                if step == "ending-chest" and t % 120 == 0 then
+                if approachingChest() and t % 120 == 0 then
                     local pickup, sprite = e:ToPickup(), e:GetSprite()
                     report(
                         "CHEST_STATE state="
@@ -1505,7 +1539,7 @@ local function advance(t)
                         end
                     end
                 end
-                if step == "ending-chest" then
+                if approachingChest() then
                     -- Approach through normal guest input. Teleporting into
                     -- the solid chest can leave the actor pushed outside its
                     -- trigger, even after Appear has completed.
