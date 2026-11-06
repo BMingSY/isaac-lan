@@ -8,7 +8,8 @@ from pathlib import Path
 
 
 def measure(path):
-    rows = [list(map(float, row)) for row in csv.reader(path.open()) if len(row) == 6]
+    # The first six fields are stable; later fields carry optional authority diagnostics.
+    rows = [list(map(float, row)) for row in csv.reader(path.open()) if len(row) >= 6]
     steady = 0
     movement = []
     for previous, current in zip(rows, rows[1:]):
