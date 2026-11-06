@@ -276,6 +276,24 @@ python3 tools/validate_replica.py --cases gameplay normal \
 
 画面由隔离进程渲染缓冲区采集，遮挡窗口也可记录。按本轮范围对照双端的战斗、过门、Boss 阶段和换层画面；显示专项另检查镜头、身体／蓄力和演出归属。采样间隙和黑帧候选不能证明没有短暂闪屏。操作与录像归档见 [`tools/NORMAL_GAMEPLAY.md`](https://github.com/BMingSY/isaac-lan/blob/main/tools/NORMAL_GAMEPLAY.md)，性能和堆检查见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。
 
+## 双开手动测试
+
+在 WSL 中使用 [run_manual_dual.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_manual_dual.py)。常用参数只有主客机角色与额外往返延迟：
+
+```sh
+python3 tools/run_manual_dual.py --characters 以撒 阿撒泻勒 --latency-ms 80
+python3 tools/run_manual_dual.py --status
+python3 tools/run_manual_dual.py --stop
+```
+
+角色顺序为主机、客机，可用中文名、英文枚举名或数字 PlayerType；`--list-characters` 列出名称，实际可选角色以各端隔离存档为准。默认双以撒、0 ms。此工具的 `--latency-ms 80` 表示两方向各增加 40 ms，与自动验收入口的单程参数不同；实际 Ping 还包括本机调度开销。
+
+默认复用已有手动目录 `host-001`／`client-001`，启动前增量构建 `build-win32`、备份配置与存档，临时关闭自动验收夹具。其他位置用 `--host`、`--client`、`--build` 指定。工具只接受带 `.isaac-lan-lab` 标记且未运行的独立副本；首次准备见上节。已有第三方 Mod 的启用状态保留。
+
+双端窗口左右排列，启用音乐并把零音量恢复为 20%；自动联机、按所选角色开始随机种子的普通模式，确认实际角色后撤掉启动钩子，将控制交给用户。后台保留延迟中继，不产生移动或战斗输入。关闭两窗口后保存日志并恢复启动前的隔离资料，本次手测进度不覆盖原隔离存档。`--stop` 仅关闭本工具记录且身份匹配的进程，后台异常退出后也可用它尝试恢复。
+
+运行记录默认保存在 `test-runs/manual-dual/`；`--status`／`--stop` 默认选择最近一次成功启动，也可通过 `--session` 指定目录。仓库 skill 位于 [isaac-dual-test/SKILL.md](https://github.com/BMingSY/isaac-lan/blob/main/.agents/skills/isaac-dual-test/SKILL.md)。离线用例为 [test_manual_dual.py](https://github.com/BMingSY/isaac-lan/blob/main/tests/test_manual_dual.py)，覆盖角色解析、双端交接、重复启动、失败清理和资料恢复。
+
 ## 修改后的契约检查
 
 | 改动 | 必须核对 |
