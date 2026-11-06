@@ -97,9 +97,16 @@ class Steam:
     def update(self, prefix, content, notes):
         return self.call("update", prefix, content, notes)
 
-    def update_page(self, prefix, content, notes, language, description, preview):
+    def update_page(self, prefix, content, notes, language, description, preview, title=None):
         return self.call(
-            "update-page", prefix, content or "-", notes, language, description, preview or "-"
+            "update-page",
+            prefix,
+            content or "-",
+            notes,
+            language,
+            description,
+            preview or "-",
+            *([title] if title else []),
         )
 
 
@@ -340,6 +347,7 @@ def publish(steam, output):
                 output / presentation.get("preview_upload_file", "content/preview.png")
                 if index == 0 and presentation["preview_sha256"]
                 else None,
+                manifest["before"][language]["title"] or None,
             )
             write_json(output / f"upload-result-{language}.json", result)
             if result.get("result") != 1 or result.get("legal_agreement_required") is not False:
