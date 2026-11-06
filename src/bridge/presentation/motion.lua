@@ -138,12 +138,32 @@ return function(fields)
                 end
             end
         end
-        local function clearForPlayer(room, position, aperture, flying)
+        local POOP_CONTACT_RADIUS, GRID_CONTACT_TOLERANCE = 18, 0.1
+        local function clearForPlayer(room, position, center, radius, aperture, flying)
             local collision = room:GetGridCollisionAtPos(position)
-            return collision == GridCollisionClass.COLLISION_NONE
+            if
+                collision == GridCollisionClass.COLLISION_NONE
                 or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
                 or (flying and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT or collision == GridCollisionClass.COLLISION_SOLID))
                 or (aperture and collision == GridCollisionClass.COLLISION_WALL)
+            then
+                return true
+            end
+            if
+                collision == GridCollisionClass.COLLISION_OBJECT
+                or collision == GridCollisionClass.COLLISION_SOLID
+            then
+                -- Grid queries identify a whole tile. Poop uses a smaller round
+                -- boundary; clipping to its tile traps correction at corners.
+                -- Rocks share its collision class but retain the tile boundary.
+                local index = room:GetGridIndex(position)
+                local grid = room:GetGridEntity(index)
+                if grid and grid:GetType() == GridEntityType.GRID_POOP then
+                    return (center - room:GetGridPosition(index)):LengthSquared()
+                        >= (radius + POOP_CONTACT_RADIUS - GRID_CONTACT_TOLERANCE) ^ 2
+                end
+            end
+            return false
         end
         local footprint = {
             { 1, 0 },
@@ -159,7 +179,7 @@ return function(fields)
         local function sweep(room, from, wanted, radius, flying, controls, authority, preview)
             local function clear(position)
                 local aperture = controls and doorCorridor(room, position, preview) ~= nil
-                if not clearForPlayer(room, position, aperture, flying) then
+                if not clearForPlayer(room, position, position, radius, aperture, flying) then
                     return false
                 end
                 for _, offset in ipairs(footprint) do
@@ -167,6 +187,8 @@ return function(fields)
                         not clearForPlayer(
                             room,
                             position + Vector(offset[1] * radius, offset[2] * radius),
+                            position,
+                            radius,
                             aperture,
                             flying
                         )

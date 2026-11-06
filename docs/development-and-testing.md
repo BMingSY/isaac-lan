@@ -213,6 +213,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 | --- | --- |
 | 菜单输入与怪物显示 | [state_npc_motion.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_npc_motion.lua) 配合 `run_network_engine.py --frontend --menu-start --exercise-menu --exercise-lobby-chat --virtual-input --latency-ms 40 --native-record-both --heap-check`，使用独立端口并由 `ProtectedLabs` 保护资料。菜单驱动依赖 LuaDebug 的隔离输入文件，不能搭配 `--no-luadebug`；同一对进程验证地址中 M/F 不改音量／全屏、端口校验、种子编辑与大厅聊天，再采集蜘蛛、冲锋怪、攻击蝇的权威目标和双端轨迹。完成标记为 `LAN_NETWORK NPC_PROBE PASS native pursuit and display capture`；对照轨迹与画面，不以采集完成代替误差结论。离线 `presentation.npc-motion` 使用 [npc_motion.csv](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/npc_motion.csv) 回放原生轨迹，检查制动误差、跳包、重复状态与轨迹清理 |
 | 输入与镜头 | [run_response_acceptance.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_response_acceptance.py)：直连／约 20 ms RTT、输入预览、移动／过门、暂停、主动、蓄力和大房间／镜面；需要画面时用 `--record-view`。[run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `input-response-speeds` 在同一局测试 0.6、1.3、2 三档移速的加速、松键与转向；离线 `bridge.prediction` 对照原版运动采样。多身体预测用 [state_multi_actor_prediction.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_multi_actor_prediction.lua) 检查双子、骸骨切换及魂石身体的生成／退场 |
+| 网格碰撞预测 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case motion --latency-ms 40 --record-client --heap-check` 在同一组进程检查普通移动、碰墙、松键、大便／石头贴边绕行及障碍移除后的通行；核对逐帧位移和静止后的权威位置。离线 `bridge.motion-intervals` 使用原生接触位置验证圆形边界、重复纠偏和网格清理，同时保留墙、坑洞、飞行与过门检查 |
 | 鼠标与地址记忆 | [run_mouse_input.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_mouse_input.py)：指定 `--host`、`--client`、`--build`、`--output` 和独立 `--port`；真实鼠标步骤独占焦点。主客机分别点击并反向瞄准，检查原版四向泪弹、输入归属与松键；重启一对进程验证地址文件回填，第二轮同时用 Analog Stick 检查自由瞄准。两轮均保留双端画面和堆异常证据，结束恢复并核对隔离资料。离线对应 `presentation.connection-settings`、`bridge.challenge_menu`、`core.pointer-input`、`native.mouse-input`、UDP `net.render-inputs` 与 `net.floor-rejoin` |
 | 客机重连 | [state_client_recovery.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_client_recovery.lua) 通过 `run_network_engine.py --frontend --menu-start` 复用一组进程，检查虚拟控制器延迟就绪、新局角色归属、客机单独传送进恶魔房后的主动重连、恢复失败后的手动重试、意外掉线恢复、菜单提示与离开；恢复后再验证投票重开及通关返回大厅的共同退出边界，不代替 Boss／结局路线验收。原生退出不重启进程。执行前用 `ProtectedLabs` 保护隔离资料，收尾后恢复并核对哈希 |
 | 过门输入与预测 | [state_door_prediction.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_door_prediction.lua) 配合 `run_network_engine.py --frontend --menu-start --no-luadebug --virtual-input --latency-ms 40 --completion "PASS feedback observation complete" --native-record-both --heap-check`，指定隔离双端、输出目录与独立端口，由 `ProtectedLabs` 保护并恢复资料。同一组进程检查客机进入新房、返回驻留房间及主机单独过门；记录双端位置和客机权威目标，断言客机淡入前段没有隐形位移、恢复行走没有补跑积压输入。离线覆盖到达／取消淡入、延迟确认，以及原生半帧换房边界 |
@@ -274,6 +275,24 @@ python3 tools/validate_replica.py --cases gameplay normal \
 独立分组须使用独立目录、存档、进程、端口和输出；延迟中继还占用相邻端口，例如两组选 30220／30230。前台键盘步骤顺序执行。
 
 画面由隔离进程渲染缓冲区采集，遮挡窗口也可记录。按本轮范围对照双端的战斗、过门、Boss 阶段和换层画面；显示专项另检查镜头、身体／蓄力和演出归属。采样间隙和黑帧候选不能证明没有短暂闪屏。操作与录像归档见 [`tools/NORMAL_GAMEPLAY.md`](https://github.com/BMingSY/isaac-lan/blob/main/tools/NORMAL_GAMEPLAY.md)，性能和堆检查见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。
+
+## 双开手动测试
+
+在 WSL 中使用 [run_manual_dual.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_manual_dual.py)。常用参数只有主客机角色与额外往返延迟：
+
+```sh
+python3 tools/run_manual_dual.py --characters 以撒 阿撒泻勒 --latency-ms 80
+python3 tools/run_manual_dual.py --status
+python3 tools/run_manual_dual.py --stop
+```
+
+角色顺序为主机、客机，可用中文名、英文枚举名或数字 PlayerType；`--list-characters` 列出名称，实际可选角色以各端隔离存档为准。默认双以撒、0 ms。此工具的 `--latency-ms 80` 表示两方向各增加 40 ms，与自动验收入口的单程参数不同；实际 Ping 还包括本机调度开销。
+
+默认复用已有手动目录 `host-001`／`client-001`，启动前增量构建 `build-win32`、备份配置与存档，临时关闭自动验收夹具。其他位置用 `--host`、`--client`、`--build` 指定。工具只接受带 `.isaac-lan-lab` 标记且未运行的独立副本；首次准备见上节。已有第三方 Mod 的启用状态保留。
+
+双端窗口左右排列，启用音乐并把零音量恢复为 20%；自动联机、按所选角色开始随机种子的普通模式，确认实际角色后撤掉启动钩子，将控制交给用户。后台保留延迟中继，不产生移动或战斗输入。关闭两窗口后保存日志并恢复启动前的隔离资料，本次手测进度不覆盖原隔离存档。`--stop` 仅关闭本工具记录且身份匹配的进程，后台异常退出后也可用它尝试恢复。
+
+运行记录默认保存在 `test-runs/manual-dual/`；`--status`／`--stop` 默认选择最近一次成功启动，也可通过 `--session` 指定目录。仓库 skill 位于 [isaac-dual-test/SKILL.md](https://github.com/BMingSY/isaac-lan/blob/main/.agents/skills/isaac-dual-test/SKILL.md)。离线用例为 [test_manual_dual.py](https://github.com/BMingSY/isaac-lan/blob/main/tests/test_manual_dual.py)，覆盖角色解析、双端交接、重复启动、失败清理和资料恢复。
 
 ## 修改后的契约检查
 

@@ -232,6 +232,8 @@ for _, name in ipairs({ "state_motion", "state_floor_items", "state_mod_integrat
         },
         Isaac = { AddCallback = function() end },
         ModCallbacks = { MC_POST_RENDER = 1 },
+        GridEntityType = { GRID_ROCK = 2, GRID_POOP = 14 },
+        Vector = env.Vector,
     }, { __index = _G })
     assert(loadfile(root .. "/tests/" .. name .. ".lua", "t", sandbox))()
     assert(sandbox._IsaacLanFrame ~= frame and sandbox._IsaacLan.net_gate ~= gate)

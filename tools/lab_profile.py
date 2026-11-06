@@ -85,6 +85,33 @@ class Backup:
 
 
 class ProtectedLabs:
+    @classmethod
+    def from_backup(cls, labs, output, roles=("host", "client")):
+        """Reopen an existing manifest after its owning supervisor has exited."""
+        result = cls.__new__(cls)
+        result.labs = tuple(Path(lab).resolve() for lab in labs)
+        if len(result.labs) != len(roles) or len(set(result.labs)) != len(result.labs):
+            raise ValueError("Distinct labs and one role per lab are required")
+        if any(not (lab / ".isaac-lan-lab").is_file() for lab in result.labs):
+            raise ValueError("Only marked isolated labs can be restored")
+        output = Path(output).resolve()
+        report = json.loads((output / "backup.json").read_text())
+        result.entries = []
+        for role, lab in zip(roles, result.labs):
+            if output.is_relative_to(lab) or lab.is_relative_to(output):
+                raise ValueError("Backup must be outside the protected labs")
+            for folder in ("profile", "game/data", "game/isaac-lan"):
+                source = lab / folder
+                entry = report[str(source)]
+                result.entries.append(
+                    Backup(
+                        source, output / "before" / role / folder, entry["before"], entry["existed"]
+                    )
+                )
+        if set(report) != {str(entry.source) for entry in result.entries}:
+            raise ValueError("Backup manifest does not match the selected labs")
+        return result
+
     def __init__(self, labs, output, roles=("host", "client")):
         self.labs = tuple(labs)
         roles = tuple(roles)
