@@ -45,6 +45,7 @@ inline constexpr std::uint32_t tearSetScale = 0x276120;
 inline constexpr std::uint32_t bossHeldBombsResize = 0x4bd80;
 inline constexpr std::uint32_t entityPtrAssignTwin = 0xcf1d0;
 inline constexpr std::uint32_t playerManagerAddExistingPlayer = 0x5b9f60;
+inline constexpr std::uint32_t playerManagerRemoveExistingPlayer = 0x5b9fc0;
 inline constexpr std::uint32_t playerManagerRemovePlayer = 0x5ba000;
 inline constexpr std::uint32_t playerGetPoopMana = 0x353c20;
 inline constexpr std::uint32_t playerGetPoopSpell = 0x441cd0;
