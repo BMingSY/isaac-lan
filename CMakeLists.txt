@@ -53,6 +53,22 @@ if(BUILD_TESTING AND ISAAC_LAN_LZ4_SOURCE_DIR)
     endif()
 endif()
 if(BUILD_TESTING)
+    add_executable(isaac_lan_extension_update_test tests/extension_update_test.cpp
+                                                   src/runtime/extension_update.cpp)
+    target_include_directories(isaac_lan_extension_update_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_extension_update_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_extension_update_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    foreach(test_case manifests selection recovery boundaries)
+        add_test(NAME runtime.extension-update-${test_case} COMMAND isaac_lan_extension_update_test
+                                                                    ${test_case})
+        set_tests_properties(runtime.extension-update-${test_case} PROPERTIES TIMEOUT 30 LABELS
+                                                                              "offline;runtime")
+    endforeach()
     add_executable(isaac_lan_compatibility_test tests/compatibility_test.cpp)
     target_include_directories(isaac_lan_compatibility_test PRIVATE src)
     if(MINGW)
@@ -820,10 +836,45 @@ if(BUILD_TESTING)
     set_tests_properties(diagnostics.lifecycle PROPERTIES TIMEOUT 30 LABELS "offline;resources")
     set_tests_properties(log.path-and-records PROPERTIES TIMEOUT 30 LABELS "offline;logging")
 endif()
-add_library(isaac_lan_loader SHARED src/app/loader.cpp src/app/loader.def)
+add_library(isaac_lan_loader SHARED src/app/loader.cpp src/app/extension_loader.cpp
+                                    src/runtime/extension_update.cpp src/app/loader.def)
 set_target_properties(isaac_lan_loader PROPERTIES PREFIX "" OUTPUT_NAME "winmm")
 target_include_directories(isaac_lan_loader PRIVATE src)
-target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
+                                                    ISAAC_LAN_VERSION="${ISAAC_LAN_VERSION}")
+target_link_libraries(isaac_lan_loader PRIVATE bcrypt)
+if(BUILD_TESTING)
+    foreach(kind compatible incompatible)
+        add_library(isaac_lan_extension_${kind}_fixture SHARED tests/extension_fixture.cpp)
+        target_include_directories(isaac_lan_extension_${kind}_fixture PRIVATE src)
+        target_compile_definitions(isaac_lan_extension_${kind}_fixture PRIVATE WIN32_LEAN_AND_MEAN
+                                                                               NOMINMAX)
+        if(MINGW)
+            target_link_options(isaac_lan_extension_${kind}_fixture PRIVATE -static-libgcc
+                                -static-libstdc++ -Wl,--kill-at)
+        endif()
+    endforeach()
+    target_compile_definitions(isaac_lan_extension_incompatible_fixture
+                               PRIVATE TEST_LOADER_ABI_OFFSET=1)
+    add_executable(
+        isaac_lan_extension_loader_test
+        tests/extension_loader_test.cpp src/app/extension_loader.cpp
+        src/runtime/extension_update.cpp)
+    target_include_directories(isaac_lan_extension_loader_test PRIVATE src)
+    target_compile_definitions(isaac_lan_extension_loader_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(isaac_lan_extension_loader_test PRIVATE bcrypt)
+    if(MINGW)
+        target_compile_options(isaac_lan_extension_loader_test PRIVATE -Wall -Wextra -Werror)
+        target_link_options(isaac_lan_extension_loader_test PRIVATE -static-libgcc
+                            -static-libstdc++ -municode)
+    endif()
+    add_test(
+        NAME app.extension-loader
+        COMMAND
+            isaac_lan_extension_loader_test $<TARGET_FILE:isaac_lan_extension_compatible_fixture>
+            $<TARGET_FILE:isaac_lan_extension_incompatible_fixture>)
+    set_tests_properties(app.extension-loader PROPERTIES TIMEOUT 30 LABELS "offline;native")
+endif()
 target_compile_definitions(isaac_lan_lab PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(MINGW)
     target_link_options(isaac_lan_heap_watch PRIVATE -static-libgcc -static-libstdc++ -municode

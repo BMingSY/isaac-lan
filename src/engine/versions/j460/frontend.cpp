@@ -5,6 +5,7 @@
 #include "engine/chat_input.h"
 #include "engine/emotes.h"
 #include "engine/build.h"
+#include "engine/module_path.h"
 #include "runtime/session.h"
 #include "engine/rooms.h"
 #include "engine/input.h"
@@ -668,7 +669,7 @@ void manifest() {
     hash.text("Isaac LAN/build-v1");
     hash.text(build::version);
     Hash extension;
-    extension.file(directory / L"isaac_lan_probe.dll");
+    extension.file(isaac::engine::modulePath(&fingerprint));
     hash.text(extension.finish());
     fingerprint = hash.finish();
     // Mods are advisory, including unreadable files. They never enter the

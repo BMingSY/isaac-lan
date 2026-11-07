@@ -2,6 +2,7 @@
 """Prepare, publish or verify the existing Isaac LAN Workshop item (Windows/WSL)."""
 
 import argparse
+from extension_package import prepare_update
 import hashlib
 import json
 import os
@@ -222,6 +223,7 @@ def prepare(
         shutil.copy2(source, content / source.name)
     if digest(content / archive.name) != checked["sha256"]:
         raise ValueError("Archive changed during preparation")
+    prepare_update(content / archive.name, content)
     (output / "reviewed-notes.md").write_bytes(reviewed.encode("utf-8"))
     (output / "steam-change-notes.txt").write_bytes(formatted.encode("utf-8"))
     manifest = {
