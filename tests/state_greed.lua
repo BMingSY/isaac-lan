@@ -1,6 +1,7 @@
 -- Greed/Greedier use native buttons, wave spawning, rewards and shop collision.
 -- Only preparation, enemy damage and route positioning are test fixtures.
 local native = assert(_IsaacLan)
+local testInput = assert(_IsaacLanTestInput)
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local difficulty = _IsaacLanTest.route == "greedier" and 3 or 2
 local frame, gate = _IsaacLanFrame, native.net_gate
@@ -15,6 +16,7 @@ local completedFloors, visitedFloors, bossVariants = {}, {}, {}
 local currentStage, won, endedAt, localProgress = 1, false, nil, nil
 local winCallback, exitCallback
 local exitContact
+local endingChestMove = false
 local function report(text)
     Isaac.DebugString("LAN_NETWORK GREED mode=" .. difficulty .. " " .. text)
 end
@@ -538,9 +540,17 @@ local function advance(t)
                     e.Type == EntityType.ENTITY_PICKUP
                     and e.Variant == PickupVariant.PICKUP_BIGCHEST
                 then
+                    -- Any touching actor restarts the native chest cooldown.
+                    -- Clear both actors, then let normal guest movement enter
+                    -- the solid chest instead of repeatedly teleporting into it.
+                    actor(0, function(other)
+                        other.Position, other.Velocity = e.Position + Vector(-80, 0), Vector.Zero
+                    end)
                     local away = (t - stepAt) % 90 < 20
-                    p.Position = e.Position + Vector(away and 60 or 4, 0)
-                    p.Velocity = Vector(away and -1 or 1, 0)
+                    endingChestMove = not away
+                    if away and p:IsExtraAnimationFinished() then
+                        p.Position, p.Velocity = e.Position + Vector(60, 0), Vector.Zero
+                    end
                     return
                 end
             end
@@ -555,17 +565,24 @@ local function advance(t)
     )
 end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
-    return gate(capture, function(t, n, b)
+    return gate(function()
+        if not host and endingChestMove then
+            return testInput.buttons(1 << ButtonAction.ACTION_LEFT)
+        end
+        return capture()
+    end, function(t, n, b)
         before(t, n, b)
         if not finished then
             advance(t)
         end
     end, function(slot, t)
         local bytes, stable = collect(slot, t)
-        return string.pack(">s4", bytes) .. _IsaacLanState.encode({ step }), stable
+        return string.pack(">s4", bytes) .. _IsaacLanState.encode({ step, endingChestMove }), stable
     end, function(packet, t, ack, betweenUpdates, stable)
         local bytes, offset = string.unpack(">s4", packet)
-        local phase = _IsaacLanState.decode(packet:sub(offset))[1]
+        local metadata = _IsaacLanState.decode(packet:sub(offset))
+        local phase = metadata[1]
+        endingChestMove = metadata[2] == true
         if restore(bytes, t, ack, betweenUpdates, stable) == false then
             return false
         end
