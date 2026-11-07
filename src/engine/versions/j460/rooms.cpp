@@ -54,6 +54,7 @@
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/floor_source.h"
 #include "engine/versions/j460/room_routing.h"
+#include "engine/versions/j460/room_roster.h"
 #include "engine/versions/j460/stage_transition_binding.h"
 #include "engine/versions/j460/forgotten_form.h"
 #include "engine/versions/j460/room_metadata.h"
@@ -358,7 +359,7 @@ struct Scope {
         assign(*storage, players);
         roster() = *storage;
         room->activate();
-        binding.emplace(scopes, *room, previousRoster);
+        binding.emplace(scopes, *room, previousRoster, &roster());
         audioScope.emplace();
     }
     explicit Scope(Room& target) : Scope(target, occupants(target)) {}
@@ -419,21 +420,8 @@ struct Scope {
         binding.reset();
     }
 };
-struct TeamScope {
-    Vector saved;
-    bool changed;
-    TeamScope() : saved(roster()), changed(enabled && scopes.teamRoster()) {
-        if (changed)
-            roster() = *scopes.teamRoster();
-    }
-    TeamScope(const TeamScope&) = delete;
-    TeamScope& operator=(const TeamScope&) = delete;
-    ~TeamScope() {
-        if (changed) {
-            *scopes.teamRoster() = roster();
-            roster() = saved;
-        }
-    }
+struct TeamScope : j460::TeamRoster<decltype(scopes), Vector> {
+    TeamScope() : TeamRoster(scopes, roster(), enabled) {}
 };
 using FindCollectible = void*(__attribute__((thiscall)) *)(void*, int, void*, bool);
 using CollectibleCount = int(__attribute__((thiscall)) *)(void*, int);
@@ -2463,11 +2451,12 @@ int actorForm(lua_State* L) {
         // ownership only when the authority actually includes the extra body.
         for (auto owner : all) {
             const auto kind = at<int>(owner, 0x13c0);
-            const auto backup = at<Address>(owner, 0x1e6c);
+            const auto backup = at<Address>(owner, j460::layout::player::lazarusBackup);
             auto room = findRoom(owner);
             if ((!compat::characters::lazarus(kind)) || at<int>(owner, 0x1618) != controller ||
                 !room || !backup || at<unsigned>(backup, 0x28) != 1 ||
-                at<int>(backup, 0x13c0) != desired || at<Address>(backup, 0x1e6c) != owner ||
+                at<int>(backup, 0x13c0) != desired ||
+                at<Address>(backup, j460::layout::player::lazarusBackup) != owner ||
                 std::find(all.begin(), all.end(), backup) != all.end())
                 continue;
             using AssignPtr = void*(__attribute__((thiscall))*)(void*, void*);
@@ -2478,7 +2467,8 @@ int actorForm(lua_State* L) {
                     reinterpret_cast<void*>(owner + 0x1e68), reinterpret_cast<void*>(backup));
                 engine<AssignPtr>(j460::entry::entityPtrAssignTwin)(
                     reinterpret_cast<void*>(backup + 0x1e68), reinterpret_cast<void*>(owner));
-                at<Address>(owner, 0x1e6c) = at<Address>(backup, 0x1e6c) = 0;
+                at<Address>(owner, j460::layout::player::lazarusBackup) =
+                    at<Address>(backup, j460::layout::player::lazarusBackup) = 0;
                 at<int>(backup, 0x1618) = controller;
                 at<bool>(backup, 0x170) = at<bool>(backup, 0x172) = true;
                 at<Vec2>(backup, 0x33c) = at<Vec2>(owner, 0x33c);
@@ -2510,7 +2500,7 @@ int actorForm(lua_State* L) {
         return 1;
     }
     Address replacement = 0;
-    for (auto offset : {0x1e68u, 0x1e6cu}) {
+    for (auto offset : {0x1e68u, j460::layout::player::lazarusBackup}) {
         const auto candidate = at<Address>(old, offset);
         if (candidate && at<unsigned>(candidate, 0x28) == 1 &&
             at<int>(candidate, 0x13c0) == desired) {
@@ -2540,6 +2530,48 @@ int actorForm(lua_State* L) {
         logger("actor_form=REPLACED index=" + std::to_string(index) +
                " type=" + std::to_string(desired));
     lua.pushBoolean(L, ready);
+    return 1;
+}
+int actorLazarusUnpair(lua_State* L) {
+    const auto index = lua.checkInteger(L, 1);
+    const auto all = values(roster());
+    if (!runtime::replica() || !enabled || scopes.depth() || index < 0 ||
+        static_cast<std::size_t>(index) >= all.size()) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    using namespace j460::layout;
+    const auto owner = all[index];
+    const auto twin = at<Address>(owner, player::twin);
+    const auto room = findRoom(owner);
+    const auto found = std::find(all.begin(), all.end(), twin);
+    const bool valid =
+        room && twin && found != all.end() && found - all.begin() > index &&
+        findRoom(twin) == room && compat::characters::lazarus(at<int>(owner, player::type)) &&
+        compat::characters::lazarus(at<int>(twin, player::type)) &&
+        at<int>(twin, player::type) != at<int>(owner, player::type) &&
+        !at<Address>(owner, player::lazarusBackup) && !at<Address>(twin, player::lazarusBackup) &&
+        at<Address>(twin, player::twin) == owner &&
+        at<int>(twin, player::controller) == at<int>(owner, player::controller);
+    if (valid) {
+        // Birthright disappears into the ghost inventory. Native Update then
+        // demotes the listed twin to an owned, inactive backup (J460 0x382f0e),
+        // which ghost conversion/revival traverses and actorForm can relist.
+        Scope scope(*room, all);
+        using Unlist = void(__attribute__((thiscall))*)(void*, void*);
+        using AssignPtr = void*(__attribute__((thiscall))*)(void*, void*);
+        at<Address>(owner, player::lazarusBackup) = twin;
+        at<Address>(twin, player::lazarusBackup) = owner;
+        engine<AssignPtr>(j460::entry::entityPtrAssignTwin)(
+            reinterpret_cast<void*>(twin + player::twin), nullptr);
+        engine<AssignPtr>(j460::entry::entityPtrAssignTwin)(
+            reinterpret_cast<void*>(owner + player::twin), nullptr);
+        at<bool>(twin, entity::registered) = at<bool>(twin, entity::active) = false;
+        at<int>(twin, player::index) = -1;
+        engine<Unlist>(j460::entry::playerManagerRemoveExistingPlayer)(
+            reinterpret_cast<void*>(game() + game::players), reinterpret_cast<void*>(twin));
+    }
+    lua.pushBoolean(L, valid);
     return 1;
 }
 int actorForgottenForm(lua_State* L) {
@@ -4049,6 +4081,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("actor_pockets", actorPockets);
     function("actor_crafting_bag", actorCraftingBag);
     function("actor_form", actorForm);
+    function("actor_lazarus_unpair", actorLazarusUnpair);
     function("actor_forgotten_form", actorForgottenForm);
     function("actor_companions", actorCompanions);
     function("actor_poop", actorPoop);

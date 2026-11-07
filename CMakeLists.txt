@@ -408,6 +408,7 @@ if(BUILD_TESTING)
         room-map
         room-transition-context
         room-scope-ownership
+        room-team-roster
         compatibility-targets
         death-certificate-arrival
         resolved-room-curses

@@ -77,6 +77,10 @@ Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端
 
 `rooms_revive_player(slot)` 只接受 0–3 的所属玩家栏位，在主机房间系统启用、没有借用作用域、目标为联机幽灵且挑战允许 `round_revive` 时调用既有 `replicaRevivePlayerGhost` 原生入口。幽灵身份使用 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `player::coopGhost`；复活期间只借用该玩家及其身体的房间名单，不接受或返回原生地址，不自行分配、释放角色。复活时机、回血和资源保留由挑战组件决定。
 
+`actor_lazarus_unpair(index)` 仅供客机恢复长子权里拉撒路的幽灵状态。角色兼容组件根据权威幽灵状态请求挂起第二具身体；后端要求房间系统启用、没有借用作用域，索引指向完整名单内的主人，双向配对身体位于其后、同房、同控制器，分别属于里拉撒路的两种形态，且双方没有隐藏备份。校验失败不写入。后端按 J460 原生降级路径把双方的 `player::lazarusBackup`（`+0x1e6c`）设为彼此，用原生 EntityPtr 赋值清除公开配对引用，将备份设为未注册／不活动、玩家索引为 `-1`，再调用 `PlayerManager::RemoveExistingPlayer`（RVA `0x5b9fc0`，`thiscall void(manager, player)`）移出名单。该入口只移除名单元素，不能传入不在名单中的身体；启动时校验其签名。备份仍由原生玩家对象持有，不销毁或分配角色；既有幽灵／复活入口遍历隐藏备份，`actor_form` 在权威重新列出身体时恢复公开配对和名单。房间作用域负责位置记录，后续实体同步负责跟班状态；接口不接收地址，不调用客机伤害或玩家更新逻辑。
+
+完整名单借用使用 [`room_roster.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_roster.h) 的 `TeamRoster`，只复制 J460 玩家向量的 begin／end／capacity 描述符，不复制角色或持有其分配。借用期间，[`ScopeStack::TeamBinding`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 将完整名单来源指向当前原生向量；重复查询不重新装入保存的描述符，原生扩容、增删和重排均保留。嵌套房间作用域暂借其保存的最新描述符；正常返回及异常退栈先交回更新后的名单，再恢复父作用域。绑定必须按栈顺序销毁，不跨会话、楼层清理或异步调用持有。既有原生入口与启动签名校验保持适用，角色和向量分配／释放仍由后端与 PlayerManager 管理。
+
 `room_special_template(index, type, variant, seed)` 为主机未访问、未实例化、没有覆盖配置的主维度房间选择原生特殊房间模板。既有 `roomConfigRandomRoom` Hook 记录当前游戏所属的配置对象；接口限定特殊房间库、精确类型和原房间形状。`variant` 非负时指定精确变种，`-1` 时从普通模式模板中随机选择。既有连接的门掩码参与筛选，结果必须包含所有连接门位；选择不消耗房间权重，失败不替换原配置。描述符仅借用游戏配置指针，字符串、生成列表与房间对象仍由游戏持有；布局字段归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `roomDescriptor`／`roomConfig`。接口不传递地址、不构造或释放原生配置，不允许替换已加载房间；具体模板与调用时机由挑战地图策略决定。
 
 `room_connections(index)` 在主机房间系统启用且没有借用作用域时读取主维度房间的实际门连接。索引限定为 0–168，返回八个门位的目标 `SafeGridIndex`；无门、地图外入口或缺失目标返回 `-1`，无效源房间返回 `false`。接口只返回普通整数，不加载房间或改变连接；上层可据此检查资源房的可达路径。

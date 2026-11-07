@@ -37,6 +37,7 @@
 #include "core/laser_state.h"
 #include "runtime/actor_roster.h"
 #include "runtime/room_scope.h"
+#include "engine/versions/j460/room_roster.h"
 #include "presentation/ambient_effects.h"
 #include <stdexcept>
 #include <type_traits>
@@ -315,6 +316,58 @@ void roomScopeOwnership() {
     Stack::Binding next(stack, second, slice);
     require(stack.current() == &second && stack.teamRoster() == &slice && stack.depth() == 1,
             "A new room operation retained the old full roster");
+}
+void roomTeamRoster() {
+    // Native vector growth replaces its descriptor during actor creation.
+    // A nested resource query must see the newly listed body, even when the
+    // backing allocation changed, and must not restore a stale vector on exit.
+    using Roster = std::span<int>;
+    using Stack = isaac::rooms::ScopeStack<int, Roster>;
+    Stack stack;
+    int room = 84;
+    std::array original{1, 2};
+    std::array grown{1, 2, 3};
+    std::array replaced{3, 2, 1, 4};
+    std::array local{2};
+    Roster team(original), current(local);
+    Stack::Binding scope(stack, room, team);
+    {
+        isaac::engine::j460::TeamRoster outer(stack, current);
+        current = grown;
+        {
+            isaac::engine::j460::TeamRoster query(stack, current);
+            require(current.size() == 3 && current.back() == 3,
+                    "Nested team query lost the newly created revival body");
+        }
+        require(current.data() == grown.data() && current.size() == 3,
+                "Nested query restored the obsolete native allocation");
+        {
+            Roster saved = current;
+            current = local;
+            Stack::Binding nested(stack, room, saved, &current);
+            try {
+                isaac::engine::j460::TeamRoster callback(stack, current);
+                require(current.data() == grown.data(),
+                        "Nested room borrowed the obsolete outer roster");
+                current = replaced;
+                throw std::runtime_error("callback failed after replacing a body");
+            } catch (const std::runtime_error&) {
+            }
+            require(current.data() == local.data() && saved.data() == replaced.data(),
+                    "Failed callback lost its latest team or room-local roster");
+            current = saved;
+            nested.restoreParent();
+        }
+        require(stack.teamRoster() == &current && current.data() == replaced.data(),
+                "Nested room returned to an obsolete complete-team descriptor");
+    }
+    require(team.size() == 4 && team.data() == replaced.data() && current.data() == local.data(),
+            "Revival roster growth did not survive room restoration");
+    {
+        isaac::engine::j460::TeamRoster disabled(stack, current, false);
+        require(current.data() == local.data() && stack.teamRoster() == &team,
+                "Disabled room integration changed native roster ownership");
+    }
 }
 void roomTransitionContext() {
     isaac::rooms::RoomClock bossClock, residentClock;
@@ -1727,6 +1780,7 @@ int main(int argc, char** argv) {
                      {"room-map", roomMap},
                      {"room-transition-context", roomTransitionContext},
                      {"room-scope-ownership", roomScopeOwnership},
+                     {"room-team-roster", roomTeamRoster},
                      {"compatibility-targets", compatibilityTargets},
                      {"death-certificate-arrival", deathCertificateArrival},
                      {"resolved-room-curses", resolvedRoomCurses},
