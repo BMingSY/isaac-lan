@@ -46,6 +46,17 @@ for _, error in ipairs({ 12, 24, 48, 80 }) do
     end
     assert(math.abs(previous - error) < 0.01, "Bounded correction never converged")
 end
+-- The bound is a vector distance per second, independent of render rate.
+for _, rate in ipairs({ 30, 60, 120 }) do
+    local recovering = prediction.new(Vector(0, 0))
+    recovering:confirm(Vector(48, 36), 0, stop, 1)
+    for frame = 1, rate * 2 do
+        local previous = recovering.display
+        local current = recovering:step(stop, frame, speed, 1 / rate, true)
+        assert((current - previous):LengthSquared() <= (120 / rate + 0.00001) ^ 2)
+    end
+    assert((recovering.display - Vector(48, 36)):LengthSquared() < 0.0001)
+end
 -- Measured J460 web half tick: friction precedes both movement and walking.
 local web = prediction.new(Vector(310.66775512695, 280))
 web:reset(web.position, 0, Vector(2.4830493927002 * 60, 0))

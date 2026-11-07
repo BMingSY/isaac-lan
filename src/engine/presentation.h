@@ -15,7 +15,7 @@ class IntroSimulationScope {
 };
 bool install(std::uintptr_t image);
 bool bind(lua_State*, HMODULE);
-void roomEntered(std::uintptr_t room);
+void roomEntered(std::uintptr_t room, bool created);
 void reset();
 unsigned playedIntro();
 bool introActive();
