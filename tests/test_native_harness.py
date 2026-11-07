@@ -52,6 +52,49 @@ def run_lua(source, tmp_path):
     ).stdout
 
 
+@pytest.mark.parametrize("lost", [False, True])
+def test_tear_trajectory_excludes_prior_scenarios_but_detects_new_missing_shots(tmp_path, lost):
+    run_lua(
+        """
+local status = { phase = 3, prepared = true, verified = 79 }
+_IsaacLanTest = { host = false, port = "1234" }
+_IsaacLanFrame = function() return status end
+_IsaacLan = {
+    net_gate = function() end,
+    diagnostics_counter = function() end,
+    test_gamepad = function() end,
+}
+CollectibleType = { COLLECTIBLE_NUMBER_ONE = 1, COLLECTIBLE_MOMS_HEELS = 30 }
+Isaac = { DebugString = function() end }
+package.loaded.json = { encode = function(value) return value.name or "" end }
+dofile("""
+        + lua_support.literal(str(ROOT / "tests/state_tear_trajectory.lua"))
+        + """)
+local function counters(previews, confirmed)
+    for name, value in pairs({
+        previews = previews, confirmed = confirmed, timed_out = 4,
+        grid_stops = 5, landed = 0,
+    }) do
+        _IsaacLan.diagnostics_counter("attack." .. name, value)
+    end
+end
+-- A preceding scenario left cumulative counters, including valid grid stops.
+counters(151, 142)
+_IsaacLanFrame()
+counters(163, 154 - """
+        + str(int(lost))
+        + """)
+status.verified = 240
+local ok, message = pcall(_IsaacLanFrame)
+assert(ok == """
+        + lua_support.literal(not lost)
+        + """, tostring(message))
+if not ok then assert(message:find("A shot failed to hand over: still", 1, true)) end
+""",
+        tmp_path,
+    )
+
+
 def test_bundled_input_support_is_frozen_and_needs_no_runtime_files(tmp_path, monkeypatch):
     support = tmp_path / "tests/support/input.lua"
     support.parent.mkdir(parents=True)
