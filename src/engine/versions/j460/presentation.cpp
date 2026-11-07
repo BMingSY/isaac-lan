@@ -1,5 +1,6 @@
 #include "engine/lua_api.h"
 #include "engine/versions/j460/layout.h"
+#include "engine/versions/j460/boss_intro.h"
 #include "compat/game_ids.h"
 #include "engine/presentation.h"
 #include "engine/frontend.h"
@@ -36,7 +37,8 @@ struct Intro {
     unsigned first, second;
 };
 std::deque<Intro> intros;
-unsigned serial = 0, seen = 0;
+unsigned serial = 0;
+std::map<IntroBarrier::Room, unsigned> seen;
 unsigned played = 0;
 unsigned hostIntro = 0;
 using PromptCall = void(__attribute__((thiscall)) *)(void*);
@@ -108,6 +110,15 @@ void __attribute__((fastcall)) promptRender(void* prompt, void*) {
 IntroBarrier waiting;
 using StartIntro = void(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 StartIntro originalIntro;
+void finishIntro() {
+    const auto game = at<std::uintptr_t>(image, j460::globals::game);
+    const auto target = game + j460::layout::game::roomTransition;
+    using Update = void(__attribute__((thiscall))*)(void*);
+    j460::finishBossIntro(target, [&] {
+        reinterpret_cast<Update>(image + j460::entry::roomTransitionUpdate)(
+            reinterpret_cast<void*>(target));
+    });
+}
 void playIntro(void* transition, unsigned first, unsigned second) {
     const auto game = at<std::uintptr_t>(image, j460::globals::game);
     const auto target = reinterpret_cast<std::uintptr_t>(transition);
@@ -249,12 +260,18 @@ int events(lua_State* L) {
             throw std::runtime_error("Invalid intro events");
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
         const auto game = at<std::uintptr_t>(image, j460::globals::game);
+        bool retained = false;
         for (std::size_t i = 0; i < size / 32; ++i) {
             const auto id = r.u32();
             r.u32(); // Event origin tick; delivery remains valid until acknowledged.
             const int stage = r.u32(), type = r.u32(), dimension = r.u32(), room = r.u32();
             const auto first = r.u32(), second = r.u32();
-            if (id <= seen)
+            retained |= id == played;
+            const IntroBarrier::Room key{stage, type, dimension, room};
+            const auto previous = seen.find(key);
+            // A late arrival may join an older event after having watched a
+            // newer one in another room. Deduplicate within its own room.
+            if (previous != seen.end() && id <= previous->second)
                 continue;
             rooms::withView(
                 [&] {
@@ -264,11 +281,17 @@ int events(lua_State* L) {
                     playIntro(reinterpret_cast<void*>(game + 0x1b83c), first, second);
                     // A view can arrive before its room is ready. Only consume an
                     // event after playing it; the authority retries until completion.
-                    seen = played = id;
+                    seen[key] = played = id;
+                    retained = true;
                 },
                 true);
         }
         r.finish();
+        // The complete accepted view carries all still-pending intros. Once
+        // the original audience finishes, its event disappears and a late
+        // viewer completes the native screen instead of extending combat's wait.
+        if (played && !retained && introActive())
+            rooms::withView(finishIntro, true);
         lua.pushBoolean(L, true);
         return 1;
     } catch (const std::exception& e) {
@@ -310,6 +333,11 @@ IntroSimulationScope::IntroSimulationScope(bool advance) {
     }
     if (at<int>(target, 0) != 2 && at<int>(target, 0) != 3)
         return;
+    if (!waiting.pending(0, hostIntro, runtime::tick())) {
+        rooms::withRoomPlayers(0, finishIntro);
+        hostIntro = 0;
+        return;
+    }
     if (advance && at<int>(game, 0x23a74) == 0) {
         using Update = void(__attribute__((thiscall))*)(void*);
         // Game::Update otherwise advances this screen and returns before ANY
@@ -380,7 +408,8 @@ void reset() {
     items::reset();
     intros.clear();
     waiting.clear();
-    serial = seen = played = hostIntro = 0;
+    seen.clear();
+    serial = played = hostIntro = 0;
 }
 unsigned playedIntro() {
     return played;
@@ -416,9 +445,29 @@ bool roomPaused() {
     // disconnects or fails to render. Normal completion is event-specific.
     return waiting.paused(key, runtime::tick(), rooms::connected() & rooms::soundAudience());
 }
-void roomEntered(std::uintptr_t room) {
+void roomEntered(std::uintptr_t room, bool created) {
     if (runtime::replica())
         return;
+    if (!created) {
+        const auto game = at<std::uintptr_t>(image, j460::globals::game);
+        const IntroBarrier::Room key{at<int>(game, 0), at<int>(game, 4), at<int>(game, 0x1830c),
+                                     at<int>(game, 0x18304)};
+        for (auto& event : intros) {
+            if (IntroBarrier::Room{event.stage, event.type, event.dimension, event.room} != key)
+                continue;
+            // Joining a resident room skips native Init. Subscribe its new
+            // occupants to the existing screen without restarting anyone who
+            // has already played it or extending the original timeout.
+            const auto added = waiting.join(key, event.serial, runtime::tick(),
+                                            rooms::soundAudience() & rooms::connected());
+            event.audience |= added;
+            if (added & 1u) {
+                hostIntro = played = event.serial;
+                playIntro(reinterpret_cast<void*>(game + 0x1b83c), event.first, event.second);
+            }
+        }
+        return;
+    }
     // These are the same native boss IDs and living-enemy checks used by
     // RoomTransition::ChangeRoom. Per-player room entry skips that global
     // transition, but must retain its original versus presentation.

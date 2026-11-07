@@ -88,6 +88,8 @@ Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，�
 
 玩家轮廓的 Windows 离线检查为 `native.player-outlines`，覆盖三条原生分支的寄存器／栈保护、四槽位配色、名单重排、全息分身／非主绘制限制、断开与嵌套／异常清理。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-outlines --case guest-visuals`，在同一组受保护主客机进程中检查装扮／缩放、重叠、染色、受击闪烁、双角色、幽灵、分房与换层；使用独立端口以及 `--heap-check --record`，对照双端画面。夹具断言与画面审阅分别记录，不能仅凭脚本完成判定描边可见。
 
+Boss 出场共享的定向检查为 `core.intro-barrier`、`native.intro-completion` 与 `run_special_routes.py --case shared-intro`；实机在同一连接中交换先进入 Boss 房间的玩家，错开 40 tick 入场，检查后来进入者的画面、首位观看者结束后截断剩余动画、去重、异房隔离与控制恢复。可与 `--case input-response` 合并，配合 `--latency-ms 40 --heap-check --record` 核对副机纠偏速度和输入响应；移动离线检查为 `bridge.prediction`，覆盖不同绘制频率、重复确认、碰撞和传送。
+
 ## 失败记录与回放
 
 统一运行按当轮归档保存阶段日志、耗时、`summary.json`、`ctest.xml`、`pytest.xml` 和失败请求。回放命令：

@@ -76,6 +76,7 @@ inline constexpr unsigned previousDimension = 0x18310;
 inline constexpr unsigned leaveDoor = 0x18318;
 inline constexpr unsigned enterDoor = 0x1831c;
 inline constexpr unsigned players = 0x1baa8;
+inline constexpr unsigned roomTransition = 0x1b83c;
 inline constexpr unsigned playerHuds = 0x1da04;
 inline constexpr unsigned floorSeeds = 0x1bb84;
 inline constexpr unsigned pauseMenu = 0x23a74;
@@ -89,6 +90,11 @@ inline constexpr unsigned fadeAction = 0x265bc;
 inline constexpr unsigned restartHeldFrames = 0x265c4;
 inline constexpr unsigned generatedItems = 0x67758;
 } // namespace game
+namespace roomTransition {
+inline constexpr unsigned mode = 0x0, elapsed = 0x4, duration = 0x8;
+inline constexpr unsigned introSprite = 0x38, bossIntro = 0x238;
+inline constexpr int intro = 2, returning = 3;
+} // namespace roomTransition
 namespace activeItem {
 inline constexpr unsigned count = 4, stride = 0x20, data = 0x1c;
 } // namespace activeItem

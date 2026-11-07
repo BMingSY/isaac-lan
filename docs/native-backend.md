@@ -121,6 +121,10 @@ J460 音乐管理器位于 `Manager+0x29fbc`，当前／排队 ID 分别为 `+0x
 
 Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；普通 `Game::StartRoomTransition` 同时选路并启动转场，不能直接作为客机结果回放接口。
 
+[`presentation_events`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/presentation.cpp) 保持每条八个 `u32` 的 Boss 出场载荷，按楼层、类型、维度和房间匹配后调用原生 `StartBossIntro`。加入已加载房间只订阅其未完成事件，沿用序号和 Boss ID；主机加入时在到达作用域内启动本机原生画面，客机通过权威视图接收。原始观看者决定等待边界，后来者不延长战斗暂停。每份已接受视图中的事件列表是该接收者仍待播放的完整集合：已播放事件消失时，客机结束对应的剩余出场画面。重复状态按房间与序号去重；等待和已参与名单由 [IntroBarrier](https://github.com/BMingSY/isaac-lan/blob/main/src/core/intro_barrier.h) 管理，完成／超时后不接受新订阅，退出清理名单。载荷字段和协议号不变，不同 DLL 由扩展指纹拒绝连接。
+
+[`finishBossIntro`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/boss_intro.h) 只完成 J460 的 Boss versus 状态，不暴露 Lua 写内存接口。游戏的 `RoomTransition` 位于 `Game+0x1b83c`，模式／已用帧／持续帧在 `+0/+4/+8`，出场 Sprite 在 `+0x38`，Boss 标记在 `+0x238`。仅当标记有效且模式为 2 或 3 时操作：模式 2 清除 Sprite 主动画的播放位，再调用原生 `RoomTransition::Update`（RVA `0x4318a0`）完成音乐和演出收尾；模式 3 将已用帧推进到持续帧，再调用原生完成控制恢复。最多调用两次，不直接改写模式、不重新初始化房间，不分配或保留原生对象；其他转场完全不写入。主机在本机房间名单作用域内执行，客机在已提交视图的本机作用域内执行。
+
 镜子过门调用 `Game::StartRoomTransition` 时，目标已从 `ROOM_MIRROR_IDX` 解析为实际描述符索引和维度；识别依据是 `RoomTransitionAnim.FADE_MIRROR`（18）。[镜像路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/mirror.h)仅对有效门槽位保留原门作为目标入口；屏幕反射不改变世界空间的门槽位。普通过门继续按相邻描述符选择入口。
 
 [`room_routing`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_routing.h) 在 `Level::ChangeRoom` 的 RVA `0x3404ec` 同步提供最终房间索引、维度、入口及原生改送标志（当前原生栈帧 `EBP+0xb`）。改送标志也覆盖同一大房间的不同子格，不能仅通过标准房间索引是否改变推断。此处原生混乱诅咒的临时容器已析构，目的房间尚未初始化。调用方先选择或创建真实目标、迁移进入者并切换房间作用域；返回 `true` 继续原生初始化，返回 `false` 经 RVA `0x340814` 的原生公共尾部返回，再由联机运行组件执行已加载房间的进入效果。拦截保存通用寄存器、标志与 XMM0–7；公共尾部恢复原生 SEH 栈并清理两个栈参数。回调只在当前主线程调用中借用，错误在原生栈退出后重新抛出，不跨原生帧展开 C++ 异常。

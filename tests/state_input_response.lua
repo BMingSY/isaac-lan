@@ -23,6 +23,7 @@ local movementRenders, captureCount = 0, 0
 local sent, preview, previewSequence = Vector(0, 0), Vector(0, 0), 0
 local beforeVelocity, afterVelocity = Vector(0, 0), Vector(0, 0)
 local fastApplies, fullApplies = 0, 0
+local correctionSpeedMax = 0
 local makePrediction = _IsaacLanPrediction.new
 _IsaacLanPrediction.new = function(position)
     local model = makePrediction(position)
@@ -30,6 +31,12 @@ _IsaacLanPrediction.new = function(position)
     model.step = function(self, ...)
         beforeVelocity = Vector(self.velocity.X, self.velocity.Y)
         local result = step(self, ...)
+        local dt = math.max(0, math.min(select(4, ...), 0.05))
+        local correction = assert(self.correctionStep)
+        assert(correction <= 120 * dt + 0.00001, "Authority correction exceeded display budget")
+        if dt > 0 then
+            correctionSpeedMax = math.max(correctionSpeedMax, correction / dt)
+        end
         afterVelocity = Vector(self.velocity.X, self.velocity.Y)
         return result
     end
@@ -99,6 +106,7 @@ function _IsaacLanFrame()
     if s.verified >= 550 and not finished then
         if not host then
             report("RESPONSE_APPLIES half=" .. fastApplies .. " full=" .. fullApplies)
+            report("RESPONSE_CORRECTION_SPEED_MAX " .. correctionSpeedMax)
             -- Arrival phase can consistently favor either boundary. Requiring
             -- both makes a healthy, phase-aligned connection fail at random.
             assert(fastApplies + fullApplies > 300, "Snapshot application window was not exercised")

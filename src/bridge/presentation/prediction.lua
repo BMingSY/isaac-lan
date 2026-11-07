@@ -9,6 +9,7 @@ local coastingRetention = math.sqrt(0.775)
 local turningRetention = math.sqrt(0.8)
 local inputBase, inputSpeedScale = 0.75, 0.25
 local walkingAcceleration, reverseAcceleration = 0.6, 0.04
+local correctionTime, correctionSpeed = 0.06, 120
 local function zero()
     return Vector(0, 0)
 end
@@ -25,6 +26,7 @@ function methods:reset(position, sequence, velocity)
     self.authority, self.authorityVelocity = position, self.velocity
     self.rebuild, self.confirmedTick = false, nil
     self.teleported = true
+    self.correctionStep = 0
 end
 function methods:confirm(position, sequence, velocity, tick)
     if
@@ -169,7 +171,15 @@ function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
             end
         end
     end
-    self.correction = self.correction * math.exp(-dt / 0.06)
+    local distance = math.sqrt(self.correction:LengthSquared())
+    local decay = math.exp(-dt / correctionTime)
+    if distance > 0 then
+        -- Bound only the authority correction. Fresh movement retains its own
+        -- integration, including while a late acknowledgement is catching up.
+        decay = math.max(decay, 1 - correctionSpeed * dt / distance)
+    end
+    self.correctionStep = distance * (1 - decay)
+    self.correction = self.correction * decay
     self.display = self.position + self.correction
     return self.display
 end

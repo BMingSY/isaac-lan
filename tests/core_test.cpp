@@ -941,6 +941,43 @@ void introBarrier() {
     barrier.observe(0, 7, false);
     require(!barrier.paused(room, 1101, 1) && !barrier.pending(1, 7, 1101),
             "A guest who left the intro room kept its combat paused");
+    // Arrival in an already resident room must enroll the newcomer in the
+    // same screen, including a host arriving after a guest started it.
+    for (const auto first : {1u, 2u}) {
+        const auto original = first == 1 ? 0u : 1u, late = 1u - original;
+        barrier.start(room, 8, 1200, first);
+        require(!barrier.join(other, 8, 1210, 3) && !barrier.join(room, 7, 1210, 3),
+                "Arrival joined an unrelated room or stale intro");
+        require(barrier.join(room, 8, 1210, 3) == (1u << late) && barrier.pending(late, 8, 1210),
+                "Late entrant did not receive the running boss intro");
+        require(!barrier.join(room, 8, 1211, 3), "Repeated arrival restarted an intro");
+        barrier.observe(original, 8, false);
+        require(!barrier.join(room, 8, 1212, 3) && !barrier.pending(original, 8, 1212) &&
+                    !barrier.pending(late, 8, 1212) && !barrier.paused(room, 1212, 3),
+                "Late entrant extended the first viewer's wait or kept its screen alive");
+        require(!barrier.join(room, 8, 1213, 7) && !barrier.observe(late, 8, false),
+                "Completed shared intro was replayed or retained its control lock");
+        barrier.start(room, 8, 1250, first);
+        barrier.join(room, 8, 1260, 3);
+        barrier.observe(late, 8, false);
+        require(barrier.paused(room, 1261, 3) && barrier.pending(original, 8, 1261),
+                "Late viewer's skip ended the original viewer's screen");
+        require(!barrier.paused(room, 1262, 1u << late),
+                "Original viewer leaving kept the late viewer waiting");
+    }
+    barrier.start(room, 9, 1300, 1);
+    require(barrier.join(room, 9, 1899, 3) == 2 && !barrier.join(room, 9, 1901, 7) &&
+                !barrier.paused(room, 1901, 7),
+            "Late arrivals extended the intro timeout");
+    barrier.start(room, 10, 2000, 1);
+    barrier.join(room, 10, 2010, 3);
+    barrier.observe(0, 10, false);
+    require(!barrier.paused(room, 2011, 1), "Disconnected late entrant froze combat");
+    barrier.start(room, 11, 2100, 1);
+    barrier.join(room, 11, 2110, 3);
+    barrier.clear();
+    require(!barrier.join(room, 11, 2111, 7) && !barrier.pending(1, 11, 2111),
+            "Floor/session reset retained a late intro subscription");
 }
 void automationInput() {
     using isaac::input::consoleArguments;

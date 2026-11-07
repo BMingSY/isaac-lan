@@ -3432,8 +3432,8 @@ struct RoomTransfer {
         runtime::roomEntered(request.door);
         if (created) {
             to->clock.reset(at<int>(game(), j460::layout::game::frame));
-            presentation::roomEntered(to->pointer);
         }
+        presentation::roomEntered(to->pointer, created);
         if (!created) {
             // J460's native POST_NEW_ROOM dispatcher (callback 19). A
             // resident room needs the entry notification without Init;
