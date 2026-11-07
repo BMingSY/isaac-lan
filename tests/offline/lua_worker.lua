@@ -50,6 +50,15 @@ local function stateEnvironment()
             ["presentation/tethers"] = dofile(root .. "/src/bridge/presentation/tethers.lua"),
             ["presentation/doors"] = dofile(root .. "/src/bridge/presentation/doors.lua"),
             ["presentation/attacks"] = dofile(root .. "/src/bridge/presentation/attacks.lua"),
+            ["presentation/entity_visuals"] = dofile(
+                root .. "/src/bridge/presentation/entity_visuals.lua"
+            ),
+            ["presentation/attack_matching"] = dofile(
+                root .. "/src/bridge/presentation/attack_matching.lua"
+            ),
+            ["presentation/attack_volley"] = dofile(
+                root .. "/src/bridge/presentation/attack_volley.lua"
+            ),
             ["presentation/attack_prediction"] = dofile(
                 root .. "/src/bridge/presentation/attack_prediction.lua"
             ),

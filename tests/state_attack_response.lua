@@ -30,6 +30,21 @@ local cases = {
         kind = WeaponType.WEAPON_TEARS,
     },
     {
+        name = "double-shot",
+        item = CollectibleType.COLLECTIBLE_20_20,
+        kind = WeaponType.WEAPON_TEARS,
+    },
+    {
+        name = "quad-shot",
+        item = CollectibleType.COLLECTIBLE_MUTANT_SPIDER,
+        kind = WeaponType.WEAPON_TEARS,
+    },
+    {
+        name = "soy-milk",
+        item = CollectibleType.COLLECTIBLE_SOY_MILK,
+        kind = WeaponType.WEAPON_TEARS,
+    },
+    {
         name = "sword",
         item = CollectibleType.COLLECTIBLE_SPIRIT_SWORD,
         kind = WeaponType.WEAPON_SPIRIT_SWORD,
@@ -142,10 +157,14 @@ function _IsaacLanFrame()
                 "Latency relay did not separate preview from confirmation"
             )
             assert((metrics["attack.confirmed"] or 0) > 5, "Insufficient tear handoffs")
-            assert(
-                mirror or (measurements.multishot.previews or 0) == 0,
-                "Multi-shot attacks generated false single tears"
-            )
+            if not mirror then
+                for _, name in ipairs({ "multishot", "double-shot", "quad-shot", "soy-milk" }) do
+                    assert(
+                        (measurements[name].previews or 0) > 0,
+                        "Missing learned launch preview: " .. name
+                    )
+                end
+            end
             assert(
                 headSamples >= (mirror and 4 or 24)
                     and (mirror or (chargeSamples > 5 and releaseSamples > 3))

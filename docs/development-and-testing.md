@@ -168,9 +168,11 @@ python tools/engine_test.py run special-routes -- \
 
 `action-prediction` 用正常客机输入和实际拾取覆盖主动、卡牌、正负药丸、道具／饰品／卡牌／药丸拾取及举起类主动，核对房主使用回调、拾取结果、两端动作姿态和客机连续帧移动。`--latency-ms 75` 为两个方向各增加 75 ms；延迟中继本身增加约 150 ms RTT。它检查动作期间及结束后的移动连续性，不预测道具效果或提前确认拾取。
 
+`input-response` 的通过标准同时要求同帧输入、纠偏速度上限和松键时超出惯性与修正预算的额外位移；旧采样缺少 `correction_step` 时不能计为该标准通过。相关离线检查为 `bridge.prediction` 和 `tests/test_input_response_analysis.py`。`presentation.entity-visuals` 检查动画／高度的外推边界、后续确认与实体替换；录帧用于外观审阅，开启录帧时的耗时不能作为独立性能基准。
+
 `attached-motion` 用正常客机移动、点按、蓄力和松键覆盖骸骨、妈刀、圣剑、硫磺火、科技、科技 X 与虚空之喉。它检查武器相对预测身体的位置、激光世界路径／终点及命中特效，并确认独立激光不被绑定到身体。推荐与 `--latency-ms 75 --record-client --heap-check` 配合；场景逐项核对两端实际生成的攻击，不以仅完成会话视为通过。
 
-`attack-response` 测量普通泪弹、硫磺火、妈刀、科技 X、多发与圣剑的按键至朝向、初次泪弹、蓄力和松键显示时间，核对预测弹接管及真实实体归属；`attack-mirror` 在水层镜面房间复用普通泪弹检查。使用 `--latency-ms 40 --performance --record-client --heap-check`，中继每方向延迟 40 ms，合计约 80 ms RTT。可与 `attached-motion` 在同一对进程运行；画面需对照镜像位置与接管前后弹幕。离线检查为 `presentation.attack-prediction`、`presentation.attacks` 及 Windows `native.pause-menu`，覆盖冷却、重复确认、取消、换武器、超时、视图清理和输入作用域恢复。
+`attack-response` 测量普通泪弹、硫磺火、妈刀、科技 X、三眼、20/20、四眼蜘蛛、豆浆与圣剑的按键至朝向、初次泪弹、蓄力和松键显示时间，核对预测弹接管及真实实体归属；`attack-mirror` 在水层镜面房间复用普通泪弹检查。使用 `--latency-ms 40 --performance --record-client --heap-check`，中继每方向延迟 40 ms，合计约 80 ms RTT。可与 `motion`、`mirror-camera`、`attached-motion` 在同一对进程运行；画面需对照镜像位置与接管前后弹幕。离线检查为 `presentation.attack-prediction`、`presentation.attacks` 及 Windows `native.pause-menu`，覆盖冷却、重复确认、缺失早期发射与抖动后的匹配、固定多发、取消、换武器、超时、视图清理和输入作用域恢复。
 
 `tear-trajectory` 用正常射击输入覆盖静止、横向往返、0.6／1.6 弹速、尿一／妈妈的高跟鞋改变射程及快速点射。每组停止射击后等待确认完成，要求产生的预览全部接管，并分别核对超时、碰墙和落地计数。与 `attack-mirror` 复用进程检查镜面；沿用每方向 40 ms 的中继。离线 `presentation.tear-motion` 对照 [tear_motion.csv](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/tear_motion.csv) 中的原生轨迹，验证弹速、惯性和纵向运动；`presentation.attack-prediction` 对照原生小数冷却的发射时刻。
 

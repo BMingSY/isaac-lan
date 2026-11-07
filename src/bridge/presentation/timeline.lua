@@ -1,13 +1,14 @@
 -- Map the authority's monotonic capture clock onto the local render clock.
 -- RTT/2 supplies an estimate, not a claim of symmetric one-way latency.
 return function()
-    local window, cursor, lastSource, offset = {}, 0, nil, nil
+    local window, cursor, lastSource, offset, captured = {}, 0, nil, nil, nil
     local samples, maxHalfRtt = 64, 0.25
     local function reset()
-        window, cursor, lastSource, offset = {}, 0, nil, nil
+        window, cursor, lastSource, offset, captured = {}, 0, nil, nil, nil
     end
     local function observe(sourceMs, received, rttMs)
         if not sourceMs or sourceMs <= 0 then
+            captured = received
             return received
         end
         local source = sourceMs / 1000
@@ -27,7 +28,14 @@ return function()
         end
         offset = minimumDelay - (minimumHalfRtt < math.huge and minimumHalfRtt or 0)
         -- Jitter can make a sample older, never put it in the local future.
-        return math.min(received, source + offset)
+        captured = math.min(received, source + offset)
+        return captured
     end
-    return { observe = observe, reset = reset }
+    return {
+        observe = observe,
+        reset = reset,
+        captured = function()
+            return captured
+        end,
+    }
 end

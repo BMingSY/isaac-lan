@@ -392,6 +392,12 @@ return function(fields)
                             m.prediction.teleported = false
                         end))
                         m.prediction:clip(position)
+                        if view.metrics and view.metrics.enabled then
+                            view.metrics.counter(
+                                "prediction.correction_step_millipixels",
+                                math.floor((m.prediction.correctionStep or 0) * 1000)
+                            )
+                        end
                         if actorsPresentation.walk and actorByID[identifier] then
                             actorsPresentation.walk(
                                 p,
@@ -443,6 +449,9 @@ return function(fields)
                     end
                     m.display = position
                     e.Position = position
+                    if view.visuals and not m.actor then
+                        view.visuals.present(m.visual, e, now)
+                    end
                 end
             end
             if view.attachments then
@@ -457,6 +466,11 @@ return function(fields)
         end
         return {
             track = track,
+            trackVisual = function(prior, entity, value, now)
+                if view.visuals then
+                    return view.visuals.observe(prior, entity, value, now, captured)
+                end
+            end,
             sample = sample,
             present = present,
             observe = function(sourceMs, now)
