@@ -39,6 +39,7 @@ DIAGNOSTICS = (
     "local-hud",
     "guest-visuals",
     "player-outlines",
+    "player-opacity",
     "feedback-b7fs",
     "feedback-october",
     "tainted-feedback",
@@ -112,6 +113,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "local-hud": "state_local_hud.lua",
             "guest-visuals": "state_guest_visuals.lua",
             "player-outlines": "state_player_outlines.lua",
+            "player-opacity": "state_player_outlines.lua",
             "feedback-b7fs": "state_feedback_b7fs.lua",
             "feedback-october": "state_feedback_20261027.lua",
             "tainted-feedback": "state_tainted_feedback.lua",
@@ -155,6 +157,7 @@ def build(output, cases=CASES, *, first_floor=False):
         }.get(name, "state_side_routes.lua")
         options = {
             "route": name,
+            "playerOpacity": name == "player-opacity",
             "integrationDual": name == "mod-integrations-dual",
             "motherEntrant": 1 if name == "mother-guest" else 0,
             "motherTogether": name == "mother-together",

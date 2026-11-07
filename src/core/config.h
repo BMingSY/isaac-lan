@@ -10,6 +10,7 @@
 namespace isaac::configuration {
 struct Settings {
     unsigned inputHz = 60;
+    unsigned otherPlayersOpacity = 100;
     logging::Level logLevel = logging::Level::info;
     bool performance = false;
     unsigned sampleIntervalMs = 1000;
@@ -28,6 +29,9 @@ inline constexpr std::string_view defaults =
     "; 客机输入发送频率：30 / 60，默认 60；各端可以不同。\n"
     "; 30 减少输入流量，但可能多等一个渲染帧；主机模拟和本机显示频率不变。\n"
     "input_hz = 60\n\n"
+    "[players]\n"
+    "; 其他玩家默认不透明度：0–100；0 完全透明，100 保留原本外观，仅影响本机画面。\n"
+    "others_opacity = 100\n\n"
     "[logging]\n"
     "; 日志与原版 log.txt 位于同一游戏数据目录，按启动和局次分目录保存。\n"
     "; startup.log 记录启动和退出，runtime.log 记录局内事件。\n"
@@ -119,6 +123,14 @@ inline Parsed parse(std::string_view source) {
             if (error == std::errc{} && endValue == value.data() + value.size() &&
                 interval >= 100 && interval <= 60000)
                 result.settings.sampleIntervalMs = interval;
+            else
+                warn("invalid_value=" + key);
+        } else if (key == "players.others_opacity") {
+            unsigned opacity = 0;
+            const auto [endValue, error] =
+                std::from_chars(value.data(), value.data() + value.size(), opacity);
+            if (error == std::errc{} && endValue == value.data() + value.size() && opacity <= 100)
+                result.settings.otherPlayersOpacity = opacity;
             else
                 warn("invalid_value=" + key);
         } else if (key == "chat.background_opacity") {

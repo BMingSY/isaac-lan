@@ -12,6 +12,7 @@ sync/actor_pose
 sync/weapon_pose
 sync/actor_roster
 presentation/actors
+presentation/player_opacity
 presentation/menu_model
 presentation/audio
 presentation/motion

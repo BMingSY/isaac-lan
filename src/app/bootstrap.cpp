@@ -19,6 +19,7 @@
 #include "engine/audio.h"
 #include "engine/combat_feedback.h"
 #include "engine/player_outlines.h"
+#include "engine/player_opacity.h"
 #include "engine/presentation.h"
 #include "engine/rewind.h"
 #include "engine/rooms.h"
@@ -255,6 +256,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         return 14;
     const auto config = isaac::configuration::load(directory / L"isaac-lan/config.ini");
     settings = config.settings;
+    isaac::presentation::player_opacity::configure(settings.otherPlayersOpacity);
     isaac::runtime::configureNetwork(settings.inputHz);
     isaac::logging::configure(settings.logLevel);
     isaac::diagnostics::configure(settings);
@@ -354,6 +356,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         return 24;
     if (!isaac::presentation::outlines::install(image))
         return 24;
+    if (!isaac::presentation::player_opacity::install(image))
+        return 24;
     if (!isaac::rewind::install(image))
         return 25;
     if (!isaac::frontend::install(image, root, log, luaopen_isaac_lan_probe, installed))
@@ -416,6 +420,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* 
     if (!isaac::audio::bind(L, module))
         return 0;
     if (!isaac::presentation::bind(L, module))
+        return 0;
+    if (!isaac::presentation::player_opacity::bind(L, module))
         return 0;
     if (!isaac::rewind::bind(L, module))
         return 0;

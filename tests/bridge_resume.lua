@@ -5,7 +5,7 @@ local originalRegisterMod, originalRequire = RegisterMod, require
 for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     local callbacks, assigned = {}, {}
     local phase, frame, gates, restores, cancelGate = 3, 9, 0, 0, false
-    local closes = {}
+    local closes, opacityValues = {}, nil
     local players = { { ControllerIndex = controllers[1] }, { ControllerIndex = controllers[2] } }
     ModCallbacks = {
         MC_EXECUTE_CMD = 1,
@@ -24,6 +24,9 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
             callbacks[id] = fn
         end,
         DebugString = function() end,
+        GetTime = function()
+            return 100
+        end,
         GetPlayer = function(index)
             return players[index + 1]
         end,
@@ -67,7 +70,14 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
             return {}
         end,
         api_info = function()
-            return { ready = 0, nowMs = 0 }
+            return { ready = 0, nowMs = 0, slot = 0, players = 2, connected = 3, hosting = 1 }
+        end,
+        player_opacity = function(...)
+            if select("#", ...) == 0 then
+                return 50
+            end
+            opacityValues = { ... }
+            return true
         end,
         net_poll = function()
             return {
@@ -149,6 +159,13 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     dofile(root .. "/tests/fixtures/app_bridge.lua")(root, _IsaacLan, _IsaacLanModules)
     dofile(root .. "/src/bridge/app/main.lua")
     _IsaacLanFrame()
+    assert(table.concat(opacityValues, ",") == "100,50,50,50")
+    assert(_IsaacLanChatSubmit("/opacity 2p 20"))
+    phase = _IsaacLan.net_phases().waiting
+    _IsaacLanFrame()
+    assert(opacityValues[2] == 20, "Waiting for a peer discarded local opacity")
+    phase = _IsaacLan.net_phases().running
+    _IsaacLanFrame()
     callbacks[ModCallbacks.MC_POST_GAME_STARTED](nil, true)
     assert(assigned[1] == 1 and assigned[2] == 2, "Continue lost or duplicated a LAN slot")
     callbacks[ModCallbacks.MC_POST_UPDATE]()
@@ -157,8 +174,10 @@ for _, controllers in ipairs({ { 0, 1 }, { 0, -1 }, { 1, 1 } }) do
     callbacks[ModCallbacks.MC_POST_UPDATE]()
     callbacks[ModCallbacks.MC_POST_UPDATE]()
     assert(gates == 1 and restores == 1 and _IsaacLanFrame().prepared)
+    assert(opacityValues[2] == 20, "Preparing a run discarded local opacity")
     callbacks[ModCallbacks.MC_PRE_GAME_EXIT]()
     assert(closes[1] == 1 and not _IsaacLanFrame().prepared)
+    assert(table.concat(opacityValues, ",") == "100,50,50,50", "Session exit retained overrides")
     -- An inline native exit during gate must retain the native save guard and
     -- cancel restore. Repeated updates must not resurrect the old preparation.
     phase, cancelGate = 3, true

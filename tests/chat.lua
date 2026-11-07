@@ -2,6 +2,8 @@ local root = assert(arg[1])
 local wire = dofile(root .. "/src/bridge/runtime/chat_wire.lua")
 local factory = dofile(root .. "/src/bridge/runtime/chat.lua")
 local dice = dofile(root .. "/src/bridge/runtime/chat_dice.lua")
+local opacityFactory = dofile(root .. "/src/bridge/presentation/player_opacity.lua")
+local opacityValues = {}
 local emoteCount = 59
 local limits = { characters = 60, commandBytes = 2048, history = 200, dice = 999 }
 local now, rolls, executions = 100, 0, {}
@@ -19,6 +21,16 @@ for slot = 0, 2 do
         worldEpoch = 1,
     }
     local context = { index = 84, dimension = 0 }
+    local opacity = opacityFactory({
+        default = 50,
+        info = function()
+            return info
+        end,
+        apply = function(...)
+            opacityValues[slot] = { ... }
+            return true
+        end,
+    })
     local function send(target, bytes)
         if blocked[slot .. ":" .. target] then
             return false
@@ -72,6 +84,7 @@ for slot = 0, 2 do
         bot = function(args)
             return "bot " .. args
         end,
+        opacity = opacity.command,
         feedback = function(text)
             feedbackCalls[#feedbackCalls + 1] = { slot, text }
             return "反馈：" .. text
@@ -497,6 +510,7 @@ for _, alias in ipairs({ "/h", "/help" }) do
         "/c",
         "/console",
         "/lanbot help",
+        "/opacity help",
         "/feedback",
         "/fb",
     }) do
@@ -507,6 +521,17 @@ for _, alias in ipairs({ "/h", "/help" }) do
     assert(not result:find("/c help", 1, true), "Help advertised a command absent from vanilla")
     help = result
 end
+-- Presentation commands stay local, including before readiness.
+for _, text in ipairs({ "/opacity 1p 25", "/OPACITY others 0", "/opacity reset" }) do
+    local first = #guest.messages + 1
+    assert(guest.submit(text))
+    assert(guest.messages[first].command and guest.messages[first].text == text)
+    local reply = guest.messages[first + 1]
+    assert(reply.kind == "system" and not reply.bubble and reply.owner == 1)
+    assert(reply.text:find("不透明度"))
+end
+assert(table.concat(opacityValues[1], ",") == "50,100,50,50")
+assert(not opacityValues[0] and not opacityValues[2], "Opacity changed another peer's preferences")
 -- Feedback runs on the submitting machine only, including before readiness.
 for _, text in ipairs({ "/feedback 进房后卡住", "/FB 进房后卡住", "/feedback" }) do
     local first = #guest.messages + 1

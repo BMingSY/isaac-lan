@@ -287,6 +287,7 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/input_wire.cmake")
         set_tests_properties(bridge.input-wire PROPERTIES TIMEOUT 30 LABELS "offline;lua")
         isaac_add_lua_test(bridge.chat chat.lua)
+        isaac_add_lua_test(presentation.player-opacity player_opacity.lua)
         isaac_add_lua_test(bridge.chat-dice chat_dice.lua)
         isaac_add_lua_test(bridge.teleport teleport.lua)
         isaac_add_lua_test(bridge.room-placement room_placement.lua)
@@ -487,6 +488,7 @@ add_library(
     src/engine/versions/j460/combat_feedback.cpp
     src/engine/versions/j460/presentation.cpp
     src/engine/versions/j460/player_outlines.cpp
+    src/engine/versions/j460/player_opacity.cpp
     src/engine/versions/j460/crafting_hud.cpp
     src/engine/versions/j460/challenge_hud.cpp
     src/engine/versions/j460/characters.cpp
@@ -664,6 +666,15 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME native.player-outlines COMMAND isaac_lan_player_outlines_test)
     set_tests_properties(native.player-outlines PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_player_opacity_test tests/player_opacity_test.cpp)
+    target_include_directories(isaac_lan_player_opacity_test PRIVATE src)
+    target_link_libraries(isaac_lan_player_opacity_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_player_opacity_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_player_opacity_test PRIVATE -Wall -Wextra -Werror -msse2)
+    endif()
+    add_test(NAME native.player-opacity COMMAND isaac_lan_player_opacity_test)
+    set_tests_properties(native.player-opacity PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_combat_feedback_test tests/combat_feedback_test.cpp)
     target_include_directories(isaac_lan_combat_feedback_test PRIVATE src)
     target_link_libraries(isaac_lan_combat_feedback_test PRIVATE minhook)
