@@ -18,7 +18,39 @@ from testing.endings import build as build_endings
 from testing import gameplay as build_gameplay_suite
 from testing import discovery
 from run_mouse_input import ready_peers
+from run_network_engine import read_log
 from game_logs import log_path
+
+
+@pytest.mark.parametrize(
+    "event", ["[INFO] - Updating mod 'Isaac LAN'", "[INFO] - Lua is resetting!"]
+)
+@pytest.mark.parametrize("started", [False, True])
+def test_engine_rejects_runtime_reload_even_with_completion(tmp_path, event, started):
+    lab = tmp_path / "owned-host"
+    log = log_path(lab)
+    log.parent.mkdir(parents=True)
+    text = "[INFO] - Running Lua Script: resources/scripts/main.lua\n"
+    if started:
+        text += "[INFO] - Lua Debug: LAN_NETWORK SPECIAL_CASE_PASS index=1\n"
+    log.write_text(text + event + "\n[INFO] - Lua Debug: LAN_NETWORK PASS all selected routes\n")
+    with pytest.raises(RuntimeError, match="owned-host: runtime changed during the frozen test"):
+        read_log(lab)
+    assert event in log.read_text()  # Keep the original evidence for archiving.
+
+
+def test_engine_accepts_normal_lua_startup_and_literal_scenario_messages(tmp_path):
+    assert read_log(tmp_path) == ""
+    log = log_path(tmp_path)
+    log.parent.mkdir(parents=True)
+    text = (
+        "[INFO] - Running Lua Script: resources/scripts/enums.lua\n"
+        "[INFO] - Running Lua Script: resources/scripts/main.lua\n"
+        "[INFO] - Lua Debug: LAN_NETWORK MESSAGE Lua is resetting!\n"
+        "[INFO] - Lua Debug: LAN_NETWORK MESSAGE Updating mod 'example'\n"
+    )
+    log.write_text(text)
+    assert read_log(tmp_path) == text
 
 
 def test_mouse_restart_waits_for_new_peers_and_recreated_logs(tmp_path):
@@ -52,6 +84,49 @@ def run_lua(source, tmp_path):
     ).stdout
 
 
+@pytest.mark.parametrize("lost", [False, True])
+def test_tear_trajectory_excludes_prior_scenarios_but_detects_new_missing_shots(tmp_path, lost):
+    run_lua(
+        """
+local status = { phase = 3, prepared = true, verified = 79 }
+_IsaacLanTest = { host = false, port = "1234" }
+_IsaacLanFrame = function() return status end
+_IsaacLan = {
+    net_gate = function() end,
+    diagnostics_counter = function() end,
+    test_gamepad = function() end,
+}
+CollectibleType = { COLLECTIBLE_NUMBER_ONE = 1, COLLECTIBLE_MOMS_HEELS = 30 }
+Isaac = { DebugString = function() end }
+package.loaded.json = { encode = function(value) return value.name or "" end }
+dofile("""
+        + lua_support.literal(str(ROOT / "tests/state_tear_trajectory.lua"))
+        + """)
+local function counters(previews, confirmed)
+    for name, value in pairs({
+        previews = previews, confirmed = confirmed, timed_out = 4,
+        grid_stops = 5, landed = 0,
+    }) do
+        _IsaacLan.diagnostics_counter("attack." .. name, value)
+    end
+end
+-- A preceding scenario left cumulative counters, including valid grid stops.
+counters(151, 142)
+_IsaacLanFrame()
+counters(163, 154 - """
+        + str(int(lost))
+        + """)
+status.verified = 240
+local ok, message = pcall(_IsaacLanFrame)
+assert(ok == """
+        + lua_support.literal(not lost)
+        + """, tostring(message))
+if not ok then assert(message:find("A shot failed to hand over: still", 1, true)) end
+""",
+        tmp_path,
+    )
+
+
 def test_bundled_input_support_is_frozen_and_needs_no_runtime_files(tmp_path, monkeypatch):
     support = tmp_path / "tests/support/input.lua"
     support.parent.mkdir(parents=True)
@@ -74,6 +149,70 @@ print("PASS frozen fixture support")
         [shutil.which("lua5.3"), str(script)], capture_output=True, text=True, check=True
     )
     assert "PASS frozen fixture support" in result.stdout
+
+
+@pytest.mark.parametrize("host", [True, False])
+def test_motion_fixture_rejects_room_drift_and_restores_its_doors(tmp_path, host):
+    run_lua(
+        """
+local function noop() end
+local status = { phase = 3, prepared = true, verified = 0 }
+local locations = { ["0"] = { index = 84, dimension = 0 }, ["1"] = { index = 84, dimension = 0 } }
+local door = { opened = true, locked = false }
+function door:IsOpen() return self.opened end
+function door:IsLocked() return self.locked end
+function door:Close(force) assert(force); self.opened = false end
+function door:Open() self.opened = true end
+function door:SetLocked(value) self.locked = value end
+local room = {
+    GetGridSize = function() return 0 end,
+    GetDoor = function(_, slot) return slot == 2 and door or nil end,
+}
+local players = {}
+for i = 0, 1 do
+    players[i] = { SetMinDamageCooldown = noop, AddEntityFlags = noop }
+end
+Vector = setmetatable({Zero = {X = 0, Y = 0}}, {__call = function(_, x, y) return {X = x, Y = y} end})
+GridEntityType = { GRID_POOP = 14, GRID_ROCK = 2 }
+EntityFlag = { FLAG_NO_DAMAGE_BLINK = 1 }
+ModCallbacks = { MC_POST_RENDER = 1 }
+Isaac = { GetPlayer = function(i) return players[i] end, GetRoomEntities = function() return {} end,
+    DebugString = noop, AddCallback = noop }
+Game = function() return { GetNumPlayers = function() return 2 end, GetRoom = function() return room end } end
+_IsaacLanTest = { host = """
+        + lua_support.literal(host)
+        + """, port = "1234" }
+_IsaacLanFrame = function() return status end
+local before
+_IsaacLan = {
+    net_gate = function(_, callback) before = callback end, test_gamepad = noop,
+    rooms_positions = function() return locations end,
+    rooms_with_player = function(_, fn) fn(); return true end,
+    api_info = function() return { ready = 1 } end,
+}
+local files = io
+io = nil
+local fixture = dofile("""
+        + lua_support.literal(str(ROOT / "tests/state_motion.lua"))
+        + """)
+io = files
+if _IsaacLanTest.host then
+    _IsaacLan.net_gate(noop, noop, noop, noop, noop, noop)
+    before(0, 0, "")
+    assert(door.locked and not door.opened, "Motion fixture left its exit traversable")
+end
+_IsaacLanFrame()
+locations["1"].index = 85
+status.verified = 12
+local ok, message = pcall(_IsaacLanTest.host and function() before(12, 0, "") end or _IsaacLanFrame)
+assert(not ok and message:find("Motion fixture left its room", 1, true),
+    "Room drift was misreported as a movement/grid regression: " .. tostring(message))
+locations["1"].index = 84
+fixture.cleanup()
+assert(not door.locked and door.opened, "Motion fixture left a locked exit for the next scenario")
+""",
+        tmp_path,
+    )
 
 
 @pytest.mark.parametrize("host", [True, False])

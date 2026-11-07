@@ -28,11 +28,11 @@ function _IsaacLanFrame()
     end
     local s = frame()
     if s.phase == 2 and not chosen then
-        _IsaacLanCommand("choose", "7:1")
+        _IsaacLanCommand("choose", host and "0:1" or "7:1")
         chosen = true
     end
     if host and s.phase == 2 and s.players == 2 and s.ready0 == 1 and s.ready1 == 1 then
-        _IsaacLanCommand("start", "LBCD0G4M:0:7:7:7:7")
+        _IsaacLanCommand("start", "LBCD0G4M:0:0:7:0:0")
     end
     if s.phase == 4 or s.phase == 9 then
         report("FAILED " .. s.error)

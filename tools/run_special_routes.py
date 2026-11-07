@@ -160,7 +160,7 @@ def main():
         command.append("--lazarus-fixture")
     if "tainted-feedback" in cases:
         command.append("--focus-cycle")
-    if "knife" in cases:
+    if any(name in cases for name in ("knife", "mirror-camera")):
         command.append("--knife-fixture")
     if any(
         name in cases

@@ -21,6 +21,9 @@ presentation/tethers
 presentation/doors
 presentation/attack_prediction
 presentation/tear_motion
+presentation/entity_visuals
+presentation/attack_matching
+presentation/attack_volley
 presentation/attacks
 core/contacts
 core/endpoint

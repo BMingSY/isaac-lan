@@ -96,6 +96,7 @@ local native = {
         return true
     end,
 }
+local tearCount = 1
 local policy = {
     mode = function(weapon)
         return { tears = weapon.kind == 1, charge = weapon.kind == 2 and 32 or nil }
@@ -106,8 +107,8 @@ local policy = {
     normalTear = function()
         return true
     end,
-    singleTear = function()
-        return true
+    tearCount = function()
+        return tearCount
     end,
 }
 local attacks = module("presentation/attacks")(fields)({
@@ -127,6 +128,12 @@ local attacks = module("presentation/attacks")(fields)({
     applySprite = function() end,
     pose = module("sync/weapon_pose"),
     policy = policy,
+    timeline = module("presentation/timeline")(),
+    latency = function()
+        return 0.04
+    end,
+    matching = module("presentation/attack_matching")(module("presentation/tear_motion")(Vector)),
+    volley = module("presentation/attack_volley")(Vector),
     prediction = module("presentation/attack_prediction")(policy),
     trajectory = module("presentation/tear_motion")(Vector),
     tearType = 2,
@@ -148,7 +155,7 @@ local attacks = module("presentation/attacks")(fields)({
         end,
     },
 })
-local function weapon(kind, charge)
+local function weapon(kind, charge, maximum, delay)
     return string.pack(
         ">BBI4I4fBBI4ffffI4BBB",
         0,
@@ -159,8 +166,8 @@ local function weapon(kind, charge)
         0,
         1,
         kind or 1,
-        -1,
-        10,
+        delay or -1,
+        maximum or 10,
         charge or 0,
         kind == 2 and 10 or 0,
         0,
@@ -225,9 +232,9 @@ present(0.1, 3)
 assert(counters["attack.confirmed"] == 1, "Repeated snapshots confirmed a shot twice")
 assert(tear.Position.X - handedOff >= 4.5, "Handoff braked the tear below its launch speed budget")
 
-local function fresh(kind)
+local function fresh(kind, maximum)
     attacks.reset()
-    actor[A.pose], value.room[R.entities] = weapon(kind), {}
+    actor[A.pose], value.room[R.entities] = weapon(kind, nil, maximum), {}
     confirm(0, 0, 0)
 end
 fresh()
@@ -236,6 +243,14 @@ enabled = false
 present(0.02, 2)
 assert(#draws == 0, "Disabling control left a speculative shot")
 enabled = true
+fresh()
+present(0, 1)
+player.Position = Vector(400, 100)
+actor[A.pose] = weapon(nil, nil, 10, 10)
+confirm(1, 1, 0.02)
+present(0.02, 2)
+assert(#draws == 0, "A same-room teleport retained a departure preview")
+player.Position = Vector(100, 100)
 fresh()
 present(0, 1)
 actor[A.pose] = weapon(2)
@@ -289,6 +304,135 @@ assert(
     "A moving player's inherited tear was abandoned in midair"
 )
 player.Velocity = Vector(0, 0)
+-- The first shot was never observed (e.g. it hit between two delivered views).
+-- The newer authority must consume the closest launch, not the first list entry.
+fresh(nil, 1)
+for frame = 0, 3 do
+    present(frame / 60, frame + 1)
+end
+assert(counters["attack.pending"] == 2)
+tear.Position, tear.Height = Vector(115, 104), -23
+motion[20].display = tear.Position
+value.room[R.entities] = {
+    {
+        [E.id] = 20,
+        [E.type] = 2,
+        [E.variant] = 0,
+        [E.spawner] = 10,
+        [E.frame] = 0,
+        [E.position] = { 115, 104 },
+        [E.velocity] = { 10, 0 },
+        [E.sprite] = {},
+    },
+}
+actor[A.pose] = weapon(nil, nil, 1, 1)
+confirm(3, 4, 0.13)
+present(0.13, 5)
+assert(
+    math.abs(tear.Position.X - 139) < 0.001 and tear.Position.Y == 104,
+    "A newer authority tear consumed an older unmatched launch"
+)
+assert(#draws == 1 and math.abs((draws[1].X - 20) * 2 - 154) < 0.001)
+-- Unrelated launches are not bridged across the room, even with matching aim.
+fresh()
+present(0, 1)
+local matched = counters["attack.confirmed"]
+value.room[R.entities] = {
+    {
+        [E.id] = 20,
+        [E.type] = 2,
+        [E.variant] = 0,
+        [E.spawner] = 10,
+        [E.frame] = 0,
+        [E.position] = { 320, 220 },
+        [E.velocity] = { 10, 0 },
+        [E.sprite] = {},
+    },
+}
+confirm(2, 1, 0.08)
+present(0.08, 2)
+assert(counters["attack.confirmed"] == matched, "Distant launch acquired a false handoff")
+-- Learn a double volley before predicting it. Each authority consumes one preview.
+tearCount = 2
+fresh()
+local other = { Height = -23, Position = Vector(115, 104), ToTear = tear.ToTear }
+entities[21], motion[21] = other, { display = other.Position }
+tear.Position, tear.Height = Vector(115, 96), -23
+motion[20].display = tear.Position
+value.room[R.entities] = {}
+for index, y in ipairs({ 96, 104 }) do
+    value.room[R.entities][index] = {
+        [E.id] = 19 + index,
+        [E.type] = 2,
+        [E.variant] = 0,
+        [E.spawner] = 10,
+        [E.frame] = 0,
+        [E.position] = { 115, y },
+        [E.velocity] = { 10, 0 },
+        [E.sprite] = {},
+    }
+end
+confirm(1, 0, 0)
+present(0, 1)
+assert(#draws == 2, "A learned double volley did not emit two previews")
+value.room[R.entities] = {}
+for index, y in ipairs({ 96, 104 }) do
+    local id = 29 + index
+    entities[id] = { Height = -23, Position = Vector(115, y), ToTear = tear.ToTear }
+    motion[id] = { display = entities[id].Position }
+    value.room[R.entities][index] = {
+        [E.id] = id,
+        [E.type] = 2,
+        [E.variant] = 0,
+        [E.spawner] = 10,
+        [E.frame] = 0,
+        [E.position] = { 115, y },
+        [E.velocity] = { 10, 0 },
+        [E.sprite] = {},
+    }
+end
+matched = counters["attack.confirmed"]
+actor[A.pose] = weapon(nil, nil, 10, 10)
+confirm(3, 1, 0.08)
+present(0.08, 2)
+assert(
+    #draws == 0 and counters["attack.confirmed"] == matched + 2,
+    "A double volley retained a ghost or consumed a launch twice"
+)
+tearCount = 1
+-- Missing early shots and jitter must not shift high-rate launches by one shot.
+local trajectory = module("presentation/tear_motion")(Vector)
+local match = module("presentation/attack_matching")(trajectory)
+for _, rtt in ipairs({ 0, 80, 150 }) do
+    for _, jitter in ipairs({ 0, 0.015, 0.03 }) do
+        local timeline = module("presentation/timeline")()
+        local oneWay = rtt / 2000
+        timeline.observe(1000, 1 + oneWay, rtt)
+        local born, age = 1.04, 1
+        local captured = born + oneWay + age / 30
+        local now = captured + oneWay + jitter
+        local mapped = timeline.observe(captured * 1000, now, rtt)
+        local shots = {}
+        for index = 1, 3 do
+            local at = 1 + (index - 1) * 0.04
+            if at <= now then
+                shots[#shots + 1] = {
+                    owner = 10,
+                    sequence = index,
+                    at = at,
+                    lifetime = 0.25,
+                    origin = Vector(115, 100),
+                    velocity = Vector(10, 0),
+                    height = -23,
+                    falling = 0,
+                    acceleration = 0,
+                }
+            end
+        end
+        local index = match(shots, 10, Vector(125, 100), Vector(10, 0), age, 2, now, mapped, oneWay)
+        assert(index == 2, "Latency/jitter matched a missing shot instead of the observed launch")
+    end
+end
 attacks.reset()
 draws = {}
 roomAvailable = false

@@ -67,6 +67,13 @@ function _IsaacLanFrame()
         _IsaacLanCommand("start", "YV039KQF:0:0:0:0:0")
     end
     local case, at = phase(status.verified)
+    if status.prepared and status.verified < firstTick + beginShooting then
+        -- Counters span views and sessions. A preceding suite case may have
+        -- valid expirations; measure only launches made by this fixture.
+        for key, value in pairs(metrics) do
+            baseline[key] = value
+        end
+    end
     local buttons = 0
     if not host and status.prepared and case and at >= beginShooting and at < endShooting then
         -- Every tap lasts three simulation ticks, so it reaches the authority.
