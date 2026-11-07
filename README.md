@@ -45,6 +45,10 @@ WINEDLLOVERRIDES="winmm=n,b" %command%
 ; 30 减少输入流量，但可能多等一个渲染帧；主机模拟和本机显示频率不变。
 input_hz = 60
 
+[players]
+; 其他玩家默认不透明度：0–100；0 完全透明，100 保留原本外观，仅影响本机画面。
+others_opacity = 100
+
 [logging]
 ; 日志与原版 log.txt 位于同一游戏数据目录，按启动和局次分目录保存。
 ; startup.log 记录启动和退出，runtime.log 记录局内事件。
