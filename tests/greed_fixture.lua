@@ -12,6 +12,7 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
     local positions = { ["0"] = { index = main }, ["1"] = { index = main } }
     local pending, hooks, wave, clear, enemy, coins, bought, spawned =
         {}, nil, 0, false, true, 0, false, 0
+    local actorScope = false
     local vector
     local vectorMethods = {
         __add = function(a, b)
@@ -171,10 +172,18 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
             return { ["0"] = 0, ["1"] = 1 }
         end,
         rooms_with_player = function(slot, fn)
+            if actorScope then
+                return false
+            end
             local previous = active
             active = positions[tostring(slot)].index
-            fn()
+            actorScope = true
+            local ok, failure = pcall(fn)
+            actorScope = false
             active = previous
+            if not ok then
+                error(failure)
+            end
             return true
         end,
         net_gate = function(...)

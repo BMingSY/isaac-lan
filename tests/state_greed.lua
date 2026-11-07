@@ -534,6 +534,7 @@ local function advance(t)
             mark("ending-chest", t)
         end
     elseif step == "ending-chest" then
+        local chestPosition
         actor(1, function(p)
             for _, e in ipairs(Isaac.GetRoomEntities()) do
                 if
@@ -543,9 +544,7 @@ local function advance(t)
                     -- Any touching actor restarts the native chest cooldown.
                     -- Clear both actors, then let normal guest movement enter
                     -- the solid chest instead of repeatedly teleporting into it.
-                    actor(0, function(other)
-                        other.Position, other.Velocity = e.Position + Vector(-80, 0), Vector.Zero
-                    end)
+                    chestPosition = e.Position
                     local away = (t - stepAt) % 90 < 20
                     endingChestMove = not away
                     if away and p:IsExtraAnimationFinished() then
@@ -555,6 +554,11 @@ local function advance(t)
                 end
             end
         end)
+        if chestPosition then
+            actor(0, function(p)
+                p.Position, p.Velocity = chestPosition + Vector(-80, 0), Vector.Zero
+            end)
+        end
     elseif step == "done" and t - stepAt >= 90 then
         finished = true
         passed()
