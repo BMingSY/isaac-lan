@@ -54,6 +54,7 @@
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/floor_source.h"
 #include "engine/versions/j460/room_routing.h"
+#include "engine/versions/j460/room_roster.h"
 #include "engine/versions/j460/stage_transition_binding.h"
 #include "engine/versions/j460/forgotten_form.h"
 #include "engine/versions/j460/room_metadata.h"
@@ -358,7 +359,7 @@ struct Scope {
         assign(*storage, players);
         roster() = *storage;
         room->activate();
-        binding.emplace(scopes, *room, previousRoster);
+        binding.emplace(scopes, *room, previousRoster, &roster());
         audioScope.emplace();
     }
     explicit Scope(Room& target) : Scope(target, occupants(target)) {}
@@ -419,21 +420,8 @@ struct Scope {
         binding.reset();
     }
 };
-struct TeamScope {
-    Vector saved;
-    bool changed;
-    TeamScope() : saved(roster()), changed(enabled && scopes.teamRoster()) {
-        if (changed)
-            roster() = *scopes.teamRoster();
-    }
-    TeamScope(const TeamScope&) = delete;
-    TeamScope& operator=(const TeamScope&) = delete;
-    ~TeamScope() {
-        if (changed) {
-            *scopes.teamRoster() = roster();
-            roster() = saved;
-        }
-    }
+struct TeamScope : j460::TeamRoster<decltype(scopes), Vector> {
+    TeamScope() : TeamRoster(scopes, roster(), enabled) {}
 };
 using FindCollectible = void*(__attribute__((thiscall)) *)(void*, int, void*, bool);
 using CollectibleCount = int(__attribute__((thiscall)) *)(void*, int);
