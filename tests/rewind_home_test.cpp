@@ -2,6 +2,8 @@
 // route selection is modelled by ABI callees; no game, save file or hook runs.
 #include "test_support.h"
 #include "engine/versions/j460/rewind.cpp"
+#include "compat/game_ids.h"
+#include "engine/versions/j460/layout.h"
 #include <algorithm>
 #include <limits>
 #include <string>
@@ -46,6 +48,8 @@ struct Fixture {
     int specialRoomType = 0, specialRoomStage = 0;
     unsigned userSlot = 1, door = 2, tick = 345;
     unsigned stored = 0, decoded = 0, wrappers = 0, lowerCalls = 0;
+    std::uint64_t storedStateFlags = 0;
+    std::uint64_t storeAddedFlags = 0;
     unsigned capturedHomes = 0, stageEvents = 0, nativeStages = 0;
     std::string abiError;
 
@@ -166,6 +170,8 @@ void __stdcall storeFixture(int door) {
     auto& f = *current;
     ++f.stored;
     f.events.push_back("store");
+    f.storedStateFlags = field<std::uint64_t>(f.game.data(), native::layout::game::stateFlags);
+    field<std::uint64_t>(f.game.data(), native::layout::game::stateFlags) |= f.storeAddedFlags;
     if (door != static_cast<int>(f.door) || field<int>(f.game.data(), 0x676ac) != -1)
         f.reject("Native Store did not receive the checkpoint door and cleared rewind timer");
     field<bool>(f.game.data(), bufferOffset) = f.storeReady;
@@ -707,6 +713,63 @@ void storeBoundary() {
             "Empty checkpoint serialization was accepted");
     f.validABI();
 }
+void routeCheckpoint() {
+    namespace ids = isaac::compat::ids;
+    namespace layout = native::layout::game;
+    Fixture f;
+    constexpr auto heaven = std::uint64_t{1} << ids::gameStateFlag::heavenPath;
+    constexpr auto backwards = std::uint64_t{1} << ids::gameStateFlag::backwardsPath;
+    constexpr auto unrelated = (std::uint64_t{1} << 60) | 0x23;
+    auto& flags = field<std::uint64_t>(f.game.data(), layout::stateFlags);
+    // The light sets HEAVEN_PATH before the deferred floor checkpoint. A
+    // rewind must restore the source with both exits available, while the
+    // current live departure must still reach Cathedral.
+    for (int stage : {ids::stage::chapterFourSecond, ids::stage::blueWomb}) {
+        field<int>(f.game.data(), layout::stage) = stage;
+        for (int type = ids::stageType::original; type < ids::stageType::repentance; ++type) {
+            field<int>(f.game.data(), layout::stageType) = type;
+            for (auto selected : {std::uint64_t{0}, heaven}) {
+                flags = unrelated | selected;
+                rewind::remember(1, f.door, f.locations);
+                require(f.storedStateFlags == unrelated,
+                        "Rewind checkpoint retained the already-selected Cathedral exit");
+                require(flags == (unrelated | selected),
+                        "Checkpoint capture changed the live floor destination");
+            }
+        }
+    }
+    field<int>(f.game.data(), layout::stageType) = ids::stageType::original;
+    for (int stage : {1, 6, 7, 10, 11, 12, 13}) {
+        field<int>(f.game.data(), layout::stage) = stage;
+        flags = unrelated | heaven;
+        rewind::remember(1, f.door, f.locations);
+        require(f.storedStateFlags == flags, "Other floor's route flag was erased");
+    }
+    field<int>(f.game.data(), layout::stage) = ids::stage::chapterFourSecond;
+    flags = unrelated | heaven | backwards;
+    rewind::remember(1, f.door, f.locations);
+    require(f.storedStateFlags == flags, "Ascent checkpoint changed its route flags");
+    flags = unrelated | heaven;
+    for (int type : {ids::stageType::repentance, ids::stageType::repentanceB}) {
+        field<int>(f.game.data(), layout::stageType) = type;
+        rewind::remember(1, f.door, f.locations);
+        require(f.storedStateFlags == flags, "Alternate floor checkpoint changed its route");
+    }
+    field<int>(f.game.data(), layout::stageType) = ids::stageType::original;
+    f.storeReady = false;
+    rewind::remember(1, f.door, f.locations);
+    require(flags == (unrelated | heaven), "Unready checkpoint leaked route state");
+    f.storeReady = true;
+    f.encodeAllowed = false;
+    rejects([&] { rewind::remember(1, f.door, f.locations); }, "Invalid checkpoint accepted");
+    require(flags == (unrelated | heaven), "Failed serialization leaked route state");
+    f.encodeAllowed = true;
+    f.storeAddedFlags = std::uint64_t{1} << 61;
+    rewind::remember(1, f.door, f.locations);
+    require(flags == (unrelated | heaven | f.storeAddedFlags),
+            "Restoring the live route erased an unrelated native Store side effect");
+    f.validABI();
+}
 
 void rehash(std::vector<std::uint8_t>& bytes) {
     const auto hash = isaac::lan::snapshotHash(std::span(bytes).first(bytes.size() - 8));
@@ -889,6 +952,7 @@ int main(int argc, char** argv) {
                      {"native-home-source-guards", nativeHomeSourceGuards},
                      {"cancel-preserves-checkpoints", cancelPreservesCheckpoints},
                      {"store-boundary", storeBoundary},
+                     {"route-checkpoint", routeCheckpoint},
                      {"malformed-payloads", malformedPayloads},
                      {"selected-payload-bounds", selectedPayloadBounds},
                      {"invalid-native-selection", invalidNativeSelection},

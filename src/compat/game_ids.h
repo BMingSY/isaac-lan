@@ -89,6 +89,10 @@ inline constexpr unsigned greedier = 3;
 namespace dimension {
 inline constexpr int minesEscape = 1;
 } // namespace dimension
+namespace gameStateFlag {
+inline constexpr unsigned heavenPath = 19;
+inline constexpr unsigned backwardsPath = 48;
+} // namespace gameStateFlag
 namespace roomTransition {
 inline constexpr int mirror = 18;
 } // namespace roomTransition

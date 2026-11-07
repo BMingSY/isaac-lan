@@ -55,6 +55,10 @@ namespace playerRenderFrame {
 inline constexpr std::ptrdiff_t mainPass = 0xc;
 inline constexpr std::ptrdiff_t hologram = -0x6d;
 } // namespace playerRenderFrame
+namespace spriteRenderFrame {
+inline constexpr std::ptrdiff_t sprite = -0xf4;
+inline constexpr std::ptrdiff_t color = -0x40;
+} // namespace spriteRenderFrame
 namespace game {
 inline constexpr unsigned bloomTime = 0x26528;
 inline constexpr unsigned bloomDuration = 0x2652c;
@@ -258,6 +262,8 @@ inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, sta
 inline constexpr unsigned flipSprite = 0x5d0, flipVisible = 0x6d9;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned extraSprite = 0x41c, auxiliarySprite = 0xee4, ghostSprite = 0xff8;
+inline constexpr unsigned costumes = 0x1220, costumeStride = 0x130, maximumCostumes = 4096;
 inline constexpr unsigned weapons = 0x13dc;
 inline constexpr unsigned babySkin = 0x1aec;
 inline constexpr int lastBabySkin = 0x47;

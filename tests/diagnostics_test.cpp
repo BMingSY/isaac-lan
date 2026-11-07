@@ -12,6 +12,7 @@ void defaults() {
     const auto parsed = isaac::configuration::parse(isaac::configuration::defaults);
     require(parsed.warnings.empty(), "Default configuration is invalid");
     require(parsed.settings.inputHz == 60, "Default guest input rate changed");
+    require(parsed.settings.otherPlayersOpacity == 100, "Default player appearance changed");
     require(parsed.settings.chat.backgroundImage.empty() && parsed.settings.chat.opacity == 70,
             "Default chat background is not a translucent solid color");
     require(isaac::configuration::missingDefaults(parsed).empty(),
@@ -22,6 +23,17 @@ void defaults() {
 }
 void validation() {
     using isaac::configuration::parse;
+    for (const auto opacity : {0u, 50u, 100u}) {
+        const auto parsed = parse("[players]\nothers_opacity=" + std::to_string(opacity));
+        require(parsed.warnings.empty() && parsed.settings.otherPlayersOpacity == opacity,
+                "Valid other-player opacity was rejected");
+    }
+    for (const auto value :
+         {"-1", "101", "50.5", "nan", "inf", "50oops", "", "99999999999999999999"}) {
+        const auto parsed = parse("[players]\nothers_opacity=" + std::string(value));
+        require(parsed.warnings.size() == 1 && parsed.settings.otherPlayersOpacity == 100,
+                "Invalid player opacity did not fall back to normal appearance");
+    }
     const auto legacy = parse("[network]\ntransport=tcp\ninput_hz=30");
     require(legacy.settings.inputHz == 30 && legacy.warnings.size() == 1 &&
                 legacy.warnings[0].find("unknown_key=network.transport") != std::string::npos,
@@ -106,6 +118,8 @@ void preservation() {
     const std::string upgraded(std::istreambuf_iterator<char>(file), {});
     require(upgraded.starts_with(custom) && upgraded.find("input_hz = 60") != std::string::npos,
             "Migration replaced user values/comments or omitted new defaults");
+    require(upgraded.find("others_opacity = 100") != std::string::npos,
+            "Existing configuration did not acquire the other-player opacity setting");
     const auto parsed = isaac::configuration::parse(upgraded);
     require(isaac::configuration::missingDefaults(parsed).empty() && parsed.warnings.size() == 1,
             "Migration lost a known key or duplicated an existing setting");

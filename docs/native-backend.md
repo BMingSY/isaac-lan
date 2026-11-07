@@ -101,6 +101,14 @@ J460 后端在 `Player::Render` 的三个轮廓资格分支接入原生绘制：
 
 `PlayerManager` 的颜色转换入口 RVA `0x2d060` 使用 thiscall，接收借用的 `ColorMod*` 输出与 `Player*`，返回同一输出指针并弹出 8 字节参数。只在上述三个原生描边调用点改写输出的 44 字节临时 `ColorMod`（RGBA 乘数、四个 colorize 值、RGB 偏移），不写角色或装扮颜色。其他 HUD／效果调用保留原函数；不修改官方联机状态、原生玩家颜色分配、用户配色选项、对象所有权或存档。布局与接口均仅适用于经校验的 J460 后端。
 
+## 玩家不透明度
+
+[`player_opacity::withPlayers(players, connected, render)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/player_opacity.h) 在本机房间绘制作用域内，将有效 LAN 槽位的角色精灵映射到本机倍率。只借用角色的基础 Sprite（`+0x48`）、额外 Sprite（`+0x41c`）、辅助 Sprite（`+0xee4`、`+0xff8`）及装扮向量（`+0x1220`，步长 `0x130`，上限 4096）；拒绝倒序、未对齐和越界向量。七个充能条和其他实体不在名单内。嵌套绘制、正常退出和异常退栈均恢复外层映射；不跨绘制缓存游戏地址，不分配或释放游戏对象。
+
+J460 的 Sprite 图层绘制在 RVA `0x9311` 完成原始颜色、图层颜色与颜色栈覆盖的选择，此时 `[EBP-0xf4]` 是所属 Sprite，`[EBP-0x40]` 是栈上的最终 `ColorMod` 副本。受启动签名校验的边界保存通用寄存器、标志及全部 XMM 寄存器，仅将该副本的 Alpha（`ColorMod+0xc`）乘以所属倍率。原生描边和全息颜色也经过此处，每次图层绘制只乘一次；实体、精灵、图层及全局颜色栈均保持原值，后续水面／房间着色继续由游戏完成。
+
+内部 Lua 能力 `player_opacity()` 读取启动配置的其他玩家默认百分比；`player_opacity(p1, p2, p3, p4)` 原子更新四个本机百分比，只接受四个 0～100 的 Lua 整数，失败返回 `false` 且保留全部旧值。玩家选择、默认值与会话清理由表现组件负责；接口不接受原生指针，也不更改联网状态。
+
 ## 激光路径呈现
 
 [`laser_path(sprite)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rooms.cpp) 读取活动激光的采样状态、起点／终点、形状／缩放、采样数量与两组路径坐标。要求实体借用 Sprite，回溯所属对象后核对激光类型；不接受自有 Sprite 或其他实体类型，不跨调用保留指针。
@@ -135,6 +143,7 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 | --- | --- | --- |
 | 换层来源上下文 | `Level::SetNextStage`，RVA `0x3467c0`，`thiscall void(Level*)` | 调用期间临时替换 `Level+0x18304` 来源索引，范围 `[-20, 168]`；返回恢复，事务完成／取消时失效，不切换房间对象 |
 | 已决定的房间转场 | `RoomTransition.Start`，RVA `0x42ee40`，receiver 为 `Game+0x1b83c`，五个栈参数、被调方清理 20 字节 | 回放 index、direction、animation、player、dimension，保留原版尾部完成标志；不重新选择路线 |
+| 沙漏检查点路线标记 | `Game+0x26548` 的 64 位 `GameStateFlag`，由既有原生 Store 写入 GameState | 按[路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/hourglass.h)临时投影标记，仅限同步保存调用；返回时恢复实时标记。不改变存档布局、协议或对象所有权 |
 | 暂停菜单 | `pauseMenuShow`、`pauseMenuHide`、`pauseMenuControls`、`optionsSave` | 菜单操作独立于整段 `Game::Controls`，临时使用本机显示名单，返回恢复，不接管菜单或角色所有权 |
 | 原生菜单提示清理 | `input::resetMenuPrompts`，RVA `0x239b0`，`thiscall void(Manager+0x4a950, false)` | 联网启动销毁菜单后调用一次，被调方清理 4 字节，不影响随后暂停菜单提示 |
 | 原生结束回放 | `Game::End`，RVA `0x2f9770`，`thiscall void(Game*, int id)` | `1` 为死亡结算，`2～14` 为结局；房主原生确认后发送可靠结束事件，客机在安全更新边界调用原入口。本机名单只在调用期间借用，不复制结算 Sprite、角色或原生容器；单人保留原调用 |

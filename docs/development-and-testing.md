@@ -90,6 +90,8 @@ Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，�
 
 Boss 出场共享的定向检查为 `core.intro-barrier`、`native.intro-completion` 与 `run_special_routes.py --case shared-intro`；实机在同一连接中交换先进入 Boss 房间的玩家，错开 40 tick 入场，检查后来进入者的画面、首位观看者结束后截断剩余动画、去重、异房隔离与控制恢复。可与 `--case input-response` 合并，配合 `--latency-ms 40 --heap-check --record` 核对副机纠偏速度和输入响应；移动离线检查为 `bridge.prediction`，覆盖不同绘制频率、重复确认、碰撞和传送。
 
+后悔药分岔选路的离线检查为 `native.rewind-home` 的 `route-checkpoint`，覆盖检查点路线位、实时换层标记、重复采集及失败清理。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case hourglass-routes --case rewind --case floor-sources`，指定隔离双端、独立端口及 `--heap-check --record`，复用进程验证主客机触发原生光柱／地洞、跨层回退后改选路线、重复回退与普通房间回退。
+
 ## 失败记录与回放
 
 统一运行按当轮归档保存阶段日志、耗时、`summary.json`、`ctest.xml`、`pytest.xml` 和失败请求。回放命令：
@@ -212,6 +214,8 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 运气游戏使用 [run_luck_game.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_luck_game.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`，可加 `--heap-check --record`。同一组主客机覆盖挑战开局、开局吞下禁令、非主动底座拾取、购买代价与二选一、主动拾取跳过掷骰、主动转移充能、幸运上升药丸、换层赠送、分房发放、重连和妈腿奖杯退出；工具保护并恢复隔离资料。离线对应 `bridge.luck_game`、`bridge.challenges`、`bridge.challenge_menu`、`bridge.chat`、`core.challenge-rules` 与 Windows `native.item-effects`。
 
 以下入口用于开发修复时的定向回归，不属于发版清单。只选择受改动影响、需要排查或用户明确要求的场景，记录具体用例，不自动运行整个专项目录。
+
+玩家不透明度的离线检查为 `presentation.player-opacity`、`bridge.chat`、`bridge.resume`、`diagnostics.defaults`／`validation`／`preservation` 及 Windows `native.player-opacity`／`native.player-outlines`。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-opacity --heap-check --record`，复用一组隔离主客机检查指定槽位、其他玩家、0% 与重置、装扮、受击染色、双子、遗骸、幽灵、分房及换层。配置默认值和非法值回退由离线配置测试覆盖；实机收尾恢复资料并核对哈希，同时核对双端画面中的身体与描边，不能只凭命令回执判定画面通过。夹具检查原始精灵颜色在绘制期间仍保持游戏值。
 
 | 领域 | 入口与范围 |
 | --- | --- |
