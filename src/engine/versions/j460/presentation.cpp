@@ -449,9 +449,11 @@ void roomEntered(std::uintptr_t room, bool created) {
     if (runtime::replica())
         return;
     if (!created) {
+        namespace field = j460::layout::game;
         const auto game = at<std::uintptr_t>(image, j460::globals::game);
-        const IntroBarrier::Room key{at<int>(game, 0), at<int>(game, 4), at<int>(game, 0x1830c),
-                                     at<int>(game, 0x18304)};
+        const IntroBarrier::Room key{at<int>(game, field::stage), at<int>(game, field::stageType),
+                                     at<int>(game, field::dimension),
+                                     at<int>(game, field::roomIndex)};
         for (auto& event : intros) {
             if (IntroBarrier::Room{event.stage, event.type, event.dimension, event.room} != key)
                 continue;
@@ -463,7 +465,8 @@ void roomEntered(std::uintptr_t room, bool created) {
             event.audience |= added;
             if (added & 1u) {
                 hostIntro = played = event.serial;
-                playIntro(reinterpret_cast<void*>(game + 0x1b83c), event.first, event.second);
+                playIntro(reinterpret_cast<void*>(game + field::roomTransition), event.first,
+                          event.second);
             }
         }
         return;
