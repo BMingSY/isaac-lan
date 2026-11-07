@@ -1151,6 +1151,26 @@ bool remoteCommand(Address player, int index, int dimension, bool teleport) {
          static_cast<std::uint8_t>(target->dimension), static_cast<std::int16_t>(source.index),
          static_cast<std::int16_t>(target->index), teleport});
 }
+std::array<int, j460::layout::roomDescriptor::doorCount> entranceNeighbors(const Key& key) {
+    namespace descriptor = j460::layout::roomDescriptor;
+    using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+    std::array<int, j460::layout::roomDescriptor::doorCount> neighbors;
+    neighbors.fill(-1);
+    const auto target = reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
+        reinterpret_cast<void*>(game()), key.index, key.dimension));
+    if (!target || !at<Address>(target, descriptor::data))
+        return neighbors;
+    for (unsigned slot = 0; slot < neighbors.size(); ++slot) {
+        const int index = at<int>(target, descriptor::doors + slot * sizeof(int));
+        if (index < 0 || index >= 169)
+            continue;
+        const auto neighbor = reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
+            reinterpret_cast<void*>(game()), index, key.dimension));
+        if (neighbor && at<Address>(neighbor, descriptor::data))
+            neighbors[slot] = at<int>(neighbor, descriptor::safeGridIndex);
+    }
+    return neighbors;
+}
 bool queue(Address player, int index, int dimension, int door, bool teleport = false,
            bool animateDeparture = true, int animation = 0,
            std::optional<Vec2> landing = std::nullopt, RoomRouting routing = RoomRouting::native) {
@@ -1177,30 +1197,13 @@ bool queue(Address player, int index, int dimension, int door, bool teleport = f
                     [player](const auto& r) { return r.player == player; }))
         return true;
     if (!teleport && door >= 0 && door < 8 && key.dimension == it->second->key.dimension) {
-        using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
-        const auto targetDesc =
-            reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
-                reinterpret_cast<void*>(game()), key.index, key.dimension));
-        if (targetDesc && at<Address>(targetDesc, 0x10)) {
-            std::array<int, 8> neighbors;
-            neighbors.fill(-1);
-            for (int slot = 0; slot < 8; ++slot) {
-                const int index = at<int>(targetDesc, 0x1c + slot * 4);
-                if (index < 0 || index >= 169)
-                    continue;
-                const auto neighbor =
-                    reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
-                        reinterpret_cast<void*>(game()), index, key.dimension));
-                if (neighbor && at<Address>(neighbor, 0x10))
-                    neighbors[slot] = at<int>(neighbor, 4);
-            }
-            const int resolved = resolveEntranceDoor(door, it->second->key.index, neighbors);
-            if (resolved != door)
-                logger("room_entry_resolved slot=" + std::to_string(slotOf(player)) + " from=" +
-                       std::to_string(it->second->key.index) + " to=" + std::to_string(key.index) +
-                       " hint=" + std::to_string(door) + " entry=" + std::to_string(resolved));
-            door = resolved;
-        }
+        const int resolved =
+            resolveEntranceDoor(door, it->second->key.index, entranceNeighbors(key));
+        if (resolved != door)
+            logger("room_entry_resolved slot=" + std::to_string(slotOf(player)) + " from=" +
+                   std::to_string(it->second->key.index) + " to=" + std::to_string(key.index) +
+                   " hint=" + std::to_string(door) + " entry=" + std::to_string(resolved));
+        door = resolved;
     }
     pending.push_back({player, key, door, teleport, animateDeparture, animation, landing, routing});
     if (teleport && animateDeparture) {
@@ -2979,7 +2982,18 @@ bool receiveRoomRequest(unsigned slot, const lan::RoomRequest& request) {
     if (!from || from->key.index != request.source ||
         from->key.dimension != request.sourceDimension)
         return false;
-    return queue(head, request.destination, request.dimension, -1, request.teleport);
+    const auto target = destination(*from, request.destination, request.dimension);
+    if (!target)
+        return false;
+    // Requests carry a validated source/destination, not the guest's native
+    // EnterDoor. Reconstruct an unambiguous adjacent entrance on authority;
+    // keeping source coordinates would land on the opposite wall of a resident
+    // room. Teleports and cross-dimension transfers retain their native arrival.
+    const int door =
+        !request.teleport && target->index >= 0 && target->dimension == from->key.dimension
+            ? uniqueEntranceDoor(from->key.index, entranceNeighbors(*target))
+            : -1;
+    return queue(head, target->index, target->dimension, door, request.teleport);
 }
 std::vector<SavedLocation> captureLocations() {
     std::vector<SavedLocation> result;

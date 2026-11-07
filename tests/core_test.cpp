@@ -402,6 +402,21 @@ void roomTransitionContext() {
                 resolveEntranceDoor(3, 83, shopNeighbors) == 3,
             "Shop entry ignored the actual departure room or replaced a valid door");
     const std::array<int, 8> multiple{-1, -1, -1, 84, -1, -1, -1, 84};
+    // Guest room requests have no trusted native EnterDoor. A return from
+    // the room on the right must arrive at the resident room's right door,
+    // rather than keeping the departure room's left-side coordinates.
+    const std::array<int, 8> startingNeighbors{83, 71, 85, 97, -1, -1, -1, -1};
+    require(uniqueEntranceDoor(85, startingNeighbors) == 2 &&
+                uniqueEntranceDoor(83, startingNeighbors) == 0 &&
+                uniqueEntranceDoor(71, startingNeighbors) == 1 &&
+                uniqueEntranceDoor(97, startingNeighbors) == 3 &&
+                uniqueEntranceDoor(84, shopNeighbors) == 7,
+            "An adjacent guest request lost its actual departure entrance");
+    require(uniqueEntranceDoor(84, multiple) == -1 &&
+                uniqueEntranceDoor(80, startingNeighbors) == -1 &&
+                uniqueEntranceDoor(-1, startingNeighbors) == -1 &&
+                uniqueEntranceDoor(169, startingNeighbors) == -1,
+            "An ambiguous or non-adjacent guest request invented an entrance");
     require(resolveEntranceDoor(7, 84, multiple) == 7 && resolveEntranceDoor(1, 84, multiple) == 1,
             "Entry resolution guessed between multiple doors to the same room");
     require(resolveEntranceDoor(-1, 84, shopNeighbors) == -1 &&
