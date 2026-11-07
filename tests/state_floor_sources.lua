@@ -74,7 +74,16 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 Game():SetStateFlag(GameStateFlag.STATE_HEAVEN_PATH, false)
                 Game():SetStateFlag(GameStateFlag.STATE_SECRET_PATH, false)
                 Game():GetLevel():SetStage(8, 0)
-                Game():StartStageTransition(true, 0, Isaac.GetPlayer(0))
+                if caseIndex == 1 then
+                    Game():StartStageTransition(true, 0)
+                    report("BINDING player=omitted")
+                elseif caseIndex == 2 then
+                    Game():StartStageTransition(true, 0, nil)
+                    report("BINDING player=nil")
+                else
+                    Game():StartStageTransition(true, 0, Isaac.GetPlayer(0))
+                    report("BINDING player=explicit")
+                end
                 mark("source", tick)
             elseif step == "source" and tick - stepAt > 120 then
                 assert(Game():GetLevel():GetStage() == 8)

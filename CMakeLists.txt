@@ -735,6 +735,18 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME native.room-routing COMMAND isaac_lan_room_routing_test)
     set_tests_properties(native.room-routing PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_stage_transition_binding_test tests/stage_transition_binding_test.cpp)
+    target_include_directories(isaac_lan_stage_transition_binding_test PRIVATE src)
+    target_link_libraries(isaac_lan_stage_transition_binding_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_stage_transition_binding_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+        target_compile_options(isaac_lan_stage_transition_binding_test PRIVATE -Wall -Wextra
+                                                                               -Werror)
+    endif()
+    add_test(NAME native.stage-transition-binding COMMAND isaac_lan_stage_transition_binding_test)
+    set_tests_properties(native.stage-transition-binding PROPERTIES TIMEOUT 30 LABELS
+                                                                    "offline;native-abi")
     add_test(NAME native.crafting-hud COMMAND isaac_lan_crafting_hud_test)
     set_tests_properties(native.crafting-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_character_catalog_test tests/character_catalog_test.cpp

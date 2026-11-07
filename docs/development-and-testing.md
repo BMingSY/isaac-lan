@@ -164,6 +164,8 @@ python tools/engine_test.py run special-routes -- \
 
 原生后端在启动及场景轮询时检查游戏日志；发现 Mod 自动更新或 Lua 重载就将本轮判为运行环境变化，保留日志并执行正常收尾，不自动重试。冻结脚本被重新加载后，先前的完成标记不能作为连续执行证据；该判定也不等于已解释同时发生的原生崩溃。
 
+换层 Lua 调用边界的 Windows 离线检查为 `native.stage-transition-binding`，覆盖栈与保存寄存器、原闭包目标、可空玩家参数、重复调用和卸载恢复。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 组合 `--case attack-mirror --case floor-sources --case rewind --heap-check --record`，在同一对隔离进程检查镜面换层、主客机分房选路、回退，以及省略玩家、显式 `nil` 和指定玩家三种 Lua 调用形式。
+
 `special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存原始传输；`datagrams.bin` 按大端 `double 时间戳 + u8 方向 + u16 长度 + 原始报文` 记录。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
 
 `entity-fields` 使用泪弹、跟班和效果实体，对照游戏 Lua 属性、原生数组与数值块的读写结果，检查完整动画往返、错误输入不写入及外层编解码；它不作性能验收，可与其他功能场景共用进程。`lazarus` 在启动前仅为隔离客机准备所需角色解锁，并在进入联机前核对菜单可选项；存档仍由套件备份和恢复。

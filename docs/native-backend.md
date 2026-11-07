@@ -119,6 +119,8 @@ J460 音乐管理器位于 `Manager+0x29fbc`，当前／排队 ID 分别为 `+0x
 
 ## 转场与暂停
 
+J460 的 `Game:StartStageTransition(sameStage, animation[, player])` Lua 闭包经适配入口调用与 `MoveToRandomRoom` 相同的三参数绑定（RVA `0x4b8c30`），替换原入口 `0x4b8bb0`；两个原生入口均校验签名。省略玩家时使用公共 Lua ABI 将第四个栈参数补为 `nil`；原生绑定仍从原闭包的 userdata upvalue 读取目标方法，沿用 Game／EntityPlayer 类型检查，将 `nil` 玩家转为空指针。底层 `Game::StartStageTransition`（RVA `0x2fdc10`）为 `thiscall void(Game*, bool, int, EntityPlayer*)`，清理 12 字节栈参数。游戏原生调用、房间来源选择与联机换层屏障继续使用该三参数契约；适配只保留进程内函数入口，不缓存 Lua 状态、闭包或玩家指针，Lua 重载后仍通过同一入口。
+
 Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；普通 `Game::StartRoomTransition` 同时选路并启动转场，不能直接作为客机结果回放接口。
 
 镜子过门调用 `Game::StartRoomTransition` 时，目标已从 `ROOM_MIRROR_IDX` 解析为实际描述符索引和维度；识别依据是 `RoomTransitionAnim.FADE_MIRROR`（18）。[镜像路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/mirror.h)仅对有效门槽位保留原门作为目标入口；屏幕反射不改变世界空间的门槽位。普通过门继续按相邻描述符选择入口。

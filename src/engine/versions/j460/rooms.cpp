@@ -53,6 +53,7 @@
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/floor_source.h"
 #include "engine/versions/j460/room_routing.h"
+#include "engine/versions/j460/stage_transition_binding.h"
 #include "engine/versions/j460/forgotten_form.h"
 #include "engine/versions/j460/room_metadata.h"
 namespace j460 = isaac::engine::j460;
@@ -3908,12 +3909,15 @@ void withMapPickups(const std::function<void()>& cache) {
 bool install(Address base, void (*log)(const std::string&)) {
     image = base;
     logger = log;
+    if (!lua.load(GetModuleHandleW(L"Lua5.3.3r.dll"),
+                  {isaac::lua::Symbol::getTop, isaac::lua::Symbol::setTop}))
+        return false;
     auto hook = [](Address rva, void* replacement, void** original) {
         return MH_CreateHook(reinterpret_cast<void*>(image + rva), replacement, original) ==
                    MH_OK &&
                MH_EnableHook(reinterpret_cast<void*>(image + rva)) == MH_OK;
     };
-    return j460::installRoomRouting(image) &&
+    return j460::installRoomRouting(image) && j460::installStageTransitionBinding(image, lua) &&
            hook(j460::entry::levelSwapRooms, reinterpret_cast<void*>(swapRooms),
                 reinterpret_cast<void**>(&originalSwapRooms)) &&
            hook(j460::entry::entityPlayerAddCoins, reinterpret_cast<void*>(addCoins),
