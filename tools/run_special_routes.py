@@ -167,6 +167,7 @@ def main():
         for name in (
             "endings",
             "floor-sources",
+            "hourglass-routes",
             "campaign",
             "victory-lap",
             "victory-no",
