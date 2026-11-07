@@ -41,6 +41,10 @@ return function(root, native, modules)
             return true
         end
     native.chat_style = { opacity = 70, background = 0x231b18, border = 0x79604c, text = 0xe8dfcb }
+    native.player_opacity = native.player_opacity
+        or function(...)
+            return select("#", ...) == 0 and 100 or true
+        end
     for _, name in ipairs({
         "core/contacts",
         "core/endpoint",
@@ -71,6 +75,7 @@ return function(root, native, modules)
         "runtime/chat",
         "presentation/chat_layout",
         "presentation/chat",
+        "presentation/player_opacity",
         "diagnostics/feedback",
     }) do
         modules[name] = dofile(root .. "/src/bridge/" .. name .. ".lua")

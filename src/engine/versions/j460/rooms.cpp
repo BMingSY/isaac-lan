@@ -9,6 +9,7 @@
 #include "engine/rewind.h"
 #include "engine/presentation.h"
 #include "engine/player_outlines.h"
+#include "engine/player_opacity.h"
 #include "engine/item_presentation.h"
 #include "engine/pickup_preview.h"
 #include "runtime/session.h"
@@ -2176,13 +2177,14 @@ int actorSprites(lua_State* L) {
         return 1;
     }
     const auto player = all[index];
-    const auto costumes = at<Vector>(player, 0x1220);
-    if (costumes.end < costumes.begin || (costumes.end - costumes.begin) % 0x130 ||
-        costumes.end - costumes.begin > 0x130 * 4096) {
+    const auto costumes = at<Vector>(player, j460::layout::player::costumes);
+    constexpr auto stride = j460::layout::player::costumeStride;
+    if (costumes.end < costumes.begin || (costumes.end - costumes.begin) % stride ||
+        costumes.end - costumes.begin > stride * j460::layout::player::maximumCostumes) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    lua.createTable(L, 10 + (costumes.end - costumes.begin) / 0x130, 0);
+    lua.createTable(L, 10 + (costumes.end - costumes.begin) / stride, 0);
     unsigned ordinal = 1;
     auto push = [&](Address sprite) {
         // Clone the game's non-owning LuaBridge Sprite wrapper, retaining its
@@ -2194,13 +2196,14 @@ int actorSprites(lua_State* L) {
         lua.setMetatable(L, -2);
         lua.rawSetI(L, -2, ordinal++);
     };
-    for (auto offset : {0x41cu, 0xff8u, 0xee4u})
+    for (auto offset : {j460::layout::player::extraSprite, j460::layout::player::ghostSprite,
+                        j460::layout::player::auxiliarySprite})
         push(player + offset);
     // The seven native charge-bar sprites advance in Player::Update, which
     // replicas suppress. Their charged/flash overlays must follow the host.
     for (unsigned i = 0; i < 7; ++i)
         push(player + 0x758 + i * 0x114);
-    for (auto address = costumes.begin; address < costumes.end; address += 0x130)
+    for (auto address = costumes.begin; address < costumes.end; address += stride)
         push(address);
     return 1;
 }
@@ -2874,7 +2877,9 @@ bool render(void* g, RoomCall original, int slot) {
         presentation::pickup_preview::prepare();
         presentation::items::withScreen([&] {
             presentation::outlines::withPlayers(connected(), [&] {
-                combat_feedback::withPresentation(room->pointer, [&] { original(g); });
+                presentation::player_opacity::withPlayers(values(roster()), connected(), [&] {
+                    combat_feedback::withPresentation(room->pointer, [&] { original(g); });
+                });
             });
         });
         runtime::mapView(false);

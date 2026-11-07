@@ -213,6 +213,8 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 以下入口用于开发修复时的定向回归，不属于发版清单。只选择受改动影响、需要排查或用户明确要求的场景，记录具体用例，不自动运行整个专项目录。
 
+玩家不透明度的离线检查为 `presentation.player-opacity`、`bridge.chat`、`bridge.resume`、`diagnostics.defaults`／`validation`／`preservation` 及 Windows `native.player-opacity`／`native.player-outlines`。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-opacity --heap-check --record`，复用一组隔离主客机检查指定槽位、其他玩家、0% 与重置、装扮、受击染色、双子、遗骸、幽灵、分房及换层。配置默认值和非法值回退由离线配置测试覆盖；实机收尾恢复资料并核对哈希，同时核对双端画面中的身体与描边，不能只凭命令回执判定画面通过。夹具检查原始精灵颜色在绘制期间仍保持游戏值。
+
 | 领域 | 入口与范围 |
 | --- | --- |
 | 菜单输入与怪物显示 | [state_npc_motion.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_npc_motion.lua) 配合 `run_network_engine.py --frontend --menu-start --exercise-menu --exercise-lobby-chat --virtual-input --latency-ms 40 --native-record-both --heap-check`，使用独立端口并由 `ProtectedLabs` 保护资料。菜单驱动依赖 LuaDebug 的隔离输入文件，不能搭配 `--no-luadebug`；同一对进程验证地址中 M/F 不改音量／全屏、端口校验、种子编辑与大厅聊天，再采集蜘蛛、冲锋怪、攻击蝇的权威目标和双端轨迹。完成标记为 `LAN_NETWORK NPC_PROBE PASS native pursuit and display capture`；对照轨迹与画面，不以采集完成代替误差结论。离线 `presentation.npc-motion` 使用 [npc_motion.csv](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/npc_motion.csv) 回放原生轨迹，检查制动误差、跳包、重复状态与轨迹清理 |

@@ -6,6 +6,21 @@ local owner = { Name = "LAN player outline presentation" }
 local renders, linked, chosen, finished = 0, false, false, false
 local tick, origin, other = 0, nil, nil
 local observed, renderChecks, tintChecks, plainChecks = {}, 0, 0, 0
+local opacity = test.playerOpacity
+local commandIndex, ghostSeen = 1, false
+local opacityCommands = {
+    { 60, "reset" },
+    { 180, "2p 50" },
+    { 300, "others 0" },
+    { 390, "others 50" },
+    { 600, "1p 25" },
+    { 720, "reset" },
+    { 810, "2p 35" },
+    { 1050, "reset" },
+    { 1170, "2p 50" },
+    { 1380, "2p 0" },
+    { 1450, "reset" },
+}
 local function report(message)
     Isaac.DebugString("LAN_NETWORK OUTLINES " .. message)
 end
@@ -60,7 +75,15 @@ function _IsaacLanFrame()
     then
         _IsaacLanCommand("start", "N024KHNP:0:0:0:0:0")
     end
-    if status.verified >= 1110 and not finished then
+    if opacity and status.phase == 3 then
+        local command = opacityCommands[commandIndex]
+        if command and status.verified >= command[1] then
+            assert(_IsaacLanChatSubmit("/opacity " .. command[2]))
+            report("OPACITY " .. command[2] .. " default=" .. native.player_opacity())
+            commandIndex = commandIndex + 1
+        end
+    end
+    if status.verified >= (opacity and 1530 or 1110) and not finished then
         assert(
             observed[1]
                 and observed[2]
@@ -70,6 +93,9 @@ function _IsaacLanFrame()
             "Missing native player rendering"
         )
         assert(Game():GetLevel():GetStage() == 2, "Floor transition did not finish")
+        if opacity then
+            assert(commandIndex > #opacityCommands and ghostSeen, "Missing opacity/ghost scenes")
+        end
         report(
             "PASS colors preserved across native render, room and floor; checks=" .. renderChecks
         )
@@ -149,12 +175,24 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             report("SCENE next-floor tick=" .. t)
         elseif t == 1050 then
             arrange()
+        elseif opacity and t == 1170 then
+            actor(1, function(p)
+                p:ChangePlayerType(PlayerType.PLAYER_THEFORGOTTEN)
+            end)
+            arrange()
+            report("SCENE forgotten tick=" .. t)
+        elseif opacity and t == 1290 then
+            actor(1, function(p)
+                p:Kill()
+            end)
+            report("SCENE ghost tick=" .. t)
         end
     end, collect, restore, present, beginFloor)
 end
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_PLAYER_RENDER, function(_, p)
     if native.rooms_ready() and tick >= 60 then
         observed[p.ControllerIndex] = true
+        ghostSeen = ghostSeen or p:IsCoopGhost()
         -- A frame callback precedes native updates/presentation. Compare the
         -- actual draw against stable fixture colors, not the previous update.
         local tinted = tick >= 500 and tick <= 535

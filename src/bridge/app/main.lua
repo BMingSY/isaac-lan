@@ -321,6 +321,11 @@ local bot = _IsaacLanModules["lanbot"]({
 }, _IsaacLanModules)
 local chatLimits = native.chat_limits()
 local emotes = native.emote_count()
+local playerOpacity = _IsaacLanModules["presentation/player_opacity"]({
+    default = native.player_opacity(),
+    info = native.api_info,
+    apply = native.player_opacity,
+})
 chat = _IsaacLanModules["runtime/chat"]({
     limits = chatLimits,
     nonce = native.api_nonce,
@@ -346,6 +351,7 @@ chat = _IsaacLanModules["runtime/chat"]({
         end,
     }),
     bot = bot.command,
+    opacity = playerOpacity.command,
     feedback = function(text)
         return feedback.submit(text, function(message)
             chat.output(message, { audience = "self" })
@@ -535,6 +541,7 @@ end)
 function _IsaacLanCommand(action, value)
     if action == "host" then
         bot.reset()
+        playerOpacity.reset()
         chat.reset()
         chatUI.reset()
         lifecycle.close()
@@ -544,6 +551,7 @@ function _IsaacLanCommand(action, value)
         savedPlayers, savedOptions = native.net_saved_info()
     elseif action == "join" then
         bot.reset()
+        playerOpacity.reset()
         chat.reset()
         chatUI.reset()
         lifecycle.close()
@@ -626,9 +634,11 @@ function _IsaacLanFrame()
         )
     then
         chatSession = false
+        playerOpacity.reset()
         chat.reset()
         chatUI.reset()
     end
+    playerOpacity.step()
     restart.poll(status)
     integration.poll()
     chat.poll()
