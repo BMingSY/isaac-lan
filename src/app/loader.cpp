@@ -4,6 +4,8 @@
 #include <windows.h>
 #include <cstdint>
 #include <cwchar>
+#include "app/extension_loader.h"
+#include "engine/build.h"
 
 namespace {
 [[noreturn]] void unavailableExport(const char* name, unsigned ordinal) {
@@ -50,14 +52,20 @@ void restoreEntry() {
     VirtualProtect(entry, 2, old, &ignored);
 }
 DWORD WINAPI initialize(void*) {
-    const auto module = LoadLibraryW(extension);
-    using Bootstrap = DWORD(WINAPI*)(void*);
-    Bootstrap bootstrap = nullptr;
-    if (module) {
-        auto proc = GetProcAddress(module, "IsaacLanBootstrap");
-        memcpy(&bootstrap, &proc, sizeof(proc));
+    isaac::loader::Extension loaded;
+    try {
+        loaded = isaac::loader::load(std::filesystem::path(extension).parent_path(),
+                                     ISAAC_LAN_VERSION, isaac::build::version);
+    } catch (...) {
+        // No engine bootstrap has run yet. Preserve the original installation
+        // if source discovery or staging cannot be completed.
+        loaded.module = LoadLibraryW(extension);
+        if (loaded.module) {
+            auto proc = GetProcAddress(loaded.module, "IsaacLanBootstrap");
+            memcpy(&loaded.bootstrap, &proc, sizeof(proc));
+        }
     }
-    const DWORD result = bootstrap ? bootstrap(nullptr) : 100;
+    const DWORD result = loaded.bootstrap ? loaded.bootstrap(nullptr) : 100;
     if (result) {
         wchar_t message[256];
         swprintf(message, 256,

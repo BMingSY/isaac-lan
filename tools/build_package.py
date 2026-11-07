@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import shutil
 import re
+from extension_package import LOADER_ABI
 
 
 def game_profile(source):
@@ -61,6 +62,7 @@ def build(build_directory, output):
         "format": 1,
         "game_build": "1.9.7.17.J460",
         "extension_version": version,
+        "loader_abi": LOADER_ABI,
         "files": files,
     }
     shutil.copy2(source / "package/install.py", output)

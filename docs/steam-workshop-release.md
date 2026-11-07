@@ -32,7 +32,7 @@ python tools/workshop_release.py prepare \
   --tag "$tag" --output "$WORKSHOP_OUTPUT"
 ```
 
-`prepare` 不发布。它校验安装包，查询现有条目并下载当前内容，保留原有 Lua 入口、预览图和安装说明，更新 `metadata.xml` 的版本号，只放入本次 ZIP 和校验文件。更新说明只转换标题格式为 Steam BBCode，不改变措辞。
+`prepare` 不发布。它校验安装包，查询现有条目并下载当前内容，保留原有 Lua 入口、预览图和安装说明，更新 `metadata.xml` 的版本号，只保留本次 ZIP 和校验文件。安装包声明加载器 ABI 时，同时从该 ZIP 提取主体 DLL 和清单到 `isaac-lan-update`，供已安装加载器采用；不重新编译，也不从上次工坊副本复用主体，契约见[原生扩展更新](https://github.com/BMingSY/isaac-lan/blob/main/docs/extension-updates.md)。更新说明只转换标题格式为 Steam BBCode，不改变措辞。
 
 需要将更新说明放到介绍最前面并更换封面时，在 `prepare` 命令中追加 `--prepend-notes --preview docs/assets/steam-workshop-cover.png`；只有用户明确要求时使用。准备结果额外包含各语言的完整介绍和封面哈希，发布前核对其与已确认文案、原介绍和指定图片一致。该操作在现有介绍前添加一次内容，不自动删除历史版本段落。
 

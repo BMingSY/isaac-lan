@@ -17,6 +17,10 @@ def native_build(tmp_path):
     (source / "main.c").write_text(
         "#include <stdio.h>\n#include <string.h>\n"
         "int main(int argc, char **argv) {\n"
+        '  if (argc == 3 && !strcmp(argv[1], "file")) {\n'
+        '    char bytes[15] = {0}; FILE *file = fopen(argv[2], "rb");\n'
+        "    if (!file) return 1; fread(bytes, 1, 14, file); fclose(file);\n"
+        '    return strcmp(bytes, "resource bytes");\n  }\n'
         '  puts(argc > 1 ? argv[1] : "missing argument");\n'
         '  return argc != 2 || strcmp(argv[1], "pass ${literal} [=[text]=]; space");\n'
         "}\n"
@@ -29,6 +33,8 @@ def native_build(tmp_path):
         "add_test(NAME first COMMAND probe [==[pass ${literal} [=[text]=]; space]==])\n"
         "add_test(NAME second COMMAND probe [==[pass ${literal} [=[text]=]; space]==])\n"
         "add_test(NAME fails COMMAND probe wrong)\n"
+        'file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/fixture data.bin" "resource bytes")\n'
+        'add_test(NAME artifact COMMAND probe file "${CMAKE_CURRENT_BINARY_DIR}/fixture data.bin")\n'
         'set_tests_properties(first second fails PROPERTIES TIMEOUT 3 LABELS "offline;core")\n'
         "set_tests_properties(second PROPERTIES RESOURCE_LOCK shared-resource COST 2)\n"
         "add_test(NAME lua-only COMMAND missing-interpreter)\n"
@@ -53,7 +59,7 @@ def test_relocated_bundle_keeps_cases_arguments_properties_and_failure(native_bu
         )
     )
     cases = {case["name"]: case for case in listing["tests"]}
-    assert set(cases) == {"first", "second", "fails"}
+    assert set(cases) == {"first", "second", "fails", "artifact"}
     properties = {p["name"]: p["value"] for p in cases["second"]["properties"]}
     assert properties["TIMEOUT"] == 3
     assert properties["RESOURCE_LOCK"] == ["shared-resource"]
@@ -64,7 +70,7 @@ def test_relocated_bundle_keeps_cases_arguments_properties_and_failure(native_bu
         for prop in case["properties"]
         if prop["name"] == "WORKING_DIRECTORY"
     }
-    assert len(directories) == 3
+    assert len(directories) == 4
     report = tmp_path / "report.xml"
     result = subprocess.run(
         ["ctest", "--test-dir", str(moved), "-j", "2", "--output-junit", str(report)],
@@ -75,6 +81,7 @@ def test_relocated_bundle_keeps_cases_arguments_properties_and_failure(native_bu
     tests = {case.attrib["name"]: case for case in ET.parse(report).findall("testcase")}
     assert tests["first"].find("failure") is None
     assert tests["second"].find("failure") is None
+    assert tests["artifact"].find("failure") is None
     assert tests["fails"].find("failure") is not None
 
 

@@ -27,6 +27,8 @@
 #include "engine/frontend.h"
 #include "engine/build.h"
 #include "core/bootstrap_profile.h"
+#include "core/extension_package.h"
+#include "engine/module_path.h"
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
 #include "diagnostics/crash_signal.h"
@@ -212,6 +214,10 @@ int diagnosticsCounter(lua_State* L) {
 
 } // namespace
 
+extern "C" __declspec(dllexport) unsigned __cdecl IsaacLanLoaderABI() {
+    return isaac::updates::loaderABI;
+}
+
 extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     wchar_t env[1024] = {}, executable[1024] = {};
     DWORD size = GetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", env, 1024);
@@ -254,6 +260,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
     isaac::diagnostics::configure(settings);
     if (!isaac::logging::initialize(logDirectory))
         return 14;
+    log("startup_extension=" + utf8(isaac::engine::modulePath(&initialized).wstring()));
     for (const auto& warning : config.warnings)
         log("config_warning=" + warning);
     // Isolated lab profiles reach a receiver only through an explicit endpoint.

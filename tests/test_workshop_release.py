@@ -2,10 +2,13 @@
 
 from copy import deepcopy
 import hashlib
+import json
 from pathlib import Path
 import shutil
 
 import pytest
+from zipfile import ZipFile
+import extension_package
 
 import workshop_release as workshop
 
@@ -80,7 +83,21 @@ def release(tmp_path, monkeypatch):
     for name in ("main.lua", "preview.png", "安装说明.txt", "old-version.zip"):
         (base / name).write_bytes(b"existing content")
     archive = tmp_path / "Isaac-LAN-v0.4.2-windows-x86.zip"
-    archive.write_bytes(b"release validated by the package checker")
+    dll = b"native release bytes validated by the package checker"
+    with ZipFile(archive, "w") as zipped:
+        prefix = archive.stem + "/"
+        zipped.writestr(prefix + "isaac_lan_probe.dll", dll)
+        zipped.writestr(
+            prefix + "payload.json",
+            json.dumps(
+                {
+                    "extension_version": "0.4.2",
+                    "game_build": "1.9.7.17.J460",
+                    "loader_abi": extension_package.LOADER_ABI,
+                    "files": {"isaac_lan_probe.dll": hashlib.sha256(dll).hexdigest()},
+                }
+            ),
+        )
     archive.with_suffix(".zip.sha256").write_text(
         f"{workshop.digest(archive)}  {archive.name}\n", encoding="ascii"
     )
@@ -107,6 +124,8 @@ def test_prepare_uses_fresh_content_and_never_publishes(release):
     assert set(manifest["files"]) == set(workshop.BASE_FILES) | {
         archive.name,
         archive.with_suffix(".zip.sha256").name,
+        "isaac-lan-update/manifest.txt",
+        "isaac-lan-update/isaac_lan_probe.dll",
     }
     assert manifest["files"][archive.name] == workshop.digest(archive)
     assert "<version>0.4.2</version>" in (output / "content/metadata.xml").read_text()

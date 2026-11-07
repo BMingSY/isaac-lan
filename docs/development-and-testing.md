@@ -52,6 +52,8 @@ Hypothesis 还会运行缓存失败样例和缩减步骤，上述预算不是精
 
 安装器的定向回归为 `tests/test_linux_installer.py`、`tests/test_windows_installer.py` 和 `tests/test_tools.py`。Windows 脚本测试使用 Windows 临时目录、检查器替身与真实 Windows PowerShell，覆盖安装／补回缺失 DLL／卸载、文件占用、损坏清单和失败恢复，不启动游戏；它在 Windows CI 中运行，在有 `powershell.exe` 的 WSL 中也可随 pytest 执行，其他 Linux 环境跳过。WSL 同样将占用／替换用例放在 Windows 文件系统上，另以 Linux 临时目录覆盖 UNC 路径。仅需 Python 标准库的 Windows 入口为 `python tests/test_windows_installer.py`。原生游戏版本校验仍由原生测试和 [check_installer.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/check_installer.py) 覆盖。
 
+自动更新的直接回归为可移植的 `runtime.extension-update-*`、Windows 的 `app.extension-loader`，以及 `tests/test_workshop_release.py`、`tests/test_extension_package.py` 和 `tests/test_ctest_bundle.py`。覆盖数字版本排序、完整复制、重复启动、离线缓存、损坏与不兼容载荷回退、手动安装基线、归属与隔离边界、真实 SHA-256、版本目录动态加载和实际模块路径；Windows 用例只加载合成 DLL，不启动游戏。启动集成的实机检查需在隔离安装中核对首次迁移、工坊源新版而 `mods` 副本旧版时采用更新、下次启动和缓存启动，确认 `startup_extension` 与双方构建指纹；该检查不替代基础联机验收。更新来源及失败契约见[原生扩展更新](https://github.com/BMingSY/isaac-lan/blob/main/docs/extension-updates.md)。
+
 只运行可移植 C++／Lua 检查，无需 Windows 工具链或游戏依赖：
 
 ```sh

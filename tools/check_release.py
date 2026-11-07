@@ -9,6 +9,7 @@ import re
 from zipfile import ZipFile
 
 import pefile
+from extension_package import LOADER_ABI
 
 
 BINARIES = {"winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe"}
@@ -73,6 +74,10 @@ def check(archive, tag):
             payload.get("format") != 1
             or payload.get("game_build") != "1.9.7.17.J460"
             or payload.get("extension_version") != tag[1:]
+            or (
+                "loader_abi" in payload
+                and (type(payload["loader_abi"]) is not int or payload["loader_abi"] != LOADER_ABI)
+            )
             or set(payload["files"]) != BINARIES
         ):
             raise ValueError("Release manifest differs")
@@ -102,6 +107,8 @@ def check(archive, tag):
                     exports = {symbol.name for symbol in pe.DIRECTORY_ENTRY_EXPORT.symbols}
                     if b"IsaacLanBootstrap" not in exports:
                         raise ValueError("Native bootstrap export is missing")
+                    if "loader_abi" in payload and b"IsaacLanLoaderABI" not in exports:
+                        raise ValueError("Native loader ABI export is missing")
                 imports[name] = required
             finally:
                 pe.close()

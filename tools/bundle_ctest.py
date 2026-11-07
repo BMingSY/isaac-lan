@@ -48,6 +48,14 @@ def bundle(build, output):
         if binary.parent != build or not binary.is_file():
             raise ValueError(f"Test executable must exist in the build directory: {binary}")
         binaries.add(binary)
+        artifacts = {}
+        for index, argument in enumerate(command[1:], start=1):
+            path = Path(argument)
+            if path.is_absolute() and path.parent.resolve() == build:
+                if not path.is_file():
+                    raise ValueError(f"Missing test artifact for {name}: {path}")
+                binaries.add(path)
+                artifacts[str(index)] = path.name
         properties = []
         for prop in case["properties"]:
             if prop["name"] == "WORKING_DIRECTORY":
@@ -56,7 +64,12 @@ def bundle(build, output):
             else:
                 properties.append(prop)
         cases.append(
-            {"name": name, "command": [binary.name, *command[1:]], "properties": properties}
+            {
+                "name": name,
+                "command": [binary.name, *command[1:]],
+                "properties": properties,
+                "artifacts": artifacts,
+            }
         )
     output.mkdir(parents=True, exist_ok=False)
     for binary in sorted(binaries):
@@ -72,6 +85,8 @@ def configure(directory):
     for case in cases:
         name = case["name"]
         command = [str(directory / case["command"][0]), *case["command"][1:]]
+        for index, filename in case.get("artifacts", {}).items():
+            command[int(index)] = str(directory / filename)
         args = " ".join(literal(arg) for arg in command)
         lines.append(f"add_test({literal(name)} {args})")
         for prop in case["properties"]:
