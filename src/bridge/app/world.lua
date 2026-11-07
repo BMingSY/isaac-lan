@@ -143,6 +143,17 @@ local applyInventory = performance.wrap("apply.inventory", inventoryState.apply)
 local actorsPresentation = component("presentation/actors")(native, function(path)
     return Isaac.GetCostumeIdByPath(path)
 end, applySprite)
+local presentationTimeline = modules["presentation/timeline"]()
+local tearTrajectory = modules["presentation/tear_motion"](Vector)
+local entityVisuals = component("presentation/entity_visuals")(
+    native,
+    tearTrajectory,
+    EntityType.ENTITY_TEAR,
+    TearVariant,
+    TearFlags.TEAR_NORMAL
+)
+actorsPresentation.apply = performance.wrap("present.actors", actorsPresentation.apply)
+actorsPresentation.walk = performance.wrap("present.walk", actorsPresentation.walk)
 local attachments = component("presentation/attachments")(native, Vector, EntityType, EffectVariant)
 local attackPolicy = modules["compat/items/attack_preview"](
     WeaponType,
@@ -164,8 +175,15 @@ local attacks = component("presentation/attacks")({
     applySprite = applySprite,
     pose = modules["sync/weapon_pose"],
     policy = attackPolicy,
+    timeline = presentationTimeline,
+    latency = function()
+        local status = _IsaacLanStatus()
+        return math.max(0, status["ping" .. status.slot] or 0) / 2000
+    end,
+    matching = modules["presentation/attack_matching"](tearTrajectory),
+    volley = modules["presentation/attack_volley"](Vector),
     prediction = modules["presentation/attack_prediction"](attackPolicy),
-    trajectory = modules["presentation/tear_motion"](Vector),
+    trajectory = tearTrajectory,
     tearType = EntityType.ENTITY_TEAR,
     tearVariants = TearVariant,
     room = function()
@@ -194,10 +212,12 @@ local doorPresentation = modules["presentation/doors"]({
     width = Isaac.GetScreenWidth,
     height = Isaac.GetScreenHeight,
 })
+attacks.present = performance.wrap("present.attacks", attacks.present)
+hits.present = performance.wrap("present.hits", hits.present)
 state.filterInput = doorPresentation.filterInput
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
     doors = doorPresentation,
-    timeline = assert(modules["presentation/timeline"])(),
+    timeline = presentationTimeline,
     metrics = performance,
     predictMovement = function(player, room)
         return forgotten.predictMovement(player) and crawlspace.predictMovement(room)
@@ -205,6 +225,7 @@ local motionPresentation = component("presentation/motion")(native, actorsPresen
     attachments = attachments,
     attacks = attacks,
     hits = hits,
+    visuals = entityVisuals,
     vector = Vector,
     player = function(index)
         return Isaac.GetPlayer(index)

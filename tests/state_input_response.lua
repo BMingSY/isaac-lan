@@ -22,6 +22,7 @@ local renders, linked, chosen, finished = 0, false, false, false
 local movementRenders, captureCount = 0, 0
 local sent, preview, previewSequence = Vector(0, 0), Vector(0, 0), 0
 local beforeVelocity, afterVelocity = Vector(0, 0), Vector(0, 0)
+local correctionStep = 0
 local fastApplies, fullApplies = 0, 0
 local makePrediction = _IsaacLanPrediction.new
 _IsaacLanPrediction.new = function(position)
@@ -31,6 +32,7 @@ _IsaacLanPrediction.new = function(position)
         beforeVelocity = Vector(self.velocity.X, self.velocity.Y)
         local result = step(self, ...)
         afterVelocity = Vector(self.velocity.X, self.velocity.Y)
+        correctionStep = self.correctionStep or 0
         return result
     end
     return model
@@ -60,7 +62,7 @@ if not host then
 end
 if out then
     out:write(
-        "time,frame,tick,capture,sequence,sent_x,sent_y,raw_x,raw_y,preview_x,preview_y,x,y,before_vx,before_vy,after_vx,after_vy\n"
+        "time,frame,tick,capture,sequence,sent_x,sent_y,raw_x,raw_y,preview_x,preview_y,x,y,before_vx,before_vy,after_vx,after_vy,correction_step\n"
     )
 end
 local function direction(bytes)
@@ -189,7 +191,7 @@ Isaac.AddCallback(
         local p = Isaac.GetPlayer(native.rooms_heads()["1"])
         out:write(
             string.format(
-                "%.3f,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+                "%.3f,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
                 Isaac.GetTime() / 1000,
                 renders,
                 _IsaacLanStatus().verified,
@@ -206,7 +208,8 @@ Isaac.AddCallback(
                 beforeVelocity.X,
                 beforeVelocity.Y,
                 afterVelocity.X,
-                afterVelocity.Y
+                afterVelocity.Y,
+                correctionStep
             )
         )
     end

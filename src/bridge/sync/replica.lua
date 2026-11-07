@@ -82,6 +82,9 @@ return function(fields)
                 actor and 60 or 30,
                 not not v[Entity.npc]
             )
+            if not actor and motionPresentation.trackVisual then
+                m.visual = motionPresentation.trackVisual(m.visual, e, v, now)
+            end
             motion[v[Entity.id]] = m
         end
 

@@ -8,7 +8,7 @@ def test_render_response_uses_adjacent_predictions_and_accepts_archived_logs(tmp
     source = io.StringIO()
     fields = (
         "time,tick,capture,raw_x,raw_y,sent_x,sent_y,preview_x,preview_y,"
-        "x,y,before_vx,before_vy,after_vx,after_vy"
+        "x,y,before_vx,before_vy,after_vx,after_vy,correction_step"
     ).split(",")
     writer = csv.DictWriter(source, fieldnames=fields)
     writer.writeheader()
@@ -36,6 +36,7 @@ def test_render_response_uses_adjacent_predictions_and_accepts_archived_logs(tmp
                 before_vy=0,
                 after_vx=velocity,
                 after_vy=0,
+                correction_step=0,
             )
         )
     csv_path, log_path = tmp_path / "response.csv", tmp_path / "log.txt"
@@ -53,3 +54,6 @@ def test_render_response_uses_adjacent_predictions_and_accepts_archived_logs(tmp
     assert result["acceleration_transitions"] == 74
     assert result["acceleration_transitions_responding_same_frame"] == 74
     assert passed(result)
+    assert not passed({**result, "max_correction_speed": 300})
+    assert not passed({**result, "max_release_excess": 5})
+    assert not passed({**result, "correction_samples": 0})

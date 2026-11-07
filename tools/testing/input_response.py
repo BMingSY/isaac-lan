@@ -3,6 +3,10 @@
 import csv
 import math
 
+MAX_CORRECTION_SPEED = 120
+TIMESTAMP_RESOLUTION_SECONDS = 0.001
+MAX_RELEASE_EXCESS = 2
+
 
 def measure(path):
     lines = path.read_text(errors="replace").splitlines()
@@ -23,6 +27,7 @@ def measure(path):
     releases = []
     acceleration_transitions = 0
     acceleration_responses = 0
+    correction_speeds, release_excess = [], []
     for i, row in enumerate(rows):
         raw = (row["raw_x"], row["raw_y"])
         preview = (row["preview_x"], row["preview_y"])
@@ -31,6 +36,11 @@ def measure(path):
         if not i:
             continue
         previous = rows[i - 1]
+        dt = max(0, row["time"] - previous["time"])
+        if "correction_step" in row and dt > 0:
+            # The fixture logs millisecond timestamps; allow their rounding,
+            # not an additional render frame of positional correction.
+            correction_speeds.append(row["correction_step"] / (dt + TIMESTAMP_RESOLUTION_SECONDS))
         if raw == (previous["raw_x"], previous["raw_y"]):
             continue
         for later in rows[i : i + 5]:
@@ -67,6 +77,13 @@ def measure(path):
                 movement_delays.append(math.inf)
         else:
             releases.append(math.hypot(dx, dy))
+            if "after_vx" in previous and "correction_step" in row:
+                coasting = math.hypot(previous["after_vx"], previous["after_vy"]) * (
+                    dt + TIMESTAMP_RESOLUTION_SECONDS
+                )
+                release_excess.append(
+                    max(0, math.hypot(dx, dy) - coasting - row["correction_step"])
+                )
     assert len(delays) >= 30, "Start/turn/release changes not exercised"
     return {
         "render_samples": len(rows),
@@ -86,6 +103,9 @@ def measure(path):
         "mean_input_to_movement_ms": sum(movement_delays) / len(movement_delays),
         "mean_release_frame_displacement": sum(releases) / len(releases),
         "max_release_frame_displacement": max(releases),
+        "correction_samples": len(correction_speeds),
+        "max_correction_speed": max(correction_speeds, default=math.inf),
+        "max_release_excess": max(release_excess, default=math.inf),
     }
 
 
@@ -98,4 +118,7 @@ def passed(result):
         and result["acceleration_transitions"] >= 30
         and result["acceleration_transitions_responding_same_frame"]
         >= 0.9 * result["acceleration_transitions"]
+        and result["correction_samples"] > 500
+        and result["max_correction_speed"] <= MAX_CORRECTION_SPEED + 0.01
+        and result["max_release_excess"] <= MAX_RELEASE_EXCESS
     )
