@@ -48,6 +48,30 @@ local gridRemovalLeadTicks = 10
 local maximumAllowedContactSpeed, minimumContactSamples = 450, 100
 local contactSamples, maximumContactSpeed, brokenGridSamples = {}, 0, 0
 local previousContact, previousContactTime, previousContactCase
+local fixtureRoom, fixtureDoors = nil, {}
+local function checkRoom()
+    local locations = native.rooms_positions()
+    if not fixtureRoom and locations["0"] then
+        fixtureRoom = { index = locations["0"].index, dimension = locations["0"].dimension }
+    end
+    assert(fixtureRoom, "Motion fixture has no starting room")
+    for slot = 0, 1 do
+        local location = locations[tostring(slot)]
+        assert(
+            location
+                and location.index == fixtureRoom.index
+                and location.dimension == fixtureRoom.dimension,
+            "Motion fixture left its room: slot="
+                .. slot
+                .. " expected="
+                .. fixtureRoom.dimension
+                .. ":"
+                .. fixtureRoom.index
+                .. " actual="
+                .. (location and (location.dimension .. ":" .. location.index) or "missing")
+        )
+    end
+end
 local originalFrame = _IsaacLanFrame
 local ticks, corrected, samples = 0, 0, 0
 function _IsaacLanFrame()
@@ -67,6 +91,9 @@ function _IsaacLanFrame()
     end
     if s.phase == 4 or s.phase == 9 then
         report("FAILED " .. s.error)
+    end
+    if s.prepared and native.api_info().ready == 1 then
+        checkRoom()
     end
     samples = s.verified
     moveSign = not host and samples >= 30 and (math.floor((samples - 30) / 30) % 2 == 0 and 1 or -1)
@@ -123,6 +150,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
     end, function(t, n, b)
         before(t, n, b)
         ticks = t
+        checkRoom()
         if t == 0 then
             report("AUTHORITY host simulation begins")
         end
@@ -136,6 +164,16 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 end
             end
             local room = Game():GetRoom()
+            -- Alternating input can drift into an open doorway under latency.
+            -- This fixture measures one room's collision, not room transfer.
+            for slot = 0, 7 do
+                local door = room:GetDoor(slot)
+                if door then
+                    fixtureDoors[slot] = { locked = door:IsLocked(), opened = door:IsOpen() }
+                    door:Close(true)
+                    door:SetLocked(true)
+                end
+            end
             for i = 0, room:GetGridSize() - 1 do
                 local grid = room:GetGridEntity(i)
                 if
@@ -314,6 +352,28 @@ return {
         return finished
     end,
     cleanup = function()
+        if next(fixtureDoors) then
+            native.rooms_with_player(0, function()
+                local location = native.rooms_positions()["0"]
+                if
+                    location
+                    and location.index == fixtureRoom.index
+                    and location.dimension == fixtureRoom.dimension
+                then
+                    local room = Game():GetRoom()
+                    for slot, prior in pairs(fixtureDoors) do
+                        local door = room:GetDoor(slot)
+                        if door then
+                            door:SetLocked(prior.locked)
+                            if prior.opened then
+                                door:Open()
+                            end
+                        end
+                    end
+                end
+            end)
+            fixtureDoors = {}
+        end
         if motionFile then
             motionFile:close()
             motionFile = nil

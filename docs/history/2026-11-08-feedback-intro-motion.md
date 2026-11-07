@@ -19,6 +19,8 @@ Boss 出场尚未结束时，后来进入的玩家现在接收同一场动画；
 
 移动离线用例在基线命中 `Late authority correction exceeded its display speed budget`，修改后通过。限速实现复用 [PR #154](https://github.com/BMingSY/isaac-lan/pull/154) 中的移动修正，并补充 30／60／120 Hz 下的二维距离检查。玩家日志没有连续位置与网络时序，无法据此确认其每次抖动都来自同一原因。
 
+PR #154 合入主分支 `d79b017` 后，本分支同步该提交。客机移动预测的生产代码与主分支完全一致；PR #157 的移动相关增量仅包含补充回归断言、测试结果和现有行为说明。两份 PR 使用同一个纠偏限速实现，没有叠加第二次限速。唯一合并冲突位于 `tests/prediction.lua`，解决时保留了 #154 的回归及本记录新增的多绘制频率检查。
+
 ## 最终验证
 
 11 项定向 CTest、70 项相关 pytest、代码格式和脚本语法检查通过；Windows x86 构建通过。`native.intro-completion` 在 Linux 和 Windows x86 均通过，检查原生两阶段收尾、重复完成以及普通门／其他转场不被改写。

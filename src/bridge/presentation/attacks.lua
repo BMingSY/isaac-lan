@@ -4,18 +4,19 @@ return function(fields)
     local staleAfter, handoffTime, projectileLine = 0.25, 0.06, 0
     local maxPreviews, axisTolerance = 32, 0.001
     local simulationRate, birthHistoryTicks = 30, 30
-    local inputLookahead, matchDirection = 1, 0.95
     local eyeOffset, playerVelocityRate, maxCorrectionFraction = 4, 60, 0.25
     local minimumLifetime, confirmationMargin, minimumShotSpacing = 0.12, 0.1, 0.5
-    local mouthFrame, mouthDuration, handoffCutoff = 2, 0.1, 3
+    local mouthFrame, mouthDuration, handoffCutoff = 2, 0.1, 5
+    local teleportDistance = 96
     local groundHeight = -5
     local headNames = { left = "HeadLeft", right = "HeadRight", up = "HeadUp", down = "HeadDown" }
     return function(deps)
         local Vector, native, pose, trajectory =
             deps.vector, deps.native, deps.pose, deps.trajectory
         local states, previews, handoffs, seen = {}, {}, {}, {}
-        local lastTick, lastReceived, serial = -1, nil, 0
+        local lastTick, lastReceived = -1, nil
         local started, confirmed, expired, timedOut, gridStops, landed = 0, 0, 0, 0, 0, 0
+        local handoffSum, handoffMaximum = 0, 0
         local function measure()
             if deps.metrics then
                 deps.metrics.counter("attack.previews", started)
@@ -25,6 +26,8 @@ return function(fields)
                 deps.metrics.counter("attack.timed_out", timedOut)
                 deps.metrics.counter("attack.grid_stops", gridStops)
                 deps.metrics.counter("attack.landed", landed)
+                deps.metrics.counter("attack.handoff_sum_millipixels", handoffSum)
+                deps.metrics.counter("attack.handoff_max_millipixels", handoffMaximum)
             end
         end
         local function clear()
@@ -81,8 +84,9 @@ return function(fields)
                             signature = signature,
                             actor = actor,
                             model = deps.prediction.new(weapons, ack, tick),
-                            single = true,
+                            count = deps.policy.tearCount(player),
                             births = {},
+                            shots = 0,
                         }
                         -- The unmodified Isaac shot has a known appearance before
                         -- the first acknowledgement. Other outfits learn a template.
@@ -92,6 +96,17 @@ return function(fields)
                     else
                         current.model:confirm(weapons, ack, tick)
                         current.actor = actor
+                    end
+                    if
+                        current.position
+                        and (player.Position - current.position):LengthSquared()
+                            >= teleportDistance ^ 2
+                    then
+                        cancel(id)
+                    end
+                    current.position = Vector(player.Position.X, player.Position.Y)
+                    if current.count == 1 then
+                        current.pattern = { { along = 1, across = 0 } }
                     end
                     retained[id] = current
                 end
@@ -103,23 +118,37 @@ return function(fields)
             end
             states = retained
             local nextSeen = {}
+            local oneWay = math.min(staleAfter, deps.latency())
+            local captured = deps.timeline.captured() or (now - oneWay)
             for _, entity in ipairs(value.room[R.entities]) do
                 local id, owner = entity[E.id], entity[E.spawner]
                 nextSeen[id] = true
                 local current = states[owner]
                 if current and entity[E.type] == deps.tearType and not seen[id] then
                     local birth = tick - entity[E.frame]
-                    current.births[birth] = (current.births[birth] or 0) + 1
-                    if current.births[birth] > 1 then
-                        current.single = false
+                    local group = current.births[birth] or {}
+                    current.births[birth] = group
+                    local velocity = Vector(table.unpack(entity[E.velocity]))
+                    local tear = ref(id)
+                    group[#group + 1] = {
+                        position = entity[E.position] and Vector(table.unpack(entity[E.position]))
+                            or tear.Position,
+                        velocity = velocity,
+                        age = entity[E.frame],
+                    }
+                    if current.count and #group > current.count then
+                        current.count, current.pattern = nil, nil
                         cancel(owner)
+                    elseif current.count and current.count > 1 and not current.pattern then
+                        local player = deps.player(current.actor[A.index])
+                        current.pattern =
+                            deps.volley(group, current.count, player.Position, player.Velocity)
                     end
                     for prior in pairs(current.births) do
                         if prior < tick - birthHistoryTicks then
                             current.births[prior] = nil
                         end
                     end
-                    local tear = ref(id)
                     if
                         tear
                         and (
@@ -131,27 +160,35 @@ return function(fields)
                             sprite = entity[E.sprite],
                         }
                     end
-                    local velocity = Vector(table.unpack(entity[E.velocity]))
-                    if velocity:LengthSquared() > 0 then
-                        local direction = velocity:Normalized()
-                        for index, shot in ipairs(previews) do
-                            if
-                                shot.owner == owner
-                                -- Present labels movement with the upcoming sample;
-                                -- a shot can already belong to the sample just sent.
-                                and shot.sequence <= ack + inputLookahead
-                                and shot.velocity:Normalized():Dot(direction) > matchDirection
-                                and now - shot.at <= shot.lifetime
-                            then
-                                handoffs[id] = {
-                                    position = position(shot, now),
-                                    velocity = shot.velocity,
-                                    at = now,
-                                }
-                                table.remove(previews, index)
-                                confirmed = confirmed + 1
-                                break
-                            end
+                    local index = tear
+                        and deps.matching(
+                            previews,
+                            owner,
+                            group[#group].position,
+                            velocity,
+                            entity[E.frame],
+                            ack,
+                            now,
+                            captured,
+                            oneWay
+                        )
+                    if index then
+                        local shot = table.remove(previews, index)
+                        local at, height = position(shot, now)
+                        handoffs[id] = {
+                            position = at,
+                            height = height,
+                            baseHeight = tear:ToTear().Height,
+                            velocity = shot.velocity,
+                            at = now,
+                        }
+                        confirmed = confirmed + 1
+                        if deps.metrics and deps.metrics.enabled then
+                            local distance = math.floor(
+                                math.sqrt((at - group[#group].position):LengthSquared()) * 1000
+                            )
+                            handoffSum = handoffSum + distance
+                            handoffMaximum = math.max(handoffMaximum, distance)
                         end
                     end
                 end
@@ -203,10 +240,9 @@ return function(fields)
                         direction = direction:Normalized()
                     end
                     local normal = controls
-                        and current.single
+                        and current.pattern ~= nil
                         and current.template ~= nil
                         and deps.policy.normalTear(player)
-                        and deps.policy.singleTear(player)
                         and (
                             math.abs(direction.X) < axisTolerance
                             or math.abs(direction.Y) < axisTolerance
@@ -215,7 +251,10 @@ return function(fields)
                         cancel(id)
                     end
                     local weapons = current.model:step(sequence, dt, firing, normal, function(slot)
-                        if slot ~= pose.primarySlot or #previews >= maxPreviews then
+                        if
+                            slot ~= pose.primarySlot
+                            or #previews + #current.pattern > maxPreviews
+                        then
                             return
                         end
                         local weapon = current.model.weapons[slot]
@@ -227,53 +266,61 @@ return function(fields)
                             return
                         end
                         current.fired = now
-                        started = started + 1
-                        serial = serial + 1
-                        local sprite = deps.sprite()
-                        if current.template.sprite then
-                            deps.applySprite(sprite, current.template.sprite)
-                        else
-                            sprite:Load("gfx/002.000_Tear.anm2", true)
-                            sprite:SetFrame("RegularTear6", 0)
+                        for _, lane in ipairs(current.pattern) do
+                            started = started + 1
+                            current.shots = current.shots + 1
+                            local sprite = deps.sprite()
+                            if current.template.sprite then
+                                deps.applySprite(sprite, current.template.sprite)
+                            else
+                                sprite:Load("gfx/002.000_Tear.anm2", true)
+                                sprite:SetFrame("RegularTear6", 0)
+                            end
+                            -- Native inheritance reads an internal simulation cache
+                            -- which is not advanced by replica players. Use the local
+                            -- walking model, in native half-update velocity units.
+                            local movement = model.prediction
+                                    and model.prediction.velocity * (1 / playerVelocityRate)
+                                or player.Velocity
+                            local aimDirection = Vector(
+                                direction.X * lane.along - direction.Y * lane.across,
+                                direction.Y * lane.along + direction.X * lane.across
+                            )
+                            local velocity =
+                                trajectory.velocity(aimDirection, movement, player.ShotSpeed)
+                            local origin = trajectory.origin(
+                                player.Position,
+                                velocity,
+                                lane.eye or (current.shots % 2 == 0 and eyeOffset or -eyeOffset)
+                            )
+                            local height, falling = trajectory.initial(
+                                player.TearHeight,
+                                player.TearFallingSpeed,
+                                player.TearFallingAcceleration
+                            )
+                            previews[#previews + 1] = {
+                                owner = id,
+                                sequence = sequence,
+                                at = now,
+                                sprite = sprite,
+                                direction = direction,
+                                origin = origin,
+                                velocity = velocity,
+                                height = height,
+                                falling = falling,
+                                acceleration = player.TearFallingAcceleration,
+                                drawnHeight = height,
+                                last = origin,
+                                lifetime = math.min(
+                                    staleAfter,
+                                    math.max(
+                                        minimumLifetime,
+                                        (status["ping" .. status.slot] or 0) / 1000
+                                            + confirmationMargin
+                                    )
+                                ),
+                            }
                         end
-                        -- Native inheritance reads an internal simulation cache
-                        -- which is not advanced by replica players. Use the local
-                        -- walking model, in native half-update velocity units.
-                        local movement = model.prediction
-                                and model.prediction.velocity * (1 / playerVelocityRate)
-                            or player.Velocity
-                        local velocity = trajectory.velocity(direction, movement, player.ShotSpeed)
-                        local origin = trajectory.origin(
-                            player.Position,
-                            velocity,
-                            serial % 2 == 0 and eyeOffset or -eyeOffset
-                        )
-                        local height, falling = trajectory.initial(
-                            player.TearHeight,
-                            player.TearFallingSpeed,
-                            player.TearFallingAcceleration
-                        )
-                        previews[#previews + 1] = {
-                            owner = id,
-                            sequence = sequence,
-                            at = now,
-                            sprite = sprite,
-                            direction = direction,
-                            origin = origin,
-                            velocity = velocity,
-                            height = height,
-                            falling = falling,
-                            acceleration = player.TearFallingAcceleration,
-                            drawnHeight = height,
-                            last = origin,
-                            lifetime = math.min(
-                                staleAfter,
-                                math.max(
-                                    minimumLifetime,
-                                    (status["ping" .. status.slot] or 0) / 1000 + confirmationMargin
-                                )
-                            ),
-                        }
                     end)
                     if weapons then
                         assert(
@@ -318,6 +365,15 @@ return function(fields)
                         )
                     entity.Position = model.display
                         + handoff.offset * math.exp(-(now - handoff.at) / handoff.duration)
+                    local tear = entity:ToTear()
+                    if tear then
+                        local base = model.visual and model.visual.presentedHeight
+                            or handoff.baseHeight
+                        handoff.heightOffset = handoff.heightOffset or (handoff.height - base)
+                        tear.Height = base
+                            + handoff.heightOffset
+                                * math.exp(-(now - handoff.at) / handoff.duration)
+                    end
                 end
             end
             for index = #previews, 1, -1 do

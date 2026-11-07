@@ -15,6 +15,15 @@ class BackendCleanupError(RuntimeError):
     """The owning backend may still write data or launch/close native children."""
 
 
+def check_runtime_log(text, peer):
+    """Reject hot reloads that invalidate a frozen native scenario's state."""
+    for line in text.splitlines():
+        if line.startswith("[INFO] - Updating mod '") or line.strip() == (
+            "[INFO] - Lua is resetting!"
+        ):
+            raise RuntimeError(f"{peer}: runtime changed during the frozen test: {line.strip()}")
+
+
 def configure_interrupts():
     """Unwind protection even when a background shell inherited SIGINT ignored."""
     for name in ("SIGINT", "SIGTERM", "SIGHUP"):

@@ -6,6 +6,54 @@ local fields = module("sync/fields")
 local weapons = { WEAPON_TEARS = 1, WEAPON_BRIMSTONE = 2, WEAPON_KNIFE = 4, WEAPON_TECH_X = 9 }
 local policy = module("compat/items/attack_preview")(weapons, {}, fields, {}, {}, {})
 local prediction = module("presentation/attack_prediction")(policy)
+local enums = { CollectibleType = {} }
+for index, name in ipairs({
+    "COLLECTIBLE_20_20",
+    "COLLECTIBLE_INNER_EYE",
+    "COLLECTIBLE_MUTANT_SPIDER",
+    "COLLECTIBLE_SOY_MILK",
+    "COLLECTIBLE_ALMOND_MILK",
+}) do
+    enums.CollectibleType[name] = index
+end
+local counts = {}
+local player = {
+    HasCollectible = function(_, id)
+        return (counts[id] or 0) > 0
+    end,
+    GetCollectibleNum = function(_, id)
+        return counts[id] or 0
+    end,
+}
+local previewPolicy = module("compat/items/attack_preview")(
+    weapons,
+    enums.CollectibleType,
+    fields,
+    {},
+    {},
+    {}
+)
+for name, count in pairs({
+    COLLECTIBLE_20_20 = 2,
+    COLLECTIBLE_INNER_EYE = 3,
+    COLLECTIBLE_MUTANT_SPIDER = 4,
+    COLLECTIBLE_SOY_MILK = 1,
+}) do
+    counts = { [enums.CollectibleType[name]] = 1 }
+    assert(previewPolicy.tearCount(player) == count, "Supported ordinary volley was disabled")
+end
+counts = { [enums.CollectibleType.COLLECTIBLE_INNER_EYE] = 2 }
+assert(previewPolicy.tearCount(player) == nil, "Stacked multi-shot geometry was guessed")
+counts = {
+    [enums.CollectibleType.COLLECTIBLE_20_20] = 1,
+    [enums.CollectibleType.COLLECTIBLE_MUTANT_SPIDER] = 1,
+}
+assert(previewPolicy.tearCount(player) == nil)
+counts = { [enums.CollectibleType.COLLECTIBLE_ALMOND_MILK] = 1 }
+assert(
+    previewPolicy.tearCount(player) == nil,
+    "Random trajectories acquired deterministic previews"
+)
 local pose = module("sync/weapon_pose")
 local function snapshot(kind, delay, maximum, charge, chargeLimit)
     return {

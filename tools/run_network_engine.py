@@ -10,7 +10,7 @@ import shutil
 import signal
 import subprocess
 import time
-from testing.engine import finalize_result
+from testing.engine import check_runtime_log, finalize_result
 from testing.lua import bundle_input
 from game_logs import freeze_probe_logs, probe_text, log_path
 from lab_profile import windows
@@ -28,7 +28,9 @@ def execute(*args, timeout=30):
 
 def read_log(lab):
     path = log_path(lab)
-    return path.read_text(errors="replace") if path.exists() else ""
+    text = path.read_text(errors="replace") if path.exists() else ""
+    check_runtime_log(text, lab.name)
+    return text
 
 
 def main():
@@ -108,7 +110,7 @@ def main():
     parser.add_argument(
         "--knife-fixture",
         action="store_true",
-        help="Unlock Azazel on the owned guest before the knife-route character selection",
+        help="Unlock Azazel on the owned guest before knife-route or mirror-camera selection",
     )
     parser.add_argument(
         "--automatic",
