@@ -2,6 +2,7 @@
 #include "engine/rewind.h"
 #include "compat/items/rewind_targets.h"
 #include "compat/routes/home.h"
+#include "compat/routes/hourglass.h"
 #include "engine/save.h"
 #include "net/protocol.h"
 #include "runtime/session.h"
@@ -13,6 +14,7 @@
 #include <optional>
 
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/layout.h"
 namespace j460 = isaac::engine::j460;
 
 namespace isaac::rewind {
@@ -64,6 +66,21 @@ struct RouteScope {
 };
 using Store = void(__stdcall*)(int);
 Store originalStore;
+void storeCheckpoint(int door) {
+    namespace layout = j460::layout::game;
+    auto& flags = at<std::uint64_t>(game(), layout::stateFlags);
+    const auto checkpointFlags = compat::routes::hourglassCheckpointFlags(
+        at<int>(game(), layout::stage), at<int>(game(), layout::stageType), flags);
+    struct Restore {
+        std::uint64_t& field;
+        std::uint64_t value, mask;
+        ~Restore() {
+            field = (field & ~mask) | (value & mask);
+        }
+    } restore{flags, flags, flags ^ checkpointFlags};
+    flags = checkpointFlags;
+    originalStore(door);
+}
 void __stdcall store(int door) {
     // Native room entry uses two process-wide buffers. LAN keeps one last
     // entry per controller, so background entries cannot replace another
@@ -238,7 +255,7 @@ void remember(unsigned slot, int door, const std::vector<rooms::SavedLocation>& 
     if (runtime::replica() || slot >= 4 || locations.empty())
         return;
     at<int>(game(), 0x676ac) = -1;
-    originalStore(door);
+    storeCheckpoint(door);
     at<bool>(game(), bufferOffset + 0x20660) = false;
     const auto buffer = game() + bufferOffset;
     if (!at<bool>(buffer, 0))

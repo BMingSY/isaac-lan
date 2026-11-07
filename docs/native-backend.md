@@ -131,6 +131,7 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 | --- | --- | --- |
 | 换层来源上下文 | `Level::SetNextStage`，RVA `0x3467c0`，`thiscall void(Level*)` | 调用期间临时替换 `Level+0x18304` 来源索引，范围 `[-20, 168]`；返回恢复，事务完成／取消时失效，不切换房间对象 |
 | 已决定的房间转场 | `RoomTransition.Start`，RVA `0x42ee40`，receiver 为 `Game+0x1b83c`，五个栈参数、被调方清理 20 字节 | 回放 index、direction、animation、player、dimension，保留原版尾部完成标志；不重新选择路线 |
+| 沙漏检查点路线标记 | `Game+0x26548` 的 64 位 `GameStateFlag`，由既有原生 Store 写入 GameState | 按[路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/hourglass.h)临时投影标记，仅限同步保存调用；返回时恢复实时标记。不改变存档布局、协议或对象所有权 |
 | 暂停菜单 | `pauseMenuShow`、`pauseMenuHide`、`pauseMenuControls`、`optionsSave` | 菜单操作独立于整段 `Game::Controls`，临时使用本机显示名单，返回恢复，不接管菜单或角色所有权 |
 | 原生菜单提示清理 | `input::resetMenuPrompts`，RVA `0x239b0`，`thiscall void(Manager+0x4a950, false)` | 联网启动销毁菜单后调用一次，被调方清理 4 字节，不影响随后暂停菜单提示 |
 | 原生结束回放 | `Game::End`，RVA `0x2f9770`，`thiscall void(Game*, int id)` | `1` 为死亡结算，`2～14` 为结局；房主原生确认后发送可靠结束事件，客机在安全更新边界调用原入口。本机名单只在调用期间借用，不复制结算 Sprite、角色或原生容器；单人保留原调用 |
