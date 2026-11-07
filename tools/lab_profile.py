@@ -1,9 +1,11 @@
 """Protect owned lab data independently of any particular gameplay suite."""
 
 import configparser
+from contextlib import ExitStack
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -76,6 +78,27 @@ def hashes(directory):
     }
 
 
+def lock_labs(labs):
+    """Hold each directory across backup, native execution and restoration."""
+    locks = ExitStack()
+    try:
+        for lab in sorted(labs):
+            stream = locks.enter_context((lab / ".isaac-lan-run.lock").open("a+b"))
+            if os.name == "nt":
+                import msvcrt
+
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        locks.close()
+        raise RuntimeError(f"Owned lab in use or unavailable: {lab}") from error
+    return locks
+
+
 @dataclass(frozen=True)
 class Backup:
     source: Path
@@ -110,6 +133,7 @@ class ProtectedLabs:
                 )
         if set(report) != {str(entry.source) for entry in result.entries}:
             raise ValueError("Backup manifest does not match the selected labs")
+        result._locks = lock_labs(result.labs)
         return result
 
     def __init__(self, labs, output, roles=("host", "client")):
@@ -120,17 +144,22 @@ class ProtectedLabs:
         if any(not (lab / ".isaac-lan-lab").is_file() for lab in self.labs):
             raise ValueError("Only marked isolated labs can be protected")
         self.entries = []
-        for role, lab in zip(roles, self.labs):
-            for folder in ("profile", "game/data", "game/isaac-lan"):
-                source = lab / folder
-                destination = output / "before" / role / folder
-                baseline = hashes(source)
-                existed = source.exists()
-                if existed:
-                    shutil.copytree(source, destination)
-                    if hashes(destination) != baseline:
-                        raise RuntimeError("Lab backup differs: " + str(source))
-                self.entries.append(Backup(source, destination, baseline, existed))
+        self._locks = lock_labs(self.labs)
+        try:
+            for role, lab in zip(roles, self.labs):
+                for folder in ("profile", "game/data", "game/isaac-lan"):
+                    source = lab / folder
+                    destination = output / "before" / role / folder
+                    baseline = hashes(source)
+                    existed = source.exists()
+                    if existed:
+                        shutil.copytree(source, destination)
+                        if hashes(destination) != baseline:
+                            raise RuntimeError("Lab backup differs: " + str(source))
+                    self.entries.append(Backup(source, destination, baseline, existed))
+        except BaseException:
+            self._locks.close()
+            raise
 
     def report(self):
         return {
@@ -140,6 +169,8 @@ class ProtectedLabs:
 
     def restore(self):
         # Check all processes and backups before replacing any live data.
+        if self._locks is None:
+            self._locks = lock_labs(self.labs)
         idle(self.labs)
         for entry in self.entries:
             if entry.existed and (
@@ -160,4 +191,6 @@ class ProtectedLabs:
                 errors.append(str(error))
         if errors:
             raise RuntimeError("; ".join(errors))
+        self._locks.close()
+        self._locks = None
         return restored

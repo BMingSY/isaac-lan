@@ -3,6 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import json
+import subprocess
 import sys
 
 import pytest
@@ -92,3 +93,56 @@ def test_one_failed_restore_still_restores_other_lab(protected, monkeypatch):
     assert (protected.labs[1] / "profile/save.dat").read_bytes() == b"personal save"
     assert not (protected.labs[1] / "game/data").exists()
     assert (protected.entries[0].destination / "save.dat").read_bytes() == b"personal save"
+
+
+def test_another_suite_cannot_enter_until_restoration_finishes(protected, tmp_path):
+    script = """
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import lab_profile
+lab_profile.idle = lambda labs: None
+try:
+    owner = lab_profile.ProtectedLabs([Path(p) for p in sys.argv[2:4]], Path(sys.argv[4]))
+except RuntimeError as error:
+    assert 'Owned lab in use' in str(error), str(error)
+    print('busy')
+else:
+    owner.restore()
+    print('acquired')
+"""
+
+    def enter(output):
+        return subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                script,
+                str(Path(lab_profile.__file__).parent),
+                *(str(lab) for lab in protected.labs),
+                str(output),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    mutate(protected)
+    assert enter(tmp_path / "overlap") == "busy"
+    assert not (tmp_path / "overlap").exists()
+    protected.restore()
+    assert enter(tmp_path / "next") == "acquired"
+
+
+def test_failed_backup_releases_lab_ownership(protected, tmp_path, monkeypatch):
+    protected.restore()
+    copytree = lab_profile.shutil.copytree
+
+    def fail_copy(*args, **kwargs):
+        raise OSError("injected backup failure")
+
+    monkeypatch.setattr(lab_profile.shutil, "copytree", fail_copy)
+    with pytest.raises(OSError, match="injected backup failure"):
+        lab_profile.ProtectedLabs(protected.labs, tmp_path / "failed-backup")
+    monkeypatch.setattr(lab_profile.shutil, "copytree", copytree)
+    lab_profile.ProtectedLabs(protected.labs, tmp_path / "retry").restore()
