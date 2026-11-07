@@ -16,6 +16,71 @@ local function log(event, data)
     data.role = host and "host" or "client"
     Isaac.DebugString("LAN_DOORS " .. json.encode(data))
 end
+local timeoutCheck, timeoutCleanup, timeoutResults
+if config.doorTimeout and not host then
+    local state, doors = assert(_IsaacLanState), nil
+    for index = 1, 32 do
+        local name, value = native.debug.getupvalue(state.render, index)
+        if name == "doorPresentation" then
+            doors = value
+            break
+        elseif not name then
+            break
+        end
+    end
+    assert(doors, "Cannot observe the production door overlay")
+    local begin, arrive, apply = doors.begin, doors.arrive, state.apply
+    local hold, completed = nil, 0
+    local delayMs, visibleAfterMs = 1600, 650
+    doors.begin = function()
+        if not hold then
+            hold = { at = Isaac.GetTime(), starts = 0, visible = 0 }
+            log("delay_begin", { duration = delayMs })
+        end
+        hold.starts = hold.starts + 1
+        begin()
+    end
+    state.apply = function(...)
+        -- Delay acceptance in the replica while the real host keeps running.
+        -- Input, networking and rendering continue through the normal path.
+        if hold and Isaac.GetTime() - hold.at < delayMs then
+            return false
+        end
+        return apply(...)
+    end
+    timeoutCheck = function()
+        if hold then
+            local age = Isaac.GetTime() - hold.at
+            if age >= visibleAfterMs and age < delayMs then
+                assert(hold.starts == 1, "Held doorway restarted its timed-out preview")
+                assert(doors.alpha() == 0, "Timed-out doorway obscured the source room again")
+                assert(not doors.movementBlocked(), "Timed-out doorway held arrival input")
+                hold.visible = hold.visible + 1
+            end
+        end
+    end
+    doors.arrive = function()
+        if hold then
+            assert(hold.starts == 1 and hold.visible >= 10, "Door timeout was not exercised")
+            assert(Isaac.GetTime() - hold.at >= delayMs, "Delayed confirmation arrived early")
+            assert(doors.alpha() == 0, "Delayed arrival replayed an expired blackout")
+            completed = completed + 1
+            log("delay_arrival", {
+                starts = hold.starts,
+                visible = hold.visible,
+                elapsed = Isaac.GetTime() - hold.at,
+            })
+            hold = nil
+        end
+        arrive()
+    end
+    timeoutResults = function()
+        assert(completed == 2 and not hold, "Missing delayed new/resident room coverage")
+    end
+    timeoutCleanup = function()
+        doors.begin, doors.arrive, state.apply = begin, arrive, apply
+    end
+end
 local function actor(slot, fn)
     return native.rooms_with_player(slot, function()
         fn(Isaac.GetPlayer(assert(native.rooms_heads()[tostring(slot)])), Game():GetRoom())
@@ -82,6 +147,9 @@ function _IsaacLanFrame()
         _IsaacLanCommand("start", "LBCD0G4M:0:0:0:0:0")
     end
     local t = s.verified
+    if timeoutCheck then
+        timeoutCheck()
+    end
 
     local moving = (not host and (t >= 60 and t < 105 or t >= 210 and t < 255))
         or (host and t >= 390 and t < 435)
@@ -160,7 +228,14 @@ function _IsaacLanFrame()
                 { arrivals = arrivals, invisibleDistance = invisibleDistance, fastest = fastest }
             )
             assert(arrivals == 2, "Missing new and resident destination coverage")
-            assert(invisibleDistance < 1, "Arrival moved during the reveal: " .. invisibleDistance)
+            if timeoutResults then
+                timeoutResults()
+            else
+                assert(
+                    invisibleDistance < 1,
+                    "Arrival moved during the reveal: " .. invisibleDistance
+                )
+            end
             assert(fastest < 340, "Arrival replay accelerated beyond ordinary walking: " .. fastest)
         end
         finished = true
@@ -199,6 +274,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
 end
 
 return {
+    cleanup = timeoutCleanup,
     done = function()
         return finished
     end,

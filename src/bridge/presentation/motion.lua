@@ -347,12 +347,15 @@ return function(fields)
                                 p.Friction
                             )
                             if m.doorway then
+                                -- The overlay expires independently. Keep a held
+                                -- approach latched so its timeout cannot start
+                                -- another blackout before the room is confirmed.
                                 local door = room:GetDoor(m.doorway.slot)
                                 if
                                     not door
                                     or not door:IsOpen()
                                     or direction:Dot(m.doorway.outward) <= 0
-                                    or now - m.doorway.at > 0.5
+                                    or m.prediction.teleported
                                 then
                                     m.doorway = nil
                                     if view.doors then
@@ -371,7 +374,6 @@ return function(fields)
                                 m.doorway = {
                                     slot = slot,
                                     outward = outward,
-                                    at = now,
                                     position = position,
                                 }
                                 if view.doors then

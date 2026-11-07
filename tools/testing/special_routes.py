@@ -24,6 +24,8 @@ DIAGNOSTICS = (
     "home",
     "endings",
     "motion",
+    "door-prediction",
+    "door-timeout",
     "input-response",
     "shared-intro",
     "input-response-speeds",
@@ -100,6 +102,8 @@ def build(output, cases=CASES, *, first_floor=False):
             "hourglass-routes": "state_hourglass_routes.lua",
             "endings": "state_endings.lua",
             "motion": "state_motion.lua",
+            "door-prediction": "state_door_prediction.lua",
+            "door-timeout": "state_door_prediction.lua",
             "input-response": "state_input_response.lua",
             "shared-intro": "state_shared_intro.lua",
             "input-response-speeds": "state_input_response.lua",
@@ -161,6 +165,7 @@ def build(output, cases=CASES, *, first_floor=False):
         }.get(name, "state_side_routes.lua")
         options = {
             "route": name,
+            "doorTimeout": name == "door-timeout",
             "playerOpacity": name == "player-opacity",
             "integrationDual": name == "mod-integrations-dual",
             "motherEntrant": 1 if name == "mother-guest" else 0,

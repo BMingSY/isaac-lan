@@ -209,6 +209,20 @@ local actor =
     { 1, 2, { 1 }, {}, { { "body", "LiftItem" } }, false, false, { string.rep("\0", 12), true } }
 local doorBlocked = false
 local doorPreview, doorBegins = nil, 0
+local doorPresentation = {
+    preview = function()
+        return doorPreview
+    end,
+    begin = function()
+        doorBegins = doorBegins + 1
+    end,
+    cancel = function() end,
+    movementBlocked = function()
+        return doorBlocked
+    end,
+    reset = function() end,
+    arrive = function() end,
+}
 local localMotion = assert(
     loadfile(
         root .. "/src/bridge/presentation/motion.lua",
@@ -224,20 +238,7 @@ local localMotion = assert(
         return true
     end,
 }, { apply = function() end }, {
-    doors = {
-        preview = function()
-            return doorPreview
-        end,
-        begin = function()
-            doorBegins = doorBegins + 1
-        end,
-        cancel = function() end,
-        movementBlocked = function()
-            return doorBlocked
-        end,
-        reset = function() end,
-        arrive = function() end,
-    },
+    doors = doorPresentation,
     vector = Vector,
     player = function()
         return player
@@ -810,3 +811,107 @@ accept(20.095, 2, 3.3, 100)
 close(render(20.095), 9.5, "Receipt jitter changed the authority timeline")
 close(render(20.3), 13.3, "Old views extrapolated past the bounded horizon")
 print("PASS shared capture clock and bounded projectile extrapolation")
+
+-- Exercise the real overlay with movement prediction: its timeout must not
+-- turn a still-held door approach into a new departure every half second.
+local overlay = dofile(root .. "/src/bridge/presentation/doors.lua")({
+    doorVariants = {},
+    gridTypes = {},
+    clock = function()
+        return now * 1000
+    end,
+})
+for name, method in pairs(overlay) do
+    doorPresentation[name] = method
+end
+local starts = 0
+doorPresentation.begin = function()
+    starts = starts + 1
+    overlay.begin()
+end
+-- There are no locked doors or stairs in this doorway fixture.
+doorPresentation.preview = function() end
+local openDoor = { Position = Vector(200, 100), open = true }
+function openDoor:IsOpen()
+    return self.open
+end
+room.GetDoor = function(_, slot)
+    return slot == 2 and openDoor or nil
+end
+room.GetGridCollisionAtPos = function()
+    return collision.COLLISION_NONE
+end
+local direction = Vector(1, 0)
+player.GetMovementInput = function()
+    return direction
+end
+player.MoveSpeed, player.ControlsEnabled = 1, true
+actor[8], extraFinished = false, true
+local function doorway(position)
+    localState = {
+        actor = true,
+        controller = 2,
+        target = position,
+        display = position,
+        prediction = prediction.new(position),
+    }
+end
+doorway(Vector(188, 100))
+localMotion.reset(true)
+for frame = 0, 120 do
+    localRender(frame)
+    close(player.Position.X, 188, "Unconfirmed door extrapolated into another room")
+    if frame >= 36 then
+        assert(overlay.alpha() == 0, "Held door restarted its expired blackout")
+        assert(not overlay.movementBlocked(), "Expired blackout held destination input")
+    end
+end
+assert(starts == 1, "One continuous door approach started multiple departures")
+direction = Vector(-1, 0)
+localRender(121)
+localRender(122)
+assert(player.Position.X < 188, "Timed-out door prevented turning back")
+direction = Vector(1, 0)
+localRender(123)
+assert(starts == 2, "Turning back and approaching again did not rearm the preview")
+direction = Vector(0, 0)
+localRender(124)
+direction = Vector(1, 0)
+localRender(125)
+assert(starts == 3, "Releasing and pressing again did not rearm the preview")
+openDoor.open = false
+localRender(126)
+openDoor.open = true
+localRender(127)
+assert(starts == 4, "Door closure did not cancel the old approach")
+-- An authoritative same-room teleport must also release the doorway hold.
+localState.target = Vector(50, 100)
+localState.prediction:confirm(localState.target, 128, Vector(0, 0), 128)
+close(localRender(128), 50, "Door hold overrode an authoritative teleport")
+for frame = 129, 140 do
+    localRender(frame)
+end
+assert(player.Position.X > 50 and overlay.alpha() == 0)
+-- Delayed arrival receives a fresh room's trajectory with no leftover fade.
+doorway(Vector(188, 100))
+localMotion.reset(true)
+for frame = 150, 240 do
+    localRender(frame)
+end
+localMotion.reset()
+doorway(Vector(80, 100))
+for frame = 241, 244 do
+    localRender(frame)
+end
+assert(overlay.alpha() == 0 and player.Position.X > 80, "Late arrival retained its old hold")
+-- Floor/session reset clears the overlay and the caller replaces actor tracks.
+doorway(Vector(188, 100))
+localMotion.reset(true)
+localRender(250)
+localRender(256)
+assert(overlay.alpha() > 0)
+doorway(Vector(80, 100))
+localMotion.reset(true)
+localRender(257)
+assert(overlay.alpha() == 0 and not overlay.movementBlocked())
+print("PASS bounded door blackout, held input, cancellation, teleport, late arrival and reset")
