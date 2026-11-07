@@ -162,6 +162,8 @@ python tools/engine_test.py run special-routes -- \
 
 连续玩法组合器在同一局内切换兼容场景，保持绝对网络 tick，仅为夹具转换相对时间；路线组合器在同一组进程中等待原生退出与菜单恢复后再切换。独立启动配置、真实键盘焦点和性能隔离要求仍属于套件执行边界，不能将任意套件直接合并。
 
+[`ProtectedLabs`](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_profile.py) 从备份前到恢复完成持续持有每个隔离目录的占用锁；另一轮测试不得在原生进程退出后、资料尚未恢复时复用目录。恢复先确认所属进程已结束及备份完整，再逐文件核对哈希。异常中断后的恢复也须重新取得同一目录锁。
+
 原生后端在启动及场景轮询时检查游戏日志；发现 Mod 自动更新或 Lua 重载就将本轮判为运行环境变化，保留日志并执行正常收尾，不自动重试。冻结脚本被重新加载后，先前的完成标记不能作为连续执行证据；该判定也不等于已解释同时发生的原生崩溃。
 
 换层 Lua 调用边界的 Windows 离线检查为 `native.stage-transition-binding`，覆盖栈与保存寄存器、原闭包目标、可空玩家参数、重复调用和卸载恢复。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 组合 `--case attack-mirror --case floor-sources --case rewind --heap-check --record`，在同一对隔离进程检查镜面换层、主客机分房选路、回退，以及省略玩家、显式 `nil` 和指定玩家三种 Lua 调用形式。
