@@ -1539,10 +1539,16 @@ local function advance(t)
                         end
                     end
                 end
-                if approachingChest() then
-                    -- Approach through normal guest input. Teleporting into
-                    -- the solid chest can leave the actor pushed outside its
-                    -- trigger, even after Appear has completed.
+                if
+                    approachingChest()
+                    or step == "floor-wait" and e.Type == EntityType.ENTITY_EFFECT
+                then
+                    -- Approach chests and lights through normal guest input.
+                    -- Repeated positioning can miss their native collision
+                    -- or interfere with an entrance animation already begun.
+                    if not p:IsExtraAnimationFinished() then
+                        return
+                    end
                     if t - stepAt < 20 or t % 90 < 20 then
                         p.Position, p.Velocity = e.Position + Vector(60, 0), Vector.Zero
                     else

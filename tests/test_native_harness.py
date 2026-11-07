@@ -953,8 +953,10 @@ Vector = setmetatable({}, {__call = function(_, x, y)
 end})
 Vector.Zero = Vector(0, 0)
 local players = {}
+local extraAnimationFinished = true
 for slot = 0, 1 do players[slot] = {
     IsDead = function() return false end, IsCoopGhost = function() return false end,
+    IsExtraAnimationFinished = function() return extraAnimationFinished end,
     SetMinDamageCooldown = noop, AddEntityFlags = noop,
     Position = Vector(320, 320),
 } end
@@ -1026,11 +1028,21 @@ before(525)
 if isLight then
     player.Position = Vector(160, 220)
     before(526)
-    assert((player.Position - beam):LengthSquared() == 4 * 4,
-        "Lost contact before the native Cathedral light became ready")
+    assert((player.Position - beam):LengthSquared() == 60 * 60,
+        "Light fixture did not back off before entering through normal movement")
+    player.Position, player.Velocity = Vector(440, 320), Vector(-4, 0)
+    before(560)
+    collect(1, 560)
+    assert(metadata[8] == 0 and player.Position.X == 440 and player.Velocity.X == -4,
+        "Light approach replaced normal guest movement with repeated positioning")
+    extraAnimationFinished = false
+    before(561)
+    collect(1, 561)
+    assert(metadata[8] == -1 and player.Position.X == 440,
+        "Light fixture kept moving the actor during the native entrance animation")
     stage, kind = 10, 1
     player.Position = Vector(160, 220)
-    before(527)
+    before(562)
     assert(player.Position.X == 160 and player.Position.Y == 220,
         "Reused the previous floor's entrance contact after arrival")
     return
