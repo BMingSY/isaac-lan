@@ -302,6 +302,7 @@ python3 tools/validate_replica.py --cases gameplay normal \
 
 ```sh
 python3 tools/run_manual_dual.py --characters 以撒 阿撒泻勒 --latency-ms 80
+python3 tools/run_manual_dual.py --launch-only
 python3 tools/run_manual_dual.py --status
 python3 tools/run_manual_dual.py --stop
 ```
@@ -311,6 +312,8 @@ python3 tools/run_manual_dual.py --stop
 默认复用已有手动目录 `host-001`／`client-001`，启动前增量构建 `build-win32`、备份配置与存档，临时关闭自动验收夹具。其他位置用 `--host`、`--client`、`--build` 指定。工具只接受带 `.isaac-lan-lab` 标记且未运行的独立副本；首次准备见上节。已有第三方 Mod 的启用状态保留。
 
 双端窗口左右排列，启用音乐并把零音量恢复为 20%；通过正常菜单按键进入第一存档，再自动联机、按所选角色开始随机种子的普通模式，确认实际角色后撤掉启动钩子，将控制交给用户。后台保留延迟中继，不产生移动或战斗输入。关闭两窗口后保存日志并恢复启动前的隔离资料，本次手测进度不覆盖原隔离存档。`--stop` 仅关闭本工具记录且身份匹配的进程，后台异常退出后也可用它尝试恢复。
+
+只需启动两个窗口时使用 `--launch-only`：等待双端菜单出现后交回操作，不选择存档、解锁角色或自动联机开局，也不启用延迟中继；此模式的 `--latency-ms` 必须为 0。窗口排列、资料备份和关闭后的恢复与默认模式相同。
 
 运行记录默认保存在 `test-runs/manual-dual/`；`--status`／`--stop` 默认选择最近一次成功启动，也可通过 `--session` 指定目录。仓库 skill 位于 [isaac-dual-test/SKILL.md](https://github.com/BMingSY/isaac-lan/blob/main/.agents/skills/isaac-dual-test/SKILL.md)。离线用例为 [test_manual_dual.py](https://github.com/BMingSY/isaac-lan/blob/main/tests/test_manual_dual.py)，覆盖角色解析、双端交接、重复启动、失败清理和资料恢复。
 

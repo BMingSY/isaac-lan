@@ -167,6 +167,38 @@ def test_manual_handoff_releases_startup_hook_and_restores_after_user_close(sess
     assert_restored(session)
 
 
+def test_launch_only_waits_for_menus_without_input_relay_or_progress_changes(session, monkeypatch):
+    config = dual.read_json(session.output / "config.json")
+    config.update(launch_only=True, latency_ms=0)
+    dual.write_json(session.output / "config.json", config)
+
+    def forbidden(*args):
+        pytest.fail("Launch-only must not select saves, connect or modify character access")
+
+    for name in ("select_save", "readiness", "choose_host_port", "azazel_profile"):
+        monkeypatch.setattr(dual, name, forbidden)
+
+    def launch(lab, role, output):
+        assert not (lab / "frontend-scenario.lua").exists()
+        assert (
+            dual.log_path(lab).parent / "persistentgamedata1.dat"
+        ).read_bytes() == b"personal progress"
+        return session.launch(lab, role, output)
+
+    snapshots = iter(
+        [
+            {"gameState": dual.MENU_SCENE, "menu": -1},
+            {"gameState": dual.MENU_SCENE, "menu": dual.TITLE_PAGE},
+            {"gameState": dual.MENU_SCENE, "menu": dual.SAVE_PAGE},
+        ]
+    )
+    monkeypatch.setattr(dual, "launch", launch)
+    monkeypatch.setattr(dual, "menu_state", lambda process: next(snapshots))
+    assert dual.supervise(session.output) == 0
+    assert session.observed_ready and not session.relays and not session.closed
+    assert_restored(session)
+
+
 @pytest.mark.parametrize("selected", ["PLAYER_AZAZEL", AZAZEL_PLAYER_TYPE])
 def test_selected_azazel_is_prepared_after_backup_and_restored(session, monkeypatch, selected):
     config = dual.read_json(session.output / "config.json")

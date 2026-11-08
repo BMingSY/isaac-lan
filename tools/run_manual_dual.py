@@ -44,6 +44,9 @@ def parser():
         metavar="RTT",
         help="额外往返延迟，默认 0；80 表示每方向 40 ms",
     )
+    result.add_argument(
+        "--launch-only", action="store_true", help="只启动到菜单，不选择存档或自动联机开局"
+    )
     actions = result.add_mutually_exclusive_group()
     actions.add_argument("--status", action="store_true", help="查看最近一次双开的状态")
     actions.add_argument("--stop", action="store_true", help="关闭本工具启动的两端并恢复隔离资料")
@@ -91,6 +94,8 @@ def existing(args):
 
 
 def start(args):
+    if args.launch_only and args.latency_ms:
+        raise ValueError("--launch-only 不启用延迟中继，请使用 0 ms")
     selections = [character(value) for value in args.characters]
     labs = [args.host.resolve(), args.client.resolve()]
     output = (
@@ -131,6 +136,7 @@ def start(args):
         "characters": selections,
         "character_names": args.characters,
         "latency_ms": args.latency_ms,
+        "launch_only": args.launch_only,
         "dll_sha256": hashlib.sha256((frozen / "isaac_lan_probe.dll").read_bytes()).hexdigest(),
     }
     write_json(output / "config.json", config)
@@ -152,12 +158,18 @@ def start(args):
                 LATEST.parent.mkdir(parents=True, exist_ok=True)
                 write_json(LATEST, {"directory": str(output)})
                 for slot, role in enumerate(("host", "client")):
+                    details = f"{role}: PID {state['processes'][slot]['pid']}"
+                    if not args.launch_only:
+                        details += (
+                            f"，{args.characters[slot]}，Ping {state['peers'][role]['ping_ms']} ms"
+                        )
+                    print(details)
+                if args.launch_only:
+                    print("两个实例已启动并停留在菜单，未启用延迟中继；关闭两窗口后自动收尾。")
+                else:
                     print(
-                        f"{role}: {args.characters[slot]}，PID {state['processes'][slot]['pid']}，Ping {state['peers'][role]['ping_ms']} ms"
+                        f"已进入游戏并交回手动操作。额外 RTT {args.latency_ms:g} ms；关闭两窗口后自动收尾。"
                     )
-                print(
-                    f"已进入游戏并交回手动操作。额外 RTT {args.latency_ms:g} ms；关闭两窗口后自动收尾。"
-                )
                 return 0
             if worker.poll() is not None:
                 raise RuntimeError(

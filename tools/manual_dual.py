@@ -178,12 +178,16 @@ def prepare(lab, slot, config, files):
     shutil.copy2(build / "isaac_lan_probe.dll", lab / "game/isaac_lan_probe.dll")
     shutil.copy2(build / "isaac_lan_lab.exe", lab / "isaac_lan_lab.exe")
     configure_options(lab, slot)
-    if config["characters"][slot] in ("PLAYER_AZAZEL", AZAZEL_PLAYER_TYPE):
+    launch_only = config.get("launch_only", False)
+    if not launch_only and config["characters"][slot] in ("PLAYER_AZAZEL", AZAZEL_PLAYER_TYPE):
         progress = log_path(lab).parent / "persistentgamedata1.dat"
         progress.write_bytes(azazel_profile(progress.read_bytes()))
     files.remove(lab / "game/manual-dual-ready.json")
     files.remove(lab / "game/manual-dual-ready.json.tmp")
     files.write(lab / "frontend.test", "Owned manual startup; no gameplay automation.\n")
+    if launch_only:
+        files.remove(lab / "frontend-scenario.lua")
+        return
     bootstrap = (ROOT / "tools/manual_dual_bootstrap.lua").read_text(encoding="utf-8")
     settings = {
         "host": slot == 0,
@@ -381,6 +385,16 @@ def readiness(labs, session):
     return result if len(result) == 2 else None
 
 
+def menu_readiness(owned):
+    result = {}
+    for process in owned:
+        snapshot = menu_state(process)
+        if snapshot["gameState"] != MENU_SCENE or snapshot["menu"] < TITLE_PAGE:
+            return None
+        result[process["role"]] = snapshot
+    return result if len(result) == len(ROLES) else None
+
+
 def supervisor_alive(state, output):
     try:
         arguments = (
@@ -435,6 +449,7 @@ def recover(output):
 
 def supervise(output):
     config = read_json(output / "config.json")
+    launch_only = config.get("launch_only", False)
     labs = [Path(value) for value in config["labs"]]
     state = dict(config, status="starting", supervisor_pid=os.getpid(), processes=[])
     files, protected, relay = SetupFiles(output), None, None
@@ -453,18 +468,20 @@ def supervise(output):
             idle(labs)
             protected = ProtectedLabs(labs, output)
             write_json(output / "backup.json", protected.report())
-            config["host_port"] = choose_host_port()
-            relay = DatagramRelay(0, config["host_port"], config["latency_ms"] / 2)
-            config["relay_port"] = relay.listener.getsockname()[1]
-            state.update(host_port=config["host_port"], relay_port=config["relay_port"])
+            if not launch_only:
+                config["host_port"] = choose_host_port()
+                relay = DatagramRelay(0, config["host_port"], config["latency_ms"] / 2)
+                config["relay_port"] = relay.listener.getsockname()[1]
+                state.update(host_port=config["host_port"], relay_port=config["relay_port"])
             for slot, lab in enumerate(labs):
                 prepare(lab, slot, config, files)
             publish()
             for role, lab in zip(ROLES, labs):
                 state["processes"].append(launch(lab, role, output))
                 publish()
-            for process in state["processes"]:
-                select_save(process)
+            if not launch_only:
+                for process in state["processes"]:
+                    select_save(process)
             deadline = time.monotonic() + STARTUP_TIMEOUT
             while True:
                 if (output / "stop").exists():
@@ -478,7 +495,11 @@ def supervise(output):
                 if not handed_off:
                     if len(active) != 2:
                         raise RuntimeError("一个实例在交接前退出")
-                    ready = readiness(labs, config["session"])
+                    ready = (
+                        menu_readiness(active)
+                        if launch_only
+                        else readiness(labs, config["session"])
+                    )
                     if ready:
                         state.update(status="ready", peers=ready)
                         write_json(output / "handoff.json", ready)
@@ -487,12 +508,13 @@ def supervise(output):
                             (lab / "frontend-scenario.lua").unlink(missing_ok=True)
                         handed_off = True
                     elif time.monotonic() > deadline:
-                        raise TimeoutError("联机开局超时；检查双端启动与游戏日志")
-                if relay.error:
+                        raise TimeoutError("启动交接超时；检查双端启动与游戏日志")
+                if relay and relay.error:
                     state.update(status="error", error="UDP relay: " + relay.error)
                     if not handed_off:
                         raise RuntimeError(state["error"])
-                state["relay"] = relay.settings()
+                if relay:
+                    state["relay"] = relay.settings()
                 publish()
                 time.sleep(1)
             state["status"] = "closed"
