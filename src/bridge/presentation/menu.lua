@@ -318,13 +318,7 @@ function _IsaacLanMenuRender(
     elseif notice == "returning" then
         centered("等待队友结算结束", 110, 100, 12)
     elseif notice == "waiting" then
-        centered(
-            phase == Phase.waiting and "正在当前层归队" or "正在连接或加载…",
-            110,
-            100,
-            12
-        )
-        centered("队友可以继续游戏", 110, 124, 10)
+        centered("正在连接...", 110, 100, 12)
     end
     local yStart = (
         status.recovering
