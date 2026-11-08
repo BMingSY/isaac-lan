@@ -1,6 +1,7 @@
 -- Reproduce deferred native room transfers in the actual engine fixture.
 local root = assert(arg[1])
 local Phase = dofile(root .. "/tests/fixtures/net_phases.lua")
+local testInput = dofile(root .. "/tests/support/input.lua")
 for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true } }) do
     local difficulty, campaign = table.unpack(scenario)
     local callbacks, clock, tears, terminalVariant = {}, 0, {}, 0
@@ -11,6 +12,7 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
     local positions = { ["0"] = { index = main }, ["1"] = { index = main } }
     local pending, hooks, wave, clear, enemy, coins, bought, spawned =
         {}, nil, 0, false, true, 0, false, 0
+    local actorScope = false
     local vector
     local vectorMethods = {
         __add = function(a, b)
@@ -58,6 +60,9 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
                 return bought
             end,
             AreControlsEnabled = function()
+                return true
+            end,
+            IsExtraAnimationFinished = function()
                 return true
             end,
             FireTear = function()
@@ -167,10 +172,18 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
             return { ["0"] = 0, ["1"] = 1 }
         end,
         rooms_with_player = function(slot, fn)
+            if actorScope then
+                return false
+            end
             local previous = active
             active = positions[tostring(slot)].index
-            fn()
+            actorScope = true
+            local ok, failure = pcall(fn)
+            actorScope = false
             active = previous
+            if not ok then
+                error(failure)
+            end
             return true
         end,
         net_gate = function(...)
@@ -179,6 +192,7 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
     }
     local env = setmetatable({
         _IsaacLan = native,
+        _IsaacLanTestInput = testInput,
         _IsaacLanFrame = function()
             return {
                 phase = returned and Phase.lobby or Phase.idle,
@@ -485,6 +499,17 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
         t = t + 3
         tick(t)
         assert(players[1].Position.X > 320, "Ending chest collision was never arranged")
+        assert(
+            players[0].Position and players[0].Position.X < 320,
+            "Host kept restarting the native chest cooldown"
+        )
+        local approachPosition, approachVelocity = vector(360, 280), vector(-4, 0)
+        players[1].Position, players[1].Velocity = approachPosition, approachVelocity
+        tick(t + 25)
+        assert(
+            players[1].Position == approachPosition and players[1].Velocity == approachVelocity,
+            "Chest approach overwrote normal guest movement with a teleport"
+        )
         assert(not pcall(callbacks[1], nil, true), "Defeat was accepted as a win")
         callbacks[1](nil, false)
         assert(not pcall(callbacks[1], nil, false), "Duplicate win callback was accepted")

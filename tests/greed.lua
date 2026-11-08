@@ -1,6 +1,7 @@
 -- Exercise the production world capture/apply chain, including floor barriers.
 local root = assert(arg[1])
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
+local testInput = dofile(root .. "/tests/support/input.lua")
 local function environment(difficulty)
     local level = {
         GreedModeWave = 0,
@@ -333,6 +334,7 @@ for _, route in ipairs({ "greed", "greedier" }) do
         local env = setmetatable({
             io = false,
             _IsaacLanTest = { host = host, port = "30420", route = route },
+            _IsaacLanTestInput = testInput,
             _IsaacLan = {
                 net_gate = function(...)
                     hooks = table.pack(...)

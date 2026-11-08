@@ -15,13 +15,18 @@ import time
 from datagram_relay import DatagramRelay
 from game_logs import freeze_probe_logs, log_path
 from lab_profile import ProtectedLabs, idle, validate_startup, windows
+from progress_fixture import AZAZEL_PLAYER_TYPE
 from testing.lua import literal
+from testing.profiles import azazel_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLES = ("host", "client")
 STARTUP_TIMEOUT = 120
 MAX_RTT_MS = 10000
 FIRST_HOST_PORT, LAST_HOST_PORT = 29506, 29606
+MENU_SCENE = 1
+TITLE_PAGE, SAVE_PAGE, MAIN_PAGE = 1, 2, 3
+DELETE_FILE_ROW = 3
 DEFAULT_LABS = tuple(Path("/mnt/d/isaac-lan-lab") / (role + "-001") for role in ROLES)
 LATEST = ROOT / "test-runs/manual-dual/latest.json"
 
@@ -173,6 +178,9 @@ def prepare(lab, slot, config, files):
     shutil.copy2(build / "isaac_lan_probe.dll", lab / "game/isaac_lan_probe.dll")
     shutil.copy2(build / "isaac_lan_lab.exe", lab / "isaac_lan_lab.exe")
     configure_options(lab, slot)
+    if config["characters"][slot] in ("PLAYER_AZAZEL", AZAZEL_PLAYER_TYPE):
+        progress = log_path(lab).parent / "persistentgamedata1.dat"
+        progress.write_bytes(azazel_profile(progress.read_bytes()))
     files.remove(lab / "game/manual-dual-ready.json")
     files.remove(lab / "game/manual-dual-ready.json.tmp")
     files.write(lab / "frontend.test", "Owned manual startup; no gameplay automation.\n")
@@ -235,6 +243,75 @@ def identity(process):
 def live_owned(owned):
     live = {identity(process) for process in processes()}
     return [process for process in owned if identity(process) in live]
+
+
+def menu_state(process):
+    result = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            windows(ROOT / "tools/lab_menu_state.ps1"),
+            "-GameProcessId",
+            str(process["pid"]),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=True,
+    )
+    return json.loads(result.stdout)
+
+
+def menu_key(process, key):
+    subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            windows(ROOT / "tools/lab_window.ps1"),
+            "-GameProcessId",
+            str(process["pid"]),
+            "-Action",
+            "PostKeys",
+            "-Value",
+            key,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=True,
+    )
+
+
+def select_save(process):
+    # Enter the first native file before the bridge captures character access.
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        snapshot = menu_state(process)
+        page = snapshot["menu"]
+        if snapshot["gameState"] == MENU_SCENE and page == MAIN_PAGE and not snapshot["dialogs"]:
+            return
+        key = None
+        if snapshot["dialogs"]:
+            key = "{ESC}"
+        elif page == TITLE_PAGE:
+            key = "{ENTER}"
+        elif page == SAVE_PAGE and snapshot["fileState"] == 0:
+            if snapshot["fileSelected"] == DELETE_FILE_ROW:
+                key = "{UP}"
+            else:
+                key = "{LEFT}" if snapshot["fileSelected"] else "{ENTER}"
+        elif page in (-1, 0):
+            key = "{SPACE}"
+        if key:
+            menu_key(process, key)
+        time.sleep(0.2)
+    raise TimeoutError(f"{process['role']} 第一存档菜单未就绪：{snapshot}")
 
 
 def launch(lab, role, output):
@@ -386,6 +463,8 @@ def supervise(output):
             for role, lab in zip(ROLES, labs):
                 state["processes"].append(launch(lab, role, output))
                 publish()
+            for process in state["processes"]:
+                select_save(process)
             deadline = time.monotonic() + STARTUP_TIMEOUT
             while True:
                 if (output / "stop").exists():
