@@ -18,6 +18,7 @@ local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
 -- menu_key reports Windows virtual-key codes from the native frontend.
 local Key =
     { escape = 27, enter = 13, up = 38, down = 40, tab = 9, space = 32, left = 37, right = 39 }
+local renderUpdateNotice = _IsaacLanModules["presentation/update_notice"](Key, _IsaacLan)
 local model =
     _IsaacLanModules["presentation/menu_model"](Phase, Command, _IsaacLanModules["core/endpoint"])
 local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
@@ -139,7 +140,9 @@ function _IsaacLanMenuRender(
     my,
     clicked,
     addresses,
-    networkError
+    networkError,
+    updateVersion,
+    updateReleased
 )
     local status = _IsaacLanStatus()
     local phase = status.phase or Phase.idle
@@ -199,6 +202,21 @@ function _IsaacLanMenuRender(
     end
     local function hit(x, y, w, h)
         return mouse.X >= x and mouse.X < x + w and mouse.Y >= y and mouse.Y < y + h
+    end
+    if available and updateVersion and updateVersion ~= "" then
+        renderUpdateNotice(
+            { key = key, clicked = clicked, moved = moved, released = updateReleased },
+            {
+                assets = assets,
+                width = width,
+                height = height,
+                centered = centered,
+                layer = layer,
+                pointer = pointer,
+                hit = hit,
+            }
+        )
+        return false
     end
     if phase ~= ui.lastPhase then
         if phase == Phase.running and ui.lastPhase == Phase.lobby then

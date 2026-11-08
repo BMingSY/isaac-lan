@@ -77,12 +77,25 @@ if(BUILD_TESTING)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(isaac_lan_extension_update_test PRIVATE -Wall -Wextra -Werror)
     endif()
-    foreach(test_case manifests selection recovery boundaries)
+    foreach(test_case manifests selection recovery boundaries pending)
         add_test(NAME runtime.extension-update-${test_case} COMMAND isaac_lan_extension_update_test
                                                                     ${test_case})
         set_tests_properties(runtime.extension-update-${test_case} PROPERTIES TIMEOUT 30 LABELS
                                                                               "offline;runtime")
     endforeach()
+    add_executable(isaac_lan_update_notice_test tests/update_notice_test.cpp
+                                                src/runtime/update_notice.cpp)
+    target_include_directories(isaac_lan_update_notice_test PRIVATE src)
+    find_package(Threads REQUIRED)
+    target_link_libraries(isaac_lan_update_notice_test PRIVATE Threads::Threads)
+    if(MINGW)
+        target_link_options(isaac_lan_update_notice_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_update_notice_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME runtime.update-notice COMMAND isaac_lan_update_notice_test)
+    set_tests_properties(runtime.update-notice PROPERTIES TIMEOUT 30 LABELS "offline;runtime")
     add_executable(isaac_lan_compatibility_test tests/compatibility_test.cpp)
     target_include_directories(isaac_lan_compatibility_test PRIVATE src)
     if(MINGW)
@@ -334,6 +347,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.friendly-fire friendly_fire.lua)
         isaac_add_lua_test(bridge.pvp-items pvp_items.lua)
         isaac_add_lua_test(bridge.challenge_menu challenge_menu.lua)
+        isaac_add_lua_test(presentation.update-notice update_notice.lua)
         isaac_add_lua_test(bridge.endpoint endpoint.lua)
         isaac_add_lua_test(bridge.ping_hud ping_hud.lua)
         isaac_add_lua_test(bridge.hornfel hornfel.lua)
@@ -505,6 +519,9 @@ add_library(
     src/diagnostics/crash_signal.cpp
     src/diagnostics/feedback.cpp
     src/runtime/session.cpp
+    src/runtime/extension_update.cpp
+    src/runtime/extension_files.cpp
+    src/runtime/update_notice.cpp
     src/runtime/session_store.cpp
     src/engine/versions/j460/rooms.cpp
     src/engine/versions/j460/room_routing.cpp
@@ -895,8 +912,10 @@ if(BUILD_TESTING)
     set_tests_properties(diagnostics.lifecycle PROPERTIES TIMEOUT 30 LABELS "offline;resources")
     set_tests_properties(log.path-and-records PROPERTIES TIMEOUT 30 LABELS "offline;logging")
 endif()
-add_library(isaac_lan_loader SHARED src/app/loader.cpp src/app/extension_loader.cpp
-                                    src/runtime/extension_update.cpp src/app/loader.def)
+add_library(
+    isaac_lan_loader SHARED
+    src/app/loader.cpp src/app/extension_loader.cpp src/runtime/extension_update.cpp
+    src/runtime/extension_files.cpp src/app/loader.def)
 set_target_properties(isaac_lan_loader PROPERTIES PREFIX "" OUTPUT_NAME "winmm")
 target_include_directories(isaac_lan_loader PRIVATE src)
 target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
@@ -921,7 +940,7 @@ if(BUILD_TESTING)
     add_executable(
         isaac_lan_extension_loader_test
         tests/extension_loader_test.cpp src/app/extension_loader.cpp
-        src/runtime/extension_update.cpp)
+        src/runtime/extension_update.cpp src/runtime/extension_files.cpp)
     target_include_directories(isaac_lan_extension_loader_test PRIVATE src)
     target_compile_definitions(isaac_lan_extension_loader_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     target_link_libraries(isaac_lan_extension_loader_test PRIVATE bcrypt)

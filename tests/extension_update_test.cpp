@@ -165,11 +165,44 @@ void boundaries() {
     require(fs::is_empty(fixture.root / "foreign"), "no writes through cache symlink");
 #endif
 }
+void pendingUpdate() {
+    Fixture fixture;
+    auto pending = [&](const char* running = "0.6.9") {
+        return isaac::updates::pending(fixture.game, fixture.source, running, gameBuild, hash);
+    };
+    require(!pending(), "missing download cannot prompt");
+    fixture.package("0.6.10");
+    auto update = pending();
+    require(update && update->version == "0.6.10", "a late download is staged for next launch");
+    require(!pending("0.6.10"), "running cached version overrides an older root DLL");
+    require(!pending("0.6.11"), "older downloads never prompt or downgrade");
+    fs::remove_all(fixture.source);
+    require(pending().has_value(), "a complete newer cache remains available offline");
+    for (const auto& invalid :
+         {manifest("0.6.12", "next", gameBuild, loaderABI + 1),
+          manifest("0.6.12", "next", "1.9.7.16.J459"), std::string("incomplete manifest")}) {
+        write(fixture.source / manifestFile, invalid);
+        write(fixture.source / payloadFile, "next");
+        require(!pending("0.6.10"), "incompatible/incomplete updates cannot promise activation");
+    }
+    write(fixture.source / manifestFile, manifest("0.6.12", "next"));
+    write(fixture.source / payloadFile, "partial download");
+    require(!pending("0.6.10"), "bad SHA-256 does not prompt");
+    write(fixture.source / payloadFile, "next");
+    require(pending("0.6.10")->version == "0.6.12", "completed download is detected on retry");
+    fs::remove(fixture.game / ".isaac-lan-install");
+    require(!pending(), "uninstalled copies never offer activation");
+    require(read(fixture.game / payloadFile) == "installed DLL", "root DLL is not replaced");
+    require(read(fixture.game / "isaac-lan/session.keep") == "saved session",
+            "checking for an update preserves saves");
+}
 } // namespace
 int main(int argc, char** argv) {
     try {
         const std::string name = argc == 2 ? argv[1] : "";
-        if (name == "manifests")
+        if (name == "pending")
+            pendingUpdate();
+        else if (name == "manifests")
             manifests();
         else if (name == "selection")
             selection();

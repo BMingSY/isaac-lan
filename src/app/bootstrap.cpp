@@ -27,6 +27,9 @@
 #include "engine/generated_items.h"
 #include "engine/frontend.h"
 #include "engine/build.h"
+#include "runtime/extension_files.h"
+#include "runtime/extension_update.h"
+#include "runtime/update_notice.h"
 #include "core/bootstrap_profile.h"
 #include "core/extension_package.h"
 #include "engine/module_path.h"
@@ -289,6 +292,14 @@ DWORD initialize() {
     if (!isaac::logging::initialize(logDirectory, &logFailure))
         return fail(StartupCode::logInitialization, logFailure.path.wstring(), logFailure.error);
     log("startup_extension=" + utf8(isaac::engine::modulePath(&initialized).wstring()));
+    if (installed && !isolated) {
+        isaac::updates::startupNotice() = isaac::updates::Notice([directory] {
+            const auto update = isaac::updates::pending(
+                directory, isaac::updates::workshopSource(directory), ISAAC_LAN_VERSION,
+                isaac::build::version, isaac::updates::fileHash);
+            return update ? update->version : std::string{};
+        });
+    }
     for (const auto& warning : config.warnings)
         log("config_warning=" + warning);
     // Isolated lab profiles reach a receiver only through an explicit endpoint.

@@ -54,6 +54,8 @@ Hypothesis 还会运行缓存失败样例和缩减步骤，上述预算不是精
 
 自动更新的直接回归为可移植的 `runtime.extension-update-*`、Windows 的 `app.extension-loader`，以及 `tests/test_workshop_release.py`、`tests/test_extension_package.py` 和 `tests/test_ctest_bundle.py`。覆盖数字版本排序、完整复制、重复启动、离线缓存、损坏与不兼容载荷回退、手动安装基线、归属与隔离边界、真实 SHA-256、版本目录动态加载和实际模块路径；Windows 用例只加载合成 DLL，不启动游戏。启动集成的实机检查需在隔离安装中核对首次迁移、工坊源新版而 `mods` 副本旧版时采用更新、下次启动和缓存启动，确认 `startup_extension` 与双方构建指纹；该检查不替代基础联机验收。更新来源及失败契约见[原生扩展更新](https://github.com/BMingSY/isaac-lan/blob/main/docs/extension-updates.md)。
 
+启动更新提示的定向检查为 `runtime.extension-update-pending`、`runtime.update-notice`、`presentation.update-notice` 和 `bridge.challenge_menu`，覆盖实际运行版本比较、未完成／不兼容载荷、后台检查与重试、选择“继续”后的进程级抑制、过期结果、默认退出、按键释放和鼠标操作。实机使用有归属标记的隔离实例，将 [state_update_notice.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_update_notice.lua) 作为 `frontend-scenario.lua`：选完存档后检查原版风格弹窗、键盘／手柄／鼠标选择与底层菜单不穿透，选择“继续”后等待 `LAN_UPDATE_NOTICE CONTINUE_PASS`；另一次必要启动检查“退出游戏”正常关闭。夹具只向同一运行组件提供待更新版本，不代表实际工坊下载或 Steam Deck／Proton 已验收。
+
 只运行可移植 C++／Lua 检查，无需 Windows 工具链或游戏依赖：
 
 ```sh

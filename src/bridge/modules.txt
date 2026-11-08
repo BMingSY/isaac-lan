@@ -42,6 +42,7 @@ presentation/hits
 presentation/hit_candidates
 presentation/ping
 presentation/restart
+presentation/update_notice
 compat/transitions
 compat/items/hourglass
 compat/items/r_key

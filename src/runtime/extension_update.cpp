@@ -121,8 +121,11 @@ Selection select(const fs::path& game, const fs::path& workshop, std::string_vie
                 const auto dll = path / payloadFile;
                 if (verified(dll, package, hash) &&
                     std::find(result.candidates.begin(), result.candidates.end(), dll) ==
-                        result.candidates.end())
+                        result.candidates.end()) {
                     result.candidates.push_back(dll);
+                    if (!result.newest)
+                        result.newest = package;
+                }
             } catch (const std::exception&) {
                 // Retain earlier complete packages when one version is damaged.
             }
@@ -132,5 +135,10 @@ Selection select(const fs::path& game, const fs::path& workshop, std::string_vie
     }
     result.candidates.push_back(fallback);
     return result;
+}
+std::optional<Package> pending(const fs::path& game, const fs::path& workshop,
+                               std::string_view runningVersion, std::string_view gameBuild,
+                               FileHash hash) {
+    return select(game, workshop, runningVersion, gameBuild, hash).newest;
 }
 } // namespace isaac::updates

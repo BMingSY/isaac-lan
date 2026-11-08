@@ -165,6 +165,7 @@ _IsaacLan = {
 }
 _IsaacLanModules = {
     ["presentation/restart"] = dofile(root .. "/src/bridge/presentation/restart.lua"),
+    ["presentation/update_notice"] = dofile(root .. "/src/bridge/presentation/update_notice.lua"),
     ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
     ["core/endpoint"] = dofile(root .. "/src/bridge/core/endpoint.lua"),
     ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
@@ -187,6 +188,7 @@ _IsaacLanCommand = function(name, value)
     end
 end
 dofile(root .. "/src/bridge/presentation/menu.lua")
+local updateVersion = ""
 local function draw(key, visible, mx, my, clicked)
     labels = {}
     renderedPortraits = {}
@@ -202,7 +204,9 @@ local function draw(key, visible, mx, my, clicked)
         my or -100,
         clicked or false,
         "",
-        ""
+        "",
+        updateVersion,
+        true
     )
 end
 _IsaacLanMenuOpen(true)
@@ -843,3 +847,42 @@ assert(status.roomOptions == 0, "Leaving the locked challenge did not restore ed
 print("PASS personal completion layers, host-only independent rules and resume selection")
 print("PASS rules submenu, summaries, scrolling, read-only updates and keyboard/mouse navigation")
 print("PASS locked challenge rules on both peers, stale rules pages and returning to ordinary mode")
+
+-- Drive the actual menu entry with the same extra arguments as the native
+-- frontend, proving the notice owns input before any ordinary menu action.
+local continued, exited = 0, 0
+_IsaacLan.update_continue = function()
+    continued = continued + 1
+    updateVersion = ""
+end
+_IsaacLan.update_exit = function()
+    exited = exited + 1
+    updateVersion = ""
+    return true
+end
+status.phase, status.prepared, status.recovering = _IsaacLan.net_phases().idle, false, false
+updateVersion = "0.7.1"
+dofile(root .. "/src/bridge/presentation/menu.lua")
+local commandsBefore = #commands
+draw(13, false)
+assert(labels["新版 Isaac LAN 已下载"] and exited == 0)
+draw(0, false)
+draw(40, false)
+draw(13, false)
+assert(continued == 1 and exited == 0 and #commands == commandsBefore)
+for _ = 1, 20 do
+    draw(0, false)
+    assert(not labels["新版 Isaac LAN 已下载"])
+end
+dofile(root .. "/src/bridge/presentation/menu.lua")
+draw(0, false)
+assert(
+    not labels["新版 Isaac LAN 已下载"],
+    "Rebuilding Lua cannot reopen a dismissed native notice"
+)
+updateVersion = "0.7.2"
+draw(0, false)
+draw(0, false)
+draw(13, false)
+assert(exited == 1 and #commands == commandsBefore)
+print("PASS menu integration: update input ownership, continue, reconstruction and default exit")
