@@ -209,6 +209,7 @@ local function environment()
         "compat/items/hourglass",
         "compat/items/r_key",
         "compat/items/crafting_bag",
+        "compat/characters/isaac",
         "compat/characters/blue_baby",
     }) do
         modules[name] = module(name)

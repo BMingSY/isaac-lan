@@ -85,6 +85,9 @@ local roomPlacement = assert(modules["runtime/room_placement"])({
     collision = GridCollisionClass,
     canPlace = crawlspace.gridPlacement,
 })
+function _IsaacLanRoomLeaving()
+    modules["compat/items/blue_key"](Game(), RoomDescriptor.FLAG_BLUE_REDIRECT)
+end
 function _IsaacLanRoomEntered(door)
     assert(roomPlacement.arrive(door), "Cannot find a safe room arrival")
     modules["compat/bosses/rotgut"](Game(), Isaac.GetPlayer, RoomType.ROOM_DUNGEON)
@@ -123,6 +126,7 @@ local inventoryState = component("sync/inventory")({
     collectibleReader = glitched.reader,
     subplayer = forgotten.subplayer,
     restoreForm = forgotten.restoreForm,
+    order = assert(modules["compat/characters/isaac"])(native, PlayerType),
     activeType = ItemType.ITEM_ACTIVE,
     curse = NullItemID.ID_LOST_CURSE,
     activeData = function(player, value)

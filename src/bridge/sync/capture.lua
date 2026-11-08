@@ -58,6 +58,12 @@ return function(fields)
                 then
                     local full = captureVisuals[index]
                     if not full then
+                        local actorEntity
+                        -- Held entities and minecarts use room-local indices.
+                        -- Resolve them in the actor's room, including remote views.
+                        assert(native.rooms_with_player(p.ControllerIndex - 1, function()
+                            actorEntity = entity(p)
+                        end))
                         local visuals = {}
                         for _, s in
                             ipairs(
@@ -72,7 +78,7 @@ return function(fields)
                         full = {
                             [Actor.index] = index,
                             [Actor.controller] = p.ControllerIndex,
-                            [Actor.entity] = entity(p),
+                            [Actor.entity] = actorEntity,
                             [Actor.inventory] = base[Actor.inventory],
                             [Actor.visuals] = visuals,
                             [Actor.pose] = assert(native.actor_pose(p:GetSprite())),

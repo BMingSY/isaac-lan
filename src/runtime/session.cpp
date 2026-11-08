@@ -1957,6 +1957,10 @@ void roomEntered(int door) {
     if (!replica())
         integrationCallback("_IsaacLanRoomEntered", door);
 }
+void roomLeaving() {
+    if (!replica())
+        integrationCallback("_IsaacLanRoomLeaving");
+}
 void halfStarted() {
     if (view.gated)
         input::finishUpdate();

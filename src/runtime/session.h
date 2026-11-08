@@ -12,6 +12,7 @@ struct RoomRequest;
 namespace isaac::runtime {
 void configureNetwork(unsigned hz);
 void roomEntered(int door);
+void roomLeaving();
 void requestWindowClose();
 bool install(std::uintptr_t image, void (*logger)(const std::string&), void (*halfUpdate)(),
              void (*restorePositions)());

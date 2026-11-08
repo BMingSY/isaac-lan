@@ -131,6 +131,7 @@ local function stateEnvironment()
             ["compat/characters/forgotten"] = dofile(
                 root .. "/src/bridge/compat/characters/forgotten.lua"
             ),
+            ["compat/characters/isaac"] = dofile(root .. "/src/bridge/compat/characters/isaac.lua"),
             ["compat/characters/blue_baby"] = dofile(
                 root .. "/src/bridge/compat/characters/blue_baby.lua"
             ),
