@@ -238,6 +238,13 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME runtime.input-schedule COMMAND isaac_lan_input_schedule_test)
     set_tests_properties(runtime.input-schedule PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_latency_test tests/latency_test.cpp)
+    target_include_directories(isaac_lan_latency_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_latency_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME runtime.latency COMMAND isaac_lan_latency_test)
+    set_tests_properties(runtime.latency PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_floor_source_test tests/floor_source_test.cpp)
     target_include_directories(isaac_lan_floor_source_test PRIVATE src)
     if(MINGW)
@@ -637,6 +644,7 @@ if(BUILD_TESTING)
         compression-limits
         wire-compression
         async-network
+        latency-hud
         bulk-worker
         reliable-receive
         world-deltas

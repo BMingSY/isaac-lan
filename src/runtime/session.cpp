@@ -23,7 +23,7 @@
 #include "core/room_options.h"
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
-#include "diagnostics/input_latency.h"
+#include "core/input_latency.h"
 #include "engine/session_backend.h"
 #include <cstring>
 #include <filesystem>
@@ -48,7 +48,7 @@ constexpr auto restartHoldDuration = std::chrono::milliseconds(550);
 
 LaunchState launch;
 SessionView view;
-diagnostics::InputLatency inputLatency;
+core::InputLatency inputLatency;
 SavedRun saves;
 std::string sessionFingerprint;
 bool requestRestart(bool held) {
@@ -475,7 +475,7 @@ bool captureNextInput(bool simulationStep = false) {
         fail("Local input sequence rejected");
         return false;
     }
-    if (!session->isHost() && diagnostics::enabled())
+    if (!session->isHost())
         inputLatency.capture(nextInputTick);
     ++nextInputTick;
     return true;
@@ -517,9 +517,13 @@ bool applyReplicaView(bool betweenUpdates) {
         lua.setTop(state, top);
         if (!applied)
             return false;
-        if (diagnostics::enabled())
-            if (auto elapsed = inputLatency.confirm(packet->inputSequences[session->slot()]))
-                diagnostics::sample("input.ack", *elapsed);
+        // Zero also means no input has arrived yet; wait for an unambiguous ack.
+        if (const auto sequence = packet->inputSequences[session->slot()]; sequence)
+            if (auto elapsed = inputLatency.confirm(sequence)) {
+                session->recordSyncLatency(*elapsed);
+                if (diagnostics::enabled())
+                    diagnostics::sample("input.ack", *elapsed);
+            }
         currentTick = packet->tick;
         nextTick = currentTick + 1;
         input::setMenuOwner(packet->pauseOwner);
@@ -548,6 +552,7 @@ void updateReplica(const backend::Call& original) {
         // before a deferred native floor event can name its player object.
         rooms::setConnected(session->connectedMask() | (1u << session->slot()));
         view.floorEpoch = transition->epoch;
+        inputLatency = {};
         // Native Forget Me Now, five-pip rooms and R Key update Seeds before
         // starting the transition. A stage number alone regenerates the old
         // client topology, whose missing descriptor can crash the minimap.
@@ -976,6 +981,8 @@ int poll(lua_State* L) {
             lua.setField(L, -2, ("marks" + std::to_string(i)).c_str());
         }
         integer(("ping" + std::to_string(i)).c_str(), session ? session->latency()[i] : -1);
+        integer(("network" + std::to_string(i)).c_str(), session ? session->networkLatency(i) : -1);
+        integer(("sync" + std::to_string(i)).c_str(), session ? session->syncLatency(i) : -1);
         lua.pushBoolean(L, session && i < session->players() &&
                                session->access()[i].allowsRules(session->rules()));
         lua.setField(L, -2, ("eligible" + std::to_string(i)).c_str());
@@ -1416,6 +1423,7 @@ int close(lua_State* L) {
             lua.unref(L, registry, reference);
     captureRef = applyRef = captureStateRef = restoreStateRef = presentRef = stageRef = -2;
     view.clearSnapshots();
+    inputLatency = {};
     lastInputRoom.reset();
     if (!keep) {
         session.reset();
