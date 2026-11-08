@@ -1,5 +1,6 @@
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
+#include "diagnostics/startup_error.h"
 #include "test_support.h"
 #include <windows.h>
 #include <filesystem>
@@ -25,7 +26,15 @@ void pathAndRecords() {
     } cleanup{root};
     using namespace isaac::logging;
     const auto fallback = root / L"默认文档";
-    require(initialize(fallback), "Could not initialize profile log directory");
+    InitializationFailure failure;
+    const auto notDirectory = root / L"不是目录";
+    std::filesystem::create_directories(root);
+    std::ofstream(notDirectory) << "keep";
+    require(!initialize(notDirectory, &failure) &&
+                failure.path == notDirectory / L"isaac-lan/logs" && failure.error,
+            "Failed directory creation lost its path or OS error");
+    require(initialize(fallback, &failure), "Could not initialize profile log directory");
+    require(failure.path.empty() && !failure.error, "Successful retry retained a stale failure");
     write("bootstrap=PASS");
     // Native game paths can mix '/' and '\\' unlike the fallback path.
     nativeFileOpened((fallback / L"log.txt").generic_wstring().c_str());
@@ -86,7 +95,18 @@ void pathAndRecords() {
         CreateFileW((destination / L"startup.log").c_str(), GENERIC_READ | GENERIC_WRITE,
                     FILE_SHARE_READ, nullptr, CREATE_ALWAYS, 0, nullptr);
     require(held != INVALID_HANDLE_VALUE, "Could not hold the existing log");
-    require(!initialize(blocked), "An exclusive file lock did not reject log selection");
+    require(!initialize(blocked, &failure), "An exclusive file lock did not reject log selection");
+    require(failure.path == destination / L"startup.log" &&
+                failure.error == std::error_code(ERROR_SHARING_VIOLATION, std::system_category()),
+            "Locked startup log lost its exact path or Win32 error");
+    const isaac::startup::Failure startupFailure{
+        isaac::startup::Code::logInitialization, failure.path.wstring(), failure.error, {}};
+    require(isaac::diagnostics::startupFailure(startupFailure) == 29,
+            "Reporting changed the bootstrap return code");
+    require(isaac::diagnostics::startupFailureMessage() == isaac::startup::message(startupFailure),
+            "Reported dialog differs from the original failure");
+    require(read(launch / L"startup.log").find("startup_failure=") != std::string::npos,
+            "Startup failure was not written to the available log");
     write("failed_reopen_preserved=PASS");
     CloseHandle(held);
     require(read(launch / L"startup.log").find("failed_reopen_preserved=PASS") != std::string::npos,

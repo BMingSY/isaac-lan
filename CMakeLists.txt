@@ -53,6 +53,20 @@ if(BUILD_TESTING AND ISAAC_LAN_LZ4_SOURCE_DIR)
     endif()
 endif()
 if(BUILD_TESTING)
+    add_executable(isaac_lan_startup_error_test tests/startup_error_test.cpp)
+    target_include_directories(isaac_lan_startup_error_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_startup_error_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_startup_error_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    foreach(test_case contract messages)
+        add_test(NAME core.startup-error-${test_case} COMMAND isaac_lan_startup_error_test
+                                                              ${test_case})
+        set_tests_properties(core.startup-error-${test_case} PROPERTIES TIMEOUT 30 LABELS
+                                                                        "offline;core")
+    endforeach()
     add_executable(isaac_lan_extension_update_test tests/extension_update_test.cpp
                                                    src/runtime/extension_update.cpp)
     target_include_directories(isaac_lan_extension_update_test PRIVATE src)
@@ -484,6 +498,7 @@ add_library(
     src/presentation/connection_settings.cpp
     src/presentation/chat_background.cpp
     src/diagnostics/runtime_log.cpp
+    src/diagnostics/startup_error.cpp
     src/diagnostics/performance.cpp
     src/diagnostics/crash_signal.cpp
     src/diagnostics/feedback.cpp
@@ -855,8 +870,9 @@ if(BUILD_TESTING)
         target_compile_options(isaac_lan_heap_fixture PRIVATE -Wall -Wextra -Werror)
     endif()
 
-    add_executable(isaac_lan_log_test tests/runtime_log_test.cpp src/diagnostics/runtime_log.cpp
-                                      src/diagnostics/performance.cpp)
+    add_executable(
+        isaac_lan_log_test tests/runtime_log_test.cpp src/diagnostics/runtime_log.cpp
+                           src/diagnostics/performance.cpp src/diagnostics/startup_error.cpp)
     target_link_libraries(isaac_lan_log_test PRIVATE psapi)
     target_include_directories(isaac_lan_log_test PRIVATE src)
     target_compile_definitions(isaac_lan_log_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -877,7 +893,7 @@ target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
                                                     ISAAC_LAN_VERSION="${ISAAC_LAN_VERSION}")
 target_link_libraries(isaac_lan_loader PRIVATE bcrypt)
 if(BUILD_TESTING)
-    foreach(kind compatible incompatible)
+    foreach(kind compatible incompatible failing missing_export)
         add_library(isaac_lan_extension_${kind}_fixture SHARED tests/extension_fixture.cpp)
         target_include_directories(isaac_lan_extension_${kind}_fixture PRIVATE src)
         target_compile_definitions(isaac_lan_extension_${kind}_fixture PRIVATE WIN32_LEAN_AND_MEAN
@@ -889,6 +905,9 @@ if(BUILD_TESTING)
     endforeach()
     target_compile_definitions(isaac_lan_extension_incompatible_fixture
                                PRIVATE TEST_LOADER_ABI_OFFSET=1)
+    target_compile_definitions(isaac_lan_extension_failing_fixture PRIVATE TEST_STARTUP_FAILURE=1)
+    target_compile_definitions(isaac_lan_extension_missing_export_fixture
+                               PRIVATE TEST_NO_BOOTSTRAP=1)
     add_executable(
         isaac_lan_extension_loader_test
         tests/extension_loader_test.cpp src/app/extension_loader.cpp
@@ -905,7 +924,9 @@ if(BUILD_TESTING)
         NAME app.extension-loader
         COMMAND
             isaac_lan_extension_loader_test $<TARGET_FILE:isaac_lan_extension_compatible_fixture>
-            $<TARGET_FILE:isaac_lan_extension_incompatible_fixture>)
+            $<TARGET_FILE:isaac_lan_extension_incompatible_fixture>
+            $<TARGET_FILE:isaac_lan_extension_failing_fixture>
+            $<TARGET_FILE:isaac_lan_extension_missing_export_fixture>)
     set_tests_properties(app.extension-loader PROPERTIES TIMEOUT 30 LABELS "offline;native")
 endif()
 target_compile_definitions(isaac_lan_lab PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)

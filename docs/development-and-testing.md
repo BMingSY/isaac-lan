@@ -94,6 +94,8 @@ Boss 出场共享的定向检查为 `core.intro-barrier`、`native.intro-complet
 
 ## 失败记录与回放
 
+启动错误的定向离线检查为 `core.startup-error-contract`、`core.startup-error-messages`、Windows 的 `log.path-and-records` 和 `app.extension-loader`。覆盖稳定编号、未知编号、中文长路径、日志目录失败与文件占用、失败后的原日志保留、DLL 缺失／导出缺失，以及新旧主体的诊断回退；这些检查无需启动游戏。
+
 统一运行按当轮归档保存阶段日志、耗时、`summary.json`、`ctest.xml`、`pytest.xml` 和失败请求。回放命令：
 
 ```sh
