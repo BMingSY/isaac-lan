@@ -63,9 +63,11 @@ Lua 绘制组件按权威实体 ID 维护实际绳索记录，以 `EntityPtr` �
 
 角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先移除原房间各实体列表中的引用，再调用原生添加入口；对象仍由游戏持有和销毁，不复制效果、不重放道具使用。没有对应持有者的效果及房间独立效果不随角色迁移。
 
+迁移的原生离房回调完成后、随行实体迁出前，主机在源房间作用域内通知 `_IsaacLanRoomLeaving()`；回调只借用当前房间，不保留对象。蓝钥匙兼容组件在这里消费源房间各门目标的 `FLAG_BLUE_REDIRECT`，保留其他标记。
+
 原生放置完成后，主机在仅含本次抵达身体的目的房间作用域内通知 `_IsaacLanRoomEntered(door)`。无门到达（`door < 0`）由[落点组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_placement.lua)检查房间边界、碰撞范围和飞行能力，只把无效位置移到最近的安全网格；有效位置和常驻玩家保持原状。地窖等横版房间由路线兼容策略保留原生落点。常规门口位置仍由原生入口处理，客机接受主机最终位置。
 
-客机房间请求先核对楼层、维度和实际源房间。对于同维度的非传送请求，主机读取目标描述符 `roomDescriptor::doors`，将邻接格解析为原生 `SafeGridIndex`；只有一个入口指向源房间时才采用该门的落点。多个入口、非邻接房间、地图外目的地、跨维度或传送请求不推断入口。描述符仅在查找期间借用，不缓存原生指针或改变房间所有权。
+客机房间请求先核对楼层、维度和实际源房间。对于同维度的非传送请求，主机读取目标描述符 `roomDescriptor::doors`，将邻接格解析为原生 `SafeGridIndex`；只有一个入口指向源房间时才采用该门的落点。源端出口同样唯一时，后端在源房间及所属身体作用域内执行既有步行转场解析，特殊过道等原生重定向先于迁移与标记消费；客机报告的邻接房间不直接决定最终目的地。多个入口、非邻接房间、地图外目的地、跨维度或传送请求不推断入口。描述符仅在查找期间借用，不缓存原生指针或改变房间所有权。
 
 妈手抓取的原生转场调用点为 RVA `0x134752`，以空玩家参数请求起始房间的淡入淡出，调用字节受启动签名校验。后端识别该调用上下文，交由[抓取转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/enemies/room_transitions.h)验证目的地和参数，只排队源房间内已连接的参与者及其受控身体。安全边界完成迁移后按原生 `RoomTransition::ChangeRoom` 的排除标志恢复可见性并提供到达保护；目的地已加载或就是当前房间时同样完成恢复。恢复请求随会话清理，不改变其他房间的玩家状态。
 
@@ -80,6 +82,8 @@ Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端
 `actor_lazarus_unpair(index)` 仅供客机恢复长子权里拉撒路的幽灵状态。角色兼容组件根据权威幽灵状态请求挂起第二具身体；后端要求房间系统启用、没有借用作用域，索引指向完整名单内的主人，双向配对身体位于其后、同房、同控制器，分别属于里拉撒路的两种形态，且双方没有隐藏备份。校验失败不写入。后端按 J460 原生降级路径把双方的 `player::lazarusBackup`（`+0x1e6c`）设为彼此，用原生 EntityPtr 赋值清除公开配对引用，将备份设为未注册／不活动、玩家索引为 `-1`，再调用 `PlayerManager::RemoveExistingPlayer`（RVA `0x5b9fc0`，`thiscall void(manager, player)`）移出名单。该入口只移除名单元素，不能传入不在名单中的身体；启动时校验其签名。备份仍由原生玩家对象持有，不销毁或分配角色；既有幽灵／复活入口遍历隐藏备份，`actor_form` 在权威重新列出身体时恢复公开配对和名单。房间作用域负责位置记录，后续实体同步负责跟班状态；接口不接收地址，不调用客机伤害或玩家更新逻辑。
 
 完整名单借用使用 [`room_roster.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_roster.h) 的 `TeamRoster`，只复制 J460 玩家向量的 begin／end／capacity 描述符，不复制角色或持有其分配。借用期间，[`ScopeStack::TeamBinding`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 将完整名单来源指向当前原生向量；重复查询不重新装入保存的描述符，原生扩容、增删和重排均保留。嵌套房间作用域暂借其保存的最新描述符；正常返回及异常退栈先交回更新后的名单，再恢复父作用域。绑定必须按栈顺序销毁，不跨会话、楼层清理或异步调用持有。既有原生入口与启动签名校验保持适用，角色和向量分配／释放仍由后端与 PlayerManager 管理。
+
+角色构造期间调用共享资源广播时，新身体可能尚未登记到房间位置表。此时后端先从已登记参与者用既有 `Player::CopyResourcesTo` 复制本次共享掩码内的资源，再借入完整名单执行原生广播，避免将构造初始值写回队伍。已登记身体、个人资源位及未启用房间系统时沿用各自原生路径；不保存跨帧资源副本、不补发拾取物，也不改变身体分配或资源所有权。
 
 `room_special_template(index, type, variant, seed)` 为主机未访问、未实例化、没有覆盖配置的主维度房间选择原生特殊房间模板。既有 `roomConfigRandomRoom` Hook 记录当前游戏所属的配置对象；接口限定特殊房间库、精确类型和原房间形状。`variant` 非负时指定精确变种，`-1` 时从普通模式模板中随机选择。既有连接的门掩码参与筛选，结果必须包含所有连接门位；选择不消耗房间权重，失败不替换原配置。描述符仅借用游戏配置指针，字符串、生成列表与房间对象仍由游戏持有；布局字段归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `roomDescriptor`／`roomConfig`。接口不传递地址、不构造或释放原生配置，不允许替换已加载房间；具体模板与调用时机由挑战地图策略决定。
 
@@ -230,6 +234,8 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 ## 道具与效果
 
+`actor_inventory_order(sprite[, bytes])` 读取或恢复当前名单中玩家的 16 个库存槽顺序，每槽为大端 `i32` 道具 ID，0 表示空槽；玩法适配只用于里以撒。写入只允许客机，在完整解析并校验重复项数量后，把 ID 映射到本机已有历史索引，再一次提交槽位并置该角色 `PlayerHUD+0x6ac` 的库存刷新字节；顺序不变时不触及缓存。历史容器、道具效果、纹理和 HUD 缓存仍归原生代码所有，不复制主机索引、不分配历史条目。J460 的槽数组位于 `Player+0x1e00`，历史向量位于 `+0x1dec`，历史条目步长 `0x1c`、饰品标记 `+0x4`、道具 ID `+0x8`；读取检查向量长度、65536 条上限和每个索引，布局受原生 HUD 读取指令签名校验。实现见 [inventory_order.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/inventory_order.h)。
+
 `items_active_data(sprite[, bytes])` 接受当前原生名单中玩家的借用 Sprite，读取或恢复四个主动槽的 `{id:i32, data:i32}` 大端记录，共 32 字节。写入只允许客机；完整解析后核对四个 ID 与已恢复的库存一致、空槽状态为 0，并通过[道具状态校验](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/active_data.h)后才提交。D 无限高 16 位为十种骰子的索引，低 16 位保留充能状态。原生描述符位于 `Player+0x1580`，槽间隔 `0x20`，状态在槽内 `+0x1c`；布局由 RVA `0x391519` 的原生写入指令校验。
 
 状态变化只清空该玩家对应槽的原生 HUD 图标键。PlayerHUD 数组起于 `Game+0x1da04`，共 8 项、每项 `0x6dc`，首字段为借用玩家指针；四个主动图标缓存起于 `+0x190`，间隔 `0x1c`。根、步长、清空操作和槽间隔受原生指令签名校验。重复状态不触及缓存；图片加载、释放和绘制继续由原生 HUD 负责，不借用队友图标，也不执行主动道具玩法。实现见 [active_items.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/active_items.h)。
@@ -263,7 +269,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x26528/+0x2652c/+0x26530` 是泛光剩余时间／初始时间／强度，`+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；角色更新及嵌套的道具／药丸／卡牌调用借入同一所属状态，结束时回收并恢复全局标量；绘制只借入本机状态，角色动作外的世界泛光保留全局归属 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 38、网络消息版本为 47；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 39、网络消息版本为 48；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 

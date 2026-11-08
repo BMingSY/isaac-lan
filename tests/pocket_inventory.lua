@@ -39,6 +39,7 @@ local expected = {
     raw,
     false,
     false,
+    false,
 }
 -- Setter order is checked above; this round trip fixes every nested tuple position.
 local plain = factory(root)

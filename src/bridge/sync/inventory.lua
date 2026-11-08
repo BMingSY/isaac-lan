@@ -147,6 +147,7 @@ return function(fields)
                     [Subplayer.hearts] = captureHearts(sub),
                 } or false,
                 [Inventory.activeData] = env.activeData and env.activeData(p) or false,
+                [Inventory.order] = env.order and env.order(p) or false,
             }
         end
         local function applyResources(p, v)
@@ -221,6 +222,12 @@ return function(fields)
                 assert(
                     env.activeData and env.activeData(p, v[Inventory.activeData]),
                     "Cannot restore active item data"
+                )
+            end
+            if v[Inventory.order] then
+                assert(
+                    env.order and env.order(p, v[Inventory.order]),
+                    "Cannot restore inventory order"
                 )
             end
             for i, active in ipairs(v[Inventory.active]) do

@@ -102,6 +102,10 @@ inline constexpr int intro = 2, returning = 3;
 namespace activeItem {
 inline constexpr unsigned count = 4, stride = 0x20, data = 0x1c;
 } // namespace activeItem
+namespace historyItem {
+inline constexpr unsigned size = 0x1c, trinket = 0x4, id = 0x8;
+inline constexpr unsigned maxEntries = 65536;
+} // namespace historyItem
 namespace room {
 inline constexpr unsigned size = 0x7898;
 inline constexpr unsigned descriptor = 0x4, type = 0x8;
@@ -262,6 +266,7 @@ inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, sta
 inline constexpr unsigned flipSprite = 0x5d0, flipVisible = 0x6d9;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned history = 0x1dec, inventoryOrder = 0x1e00, inventorySlots = 16;
 inline constexpr unsigned extraSprite = 0x41c, auxiliarySprite = 0xee4, ghostSprite = 0xff8;
 inline constexpr unsigned costumes = 0x1220, costumeStride = 0x130, maximumCostumes = 4096;
 inline constexpr unsigned weapons = 0x13dc;

@@ -3,6 +3,7 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/active_items.h"
+#include "engine/versions/j460/inventory_order.h"
 #include "compat/items/starting_rewards.h"
 #include <MinHook.h>
 #include "engine/lua_api.h"
@@ -103,6 +104,37 @@ Address playerArgument(lua_State* L, bool snapshot = false) {
                    (snapshot || at<bool>(actor, layout::entity::active))
                ? actor
                : 0;
+}
+int inventoryOrder(lua_State* L) {
+    try {
+        const auto actor = playerArgument(L, true);
+        if (!actor)
+            throw std::runtime_error("Inventory order requires a listed player");
+        if (lua.getTop(L) == 1) {
+            lan::Writer writer(lan::Message::world);
+            for (const auto id : j460::inventory_order::capture(actor))
+                writer.u32(static_cast<std::uint32_t>(id));
+            lua.pushLString(L, reinterpret_cast<const char*>(writer.bytes.data() + 1),
+                            writer.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas restore inventory order");
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 2, &size);
+        lan::Reader reader({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        j460::inventory_order::State desired;
+        for (auto& id : desired)
+            id = std::bit_cast<std::int32_t>(reader.u32());
+        reader.finish();
+        j460::inventory_order::restore(actor, at<Address>(image, j460::globals::game), desired);
+        lua.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
 }
 int activeData(lua_State* L) {
     try {
@@ -261,13 +293,14 @@ bool bind(lua_State* L, HMODULE module) {
                            S::pushInteger, S::pushBoolean, S::pushString, S::pushClosure,
                            S::setField, S::getTop, S::checkString, S::pushLString}))
         return false;
-    for (const auto& [key, fn] : std::array<std::pair<const char*, isaac::lua::Function>, 6>{
+    for (const auto& [key, fn] : std::array<std::pair<const char*, isaac::lua::Function>, 7>{
              {{"items_take_collectible", take},
               {"items_give_collectible", give},
               {"items_collectible_name", name},
               {"items_active_charge", activeCharge},
               {"items_add_active_charge", addActiveCharge},
-              {"items_active_data", activeData}}}) {
+              {"items_active_data", activeData},
+              {"actor_inventory_order", inventoryOrder}}}) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, key);
     }

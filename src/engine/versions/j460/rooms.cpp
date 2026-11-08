@@ -649,6 +649,17 @@ void __attribute__((fastcall)) syncResources(void* player, void*, unsigned mask)
         originalResources(player, mask);
         return;
     }
+    const auto actor = reinterpret_cast<Address>(player);
+    if (!location.contains(actor)) {
+        // Native constructors broadcast their zero-initialized resource fields
+        // before Scope enrolls the new body. Inherit the live team pool first.
+        for (const auto owner : participants)
+            if (owner != actor && location.contains(owner)) {
+                engine<CopyResources>(j460::entry::entityPlayerCopyResourcesTo)(
+                    reinterpret_cast<void*>(owner), player, shared);
+                break;
+            }
+    }
     {
         TeamScope team;
         originalResources(player, shared);
@@ -3031,6 +3042,21 @@ bool receiveRoomRequest(unsigned slot, const lan::RoomRequest& request) {
         !request.teleport && target->index >= 0 && target->dimension == from->key.dimension
             ? uniqueEntranceDoor(from->key.index, entranceNeighbors(*target))
             : -1;
+    if (door >= 0) {
+        const int leave = uniqueEntranceDoor(target->index, entranceNeighbors(from->key));
+        if (leave >= 0) {
+            Scope scope(*from, controlledActors(head));
+            at<int>(game(), j460::layout::game::leaveDoor) = leave;
+            // A guest's native door preview names the adjacent descriptor.
+            // Resolve the actual transition on authority in the source room,
+            // just as a host walking through that door would.
+            constexpr int walkAnimation = 0;
+            transition(reinterpret_cast<void*>(game()), nullptr, target->index, leave % 4,
+                       walkAnimation, reinterpret_cast<void*>(head), target->dimension);
+            return std::any_of(pending.begin(), pending.end(),
+                               [head](const auto& value) { return value.player == head; });
+        }
+    }
     return queue(head, target->index, target->dimension, door, request.teleport);
 }
 std::vector<SavedLocation> captureLocations() {
@@ -3248,6 +3274,7 @@ struct RoomTransfer {
                 if (!runtime::replica())
                     engine::items::leaveRoom(reinterpret_cast<void*>(player));
             }
+            runtime::roomLeaving();
         }
         collect();
     }

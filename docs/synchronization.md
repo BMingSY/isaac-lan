@@ -52,13 +52,13 @@ flowchart LR
 
 ## 完整视图与实体身份
 
-每份视图包含全队主要角色状态、共同楼层与地图，以及接收者当前房间的实体、网格和表现。同房角色携带完整外观，异房角色保留多人 HUD 所需状态。角色的 `ControlsEnabled` 与 `ControlsCooldown` 同属权威状态；客机不推进原生角色更新，控制冷却的递减和归零必须随快照恢复。玩家字段同时携带 `Friction`，供本机重放蜘蛛网、地面减速后的移动。库存字段 12 `subplayer` 为 `false` 或 `{type, hearts}`；骸骨兼容组件先恢复原生形态配对，再分别恢复当前与隐藏形态生命，不重建隐藏身体的道具库存。任意 Mod 私有表、Lua 源码和原生指针不进入视图。
+每份视图包含全队主要角色状态、共同楼层与地图，以及接收者当前房间的实体、网格和表现。同房角色携带完整外观，异房角色保留多人 HUD 所需状态。角色的 `ControlsEnabled` 与 `ControlsCooldown` 同属权威状态；客机不推进原生角色更新，控制冷却的递减和归零必须随快照恢复。玩家字段同时携带 `Friction`，供本机重放蜘蛛网、地面减速后的移动。库存字段 12 `subplayer` 为 `false` 或 `{type, hearts}`；骸骨兼容组件先恢复原生形态配对，再分别恢复当前与隐藏形态生命，不重建隐藏身体的道具库存。库存字段 14 `order` 为 `false` 或里以撒的 16 个大端 `i32` 有序道具 ID 组成的 64 字节串；完成道具数量恢复后再恢复顺序，重复快照不推进选择。任意 Mod 私有表、Lua 源码和原生指针不进入视图。
 
-采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。分层投影复制角色与房间容器，编码缓存复用其不变的子表。仅有一个客机时不增加这类片段；多个客机共享角色字段，同房且同维度的客机还共享实体与网格编码。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
+采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。角色持有物与矿车关联在角色所属房间内采集，房间内部索引只用于转换为稳定实体 ID。分层投影复制角色与房间容器，编码缓存复用其不变的子表。仅有一个客机时不增加这类片段；多个客机共享角色字段，同房且同维度的客机还共享实体与网格编码。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
 
 [分层投影](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/layers.lua)把道具列表、饰品、地图、进度、诅咒、交易、药丸、生成道具定义、房间布局／轨道／夹层信息编码为低频依赖；充能、血量、消耗品、便便／合成袋／临时效果、位置、实体、网格、动画及一次性表现留在实时部分。采集仍逐 tick 执行，低频指传输按变化发送，不延后读取权威状态。UDP 依赖使用递增修订号和可靠有序交付，可引用上一份可靠依赖压缩；一次最多有一份未确认的可靠副本，其间的新变化合并为最新候选，允许跳过中间修订。初始视图可靠交付；建立应用确认基线后，尚未被应用确认的新修订同时内嵌于实时视图，避免可靠副本丢包阻塞整帧。内嵌副本可先于可靠副本到达，接收缓存按修订号合并，可靠压缩字典独立维护。实时视图明确引用修订号，客机仅在对应数据齐全时还原完整视图，不能套用最新库存或跨房间拼接。依赖缓存、未完成视图和修订号在代次屏障清理。
 
-世界 schema 为 38，字段 `captured` 是主机开始本轮采集的单调时钟毫秒数；离线生成的无时钟状态使用 0。采集回调返回实时字节和可选依赖字节，应用回调的第五个参数接收对应依赖。完整状态的诊断采集仍由 `state.capture` 提供；生产传输使用 `state.captureTransfer`。
+世界 schema 为 39，字段 `captured` 是主机开始本轮采集的单调时钟毫秒数；离线生成的无时钟状态使用 0。采集回调返回实时字节和可选依赖字节，应用回调的第五个参数接收对应依赖。完整状态的诊断采集仍由 `state.capture` 提供；生产传输使用 `state.captureTransfer`。
 
 库存的 `activeData`（字段 13）保存四个主动槽的内部状态：每槽为大端 `{id:i32, data:i32}`，共 32 字节；空槽的状态为 0。副本先恢复各槽道具身份，再恢复状态，最后设置充能，确保依赖内部状态的容量与图标一致。应用前完整校验槽位身份与道具状态；重复状态不刷新图标缓存，也不重放道具使用。联机幽灵的隐藏背包继续由原生转换负责。
 
@@ -96,7 +96,7 @@ NPC 字段 `npc` 是 25 字节记录：六个大端 float32 依次保存 `V1`、
 
 主线程通过有界单生产者／单消费者队列交换拥有独立存储的消息，最新视图使用单值邮箱替换尚未处理的旧值。网络工作线程不调用 Lua、游戏 API、日志回调或诊断回调；诊断样本有界交接后由主线程记录。存档和回退使用独立的 [大数据工作线程](https://github.com/BMingSY/isaac-lan/blob/main/src/net/byte_worker.cpp)，在后台压缩、解压并校验完整性，避免占住网络线程。原生存档采集、Continue 和副本应用必须在主线程执行。取消任务后，已开始的任务只完成其独立字节结果；旧会话退出等待在线程退休阶段完成，不阻塞下一次重连的启动。
 
-游戏协议版本为 47。ENet 建连标记固定为 `ILAN`，不使用游戏协议号提前拒绝连接。双方先在可靠通道交换独立、未压缩的[兼容性报文](https://github.com/BMingSY/isaac-lan/blob/main/src/net/compatibility.h)，其信封、修订号和字段顺序独立于游戏协议。报文携带 Isaac LAN 版本号、扩展指纹和游戏协议号，三项必须完全一致；版本号来自 [VERSION](https://github.com/BMingSY/isaac-lan/blob/main/VERSION) 的编译值，扩展指纹包含目标游戏版本标识和 DLL 文件内容。预检通过前不解压或解析游戏消息，不接纳大厅席位，也不启动归队恢复。初次加入和重连共用这一检查。
+游戏协议版本为 48。ENet 建连标记固定为 `ILAN`，不使用游戏协议号提前拒绝连接。双方先在可靠通道交换独立、未压缩的[兼容性报文](https://github.com/BMingSY/isaac-lan/blob/main/src/net/compatibility.h)，其信封、修订号和字段顺序独立于游戏协议。报文携带 Isaac LAN 版本号、扩展指纹和游戏协议号，三项必须完全一致；版本号来自 [VERSION](https://github.com/BMingSY/isaac-lan/blob/main/VERSION) 的编译值，扩展指纹包含目标游戏版本标识和 DLL 文件内容。预检通过前不解压或解析游戏消息，不接纳大厅席位，也不启动归队恢复。初次加入和重连共用这一检查。
 
 UDP 游戏消息使用消息封套和连接代次，按完整报文交接，不使用字节流长度前缀。[统一消息封装](https://github.com/BMingSY/isaac-lan/blob/main/src/net/wire_codec.h) 对至少 256 字节的控制、聊天及扩展消息尝试压缩，仅在包含封套后仍更小时使用 `0x80 + 压缩封套`；小消息和不可压缩消息保持原正文。实时视图、检查点和回退载荷先整体压缩再分块，不逐块重复压缩。
 

@@ -174,6 +174,8 @@ python tools/engine_test.py run special-routes -- \
 
 角色复活的名单借用检查为 `core.room-team-roster` 与 `core.room-scope-ownership`，覆盖原生名单扩容、嵌套查询、跨房借用及异常清理；`bridge.actor-forms` 检查长子权身体的死亡挂起、重复幽灵状态及复活重新入列，`bridge.replica_pipeline` 检查形态解析与库存恢复顺序、重复状态和失败边界。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case character-revival --heap-check --record`，默认检查客机里骸骨的 Boss 复活、死亡前后拾取、资源保留、身体配对、闪烁状态和跨房／跨层；夹具 [state_character_revival.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_character_revival.lua) 接受 `revivalOwner`（0／1）及 `revivalKind`（`tainted-forgotten`、`forgotten`、`lazarus`、`lazarus-birthright`、`twins`），可通过现有套件工厂组合，复用同一对进程对照主客机和其他多身体角色。
 
+`special-routes` 的 `--case feedback-items` 检查主客机使用骸骨魂石后的资源、客机里以撒的实际切换及拾取替换、蓝钥匙上锁入口与对侧出口、丢弃后的重访，以及里骸骨分房抱起／投掷／带入其他房间。夹具见 [state_feedback_items.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_feedback_items.lua)；离线契约检查为 `bridge.inventory-order`、`native.inventory-order`、`bridge.blue-key` 和 `bridge.capture_generation`。图标刷新还需对照双端录帧。
+
 `special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存原始传输；`datagrams.bin` 按大端 `double 时间戳 + u8 方向 + u16 长度 + 原始报文` 记录。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
 
 `entity-fields` 使用泪弹、跟班和效果实体，对照游戏 Lua 属性、原生数组与数值块的读写结果，检查完整动画往返、错误输入不写入及外层编解码；它不作性能验收，可与其他功能场景共用进程。`lazarus` 在启动前仅为隔离客机准备所需角色解锁，并在进入联机前核对菜单可选项；存档仍由套件备份和恢复。

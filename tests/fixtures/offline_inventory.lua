@@ -8,7 +8,8 @@ return function(
     subplayer,
     restoreForm,
     activeData,
-    collectibleReader
+    collectibleReader,
+    order
 )
     local module = dofile(root .. "/src/bridge/sync/inventory.lua")(
         dofile(root .. "/src/bridge/sync/fields.lua")
@@ -40,6 +41,7 @@ return function(
         subplayer = subplayer,
         restoreForm = restoreForm,
         activeData = activeData,
+        order = order,
     })
     local player
     function fixture.reset(ghost)

@@ -5,6 +5,7 @@ local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local schema = dofile(root .. "/src/bridge/sync/world_schema.lua")
 local epoch, revision, calls = 1, 1, {}
 local catalogs = {}
+local currentRoom = { index = 84, dimension = 0 }
 local connected, playerCount = 7, 3
 local function count(name)
     calls[name] = (calls[name] or 0) + 1
@@ -85,6 +86,14 @@ local deps = {
         return assert(players[index])
     end,
     entity = function(player, full)
+        if full ~= false then
+            local ownerRoom = positions[tostring(player.ControllerIndex - 1)]
+            assert(
+                currentRoom.index == ownerRoom.index
+                    and currentRoom.dimension == ownerRoom.dimension,
+                "Actor links were resolved against another room's entity indices"
+            )
+        end
         count("entity")
         return { player.ControllerIndex, full == nil, revision }
     end,
@@ -132,6 +141,13 @@ local deps = {
         end
     end,
     native = {
+        rooms_with_player = function(slot, callback)
+            local previous = currentRoom
+            currentRoom = assert(positions[tostring(slot)])
+            callback()
+            currentRoom = previous
+            return true
+        end,
         net_floor_epoch = function()
             return epoch
         end,
