@@ -383,28 +383,28 @@ int audit(lua_State* L) {
     return 1;
 }
 } // namespace
-int installUpdates(std::uintptr_t base, void (*logger)(const std::string&)) {
+startup::Code installUpdates(std::uintptr_t base, void (*logger)(const std::string&)) {
     image = base;
     log = logger;
     if (MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::roomUpdate),
                       reinterpret_cast<void*>(updateForeground),
                       reinterpret_cast<void**>(&originalRoomUpdate)) != MH_OK ||
         MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::roomUpdate)) != MH_OK)
-        return 16;
+        return startup::Code::roomUpdate;
     if (MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::gameUpdateHalf),
                       reinterpret_cast<void*>(updateHalfFrames),
                       reinterpret_cast<void**>(&originalHalfUpdate)) != MH_OK ||
         MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::gameUpdateHalf)) != MH_OK)
-        return 17;
-    return 0;
+        return startup::Code::halfUpdate;
+    return startup::Code::success;
 }
-int installRendering() {
+startup::Code installRendering() {
     if (MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::gameRender),
                       reinterpret_cast<void*>(renderLocalRoom),
                       reinterpret_cast<void**>(&originalGameRender)) != MH_OK ||
         MH_EnableHook(reinterpret_cast<void*>(image + j460::entry::gameRender)) != MH_OK)
-        return 20;
-    return 0;
+        return startup::Code::rendering;
+    return startup::Code::success;
 }
 void halfUpdate() {
     updateHalfFrames();

@@ -57,7 +57,7 @@ struct Temporary {
 } // namespace
 int wmain(int argc, wchar_t** argv) {
     try {
-        require(argc == 3, "expected compatible and incompatible fixture DLLs");
+        require(argc == 5, "expected compatible, incompatible, failing and missing-export DLLs");
         wchar_t executable[32768]{};
         require(GetModuleFileNameW(nullptr, executable, std::size(executable)) != 0,
                 "locate fixture build directory");
@@ -65,7 +65,41 @@ int wmain(int argc, wchar_t** argv) {
         // Cross-compiled CTest arguments may still use the Linux build prefix.
         const auto compatible = binaryDirectory / fs::path(argv[1]).filename();
         const auto incompatible = binaryDirectory / fs::path(argv[2]).filename();
+        const auto failing = binaryDirectory / fs::path(argv[3]).filename();
+        const auto missingExport = binaryDirectory / fs::path(argv[4]).filename();
         Temporary temporary;
+        const auto missing = temporary.root / L"缺失.dll";
+        auto rejected = isaac::loader::loadInstalled(missing);
+        require(!rejected.module && !rejected.bootstrap &&
+                    rejected.failure.code == isaac::startup::Code::extensionLoad &&
+                    rejected.failure.path == missing.wstring() && rejected.failure.systemError,
+                "Missing DLL lost its failure stage, Unicode path or OS error");
+        rejected = isaac::loader::loadInstalled(missingExport);
+        require(!rejected.module && !rejected.bootstrap &&
+                    rejected.failure.code == isaac::startup::Code::bootstrapExport &&
+                    rejected.failure.systemError.value() == ERROR_PROC_NOT_FOUND,
+                "Missing bootstrap export was misreported as a load failure");
+        require(GetModuleHandleW(missingExport.filename().c_str()) == nullptr,
+                "Rejected DLL was not unloaded");
+        auto diagnostic = isaac::loader::loadInstalled(failing);
+        require(diagnostic.bootstrap != nullptr, "Load diagnostic fixture");
+        const auto status = diagnostic.bootstrap(nullptr);
+        const auto message = isaac::loader::failureMessage(diagnostic, status);
+        require(status == 29 && message.find(L"C:\\文档\\startup.log") != message.npos &&
+                    message.find(L"system:5") != message.npos,
+                "Loader did not use the payload's detailed failure export");
+        FreeLibrary(diagnostic.module);
+        diagnostic = isaac::loader::loadInstalled(compatible);
+        const auto legacy = isaac::loader::failureMessage(diagnostic, 14);
+        require(legacy.find(L"code 14") != legacy.npos && legacy.find(L"目录") != legacy.npos &&
+                    legacy.find(L"游戏版本") == legacy.npos,
+                "Legacy payload without an error export lost directory-specific guidance");
+        require(isaac::loader::failureMessage(diagnostic, 0).empty(),
+                "Successful bootstrap produced an error message");
+        const auto unknown = isaac::loader::failureMessage(diagnostic, 4001);
+        require(unknown.find(L"4001") != unknown.npos && unknown.find(L"UNKNOWN") != unknown.npos,
+                "Unknown payload code was lost");
+        FreeLibrary(diagnostic.module);
         write(temporary.root / "hash-vector", "abc");
         require(isaac::loader::fileHash(temporary.root / "hash-vector") ==
                     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",

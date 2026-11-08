@@ -31,6 +31,7 @@
 #include "core/extension_package.h"
 #include "engine/module_path.h"
 #include "diagnostics/runtime_log.h"
+#include "diagnostics/startup_error.h"
 #include "diagnostics/performance.h"
 #include "diagnostics/crash_signal.h"
 #include "diagnostics/feedback.h"
@@ -115,6 +116,20 @@ std::string utf8(const std::wstring& s) {
     WideCharToMultiByte(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), out.data(), size, nullptr,
                         nullptr);
     return out;
+}
+std::wstring wide(const std::string& text) {
+    const auto size =
+        MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+    std::wstring result(size, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), result.data(),
+                        size);
+    return result;
+}
+using StartupCode = isaac::startup::Code;
+DWORD fail(StartupCode code, std::wstring path = {}, std::error_code systemError = {},
+           std::wstring detail = {}) {
+    return isaac::diagnostics::startupFailure(
+        {code, std::move(path), systemError, std::move(detail)});
 }
 
 BOOL WINAPI privateUserProfile(HANDLE, LPSTR buffer, LPDWORD size) {
@@ -219,19 +234,23 @@ extern "C" __declspec(dllexport) unsigned __cdecl IsaacLanLoaderABI() {
     return isaac::updates::loaderABI;
 }
 
-extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
+namespace {
+DWORD initialize() {
     wchar_t env[1024] = {}, executable[1024] = {};
     DWORD size = GetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", env, 1024);
     const auto length = GetModuleFileNameW(nullptr, executable, 1024);
-    if (!length || length >= 1024)
-        return 11;
+    if (!length || length >= 1024) {
+        const auto error = GetLastError();
+        return fail(StartupCode::executablePath, {},
+                    {static_cast<int>(error), std::system_category()}, L"GetModuleFileNameW");
+    }
     const auto directory = std::filesystem::path(executable).parent_path();
     std::ifstream marker(directory / L".isaac-lan-install");
     std::string identity;
     std::getline(marker, identity);
     const bool installed = identity == "IsaacLAN/1";
     if (size >= 1024 && !installed)
-        return 10;
+        return fail(StartupCode::labEnvironment);
     const std::wstring expected =
         size && size < 1024 ? std::wstring(env) + L"\\game\\isaac-ng.exe" : std::wstring{};
     const bool matchesLab = !expected.empty() && _wcsicmp(executable, expected.c_str()) == 0;
@@ -240,28 +259,35 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
                           INVALID_FILE_ATTRIBUTES;
     const auto selected = isaac::bootstrap::profile(installed, size != 0, matchesLab, markedLab);
     if (selected == isaac::bootstrap::Profile::wrongPath)
-        return 11;
+        return fail(StartupCode::executablePath, executable);
     if (selected == isaac::bootstrap::Profile::missingMarker)
-        return 12;
+        return fail(StartupCode::installationMarker,
+                    matchesLab ? (std::filesystem::path(env) / L".isaac-lan-lab").wstring()
+                               : (directory / L".isaac-lan-install").wstring());
     isolated = selected == isaac::bootstrap::Profile::isolated;
     wchar_t documents[MAX_PATH]{};
     std::filesystem::path logDirectory;
     if (isolated)
         logDirectory =
             std::filesystem::path(env) / L"profile/Documents/My Games/Binding of Isaac Repentance+";
-    else if (SUCCEEDED(
-                 SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documents)))
+    else {
+        const auto result =
+            SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documents);
+        if (FAILED(result))
+            return fail(StartupCode::documentsDirectory, {}, {},
+                        L"SHGetFolderPathW HRESULT=" +
+                            std::to_wstring(static_cast<unsigned long>(result)));
         logDirectory = std::filesystem::path(documents) / L"My Games/Binding of Isaac Repentance+";
-    else
-        return 14;
+    }
     const auto config = isaac::configuration::load(directory / L"isaac-lan/config.ini");
     settings = config.settings;
     isaac::presentation::player_opacity::configure(settings.otherPlayersOpacity);
     isaac::runtime::configureNetwork(settings.inputHz);
     isaac::logging::configure(settings.logLevel);
     isaac::diagnostics::configure(settings);
-    if (!isaac::logging::initialize(logDirectory))
-        return 14;
+    isaac::logging::InitializationFailure logFailure;
+    if (!isaac::logging::initialize(logDirectory, &logFailure))
+        return fail(StartupCode::logInitialization, logFailure.path.wstring(), logFailure.error);
     log("startup_extension=" + utf8(isaac::engine::modulePath(&initialized).wstring()));
     for (const auto& warning : config.warnings)
         log("config_warning=" + warning);
@@ -288,7 +314,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         std::error_code error;
         std::filesystem::create_directories(root, error);
         if (error)
-            return 14;
+            return fail(StartupCode::dataDirectory, root, error);
         if (size) {
             SetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", nullptr);
             SetEnvironmentVariableW(L"ISAAC_LAN_LAB_READY", nullptr);
@@ -302,68 +328,68 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
         compatibilityError = isaac::build::checkMemory(image);
     if (!compatibilityError.empty()) {
         log("game_compatibility=FAILED " + compatibilityError);
-        if (!isolated)
-            MessageBoxA(nullptr, compatibilityError.c_str(), "Isaac LAN - game compatibility",
-                        MB_OK | MB_ICONERROR);
-        return 13;
+        return fail(StartupCode::gameCompatibility, executable, {}, wide(compatibilityError));
     }
     log("game_compatibility=PASS build=" + std::string(isaac::build::version));
     isaac::input::install(image, log, installed);
     if (isolated) {
         profile = utf8(root + L"\\profile");
         if (profile.size() > 800 || profile.find_first_of("\r\n") != std::string::npos)
-            return 14;
+            return fail(StartupCode::labProfile, root + L"\\profile");
     }
     if (!replaceImport("GetProcAddress", reinterpret_cast<void*>(privateGetProc)))
-        return 15;
+        return fail(StartupCode::importBinding, {}, {}, L"GetProcAddress");
     if (!replaceImport("CreateFileA", reinterpret_cast<void*>(nativeOpenFile)))
-        return 15;
+        return fail(StartupCode::importBinding, {}, {}, L"CreateFileA");
     // Native loggers use both CRT stdio and C++ streams. Preserve the game's
     // own CRT file objects; observe their successful opens without borrowing
     // or closing them from this DLL's different runtime.
     if (!replaceImport("fopen", reinterpret_cast<void*>(nativeFopen),
-                       reinterpret_cast<void**>(&originalFopen)) ||
-        !replaceImport("?_Fiopen@std@@YAPAU_iobuf@@PBDHH@Z", reinterpret_cast<void*>(nativeFiopen),
+                       reinterpret_cast<void**>(&originalFopen)))
+        return fail(StartupCode::importBinding, {}, {}, L"fopen");
+    if (!replaceImport("?_Fiopen@std@@YAPAU_iobuf@@PBDHH@Z", reinterpret_cast<void*>(nativeFiopen),
                        reinterpret_cast<void**>(&originalFiopen)))
-        return 15;
+        return fail(StartupCode::importBinding, {}, {}, L"_Fiopen");
     if (isolated)
         replaceImport("SteamAPI_RestartAppIfNecessary", reinterpret_cast<void*>(noSteamRelaunch));
     if (!replaceImport("GetActiveWindow", reinterpret_cast<void*>(localActiveWindow)))
-        return 19;
+        return fail(StartupCode::windowFocus);
     initialized = true;
     isaac::diagnostics::observeExceptions(image, isaac::engine::bootstrap::scopeActive);
-    if (MH_Initialize() != MH_OK)
-        return 16;
-    if (const auto error = isaac::engine::bootstrap::installUpdates(image, log))
-        return error;
+    if (const auto status = MH_Initialize(); status != MH_OK)
+        return fail(StartupCode::hookLibrary, {}, {}, wide(MH_StatusToString(status)));
+    if (const auto error = isaac::engine::bootstrap::installUpdates(image, log);
+        error != StartupCode::success)
+        return fail(error);
     log(std::string("bootstrap=PASS version=1.9.7.17.J460 isolation=") +
         (isolated ? "profile_redirect" : "installed"));
     log(std::string("installation_mode=") + (installed ? "installed" : "lab"));
     if (!isaac::runtime::install(image, log, isaac::engine::bootstrap::halfUpdate,
                                  isaac::engine::bootstrap::restorePositions))
-        return 18;
+        return fail(StartupCode::session);
     if (!isaac::engine::items::install(image))
-        return 27;
+        return fail(StartupCode::items);
     if (!isaac::generated_items::install(image))
-        return 27;
+        return fail(StartupCode::generatedItems);
     if (!isaac::rooms::install(image, log))
-        return 21;
+        return fail(StartupCode::rooms);
     if (!isaac::combat_feedback::install(image))
-        return 23;
+        return fail(StartupCode::combatFeedback);
     if (!isaac::audio::install(image))
-        return 23;
+        return fail(StartupCode::audio);
     if (!isaac::presentation::install(image))
-        return 24;
+        return fail(StartupCode::presentation);
     if (!isaac::presentation::outlines::install(image))
-        return 24;
+        return fail(StartupCode::playerOutlines);
     if (!isaac::presentation::player_opacity::install(image))
-        return 24;
+        return fail(StartupCode::playerOpacity);
     if (!isaac::rewind::install(image))
-        return 25;
+        return fail(StartupCode::rewind);
     if (!isaac::frontend::install(image, root, log, luaopen_isaac_lan_probe, installed))
-        return 22;
-    if (const auto error = isaac::engine::bootstrap::installRendering())
-        return error;
+        return fail(StartupCode::frontend);
+    if (const auto error = isaac::engine::bootstrap::installRendering();
+        error != StartupCode::success)
+        return fail(error);
     if (isolated) {
         wchar_t eventName[128]{};
         if (GetEnvironmentVariableW(L"ISAAC_LAN_LAB_READY", eventName, 128)) {
@@ -374,7 +400,22 @@ extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
             }
         }
     }
-    return 0;
+    return isaac::startup::value(StartupCode::success);
+}
+} // namespace
+extern "C" __declspec(dllexport) DWORD WINAPI IsaacLanBootstrap(void*) {
+    try {
+        return initialize();
+    } catch (const std::filesystem::filesystem_error& error) {
+        return fail(StartupCode::unexpectedException, error.path1().wstring(), error.code());
+    } catch (const std::system_error& error) {
+        return fail(StartupCode::unexpectedException, {}, error.code());
+    } catch (...) {
+        return fail(StartupCode::unexpectedException);
+    }
+}
+extern "C" __declspec(dllexport) const wchar_t* __cdecl IsaacLanBootstrapError() {
+    return isaac::diagnostics::startupFailureMessage();
 }
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* L) {

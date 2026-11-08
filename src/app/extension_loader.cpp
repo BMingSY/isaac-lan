@@ -25,6 +25,31 @@ bool labGame(const std::filesystem::path& game) {
     return length && length < std::size(root) &&
            _wcsicmp(game.c_str(), (std::filesystem::path(root) / L"game").c_str()) == 0;
 }
+Extension resolve(HMODULE module, const std::filesystem::path& path) {
+    if (!module) {
+        const auto error = GetLastError();
+        return {nullptr,
+                nullptr,
+                {startup::Code::extensionLoad,
+                 path.wstring(),
+                 {static_cast<int>(error), std::system_category()},
+                 {}}};
+    }
+    Bootstrap bootstrap{};
+    const auto proc = GetProcAddress(module, "IsaacLanBootstrap");
+    if (!proc) {
+        const auto error = GetLastError();
+        FreeLibrary(module);
+        return {nullptr,
+                nullptr,
+                {startup::Code::bootstrapExport,
+                 path.wstring(),
+                 {static_cast<int>(error), std::system_category()},
+                 L"IsaacLanBootstrap"}};
+    }
+    std::memcpy(&bootstrap, &proc, sizeof(proc));
+    return {module, bootstrap, {}};
+}
 } // namespace
 std::string fileHash(const std::filesystem::path& path) {
     Hash hash;
@@ -68,27 +93,49 @@ Extension load(const std::filesystem::path& game, std::string_view baselineVersi
     }
     if (!selection.detail.empty())
         OutputDebugStringA(("Isaac LAN update: " + selection.detail + "\n").c_str());
+    Extension last;
     for (const auto& path : selection.candidates) {
         const auto module =
             LoadLibraryExW(path.c_str(), nullptr,
                            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-        if (!module)
+        last = resolve(module, path);
+        if (!last.module)
             continue;
-        Bootstrap bootstrap{};
-        auto proc = GetProcAddress(module, "IsaacLanBootstrap");
-        std::memcpy(&bootstrap, &proc, sizeof(proc));
         bool compatible = true;
         if (path != fallback) {
             using ABI = unsigned(__cdecl*)();
             ABI abi{};
-            proc = GetProcAddress(module, "IsaacLanLoaderABI");
+            const auto proc = GetProcAddress(module, "IsaacLanLoaderABI");
             std::memcpy(&abi, &proc, sizeof(proc));
             compatible = abi && abi() == updates::loaderABI;
         }
-        if (bootstrap && compatible)
-            return {module, bootstrap};
+        if (compatible)
+            return last;
         FreeLibrary(module);
+        last = {};
     }
-    return {};
+    return last;
+}
+Extension loadInstalled(const std::filesystem::path& path) {
+    return resolve(LoadLibraryW(path.c_str()), path);
+}
+std::wstring failureMessage(const Extension& extension, DWORD code) {
+    if (!code)
+        return {};
+    // Optional ABI-1 export. Older payloads still use the stable code catalog.
+    if (extension.module && extension.bootstrap) {
+        using ErrorText = const wchar_t*(__cdecl*)();
+        ErrorText errorText{};
+        const auto proc = GetProcAddress(extension.module, "IsaacLanBootstrapError");
+        std::memcpy(&errorText, &proc, sizeof(proc));
+        if (errorText) {
+            const auto text = errorText();
+            if (text && *text)
+                return text;
+        }
+    }
+    auto failure = extension.failure;
+    failure.code = static_cast<startup::Code>(code);
+    return startup::message(failure);
 }
 } // namespace isaac::loader
