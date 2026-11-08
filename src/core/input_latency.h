@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace isaac::diagnostics {
+namespace isaac::core {
 // Local-clock intervals only. An acknowledgement measures receipt/application
 // of a control sample, not proof that a particular weapon effect fired.
 class InputLatency {
@@ -38,4 +38,4 @@ class InputLatency {
         return std::chrono::duration<double, std::milli>(at - value->at).count();
     }
 };
-} // namespace isaac::diagnostics
+} // namespace isaac::core

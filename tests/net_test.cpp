@@ -457,6 +457,82 @@ void loadingTimeout() {
     require(frame && frame->tick == 0 && frame->connected == 3,
             "Host did not resume after removing the unready peer");
 }
+void latencyHud() {
+    Group g(3);
+    g.ready();
+    g.step(0);
+    auto& host = *g.peers[0];
+    auto& guest = *g.peers[1];
+    auto& other = *g.peers[2];
+    require(host.syncLatency(1) == -1 && guest.syncLatency(1) == -1,
+            "New session inherited a response measurement");
+    guest.recordSyncLatency(123.4);
+    other.recordSyncLatency(234.6);
+    until([&] {
+        g.poll();
+        return host.networkLatency(1) >= 0 && guest.networkLatency(1) >= 0 &&
+               host.syncLatency(1) == 123 && other.syncLatency(1) == 123 &&
+               host.syncLatency(2) == 235 && guest.syncLatency(2) == 235;
+    });
+    require(host.syncLatency(0) == -1 && host.syncLatency(4) == -1,
+            "Host/invalid slot received a guest response");
+    guest.recordSyncLatency(321);
+    guest.recordSyncLatency(-1);
+    guest.recordSyncLatency(std::numeric_limits<double>::quiet_NaN());
+    require(guest.syncLatency(1) == 321, "Invalid sample poisoned the local reading");
+    // Incoming host reports must not overwrite the guest's fresher local sample.
+    g.poll();
+    require(guest.syncLatency(1) == 321, "Host echo replaced a local response");
+    until([&] {
+        g.poll();
+        return host.syncLatency(1) == -1 && guest.syncLatency(1) == -1 &&
+               other.syncLatency(1) == -1;
+    });
+    require(host.networkLatency(1) >= 0, "Missing state applications stopped network pings");
+    // Without main-thread polling, even the last good RTT must expire for display.
+    const auto untilStale = std::chrono::steady_clock::now() + std::chrono::milliseconds(3100);
+    while (std::chrono::steady_clock::now() < untilStale)
+        Sleep(1);
+    require(host.networkLatency(1) == -1 && guest.networkLatency(1) == -1 &&
+                host.latency()[1] >= 0 && guest.latency()[1] >= 0,
+            "Stale HUD ping remained valid or changed prediction's RTT");
+    guest.recordSyncLatency(90);
+    guest.poll(); // Queue an old-floor report before the host changes epoch.
+    require(host.beginStage({1, 2, 0, 0, false, {}, {}}), "Floor transition failed");
+    until([&] {
+        g.poll();
+        return guest.worldEpoch() == 1 && other.worldEpoch() == 1;
+    });
+    require(host.syncLatency(1) == -1 && guest.syncLatency(1) == -1 && other.syncLatency(1) == -1,
+            "A previous-floor report crossed the epoch boundary");
+    g.step(1);
+    g.publish(1);
+    until([&] {
+        g.poll();
+        if (auto state = guest.takeState()) {
+            guest.applied(state->tick);
+            guest.recordSyncLatency(110);
+        }
+        return host.syncLatency(1) == 110;
+    });
+    auto settings = host.settings();
+    settings.seed = "QWERTY12";
+    require(host.restart(settings), "Restart failed");
+    until([&] {
+        g.poll();
+        return guest.runId() == host.runId() && other.runId() == host.runId();
+    });
+    require(host.syncLatency(1) == -1 && guest.syncLatency(1) == -1,
+            "Restart retained the previous run's response");
+    guest.close();
+    until([&] {
+        host.poll();
+        other.poll();
+        return !(host.connectedMask() & 2);
+    });
+    require(host.networkLatency(1) == -1 && host.syncLatency(1) == -1,
+            "Disconnected guest retained latency readings");
+}
 void inputsAndStates(unsigned n, const char* address = "127.0.0.1",
                      std::array<const char*, maxPlayers> addresses = {}) {
     Group g(n, 0, address, {}, {}, false, addresses);
@@ -3131,6 +3207,7 @@ int main(int argc, char** argv) {
          {"world-deltas", worldDeltas},
          {"wire-compression", wireCompression},
          {"async-network", asyncNetwork},
+         {"latency-hud", latencyHud},
          {"bulk-worker", bulkWorker},
          {"reliable-receive", reliableReceive},
          {"delivery-backpressure", deliveryBackpressure},

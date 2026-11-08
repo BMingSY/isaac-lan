@@ -82,6 +82,10 @@ class Session {
     void applied(std::uint32_t tick);
     std::array<std::uint32_t, maxPlayers> inputSequences() const;
     const std::array<int, maxPlayers>& latency() const;
+    // HUD readings expire independently of the RTT retained for prediction.
+    int networkLatency(unsigned slot) const;
+    int syncLatency(unsigned slot) const;
+    void recordSyncLatency(double milliseconds);
     void completed(std::uint32_t tick);
     const std::string& identity() const;
     Phase phase() const;
