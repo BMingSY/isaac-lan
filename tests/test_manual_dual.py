@@ -10,6 +10,7 @@ import pytest
 
 import lab_profile
 import manual_dual as dual
+from progress_fixture import AZAZEL_PLAYER_TYPE
 from testing.lua import literal
 
 
@@ -82,6 +83,7 @@ def session(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(dual, "choose_host_port", lambda: 29506)
     monkeypatch.setattr(dual.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(dual, "azazel_profile", lambda source: source + b":azazel")
     relays = []
 
     class Relay:
@@ -121,6 +123,7 @@ def session(tmp_path, monkeypatch):
         return process
 
     monkeypatch.setattr(dual, "launch", launch)
+    monkeypatch.setattr(dual, "select_save", lambda process: None)
     monkeypatch.setattr(dual, "close_owned", lambda owned, output: closed.extend(owned))
     observed_ready = []
 
@@ -161,6 +164,63 @@ def test_manual_handoff_releases_startup_hook_and_restores_after_user_close(sess
     assert state["status"] == "closed" and state["restored"]
     assert session.observed_ready and not session.closed
     assert session.relays[0].delay == 40 and session.relays[0].closed
+    assert_restored(session)
+
+
+@pytest.mark.parametrize("selected", ["PLAYER_AZAZEL", AZAZEL_PLAYER_TYPE])
+def test_selected_azazel_is_prepared_after_backup_and_restored(session, monkeypatch, selected):
+    config = dual.read_json(session.output / "config.json")
+    config["characters"][1] = selected
+    dual.write_json(session.output / "config.json", config)
+
+    def launch(lab, role, output):
+        progress = dual.log_path(lab).parent / "persistentgamedata1.dat"
+        assert progress.read_bytes() == b"personal progress" + (
+            b":azazel" if role == "client" else b""
+        )
+        saved = output / "before" / role / "profile" / progress.relative_to(lab / "profile")
+        assert saved.read_bytes() == b"personal progress"
+        return session.launch(lab, role, output)
+
+    monkeypatch.setattr(dual, "launch", launch)
+    assert dual.supervise(session.output) == 0
+    assert_restored(session)
+
+
+def test_save_selection_uses_normal_keys_and_avoids_delete_row(monkeypatch):
+    snapshots = iter(
+        {
+            "gameState": 1,
+            "menu": page,
+            "dialogs": dialogs,
+            "fileSelected": selected,
+            "fileState": state,
+        }
+        for page, dialogs, selected, state in (
+            (-1, 0, -1, -1),
+            (1, 0, -1, -1),
+            (2, 0, 3, 0),
+            (2, 0, 2, 0),
+            (2, 0, 0, 0),
+            (2, 0, 0, 1),
+            (3, 0, 0, 0),
+        )
+    )
+    keys = []
+    monkeypatch.setattr(dual, "menu_state", lambda process: next(snapshots))
+    monkeypatch.setattr(dual, "menu_key", lambda process, key: keys.append(key))
+    monkeypatch.setattr(dual.time, "sleep", lambda seconds: None)
+    dual.select_save({"pid": 10, "role": "host"})
+    assert keys == ["{SPACE}", "{ENTER}", "{UP}", "{LEFT}", "{ENTER}"]
+
+
+def test_save_selection_failure_closes_owned_peers_and_restores(session, monkeypatch):
+    def reject(process):
+        raise TimeoutError("native menu unavailable")
+
+    monkeypatch.setattr(dual, "select_save", reject)
+    assert dual.supervise(session.output) == 1
+    assert len(session.closed) == 2
     assert_restored(session)
 
 
@@ -259,7 +319,8 @@ def test_explicit_recovery_restores_dead_supervisor_backup(session, monkeypatch)
 @pytest.mark.parametrize("mode", ["host", "client", "unavailable", "rejected", "wrong-body"])
 def test_lua_bootstrap_uses_real_command_contract_and_relinquishes_control(tmp_path, mode):
     # The real command function returns nil, and raises on rejection. No input API is supplied.
-    source = r"""
+    source = (
+        r"""
 local mode = MODE
 local phases = {idle=0, lobby=2, running=3, failed=4, waiting=9}
 local status = {phase=0, slot=mode == "client" and 1 or 0, players=2,
@@ -268,7 +329,8 @@ local captured, calls = nil, {}
 package.preload.json = function()
     return {encode=function(value) captured=value; return "recorded" end}
 end
-PlayerType = {PLAYER_ISAAC=0, PLAYER_AZAZEL=7}
+PlayerType = assert(loadfile(ENUMS))().PlayerType
+assert(PlayerType.PLAYER_AZAZEL == AZAZEL_ID)
 local selected = mode == "client" and 7 or 0
 _IsaacLan = {net_phases=function() return phases end, rooms_ready=function() return true end,
     net_characters=function() return mode == "unavailable" and {99} or {0,7} end}
@@ -278,6 +340,8 @@ Isaac = {GetPlayer=function() return {ControllerIndex=status.slot+1,
     GetPlayerType=function() return mode == "wrong-body" and 99 or selected end} end}
 local function original() return status end
 _IsaacLanFrame = original
+local function originalMenu(available) return false end
+_IsaacLanMenuRender = originalMenu
 _IsaacLanCommand = function(action, value)
     if mode == "rejected" then error("native rejection") end
     calls[#calls+1]={action,value}
@@ -285,6 +349,9 @@ _IsaacLanCommand = function(action, value)
 end
 assert(loadfile(BOOTSTRAP))()({session="nonce",host=mode ~= "client",port=29506,
     character=selected == 0 and "PLAYER_ISAAC" or "PLAYER_AZAZEL"})
+for _=1,370 do _IsaacLanFrame() end
+assert(#calls == 0)
+_IsaacLanMenuRender(true)
 for _=1,370 do _IsaacLanFrame() end
 if mode == "unavailable" or mode == "rejected" then
     assert(captured.error and _IsaacLanFrame == original)
@@ -302,8 +369,11 @@ else
     assert(#calls == count)
 end
 assert(io.open("manual-dual-ready.json", "r")):close()
-""".replace("MODE", literal(mode)).replace(
-        "BOOTSTRAP", literal(str(dual.ROOT / "tools/manual_dual_bootstrap.lua"))
+assert(_IsaacLanMenuRender == originalMenu)
+""".replace("MODE", literal(mode))
+        .replace("BOOTSTRAP", literal(str(dual.ROOT / "tools/manual_dual_bootstrap.lua")))
+        .replace("ENUMS", literal(str(dual.ROOT / "tests/fixtures/game_enums.lua")))
+        .replace("AZAZEL_ID", str(AZAZEL_PLAYER_TYPE))
     )
     script = tmp_path / "check.lua"
     script.write_text(source)

@@ -1,13 +1,20 @@
 -- Connect and select through the ordinary LAN commands, then relinquish the frame hook.
 return function(config)
     local native, frame = assert(_IsaacLan), assert(_IsaacLanFrame)
+    local menu = assert(_IsaacLanMenuRender)
     local Phase, json = native.net_phases(), require("json")
     local character = type(config.character) == "number" and config.character
         or PlayerType[config.character]
     local renders, linked, chosen, started = 0, false, false, false
+    local menuReady = false
     local connectFrame = config.host and 300 or 360
+    function _IsaacLanMenuRender(available, ...)
+        menuReady = available
+        return menu(available, ...)
+    end
     local function finish(result)
         _IsaacLanFrame = frame
+        _IsaacLanMenuRender = menu
         result.session, result.role = config.session, config.host and "host" or "client"
         local file = assert(io.open("./manual-dual-ready.json.tmp", "w"))
         file:write(json.encode(result))
@@ -30,14 +37,14 @@ return function(config)
             finish({ error = status.error or "Connection failed" })
             return status
         end
-        if not linked and renders >= connectFrame then
+        if not linked and menuReady and renders >= connectFrame then
             linked = true
             local address = tostring(config.port)
             if not config.host then
                 address = "127.0.0.1:" .. address
             end
             command(config.host and "host" or "join", address)
-        elseif status.phase == Phase.lobby then
+        elseif linked and status.phase == Phase.lobby then
             if not chosen then
                 local available = native.net_characters()
                 local allowed = false

@@ -8,7 +8,9 @@ import tempfile
 MAGIC = b"ISAACNGSAVE09R  "
 PROFILE = Path("profile/Documents/My Games/Binding of Isaac Repentance+")
 TAINTED_LAZARUS_ACHIEVEMENT = 482
+MAGDALENE_ACHIEVEMENT = 1
 AZAZEL_ACHIEVEMENT = 79
+AZAZEL_PLAYER_TYPE = 7
 
 
 def checksum(data):
