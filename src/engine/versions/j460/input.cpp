@@ -745,6 +745,15 @@ bool menuTriggered(int action, bool controllersOnly) {
             return true;
     return false;
 }
+bool menuHeld(int action) {
+    if (!hookQuery())
+        return false;
+    float value = 0;
+    originalQuery(reinterpret_cast<void*>(image + j460::globals::inputManager), -1,
+                  reinterpret_cast<void*>(image + j460::entry::inputValue), &action, &value,
+                  nullptr);
+    return value > 0;
+}
 bool restartHeld() {
     const int action = input::action::restart;
     if (hookQuery())

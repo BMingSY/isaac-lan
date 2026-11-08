@@ -1,6 +1,7 @@
 #include "app/extension_loader.h"
 #include "core/extension_package.h"
 #include "runtime/extension_update.h"
+#include "runtime/extension_files.h"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -28,7 +29,7 @@ void prepare(const fs::path& directory, const fs::path& fixture, const std::stri
     write(directory / manifestFile,
           std::string(manifestMagic) + "\nversion=" + version +
               "\ngame_build=1.9.7.17.J460\nloader_abi=" + std::to_string(loaderABI) +
-              "\nsha256=" + isaac::loader::fileHash(directory / payloadFile) + "\n");
+              "\nsha256=" + isaac::updates::fileHash(directory / payloadFile) + "\n");
 }
 fs::path load(const fs::path& game) {
     const auto loaded = isaac::loader::load(game, "0.6.3", "1.9.7.17.J460");
@@ -56,6 +57,9 @@ struct Temporary {
 };
 } // namespace
 int wmain(int argc, wchar_t** argv) {
+    // Deliberately invalid DLLs must return a load error instead of opening a
+    // Windows "Bad Image" dialog and blocking this unattended fixture.
+    SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS);
     try {
         require(argc == 5, "expected compatible, incompatible, failing and missing-export DLLs");
         wchar_t executable[32768]{};
@@ -101,7 +105,7 @@ int wmain(int argc, wchar_t** argv) {
                 "Unknown payload code was lost");
         FreeLibrary(diagnostic.module);
         write(temporary.root / "hash-vector", "abc");
-        require(isaac::loader::fileHash(temporary.root / "hash-vector") ==
+        require(isaac::updates::fileHash(temporary.root / "hash-vector") ==
                     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
                 "SHA-256 matches independent standard vector");
         const auto game = temporary.root / L"steamapps/common/Game [\u6d4b\u8bd5]";
@@ -116,7 +120,7 @@ int wmain(int argc, wchar_t** argv) {
         require(active != game / payloadFile &&
                     active.parent_path().parent_path() == game / "isaac-lan/versions",
                 "raw Workshop source is adopted before any mods refresh");
-        require(isaac::loader::fileHash(active) == isaac::loader::fileHash(compatible),
+        require(isaac::updates::fileHash(active) == isaac::updates::fileHash(compatible),
                 "BCrypt verifies exact cached bytes");
         const auto held = isaac::loader::load(game, "0.6.3", "1.9.7.17.J460");
         require(held.module != nullptr, "hold an existing session DLL open");
@@ -150,7 +154,7 @@ int wmain(int argc, wchar_t** argv) {
         write(labGame / "isaac-lan/session.keep", "preserved fixture");
         fs::copy_file(compatible, labGame / payloadFile);
         prepare(source, compatible, "0.6.4");
-        isaac::updates::select(labGame, source, "0.6.3", "1.9.7.17.J460", isaac::loader::fileHash);
+        isaac::updates::select(labGame, source, "0.6.3", "1.9.7.17.J460", isaac::updates::fileHash);
         wchar_t previous[32768]{};
         GetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", previous, std::size(previous));
         SetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", lab.c_str());

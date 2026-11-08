@@ -12,7 +12,6 @@ struct Extension {
     Bootstrap bootstrap = nullptr;
     startup::Failure failure{startup::Code::extensionLoad, {}, {}, {}};
 };
-std::string fileHash(const std::filesystem::path& path);
 Extension load(const std::filesystem::path& game, std::string_view baselineVersion,
                std::string_view gameBuild);
 Extension loadInstalled(const std::filesystem::path& path);

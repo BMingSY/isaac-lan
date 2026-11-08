@@ -10,6 +10,8 @@
 
 Steam 未下载或仍在下载的更新不保证在本次启动生效；本组件不提供下载器或运行时热替换。首次订阅、下载延迟和 Steam 离线时，继续从本地兼容缓存或安装版本启动。`winmm.dll` 自身以及不兼容的加载器 ABI 升级仍需关闭游戏后重新安装。
 
+选完存档后，首次开局前的主菜单通过[后台检查组件](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/update_notice.cpp)每两秒补查本地更新，复用同一选择器、兼容校验与版本缓存。比较基准为当前运行主体编译时的版本，根目录保留的旧 DLL 不会触发提示；检查不加载候选 DLL、不联网、不阻塞菜单。完整且版本更高的兼容包就绪后，[游戏内弹窗](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/update_notice.lua)默认选择“退出游戏”，提示玩家退出后自行重新启动。支持键盘、手柄和鼠标，打开及关闭时等待菜单按键释放；返回键等同“继续”。选择“继续”、进入联机界面／会话或开始游戏后，本进程不再检查或提示，Lua 重建也不会重置该状态。隔离测试默认不检查真实工坊更新。
+
 ## 包契约
 
 [发布准备工具](https://github.com/BMingSY/isaac-lan/blob/main/tools/workshop_release.py)保留完整 ZIP，并从已经校验的 ZIP 提取主体 DLL 到上述更新子目录。SHA-256、扩展版本、游戏版本来自 ZIP 的 `payload.json`，不另行构建主体。缺少 `loader_abi` 的旧安装包只提供手动安装，不生成自动更新载荷。
