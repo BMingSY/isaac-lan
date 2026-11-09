@@ -15,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 49;
+constexpr std::uint16_t protocolVersion = 50;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;

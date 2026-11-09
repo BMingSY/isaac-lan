@@ -3,6 +3,7 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/active_items.h"
+#include "engine/versions/j460/cursed_mist.h"
 #include "engine/versions/j460/inventory_order.h"
 #include "compat/items/starting_rewards.h"
 #include <MinHook.h>
@@ -285,7 +286,8 @@ bool install(Address base) {
            hook(j460::entry::playerQueueItem, queue, originalQueue) &&
            hook(j460::entry::playerReviveCollectible, reviveCollectible,
                 originalReviveCollectible) &&
-           hook(j460::entry::playerReviveTrinket, reviveTrinket, originalReviveTrinket);
+           hook(j460::entry::playerReviveTrinket, reviveTrinket, originalReviveTrinket) &&
+           j460::cursed_mist::install(base);
 }
 bool bind(lua_State* L, HMODULE module) {
     using S = isaac::lua::Symbol;

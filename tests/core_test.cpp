@@ -212,6 +212,9 @@ void compatibilityTargets() {
     require(items::roomFollower(1000, 83, true) && !items::roomFollower(1000, 83, false) &&
                 !items::roomFollower(1000, 144, true) && !items::roomFollower(3, 83, true),
             "Room handoff left an attached spear behind or moved an unrelated effect");
+    require(items::roomFollower(1000, 123, true, 6) && !items::roomFollower(1000, 123, false, 6) &&
+                !items::roomFollower(1000, 123, true, 0) && !items::roomFollower(3, 123, true, 6),
+            "Salvation's attached halo remained in the old room or another halo followed");
     require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
             "Lazarus form matching crossed another character");
     require(characters::taintedJacob(37) && characters::taintedJacob(39) &&

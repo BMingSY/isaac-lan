@@ -157,6 +157,8 @@ inline constexpr unsigned collisionDamage = 0x388;
 inline constexpr unsigned visible = 0x171;
 inline constexpr unsigned flipX = 0x148;
 inline constexpr unsigned depthOffset = 0x358;
+inline constexpr unsigned sortingLayer = 0x35c;
+inline constexpr unsigned renderZOffset = 0x354;
 inline constexpr unsigned mass = 0x37c;
 inline constexpr unsigned size = 0x370;
 inline constexpr unsigned sizeMultiplier = 0x374;
@@ -207,6 +209,7 @@ inline constexpr unsigned minRadius = 0x454;
 inline constexpr unsigned maxRadius = 0x458;
 } // namespace effect
 namespace familiar {
+inline constexpr unsigned player = 0x410;
 inline constexpr unsigned chargeBar = 0xdcc;
 inline constexpr unsigned state = 0xd88;
 inline constexpr unsigned fireCooldown = 0xd4c;

@@ -1,6 +1,7 @@
 // Private x86 image only: no game process, files, input or hooks are installed.
 #include "test_support.h"
 #include "engine/versions/j460/item_effects.cpp"
+#include "engine/versions/j460/cursed_mist.cpp"
 #include "engine/versions/j460/pickup_preview.cpp"
 #include "engine/versions/j460/session_backend.cpp"
 #include "runtime/progression.h"
@@ -451,6 +452,76 @@ void activeChargeCapabilities() {
             "Unregistered sprite reached native charge methods");
     items::lua = {};
 }
+namespace mist = native::cursed_mist;
+mist::Find mistStub;
+void* mistList;
+int mistVariant;
+std::array<Address, 3> mistEntities;
+mist::QueryResult* __attribute__((thiscall)) mistFindFixture(void* list, mist::QueryResult* result,
+                                                             int type, int variant, int subtype,
+                                                             bool cache, bool ignoreFriendly) {
+    require(list == mistList && type == 3 && variant == mistVariant && subtype == -1 && !cache &&
+                !ignoreFriendly,
+            "Mist familiar query lost its thiscall receiver or six stack arguments");
+    *result = {true, mistEntities.data(), 3, 3};
+    return result;
+}
+void __attribute__((thiscall)) mistPlayerFixture(void* player) {
+    require(player == expectedPlayer, "Mist transition lost its player receiver");
+    mist::QueryResult result{};
+    require(mistStub(mistList, &result, 3, mistVariant, -1, false, false) == &result,
+            "Mist query changed its native result return value");
+    require(result.count == 2 && result.borrowed && result.capacity == 3,
+            "Native mist query retained another player's familiar or changed ownership");
+}
+void cursedMistQueryABI() {
+    Fixture fixture;
+    std::array<std::array<unsigned char, native::layout::familiar::player + sizeof(Address)>, 3>
+        familiars{};
+    const auto owner = reinterpret_cast<Address>(fixture.player.data());
+    for (unsigned i = 0; i < familiars.size(); ++i)
+        *reinterpret_cast<Address*>(familiars[i].data() + native::layout::familiar::player) =
+            i == 1 ? owner + 1 : owner;
+    mist::image = reinterpret_cast<Address>(fixture.image);
+    mist::originalFind = mistFindFixture;
+    mist::originalDisable = mist::originalEnable = mistPlayerFixture;
+    mistList = fixture.manager.data();
+    for (const auto entry :
+         {native::entry::playerMistStoreQueryReturn, native::entry::playerMistRestoreQueryReturn}) {
+        // A private native thiscall caller, returning at the audited query site.
+        // Save EBP; copy all six stack arguments; retain ECX; call the real hook.
+        const unsigned char setup[] = {0x55, 0x8b, 0xec, 0xff, 0x75, 0x1c, 0xff,
+                                       0x75, 0x18, 0xff, 0x75, 0x14, 0xff, 0x75,
+                                       0x10, 0xff, 0x75, 0x0c, 0xff, 0x75, 0x08};
+        auto call = fixture.image + entry - 5;
+        std::memcpy(call - sizeof(setup), setup, sizeof(setup));
+        call[0] = 0xe8;
+        const auto displacement = static_cast<unsigned>(reinterpret_cast<Address>(mist::find) -
+                                                        reinterpret_cast<Address>(call + 5));
+        std::memcpy(call + 1, &displacement, 4);
+        const unsigned char finish[] = {0x5d, 0xc2, 24, 0};
+        std::memcpy(call + 5, finish, sizeof(finish));
+        require(FlushInstructionCache(GetCurrentProcess(), call - sizeof(setup),
+                                      sizeof(setup) + 5 + sizeof(finish)) != 0,
+                "Cannot publish the private mist query caller");
+        mistStub = reinterpret_cast<mist::Find>(call - sizeof(setup));
+        mistVariant = entry == native::entry::playerMistStoreQueryReturn ? -1 : 231;
+        for (unsigned repetition = 0; repetition < 32; ++repetition) {
+            for (unsigned i = 0; i < familiars.size(); ++i)
+                mistEntities[i] = reinterpret_cast<Address>(familiars[i].data());
+            if (mistVariant == -1)
+                mist::disable(fixture.player.data(), nullptr);
+            else
+                mist::enable(fixture.player.data(), nullptr);
+            require(mistEntities[0] == reinterpret_cast<Address>(familiars[0].data()) &&
+                        mistEntities[1] == reinterpret_cast<Address>(familiars[2].data()),
+                    "Mist filtering changed owned familiar order");
+        }
+    }
+    mist::originalFind = nullptr;
+    mist::originalDisable = mist::originalEnable = nullptr;
+    mist::image = 0;
+}
 } // namespace
 int main(int argc, char** argv) {
     return runTests(argc, argv,
@@ -460,6 +531,7 @@ int main(int argc, char** argv) {
                      {"beam-departure", beamDeparture},
                      {"blue-room-entry", blueRoomEntry},
                      {"revival-room", revivalRoom},
+                     {"cursed-mist", cursedMistQueryABI},
                      {"pending-reward-persistence", pendingRewardPersistence},
                      {"local-pickup-preview", localPickupPreview}});
 }

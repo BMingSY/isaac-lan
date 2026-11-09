@@ -160,7 +160,7 @@ def main():
         command.append("--lazarus-fixture")
     if "tainted-feedback" in cases:
         command.append("--focus-cycle")
-    if any(name in cases for name in ("knife", "mirror-camera")):
+    if any(name in cases for name in ("knife", "mirror-camera", "abyss-escape", "beast-layering")):
         command.append("--knife-fixture")
     if any(
         name in cases
@@ -196,6 +196,7 @@ def main():
             name in cases
             for name in (
                 "ascent-compat",
+                "beast-layering",
                 "dogma-warning",
                 "campaign",
                 "victory-lap",
@@ -235,6 +236,7 @@ def main():
                             in (
                                 "home",
                                 "home-debug",
+                                "beast-layering",
                                 "endings",
                                 "dogma-warning",
                                 "ascent-compat",

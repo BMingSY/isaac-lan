@@ -71,6 +71,9 @@ DIAGNOSTICS = (
     "reconnect-motion",
     "dice-floor",
     "room-followers",
+    "item-room-effects",
+    "abyss-escape",
+    "beast-layering",
     "chain-traps",
     "secret-exit-doors",
     "split-render",
@@ -155,6 +158,9 @@ def build(output, cases=CASES, *, first_floor=False):
             "reconnect-motion": "state_reconnect_motion.lua",
             "dice-floor": "state_dice_floor.lua",
             "room-followers": "state_room_followers.lua",
+            "item-room-effects": "state_item_room_effects.lua",
+            "abyss-escape": "state_side_routes.lua",
+            "beast-layering": "state_endings.lua",
             "chain-traps": "state_chain_traps.lua",
             "secret-exit-doors": "state_secret_exit.lua",
             "split-render": "state_split_render.lua",
@@ -164,14 +170,16 @@ def build(output, cases=CASES, *, first_floor=False):
             "hornfel": "state_hornfel.lua",
         }.get(name, "state_side_routes.lua")
         options = {
-            "route": name,
+            "route": "knife" if name == "abyss-escape" else name,
+            "abyssEscape": name == "abyss-escape",
+            "beastLayering": name == "beast-layering",
             "playerOpacity": name == "player-opacity",
             "integrationDual": name == "mod-integrations-dual",
             "motherEntrant": 1 if name == "mother-guest" else 0,
             "motherTogether": name == "mother-together",
             "inputResponseSpeeds": name == "input-response-speeds",
             "attackMirror": name == "attack-mirror",
-            "homeOnly": name in ("home", "home-debug", "dogma-warning"),
+            "homeOnly": name in ("home", "home-debug", "dogma-warning", "beast-layering"),
             "dogmaWarning": name in ("dogma-warning", "ascent-compat"),
             "crawlspace": name == "ascent-compat",
             "debug10": name == "home-debug",
@@ -182,7 +190,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "firstFloor": first_floor and name == "endings",
             "greedCampaign": name in ("greed", "greedier"),
         }
-        if name in ("home", "home-debug", "dogma-warning", "ascent-compat"):
+        if name in ("home", "home-debug", "dogma-warning", "ascent-compat", "beast-layering"):
             options["endingRoutes"] = ["ascent"]
         elif name in ("campaign", "victory-lap", "victory-no"):
             options["endingRoutes"] = ["lamb"]
@@ -200,6 +208,18 @@ def build(output, cases=CASES, *, first_floor=False):
                 + "\nend)()\n"
                 + "local worldSchema = (function()\n"
                 + (ROOT / "src/bridge/sync/world_schema.lua").read_text()
+                + "\nend)()\n"
+            )
+        if name == "abyss-escape":
+            prelude = (
+                "local createAbyssEscapeProbe = (function()\n"
+                + (ROOT / "tests/fixtures/abyss_escape_probe.lua").read_text()
+                + "\nend)()\n"
+            )
+        if name == "beast-layering":
+            prelude = (
+                "local createBeastLayerProbe = (function()\n"
+                + (ROOT / "tests/fixtures/beast_layer_probe.lua").read_text()
                 + "\nend)()\n"
             )
         if name == "entity-fields":

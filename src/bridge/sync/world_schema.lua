@@ -25,7 +25,7 @@ local names = {
     "combat",
     "challenge",
 }
-local version = 39
+local version = 40
 local VERSION_FIELD, TICK_FIELD = 1, 2
 return {
     VERSION = version,

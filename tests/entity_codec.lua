@@ -96,7 +96,7 @@ local function entity(kind, flags)
     for _, name in ipairs(schemas.common) do
         e[name] = 0
     end
-    for _, name in ipairs(schemas.byType[kind]) do
+    for _, name in ipairs(schemas.byType[kind] or schemas.byType.npc) do
         e[name] = 0
     end
     e.Visible, e.DepthOffset = true, 10
@@ -116,7 +116,7 @@ local function entity(kind, flags)
         return self
     end
     function e:ToNPC()
-        return nil
+        return kind >= 10 and kind < 1000 and self or nil
     end
     function e:ToEffect()
         return self
@@ -185,6 +185,34 @@ assert(target.Position.X == 12 and target.Velocity.Y == 3 and target.EndPoint.X 
 assert(target.EntityCollisionClass == 0 and target.GridCollisionClass == 0 and laserWrites == 1)
 component.apply(target, state)
 assert(target.DepthOffset == -9990, "Repeated snapshots must not accumulate the floor offset")
+-- Background bosses must keep their native sorting layer independently of
+-- the order in which the replica allocated the actors and NPCs.
+local background, backgroundReplica =
+    entity(enums.EntityType.ENTITY_BEAST, 0), entity(enums.EntityType.ENTITY_BEAST, 0)
+background.SortingLayer, background.RenderZOffset = 0, -80
+backgroundReplica.SortingLayer, backgroundReplica.RenderZOffset = 2, 0
+for _ = 1, 3 do
+    component.apply(backgroundReplica, component.capture(background, false))
+    assert(
+        backgroundReplica.SortingLayer == 0 and backgroundReplica.RenderZOffset == -80,
+        "A background entity retained its replica allocation's render order"
+    )
+end
+background.SortingLayer, background.RenderZOffset = 2, 120
+component.apply(backgroundReplica, component.capture(background, false))
+assert(
+    backgroundReplica.SortingLayer == 2 and backgroundReplica.RenderZOffset == 120,
+    "A phase change retained the old background layer"
+)
+local actor, actorReplica =
+    entity(enums.EntityType.ENTITY_PLAYER, 0), entity(enums.EntityType.ENTITY_PLAYER, 0)
+actor.SortingLayer, actor.RenderZOffset = 1, 50
+actorReplica.SortingLayer, actorReplica.RenderZOffset = 2, -50
+component.apply(actorReplica, component.capture(actor, false))
+assert(
+    actorReplica.SortingLayer == 1 and actorReplica.RenderZOffset == 50,
+    "Actor render order was not restored"
+)
 -- A live slot can have no XML definition. Its Size getter works, while the
 -- public property setter dereferences absent defaults even for the same value.
 local slot, slotReplica = entity(7, 0), entity(7, 0)
