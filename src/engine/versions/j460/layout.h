@@ -139,6 +139,7 @@ namespace entityList {
 inline constexpr unsigned firstArray = 0x20;
 inline constexpr unsigned lastArray = 0x90;
 inline constexpr unsigned arrayStride = 0x10;
+inline constexpr unsigned persistentArray = 0x30;
 inline constexpr unsigned renderArray = 0x40;
 inline constexpr unsigned data = 0x4;
 inline constexpr unsigned count = 0xc;
