@@ -1,6 +1,6 @@
 # 开发与测试
 
-BUG 修复、需求新增和日常重构按影响范围执行离线回归与必要的局部实机验证。发版默认只覆盖基础联机、全部 Boss 和正常结局／路线，不重复开发专项。离线通过不代表实机通过；任务要求不启动游戏时，实机项记为未执行。协作和发布约定见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md)。
+BUG 修复、需求新增和日常重构按影响范围执行离线回归与必要的局部实机验证。小版本发版只做基本验收与全路线验收，大版本额外覆盖全部原版 Boss，不重复开发专项。离线通过不代表实机通过；任务要求不启动游戏时，实机项记为未执行。协作约定见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md)，完整发布流程见仓库 skill [isaac-lan-release](https://github.com/BMingSY/isaac-lan/blob/main/.agents/skills/isaac-lan-release/SKILL.md)。
 
 ## 构建与产物
 
@@ -210,18 +210,20 @@ python tools/engine_test.py run special-routes -- \
 
 ### 默认发版范围
 
-先执行 `python tools/test.py --profile full`、Windows x86 构建、网络／原生 ABI 测试与安装包校验，冻结候选及产物哈希。实机默认检查以下范围：
+两种规模均先执行 `python tools/test.py --profile full`、Windows x86 构建、网络／原生 ABI 测试与安装包校验，冻结候选及产物哈希。用户指定的分类优先，否则补丁号变化为小版本，次版本或主版本变化为大版本。小版本实机检查基础联机、全部结局和正常路线机制；大版本另加全部原版 Boss：
 
 | 范围 | 入口与通过条件 |
 | --- | --- |
 | 基础联机 | [run_release_acceptance.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_release_acceptance.py)：安装／自动加载、战斗／拾取、分房／换层、五类沙漏、暂停及单人／联机存档隔离 |
 | 全部结局 | [run_endings.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_endings.py)：羔羊（`--first-floor`）、???、Delirium、Mega Satan、Mother、上行至 Beast；双端实际完成路线、原生结局、清理和进度恢复，Mother 经过完整支线楼层 |
-| 全部 Boss | [run_bosses.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_bosses.py)：完整 [boss_catalog.json](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/boss_catalog.json)，包含原生阶段机制；用 [check_boss_coverage.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/check_boss_coverage.py) 合并 Boss、结局与贪婪结果，主客机均无缺项 |
+| 全部 Boss（仅大版本） | [run_bosses.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_bosses.py)：完整 [boss_catalog.json](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/boss_catalog.json)，包含原生阶段机制；用 [check_boss_coverage.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/check_boss_coverage.py) 合并 Boss、结局与贪婪结果，主客机均无缺项 |
 | 正常路线机制 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 选 `greed`、`greedier`、`knife`、`hornfel`：两种贪婪全程、矿车／逃亡、持有炸弹、跨层与重连 |
 
 Boss 整组时限按用例数量预留加载与转场时间，单项进度断言独立生效。整组因人工停止或总时限结束且双端正常退出、资料恢复成功时，覆盖工具可通过 `--partial-arena` 读取原始双端日志，只保留已完成且无重复的单项断言；缺少一端、断言失败和异常退出不计入。原整组报告保持失败，剩余用例用 `--case` 补跑，再汇总全部覆盖。
 
-错误技、达摩剑、创世纪、小夜灯，EID／举袋／水流／切窗口暂停，道具与弹幕压力，输入响应／镜头，以及全道具／卡牌／药丸／角色／Mod 遍历均不列入发版检查，也不因版本包含相关改动而自动追加。用户明确要求时再增加发布专项。已有开发回归结果可以引用，旧验收记录和未决问题保持原结论。完整规则见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md#发布前验收范围)。
+大版本由执行者根据相对上次发布的实际变更，自行选定并执行必要的安装／配置升级与工坊重启更新、异常断线／退出及续玩、协议版本／弱网、道具／角色／第三方 Mod、输入／镜头或性能压力专项，说明与变更的关系，无需等待用户逐项选择。影响范围不明时扩大相关回归；用户明确限定的范围优先。
+
+错误技、达摩剑、创世纪、小夜灯，EID／举袋／水流／切窗口暂停，道具与弹幕压力，输入响应／镜头，不属于每次发版固定必跑范围；小版本不因此重复追加，大版本按影响选择必要专项，不机械执行全道具／卡牌／药丸／角色／Mod 遍历。适用于本次候选的开发回归结果可以引用，旧验收记录和未决问题保持原结论。完整规则见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md#发布前验收范围)。
 
 ## 开发专项入口
 
@@ -231,7 +233,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 运气游戏使用 [run_luck_game.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_luck_game.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`，可加 `--heap-check --record`。同一组主客机覆盖挑战开局、开局吞下禁令、非主动底座拾取、购买代价与二选一、主动拾取跳过掷骰、主动转移充能、幸运上升药丸、换层赠送、分房发放、重连和妈腿奖杯退出；工具保护并恢复隔离资料。离线对应 `bridge.luck_game`、`bridge.challenges`、`bridge.challenge_menu`、`bridge.chat`、`core.challenge-rules` 与 Windows `native.item-effects`。
 
-以下入口用于开发修复时的定向回归，不属于发版清单。只选择受改动影响、需要排查或用户明确要求的场景，记录具体用例，不自动运行整个专项目录。
+以下入口用于开发修复时的定向回归，不属于每次发版固定必跑范围；大版本可按变更影响从中选定必要专项。只选择受改动影响、需要排查或用户明确要求的场景，记录具体用例，不自动运行整个专项目录。
 
 玩家不透明度的离线检查为 `presentation.player-opacity`、`bridge.chat`、`bridge.resume`、`diagnostics.defaults`／`validation`／`preservation` 及 Windows `native.player-opacity`／`native.player-outlines`。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-opacity --heap-check --record`，复用一组隔离主客机检查指定槽位、其他玩家、0% 与重置、装扮、受击染色、双子、遗骸、幽灵、分房及换层。配置默认值和非法值回退由离线配置测试覆盖；实机收尾恢复资料并核对哈希，同时核对双端画面中的身体与描边，不能只凭命令回执判定画面通过。夹具检查原始精灵颜色在绘制期间仍保持游戏值。
 
@@ -275,7 +277,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 逐帧证据保存在 `host-events.log` 与 `client-events.log`，游戏日志只记录用例边界和问题；报告按单个用例读取证据，保存结论与原始日志哈希，避免长批次汇总占用整批日志的内存。画面采集默认间隔 1000 ms；闪光等短暂效果可使用 `--record --frame-ms 33`，结合实际帧时间人工复核。
 
-每轮冻结 DLL、生成夹具、配方和判定器；复测使用新输出目录。修正判定器后重审已有原始记录，应保留原判定、变更原因、前后哈希及新的审阅报告。触发前提不成立、夹具错误、缺少一端或退出未完成均保留为未通过，不直接归因于道具不兼容。更新 [`item_audit_findings.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_audit_findings.json) 后用 `python tools/render_item_compatibility.py` 生成清单，`--check` 检查一致性；专项结果只写入 `docs/history/` 或 PR。
+每轮冻结 DLL、生成夹具、配方和判定器；复测使用新输出目录。修正判定器后重审已有原始记录，应保留原判定、变更原因、前后哈希及新的审阅报告。触发前提不成立、夹具错误、缺少一端或退出未完成均保留为未通过，不直接归因于道具不兼容。更新 [`item_audit_findings.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_audit_findings.json) 后用 `python tools/render_item_compatibility.py` 生成清单，`--check` 检查一致性；专项结果默认留在本地测试产物，用户明确要求入库时才写入 `docs/history/` 或 PR。
 
 ## 隔离执行与记录
 
@@ -295,7 +297,7 @@ python3 tools/validate_replica.py --cases gameplay normal \
   --output "$ISAAC_RUN_OUTPUT" --latency-ms 75 --ffmpeg "$ISAAC_FFMPEG"
 ```
 
-示例的 `gameplay` 串联兼容的输入、复活、蓄力、沙漏与镜头场景，`normal` 使用菜单和正常手柄输入。它们是局部检查入口，不能替代上表全部 Boss 与结局覆盖。
+示例的 `gameplay` 串联兼容的输入、复活、蓄力、沙漏与镜头场景，`normal` 使用菜单和正常手柄输入。它们是局部检查入口，不能替代按版本规模选定的基础、路线或 Boss 覆盖。
 
 现有工具并未自动合并所有分组，执行前仍需安排进程复用。`--latency-ms 75` 为两个方向各附加 75 ms，不能等同所有公网／frp 情况；`--goodtrip` 可传入原样 Mod 目录。
 
@@ -334,4 +336,4 @@ python3 tools/run_manual_dual.py --stop
 | 会话／楼层 | 准备屏障、事件先于新视图、重连位置、回退清理 |
 | 表现 | 本机归属、原版多人栏位、连续转场画面 |
 
-实机 runner 共用 [`lab_profile.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_profile.py) 备份和恢复带归属标记的资料。恢复前确认进程已退出且备份哈希完整，恢复后逐文件核对；失败结果和原始证据保留在本轮测试产物中。发布验收摘要保存到 `docs/history/`，记录候选及哈希、实际范围、逐项结果、未决问题、重启和恢复；不把过程或成绩追加进设计文档。
+实机 runner 共用 [`lab_profile.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_profile.py) 备份和恢复带归属标记的资料。恢复前确认进程已退出且备份哈希完整，恢复后逐文件核对；失败结果和原始证据保留在本轮测试产物中。发布验收摘要默认保存在本地测试产物，不随版本准备提交，也不单独提 PR 或合并；用户明确要求入库时才保存到 `docs/history/`。摘要记录候选及哈希、实际范围、逐项结果、未决问题、重启和恢复，不把过程或成绩追加进设计文档。
