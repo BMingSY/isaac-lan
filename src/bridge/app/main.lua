@@ -24,6 +24,14 @@ function _IsaacLanMinimapRender()
     end
 end
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
+local refreshFlatFileDoors = _IsaacLanModules["compat/items/flat_file"]({
+    native = native,
+    game = Game,
+    player = Isaac.GetPlayer,
+    trinket = TrinketType.TRINKET_FLAT_FILE,
+    curseRoom = RoomType.ROOM_CURSE,
+    doorSlots = DoorSlot.NUM_DOOR_SLOTS,
+})
 local friendlyFire = _IsaacLanModules["compat/rules/friendly_fire"]({
     policy = _IsaacLanModules["compat/rules/pvp_damage"],
     attacks = _IsaacLanModules["compat/rules/pvp_attacks"],
@@ -273,6 +281,7 @@ function _IsaacLanChallengeStep()
     challenge.step()
     roomRules.step()
     friendlyFire.step()
+    refreshFlatFileDoors()
 end
 function _IsaacLanCanEnterRoom(...)
     return challenge.canEnter(...)
@@ -429,6 +438,7 @@ function _IsaacLanActionStep()
     challenge.step()
     roomRules.step()
     friendlyFire.prepare()
+    refreshFlatFileDoors()
     if native.api_info().ready == 1 then
         _IsaacLanModules["compat/mods/goodtrip/authority"].observe()
     end

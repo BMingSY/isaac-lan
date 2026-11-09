@@ -603,6 +603,8 @@ return {
         "local_hud",
         "guest_visuals",
         "character_revival",
+        "item_room_effects",
+        "side_routes",
     ):
         (tests / f"state_{name}.lua").write_text(source)
     monkeypatch.setattr(lua_support, "ROOT", tmp_path)
@@ -617,6 +619,7 @@ return {
         (["lanbot", "lanbot-campaign", "lanbot-spiders", "lanbot-greed"], False),
         (["campaign", "ascent-compat"], False),
         (["local-hud", "guest-visuals", "character-revival"], False),
+        (["item-room-effects", "abyss-escape", "beast-layering"], False),
     ],
 )
 def test_built_suites_execute_options_and_cleanup(fake_scenarios, cases, first_floor):
@@ -654,7 +657,12 @@ state = { phase = 0, scene = 1, prepared = false }
 _IsaacLanFrame()
 state = { phase = 3, scene = 2, prepared = true }
 for index, name in ipairs(expected) do
-    assert(#observed == index and observed[index].route == name)
+    assert(#observed == index and observed[index].route == (name == "abyss-escape" and "knife" or name))
+    assert(observed[index].abyssEscape == (name == "abyss-escape"))
+    assert(observed[index].beastLayering == (name == "beast-layering"))
+    if name == "beast-layering" then
+        assert(observed[index].homeOnly and observed[index].endingRoutes[1] == "ascent")
+    end
     assert(observed[index].firstFloor == (name == "endings" and """
         + lua_support.literal(first_floor)
         + """))
@@ -1186,3 +1194,39 @@ end
 """
     )
     run_lua(source, tmp_path)
+
+
+def test_beast_observer_checks_native_layer_values_without_optional_globals(tmp_path):
+    run_lua(
+        """
+EntityType = { ENTITY_BEAST = 951 }
+local function entity(kind, variant, layer, z)
+    return { Type = kind, Variant = variant, SortingLayer = layer,
+        RenderZOffset = z, DepthOffset = 0, Exists = function() return true end }
+end
+local players = { [0] = entity(1, 0, 0, 0), [1] = entity(1, 0, 0, 0) }
+local room = { entity(951, 0, -100, 0), entity(951, 10, 0, 0) }
+Isaac = { GetRoomEntities = function() return room end }
+local native = { api_with_local_view = function(fn) fn() return true end }
+local probe = dofile("""
+        + lua_support.literal(str(ROOT / "tests/fixtures/beast_layer_probe.lua"))
+        + """)(native, function(slot, fn) fn(players[slot]) end, function() end)
+local expected
+for i = 1, 130 do expected = probe.capture(); probe.restore(expected) end
+room[1].SortingLayer = 0
+assert(not pcall(probe.restore, expected), "Missed background Beast ordering mismatch")
+room[1].SortingLayer = -100
+players[1].RenderZOffset = 100
+assert(not pcall(probe.restore, expected), "Missed player render offset mismatch")
+ButtonAction = { ACTION_LEFT = 0, ACTION_RIGHT = 1, ACTION_UP = 2, ACTION_DOWN = 3 }
+native.rooms_ready = function() return true end
+native.rooms_heads = function() return { ["0"] = 0, ["1"] = 1 } end
+Isaac.GetPlayer = function(slot) return players[slot] end
+players[0].Position = { X = 80, Y = 340 }
+assert(probe.direction(0) == ButtonAction.ACTION_RIGHT)
+players[0].Position.X = 298
+for i = 1, 60 do assert(probe.direction(0) == -1) end
+probe.finish(true)
+""",
+        tmp_path,
+    )

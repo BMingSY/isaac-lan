@@ -201,6 +201,13 @@ if(BUILD_TESTING)
         set_tests_properties(bridge.native-capture-generation PROPERTIES TIMEOUT 60 LABELS
                                                                          "offline;lua;core")
     endif()
+    add_executable(isaac_lan_cursed_mist_test tests/cursed_mist_test.cpp)
+    target_include_directories(isaac_lan_cursed_mist_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_cursed_mist_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME native.cursed-mist COMMAND isaac_lan_cursed_mist_test)
+    set_tests_properties(native.cursed-mist PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_room_metadata_test tests/room_metadata_test.cpp)
     target_include_directories(isaac_lan_room_metadata_test PRIVATE src)
     if(MINGW)
@@ -410,6 +417,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.crafting-bag crafting_bag.lua)
         isaac_add_lua_test(bridge.temporary-effects temporary_effects.lua)
         isaac_add_lua_test(bridge.item-room-entry item_room_entry.lua)
+        isaac_add_lua_test(bridge.flat-file flat_file.lua)
         isaac_add_lua_test(bridge.blue-key blue_key.lua)
         isaac_add_lua_test(bridge.keeper keeper.lua)
         isaac_add_lua_test(bridge.greed greed.lua)
@@ -547,6 +555,7 @@ add_library(
     src/engine/versions/j460/item_presentation.cpp
     src/engine/versions/j460/pickup_preview.cpp
     src/engine/versions/j460/item_effects.cpp
+    src/engine/versions/j460/cursed_mist.cpp
     src/engine/versions/j460/generated_items.cpp
     src/engine/versions/j460/rewind.cpp
     src/engine/versions/j460/frontend.cpp

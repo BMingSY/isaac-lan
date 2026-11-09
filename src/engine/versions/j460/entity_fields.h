@@ -53,6 +53,8 @@ inline constexpr Field common[] = {
     {"Visible", Kind::boolean, layout::entity::visible},
     {"FlipX", Kind::boolean, layout::entity::flipX},
     {"DepthOffset", Kind::real, layout::entity::depthOffset},
+    {"SortingLayer", Kind::integer, layout::entity::sortingLayer},
+    {"RenderZOffset", Kind::integer, layout::entity::renderZOffset},
     {"Mass", Kind::real, layout::entity::mass},
     {"Size", Kind::real, layout::entity::size, Write::size},
     {"SpriteRotation", Kind::real, layout::entity::spriteRotation},

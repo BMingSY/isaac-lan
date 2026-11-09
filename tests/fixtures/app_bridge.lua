@@ -2,6 +2,8 @@
 return function(root, native, modules)
     local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
     RoomType = RoomType or enums.RoomType
+    TrinketType = TrinketType or enums.TrinketType
+    DoorSlot = DoorSlot or enums.DoorSlot
     RoomShape = RoomShape or enums.RoomShape
     GridRooms = GridRooms or enums.GridRooms
     GridCollisionClass = GridCollisionClass or enums.GridCollisionClass
@@ -52,6 +54,7 @@ return function(root, native, modules)
         "compat/rules/pvp_attacks",
         "compat/rules/pvp_health",
         "compat/items/pvp",
+        "compat/items/flat_file",
         "compat/rules/friendly_fire",
         "compat/rules/loot_roll",
         "compat/rules/clear_charge",

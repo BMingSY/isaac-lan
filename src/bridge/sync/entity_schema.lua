@@ -5,6 +5,8 @@ local common = {
     "Visible",
     "FlipX",
     "DepthOffset",
+    "SortingLayer",
+    "RenderZOffset",
     "Mass",
     "Size",
     "SpriteRotation",
