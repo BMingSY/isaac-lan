@@ -212,6 +212,10 @@ void compatibilityTargets() {
     require(items::roomFollower(1000, 83, true) && !items::roomFollower(1000, 83, false) &&
                 !items::roomFollower(1000, 144, true) && !items::roomFollower(3, 83, true),
             "Room handoff left an attached spear behind or moved an unrelated effect");
+    require(items::roomFollower(802, 0, true) && items::roomFollower(802, 1, true) &&
+                !items::roomFollower(802, 0, false) && !items::roomFollower(802, 1, false) &&
+                !items::roomFollower(802, 2, true),
+            "Room handoff lost an owned angry Blood Puppy or moved an unrelated NPC");
     require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
             "Lazarus form matching crossed another character");
     require(characters::taintedJacob(37) && characters::taintedJacob(39) &&

@@ -128,8 +128,9 @@ local function entity(id, x, isTear)
         return self.vulnerable
     end
     function e:HasEntityFlags(mask)
-        assert(mask == 33554432, "NPC flash eligibility used the player invulnerability flag")
-        return self.noBlink
+        local flags = (self.noBlink and enums.EntityFlag.FLAG_NO_FLASH_ON_DAMAGE or 0)
+            | (self.friendly and enums.EntityFlag.FLAG_FRIENDLY or 0)
+        return flags & mask ~= 0
     end
     function e:IsDead()
         return false
@@ -156,6 +157,10 @@ near.vulnerable, near.noBlink = true, true
 assert(eligibility(near) == C.none)
 near.noBlink = false
 assert(eligibility(near) == C.target)
+near.friendly = true
+assert(eligibility(near) == C.none, "Friendly flies accepted speculative player hits")
+near.friendly = false
+assert(eligibility(near) == C.target, "A hostile enemy lost ordinary hit feedback")
 local objects, active, open = { [2] = projectile, [3] = near, [4] = far }, {}, true
 local function ref(id)
     return objects[id]
@@ -221,4 +226,31 @@ value.locations[1][L.index] = 85
 value.room[R.entities] = {}
 hits.confirm(value, 33, 3.02, ref)
 assert(projectile.Visible and next(active) == nil, "Room change leaked hidden projectiles")
+-- Capture eligibility must reach presentation: ordinary tears pass through a
+-- friendly fly without flashing it or hiding the tear, then hit a hostile NPC.
+near.friendly = true
+value.room[R.entities] = {
+    {
+        [E.id] = 2,
+        [E.spawner] = 1,
+        [E.position] = { -30, 0 },
+        [E.combat] = eligibility(projectile),
+    },
+    { [E.id] = 3, [E.combat] = eligibility(near) },
+}
+for tick = 34, 35 do
+    projectile.Position = vector(-30, 0)
+    hits.confirm(value, tick, tick, ref)
+    projectile.Position = vector(30, 0)
+    hits.present(nil, ref, tick + 0.01, nil, nil, { pause = 0 })
+    assert(next(active) == nil and projectile.Visible, "A friendly fly consumed a predicted hit")
+    hits.suspend(ref)
+end
+value.room[R.entities][3] = { [E.id] = 4, [E.combat] = eligibility(far) }
+projectile.Position = vector(-30, 0)
+hits.confirm(value, 36, 36, ref)
+projectile.Position = vector(30, 0)
+hits.present(nil, ref, 36.01, nil, nil, { pause = 0 })
+assert(not active[3] and active[4] and not projectile.Visible, "Friendly fly blocked a hostile hit")
+hits.suspend(ref)
 print("PASS actual projectile policy, nearest contact, blocked line, pause and room cleanup")
