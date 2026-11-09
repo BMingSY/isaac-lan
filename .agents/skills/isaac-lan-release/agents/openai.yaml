@@ -1,0 +1,3 @@
+interface:
+  display_name: "Isaac LAN 发版"
+  short_description: "按版本规模执行基础、全路线及 Boss 验收，经 GitHub CI 发布并同步工坊介绍"
