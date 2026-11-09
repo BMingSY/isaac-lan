@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#f4efe5" />
+        <meta
+            name="description"
+            content="Isaac LAN 是《以撒的结合：忏悔＋》的 2–4 人局域网联机扩展。共享楼层、分房探索、随时汇合，支持 Mod 加载与断线重连。"
+        />
+        <meta property="og:type" content="website" />
+        <meta property="og:locale" content="zh_CN" />
+        <meta
+            property="og:title"
+            content="Isaac LAN · 一起下地牢，分头也精彩"
+        />
+        <meta
+            property="og:description"
+            content="《以撒的结合：忏悔＋》2–4 人局域网联机扩展。共享楼层，分房探索，随时汇合。"
+        />
+        <title>Isaac LAN · 以撒局域网联机</title>
+        <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="styles.css" />
+        <script src="main.js" defer></script>
+    </head>
+    <body>
+        <a class="skip-link" href="#main">跳到正文</a>
+        <header class="site-header wrap">
+            <a class="wordmark" href="#" aria-label="Isaac LAN 首页">
+                <img src="assets/favicon.svg" width="28" height="28" alt="" />
+                ISAAC <span>LAN</span>
+            </a>
+            <nav aria-label="主导航">
+                <a href="#explore">联机体验</a>
+                <a href="#start">开始游玩</a>
+                <a href="#questions">常见问题</a>
+            </nav>
+            <a class="header-github" href="https://github.com/BMingSY/isaac-lan"
+                >GitHub <span aria-hidden="true">↗</span></a
+            >
+        </header>
+
+        <main id="main">
+            <section class="hero wrap" aria-labelledby="hero-title">
+                <div class="hero-copy">
+                    <p class="eyebrow">
+                        <span class="status-dot" aria-hidden="true"></span> THE
+                        BINDING OF ISAAC · REPENTANCE+
+                    </p>
+                    <h1 id="hero-title">
+                        一起下地牢，<br /><em>分头</em>也精彩。
+                    </h1>
+                    <p class="hero-description">
+                        熟悉的以撒，多一种一起玩的方式。<br />2–4
+                        人共享同一层地牢，各自探索房间，<br
+                            class="desktop-break"
+                        />也随时汇合，迎战下一个 Boss。
+                    </p>
+                    <div class="hero-actions">
+                        <a
+                            class="button button-primary"
+                            href="https://github.com/BMingSY/isaac-lan/releases/latest"
+                            >下载最新版本 <span aria-hidden="true">↓</span></a
+                        >
+                        <a
+                            class="button button-outline"
+                            href="https://steamcommunity.com/sharedfiles/filedetails/?id=3817760679"
+                            >Steam 创意工坊 <span aria-hidden="true">↗</span></a
+                        >
+                    </div>
+                    <a
+                        class="text-link"
+                        href="https://github.com/BMingSY/isaac-lan/blob/main/README.md#安装"
+                        >查看完整安装说明 <span aria-hidden="true">→</span></a
+                    >
+                    <p class="hero-platforms">
+                        Windows · Linux / Steam Deck（Proton）
+                    </p>
+                </div>
+                <figure class="hero-poster">
+                    <div class="poster-frame">
+                        <img
+                            src="assets/cover.png"
+                            alt="Isaac LAN 像素风封面：以撒与队友在地下室中一起战斗"
+                            width="1254"
+                            height="1254"
+                            fetchpriority="high"
+                        />
+                    </div>
+                    <figcaption>
+                        <span>ISAAC LAN / 局域网联机</span
+                        ><span>2–4 PLAYERS</span>
+                    </figcaption>
+                </figure>
+            </section>
+
+            <div class="facts-strip">
+                <div class="wrap facts">
+                    <p><strong>2–4 人</strong><span>一起开局</span></p>
+                    <p><strong>同层分房</strong><span>自由探索</span></p>
+                    <p><strong>Mod 支持</strong><span>保留你的搭配</span></p>
+                    <p><strong>断线重连</strong><span>回来继续这一局</span></p>
+                </div>
+            </div>
+
+            <section
+                class="explore-section wrap section-space"
+                id="explore"
+                aria-labelledby="explore-title"
+            >
+                <div class="section-heading">
+                    <p class="eyebrow">01 / 一层地牢，多种默契</p>
+                    <h2 id="explore-title">
+                        你探你的路，<br />我们打同一场冒险。
+                    </h2>
+                </div>
+                <div class="explore-layout">
+                    <div class="map-panel">
+                        <div class="map-heading">
+                            <span>BASEMENT / 地下室</span
+                            ><span class="map-key"
+                                ><i aria-hidden="true"></i> 队友位置</span
+                            >
+                        </div>
+                        <div
+                            class="floor-map"
+                            id="floor-map"
+                            data-mode="split"
+                            role="img"
+                            aria-label="联机方式示意：四名玩家分散在同一层的不同房间"
+                        >
+                            <svg viewBox="0 0 600 380" aria-hidden="true">
+                                <path
+                                    class="map-corridor"
+                                    d="M90 190H510 M300 80V300 M180 190V300"
+                                />
+                                <g class="map-rooms">
+                                    <rect
+                                        x="40"
+                                        y="147"
+                                        width="100"
+                                        height="86"
+                                    />
+                                    <rect
+                                        x="156"
+                                        y="147"
+                                        width="100"
+                                        height="86"
+                                    />
+                                    <rect
+                                        x="272"
+                                        y="147"
+                                        width="100"
+                                        height="86"
+                                    />
+                                    <rect
+                                        x="388"
+                                        y="147"
+                                        width="100"
+                                        height="86"
+                                    />
+                                    <rect
+                                        class="boss-room"
+                                        x="504"
+                                        y="147"
+                                        width="72"
+                                        height="86"
+                                    />
+                                    <rect
+                                        x="272"
+                                        y="37"
+                                        width="100"
+                                        height="86"
+                                    />
+                                    <rect
+                                        x="272"
+                                        y="257"
+                                        width="100"
+                                        height="86"
+                                    />
+                                    <rect
+                                        x="156"
+                                        y="257"
+                                        width="100"
+                                        height="86"
+                                    />
+                                </g>
+                                <path
+                                    class="map-door"
+                                    d="M140 180V200 M256 180V200 M372 180V200 M488 180V200 M312 123H332 M312 257H332 M196 257H216"
+                                />
+                                <g
+                                    class="map-symbol"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="3"
+                                >
+                                    <path
+                                        d="m310 74 5 5 7-11 7 11 5-5v17h-24z"
+                                    />
+                                    <path
+                                        d="M529 179h22v18h-22z M534 184v4 M546 184v4 M537 196v7 M543 196v7"
+                                    />
+                                </g>
+                            </svg>
+                            <span class="map-player player-one">1</span>
+                            <span class="map-player player-two">2</span>
+                            <span class="map-player player-three">3</span>
+                            <span class="map-player player-four">4</span>
+                        </div>
+                        <div
+                            class="map-controls"
+                            hidden
+                            role="group"
+                            aria-label="切换联机示意"
+                        >
+                            <button
+                                type="button"
+                                data-mode="split"
+                                aria-controls="floor-map"
+                                aria-pressed="true"
+                            >
+                                分头探索
+                            </button>
+                            <button
+                                type="button"
+                                data-mode="together"
+                                aria-controls="floor-map"
+                                aria-pressed="false"
+                            >
+                                汇合战斗
+                            </button>
+                        </div>
+                        <p
+                            class="map-caption"
+                            id="map-caption"
+                            aria-live="polite"
+                        >
+                            分房探索，同一层里的每个人都有自己的方向。
+                        </p>
+                        <p class="map-note">联机方式示意，非游戏画面</p>
+                    </div>
+                    <div class="feature-list">
+                        <article>
+                            <span class="feature-number">01</span>
+                            <div>
+                                <h3>分开走，也是一队。</h3>
+                                <p>
+                                    共享楼层，各自进房探索与战斗。小地图显示队友位置，想汇合时就去队友的房间；换层时，全队一起出发。
+                                </p>
+                            </div>
+                        </article>
+                        <article>
+                            <span class="feature-number">02</span>
+                            <div>
+                                <h3>喜欢的 Mod，带上一起。</h3>
+                                <p>
+                                    允许加载其他 Mod，保留原版多人 UI
+                                    和官方联机入口。内容 Mod
+                                    需要各端一致，已适配的界面 Mod
+                                    可以各自安装。
+                                </p>
+                                <a
+                                    class="text-link"
+                                    href="https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md"
+                                    >查看 Mod 兼容清单
+                                    <span aria-hidden="true">↗</span></a
+                                >
+                            </div>
+                        </article>
+                        <article>
+                            <span class="feature-number">03</span>
+                            <div>
+                                <h3>掉线了，这局还在。</h3>
+                                <p>
+                                    房主会话仍在时，原玩家可以断线重连，恢复角色并回到房主当前房间。单人
+                                    Continue 与联机存档分开管理。
+                                </p>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section
+                class="start-section"
+                id="start"
+                aria-labelledby="start-title"
+            >
+                <div class="wrap section-space">
+                    <div class="start-heading">
+                        <div>
+                            <p class="eyebrow">02 / 约好队友，就出发</p>
+                            <h2 id="start-title">三步，开始这一局。</h2>
+                        </div>
+                        <a
+                            class="text-link"
+                            href="https://github.com/BMingSY/isaac-lan/blob/main/README.md"
+                            >完整安装与联机指南
+                            <span aria-hidden="true">↗</span></a
+                        >
+                    </div>
+                    <div class="requirements">
+                        <span class="requirements-label">开局前确认</span>
+                        <p>
+                            《以撒的结合：忏悔＋》Windows 版
+                            <strong>v1.9.7.17.J460</strong
+                            >；所有玩家使用相同游戏版本和同一份联机扩展。
+                        </p>
+                    </div>
+                    <ol class="steps">
+                        <li>
+                            <span class="step-number">01</span>
+                            <h3>下载并安装</h3>
+                            <p>
+                                下载并解压完整安装包。关闭游戏，运行
+                                <code>Install.cmd</code>，选择游戏目录里的
+                                <code>isaac-ng.exe</code>。
+                            </p>
+                        </li>
+                        <li>
+                            <span class="step-number">02</span>
+                            <h3>进入局域网联机</h3>
+                            <p>
+                                从 Steam 正常启动游戏，选择存档栏，进入
+                                <strong>Online / 在线联机 → 局域网联机</strong
+                                >。
+                            </p>
+                        </li>
+                        <li>
+                            <span class="step-number">03</span>
+                            <h3>创建房间，叫上队友</h3>
+                            <p>
+                                房主创建房间，分享 IP
+                                或域名与端口。队友加入后选择角色并准备，由房主开始游戏。
+                            </p>
+                        </li>
+                    </ol>
+                    <div class="install-notes">
+                        <p>
+                            <strong>Linux / Steam Deck</strong> 使用 Windows 版
+                            J460 与 Proton 11.0-2 及以上，按指南运行
+                            <code>install.py</code> 并配置启动选项。<a
+                                href="https://github.com/BMingSY/isaac-lan/blob/main/README.md#linuxsteam-deckproton"
+                                >查看步骤 <span aria-hidden="true">↗</span></a
+                            >
+                        </p>
+                        <p>
+                            <strong>连接方式</strong> 默认端口为
+                            <code>UDP 29506</code
+                            >，可在界面修改。跨网络游玩需要配置端口映射或转发。
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section
+                class="questions-section wrap section-space"
+                id="questions"
+                aria-labelledby="questions-title"
+            >
+                <div class="questions-heading">
+                    <p class="eyebrow">03 / 出发前的小问题</p>
+                    <h2 id="questions-title">你可能还想知道。</h2>
+                    <a
+                        class="text-link"
+                        href="https://github.com/BMingSY/isaac-lan/blob/main/docs/faq.md"
+                        >查看全部常见问题 <span aria-hidden="true">↗</span></a
+                    >
+                </div>
+                <div class="questions-list">
+                    <details>
+                        <summary>会影响自己的单人存档吗？</summary>
+                        <p>
+                            单人 Continue
+                            与联机存档分开管理。保留原有解锁，计数只合并本局变化。
+                        </p>
+                    </details>
+                    <details>
+                        <summary>能保存下来，下次继续吗？</summary>
+                        <p>
+                            可以，需要原房主、原存档栏、原人数、原加入顺序和匹配的扩展构建。临时挑战不能续玩。
+                        </p>
+                    </details>
+                    <details>
+                        <summary>中途可以加入新玩家吗？</summary>
+                        <p>
+                            暂不支持中途加入新人或更换房主。断线的原玩家可在房主会话仍在时，保留原来的
+                            <code>player-id.txt</code> 重连。
+                        </p>
+                    </details>
+                    <details>
+                        <summary>连接不上，或者遇到问题怎么办？</summary>
+                        <p>
+                            先确认全员安装了同一份扩展并重启游戏，再核对房主地址、端口与防火墙。联机时可以在聊天中输入
+                            <code>/feedback 问题描述</code>
+                            提交反馈；收集范围见<a
+                                href="https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md"
+                                >反馈说明</a
+                            >。也可以到
+                            <a
+                                href="https://github.com/BMingSY/isaac-lan/issues"
+                                >GitHub Issues</a
+                            >
+                            报告问题。
+                        </p>
+                    </details>
+                </div>
+            </section>
+
+            <section class="closing-section" aria-labelledby="closing-title">
+                <div class="wrap closing-inner">
+                    <div>
+                        <p class="eyebrow">
+                            BRING YOUR FRIENDS. FIND YOUR WAY.
+                        </p>
+                        <h2 id="closing-title">下一层，和朋友一起。</h2>
+                    </div>
+                    <a
+                        class="button button-paper"
+                        href="https://github.com/BMingSY/isaac-lan/releases/latest"
+                        >获取 Isaac LAN <span aria-hidden="true">↗</span></a
+                    >
+                </div>
+            </section>
+        </main>
+
+        <footer class="wrap site-footer">
+            <div>
+                <a class="wordmark" href="#">ISAAC <span>LAN</span></a>
+                <p>为《以撒的结合：忏悔＋》制作的社区联机扩展。</p>
+            </div>
+            <nav aria-label="项目资源">
+                <a href="https://github.com/BMingSY/isaac-lan"
+                    >源代码 <span aria-hidden="true">↗</span></a
+                ><a href="https://github.com/BMingSY/isaac-lan/tree/main/docs"
+                    >技术文档 <span aria-hidden="true">↗</span></a
+                ><a href="https://github.com/BMingSY/isaac-lan/issues"
+                    >问题反馈 <span aria-hidden="true">↗</span></a
+                >
+            </nav>
+        </footer>
+    </body>
+</html>
