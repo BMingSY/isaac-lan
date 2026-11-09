@@ -130,6 +130,7 @@ local function actor(slot, fn)
         fn(player)
     end))
 end
+local beastLayerProbe = _IsaacLanTest.beastLayering and createBeastLayerProbe(native, actor, report)
 local function protect(p)
     p:SetMinDamageCooldown(10000)
     p:AddEntityFlags(EntityFlag.FLAG_NO_DAMAGE_BLINK)
@@ -474,7 +475,9 @@ local function fight(t)
                             .. e:GetSprite():GetFrame()
                     )
                 end
-                local warmup = e.Type == 950 and 200 or 30
+                local warmup = e.Type == 950 and 200
+                    or beastLayerProbe and e.Type == EntityType.ENTITY_BEAST and 360
+                    or 30
                 if
                     not terminalWalking
                     and (not dogmaWarning or e.Type ~= 950 or not dogmaAngelSeen or warningAt and t - warningAt > 150 and attackFrames > 0)
@@ -800,6 +803,9 @@ function _IsaacLanFrame()
             report("PASS native ending and session cleanup snapshots=" .. snapshots)
             if caseIndex == #cases then
                 if not finished then
+                    if beastLayerProbe then
+                        beastLayerProbe.finish(true)
+                    end
                     finished = true
                     Isaac.DebugString("LAN_NETWORK PASS all selected native ending routes")
                 end
@@ -1590,7 +1596,12 @@ local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(
         function()
-            if terminalWalking or not host and (shoot >= 0 or homeWalking or chestMove >= 0) then
+            local beastMove = beastLayerProbe and beastLayerProbe.direction(host and 0 or 1) or -1
+            if
+                beastMove >= 0
+                or terminalWalking
+                or not host and (shoot >= 0 or homeWalking or chestMove >= 0)
+            then
                 local values = {}
                 local triggered = not host
                         and chestMove >= 0
@@ -1601,7 +1612,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 local direction = ({ 0, 2, 1, 3 })[math.floor(native.api_info().tick / 12) % 4 + 1]
                 for action = 0, testInput.actionCount - 1 do
                     values[action] = (
-                        (homeWalking or terminalWalking) and action == direction
+                        beastMove >= 0 and action == beastMove
+                        or (homeWalking or terminalWalking) and action == direction
                         or not homeWalking and not terminalWalking and chestMove >= 0 and action == chestMove
                         or not homeWalking
                             and not terminalWalking
@@ -1637,6 +1649,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 debug10BeastWalking,
                 crawlspaceReturns,
                 chestMove,
+                beastLayerProbe and beastLayerProbe.capture() or false,
             }),
                 stable
         end,
@@ -1654,6 +1667,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         "Replica crawlspace return context differs"
                     )
                 end))
+            end
+            if beastLayerProbe then
+                beastLayerProbe.restore(meta[9])
             end
             assert(meta[1] == caseIndex, "Ending case changed without a native win")
             terminalWalking = meta[5]

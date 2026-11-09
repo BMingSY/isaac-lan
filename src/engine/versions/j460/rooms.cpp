@@ -994,7 +994,8 @@ std::vector<Address> followers(Address player, const Room& room, bool departingF
             (type == 8 &&
              (owned(at<Address>(entity, 0x3bc)) || owned(at<Address>(entity, 0x3c8)))) ||
             compat::items::roomFollower(type, at<unsigned>(entity, 0x2c),
-                                        owned(at<Address>(entity, 0x3bc))) ||
+                                        owned(at<Address>(entity, 0x3bc)),
+                                        at<unsigned>(entity, j460::layout::entity::subtype)) ||
             darkEsau ||
             (departingFloor &&
              compat::items::floorFollower(

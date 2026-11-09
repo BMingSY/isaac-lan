@@ -216,6 +216,9 @@ void compatibilityTargets() {
                 !items::roomFollower(802, 0, false) && !items::roomFollower(802, 1, false) &&
                 !items::roomFollower(802, 2, true),
             "Room handoff lost an owned angry Blood Puppy or moved an unrelated NPC");
+    require(items::roomFollower(1000, 123, true, 6) && !items::roomFollower(1000, 123, false, 6) &&
+                !items::roomFollower(1000, 123, true, 0) && !items::roomFollower(3, 123, true, 6),
+            "Salvation's attached halo remained in the old room or another halo followed");
     require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
             "Lazarus form matching crossed another character");
     require(characters::taintedJacob(37) && characters::taintedJacob(39) &&

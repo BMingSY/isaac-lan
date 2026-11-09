@@ -14,11 +14,17 @@
 
 `sprite_fields_plan(template)`／`sprite_fields_capture(sprite, plan)`／`sprite_fields_apply(sprite, plan, value)`使用同一模板边界处理精灵字段。支持文件名、动画名、帧、翻转、旋转、缩放、偏移及七个颜色通道；字符串与动画字段只读，动画切换、加载和完整层状态继续使用原有接口。接受借用或 Lua 自有 Sprite，不能将实体计划用于精灵。主动画帧按原版取 floor，叠加帧截断；无动画返回空名称与 `-1`。颜色写入与七参数 Lua `Color` 一致，完整 colorize 状态随后由 `sprite_state` 恢复。
 
-J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.h)。`Size` 使用下述尺寸恢复能力；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。掉落物 `Price` 调用原 thiscall setter（RVA `0x2e2570`），保留商店显示和特殊价格行为；`ShopItemId` 按原 Lua setter 限制在 -2 至 7。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
+J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.h)。`Size` 使用下述尺寸恢复能力；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。掉落物 `Price` 调用原 thiscall setter（RVA `0x2e2570`），保留商店显示和特殊价格行为；`ShopItemId` 按原 Lua setter 限制在 -2 至 7。`SortingLayer`（`Entity+0x35c`）和 `RenderZOffset`（`+0x354`）按原 Lua 属性读写有符号 32 位整数，与 `DepthOffset`（`+0x358`）共同参与原生排序，不改变实体所属列表。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
 
 `entity_size(entity:GetSprite(), radius)` 仅供客机恢复活动实体的有限数值尺寸，接受借用 Sprite，不接受 Lua 自有 Sprite、地址或偏移。Lua 普通字段恢复与上述批量字段共用 [`entity_size.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_size.h)。实体的 XML 配置指针 `+0x330` 非空时，沿用原 Lua setter（cdecl，RVA `0x471fa0`）。配置为空时，读取本机 `SizeMulti`（`+0x374` 的两个 float）及碰撞点向量（`+0x178` 的 begin／end／capacity，每点 8 字节），校验有限乘数、非默认哨兵和向量边界后，把现有形状及实际点数显式传给原生 `Entity::SetSize`（thiscall，RVA `0x2ac2a0`；参数为 float、两个 float 组成的值类型和 int）。碰撞点由游戏重建，向量内存仍由游戏管理；适配器不借用其他实体配置，不直接复制、分配或释放 MSVC 向量，也不跨调用保存任何原生引用。线上的尺寸字段保持原有布局。
 
 `entity_npc_boss(npc:GetSprite(), boolean)` 仅供客机恢复活动 NPC 的 Boss 分类。J460 `EntityNPC::IsBoss`（RVA `0x2b8470`）读取 NPC `+0xc3d` 的独立布尔值；它与 `GetBossID()` 返回的类型标识不同。接口只接受借用 Sprite、原版 NPC 类型范围与布尔值，不接收地址、不保留引用，不运行 NPC AI。同步组件将 `IsBoss()` 与六个 scratch／目标坐标 float32 一起编码为 25 字节；完整校验后应用，原生血条仍按这些实体及血量计算。
+
+## 诅咒迷雾的随从归属
+
+[迷雾适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/cursed_mist.cpp)仅在联机主机的原生道具禁用／恢复调用期间借用当前角色身份。J460 `Player::DisableCollectibles`（RVA `0x3d8980`）和 `EnableCollectibles`（`0x3d8d20`）均为无栈参数的 `thiscall`；递归处理子角色、异常退出后恢复外层身份，不跨房间或帧缓存角色指针。
+
+`EntityList::FindByType`（RVA `0x1af60`）为 `thiscall`，六个栈参数依次为结果缓冲、类型、变体、子类型、使用缓存、排除友好实体，被调方清理 24 字节并返回结果地址。适配只处理返回点 `0x3d8ade`／`0x3d9046` 的无缓存随从查询，查询种类由[矿坑路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/mines.h)限定。结果描述符的借用标记、数据指针、容量、数量位于 `+0/+4/+8/+12`；校验数量不超过容量及 65536 后，按 `Familiar.Player`（`+0x410`）稳定筛选当前角色的结果。只改查询结果中的地址顺序与数量，不改房间实体列表、结果容量或借用标记。存储载荷、生成、移除和内存回收仍由原生完成；单人、客机及其他查询原样执行。入口与调用返回点均纳入启动签名校验。
 
 ## 实体引用与房间数据
 
@@ -61,7 +67,7 @@ Lua 绘制组件按权威实体 ID 维护实际绳索记录，以 `EntityPtr` �
 
 实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
 
-角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先记录原生持久列表成员身份，再移除源列表引用并调用原生添加入口。普通添加未恢复的持久成员通过既有 `AddPersistent`（RVA `0x1b4f0`）登记，避免重复添加；该列表位于 Room 实体容器 `+0x30`，布局归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)。成员身份在目的房间初始化和跟班入房回调前恢复，适用于换房、跨层聚合和离线角色停放。对象仍由游戏持有和销毁，不复制效果、不重放道具使用；没有对应持有者的效果及房间独立效果不随角色迁移。
+角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体、子类型和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先记录原生持久列表成员身份，再移除源列表引用并调用原生添加入口。普通添加未恢复的持久成员通过既有 `AddPersistent`（RVA `0x1b4f0`）登记，避免重复添加；该列表位于 Room 实体容器 `+0x30`，布局归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)。成员身份在目的房间初始化和跟班入房回调前恢复，适用于换房、跨层聚合和离线角色停放。对象仍由游戏持有和销毁，不复制效果、不重放道具使用；没有对应持有者的效果及房间独立效果不随角色迁移。
 
 迁移的原生离房回调完成后、随行实体迁出前，主机在源房间作用域内通知 `_IsaacLanRoomLeaving()`；回调只借用当前房间，不保留对象。蓝钥匙兼容组件在这里消费源房间各门目标的 `FLAG_BLUE_REDIRECT`，保留其他标记。
 
@@ -270,7 +276,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | 个人画面状态 | `Game::AddPixelation` RVA `0x353cc0`、`Player::UpdateWavyCap` RVA `0x1cb480`；画面状态按控制器保存。Game 的 `+0x26528/+0x2652c/+0x26530` 是泛光剩余时间／初始时间／强度，`+0x269e0/+0x269e4` 是像素化剩余／初始时间，`+0x67738/+0x6773c/+0x67740` 是扭曲当前／目标／步长；角色更新及嵌套的道具／药丸／卡牌调用借入同一所属状态，结束时回收并恢复全局标量；绘制只借入本机状态，角色动作外的世界泛光保留全局归属 |
 | 规则文字 | `HUD::ShowFortuneText` RVA `0x5a3ac0` 借用 x86 MSVC 字符串链表，返回后不保留或释放调用方节点；接收端用本地字符串构造临时只读节点。`StringTable::Indexed` RVA `0x626d30` 根据原生选中的节名／索引翻译，不再次抽取随机提示 |
 
-道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema 为 39、网络消息版本为 48；包含扩展 DLL 与嵌入 Lua 的指纹阻止旧实现接入，schema 同时拒绝旧快照。
+道具演出 pose 在状态、ID、延迟之后携带两个 `u32` 像素化计时和三个按 IEEE 754 位模式编码的 `f32` 扭曲标量，随后是泛光的两个 `u32` 计时与一个 `f32` 强度。接收端先校验完整记录：计时不得倒置，浮点必须有限且非负；重复快照只恢复状态，不重置计时。规则文字事件使用种类 5，受现有序号、楼层代次、接收者、事件数与长度限制。世界 schema、协议版本和扩展指纹的兼容边界见[状态同步](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#校验与失败边界)。
 
 本页描述实现契约，不代表对应玩法已经验收通过。兼容状态维护在[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)，原生验证方法见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
 

@@ -15,13 +15,14 @@ inline bool floorFollower(unsigned type, unsigned variant, bool attached) {
     constexpr unsigned effect = 1000, redemption = 185;
     return type == effect && variant == redemption && attached;
 }
-inline bool roomFollower(unsigned type, unsigned variant, bool attached) {
-    constexpr unsigned effect = 1000, spearOfDestiny = 83;
+inline bool roomFollower(unsigned type, unsigned variant, bool attached, unsigned subtype = 0) {
+    constexpr unsigned effect = 1000, spearOfDestiny = 83, halo = 123, salvationHalo = 6;
     constexpr unsigned puppyAngry = 0, puppyLarge = 1;
     // The angry body is an NPC parented to the owner's familiar. Both must
     // migrate together so native room entry retains its form and progress.
     return attached &&
-           ((type == effect && variant == spearOfDestiny) ||
+           ((type == effect &&
+             (variant == spearOfDestiny || (variant == halo && subtype == salvationHalo))) ||
             (type == ids::entity::bloodPuppy && (variant == puppyAngry || variant == puppyLarge)));
 }
 } // namespace isaac::compat::items

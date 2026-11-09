@@ -23,6 +23,7 @@ return {
         ENTITY_MOTHERS_SHADOW = 867,
         ENTITY_HORNFEL = 906,
         ENTITY_HORNY_BOYS = 920,
+        ENTITY_BEAST = 951,
         ENTITY_EFFECT = 1000,
     },
     EntityFlag = {
@@ -112,6 +113,7 @@ return {
     GridRooms = { ROOM_DEVIL_IDX = -1, ROOM_ERROR_IDX = -2 },
     GridCollisionClass = { COLLISION_NONE = 0 },
     DoorVariant = { DOOR_UNLOCKED = 8 },
+    DoorSlot = { NUM_DOOR_SLOTS = 8 },
     TrinketType = { TRINKET_FLAT_FILE = 151 },
     CollectibleType = {
         COLLECTIBLE_BOOK_OF_SHADOWS = 58,
