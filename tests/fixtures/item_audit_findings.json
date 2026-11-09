@@ -83968,6 +83968,20 @@
         "collectible:492/host-same",
         "collectible:492/client-split"
       ]
+    },
+    "collectible:565": {
+      "candidate": "f1cb6bec4ad4ee468ebc857b535c93e7823c2f7d",
+      "dll_sha256": "0c8fc9895b9718aab91ecef33aea78d14828673d415906bf1585e21d8b267aa0",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "客机持有：两种狂暴形态跨房往返、大型狂暴形态换层；未穷举其他组合。",
+      "evidence": [
+        "feedback-item-state-20261109/native18"
+      ],
+      "scope": "正常喂养产生小型、大型狂暴 NPC；主客机确认两种形态往返驻留房与重新加载的房间，原生种子和主机对象保持；大型形态正常换层后保留形态、跟班父实体与持有者。",
+      "cases": [
+        "feedback-puppy"
+      ]
     }
   },
   "completion_acceptance": {
