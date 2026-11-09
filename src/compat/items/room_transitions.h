@@ -1,4 +1,5 @@
 #pragma once
+#include "compat/game_ids.h"
 
 namespace isaac::compat::items {
 inline constexpr int blueRoomIndex = -16;
@@ -16,7 +17,12 @@ inline bool floorFollower(unsigned type, unsigned variant, bool attached) {
 }
 inline bool roomFollower(unsigned type, unsigned variant, bool attached, unsigned subtype = 0) {
     constexpr unsigned effect = 1000, spearOfDestiny = 83, halo = 123, salvationHalo = 6;
-    return type == effect && attached &&
-           (variant == spearOfDestiny || (variant == halo && subtype == salvationHalo));
+    constexpr unsigned puppyAngry = 0, puppyLarge = 1;
+    // The angry body is an NPC parented to the owner's familiar. Both must
+    // migrate together so native room entry retains its form and progress.
+    return attached &&
+           ((type == effect &&
+             (variant == spearOfDestiny || (variant == halo && subtype == salvationHalo))) ||
+            (type == ids::entity::bloodPuppy && (variant == puppyAngry || variant == puppyLarge)));
 }
 } // namespace isaac::compat::items

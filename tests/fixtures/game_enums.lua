@@ -26,7 +26,11 @@ return {
         ENTITY_BEAST = 951,
         ENTITY_EFFECT = 1000,
     },
-    EntityFlag = { FLAG_DONT_OVERWRITE = 2097152, FLAG_NO_FLASH_ON_DAMAGE = 33554432 },
+    EntityFlag = {
+        FLAG_DONT_OVERWRITE = 2097152,
+        FLAG_NO_FLASH_ON_DAMAGE = 33554432,
+        FLAG_FRIENDLY = 536870912,
+    },
     FamiliarVariant = { ISAACS_BODY = 48 },
     PickupVariant = { PICKUP_COLLECTIBLE = 100 },
     PlayerType = {

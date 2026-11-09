@@ -212,6 +212,10 @@ void compatibilityTargets() {
     require(items::roomFollower(1000, 83, true) && !items::roomFollower(1000, 83, false) &&
                 !items::roomFollower(1000, 144, true) && !items::roomFollower(3, 83, true),
             "Room handoff left an attached spear behind or moved an unrelated effect");
+    require(items::roomFollower(802, 0, true) && items::roomFollower(802, 1, true) &&
+                !items::roomFollower(802, 0, false) && !items::roomFollower(802, 1, false) &&
+                !items::roomFollower(802, 2, true),
+            "Room handoff lost an owned angry Blood Puppy or moved an unrelated NPC");
     require(items::roomFollower(1000, 123, true, 6) && !items::roomFollower(1000, 123, false, 6) &&
                 !items::roomFollower(1000, 123, true, 0) && !items::roomFollower(3, 123, true, 6),
             "Salvation's attached halo remained in the old room or another halo followed");

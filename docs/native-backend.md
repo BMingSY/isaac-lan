@@ -67,7 +67,7 @@ Lua 绘制组件按权威实体 ID 维护实际绳索记录，以 `EntityPtr` �
 
 实体链接在对象恢复完成后应用。原生能力只处理引用与布局，Boss 匹配和状态选择由 [compat/bosses/](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/compat/bosses) 负责。
 
-角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体、子类型和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先移除原房间各实体列表中的引用，再调用原生添加入口；对象仍由游戏持有和销毁，不复制效果、不重放道具使用。没有对应持有者的效果及房间独立效果不随角色迁移。
+角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体、子类型和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先记录原生持久列表成员身份，再移除源列表引用并调用原生添加入口。普通添加未恢复的持久成员通过既有 `AddPersistent`（RVA `0x1b4f0`）登记，避免重复添加；该列表位于 Room 实体容器 `+0x30`，布局归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)。成员身份在目的房间初始化和跟班入房回调前恢复，适用于换房、跨层聚合和离线角色停放。对象仍由游戏持有和销毁，不复制效果、不重放道具使用；没有对应持有者的效果及房间独立效果不随角色迁移。
 
 迁移的原生离房回调完成后、随行实体迁出前，主机在源房间作用域内通知 `_IsaacLanRoomLeaving()`；回调只借用当前房间，不保留对象。蓝钥匙兼容组件在这里消费源房间各门目标的 `FLAG_BLUE_REDIRECT`，保留其他标记。
 

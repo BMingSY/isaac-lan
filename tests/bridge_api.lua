@@ -487,13 +487,19 @@ for _, build in ipairs({
         }
     end
     local near, far, effect = pickup(71, 60), pickup(72, 81), pickup(73, 20, 1000)
+    local foreign = pickup(75, 10)
     local roomEntities, indexed = { near, far, effect }, false
     p.env.Isaac.GetRoomEntities = function()
         assert(p.scope == 1, "EID radius fallback left the local view")
         return roomEntities
     end
-    local nativeFind = function()
-        return indexed and { near } or {}
+    local nativeFind = function(_, _, mask)
+        if mask ~= 15 then
+            return {}
+        end
+        -- The native spatial index also contains a closer pedestal from the
+        -- other occupied room, even while EID borrows the local room context.
+        return indexed and { near, foreign } or { foreign }
     end
     p.env.Isaac.FindInRadius = nativeFind
     local originalRender = callbacks[2]
@@ -512,6 +518,16 @@ for _, build in ipairs({
         assert(value == 7 and gap == nil and tail == "rendered")
         assert(p.env.Isaac.FindInRadius == nativeFind, "Radius override escaped EID rendering")
     end
+    local originalInfo = p.env._IsaacLan.api_info
+    p.env._IsaacLan.api_info = function()
+        local info = originalInfo()
+        info.authority = 1
+        return info
+    end
+    indexed = true
+    callbacks[2](eid)
+    assert(p.env.Isaac.FindInRadius == nativeFind, "Authority EID query leaked its override")
+    p.env._IsaacLan.api_info = originalInfo
     indexed, roomEntities = false, { pickup(74, 80) }
     p.positions["1"].index = 70
     p.epoch = p.epoch + 1

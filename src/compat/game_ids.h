@@ -10,6 +10,7 @@ inline constexpr unsigned pickup = 5;
 inline constexpr unsigned tear = 2;
 inline constexpr unsigned familiar = 3;
 inline constexpr unsigned bomb = 4;
+inline constexpr unsigned bloodPuppy = 802;
 inline constexpr unsigned hornfel = 906;
 inline constexpr unsigned hornyBoys = 920;
 inline constexpr unsigned rotgut = 911;

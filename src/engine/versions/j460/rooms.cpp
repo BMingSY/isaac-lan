@@ -899,15 +899,19 @@ void restorePositions(Address room) {
     }
 }
 void moveEntity(Address entity, Room& from, Room& to) {
-    for (std::size_t offset = 0x20; offset <= 0x90; offset += 0x10) {
-        const auto list = from.pointer + 0x1218 + offset;
-        auto data = reinterpret_cast<Address*>(at<Address>(list, 4));
-        auto& size = at<unsigned>(list, 12);
+    namespace listLayout = j460::layout::entityList;
+    bool persistent = false;
+    for (auto offset = listLayout::firstArray; offset <= listLayout::lastArray;
+         offset += listLayout::arrayStride) {
+        const auto list = from.pointer + j460::layout::room::entities + offset;
+        auto data = reinterpret_cast<Address*>(at<Address>(list, listLayout::data));
+        auto& size = at<unsigned>(list, listLayout::count);
         for (unsigned i = 0; i < size;) {
             if (data[i] != entity) {
                 ++i;
                 continue;
             }
+            persistent |= offset == listLayout::persistentArray;
             std::memmove(data + i, data + i + 1, (--size - i) * sizeof(Address));
         }
     }
@@ -920,6 +924,18 @@ void moveEntity(Address entity, Room& from, Room& to) {
     using Add = void(__attribute__((thiscall))*)(void*, void*);
     engine<Add>(j460::entry::engineRoomsAdd)(reinterpret_cast<void*>(to.pointer + 0x1218),
                                              reinterpret_cast<void*>(entity));
+    // Add rebuilds the ordinary type lists, but dynamic native persistence is
+    // separate. Preserve that membership before Room::Init can discard an NPC
+    // or a familiar's room-entry callback searches for its persistent body.
+    if (persistent) {
+        const auto list = to.pointer + j460::layout::room::entities + listLayout::persistentArray;
+        const auto data = reinterpret_cast<const Address*>(at<Address>(list, listLayout::data));
+        const std::span<const Address> members(data, at<unsigned>(list, listLayout::count));
+        if (std::find(members.begin(), members.end(), entity) == members.end())
+            engine<Add>(j460::entry::engineRoomsAddPersistent)(
+                reinterpret_cast<void*>(to.pointer + j460::layout::room::entities),
+                reinterpret_cast<void*>(entity));
+    }
 }
 std::vector<Address> followers(Address player, const Room& room, bool departingFloor = false) {
     std::vector<Address> candidates, result;
