@@ -219,6 +219,13 @@ void compatibilityTargets() {
     require(items::roomFollower(1000, 123, true, 6) && !items::roomFollower(1000, 123, false, 6) &&
                 !items::roomFollower(1000, 123, true, 0) && !items::roomFollower(3, 123, true, 6),
             "Salvation's attached halo remained in the old room or another halo followed");
+    for (unsigned variant : {1u, 2u, 3u})
+        require(items::roomFollower(7, variant, true, 1) &&
+                    !items::roomFollower(7, variant, false, 1) &&
+                    !items::roomFollower(7, variant, true, 0) &&
+                    !items::roomFollower(7, variant, true, 2) &&
+                    !items::roomFollower(2, variant, true, 1),
+                "Ludovico ring stayed behind or an ordinary/unowned attack followed");
     require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
             "Lazarus form matching crossed another character");
     require(characters::taintedJacob(37) && characters::taintedJacob(39) &&
