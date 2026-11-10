@@ -132,12 +132,14 @@ def test_failed_transaction_restores_all_files(package_game, monkeypatch, instal
     assert {path: path.read_bytes() if path.exists() else None for path in paths} == before
 
 
-def test_refuses_bad_game_code_and_tampered_package(package_game):
+@pytest.mark.parametrize("signature_name", ["Entity.DynamicCast", "Entity.RTTI", "NPC.RTTI"])
+def test_refuses_bad_game_code_and_tampered_package(package_game, signature_name):
     package, game = package_game
     profile = json.loads((package / "game-profile.json").read_text())
     executable = game / "isaac-ng.exe"
     image = bytearray(executable.read_bytes())
-    image[profile["signatures"][0]["rva"]] ^= 1
+    signature = next(entry for entry in profile["signatures"] if entry["name"] == signature_name)
+    image[signature["rva"]] ^= 1
     executable.write_bytes(image)
     assert not installer.install(package, game, "Status")["gameCompatible"]
     with pytest.raises(ValueError, match="code differs"):
