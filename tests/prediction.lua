@@ -27,6 +27,38 @@ local prediction =
     assert(_IsaacLanPrediction, "Native prediction bootstrap did not publish its API")
 local right, left, stop = Vector(1, 0), Vector(-1, 0), Vector(0, 0)
 local origin, speed, dt = Vector(100, 200), 1, 1 / 60
+-- A stream of fresh local samples does not prove the host is still accepting
+-- them. A sustained blackout must stop speculative travel, not just evict history.
+local stalled = prediction.new(origin)
+stalled:confirm(origin, 0, stop, 0)
+for sequence = 1, 60 do
+    stalled:step(right, sequence, speed, dt)
+end
+local heldPosition = stalled.display
+for sequence = 61, 240 do
+    close(stalled:step(right, sequence, speed, dt), heldPosition)
+end
+assert(stalled.velocity:LengthSquared() == 0, "Blackout retained speculative inertia")
+stalled:confirm(heldPosition, 239, stop, 120)
+for sequence = 241, 250 do
+    stalled:step(right, sequence, speed, dt)
+end
+assert(stalled.display.X > heldPosition.X, "Fresh authority did not resume local walking")
+-- A higher render rate can evict history before the time budget is exhausted.
+-- New host ticks with the same old input ACK must not refund that evicted time.
+for _, hz in ipairs({ 30, 60, 144, 500 }) do
+    local bounded = prediction.new(origin)
+    bounded:confirm(origin, 0, stop, 0)
+    for sequence = 1, hz do
+        bounded:step(right, sequence, speed, 1 / hz)
+    end
+    bounded:confirm(origin, 0, stop, 1)
+    bounded:step(right, hz + 1, speed, 1 / hz)
+    assert(bounded.velocity:LengthSquared() == 0, "Repeated ACK renewed evicted prediction time")
+    bounded:confirm(origin, hz + 1, stop, 2)
+    bounded:step(right, hz + 2, speed, 1 / hz)
+    assert(bounded.velocity.X > 0, "Fresh ACK failed to retire evicted prediction time")
+end
 -- A late authority offset must not turn into a one-frame jump, including when
 -- subsequent confirmations keep arriving during recovery. Input remains live.
 for _, error in ipairs({ 12, 24, 48, 80 }) do
@@ -75,6 +107,9 @@ assert(p.velocity.X < initialVelocity, "Local turn waited for the next sample")
 -- stopping instantly and being dragged onward by late authority positions.
 for sequence = 2, 30 do
     p:step(right, sequence, speed, dt)
+    if sequence == 20 then
+        p:confirm(p.position, sequence, p.velocity, sequence)
+    end
 end
 local beforeRelease = p.display.X
 local movingVelocity = p.velocity.X
@@ -201,19 +236,18 @@ print("PASS same-ack host ticks, stale ticks, authoritative velocity and bounded
 p = prediction.new(origin)
 p:confirm(origin, 0, stop, 0)
 local delayedPosition, delayedVelocity
-for sequence = 1, 120 do
-    p:step(right, sequence, speed, dt)
-    if sequence == 50 then
+for sequence = 1, 28 do
+    p:step(right, sequence, 2, dt)
+    if sequence == 22 then
         delayedPosition, delayedVelocity = p.position, p.velocity
     end
 end
 local beforeDelayed = p.display
 assert((delayedPosition - origin):LengthSquared() > 96 ^ 2)
-assert((delayedPosition - beforeDelayed):LengthSquared() > 96 ^ 2)
-p:confirm(delayedPosition, 50, delayedVelocity, 25)
+p:confirm(delayedPosition, 22, delayedVelocity, 11)
 close(p.display, beforeDelayed)
-assert(#p.pending == 70, "Delayed walking confirmation discarded unacknowledged input")
-close(p:step(stop, 120, speed, 0), beforeDelayed)
+assert(#p.pending == 6, "Delayed walking confirmation discarded unacknowledged input")
+close(p:step(stop, 28, speed, 0), beforeDelayed)
 -- A genuine displacement away from both the previous authority and the
 -- predicted walk must still discard that path immediately.
 p:confirm(Vector(600, 400), 120, stop, 60)
@@ -234,6 +268,7 @@ for line in samples:lines() do
     end
     local tick, x, y, vx, vy, dx, dy, moveSpeed = table.unpack(values)
     if previousTick and tick == previousTick + 1 and moveSpeed == previousSpeed then
+        p:confirm(p.position, previousTick, p.velocity, previousTick)
         p:step(Vector(dx, dy), tick, moveSpeed, 1 / 30)
         assert(
             (p.position - Vector(x, y)):LengthSquared() < 0.002 ^ 2,

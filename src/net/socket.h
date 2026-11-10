@@ -67,7 +67,6 @@ struct Socket : SendQueue {
                 auto message = pipe->incoming.pop();
                 if (!message)
                     break;
-                pipe->incomingBytes.fetch_sub(message->size(), std::memory_order_acq_rel);
                 if (message->bulk) {
                     if constexpr (std::is_same_v<B, std::nullptr_t>)
                         throw std::runtime_error("Unexpected bulk transfer before handshake");

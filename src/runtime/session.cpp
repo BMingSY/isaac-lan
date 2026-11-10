@@ -443,7 +443,7 @@ void publishState() {
         packet.bytes.assign(bytes, bytes + size);
         if (stableSize)
             packet.stable.assign(stable, stable + stableSize);
-        session->publish(slot, packet);
+        session->publish(slot, std::move(packet));
         lua.setTop(state, top);
     }
     session->poll();

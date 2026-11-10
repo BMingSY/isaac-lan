@@ -1,5 +1,6 @@
 #pragma once
 #include "net/datagram_protocol.h"
+#include "net/path_latency.h"
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -16,7 +17,7 @@ class WorldPacing {
     static constexpr auto adjustmentInterval = std::chrono::milliseconds(200);
     static constexpr auto serviceInterval = std::chrono::milliseconds(5);
     static constexpr std::size_t minimumBurstDatagrams = 2, maximumBurstDatagrams = 16;
-    static constexpr double queueAllowanceMs = 50;
+    static constexpr double queueAllowanceMs = 25;
     static constexpr auto congestionConfirmation = std::chrono::milliseconds(100);
     static constexpr unsigned minimumDelayedReceipts = 3;
     static constexpr double decreaseFactor = 0.75, increaseFactor = 1.25, minimumReceiptMs = 1;
@@ -25,7 +26,7 @@ class WorldPacing {
     double rate = initialRate, credit = minimumBurstDatagrams * datagram::mtu;
     std::optional<Clock::time_point> updated, adjusted;
     bool received = false;
-    std::optional<double> minimumTransit;
+    PathLatency path;
     std::optional<Clock::time_point> delayedSince;
     unsigned delayedReceipts = 0;
     double burst() const {
@@ -75,12 +76,15 @@ class WorldPacing {
         credit = std::min(credit, burst());
         adjusted = now;
     }
-    void acknowledge(std::size_t bytes, double transitMs, int minimumLatency,
+    void acknowledge(std::size_t bytes, double transitMs, int networkLatency,
                      Clock::time_point now) {
         advance(now);
-        minimumTransit = std::min(minimumTransit.value_or(transitMs), transitMs);
-        const auto baseline = minimumLatency >= 0 ? minimumLatency : *minimumTransit;
-        if (transitMs > baseline + queueAllowanceMs) {
+        // ENet's RTT ends on the network thread. A busy renderer may defer the
+        // application receipt; it limits the view window, not path capacity.
+        if (networkLatency < 0)
+            return;
+        const auto baseline = path.observe(networkLatency, now);
+        if (networkLatency > baseline + queueAllowanceMs) {
             if (!delayedSince)
                 delayedSince = now;
             ++delayedReceipts;

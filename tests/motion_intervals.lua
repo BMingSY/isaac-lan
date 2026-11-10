@@ -273,6 +273,13 @@ local function localRender(sequence)
     )
     return player.Position.X
 end
+local lastAuthoritySequence = -1
+local function confirmLocal(sequence)
+    local p = localState.prediction
+    localState.target = p.position
+    p:confirm(p.position, sequence, p.velocity, sequence)
+    lastAuthoritySequence = sequence
+end
 local previous = localRender(0)
 close(localRender(1), previous, "Native first half tick integrates the resting velocity")
 assert(localState.prediction.velocity.X > 0, "Held bag blocked local acceleration")
@@ -280,6 +287,9 @@ for sequence = 2, 30 do
     local position = localRender(sequence)
     assert(position > previous, "Held bag froze local motion between snapshots")
     previous = position
+    if sequence % 10 == 0 then
+        confirmLocal(sequence)
+    end
 end
 -- The item-state bit arrives with the same snapshot as the extra-animation
 -- flag, while the body can still report Walk for several renders. Exercise
@@ -292,6 +302,9 @@ for sequence = 31, 90 do
     local position = localRender(sequence)
     assert(position > previous, "Raising/lowering the bag reset movement prediction")
     previous = position
+    if sequence % 10 == 0 then
+        confirmLocal(sequence)
+    end
 end
 -- Every native split item pose keeps walking, independent of inventory and
 -- item state. Unknown/full-body poses and explicit control locks stay blocked.
@@ -305,7 +318,10 @@ for _, extra in ipairs({ "Pickup", "UseItem", "LiftItem", "HideItem", "" }) do
         sequence = sequence + 1
         local position = localRender(sequence)
         assert(position > previous, extra .. "/" .. body .. " froze pending movement")
-        assert(localState.prediction.acknowledged == -1, "Action fabricated an acknowledgement")
+        assert(
+            localState.prediction.acknowledged == lastAuthoritySequence,
+            "Action fabricated an acknowledgement"
+        )
         previous = position
     end
 end
@@ -393,6 +409,12 @@ local function pairedRender(sequence)
     pairedMotion.present(testInput.buttons(1 << 1), sequence, {}, bodyStates, function(id)
         return bodies[id]
     end, 1)
+    if sequence % 10 == 0 then
+        for _, state in pairs(bodyStates) do
+            local p = state.prediction
+            p:confirm(p.position, sequence, p.velocity, sequence)
+        end
+    end
 end
 for sequence = 0, 20 do
     pairedRender(sequence)
@@ -459,6 +481,8 @@ end
 assert(previousLocked - 100 < 0.001, "Locked position did not settle at the host position")
 extraFinished = true
 animation = "WalkRight"
+-- The unlock view also carries the host's current input confirmation.
+localState.prediction:confirm(Vector(100, 100), 50, Vector(0, 0), 50)
 localRender(51)
 assert(localState.prediction.velocity.X > 0, "Movement waited for another host packet")
 print("PASS action locks retain pending inputs, reconcile delayed state and resume locally")
@@ -686,6 +710,7 @@ localMotion.reset()
 for s = 0, 20 do
     assert(localRender(s) <= 170, "Closed door admitted ordinary prediction")
 end
+confirmLocal(20)
 doorPreview = 2
 for s = 21, 40 do
     assert(localRender(s) <= 182.001, "Unlock preview left the source room")
@@ -795,6 +820,9 @@ for frame = 1, 60 do
     if player.Position.Y <= 300 then
         assert(player.Position.X < 330.01, "Rock collision incorrectly used the poop boundary")
         rockSamples = rockSamples + 1
+    end
+    if frame % 10 == 0 then
+        confirmLocal(frame)
     end
 end
 assert(rockSamples > 5 and player.Position.X > 380)

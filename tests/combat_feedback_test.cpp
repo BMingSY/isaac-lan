@@ -1,12 +1,14 @@
 // Private x86 memory only. No game process or hook is installed.
 #include "test_support.h"
 #include "engine/versions/j460/combat_feedback.cpp"
+#include "support/native_entity_types.h"
 #include <array>
 
 namespace isaac::runtime {
 std::uint32_t testTick = 10, testEpoch = 2;
+bool testReplica = false;
 bool replica() {
-    return false;
+    return testReplica;
 }
 std::uint32_t tick() {
     return testTick;
@@ -52,7 +54,8 @@ bool __attribute__((thiscall)) nativeDamage(void* object, float, std::uint64_t, 
 struct Fixture {
     unsigned char* image =
         static_cast<unsigned char*>(VirtualAlloc(nullptr, native::globals::game + sizeof(Address),
-                                                 MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+                                                 MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    isaac::test::NativeEntityTypes types{reinterpret_cast<Address>(image)};
     std::array<unsigned char, 0x20000> game{};
     std::array<unsigned char, 0x1000> target{};
     std::array<unsigned char, 16 * native::layout::entity::damageRecordSize> queue{};
@@ -68,6 +71,8 @@ struct Fixture {
                   {reinterpret_cast<Address>(other.data()),
                    reinterpret_cast<Address>(otherQueue.data())}}}) {
             feedback::at<unsigned>(object, native::layout::entity::type) = 10;
+            feedback::at<bool>(object, native::layout::entity::active) = true;
+            types.npc(object);
             feedback::at<Address>(object, native::layout::entity::damageQueue +
                                               native::layout::vector::begin) = records;
             feedback::at<Address>(object, native::layout::entity::damageQueue +
@@ -81,6 +86,7 @@ struct Fixture {
         feedback::serial = feedback::nextIdentity = 0;
         isaac::runtime::testTick = 10;
         isaac::runtime::testEpoch = 2;
+        isaac::runtime::testReplica = false;
     }
     ~Fixture() {
         VirtualFree(image, 0, MEM_RELEASE);
@@ -174,10 +180,50 @@ void relocationAndLifetime() {
     require(feedback::pending.empty() && feedback::pendingCount == 0,
             "Removed/frozen entities retained unbounded observations");
 }
+void customTypes() {
+    Fixture f;
+    const auto target = reinterpret_cast<Address>(f.target.data());
+    for (const auto kind : {6617u, 6621u}) {
+        feedback::at<unsigned>(target, native::layout::entity::type) = kind;
+        require(f.hit(Result::flash), "Custom NPC damage failed");
+        flash(target, static_cast<unsigned>(feedback::events.size()), 3);
+        feedback::drain(target);
+        require(feedback::events.back().duration == 3 && feedback::flashes.contains(target),
+                "Custom NPC lost its confirmed hurt flash");
+    }
+    const std::array<Address, 2> sprite{0, target + native::layout::entity::sprite};
+    feedback::api.getTop = [](lua_State*) { return 1; };
+    // The Lua ABI borrows the wrapper only for this synchronous call.
+    static const Address* wrapper;
+    wrapper = sprite.data();
+    feedback::api.toUserdata = [](lua_State*, int) -> void* {
+        return const_cast<Address*>(wrapper);
+    };
+    feedback::api.rawLength = [](lua_State*, int) -> std::size_t { return 8; };
+    feedback::api.pushBoolean = [](lua_State*, int value) {
+        require(value == 1, "Local hit presentation failed");
+    };
+    isaac::runtime::testReplica = true;
+    require(feedback::present(nullptr) == 1 && feedback::flashes.at(target).local,
+            "Custom NPC rejected local hit presentation");
+    feedback::flashes.clear();
+    f.types.effect(target);
+    for (const auto kind : {10u, 6617u}) {
+        feedback::at<unsigned>(target, native::layout::entity::type) = kind;
+        rejects([] { feedback::present(nullptr); }, "Non-NPC accepted hit presentation");
+        require(feedback::flashes.empty(), "Rejected native class retained a hurt flash");
+    }
+    f.types.npc(target);
+    feedback::at<bool>(target, native::layout::entity::active) = false;
+    rejects([] { feedback::present(nullptr); }, "Inactive NPC accepted hit presentation");
+    require(feedback::flashes.empty(), "Inactive NPC retained hit presentation");
+    isaac::runtime::testReplica = false;
+}
 } // namespace
 int main(int argc, char** argv) {
     return runTests(argc, argv,
                     {{"contacts", contacts},
                      {"nested", nested},
-                     {"relocation-and-lifetime", relocationAndLifetime}});
+                     {"relocation-and-lifetime", relocationAndLifetime},
+                     {"custom-types", customTypes}});
 }

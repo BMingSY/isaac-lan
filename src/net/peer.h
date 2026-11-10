@@ -28,6 +28,7 @@ struct Peer : Socket {
     std::deque<InputSample> inputEdges;
     std::optional<std::uint32_t> acknowledged;
     int minimumLatency = -1;
+    PathLatency pathLatency;
     Clock::time_point packetAt = Clock::now();
     Clock::time_point connectedAt = Clock::now();
     Clock::time_point advancedAt = Clock::now(), inputAt = Clock::now();

@@ -15,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 51;
+constexpr std::uint16_t protocolVersion = 52;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -426,13 +426,18 @@ class Reader {
             throw std::runtime_error("Invalid input pointer");
         return out;
     }
-    std::vector<std::uint8_t> blob(std::size_t maximum = maxSnapshotSize) {
+    // Borrowed until the caller releases the containing packet.
+    std::span<const std::uint8_t> blobView(std::size_t maximum = maxSnapshotSize) {
         const auto n = u32();
         if (n > maximum || n > bytes.size() - cursor)
             throw std::runtime_error("Invalid snapshot length");
-        std::vector<std::uint8_t> out(bytes.begin() + cursor, bytes.begin() + cursor + n);
+        const auto out = bytes.subspan(cursor, n);
         cursor += n;
         return out;
+    }
+    std::vector<std::uint8_t> blob(std::size_t maximum = maxSnapshotSize) {
+        const auto value = blobView(maximum);
+        return {value.begin(), value.end()};
     }
     std::optional<Progress> progress(bool withEarned = true) {
         const auto present = u8();

@@ -535,8 +535,7 @@ struct Session::Impl {
                         .count()));
                 p.pingPending = false;
                 networkLatency[slot].record(latency[slot]);
-                if (p.minimumLatency < 0 || latency[slot] < p.minimumLatency)
-                    p.minimumLatency = latency[slot];
+                p.minimumLatency = p.pathLatency.observe(latency[slot], Clock::now());
                 p.pipe->minimumLatency.store(p.minimumLatency);
             }
             return;
@@ -1825,14 +1824,14 @@ bool Session::ready() {
     }
     return true;
 }
-bool Session::publish(unsigned slot, const WorldState& state) {
+bool Session::publish(unsigned slot, WorldState state) {
     if (!impl->hosting || impl->state != Phase::running || impl->ending || impl->cinematicEpoch ||
         !slot || slot >= impl->playerCount || state.bytes.empty() ||
         state.bytes.size() + state.stable.size() + (state.stable.empty() ? 0 : 4) > maxWorldSize ||
         state.tick >= impl->nextConsume)
         return false;
     if (auto& p = impl->peers[slot]; p && p->ready)
-        p->pending = state;
+        p->pending = std::move(state);
     return true;
 }
 std::optional<WorldState> Session::takeState() {

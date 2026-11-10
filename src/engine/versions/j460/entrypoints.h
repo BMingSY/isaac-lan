@@ -4,6 +4,9 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t entityDynamicCast = 0x6f08b1;
+inline constexpr std::uint32_t entityRTTIName = 0x85d5e4;
+inline constexpr std::uint32_t npcRTTIName = 0x85d6b4;
 inline constexpr std::uint32_t spriteRenderColor = 0x9311;
 inline constexpr std::uint32_t playerOutlineBodyGate = 0x38c481;
 inline constexpr std::uint32_t playerOutlineBodyDraw = 0x38c4df;
@@ -281,6 +284,11 @@ inline constexpr std::uint32_t pauseMenuHide = 0x5b7500;
 inline constexpr std::uint32_t optionsSave = 0x524d10;
 inline constexpr std::uint32_t menuCharacterModEnumeration = 0x54919e;
 } // namespace entry
+namespace rtti {
+inline constexpr std::uint32_t name = 8;
+inline constexpr std::uint32_t entity = entry::entityRTTIName - name;
+inline constexpr std::uint32_t npc = entry::npcRTTIName - name;
+} // namespace rtti
 namespace globals {
 inline constexpr std::uint32_t inputManager = 0x857b18;
 inline constexpr std::uint32_t renderer = 0x8798e0;

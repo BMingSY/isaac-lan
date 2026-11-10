@@ -133,7 +133,10 @@ local attacks = module("presentation/attacks")(fields)({
         return 0.04
     end,
     matching = module("presentation/attack_matching")(module("presentation/tear_motion")(Vector)),
-    volley = module("presentation/attack_volley")(Vector),
+    volley = module("presentation/attack_volley")(
+        Vector,
+        module("presentation/tear_motion")(Vector)
+    ),
     prediction = module("presentation/attack_prediction")(policy),
     trajectory = module("presentation/tear_motion")(Vector),
     tearType = 2,
@@ -399,6 +402,55 @@ assert(
     #draws == 0 and counters["attack.confirmed"] == matched + 2,
     "A double volley retained a ghost or consumed a launch twice"
 )
+-- A moving double volley learns from its authority birth pose, then rotates
+-- the original aim rather than baking walking inertia into the learned spread.
+fresh()
+player.Velocity = Vector(0, 2)
+confirm(1, 0, 0)
+local volley =
+    module("presentation/attack_volley")(Vector, module("presentation/tear_motion")(Vector))
+local travel = Vector(10, 2.4)
+local perpendicular = Vector(-2.4, 10):Normalized()
+local movingShots = {}
+value.room[R.entities] = {}
+for index, eye in ipairs({ -4, 4 }) do
+    local at = Vector(115, 103.6) + perpendicular * eye
+    movingShots[index] = { position = at, velocity = travel, age = 0 }
+    value.room[R.entities][index] = {
+        [E.id] = 49 + index,
+        [E.type] = 2,
+        [E.variant] = 0,
+        [E.spawner] = 10,
+        [E.frame] = 0,
+        [E.position] = { at.X, at.Y },
+        [E.velocity] = { 10, 2.4 },
+        [E.sprite] = {},
+    }
+end
+assert(
+    volley(movingShots, 2, player.Position, player.Velocity, 1) == nil,
+    "A moving volley guessed its unobserved birth pose"
+)
+local learned = volley(
+    movingShots,
+    2,
+    player.Position,
+    player.Velocity,
+    1,
+    { position = Vector(100, 100), velocity = Vector(0, 2) }
+)
+assert(
+    learned
+        and math.abs(learned[1].along - 1) < 0.00001
+        and math.abs(learned[1].across) < 0.00001
+        and math.abs(learned[1].eye + 4) < 0.00001
+        and math.abs(learned[2].eye - 4) < 0.00001,
+    "Moving inertia changed the learned volley geometry"
+)
+confirm(2, 0, 0.03)
+present(0.03, 1)
+assert(#draws == 2, "Continuous walking prevented double-shot prediction")
+player.Velocity = Vector(0, 0)
 tearCount = 1
 -- Missing early shots and jitter must not shift high-rate launches by one shot.
 local trajectory = module("presentation/tear_motion")(Vector)
