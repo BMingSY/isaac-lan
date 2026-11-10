@@ -14,6 +14,9 @@ def bundle_input(source):
         "_IsaacLanTestInput = (function()\n"
         + (ROOT / "tests/support/input.lua").read_text(encoding="utf-8")
         + "\nend)();\n"
+        + "_IsaacLanTestProgress = (function()\n"
+        + (ROOT / "tests/support/progress.lua").read_text(encoding="utf-8")
+        + "\nend)();\n"
         + source
     )
 

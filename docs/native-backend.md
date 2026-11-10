@@ -176,6 +176,10 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 联机拦截 `Manager::SaveGame` 的文件写入时仍执行 `Game::CaptureState`。采集包含原生玩家离房清理，调用方随后恢复进房临时效果；两者必须配对。捕获结果只保存在原生 GameState 中，单人存档由会话备份保护，联机退出写入独立会话存档。个人进度合并完成后，`session::persistProgress` 按原生顺序调用 `Progress::SaveCloud`（RVA `0x528ee0`）和 `Progress::SaveFile`（RVA `0x5294f0`），两者均为 `thiscall void(Manager+0x14)`，由原生打开并关闭流；不能直接调用需要已打开流的 `Serialize`。该接口只保存当前存档槽的进度，不分配角色或写入局内存档。
 
+`RecordCharacterCompletion`（RVA `0x55aa30`）为 `stdcall void(event, character, difficulty)`，返回时清理 12 字节。观察器保留原生调用与资格判定，只向运行层提供本次通关的计数 ID、普通／困难位及成就 ID；重复通关仍产生通知。事件限定为 0–14、角色为 0–40、难度为 0–3，只读恢复期间不产生奖励。原生描述符表位于 RVA `0x835ed0`，每名角色 18 项，每项两个 32 位 ID；HUD 映射及位计数分类见 [completion_marks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/completion_marks.h)。回调不暴露原生地址，不改变描述符或对象所有权。
+
+`commitProgress` 只用于退出时提交已合并的个人进度：恢复个人计数和原有成就，使用 `Progress::TryUnlock`（RVA `0x529a20`，`thiscall bool(id)`）提交本局解锁，再以 `Progress::IncreaseEventCounter`（RVA `0x529b40`，`thiscall void(id, delta)`）的零增量检查累计条件。提交期间借用可写位并在返回时恢复；运行层须先结束共享进度合并，避免原生同步保存再次合并。该能力不写入局内 Continue 或分配游戏对象。
+
 客机恢复与原生更新使用 `ProgressReadOnlyScope`，按栈保存并恢复 `Manager+0x14` 进度对象的 `+1` 只读位。J460 收藏记录更新（RVA `0x52a2d0`）与成就尝试（RVA `0x529a20`）均先检查此位；复制权威成就／计数不通过这些方法，因此不被拦截。作用域结束恢复原值，不改变主机进度、会话合并或退出持久化。
 
 ## HUD 与本机输入

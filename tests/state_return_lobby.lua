@@ -59,7 +59,11 @@ function _IsaacLanFrame()
         assert(not s.prepared and exits == wins, "Lobby opened before native exit")
         assert(s.players == 2 and s.connected == 3 and s.slot == (host and 0 or 1), "Room lost")
         assert(s["ready" .. s.slot] == 0, "Old ready state survived")
-        assert(native.net_progress():sub(-4) == baseline:sub(-4), "Private progress replaced")
+        assert(
+            _IsaacLanTestProgress.privateCounter(native.net_progress())
+                == _IsaacLanTestProgress.privateCounter(baseline),
+            "Private progress replaced"
+        )
         lobbyRun, lobbyAt, chosen, started = wins, Isaac.GetTime(), false, false
         report("LOBBY run=" .. run .. " port=" .. s.port)
     end

@@ -19,6 +19,7 @@ struct Callbacks {
     void (*controls)(const Call&);
     void (*executeMenu)(const Call&);
     bool (*restartRequest)(bool held);
+    void (*completionAward)(unsigned counter, unsigned bits, unsigned achievement);
 };
 bool install(std::uintptr_t image, const Callbacks& callbacks);
 bool managerReady();
@@ -32,6 +33,10 @@ void clearSave();
 lan::Progress readProgress();
 void writeProgress(const lan::Progress& value);
 void persistProgress();
+std::span<const bool> progressBitCounters();
+// Commit earned personal flags through the native unlock path, then evaluate
+// cumulative unlock conditions against this profile's counters.
+void commitProgress(const lan::Progress& previous, const lan::Progress& value);
 // Native reconstruction and display callbacks must not earn local progress.
 // Direct authority snapshots still writeProgress; destruction restores the flag.
 class ProgressReadOnlyScope {

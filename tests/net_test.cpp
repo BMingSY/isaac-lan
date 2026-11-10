@@ -863,6 +863,8 @@ void endingEvents() {
         Progress progress;
         progress.achievements[7] = 1;
         progress.counters[21] = 5;
+        progress.earned.achievements[7] = 1;
+        progress.earned.counters[97] = 3;
         require(g.peers[0]->beginEnding(id, progress), "Ending broadcast failed");
         require(g.peers[0]->beginEnding(id), "Duplicate native ending was not idempotent");
         require(!g.peers[0]->beginEnding(13), "A terminal event changed its ending");

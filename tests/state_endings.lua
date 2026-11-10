@@ -774,9 +774,9 @@ function _IsaacLanFrame()
                 "PROGRESS_DIFF flags="
                     .. table.concat(diffs, ",")
                     .. " private="
-                    .. string.unpack(">I4", localProgress:sub(-4))
+                    .. _IsaacLanTestProgress.privateCounter(localProgress)
                     .. ">"
-                    .. string.unpack(">I4", progress:sub(-4))
+                    .. _IsaacLanTestProgress.privateCounter(progress)
             )
             -- Native menu loading derives unlocks from earned Boss counters
             -- (for example Eden and the Void gate). Retain every prior flag;
@@ -796,7 +796,8 @@ function _IsaacLanFrame()
                 )
             end
             assert(
-                progress:sub(-4) == localProgress:sub(-4),
+                _IsaacLanTestProgress.privateCounter(progress)
+                    == _IsaacLanTestProgress.privateCounter(localProgress),
                 "Ending replaced this peer's private counter"
             )
             report("LOCAL_PROGRESS_RESTORED")

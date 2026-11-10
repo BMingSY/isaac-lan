@@ -138,6 +138,15 @@ struct Fixture {
         reinterpret_cast<Grant>(image + native::entry::edensBlessingGranted - 20)(player.data(),
                                                                                   item);
     }
+    template <class F> void publish(unsigned entry, F method) {
+        auto call = image + entry;
+        call[0] = 0xe9;
+        const auto displacement = static_cast<unsigned>(reinterpret_cast<Address>(method) -
+                                                        reinterpret_cast<Address>(call + 5));
+        std::memcpy(call + 1, &displacement, 4);
+        require(FlushInstructionCache(GetCurrentProcess(), call, 5) != 0,
+                "Cannot publish private native method");
+    }
 };
 unsigned nativeQueues = 0;
 void __attribute__((thiscall)) queueFixture(void* player, void* config, int charge,
@@ -208,15 +217,8 @@ void pendingRewardPersistence() {
     *reinterpret_cast<Address*>(f.image + native::globals::manager) =
         reinterpret_cast<Address>(f.manager.data());
     expectedProgress = f.manager.data() + native::layout::manager::progress;
-    auto publish = [&](unsigned entry, auto method) {
-        auto call = f.image + entry;
-        call[0] = 0xe9;
-        const auto displacement = static_cast<unsigned>(reinterpret_cast<Address>(method) -
-                                                        reinterpret_cast<Address>(call + 5));
-        std::memcpy(call + 1, &displacement, 4);
-    };
-    publish(native::entry::progressSaveCloud, saveProgressCloudFixture);
-    publish(native::entry::progressSaveFile, saveProgressFileFixture);
+    f.publish(native::entry::progressSaveCloud, saveProgressCloudFixture);
+    f.publish(native::entry::progressSaveFile, saveProgressFileFixture);
     require(FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size) != 0,
             "Cannot publish private progress save methods");
     constexpr unsigned pendingBlessings = 114;
@@ -254,6 +256,100 @@ void startingRewards() {
     grants.clear();
     items::grantStartingRewards(f.player.data(), 2);
     require(grants.empty(), "A solo start retained a LAN reward plan");
+}
+unsigned completionCalls = 0;
+std::vector<std::array<unsigned, 3>> completionAwards;
+void __stdcall completionFixture(unsigned, unsigned, unsigned) {
+    ++completionCalls;
+}
+void completionObserver(unsigned counter, unsigned bits, unsigned achievement) {
+    require(completionCalls > completionAwards.size(), "Award observed before native completion");
+    completionAwards.push_back({counter, bits, achievement});
+}
+void repeatedCompletionAwards() {
+    namespace session = isaac::engine::session;
+    Fixture f;
+    session::image = reinterpret_cast<Address>(f.image);
+    *reinterpret_cast<Address*>(f.image + native::globals::manager) =
+        reinterpret_cast<Address>(f.manager.data());
+    auto records = reinterpret_cast<native::completion::CharacterAwards*>(
+        f.image + native::globals::completionDefinitions);
+    records[0][0] = {27, 99};
+    records[0][2] = {41, 33};
+    session::originalRecordCompletion = completionFixture;
+    session::callbacks.completionAward = completionObserver;
+    completionCalls = 0;
+    completionAwards.clear();
+    for (unsigned i = 0; i < 32; ++i) {
+        session::recordCompletionHook(0, 0, 0);
+        session::recordCompletionHook(0, 0, 1);
+        session::recordCompletionHook(2, 0, 0);
+        session::recordCompletionHook(2, 0, 1);
+    }
+    require(completionCalls == 128 && completionAwards.size() == 128 &&
+                completionAwards[0] == std::array<unsigned, 3>{27, 1, 0} &&
+                completionAwards[1] == std::array<unsigned, 3>{27, 3, 99} &&
+                completionAwards[2] == std::array<unsigned, 3>{41, 1, 33} &&
+                completionAwards[3] == std::array<unsigned, 3>{41, 3, 33},
+            "Repeated completion lost its native descriptor or difficulty");
+    {
+        session::ProgressReadOnlyScope scope;
+        session::recordCompletionHook(2, 0, 1);
+    }
+    session::recordCompletionHook(15, 0, 0);
+    session::recordCompletionHook(0, 41, 0);
+    require(completionAwards.size() == 128 && completionCalls == 131,
+            "Read-only replica or invalid descriptor earned a completion award");
+    session::callbacks.completionAward = nullptr;
+    session::originalRecordCompletion = nullptr;
+    session::image = 0;
+}
+std::vector<unsigned> committedUnlocks;
+bool __attribute__((thiscall)) unlockFixture(void* receiver, unsigned id) {
+    namespace session = isaac::engine::session;
+    require(receiver == expectedProgress && !session::at<bool>(reinterpret_cast<Address>(receiver),
+                                                               native::layout::progress::readOnly),
+            "Personal commit used the wrong receiver or stayed read-only");
+    committedUnlocks.push_back(id);
+    static_cast<unsigned char*>(receiver)[native::layout::progress::achievements + id] = 1;
+    return true;
+}
+void __attribute__((thiscall)) evaluateFixture(void* receiver, unsigned id, int delta) {
+    require(receiver == expectedProgress && id == 0 && delta == 0,
+            "Cumulative unlock evaluation changed a counter");
+    const auto personal = isaac::engine::session::readProgress();
+    require(personal.counters[97] == 1 && !personal.achievements[640],
+            "Cumulative unlocks evaluated shared host progress");
+    unlockFixture(receiver, 150);
+}
+void personalProgressCommit() {
+    namespace session = isaac::engine::session;
+    Fixture f;
+    session::image = reinterpret_cast<Address>(f.image);
+    *reinterpret_cast<Address*>(f.image + native::globals::manager) =
+        reinterpret_cast<Address>(f.manager.data());
+    expectedProgress = f.manager.data() + native::layout::manager::progress;
+    f.publish(native::entry::progressTryUnlock, unlockFixture);
+    f.publish(native::entry::progressIncreaseCounter, evaluateFixture);
+    isaac::lan::Progress previous, personal;
+    previous.achievements[1] = 1;
+    personal = previous;
+    personal.achievements[149] = 1;
+    personal.counters[97] = 1;
+    committedUnlocks.clear();
+    {
+        session::ProgressReadOnlyScope scope;
+        session::commitProgress(previous, personal);
+        require(session::at<bool>(reinterpret_cast<Address>(expectedProgress),
+                                  native::layout::progress::readOnly),
+                "Personal commit did not restore the outer read-only scope");
+    }
+    const auto committed = session::readProgress();
+    require(committedUnlocks == std::vector<unsigned>({149, 150}) && committed.achievements[1] &&
+                committed.achievements[149] && committed.achievements[150] &&
+                !committed.achievements[640],
+            "Personal unlock path lost old/new flags or leaked host achievements");
+    session::image = 0;
 }
 void beamDeparture() {
     Fixture f;
@@ -533,5 +629,7 @@ int main(int argc, char** argv) {
                      {"revival-room", revivalRoom},
                      {"cursed-mist", cursedMistQueryABI},
                      {"pending-reward-persistence", pendingRewardPersistence},
+                     {"repeated-completion-awards", repeatedCompletionAwards},
+                     {"personal-progress-commit", personalProgressCommit},
                      {"local-pickup-preview", localPickupPreview}});
 }

@@ -4,6 +4,7 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/menu_state.h"
+#include "engine/versions/j460/completion_marks.h"
 #include <MinHook.h>
 #include <cstring>
 
@@ -36,6 +37,23 @@ using Console = void(__attribute__((thiscall)) *)(void*, const void*, bool, void
 Console originalConsole;
 using ConsolePrint = void(__attribute__((thiscall)) *)(void*, const void*, unsigned, unsigned);
 ConsolePrint originalConsolePrint;
+using RecordCompletion = void(__stdcall*)(unsigned, unsigned, unsigned);
+RecordCompletion originalRecordCompletion;
+void __stdcall recordCompletionHook(unsigned event, unsigned character, unsigned difficulty) {
+    originalRecordCompletion(event, character, difficulty);
+    namespace completion = j460::completion;
+    // The native caller has already checked run eligibility. This observer
+    // never unlocks anything or changes its result, including repeated wins.
+    if (!callbacks.completionAward || event >= completion::eventCount ||
+        character >= completion::counters.size() || difficulty > 3 ||
+        at<bool>(manager() + layout::manager::progress, layout::progress::readOnly))
+        return;
+    const auto& award = reinterpret_cast<const completion::CharacterAwards*>(
+        image + j460::globals::completionDefinitions)[character][event];
+    const bool hard = difficulty == 1 || difficulty == 3;
+    callbacks.completionAward(award.counter, hard ? completion::hardBits : completion::normalBits,
+                              event != completion::heartEvent || hard ? award.achievement : 0);
+}
 std::string* capturedOutput = nullptr;
 std::string_view nativeText(const void* value) {
     const auto address = reinterpret_cast<std::uintptr_t>(value);
@@ -128,6 +146,8 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
            hook(image + j460::entry::managerSaveRerun, rerunHook, originalRerun) &&
            hook(image + j460::entry::managerExecuteMenu, menuHook, originalMenu) &&
            hook(image + j460::entry::progressSerialize, serializeHook, originalSerialize) &&
+           hook(image + j460::entry::recordCharacterCompletion, recordCompletionHook,
+                originalRecordCompletion) &&
            hook(image + j460::entry::gameStart, startHook, originalStart) &&
            hook(image + j460::entry::managerExecuteStart, executeStartHook, originalExecuteStart) &&
            hook(image + j460::entry::gameUpdate, updateHook, originalUpdate) &&
@@ -180,6 +200,31 @@ void writeProgress(const lan::Progress& value) {
                 value.achievements.data(), value.achievements.size());
     std::memcpy(reinterpret_cast<void*>(base + layout::progress::counters), value.counters.data(),
                 sizeof(value.counters));
+}
+std::span<const bool> progressBitCounters() {
+    return j460::completion::bitCounters;
+}
+void commitProgress(const lan::Progress& previous, const lan::Progress& value) {
+    struct Writable {
+        bool& flag;
+        bool previous;
+        explicit Writable(bool& flag) : flag(flag), previous(flag) {
+            flag = false;
+        }
+        ~Writable() {
+            flag = previous;
+        }
+    } writable(at<bool>(manager() + layout::manager::progress, layout::progress::readOnly));
+    auto personal = value;
+    personal.achievements = previous.achievements;
+    writeProgress(personal);
+    auto progress = reinterpret_cast<void*>(manager() + layout::manager::progress);
+    using Unlock = bool(__attribute__((thiscall))*)(void*, unsigned);
+    for (unsigned id = 1; id < value.achievements.size(); ++id)
+        if (value.achievements[id] && !previous.achievements[id])
+            reinterpret_cast<Unlock>(image + j460::entry::progressTryUnlock)(progress, id);
+    using Increase = void(__attribute__((thiscall))*)(void*, unsigned, int);
+    reinterpret_cast<Increase>(image + j460::entry::progressIncreaseCounter)(progress, 0, 0);
 }
 void persistProgress() {
     // Use the same receiver and order as Manager::SaveGame. Each native
