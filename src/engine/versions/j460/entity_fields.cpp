@@ -1,6 +1,7 @@
 #include "engine/entity_fields.h"
 #include "core/state_codec.h"
 #include "engine/versions/j460/entity_fields.h"
+#include "engine/versions/j460/entity_cast.h"
 #include "engine/versions/j460/entity_size.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "runtime/session.h"
@@ -507,16 +508,10 @@ int npcBoss(lua_State* L) {
     try {
         if (!runtime::replica() || api.type(L, 2) != LuaType::boolean)
             throw std::runtime_error("NPC classification requires a replica and a boolean");
-        if (api.type(L, 1) != LuaType::userdata || api.rawLength(L, 1) != 8)
-            throw std::runtime_error("Expected borrowed NPC Sprite");
-        const auto sprite = checkedSprite(L);
-        if (sprite < j460::layout::entity::sprite)
-            throw std::runtime_error("Invalid NPC Sprite");
-        const auto entity = sprite - j460::layout::entity::sprite;
-        const auto type = at<unsigned>(entity, j460::layout::entity::type);
-        if (type < 10 || type >= 1000 || !at<bool>(entity, j460::layout::entity::active))
-            throw std::runtime_error("NPC classification requires an active NPC");
-        at<bool>(entity, j460::layout::npc::boss) = api.toBoolean(L, 2);
+        const auto npc = j460::entity_cast::npc(image, checkedEntity(L));
+        if (!npc)
+            throw std::runtime_error("NPC classification requires an NPC");
+        at<bool>(npc, j460::layout::npc::boss) = api.toBoolean(L, 2);
         api.pushBoolean(L, true);
         return 1;
     } catch (const std::exception& exception) {

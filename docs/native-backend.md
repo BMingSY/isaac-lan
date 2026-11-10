@@ -18,7 +18,9 @@ J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blo
 
 `entity_size(entity:GetSprite(), radius)` 仅供客机恢复活动实体的有限数值尺寸，接受借用 Sprite，不接受 Lua 自有 Sprite、地址或偏移。Lua 普通字段恢复与上述批量字段共用 [`entity_size.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_size.h)。实体的 XML 配置指针 `+0x330` 非空时，沿用原 Lua setter（cdecl，RVA `0x471fa0`）。配置为空时，读取本机 `SizeMulti`（`+0x374` 的两个 float）及碰撞点向量（`+0x178` 的 begin／end／capacity，每点 8 字节），校验有限乘数、非默认哨兵和向量边界后，把现有形状及实际点数显式传给原生 `Entity::SetSize`（thiscall，RVA `0x2ac2a0`；参数为 float、两个 float 组成的值类型和 int）。碰撞点由游戏重建，向量内存仍由游戏管理；适配器不借用其他实体配置，不直接复制、分配或释放 MSVC 向量，也不跨调用保存任何原生引用。线上的尺寸字段保持原有布局。
 
-`entity_npc_boss(npc:GetSprite(), boolean)` 仅供客机恢复活动 NPC 的 Boss 分类。J460 `EntityNPC::IsBoss`（RVA `0x2b8470`）读取 NPC `+0xc3d` 的独立布尔值；它与 `GetBossID()` 返回的类型标识不同。接口只接受借用 Sprite、原版 NPC 类型范围与布尔值，不接收地址、不保留引用，不运行 NPC AI。同步组件将 `IsBoss()` 与六个 scratch／目标坐标 float32 一起编码为 25 字节；完整校验后应用，原生血条仍按这些实体及血量计算。
+`entity_npc_boss(npc:GetSprite(), boolean)` 仅供客机恢复活动 NPC 的 Boss 分类。J460 `EntityNPC::IsBoss`（RVA `0x2b8470`）读取 NPC `+0xc3d` 的独立布尔值；它与 `GetBossID()` 返回的类型标识不同。接口只接受活动实体的借用 Sprite 与布尔值，并通过游戏的 MSVC RTTI 转换确认 NPC 身份；内容类型编号不用于限制 NPC。非 NPC、失效实体、Lua 自有 Sprite 和主机写入均拒绝，不接收地址、不保留引用，不运行 NPC AI。同步组件将 `IsBoss()` 与六个 scratch／目标坐标 float32 一起编码为 25 字节；完整校验后应用，原生血条仍按这些实体及血量计算。
+
+[`entity_cast::npc`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_cast.h) 与命中反馈共用 NPC 身份判定。它调用游戏的 `__RTDynamicCast` 导入跳板（RVA `0x6f08b1`，`cdecl`，五个栈参数），以 `Entity`／`Entity_NPC` 类型描述符（RVA `0x85d5dc`／`0x85d6ac`）执行非引用转换，返回借用的 NPC 或空值。描述符名称与跳板指令在启动时校验，调用期间不分配游戏对象、不改变所有权。调用者保证实体仍归当前同步或绘制作用域所有；Lua 恢复与本机命中反馈选择另外检查活动状态。
 
 ## 诅咒迷雾的随从归属
 

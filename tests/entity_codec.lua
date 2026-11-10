@@ -21,6 +21,7 @@ local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
     enums.EntityType,
     enums.EffectVariant
 )
+local npcState = assert(loadfile(root .. "/src/bridge/sync/npc.lua", "t", env))()
 local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "t", env))()(
     dofile(root .. "/src/bridge/sync/fields.lua")
 )(
@@ -43,6 +44,11 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
         entity_shadow = function()
             return ""
         end,
+        entity_npc_boss = function(sprite, boss)
+            assert(sprite.entity:ToNPC(), "Boss classification reached another native class")
+            sprite.entity.boss = boss
+            return true
+        end,
         sprite_state = function(_, bytes)
             return bytes and spriteChanges or ""
         end,
@@ -57,11 +63,7 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
         end,
     },
     schemas,
-    {
-        capture = function()
-            return false
-        end,
-    },
+    npcState,
     dogma,
     {
         capture = function()
@@ -74,7 +76,7 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
         apply = function() end,
     }
 )
-local function entity(kind, flags)
+local function entity(kind, flags, npc)
     local e = {
         Type = kind,
         Variant = 0,
@@ -91,6 +93,10 @@ local function entity(kind, flags)
         flags = flags,
         data = {},
         sprite = {},
+        V1 = { X = 0, Y = 0 },
+        V2 = { X = 0, Y = 0 },
+        TargetPosition = { X = 320, Y = 280 },
+        boss = false,
     }
     e.sprite.entity = e
     for _, name in ipairs(schemas.common) do
@@ -116,7 +122,10 @@ local function entity(kind, flags)
         return self
     end
     function e:ToNPC()
-        return kind >= 10 and kind < 1000 and self or nil
+        return (npc or kind == enums.EntityType.ENTITY_BEAST) and self or nil
+    end
+    function e:IsBoss()
+        return self.boss
     end
     function e:ToEffect()
         return self
@@ -204,6 +213,21 @@ assert(
     backgroundReplica.SortingLayer == 2 and backgroundReplica.RenderZOffset == 120,
     "A phase change retained the old background layer"
 )
+-- Custom NPC identity is independent of its numeric content type. Exercise
+-- production capture, wire encoding and repeated scratch/classification apply.
+for _, kind in ipairs({ 6617, 6621 }) do
+    local custom, replica = entity(kind, 0, true), entity(kind, 0, true)
+    custom.V1, custom.V2 = env.Vector(1, 2), env.Vector(3, 4)
+    custom.TargetPosition = env.Vector(80, 120)
+    for _, boss in ipairs({ true, true, false }) do
+        custom.boss = boss
+        local bytes = codec.encode(component.capture(custom, false))
+        component.apply(replica, codec.decode(bytes))
+        component.apply(replica, codec.decode(bytes))
+        assert(replica.boss == boss and replica.V1.X == 1 and replica.V2.Y == 4)
+        assert(replica.TargetPosition.X == 80 and replica.TargetPosition.Y == 120)
+    end
+end
 local actor, actorReplica =
     entity(enums.EntityType.ENTITY_PLAYER, 0), entity(enums.EntityType.ENTITY_PLAYER, 0)
 actor.SortingLayer, actor.RenderZOffset = 1, 50

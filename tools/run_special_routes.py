@@ -283,6 +283,8 @@ def main():
                                 "attached-motion",
                                 "weak-network",
                                 "entity-fields",
+                                "mod-npcs",
+                                "mod-npcs-tainted",
                                 "entity-size",
                                 "floor-items",
                                 "mod-integrations",
