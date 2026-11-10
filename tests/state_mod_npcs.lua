@@ -142,7 +142,8 @@ function _IsaacLanFrame()
     then
         -- Prepare the Mod's own unlock in the disposable copy, before the next
         -- session. Locked tainted characters are deliberately sent to Home.
-        Isaac.ExecuteCommand("samael unlocktainted")
+        assert(SamaelMod and SamaelMod.UnlockTaintedSamael)
+        SamaelMod:UnlockTaintedSamael()
         assert(not SamaelMod.ContentManager:CharacterLocked(tainted))
         unlockPrepared = true
         report("isolated tainted unlock prepared")
