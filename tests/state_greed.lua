@@ -198,7 +198,11 @@ function _IsaacLanFrame()
                     "Inherited host progress"
                 )
             end
-            assert(progress:sub(-4) == localProgress:sub(-4), "Replaced private counter")
+            assert(
+                _IsaacLanTestProgress.privateCounter(progress)
+                    == _IsaacLanTestProgress.privateCounter(localProgress),
+                "Replaced private counter"
+            )
             finished = true
             report("LOCAL_PROGRESS_RESTORED")
             passed()

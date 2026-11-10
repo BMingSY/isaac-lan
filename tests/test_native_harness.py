@@ -131,6 +131,8 @@ def test_bundled_input_support_is_frozen_and_needs_no_runtime_files(tmp_path, mo
     support = tmp_path / "tests/support/input.lua"
     support.parent.mkdir(parents=True)
     shutil.copyfile(ROOT / "tests/support/input.lua", support)
+    progress_support = support.with_name("progress.lua")
+    shutil.copyfile(ROOT / "tests/support/progress.lua", progress_support)
     monkeypatch.setattr(lua_support, "ROOT", tmp_path)
     script = tmp_path / "frozen.lua"
     script.write_text(
@@ -141,10 +143,15 @@ local packet = input.neutral .. input.buttons(1 << 9, 1 << 9)
 local frame = input.decode(packet, 1)
 assert(frame.values[9] == input.maxValue and frame.triggered == 1 << 9)
 assert(not frame.pointer.active and input.decode(packet).values[9] == 0)
+local progress = assert(_IsaacLanTestProgress)
+local baseline = progress.fixture(0, 321)
+assert(progress.privateCounter(baseline) == 321)
+assert(progress.privateCounter(baseline:sub(1, -2) .. string.char(1)) == 321)
 print("PASS frozen fixture support")
 """)
     )
     support.unlink()
+    progress_support.unlink()
     result = subprocess.run(
         [shutil.which("lua5.3"), str(script)], capture_output=True, text=True, check=True
     )
@@ -591,7 +598,12 @@ return {
 """
     tests = tmp_path / "tests"
     (tests / "support").mkdir(parents=True)
-    for relative in ("support/scenario.lua", "support/input.lua", "special_suite_driver.lua"):
+    for relative in (
+        "support/scenario.lua",
+        "support/input.lua",
+        "support/progress.lua",
+        "special_suite_driver.lua",
+    ):
         shutil.copyfile(ROOT / "tests" / relative, tests / relative)
     for name in (
         "greed",

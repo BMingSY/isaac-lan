@@ -2,6 +2,7 @@
 -- Player motion and victory remain external engine events in this model.
 local root = assert(arg[1])
 local Phase = dofile(root .. "/tests/fixtures/net_phases.lua")
+local testProgress = dofile(root .. "/tests/support/progress.lua")
 for _, host in ipairs({ true, false }) do
     local hooks, callbacks, messages = nil, {}, {}
     local clock, stage, roomIndex, clear, phase, scene, tick = 0, 1, 84, false, 0, 1, 0
@@ -85,9 +86,7 @@ for _, host in ipairs({ true, false }) do
             end,
         })
     end
-    local progress = (host and "\1" or "\0")
-        .. string.rep(host and "\1" or "\0", 642)
-        .. string.pack(">I4", host and 98765 or 321)
+    local progress = testProgress.fixture(host and 1 or 0, host and 98765 or 321)
     local baseline = progress
     local native = {
         net_phases = function()
@@ -211,6 +210,7 @@ for _, host in ipairs({ true, false }) do
     }
     local env = setmetatable({
         _IsaacLan = native,
+        _IsaacLanTestProgress = testProgress,
         _IsaacLanTest = { host = host, port = 30890 },
         _IsaacLanModules = {
             ["api/public"] = {
@@ -424,9 +424,14 @@ for _, host in ipairs({ true, false }) do
         assert(flags[1] == 0 and flags[2] == 1, "Fixture changed the original blink overrides")
     end
     phase, scene, clock, returned = Phase.lobby, 1, clock + 4000, true
-    progress = baseline:sub(1, -5) .. string.pack(">I4", 1)
-    assert(not pcall(env._IsaacLanFrame), "Changed private progress counter was accepted")
-    progress = baseline
+    progress = testProgress.fixture(host and 1 or 0, 1)
+    local ok, reason = pcall(env._IsaacLanFrame)
+    assert(
+        not ok and tostring(reason):find("Replaced private progress counter", 1, true),
+        "Changed private progress counter did not fail its own guard: " .. tostring(reason)
+    )
+    -- Award metadata follows the native counters and may change independently.
+    progress = baseline:sub(1, -2) .. "\1"
     env._IsaacLanFrame()
     assert(inspect())
     assert(table.concat(messages, "\n"):find("PASS full LANBOT campaign", 1, true))

@@ -5,12 +5,18 @@
 
 namespace isaac::lan {
 inline Progress mergeProgress(const Progress& local, const Progress& common,
-                              const Progress& current) {
+                              const Progress& current, std::span<const bool> bitCounters = {}) {
     Progress result = local;
+    result.earned = {};
     for (unsigned i = 0; i < result.achievements.size(); ++i)
-        if (current.achievements[i] && !common.achievements[i])
+        if ((current.achievements[i] && !common.achievements[i]) || current.earned.achievements[i])
             result.achievements[i] = 1;
     for (unsigned i = 0; i < result.counters.size(); ++i) {
+        if (i < bitCounters.size() && bitCounters[i]) {
+            result.counters[i] = local.counters[i] | (current.counters[i] & ~common.counters[i]) |
+                                 current.earned.counters[i];
+            continue;
+        }
         const auto delta =
             static_cast<std::int64_t>(static_cast<std::int32_t>(current.counters[i])) -
             static_cast<std::int32_t>(common.counters[i]);

@@ -178,7 +178,9 @@ std::optional<lan::Archive> readArchive() {
     }
 }
 lan::Progress readProgress() {
-    return backend::readProgress();
+    auto progress = backend::readProgress();
+    progress.earned = saves.earnedProgress;
+    return progress;
 }
 lan::LobbyAccess personalAccess() {
     // Embedded modules load during Lua initialization, before the native save
@@ -204,6 +206,16 @@ lan::LobbyAccess personalAccess() {
 }
 void writeProgress(const lan::Progress& value) {
     backend::writeProgress(value);
+    saves.earnedProgress = value.earned;
+}
+void completionAward(unsigned counter, unsigned bits, unsigned achievement) {
+    if (!saves.localProgress || !view.gated || !session || !session->isHost())
+        return;
+    if (counter && counter < saves.earnedProgress.counters.size() &&
+        backend::progressBitCounters()[counter])
+        saves.earnedProgress.counters[counter] |= bits;
+    if (achievement && achievement < saves.earnedProgress.achievements.size())
+        saves.earnedProgress.achievements[achievement] = 1;
 }
 void restoreProgress() {
     if (!saves.localProgress || !saves.commonProgress)
@@ -211,9 +223,15 @@ void restoreProgress() {
     const auto current = readProgress();
     // Keep each user's previous progress. Only changes earned during this
     // shared run are merged back; the host's old achievements are not granted.
-    writeProgress(lan::mergeProgress(*saves.localProgress, *saves.commonProgress, current));
+    const auto local = *saves.localProgress;
+    const auto merged =
+        lan::mergeProgress(local, *saves.commonProgress, current, backend::progressBitCounters());
+    saves.earnedProgress = {};
     saves.localProgress.reset();
     saves.commonProgress.reset();
+    // Native unlocks may save progress synchronously. They now own personal
+    // values and must not pass through the shared-run merger a second time.
+    backend::commitProgress(local, merged);
 }
 void serializeProgress(const backend::Call& original) {
     if (!saves.localProgress || !saves.commonProgress) {
@@ -221,9 +239,12 @@ void serializeProgress(const backend::Call& original) {
         return;
     }
     const auto current = readProgress();
-    writeProgress(lan::mergeProgress(*saves.localProgress, *saves.commonProgress, current));
+    // Serialization temporarily borrows personal values without replacing the
+    // run's award ledger or triggering native unlock notifications.
+    backend::writeProgress(lan::mergeProgress(*saves.localProgress, *saves.commonProgress, current,
+                                              backend::progressBitCounters()));
     original();
-    writeProgress(current);
+    backend::writeProgress(current);
     if (logger)
         logger("progress_save=ISOLATED");
 }
@@ -1673,7 +1694,7 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     restorePositions = restore;
     return backend::install(image, {saveGame, deleteGame, saveRerun, serializeProgress,
                                     executeStart, startGame, update, consoleUpdate, consoleCommand,
-                                    controls, executeMenu, requestRestart});
+                                    controls, executeMenu, requestRestart, completionAward});
 }
 void configureNetwork(unsigned hz) {
     inputHz = hz;

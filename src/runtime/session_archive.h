@@ -12,7 +12,7 @@ struct Archive {
     std::vector<std::uint8_t> game;
     std::vector<std::uint8_t> encode() const {
         Writer w(Message::snapshot);
-        w.string("IsaacLAN/save/4");
+        w.string("IsaacLAN/save/5");
         w.string(fingerprint);
         w.string(settings.seed);
         w.u8(settings.difficulty);
@@ -50,7 +50,8 @@ struct Archive {
         if (r.u8() != static_cast<unsigned>(Message::snapshot))
             throw std::runtime_error("Unsupported saved session");
         const auto format = r.string();
-        if (format != "IsaacLAN/save/3" && format != "IsaacLAN/save/4")
+        if (format != "IsaacLAN/save/3" && format != "IsaacLAN/save/4" &&
+            format != "IsaacLAN/save/5")
             throw std::runtime_error("Unsupported saved session");
         Archive out;
         out.fingerprint = r.string();
@@ -62,13 +63,13 @@ struct Archive {
         out.settings.rules.difficulty = r.u8();
         const auto transient = r.u8();
         out.settings.rules.transient = transient != 0;
-        if (format == "IsaacLAN/save/4")
+        if (format != "IsaacLAN/save/3")
             out.settings.rules.options = r.u32();
         if (transient > 1 || !out.settings.rules.valid())
             throw std::runtime_error("Invalid saved run rules");
         for (auto& c : out.settings.characters)
             c = r.u16();
-        out.settings.progress = r.progress();
+        out.settings.progress = r.progress(format == "IsaacLAN/save/5");
         const auto players = r.u8();
         if (players < 2 || players > 4 || out.settings.seed.size() != 8 ||
             out.settings.difficulty > 3)

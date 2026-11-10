@@ -1484,6 +1484,50 @@ void progression() {
                 merged.counters[3] == 43,
             "Counter delta or saturation failed");
     require(mergeProgress(local, common, common) == local, "No-op session changed local progress");
+    using namespace isaac::engine::j460::completion;
+    // Repeating an already earned host win still awards the guest. Completion
+    // counters are bit flags: normal -> hard adds bit 2, never a numeric delta.
+    local = {};
+    common = {};
+    common.achievements[42] = 1;
+    common.achievements[43] = 1;
+    common.counters[27] = 3;
+    current = common;
+    current.earned.achievements[42] = 1;
+    current.earned.counters[27] = 3;
+    auto awarded = mergeProgress(local, common, current, bitCounters);
+    require(awarded.achievements[42] && !awarded.achievements[43] && awarded.counters[27] == 3,
+            "Repeated host completion was lost or unrelated host progress leaked");
+    require(mergeProgress(awarded, common, current, bitCounters) == awarded,
+            "Repeated award was not idempotent");
+    current = common = {};
+    local.counters[27] = 1;
+    current.counters[27] = 1;
+    require(mergeProgress(local, common, current, bitCounters).counters[27] == 1,
+            "Normal completion was incorrectly promoted to hard");
+    local.counters[27] = 0;
+    common.counters[27] = 1;
+    current.counters[27] = 3;
+    current.earned.counters[27] = 3;
+    require(mergeProgress(local, common, current, bitCounters).counters[27] == 3,
+            "Hard completion only granted a partial flag");
+    Writer awards(Message::ending);
+    awards.progress(current);
+    require(awards.bytes.size() + 128 < maxMessageSize, "Progress awards exceed lifecycle budget");
+    Reader decoded(awards.bytes);
+    decoded.u8();
+    require(decoded.progress() == current, "Earned progress did not survive transport");
+    decoded.finish();
+    current.earned.achievements[0] = 2;
+    Writer invalid(Message::ending);
+    invalid.progress(current);
+    rejects(
+        [&] {
+            Reader r(invalid.bytes);
+            r.u8();
+            r.progress();
+        },
+        "Invalid earned achievement accepted");
 }
 
 Archive sample(unsigned players = 4) {
@@ -1676,32 +1720,37 @@ void roomOptionsAndMarks() {
             "Normal run lost room options when saved");
     require(!isaac::roomOptions::valid(isaac::roomOptions::known + 1),
             "Runtime accepted an unknown room option");
-    // A real v3 archive remains readable, defaulting the absent room flags off.
-    Writer legacy(Message::snapshot);
-    legacy.string("IsaacLAN/save/3");
-    legacy.string(archive.fingerprint);
-    legacy.string(archive.settings.seed);
-    legacy.u8(archive.settings.difficulty);
-    legacy.u16(0);
-    legacy.u16(0);
-    legacy.u16(65535);
-    legacy.u8(255);
-    legacy.u8(0);
-    for (auto c : archive.settings.characters)
-        legacy.u16(c);
-    legacy.progress(archive.settings.progress);
-    legacy.u8(archive.locations.size());
-    for (const auto& p : archive.locations) {
-        legacy.u32(p.dimension);
-        legacy.u32(p.index);
-        legacy.u32(std::bit_cast<std::uint32_t>(p.x));
-        legacy.u32(std::bit_cast<std::uint32_t>(p.y));
+    // Both legacy formats omit awards; v3 also omits room options.
+    for (unsigned format : {3u, 4u}) {
+        Writer legacy(Message::snapshot);
+        legacy.string(format == 3 ? "IsaacLAN/save/3" : "IsaacLAN/save/4");
+        legacy.string(archive.fingerprint);
+        legacy.string(archive.settings.seed);
+        legacy.u8(archive.settings.difficulty);
+        legacy.u16(0);
+        legacy.u16(0);
+        legacy.u16(65535);
+        legacy.u8(255);
+        legacy.u8(0);
+        if (format == 4)
+            legacy.u32(archive.settings.rules.options);
+        for (auto c : archive.settings.characters)
+            legacy.u16(c);
+        legacy.progress(archive.settings.progress, false);
+        legacy.u8(archive.locations.size());
+        for (const auto& p : archive.locations) {
+            legacy.u32(p.dimension);
+            legacy.u32(p.index);
+            legacy.u32(std::bit_cast<std::uint32_t>(p.x));
+            legacy.u32(std::bit_cast<std::uint32_t>(p.y));
+        }
+        legacy.blob(archive.game);
+        legacy.u64(snapshotHash(legacy.bytes));
+        const auto old = Archive::decode(legacy.bytes);
+        require(old.settings.rules.options == (format == 3 ? 0 : archive.settings.rules.options) &&
+                    old.settings.progress == archive.settings.progress && old.game == archive.game,
+                "Previous save format lost progress or room options");
     }
-    legacy.blob(archive.game);
-    legacy.u64(snapshotHash(legacy.bytes));
-    const auto old = Archive::decode(legacy.bytes);
-    require(old.settings.rules == RunRules{} && old.game == archive.game,
-            "Previous save format was lost or enabled friendly fire");
 }
 
 void archiveIntegrity() {

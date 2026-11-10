@@ -144,6 +144,9 @@ inline constexpr std::uint32_t frontendMenuUpdate_51ee90 = 0x51ee90;
 inline constexpr std::uint32_t progressSerialize = 0x5282e0;
 inline constexpr std::uint32_t progressSaveCloud = 0x528ee0;
 inline constexpr std::uint32_t progressSaveFile = 0x5294f0;
+inline constexpr std::uint32_t progressTryUnlock = 0x529a20;
+inline constexpr std::uint32_t progressIncreaseCounter = 0x529b40;
+inline constexpr std::uint32_t recordCharacterCompletion = 0x55aa30;
 inline constexpr std::uint32_t runtimeNetStartGame = 0x558aa0;
 inline constexpr std::uint32_t managerSave = 0x558ed0;
 inline constexpr std::uint32_t managerDeleteSave = 0x559130;
@@ -296,5 +299,6 @@ inline constexpr std::uint32_t logicalWidth = 0x878dc4;
 inline constexpr std::uint32_t logicalHeight = 0x878edc;
 inline constexpr std::uint32_t characterMenuPages = 0x724120;
 inline constexpr std::uint32_t characterMenuEntries = 0x724140;
+inline constexpr std::uint32_t completionDefinitions = 0x835ed0;
 } // namespace globals
 } // namespace isaac::engine::j460

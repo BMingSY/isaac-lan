@@ -2,6 +2,7 @@
 local root = assert(arg[1])
 local Phase = dofile(root .. "/tests/fixtures/net_phases.lua")
 local testInput = dofile(root .. "/tests/support/input.lua")
+local testProgress = dofile(root .. "/tests/support/progress.lua")
 for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true } }) do
     local difficulty, campaign = table.unpack(scenario)
     local callbacks, clock, tears, terminalVariant = {}, 0, {}, 0
@@ -155,7 +156,7 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
             return { nowMs = clock }
         end,
         net_progress = function()
-            return "\1" .. string.rep("\1", 642) .. string.pack(">I4", 98765)
+            return testProgress.fixture(1, 98765)
         end,
         test_gamepad = function() end,
         rooms_ready = function()
@@ -193,6 +194,7 @@ for _, scenario in ipairs({ { 2, false }, { 3, false }, { 2, true }, { 3, true }
     local env = setmetatable({
         _IsaacLan = native,
         _IsaacLanTestInput = testInput,
+        _IsaacLanTestProgress = testProgress,
         _IsaacLanFrame = function()
             return {
                 phase = returned and Phase.lobby or Phase.idle,

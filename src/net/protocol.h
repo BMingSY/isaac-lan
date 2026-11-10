@@ -15,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 51;
+constexpr std::uint16_t protocolVersion = 52;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -148,9 +148,20 @@ struct Frame {
     std::uint8_t connected = 15;
     bool operator==(const Frame&) const = default;
 };
-struct Progress {
+struct ProgressValues {
     std::array<std::uint8_t, 642> achievements{};
     std::array<std::uint32_t, 523> counters{};
+    bool operator==(const ProgressValues&) const = default;
+};
+struct ProgressAwards {
+    std::array<std::uint8_t, 642> achievements{};
+    std::array<std::uint8_t, 523> counters{};
+    bool operator==(const ProgressAwards&) const = default;
+};
+struct Progress : ProgressValues {
+    // Monotonic awards earned in this run, including repeated native awards
+    // whose values were already present in the authority's starting profile.
+    ProgressAwards earned;
     bool operator==(const Progress&) const = default;
 };
 namespace ending {
@@ -322,13 +333,19 @@ class Writer {
         u32(static_cast<std::uint32_t>(value.size()));
         bytes.insert(bytes.end(), value.begin(), value.end());
     }
-    void progress(const std::optional<Progress>& p) {
+    void progress(const std::optional<Progress>& p, bool withEarned = true) {
         u8(p.has_value());
         if (p) {
             for (auto n : p->achievements)
                 u8(n);
             for (auto n : p->counters)
                 u32(n);
+            if (withEarned) {
+                for (auto n : p->earned.achievements)
+                    u8(n);
+                for (auto n : p->earned.counters)
+                    u8(n);
+            }
         }
     }
     void access(const LobbyAccess& value) {
@@ -422,7 +439,7 @@ class Reader {
         const auto value = blobView(maximum);
         return {value.begin(), value.end()};
     }
-    std::optional<Progress> progress() {
+    std::optional<Progress> progress(bool withEarned = true) {
         const auto present = u8();
         if (present > 1)
             throw std::runtime_error("Invalid progression state");
@@ -436,6 +453,15 @@ class Reader {
         }
         for (auto& n : out.counters)
             n = u32();
+        if (withEarned) {
+            for (auto& n : out.earned.achievements) {
+                n = u8();
+                if (n > 1)
+                    throw std::runtime_error("Invalid earned achievement flag");
+            }
+            for (auto& n : out.earned.counters)
+                n = u8();
+        }
         return out;
     }
     LobbyAccess access() {

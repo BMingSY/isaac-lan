@@ -372,19 +372,23 @@ function _IsaacLanMenuRender(
         end
         ui.selection = math.min(ui.selection, #rows)
     end
+    local activated = false
     local function renderRow(i, item, y, height)
         if moved and hit(38 + shift, y - 2, 147, height) and not ui.editing then
             ui.selection = i
         end
         if clicked and hit(38 + shift, y - 2, 147, height) then
             ui.selection = i
-            if item.enabled then
+            if item.enabled and not activated then
+                activated = true
                 item.action()
             end
-        elseif i == ui.selection and not ui.editing and item.enabled then
+        elseif i == ui.selection and not ui.editing and item.enabled and not activated then
             if key == Key.enter or key == Key.space then
+                activated = true
                 item.action()
             elseif item.change and (key == Key.left or key == Key.right) then
+                activated = true
                 item.change(key == Key.left and -1 or 1)
             end
         end

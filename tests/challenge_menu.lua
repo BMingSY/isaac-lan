@@ -848,6 +848,38 @@ print("PASS personal completion layers, host-only independent rules and resume s
 print("PASS rules submenu, summaries, scrolling, read-only updates and keyboard/mouse navigation")
 print("PASS locked challenge rules on both peers, stale rules pages and returning to ordinary mode")
 
+-- Selecting an early challenge moves focus to lobby row 3. That focus change
+-- must not activate challenge row 3 again during the same render pass.
+_IsaacLan.net_challenges = function()
+    local result = {}
+    for id, name in pairs({ [1001] = "恶魔形态", [1002] = "运气游戏", [1003] = "吃鸡" }) do
+        result[tostring(id)] = {
+            id = id,
+            name = name,
+            character = 65535,
+            difficulty = 0,
+            available = true,
+            team_available = true,
+        }
+    end
+    return result
+end
+status.phase, status.hosting, status.slot, status.challenge = 2, 1, 0, 1001
+for index = 1, 3 do
+    _IsaacLanMenuOpen(true)
+    draw(40)
+    draw(40)
+    draw(13) -- Selected challenge's mode row opens the list.
+    for _ = 2, index do
+        draw(40)
+    end
+    local before = #commands
+    draw(13)
+    assert(status.challenge == 1000 + index, "Challenge selection was overwritten in one frame")
+    assert(#commands == before + 1, "A confirmation activated multiple menu rows")
+end
+print("PASS each challenge confirmation executes exactly once")
+
 -- Drive the actual menu entry with the same extra arguments as the native
 -- frontend, proving the notice owns input before any ordinary menu action.
 local continued, exited = 0, 0
