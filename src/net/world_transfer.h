@@ -51,6 +51,7 @@ class WorldTransfer {
     Clock::time_point fullAt{}, baselineAt{}, sentAt{};
     WorldPacing pacing;
     int minimumLatency = 0;
+    int networkLatency = -1;
 
   public:
     void resetSender() {
@@ -74,6 +75,15 @@ class WorldTransfer {
     }
     void publish(WorldState value) {
         pending = std::move(value);
+    }
+    bool newerThan(std::uint32_t tick) const {
+        return pending && pending->tick > tick;
+    }
+    double bytesPerSecond() const {
+        return pacing.bytesPerSecond();
+    }
+    void abandon(std::uint32_t tick) {
+        std::erase_if(flight, [tick](const auto& value) { return value.tick == tick; });
     }
     bool hasBaseline() const {
         return baseline.has_value();
@@ -101,6 +111,9 @@ class WorldTransfer {
     }
     bool permitDatagram(std::size_t bytes) {
         return pacing.consume(bytes, Clock::now());
+    }
+    void observeLatency(int milliseconds) {
+        networkLatency = milliseconds;
     }
     void accountWire(std::uint32_t tick, std::size_t bytes, bool reliable = false) {
         for (auto& value : flight)
@@ -161,7 +174,7 @@ class WorldTransfer {
                 baseline->wireBytes,
                 std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted)
                     .count(),
-                minimumLatency, baselineAt);
+                networkLatency, baselineAt);
             while (!flight.empty() && flight.front().tick <= tick)
                 flight.pop_front();
             return true;
@@ -178,7 +191,7 @@ class WorldTransfer {
         pacing.acknowledge(
             baseline->wireBytes,
             std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted).count(),
-            minimumLatency, baselineAt);
+            networkLatency, baselineAt);
         flight.erase(flight.begin(), std::next(found));
         return true;
     }
@@ -196,8 +209,6 @@ class WorldTransfer {
             // parity groups intact instead of throttling individual datagrams.
             constexpr auto congestedInterval = std::chrono::milliseconds(100);
             const auto receiptBudget = std::max(200, 2 * std::max(0, minimumLatency));
-            if (oldestMs() > static_cast<unsigned>(receiptBudget))
-                pacing.congested(Clock::now());
             if (oldestMs() > static_cast<unsigned>(receiptBudget) &&
                 Clock::now() - sentAt < congestedInterval)
                 return {};
@@ -217,11 +228,13 @@ class WorldTransfer {
             sentAt = began;
             sendingStable = !sending->stable.empty();
             if (sendingStable) {
-                Writer bundle(Message::world);
+                Writer bundle(Message::world, sizeof(std::uint32_t) + sending->stable.size() +
+                                                  sending->bytes.size());
+                bundle.bytes.clear(); // Payload only, without a message tag.
                 bundle.blob(sending->stable);
                 bundle.bytes.insert(bundle.bytes.end(), sending->bytes.begin(),
                                     sending->bytes.end());
-                sending->bytes.assign(bundle.bytes.begin() + 1, bundle.bytes.end());
+                sending->bytes = std::move(bundle.bytes);
                 sending->stable.clear();
             }
             auto raw = std::make_shared<const std::vector<std::uint8_t>>(std::move(sending->bytes));
@@ -260,7 +273,9 @@ class WorldTransfer {
         if (!sending)
             return {};
         const auto& value = *sending;
-        Writer w(Message::world);
+        constexpr auto headerBytes =
+            1 + 7 * sizeof(std::uint32_t) + 4 + maxPlayers * sizeof(std::uint32_t);
+        Writer w(Message::world, headerBytes + value.bytes.size());
         w.u32(value.tick);
         w.u32(sent);
         w.u32(value.bytes.size());
@@ -312,17 +327,14 @@ class WorldTransfer {
         }
         if (!assembling || assembling->tick != tick || total != size)
             throw std::runtime_error("Invalid world state chunk");
-        auto bytes = r.blob(maxWorldSize + StateCompression::headerSize);
+        const auto bytes = r.blobView(maxWorldSize + StateCompression::headerSize);
         if (offset || bytes.size() != total)
             throw std::runtime_error("Invalid datagram world size");
-        assembling->bytes = std::move(bytes);
         r.finish();
         if (lastDecoded && tick <= *lastDecoded) {
             assembling.reset();
             return {};
         }
-        if (assembling->bytes.size() != total)
-            return {};
         const auto began = Clock::now();
         if (receivingDelta) {
             const auto found = std::find_if(decoded.begin(), decoded.end(), [&](const auto& value) {
@@ -332,9 +344,9 @@ class WorldTransfer {
                 assembling.reset();
                 return {};
             }
-            assembling->bytes = codec.expand(assembling->bytes, *found->bytes);
+            assembling->bytes = codec.expand(bytes, *found->bytes);
         } else
-            assembling->bytes = codec.expand(assembling->bytes);
+            assembling->bytes = codec.expand(bytes);
         expandMs = std::chrono::duration<double, std::milli>(Clock::now() - began).count();
         decoded.push_back(
             {tick, std::make_shared<const std::vector<std::uint8_t>>(assembling->bytes)});

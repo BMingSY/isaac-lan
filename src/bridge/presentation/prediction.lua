@@ -10,6 +10,7 @@ local turningRetention = math.sqrt(0.8)
 local inputBase, inputSpeedScale = 0.75, 0.25
 local walkingAcceleration, reverseAcceleration = 0.6, 0.04
 local correctionTime, correctionSpeed = 0.06, 120
+local brakingStart, maxPendingTime = 0.35, 0.5
 local function zero()
     return Vector(0, 0)
 end
@@ -21,6 +22,8 @@ end
 function methods:reset(position, sequence, velocity)
     self.base, self.display, self.position = position, position, position
     self.pending, self.correction = {}, zero()
+    self.pendingTime = 0
+    self.evictedTime, self.evictedSequence = 0, sequence
     self.velocity = velocity or zero()
     self.acknowledged = sequence
     self.authority, self.authorityVelocity = position, self.velocity
@@ -65,9 +68,14 @@ function methods:confirm(position, sequence, velocity, tick)
     self.authority, self.authorityVelocity = position, velocity
     self.confirmedTick, self.acknowledged = tick, sequence
     local remaining = {}
+    if sequence >= self.evictedSequence then
+        self.evictedTime = 0
+    end
+    self.pendingTime = self.evictedTime
     for _, input in ipairs(self.pending) do
         if input.sequence > sequence then
             remaining[#remaining + 1] = input
+            self.pendingTime = self.pendingTime + input.dt
         end
     end
     self.pending = remaining
@@ -150,26 +158,42 @@ function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
             end
             elapsed = elapsed + input.dt
         end
-        elapsed = math.min(dt, math.max(0, 0.1 - elapsed))
+        elapsed =
+            math.min(dt, math.max(0, 0.1 - elapsed), math.max(0, maxPendingTime - self.pendingTime))
         if elapsed > 0 then
             -- The sequence acknowledges a sampled held state, not a host tick.
             -- Preserve each preview's direction and duration for approximate
             -- replay from the next authority position AND velocity.
             local input = {
                 sequence = sequence,
-                direction = direction,
+                direction = direction
+                    * math.min(
+                        1,
+                        math.max(
+                            0,
+                            (maxPendingTime - self.pendingTime) / (maxPendingTime - brakingStart)
+                        )
+                    ),
                 speed = speed,
                 dt = elapsed,
                 locked = locked,
                 friction = math.max(0, math.min(friction or 1, 1)),
             }
             self.pending[#self.pending + 1] = input
+            self.pendingTime = self.pendingTime + elapsed
             advance(self, input, resolve)
             input.position = self.position
             if #self.pending > maxHistory then
-                table.remove(self.pending, 1)
+                local evicted = table.remove(self.pending, 1)
+                self.evictedTime = self.evictedTime + evicted.dt
+                self.evictedSequence = evicted.sequence
             end
         end
+    end
+    if self.pendingTime >= maxPendingTime then
+        -- Keep the bounded replay until a real acknowledgement retires it.
+        -- New local sequence numbers alone cannot renew the prediction budget.
+        self.velocity = zero()
     end
     local distance = math.sqrt(self.correction:LengthSquared())
     local decay = math.exp(-dt / correctionTime)

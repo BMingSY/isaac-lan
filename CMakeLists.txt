@@ -142,6 +142,20 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME net.world-pacing COMMAND isaac_lan_world_pacing_test)
     set_tests_properties(net.world-pacing PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_world_emission_test tests/world_emission_test.cpp)
+    target_include_directories(isaac_lan_world_emission_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_world_emission_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME net.world-emission COMMAND isaac_lan_world_emission_test)
+    set_tests_properties(net.world-emission PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_incoming_queue_test tests/incoming_queue_test.cpp)
+    target_include_directories(isaac_lan_incoming_queue_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_incoming_queue_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME net.incoming-queue COMMAND isaac_lan_incoming_queue_test)
+    set_tests_properties(net.incoming-queue PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_world_shards_test tests/world_shards_test.cpp)
     target_include_directories(isaac_lan_world_shards_test PRIVATE src)
     if(MINGW)
@@ -656,6 +670,7 @@ if(BUILD_TESTING)
         latency-hud
         bulk-worker
         reliable-receive
+        receive-isolation
         world-deltas
         delivery-backpressure
         delta-floor-boundary

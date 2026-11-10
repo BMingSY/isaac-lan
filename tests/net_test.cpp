@@ -251,6 +251,15 @@ void codec() {
     r.u8();
     require(r.u32() == 0x12345678 && r.blob().size() == 409, "State codec failed");
     r.finish();
+    Reader view(w.bytes);
+    view.u8();
+    view.u32();
+    const auto borrowedBlob = view.blobView();
+    require(borrowedBlob.size() == 409 && borrowedBlob.data() == w.bytes.data() + 9,
+            "Blob view copied or changed the packet payload");
+    view.finish();
+    Reader limited(std::span(w.bytes).subspan(5));
+    rejects([&] { limited.blobView(408); }, "Borrowed blob bypassed its channel size limit");
     std::puts("PASS bounded state codec rejects truncated packets");
 }
 void udpLossRecoveryImpl(bool large) {
@@ -1758,6 +1767,57 @@ struct WirePeer {
         sendPacket(envelope.bytes);
     }
 };
+void receiveIsolation() {
+    auto io = std::make_shared<NetworkIo>();
+    const BuildIdentity build{testVersion, "receive-isolation"};
+    auto listener = io->listenDatagram(0, build);
+    ENetAddress address{};
+    address.host = htonl(INADDR_LOOPBACK);
+    address.port = listener->port;
+    std::array<std::unique_ptr<Socket>, 2> senders;
+    std::array<std::shared_ptr<ConnectionPipe>, 2> receivers;
+    for (unsigned i = 0; i < senders.size(); ++i) {
+        senders[i] = std::make_unique<Socket>(io, io->connectDatagram(address, build));
+        until([&] {
+            if (auto pipe = listener->accepted.pop())
+                receivers[i] = std::move(*pipe);
+            return receivers[i] && receivers[i]->state.load() == ConnectionPipe::connected &&
+                   senders[i]->pipe->state.load() == ConnectionPipe::connected;
+        });
+    }
+    // Leave one game-thread consumer stalled while its peer fills reliable
+    // capacity. Both receiving connections share the same ENet endpoint.
+    for (unsigned i = 0; i < 200; ++i) {
+        Writer message(Message::communication);
+        message.u32(i);
+        senders[0]->sendMessage(message);
+    }
+    Writer healthy(Message::communication);
+    healthy.u32(12345);
+    senders[1]->sendMessage(healthy);
+    until([&] {
+        senders[0]->flush();
+        if (auto packet = receivers[1]->incoming.pop()) {
+            Reader reader(packet->bytes);
+            require(reader.u8() == static_cast<unsigned>(Message::communication) &&
+                        reader.u32() == 12345,
+                    "Healthy connection received the wrong control message");
+            reader.finish();
+            return true;
+        }
+        return false;
+    });
+    until([&] {
+        senders[0]->flush();
+        return receivers[0]->state.load() == ConnectionPipe::failed;
+    });
+    require(receivers[1]->state.load() == ConnectionPipe::connected,
+            "One overflowing consumer disconnected another player");
+    require(receivers[0]->error == "Connection receive queue limit exceeded",
+            "Overflow did not report the connection-local receive limit");
+    listener->closing.store(true);
+    io->signal();
+}
 void roomOptions() {
     TestSession host, guest;
     require(host.host(0, "test", {}, testAccess()), "Host failed");
@@ -3210,6 +3270,7 @@ int main(int argc, char** argv) {
          {"latency-hud", latencyHud},
          {"bulk-worker", bulkWorker},
          {"reliable-receive", reliableReceive},
+         {"receive-isolation", receiveIsolation},
          {"delivery-backpressure", deliveryBackpressure},
          {"delta-floor-boundary", deltaFloorBoundary},
          {"compression-limits", compressionLimits},

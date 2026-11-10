@@ -63,7 +63,7 @@ class Session {
     // Only the host consumes inputs; missing remote samples never stall it.
     std::optional<Frame> take();
     bool ready();
-    bool publish(unsigned slot, const WorldState& state);
+    bool publish(unsigned slot, WorldState state);
     std::optional<WorldState> takeState();
     bool beginStage(const Stage&);
     std::optional<Stage> takeStage();
