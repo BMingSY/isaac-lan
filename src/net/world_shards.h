@@ -85,7 +85,7 @@ class WorldShards {
             const auto count = std::min(dataShards, shards - first);
             std::array<std::array<std::uint8_t, shardSize>, parityShards> parity{};
             const auto output = [&](unsigned index, std::span<const std::uint8_t> payload) {
-                Writer packet(Message::world);
+                Writer packet(Message::world, 1 + headerSize + payload.size());
                 packet.u32(id);
                 packet.u32(bytes.size());
                 packet.u16(first / dataShards);

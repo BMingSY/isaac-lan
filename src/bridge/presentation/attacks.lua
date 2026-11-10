@@ -86,6 +86,7 @@ return function(fields)
                             model = deps.prediction.new(weapons, ack, tick),
                             count = deps.policy.tearCount(player),
                             births = {},
+                            launches = {},
                             shots = 0,
                         }
                         -- The unmodified Isaac shot has a known appearance before
@@ -103,8 +104,18 @@ return function(fields)
                             >= teleportDistance ^ 2
                     then
                         cancel(id)
+                        current.launches = {}
                     end
                     current.position = Vector(player.Position.X, player.Position.Y)
+                    current.launches[tick] = {
+                        position = current.position,
+                        velocity = Vector(player.Velocity.X, player.Velocity.Y),
+                    }
+                    for prior in pairs(current.launches) do
+                        if prior < tick - birthHistoryTicks then
+                            current.launches[prior] = nil
+                        end
+                    end
                     if current.count == 1 then
                         current.pattern = { { along = 1, across = 0 } }
                     end
@@ -141,8 +152,16 @@ return function(fields)
                         cancel(owner)
                     elseif current.count and current.count > 1 and not current.pattern then
                         local player = deps.player(current.actor[A.index])
-                        current.pattern =
-                            deps.volley(group, current.count, player.Position, player.Velocity)
+                        if deps.policy.normalTear(player) then
+                            current.pattern = deps.volley(
+                                group,
+                                current.count,
+                                player.Position,
+                                player.Velocity,
+                                player.ShotSpeed,
+                                current.launches[birth]
+                            )
+                        end
                     end
                     for prior in pairs(current.births) do
                         if prior < tick - birthHistoryTicks then

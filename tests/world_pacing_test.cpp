@@ -28,17 +28,19 @@ static void feedback() {
     WorldPacing pacing;
     auto now = Clock::time_point{};
     const auto initial = pacing.bytesPerSecond();
-    pacing.acknowledge(1200, 300, 90, now);
+    pacing.acknowledge(1200, 95, 90, now);
+    now += 50ms;
+    pacing.acknowledge(1200, 300, 300, now);
     require(pacing.bytesPerSecond() == initial,
             "An isolated delayed ACK was treated as congestion");
     for (unsigned i = 0; i < 4; ++i) {
         now += 50ms;
-        pacing.acknowledge(1200, 300, 90, now);
+        pacing.acknowledge(1200, 300, 300, now);
     }
     require(pacing.bytesPerSecond() < initial, "Queue growth did not reduce publication rate");
     const auto reduced = pacing.bytesPerSecond();
     for (unsigned i = 0; i < 100; ++i)
-        pacing.acknowledge(1200, 300, 90, now);
+        pacing.acknowledge(1200, 300, 300, now);
     require(pacing.bytesPerSecond() == reduced, "ACK burst multiplied congestion penalties");
     for (unsigned i = 0; i < 40; ++i) {
         now += 250ms;
@@ -59,9 +61,34 @@ static void feedback() {
     pacing = {};
     for (unsigned i = 0; i < 300; ++i) {
         now += 33ms;
-        pacing.acknowledge(1200, i % 3 == 0 ? 110 : 20, 0, now);
+        const auto latency = i % 3 == 0 ? 110 : 20;
+        pacing.acknowledge(1200, latency, latency, now);
     }
     require(pacing.bytesPerSecond() >= initial, "Ordinary jitter collapsed the send budget");
+}
+
+static void pathChanges() {
+    WorldPacing pacing;
+    auto now = Clock::time_point{};
+    pacing.acknowledge(1200, 95, 90, now);
+    // The transport remains healthy while the game thread takes 300 ms to
+    // apply each view. Application delay must not masquerade as a full path.
+    for (unsigned i = 0; i < 120; ++i) {
+        now += 33ms;
+        pacing.acknowledge(1200, 390, 90, now);
+    }
+    require(pacing.bytesPerSecond() >= WorldPacing::initialRate,
+            "Slow application collapsed the transport budget");
+    // A new route has a higher base RTT, without growing queues. Forget the
+    // obsolete minimum, then regain capacity rather than remaining at 16 KiB/s.
+    pacing = {};
+    pacing.acknowledge(1200, 95, 90, now);
+    for (unsigned i = 0; i < 300; ++i) {
+        now += 33ms;
+        pacing.acknowledge(1200, 185, 180, now);
+    }
+    require(pacing.bytesPerSecond() >= WorldPacing::initialRate,
+            "A stable route change permanently throttled publication");
 }
 
 static void bottleneck() {
@@ -82,7 +109,8 @@ static void bottleneck() {
         while (!receipts.empty() && receipts.front().at <= seconds) {
             const auto receipt = receipts.front();
             receipts.pop_front();
-            pacing.acknowledge(1200, (receipt.at - receipt.sent) * 1000, 90, now);
+            const auto latency = (receipt.at - receipt.sent) * 1000;
+            pacing.acknowledge(1200, latency, static_cast<int>(latency), now);
             if (seconds >= 10) {
                 delay += receipt.at - receipt.sent;
                 ++delivered;
@@ -95,13 +123,16 @@ static void bottleneck() {
             receipts.push_back({available + 0.09, seconds});
         }
     }
-    require(delivered > 60, "Congestion recovery left the path idle");
-    require(delay / delivered < 0.2, "Realtime pacing retained excessive queue delay");
     std::printf("PACED 32KiB/s delivered=%u mean_rtt_ms=%.1f rate=%.0f\n", delivered,
                 delay * 1000 / delivered, pacing.bytesPerSecond());
+    require(delivered > 60, "Congestion recovery left the path idle");
+    require(delay / delivered < 0.2, "Realtime pacing retained excessive queue delay");
 }
 
 int main(int argc, char** argv) {
     return runTests(argc, argv,
-                    {{"budget", budget}, {"feedback", feedback}, {"bottleneck", bottleneck}});
+                    {{"budget", budget},
+                     {"feedback", feedback},
+                     {"bottleneck", bottleneck},
+                     {"path-changes", pathChanges}});
 }

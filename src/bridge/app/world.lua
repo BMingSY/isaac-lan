@@ -185,7 +185,7 @@ local attacks = component("presentation/attacks")({
         return math.max(0, status["ping" .. status.slot] or 0) / 2000
     end,
     matching = modules["presentation/attack_matching"](tearTrajectory),
-    volley = modules["presentation/attack_volley"](Vector),
+    volley = modules["presentation/attack_volley"](Vector, tearTrajectory),
     prediction = modules["presentation/attack_prediction"](attackPolicy),
     trajectory = tearTrajectory,
     tearType = EntityType.ENTITY_TEAR,

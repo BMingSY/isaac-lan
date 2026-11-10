@@ -18,5 +18,8 @@ template <class T> class LatestMailbox {
     std::unique_ptr<T> take() {
         return std::unique_ptr<T>(value.exchange(nullptr, std::memory_order_acq_rel));
     }
+    bool empty() const {
+        return value.load(std::memory_order_acquire) == nullptr;
+    }
 };
 } // namespace isaac

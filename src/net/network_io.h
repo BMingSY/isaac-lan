@@ -6,22 +6,13 @@
 #include "net/reliable_transfer.h"
 #include "net/reliable_receiver.h"
 #include "net/world_transfer.h"
+#include "net/incoming_queue.h"
 #include <deque>
 #include <enet/enet.h>
 
 namespace isaac::lan {
 class DatagramHost;
 inline constexpr std::size_t maxSocketQueueBytes = 262144;
-inline constexpr std::size_t maxIncomingBytes = 2 * maxWorldSize;
-struct IncomingPacket {
-    std::vector<std::uint8_t> bytes;
-    std::optional<WorldState> world;
-    std::optional<ReceivedBulk> bulk;
-    std::size_t size() const {
-        return bytes.size() + (world ? world->bytes.size() + world->stable.size() : 0) +
-               (bulk ? bulk->size() : 0);
-    }
-};
 struct OutgoingPacket {
     std::vector<std::uint8_t> bytes;
     std::shared_ptr<const ReliableTransfer> transfer;
@@ -50,7 +41,7 @@ struct ConnectionPipe {
     std::optional<ENetAddress> address;
     BuildIdentity build; // Immutable after publication to the network worker.
     SpscQueue<OutgoingPacket, 128> outgoing;
-    SpscQueue<IncomingPacket, 128> incoming;
+    IncomingQueue incoming;
     SpscQueue<NetworkSample, 64> samples;
     SpscQueue<WorldTransfer::Trace, 8> traces;
     LatestMailbox<WorldPublication> publication;
@@ -60,7 +51,7 @@ struct ConnectionPipe {
     WorldObservation world;
     std::atomic<State> state;
     std::atomic<bool> closing{false}, answerPing{false};
-    std::atomic<std::size_t> queued{0}, receiveCapacity{0}, incomingBytes{0};
+    std::atomic<std::size_t> queued{0}, receiveCapacity{0};
     std::atomic<std::size_t> checkpointSent{0}, bulkBytes{0};
     std::string error; // Written once, published by terminal state release.
     std::optional<CompatibilityFailure> compatibilityFailure; // Published with failed state.
