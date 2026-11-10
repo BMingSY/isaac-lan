@@ -8,6 +8,13 @@ local npcState = assert(_IsaacLanModules["sync/npc"])
 local normal = Isaac.GetPlayerTypeByName("Samael", false)
 local tainted = Isaac.GetPlayerTypeByName("Samael", true)
 assert(normal > 0 and tainted > 0 and normal ~= tainted, "Samael characters unavailable")
+local MAX_VERIFIED_TICK = 1800
+if config.modNpcTainted then
+    assert(
+        SamaelMod and not SamaelMod.ContentManager:CharacterLocked(tainted),
+        "Run mod-npcs first to prepare the isolated tainted unlock"
+    )
+end
 local selected = config.modNpcTainted and tainted or normal
 local custom = {
     [Isaac.GetEntityTypeByName("Samael Scythe")] = true,
@@ -19,6 +26,7 @@ local frames, gates, samples = 0, 0, 0
 local linked, chosen, finished, requested, departed = false, false, false, false, false
 local characterSeen, reentry, restoredFloor = false, false, false
 local floorTick, resumedAt, presented
+local unlockPrepared = false
 local function report(message)
     Isaac.DebugString("LAN_NETWORK MOD_NPCS " .. message)
 end
@@ -121,7 +129,24 @@ function _IsaacLanFrame()
     end
     local status = frame()
     assert(status.phase ~= phases.failed, tostring(status.error))
+    assert(
+        finished or not status.prepared or status.verified < MAX_VERIFIED_TICK,
+        "Mod NPC scenario did not finish; stage=" .. Game():GetLevel():GetStage()
+    )
     native.test_gamepad(0)
+    if
+        not config.modNpcTainted
+        and not unlockPrepared
+        and status.prepared
+        and status.verified >= 10
+    then
+        -- Prepare the Mod's own unlock in the disposable copy, before the next
+        -- session. Locked tainted characters are deliberately sent to Home.
+        Isaac.ExecuteCommand("samael unlocktainted")
+        assert(not SamaelMod.ContentManager:CharacterLocked(tainted))
+        unlockPrepared = true
+        report("isolated tainted unlock prepared")
+    end
     if status.phase == phases.lobby and not chosen then
         chosen = true
         _IsaacLanCommand("choose", (host and selected or PlayerType.PLAYER_ISAAC) .. ":1")
