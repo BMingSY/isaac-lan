@@ -27,7 +27,13 @@ return function(wire)
             end
             if native.combat_identity then
                 local identifier = assert(native.combat_identity(e:GetSprite()))
-                e:GetData().__isaac_lan_entity = identifier
+                -- Synchronization identity belongs to the native registry.
+                -- The Lua table is only a diagnostic mirror; an absent table
+                -- must not replace or discard a successfully assigned ID.
+                local data = e:GetData()
+                if data then
+                    data.__isaac_lan_entity = identifier
+                end
                 return identifier
             end
             local d = e:GetData()

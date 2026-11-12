@@ -3357,11 +3357,11 @@ struct RoomTransfer {
                   : certificatePosition
                       ? std::optional<Vec2>{{(*certificatePosition)[0], (*certificatePosition)[1]}}
                       : std::nullopt;
-        if (!landing && request.routing == RoomRouting::resolved && request.door < 0 &&
-            residentPosition) {
-            // A resolved gather joins an existing room without native Init.
-            // Source coordinates can lie beyond a crawlspace's side exit and
-            // immediately send the entire gathered party to the Error Room.
+        if (!landing && request.door < 0 && residentPosition) {
+            // Every non-door arrival into a resident room bypasses native
+            // Init, including a second player taking the same staircase.
+            // Source coordinates can lie beyond the destination's bounds;
+            // reuse a destination-space position unless the caller supplied one.
             landing = Vec2{(*residentPosition)[0], (*residentPosition)[1]};
         }
         if (created)

@@ -1,9 +1,11 @@
 #include "engine/item_effects.h"
+#include "engine/moving_box.h"
 #include "engine/rooms.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/active_items.h"
 #include "engine/versions/j460/cursed_mist.h"
+#include "engine/versions/j460/death_certificate_return.h"
 #include "engine/versions/j460/inventory_order.h"
 #include "compat/items/starting_rewards.h"
 #include <MinHook.h>
@@ -148,6 +150,7 @@ int activeData(lua_State* L) {
                 writer.u32(static_cast<std::uint32_t>(item.id));
                 writer.u32(static_cast<std::uint32_t>(item.data));
             }
+            writer.u8(presentation::moving_box::capture(actor));
             lua.pushLString(L, reinterpret_cast<const char*>(writer.bytes.data() + 1),
                             writer.bytes.size() - 1);
             return 1;
@@ -162,8 +165,12 @@ int activeData(lua_State* L) {
             item.id = std::bit_cast<std::int32_t>(reader.u32());
             item.data = std::bit_cast<std::int32_t>(reader.u32());
         }
+        const auto boxFull = reader.u8();
+        if (boxFull > 1)
+            throw std::runtime_error("Invalid Moving Box display state");
         reader.finish();
         j460::active_items::restore(actor, at<Address>(image, j460::globals::game), state);
+        presentation::moving_box::apply(actor, boxFull != 0);
         lua.pushBoolean(L, true);
         return 1;
     } catch (const std::exception& error) {
@@ -287,7 +294,7 @@ bool install(Address base) {
            hook(j460::entry::playerReviveCollectible, reviveCollectible,
                 originalReviveCollectible) &&
            hook(j460::entry::playerReviveTrinket, reviveTrinket, originalReviveTrinket) &&
-           j460::cursed_mist::install(base);
+           j460::cursed_mist::install(base) && j460::installDeathCertificateReturn(base);
 }
 bool bind(lua_State* L, HMODULE module) {
     using S = isaac::lua::Symbol;

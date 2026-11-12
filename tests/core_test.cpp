@@ -252,6 +252,14 @@ void compatibilityTargets() {
 void deathCertificateArrival() {
     using isaac::compat::items::deathCertificateArrival;
     using Position = std::array<float, 2>;
+    using isaac::compat::items::deathCertificateReturnSlot;
+    require(deathCertificateReturnSlot(std::array{0, 2, 0, 0}, 3) == 1,
+            "Rewinding the host outside the annex lost the guest's delayed return");
+    require(deathCertificateReturnSlot(std::array{2, 2, 0, 0}, 3) == 0 &&
+                deathCertificateReturnSlot(std::array{2, 2, 0, 0}, 2) == 1 &&
+                !deathCertificateReturnSlot(std::array{0, 2, 0, 0}, 1) &&
+                !deathCertificateReturnSlot(std::array{0, 0, 0, 0}, 15),
+            "Death Certificate return selected an absent or disconnected occupant");
     // A teammate can leave a wide/tall room at pixels outside the annex's
     // 1x1 entry. Only the first arriving head gets native initialization.
     for (const auto source : {Position{1000, 600}, Position{320, 680}}) {

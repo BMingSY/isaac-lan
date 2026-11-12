@@ -249,9 +249,13 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 `actor_inventory_order(sprite[, bytes])` 读取或恢复当前名单中玩家的 16 个库存槽顺序，每槽为大端 `i32` 道具 ID，0 表示空槽；玩法适配只用于里以撒。写入只允许客机，在完整解析并校验重复项数量后，把 ID 映射到本机已有历史索引，再一次提交槽位并置该角色 `PlayerHUD+0x6ac` 的库存刷新字节；顺序不变时不触及缓存。历史容器、道具效果、纹理和 HUD 缓存仍归原生代码所有，不复制主机索引、不分配历史条目。J460 的槽数组位于 `Player+0x1e00`，历史向量位于 `+0x1dec`，历史条目步长 `0x1c`、饰品标记 `+0x4`、道具 ID `+0x8`；读取检查向量长度、65536 条上限和每个索引，布局受原生 HUD 读取指令签名校验。实现见 [inventory_order.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/inventory_order.h)。
 
-`items_active_data(sprite[, bytes])` 接受当前原生名单中玩家的借用 Sprite，读取或恢复四个主动槽的 `{id:i32, data:i32}` 大端记录，共 32 字节。写入只允许客机；完整解析后核对四个 ID 与已恢复的库存一致、空槽状态为 0，并通过[道具状态校验](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/active_data.h)后才提交。D 无限高 16 位为十种骰子的索引，低 16 位保留充能状态。原生描述符位于 `Player+0x1580`，槽间隔 `0x20`，状态在槽内 `+0x1c`；布局由 RVA `0x391519` 的原生写入指令校验。
+`items_active_data(sprite[, bytes])` 接受当前原生名单中玩家的借用 Sprite，读取或恢复四个主动槽的 `{id:i32, data:i32}` 大端记录，并在末尾携带一个打包盒非空标志（0／1），共 33 字节。写入只允许客机；完整解析后核对四个 ID 与已恢复的库存一致、空槽状态为 0，并通过[道具状态校验](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/active_data.h)后才提交。D 无限高 16 位为十种骰子的索引，低 16 位保留充能状态。原生描述符位于 `Player+0x1580`，槽间隔 `0x20`，状态在槽内 `+0x1c`；布局由 RVA `0x391519` 的原生写入指令校验。
 
 状态变化只清空该玩家对应槽的原生 HUD 图标键。PlayerHUD 数组起于 `Game+0x1da04`，共 8 项、每项 `0x6dc`，首字段为借用玩家指针；四个主动图标缓存起于 `+0x190`，间隔 `0x1c`。根、步长、清空操作和槽间隔受原生指令签名校验。重复状态不触及缓存；图片加载、释放和绘制继续由原生 HUD 负责，不借用队友图标，也不执行主动道具玩法。实现见 [active_items.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/active_items.h)。
+
+打包盒内容由 `Player+0x1d7c/+0x1d80` 的原生向量边界只读判空。客机标志按玩家地址和实体种子保存，在演出状态重置时清理；不写该向量或主动槽内部状态。`PlayerHUD::RenderActiveItem` 的 RVA `0x4458f2` 分支仅选择原生满盒／空盒裁剪路径，保存通用寄存器、标志和 XMM0–7，图片所有权不变。向量读取与分支受签名校验。实现见 [moving_box.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/moving_box.cpp)。
+
+死亡证明的原生拾取倒计时位于 `Game+0x68d6c`，返回房间和维度位于 `+0x18900/+0x18904`。RVA `0x2fb9bb` 是倒计时完成后的返回边界：主机视口已离开道具区而仍有在线玩家留在其中时，仅为这次原生转场借入该玩家的房间作用域。转场沿用 `thiscall(Game*, int room, int direction, int animation, Player*, int dimension)` 和原生来源字段；没有道具区玩家时只消费已完成的倒计时。单人、客机和视口仍在道具区时走原分支。适配保存通用寄存器、标志及 XMM0–7，错误不跨原生帧展开；不改回溯存档或对象所有权。实现见 [death_certificate_return.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/death_certificate_return.cpp)。
 
 底座拾取适配位于 [item_effects.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/item_effects.cpp)。`Player::QueueItem` RVA `0x35e050` 使用 `thiscall`，只在底座确认拾取的返回点 `0x2ebe11` 通知运行层，传递玩家栏位、实体种子、道具 ID、充能、Touched、VarData 与来源池。兼容组件接受时不再向原拾取者入队；其他调用点、饰品、开局和恢复沿用原生方法。通知期间不切换房间；结算在模拟作用域退出后、发布视图前完成。源对象和配置指针不进入 Lua，不由适配器释放。
 

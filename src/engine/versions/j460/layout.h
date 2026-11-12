@@ -60,6 +60,8 @@ inline constexpr std::ptrdiff_t sprite = -0xf4;
 inline constexpr std::ptrdiff_t color = -0x40;
 } // namespace spriteRenderFrame
 namespace game {
+inline constexpr unsigned deathCertificateRoom = 0x18900, deathCertificateDimension = 0x18904;
+inline constexpr unsigned deathCertificateReturnTimer = 0x68d6c;
 inline constexpr unsigned bloomTime = 0x26528;
 inline constexpr unsigned bloomDuration = 0x2652c;
 inline constexpr unsigned bloomIntensity = 0x26530;
@@ -270,6 +272,7 @@ inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, sta
 inline constexpr unsigned flipSprite = 0x5d0, flipVisible = 0x6d9;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned movingBoxBegin = 0x1d7c, movingBoxEnd = 0x1d80;
 inline constexpr unsigned history = 0x1dec, inventoryOrder = 0x1e00, inventorySlots = 16;
 inline constexpr unsigned extraSprite = 0x41c, auxiliarySprite = 0xee4, ghostSprite = 0xff8;
 inline constexpr unsigned costumes = 0x1220, costumeStride = 0x130, maximumCostumes = 4096;
