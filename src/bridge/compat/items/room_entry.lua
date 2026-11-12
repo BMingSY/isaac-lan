@@ -47,5 +47,19 @@ return function(game, getPlayer, roomTypes, collectibles, trinkets)
                 end
             end
         end
+        if player:HasCollectible(collectibles.COLLECTIBLE_XRAY_VISION) then
+            for slot = 0, 7 do
+                local door = room:GetDoor(slot)
+                if
+                    door
+                    and (
+                        door:IsRoomType(roomTypes.ROOM_SECRET)
+                        or door:IsRoomType(roomTypes.ROOM_SUPERSECRET)
+                    )
+                then
+                    door:TryBlowOpen(false, player)
+                end
+            end
+        end
     end
 end

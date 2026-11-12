@@ -567,8 +567,10 @@ add_library(
     src/engine/versions/j460/characters.cpp
     src/engine/versions/j460/pause_menu.cpp
     src/engine/versions/j460/item_presentation.cpp
+    src/engine/versions/j460/moving_box.cpp
     src/engine/versions/j460/pickup_preview.cpp
     src/engine/versions/j460/item_effects.cpp
+    src/engine/versions/j460/death_certificate_return.cpp
     src/engine/versions/j460/cursed_mist.cpp
     src/engine/versions/j460/generated_items.cpp
     src/engine/versions/j460/rewind.cpp
@@ -792,7 +794,7 @@ if(BUILD_TESTING)
     target_link_libraries(isaac_lan_item_effects_test PRIVATE minhook)
     if(MINGW)
         target_link_options(isaac_lan_item_effects_test PRIVATE -static-libgcc -static-libstdc++)
-        target_compile_options(isaac_lan_item_effects_test PRIVATE -Wall -Wextra -Werror)
+        target_compile_options(isaac_lan_item_effects_test PRIVATE -Wall -Wextra -Werror -msse2)
     endif()
     add_test(NAME native.item-effects COMMAND isaac_lan_item_effects_test)
     set_tests_properties(native.item-effects PROPERTIES TIMEOUT 30 LABELS "offline;native")
@@ -865,8 +867,10 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME native.pause-menu COMMAND isaac_lan_pause_menu_test)
     set_tests_properties(native.pause-menu PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_active_items_test tests/active_items_test.cpp)
+    add_executable(isaac_lan_active_items_test tests/active_items_test.cpp
+                                               src/engine/versions/j460/moving_box.cpp)
     target_include_directories(isaac_lan_active_items_test PRIVATE src)
+    target_link_libraries(isaac_lan_active_items_test PRIVATE minhook)
     if(MINGW)
         target_link_options(isaac_lan_active_items_test PRIVATE -static-libgcc -static-libstdc++)
         target_compile_options(isaac_lan_active_items_test PRIVATE -Wall -Wextra -Werror)

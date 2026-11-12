@@ -261,6 +261,8 @@ def main():
                             and "PARTY_COMPAT " in line
                             or name == "death-certificate"
                             and "DEATH_CERTIFICATE " in line
+                            or name == "feedback-november"
+                            and "FEEDBACK_NOVEMBER " in line
                             or name == "item-generation"
                             and "ITEM_GENERATION " in line
                             or name == "deep-pockets"

@@ -27,7 +27,13 @@ return function(wire)
             end
             if native.combat_identity then
                 local identifier = assert(native.combat_identity(e:GetSprite()))
-                e:GetData().__isaac_lan_entity = identifier
+                -- Removed sources can remain in native parent/spawner links
+                -- after their Lua data has been released. Identity belongs to
+                -- the native registry; this table is only a diagnostic mirror.
+                local data = e:GetData()
+                if data then
+                    data.__isaac_lan_entity = identifier
+                end
                 return identifier
             end
             local d = e:GetData()

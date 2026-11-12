@@ -467,4 +467,32 @@ packedComponent.apply(beam, packedState)
 assert(table.concat(applied, ",") == "outer,packed", "Packed plan was not restored")
 packedState[26] = false
 assert(not pcall(packedComponent.apply, beam, packedState), "Missing packed fields accepted")
+-- Native identities remain valid when an entity or a linked source no longer
+-- exposes its Lua data table. The optional diagnostic mirror must not abort
+-- capture or break the wire references during a room handoff.
+local ids, nextNativeID = {}, 100
+packedNative.combat_identity = function(sprite)
+    if not ids[sprite] then
+        nextNativeID = nextNativeID + 1
+        ids[sprite] = nextNativeID
+    end
+    return ids[sprite]
+end
+local retiredSource = entity(enums.EntityType.ENTITY_TEAR, 0)
+retiredSource.data = nil
+warning.data = nil
+warning.Parent, warning.SpawnerEntity = retiredSource, retiredSource
+local withoutData = packedComponent.capture(warning, false)
+assert(withoutData[1] == ids[warning.sprite] and withoutData[11] == ids[retiredSource.sprite])
+assert(withoutData[11] == withoutData[12], "Missing Lua data changed a shared source identity")
+for _ = 1, 3 do
+    local repeated = codec.decode(codec.encode(packedComponent.capture(warning, false)))
+    assert(repeated[1] == withoutData[1] and repeated[11] == withoutData[11])
+end
+warning.data = {}
+packedComponent.capture(warning, false)
+assert(warning.data.__isaac_lan_entity == withoutData[1], "Diagnostic mirror changed native ID")
+warning.Parent, warning.SpawnerEntity = nil, nil
+packedComponent.reset()
+assert(packedComponent.capture(warning, false)[1] == withoutData[1])
 print("PASS portable entity fields, native laser state and replica lifecycle flag ownership")

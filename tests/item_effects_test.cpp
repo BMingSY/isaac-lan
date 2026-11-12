@@ -1,6 +1,8 @@
 // Private x86 image only: no game process, files, input or hooks are installed.
 #include "test_support.h"
 #include "engine/versions/j460/item_effects.cpp"
+#include "engine/versions/j460/death_certificate_return.cpp"
+#include "engine/versions/j460/moving_box.cpp"
 #include "engine/versions/j460/cursed_mist.cpp"
 #include "engine/versions/j460/pickup_preview.cpp"
 #include "engine/versions/j460/session_backend.cpp"
@@ -28,6 +30,10 @@ bool takeCollectiblePickup(int owner, unsigned seed, int id, int charge, bool to
 } // namespace isaac::runtime
 
 namespace isaac::rooms {
+std::vector<SavedLocation> certificateLocations;
+std::vector<SavedLocation> captureLocations() {
+    return certificateLocations;
+}
 bool previewReady = true, localPreviewRoster = false;
 bool revivalScoped = false, scopeAvailable = true;
 unsigned revivalSlot = 0;
@@ -59,6 +65,27 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     localPreviewRoster = false;
 }
 } // namespace isaac::rooms
+
+extern "C" {
+unsigned certificateBoundaryECX = 0, certificateBoundaryEBX = 0;
+float certificateBoundarySSE = 0;
+__attribute__((naked)) void certificateContinued() {
+    __asm__ __volatile__("movl %ecx, _certificateBoundaryECX\n\t"
+                         "movl %ebx, _certificateBoundaryEBX\n\t"
+                         "movss %xmm7, _certificateBoundarySSE\n\tmovl $17, %eax\n\tret");
+}
+__attribute__((naked)) void certificateCompleted() {
+    __asm__ __volatile__("movl %ecx, _certificateBoundaryECX\n\t"
+                         "movl %ebx, _certificateBoundaryEBX\n\t"
+                         "movss %xmm7, _certificateBoundarySSE\n\tmovl $23, %eax\n\tret");
+}
+__attribute__((naked)) int invokeCertificateBoundary() {
+    __asm__ __volatile__("pushl %ebx\n\tmovl $0x12345678, %ebx\n\t"
+                         "movl $0x87654321, %ecx\n\tmovl $0x3f400000, %eax\n\t"
+                         "movd %eax, %xmm7\n\tcall _isaac_lan_certificate_thunk\n\t"
+                         "popl %ebx\n\tret");
+}
+}
 
 namespace {
 namespace items = isaac::engine::items;
@@ -236,6 +263,51 @@ void pendingRewardPersistence() {
                 !session::readProgress().achievements[2],
             "Pending reward was lost or host achievements leaked");
     session::image = 0;
+}
+unsigned certificateReturns = 0;
+void __attribute__((thiscall)) certificateReturnFixture(void*, int room, int direction,
+                                                        int animation, void* player,
+                                                        int dimension) {
+    require(room == 84 && direction == -1 && animation == 20 && !player && dimension == 0 &&
+                isaac::rooms::revivalScoped && isaac::rooms::revivalSlot == 1,
+            "Delayed return lost its native ABI or annex occupant");
+    ++certificateReturns;
+    __asm__ __volatile__("pxor %%xmm7, %%xmm7" ::: "xmm7");
+}
+void certificateReturn() {
+    Fixture f;
+    std::vector<unsigned char> game(native::layout::game::deathCertificateReturnTimer +
+                                    sizeof(int));
+    native::image = reinterpret_cast<Address>(f.image);
+    *reinterpret_cast<Address*>(f.image + native::globals::game) =
+        reinterpret_cast<Address>(game.data());
+    auto field = [&](unsigned offset) -> int& {
+        return *reinterpret_cast<int*>(game.data() + offset);
+    };
+    field(native::layout::game::deathCertificateRoom) = 84;
+    f.publish(native::entry::engineRoomsTransition, certificateReturnFixture);
+    FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size);
+    native::isaac_lan_certificate_original = reinterpret_cast<void*>(certificateContinued);
+    native::isaac_lan_certificate_done = reinterpret_cast<void*>(certificateCompleted);
+    isaac::rooms::certificateLocations = {{0, 84, 160, 200}, {2, 103, 200, 280}};
+    certificateReturns = 0;
+    for (unsigned i = 0; i < 3; ++i) {
+        field(native::layout::game::deathCertificateReturnTimer) = 1;
+        require(invokeCertificateBoundary() == 23 && certificateReturns == i + 1 &&
+                    field(native::layout::game::deathCertificateReturnTimer) == 0,
+                "Split-dimension pickup did not finish its native return");
+    }
+    field(native::layout::game::dimension) = 2;
+    require(invokeCertificateBoundary() == 17 && certificateReturns == 3,
+            "Ordinary annex return did not keep the native path");
+    field(native::layout::game::dimension) = 0;
+    isaac::rooms::certificateLocations.clear();
+    require(invokeCertificateBoundary() == 23 && certificateReturns == 3,
+            "Empty annex retained a stale return");
+    require(certificateBoundaryECX == 0x87654321 && certificateBoundaryEBX == 0x12345678 &&
+                certificateBoundarySSE == 0.75f,
+            "Delayed-return adapter corrupted general/SSE registers");
+    native::image = 0;
 }
 void startingRewards() {
     Fixture f;
@@ -622,6 +694,7 @@ void cursedMistQueryABI() {
 int main(int argc, char** argv) {
     return runTests(argc, argv,
                     {{"collectible-pickup", collectiblePickup},
+                     {"certificate-return", certificateReturn},
                      {"active-charge", activeChargeCapabilities},
                      {"starting-rewards", startingRewards},
                      {"beam-departure", beamDeparture},

@@ -1,5 +1,6 @@
 #include "engine/lua_api.h"
 #include "engine/item_presentation.h"
+#include "engine/moving_box.h"
 #include "engine/pickup_preview.h"
 #include "engine/rooms.h"
 #include "runtime/session.h"
@@ -813,6 +814,8 @@ int status(lua_State* L) {
 } // namespace
 bool install(Address base) {
     image = base;
+    if (!moving_box::install(base))
+        return false;
     auto hook = [&](unsigned offset, void* callback, void** original) {
         const auto target = reinterpret_cast<void*>(image + offset);
         return MH_CreateHook(target, callback, original) == MH_OK && MH_EnableHook(target) == MH_OK;
@@ -942,6 +945,7 @@ void advance() {
             rooms::withPlayer(slot, [&] { originalUpdate(owned[slot]->storage.data(), false); });
 }
 void reset(bool preservePixels) {
+    moving_box::reset();
     ++screenGeneration;
     for (auto& screen : screens) {
         const auto previous = screen;
