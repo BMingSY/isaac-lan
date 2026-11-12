@@ -27,9 +27,9 @@ return function(wire)
             end
             if native.combat_identity then
                 local identifier = assert(native.combat_identity(e:GetSprite()))
-                -- Removed sources can remain in native parent/spawner links
-                -- after their Lua data has been released. Identity belongs to
-                -- the native registry; this table is only a diagnostic mirror.
+                -- Synchronization identity belongs to the native registry.
+                -- The Lua table is only a diagnostic mirror; an absent table
+                -- must not replace or discard a successfully assigned ID.
                 local data = e:GetData()
                 if data then
                     data.__isaac_lan_entity = identifier

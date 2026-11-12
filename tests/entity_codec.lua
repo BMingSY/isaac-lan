@@ -467,9 +467,9 @@ packedComponent.apply(beam, packedState)
 assert(table.concat(applied, ",") == "outer,packed", "Packed plan was not restored")
 packedState[26] = false
 assert(not pcall(packedComponent.apply, beam, packedState), "Missing packed fields accepted")
--- Native identities remain valid when an entity or a linked source no longer
--- exposes its Lua data table. The optional diagnostic mirror must not abort
--- capture or break the wire references during a room handoff.
+-- Inject the nil GetData result reported by the host log. This exercises the
+-- optional diagnostic write, not the native lifecycle that produced the nil.
+-- Synchronization must preserve the ID and links supplied by the native registry.
 local ids, nextNativeID = {}, 100
 packedNative.combat_identity = function(sprite)
     if not ids[sprite] then
@@ -478,12 +478,12 @@ packedNative.combat_identity = function(sprite)
     end
     return ids[sprite]
 end
-local retiredSource = entity(enums.EntityType.ENTITY_TEAR, 0)
-retiredSource.data = nil
+local sourceWithoutData = entity(enums.EntityType.ENTITY_TEAR, 0)
+sourceWithoutData.data = nil
 warning.data = nil
-warning.Parent, warning.SpawnerEntity = retiredSource, retiredSource
+warning.Parent, warning.SpawnerEntity = sourceWithoutData, sourceWithoutData
 local withoutData = packedComponent.capture(warning, false)
-assert(withoutData[1] == ids[warning.sprite] and withoutData[11] == ids[retiredSource.sprite])
+assert(withoutData[1] == ids[warning.sprite] and withoutData[11] == ids[sourceWithoutData.sprite])
 assert(withoutData[11] == withoutData[12], "Missing Lua data changed a shared source identity")
 for _ = 1, 3 do
     local repeated = codec.decode(codec.encode(packedComponent.capture(warning, false)))
@@ -492,6 +492,20 @@ end
 warning.data = {}
 packedComponent.capture(warning, false)
 assert(warning.data.__isaac_lan_entity == withoutData[1], "Diagnostic mirror changed native ID")
+sourceWithoutData.Exists = function()
+    return false
+end
+local withoutSource = packedComponent.capture(warning, false)
+assert(withoutSource[11] == 0 and withoutSource[12] == 0, "Nonexistent source retained a link")
+local nativeIdentity = packedNative.combat_identity
+packedNative.combat_identity = function()
+    return false
+end
+assert(
+    not pcall(packedComponent.capture, warning, false),
+    "Native identity failure was hidden by the diagnostic guard"
+)
+packedNative.combat_identity = nativeIdentity
 warning.Parent, warning.SpawnerEntity = nil, nil
 packedComponent.reset()
 assert(packedComponent.capture(warning, false)[1] == withoutData[1])
