@@ -711,6 +711,10 @@ void inputBackpressure() {
     peer.submitInput({4, {}, destination});
     Reader reader(peer.unsentTail(Message::input).subspan(1));
     const auto last = readInput(reader);
+    const auto repeated = reader.u8();
+    require(repeated <= maxRepeatedInputEvents, "Held sample exceeded event bound");
+    for (unsigned i = 0; i < repeated; ++i)
+        readInputEvent(reader);
     reader.finish();
     require(last.sequence == 4 && last.room == destination && last.input.triggered == 0,
             "Old-room button edges crossed the destination boundary");
@@ -3079,13 +3083,103 @@ void worldDeltas() {
     });
     const auto resources = g.peers[0]->resources();
     require(resources.deltaSnapshots > 180 &&
-                resources.wireWorldBytes < resources.fullWorldBytes / 2,
-            "Confirmed sparse snapshots did not reduce actual compressed traffic");
+                resources.comparedWorldBytes < resources.fullWorldBytes / 2,
+            "Sampled sparse snapshots did not reduce compressed payload");
     std::printf("DELTA snapshots=%llu deltas=%llu full_wire=%llu actual_wire=%llu\n",
                 static_cast<unsigned long long>(resources.worldSnapshots),
                 static_cast<unsigned long long>(resources.deltaSnapshots),
                 static_cast<unsigned long long>(resources.fullWorldBytes),
                 static_cast<unsigned long long>(resources.wireWorldBytes));
+}
+void sampledCompression() {
+    WorldTransfer sender, receiver;
+    StateCompression codec;
+    std::mt19937 random(107);
+    std::vector<std::uint8_t> bytes(100000);
+    for (auto& byte : bytes)
+        byte = random();
+    unsigned comparisons = 0;
+    for (unsigned tick = 0; tick < 65; ++tick) {
+        bytes[tick] ^= 0x42;
+        WorldState state;
+        state.tick = tick;
+        state.epoch = 1;
+        state.connected = 3;
+        state.bytes = bytes;
+        require(sender.canCapture(40), "Acknowledged sender stopped requesting fresh state");
+        sender.publish(std::move(state));
+        require(!sender.canCapture(40), "Pending state requested redundant capture");
+        const auto packet = sender.next(codec, 40);
+        require(packet.has_value(), "Healthy sender stopped advancing");
+        if (!tick)
+            require(!sender.canCapture(40) && sender.canCapture(40, true),
+                    "An oversized in-flight view blocked its permitted fresh replacement");
+        comparisons += sender.trace.full != 0;
+        Reader reader(std::span(packet->bytes).subspan(1));
+        const auto restored = receiver.receive(reader, codec);
+        require(restored && restored->bytes == bytes, "Sampled compression changed state bytes");
+        require(sender.acknowledge(1, tick), "Decoded sampled state could not become a baseline");
+    }
+    require(comparisons >= 3 && comparisons <= 4 && sender.totals.deltas >= 60,
+            "Healthy prefix stream still compressed both alternatives every frame");
+    require(sender.totals.compared < sender.totals.full / 2,
+            "Sampled comparison accounting included unsampled frames");
+    for (auto& byte : bytes)
+        byte = random();
+    WorldState changed;
+    changed.tick = 65;
+    changed.epoch = 1;
+    changed.connected = 3;
+    changed.bytes = bytes;
+    sender.publish(changed);
+    const auto fallback = sender.next(codec, 40);
+    require(fallback && sender.trace.full && !sender.trace.delta,
+            "Poor prefix compression failed to compare an independent frame immediately");
+    sender.resetSender();
+    require(sender.canCapture(40), "Floor reset retained old capture backpressure");
+    sender.publish(changed);
+    require(sender.next(codec, 40).has_value() && !sender.trace.delta,
+            "Reset sender referenced an expired baseline");
+}
+void captureDemand() {
+    Group group(2);
+    group.ready();
+    group.step(0);
+    until([&] {
+        group.poll();
+        return group.peers[0]->captureRequested(1);
+    });
+    group.publish(0);
+    until([&] {
+        group.poll();
+        return group.peers[0]->resources().worldSnapshots == 1;
+    });
+    require(!group.peers[0]->captureRequested(1),
+            "Bootstrap without receipt kept requesting capture");
+    until([&] {
+        group.poll();
+        if (auto state = group.peers[1]->takeState()) {
+            group.peers[1]->applied(state->tick);
+            return true;
+        }
+        return false;
+    });
+    until([&] {
+        group.poll();
+        return group.peers[0]->captureRequested(1);
+    });
+    require(!group.peers[0]->captureRequested(0) && !group.peers[1]->captureRequested(1),
+            "Non-authoritative slot requested capture");
+    require(group.peers[0]->beginStage({2, 2, 0, 0, false, {}, {}}),
+            "Capture demand blocked floor control");
+    until([&] {
+        group.poll();
+        return group.peers[1]->takeStage().has_value();
+    });
+    until([&] {
+        group.poll();
+        return group.peers[0]->captureRequested(1);
+    });
 }
 void deliveryBackpressure() {
     Group group(3);
@@ -3267,6 +3361,8 @@ int main(int argc, char** argv) {
         argc, argv,
         {{"codec", codec},
          {"world-deltas", worldDeltas},
+         {"sampled-compression", sampledCompression},
+         {"capture-demand", captureDemand},
          {"wire-compression", wireCompression},
          {"async-network", asyncNetwork},
          {"latency-hud", latencyHud},

@@ -28,7 +28,8 @@
 | `world_delivery_window`／`world_oldest_unapplied_ms` | 有在途视图的连接窗口总和／最旧未确认视图的年龄 |
 | `input_coalesced` | 当前连接合并的未发送输入数量；不包含已交给传输协议的输入 |
 | `world_snapshots_total`／`world_delta_snapshots_total` | 当前会话累计视图数／增量数 |
-| `world_raw_bytes_total`／`world_wire_bytes_total`／`world_full_wire_bytes_total` | 原始字节／已发布压缩载荷／同批完整压缩对照量 |
+| `world_raw_bytes_total`／`world_wire_bytes_total` | 原始字节／已发布压缩载荷（含独立分片头和校验片，不含全部 UDP／ENet 头或可靠重传） |
+| `world_full_wire_bytes_total`／`world_compared_wire_bytes_total` | 抽样帧的完整压缩对照量／同批选中载荷；只以这两个计数计算抽样压缩节省率，不与全部流量相除 |
 
 载荷计数包含实际发送的低频依赖以及大视图校验片和片头；不含 UDP／ENet 封装、重传、frp 或可靠存档流量；实际链路用量以中继记录为准。`compress` 已包含 `delta.encode`，二者不能相加。DEBUG 的 `state_transfer` 提供 `raw`、`wire`、`full_wire`、`delta`、`base`。
 
@@ -63,7 +64,7 @@ python tools/benchmark_state_codec.py --runner build-codec/isaac_lan_state_codec
   --iterations 100 --output "$ISAAC_CODEC_REPORT"
 ```
 
-默认输入是模拟库存和实体字段的合成状态，先核对字节一致，再测编码、解码和同房三客机片段复用。`transfer-one-peer`、`transfer-three-peers`、`transfer-split-rooms` 还执行生产分层投影及实时／依赖双路编码，分别模拟单客机、三客机同房和分房；每次测量创建独立代次的片段缓存，`bytes` 为该操作全部接收者的载荷总量。这些操作不包含游戏对象采集，不能据此推定游戏帧率。`--snapshot` 可输入一份已还原的完整二进制视图，分层操作仍使用模拟的接收者与房间位置。输出保存逐项 CPU 时间、样本数、均值／P95、速度比、执行器哈希和 JSON／JUnit；缺少一端测量、输入规模不一致或执行失败不能计为完成。报告通过表示对照执行完整，不表示实机性能已通过。
+默认输入是模拟库存和实体字段的合成状态，包含展开数组与 `packed-*` 原生数值块形状；先核对字节一致，再测编码、普通解码、只读视图解码（`decode-view`）和同房三客机片段复用。`transfer-one-peer`、`transfer-three-peers`、`transfer-split-rooms` 还执行生产分层投影及实时／依赖双路编码，分别模拟单客机、三客机同房和分房；每次测量创建独立代次的片段缓存，`bytes` 为该操作全部接收者的载荷总量。这些操作不包含游戏对象采集，不能据此推定游戏帧率。`--snapshot` 可输入一份已还原的完整二进制视图，分层操作仍使用模拟的接收者与房间位置。输出保存逐项 CPU 时间、样本数、均值／P95、速度比、执行器哈希和 JSON／JUnit；缺少一端测量、输入规模不一致或执行失败不能计为完成。报告通过表示对照执行完整，不表示实机性能已通过。
 
 [`run_shared_view_encoding.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_shared_view_encoding.py) 使用 `--host`、`--client` 和两个 `--extra-client` 指定四个隔离实例，连续检查三客机同房、分房、重聚、恶魔交易价格与换层清理。`--build` 选择候选构建，`--output` 保存证据；`--baseline` 仅把普通房价格扫描断言切换为旧行为。每个房间默认准备 200 个静止泪弹（分房共 600 个，避免原生实体池回收使负载变化），预热后各测量 15 秒，`fixture.capture.same/split` 记录每个接收者的生产采集与双路编码总耗时，`fixture.encode.same/split` 记录其中每次编码调用耗时。字节对照和场景准备不计入这些操作，结果不能直接换算帧率。工具要求没有其他运行中的游戏，并在退出后恢复隔离资料、核对哈希。
 

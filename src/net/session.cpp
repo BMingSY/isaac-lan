@@ -98,7 +98,7 @@ struct Session::Impl {
     std::size_t snapshotSize = 0;
     std::uint32_t takenWorldEpoch = 0;
     std::uint64_t worldSnapshots = 0, deltaSnapshots = 0, rawWorldBytes = 0, wireWorldBytes = 0,
-                  fullWorldBytes = 0;
+                  fullWorldBytes = 0, comparedWorldBytes = 0;
     std::uint64_t snapshotChecksum = 0;
     Clock::time_point progress = Clock::now(), checkpointAt = Clock::now();
 
@@ -158,6 +158,7 @@ struct Session::Impl {
             rawWorldBytes += totals.raw.load();
             wireWorldBytes += totals.wire.load();
             fullWorldBytes += totals.full.load();
+            comparedWorldBytes += totals.compared.load();
         }
         peer.reset();
     }
@@ -193,8 +194,7 @@ struct Session::Impl {
             if (p) {
                 p->ready = p->hasInput = false;
                 p->inputSequence = 0;
-                p->edgeSequence.reset();
-                p->inputEdges.clear();
+                p->inputEvents = {};
                 p->acknowledged.reset();
                 p->resetWorldCache(integrationEpoch);
                 p->sendingStage.reset();
@@ -643,8 +643,7 @@ struct Session::Impl {
                 p.inputAt = Clock::now();
                 p.hasInput = false;
                 p.inputSequence = 0;
-                p.edgeSequence.reset();
-                p.inputEdges.clear();
+                p.inputEvents = {};
                 latest[slot] = {};
                 inputRooms[slot].reset();
                 // Readiness starts a new input stream after loading/rejoin.
@@ -668,21 +667,31 @@ struct Session::Impl {
             if ((type == Message::input || type == Message::inputEdges) &&
                 (state == Phase::running || state == Phase::finishing ||
                  state == Phase::returning)) {
+                const bool accepting = p.ready && !p.waiting && state == Phase::running;
+                if (type == Message::inputEdges) {
+                    const auto event = readInputEvent(r);
+                    r.finish();
+                    if (accepting)
+                        p.inputEvents.receive(event);
+                    return;
+                }
                 const auto sample = readInput(r);
+                const auto count = r.u8();
+                if (count > maxRepeatedInputEvents)
+                    throw std::runtime_error("Too many repeated input events");
+                for (unsigned i = 0; i < count; ++i) {
+                    const auto event = readInputEvent(r);
+                    if (event.sample.sequence > sample.sequence)
+                        throw std::runtime_error("Input event precedes its sample");
+                    if (accepting)
+                        p.inputEvents.receive(event);
+                }
+                r.finish();
+                if (!accepting)
+                    return;
                 const auto sequence = sample.sequence;
                 const auto& value = sample.input;
                 const auto& room = sample.room;
-                if (!p.ready || p.waiting || state != Phase::running)
-                    return;
-                if (type == Message::inputEdges) {
-                    if (p.edgeSequence && sequence <= *p.edgeSequence)
-                        return;
-                    p.edgeSequence = sequence;
-                    if (p.inputEdges.size() >= 128)
-                        throw std::runtime_error("Input event queue limit exceeded");
-                    p.inputEdges.push_back(sample);
-                    return;
-                }
                 if (p.hasInput && sequence <= p.inputSequence)
                     return;
                 if (value.triggered)
@@ -1834,6 +1843,14 @@ bool Session::publish(unsigned slot, WorldState state) {
         p->pending = std::move(state);
     return true;
 }
+bool Session::captureRequested(unsigned slot) const {
+    if (!impl->hosting || impl->state != Phase::running || impl->ending || impl->cinematicEpoch ||
+        !slot || slot >= impl->playerCount)
+        return false;
+    const auto& peer = impl->peers[slot];
+    return peer && peer->ready && !peer->pending && peer->pipe &&
+           peer->pipe->captureRequested.load(std::memory_order_acquire);
+}
 std::optional<WorldState> Session::takeState() {
     if (impl->hosting || !impl->localReady || !impl->receivedState)
         return {};
@@ -1925,6 +1942,7 @@ TransportResources Session::resources() const {
     out.rawWorldBytes = impl->rawWorldBytes;
     out.wireWorldBytes = impl->wireWorldBytes;
     out.fullWorldBytes = impl->fullWorldBytes;
+    out.comparedWorldBytes = impl->comparedWorldBytes;
     out.connections = impl->listener != nullptr;
     const auto observe = [&out](const auto& p) {
         if (!p)
@@ -1947,6 +1965,7 @@ TransportResources Session::resources() const {
             out.rawWorldBytes += world.raw.load();
             out.wireWorldBytes += world.wire.load();
             out.fullWorldBytes += world.full.load();
+            out.comparedWorldBytes += world.compared.load();
         }
         if (p->pending)
             out.worldBytes += p->pending->bytes.capacity();

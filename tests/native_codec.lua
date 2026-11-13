@@ -6,6 +6,10 @@ local function compare(value)
     local expected = reference.encode(value)
     assert(codec.encode(value) == expected, "Native encoding differs")
     assert(reference.encode(codec.decode(expected)) == expected, "Native decoding differs")
+    assert(
+        reference.encode(native.state_decode_view(expected)) == expected,
+        "View decoding differs"
+    )
     assert(codec.encode(reference.decode(expected)) == expected, "Mixed codecs differ")
     return expected
 end
@@ -27,6 +31,21 @@ compare({ math.mininteger, math.maxinteger, 0.0, -0.0, 1.0, -1.0, "\0\255", {} }
 assert(math.type(codec.decode(codec.encode(1.0))) == "float")
 assert(math.type(codec.decode(codec.encode(1))) == "integer")
 assert(1 / codec.decode(codec.encode(-0.0)) == -math.huge)
+local viewDecode = assert(native.state_decode_view)
+local repeated = codec.encode({ { 1.0, -0.0 }, { 1.0, -0.0 }, { 1, 0 }, { { 1.0, -0.0 } } })
+local view = viewDecode(repeated)
+assert(view[1] == view[2] and view[1] == view[4][1])
+assert(view[1] ~= view[3] and math.type(view[3][1]) == "integer")
+assert(reference.encode(view) == repeated)
+assert(viewDecode(repeated)[1] ~= view[1], "View leaves escaped their decode lifetime")
+local ordinary = codec.decode(repeated)
+assert(ordinary[1] ~= ordinary[2], "Ordinary decoding started aliasing mutable tables")
+-- Sharing must account for every logical node/depth, including cache hits.
+local leaf = codec.encode({ 0.0, 1.0, true })
+local many = viewDecode("\6" .. string.pack(">I2", 60000) .. leaf:rep(60000))
+assert(many[1] == many[60000])
+assert(not pcall(viewDecode, "\6" .. string.pack(">I2", 65535) .. leaf:rep(65535)))
+assert(not pcall(viewDecode, "\6\0\2" .. leaf .. ("\6\0\1"):rep(10) .. leaf))
 
 -- Deterministic randomized nested values, including all finite float32 bit patterns.
 math.randomseed(817243)
@@ -60,6 +79,7 @@ end
 local payload = compare({ { "sprite", { 1, -0.5, 10000000000 } }, true, "hello\0world" })
 for length = 0, #payload - 1 do
     assert(not pcall(codec.decode, payload:sub(1, length)), "Truncated payload accepted")
+    assert(not pcall(viewDecode, payload:sub(1, length)))
 end
 for _, invalid in ipairs({
     "\255",
@@ -72,6 +92,7 @@ for _, invalid in ipairs({
     string.rep("\0", 2 * 1024 * 1024 + 1),
 }) do
     assert(not pcall(codec.decode, invalid))
+    assert(not pcall(viewDecode, invalid))
 end
 local cycle = {}
 cycle[1] = cycle
@@ -104,6 +125,8 @@ if native.with_allocation_limit then
         failures = failures + (ok and 0 or 1)
         local decoded = native.with_allocation_limit(limit, codec.decode, encoded)
         failures = failures + (decoded and 0 or 1)
+        native.with_allocation_limit(limit, viewDecode, encoded)
+        assert(codec.encode(viewDecode(repeated)) == repeated)
         compare({ "after allocation failure", limit })
         collectgarbage("collect")
     end

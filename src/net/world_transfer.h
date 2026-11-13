@@ -26,7 +26,7 @@ class WorldTransfer {
         Clock::time_point transmitted = started;
     };
     struct Totals {
-        std::uint64_t snapshots = 0, deltas = 0, raw = 0, wire = 0, full = 0;
+        std::uint64_t snapshots = 0, deltas = 0, raw = 0, wire = 0, full = 0, compared = 0;
     } totals;
     double compressMs = 0, prefixMs = 0, expandMs = 0;
     struct Trace {
@@ -52,6 +52,7 @@ class WorldTransfer {
     WorldPacing pacing;
     int minimumLatency = 0;
     int networkLatency = -1;
+    unsigned sinceComparison = 0;
 
   public:
     void resetSender() {
@@ -67,6 +68,7 @@ class WorldTransfer {
         sending.reset();
         sentAt = {};
         pacing = {};
+        sinceComparison = 0;
     }
     void resetReceiver() {
         decoded.clear();
@@ -159,6 +161,18 @@ class WorldTransfer {
                            inFlightBytes() < maxInFlightBytes &&
                            cachedBytes() + pending->bytes.capacity() <= maxCachedBytes);
     }
+    bool canCapture(int latency, bool replacing = false) const {
+        if (pending || sending)
+            return false;
+        // A replacement retires the unfinished view before sending. Its byte
+        // budget must not prevent the producer from supplying that replacement.
+        if (replacing)
+            return true;
+        if (!flight.empty() && Clock::now() - flight.front().started >= lostStateAge)
+            return true;
+        return flight.size() < window(latency) && inFlightBytes() < maxInFlightBytes &&
+               cachedBytes() < maxCachedBytes;
+    }
     bool acknowledge(std::uint32_t epoch, std::uint32_t tick) {
         if (epoch < sendEpoch)
             return false;
@@ -238,8 +252,8 @@ class WorldTransfer {
                 sending->stable.clear();
             }
             auto raw = std::make_shared<const std::vector<std::uint8_t>>(std::move(sending->bytes));
-            auto full = codec.compress(*raw);
-            const auto fullSize = full.size();
+            std::vector<std::uint8_t> full;
+            std::size_t fullSize = 0;
             sendingDelta = false;
             sendingBase = 0;
             prefixMs = 0;
@@ -250,17 +264,36 @@ class WorldTransfer {
                 auto delta = codec.compress(*raw, *baseline->bytes);
                 prefixMs =
                     std::chrono::duration<double, std::milli>(Clock::now() - prefixBegan).count();
-                if (delta.size() < full.size()) {
-                    full = std::move(delta);
-                    sendingDelta = true;
-                    sendingBase = baseline->tick;
+                full = std::move(delta);
+                sendingDelta = true;
+                sendingBase = baseline->tick;
+            }
+            // Usually the acknowledged prefix wins. Sample the alternative
+            // periodically, and immediately after reset or poor compression.
+            constexpr unsigned comparisonInterval = 30;
+            constexpr std::size_t poorPrefixNumerator = 3, poorPrefixDenominator = 4;
+            const bool compare =
+                !sendingDelta || !sinceComparison || sinceComparison >= comparisonInterval ||
+                full.size() >= raw->size() * poorPrefixNumerator / poorPrefixDenominator;
+            if (compare) {
+                auto independent = codec.compress(*raw);
+                fullSize = independent.size();
+                if (!sendingDelta || independent.size() <= full.size()) {
+                    full = std::move(independent);
+                    sendingDelta = false;
+                    sendingBase = 0;
                 }
+                sinceComparison = 1;
+            } else {
+                ++sinceComparison;
             }
             if (!sendingDelta)
                 fullAt = began;
             totals.raw += raw->size();
             trace = {sending->tick, sendingBase, raw->size(), full.size(), fullSize, sendingDelta};
             totals.full += fullSize;
+            if (fullSize)
+                totals.compared += full.size();
             totals.wire += full.size();
             ++totals.snapshots;
             totals.deltas += sendingDelta;

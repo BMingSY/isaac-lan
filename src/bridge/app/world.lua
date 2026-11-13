@@ -30,6 +30,8 @@ local performance = modules["diagnostics/performance"]
     }
 local encode = performance.wrap("encode", native.state_encode or codec.encode)
 local decode = performance.wrap("decode", native.state_decode or codec.decode)
+local decodeView =
+    performance.wrap("decode", native.state_decode_view or native.state_decode or codec.decode)
 local reconcileEntities =
     performance.wrap("apply.entities", component("sync/entities")(EntityType, PickupVariant))
 local reconcileGrids = performance.wrap("apply.grids", component("sync/grids"))
@@ -322,7 +324,7 @@ local replica = component("sync/replica")({
     end,
     native = native,
     encode = encode,
-    decode = decode,
+    decode = decodeView,
     schema = worldSchema,
     layers = layers,
     floor = floor,

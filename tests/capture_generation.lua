@@ -365,3 +365,27 @@ revision = 9
 transfer.reset()
 assert(transferView(1, 22).actors[1][fields.actor.inventory][fields.inventory.items][1][2] == 9)
 print("PASS layered transfer bytes, peer events, same/split rooms, disconnect, epoch and reset")
+
+-- Stable map records retain their encoded fragments across ticks while every
+-- descriptor and native layout remains live. New epochs and resets drop them.
+local records = {}
+deps.projectMap = function(map)
+    records[#records + 1] = map[1]
+    return map
+end
+local mapCapture = factory(deps)
+mapCapture.capture(1, 40)
+mapCapture.capture(1, 41)
+assert(records[1] == records[2], "Unchanged map record lost value reuse")
+local originalMap = codec.encode(records[1])
+descriptor.DisplayFlags = descriptor.DisplayFlags + 1
+mapCapture.capture(1, 42)
+assert(records[3] ~= records[2], "Live map mutation reused an obsolete record")
+assert(codec.encode(records[1]) == originalMap, "Map reuse mutated a prior snapshot")
+epoch = epoch + 1
+mapCapture.capture(1, 42)
+assert(records[4] ~= records[3], "New floor retained prior map identities")
+mapCapture.reset()
+mapCapture.capture(1, 42)
+assert(records[5] ~= records[4], "New session retained prior map identities")
+print("PASS live map reads and immutable record/fragment reuse")

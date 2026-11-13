@@ -95,13 +95,32 @@ return function(fields)
                 end
             end
         end
-        local function inventory(p, catalog)
-            local items = {}
+        local function inventory(p, catalog, previous)
+            local before = previous and previous[Inventory.items]
+            local items, used = nil, 0
+            local function copyPrefix(count)
+                local result = {}
+                for index = 1, count do
+                    result[index] = before[index]
+                end
+                return result
+            end
             local ownedCount = reader(p)
             local function ownedItem(item)
                 local owned = ownedCount(item)
                 if owned > 0 then
-                    items[#items + 1] = { item, owned } -- Item.id, Item.count
+                    used = used + 1
+                    local prior = before and before[used]
+                    if
+                        not items
+                        and prior
+                        and prior[Item.id] == item
+                        and prior[Item.count] == owned
+                    then
+                        return
+                    end
+                    items = items or copyPrefix(used - 1)
+                    items[used] = { item, owned } -- Item.id, Item.count
                 end
             end
             if catalog then
@@ -114,6 +133,9 @@ return function(fields)
             else
                 eachCollectible(env.config(), ownedItem)
             end
+            -- Counts and definitions are still read live, including Mod changes.
+            -- Unchanged value tuples remain immutable across capture generations.
+            items = items or (before and used == #before and before) or copyPrefix(used)
             local active = {}
             for slot = 0, LAST_ACTIVE_SLOT do
                 active[#active + 1] = {
@@ -154,10 +176,10 @@ return function(fields)
             -- Resources are shared by native co-op, including its hidden ghost
             -- inventory. Conversion alone cannot restore a newer authority value.
             for _, pair in ipairs(sharedResources) do
-                p["Add" .. pair.name](
-                    p,
-                    v[Inventory.resources][pair.field] - p["GetNum" .. pair.name](p)
-                )
+                local delta = v[Inventory.resources][pair.field] - p["GetNum" .. pair.name](p)
+                if delta ~= 0 then
+                    p["Add" .. pair.name](p, delta)
+                end
             end
             for _, flag in ipairs(sharedFlags) do
                 local desired = v[Inventory.resources][flag.field]
@@ -231,7 +253,10 @@ return function(fields)
                 )
             end
             for i, active in ipairs(v[Inventory.active]) do
-                p:SetActiveCharge(active[Active.charge], i - 1)
+                local slot = i - 1
+                if p:GetActiveCharge(slot) + p:GetBatteryCharge(slot) ~= active[Active.charge] then
+                    p:SetActiveCharge(active[Active.charge], slot)
+                end
             end
             for slot = 0, LAST_POCKET_SLOT do
                 if p:GetTrinket(slot) ~= v[Inventory.trinkets][slot + 1] then
@@ -251,8 +276,14 @@ return function(fields)
                 end
             end
             applyResources(p, v)
-            p:AddSoulCharge(v[Inventory.resources][Resource.soulCharge] - p:GetSoulCharge())
-            p:AddBloodCharge(v[Inventory.resources][Resource.bloodCharge] - p:GetBloodCharge())
+            local soul = v[Inventory.resources][Resource.soulCharge] - p:GetSoulCharge()
+            local blood = v[Inventory.resources][Resource.bloodCharge] - p:GetBloodCharge()
+            if soul ~= 0 then
+                p:AddSoulCharge(soul)
+            end
+            if blood ~= 0 then
+                p:AddBloodCharge(blood)
+            end
             applyHearts(p, v[Inventory.hearts])
             local sub = v[Inventory.subplayer]
             if sub then

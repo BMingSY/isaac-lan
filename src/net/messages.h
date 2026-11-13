@@ -9,6 +9,11 @@ struct InputSample {
     InputFrame input;
     std::optional<InputRoom> room;
 };
+struct InputEvent {
+    std::uint32_t id;
+    InputSample sample;
+};
+inline constexpr std::size_t maxRepeatedInputEvents = 4;
 inline InputSample readInput(Reader& r) {
     InputSample sample{r.u32(), r.input(), {}};
     const auto hasRoom = r.u8();
@@ -27,8 +32,7 @@ inline InputSample readInput(Reader& r) {
     }
     return sample;
 }
-inline Writer inputMessage(const InputSample& sample) {
-    Writer w(Message::input);
+inline void writeInput(Writer& w, const InputSample& sample) {
     w.u32(sample.sequence);
     w.input(sample.input);
     w.u8(sample.room.has_value());
@@ -40,6 +44,30 @@ inline Writer inputMessage(const InputSample& sample) {
         w.u32(room.introSerial);
         w.u8(room.introActive);
     }
+}
+inline void writeInputEvent(Writer& w, const InputEvent& event) {
+    w.u32(event.id);
+    writeInput(w, event.sample);
+}
+inline InputEvent readInputEvent(Reader& r) {
+    InputEvent event{r.u32(), readInput(r)};
+    if (!event.id || !event.sample.input.triggered)
+        throw std::runtime_error("Invalid input event");
+    return event;
+}
+inline Writer inputMessage(const InputSample& sample, std::span<const InputEvent> recent = {}) {
+    if (recent.size() > maxRepeatedInputEvents)
+        throw std::runtime_error("Too many repeated input events");
+    Writer w(Message::input);
+    writeInput(w, sample);
+    w.u8(recent.size());
+    for (const auto& event : recent)
+        writeInputEvent(w, event);
+    return w;
+}
+inline Writer inputEventMessage(const InputEvent& event) {
+    Writer w(Message::inputEdges);
+    writeInputEvent(w, event);
     return w;
 }
 inline std::uint16_t retainedInputEdges(const InputFrame& previous,

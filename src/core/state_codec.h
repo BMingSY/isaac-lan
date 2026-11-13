@@ -121,6 +121,12 @@ class Reader {
         if (value.size() > maxBytes)
             throw std::runtime_error("State size exceeded");
     }
+    std::size_t position() const {
+        return cursor;
+    }
+    std::string_view slice(std::size_t first) const {
+        return {reinterpret_cast<const char*>(bytes.data() + first), cursor - first};
+    }
     std::uint64_t integer(unsigned width) {
         if (width > bytes.size() - cursor)
             throw std::runtime_error("Truncated state value");

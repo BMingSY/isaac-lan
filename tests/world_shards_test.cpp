@@ -1,4 +1,5 @@
 #include "net/world_shards.h"
+#include "net/world_redundancy.h"
 #include "test_support.h"
 #include <random>
 
@@ -92,7 +93,64 @@ static void cleanup() {
     malformed[10] = 10;
     rejects([&] { receiver.receive(malformed); }, "Invalid shard accepted");
 }
+static void adaptive() {
+    using namespace std::chrono_literals;
+    WorldRedundancy policy;
+    auto now = WorldRedundancy::Clock::time_point{};
+    require(policy.parity(now) == 2, "Unknown path lost its conservative redundancy");
+    for (unsigned report = 0; report <= 6; ++report) {
+        policy.observe({report * 15, 0, 0}, now + report * 500ms);
+        if (report < 6)
+            require(policy.parity(now + report * 500ms) == 2, "Parity fell before clean evidence");
+    }
+    require(policy.parity(now + 3s) == 1, "Clean path never reduced redundant traffic");
+    require(policy.parity(now + 5s) == 2, "Stale feedback retained weak protection");
+    policy.observe({91, 1, 0}, now + 3500ms);
+    require(policy.parity(now + 3500ms) == 2,
+            "A repaired view failed to restore two parity shards");
+    policy.observe({90, 0, 0}, now + 3600ms);
+    require(policy.parity(now + 3600ms) == 2, "Reordered feedback erased loss evidence");
+    for (unsigned report = 1; report <= 6; ++report)
+        policy.observe({91 + report * 15, 1, 0}, now + 3500ms + report * 500ms);
+    require(policy.parity(now + 6500ms) == 1, "Recovered path could not reduce redundancy again");
+    policy.observe({182, 1, 1}, now + 7s);
+    require(policy.parity(now + 7s) == 2, "Discarded incomplete view was ignored");
+    rejects([&] { policy.observe({1, 2, 0}, now); }, "Invalid quality accepted");
+    std::vector<std::uint8_t> bytes(88001, 42);
+    WorldShards receiver;
+    std::size_t packets = 0;
+    WorldShards::send(
+        1, bytes,
+        [&](auto packet) {
+            ++packets;
+            if (packet[10] == 0)
+                return; // One erased data shard in every group, with only one parity.
+            if (auto result = receiver.receive(packet))
+                require(*result == bytes, "Adaptive parity changed decoded bytes");
+        },
+        1);
+    require(packets == WorldShards::packetCount(bytes.size(), 1) &&
+                packets < WorldShards::packetCount(bytes.size()),
+            "Reduced parity saved no packets");
+    require(receiver.quality.completed == 1 && receiver.quality.repaired == 1,
+            "Receiver did not report successful parity recovery");
+    WorldShards::send(2, bytes, [&](auto packet) {
+        if (packet[10] == 0)
+            receiver.receive(packet);
+    });
+    WorldShards::send(3, bytes, [&](auto packet) { receiver.receive(packet); });
+    require(receiver.quality.completed == 2 && receiver.quality.repaired == 1 &&
+                receiver.quality.discarded == 1,
+            "Incomplete obsolete views were not counted");
+    receiver.reset();
+    require(!receiver.quality.completed && !receiver.quality.repaired &&
+                !receiver.quality.discarded,
+            "Floor reset retained quality from an old generation");
+}
 int main(int argc, char** argv) {
     return runTests(argc, argv,
-                    {{"erasures", erasures}, {"cleanup", cleanup}, {"overhead", overhead}});
+                    {{"erasures", erasures},
+                     {"cleanup", cleanup},
+                     {"overhead", overhead},
+                     {"adaptive", adaptive}});
 }

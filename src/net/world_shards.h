@@ -11,6 +11,9 @@ class WorldShards {
     static constexpr std::size_t maxSize = maxWorldSize + 128;
     static constexpr std::size_t maxBuffered = 4 * maxWorldSize, maxViews = 8;
     static constexpr std::size_t headerSize = 11, smallViewShards = 3;
+    struct Quality {
+        std::uint32_t completed = 0, repaired = 0, discarded = 0;
+    } quality;
 
   private:
     struct Field {
@@ -49,6 +52,7 @@ class WorldShards {
         std::size_t size = 0, remaining = 0;
         std::vector<std::uint8_t> bytes;
         std::vector<Group> groups;
+        bool repaired = false;
         std::size_t memory() const {
             return bytes.capacity() + groups.capacity() * sizeof(Group);
         }
@@ -57,13 +61,15 @@ class WorldShards {
     std::optional<std::uint32_t> completed;
 
   public:
-    static std::size_t redundancy(std::size_t bytes) {
-        return bytes <= smallViewShards * shardSize ? 1 : parityShards;
+    static std::size_t redundancy(std::size_t bytes, std::size_t limit = parityShards) {
+        return bytes <= smallViewShards * shardSize
+                   ? 1
+                   : std::clamp(limit, std::size_t(1), parityShards);
     }
-    static std::size_t packetCount(std::size_t bytes) {
+    static std::size_t packetCount(std::size_t bytes, std::size_t limit = parityShards) {
         const auto shards = (bytes + shardSize - 1) / shardSize;
         const auto groups = (shards + dataShards - 1) / dataShards;
-        const auto parity = redundancy(bytes);
+        const auto parity = redundancy(bytes, limit);
         return shards + groups * parity - (parity > 1 && shards % dataShards == 1 ? 1 : 0);
     }
     std::size_t buffered() const {
@@ -75,14 +81,17 @@ class WorldShards {
     void reset() {
         pending.clear();
         completed.reset();
+        quality = {};
     }
     template <class Send>
-    static void send(std::uint32_t id, std::span<const std::uint8_t> bytes, Send emit) {
+    static void send(std::uint32_t id, std::span<const std::uint8_t> bytes, Send emit,
+                     std::size_t limit = parityShards) {
         if (bytes.empty() || bytes.size() > maxSize)
             throw std::runtime_error("Invalid sharded world size");
         const auto shards = (bytes.size() + shardSize - 1) / shardSize;
         for (std::size_t first = 0; first < shards; first += dataShards) {
             const auto count = std::min(dataShards, shards - first);
+            const bool secondParity = count > 1 && redundancy(bytes.size(), limit) > 1;
             std::array<std::array<std::uint8_t, shardSize>, parityShards> parity{};
             const auto output = [&](unsigned index, std::span<const std::uint8_t> payload) {
                 Writer packet(Message::world, 1 + headerSize + payload.size());
@@ -98,12 +107,13 @@ class WorldShards {
                 const auto data = bytes.subspan(offset, std::min(shardSize, bytes.size() - offset));
                 for (std::size_t byte = 0; byte < data.size(); ++byte) {
                     parity[0][byte] ^= data[byte];
-                    parity[1][byte] ^= field().multiply(data[byte], 1u << i);
+                    if (secondParity)
+                        parity[1][byte] ^= field().multiply(data[byte], 1u << i);
                 }
                 output(i, data);
             }
             output(dataShards, parity[0]);
-            if (count > 1 && redundancy(bytes.size()) > 1)
+            if (secondParity)
                 output(dataShards + 1, parity[1]);
         }
     }
@@ -141,6 +151,7 @@ class WorldShards {
                 if (id < pending.begin()->first)
                     return {};
                 pending.erase(pending.begin());
+                ++quality.discarded;
             }
             found = pending.emplace(id, std::move(view)).first;
         }
@@ -164,6 +175,7 @@ class WorldShards {
             if (!(group.present & (1u << i)))
                 missing[lost++] = i;
         if (lost) {
+            view.repaired = true;
             const bool haveXor = group.present & (1u << dataShards);
             for (std::size_t byte = 0; byte < shardSize; ++byte) {
                 auto p = group.parity[0][byte], q = group.parity[1][byte];
@@ -192,6 +204,9 @@ class WorldShards {
         view.bytes.resize(size);
         auto result = std::move(view.bytes);
         completed = id;
+        ++quality.completed;
+        quality.repaired += view.repaired;
+        quality.discarded += std::distance(pending.begin(), found);
         pending.erase(pending.begin(), std::next(found));
         return result;
     }

@@ -2,6 +2,7 @@
 return function(fields)
     local A, E, R, I = fields.actor, fields.entity, fields.room, fields.inventory
     local staleAfter, handoffTime, projectileLine = 0.25, 0.06, 0
+    local maximumPreviewTime, previewMargin = 0.5, 0.1
     local maxPreviews, axisTolerance = 32, 0.001
     local simulationRate, birthHistoryTicks = 30, 30
     local eyeOffset, playerVelocityRate, maxCorrectionFraction = 4, 60, 0.25
@@ -234,7 +235,13 @@ return function(fields)
             end
         end
         local function present(motion, ref, now, dt, sequence, status)
-            if not lastReceived or now - lastReceived > staleAfter then
+            local latency = status["sync" .. status.slot]
+            if not latency or latency < 0 then
+                latency = status["ping" .. status.slot] or 0
+            end
+            local previewTime =
+                math.max(staleAfter, math.min(maximumPreviewTime, latency / 1000 + previewMargin))
+            if not lastReceived or now - lastReceived > previewTime then
                 clear()
                 return
             end
@@ -265,6 +272,7 @@ return function(fields)
                         and (
                             math.abs(direction.X) < axisTolerance
                             or math.abs(direction.Y) < axisTolerance
+                            or (deps.policy.freeAim and deps.policy.freeAim(player))
                         )
                     if not controls then
                         cancel(id)
@@ -331,16 +339,12 @@ return function(fields)
                                 drawnHeight = height,
                                 last = origin,
                                 lifetime = math.min(
-                                    staleAfter,
-                                    math.max(
-                                        minimumLifetime,
-                                        (status["ping" .. status.slot] or 0) / 1000
-                                            + confirmationMargin
-                                    )
+                                    previewTime,
+                                    math.max(minimumLifetime, latency / 1000 + confirmationMargin)
                                 ),
                             }
                         end
-                    end)
+                    end, previewTime)
                     if weapons then
                         assert(
                             native.actor_pose(

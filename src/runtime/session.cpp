@@ -415,7 +415,8 @@ void publishState() {
     // first view after setConnected has restored the actor and room.
     const auto simulatedMask = rooms::connected();
     for (unsigned slot = 1; slot < session->players(); ++slot) {
-        if (!(simulatedMask & session->connectedMask() & (1u << slot)))
+        if (!(simulatedMask & session->connectedMask() & (1u << slot)) ||
+            !session->captureRequested(slot))
             continue;
         const int top = lua.getTop(state);
         const auto began = InputClock::now();
@@ -917,6 +918,7 @@ int poll(lua_State* L) {
         diagnostics::counter("world_raw_bytes_total", resource.rawWorldBytes);
         diagnostics::counter("world_wire_bytes_total", resource.wireWorldBytes);
         diagnostics::counter("world_full_wire_bytes_total", resource.fullWorldBytes);
+        diagnostics::counter("world_compared_wire_bytes_total", resource.comparedWorldBytes);
         diagnostics::counter("retiring_sessions", retiring.size());
     }
     if (rejoinAt && InputClock::now() >= *rejoinAt) {

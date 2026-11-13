@@ -19,7 +19,6 @@ return function(weapons, items, fields, flags, forms, players)
         "COLLECTIBLE_NEPTUNUS",
         "COLLECTIBLE_MONSTROS_LUNG",
         "COLLECTIBLE_MARKED",
-        "COLLECTIBLE_ANALOG_STICK",
         "COLLECTIBLE_TRACTOR_BEAM",
     }) do
         if items[name] then
@@ -27,6 +26,10 @@ return function(weapons, items, fields, flags, forms, players)
         end
     end
     return {
+        freeAim = function(player)
+            return items.COLLECTIBLE_ANALOG_STICK
+                and player:HasCollectible(items.COLLECTIBLE_ANALOG_STICK)
+        end,
         normalTear = function(player)
             return player.TearFlags == flags.TEAR_NORMAL
                 and not player:HasPlayerForm(forms.PLAYERFORM_BOOK_WORM)
