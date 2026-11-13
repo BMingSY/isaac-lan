@@ -168,6 +168,9 @@ jericho = _IsaacLanModules["compat/routes/jericho"]({
     end,
 })
 _IsaacLanState.setJericho(jericho)
+callback(ModCallbacks.MC_PRE_ROOM_ENTITY_SPAWN, function()
+    return jericho.layoutSpawn()
+end)
 jerichoHud = _IsaacLanModules["presentation/jericho"]({
     native = native,
     rules = jerichoRules,

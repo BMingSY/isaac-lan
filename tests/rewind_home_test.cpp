@@ -30,6 +30,8 @@ struct Fixture {
     std::array<std::array<std::uint8_t, 0x2200>, 4> players{};
     std::array<Address, 4> roster{};
     std::vector<std::uint8_t> savedBytes{0x31, 0x72, 0x25, 0x19};
+    std::vector<std::uint8_t> savedRunState{0x17, 0, 0x28}, runState = savedRunState;
+    unsigned runRestores = 0;
     std::vector<Location> locations{{0, 84, 160.5f, 280.25f}, {2, 97, 400.25f, 150.5f}};
     std::vector<std::vector<Location>> resumed;
     std::vector<std::vector<std::uint8_t>> rewindEvents;
@@ -112,11 +114,13 @@ struct Fixture {
         rewindEvents.clear();
         wrappers = lowerCalls = capturedHomes = stageEvents = nativeStages = decoded = 0;
         prepares = cleanups = greedCalls = teleports = 0;
+        runRestores = 0;
         decisionReturned = false;
     }
     rewind::Checkpoint checkpoint() const {
         rewind::Checkpoint result;
         result.game = savedBytes;
+        result.runState = savedRunState;
         result.locations = locations;
         result.door = door;
         result.tick = tick;
@@ -291,6 +295,13 @@ bool decodeAt(Address image, Address state, std::span<const std::uint8_t> bytes)
 }
 } // namespace isaac::save
 namespace isaac::runtime {
+std::vector<std::uint8_t> captureRunState() {
+    return current->runState;
+}
+void restoreRunState(std::span<const std::uint8_t> bytes) {
+    current->runState.assign(bytes.begin(), bytes.end());
+    ++current->runRestores;
+}
 bool replica() {
     return current->replica;
 }
@@ -323,6 +334,7 @@ void homeTransaction() {
     f.sourceFirstVisit[1] = true;
     const auto playersBefore = f.players;
     f.remember();
+    f.runState = {9};
     require(f.viewRoom == 97 && f.sourceRooms[1] == 84,
             "Missing requester Home regression fixture");
     require(rewind::request(1) && rewind::executePending(),
@@ -338,6 +350,8 @@ void homeTransaction() {
             "Host published both Home and rewind, or executed an early room transition");
     require(f.resumed.size() == 1 && f.resumed.front().empty(),
             "Home departure restored obsolete old-floor player locations");
+    require(f.runRestores == 0 && f.runState == std::vector<std::uint8_t>{9},
+            "Home departure restored the old floor's bridge state");
     require(f.players == playersBefore && !rewind::captureStage(false, 6),
             "Home branch changed actor ownership or leaked its capture scope");
     require(!rewind::executePending(), "Consumed Home request was replayed");
@@ -347,6 +361,7 @@ void normalTransaction() {
     f.viewRoom = 84; // P1's initial room must not select Home for P2 in 97.
     f.remember();
     const auto expected = f.payload(f.chosenTransition());
+    f.runState = {9};
     require(rewind::request(1) && rewind::executePending(), "Ordinary rewind did not execute");
     f.validABI();
     require(f.events == std::vector<std::string>{"prepare-source", "before-start", "decode",
@@ -358,6 +373,8 @@ void normalTransaction() {
                 sameLocations(f.resumed[0], f.locations) && f.viewRoom == 97 && f.prepares == 1 &&
                 f.cleanups == 1,
             "Ordinary rewind changed its exact wire payload or restored player positions");
+    require(f.runRestores == 1 && f.runState == f.savedRunState,
+            "Ordinary rewind lost the bridge state captured with its native checkpoint");
 }
 void replicaHomeFallback() {
     for (unsigned difficulty : {0, 1})
@@ -511,6 +528,7 @@ void locationRestorationFollowsNativeAnimation() {
     for (int animation = 0; animation <= 22; ++animation) {
         Fixture f;
         f.lowerExpected = rewind::NativeTransition{103, 0, animation, 1};
+        f.runState = {9};
         require(rewind::startRewind(f.payload()), "Host native animation choice failed");
         f.validABI();
         require(
@@ -518,9 +536,14 @@ void locationRestorationFollowsNativeAnimation() {
                 f.resumed.size() == 1 &&
                 (animation == 12 ? sameLocations(f.resumed[0], f.locations) : f.resumed[0].empty()),
             "Host restored old locations for a non-rewind animation or lost ordinary rewind");
+        require(f.runRestores == (animation == 12 ? 1u : 0u) &&
+                    f.runState ==
+                        (animation == 12 ? f.savedRunState : std::vector<std::uint8_t>{9}),
+                "Host bridge state did not follow native GameState restoration");
         const auto wire = f.rewindEvents[0];
         f.clearCalls();
         f.replica = true;
+        f.runState = {9};
         require(rewind::startRewind(wire), "Replica rejected a valid native animation choice");
         f.validABI();
         require(
@@ -528,6 +551,10 @@ void locationRestorationFollowsNativeAnimation() {
                 (animation == 12 ? sameLocations(f.resumed[0], f.locations) : f.resumed[0].empty()),
             "Replica restored old locations for a non-rewind animation or lost ordinary "
             "rewind");
+        require(f.runRestores == (animation == 12 ? 1u : 0u) &&
+                    f.runState ==
+                        (animation == 12 ? f.savedRunState : std::vector<std::uint8_t>{9}),
+                "Replica bridge state did not follow native GameState restoration");
     }
 }
 void sourcePreparationFailure() {

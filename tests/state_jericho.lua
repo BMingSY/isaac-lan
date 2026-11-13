@@ -86,6 +86,24 @@ local function items(slot)
     end)
     return found
 end
+local function emptyLayout(slot)
+    actor(slot, function()
+        local room = Game():GetRoom()
+        for index = 0, room:GetGridSize() - 1 do
+            local grid = room:GetGridEntity(index)
+            if grid then
+                local kind = grid:GetType()
+                assert(
+                    kind == GridEntityType.GRID_WALL
+                        or kind == GridEntityType.GRID_DOOR
+                        or kind == GridEntityType.GRID_DECORATION
+                        or kind == GridEntityType.GRID_PILLAR,
+                    "Original layout terrain returned: " .. kind .. " at " .. index
+                )
+            end
+        end
+    end)
+end
 local install = native.room_empty_pair
 native.room_empty_pair = function(first, second, restore)
     local level = Game():GetLevel()
@@ -263,6 +281,8 @@ local function advance()
         )
         assert(native.rooms_positions()["0"].index == pair[1], "Hourglass lost split location")
         assert(#items(0) == 0 and #items(1) == 0)
+        emptyLayout(0)
+        emptyLayout(1)
         park(0, -100, 0)
         park(1, 100, 0)
         report("PASS native hourglass restores matching puzzle checkpoint")
@@ -289,6 +309,8 @@ local function advance()
         assert(native.rooms_teleport(0, pair[1], 0))
         mark("return")
     elseif step == "return" and elapsed > 60 then
+        emptyLayout(0)
+        emptyLayout(1)
         assert(#items(0) == 1 and #items(1) == 1)
         for slot = 0, 1 do
             actor(slot, function(player)
@@ -320,6 +342,7 @@ local function advance()
         )
         assert(native.net_run_state() == savedPayload, "Continue changed bridge payload")
         for slot = 0, 1 do
+            emptyLayout(slot)
             assert(#items(slot) == 1, "Continue duplicated or lost pedestal")
             actor(slot, function(player)
                 assert(player:GetActiveCharge() == 1, "Continue repeated charge")
@@ -393,6 +416,7 @@ local function advance()
         mark("mirror")
     elseif step == "mirror" and elapsed > 100 then
         for slot = 0, 1 do
+            emptyLayout(slot)
             assert(native.rooms_positions()[tostring(slot)].dimension == 1)
             actor(slot, function(player)
                 assert(Game():GetRoom():IsMirrorWorld(), "Fixture missed native mirror dimension")

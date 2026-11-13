@@ -309,7 +309,7 @@ local adapter = module("compat/routes/jericho")({
     enums = {
         stage = { STAGE8 = 13 },
         pool = { POOL_TREASURE = 0 },
-        entity = { ENTITY_PICKUP = 5 },
+        entity = { ENTITY_NULL = 0, ENTITY_PICKUP = 5 },
         pickup = { PICKUP_COLLECTIBLE = 100 },
         grid = { GRID_PILLAR = 24 },
     },
@@ -362,6 +362,19 @@ assert(adapter.snapshot()[F.firstItem] == 1 and adapter.snapshot()[F.secondItem]
 assert(#pickups == 0 and next(awards) == nil)
 assert(adapter.separate(positions["0"]) and not adapter.separate({ index = 10, dimension = 1 }))
 local initial = payload
+-- Native layout reconstruction runs before readiness and may follow a Lua
+-- reset. Only the saved pair's template spawns are suppressed; unrelated
+-- rooms, alternate dimensions and replicas retain their native behavior.
+adapter.reset()
+info.ready = 0
+assert(adapter.layoutSpawn()[1] == 0)
+assert(payload == initial)
+positions["0"].index = 30
+assert(adapter.layoutSpawn() == nil)
+positions["0"].index, info.ready = 10, 1
+info.authority = 0
+assert(adapter.layoutSpawn() == nil)
+info.authority = 1
 for plate = 1, 6 do
     for _, player in ipairs(actors) do
         player.Position = vector(0, 0)
@@ -411,6 +424,7 @@ for _ = 1, 20 do
     step()
 end
 adapter.entered()
+assert(adapter.layoutSpawn()[1] == 0)
 assert(adapter.snapshot()[F.progress] == 0 and #pickups == 0 and next(awards) == nil)
 info.authority = 0
 adapter.apply(adapter.snapshot())
@@ -424,5 +438,6 @@ local installCount, saved = #installs, payload
 adapter.level()
 step()
 adapter.entered()
+assert(adapter.layoutSpawn() == nil)
 assert(not adapter.snapshot() and #installs == installCount and payload == saved)
 print("Jericho generation, sequence, contacts, persistence, mirror and awards passed")

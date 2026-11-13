@@ -223,6 +223,21 @@ return function(deps)
         return current and current[F.first] >= 0 and { table.unpack(current) } or false
     end
     return {
+        layoutSpawn = function()
+            local info = native.api_info()
+            if info.active ~= 1 or info.authority ~= 1 or not supported(info) then
+                return
+            end
+            -- Native GameState stores a template identity, not our empty
+            -- borrowed configuration. Suppress only template spawns while
+            -- that identity is reconstructed, before room/gate readiness.
+            -- Saved pickups and player-created entities use their own path.
+            restore()
+            current = model.find(identity())
+            if roomSide() then
+                return { enums.entity.ENTITY_NULL, 0, 0 }
+            end
+        end,
         reset = reset,
         restore = restore,
         entered = entered,
