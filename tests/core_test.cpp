@@ -1655,8 +1655,25 @@ void challengeRules() {
             "Battle royale lobby contract mismatch");
     require(!definition->roomOptionsLocked && !luck->roomOptionsLocked,
             "Other challenges lost their independent room options");
-    require(!isaac::compat::challenges::find(1004), "Unknown challenge accepted");
+    const auto* large = isaac::compat::challenges::find(1004);
+    const auto* aim = isaac::compat::challenges::find(1005);
+    require(large && large->character == isaac::compat::ids::player::isaac &&
+                large->route == "heart" && large->goalStage == 8 && large->largeFloor &&
+                large->transient && large->difficulty == 0 && !large->roomOptionsLocked &&
+                !large->nextPlayerShooting && !large->friendlyFire,
+            "Large floor challenge contract mismatch");
+    require(aim && aim->character == RunRules{}.character && aim->route == "mom" &&
+                aim->goalStage == 6 && aim->nextPlayerShooting && !aim->largeFloor &&
+                aim->transient && aim->difficulty == 0 && !aim->roomOptionsLocked &&
+                !aim->friendlyFire && isaac::compat::challenges::available(*aim, {}),
+            "Rotated shooting must preserve ordinary characters and independent room options");
+    require(!isaac::compat::challenges::find(1006), "Unknown challenge accepted");
     std::array<std::uint8_t, 642> achievements{};
+    require(!isaac::compat::challenges::available(*large, achievements),
+            "Original challenge unlock was bypassed");
+    achievements[4] = 1;
+    require(isaac::compat::challenges::available(*large, achievements),
+            "Original challenge required an unrelated unlock");
     require(!isaac::compat::challenges::available(*definition, achievements),
             "Locked save entered the challenge");
     achievements[78] = 1;

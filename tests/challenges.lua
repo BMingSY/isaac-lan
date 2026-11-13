@@ -400,7 +400,7 @@ function game:GetRoom()
 end
 effects, grids, pendingRemoval = {}, {}, {}
 local spawned = 0
-local mom = routeFactory({
+local goalDeps = {
     game = function()
         return game
     end,
@@ -431,7 +431,8 @@ local mom = routeFactory({
         effects[#effects + 1] = p
         return p
     end,
-}, "mom")
+}
+local mom = routeFactory(goalDeps, "mom")
 for _, wrong in ipairs({ { 5, 0, 45 }, { 6, 0, 273 }, { 8, 0, 45 } }) do
     stage, kind, enemy = table.unpack(wrong)
     mom.clearAward()
@@ -456,3 +457,34 @@ stage, kind = 8, 4
 mom.clearAward()
 assert(spawned == 1)
 print("PASS Mom clear reward, duplicate callbacks, goal identity, exits and trophy completion")
+
+enums.entity.ENTITY_MOMS_HEART = 78
+local heart = routeFactory(goalDeps, "heart")
+for _, floorType in ipairs({ 0, 1, 2, 3 }) do
+    effects, grids, pendingRemoval = {}, {}, {}
+    local before = spawned
+    for _, wrong in ipairs({ { 7, floorType, 78 }, { 8, 4, 78 }, { 8, floorType, 45 } }) do
+        stage, kind, enemy = table.unpack(wrong)
+        heart.clearAward()
+    end
+    assert(spawned == before)
+    stage, kind, enemy, clear = 8, floorType, 78, false
+    heart.clearAward()
+    heart.clearAward()
+    assert(spawned == before + 1 and effects[1].Wait == 30)
+    local trophy = effects[1]
+    local beforeFinish = finish
+    trophy.Wait = 0
+    heart.collide(trophy, player)
+    assert(finish == beforeFinish)
+    clear = true
+    grids[1], grids[2] = grid(17, 0, 0), grid(17, 1, 1)
+    heart.pickup(trophy)
+    assert(pendingRemoval[1] and pendingRemoval[2])
+    heart.collide(trophy, player)
+    assert(finish == beforeFinish + 1)
+    heart = routeFactory(goalDeps, "heart")
+    heart.clearAward()
+    assert(spawned == before + 1, "Restored Heart reward spawned twice")
+end
+print("PASS Heart/It Lives room identity, Womb variants, reward restore and exit cleanup")

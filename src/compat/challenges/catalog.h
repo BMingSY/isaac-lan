@@ -19,6 +19,8 @@ struct Definition {
     std::array<unsigned, 2> requiredAchievements;
     bool friendlyFire = false;
     bool roomOptionsLocked = false;
+    bool largeFloor = false;
+    bool nextPlayerShooting = false;
 };
 inline constexpr std::array definitions{
     Definition{
@@ -63,6 +65,41 @@ inline constexpr std::array definitions{
         false,
         {},
         true,
+        true,
+    },
+    Definition{
+        1004,
+        1,
+        ids::player::isaac,
+        0,
+        true,
+        "超大房间",
+        "heart",
+        ids::ending::epilogue,
+        ids::stage::chapterFourSecond,
+        ids::stageType::original,
+        false,
+        {4, 0},
+        false,
+        false,
+        true,
+    },
+    Definition{
+        1005,
+        1,
+        unrestrictedCharacter,
+        0,
+        true,
+        "你瞄我走",
+        "mom",
+        ids::ending::epilogue,
+        ids::stage::chapterThreeSecond,
+        ids::stageType::original,
+        false,
+        {},
+        false,
+        false,
+        false,
         true,
     },
 };

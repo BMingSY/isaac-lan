@@ -6,6 +6,7 @@
 #include "engine/versions/j460/cursed_mist.cpp"
 #include "engine/versions/j460/pickup_preview.cpp"
 #include "engine/versions/j460/session_backend.cpp"
+#include "engine/versions/j460/floor_generation.cpp"
 #include "runtime/progression.h"
 #include <array>
 #include <cstring>
