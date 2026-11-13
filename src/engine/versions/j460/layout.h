@@ -118,6 +118,7 @@ inline constexpr unsigned entities = 0x1218;
 } // namespace room
 namespace roomDescriptor {
 inline constexpr unsigned safeGridIndex = 0x4;
+inline constexpr unsigned dimension = 0xc;
 inline constexpr unsigned data = 0x10;
 inline constexpr unsigned overrideData = 0x14;
 inline constexpr unsigned allowedDoors = 0x18;
@@ -129,8 +130,10 @@ namespace roomConfig {
 inline constexpr unsigned type = 0x8;
 inline constexpr unsigned variant = 0xc;
 inline constexpr unsigned doors = 0x38;
+inline constexpr unsigned questDoors = 0x3c;
 inline constexpr unsigned shape = 0x48;
 inline constexpr unsigned width = 0x46, height = 0x47;
+inline constexpr int ordinaryType = 1, singleRoomShape = 1;
 inline constexpr int anyVariant = -1;
 inline constexpr int normalMode = 0;
 inline constexpr int specialStage = 0;

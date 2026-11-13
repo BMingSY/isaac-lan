@@ -77,5 +77,16 @@ return function(deps)
             end
         end
     end
-    return { reset = reset, record = record, step = step }
+    local function award(info, recipients, amount)
+        for _, seat in ipairs(deps.party(info)) do
+            if not recipients or recipients[seat.slot] then
+                deps.scoped(seat, function()
+                    for _, player in ipairs(seat.actors) do
+                        charge(player, amount)
+                    end
+                end)
+            end
+        end
+    end
+    return { reset = reset, record = record, step = step, award = award }
 end

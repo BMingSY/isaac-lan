@@ -1551,6 +1551,7 @@ Archive sample(unsigned players = 4) {
         value.locations.push_back(
             {static_cast<int>(i % 3), -20 + static_cast<int>(i), 12.5f, -4.25f});
     value.game.resize(6507);
+    value.runState = {0, 1, 2, 0, 255};
     for (unsigned i = 0; i < value.game.size(); ++i)
         value.game[i] = static_cast<std::uint8_t>(i);
     return value;
@@ -1569,7 +1570,7 @@ void archiveRoundTrip() {
                         decoded.settings.difficulty == value.settings.difficulty &&
                         decoded.settings.characters == value.settings.characters &&
                         decoded.settings.progress == value.settings.progress &&
-                        decoded.game == value.game,
+                        decoded.game == value.game && decoded.runState == value.runState,
                     "Saved session round trip failed");
             require(decoded.locations.size() == players, "Saved roster differs");
             for (unsigned i = 0; i < players; ++i) {
@@ -1619,6 +1620,19 @@ void archiveRetry() {
 }
 
 void archiveCapacity() {
+    auto oversized = sample();
+    oversized.runState.resize(isaac::runtime::maxRunPayloadSize + 1);
+    rejects([&] { oversized.encode(); }, "Oversized bridge run payload accepted");
+    isaac::runtime::RunPayload payload;
+    const auto original = sample().runState;
+    payload.restore(original);
+    const auto revision = payload.revision();
+    rejects([&] { payload.restore(oversized.runState); }, "Oversized checkpoint payload accepted");
+    require(payload.bytes() == original && payload.revision() == revision,
+            "Rejected payload changed the previous checkpoint");
+    payload.restore({});
+    require(payload.bytes().empty() && payload.revision() != revision,
+            "New run retained the previous payload");
     for (unsigned players : {2u, 4u}) {
         auto value = sample(players);
         if (players == 2)
@@ -1728,10 +1742,10 @@ void roomOptionsAndMarks() {
             "Normal run lost room options when saved");
     require(!isaac::roomOptions::valid(isaac::roomOptions::known + 1),
             "Runtime accepted an unknown room option");
-    // Both legacy formats omit awards; v3 also omits room options.
-    for (unsigned format : {3u, 4u}) {
+    // Legacy formats omit bridge state; v3/4 also omit earned awards.
+    for (unsigned format : {3u, 4u, 5u}) {
         Writer legacy(Message::snapshot);
-        legacy.string(format == 3 ? "IsaacLAN/save/3" : "IsaacLAN/save/4");
+        legacy.string("IsaacLAN/save/" + std::to_string(format));
         legacy.string(archive.fingerprint);
         legacy.string(archive.settings.seed);
         legacy.u8(archive.settings.difficulty);
@@ -1740,11 +1754,11 @@ void roomOptionsAndMarks() {
         legacy.u16(65535);
         legacy.u8(255);
         legacy.u8(0);
-        if (format == 4)
+        if (format >= 4)
             legacy.u32(archive.settings.rules.options);
         for (auto c : archive.settings.characters)
             legacy.u16(c);
-        legacy.progress(archive.settings.progress, false);
+        legacy.progress(archive.settings.progress, format >= 5);
         legacy.u8(archive.locations.size());
         for (const auto& p : archive.locations) {
             legacy.u32(p.dimension);
@@ -1756,7 +1770,8 @@ void roomOptionsAndMarks() {
         legacy.u64(snapshotHash(legacy.bytes));
         const auto old = Archive::decode(legacy.bytes);
         require(old.settings.rules.options == (format == 3 ? 0 : archive.settings.rules.options) &&
-                    old.settings.progress == archive.settings.progress && old.game == archive.game,
+                    old.settings.progress == archive.settings.progress &&
+                    old.game == archive.game && old.runState.empty(),
                 "Previous save format lost progress or room options");
     }
 }

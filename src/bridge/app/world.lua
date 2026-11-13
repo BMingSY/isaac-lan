@@ -3,7 +3,13 @@
 local native = assert(_IsaacLan)
 local prediction = assert(_IsaacLanPrediction)
 local state = {}
-local challenges
+local challenges, jericho
+function state.setJericho(value)
+    jericho = value
+end
+function state.jerichoView()
+    return jericho and jericho.view()
+end
 function state.setChallenges(value)
     challenges = value
 end
@@ -91,6 +97,9 @@ function _IsaacLanRoomLeaving()
     modules["compat/items/blue_key"](Game(), RoomDescriptor.FLAG_BLUE_REDIRECT)
 end
 function _IsaacLanRoomEntered(door)
+    if jericho then
+        jericho.entered()
+    end
     assert(roomPlacement.arrive(door), "Cannot find a safe room arrival")
     modules["compat/bosses/rotgut"](Game(), Isaac.GetPlayer, RoomType.ROOM_DUNGEON)
     modules["runtime/room_entry"](
@@ -250,6 +259,9 @@ local audioPresentation = assert(modules["presentation/audio"])(native, function
     return SFXManager()
 end)
 local captureState = component("sync/capture")({
+    jericho = function()
+        return jericho and jericho.snapshot() or false
+    end,
     challenge = function()
         return challenges and challenges.snapshot() or false
     end,
@@ -317,6 +329,11 @@ local transitions = assert(modules["compat/transitions"])({
     assert(modules["compat/routes/victory_lap"]),
 })
 local replica = component("sync/replica")({
+    applyJericho = function(value)
+        if jericho then
+            jericho.apply(value)
+        end
+    end,
     applyChallenge = function(value)
         if challenges then
             challenges.apply(value)

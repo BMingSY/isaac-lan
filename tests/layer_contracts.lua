@@ -31,6 +31,7 @@ local tuple = {
     0,
     string.pack(">I4", 0),
     false,
+    false,
 }
 local view = schema.unpack(tuple, 42)
 assert(view.slot == 1 and view.stage == 6 and view.epoch == 7 and view.curses == 5)

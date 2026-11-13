@@ -6,7 +6,7 @@ local integration = assert(_IsaacLanModules)["api/public"]
 local registry = _IsaacLanModules["compat/mods/registry"]
 local game
 local owner = { Name = "Isaac LAN native extension" }
-local battleHud
+local battleHud, jerichoHud
 local function callback(id, fn)
     Isaac.AddCallback(owner, id, fn)
 end
@@ -16,6 +16,9 @@ callback(ModCallbacks.MC_POST_RENDER, function()
     end
     if battleHud then
         battleHud.render()
+    end
+    if jerichoHud then
+        jerichoHud.render()
     end
 end)
 function _IsaacLanMinimapRender()
@@ -66,7 +69,7 @@ end)
 callback(ModCallbacks.MC_PRE_USE_ITEM, function(_, item, _, player)
     friendlyFire.beforeUseItem(item, player)
 end)
-local challenge, chat, feedback
+local challenge, chat, feedback, jericho
 local function lootAllocation()
     return _IsaacLanModules["compat/rules/loot_roll"]({
         native = native,
@@ -92,6 +95,20 @@ local placeNear = _IsaacLanModules["runtime/room_placement"]({
     vector = Vector,
     collision = GridCollisionClass,
 }).near
+local clearCharge = _IsaacLanModules["compat/rules/clear_charge"]({
+    native = native,
+    game = Game,
+    party = allocation.party,
+    scoped = allocation.scoped,
+    enums = {
+        shape = RoomShape,
+        room = RoomType,
+        trinket = TrinketType,
+        collectible = CollectibleType,
+        active = ActiveSlot,
+        charge = ItemConfig,
+    },
+})
 local roomRules = _IsaacLanModules["runtime/room_rules"]({
     native = native,
     allocation = allocation,
@@ -104,21 +121,66 @@ local roomRules = _IsaacLanModules["runtime/room_rules"]({
         roomTypes = RoomType,
         player = Isaac.GetPlayer,
         placeNear = placeNear,
+        separate = function(position)
+            return jericho and jericho.separate(position)
+        end,
     }),
-    charge = _IsaacLanModules["compat/rules/clear_charge"]({
+    charge = clearCharge,
+})
+local jerichoRules = _IsaacLanModules["compat/routes/jericho_rules"]
+local jerichoLayout = _IsaacLanModules["compat/routes/jericho_layout"]
+local jerichoEnums = {
+    entity = EntityType,
+    pickup = PickupVariant,
+    grid = GridEntityType,
+    room = RoomType,
+    shape = RoomShape,
+    descriptor = RoomDescriptor,
+    pool = ItemPoolType,
+    stage = LevelStage,
+}
+jericho = _IsaacLanModules["compat/routes/jericho"]({
+    native = native,
+    rules = jerichoRules,
+    layout = jerichoLayout,
+    enums = jerichoEnums,
+    game = Game,
+    vector = Vector,
+    spawn = Isaac.Spawn,
+    encode = _IsaacLanModules["sync/codec"].encode,
+    decode = _IsaacLanModules["sync/codec"].decode,
+    party = allocation.party,
+    scoped = allocation.scoped,
+    charge = clearCharge,
+    map = _IsaacLanModules["compat/routes/jericho_map"]({
         native = native,
-        game = Game,
-        party = allocation.party,
-        scoped = allocation.scoped,
-        enums = {
-            shape = RoomShape,
-            room = RoomType,
-            trinket = TrinketType,
-            collectible = CollectibleType,
-            active = ActiveSlot,
-            charge = ItemConfig,
-        },
+        rules = jerichoRules,
+        enums = jerichoEnums,
     }),
+    sound = function(event)
+        local sound = event == "complete" and SoundEffect.SOUND_ROCK_CRUMBLE
+            or event == "wrong" and SoundEffect.SOUND_BOSS2INTRO_ERRORBUZZ
+            or SoundEffect.SOUND_BUTTON_PRESS
+        SFXManager():Play(sound, 0.7, 0, false, 1)
+        if event == "complete" then
+            Game():ShakeScreen(10)
+        end
+    end,
+})
+_IsaacLanState.setJericho(jericho)
+jerichoHud = _IsaacLanModules["presentation/jericho"]({
+    native = native,
+    rules = jerichoRules,
+    layout = jerichoLayout,
+    view = jericho.view,
+    game = Game,
+    sprite = Sprite,
+    vector = Vector,
+    color = Color,
+    screen = Isaac.WorldToScreen,
+    config = Isaac.GetItemConfig,
+    backdrop = BackdropType,
+    width = Isaac.GetScreenWidth,
 })
 local function goalRoute(goal)
     return _IsaacLanModules["compat/routes/challenge_goal"]({
@@ -263,6 +325,7 @@ callback(ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, pickup, collider)
 end)
 callback(ModCallbacks.MC_POST_NEW_LEVEL, function()
     challenge.level()
+    jericho.level()
 end)
 callback(ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD, function()
     challenge.clearAward()
@@ -279,6 +342,7 @@ function _IsaacLanPlayerRoomCleared(...)
 end
 function _IsaacLanChallengeStep()
     challenge.step()
+    jericho.step()
     roomRules.step()
     friendlyFire.step()
     refreshFlatFileDoors()
@@ -436,6 +500,7 @@ function _IsaacLanViewCommitted()
 end
 function _IsaacLanActionStep()
     challenge.step()
+    jericho.step()
     roomRules.step()
     friendlyFire.prepare()
     refreshFlatFileDoors()
@@ -488,6 +553,7 @@ lifecycle = assert(_IsaacLanModules["runtime/session"])({
         )
     end,
     restoreRooms = function()
+        jericho.resume()
         assert(native.net_restore_rooms())
     end,
     close = function(preserve)
@@ -516,6 +582,8 @@ callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
         )
     end
     challenge.reset()
+    jericho.reset()
+    jerichoHud.reset()
     _IsaacLanState.reset()
     continuedRun = continued
     if lifecycle.gameStarted(continued) then
@@ -537,6 +605,8 @@ callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
     friendlyFire.reset()
     roomRules.reset()
     challenge.reset()
+    jericho.reset()
+    jerichoHud.reset()
     bot.reset()
     integration.reset("session_ended")
     if lifecycle.active() then

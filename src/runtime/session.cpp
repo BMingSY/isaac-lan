@@ -1332,6 +1332,7 @@ int startEngine(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
+    saves.runPayload.restore({});
     if (!settings.snapshot.empty()) {
         try {
             saves.resumingArchive = lan::Archive::decode(settings.snapshot);
@@ -1341,6 +1342,7 @@ int startEngine(lua_State* L) {
                 saves.resumingArchive->settings.rules != settings.rules ||
                 !save::decode(executableImage, saves.resumingArchive->game))
                 throw std::runtime_error("Cannot restore host saved session");
+            saves.runPayload.restore(saves.resumingArchive->runState);
         } catch (const std::exception& error) {
             fail(error.what());
             lua.pushBoolean(L, false);
@@ -1591,6 +1593,7 @@ lan::Archive captureCheckpoint() {
     archive.fingerprint = sessionFingerprint;
     archive.settings = session->settings().metadata();
     archive.settings.progress = readProgress();
+    archive.runState = saves.runPayload.bytes();
     archive.locations = rooms::captureLocations();
     for (unsigned slot = 1; slot < archive.locations.size(); ++slot)
         if (!(session->connectedMask() & (1u << slot)))
@@ -1599,6 +1602,24 @@ lan::Archive captureCheckpoint() {
         archive.game.empty())
         throw std::runtime_error("Cannot capture current-floor checkpoint");
     return archive;
+}
+int runStateLua(lua_State* L) {
+    if (lua.getTop(L) > 0) {
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 1, &size);
+        if (!session || !session->isHost() || !view.gated || size > maxRunPayloadSize) {
+            lua.pushBoolean(L, false);
+            return 1;
+        }
+        saves.runPayload.restore({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        lua.pushInteger(L, saves.runPayload.revision());
+        return 1;
+    }
+    const auto& bytes = saves.runPayload.bytes();
+    lua.pushLString(L, bytes.empty() ? "" : reinterpret_cast<const char*>(bytes.data()),
+                    bytes.size());
+    lua.pushInteger(L, saves.runPayload.revision());
+    return 2;
 }
 int epoch(lua_State* L) {
     lua.pushInteger(L, view.floorEpoch);
@@ -1632,6 +1653,12 @@ void executeMenu(const backend::Call& original) {
     original();
 }
 } // namespace
+std::vector<std::uint8_t> captureRunState() {
+    return saves.runPayload.bytes();
+}
+void restoreRunState(std::span<const std::uint8_t> bytes) {
+    saves.runPayload.restore(bytes);
+}
 void beforeExit(bool save) {
     saves.exitingHost = session && session->isHost() && view.gated;
     saves.exitingTransient = session && session->settings().rules.transient;
@@ -1642,6 +1669,7 @@ void beforeExit(bool save) {
     archive.fingerprint = sessionFingerprint;
     archive.settings = session->settings().metadata();
     archive.settings.progress = readProgress();
+    archive.runState = saves.runPayload.bytes();
     archive.locations = rooms::captureLocations();
     saves.exitingArchive = std::move(archive);
 }
@@ -2071,6 +2099,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_start", start);
     function("net_choose", choose);
     function("net_engine_start", startEngine);
+    function("net_run_state", runStateLua);
     function("net_gate", gate);
     function("net_close", close);
     function("net_reconnect", reconnect);

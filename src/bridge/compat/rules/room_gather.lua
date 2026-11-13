@@ -7,6 +7,9 @@ return function(deps)
     local function sameRoom(a, b)
         return a and b and a.index == b.index and a.dimension == b.dimension
     end
+    local function separate(position)
+        return deps.separate and deps.separate(position)
+    end
     local function cancel(slot, batch, info)
         if info.authority == 1 and info.runId == batch.run and info.worldEpoch == batch.epoch then
             native.api_cancel_move(slot, batch.destination.index, batch.destination.dimension)
@@ -59,10 +62,16 @@ return function(deps)
         if pending then
             local valid = sameRoom(current[pending.owner], pending.destination)
                 and info.nowMs - pending.started < arrivalTimeout
+                and not separate(pending.destination)
             for slot, source in pairs(pending.waiting) do
                 consumed[slot] = true
                 local position = current[slot]
-                if not valid or not position or sameRoom(position, pending.destination) then
+                if
+                    not valid
+                    or not position
+                    or separate(position)
+                    or sameRoom(position, pending.destination)
+                then
                     if valid and allRooms and sameRoom(position, pending.destination) then
                         placeNear(slot, pending.owner)
                     end
@@ -101,6 +110,8 @@ return function(deps)
             if
                 before[owner]
                 and destination
+                and not separate(destination)
+                and not separate(before[owner])
                 and not consumed[owner]
                 and not sameRoom(before[owner], destination)
                 and (allRooms or special(owner))
@@ -118,6 +129,7 @@ return function(deps)
                     local source = current[slot]
                     if
                         source
+                        and not separate(source)
                         and not sameRoom(source, destination)
                         and native.rooms_teleport(slot, destination.index, destination.dimension)
                     then

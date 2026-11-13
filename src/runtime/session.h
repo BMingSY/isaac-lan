@@ -4,6 +4,7 @@
 #include <string>
 #include <span>
 #include <array>
+#include <vector>
 
 struct lua_State;
 namespace isaac::lan {
@@ -48,4 +49,6 @@ std::uint32_t worldEpoch();
 void abort(const std::string& error);
 void beforeExit(bool save);
 void afterExit(bool save);
+std::vector<std::uint8_t> captureRunState();
+void restoreRunState(std::span<const std::uint8_t> bytes);
 } // namespace isaac::runtime

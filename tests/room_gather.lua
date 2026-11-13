@@ -14,7 +14,7 @@ local info = {
     nowMs = 0,
 }
 local positions, kinds, queued, moves, cancelled, refused = {}, {}, {}, {}, {}, {}
-local scope, unavailable
+local scope, unavailable, separateIndex
 local actors, placements = {}, {}
 local function vector(x, y)
     return { X = x, Y = y }
@@ -109,6 +109,9 @@ local gather = dofile(root .. "/src/bridge/compat/rules/room_gather.lua")({
     roomTypes = types,
     game = game,
     player = player,
+    separate = function(position)
+        return position.index == separateIndex
+    end,
     placeNear = function(slot, target)
         placements[#placements + 1] = slot
         return placeNear(slot, target)
@@ -464,4 +467,16 @@ setup(allGatherFlag)
 info.authority = 0
 starts(1, 85)
 assert(#moves == 0, "Replica ran all-room gathering")
+setup(allGatherFlag)
+separateIndex = 85
+starts(0, 85)
+assert(#moves == 0, "Entering a puzzle gathered its partner")
+starts(0, 84)
+assert(#moves == 0, "Leaving a puzzle gathered its partner")
+enter(0, 85)
+rules.step()
+starts(1, 86)
+assert(#moves == 2 and not queued[0], "Another room pulled a puzzle participant away")
+complete()
+separateIndex = nil
 print("PASS room gathering: special/all rooms, safe landing, repeated exits and lifecycle")
