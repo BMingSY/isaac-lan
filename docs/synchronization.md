@@ -56,9 +56,9 @@ HUD 延迟独立于诊断日志开关。运行层为客机输入序号保留有�
 
 每份视图包含全队主要角色状态、共同楼层与地图，以及接收者当前房间的实体、网格和表现。同房角色携带完整外观，异房角色保留多人 HUD 所需状态。角色的 `ControlsEnabled` 与 `ControlsCooldown` 同属权威状态；客机不推进原生角色更新，控制冷却的递减和归零必须随快照恢复。玩家字段同时携带 `Friction`，供本机重放蜘蛛网、地面减速后的移动。库存字段 12 `subplayer` 为 `false` 或 `{type, hearts}`；骸骨兼容组件先恢复原生形态配对，再分别恢复当前与隐藏形态生命，不重建隐藏身体的道具库存。库存字段 14 `order` 为 `false` 或里以撒的 16 个大端 `i32` 有序道具 ID 组成的 64 字节串；完成道具数量恢复后再恢复顺序，重复快照不推进选择。任意 Mod 私有表、Lua 源码和原生指针不进入视图。
 
-采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房数据；缓存不跨 tick。角色持有物与矿车关联在角色所属房间内采集，房间内部索引只用于转换为稳定实体 ID。分层投影复制角色与房间容器，编码缓存复用其不变的子表。仅有一个客机时不增加这类片段；多个客机共享角色字段，同房且同维度的客机还共享实体与网格编码。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
+采集以 `(floorEpoch, tick)` 为不可变代次，在该代次内复用公共字段、角色和同房采集结果；下一 tick 仍读取当前原生状态，逐项比较未变化的库存列表和地图记录可复用不可变值及编码片段。角色持有物与矿车关联在角色所属房间内采集，房间内部索引只用于转换为稳定实体 ID。分层投影复制角色与房间容器，编码缓存复用其不变的子表。跨客机的角色、实体与网格片段只在多个接收者时建立：多个客机共享角色字段，同房且同维度的客机还共享实体与网格编码。音效和演出按接收者筛选。字段由 [world_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/world_schema.lua)、[fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 [entity_schema.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/entity_schema.lua) 定义。泪弹、跟班、效果与精灵的常用属性通过[具名批量能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体字段批量读写)读写，Lua 模板决定字段顺序，版本后端保留原属性语义；其他类型使用游戏 Lua API。
 
-[分层投影](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/layers.lua)把道具列表、饰品、地图、进度、诅咒、交易、药丸、生成道具定义、房间布局／轨道／夹层信息编码为低频依赖；充能、血量、消耗品、便便／合成袋／临时效果、位置、实体、网格、动画及一次性表现留在实时部分。采集仍逐 tick 执行，低频指传输按变化发送，不延后读取权威状态。UDP 依赖使用递增修订号和可靠有序交付，比较独立编码与引用上一份可靠依赖的 prefix 编码，只发送较小者；首份依赖只执行独立压缩；一次最多有一份未确认的可靠副本，其间的新变化合并为最新候选，允许跳过中间修订。初始视图可靠交付；建立应用确认基线后，尚未被应用确认的新修订同时内嵌于实时视图，避免可靠副本丢包阻塞整帧。内嵌副本可先于可靠副本到达，接收缓存按修订号合并，可靠压缩字典独立维护。实时视图明确引用修订号，客机仅在对应数据齐全时还原完整视图，不能套用最新库存或跨房间拼接。依赖缓存、未完成视图和修订号在代次屏障清理。
+[分层投影](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/layers.lua)把道具列表、饰品、地图、进度、诅咒、交易、药丸、生成道具定义、房间布局／轨道／夹层信息编码为低频依赖；充能、血量、消耗品、便便／合成袋／临时效果、位置、实体、网格、动画及一次性表现留在实时部分。需要发布时仍读取当前 tick 的权威状态，低频指依赖传输按变化发送，不使用旧采样代替当前字段。UDP 依赖使用递增修订号和可靠有序交付，比较独立编码与引用上一份可靠依赖的 prefix 编码，只发送较小者；首份依赖只执行独立压缩；一次最多有一份未确认的可靠副本，其间的新变化合并为最新候选，允许跳过中间修订。初始视图可靠交付；建立应用确认基线后，尚未被应用确认的新修订同时内嵌于实时视图，避免可靠副本丢包阻塞整帧。内嵌副本可先于可靠副本到达，接收缓存按修订号合并，可靠压缩字典独立维护。实时视图明确引用修订号，客机仅在对应数据齐全时还原完整视图，不能套用最新库存或跨房间拼接。依赖缓存、未完成视图和修订号在代次屏障清理。
 
 世界 schema 为 41，字段 `captured` 是主机开始本轮采集的单调时钟毫秒数；离线生成的无时钟状态使用 0。采集回调返回实时字节和可选依赖字节，应用回调的第五个参数接收对应依赖。完整状态的诊断采集仍由 `state.capture` 提供；生产传输使用 `state.captureTransfer`。
 
@@ -102,7 +102,7 @@ NPC 字段 `npc` 是 25 字节记录：六个大端 float32 依次保存 `V1`、
 
 UDP 游戏消息使用消息封套和连接代次，按完整报文交接，不使用字节流长度前缀。[统一消息封装](https://github.com/BMingSY/isaac-lan/blob/main/src/net/wire_codec.h) 对至少 256 字节的控制、聊天及扩展消息尝试压缩，仅在包含封套后仍更小时使用 `0x80 + 压缩封套`；小消息和不可压缩消息保持原正文。实时视图、检查点和回退载荷先整体压缩再分块，不逐块重复压缩。
 
-[Zstd 适配器](https://github.com/BMingSY/isaac-lan/blob/main/src/core/zstd.cpp) 使用快速级别 `-1`。实时视图比较独立帧和引用已确认不可变快照的 prefix 帧，选择较小载荷；检查点及回退使用独立帧。无压缩收益时使用原始字节。prefix 直接引用完整快照，不训练字典或另外构造字节补丁。压缩上下文由所属工作线程持有并复用，每次调用结束清除借用的 prefix；不同客机之间不共享基线。实时视图首块标明完整／参考模式、基线 tick 与楼层代次。
+[Zstd 适配器](https://github.com/BMingSY/isaac-lan/blob/main/src/core/zstd.cpp) 使用快速级别 `-1`。实时视图优先引用已确认不可变快照的 prefix 帧，并按下述策略抽样比较独立帧；检查点及回退使用独立帧。无压缩收益时使用原始字节。prefix 直接引用完整快照，不训练字典或另外构造字节补丁。压缩上下文由所属工作线程持有并复用，每次调用结束清除借用的 prefix；不同客机之间不共享基线。实时视图首块标明完整／参考模式、基线 tick 与楼层代次。
 
 压缩封套为一字节模式和四字节大端原始长度：`0` 为原始字节，`3` 为独立 Zstd 帧，`4` 为 prefix 帧；`1`／`2` 仅保留旧 XPRESS／DEFLATE 读取。Zstd 帧必须含已知原始长度和内容校验和，不接受训练字典 ID、串接帧或尾随字节。解码前按通道检查输出大小和窗口：消息 4096 字节、实时视图 2 MiB、存档及回退 8 MiB。Zstd 静态链接，不依赖系统安装或额外 DLL。
 
