@@ -7,6 +7,12 @@ local A, E, R = fields.actor, fields.entity, fields.room
 local cases = {
     { name = "tears", kind = WeaponType.WEAPON_TEARS },
     {
+        name = "analog-stick",
+        item = CollectibleType.COLLECTIBLE_ANALOG_STICK,
+        kind = WeaponType.WEAPON_TEARS,
+        freeAim = true,
+    },
+    {
         name = "brimstone",
         item = CollectibleType.COLLECTIBLE_BRIMSTONE,
         kind = WeaponType.WEAPON_BRIMSTONE,
@@ -82,6 +88,12 @@ native.diagnostics_counter = function(name, value)
     if current and name == "attack.previews" and value > (metrics[name] or 0) then
         local m = measurements[current.name]
         m.previews = (m.previews or 0) + value - (metrics[name] or 0)
+        if current.freeAim then
+            local direction = Isaac.GetPlayer(1):GetShootingInput()
+            if math.abs(direction.X) > 0.1 and math.abs(direction.Y) > 0.1 then
+                m.diagonalPreviews = (m.diagonalPreviews or 0) + value - (metrics[name] or 0)
+            end
+        end
         if current.walking and Isaac.GetPlayer(1).Velocity:LengthSquared() > 0.01 then
             m.walkingPreviews = (m.walkingPreviews or 0) + value - (metrics[name] or 0)
         end
@@ -123,6 +135,9 @@ function _IsaacLanFrame()
             buttons, aiming = 0x4000, "HeadLeft"
         elseif at >= 80 and at < 140 then
             buttons, aiming = 0x8000, "HeadUp"
+            if case.freeAim then
+                buttons = buttons | 0x2000
+            end
         elseif at >= 160 and at < 190 then
             buttons, aiming = 0x1000, "HeadDown"
         end
@@ -168,6 +183,10 @@ function _IsaacLanFrame()
             )
             assert((metrics["attack.confirmed"] or 0) > 5, "Insufficient tear handoffs")
             if not mirror then
+                assert(
+                    (measurements["analog-stick"].diagonalPreviews or 0) > 0,
+                    "Free-aim shooting never produced a diagonal local preview"
+                )
                 for _, name in ipairs({ "multishot", "double-shot", "quad-shot", "soy-milk" }) do
                     assert(
                         (measurements[name].previews or 0) > 0,

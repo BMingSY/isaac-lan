@@ -108,14 +108,25 @@ for _, case in ipairs(workloads) do
     local bytes = reference.encode(case.value)
     assert(native.state_encode(case.value) == bytes)
     assert(reference.encode(native.state_decode(bytes)) == bytes)
+    assert(reference.encode(native.state_decode_view(bytes)) == bytes)
     local transfers = {
         ["transfer-one-peer"] = transferWorkload(case, 1, false),
         ["transfer-three-peers"] = transferWorkload(case, 3, false),
         ["transfer-split-rooms"] = transferWorkload(case, 3, true),
     }
     for _, implementation in ipairs({
-        { name = "lua", encode = reference.encode, decode = reference.decode },
-        { name = "native", encode = native.state_encode, decode = native.state_decode },
+        {
+            name = "lua",
+            encode = reference.encode,
+            decode = reference.decode,
+            view = reference.decode,
+        },
+        {
+            name = "native",
+            encode = native.state_encode,
+            decode = native.state_decode,
+            view = native.state_decode_view,
+        },
     }) do
         for _, transfer in pairs(transfers) do
             transfer.run(implementation.encode, true)
@@ -123,6 +134,7 @@ for _, case in ipairs(workloads) do
         for _, operation in ipairs({
             "encode",
             "decode",
+            "decode-view",
             "encode-three-peers",
             "transfer-one-peer",
             "transfer-three-peers",
@@ -134,6 +146,8 @@ for _, case in ipairs(workloads) do
                     transfer.run(implementation.encode)
                 elseif operation == "decode" then
                     implementation.decode(bytes)
+                elseif operation == "decode-view" then
+                    implementation.view(bytes)
                 elseif operation == "encode" then
                     implementation.encode(case.value)
                 else

@@ -1,5 +1,5 @@
 -- Reconcile display-only weapon clocks against accepted input sequences.
-local rate, maxHistory, maxPendingTime = 30, 120, 0.25
+local rate, maxHistory, defaultPendingTime, maximumPendingTime = 30, 120, 0.25, 0.5
 return function(policy)
     local methods = {}
     methods.__index = methods
@@ -67,7 +67,7 @@ return function(policy)
         self.pending = pending
         return true
     end
-    function methods:step(sequence, dt, firing, tears, emit)
+    function methods:step(sequence, dt, firing, tears, emit, pendingLimit)
         local input = {
             sequence = sequence,
             dt = math.max(0, math.min(dt, 0.05)),
@@ -78,7 +78,11 @@ return function(policy)
         for _, pending in ipairs(self.pending) do
             total = total + pending.dt
         end
-        if #self.pending >= maxHistory or total > maxPendingTime then
+        local limit = math.max(
+            defaultPendingTime,
+            math.min(pendingLimit or defaultPendingTime, maximumPendingTime)
+        )
+        if #self.pending >= maxHistory or total > limit then
             return nil
         end
         self.pending[#self.pending + 1] = input

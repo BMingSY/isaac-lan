@@ -27,10 +27,13 @@ class WorldEmission {
         if (!remaining)
             protectedReplacement = false;
     }
+    bool refreshDue(double bytesPerSecond, Clock::time_point now) const {
+        return !protectedReplacement && remaining && now - started >= staleAfter &&
+               remaining > total / 2 &&
+               remaining / std::max(1.0, bytesPerSecond) > finishSoonSeconds;
+    }
     bool replace(bool newer, double bytesPerSecond, Clock::time_point now) {
-        if (!newer || protectedReplacement || !remaining || now - started < staleAfter ||
-            remaining <= total / 2 ||
-            remaining / std::max(1.0, bytesPerSecond) <= finishSoonSeconds)
+        if (!newer || !refreshDue(bytesPerSecond, now))
             return false;
         protectedReplacement = true;
         return true;

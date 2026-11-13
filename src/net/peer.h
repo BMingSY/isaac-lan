@@ -1,6 +1,7 @@
 #pragma once
 #include "net/socket.h"
 #include "net/messages.h"
+#include "net/input_events.h"
 #include "net/world_transfer.h"
 #include "net/checkpoint_transfer.h"
 #include <chrono>
@@ -24,8 +25,7 @@ struct Peer : Socket {
     std::shared_ptr<const Stage> sendingStage;
     std::optional<WorldState> pending;
     std::uint32_t inputSequence = 0;
-    std::optional<std::uint32_t> edgeSequence;
-    std::deque<InputSample> inputEdges;
+    InputEvents inputEvents;
     std::optional<std::uint32_t> acknowledged;
     int minimumLatency = -1;
     PathLatency pathLatency;
@@ -37,40 +37,20 @@ struct Peer : Socket {
     bool pingPending = false;
     using Socket::Socket;
     void submitInput(InputSample sample) {
-        if (sample.input.triggered) {
-            auto event = inputMessage(sample);
-            event.bytes[0] = static_cast<std::uint8_t>(Message::inputEdges);
-            sendMessage(event);
-        }
+        if (auto event = inputEvents.submit(sample))
+            sendMessage(inputEventMessage(*event));
         sample.input.triggered = 0;
-        sendMessage(inputMessage(sample));
+        sendMessage(inputMessage(sample, inputEvents.recent()));
     }
     void consumeEdges(InputFrame& input, const std::optional<InputRoom>& room) {
-        if (Clock::now() - inputAt > std::chrono::milliseconds(500)) {
-            inputEdges.clear();
-            return;
-        }
-        // Bounded by samples, not simulated host ticks: 120 samples cover at
-        // most two seconds at the default 60 Hz rate. Context also expires
-        // actions at room/floor boundaries, including reordered delivery.
-        constexpr std::uint32_t maxEdgeSampleAge = 120;
-        while (!inputEdges.empty() && hasInput && inputEdges.front().sequence <= inputSequence) {
-            const auto& event = inputEdges.front();
-            std::uint16_t edges = 0;
-            if (inputSequence - event.sequence <= maxEdgeSampleAge)
-                edges = retainedInputEdges(event.input, event.room, room);
-            inputEdges.pop_front();
-            if (edges) {
-                // Two separate presses delivered together are still two host
-                // updates, rather than one bitwise-OR action.
-                input.triggered |= edges;
-                break;
-            }
-        }
+        if (hasInput)
+            input.triggered |= inputEvents.consume(
+                inputSequence, room, Clock::now() - inputAt <= std::chrono::milliseconds(500));
     }
     void resetWorldCache(std::uint32_t epoch = 0) {
         pending.reset();
         if (pipe) {
+            pipe->captureRequested.store(true, std::memory_order_release);
             pipe->publication.take();
             auto generation = pipe->generation.load(std::memory_order_relaxed);
             ++generation.revision;

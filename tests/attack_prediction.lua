@@ -13,6 +13,7 @@ for index, name in ipairs({
     "COLLECTIBLE_MUTANT_SPIDER",
     "COLLECTIBLE_SOY_MILK",
     "COLLECTIBLE_ALMOND_MILK",
+    "COLLECTIBLE_ANALOG_STICK",
 }) do
     enums.CollectibleType[name] = index
 end
@@ -183,3 +184,18 @@ assert(pose.display(bytes, snapshot(4, 0, 10, 9)) == bytes, "A different weapon 
 print(
     "PASS immediate shooting, cooldown, acknowledgement replay, charge caps/release, stall and pose contract"
 )
+
+counts = { [enums.CollectibleType.COLLECTIBLE_ANALOG_STICK] = 1 }
+assert(previewPolicy.freeAim(player) and previewPolicy.tearCount(player) == 1)
+counts[enums.CollectibleType.COLLECTIBLE_ALMOND_MILK] = 1
+assert(previewPolicy.tearCount(player) == nil, "Free aim bypassed incompatible attack rules")
+local delayed = prediction.new(snapshot(1, -1, 0, 0), 0, 0)
+for sequence = 1, 9 do
+    assert(
+        delayed:step(sequence, 0.05, true, true, nil, 10),
+        "High-latency prediction ended too early"
+    )
+end
+assert(delayed:step(10, 0.05, true, true, nil, 10))
+assert(not delayed:step(11, 0.05, true, true, nil, 10), "Adaptive prediction exceeded its hard cap")
+print("PASS free aim eligibility and bounded high-latency prediction")

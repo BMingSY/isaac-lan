@@ -493,3 +493,28 @@ assert(#draws == 0, "View reset left a tear in another room")
 print(
     "PASS local aiming/drawing, unique confirmation, smooth handoff, controls, weapon change, collision, timeout and view reset"
 )
+
+-- Native Analog Stick aim may be diagonal; ordinary cardinal weapons retain
+-- their restriction. These are drawing-only previews and disappear on reset.
+roomAvailable = true
+direction = Vector(1, 1)
+fresh()
+present(0, 1)
+assert(#draws == 0, "Ordinary weapon guessed a diagonal tear")
+policy.freeAim = function()
+    return true
+end
+fresh()
+present(0, 1)
+assert(#draws == 1, "Known free-aim weapon did not preview its diagonal shot")
+policy.freeAim = nil
+direction = Vector(1, 0)
+status.sync1, status.ping1 = 300, 40
+fresh()
+present(0, 1)
+present(0.28, 2)
+assert(#draws > 0, "Preview expired at the short RTT despite delayed authoritative views")
+present(0.51, 3)
+assert(counters["attack.pending"] == 0, "Delayed preview outlived its hard deadline")
+status.sync1 = nil
+print("PASS diagonal free-aim presentation and sync-delay budget")

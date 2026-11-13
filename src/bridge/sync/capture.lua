@@ -11,10 +11,13 @@ return function(fields)
         local inventoryCatalog = {}
         local captureEncoded, locations, shared = {}, nil, nil
         local captureStarted = 0
+        local previousActors, previousEncoded, previousMap = {}, {}, {}
+        local currentMap = {}
         local roomState = deps.roomFactory()
         local function reset()
             captureTick, captureEpoch = nil, nil
             captureActors, captureVisuals, captureEncoded = {}, {}, {}
+            previousActors, previousEncoded, previousMap, currentMap = {}, {}, {}, {}
             inventoryCatalog = {}
             locations, shared = nil, nil
             roomState = deps.roomFactory()
@@ -24,6 +27,21 @@ return function(fields)
             local level = game:GetLevel()
             local epoch = native.net_floor_epoch()
             if captureTick ~= tick or captureEpoch ~= epoch then
+                previousActors = captureEpoch == epoch and captureActors or {}
+                previousMap = captureEpoch == epoch and currentMap or {}
+                previousEncoded = {}
+                -- Carry only reusable stable fragments, not the prior room's
+                -- entity graph and all its encoded bytes.
+                for _, actor in pairs(previousActors) do
+                    local items = actor[Actor.inventory][fields.inventory.items]
+                    if items then
+                        previousEncoded[items] = captureEncoded[items]
+                    end
+                end
+                for _, record in pairs(previousMap) do
+                    previousEncoded[record] = captureEncoded[record]
+                end
+                currentMap = {}
                 captureTick, captureEpoch = tick, epoch
                 captureStarted = deps.clock and deps.clock() or 0
                 captureActors, captureVisuals, captureEncoded = {}, {}, {}
@@ -40,7 +58,11 @@ return function(fields)
                     base = {
                         [Actor.index] = index,
                         [Actor.controller] = p.ControllerIndex,
-                        [Actor.inventory] = inventory(p, inventoryCatalog),
+                        [Actor.inventory] = inventory(
+                            p,
+                            inventoryCatalog,
+                            previousActors[index] and previousActors[index][Actor.inventory]
+                        ),
                         [Actor.visuals] = {},
                         [Actor.pose] = false,
                         [Actor.poop] = poop.capture(p),
@@ -49,6 +71,10 @@ return function(fields)
                         [Actor.babySkin] = p:GetBabySkin(),
                     }
                     captureActors[index] = base
+                    local items = base[Actor.inventory][fields.inventory.items]
+                    if items then
+                        captureEncoded[items] = previousEncoded[items] or false
+                    end
                 end
                 local position = locations[tostring(p.ControllerIndex - 1)]
                 if
@@ -125,7 +151,7 @@ return function(fields)
                         return
                     end
                     included[key] = true
-                    map[#map + 1] = {
+                    local value = {
                         [Map.index] = index,
                         [Map.display] = d.DisplayFlags,
                         [Map.visited] = d.VisitedCount,
@@ -136,6 +162,22 @@ return function(fields)
                         [Map.pickups] = native.map_pickups(index, dimension),
                         [Map.layout] = native.room_layout(index, dimension),
                     }
+                    local prior = previousMap[key]
+                    local same = prior ~= nil
+                    if prior then
+                        for field, entry in ipairs(value) do
+                            if prior[field] ~= entry then
+                                same = false
+                                break
+                            end
+                        end
+                    end
+                    if same then
+                        value = prior
+                    end
+                    currentMap[key] = value
+                    captureEncoded[value] = previousEncoded[value] or false
+                    map[#map + 1] = value
                 end
                 local rooms = level:GetRooms()
                 for i = 0, rooms.Size - 1 do

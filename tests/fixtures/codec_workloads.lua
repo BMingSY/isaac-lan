@@ -1,6 +1,8 @@
 -- Synthetic wire-shaped data isolates codec CPU cost from native gameplay.
 return function(root)
     local schema = dofile(root .. "/src/bridge/sync/world_schema.lua")
+    local codec = dofile(root .. "/src/bridge/sync/codec.lua")
+    local fields = dofile(root .. "/src/bridge/sync/fields.lua")
     local function sprite(index)
         return {
             "gfx/tears/tear.anm2",
@@ -17,8 +19,8 @@ return function(root)
             string.rep("\0", 48),
         }
     end
-    local function entity(index)
-        return {
+    local function entity(index, packed)
+        local value = {
             index,
             2,
             0,
@@ -45,6 +47,21 @@ return function(root)
             false,
             0,
         }
+        if packed then
+            local E = fields.entity
+            value[E.nativeFields] = codec.encode({
+                value[E.common],
+                value[E.typed],
+                value[E.offset],
+                value[E.scale],
+                value[E.color],
+            })
+            for _, field in ipairs({ E.common, E.typed, E.offset, E.scale, E.color }) do
+                value[field] = false
+            end
+            value[E.sprite][fields.sprite.color] = false
+        end
+        return value
     end
     local result = {}
     for _, load in ipairs({
@@ -53,13 +70,15 @@ return function(root)
         { "inventory-500", 500, 0 },
         { "tears-500", 1, 500 },
         { "combined", 300, 500 },
+        { "packed-tears-500", 1, 500, true },
+        { "packed-combined", 300, 500, true },
     }) do
         local items, entities = {}, {}
         for i = 1, load[2] do
             items[i] = { i, 1 }
         end
         for i = 1, load[3] do
-            entities[i] = entity(i)
+            entities[i] = entity(i, load[4])
         end
         local actor = { 0, 1, entity(10000), { 0, items, { { 0, 0 } }, { 0, 0 } }, {}, false }
         local room = { true, 42, entities, {}, "music", "layout", false, { 0.0, 0.0 }, "rails" }

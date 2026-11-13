@@ -190,3 +190,56 @@ for actor, p in ipairs(observed) do
     assert(p.actives[1][1] == 2 and p.actives[1][2] == actor)
 end
 print("PASS shared repair catalog, independent passive/generated counts and active slots")
+
+-- Reuse values, never cached native counts. Same-size replacements and removals
+-- must leave a prior published inventory untouched.
+local reuse = dofile(root .. "/tests/fixtures/offline_inventory.lua")(root)
+local p = reuse.player()
+p.items = { [1] = 2, [5] = 3 }
+local original = reuse.read()[1]
+local originalBytes = codec.encode(original)
+local unchanged = reuse.read({}, original)[1]
+assert(unchanged[fields.inventory.items] == original[fields.inventory.items])
+p.items[1], p.items[6], p.items[5] = 4, 2, nil
+local changed = reuse.read({}, unchanged)[1]
+assert(changed[fields.inventory.items] ~= unchanged[fields.inventory.items])
+same(changed, reuse.read()[1])
+p.items = {}
+local empty = reuse.read({}, changed)[1]
+assert(#empty[fields.inventory.items] == 0)
+assert(codec.encode(original) == originalBytes, "Inventory reuse mutated a prior snapshot")
+
+-- Repeated resources/charges must not call native mutators. A local deviation
+-- is still repaired even when the authoritative inventory has not changed.
+local setters = 0
+for _, name in ipairs({
+    "AddCoins",
+    "AddBombs",
+    "AddKeys",
+    "AddSoulCharge",
+    "AddBloodCharge",
+    "SetActiveCharge",
+}) do
+    local apply = p[name]
+    p[name] = function(self, ...)
+        setters = setters + 1
+        return apply(self, ...)
+    end
+end
+local state = reuse.read()[1]
+reuse.apply(state, false)
+reuse.apply(state, true)
+assert(setters == 0, "Unchanged inventory called native resource/charge mutators")
+p.resources[1], p.resources[4], p.actives[1][2] = 3, 2, 1
+reuse.apply(state, false)
+assert(setters == 3, "Local resource deviation was not repaired exactly once")
+same(reuse.read()[1], state)
+-- Battery charge belongs to the same total; it must not spuriously reapply.
+p.GetBatteryCharge = function(_, slot)
+    return slot == 0 and 2 or 0
+end
+state = reuse.read()[1]
+setters = 0
+reuse.apply(state, false)
+assert(setters == 0, "Battery charge was ignored in the equality check")
+print("PASS immutable inventory reuse, local mutations, resources and battery charges")

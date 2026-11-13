@@ -161,12 +161,19 @@ if(BUILD_TESTING)
     if(MINGW)
         target_link_options(isaac_lan_world_shards_test PRIVATE -static-libgcc -static-libstdc++)
     endif()
-    foreach(test_case erasures cleanup overhead)
+    foreach(test_case erasures cleanup overhead adaptive)
         add_test(NAME net.world-shards-${test_case} COMMAND isaac_lan_world_shards_test
                                                             ${test_case})
         set_tests_properties(net.world-shards-${test_case} PROPERTIES TIMEOUT 60 LABELS
                                                                       "offline;core")
     endforeach()
+    add_executable(isaac_lan_input_events_test tests/input_events_test.cpp)
+    target_include_directories(isaac_lan_input_events_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_input_events_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME net.input-events COMMAND isaac_lan_input_events_test)
+    set_tests_properties(net.input-events PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_mailbox_test tests/mailbox_test.cpp)
     target_include_directories(isaac_lan_mailbox_test PRIVATE src)
     if(MINGW)
@@ -674,6 +681,8 @@ if(BUILD_TESTING)
         reliable-receive
         receive-isolation
         world-deltas
+        sampled-compression
+        capture-demand
         delivery-backpressure
         delta-floor-boundary
         inputs-2

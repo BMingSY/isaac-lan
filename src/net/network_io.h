@@ -31,7 +31,8 @@ struct NetworkSample {
 };
 struct WorldObservation {
     std::atomic<std::size_t> cached{0}, flightBytes{0}, flightStates{0}, worldBytes{0};
-    std::atomic<std::uint64_t> oldestMs{0}, snapshots{0}, deltas{0}, raw{0}, wire{0}, full{0};
+    std::atomic<std::uint64_t> oldestMs{0}, snapshots{0}, deltas{0}, raw{0}, wire{0}, full{0},
+        compared{0};
 };
 // Main-thread producer / network-thread consumer for outgoing, reversed for
 // incoming. Socket state and queue counters are observations, never ownership.
@@ -48,6 +49,7 @@ struct ConnectionPipe {
     std::atomic<WorldGeneration> generation{};
     std::atomic<std::uint64_t> coalescedInputs{0};
     std::atomic<int> minimumLatency{-1};
+    std::atomic<bool> captureRequested{true};
     WorldObservation world;
     std::atomic<State> state;
     std::atomic<bool> closing{false}, answerPing{false};

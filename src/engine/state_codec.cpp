@@ -116,8 +116,47 @@ struct Encoder {
     }
 };
 
-void get(lua_State* L, Reader& reader, Budget& budget, std::size_t depth) {
+struct LeafCache {
+    int table = 0;
+    unsigned entries = 0;
+    static constexpr unsigned maxEntries = 4096, maxFields = 16;
+};
+
+// View leaves are immutable value tuples. Share identical numeric/boolean
+// leaves within this decode only; mutable containers and separate views never
+// alias. The ordinary codec keeps its independent-table contract.
+bool scalarLeaf(Reader& reader, unsigned size) {
+    if (!size || size > LeafCache::maxFields)
+        return false;
+    bool integerPair = size <= 2;
+    for (unsigned i = 0; i < size; ++i) {
+        switch (reader.tag()) {
+        case Tag::falseValue:
+        case Tag::trueValue:
+            integerPair = false;
+            break;
+        case Tag::int32:
+            reader.integer(4);
+            break;
+        case Tag::int64:
+            reader.integer(8);
+            break;
+        case Tag::float32:
+            integerPair = false;
+            reader.number();
+            break;
+        default:
+            return false;
+        }
+    }
+    // Short integer tuples (notably item ID/count pairs) are usually unique.
+    // Their hash keys would cost more than the small tables they might save.
+    return !integerPair;
+}
+
+void get(lua_State* L, Reader& reader, Budget& budget, std::size_t depth, LeafCache& cache) {
     budget.visit(depth);
+    const auto first = reader.position();
     switch (reader.tag()) {
     case Tag::falseValue:
         api.pushBoolean(L, false);
@@ -142,10 +181,29 @@ void get(lua_State* L, Reader& reader, Budget& budget, std::size_t depth) {
     }
     case Tag::array: {
         const auto size = static_cast<int>(reader.integer(2));
+        auto end = reader;
+        const bool leaf = cache.table && scalarLeaf(end, size);
+        const auto key = leaf ? end.slice(first) : std::string_view{};
+        if (leaf) {
+            api.pushLString(L, key.data(), key.size());
+            if (api.rawGet(L, cache.table) == LuaType::table) {
+                budget.visit(depth + 1, size);
+                reader = end;
+                return;
+            }
+            pop(L);
+        }
         api.createTable(L, size, 0);
         for (int i = 1; i <= size; ++i) {
-            get(L, reader, budget, depth + 1);
+            get(L, reader, budget, depth + 1, cache);
             api.rawSetI(L, -2, i);
+        }
+        if (leaf && cache.entries < LeafCache::maxEntries) {
+            const auto value = api.getTop(L);
+            api.pushLString(L, key.data(), key.size());
+            api.pushValue(L, value);
+            api.rawSet(L, cache.table);
+            ++cache.entries;
         }
         break;
     }
@@ -200,7 +258,7 @@ int encode(lua_State* L) {
     api.pushString(L, error);
     return api.error(L); // No owning C++ objects remain across Lua's longjmp.
 }
-int decode(lua_State* L) {
+template <bool view> int decode(lua_State* L) {
     char error[256]{};
     try {
         if (!api.checkStack(L, static_cast<int>(state_codec::maxDepth) + 4))
@@ -208,7 +266,12 @@ int decode(lua_State* L) {
         const auto value = bytes(L, 1);
         Reader reader({reinterpret_cast<const std::uint8_t*>(value.data()), value.size()});
         Budget budget;
-        get(L, reader, budget, 0);
+        LeafCache cache;
+        if constexpr (view) {
+            api.createTable(L, 0, 0);
+            cache.table = api.getTop(L);
+        }
+        get(L, reader, budget, 0, cache);
         reader.finish();
         return 1;
     } catch (const std::exception& exception) {
@@ -236,8 +299,10 @@ bool bind(lua_State* L, lua::Module module, lua::Resolver resolver) {
     api.setField(L, registry, bufferMetatable);
     api.pushClosure(L, encode, 0);
     api.setField(L, -2, "state_encode");
-    api.pushClosure(L, decode, 0);
+    api.pushClosure(L, decode<false>, 0);
     api.setField(L, -2, "state_decode");
+    api.pushClosure(L, decode<true>, 0);
+    api.setField(L, -2, "state_decode_view");
     return true;
 }
 } // namespace isaac::lua_state_codec

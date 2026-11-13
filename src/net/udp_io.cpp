@@ -5,6 +5,7 @@
 #include "net/wire_codec.h"
 #include "net/world_dependencies.h"
 #include "net/world_shards.h"
+#include "net/world_redundancy.h"
 #include "net/world_emission.h"
 #include <enet/enet.h>
 #include <algorithm>
@@ -89,6 +90,8 @@ struct DatagramConnection {
     WorldTransfer world;
     WorldDependencies dependencies;
     WorldShards shards;
+    WorldRedundancy redundancy;
+    Clock::time_point qualityAt{};
     std::deque<std::vector<std::uint8_t>> outgoingShards;
     WorldEmission emission;
     std::size_t outgoingShardBytes = 0;
@@ -196,6 +199,7 @@ struct DatagramConnection {
         generation = requested;
         pipe->incoming.invalidate();
         world.resetSender();
+        redundancy = {};
         world.epoch(generation.epoch);
         publication.reset();
         latestReceipt.reset();
@@ -284,6 +288,13 @@ struct DatagramConnection {
                 pipe->samples.push({"decompress", world.expandMs});
                 incoming.world = dependencies.receive(std::move(*incoming.world));
             }
+        } else if (kind == Envelope::quality) {
+            if (channel != inputChannel || !authority)
+                throw std::runtime_error("Invalid shard quality channel");
+            WorldShards::Quality value{envelope.u32(), envelope.u32(), envelope.u32()};
+            envelope.finish();
+            redundancy.observe(value, Clock::now());
+            return;
         } else if (kind == Envelope::dependency) {
             if (channel != reliableChannel || authority || context != fence)
                 throw std::runtime_error("Invalid UDP dependency channel");
@@ -308,9 +319,9 @@ struct DatagramConnection {
             if (realtime != (channel == inputChannel) ||
                 (channel != inputChannel && channel != reliableChannel))
                 throw std::runtime_error("Invalid UDP message channel");
-            // Reliable one-shot input from an old generation must not leak
-            // into the next floor/run even if it was waiting for retransmission.
-            if ((type == Message::inputEdges || type == Message::applied) && context != fence)
+            // Events keep their ordinal across floors. Deliver reliable gaps;
+            // the session expires their original room/epoch before consumption.
+            if (type == Message::applied && context != fence)
                 return;
             if (type == Message::world)
                 throw std::runtime_error("Invalid UDP world envelope");
@@ -336,6 +347,7 @@ struct DatagramConnection {
         pipe->world.raw.store(world.totals.raw + dependencyRaw);
         pipe->world.wire.store(world.totals.wire + dependencyWire + redundancyWire);
         pipe->world.full.store(world.totals.full + dependencyFull);
+        pipe->world.compared.store(world.totals.compared + dependencyWire);
         pipe->receiveCapacity.store(peer->totalWaitingData + pipe->incoming.queuedBytes());
     }
     std::size_t datagramCost(std::size_t bytes) const {
@@ -394,6 +406,19 @@ struct DatagramConnection {
         }
         if (input)
             message(std::move(*input), codec);
+        constexpr auto qualityInterval = std::chrono::milliseconds(500);
+        if (!authority && !closingAt && (shards.quality.completed || shards.quality.discarded) &&
+            Clock::now() - qualityAt >= qualityInterval) {
+            Writer quality(Message::world);
+            quality.u32(shards.quality.completed);
+            quality.u32(shards.quality.repaired);
+            quality.u32(shards.quality.discarded);
+            send(std::span(quality.bytes).subspan(1), inputChannel, Envelope::quality, 0, nullptr,
+                 true);
+            qualityAt = Clock::now();
+        }
+        if (world.oldestMs() >= WorldTransfer::lostStateAge.count())
+            redundancy.penalize(Clock::now());
         // A receipt is cumulative latest-state feedback, not a transaction.
         // Ordered retransmission here would stall the UDP publication window
         // behind an old missing ACK. Repeat the newest receipt so a lost final
@@ -514,7 +539,8 @@ struct DatagramConnection {
                 const auto fragmentLimit =
                     peer->mtu - sizeof(ENetProtocolHeader) - sizeof(ENetProtocolSendFragment) -
                     (peer->host->checksum ? sizeof(enet_uint32) : 0) - envelopeHeader;
-                const auto shardCount = WorldShards::packetCount(state->bytes.size());
+                const auto parity = redundancy.parity(Clock::now());
+                const auto shardCount = WorldShards::packetCount(state->bytes.size(), parity);
                 if (!recovery && state->bytes.size() > fragmentLimit &&
                     shardCount <= ENET_PEER_UNSEQUENCED_WINDOW_SIZE) {
                     // ENet discards the previous 1024-sequence window as soon
@@ -530,13 +556,15 @@ struct DatagramConnection {
                     outgoingTick = world.trace.tick;
                     outgoingKind = Envelope::shard;
                     std::size_t emitted = 0, wire = 0;
-                    WorldShards::send(world.trace.tick, state->bytes,
-                                      [&](std::span<const std::uint8_t> shard) {
-                                          emitted += shard.size();
-                                          wire += datagramCost(shard.size());
-                                          outgoingShards.emplace_back(shard.begin(), shard.end());
-                                          outgoingShardBytes += shard.size();
-                                      });
+                    WorldShards::send(
+                        world.trace.tick, state->bytes,
+                        [&](std::span<const std::uint8_t> shard) {
+                            emitted += shard.size();
+                            wire += datagramCost(shard.size());
+                            outgoingShards.emplace_back(shard.begin(), shard.end());
+                            outgoingShardBytes += shard.size();
+                        },
+                        parity);
                     redundancyWire += emitted - state->bytes.size();
                     world.accountWire(world.trace.tick, wire);
                     emission.begin(outgoingShardBytes, Clock::now());
@@ -580,6 +608,20 @@ struct DatagramConnection {
             outgoingShards.pop_front();
         }
         observe();
+        // Request game-thread work only when it can feed the bounded sender.
+        // A stale unfinished emission may request one fresh replacement; its
+        // protected replacement must finish before another capture is requested.
+        const bool refresh =
+            !outgoingShards.empty() && emission.refreshDue(world.bytesPerSecond(), Clock::now());
+        pipe->captureRequested.store(
+            !closingAt && bulk.empty() && !publication &&
+                queued - std::min(queued, dependencyQueued) < bulkChunkSize &&
+                (world.hasBaseline() ||
+                 (recoveryComplete->load() &&
+                  Clock::now() - recoveryAt >= WorldTransfer::lostStateAge)) &&
+                world.canCapture(pipe->minimumLatency.load(), refresh) &&
+                (outgoingShards.empty() || refresh),
+            std::memory_order_release);
         if (closingAt) {
             if (peer->state == ENET_PEER_STATE_CONNECTED)
                 enet_peer_disconnect_later(peer, 0);

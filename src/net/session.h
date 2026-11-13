@@ -11,7 +11,7 @@ struct TransportResources {
     std::size_t deliveryWindow = 0;
     std::uint64_t oldestWorldMs = 0, coalescedInputs = 0;
     std::uint64_t worldSnapshots = 0, deltaSnapshots = 0, rawWorldBytes = 0, wireWorldBytes = 0,
-                  fullWorldBytes = 0;
+                  fullWorldBytes = 0, comparedWorldBytes = 0;
 };
 // Main-thread session coordinator. Socket/byte workers exchange owned values;
 // no worker invokes Lua or touches game objects. All traffic uses UDP/ENet.
@@ -64,6 +64,7 @@ class Session {
     std::optional<Frame> take();
     bool ready();
     bool publish(unsigned slot, WorldState state);
+    bool captureRequested(unsigned slot) const;
     std::optional<WorldState> takeState();
     bool beginStage(const Stage&);
     std::optional<Stage> takeStage();
