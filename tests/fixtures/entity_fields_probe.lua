@@ -54,6 +54,17 @@ return function(native, reference, schemas, host)
         s.Scale, s.Offset = Vector(table.unpack(value[9])), Vector(table.unpack(value[10]))
         s.Color = Color(table.unpack(value[11]))
     end
+    local function verifyReuse(capture, sprite, plan, previous, arrays)
+        local original, memo = reference.encode(previous), {}
+        local first = capture(sprite, plan, memo)
+        local value = capture(sprite, plan, memo)
+        assert(value ~= first and reference.encode(value) == original, "Capture reuse differs")
+        for _, index in ipairs(arrays) do
+            assert(value[index] == first[index], "Equal numeric arrays were allocated again")
+            assert(value[index] ~= previous[index], "Uncached captures unexpectedly shared arrays")
+        end
+        assert(reference.encode(first) == original and #memo <= 256)
+    end
     local function verifySprite(s)
         local original = readSprite(s)
         local bytes = reference.encode(original)
@@ -61,6 +72,33 @@ return function(native, reference, schemas, host)
             reference.encode(native.sprite_fields_capture(s, spritePlan)) == bytes,
             "Native sprite capture differs"
         )
+        verifyReuse(
+            native.sprite_fields_capture,
+            s,
+            spritePlan,
+            native.sprite_fields_capture(s, spritePlan),
+            { 9, 10, 11 }
+        )
+        local memo, scalePlan = {}, native.sprite_fields_plan({ "Scale" })
+        local ok, message = pcall(function()
+            s.Scale = Vector(-0.0, 1.0)
+            local negative = native.sprite_fields_capture(s, scalePlan, memo)[1]
+            s.Scale = Vector(0.0, 1.0)
+            local positive = native.sprite_fields_capture(s, scalePlan, memo)[1]
+            assert(negative ~= positive and 1 / negative[1] < 0 and 1 / positive[1] > 0)
+            local saved = reference.encode(negative)
+            for index = 1, 300 do
+                s.Scale = Vector(index / 10, 1.0)
+                local captured = native.sprite_fields_capture(s, scalePlan, memo)
+                assert(
+                    reference.encode(captured) == reference.encode({ vector(s.Scale) }),
+                    "Full capture cache returned stale fields"
+                )
+            end
+            assert(#memo == 256 and reference.encode(negative) == saved)
+        end)
+        s.Scale = Vector(table.unpack(original[9]))
+        assert(ok, message)
         if not host then
             local state = assert(native.sprite_state(s))
             if original[2] ~= "" then
@@ -173,6 +211,13 @@ return function(native, reference, schemas, host)
                     assert(
                         native.entity_fields_encode(sprite, plan) == expected,
                         "Packed capture differs"
+                    )
+                    verifyReuse(
+                        native.entity_fields_capture,
+                        sprite,
+                        plan,
+                        native.entity_fields_capture(sprite, plan),
+                        { 1, 2, 5, 6, 9 }
                     )
                     if not host then
                         local originalSprite = assert(native.sprite_state(sprite))

@@ -1,6 +1,45 @@
 local root = assert(arg[1])
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
+-- Dispatcher matching uses plain identity values and never retains the native
+-- object. Equal classes still capture/apply/link fresh state every time.
+local dispatchCalls, dispatchMatches = {}, 0
+local dispatcher = dofile(root .. "/src/bridge/compat/visuals.lua")({
+    matches = function(identity)
+        dispatchMatches = dispatchMatches + 1
+        return identity.Type == 1000 and identity.Variant == 172 and identity.SubType == 1
+    end,
+    capture = function(entity)
+        return entity.value
+    end,
+    apply = function(entity, value)
+        entity.value = value
+        dispatchCalls[#dispatchCalls + 1] = "apply"
+    end,
+    link = function(_, value)
+        dispatchCalls[#dispatchCalls + 1] = value
+    end,
+})
+local target = setmetatable({ value = "first" }, {
+    __index = function(_, name)
+        error("Unexpected native identity read: " .. name)
+    end,
+})
+assert(dispatcher.capture(target, nil, nil, 1000, 172, 1) == "first")
+dispatcher.apply(target, "second", nil, 1000, 172, 1)
+dispatcher.link(target, "links", nil, 1000, 172, 1)
+assert(dispatcher.capture(target, nil, nil, 1000, 172, 1) == "second")
+assert(dispatchMatches == 1 and table.concat(dispatchCalls, ",") == "apply,links")
+for _, identity in ipairs({ { 5, 172, 1 }, { 1000, 171, 1 }, { 1000, 172, 0 } }) do
+    assert(dispatcher.capture(target, nil, nil, table.unpack(identity)) == false)
+    dispatcher.apply(target, false, nil, table.unpack(identity))
+    assert(not pcall(dispatcher.apply, target, "bad", nil, table.unpack(identity)))
+end
+assert(dispatcher.capture(target, nil, nil, 1000, 172, 1) == "second")
+local weak = setmetatable({ target }, { __mode = "v" })
+target = nil
+collectgarbage("collect")
+assert(weak[1] == nil, "Visual selection retained a game object")
 local stored = string.pack(">ff", 520, -180)
 local function vector(x, y)
     return { X = x, Y = y }

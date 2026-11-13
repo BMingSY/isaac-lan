@@ -221,6 +221,11 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(bridge.native-capture-generation PROPERTIES TIMEOUT 60 LABELS
                                                                          "offline;lua;core")
+        add_test(NAME bridge.native-capture-arrays
+                 COMMAND isaac_lan_state_codec_runner
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_capture_arrays.lua")
+        set_tests_properties(bridge.native-capture-arrays PROPERTIES TIMEOUT 60 LABELS
+                                                                     "offline;lua;core")
     endif()
     add_executable(isaac_lan_cursed_mist_test tests/cursed_mist_test.cpp)
     target_include_directories(isaac_lan_cursed_mist_test PRIVATE src)

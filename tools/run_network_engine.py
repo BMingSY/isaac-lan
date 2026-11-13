@@ -110,7 +110,7 @@ def main():
     parser.add_argument(
         "--knife-fixture",
         action="store_true",
-        help="Unlock Azazel on the owned guest before knife-route or mirror-camera selection",
+        help="Unlock Azazel on the owned guest before scenarios that select him",
     )
     parser.add_argument(
         "--automatic",

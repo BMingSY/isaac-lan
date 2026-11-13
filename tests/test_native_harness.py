@@ -127,6 +127,54 @@ if not ok then assert(message:find("A shot failed to hand over: still", 1, true)
     )
 
 
+@pytest.mark.parametrize("case", ["home", "home-debug", "dogma-warning"])
+def test_home_scenarios_prepare_azazel_before_launch(tmp_path, monkeypatch, case):
+    import run_special_routes as runner
+
+    labs = [tmp_path / role for role in ("host", "client")]
+    for lab in labs:
+        (lab / ".isaac-lan-lab").parent.mkdir(parents=True)
+        (lab / ".isaac-lan-lab").touch()
+        options = log_path(lab).parent / "options.ini"
+        options.parent.mkdir(parents=True)
+        options.write_text("PopUps=1\n")
+    monkeypatch.setattr(runner, "configure_interrupts", lambda: None)
+    monkeypatch.setattr(runner, "validate_owned_labs", lambda *args, **kwargs: labs)
+    monkeypatch.setattr(runner, "validate_startup", lambda labs: None)
+    monkeypatch.setattr(runner, "idle", lambda *args, **kwargs: None)
+    monkeypatch.setattr(lab_profile, "idle", lambda labs: None)
+    output = tmp_path / "result"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_special_routes",
+            "--host",
+            str(labs[0]),
+            "--client",
+            str(labs[1]),
+            "--output",
+            str(output),
+            "--case",
+            case,
+        ],
+    )
+    commands = []
+
+    def stop_before_launch(command, **kwargs):
+        commands.append(command)
+        raise RuntimeError("offline launch boundary")
+
+    monkeypatch.setattr(runner, "run_engine", stop_before_launch)
+    with pytest.raises(RuntimeError, match="offline launch boundary"):
+        runner.main()
+    assert len(commands) == 1 and "--knife-fixture" in commands[0]
+    report = json.loads((output / "report.json").read_text())
+    assert report["restored"] and not report["passed"]
+    for lab in labs:
+        assert (log_path(lab).parent / "options.ini").read_text() == "PopUps=1\n"
+
+
 def test_bundled_input_support_is_frozen_and_needs_no_runtime_files(tmp_path, monkeypatch):
     support = tmp_path / "tests/support/input.lua"
     support.parent.mkdir(parents=True)

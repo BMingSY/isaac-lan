@@ -389,3 +389,33 @@ mapCapture.reset()
 mapCapture.capture(1, 42)
 assert(records[5] ~= records[4], "New session retained prior map identities")
 print("PASS live map reads and immutable record/fragment reuse")
+
+local gridValues = { { 1, 2, 0, 0, 1, 0, { "rock", 0 }, 1, false } }
+deps.roomFactory = function()
+    return function()
+        return { true, revision, {}, gridValues, "music", "layout", false, { 0, 0 }, "rails" }
+    end
+end
+local originalEncode, fragments = deps.encode, {}
+deps.encode = function(value, memo)
+    fragments[#fragments + 1] = memo[gridValues]
+    return originalEncode(value, memo)
+end
+local gridCapture = factory(deps)
+local function gridView(tick)
+    local bytes = gridCapture.capture(1, tick)
+    assert(codec.encode(codec.decode(bytes)) == bytes, "Grid fragments changed wire bytes")
+end
+gridView(60)
+gridView(61)
+assert(fragments[1] == false and type(fragments[2]) == "table", "Grid fragment was not reused")
+gridValues = { { 1, 2, 0, 1, 0, 0, { "broken", 0 }, 1, false } }
+gridView(62)
+assert(fragments[3] == false, "Changed grid retained obsolete encoded bytes")
+epoch = epoch + 1
+gridView(63)
+assert(fragments[4] == false, "Floor change retained a grid fragment")
+gridCapture.reset()
+gridView(64)
+assert(fragments[5] == false, "Session reset retained a grid fragment")
+print("PASS unchanged grid fragments, live mutations and generation cleanup")
