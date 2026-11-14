@@ -1728,37 +1728,43 @@ void roomOptionsAndMarks() {
             "Normal run lost room options when saved");
     require(!isaac::roomOptions::valid(isaac::roomOptions::known + 1),
             "Runtime accepted an unknown room option");
-    // Both legacy formats omit awards; v3 also omits room options.
-    for (unsigned format : {3u, 4u}) {
-        Writer legacy(Message::snapshot);
-        legacy.string(format == 3 ? "IsaacLAN/save/3" : "IsaacLAN/save/4");
-        legacy.string(archive.fingerprint);
-        legacy.string(archive.settings.seed);
-        legacy.u8(archive.settings.difficulty);
-        legacy.u16(0);
-        legacy.u16(0);
-        legacy.u16(65535);
-        legacy.u8(255);
-        legacy.u8(0);
-        if (format == 4)
-            legacy.u32(archive.settings.rules.options);
-        for (auto c : archive.settings.characters)
-            legacy.u16(c);
-        legacy.progress(archive.settings.progress, false);
-        legacy.u8(archive.locations.size());
-        for (const auto& p : archive.locations) {
-            legacy.u32(p.dimension);
-            legacy.u32(p.index);
-            legacy.u32(std::bit_cast<std::uint32_t>(p.x));
-            legacy.u32(std::bit_cast<std::uint32_t>(p.y));
+    // v3 omits options; v3/v4 omit awards. Old gather bits migrate once.
+    for (unsigned format : {3u, 4u, 5u}) {
+        for (const auto legacyOptions : {8u, 16u, 24u, 31u}) {
+            Writer legacy(Message::snapshot);
+            legacy.string("IsaacLAN/save/" + std::to_string(format));
+            legacy.string(archive.fingerprint);
+            legacy.string(archive.settings.seed);
+            legacy.u8(archive.settings.difficulty);
+            legacy.u16(0);
+            legacy.u16(0);
+            legacy.u16(65535);
+            legacy.u8(255);
+            legacy.u8(0);
+            if (format != 3)
+                legacy.u32(legacyOptions);
+            for (auto c : archive.settings.characters)
+                legacy.u16(c);
+            legacy.progress(archive.settings.progress, format == 5);
+            legacy.u8(archive.locations.size());
+            for (const auto& p : archive.locations) {
+                legacy.u32(p.dimension);
+                legacy.u32(p.index);
+                legacy.u32(std::bit_cast<std::uint32_t>(p.x));
+                legacy.u32(std::bit_cast<std::uint32_t>(p.y));
+            }
+            legacy.blob(archive.game);
+            legacy.u64(snapshotHash(legacy.bytes));
+            const auto old = Archive::decode(legacy.bytes);
+            require(old.settings.rules.options ==
+                            (format == 3 ? 0 : isaac::roomOptions::migrateLegacy(legacyOptions)) &&
+                        old.settings.progress == archive.settings.progress &&
+                        old.game == archive.game,
+                    "Previous save format lost progress or room options");
         }
-        legacy.blob(archive.game);
-        legacy.u64(snapshotHash(legacy.bytes));
-        const auto old = Archive::decode(legacy.bytes);
-        require(old.settings.rules.options == (format == 3 ? 0 : archive.settings.rules.options) &&
-                    old.settings.progress == archive.settings.progress && old.game == archive.game,
-                "Previous save format lost progress or room options");
     }
+    archive.settings.rules.options = isaac::roomOptions::legacyAllRoomGather;
+    rejects([&] { Archive::decode(archive.encode()); }, "New archive accepted noncanonical rules");
 }
 
 void archiveIntegrity() {

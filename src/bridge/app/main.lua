@@ -345,6 +345,7 @@ chat = _IsaacLanModules["runtime/chat"]({
     roll = native.chat_roll,
     dice = _IsaacLanModules["runtime/chat_dice"],
     teleport = _IsaacLanModules["runtime/teleport"]({
+        roomDefinitions = _IsaacLanModules["core/room_types"],
         native = native,
         game = Game,
         player = Isaac.GetPlayer,

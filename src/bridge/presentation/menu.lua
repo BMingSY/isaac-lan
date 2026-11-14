@@ -29,6 +29,7 @@ function _IsaacLanMenuOpen(returning)
     ui.page = not returning and idle(_IsaacLanStatus().phase or Phase.idle) and "modes" or "lan"
     ui.selection, ui.editing = 1, nil
     ui.ruleReturn, ui.ruleScroll = nil, nil
+    ui.autoReturn, ui.autoScroll = nil, nil
     _IsaacLan.menu_text_end()
 end
 local previousMouse = Vector(-1000, -1000)
@@ -223,8 +224,12 @@ function _IsaacLanMenuRender(
             visible = false
         end
         ui.selection, ui.editing, ui.lastPhase = 1, nil, phase
-        if phase ~= Phase.lobby and (ui.page == "rules" or ui.page == "challenges") then
+        if
+            phase ~= Phase.lobby
+            and (ui.page == "rules" or ui.page == "autoTeleport" or ui.page == "challenges")
+        then
             ui.page, ui.ruleReturn, ui.ruleScroll = "lan", nil, nil
+            ui.autoReturn, ui.autoScroll = nil, nil
         end
         _IsaacLan.menu_text_end()
     end
@@ -298,6 +303,8 @@ function _IsaacLanMenuRender(
         character = character,
         accent = amber,
         options = roomOptions,
+        roomDefinitions = _IsaacLanModules["core/room_types"],
+        roomTypes = RoomType,
         hide = function()
             visible = false
         end,
@@ -305,6 +312,7 @@ function _IsaacLanMenuRender(
     local rulesPage = ruleCount ~= nil
     centered(
         modes and "联机模式"
+            or ui.page == "autoTeleport" and "自动传送"
             or rulesPage and "房间规则"
             or ui.page == "challenges" and "联机挑战"
             or "局域网联机",
@@ -314,9 +322,9 @@ function _IsaacLanMenuRender(
     )
     if rulesPage then
         centered(
-            "已启用 "
+            (ui.page == "autoTeleport" and "已选 " or "已启用 ")
                 .. ruleCount
-                .. " 项"
+                .. (ui.page == "autoTeleport" and " 类" or " 项")
                 .. (host and not (challenge and challenge.roomOptionsLocked) and "" or " · 只读"),
             110,
             82,

@@ -44,7 +44,7 @@ ConnectionSettings loadConnectionSettings(const std::filesystem::path& path) {
             std::from_chars(options.data(), options.data() + options.size(), result.roomOptions);
         if (failure != std::errc{} || last != options.data() + options.size())
             return {};
-        result.roomOptions &= roomOptions::known;
+        result.roomOptions = roomOptions::migrateLegacy(result.roomOptions) & roomOptions::known;
     }
     return result;
 }

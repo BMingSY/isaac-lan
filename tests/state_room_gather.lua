@@ -2,17 +2,24 @@
 -- the production rule. Both peers assert every destination before advancing.
 local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
 local allRooms = config.gatherAllRooms == true
+local selectedRooms = config.gatherSelected == true
 local host, base = config.host, _IsaacLanFrame
 local input, controls = native.input_bot, 0
-local frames, linked, configured, chosen, done = 0, false, false, false, false
+local frames, linked, configured, chosen, done =
+    0, config.gatherConnected == true, false, false, false
 local current, caseNumber, seen, acknowledged = nil, 0, 0, {}
 local flag, shopSource, crawlspaceSource, crawlspaceEntrance
 local cardRetry = false
 for _, rule in ipairs(native.net_room_options()) do
-    if rule.key == (allRooms and "allRoomGather" or "specialRoomGather") then
-        assert(rule.name == (allRooms and "所有房间集合" or "特殊房间集合"))
-        assert(rule.shortName == (allRooms and "全程集合" or "集合"))
-        flag = rule.flag
+    if rule.key == "autoTeleport" then
+        assert(rule.name == "自动传送" and rule.shortName == "传送")
+        if selectedRooms then
+            flag = 1
+                | (rule.firstRoomFlag << (RoomType.ROOM_BOSS - RoomType.ROOM_DEFAULT))
+                | (rule.firstRoomFlag << (RoomType.ROOM_ULTRASECRET - RoomType.ROOM_DEFAULT))
+        else
+            flag = allRooms and rule.flag or (rule.flag & ~rule.firstRoomFlag)
+        end
     end
 end
 assert(flag, "Missing lobby rule")
@@ -267,6 +274,36 @@ local cases = {
     },
     { name = "post-floor-shop", setup = target("/tp sh", RoomType.ROOM_SHOP) },
 }
+if selectedRooms then
+    cases = {
+        {
+            name = "unselected-ordinary",
+            split = true,
+            setup = function()
+                local index = existing(RoomType.ROOM_DEFAULT)
+                return coordinate(index), index
+            end,
+        },
+        { name = "unselected-shop", split = true, setup = target("/tp sh", RoomType.ROOM_SHOP) },
+        { name = "selected-boss", setup = target("/tp b", RoomType.ROOM_BOSS) },
+        { name = "leave-selected", owner = 0, split = true, setup = start },
+        {
+            name = "selected-ultra-secret",
+            owner = 0,
+            setup = target("/tp us", RoomType.ROOM_ULTRASECRET),
+        },
+        { name = "unselected-secret", split = true, setup = target("/tp s", RoomType.ROOM_SECRET) },
+        { name = "reenter-boss", owner = 0, setup = target("/tp b", RoomType.ROOM_BOSS) },
+        {
+            name = "floor",
+            owner = 0,
+            setup = function()
+                return "floor", Game():GetLevel():GetStartingRoomIndex()
+            end,
+        },
+        { name = "post-floor-boss", setup = target("/tp b", RoomType.ROOM_BOSS) },
+    }
+end
 local selected = {}
 for _, case in ipairs(cases) do
     if not (allRooms and case.specialOnly or not allRooms and case.allOnly) then
@@ -331,7 +368,11 @@ function _IsaacLanFrame()
         end
         if status.roomOptions == flag and not chosen then
             chosen = true
-            _IsaacLanCommand("choose", "0:1")
+            -- A preceding menu scenario already readied this seat. Do not
+            -- dirty the lobby again in the same frame that the host starts.
+            if status["ready" .. (host and 0 or 1)] ~= 1 then
+                _IsaacLanCommand("choose", "0:1")
+            end
         end
         if host and status.players == 2 and status.ready0 == 1 and status.ready1 == 1 then
             _IsaacLanCommand("start", "N024KHNP:0:0:0:0:0")
@@ -377,7 +418,11 @@ function _IsaacLanFrame()
             end
             if message.text == "GATHER_ALL_DONE" then
                 done, controls = true, 0
-                report("PASS " .. (allRooms and "all" or "special") .. " room rule")
+                report(
+                    "PASS "
+                        .. (selectedRooms and "selected" or allRooms and "all" or "special")
+                        .. " room rule"
+                )
             end
         end
     end
@@ -432,7 +477,7 @@ function _IsaacLanFrame()
                     assert(level.DungeonReturnRoomIndex == crawlspaceSource)
                 end)
             end
-            if host and allRooms and case.name ~= "floor" then
+            if host and (allRooms or selectedRooms and not case.split) and case.name ~= "floor" then
                 local leader
                 actor(current.owner, function(player)
                     leader = player.Position

@@ -98,7 +98,7 @@ sequenceDiagram
 
 ## 联机存档与续玩
 
-[`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 定义存档封装：扩展指纹、开局设置、运行规则、全队位置、原生 GameState 和完整性哈希。`IsaacLAN/save/5` 保存房间选项及本局奖励账本；读取也支持没有奖励账本的 `save/4` 和没有房间选项的 `save/3`，缺失字段默认清空。读取须匹配格式与指纹，完整文件上限 8 MiB。
+[`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 定义存档封装：扩展指纹、开局设置、运行规则、全队位置、原生 GameState 和完整性哈希。`IsaacLAN/save/6` 保存 64 位房间选项及本局奖励账本；读取 `save/4`、`save/5` 时将 32 位的集合选项转换为自动传送的房间类型集合。`save/3` 没有房间选项，`save/3`、`save/4` 没有奖励账本，缺失字段默认清空。读取须匹配格式与指纹，完整文件上限 8 MiB。
 
 房主三个存档栏分别使用 `session-1.bin`、`session-2.bin`、`session-3.bin`，与单人 Continue 分开管理。写入采用临时文件替换；失败时保留旧文件和进程内待保存快照，重试固定使用原存档栏，成功前不能开始新联机局。
 

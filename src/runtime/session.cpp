@@ -1223,7 +1223,7 @@ int roomOptionDefinitions(lua_State* L) {
     lua.createTable(L, roomOptions::definitions.size(), 0);
     unsigned index = 0;
     for (const auto& definition : roomOptions::definitions) {
-        lua.createTable(L, 0, 4);
+        lua.createTable(L, 0, 5);
         lua.pushInteger(L, definition.flag);
         lua.setField(L, -2, "flag");
         lua.pushString(L, definition.key.data());
@@ -1232,6 +1232,10 @@ int roomOptionDefinitions(lua_State* L) {
         lua.setField(L, -2, "name");
         lua.pushString(L, definition.shortName.data());
         lua.setField(L, -2, "shortName");
+        if (definition.flag == roomOptions::autoTeleport) {
+            lua.pushInteger(L, roomOptions::firstRoomFlag);
+            lua.setField(L, -2, "firstRoomFlag");
+        }
         lua.rawSetI(L, -2, ++index);
     }
     return 1;
@@ -1241,10 +1245,9 @@ int configureRoomOptions(lua_State* L) {
     const auto* definition = session ? compat::challenges::find(session->rules().id) : nullptr;
     bool accepted = false;
     if (session && (!definition || !definition->roomOptionsLocked) && value >= 0 &&
-        value <= std::numeric_limits<std::uint32_t>::max() &&
-        roomOptions::valid(static_cast<std::uint32_t>(value))) {
+        roomOptions::valid(static_cast<std::uint64_t>(value))) {
         auto rules = session->rules();
-        rules.options = static_cast<std::uint32_t>(value);
+        rules.options = static_cast<std::uint64_t>(value);
         rules.options |= rulesFor(definition).options;
         accepted = session->configureRules(rules);
     }

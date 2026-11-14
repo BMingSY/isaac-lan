@@ -27,6 +27,7 @@ presentation/attack_volley
 presentation/attacks
 core/contacts
 core/endpoint
+core/room_types
 compat/rules/pvp_damage
 compat/rules/pvp_attacks
 compat/rules/pvp_health
