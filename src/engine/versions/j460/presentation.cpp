@@ -3,6 +3,7 @@
 #include "engine/versions/j460/boss_intro.h"
 #include "compat/game_ids.h"
 #include "engine/presentation.h"
+#include "engine/animation_skip.h"
 #include "engine/frontend.h"
 #include "engine/crafting_hud.h"
 #include "engine/challenge_hud.h"
@@ -362,7 +363,8 @@ IntroSimulationScope::~IntroSimulationScope() {
 }
 bool install(std::uintptr_t base) {
     image = base;
-    return installCraftingHud(base) && installChallengeHud(base) && items::install(base) &&
+    return animation::install(base) && installCraftingHud(base) && installChallengeHud(base) &&
+           items::install(base) &&
            MH_CreateHook(reinterpret_cast<void*>(image + j460::entry::playerHasCollectible),
                          reinterpret_cast<void*>(visibleCollectible),
                          reinterpret_cast<void**>(&originalHasCollectible)) == MH_OK &&
@@ -402,9 +404,10 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "presentation_minimap");
     lua.pushClosure(L, victoryPrompt, 0);
     lua.setField(L, -2, "victory_lap_prompt");
-    return items::bind(L, module);
+    return animation::bind(L, module) && items::bind(L, module);
 }
 void reset() {
+    animation::reset();
     items::reset();
     intros.clear();
     waiting.clear();
@@ -418,6 +421,35 @@ bool introActive() {
     const auto transition = at<std::uintptr_t>(image, j460::globals::game) + 0x1b83c;
     const auto mode = at<int>(transition, 0);
     return (mode == 2 || mode == 3) && at<int>(transition, 0x238) != 0;
+}
+std::vector<std::pair<unsigned, unsigned>> introAudiences() {
+    std::vector<std::pair<unsigned, unsigned>> result;
+    if (runtime::replica())
+        return result;
+    for (const auto& event : intros)
+        if (const auto audience =
+                waiting.audience(event.serial, runtime::tick(), rooms::connected()))
+            result.emplace_back(event.serial, audience);
+    return result;
+}
+bool skipIntro(unsigned id) {
+    if (runtime::replica()) {
+        if (played != id || !introActive())
+            return false;
+        rooms::withView(finishIntro, true);
+        return true;
+    }
+    const auto audience = waiting.audience(id, runtime::tick(), rooms::connected());
+    if (!audience)
+        return false;
+    if (hostIntro == id && introActive()) {
+        rooms::withRoomPlayers(0, finishIntro);
+        hostIntro = 0;
+    }
+    for (unsigned slot = 0; slot < lan::maxPlayers; ++slot)
+        if (audience & (1u << slot))
+            observeIntro(slot, id, false);
+    return true;
 }
 void observeIntro(unsigned slot, unsigned id, bool active) {
     const auto completed = waiting.observe(slot, id, active);

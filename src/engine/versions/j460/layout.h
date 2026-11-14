@@ -18,6 +18,7 @@ inline constexpr unsigned words = 0x3;
 } // namespace vector
 namespace manager {
 inline constexpr unsigned scene = 0x8;
+inline constexpr unsigned nightmare = 0x21628, dreamHome = 0x21c10;
 inline constexpr unsigned saveSlot = 0x10;
 inline constexpr unsigned progress = 0x14;
 inline constexpr unsigned saveState = 0xfa4;
@@ -84,6 +85,7 @@ inline constexpr unsigned leaveDoor = 0x18318;
 inline constexpr unsigned enterDoor = 0x1831c;
 inline constexpr unsigned players = 0x1baa8;
 inline constexpr unsigned roomTransition = 0x1b83c;
+inline constexpr unsigned stageTransition = 0x1ba78;
 inline constexpr unsigned playerHuds = 0x1da04;
 inline constexpr unsigned floorSeeds = 0x1bb84;
 inline constexpr unsigned pauseMenu = 0x23a74;
@@ -102,6 +104,10 @@ inline constexpr unsigned mode = 0x0, elapsed = 0x4, duration = 0x8;
 inline constexpr unsigned introSprite = 0x38, bossIntro = 0x238;
 inline constexpr int intro = 2, returning = 3;
 } // namespace roomTransition
+namespace nightmare {
+inline constexpr unsigned active = 0x0;
+inline constexpr int scene = 5;
+} // namespace nightmare
 namespace activeItem {
 inline constexpr unsigned count = 4, stride = 0x20, data = 0x1c;
 } // namespace activeItem

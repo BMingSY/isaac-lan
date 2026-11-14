@@ -374,6 +374,9 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.session_lifecycle session_lifecycle.lua)
         isaac_add_lua_test(bridge.party-startup party_startup.lua)
         isaac_add_lua_test(bridge.restart restart.lua)
+        isaac_add_lua_test(bridge.animation-skip animation_skip.lua)
+        isaac_add_lua_test(bridge.lifecycle-messages lifecycle_messages.lua)
+        isaac_add_lua_test(presentation.vote-progress vote_progress.lua)
         isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
         isaac_add_lua_test(bridge.state-layers state_layers.lua)
         isaac_add_lua_test(presentation.timeline presentation_timeline.lua)
@@ -575,6 +578,7 @@ add_library(
     src/engine/versions/j460/audio.cpp
     src/engine/versions/j460/combat_feedback.cpp
     src/engine/versions/j460/presentation.cpp
+    src/engine/versions/j460/animation_skip.cpp
     src/engine/versions/j460/player_outlines.cpp
     src/engine/versions/j460/player_opacity.cpp
     src/engine/versions/j460/crafting_hud.cpp

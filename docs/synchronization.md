@@ -25,7 +25,7 @@ flowchart LR
 | 可靠事务 | 双向，以房主发布为主 | 大厅、开局、重开、检查点、换层、回退、结束和返回大厅按序交付，不参与视图合并 |
 | 聊天通信 `communication` | 客机请求 → 房主；房主 → 接收者 | 独立限额的可靠字节消息，不随世界快照合并；内容契约见[聊天与控制台](https://github.com/BMingSY/isaac-lan/blob/main/docs/chat-console.md) |
 
-生命周期消息 `lifecycle` 使用独立限额的可靠通道，发送者由连接确定；运行层校验投票所属的运行标识、代次和在线名单。全员同意后的 `restart` 消息携带新运行标识、世界代次和开局设置，`ready` 同时校验运行标识与首 tick。投票及退出／重建顺序见[全队重新开局](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md#全队重新开局)。
+生命周期消息 `lifecycle` 使用独立限额的可靠通道，发送者由连接确定；载荷首字节区分重开（1）与动画跳过（2），由桥接分发给各自消费者。动画同意绑定运行标识、楼层代次、动画类型和序号，名单及结果只由房主发布；运行层校验投票所属的运行标识、代次和在线名单。全员同意后的 `restart` 消息携带新运行标识、世界代次和开局设置，`ready` 同时校验运行标识与首 tick。投票及退出／重建顺序见[全队重新开局](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md#全队重新开局)。
 
 通关后的 `returnLobby` 回执携带当前运行标识。已退出的一端进入 `returning`，继续轮询连接而不启动游戏；房主收齐当前在线成员的回执后清理本局数据、提升大厅规则代次并发布 `lobby`。旧局回执与旧规则下的准备请求不能解除新大厅的屏障，结局播放速度不要求一致。
 
