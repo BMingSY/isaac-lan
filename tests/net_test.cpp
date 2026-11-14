@@ -1902,7 +1902,7 @@ void wireRules(Writer& writer, const RunRules& rules) {
     writer.u16(rules.character);
     writer.u8(rules.difficulty);
     writer.u8(rules.transient);
-    writer.u32(rules.options);
+    writer.u64(rules.options);
 }
 void accessWireValidation() {
     const LobbyAccess basic{{0}, {}, {0}};

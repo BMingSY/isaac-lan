@@ -1237,7 +1237,7 @@ int roomOptionDefinitions(lua_State* L) {
     lua.createTable(L, roomOptions::definitions.size(), 0);
     unsigned index = 0;
     for (const auto& definition : roomOptions::definitions) {
-        lua.createTable(L, 0, 4);
+        lua.createTable(L, 0, 6);
         lua.pushInteger(L, definition.flag);
         lua.setField(L, -2, "flag");
         lua.pushString(L, definition.key.data());
@@ -1246,19 +1246,36 @@ int roomOptionDefinitions(lua_State* L) {
         lua.setField(L, -2, "name");
         lua.pushString(L, definition.shortName.data());
         lua.setField(L, -2, "shortName");
+        if (definition.flag == roomOptions::autoTeleport) {
+            lua.pushInteger(L, roomOptions::firstRoomFlag);
+            lua.setField(L, -2, "firstRoomFlag");
+            lua.createTable(L, roomOptions::teleportGroups.size(), 0);
+            unsigned groupIndex = 0;
+            for (const auto& group : roomOptions::teleportGroups) {
+                lua.createTable(L, 0, 3);
+                lua.pushInteger(L, group.flag);
+                lua.setField(L, -2, "flag");
+                lua.pushString(L, group.key.data());
+                lua.setField(L, -2, "key");
+                lua.pushString(L, group.name.data());
+                lua.setField(L, -2, "name");
+                lua.rawSetI(L, -2, ++groupIndex);
+            }
+            lua.setField(L, -2, "groups");
+        }
         lua.rawSetI(L, -2, ++index);
     }
     return 1;
 }
 int configureRoomOptions(lua_State* L) {
     const auto value = lua.checkInteger(L, 1);
+    const auto options = roomOptions::normalize(static_cast<std::uint64_t>(value));
     const auto* definition = session ? compat::challenges::find(session->rules().id) : nullptr;
     bool accepted = false;
     if (session && (!definition || !definition->roomOptionsLocked) && value >= 0 &&
-        value <= std::numeric_limits<std::uint32_t>::max() &&
-        roomOptions::valid(static_cast<std::uint32_t>(value))) {
+        roomOptions::valid(options)) {
         auto rules = session->rules();
-        rules.options = static_cast<std::uint32_t>(value);
+        rules.options = options;
         rules.options |= rulesFor(definition).options;
         accepted = session->configureRules(rules);
     }

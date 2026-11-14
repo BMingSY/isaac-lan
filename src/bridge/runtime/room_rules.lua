@@ -62,9 +62,8 @@ return function(deps)
             if enabled(info, "sharedClearCharge") then
                 charge.step(info)
             end
-            local allRooms = enabled(info, "allRoomGather")
-            if allRooms or enabled(info, "specialRoomGather") then
-                gather.step(info, allRooms)
+            if enabled(info, "autoTeleport") then
+                gather.step(info, info.roomOptions & flags.autoTeleport)
             else
                 gather.reset()
             end

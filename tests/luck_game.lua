@@ -433,8 +433,7 @@ native.net_room_options = function()
     return {
         { key = "lootRoll", flag = 4 },
         { key = "sharedClearCharge", flag = 2 },
-        { key = "specialRoomGather", flag = 8 },
-        { key = "allRoomGather", flag = 16 },
+        { key = "autoTeleport", flag = ((1 << 29) - 1) << 5, firstRoomFlag = 1 << 5 },
     }
 end
 local ordinary = dofile(root .. "/src/bridge/runtime/room_rules.lua")({

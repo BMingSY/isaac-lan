@@ -58,8 +58,7 @@ local native = {
         return {
             { key = "sharedClearCharge", flag = 2 },
             { key = "lootRoll", flag = 4 },
-            { key = "specialRoomGather", flag = 8 },
-            { key = "allRoomGather", flag = 16 },
+            { key = "autoTeleport", flag = ((1 << 29) - 1) << 5, firstRoomFlag = 1 << 5 },
         }
     end,
     items_active_charge = function(p, s)

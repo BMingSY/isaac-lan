@@ -44,7 +44,7 @@ ConnectionSettings loadConnectionSettings(const std::filesystem::path& path) {
             std::from_chars(options.data(), options.data() + options.size(), result.roomOptions);
         if (failure != std::errc{} || last != options.data() + options.size())
             return {};
-        result.roomOptions &= roomOptions::known;
+        result.roomOptions = roomOptions::migrateLegacy(result.roomOptions) & roomOptions::known;
     }
     return result;
 }
@@ -72,7 +72,8 @@ bool saveConnectionSettings(const std::filesystem::path& path, const ConnectionS
     } cleanup{temporary};
     std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
     file << "address=" << settings.address << "\nport=" << settings.port
-         << "\nroomOptions=" << (settings.roomOptions & roomOptions::known) << '\n';
+         << "\nroomOptions=" << (roomOptions::normalize(settings.roomOptions) & roomOptions::known)
+         << '\n';
     file.close();
     if (!file)
         return false;

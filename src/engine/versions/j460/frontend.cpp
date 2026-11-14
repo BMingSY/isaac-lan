@@ -9,6 +9,7 @@
 #include "runtime/session.h"
 #include "runtime/update_notice.h"
 #include "core/extension_package.h"
+#include "core/room_options.h"
 #include "engine/rooms.h"
 #include "engine/input.h"
 #include "net/host_address.h"
@@ -283,9 +284,11 @@ int loadRoomOptions(lua_State* L) {
 }
 int saveRoomOptions(lua_State* L) {
     auto next = connectionSettings;
-    next.roomOptions = static_cast<std::uint32_t>(lua.integer(L, 1, nullptr));
+    next.roomOptions =
+        roomOptions::normalize(static_cast<std::uint64_t>(lua.integer(L, 1, nullptr)));
     const bool saved =
-        next == connectionSettings || presentation::saveConnectionSettings(connectionPath, next);
+        roomOptions::valid(next.roomOptions) &&
+        (next == connectionSettings || presentation::saveConnectionSettings(connectionPath, next));
     if (saved)
         connectionSettings = next;
     else

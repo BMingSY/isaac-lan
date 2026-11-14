@@ -1,3 +1,15 @@
+local gatherOptions
+for _, rule in ipairs(_IsaacLan.net_room_options()) do
+    if rule.key == "autoTeleport" then
+        gatherOptions = rule.flag
+        for _, group in ipairs(rule.groups) do
+            if group.key == "ordinary" then
+                gatherOptions = gatherOptions & ~group.flag
+            end
+        end
+    end
+end
+assert(gatherOptions)
 -- Reuse one host/client pair for crawlspace gathering, remote cache evaluation
 -- and Flip's native alternate pedestal, then verify floor cleanup.
 local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
@@ -286,9 +298,9 @@ function _IsaacLanFrame()
     local status = frame()
     if status.phase == 2 then
         if host then
-            _IsaacLanCommand("room_options", "8")
+            _IsaacLanCommand("room_options", tostring(gatherOptions))
         end
-        if not chosen and status.roomOptions == 8 then
+        if not chosen and status.roomOptions == gatherOptions then
             chosen = true
             _IsaacLanCommand("choose", "0:1")
         end

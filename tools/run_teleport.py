@@ -27,9 +27,9 @@ def main():
     suite.add_argument(
         "--gather",
         nargs="?",
-        choices=("special", "all"),
+        choices=("special", "all", "selected"),
         const="special",
-        help="Validate special-room (default) or all-room gathering",
+        help="Validate all special types, all types, or the type menu with Boss/hidden-room selection",
     )
     suite.add_argument(
         "--feedback-regressions",
@@ -57,6 +57,31 @@ def main():
             source = fixture.read_text()
             fixture = output / "all-room-gather.lua"
             fixture.write_text("_IsaacLanTest.gatherAllRooms = true\n" + source)
+        if args.gather == "selected":
+            gather = fixture.read_text()
+            menu = (
+                "local expectedOptions = (function()\n"
+                + (ROOT / "tests/fixtures/room_options.lua").read_text()
+                + "\nend)()(RoomType)\n"
+                + (ROOT / "tests/state_auto_teleport_menu.lua").read_text()
+            )
+            fixture = output / "selected-room-gather.lua"
+            fixture.write_text(
+                "local menuScenario = (function()\n" + menu + "\nend)()\n"
+                "local menuFrame = _IsaacLanFrame\n"
+                "local function startGather()\n"
+                "_IsaacLanTest.gatherSelected, _IsaacLanTest.gatherConnected = true, true\n"
+                + gather
+                + "\nend\n"
+                "function _IsaacLanFrame()\n"
+                "    local status = menuFrame()\n"
+                "    if menuScenario.done() then\n"
+                "        menuScenario.cleanup()\n"
+                "        startGather()\n"
+                "    end\n"
+                "    return status\n"
+                "end\n"
+            )
         completion = (
             f"LAN_GATHER PASS {args.gather} room rule"
             if args.gather

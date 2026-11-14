@@ -27,8 +27,7 @@ return function(root, native, modules)
             { flag = 1, key = "friendlyFire", name = "队友伤害" },
             { flag = 2, key = "sharedClearCharge" },
             { flag = 4, key = "lootRoll" },
-            { flag = 8, key = "specialRoomGather" },
-            { key = "allRoomGather", flag = 16 },
+            { key = "autoTeleport", flag = ((1 << 29) - 1) << 5, firstRoomFlag = 1 << 5 },
         }
     end
     native.menu_room_options = native.menu_room_options or function()
@@ -50,6 +49,7 @@ return function(root, native, modules)
     for _, name in ipairs({
         "core/contacts",
         "core/endpoint",
+        "core/room_types",
         "compat/rules/pvp_damage",
         "compat/rules/pvp_attacks",
         "compat/rules/pvp_health",

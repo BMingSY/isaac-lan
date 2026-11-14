@@ -1,7 +1,12 @@
 local root = assert(arg[1])
 local types = dofile(root .. "/tests/fixtures/game_enums.lua").RoomType
-local gatherFlag = 8
-local allGatherFlag = 16
+local firstRoomFlag = 1 << 5
+local roomOptions = dofile(root .. "/tests/fixtures/room_options.lua")(types)
+local allGatherFlag = roomOptions[4].flag
+local gatherFlag = allGatherFlag & ~firstRoomFlag
+local function roomFlag(kind)
+    return firstRoomFlag << (kind - types.ROOM_DEFAULT)
+end
 local info = {
     active = 1,
     authority = 1,
@@ -31,8 +36,7 @@ local native = {
         return {
             { key = "lootRoll", flag = 4 },
             { key = "sharedClearCharge", flag = 2 },
-            { key = "specialRoomGather", flag = gatherFlag },
-            { key = "allRoomGather", flag = 16 },
+            { key = "autoTeleport", flag = allGatherFlag, firstRoomFlag = firstRoomFlag },
         }
     end,
     rooms_positions = function()
@@ -124,7 +128,7 @@ local allowed = true
 local rules = dofile(root .. "/src/bridge/runtime/room_rules.lua")({
     native = native,
     allow = function(key)
-        assert(key == "specialRoomGather" or key == "allRoomGather")
+        assert(key == "autoTeleport")
         return allowed
     end,
     allocation = unused,
@@ -165,29 +169,31 @@ end
 
 -- Every original special type, including off-map deals/errors and ultra secret.
 for kind = types.ROOM_SHOP, types.ROOM_ULTRASECRET do
-    setup()
-    local index = kind == types.ROOM_ERROR and -2
-        or (kind == types.ROOM_ANGEL or kind == types.ROOM_DEVIL) and -1
-        or 85
-    starts(2, index, kind)
-    assert(#moves == 3 and not queued[2])
-    for _, move in ipairs(moves) do
-        assert(move.index == index and move.dimension == 0)
+    if (roomFlag(kind) & allGatherFlag) ~= 0 then
+        setup()
+        local index = kind == types.ROOM_ERROR and -2
+            or (kind == types.ROOM_ANGEL or kind == types.ROOM_DEVIL) and -1
+            or 85
+        starts(2, index, kind)
+        assert(#moves == 3 and not queued[2])
+        for _, move in ipairs(moves) do
+            assert(move.index == index and move.dimension == 0)
+        end
+        rules.step() -- action-step and post-frame observe the same commit
+        assert(#moves == 3, "Duplicate observation repeated the gather")
+        complete(kind)
+        rules.step()
+        enter(0, 84) -- Free to leave while teammates remain in the special room.
+        rules.step()
+        assert(#moves == 3 and not next(queued), "Gather arrivals tethered a leaving player")
+        starts(0, index, kind)
+        assert(#moves == 3, "Players already together were teleported again")
+        enter(0, 84)
+        enter(1, 84)
+        rules.step()
+        starts(1, index, kind)
+        assert(#moves == 4 and queued[0], "Re-entering did not gather again")
     end
-    rules.step() -- action-step and post-frame observe the same commit
-    assert(#moves == 3, "Duplicate observation repeated the gather")
-    complete(kind)
-    rules.step()
-    enter(0, 84) -- Free to leave while teammates remain in the special room.
-    rules.step()
-    assert(#moves == 3 and not next(queued), "Gather arrivals tethered a leaving player")
-    starts(0, index, kind)
-    assert(#moves == 3, "Players already together were teleported again")
-    enter(0, 84)
-    enter(1, 84)
-    rules.step()
-    starts(1, index, kind)
-    assert(#moves == 4 and queued[0], "Re-entering did not gather again")
 end
 
 setup()
@@ -323,8 +329,8 @@ allowed = false
 rules.step()
 assert(not next(queued), "Challenge veto must cancel a pending gather")
 
--- The stronger rule works independently and takes precedence when both are on.
-for _, options in ipairs({ allGatherFlag, allGatherFlag | gatherFlag }) do
+-- Selecting all types also gathers on departures into ordinary rooms.
+for _, options in ipairs({ allGatherFlag }) do
     for owner = 0, 3 do
         for _, kind in ipairs({ types.ROOM_DEFAULT, types.ROOM_SHOP, types.ROOM_ERROR }) do
             setup(options)
@@ -464,4 +470,51 @@ setup(allGatherFlag)
 info.authority = 0
 starts(1, 85)
 assert(#moves == 0, "Replica ran all-room gathering")
-print("PASS room gathering: special/all rooms, safe landing, repeated exits and lifecycle")
+-- A selection is a filter, including special rooms that remain unchecked.
+setup(roomFlag(types.ROOM_BOSS))
+starts(1, 85, types.ROOM_SHOP)
+starts(1, 86, types.ROOM_TREASURE)
+starts(1, 87, types.ROOM_DEFAULT)
+assert(#moves == 0, "An unselected room type triggered auto teleport")
+starts(1, 88, types.ROOM_BOSS)
+assert(#moves == 3)
+complete(types.ROOM_BOSS)
+assert(#placements == 3, "Selected rooms did not use safe follower placement")
+starts(0, 87, types.ROOM_SHOP)
+assert(#moves == 3, "Leaving a selected room pulled the team into an unselected room")
+starts(0, 88, types.ROOM_BOSS)
+assert(#moves == 3, "Already present players moved again")
+
+-- Multiple selections, including a flag above 32 bits, keep independent meaning.
+setup(roomFlag(types.ROOM_BOSS) | roomFlag(types.ROOM_ULTRASECRET))
+starts(1, 85, types.ROOM_BOSS)
+arrive(0, types.ROOM_BOSS)
+rules.step()
+starts(0, 86, types.ROOM_ULTRASECRET)
+assert(#moves == 6 and queued[1].index == 86 and queued[2].index == 86)
+complete(types.ROOM_ULTRASECRET)
+starts(1, 87, types.ROOM_ERROR)
+assert(#moves == 6)
+info.worldEpoch = info.worldEpoch + 1
+enter(0, 84)
+rules.step()
+starts(0, 85, types.ROOM_BOSS)
+assert(#moves == 9, "Selected types were lost after a floor change")
+print("PASS selected room types, safe landing, repeated exits and lifecycle")
+
+-- Each player-facing checkbox covers all of its members and no other type.
+for _, group in ipairs(roomOptions[4].groups) do
+    for kind = types.ROOM_DEFAULT, types.ROOM_ULTRASECRET do
+        setup(group.flag)
+        starts(1, 85, kind)
+        local expected = (group.flag & roomFlag(kind)) ~= 0
+        assert(#moves == (expected and 3 or 0), group.name .. " misclassified room type " .. kind)
+        if expected then
+            complete(kind)
+            assert(#placements == 3 and not next(queued))
+        end
+    end
+end
+print(
+    "PASS seven groups: all members, ordinary entrances/bedrooms, unused types and arrival cleanup"
+)

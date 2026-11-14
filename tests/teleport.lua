@@ -105,6 +105,7 @@ for _, peer in ipairs({ host, guest }) do
         peer.queuedMove = nil
     end
     peer.teleport = factory({
+        roomDefinitions = dofile(root .. "/src/bridge/core/room_types.lua"),
         native = native,
         enums = {
             room = enums.RoomType,

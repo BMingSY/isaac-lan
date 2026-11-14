@@ -2,6 +2,12 @@
 -- cards and commands share the same entry detection and resolved teleport path.
 return function(deps)
     local native, types = deps.native, deps.roomTypes
+    local firstRoomFlag
+    for _, rule in ipairs(native.net_room_options()) do
+        if rule.key == "autoTeleport" then
+            firstRoomFlag = assert(rule.firstRoomFlag)
+        end
+    end
     local arrivalTimeout = 3000
     local previous, pending = {}, nil
     local function sameRoom(a, b)
@@ -26,14 +32,17 @@ return function(deps)
         end
         previous = {}
     end
-    local function special(slot)
+    local function selected(slot, options)
         local kind
         native.api_with_owner(slot, function()
             kind = deps.game():GetRoom():GetType()
         end)
-        -- Original special types are contiguous, ending at ultra secret.
-        -- A red room with ROOM_DEFAULT remains an ordinary room.
-        return kind and kind > types.ROOM_DEFAULT and kind <= types.ROOM_ULTRASECRET
+        -- Ordinary red rooms retain ROOM_DEFAULT. Room identity includes the
+        -- dimension, but selection uses the entrant's actual original type.
+        return kind
+            and kind >= types.ROOM_DEFAULT
+            and kind <= types.ROOM_ULTRASECRET
+            and (options & (firstRoomFlag << (kind - types.ROOM_DEFAULT))) ~= 0
     end
     local function placeNear(slot, owner)
         local target
@@ -45,7 +54,7 @@ return function(deps)
             deps.placeNear(slot, target)
         end
     end
-    local function step(info, allRooms)
+    local function step(info, options)
         local positions, current = native.rooms_positions(), {}
         for slot = 0, info.players - 1 do
             local position = positions[tostring(slot)]
@@ -63,7 +72,7 @@ return function(deps)
                 consumed[slot] = true
                 local position = current[slot]
                 if not valid or not position or sameRoom(position, pending.destination) then
-                    if valid and allRooms and sameRoom(position, pending.destination) then
+                    if valid and sameRoom(position, pending.destination) then
                         placeNear(slot, pending.owner)
                     end
                     cancel(slot, pending, info)
@@ -89,12 +98,8 @@ return function(deps)
             if not next(pending.waiting) then
                 pending = nil
             end
-            -- Special-only gatherings let players leave freely. All-room
-            -- gatherings also observe subsequent exits by the leader or an
-            -- already-arrived player, but never turn forced arrivals into exits.
-            if not allRooms then
-                return
-            end
+            -- Observe subsequent selected entries by the leader or an already
+            -- arrived player, without turning forced arrivals into new entries.
         end
         for owner = 0, info.players - 1 do
             local destination = current[owner]
@@ -103,7 +108,7 @@ return function(deps)
                 and destination
                 and not consumed[owner]
                 and not sameRoom(before[owner], destination)
-                and (allRooms or special(owner))
+                and selected(owner, options)
             then
                 cancelPending(info)
                 local batch = {

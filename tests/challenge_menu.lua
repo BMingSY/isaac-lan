@@ -1,5 +1,6 @@
 local root = assert(arg[1])
-PlayerType = dofile(root .. "/tests/fixtures/game_enums.lua").PlayerType
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
+PlayerType, RoomType = enums.PlayerType, enums.RoomType
 local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels, renderedMarks = {}, {}
@@ -167,6 +168,7 @@ _IsaacLanModules = {
     ["presentation/restart"] = dofile(root .. "/src/bridge/presentation/restart.lua"),
     ["presentation/update_notice"] = dofile(root .. "/src/bridge/presentation/update_notice.lua"),
     ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
+    ["core/room_types"] = dofile(root .. "/src/bridge/core/room_types.lua"),
     ["core/endpoint"] = dofile(root .. "/src/bridge/core/endpoint.lua"),
     ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
 }
@@ -924,3 +926,110 @@ draw(0, false)
 draw(13, false)
 assert(exited == 1 and #commands == commandsBefore)
 print("PASS menu integration: update input ownership, continue, reconstruction and default exit")
+
+-- Auto teleport is one rule with a nested, independently selectable type list.
+local teleportChallenges = _IsaacLan.net_challenges
+_IsaacLan.net_challenges = function()
+    local definitions = teleportChallenges()
+    definitions["1003"].roomOptionsLocked = true
+    return definitions
+end
+local expectedOptions = dofile(root .. "/tests/fixtures/room_options.lua")(RoomType)
+for i, definition in ipairs(expectedOptions) do
+    options[i] = definition
+end
+local allRoomFlags = options[4].flag
+local bossFlag, hiddenFlag = options[4].groups[2].flag, options[4].groups[5].flag
+local function clickLabel(label)
+    local at = assert(labelPositions[label], "Missing visible menu label: " .. label)
+    draw(0, true, at.x + 3, at.y + 2, true)
+    draw()
+end
+status.phase, status.hosting, status.slot, status.challenge = 2, 1, 0, 0
+status.roomOptions, status.savedPlayers, status.ready0, status.ready1 = 7, 0, 1, 1
+_IsaacLanMenuOpen(true)
+draw()
+clickLabel("房间规则：友伤 +2")
+clickLabel("自动传送：关闭 >")
+assert(labels["自动传送"] and labels["已选 0 类"] and labels["1–6 / 9"])
+assert(status.ready0 == 1 and status.ready1 == 1, "Opening the type list cleared readiness")
+clickLabel("[ ] Boss 房")
+assert(not labels["[ ] 干净卧室"] and not labels["[ ] 传送出口"])
+assert(status.roomOptions == (7 | bossFlag) and labels["已选 1 类"])
+assert(status.ready0 == 0 and status.ready1 == 0)
+-- Scroll to the hidden-room group, whose ultra-secret flag exceeds 32 bits.
+for _ = 1, 3 do
+    draw(40)
+end
+draw()
+assert(labels["[ ] 隐藏房"] and labelPositions["返回"].y == 214)
+clickLabel("[ ] 隐藏房")
+assert(status.roomOptions == (7 | bossFlag | hiddenFlag) and labels["已选 2 类"])
+draw(27)
+draw()
+assert(labels["自动传送：2 类 >"] and labels["已启用 4 项"])
+draw(13)
+draw()
+assert(labels["1–6 / 9"], "Nested Back did not restore the auto-teleport entry")
+clickLabel("全选")
+assert(status.roomOptions == (7 | allRoomFlags) and labels["已选 7 类"])
+clickLabel("清空")
+assert(status.roomOptions == 7 and labels["已选 0 类"], "Clear removed unrelated rules")
+clickLabel("[ ] Boss 房")
+-- A challenge can lock a page already open; no stale action may change rules.
+status.challenge = 1003
+draw()
+previousCommands = #commands
+clickLabel("清空")
+clickLabel("[x] Boss 房")
+assert(#commands == previousCommands and labels["已选 1 类 · 只读"])
+status.challenge, status.hosting, status.slot = 0, 0, 1
+draw()
+previousCommands = #commands
+clickLabel("全选")
+clickLabel("清空")
+clickLabel("[x] Boss 房")
+draw(32)
+assert(#commands == previousCommands, "Guest edited auto teleport through the submenu")
+status.roomOptions = 7 | bossFlag | hiddenFlag -- authoritative update while guest is viewing
+status.savedOptions = status.roomOptions
+draw()
+assert(labels["已选 2 类 · 只读"])
+draw(27)
+draw(13)
+draw()
+assert(labels["自动传送"] and labels["已选 2 类 · 只读"])
+status.phase = phaseValues.waiting
+draw()
+assert(not labels["自动传送"], "Nested type list survived leaving the lobby")
+print(
+    "PASS auto teleport: seven room groups, high bits, bulk actions, nested Back and guest read-only updates"
+)
+
+local groupedUi = { page = "autoTeleport", difficulty = 0, seed = "" }
+local groupedStatus = {
+    phase = 2,
+    hosting = 1,
+    roomOptions = 7 | (options[4].firstRoomFlag << (RoomType.ROOM_BOSS - RoomType.ROOM_DEFAULT)),
+}
+local changed
+local groupedRows = model.rows(groupedUi, groupedStatus, {}, {}, {
+    options = options,
+    command = function(action, value)
+        changed = { action, tonumber(value) }
+    end,
+})
+assert(
+    #groupedRows == 10,
+    "The simplified menu must contain seven groups, two bulk actions and Back"
+)
+for _, row in ipairs(groupedRows) do
+    if row.label == "Boss 房" then
+        assert(row.checked)
+        row.action()
+        assert(
+            changed[1] == "room_options" and changed[2] == 7,
+            "A partial old group toggled its unselected members on"
+        )
+    end
+end

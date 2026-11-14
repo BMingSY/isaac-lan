@@ -1745,37 +1745,67 @@ void roomOptionsAndMarks() {
             "Normal run lost room options when saved");
     require(!isaac::roomOptions::valid(isaac::roomOptions::known + 1),
             "Runtime accepted an unknown room option");
-    // Both legacy formats omit awards; v3 also omits room options.
-    for (unsigned format : {3u, 4u}) {
-        Writer legacy(Message::snapshot);
-        legacy.string(format == 3 ? "IsaacLAN/save/3" : "IsaacLAN/save/4");
-        legacy.string(archive.fingerprint);
-        legacy.string(archive.settings.seed);
-        legacy.u8(archive.settings.difficulty);
-        legacy.u16(0);
-        legacy.u16(0);
-        legacy.u16(65535);
-        legacy.u8(255);
-        legacy.u8(0);
-        if (format == 4)
-            legacy.u32(archive.settings.rules.options);
-        for (auto c : archive.settings.characters)
-            legacy.u16(c);
-        legacy.progress(archive.settings.progress, false);
-        legacy.u8(archive.locations.size());
-        for (const auto& p : archive.locations) {
-            legacy.u32(p.dimension);
-            legacy.u32(p.index);
-            legacy.u32(std::bit_cast<std::uint32_t>(p.x));
-            legacy.u32(std::bit_cast<std::uint32_t>(p.y));
+    std::uint64_t covered = 0;
+    for (const auto& group : isaac::roomOptions::teleportGroups) {
+        require(!(covered & group.flag) && isaac::roomOptions::valid(group.flag),
+                "Room groups overlap or contain invalid options");
+        covered |= group.flag;
+        for (unsigned bit = 0; bit < isaac::roomOptions::roomTypeCount; ++bit) {
+            const auto member = isaac::roomOptions::firstRoomFlag << bit;
+            if (!(member & group.flag))
+                continue;
+            archive.settings.rules.options = 7 | member;
+            const auto grouped = Archive::decode(archive.encode());
+            require(grouped.settings.rules.options == (7 | group.flag),
+                    "An individual room type did not restore its whole group");
+            require(Archive::decode(grouped.encode()).settings.rules == grouped.settings.rules,
+                    "Group migration was not stable across saves");
         }
-        legacy.blob(archive.game);
-        legacy.u64(snapshotHash(legacy.bytes));
-        const auto old = Archive::decode(legacy.bytes);
-        require(old.settings.rules.options == (format == 3 ? 0 : archive.settings.rules.options) &&
-                    old.settings.progress == archive.settings.progress && old.game == archive.game,
-                "Previous save format lost progress or room options");
     }
+    require(covered == isaac::roomOptions::autoTeleport && std::popcount(covered) == 27 &&
+                isaac::roomOptions::teleportGroups.size() == 7,
+            "Seven room groups must cover exactly the 27 used room types");
+    archive.settings.rules.options = isaac::roomOptions::roomTypeFlags | 7;
+    require(Archive::decode(archive.encode()).settings.rules.options == isaac::roomOptions::known,
+            "Stored all-types selection did not drop unused teleporter types");
+    archive.settings.rules.options = isaac::roomOptions::known;
+    // v3 omits options; v3/v4 omit awards. Old gather bits migrate once.
+    for (unsigned format : {3u, 4u, 5u}) {
+        for (const auto legacyOptions : {8u, 16u, 24u, 31u}) {
+            Writer legacy(Message::snapshot);
+            legacy.string("IsaacLAN/save/" + std::to_string(format));
+            legacy.string(archive.fingerprint);
+            legacy.string(archive.settings.seed);
+            legacy.u8(archive.settings.difficulty);
+            legacy.u16(0);
+            legacy.u16(0);
+            legacy.u16(65535);
+            legacy.u8(255);
+            legacy.u8(0);
+            if (format != 3)
+                legacy.u32(legacyOptions);
+            for (auto c : archive.settings.characters)
+                legacy.u16(c);
+            legacy.progress(archive.settings.progress, format == 5);
+            legacy.u8(archive.locations.size());
+            for (const auto& p : archive.locations) {
+                legacy.u32(p.dimension);
+                legacy.u32(p.index);
+                legacy.u32(std::bit_cast<std::uint32_t>(p.x));
+                legacy.u32(std::bit_cast<std::uint32_t>(p.y));
+            }
+            legacy.blob(archive.game);
+            legacy.u64(snapshotHash(legacy.bytes));
+            const auto old = Archive::decode(legacy.bytes);
+            require(old.settings.rules.options ==
+                            (format == 3 ? 0 : isaac::roomOptions::migrateLegacy(legacyOptions)) &&
+                        old.settings.progress == archive.settings.progress &&
+                        old.game == archive.game,
+                    "Previous save format lost progress or room options");
+        }
+    }
+    archive.settings.rules.options = isaac::roomOptions::legacyAllRoomGather;
+    rejects([&] { Archive::decode(archive.encode()); }, "New archive accepted noncanonical rules");
 }
 
 void archiveIntegrity() {

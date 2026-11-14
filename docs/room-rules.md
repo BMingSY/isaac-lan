@@ -2,7 +2,7 @@
 
 选角大厅用单行“房间规则”入口显示当前摘要：未开启时为“无”，一项时显示规则简称，多项时显示第一项简称及其余数量，例如“友伤 +2”。简称由规则定义提供，不截取名称首字。
 
-房主进入子菜单后独立勾选 `[x]`／`[ ]`，每次更改即时同步并取消全员准备，连续选择不退出列表。客机可进入同一列表查看实时状态，不能修改。列表固定显示六条规则，超出时随方向选择滚动，也可点击上下箭头翻页；“返回”固定在底部，返回大厅后仍选中规则入口。
+房主进入子菜单后独立勾选 `[x]`／`[ ]`；“自动传送”进入房间类型列表，多选触发传送的目的地类型。每次更改即时同步并取消全员准备，连续选择不退出列表。客机可进入同一列表查看实时状态，不能修改。列表最多显示六行，超出时随方向选择滚动，也可点击上下箭头翻页；“返回”固定在底部，返回上一级后仍选中原入口。
 
 开始后不可更改规则。普通模式及未固定规则的挑战允许独立选择选项，并随保存、续玩、重连和重开保留；续玩规则与当前大厅不同时，先选择“载入上次规则”，重新准备后继续。[固定规则的挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)使用其定义的选项集合，房间规则入口置灰，主客机的修改请求均被拒绝；切回普通模式后可重新编辑。
 
@@ -40,28 +40,36 @@
 
 连续命中中断超过一秒会丢弃小数余量。离开房间、身体替换、断线、换层、时间回退、关闭规则或会话失效时，清理相应攻击、余量与冷却归属。被忽略的接触不在保护结束后重放。
 
-## 特殊房间集合
+## 自动传送
 
-简称“集合”，默认关闭。任意在线玩家进入原版特殊房间后，其他在线玩家自动传送到同一房间、同一维度。包括 Boss、商店、宝箱、隐藏房、天使／恶魔、错误房等全部原版特殊类型；按房间实际类型判断，普通红房间不触发，红隐触发。走门、卡牌和 `/tp` 等方式进入均适用，不生成额外房间。
+简称“传送”，默认关闭。子菜单按用途显示 7 类，每类一个复选项，选中后整组生效：
 
-集合落点使用目标房间内队友的位置，地下室保留该房间的返回入口。已在目标房间的玩家不移动，集合到达不再次触发集合。玩家之后可以自由离开；再次进入特殊房间可重新触发。同一轮观察到多人进入不同特殊房间时，按玩家席位顺序选择一次集合；集合进行期间的到达不会另起一轮。离线玩家不参与，续玩、重连或换层恢复的位置只作为初始记录。
+| 类别 | 包含的房间 |
+| --- | --- |
+| 普通房间 | 普通战斗房、支线入口、两种卧室、贪婪出口、蓝钥匙过渡房 |
+| Boss 房 | Boss 房、小 Boss 房、Boss Rush |
+| 宝物房 | 宝箱房、星象房、宝库、夹层（横版地下室） |
+| 商店 | 商店、黑市 |
+| 隐藏房 | 一秘、二秘、红隐、错误房 |
+| 天使／恶魔房 | 天使房、恶魔房 |
+| 其他特殊房 | 挑战房、诅咒房、献祭房、图书馆、赌博房、骰子房 |
 
-规则复用 `/tp` 的原生房间迁移接口，角色的全部身体、跟班与入房效果由现有房间系统处理。发起者离开、连接失效或等待超时会取消尚未执行的请求；局次／楼层切换会丢弃旧记录。
+“全选”勾选全部 7 类，“清空”取消全部类型，两者都保留其他房间规则。没有勾选时显示“关闭”，否则显示所选类别数；大厅摘要将自动传送计为一项规则。未使用的陵墓传送入口／出口不参与自动传送，也不在菜单中列出。
 
-## 所有房间集合
+任意在线玩家进入勾选类别的房间后，其他在线玩家自动传送到同一房间、同一维度，并落在发起者附近的可站立位置。例如只勾选 Boss 房时，进入商店或从 Boss 房返回普通房不会触发集合。按目的地的实际类型判断，普通红房间归入普通房间组，红隐归入隐藏房组；走门、卡牌和 `/tp` 等进入方式均适用，不生成额外房间。地下室保留返回入口，附近无可站立位置时保留原生入房落点。
 
-简称“全程集合”，默认关闭。任意在线玩家换房后，其他在线玩家自动传送到同一房间、同一维度，并落在发起者附近的可站立位置。普通房间、普通红房间和特殊房间均适用，离开特殊房间返回普通房间也会触发；走门、卡牌和 `/tp` 等换房方式使用相同规则。已在目标房间的玩家不移动。
+已在目标房间的玩家不移动，集合到达不会再次触发集合。集合尚未完成时，发起者或已经到达的队友进入另一个已选类别的房间，会取消旧目标的待执行请求并向新目的地集合；进入未选类别的房间不会发起集合。同一轮观察到多人进入不同已选房间时，按玩家席位顺序选择一次，仍在迁移的队友沿用当前集合目标。
 
-集合到达不会再次触发集合。集合尚未完成时，发起者或已经到达的队友再次换房，会取消旧目标的待执行请求，向新的目的地集合；仍在迁移的队友沿用当前集合目标。同一轮观察到多人换房时按玩家席位顺序选择一次。与“特殊房间集合”同时开启时只执行本规则，不重复传送。
+离线玩家不参与；开局、续玩、重连和换层恢复的位置只作为初始记录，后续进房继续按所选类别触发。角色的全部身体、跟班与入房效果由现有房间系统处理。发起者离开、连接失效、超时、关闭规则或会话失效会清理待执行请求，旧局次和旧楼层的请求不会影响新状态。
 
-离线玩家不参与；开局、续玩、重连和换层恢复的位置只作为初始记录，后续换房继续触发。连接失效、超时、关闭规则或会话失效会清理待执行请求，旧局次和旧楼层的请求不会影响新状态。附近无可站立位置时保留原生入房落点。
+本机偏好和旧存档的特殊房间集合选项映射为普通房间组以外的 6 类；所有房间集合选项映射为全选，两项同时存在也映射为全选。单独保存的房间类型，只要选中某组中的任意成员，就转换为选中整组；未使用的传送类型位清除。其他规则保持原值。
 
 ## 状态与职责
 
-选项定义来自 [core/room_options.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/room_options.h)，运行层验证并导出位值、名称和 `shortName` 简称，菜单据此生成摘要与复选行。挑战目录的 `roomOptionsLocked` 由 `net_challenges` 导出给菜单；运行层同时校验固定选项集合，并在修改入口拒绝锁定状态。网络只传输 `RunRules.options`，不解释具体玩法。存档及个人通关标记的生命周期见[会话与状态恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
+选项定义来自 [core/room_options.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/room_options.h)，运行层验证并导出位值、名称和 `shortName` 简称，菜单据此生成摘要与复选行。“自动传送”的 `groups` 导出各组的 `key`、名称和类型位集合，菜单直接按组选择；`flag` 汇总全部受支持的类型位，`firstRoomFlag` 指定普通房位。`/tp` 的具体房间名称和别名由 [core/room_types.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/core/room_types.lua) 提供。挑战目录的 `roomOptionsLocked` 由 `net_challenges` 导出给菜单；运行层同时校验固定选项集合，并在修改入口拒绝锁定状态。网络只传输 64 位 `RunRules.options`，不解释具体玩法。位 0–2 对应友伤、充能和掷骰；位 3–4 保留用于读取旧配置；位 5–33 保留原版 `RoomType` 1–29 的对应关系，其中未使用的传送类型位不启用。偏好载入、存档恢复和配置入口将单独类型归并成整组；当前会话只接受完整分组及已知规则位。存档及个人通关标记的生命周期见[会话与状态恢复](https://github.com/BMingSY/isaac-lan/blob/main/docs/session-lifecycle.md)。
 
 [room_rules.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_rules.lua) 管理可选效果的会话与世界代次；未结算的事件在失效时清理。[clear_charge.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/clear_charge.lua) 汇总原生清房通知并在房间模拟退出后补发充能；[loot_roll.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/loot_roll.lua) 负责玩家分组、掷骰排序和一次性库存分配，挑战提供自己的运气策略。两项规则沿用主动充能和库存同步，不扩展消息布局。
 
 [friendly_fire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/friendly_fire.lua) 在房主模拟中检查各个有人房间的攻击接触，再调用原版受击接口；客机沿用现有生命、角色动作和受击状态同步。接触与小数伤害由该组件持有；[pvp_attacks.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_attacks.lua) 管理发射记录与单轮额度，[pvp_health.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_health.lua) 管理原版冷却归属与短保护，[pvp_damage.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/pvp_damage.lua) 定义纯数值曲线。[compat/items/pvp.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/pvp.lua) 持有道具使用、索敌、进房与持续效果状态，使用回调由装配层接入。以上临时状态不写进个人存档。共享的扫掠圆碰撞放在 [core/contacts.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/core/contacts.lua)，同一几何函数也供本机命中预测使用。
 
-[room_gather.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/room_gather.lua) 在房间模拟作用域之外观察已提交的玩家位置，按所选规则限制房间类型或接受所有换房，统一发起集合并消费到达。[room_placement.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_placement.lua) 为玩家目标传送与所有房间集合提供共享的安全落点计算，分别处理同一玩家的全部身体。位置记录和未完成集合由 `room_rules` 随会话与世界代次清理；规则位沿用 `RunRules.options`，传送结果沿用现有房间同步，不扩展消息或状态字段布局，扩展指纹校验区分不同实现。
+[room_gather.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/rules/room_gather.lua) 在房间模拟作用域之外观察已提交的玩家位置，按勾选的目的地类型筛选换房，统一发起集合并消费到达。[room_placement.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_placement.lua) 为玩家目标传送与自动传送提供共享的安全落点计算，分别处理同一玩家的全部身体。位置记录和未完成集合由 `room_rules` 随会话与世界代次清理；规则位沿用 `RunRules.options`，传送结果沿用现有房间同步；消息兼容性由协议号与扩展指纹共同校验。

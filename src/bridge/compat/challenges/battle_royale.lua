@@ -430,8 +430,7 @@ return function(deps)
                 event == "coop_revive"
                 or event == "game_over"
                 or event == "shared_award"
-                or event == "specialRoomGather"
-                or event == "allRoomGather"
+                or event == "autoTeleport"
             then
                 return false
             end
