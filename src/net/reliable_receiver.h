@@ -6,7 +6,12 @@ struct ReceivedBulk {
     std::optional<Stage> stage;
     std::vector<std::uint8_t> checkpoint;
     std::size_t size() const {
-        return stage ? sizeof(Stage) + stage->rewind.size() : checkpoint.size();
+        if (!stage)
+            return checkpoint.size();
+        auto bytes = sizeof(Stage) + stage->rewind.size();
+        for (const auto& name : stage->departureAnimations)
+            bytes += sizeof(std::string) + name.size();
+        return bytes;
     }
 };
 // Socket-thread assembly only. Lifecycle acceptance and native restoration are

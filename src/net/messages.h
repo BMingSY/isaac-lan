@@ -144,12 +144,17 @@ inline StageChunk readStageChunk(Reader& r) {
     value.restart = r.u8();
     value.cinematic = r.u8();
     value.sourceRoom = static_cast<std::int16_t>(r.u16());
+    const auto actions = r.u8();
+    if (actions > Stage::maxDepartureAnimations)
+        throw std::runtime_error("Too many departure animations");
+    for (unsigned i = 0; i < actions; ++i)
+        value.departureAnimations.push_back(r.string());
     chunk.total = r.u32();
     chunk.offset = r.u32();
     chunk.bytes = r.blob(bulkChunkSize);
     if (!value.epoch || value.level < 1 || value.level > 13 || value.type > 5 || same > 1 ||
         chunk.total > maxSnapshotSize + StateCompression::headerSize || value.restart > 2 ||
-        value.sourceRoom < -20 || value.sourceRoom >= 169 ||
+        value.sourceRoom < -20 || value.sourceRoom >= 169 || !value.validDepartureAnimations() ||
         (value.cinematic && (value.cinematic != 25 || value.level != 13 || value.type != 1 ||
                              value.animation != 1 || same || value.restart || chunk.total)) ||
         (value.restart &&
@@ -173,6 +178,9 @@ inline Writer stageMessage(const Stage& value, std::size_t offset = 0) {
     w.u8(value.restart);
     w.u8(value.cinematic);
     w.u16(static_cast<std::uint16_t>(value.sourceRoom));
+    w.u8(value.departureAnimations.size());
+    for (const auto& name : value.departureAnimations)
+        w.string(name);
     w.u32(value.rewind.size());
     w.u32(offset);
     w.blob(bulkChunk(value.rewind, offset));

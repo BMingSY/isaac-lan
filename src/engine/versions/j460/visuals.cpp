@@ -815,6 +815,21 @@ int actorPose(lua_State* L) {
 }
 
 } // namespace
+std::string actorDepartureAnimation(std::uintptr_t player) {
+    if (!player || at<unsigned>(player, j460::layout::entity::type) != 1)
+        throw std::runtime_error("Departure animation requires a live player");
+    if (!at<bool>(player, j460::layout::player::extraAnimationActive))
+        return {};
+    const auto state = player + j460::layout::entity::sprite + j460::layout::sprite::animation;
+    const auto data = at<Address>(state, animation::data);
+    if (!data)
+        return {};
+    const auto name = string(data + animationData::name);
+    if (name.size() > lan::Stage::maxDepartureAnimationLength)
+        throw std::runtime_error("Departure animation name exceeds its presentation limit");
+    // Copy before room teardown; never retain an ANM2 pointer across the barrier.
+    return std::string(name);
+}
 bool bind(lua_State* L, HMODULE module) {
     if (!lua.load(module, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::type,
                            isaac::lua::Symbol::toBoolean, isaac::lua::Symbol::toUserdata,

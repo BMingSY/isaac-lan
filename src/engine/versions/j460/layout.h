@@ -253,6 +253,7 @@ inline constexpr unsigned frame = 0x10;
 inline constexpr unsigned playing = 0x14, events = 0x18, previousEvents = 0x1c;
 } // namespace animationState
 namespace animationData {
+inline constexpr unsigned name = 0x0;
 inline constexpr unsigned layers = 0x18, layerCount = 0x1c;
 inline constexpr unsigned nulls = 0x20, nullCount = 0x24;
 inline constexpr unsigned layerMap = 0x38;
@@ -279,6 +280,7 @@ inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, sta
 inline constexpr unsigned flipSprite = 0x5d0, flipVisible = 0x6d9;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned extraAnimationActive = 0x1398;
 inline constexpr unsigned movingBoxBegin = 0x1d7c, movingBoxEnd = 0x1d80;
 inline constexpr unsigned history = 0x1dec, inventoryOrder = 0x1e00, inventorySlots = 16;
 inline constexpr unsigned extraSprite = 0x41c, auxiliarySprite = 0xee4, ghostSprite = 0xff8;

@@ -182,6 +182,8 @@ python tools/engine_test.py run special-routes -- \
 
 换层 Lua 调用边界的 Windows 离线检查为 `native.stage-transition-binding`，覆盖栈与保存寄存器、原闭包目标、可空玩家参数、重复调用和卸载恢复。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 组合 `--case attack-mirror --case floor-sources --case rewind --heap-check --record`，在同一对隔离进程检查镜面换层、主客机分房选路、回退，以及省略玩家、显式 `nil` 和指定玩家三种 Lua 调用形式。
 
+换层离场动作的离线检查为 `presentation.actor-walking`、`bridge.layers`、`net.stage-events`、`net.stage-during-rejoin`、`net.reliable-receive` 和 `native.actor-animation`，覆盖动作选择、代次去重、可靠交付及原生动作名的只读复制与边界。`--case floor-sources` 移除混乱诅咒后，在同一组进程检查地下室进入／梯子返回，以及主客机分别从同房／分房状态触发光柱、从分房状态触发地洞；核对可靠动作名、客机实际姿态、两端目的地与录帧。
+
 角色复活的名单借用检查为 `core.room-team-roster` 与 `core.room-scope-ownership`，覆盖原生名单扩容、嵌套查询、跨房借用及异常清理；`bridge.actor-forms` 检查长子权身体的死亡挂起、重复幽灵状态及复活重新入列，`bridge.replica_pipeline` 检查形态解析与库存恢复顺序、重复状态和失败边界。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case character-revival --heap-check --record`，默认检查客机里骸骨的 Boss 复活、死亡前后拾取、资源保留、身体配对、闪烁状态和跨房／跨层；夹具 [state_character_revival.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_character_revival.lua) 接受 `revivalOwner`（0／1）及 `revivalKind`（`tainted-forgotten`、`forgotten`、`lazarus`、`lazarus-birthright`、`twins`），可通过现有套件工厂组合，复用同一对进程对照主客机和其他多身体角色。
 
 `special-routes` 的 `--case feedback-items` 检查主客机使用骸骨魂石后的资源、客机里以撒的实际切换及拾取替换、蓝钥匙上锁入口与对侧出口、丢弃后的重访，以及里骸骨分房抱起／投掷／带入其他房间。夹具见 [state_feedback_items.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_feedback_items.lua)；离线契约检查为 `bridge.inventory-order`、`native.inventory-order`、`bridge.blue-key` 和 `bridge.capture_generation`。图标刷新还需对照双端录帧。

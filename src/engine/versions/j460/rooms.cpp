@@ -280,6 +280,7 @@ struct StageRequest {
     int animation;
     Address player;
     int sourceRoom;
+    int sourceDimension = 0;
 };
 std::optional<StageRequest> pendingStage;
 j460::FloorSource floorSource;
@@ -1415,8 +1416,8 @@ void __attribute__((fastcall)) stageTransition(void* g, void*, bool same, int an
     // A floor transaction has precedence over room transfers in the same tick.
     // The first actor in deterministic room-update order owns the transaction.
     if (!pendingStage)
-        pendingStage =
-            StageRequest{same, animation, currentActor(player), at<int>(game(), 0x18304)};
+        pendingStage = StageRequest{same, animation, currentActor(player), at<int>(game(), 0x18304),
+                                    at<int>(game(), j460::layout::game::dimension)};
 }
 void __cdecl rKey() {
     if (enabled && !runtime::replica() && !runtime::allowChallengeEvent("floor"))
@@ -3697,6 +3698,26 @@ void finishFrame() {
     if (pendingStage) {
         const auto request = *pendingStage;
         pendingStage.reset();
+        std::vector<std::string> departureAnimations;
+        if (!runtime::replica()) {
+            // Native light effects omit the actor when several players share
+            // the source room. Capture its active poses after the native call
+            // has started them, before dismantling that room.
+            auto players =
+                request.player ? std::vector<Address>{request.player} : std::vector<Address>{};
+            if (!request.player) {
+                for (const auto& [key, room] : loaded)
+                    if (key.index == request.sourceRoom && key.dimension == request.sourceDimension)
+                        players = occupants(*room);
+            }
+            for (const auto player : players) {
+                auto name = visuals::actorDepartureAnimation(player);
+                if (!name.empty() &&
+                    std::find(departureAnimations.begin(), departureAnimations.end(), name) ==
+                        departureAnimations.end())
+                    departureAnimations.push_back(std::move(name));
+            }
+        }
         if (auto room = findRoom(request.player))
             room->activate();
         if (!runtime::replica()) {
@@ -3719,7 +3740,7 @@ void finishFrame() {
         using ChestEnding = int(__stdcall*)(bool);
         if (request.animation != 4 || runtime::replica() ||
             engine<ChestEnding>(j460::entry::gameGetChestEnding)(false) == 0)
-            runtime::beginStage(request.same, request.animation);
+            runtime::beginStage(request.same, request.animation, 0, 0, departureAnimations);
         // Replicas never simulate the chest collector or its grid markers.
         // Use the ordinary floor entry rather than waiting for local markers
         // and re-evaluating the chest against replica unlocks/inventory. J460

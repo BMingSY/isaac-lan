@@ -1170,6 +1170,7 @@ bool Session::beginStage(const Stage& value) {
     if (!impl->hosting || impl->state != Phase::running || impl->ending)
         return false;
     if (value.sourceRoom < -20 || value.sourceRoom >= 169 || value.restart > 2 ||
+        !value.validDepartureAnimations() ||
         (value.restart && (value.same || value.animation || value.level != 1 || value.type ||
                            !value.rewind.empty() || value.cinematic)) ||
         impl->cinematicEpoch ||

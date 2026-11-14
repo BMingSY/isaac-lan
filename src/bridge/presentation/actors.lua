@@ -172,12 +172,23 @@ return function(fields)
         return {
             apply = applyActorVisuals,
             walk = walk,
-            departFloor = function(player, animation, same)
-                -- The authoritative trapdoor starts this pose before issuing
-                -- the floor event. Replica grids never run that gameplay code.
-                local descent = 0
-                if animation == descent and not same and not player:IsCoopGhost() then
-                    player:AnimateTrapdoor()
+            departFloor = function(player, animation, same, departureAnimations)
+                -- The generic floor transition is shared by holes and light
+                -- entrances. Replay the authority's action from the reliable
+                -- event, including when its final snapshot was superseded.
+                local ordinaryTransition = 0
+                if animation == ordinaryTransition and not same and not player:IsCoopGhost() then
+                    local trapdoor = false
+                    for _, name in ipairs(departureAnimations or {}) do
+                        if name == "LightTravel" then
+                            player:AnimateLightTravel()
+                            return
+                        end
+                        trapdoor = trapdoor or name == "Trapdoor"
+                    end
+                    if trapdoor then
+                        player:AnimateTrapdoor()
+                    end
                 end
             end,
             reset = function()
