@@ -1657,11 +1657,11 @@ void challengeRules() {
             "Other challenges lost their independent room options");
     const auto* large = isaac::compat::challenges::find(1004);
     const auto* aim = isaac::compat::challenges::find(1005);
-    require(large && large->character == isaac::compat::ids::player::isaac &&
-                large->route == "heart" && large->goalStage == 8 && large->largeFloor &&
-                large->transient && large->difficulty == 0 && !large->roomOptionsLocked &&
-                !large->nextPlayerShooting && !large->friendlyFire,
-            "Large floor challenge contract mismatch");
+    require(large && large->character == RunRules{}.character && large->route == "heart" &&
+                large->goalStage == 8 && large->largeFloor && large->transient &&
+                large->difficulty == 0 && !large->roomOptionsLocked && !large->nextPlayerShooting &&
+                !large->friendlyFire,
+            "Large floor challenge must preserve ordinary character selection");
     require(aim && aim->character == RunRules{}.character && aim->route == "mom" &&
                 aim->goalStage == 6 && aim->nextPlayerShooting && !aim->largeFloor &&
                 aim->transient && aim->difficulty == 0 && !aim->roomOptionsLocked &&

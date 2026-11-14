@@ -70,7 +70,7 @@ inline constexpr std::array definitions{
     Definition{
         1004,
         1,
-        ids::player::isaac,
+        unrestrictedCharacter,
         0,
         true,
         "超大房间",
