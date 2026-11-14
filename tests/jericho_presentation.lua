@@ -5,7 +5,7 @@ local F = rules.fields
 local view = { "floor", 2, 10, 20, 1, 2, 3, false, 3, 0, 0 }
 local index, dimension, backdrop, sprites = 10, 0, 1, {}
 local vectors = {}
-local shotX, shotY = 0, 0
+local shotX, shotY, localSlot = 0, 0, 0
 local function vector(x, y)
     return setmetatable({ X = x, Y = y }, vectors)
 end
@@ -63,10 +63,10 @@ local presentation = dofile(root .. "/src/bridge/presentation/jericho.lua")({
     native = {
         jericho_artwork = "cache/jericho/seals.anm2",
         api_info = function()
-            return { active = 1, ready = 1, challenge = 0, slot = 0 }
+            return { active = 1, ready = 1, challenge = 0, slot = localSlot }
         end,
         api_actors = function()
-            return { { owner = 1, index = 0 } }
+            return { { owner = 1, index = 0 }, { owner = 2, index = 1 } }
         end,
     },
     rules = rules,
@@ -76,9 +76,10 @@ local presentation = dofile(root .. "/src/bridge/presentation/jericho.lua")({
     end,
     vector = vector,
     sprite = sprite,
-    player = function()
+    player = function(index)
         return {
-            Position = vector(300, 130),
+            ControllerIndex = index == 0 and localSlot + 1 or 2 - localSlot,
+            Position = vector(300, index == 0 and 130 or 370),
             Exists = function()
                 return true
             end,
@@ -112,6 +113,9 @@ local presentation = dofile(root .. "/src/bridge/presentation/jericho.lua")({
     end,
     game = function()
         return {
+            GetNumPlayers = function()
+                return 2
+            end,
             GetRoom = function()
                 return room
             end,
@@ -136,6 +140,12 @@ assert(
 for index = 1, 6 do
     assert(plate.draws[index].frame == index - 1, "Counted seals do not follow sequence")
 end
+localSlot = 1
+presentation.render()
+assert(
+    plate.draws[#plate.draws - 1].color[4] == 0.2 and plate.draws[#plate.draws].color[4] == 0.8,
+    "Guest local-first roster faded the host's marker instead of its own"
+)
 view[F.progress], shotY = 6, 1
 presentation.render()
 assert(

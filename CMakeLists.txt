@@ -517,6 +517,12 @@ string(SHA256 ISAAC_LAN_JERICHO_ARTWORK_VERSION "${ISAAC_LAN_JERICHO_ARTWORK_VER
 configure_file(src/presentation/assets/jericho_artwork_version.h.in
                generated/jericho_artwork_version.h @ONLY)
 configure_file(src/presentation/assets/jericho.rc.in generated/jericho.rc @ONLY)
+set_source_files_properties(
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/jericho.rc"
+    PROPERTIES
+        OBJECT_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/presentation/assets/jericho.png;${CMAKE_CURRENT_SOURCE_DIR}/src/presentation/assets/jericho.anm2"
+)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/main.lua" ISAAC_LAN_BRIDGE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/world.lua" ISAAC_LAN_STATE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/presentation/prediction.lua" ISAAC_LAN_PREDICTION)

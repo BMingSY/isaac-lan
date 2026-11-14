@@ -54,12 +54,17 @@ return function(deps)
     end
     local function localActors(info)
         local result = {}
-        for _, actor in ipairs(deps.native.api_actors()) do
-            if actor.owner == info.slot + 1 then
-                local player = deps.player(actor.index)
-                if player:Exists() and not player:IsDead() and not player:IsCoopGhost() then
-                    result[#result + 1] = player
-                end
+        -- Render callbacks borrow a local-first roster, while api_actors uses
+        -- canonical indices. Read ownership from the players in this view.
+        for index = 0, deps.game():GetNumPlayers() - 1 do
+            local player = deps.player(index)
+            if
+                player.ControllerIndex == info.slot + 1
+                and player:Exists()
+                and not player:IsDead()
+                and not player:IsCoopGhost()
+            then
+                result[#result + 1] = player
             end
         end
         return result
