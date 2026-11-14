@@ -51,7 +51,7 @@ SYSTEM_DLLS = {
 }
 
 
-def check(archive, tag):
+def check(archive, tag, *, require_stripped=False):
     if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
         raise ValueError("Expected a version tag such as v0.1.0")
     expected_name = f"Isaac-LAN-{tag}-windows-x86.zip"
@@ -92,6 +92,15 @@ def check(archive, tag):
                 is_dll = bool(pe.FILE_HEADER.Characteristics & 0x2000)
                 if is_dll != name.endswith(".dll"):
                     raise ValueError(f"Unexpected PE file kind: {name}")
+                # A stripped PE can retain a COFF string table for long section
+                # names such as .eh_frame, without retaining any symbols.
+                if require_stripped and (
+                    pe.FILE_HEADER.NumberOfSymbols
+                    or any(
+                        section.Name.startswith((b".debug", b".zdebug")) for section in pe.sections
+                    )
+                ):
+                    raise ValueError(f"Release binary retains debug information: {name}")
                 pe.parse_data_directories(
                     directories=[
                         pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"],
@@ -128,5 +137,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path)
     parser.add_argument("--tag", required=True)
+    parser.add_argument("--require-stripped", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(check(args.archive, args.tag), indent=2))
+    print(
+        json.dumps(check(args.archive, args.tag, require_stripped=args.require_stripped), indent=2)
+    )

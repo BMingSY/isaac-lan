@@ -154,13 +154,6 @@ class WorldTransfer {
         // for replacements without making the outstanding byte budget larger.
         return std::min(maxInFlightStates, 2 * pipeline);
     }
-    bool canSend(int minimumLatency) const {
-        if (!flight.empty() && Clock::now() - flight.front().started >= lostStateAge)
-            return pending.has_value();
-        return sending || (pending && flight.size() < window(minimumLatency) &&
-                           inFlightBytes() < maxInFlightBytes &&
-                           cachedBytes() + pending->bytes.capacity() <= maxCachedBytes);
-    }
     bool canCapture(int latency, bool replacing = false) const {
         if (pending || sending)
             return false;

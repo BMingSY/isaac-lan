@@ -14,7 +14,9 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 | `isaac_lan_net_test.exe` | 无需游戏的真实 Winsock 测试 |
 | `isaac_lan_lab.exe` | 隔离实例启动与验收 |
 
-[`tools/build_package.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_package.py) 打包前三项、安装脚本、README、FAQ 和许可证。游戏文件、存档、测试产物与构建目录不提交。加载器在扩展初始化后恢复游戏入口，游戏对象／Lua／网络轮询在主线程处理。原生改动须核对调用约定、布局、签名和所有权，见[分层约定](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md)。
+[`tools/build_package.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_package.py) 打包前三项、安装脚本、README、FAQ 和许可证；本地测试包保留原始二进制。[`tools/build_release.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_release.py) 从构建目录的 `CMakeCache.txt` 读取 `CMAKE_STRIP`，只剥离发布副本的调试信息和符号表，再生成文件哈希与 ZIP。运行代码、数据、导入／导出与重定位不裁剪；原始构建保留在构建目录，并由 CI 作为 `windows-x86-symbols` 附件保存 7 天供排障。CI 使用 `check_release.py --require-stripped` 检查发布包，工坊更新直接复用包中的主体 DLL。
+
+游戏文件、存档、测试产物与构建目录不提交。加载器在扩展初始化后恢复游戏入口，游戏对象和 Lua 在主线程处理，网络收发由独立线程负责。原生改动须核对调用约定、布局、签名和所有权，见[分层约定](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md)。
 
 ## 离线测试
 
