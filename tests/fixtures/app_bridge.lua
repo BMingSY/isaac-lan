@@ -79,6 +79,7 @@ return function(root, native, modules)
         "runtime/room_placement",
         "runtime/chat",
         "presentation/chat_layout",
+        "presentation/chat_completion",
         "presentation/chat",
         "presentation/player_opacity",
         "diagnostics/feedback",

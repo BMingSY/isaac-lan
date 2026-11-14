@@ -1,6 +1,8 @@
 local root = assert(arg[1])
 local factory = dofile(root .. "/src/bridge/presentation/chat.lua")
 local layout = dofile(root .. "/src/bridge/presentation/chat_layout.lua")
+local completion = dofile(root .. "/src/bridge/presentation/chat_completion.lua")
+local roomDefinitions = dofile(root .. "/src/bridge/core/room_types.lua")
 local draws, loads, missing = {}, {}, false
 local texts, availability, controlsPolled, sceneReady = {}, {}, 0, false
 local mouse = { x = -1000, y = -1000, down = false }
@@ -109,6 +111,9 @@ local function create(image, opacity, options, messages, service)
             chat_ui_accept = function()
                 acceptedInputs = acceptedInputs + 1
             end,
+            chat_ui_text = function(value)
+                input.text, input.cursor, input.anchor = value, #value, #value
+            end,
             chat_ui_available = function(value)
                 availability[#availability + 1] = value
                 if not value then
@@ -166,6 +171,7 @@ local function create(image, opacity, options, messages, service)
         end,
         limits = { characters = 60, commandBytes = 2048 },
         options = options or { FoundHUD = false, ExtraHUDStyle = 0, HUDOffset = 0 },
+        completion = completion(roomDefinitions, 2048),
     }, layout)
     ui.input = input
     return ui
@@ -548,6 +554,105 @@ ui.step({ phase = 3, prepared = true })
 assert(not ui.input.open and not ui.wheel and not modal and not emoteEnabled)
 assert(ui.input.text == "保留草稿")
 restartChord = false
+-- Suggestions share the input panel without sending commands, dragging it or
+-- stealing message-copy clicks. The native editor still owns history and IME.
+local submissions = {}
+ui = create(nil, nil, nil, {}, {
+    revision = 0,
+    messages = {},
+    emotes = {},
+    submit = function(value)
+        submissions[#submissions + 1] = value
+        return true
+    end,
+})
+local function typeText(value)
+    ui.input.text, ui.input.cursor, ui.input.anchor = value, #value, #value
+end
+local function tab()
+    ui.input.complete = true
+    ui.step({ phase = 2 })
+    ui.input.complete = false
+end
+local function drawHints()
+    texts = {}
+    ui.render({ phase = 2 })
+    return texts
+end
+local function textStarting(prefix)
+    for _, value in ipairs(texts) do
+        if value.text:sub(1, #prefix) == prefix then
+            return value
+        end
+    end
+end
+typeText("/")
+drawHints()
+assert(textStarting("/help") and textStarting("Tab 补全"))
+assert(not textStarting("/opacity"), "Suggestion list exceeded its visible row limit")
+assert(ui.input.text == "/" and #submissions == 0, "Preview changed or submitted the draft")
+tab()
+assert(ui.input.text == "/help ")
+drawHints()
+tab()
+assert(ui.input.text == "/c ", "Tab did not cycle the original prefix")
+drawHints()
+for _ = 1, 5 do
+    tab()
+    drawHints()
+end
+assert(textStarting("/e"), "Active suggestion scrolled outside the visible list")
+-- Typing and recalling history replace the previous cycle context.
+typeText("/c ")
+drawHints()
+local give = assert(textStarting("giveitem"), "Native command suggestions were not rendered")
+local hintX, hintY = give.x + 3, give.y + 4
+local beforeCopy = #copied
+mouse = { x = hintX, y = hintY, down = true }
+drawHints()
+mouse.down = false
+drawHints()
+assert(ui.input.text == "/c giveitem ", "Click did not fill the chosen suggestion")
+assert(#copied == beforeCopy and #submissions == 0, "Suggestion click copied or executed content")
+drawHints()
+assert(textStarting("/c giveitem <道具ID>"), "Completed command lost its parameter hint")
+typeText("/c giveitem c333")
+tab()
+assert(ui.input.text == "/c giveitem c333", "Tab replaced a native argument")
+typeText("/tp bo")
+ui.input.composing, ui.input.composition = true, "中"
+drawHints()
+assert(not textStarting("boss") and not textStarting("Tab 补全"))
+tab()
+assert(ui.input.text == "/tp bo", "Completion interrupted IME")
+ui.input.composing, ui.input.composition = false, ""
+ui.input.anchor = 0
+tab()
+assert(ui.input.text == "/tp bo", "Completion replaced selected text")
+ui.input.anchor = ui.input.cursor
+tab()
+assert(ui.input.text == "/tp boss ")
+ui.input.open = false
+drawHints()
+assert(not textStarting("Tab 补全"), "Closed input retained hints")
+ui.input.open = true
+typeText("/op")
+drawHints()
+local option = assert(textStarting("/opacity"))
+mouse = { x = option.x + 3, y = option.y + 4, down = true }
+drawHints()
+typeText("/feedback")
+mouse.down = false
+drawHints()
+assert(ui.input.text == "/feedback", "A stale mouse press rewrote edited input")
+local editor = ui.input
+ui.reset()
+ui.input = editor
+typeText("/c g")
+ui.input.open = true
+tab()
+assert(ui.input.text == "/c g ", "Reset retained an old completion cycle")
+assert(#submissions == 0)
 print(
-    "PASS chat appearance, private history, player colors, LAN input, HUD dragging and message copy"
+    "PASS chat appearance, private history, LAN input, HUD dragging, message copy and completion UI"
 )
