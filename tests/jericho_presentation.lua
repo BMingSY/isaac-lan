@@ -5,11 +5,15 @@ local F = rules.fields
 local view = { "floor", 2, 10, 20, 1, 2, 3, false, 3, 0, 0 }
 local index, dimension, backdrop, sprites = 10, 0, 1, {}
 local vectors = {}
+local shotX, shotY = 0, 0
 local function vector(x, y)
     return setmetatable({ X = x, Y = y }, vectors)
 end
 function vectors.__add(a, b)
     return vector(a.X + b.X, a.Y + b.Y)
+end
+function vectors.__sub(a, b)
+    return vector(a.X - b.X, a.Y - b.Y)
 end
 local function sprite()
     local value = { draws = {}, sheets = {} }
@@ -17,13 +21,16 @@ local function sprite()
         self.path = path
         sprites[path] = self
     end
-    function value:SetFrame() end
+    function value:SetFrame(_, frame)
+        self.frame = frame
+    end
     function value:LoadGraphics() end
     function value:ReplaceSpritesheet(layer, path)
         self.sheets[layer] = path
     end
     function value:Render(point)
-        self.draws[#self.draws + 1] = point
+        self.draws[#self.draws + 1] =
+            { X = point.X, Y = point.Y, frame = self.frame, color = self.Color }
     end
     return value
 end
@@ -54,8 +61,12 @@ local level = {
 }
 local presentation = dofile(root .. "/src/bridge/presentation/jericho.lua")({
     native = {
+        jericho_artwork = "cache/jericho/seals.anm2",
         api_info = function()
-            return { active = 1, ready = 1, challenge = 0 }
+            return { active = 1, ready = 1, challenge = 0, slot = 0 }
+        end,
+        api_actors = function()
+            return { { owner = 1, index = 0 } }
         end,
     },
     rules = rules,
@@ -65,6 +76,23 @@ local presentation = dofile(root .. "/src/bridge/presentation/jericho.lua")({
     end,
     vector = vector,
     sprite = sprite,
+    player = function()
+        return {
+            Position = vector(300, 130),
+            Exists = function()
+                return true
+            end,
+            IsDead = function()
+                return false
+            end,
+            IsCoopGhost = function()
+                return false
+            end,
+            GetShootingInput = function()
+                return vector(shotX, shotY)
+            end,
+        }
+    end,
     color = function(...)
         return { ... }
     end,
@@ -98,9 +126,25 @@ local presentation = dofile(root .. "/src/bridge/presentation/jericho.lua")({
 })
 presentation.render()
 local item = sprites["gfx/005.100_collectible.anm2"]
-local plate = sprites["gfx/grid/grid_pressureplate.anm2"]
+local plate = sprites["cache/jericho/seals.anm2"]
 assert(item.sheets[1] == "item-1" and #item.draws == 1)
 assert(plate.draws[1].X == 140)
+assert(
+    plate.draws[7].color[4] == 0.2 and plate.draws[8].color[4] == 0.8,
+    "Floor artwork obscures the player standing on it"
+)
+for index = 1, 6 do
+    assert(plate.draws[index].frame == index - 1, "Counted seals do not follow sequence")
+end
+view[F.progress], shotY = 6, 1
+presentation.render()
+assert(
+    plate.draws[#plate.draws - 1].frame == 7 and plate.draws[#plate.draws].frame == 6,
+    "Only the occupied, inward-firing shofar should respond"
+)
+shotY = -1
+presentation.render()
+assert(plate.draws[#plate.draws - 1].frame == 6, "Outward fire lit the shofar")
 index = 20
 presentation.render()
 assert(item.sheets[1] == "item-2")

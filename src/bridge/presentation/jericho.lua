@@ -1,5 +1,5 @@
--- Native floor art, pressure plates, horn and collectible sprites. Glyphs are
--- small engraved city walls with countable battlements, never numeral labels.
+-- Countable stone seals and shofar reliefs share the authority contact layout.
+-- Native floor art and rubble retain the current stage backdrop.
 return function(deps)
     local assets, previewItem, rockSheet, rockSheets
     local F = deps.rules.fields
@@ -42,42 +42,47 @@ return function(deps)
             rockSheets[deps.backdrop[name]] = "gfx/grid/rocks_" .. texture .. ".png"
         end
         for name, path in pairs({
-            plate = "gfx/grid/grid_pressureplate.anm2",
+            seals = assert(deps.native.jericho_artwork),
             rock = "gfx/grid/grid_rock.anm2",
-            horn = "gfx/005.350_trinket.anm2",
             item = "gfx/005.100_collectible.anm2",
-            fill = "gfx/ui/bossoverlay_whiteout.anm2",
         }) do
             local sprite = deps.sprite()
             sprite:Load(path, true)
             assets[name] = sprite
         end
-        assets.fill:SetFrame("Fade", 15)
-        assets.horn:ReplaceSpritesheet(0, "gfx/items/trinkets/trinket_035_curvedhorn.png")
-        assets.horn:LoadGraphics()
-        assets.horn:SetFrame("Idle", 0)
         assets.item:SetFrame("Idle", 0)
     end
-    local function rect(x, y, w, h, color)
-        assets.fill.Scale = deps.vector(w / 480, h / 270)
-        assets.fill.Color =
-            deps.color(0, 0, 0, color[4] or 1, color[1] - 1, color[2] - 1, color[3] - 1)
-        assets.fill:Render(deps.vector(math.floor(x), math.floor(y)))
-    end
-    local function glyph(point, count, lit, faded)
-        local dark = { 0.17, 0.13, 0.11, faded and 0.3 or 0.9 }
-        local light = lit and { 0.94, 0.79, 0.39, 1 } or { 0.63, 0.59, 0.48, faded and 0.25 or 0.9 }
-        local x, y = point.X - 11, point.Y - 6
-        rect(x, y + 5, 22, 8, dark)
-        rect(x + 1, y + 5, 20, 6, light)
-        rect(x + 9, y + 7, 4, 6, dark)
-        -- Evenly spaced towers: one to six; their shape stays recognisable on
-        -- damp, bloody and dark backgrounds without replacing those backgrounds.
-        local start = point.X - (count * 4 - 1) / 2
-        for tower = 0, count - 1 do
-            rect(start + tower * 4, y, 3, 6, dark)
-            rect(start + tower * 4 + 1, y + 1, 1, 4, light)
+    local function localActors(info)
+        local result = {}
+        for _, actor in ipairs(deps.native.api_actors()) do
+            if actor.owner == info.slot + 1 then
+                local player = deps.player(actor.index)
+                if player:Exists() and not player:IsDead() and not player:IsCoopGhost() then
+                    result[#result + 1] = player
+                end
+            end
         end
+        return result
+    end
+    local function opacity(players, point, radius)
+        for _, player in ipairs(players) do
+            local offset = player.Position - point
+            if offset.X ^ 2 + offset.Y ^ 2 <= radius ^ 2 then
+                return 0.25
+            end
+        end
+        return 1
+    end
+    local function responding(players, center, side)
+        local result = {}
+        for _, player in ipairs(players) do
+            local offset, shot = player.Position - center, player:GetShootingInput()
+            local _, firing, horn = deps.layout.contact(offset.X, offset.Y, shot.X, shot.Y, side)
+            if firing then
+                result[horn] = true
+            end
+        end
+        return result
     end
     local function render()
         local info = deps.native.api_info()
@@ -110,32 +115,39 @@ return function(deps)
             return point
         end
         local center = room:GetCenterPos()
+        local players = localActors(info)
         for index, offset in ipairs(deps.layout.plates) do
-            local point = screen(center + deps.vector(offset[1], offset[2]))
+            local position = center + deps.vector(offset[1], offset[2])
+            local point = screen(position)
+            local alpha = opacity(players, position, deps.layout.plateRadius)
             local active = not mirror and deps.rules.plateSide(index) == side
             local lit = not mirror and index <= view[F.progress]
-            assets.plate.Scale = deps.vector(active and 1.15 or 0.95, active and 1.15 or 0.8)
-            assets.plate.Color =
-                deps.color(0.8, 0.78, 0.7, mirror and 0.28 or (active and 1 or 0.55))
-            assets.plate:SetFrame(active and not lit and "Off" or "On", 0)
-            assets.plate:Render(point)
-            glyph(point, index, lit, mirror)
+            local scale = active and 1.15 or 0.95
+            assets.seals.Scale = deps.vector(scale, scale)
+            assets.seals.Color = lit and deps.color(1, 0.86, 0.52, alpha)
+                or deps.color(
+                    active and 1 or 0.72,
+                    active and 1 or 0.72,
+                    active and 1 or 0.72,
+                    mirror and 0.24 or alpha
+                )
+            assets.seals:SetFrame("Seals", index - 1)
+            assets.seals:Render(point)
         end
-        for _, offset in ipairs(deps.layout.horns) do
-            local point = screen(center + deps.vector(offset[1], offset[2]))
-            local lit = not mirror and view[F.progress] == deps.rules.sequenceLength
-            assets.plate.Scale = deps.vector(1.4, 1.05)
-            assets.plate.Color = deps.color(0.65, 0.61, 0.5, mirror and 0.2 or 0.65)
-            assets.plate:SetFrame(lit and "Off" or "On", 0)
-            assets.plate:Render(point)
-            assets.horn.Color = deps.color(
-                lit and 1 or 0.48,
-                lit and 0.9 or 0.46,
-                lit and 0.6 or 0.4,
-                mirror and 0.18 or 0.9
-            )
-            assets.horn.Scale = deps.vector(0.9, 0.9)
-            assets.horn:Render(point + deps.vector(0, 7))
+        local ready = not mirror and view[F.progress] == deps.rules.sequenceLength
+        local response = ready and not view[F.complete] and responding(players, center, side) or {}
+        for index, offset in ipairs(deps.layout.horns) do
+            local position = center + deps.vector(offset[1], offset[2])
+            local point = screen(position)
+            local alpha = opacity(players, position, deps.layout.hornRadius)
+            local sounding = response[index]
+            local lit = ready and (view[F.complete] or sounding)
+            local scale = sounding and 1.4 or 1.3
+            assets.seals.Scale = deps.vector(scale, scale)
+            assets.seals.Color = ready and deps.color(1, 1, 1, alpha)
+                or deps.color(0.65, 0.65, 0.65, mirror and 0.2 or alpha * 0.8)
+            assets.seals:SetFrame("Seals", lit and 7 or 6)
+            assets.seals:Render(point)
         end
         if mirror or view[F.complete] then
             local path = rockSheets[room:GetBackdropType()] or "gfx/grid/rocks_basement.png"

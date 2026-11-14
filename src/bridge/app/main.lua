@@ -178,6 +178,7 @@ jerichoHud = _IsaacLanModules["presentation/jericho"]({
     view = jericho.view,
     game = Game,
     sprite = Sprite,
+    player = Isaac.GetPlayer,
     vector = Vector,
     color = Color,
     screen = Isaac.WorldToScreen,

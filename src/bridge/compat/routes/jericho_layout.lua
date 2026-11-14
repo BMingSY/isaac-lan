@@ -30,13 +30,14 @@ function layout.contact(x, y, shootX, shootY, side)
             break
         end
     end
-    local horn = false
-    for _, point in ipairs(layout.horns) do
+    local horn, standing = false, nil
+    for index, point in ipairs(layout.horns) do
         if inside(x, y, point, layout.hornRadius) then
+            standing = index
             local length = math.sqrt((x * x + y * y) * (shootX * shootX + shootY * shootY))
             horn = length > 0 and (-x * shootX - y * shootY) / length >= layout.aimCosine
         end
     end
-    return plate, horn
+    return plate, horn, standing
 end
 return layout

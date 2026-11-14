@@ -207,6 +207,13 @@ local function advance()
         pair = { view[F.first], view[F.second] }
         for slot = 0, 1 do
             actor(slot, function(player)
+                if slot == 0 then
+                    player:ChangePlayerType(PlayerType.PLAYER_AZAZEL)
+                end
+                assert(
+                    player:GetPlayerType()
+                        == (slot == 0 and PlayerType.PLAYER_AZAZEL or PlayerType.PLAYER_ISAAC)
+                )
                 player:AddCollectible(CollectibleType.COLLECTIBLE_D6, 0, false)
                 player:SetActiveCharge(0)
             end)

@@ -1,0 +1,3 @@
+#include <windows.h>
+ISAAC_LAN_JERICHO_PNG RCDATA "@CMAKE_CURRENT_SOURCE_DIR@/src/presentation/assets/jericho.png"
+ISAAC_LAN_JERICHO_ANM2 RCDATA "@CMAKE_CURRENT_SOURCE_DIR@/src/presentation/assets/jericho.anm2"
