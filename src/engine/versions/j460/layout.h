@@ -60,6 +60,10 @@ namespace spriteRenderFrame {
 inline constexpr std::ptrdiff_t sprite = -0xf4;
 inline constexpr std::ptrdiff_t color = -0x40;
 } // namespace spriteRenderFrame
+namespace laserRenderFrame {
+inline constexpr std::ptrdiff_t opacity = -0x1a0;
+inline constexpr std::ptrdiff_t shadowOpacity = -0x124;
+} // namespace laserRenderFrame
 namespace game {
 inline constexpr unsigned challenge = 0x26584;
 inline constexpr unsigned deathCertificateRoom = 0x18900, deathCertificateDimension = 0x18904;
