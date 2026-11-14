@@ -603,13 +603,15 @@ void updateReplica(const backend::Call& original) {
         lua.pushInteger(state, transition->restart);
         lua.pushInteger(state, transition->cinematic);
         lua.pushInteger(state, transition->sourceRoom);
+        lua.pushLString(state, transition->departureAnimation.data(),
+                        transition->departureAnimation.size());
         view.playingCinematic = transition->cinematic != 0;
         view.cinematicReady = false;
         if (view.playingCinematic) {
             input::reset();
             view.pendingHalf = false;
         }
-        if (!call(stageRef, 9, 0, top))
+        if (!call(stageRef, 10, 0, top))
             return;
         rooms::finishFrame();
         if (logger)
@@ -1933,7 +1935,8 @@ void pollLocalConsole() {
         return;
     backend::hideConsole();
 }
-void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) {
+void beginStage(bool same, int animation, unsigned restart, unsigned cinematic,
+                const std::string& departureAnimation) {
     if (!view.gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
         return;
     auto value = backend::stage();
@@ -1948,6 +1951,7 @@ void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) 
     }
     value.cinematic = cinematic;
     value.sourceRoom = rooms::floorSourceRoom();
+    value.departureAnimation = departureAnimation;
     if (!session->beginStage(value)) {
         fail("Native floor transaction rejected");
         return;

@@ -3697,6 +3697,9 @@ void finishFrame() {
     if (pendingStage) {
         const auto request = *pendingStage;
         pendingStage.reset();
+        const auto departureAnimation = runtime::replica() || !request.player
+                                            ? std::string{}
+                                            : visuals::actorDepartureAnimation(request.player);
         if (auto room = findRoom(request.player))
             room->activate();
         if (!runtime::replica()) {
@@ -3719,7 +3722,7 @@ void finishFrame() {
         using ChestEnding = int(__stdcall*)(bool);
         if (request.animation != 4 || runtime::replica() ||
             engine<ChestEnding>(j460::entry::gameGetChestEnding)(false) == 0)
-            runtime::beginStage(request.same, request.animation);
+            runtime::beginStage(request.same, request.animation, 0, 0, departureAnimation);
         // Replicas never simulate the chest collector or its grid markers.
         // Use the ordinary floor entry rather than waiting for local markers
         // and re-evaluating the chest against replica unlocks/inventory. J460

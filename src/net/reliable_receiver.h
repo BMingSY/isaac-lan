@@ -6,7 +6,8 @@ struct ReceivedBulk {
     std::optional<Stage> stage;
     std::vector<std::uint8_t> checkpoint;
     std::size_t size() const {
-        return stage ? sizeof(Stage) + stage->rewind.size() : checkpoint.size();
+        return stage ? sizeof(Stage) + stage->rewind.size() + stage->departureAnimation.size()
+                     : checkpoint.size();
     }
 };
 // Socket-thread assembly only. Lifecycle acceptance and native restoration are

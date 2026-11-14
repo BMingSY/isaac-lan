@@ -294,10 +294,11 @@ namespace isaac::runtime {
 bool replica() {
     return current->replica;
 }
-void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) {
+void beginStage(bool same, int animation, unsigned restart, unsigned cinematic,
+                const std::string& departureAnimation) {
     auto& f = *current;
-    if (same || animation != 6 || restart || cinematic || !f.decisionReturned ||
-        !f.rewindEvents.empty() || f.nativeStages || !f.resumed.empty())
+    if (same || animation != 6 || restart || cinematic || !departureAnimation.empty() ||
+        !f.decisionReturned || !f.rewindEvents.empty() || f.nativeStages || !f.resumed.empty())
         f.reject("Home publication preceded the decision or mixed with a rewind transaction");
     ++f.stageEvents;
     f.events.push_back("publish-home");

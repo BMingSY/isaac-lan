@@ -1266,6 +1266,15 @@ void stageEvents() {
         stage.seeds[i] = 0x12340000 + i;
     stage.stateFlags = {0x10000, (1u << (44 - 32)) | (1u << (48 - 32))};
     stage.sourceRoom = -8;
+    stage.departureAnimation = "LightTravel";
+    {
+        auto invalid = stage;
+        invalid.departureAnimation.assign(Stage::maxDepartureAnimationLength + 1, 'x');
+        require(!g.peers[0]->beginStage(invalid), "Oversized departure animation accepted");
+        const auto message = stageMessage(invalid);
+        Reader reader(std::span(message.bytes).subspan(1));
+        rejects([&] { readStageChunk(reader); }, "Oversized departure animation decoded");
+    }
     for (int invalidRoom : {-21, 169}) {
         auto invalid = stage;
         invalid.sourceRoom = invalidRoom;
@@ -1361,6 +1370,7 @@ void stageDuringRejoin() {
     Stage last{2, 2, 0, 0, false, {}, {}};
     last.stateFlags[1] = 1u << (44 - 32);
     last.sourceRoom = -8;
+    last.departureAnimation = "Trapdoor";
     require(g.peers[0]->beginStage(last), "Second loading floor event failed");
     g.poll();
     require(!g.peers[1]->takeStage(), "Native event reached an unprepared engine");
@@ -3012,15 +3022,21 @@ void reliableReceive() {
     receiver.begin(start);
     Reader gapReader(std::span(next.bytes).subspan(1));
     rejects([&] { receiver.snapshot(gapReader); }, "Out-of-order checkpoint chunk accepted");
-    Stage stage{1, 1, 0, 12, false, {}, {}};
-    stage.rewind.resize(6001, 1);
-    auto chunk = stageMessage(stage);
-    Reader stageFirst(std::span(chunk.bytes).subspan(1));
-    receiver.floor(stageFirst);
-    ++stage.sourceRoom;
-    chunk = stageMessage(stage, bulkChunkSize);
-    Reader changed(std::span(chunk.bytes).subspan(1));
-    rejects([&] { receiver.floor(changed); }, "Mixed rewind metadata accepted");
+    for (bool changeAnimation : {false, true}) {
+        receiver.begin(start);
+        Stage stage{1, 1, 0, 12, false, {}, {}};
+        stage.rewind.resize(6001, 1);
+        auto chunk = stageMessage(stage);
+        Reader stageFirst(std::span(chunk.bytes).subspan(1));
+        receiver.floor(stageFirst);
+        if (changeAnimation)
+            stage.departureAnimation = "LightTravel";
+        else
+            ++stage.sourceRoom;
+        chunk = stageMessage(stage, bulkChunkSize);
+        Reader changed(std::span(chunk.bytes).subspan(1));
+        rejects([&] { receiver.floor(changed); }, "Mixed rewind metadata accepted");
+    }
 }
 void worldDeltas() {
     Group g(4);

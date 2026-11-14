@@ -15,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 54;
+constexpr std::uint16_t protocolVersion = 55;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -238,6 +238,7 @@ struct LobbyAccess {
 // Begin the game's native transition, rather than discovering a floor change
 // in a snapshot after the host has finished loading it.
 struct Stage {
+    static constexpr std::size_t maxDepartureAnimationLength = 64;
     std::uint32_t epoch = 0;
     std::uint8_t level = 0, type = 0, animation = 0;
     bool same = false;
@@ -256,6 +257,8 @@ struct Stage {
     std::uint8_t cinematic = 0;
     // Authoritative departure context for native next-floor selection.
     std::int16_t sourceRoom = 0;
+    // Opaque presentation name captured at the authoritative departure barrier.
+    std::string departureAnimation{};
     bool operator==(const Stage&) const = default;
 };
 // A local Mod's native room command, not a client-authored world snapshot.

@@ -145,6 +145,8 @@ J460 音乐管理器位于 `Manager+0x29fbc`，当前／排队 ID 分别为 `+0x
 
 J460 的 `Game:StartStageTransition(sameStage, animation[, player])` Lua 闭包经适配入口调用与 `MoveToRandomRoom` 相同的三参数绑定（RVA `0x4b8c30`），替换原入口 `0x4b8bb0`；两个原生入口均校验签名。省略玩家时使用公共 Lua ABI 将第四个栈参数补为 `nil`；原生绑定仍从原闭包的 userdata upvalue 读取目标方法，沿用 Game／EntityPlayer 类型检查，将 `nil` 玩家转为空指针。底层 `Game::StartStageTransition`（RVA `0x2fdc10`）为 `thiscall void(Game*, bool, int, EntityPlayer*)`，清理 12 字节栈参数。游戏原生调用、房间来源选择与联机换层屏障继续使用该三参数契约；适配只保留进程内函数入口，不缓存 Lua 状态、闭包或玩家指针，Lua 重载后仍通过同一入口。
 
+内部 C++ 能力 [`actorDepartureAnimation(player)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/visuals.cpp) 只读换层触发玩家正在播放的额外动作。调用方必须在安全更新边界持有有效玩家，且在房间拆卸前调用；入口校验非空与实体类型。J460 的有效标记位于 `Player+0x1398`，动作名来自实体主 Sprite 的当前动画数据 `+0`，使用原生 MSVC 字符串布局；长度不得超过容量或协议的 64 字节上限。无有效额外动作或动画数据时返回空字符串。返回值拥有独立副本，不保留玩家或动画数据指针，不写游戏状态；动作匹配和回放由桥接表现层负责。
+
 Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；普通 `Game::StartRoomTransition` 同时选路并启动转场，不能直接作为客机结果回放接口。
 
 [`presentation_events`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/presentation.cpp) 保持每条八个 `u32` 的 Boss 出场载荷，按楼层、类型、维度和房间匹配后调用原生 `StartBossIntro`。加入已加载房间只订阅其未完成事件，沿用序号和 Boss ID；主机加入时在到达作用域内启动本机原生画面，客机通过权威视图接收。原始观看者决定等待边界，后来者不延长战斗暂停。每份已接受视图中的事件列表是该接收者仍待播放的完整集合：已播放事件消失时，客机结束对应的剩余出场画面。重复状态按房间与序号去重；等待和已参与名单由 [IntroBarrier](https://github.com/BMingSY/isaac-lan/blob/main/src/core/intro_barrier.h) 管理，完成／超时后不接受新订阅，退出清理名单。载荷字段和协议号不变，不同 DLL 由扩展指纹拒绝连接。

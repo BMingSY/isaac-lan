@@ -300,7 +300,18 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             return true
         end,
         present,
-        function(epoch, stage, stageType, animation, same, rewind, restart, cinematic, sourceRoom)
+        function(
+            epoch,
+            stage,
+            stageType,
+            animation,
+            same,
+            rewind,
+            restart,
+            cinematic,
+            sourceRoom,
+            ...
+        )
             if rewind and #rewind > 0 then
                 local case = assert(cases[math.floor((received - 1) / 3) + 1])
                 expectedReplica = { stage = case.source, kind = original }
@@ -322,7 +333,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 rewind,
                 restart,
                 cinematic,
-                sourceRoom
+                sourceRoom,
+                ...
             )
         end
     )
