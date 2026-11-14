@@ -341,6 +341,9 @@ return function(fields)
             end))
             assert(native.presentation_events(value.presentation))
             itemPresentation.apply(value.slot, value.items)
+            if deps.applyJericho then
+                deps.applyJericho(value.jericho)
+            end
             if deps.applyChallenge then
                 deps.applyChallenge(value.challenge)
             end

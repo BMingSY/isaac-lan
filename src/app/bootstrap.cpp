@@ -26,6 +26,7 @@
 #include "engine/input.h"
 #include "engine/generated_items.h"
 #include "engine/frontend.h"
+#include "presentation/jericho_artwork.h"
 #include "engine/build.h"
 #include "runtime/extension_files.h"
 #include "runtime/extension_update.h"
@@ -313,6 +314,8 @@ DWORD initialize() {
     const auto chatBackground = isaac::presentation::prepareChatBackground(
         directory / L"isaac-lan", settings.chat.backgroundImage);
     isaac::frontend::configureChat(settings.chat, chatBackground);
+    isaac::frontend::configureJerichoArtwork(
+        isaac::presentation::prepareJerichoArtwork(directory / L"isaac-lan"));
     isaac::frontend::configureConnection(directory / L"isaac-lan/connection.txt");
     if (!chatBackground.warning.empty())
         log("chat_background_warning=" + chatBackground.warning);

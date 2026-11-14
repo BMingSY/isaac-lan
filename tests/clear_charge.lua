@@ -203,4 +203,15 @@ tick, shape, kind = 9, 8, 17
 rules.cleared(0, 0, 10)
 rules.step()
 assert(grants[#grants].n == 1, "Boss Rush uses one charge despite its room shape")
+local before = { players[0].charges[0], players[1].charges[0], players[2].charges[0] }
+clear.award(info, { [0] = true }, 1)
+assert(players[0].charges[0] == before[1] + 1 and players[1].charges[0] == before[2])
+clear.award(info, nil, 1)
+clear.award(info, nil, 1)
+assert(
+    players[0].charges[0] == before[1] + 3
+        and players[1].charges[0] == before[2] + 2
+        and players[2].charges[0] == before[3] + 2,
+    "Two explicit room awards lost their audiences"
+)
 print("PASS clear charge event dedup, separate rooms, slots, modifiers, waves and lifecycle")

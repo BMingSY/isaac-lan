@@ -50,6 +50,7 @@ namespace {
 std::uintptr_t image;
 chat::Appearance chatAppearance;
 presentation::ChatBackground chatBackground;
+std::string jerichoArtwork;
 std::filesystem::path connectionPath;
 presentation::ConnectionSettings connectionSettings;
 std::wstring labRoot;
@@ -1069,6 +1070,8 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.pushString(state, chatBackground.animation.c_str());
         lua.setField(state, -2, "image");
         lua.setField(state, -2, "chat_style");
+        lua.pushString(state, jerichoArtwork.c_str());
+        lua.setField(state, -2, "jericho_artwork");
         // Ordinary launches omit the global debug library. Keep the sandbox
         // intact and expose only our source/upvalue inspection functions.
         const auto openDebug =
@@ -1206,6 +1209,9 @@ void configureChat(const chat::Appearance& appearance,
 void configureConnection(const std::filesystem::path& path) {
     connectionPath = path;
     connectionSettings = presentation::loadConnectionSettings(path);
+}
+void configureJerichoArtwork(const std::string& animation) {
+    jerichoArtwork = animation;
 }
 void returnToLobby() {
     lobbyRequested = true;

@@ -233,6 +233,8 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 ## 开发专项入口
 
+合作遗迹的定向离线入口为 `bridge.jericho`、`bridge.jericho-presentation`、`bridge.clear-charge`、`bridge.room-gather`、`bridge.layers` 和 `core.archive-*`；Windows `presentation.jericho-artwork` 检查嵌入图集、动画缓存及损坏恢复，共用缓存写入的改动同时检查 `presentation.chat-background`。实机使用 [run_jericho.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_jericho.py) 与 [state_jericho.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_jericho.lua)，指定 `--host`、`--client`、`--build`、`--output`，可加 `--heap-check --record`；入口保护并恢复隔离资料，使用封存 DLL 和夹具检查地图连接、Azazel／以撒分房机关、道具虚影、结算、沙漏、重连、续玩及镜中遗迹，同时核对两端石印、羊角号与楼层背景。生成夹具可把概率设为正常上限，概率递增和生成后的固定 1% 由离线用例验证。
+
 超大层与射击轮换使用 [run_large_floor_aim.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_large_floor_aim.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`；可用 `--extra-client` 增加第三、四端，使用 `--heap-check --record` 保留异常与画面证据。所有用例复用同一组进程，按两人超大层、两人至指定人数的射击轮换依次开局；`--challenge 1004` 或 `--challenge 1005` 可只复测对应挑战。覆盖普通路线各层生成、妈心／妈腿奖杯、独立移动、跨房射击、鼠标、蓄力松手、幽灵与断线重连。隔离存档在启动前准备资格，结束后恢复并核对。离线对应 `core.aim-rotation`、`core.challenge-rules`、`bridge.challenges`、`bridge.challenge_menu`、`presentation.attacks` 和 Windows `native.floor-generation`、`native.challenge-hud`、`native.mouse-input`。
 
 房间共享效果使用 [run_room_rules.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_room_rules.py)，指定 `--host`、`--client`、`--build`、`--output` 和独立 `--port`，可加 `--heap-check --record`。工具固定模拟 80 ms RTT，在同一对进程中验证清房充能、分房、主动槽位、充能修正、沙漏回退、普通掷骰与运气挑战，然后仅为启动时读取本机偏好重启一次；两个端口分别用于主机与延迟代理。全部结束后恢复隔离资料，任一阶段失败不计通过。离线对应 `bridge.clear-charge`、`bridge.luck_game`、`presentation.connection-settings`、`core.room-options-marks`。

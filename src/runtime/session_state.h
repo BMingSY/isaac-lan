@@ -34,6 +34,7 @@ struct SessionView {
     }
 };
 struct SavedRun {
+    RunPayload runPayload;
     PendingArchive pendingArchive;
     std::string saveError;
     bool networkRun = false, soloContinueAvailable = false;

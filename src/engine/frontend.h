@@ -15,6 +15,7 @@ void render();
 void returnToLobby();
 bool capturesInput();
 void configureConnection(const std::filesystem::path& path);
+void configureJerichoArtwork(const std::string& animation);
 void configureChat(const chat::Appearance& appearance,
                    const presentation::ChatBackground& background);
 bool install(std::uintptr_t image, const std::wstring& root, void (*log)(const std::string&),

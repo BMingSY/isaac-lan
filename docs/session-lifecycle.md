@@ -98,7 +98,9 @@ sequenceDiagram
 
 ## 联机存档与续玩
 
-[`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 定义存档封装：扩展指纹、开局设置、运行规则、全队位置、原生 GameState 和完整性哈希。`IsaacLAN/save/5` 保存房间选项及本局奖励账本；读取也支持没有奖励账本的 `save/4` 和没有房间选项的 `save/3`，缺失字段默认清空。读取须匹配格式与指纹，完整文件上限 8 MiB。
+[`session_archive.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_archive.h) 定义存档封装：扩展指纹、开局设置、运行规则、全队位置、原生 GameState、桥接玩法状态和完整性哈希。`IsaacLAN/save/6` 保存房间选项、本局奖励账本及桥接玩法状态；读取也支持没有桥接状态的 `save/5`、没有奖励账本的 `save/4` 和没有房间选项的 `save/3`，缺失字段默认清空。读取须匹配格式与指纹，完整文件上限 8 MiB。
+
+桥接玩法状态由运行层的 [RunPayload](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/run_payload.h) 持有，限额 64 KiB，内容使用普通值编码。`net_run_state()` 返回字节串及修订号；带字节串参数时仅接受已建立运行门控的主机写入，并返回新修订号。新局清空，续玩与归队检查点随原生存档恢复，沙漏采用对应房间检查点的字节串。兼容组件观察修订号恢复自身状态；退出前先捕获缓存，随后才能清理 Lua 组件。传输层不解释玩法字段。
 
 房主三个存档栏分别使用 `session-1.bin`、`session-2.bin`、`session-3.bin`，与单人 Continue 分开管理。写入采用临时文件替换；失败时保留旧文件和进程内待保存快照，重试固定使用原存档栏，成功前不能开始新联机局。
 

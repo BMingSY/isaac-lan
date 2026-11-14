@@ -480,6 +480,9 @@ local function decodeTransition(bytes)
     local length
     length, position = string.unpack(">I4", bytes, position)
     position = position + length
+    length, position = string.unpack(">I4", bytes, position)
+    assert(length <= 64 * 1024, "Bridge checkpoint exceeds run-state limit")
+    position = position + length
     local present
     present, position = string.unpack("B", bytes, position)
     assert(present == 1, "Hourglass did not record its selected native transition")

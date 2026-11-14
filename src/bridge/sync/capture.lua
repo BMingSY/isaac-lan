@@ -221,6 +221,7 @@ return function(fields)
                     pills = deps.pills.capture(),
                     glitched = deps.glitched.capture(),
                     challenge = deps.challenge and deps.challenge() or false,
+                    jericho = deps.jericho and deps.jericho() or false,
                 }
                 -- Memoize only immutable tuples; per-peer event queues still drain
                 -- separately, even when both peers are looking at the same room.

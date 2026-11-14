@@ -17,11 +17,13 @@ return function(root, native, modules)
         }
     if _IsaacLanState then
         _IsaacLanState.setChallenges = function() end
+        _IsaacLanState.setJericho = function() end
     end
     ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD = ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD or 9
     ModCallbacks.MC_ENTITY_TAKE_DMG = ModCallbacks.MC_ENTITY_TAKE_DMG or 11
     ModCallbacks.MC_USE_ITEM = ModCallbacks.MC_USE_ITEM or 12
     ModCallbacks.MC_PRE_USE_ITEM = ModCallbacks.MC_PRE_USE_ITEM or 13
+    ModCallbacks.MC_PRE_ROOM_ENTITY_SPAWN = ModCallbacks.MC_PRE_ROOM_ENTITY_SPAWN or 14
     native.net_room_options = function()
         return {
             { flag = 1, key = "friendlyFire", name = "队友伤害" },
@@ -60,6 +62,12 @@ return function(root, native, modules)
         "compat/rules/clear_charge",
         "compat/rules/room_gather",
         "runtime/room_rules",
+        "compat/routes/jericho_rules",
+        "compat/routes/jericho_layout",
+        "compat/routes/jericho_map",
+        "compat/routes/jericho",
+        "presentation/jericho",
+        "sync/codec",
         "compat/challenges/luck_game",
         "compat/challenges/battle_royale_rules",
         "compat/challenges/battle_royale_resources",

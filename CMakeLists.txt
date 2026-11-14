@@ -386,6 +386,8 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.battle-royale-hud battle_royale_hud.lua)
         isaac_add_lua_test(bridge.personal-map personal_map.lua)
         isaac_add_lua_test(bridge.clear-charge clear_charge.lua)
+        isaac_add_lua_test(bridge.jericho jericho.lua)
+        isaac_add_lua_test(bridge.jericho-presentation jericho_presentation.lua)
         isaac_add_lua_test(bridge.room-gather room_gather.lua)
         isaac_add_lua_test(bridge.friendly-fire friendly_fire.lua)
         isaac_add_lua_test(bridge.pvp-items pvp_items.lua)
@@ -508,6 +510,27 @@ endif()
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The native engine adapter requires a 32-bit Windows toolchain")
 endif()
+enable_language(RC)
+set(ISAAC_LAN_JERICHO_ARTWORK_VERSION "")
+foreach(asset jericho.png jericho.anm2)
+    set(source_file "${CMAKE_CURRENT_SOURCE_DIR}/src/presentation/assets/${asset}")
+    file(SHA256 "${source_file}" asset_hash)
+    string(APPEND ISAAC_LAN_JERICHO_ARTWORK_VERSION "${asset_hash}")
+    set_property(
+        DIRECTORY
+        APPEND
+        PROPERTY CMAKE_CONFIGURE_DEPENDS "${source_file}")
+endforeach()
+string(SHA256 ISAAC_LAN_JERICHO_ARTWORK_VERSION "${ISAAC_LAN_JERICHO_ARTWORK_VERSION}")
+configure_file(src/presentation/assets/jericho_artwork_version.h.in
+               generated/jericho_artwork_version.h @ONLY)
+configure_file(src/presentation/assets/jericho.rc.in generated/jericho.rc @ONLY)
+set_source_files_properties(
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/jericho.rc"
+    PROPERTIES
+        OBJECT_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/presentation/assets/jericho.png;${CMAKE_CURRENT_SOURCE_DIR}/src/presentation/assets/jericho.anm2"
+)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/main.lua" ISAAC_LAN_BRIDGE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/app/world.lua" ISAAC_LAN_STATE)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/presentation/prediction.lua" ISAAC_LAN_PREDICTION)
@@ -557,6 +580,8 @@ add_library(
     src/app/configuration.cpp
     src/presentation/connection_settings.cpp
     src/presentation/chat_background.cpp
+    src/presentation/jericho_artwork.cpp
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/jericho.rc"
     src/diagnostics/runtime_log.cpp
     src/diagnostics/startup_error.cpp
     src/diagnostics/performance.cpp
@@ -666,6 +691,20 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME presentation.chat-background COMMAND isaac_lan_chat_background_test)
     set_tests_properties(presentation.chat-background PROPERTIES TIMEOUT 30 LABELS
+                                                                 "offline;presentation")
+    add_executable(
+        isaac_lan_jericho_artwork_test
+        tests/jericho_artwork_test.cpp src/presentation/jericho_artwork.cpp
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/jericho.rc")
+    target_include_directories(isaac_lan_jericho_artwork_test
+                               PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    target_compile_definitions(isaac_lan_jericho_artwork_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    if(MINGW)
+        target_link_options(isaac_lan_jericho_artwork_test PRIVATE -static-libgcc -static-libstdc++)
+        target_compile_options(isaac_lan_jericho_artwork_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME presentation.jericho-artwork COMMAND isaac_lan_jericho_artwork_test)
+    set_tests_properties(presentation.jericho-artwork PROPERTIES TIMEOUT 30 LABELS
                                                                  "offline;presentation")
     foreach(test_case hornfel rails entity_links lua_api)
         add_executable(isaac_lan_${test_case}_test tests/${test_case}_test.cpp)

@@ -6,6 +6,7 @@
 #include "engine/save.h"
 #include "net/protocol.h"
 #include "runtime/session.h"
+#include "runtime/run_payload.h"
 #include <MinHook.h>
 #include <array>
 #include <bit>
@@ -30,6 +31,7 @@ Address game() {
 constexpr unsigned bufferOffset = 0x269ec;
 struct Checkpoint {
     std::vector<std::uint8_t> game;
+    std::vector<std::uint8_t> runState;
     std::vector<rooms::SavedLocation> locations;
     std::array<unsigned, 523> counters{};
     unsigned door = 0, tick = 0;
@@ -119,6 +121,7 @@ std::vector<std::uint8_t> encode(const Checkpoint& checkpoint, unsigned slot,
         w.u32(std::bit_cast<unsigned>(p.y));
     }
     w.blob(checkpoint.game);
+    w.blob(checkpoint.runState);
     w.u8(transition.has_value());
     if (transition) {
         w.u32(transition->index);
@@ -159,6 +162,9 @@ bool startRewind(std::span<const std::uint8_t> bytes) {
         checkpoint.locations.push_back(p);
     }
     checkpoint.game = r.blob();
+    checkpoint.runState = r.blob();
+    if (checkpoint.runState.size() > runtime::maxRunPayloadSize)
+        return false;
     const auto hasTransition = r.u8();
     if (hasTransition > 1)
         return false;
@@ -227,9 +233,10 @@ bool startRewind(std::span<const std::uint8_t> bytes) {
         runtime::beginRewind(encode(checkpoint, slot, selected));
     // Only native animation 12 restores GameState. Greed's error-room
     // teleport and native early returns must keep their actual landing.
-    if (selected && selected->animation == 12)
+    if (selected && selected->animation == 12) {
+        runtime::restoreRunState(checkpoint.runState);
         rooms::resumeAfterTransition(std::move(checkpoint.locations));
-    else
+    } else
         rooms::resumeAfterTransition({});
     return true;
 }
@@ -265,6 +272,7 @@ void remember(unsigned slot, int door, const std::vector<rooms::SavedLocation>& 
     if (checkpoint.game.empty())
         throw std::runtime_error("Cannot capture native hourglass state");
     checkpoint.locations = locations;
+    checkpoint.runState = runtime::captureRunState();
     checkpoint.door = at<unsigned>(buffer, 0x1fe2c);
     checkpoint.tick = at<unsigned>(buffer, 0x1fe30);
     for (unsigned i = 0; i < checkpoint.counters.size(); ++i)

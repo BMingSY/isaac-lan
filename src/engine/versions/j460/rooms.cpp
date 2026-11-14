@@ -2022,7 +2022,9 @@ int roomConnections(lua_State* L) {
         lua.pushInteger(L, canonical);
         lua.rawSetI(L, -2, slot + 1);
     }
-    return 1;
+    const auto config = at<Address>(desc, descriptor::data);
+    lua.pushBoolean(L, at<unsigned>(config, j460::layout::roomConfig::questDoors) != 0);
+    return 2;
 }
 int specialRoomTemplate(lua_State* L) {
     namespace descriptor = j460::layout::roomDescriptor;
@@ -2056,6 +2058,74 @@ int specialRoomTemplate(lua_State* L) {
             // spawn vectors keep their native owner; no copied MSVC containers.
             if (valid)
                 at<Address>(desc, descriptor::data) = selected;
+        }
+    }
+    lua.pushBoolean(L, valid);
+    return 1;
+}
+// Stable storage, like replicaLayouts: native teardown can still borrow these
+// configurations. Copy only scalar metadata; no native strings or spawn owners.
+std::map<Key, std::array<std::uint8_t, j460::room_metadata::configBytes>> emptyLayouts;
+int emptyRoomPair(lua_State* L) {
+    namespace descriptor = j460::layout::roomDescriptor;
+    namespace config = j460::layout::roomConfig;
+    namespace metadata = j460::room_metadata;
+    const auto first = lua.checkInteger(L, 1), second = lua.checkInteger(L, 2);
+    const bool restore = lua.checkInteger(L, 3) != 0;
+    bool valid = enabled && !runtime::replica() && !scopes.depth() && first >= 0 &&
+                 first < metadata::cellsPerDimension && second >= 0 &&
+                 second < metadata::cellsPerDimension && first != second;
+    struct Replacement {
+        Key key;
+        Address descriptor;
+        std::array<std::uint8_t, metadata::configBytes> config{};
+    };
+    std::vector<Replacement> replacements;
+    using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
+    if (valid) {
+        for (int dimension : {0, 1}) {
+            for (const auto index : {first, second}) {
+                const auto desc =
+                    reinterpret_cast<Address>(engine<Desc>(j460::entry::engineRoomsDesc)(
+                        reinterpret_cast<void*>(game()), static_cast<int>(index), dimension));
+                const auto source = desc ? at<Address>(desc, descriptor::data) : 0;
+                // Missing mirror rooms return a native sentinel or main-room
+                // fallback. Never populate it or change the map's topology.
+                if (!source || at<int>(desc, descriptor::safeGridIndex) != index ||
+                    at<int>(desc, descriptor::dimension) != dimension) {
+                    if (dimension == 0)
+                        valid = false;
+                    continue;
+                }
+                const Key key{dimension, static_cast<int>(index)};
+                if (at<int>(source, config::type) != config::ordinaryType ||
+                    at<int>(source, config::shape) != config::singleRoomShape ||
+                    at<unsigned>(source, config::questDoors) ||
+                    at<Address>(desc, descriptor::overrideData) ||
+                    (!restore &&
+                     (loaded.contains(key) || at<int>(desc, descriptor::visitedCount)))) {
+                    valid = false;
+                    continue;
+                }
+                Replacement next{key, desc, {}};
+                for (const auto offset : metadata::configWords)
+                    std::memcpy(next.config.data() + offset,
+                                reinterpret_cast<void*>(source + offset), sizeof(unsigned));
+                next.config[config::width] = at<std::uint8_t>(source, config::width);
+                next.config[config::height] = at<std::uint8_t>(source, config::height);
+                constexpr unsigned emptyStringCapacity = 15;
+                std::memcpy(next.config.data() + metadata::configStringCapacity,
+                            &emptyStringCapacity, sizeof(emptyStringCapacity));
+                replacements.push_back(next);
+            }
+        }
+    }
+    if (valid) {
+        for (const auto& replacement : replacements) {
+            auto& stored = emptyLayouts[replacement.key];
+            stored = replacement.config;
+            at<Address>(replacement.descriptor, descriptor::data) =
+                reinterpret_cast<Address>(stored.data());
         }
     }
     lua.pushBoolean(L, valid);
@@ -4117,6 +4187,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("state_clock", stateClock);
     function("room_layout", roomLayout);
     function("room_special_template", specialRoomTemplate);
+    function("room_empty_pair", emptyRoomPair);
     function("room_connections", roomConnections);
     function("room_water_current", roomWaterCurrent);
     function("map_pickups", mapPickups);

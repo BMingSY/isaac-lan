@@ -1,0 +1,4 @@
+#pragma once
+namespace isaac::presentation {
+inline constexpr char jerichoArtworkVersion[] = "@ISAAC_LAN_JERICHO_ARTWORK_VERSION@";
+}

@@ -111,6 +111,11 @@ sync/capture
 sync/combat_events
 sync/combat_state
 sync/replica
+compat/routes/jericho_rules
+compat/routes/jericho_layout
+compat/routes/jericho_map
+compat/routes/jericho
+presentation/jericho
 compat/routes/challenge_goal
 compat/challenges/luck_game
 compat/challenges/battle_royale_rules
