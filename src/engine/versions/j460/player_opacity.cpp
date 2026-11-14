@@ -10,12 +10,24 @@ namespace {
 namespace j460 = engine::j460;
 namespace layout = j460::layout;
 using Address = std::uintptr_t;
-using Sprites = std::unordered_map<Address, float>;
+using Factors = std::unordered_map<Address, float>;
 constexpr unsigned maximum = 100;
 unsigned defaultOthers = maximum;
 std::array<unsigned, 4> percentages{maximum, maximum, maximum, maximum};
-const Sprites* activeSprites = nullptr;
-void* original = nullptr;
+const Factors* activeSprites = nullptr;
+const Factors* activePlayers = nullptr;
+Address image = 0;
+enum Pass : unsigned { sprite, tear, laser, laserShadow };
+struct Boundary {
+    Address gate, draw;
+    void* original = nullptr;
+};
+std::array<Boundary, 4> boundaries{{
+    {j460::entry::spriteRenderColor, 0},
+    {j460::entry::tearOpacityGate, j460::entry::tearOpacityDraw},
+    {j460::entry::laserOpacityGate, j460::entry::laserOpacityDraw},
+    {j460::entry::laserShadowOpacityGate, j460::entry::laserShadowOpacityDraw},
+}};
 lua::API api{};
 template <class T> T read(Address address, std::ptrdiff_t offset) {
     return *reinterpret_cast<const T*>(address + offset);
@@ -44,11 +56,44 @@ int settings(lua_State* L) {
 }
 } // namespace
 extern "C" {
-__attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_opacity_prepare(
-    Address* registers) {
+__attribute__((used,
+               force_align_arg_pointer)) void __cdecl isaac_lan_opacity_prepare(Address* registers,
+                                                                                unsigned pass) {
     // pushad: EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX, flags, continuation.
-    enum Register : unsigned { frame = 2, continuation = 9 };
-    registers[continuation] = reinterpret_cast<Address>(original);
+    enum Register : unsigned {
+        entity = 1,
+        frame = 2,
+        tearOwner = 5,
+        laserOwner = 7,
+        continuation = 9
+    };
+    const auto& boundary = boundaries[pass];
+    registers[continuation] = reinterpret_cast<Address>(boundary.original);
+    if (pass != sprite) {
+        if (!activePlayers)
+            return;
+        // The native renderer has already resolved the owning player. Match
+        // against this render's roster without retaining or dereferencing it.
+        const auto found = activePlayers->find(registers[pass == tear ? tearOwner : laserOwner]);
+        if (found == activePlayers->end())
+            return;
+        if (pass == tear) {
+            // Native Tear::Render saved this color before the online gate and
+            // restores it after drawing, before MC_POST_TEAR_RENDER. Use that
+            // same temporary modulation, retaining all tint/fade channels.
+            auto& alpha = *reinterpret_cast<float*>(registers[entity] + layout::entity::sprite +
+                                                    layout::sprite::color + layout::color::alpha);
+            alpha *= found->second;
+        } else {
+            // Both laser passes consume a stack-local multiplier, including
+            // native beam segments/rings that do not use Sprite::RenderColor.
+            const auto offset = pass == laser ? layout::laserRenderFrame::opacity
+                                              : layout::laserRenderFrame::shadowOpacity;
+            *reinterpret_cast<float*>(registers[frame] + offset) = found->second;
+        }
+        registers[continuation] = image + boundary.draw;
+        return;
+    }
     if (!activeSprites || activeSprites->empty())
         return;
     const auto stack = registers[frame];
@@ -60,20 +105,26 @@ __attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_opacity_pr
         *reinterpret_cast<float*>(stack + layout::spriteRenderFrame::color + layout::color::alpha);
     alpha *= found->second;
 }
-__attribute__((naked)) void isaac_lan_opacity_color() {
-    __asm__ __volatile__("pushl $0\n\tpushfl\n\tpushal\n\tsubl $128, %esp\n\t"
-                         "movups %xmm0, 0(%esp)\n\tmovups %xmm1, 16(%esp)\n\t"
-                         "movups %xmm2, 32(%esp)\n\tmovups %xmm3, 48(%esp)\n\t"
-                         "movups %xmm4, 64(%esp)\n\tmovups %xmm5, 80(%esp)\n\t"
-                         "movups %xmm6, 96(%esp)\n\tmovups %xmm7, 112(%esp)\n\t"
-                         "leal 128(%esp), %eax\n\tpushl %eax\n\t"
-                         "call _isaac_lan_opacity_prepare\n\taddl $4, %esp\n\t"
-                         "movups 0(%esp), %xmm0\n\tmovups 16(%esp), %xmm1\n\t"
-                         "movups 32(%esp), %xmm2\n\tmovups 48(%esp), %xmm3\n\t"
-                         "movups 64(%esp), %xmm4\n\tmovups 80(%esp), %xmm5\n\t"
-                         "movups 96(%esp), %xmm6\n\tmovups 112(%esp), %xmm7\n\t"
-                         "addl $128, %esp\n\tpopal\n\tpopfl\n\tret");
-}
+#define OPACITY_BOUNDARY(NAME, PASS)                                                               \
+    __attribute__((naked)) void NAME() {                                                           \
+        __asm__ __volatile__("pushl $0\n\tpushfl\n\tpushal\n\tsubl $128, %esp\n\t"                 \
+                             "movups %xmm0, 0(%esp)\n\tmovups %xmm1, 16(%esp)\n\t"                 \
+                             "movups %xmm2, 32(%esp)\n\tmovups %xmm3, 48(%esp)\n\t"                \
+                             "movups %xmm4, 64(%esp)\n\tmovups %xmm5, 80(%esp)\n\t"                \
+                             "movups %xmm6, 96(%esp)\n\tmovups %xmm7, 112(%esp)\n\t"               \
+                             "leal 128(%esp), %eax\n\tpushl $" #PASS "\n\tpushl %eax\n\t"          \
+                             "call _isaac_lan_opacity_prepare\n\taddl $8, %esp\n\t"                \
+                             "movups 0(%esp), %xmm0\n\tmovups 16(%esp), %xmm1\n\t"                 \
+                             "movups 32(%esp), %xmm2\n\tmovups 48(%esp), %xmm3\n\t"                \
+                             "movups 64(%esp), %xmm4\n\tmovups 80(%esp), %xmm5\n\t"                \
+                             "movups 96(%esp), %xmm6\n\tmovups 112(%esp), %xmm7\n\t"               \
+                             "addl $128, %esp\n\tpopal\n\tpopfl\n\tret");                          \
+    }
+OPACITY_BOUNDARY(isaac_lan_opacity_color, 0)
+OPACITY_BOUNDARY(isaac_lan_opacity_tear, 1)
+OPACITY_BOUNDARY(isaac_lan_opacity_laser, 2)
+OPACITY_BOUNDARY(isaac_lan_opacity_laser_shadow, 3)
+#undef OPACITY_BOUNDARY
 }
 void configure(unsigned others) {
     defaultOthers = others <= maximum ? others : maximum;
@@ -87,15 +138,23 @@ bool bind(lua_State* L, lua::Module module) {
     api.setField(L, -2, "player_opacity");
     return true;
 }
-bool install(Address image) {
-    const auto target = reinterpret_cast<void*>(image + j460::entry::spriteRenderColor);
-    return MH_CreateHook(target, reinterpret_cast<void*>(isaac_lan_opacity_color), &original) ==
-               MH_OK &&
-           MH_EnableHook(target) == MH_OK;
+bool install(Address base) {
+    image = base;
+    const std::array<void (*)(), 4> detours{isaac_lan_opacity_color, isaac_lan_opacity_tear,
+                                            isaac_lan_opacity_laser,
+                                            isaac_lan_opacity_laser_shadow};
+    for (unsigned i = 0; i < boundaries.size(); ++i)
+        if (MH_CreateHook(reinterpret_cast<void*>(image + boundaries[i].gate),
+                          reinterpret_cast<void*>(detours[i]), &boundaries[i].original) != MH_OK)
+            return false;
+    for (const auto& boundary : boundaries)
+        if (MH_EnableHook(reinterpret_cast<void*>(image + boundary.gate)) != MH_OK)
+            return false;
+    return true;
 }
 void withPlayers(std::span<const Address> players, unsigned connected,
                  const std::function<void()>& render) {
-    Sprites sprites;
+    Factors sprites, owners;
     for (const auto player : players) {
         if (!player)
             continue;
@@ -104,9 +163,10 @@ void withPlayers(std::span<const Address> players, unsigned connected,
             !(connected & (1u << (controller - 1))))
             continue;
         const auto percent = percentages[controller - 1];
+        const auto factor = static_cast<float>(percent) / maximum;
+        owners.emplace(player, factor);
         if (percent == maximum)
             continue;
-        const auto factor = static_cast<float>(percent) / maximum;
         for (const auto offset : {layout::entity::sprite, layout::player::extraSprite,
                                   layout::player::ghostSprite, layout::player::auxiliarySprite})
             sprites.emplace(player + offset, factor);
@@ -120,12 +180,15 @@ void withPlayers(std::span<const Address> players, unsigned connected,
             sprites.emplace(sprite, factor);
     }
     struct Restore {
-        const Sprites* previous = activeSprites;
+        const Factors* previous = activeSprites;
+        const Factors* players = activePlayers;
         ~Restore() {
             activeSprites = previous;
+            activePlayers = players;
         }
     } restore;
     activeSprites = &sprites;
+    activePlayers = &owners;
     render();
 }
 } // namespace isaac::presentation::player_opacity

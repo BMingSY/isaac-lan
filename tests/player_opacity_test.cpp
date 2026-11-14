@@ -14,6 +14,12 @@ extern "C" {
 unsigned char opacityFrame[512]{};
 unsigned opacityECX = 0, opacityFlags = 0;
 float opacitySSE = 0;
+unsigned char projectileFrame[1024]{};
+Address projectileOwner = 0, projectileEntity = 0;
+void (*projectileBoundary)() = nullptr;
+unsigned projectileHandled = 0;
+std::array<Address, 4> projectileRegisters{};
+float projectileSSE = 0;
 __attribute__((naked)) void opacityOriginal() {
     __asm__ __volatile__("pushfl\n\tpopl _opacityFlags\n\tmovl %ecx, _opacityECX\n\t"
                          "movss %xmm7, _opacitySSE\n\tret");
@@ -23,6 +29,29 @@ __attribute__((naked)) void invokeOpacity() {
                          "movl $0x87654321, %ecx\n\tmovl $0x3f400000, %eax\n\t"
                          "movd %eax, %xmm7\n\tstc\n\tcall _isaac_lan_opacity_color\n\t"
                          "popl %ebp\n\tret");
+}
+__attribute__((naked)) void projectileCapture() {
+    __asm__ __volatile__("movl %eax, _projectileRegisters\n\t"
+                         "movl %edx, _projectileRegisters+4\n\t"
+                         "movl %esi, _projectileRegisters+8\n\t"
+                         "movl %edi, _projectileRegisters+12\n\t"
+                         "movss %xmm0, _projectileSSE\n\tjmp _opacityOriginal");
+}
+__attribute__((naked)) void projectileOriginal() {
+    __asm__ __volatile__("movl $0, _projectileHandled\n\tjmp _projectileCapture");
+}
+__attribute__((naked)) void projectileDraw() {
+    __asm__ __volatile__("movl $1, _projectileHandled\n\tjmp _projectileCapture");
+}
+__attribute__((naked)) void invokeProjectile() {
+    __asm__ __volatile__("pushl %ebp\n\tpushl %esi\n\tpushl %edi\n\t"
+                         "leal _projectileFrame+512, %ebp\n\t"
+                         "movl $0x3f400000, %eax\n\tmovd %eax, %xmm7\n\t"
+                         "movl $0x3e800000, %eax\n\tmovd %eax, %xmm0\n\t"
+                         "movl _projectileOwner, %eax\n\tmovl %eax, %edx\n\t"
+                         "movl _projectileEntity, %esi\n\tmovl $0x12345678, %edi\n\t"
+                         "movl $0x87654321, %ecx\n\tstc\n\t"
+                         "call *_projectileBoundary\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebp\n\tret");
 }
 }
 namespace {
@@ -57,7 +86,7 @@ void draw(Address sprite, float source, float expected) {
             "Opacity boundary corrupted registers or flags");
 }
 void rendering() {
-    opacity::original = reinterpret_cast<void*>(opacityOriginal);
+    opacity::boundaries[opacity::sprite].original = reinterpret_cast<void*>(opacityOriginal);
     opacity::percentages = {100, 50, 0, 25};
     Player host(1), guest(2), twin(2), third(3), fourth(4), unowned(0);
     std::array<Address, 6> players{guest.address(), fourth.address(),  twin.address(),
@@ -83,7 +112,7 @@ void rendering() {
         for (float alpha : {1.f, 0.8f, 0.2f, 0.f, 1.f})
             draw(guest.address() + layout::entity::sprite, alpha, alpha * 0.5f);
         draw(guest.address() + 0x758, 1, 1); // Native charge UI is independent.
-        draw(1234, 1, 1);                    // Tears, familiars, other entities and unrelated UI.
+        draw(1234, 1, 1);                    // Unlisted sprites and unrelated UI.
         opacity::withPlayers(players, 1,
                              [&] { draw(guest.address() + layout::entity::sprite, 1, 1); });
         draw(guest.address() + layout::entity::sprite, 1, 0.5f);
@@ -96,7 +125,7 @@ void rendering() {
         }
         draw(guest.address() + layout::entity::sprite, 1, 0.5f);
     });
-    require(!opacity::activeSprites && guest.bytes == snapshot,
+    require(!opacity::activeSprites && !opacity::activePlayers && guest.bytes == snapshot,
             "Draw changed player state or retained sprite addresses");
     draw(guest.address() + layout::entity::sprite, 1, 1);
     for (int controller : {-1, INT_MIN, 5, INT_MAX}) {
@@ -116,6 +145,90 @@ void rendering() {
             draw(guest.address() + layout::entity::sprite, 1, 0.5f);
         });
     }
+}
+void projectiles() {
+    Player host(1), guest(2), twin(2), third(3), fourth(4), unowned(0);
+    const std::array<Address, 7> players{guest.address(),
+                                         fourth.address(),
+                                         twin.address(),
+                                         host.address(),
+                                         unowned.address(),
+                                         third.address(),
+                                         0};
+    const auto playerBefore = guest.bytes;
+    opacity::percentages = {100, 50, 0, 25};
+    std::array<unsigned char, 1024> entity{};
+    projectileEntity = reinterpret_cast<Address>(entity.data());
+    const auto frame = reinterpret_cast<Address>(projectileFrame + 512);
+    using Color = std::array<float, layout::color::size / sizeof(float)>;
+    auto& color = at<Color>(projectileEntity, layout::entity::sprite + layout::sprite::color);
+    const Color source{0.3f, 0.8f, 0.4f, 0.8f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f};
+    const std::array<void (*)(), 3> callbacks{opacity::isaac_lan_opacity_tear,
+                                              opacity::isaac_lan_opacity_laser,
+                                              opacity::isaac_lan_opacity_laser_shadow};
+    auto draw = [&](Address owner, float factor, bool handled) {
+        for (unsigned index = 0; index < callbacks.size(); ++index) {
+            const auto pass = index + opacity::tear;
+            opacity::boundaries[pass].original = reinterpret_cast<void*>(projectileOriginal);
+            opacity::boundaries[pass].draw = reinterpret_cast<Address>(projectileDraw);
+            projectileBoundary = callbacks[index];
+            projectileOwner = owner;
+            color = source;
+            at<float>(frame, layout::laserRenderFrame::opacity) = 1;
+            at<float>(frame, layout::laserRenderFrame::shadowOpacity) = 1;
+            invokeProjectile();
+            auto expected = source;
+            if (pass == opacity::tear)
+                expected[layout::color::alpha / sizeof(float)] *= factor;
+            require(color == expected, "Tear opacity changed tint or used the wrong owner");
+            require(at<float>(frame, layout::laserRenderFrame::opacity) ==
+                            (pass == opacity::laser ? factor : 1) &&
+                        at<float>(frame, layout::laserRenderFrame::shadowOpacity) ==
+                            (pass == opacity::laserShadow ? factor : 1),
+                    "Laser pass used the wrong opacity or stack local");
+            require(projectileHandled == unsigned(handled), "Wrong native opacity continuation");
+            require(projectileRegisters ==
+                            std::array<Address, 4>{owner, owner, projectileEntity, 0x12345678} &&
+                        projectileSSE == 0.25f && opacityECX == 0x87654321 && (opacityFlags & 1) &&
+                        opacitySSE == 0.75f,
+                    "Projectile opacity boundary corrupted registers or flags");
+        }
+    };
+    draw(guest.address(), 1, false);
+    opacity::withPlayers(players, 15, [&] {
+        for (unsigned repeat = 0; repeat < 3; ++repeat) {
+            draw(host.address(), 1, true);
+            draw(guest.address(), 0.5f, true);
+            draw(twin.address(), 0.5f, true);
+            draw(third.address(), 0, true);
+            draw(fourth.address(), 0.25f, true);
+            draw(unowned.address(), 1, false);
+            draw(0, 1, false);    // Enemy/unowned attacks retain the native path.
+            draw(1234, 1, false); // Never dereference an owner outside the roster.
+        }
+        opacity::withPlayers(players, 1, [&] { draw(guest.address(), 1, false); });
+        draw(guest.address(), 0.5f, true);
+        try {
+            opacity::withPlayers({}, 15, [&] {
+                draw(guest.address(), 1, false);
+                throw std::runtime_error("interrupted projectile render");
+            });
+        } catch (const std::runtime_error&) {
+        }
+        draw(guest.address(), 0.5f, true);
+    });
+    draw(guest.address(), 1, false);
+    require(!opacity::activePlayers && guest.bytes == playerBefore,
+            "Projectile render retained owners or changed player state");
+    opacity::percentages.fill(100);
+    opacity::withPlayers(players, 15, [&] { draw(guest.address(), 1, true); });
+    Player replacement(2);
+    const std::array<Address, 1> replaced{replacement.address()};
+    opacity::percentages[1] = 25;
+    opacity::withPlayers(replaced, 2, [&] {
+        draw(guest.address(), 1, false);
+        draw(replacement.address(), 0.25f, true);
+    });
 }
 int argumentCount = 0;
 std::array<long long, 4> arguments{};
@@ -157,9 +270,10 @@ void settings() {
 int main() {
     try {
         rendering();
+        projectiles();
         settings();
         std::puts(
-            "PASS player opacity x86 colors, body/costume ownership, nested cleanup and bounds");
+            "PASS player opacity x86 colors, tears/lasers, ownership, nested cleanup and bounds");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

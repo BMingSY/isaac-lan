@@ -8,6 +8,7 @@ local tick, origin, other = 0, nil, nil
 local observed, renderChecks, tintChecks, plainChecks = {}, 0, 0, 0
 local opacity = test.playerOpacity
 local commandIndex, ghostSeen = 1, false
+local attacks = {}
 local opacityCommands = {
     { 60, "reset" },
     { 180, "2p 50" },
@@ -52,6 +53,41 @@ local function colors(p)
     local color = p:GetSprite().Color
     return { color.R, color.G, color.B, color.A, color.RO, color.GO, color.BO }
 end
+local function fire()
+    for slot = 0, 1 do
+        actor(slot, function(p)
+            if p:IsCoopGhost() then
+                return
+            end
+            local tint = Color(0.4, 0.8, 1, 0.8)
+            local tear = p:FireTear(p.Position, Vector(0, -4), false, true, false)
+            tear.Color = tint
+            for _, variant in ipairs({ 1, 2 }) do
+                local laser = EntityLaser.ShootAngle(
+                    variant,
+                    p.Position + Vector(variant == 1 and -20 or 20, 0),
+                    270,
+                    45,
+                    Vector.Zero,
+                    p
+                )
+                laser.Color = tint
+                laser.DisableFollowParent = true
+            end
+            local ring = p:FireTechXLaser(p.Position + Vector(0, 65), Vector.Zero, 24)
+            ring.Timeout, ring.Color = 45, tint
+            local enemy = Isaac.Spawn(
+                EntityType.ENTITY_PROJECTILE,
+                0,
+                0,
+                p.Position + Vector(35, -40),
+                Vector(0, -2),
+                nil
+            )
+            enemy.Color = Color(1, 0.4, 0.4, 0.8)
+        end)
+    end
+end
 function _IsaacLanFrame()
     renders = renders + 1
     if not linked and renders >= (host and 300 or 360) then
@@ -95,6 +131,10 @@ function _IsaacLanFrame()
         assert(Game():GetLevel():GetStage() == 2, "Floor transition did not finish")
         if opacity then
             assert(commandIndex > #opacityCommands and ghostSeen, "Missing opacity/ghost scenes")
+            for _, kind in ipairs({ "tear", "brimstone", "technology", "ring", "enemy" }) do
+                assert((attacks[kind] or 0) > 10, "Missing projectile render: " .. kind)
+                report("PROJECTILE " .. kind .. " renders=" .. attacks[kind])
+            end
         end
         report(
             "PASS colors preserved across native render, room and floor; checks=" .. renderChecks
@@ -187,6 +227,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end)
             report("SCENE ghost tick=" .. t)
         end
+        if opacity and t >= 90 and t < 1290 and t % 60 == 30 then
+            fire()
+        end
     end, collect, restore, present, beginFloor)
 end
 Isaac.AddCallback(owner, ModCallbacks.MC_POST_PLAYER_RENDER, function(_, p)
@@ -219,6 +262,32 @@ Isaac.AddCallback(owner, ModCallbacks.MC_POST_PLAYER_RENDER, function(_, p)
         renderChecks = renderChecks + 1
     end
 end)
+if opacity then
+    local function observe(_, entity)
+        if tick < 90 or not native.rooms_ready() then
+            return
+        end
+        local kind = entity.Type == EntityType.ENTITY_TEAR and "tear"
+            or entity.Type == EntityType.ENTITY_PROJECTILE and "enemy"
+            or entity:ToLaser():IsCircleLaser() and "ring"
+            or entity.Variant == 1 and "brimstone"
+            or "technology"
+        attacks[kind] = (attacks[kind] or 0) + 1
+        if kind == "tear" and entity.FrameCount > 1 then
+            assert(
+                math.abs(entity:GetSprite().Color.A - entity.Color.A) < 0.0001,
+                "Native tear renderer did not restore the original alpha"
+            )
+        end
+    end
+    for _, callback in ipairs({
+        ModCallbacks.MC_POST_TEAR_RENDER,
+        ModCallbacks.MC_POST_LASER_RENDER,
+        ModCallbacks.MC_POST_PROJECTILE_RENDER,
+    }) do
+        Isaac.AddCallback(owner, callback, observe)
+    end
+end
 return {
     done = function()
         return finished

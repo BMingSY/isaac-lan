@@ -245,7 +245,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 以下入口用于开发修复时的定向回归，不属于每次发版固定必跑范围；大版本可按变更影响从中选定必要专项。只选择受改动影响、需要排查或用户明确要求的场景，记录具体用例，不自动运行整个专项目录。
 
-玩家不透明度的离线检查为 `presentation.player-opacity`、`bridge.chat`、`bridge.resume`、`diagnostics.defaults`／`validation`／`preservation` 及 Windows `native.player-opacity`／`native.player-outlines`。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-opacity --heap-check --record`，复用一组隔离主客机检查指定槽位、其他玩家、0% 与重置、装扮、受击染色、双子、遗骸、幽灵、分房及换层。配置默认值和非法值回退由离线配置测试覆盖；实机收尾恢复资料并核对哈希，同时核对双端画面中的身体与描边，不能只凭命令回执判定画面通过。夹具检查原始精灵颜色在绘制期间仍保持游戏值。
+玩家不透明度的离线检查为 `presentation.player-opacity`、`bridge.chat`、`bridge.resume`、`diagnostics.defaults`／`validation`／`preservation` 及 Windows `native.player-opacity`／`native.player-outlines`。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-opacity --heap-check --record`，复用一组隔离主客机检查指定槽位、其他玩家、0% 与重置、装扮、受击染色、双子、遗骸、幽灵、分房及换层。配置默认值和非法值回退由离线配置测试覆盖；实机收尾恢复资料并核对哈希，同时核对双端画面中的身体、描边、泪弹、科技激光、硫磺火、科技 X 环及激光地面层，并以敌方弹幕作为不受影响的对照，不能只凭命令回执判定画面通过。夹具检查角色精灵颜色在绘制期间仍保持游戏值、泪弹颜色在原版绘制后恢复，并要求双端均观察到各类攻击。
 
 | 领域 | 入口与范围 |
 | --- | --- |
