@@ -13,12 +13,14 @@ local cardRetry = false
 for _, rule in ipairs(native.net_room_options()) do
     if rule.key == "autoTeleport" then
         assert(rule.name == "自动传送" and rule.shortName == "传送")
+        local groups = {}
+        for _, group in ipairs(rule.groups) do
+            groups[group.key] = group.flag
+        end
         if selectedRooms then
-            flag = 1
-                | (rule.firstRoomFlag << (RoomType.ROOM_BOSS - RoomType.ROOM_DEFAULT))
-                | (rule.firstRoomFlag << (RoomType.ROOM_ULTRASECRET - RoomType.ROOM_DEFAULT))
+            flag = 1 | groups.boss | groups.secret
         else
-            flag = allRooms and rule.flag or (rule.flag & ~rule.firstRoomFlag)
+            flag = allRooms and rule.flag or (rule.flag & ~groups.ordinary)
         end
     end
 end
@@ -292,7 +294,12 @@ if selectedRooms then
             owner = 0,
             setup = target("/tp us", RoomType.ROOM_ULTRASECRET),
         },
-        { name = "unselected-secret", split = true, setup = target("/tp s", RoomType.ROOM_SECRET) },
+        { name = "selected-secret-same-group", setup = target("/tp s", RoomType.ROOM_SECRET) },
+        {
+            name = "unselected-treasure",
+            split = true,
+            setup = target("/tp t", RoomType.ROOM_TREASURE),
+        },
         { name = "reenter-boss", owner = 0, setup = target("/tp b", RoomType.ROOM_BOSS) },
         {
             name = "floor",

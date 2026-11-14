@@ -303,8 +303,6 @@ function _IsaacLanMenuRender(
         character = character,
         accent = amber,
         options = roomOptions,
-        roomDefinitions = _IsaacLanModules["core/room_types"],
-        roomTypes = RoomType,
         hide = function()
             visible = false
         end,

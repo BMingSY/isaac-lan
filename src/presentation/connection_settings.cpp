@@ -72,7 +72,8 @@ bool saveConnectionSettings(const std::filesystem::path& path, const ConnectionS
     } cleanup{temporary};
     std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
     file << "address=" << settings.address << "\nport=" << settings.port
-         << "\nroomOptions=" << (settings.roomOptions & roomOptions::known) << '\n';
+         << "\nroomOptions=" << (roomOptions::normalize(settings.roomOptions) & roomOptions::known)
+         << '\n';
     file.close();
     if (!file)
         return false;

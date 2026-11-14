@@ -3,23 +3,26 @@ local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
 local host, frame, menu = config.host, _IsaacLanFrame, _IsaacLanMenuRender
 local renders, linked, chosen, began, stage, finished = 0, false, false, nil, 1, false
 local queued, nextInput = {}, 0
-local first, all
+-- expectedOptions is bundled from the independent fixture by run_teleport.py.
+local expectedRule = expectedOptions[4]
+local first, all, groups
 for _, rule in ipairs(native.net_room_options()) do
     if rule.key == "autoTeleport" then
-        first, all = rule.firstRoomFlag, rule.flag
+        first, all, groups = rule.firstRoomFlag, rule.flag, rule.groups
     end
 end
-assert(first and all)
-local boss = first << (RoomType.ROOM_BOSS - RoomType.ROOM_DEFAULT)
-local ultra = first << (RoomType.ROOM_ULTRASECRET - RoomType.ROOM_DEFAULT)
-local expected = 1 | boss | ultra
-local count, mask = 0, 0
-for _, room in ipairs(_IsaacLanModules["core/room_types"]) do
-    local flag = first << (assert(RoomType[room.enum]) - RoomType.ROOM_DEFAULT)
-    assert(mask & flag == 0, "Duplicate room type")
-    count, mask = count + 1, mask | flag
+assert(first == expectedRule.firstRoomFlag and all == expectedRule.flag and #groups == 7)
+for i, group in ipairs(groups) do
+    local expectedGroup = expectedRule.groups[i]
+    assert(
+        group.key == expectedGroup.key
+            and group.name == expectedGroup.name
+            and group.flag == expectedGroup.flag,
+        "Native group does not match actual RoomType membership: " .. group.key
+    )
 end
-assert(count == 29 and mask == all, "Native room types differ from the selection contract")
+local boss, hidden = groups[2].flag, groups[5].flag
+local expected = 1 | boss | hidden
 assert(native.menu_room_options_save(host and 1 or 2))
 local function keys(...)
     assert(#queued == 0)
@@ -50,7 +53,7 @@ local steps = {
             expect(s, 1, "open")
             assert(s.ready0 == 1 and s.ready1 == 1, "Opening the submenu cleared readiness")
             if host then
-                keys(40, 40, 13)
+                keys(40, 40, 40, 13)
             end
         end,
     },
@@ -58,11 +61,11 @@ local steps = {
         6000,
         function(s)
             expect(s, 1 | boss, "boss-only")
-            assert(s.ready0 == 0 and s.ready1 == 0, "Type selection retained readiness")
+            assert(s.ready0 == 0 and s.ready1 == 0, "Group selection retained readiness")
             if host then
-                keys(38, 38, 13)
+                keys(38, 38, 38, 13)
             else
-                keys(40, 40, 13)
+                keys(40, 40, 40, 13)
             end
         end,
     },
@@ -82,16 +85,16 @@ local steps = {
         function(s)
             expect(s, 1, "clear-preserves-friendly-fire")
             if host then
-                keys(40, 13, 38, 38, 38, 38, 13)
+                keys(40, 40, 13, 40, 40, 40, 13)
             end
         end,
     },
     {
         14000,
         function(s)
-            expect(s, expected, "selected-two-types")
+            expect(s, expected, "selected-two-groups")
             if not host then
-                keys(38, 38, 38, 38, 13)
+                keys(40, 40, 40, 13)
             end
         end,
     },

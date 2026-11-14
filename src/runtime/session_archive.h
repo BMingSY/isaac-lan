@@ -65,7 +65,7 @@ struct Archive {
         const auto transient = r.u8();
         out.settings.rules.transient = transient != 0;
         if (format == "IsaacLAN/save/6")
-            out.settings.rules.options = r.u64();
+            out.settings.rules.options = roomOptions::normalize(r.u64());
         else if (format != "IsaacLAN/save/3")
             out.settings.rules.options = roomOptions::migrateLegacy(r.u32());
         if (transient > 1 || !out.settings.rules.valid() ||

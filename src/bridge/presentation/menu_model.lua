@@ -117,17 +117,12 @@ return function(Phase, Command, endpoint)
         for _, definition in ipairs(deps.options or {}) do
             if definition.key == "autoTeleport" then
                 teleport = definition
-                for _, room in ipairs(deps.roomDefinitions) do
-                    local kind = deps.roomTypes[room.enum]
-                    if kind then
-                        local flag = definition.firstRoomFlag
-                            << (kind - deps.roomTypes.ROOM_DEFAULT)
-                        local checked = ((status.roomOptions or 0) & flag) ~= 0
-                        roomChoices[#roomChoices + 1] =
-                            { name = room.name, flag = flag, checked = checked }
-                        if checked then
-                            selectedRooms = selectedRooms + 1
-                        end
+                for _, group in ipairs(definition.groups) do
+                    local checked = ((status.roomOptions or 0) & group.flag) ~= 0
+                    roomChoices[#roomChoices + 1] =
+                        { name = group.name, flag = group.flag, checked = checked }
+                    if checked then
+                        selectedRooms = selectedRooms + 1
                     end
                 end
             end
@@ -204,7 +199,13 @@ return function(Phase, Command, endpoint)
             for _, room in ipairs(roomChoices) do
                 row(room.name, function()
                     if rulesEditable then
-                        command("room_options", tostring((status.roomOptions or 0) ~ room.flag))
+                        local current = status.roomOptions or 0
+                        command(
+                            "room_options",
+                            tostring(
+                                room.checked and (current & ~room.flag) or (current | room.flag)
+                            )
+                        )
                     end
                 end, rulesEditable)
                 rows[#rows].checked = room.checked

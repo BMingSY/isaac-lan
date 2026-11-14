@@ -1745,6 +1745,30 @@ void roomOptionsAndMarks() {
             "Normal run lost room options when saved");
     require(!isaac::roomOptions::valid(isaac::roomOptions::known + 1),
             "Runtime accepted an unknown room option");
+    std::uint64_t covered = 0;
+    for (const auto& group : isaac::roomOptions::teleportGroups) {
+        require(!(covered & group.flag) && isaac::roomOptions::valid(group.flag),
+                "Room groups overlap or contain invalid options");
+        covered |= group.flag;
+        for (unsigned bit = 0; bit < isaac::roomOptions::roomTypeCount; ++bit) {
+            const auto member = isaac::roomOptions::firstRoomFlag << bit;
+            if (!(member & group.flag))
+                continue;
+            archive.settings.rules.options = 7 | member;
+            const auto grouped = Archive::decode(archive.encode());
+            require(grouped.settings.rules.options == (7 | group.flag),
+                    "An individual room type did not restore its whole group");
+            require(Archive::decode(grouped.encode()).settings.rules == grouped.settings.rules,
+                    "Group migration was not stable across saves");
+        }
+    }
+    require(covered == isaac::roomOptions::autoTeleport && std::popcount(covered) == 27 &&
+                isaac::roomOptions::teleportGroups.size() == 7,
+            "Seven room groups must cover exactly the 27 used room types");
+    archive.settings.rules.options = isaac::roomOptions::roomTypeFlags | 7;
+    require(Archive::decode(archive.encode()).settings.rules.options == isaac::roomOptions::known,
+            "Stored all-types selection did not drop unused teleporter types");
+    archive.settings.rules.options = isaac::roomOptions::known;
     // v3 omits options; v3/v4 omit awards. Old gather bits migrate once.
     for (unsigned format : {3u, 4u, 5u}) {
         for (const auto legacyOptions : {8u, 16u, 24u, 31u}) {

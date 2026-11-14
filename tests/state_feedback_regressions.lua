@@ -1,7 +1,12 @@
 local gatherOptions
 for _, rule in ipairs(_IsaacLan.net_room_options()) do
     if rule.key == "autoTeleport" then
-        gatherOptions = rule.flag & ~rule.firstRoomFlag
+        gatherOptions = rule.flag
+        for _, group in ipairs(rule.groups) do
+            if group.key == "ordinary" then
+                gatherOptions = gatherOptions & ~group.flag
+            end
+        end
     end
 end
 assert(gatherOptions)

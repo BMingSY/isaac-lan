@@ -70,7 +70,7 @@ int main() {
             << "address=old.example\nport=12345\nroomOptions=" << legacy << '\n';
         const auto expected =
             (legacy & 7) | (isaac::roomOptions::autoTeleport &
-                            (legacy & 16 ? ~0ull : ~isaac::roomOptions::firstRoomFlag));
+                            (legacy & 16 ? ~0ull : ~isaac::roomOptions::ordinaryRooms));
         const auto migrated = loadConnectionSettings(path);
         require(migrated.roomOptions == expected, "Legacy gather preference lost its selection");
         require(saveConnectionSettings(path, migrated) && loadConnectionSettings(path) == migrated,
@@ -79,6 +79,28 @@ int main() {
     std::ofstream(path, std::ios::binary)
         << "address=host\nport=12345\nroomOptions=18446744073709551616\n";
     require(loadConnectionSettings(path) == ConnectionSettings{}, "Overflowed room mask accepted");
+    for (const auto& group : isaac::roomOptions::teleportGroups) {
+        for (unsigned bit = 0; bit < isaac::roomOptions::roomTypeCount; ++bit) {
+            const auto member = isaac::roomOptions::firstRoomFlag << bit;
+            if (!(group.flag & member))
+                continue;
+            std::ofstream(path, std::ios::binary)
+                << "address=types.example\nport=12345\nroomOptions=" << (member | 7) << '\n';
+            const auto migrated = loadConnectionSettings(path);
+            require(migrated.roomOptions == (group.flag | 7),
+                    "Individual room preference did not select its whole group");
+            require(saveConnectionSettings(path, migrated) &&
+                        loadConnectionSettings(path) == migrated,
+                    "Grouped preference changed on a second load");
+        }
+    }
+    std::ofstream(path, std::ios::binary)
+        << "address=types.example\nport=12345\nroomOptions="
+        << isaac::roomOptions::roomFlags({isaac::roomOptions::RoomType::teleporter,
+                                          isaac::roomOptions::RoomType::teleporterExit})
+        << '\n';
+    require(loadConnectionSettings(path).roomOptions == 0,
+            "Unused teleporter preference remained enabled");
     const auto blocked = root / "blocked";
     std::filesystem::create_directory(blocked);
     std::ofstream(blocked / "keep") << "keep";

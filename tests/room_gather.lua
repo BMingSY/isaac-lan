@@ -1,7 +1,8 @@
 local root = assert(arg[1])
 local types = dofile(root .. "/tests/fixtures/game_enums.lua").RoomType
 local firstRoomFlag = 1 << 5
-local allGatherFlag = ((1 << 29) - 1) * firstRoomFlag
+local roomOptions = dofile(root .. "/tests/fixtures/room_options.lua")(types)
+local allGatherFlag = roomOptions[4].flag
 local gatherFlag = allGatherFlag & ~firstRoomFlag
 local function roomFlag(kind)
     return firstRoomFlag << (kind - types.ROOM_DEFAULT)
@@ -168,29 +169,31 @@ end
 
 -- Every original special type, including off-map deals/errors and ultra secret.
 for kind = types.ROOM_SHOP, types.ROOM_ULTRASECRET do
-    setup()
-    local index = kind == types.ROOM_ERROR and -2
-        or (kind == types.ROOM_ANGEL or kind == types.ROOM_DEVIL) and -1
-        or 85
-    starts(2, index, kind)
-    assert(#moves == 3 and not queued[2])
-    for _, move in ipairs(moves) do
-        assert(move.index == index and move.dimension == 0)
+    if (roomFlag(kind) & allGatherFlag) ~= 0 then
+        setup()
+        local index = kind == types.ROOM_ERROR and -2
+            or (kind == types.ROOM_ANGEL or kind == types.ROOM_DEVIL) and -1
+            or 85
+        starts(2, index, kind)
+        assert(#moves == 3 and not queued[2])
+        for _, move in ipairs(moves) do
+            assert(move.index == index and move.dimension == 0)
+        end
+        rules.step() -- action-step and post-frame observe the same commit
+        assert(#moves == 3, "Duplicate observation repeated the gather")
+        complete(kind)
+        rules.step()
+        enter(0, 84) -- Free to leave while teammates remain in the special room.
+        rules.step()
+        assert(#moves == 3 and not next(queued), "Gather arrivals tethered a leaving player")
+        starts(0, index, kind)
+        assert(#moves == 3, "Players already together were teleported again")
+        enter(0, 84)
+        enter(1, 84)
+        rules.step()
+        starts(1, index, kind)
+        assert(#moves == 4 and queued[0], "Re-entering did not gather again")
     end
-    rules.step() -- action-step and post-frame observe the same commit
-    assert(#moves == 3, "Duplicate observation repeated the gather")
-    complete(kind)
-    rules.step()
-    enter(0, 84) -- Free to leave while teammates remain in the special room.
-    rules.step()
-    assert(#moves == 3 and not next(queued), "Gather arrivals tethered a leaving player")
-    starts(0, index, kind)
-    assert(#moves == 3, "Players already together were teleported again")
-    enter(0, 84)
-    enter(1, 84)
-    rules.step()
-    starts(1, index, kind)
-    assert(#moves == 4 and queued[0], "Re-entering did not gather again")
 end
 
 setup()
@@ -498,3 +501,20 @@ rules.step()
 starts(0, 85, types.ROOM_BOSS)
 assert(#moves == 9, "Selected types were lost after a floor change")
 print("PASS selected room types, safe landing, repeated exits and lifecycle")
+
+-- Each player-facing checkbox covers all of its members and no other type.
+for _, group in ipairs(roomOptions[4].groups) do
+    for kind = types.ROOM_DEFAULT, types.ROOM_ULTRASECRET do
+        setup(group.flag)
+        starts(1, 85, kind)
+        local expected = (group.flag & roomFlag(kind)) ~= 0
+        assert(#moves == (expected and 3 or 0), group.name .. " misclassified room type " .. kind)
+        if expected then
+            complete(kind)
+            assert(#placements == 3 and not next(queued))
+        end
+    end
+end
+print(
+    "PASS seven groups: all members, ordinary entrances/bedrooms, unused types and arrival cleanup"
+)
