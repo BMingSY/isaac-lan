@@ -127,6 +127,111 @@ if not ok then assert(message:find("A shot failed to hand over: still", 1, true)
     )
 
 
+@pytest.mark.parametrize("case", ["home", "home-debug", "dogma-warning"])
+def test_home_scenarios_prepare_azazel_before_launch(tmp_path, monkeypatch, case):
+    import run_special_routes as runner
+
+    labs = [tmp_path / role for role in ("host", "client")]
+    for lab in labs:
+        (lab / ".isaac-lan-lab").parent.mkdir(parents=True)
+        (lab / ".isaac-lan-lab").touch()
+        options = log_path(lab).parent / "options.ini"
+        options.parent.mkdir(parents=True)
+        options.write_text("PopUps=1\n")
+    monkeypatch.setattr(runner, "configure_interrupts", lambda: None)
+    monkeypatch.setattr(runner, "validate_owned_labs", lambda *args, **kwargs: labs)
+    monkeypatch.setattr(runner, "validate_startup", lambda labs: None)
+    monkeypatch.setattr(runner, "idle", lambda *args, **kwargs: None)
+    monkeypatch.setattr(lab_profile, "idle", lambda labs: None)
+    output = tmp_path / "result"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_special_routes",
+            "--host",
+            str(labs[0]),
+            "--client",
+            str(labs[1]),
+            "--output",
+            str(output),
+            "--case",
+            case,
+        ],
+    )
+    commands = []
+
+    def stop_before_launch(command, **kwargs):
+        commands.append(command)
+        raise RuntimeError("offline launch boundary")
+
+    monkeypatch.setattr(runner, "run_engine", stop_before_launch)
+    with pytest.raises(RuntimeError, match="offline launch boundary"):
+        runner.main()
+    assert len(commands) == 1 and "--knife-fixture" in commands[0]
+    report = json.loads((output / "report.json").read_text())
+    assert report["restored"] and not report["passed"]
+    for lab in labs:
+        assert (log_path(lab).parent / "options.ini").read_text() == "PopUps=1\n"
+
+
+@pytest.mark.parametrize("packed", [False, True])
+def test_dogma_observer_reads_both_entity_field_encodings(tmp_path, packed):
+    run_lua(
+        "local root = "
+        + lua_support.literal(str(ROOT))
+        + "\nlocal packed = "
+        + lua_support.literal(packed)
+        + """
+local function noop() end
+local codec = dofile(root .. "/src/bridge/sync/codec.lua")
+local fields = dofile(root .. "/src/bridge/sync/fields.lua")
+local E = fields.entity
+local common = {0, 0, 0, true}
+local value = {
+    [E.id] = 1, [E.type] = 1000, [E.variant] = 172, [E.subtype] = 1,
+    [E.common] = common, [E.compatibility] = string.pack(">ff", 3, 4),
+}
+if packed then
+    value[E.common] = false
+    value[E.nativeFields] = codec.encode({common})
+end
+local effect = {
+    Visible = true, TargetPosition = {X = 3, Y = 4},
+    Exists = function() return true end,
+    ToNPC = noop,
+    GetData = function() return {__isaac_lan_replica = 1} end,
+}
+local restore
+_IsaacLan = {
+    net_gate = function(_, _, _, callback) restore = callback end,
+    state_decode = codec.decode,
+    api_with_local_view = function(callback) callback(); return true end,
+}
+_IsaacLanModules = {["sync/fields"] = fields}
+_IsaacLanState = {decode = function(bytes)
+    if bytes == "view" then return {[11] = {[3] = {value}}} end
+    return codec.decode(bytes)
+end}
+_IsaacLanFrame = noop
+_IsaacLanTest = {host = false, dogmaWarning = true, endingRoutes = {"ascent"}}
+Game = function() return {GetLevel = function() return {
+    GetStage = function() return 13 end, GetStageType = function() return 1 end,
+} end} end
+Isaac = {AddCallback = noop, DebugString = noop, GetRoomEntities = function() return {effect} end}
+EntityType, ModCallbacks, PickupVariant = {}, {}, {}
+dofile(root .. "/tests/state_endings.lua")
+_IsaacLan.net_gate(noop, noop, noop, function() return true end, noop, noop)
+local bytes = string.pack(">s4", "view") .. codec.encode({1, "init", -1, false, false, false, 0, -1})
+assert(restore(bytes, 10))
+effect.Visible = false
+local ok, message = pcall(restore, bytes, 11)
+assert(not ok and message:find("Replica Dogma effect visibility differs", 1, true))
+""",
+        tmp_path,
+    )
+
+
 def test_bundled_input_support_is_frozen_and_needs_no_runtime_files(tmp_path, monkeypatch):
     support = tmp_path / "tests/support/input.lua"
     support.parent.mkdir(parents=True)

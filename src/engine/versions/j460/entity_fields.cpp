@@ -1,4 +1,5 @@
 #include "engine/entity_fields.h"
+#include "engine/lua_capture_arrays.h"
 #include "core/state_codec.h"
 #include "engine/versions/j460/entity_fields.h"
 #include "engine/versions/j460/entity_cast.h"
@@ -128,13 +129,24 @@ void captureText(lua_State* L, Address value) {
         capacity <= j460::layout::string::inlineCapacity ? value : at<Address>(value, 0);
     api.pushLString(L, reinterpret_cast<const char*>(address), size);
 }
-void capture(lua_State* L, const Plan& plan, unsigned index, Address entity, unsigned frame) {
+void captureNumbers(lua_State* L, const properties::Field& field, Address entity, int memo) {
+    const auto count = field.kind == Kind::color ? std::size(properties::colorOffsets) : 2;
+    std::array<float, std::size(properties::colorOffsets)> values{};
+    for (unsigned i = 0; i < count; ++i) {
+        const auto offset =
+            field.kind == Kind::color ? properties::colorOffsets[i] : i * sizeof(float);
+        values[i] = at<float>(entity, field.offset + offset);
+    }
+    lua::pushCaptureArray(L, api, std::span<const float>(values).first(count), memo);
+}
+void capture(lua_State* L, const Plan& plan, unsigned index, Address entity, unsigned frame,
+             int memo = 0) {
     const auto& node = plan.nodes[index];
     if (node.array) {
         api.createTable(L, node.count, 0);
         auto child = index + 1;
         for (unsigned i = 1; i <= node.count; ++i) {
-            capture(L, plan, child, entity, frame);
+            capture(L, plan, child, entity, frame, memo);
             api.rawSetI(L, -2, i);
             child = plan.nodes[child].next;
         }
@@ -156,11 +168,8 @@ void capture(lua_State* L, const Plan& plan, unsigned index, Address entity, uns
             api.pushBoolean(L, at<bool>(entity, field.offset));
             break;
         case Kind::vector:
-            api.createTable(L, 2, 0);
-            for (unsigned i = 0; i < 2; ++i) {
-                api.pushNumber(L, at<float>(entity, field.offset + i * sizeof(float)));
-                api.rawSetI(L, -2, i + 1);
-            }
+        case Kind::color:
+            captureNumbers(L, field, entity, memo);
             break;
         case Kind::flags:
             api.pushInteger(L,
@@ -169,13 +178,6 @@ void capture(lua_State* L, const Plan& plan, unsigned index, Address entity, uns
         case Kind::frame:
             api.pushInteger(
                 L, std::bit_cast<std::int32_t>(frame - at<unsigned>(entity, field.offset)));
-            break;
-        case Kind::color:
-            api.createTable(L, std::size(properties::colorOffsets), 0);
-            for (unsigned i = 0; i < std::size(properties::colorOffsets); ++i) {
-                api.pushNumber(L, at<float>(entity, field.offset + properties::colorOffsets[i]));
-                api.rawSetI(L, -2, i + 1);
-            }
             break;
         case Kind::text:
             captureText(L, entity + field.offset);
@@ -558,7 +560,7 @@ template <int Operation> int run(lua_State* L) {
                     // Fixed storage owns no heap resource across Lua's longjmp.
                     api.pushLString(L, reinterpret_cast<const char*>(bytes.data()), bytes.size());
                 } else
-                    capture(L, plan, 0, entity, frame);
+                    capture(L, plan, 0, entity, frame, api.type(L, 3) == LuaType::table ? 3 : 0);
             } else {
                 if (!runtime::replica())
                     throw std::runtime_error("Only replicas restore entity fields");
@@ -595,7 +597,8 @@ bool bind(lua_State* L, lua::Module module) {
                    S::isInteger,   S::rawLength,    S::rawGetI,     S::rawSetI,     S::getTop,
                    S::setTop,      S::createTable,  S::newUserdata, S::toUserdata,  S::pushBoolean,
                    S::pushInteger, S::pushNumber,   S::pushString,  S::pushClosure, S::setField,
-                   S::error,       S::checkInteger, S::checkStack,  S::pushLString}))
+                   S::error,       S::checkInteger, S::checkStack,  S::pushLString, S::pushValue,
+                   S::rawGet,      S::rawSet}))
         return false;
     image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
     api.pushClosure(L, entitySize, 0);

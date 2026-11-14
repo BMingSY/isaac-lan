@@ -337,7 +337,7 @@ assert(
     "Compact sprite contract changed"
 )
 local animation, overlay = "Walk", "Glow"
-local animationChanges, overlayChanges = 0, 0
+local animationChanges, overlayChanges, overlayRemovals = 0, 0, 0
 function sourceSprite:GetAnimation()
     return animation
 end
@@ -351,7 +351,7 @@ function sourceSprite:SetOverlayFrame(name)
     overlay, overlayChanges = name, overlayChanges + 1
 end
 function sourceSprite:RemoveOverlay()
-    overlay = ""
+    overlay, overlayRemovals = "", overlayRemovals + 1
 end
 component.applySprite(sourceSprite, expectedSprite)
 assert(animationChanges == 0 and overlayChanges == 0, "Unchanged animations restarted")
@@ -360,6 +360,13 @@ switched[2], switched[4] = "Idle", "Flash"
 component.applySprite(sourceSprite, switched)
 component.applySprite(sourceSprite, switched)
 assert(animationChanges == 1 and overlayChanges == 1, "Animation switch did not occur once")
+local emptyOverlay = wire.decode(wire.encode(switched))
+emptyOverlay[4] = ""
+component.applySprite(sourceSprite, emptyOverlay)
+component.applySprite(sourceSprite, emptyOverlay)
+assert(overlay == "" and overlayRemovals == 1, "Empty overlay was reset repeatedly")
+component.applySprite(sourceSprite, switched)
+assert(overlay == "Flash", "An overlay could not resume after removal")
 local value = wire.decode(wire.encode(component.capture(warning)))
 assert(value[24] == geometry)
 component.apply(beam, value)
@@ -509,4 +516,11 @@ packedNative.combat_identity = nativeIdentity
 warning.Parent, warning.SpawnerEntity = nil, nil
 packedComponent.reset()
 assert(packedComponent.capture(warning, false)[1] == withoutData[1])
+
+-- Sprite reuse preserves the numeric wire representation, including signed zero.
+beam.sprite.Rotation = -0.0
+local negative = component.sprite(beam.sprite)
+beam.sprite.Rotation = 0.0
+local positive = component.sprite(beam.sprite, negative)
+assert(positive ~= negative and 1 / positive[8] > 0 and 1 / negative[8] < 0)
 print("PASS portable entity fields, native laser state and replica lifecycle flag ownership")

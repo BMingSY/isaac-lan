@@ -1755,7 +1755,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 -- Check every current snapshot entity, excluding retired ones.
                 for identifier, v in pairs(warnings) do
                     local e = assert(replicasByID[identifier], "Replica Dogma effect missing")
-                    assert(e.Visible == v[8][4], "Replica Dogma effect visibility differs")
+                    local fields = _IsaacLanModules["sync/fields"].entity
+                    local common = v[fields.common]
+                        or native.state_decode(v[fields.nativeFields])[1]
+                    assert(e.Visible == common[4], "Replica Dogma effect visibility differs")
                     if v[4] == 1 then
                         local expected = v[24]
                         assert(

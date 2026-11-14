@@ -36,9 +36,9 @@ return function(fields)
             end
             for _, e in ipairs(env.entities()) do
                 if
-                    e:Exists()
+                    not currentObjects[env.key(e)]
+                    and e:Exists()
                     and e.Type ~= types.ENTITY_PLAYER
-                    and not currentObjects[env.key(e)]
                     and not (env.localEffect and env.localEffect(e))
                 then
                     env.discard(e)
@@ -73,7 +73,10 @@ return function(fields)
                     e = env.spawn(v, env.ref(v[Entity.spawner]), subtype)
                 end
                 if e then
-                    e:GetData().__isaac_lan_replica = v[Entity.id]
+                    local data = e:GetData()
+                    if data then
+                        data.__isaac_lan_replica = v[Entity.id]
+                    end
                     env.apply(e, v, registered)
                     currentObjects[env.key(e)] = true
                 else
@@ -81,13 +84,14 @@ return function(fields)
                 end
             end
             for _, e in ipairs(env.entities()) do
-                if e:Exists() and e.Type ~= types.ENTITY_PLAYER then
+                if
+                    not currentObjects[env.key(e)]
+                    and e:Exists()
+                    and e.Type ~= types.ENTITY_PLAYER
+                then
                     -- Remove implicit native segments before applying links.
                     -- Membership uses allocations, independently of Mod GetData.
-                    if
-                        not currentObjects[env.key(e)]
-                        and not (env.localEffect and env.localEffect(e))
-                    then
+                    if not (env.localEffect and env.localEffect(e)) then
                         env.discard(e)
                     end
                 end
