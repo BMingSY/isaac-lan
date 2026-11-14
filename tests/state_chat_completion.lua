@@ -1,11 +1,6 @@
 -- Owned dual-peer visual check; keyboard events are covered by the native input test.
-local native = assert(_IsaacLan)
-local file = assert(io.open("./lan-test-role.txt", "r"))
-local host = file:read("*l") == "host"
-file:close()
-file = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = file:read("*l")
-file:close()
+local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
+local host, port = config.host, config.port
 local function report(value)
     Isaac.DebugString("LAN_NETWORK CHAT_COMPLETION " .. value)
 end
@@ -22,6 +17,7 @@ local cases = {
 }
 local originalState = native.chat_ui_state
 local frame = _IsaacLanFrame
+report("LOADED")
 local frames, chosen, linked, started, done = 0, false, false, false, false
 local current, age, tabPending, baseline = 1, 0, false, nil
 native.chat_ui_state = function()
@@ -42,7 +38,10 @@ native.chat_ui_state = function()
 end
 function _IsaacLanFrame()
     frames = frames + 1
-    if not linked and frames >= (host and 240 or 360) then
+    if frames == 1 then
+        report("FIRST_FRAME")
+    end
+    if not linked and frames >= (host and 30 or 60) then
         linked = true
         _IsaacLanCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)
         Isaac.DebugString("LAN_NETWORK MENU_READY")
