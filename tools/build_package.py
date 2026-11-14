@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import shutil
 import re
+import subprocess
 from extension_package import LOADER_ABI
 
 
@@ -49,14 +50,25 @@ def game_profile(source):
     return profile
 
 
-def build(build_directory, output):
+def build(build_directory, output, *, strip_binaries=False):
     source = Path(__file__).resolve().parent.parent
+    strip_tool = None
+    if strip_binaries:
+        cache = (build_directory / "CMakeCache.txt").read_text()
+        match = re.search(r"^CMAKE_STRIP:[^=\n]+=(.+)$", cache, re.MULTILINE)
+        if not match or match[1].endswith("-NOTFOUND"):
+            raise ValueError("The configured Windows toolchain must provide CMAKE_STRIP")
+        strip_tool = match[1]
     output.mkdir(parents=True, exist_ok=False)
     files = {}
     for name in ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe"):
-        contents = (build_directory / name).read_bytes()
-        shutil.copy2(build_directory / name, output / name)
-        files[name] = hashlib.sha256(contents).hexdigest()
+        destination = output / name
+        shutil.copy2(build_directory / name, destination)
+        if strip_tool:
+            # Keep the original build and its symbols for diagnostics. Hash the
+            # final payload so installers and Workshop use these exact bytes.
+            subprocess.run([strip_tool, "--strip-all", str(destination)], check=True)
+        files[name] = hashlib.sha256(destination.read_bytes()).hexdigest()
     version = (source / "VERSION").read_text().strip()
     payload = {
         "format": 1,

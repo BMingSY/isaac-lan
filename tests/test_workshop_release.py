@@ -3,7 +3,6 @@
 from copy import deepcopy
 import hashlib
 import json
-from pathlib import Path
 import shutil
 
 import pytest

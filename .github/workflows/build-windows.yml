@@ -88,7 +88,7 @@ jobs:
         run: |
           python3 tools/build_release.py --build build-win32 --output dist --tag "$RELEASE_TAG"
           .deps/packaging/bin/python tools/check_release.py \
-            "dist/Isaac-LAN-$RELEASE_TAG-windows-x86.zip" --tag "$RELEASE_TAG"
+            "dist/Isaac-LAN-$RELEASE_TAG-windows-x86.zip" --tag "$RELEASE_TAG" --require-stripped
           python3 tools/bundle_ctest.py export --build build-win32 --output ci
           cp build-win32/isaac_lan_heap_watch.exe build-win32/isaac_lan_heap_fixture.exe ci/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -98,6 +98,15 @@ jobs:
             dist/*.zip
             dist/*.sha256
             ci/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-x86-symbols
+          path: |
+            build-win32/winmm.dll
+            build-win32/isaac_lan_probe.dll
+            build-win32/isaac_lan_check.exe
           if-no-files-found: error
           retention-days: 7
 

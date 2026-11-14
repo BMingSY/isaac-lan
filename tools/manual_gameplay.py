@@ -307,7 +307,6 @@ class Gameplay:
         raise RuntimeError(f"Walking blocked: {role}, goal={x},{y}, state={self.state(role)}")
 
     def door(self, role, slot):
-        old = self.state(role)["room"]
         door = next(d for d in self.state(role)["doors"] if d["slot"] == slot)
         if not door["open"]:
             raise RuntimeError("Door is locked")

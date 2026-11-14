@@ -107,4 +107,4 @@ Boss 出场和换层梦境使用原版确认动作跳过：键盘 Space／Enter�
 
 全局 `MC_POST_NEW_ROOM`、`MC_POST_UPDATE` 在本机房间上下文执行；房主的实体、伤害等玩法回调在相应权威房间执行。渲染与 UI 通过 `input::ViewScope` 使用本机物理输入，角色战斗消费房主收到的对应控制器输入。
 
-第三方界面通过[主机动作 API](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md#主机动作与回执)或受限房间请求表达操作意图，不能提交任意世界状态。依赖全局回调的玩法 Mod 需要明确适配；任意 Mod 私有状态不会自动复制，支持范围见[兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。
+第三方界面通过[主机动作 API](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-api-reference.md#动作与完成结果)或受限房间请求表达操作意图，不能提交任意世界状态。依赖全局回调的玩法 Mod 需要明确适配；任意 Mod 私有状态不会自动复制，支持范围见[兼容清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)。
