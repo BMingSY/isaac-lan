@@ -173,6 +173,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 mark("source", tick)
             elseif step == "source" and tick - stepAt > 120 then
                 assert(Game():GetLevel():GetStage() == sourceStage)
+                -- This fixture selects native exits, not Curse of the Maze routing.
+                Game():GetLevel():RemoveCurses(LevelCurse.CURSE_OF_MAZE)
                 local list = Game():GetLevel():GetRooms()
                 boss = nil
                 for i = 0, list.Size - 1 do
