@@ -672,7 +672,7 @@ for s = 2, 10 do
 end
 assert(player.Position.X > recovered, "Walking did not resume after recovering from a wall")
 print("PASS authority recovery from an overlapping display footprint")
--- The destination's input is gated for the same interval as its local fade.
+-- The destination's input is gated until its local reveal permits movement.
 -- Holding a direction through that interval must not accumulate a path which
 -- is replayed at once when the destination becomes visible.
 room.GetGridCollisionAtPos = function()
