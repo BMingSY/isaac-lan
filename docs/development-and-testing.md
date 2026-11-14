@@ -233,6 +233,8 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 ## 开发专项入口
 
+超大层与射击轮换使用 [run_large_floor_aim.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_large_floor_aim.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`；可用 `--extra-client` 增加第三、四端，使用 `--heap-check --record` 保留异常与画面证据。所有用例复用同一组进程，按两人超大层、两人至指定人数的射击轮换依次开局；`--challenge 1004` 或 `--challenge 1005` 可只复测对应挑战。覆盖普通路线各层生成、妈心／妈腿奖杯、独立移动、跨房射击、鼠标、蓄力松手、幽灵与断线重连。隔离存档在启动前准备资格，结束后恢复并核对。离线对应 `core.aim-rotation`、`core.challenge-rules`、`bridge.challenges`、`bridge.challenge_menu`、`presentation.attacks` 和 Windows `native.floor-generation`、`native.challenge-hud`、`native.mouse-input`。
+
 房间共享效果使用 [run_room_rules.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_room_rules.py)，指定 `--host`、`--client`、`--build`、`--output` 和独立 `--port`，可加 `--heap-check --record`。工具固定模拟 80 ms RTT，在同一对进程中验证清房充能、分房、主动槽位、充能修正、沙漏回退、普通掷骰与运气挑战，然后仅为启动时读取本机偏好重启一次；两个端口分别用于主机与延迟代理。全部结束后恢复隔离资料，任一阶段失败不计通过。离线对应 `bridge.clear-charge`、`bridge.luck_game`、`presentation.connection-settings`、`core.room-options-marks`。
 
 自动传送使用 [run_teleport.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_teleport.py) 的 `--gather selected` 模式，指定隔离目录、构建、产物与独立端口，可加 `--heap-check --record`。同一组主客机与连接先验证类型菜单、多选、全选／清空、准备状态、客机只读和本机偏好隔离，再验证 Boss／红隐入房集合、未选普通／特殊房不集合、离开与重入及换层后继续生效。`--gather special` 勾选全部特殊类型，`--gather all` 全选类型；两者覆盖走门、Joker、`/tp`、地图外房间、同时进房、在途卡牌和换层，全选还覆盖普通红房、原生地下室进入和梯子返回。离线 `bridge.room-gather` 覆盖单选／多选、重复状态、维度、断线、超时、未完成集合换目标及生命周期清理；菜单、网络、偏好和存档分别覆盖选择传播与高位类型保存。

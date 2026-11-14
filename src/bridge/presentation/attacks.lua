@@ -235,6 +235,12 @@ return function(fields)
             end
         end
         local function present(motion, ref, now, dt, sequence, status)
+            -- The local device aims another actor. Its input cannot predict
+            -- this actor's heading, weapon charge or tears.
+            if status.remoteShooting == 1 then
+                clear()
+                return
+            end
             local latency = status["sync" .. status.slot]
             if not latency or latency < 0 then
                 latency = status["ping" .. status.slot] or 0

@@ -20,6 +20,7 @@ struct Callbacks {
     void (*executeMenu)(const Call&);
     bool (*restartRequest)(bool held);
     void (*completionAward)(unsigned counter, unsigned bits, unsigned achievement);
+    bool (*largeFloor)();
 };
 bool install(std::uintptr_t image, const Callbacks& callbacks);
 bool managerReady();

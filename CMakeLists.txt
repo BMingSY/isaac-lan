@@ -111,10 +111,12 @@ if(BUILD_TESTING)
     target_include_directories(isaac_lan_connection_settings_test PRIVATE src)
     add_executable(isaac_lan_pointer_input_test tests/pointer_input_test.cpp)
     target_include_directories(isaac_lan_pointer_input_test PRIVATE src)
+    add_executable(isaac_lan_aim_rotation_test tests/aim_rotation_test.cpp)
+    target_include_directories(isaac_lan_aim_rotation_test PRIVATE src)
     add_executable(isaac_lan_minimap_test tests/minimap_test.cpp)
     target_include_directories(isaac_lan_minimap_test PRIVATE src)
     foreach(target isaac_lan_connection_settings_test isaac_lan_pointer_input_test
-                   isaac_lan_minimap_test)
+                   isaac_lan_aim_rotation_test isaac_lan_minimap_test)
         if(MINGW)
             target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
         endif()
@@ -124,9 +126,10 @@ if(BUILD_TESTING)
     endforeach()
     add_test(NAME presentation.connection-settings COMMAND isaac_lan_connection_settings_test)
     add_test(NAME core.pointer-input COMMAND isaac_lan_pointer_input_test)
+    add_test(NAME core.aim-rotation COMMAND isaac_lan_aim_rotation_test)
     add_test(NAME presentation.minimap COMMAND isaac_lan_minimap_test)
-    set_tests_properties(presentation.connection-settings core.pointer-input presentation.minimap
-                         PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    set_tests_properties(presentation.connection-settings core.pointer-input core.aim-rotation
+                         presentation.minimap PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_world_dependencies_test tests/world_dependencies_test.cpp)
     target_include_directories(isaac_lan_world_dependencies_test PRIVATE src)
     if(MINGW)
@@ -576,6 +579,7 @@ add_library(
     src/engine/versions/j460/player_opacity.cpp
     src/engine/versions/j460/crafting_hud.cpp
     src/engine/versions/j460/challenge_hud.cpp
+    src/engine/versions/j460/floor_generation.cpp
     src/engine/versions/j460/characters.cpp
     src/engine/versions/j460/pause_menu.cpp
     src/engine/versions/j460/item_presentation.cpp
@@ -837,7 +841,17 @@ if(BUILD_TESTING)
         target_compile_options(isaac_lan_challenge_hud_test PRIVATE -Wall -Wextra -Werror -msse2)
     endif()
     add_test(NAME native.challenge-hud COMMAND isaac_lan_challenge_hud_test)
-    set_tests_properties(native.challenge-hud PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_floor_generation_test tests/floor_generation_test.cpp)
+    target_include_directories(isaac_lan_floor_generation_test PRIVATE src)
+    target_link_libraries(isaac_lan_floor_generation_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_floor_generation_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+        target_compile_options(isaac_lan_floor_generation_test PRIVATE -Wall -Wextra -Werror -msse2)
+    endif()
+    add_test(NAME native.floor-generation COMMAND isaac_lan_floor_generation_test)
+    set_tests_properties(native.challenge-hud native.floor-generation
+                         PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_room_routing_test tests/room_routing_test.cpp)
     target_include_directories(isaac_lan_room_routing_test PRIVATE src)
     target_link_libraries(isaac_lan_room_routing_test PRIVATE minhook)

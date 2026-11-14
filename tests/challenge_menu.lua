@@ -854,7 +854,13 @@ print("PASS locked challenge rules on both peers, stale rules pages and returnin
 -- must not activate challenge row 3 again during the same render pass.
 _IsaacLan.net_challenges = function()
     local result = {}
-    for id, name in pairs({ [1001] = "恶魔形态", [1002] = "运气游戏", [1003] = "吃鸡" }) do
+    for id, name in pairs({
+        [1001] = "恶魔形态",
+        [1002] = "运气游戏",
+        [1003] = "吃鸡",
+        [1004] = "超大房间",
+        [1005] = "你的准星",
+    }) do
         result[tostring(id)] = {
             id = id,
             name = name,
@@ -867,7 +873,7 @@ _IsaacLan.net_challenges = function()
     return result
 end
 status.phase, status.hosting, status.slot, status.challenge = 2, 1, 0, 1001
-for index = 1, 3 do
+for index = 1, 5 do
     _IsaacLanMenuOpen(true)
     draw(40)
     draw(40)

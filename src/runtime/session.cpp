@@ -5,6 +5,7 @@
 #include "runtime/session_store.h"
 #include "runtime/input_schedule.h"
 #include "compat/challenges/catalog.h"
+#include "compat/challenges/aim_rotation.h"
 #include "engine/characters.h"
 #include "engine/item_presentation.h"
 #include "engine/presentation.h"
@@ -103,6 +104,16 @@ bool validRules(const lan::RunRules& rules) {
         expected.options = rules.options;
     return roomOptions::valid(rules.options) && (!rules.id || definition) && rules == expected &&
            (rules.options & requiredOptions) == requiredOptions;
+}
+bool remoteShooting() {
+    const auto* definition =
+        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return challengeActive() && definition && definition->nextPlayerShooting;
+}
+bool largeFloor() {
+    const auto* definition =
+        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return challengeActive() && definition && definition->largeFloor;
 }
 bool beginNetworkRun() {
     if (saves.networkRun)
@@ -774,6 +785,8 @@ void updateOne(const backend::Call& original) {
     }
     if (!(frame->connected & (1u << session->slot())))
         rooms::requestExit(false);
+    if (remoteShooting())
+        compat::challenges::rotateShooting(frame->inputs, frame->players, frame->connected);
     input::apply(*frame);
     const int top = lua.getTop(state);
     lan::Writer packed(lan::Message::input);
@@ -983,6 +996,7 @@ int poll(lua_State* L) {
     integer("difficulty", session ? session->settings().difficulty : 0);
     integer("challenge", session ? session->rules().id : 0);
     integer("challengeVersion", session ? session->rules().version : 0);
+    integer("remoteShooting", remoteShooting() ? 1 : 0);
     integer("roomOptions", session ? session->rules().options : 0);
     integer("pause", backend::pause());
     integer("pauseOwner", input::menuOwner());
@@ -1697,9 +1711,10 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     logger = log;
     runHalf = halfUpdate;
     restorePositions = restore;
-    return backend::install(image, {saveGame, deleteGame, saveRerun, serializeProgress,
-                                    executeStart, startGame, update, consoleUpdate, consoleCommand,
-                                    controls, executeMenu, requestRestart, completionAward});
+    return backend::install(image,
+                            {saveGame, deleteGame, saveRerun, serializeProgress, executeStart,
+                             startGame, update, consoleUpdate, consoleCommand, controls,
+                             executeMenu, requestRestart, completionAward, largeFloor});
 }
 void configureNetwork(unsigned hz) {
     inputHz = hz;
@@ -1863,7 +1878,9 @@ void present() {
     const int top = lua.getTop(state);
     lua.rawGetI(state, registry, presentRef);
     lan::Writer packed(lan::Message::input);
-    const auto preview = input::previewPhysicalInput();
+    auto preview = input::previewPhysicalInput();
+    if (remoteShooting())
+        compat::challenges::copyShooting(preview, lan::InputFrame{});
     const input::PresentationInputScope presentationInput(preview, localViewSlot() + 1);
     packed.input(preview);
     lua.pushLString(state, reinterpret_cast<const char*>(packed.bytes.data() + 1),

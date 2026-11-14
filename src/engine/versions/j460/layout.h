@@ -60,6 +60,7 @@ inline constexpr std::ptrdiff_t sprite = -0xf4;
 inline constexpr std::ptrdiff_t color = -0x40;
 } // namespace spriteRenderFrame
 namespace game {
+inline constexpr unsigned challenge = 0x26584;
 inline constexpr unsigned deathCertificateRoom = 0x18900, deathCertificateDimension = 0x18904;
 inline constexpr unsigned deathCertificateReturnTimer = 0x68d6c;
 inline constexpr unsigned bloomTime = 0x26528;
