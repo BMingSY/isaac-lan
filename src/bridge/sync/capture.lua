@@ -12,12 +12,13 @@ return function(fields)
         local captureEncoded, locations, shared = {}, nil, nil
         local captureStarted = 0
         local previousActors, previousEncoded, previousMap = {}, {}, {}
-        local currentMap = {}
+        local currentMap, currentGrids = {}, {}
         local roomState = deps.roomFactory()
         local function reset()
             captureTick, captureEpoch = nil, nil
             captureActors, captureVisuals, captureEncoded = {}, {}, {}
             previousActors, previousEncoded, previousMap, currentMap = {}, {}, {}, {}
+            currentGrids = {}
             inventoryCatalog = {}
             locations, shared = nil, nil
             roomState = deps.roomFactory()
@@ -41,7 +42,12 @@ return function(fields)
                 for _, record in pairs(previousMap) do
                     previousEncoded[record] = captureEncoded[record]
                 end
-                currentMap = {}
+                if captureEpoch == epoch then
+                    for grids in pairs(currentGrids) do
+                        previousEncoded[grids] = captureEncoded[grids]
+                    end
+                end
+                currentMap, currentGrids = {}, {}
                 captureTick, captureEpoch = tick, epoch
                 captureStarted = deps.clock and deps.clock() or 0
                 captureActors, captureVisuals, captureEncoded = {}, {}, {}
@@ -223,6 +229,11 @@ return function(fields)
                 captureEncoded[shared.map] = false
             end
             local room = roomState(slot, tick, epoch, view)
+            local grids = room[fields.room.grids]
+            if grids then
+                currentGrids[grids] = true
+                captureEncoded[grids] = captureEncoded[grids] or previousEncoded[grids] or false
+            end
             if captureEncoded[room] == nil then
                 captureEncoded[room] = false
             end

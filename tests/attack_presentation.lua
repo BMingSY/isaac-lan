@@ -518,3 +518,17 @@ present(0.51, 3)
 assert(counters["attack.pending"] == 0, "Delayed preview outlived its hard deadline")
 status.sync1 = nil
 print("PASS diagonal free-aim presentation and sync-delay budget")
+
+fresh()
+present(0, 1)
+assert(#draws > 0)
+status.remoteShooting = 1
+head.animation = "HeadDown"
+present(0.01, 2)
+assert(#draws == 0 and head.animation == "HeadDown", "Local input predicted another seat's attack")
+assert(counters["attack.pending"] == 0, "Rotated shooting kept an old local preview")
+status.remoteShooting = nil
+fresh()
+present(0, 1)
+assert(#draws > 0, "Ordinary shooting prediction did not resume")
+print("PASS remotely controlled attacks retain authority pose and clear local previews")

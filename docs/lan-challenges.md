@@ -54,6 +54,30 @@
 
 玩法组件为 [battle_royale.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/battle_royale.lua)，可离线运行的胜场、缩圈与配额规则为 [battle_royale_rules.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/battle_royale_rules.lua)。[地图组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/battle_royale_map.lua)通过原生红房间规则展开地图，预留原生妈腿房并确定随机缩圈，再由[资源分布组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/battle_royale_resources.lua)补齐兼容模板和出生资源路径；普通胜场排除 XL 地图中的妈腿房。[奖励组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/battle_royale_rewards.lua)仅在结算抽取作用域中借用混沌，正常返回或异常时均移除临时副本，原有混沌保留。Boss、出口和整轮推进由房主裁决。个人地图保留各自探索及原生揭图效果，不提供数据保密或防作弊保证。
 
+## 当前规则：1004 超大房间
+
+| 项目 | 行为 |
+| --- | --- |
+| 资格与开局 | 全员自己的存档均已解锁子宫，与原版 21 号挑战一致；普通难度、2–4 人，自由选角，沿用各自存档的普通选角资格 |
+| 地图 | 使用原版 XXXXXXXXL 的超大层生成分支，保留原版随机布局、房间与诅咒；不额外增加资源房，不强制合并章节 |
+| 终点 | 普通路线子宫二的妈心／它还活着所在 Boss 房清场后生成奖杯；领取后结束全队挑战 |
+| 房间规则 | 由房主自行选择，沿用普通分房、集合和传送规则 |
+
+楼层生成通过 [floor_generation.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/floor_generation.cpp) 的具名能力选择原版生成分支。挑战编号与规则由挑战目录和运行层持有；原生 `Game.Challenge` 保持为零，不触发原版挑战解锁。奖杯和出口清理沿用通用挑战终点组件。
+
+## 当前规则：1005 你的准星
+
+| 项目 | 行为 |
+| --- | --- |
+| 开局 | 普通难度、2–4 人，自由选角，沿用各自存档的普通选角资格 |
+| 射击 | 每位玩家的射击输入交给开局席位中的下一位，最后一位交给 P1；包含方向、按住／松开、按键边沿与鼠标瞄准 |
+| 本人操作 | 移动、主动道具、炸弹、卡牌／药丸、菜单和地图仍由本人控制；角色、库存、属性与镜头归属保持不变 |
+| 身份变化 | 死亡成为幽灵后继续提供射击输入；掉线不重排控制环，其下一位暂时没有射击输入，重连恢复原席位 |
+| 分房与规则 | 允许分房射击；集合等房间规则由房主选择，GoodTrip 和 `/tp` 沿用已有规则 |
+| 终点 | 妈腿所在 Boss 房清场后生成奖杯，领取后结束全队挑战 |
+
+四人时射击控制关系为 P1 → P2 → P3 → P4 → P1，二人与三人按同样顺序闭环。射击转交由 [aim_rotation.h](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/challenges/aim_rotation.h) 定义，在房主接受并过滤本轮输入后执行；网络仍传输各玩家自己的原始输入。鼠标使用来源玩家提供的房间坐标，由接收角色的原生射击锚点计算方向。客机保留本机移动预测，受队友控制的攻击使用已确认的方向、蓄力和弹幕表现。
+
 ## 规则与生命周期
 
 切换规则清空全员准备状态；加入、选角、准备和启动分别校验本机存档资格及规则代次。普通选角使用原生菜单目录与可选判定，包含本机已加载的 Mod 角色。新开局所需的消耗型资格不重复限制已有角色恢复。

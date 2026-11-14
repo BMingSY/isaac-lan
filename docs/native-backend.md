@@ -8,11 +8,11 @@
 
 [`entity_fields_plan(type, template)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.cpp)将 Lua 同步组件提供的嵌套字段名数组编译为 userdata。仅支持泪弹、跟班、掉落物和效果实体的具名属性白名单；`false` 为由 Lua 填充的占位，其他实体类型返回 `false`。模板最多 128 个节点、三层深度，不接受地址或偏移。计划只持有字段描述符，不持有游戏对象；线上的字段顺序仍由 Lua schema 决定。
 
-`entity_fields_capture(entity:GetSprite(), plan)`返回同形数组。`entity_fields_apply(sprite, plan, value)`只允许客机调用；一次遍历校验整份数组的形状、类型、有限数值与整数范围，将普通值保存在固定大小的栈缓冲后，再按模板顺序写入。两者要求活动实体的借用 Sprite 与计划类型相符，返回后不保留 Sprite、实体或数组引用。对象分配、回收和实体身份仍由原有生命周期管理。
+`entity_fields_capture(entity:GetSprite(), plan, memo?)`返回同形数组。可选 `memo` 必须由调用方创建为空表并独占维护；接口按实时读取的原生浮点位模式共享向量和颜色叶数组，保留浮点类型及零的符号，最多缓存 256 个数组，满后仍正常采集。调用方不得修改缓存条目或返回的共享叶数组。根数组及字段容器始终新建，占位始终为 `false`；不提供 `memo` 时数组独立。`entity_fields_apply(sprite, plan, value)`只允许客机调用；一次遍历校验整份数组的形状、类型、有限数值与整数范围，将普通值保存在固定大小的栈缓冲后，再按模板顺序写入。两者要求活动实体的借用 Sprite 与计划类型相符；版本后端不跨调用保存 Sprite、实体或数组引用。对象分配、回收和实体身份仍由原有生命周期管理。
 
 `entity_fields_encode(sprite, plan)` 将数值计划直接编码为与 `state_encode` 相同的数组字节，不生成中间 Lua 表；`entity_fields_apply` 也接受这种字节串。此路径仅支持上述四类实体的数值字段，最多 4864 字节，使用固定栈缓冲；解码按计划核对每个数组、数值范围和结束位置，完整校验后才写入该计划的字段。身份、位置、速度及引用仍单独供 Lua 同步组件使用。编码占位只能为 `false`，不接受精灵名称字段或任意内存数据。
 
-`sprite_fields_plan(template)`／`sprite_fields_capture(sprite, plan)`／`sprite_fields_apply(sprite, plan, value)`使用同一模板边界处理精灵字段。支持文件名、动画名、帧、翻转、旋转、缩放、偏移及七个颜色通道；字符串与动画字段只读，动画切换、加载和完整层状态继续使用原有接口。接受借用或 Lua 自有 Sprite，不能将实体计划用于精灵。主动画帧按原版取 floor，叠加帧截断；无动画返回空名称与 `-1`。颜色写入与七参数 Lua `Color` 一致，完整 colorize 状态随后由 `sprite_state` 恢复。
+`sprite_fields_plan(template)`／`sprite_fields_capture(sprite, plan, memo?)`／`sprite_fields_apply(sprite, plan, value)`使用同一模板边界和只读叶数组复用规则处理精灵字段。支持文件名、动画名、帧、翻转、旋转、缩放、偏移及七个颜色通道；字符串与动画字段只读，动画切换、加载和完整层状态继续使用原有接口。接受借用或 Lua 自有 Sprite，不能将实体计划用于精灵。主动画帧按原版取 floor，叠加帧截断；无动画返回空名称与 `-1`。颜色写入与七参数 Lua `Color` 一致，完整 colorize 状态随后由 `sprite_state` 恢复。
 
 J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_fields.h)。`Size` 使用下述尺寸恢复能力；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。掉落物 `Price` 调用原 thiscall setter（RVA `0x2e2570`），保留商店显示和特殊价格行为；`ShopItemId` 按原 Lua setter 限制在 -2 至 7。`SortingLayer`（`Entity+0x35c`）和 `RenderZOffset`（`+0x354`）按原 Lua 属性读写有符号 32 位整数，与 `DepthOffset`（`+0x358`）共同参与原生排序，不改变实体所属列表。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
 
@@ -185,6 +185,12 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 `commitProgress` 只用于退出时提交已合并的个人进度：恢复个人计数和原有成就，使用 `Progress::TryUnlock`（RVA `0x529a20`，`thiscall bool(id)`）提交本局解锁，再以 `Progress::IncreaseEventCounter`（RVA `0x529b40`，`thiscall void(id, delta)`）的零增量检查累计条件。提交期间借用可写位并在返回时恢复；运行层须先结束共享进度合并，避免原生同步保存再次合并。该能力不写入局内 Continue 或分配游戏对象。
 
 客机恢复与原生更新使用 `ProgressReadOnlyScope`，按栈保存并恢复 `Manager+0x14` 进度对象的 `+1` 只读位。J460 收藏记录更新（RVA `0x52a2d0`）与成就尝试（RVA `0x529a20`）均先检查此位；复制权威成就／计数不通过这些方法，因此不被拦截。作用域结束恢复原值，不改变主机进度、会话合并或退出持久化。
+
+## 楼层生成
+
+[floor_generation.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/floor_generation.h) 接受运行层提供的同步布尔查询，仅选择原版超大层生成分支。J460 的房间数量判断位于 RVA `0x340f9f`，布局判断位于 RVA `0x3419df`；两处均为对 `Game+0x26584` 原生挑战编号的七字节比较指令。入口与后续条件跳转受启动签名校验。
+
+后端保留原比较；查询为 true 时，仅将其算术标志改为相等比较的结果，再执行原版分支。通用寄存器、栈与 XMM0–XMM7 均恢复，不写 `Game.Challenge`、诅咒、种子、布局或原生容器。房间数量抽样、随机数推进、布局与房间对象分配仍由原版负责。查询适用于首层、换层与重新生成；无活动挑战时保留原生行为。玩法匹配由上层挑战目录负责。
 
 ## HUD 与本机输入
 

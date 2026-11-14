@@ -8,7 +8,13 @@ return function(wire)
             return kind == schemas.types.ENTITY_EFFECT
                 and native.presentation_local_effect(kind, e.Variant, e.SubType)
         end
-        local function vector(v)
+        local function sameNumber(a, b)
+            return a == b and math.type(a) == math.type(b) and (a ~= 0 or 1 / a == 1 / b)
+        end
+        local function vector(v, previous)
+            if previous and sameNumber(v.X, previous[1]) and sameNumber(v.Y, previous[2]) then
+                return previous
+            end
             return { v.X, v.Y }
         end
         local function vec(v)
@@ -21,6 +27,7 @@ return function(wire)
             return Color(table.unpack(c))
         end
         local nextID = 1
+        local numericCapture = {}
         local function id(e, kind)
             if not e or not e:Exists() or localEffect(e, kind) then
                 return 0
@@ -187,27 +194,40 @@ return function(wire)
                 false, -- Sprite Color is already complete in Sprite.native.
                 false,
             })
-        local function sprite(s)
+        local function sprite(s, previous)
+            local value
             if spritePlan then
-                local value = native.sprite_fields_capture(s, spritePlan)
+                value = native.sprite_fields_capture(s, spritePlan, numericCapture)
                 value[Sprite.native] = assert(native.sprite_state(s))
-                return value
+            else
+                -- Preserve Lua array preallocation; positions follow sync/fields.
+                value = {
+                    s:GetFilename(), -- Sprite.path
+                    s:GetAnimation(), -- Sprite.animation
+                    s:GetFrame(), -- Sprite.frame
+                    s:GetOverlayAnimation(), -- Sprite.overlay
+                    s:GetOverlayFrame(), -- Sprite.overlayFrame
+                    s.FlipX, -- Sprite.flipX
+                    s.FlipY, -- Sprite.flipY
+                    s.Rotation, -- Sprite.rotation
+                    vector(s.Scale, previous and previous[Sprite.scale]), -- Sprite.scale
+                    vector(s.Offset, previous and previous[Sprite.offset]), -- Sprite.offset
+                    false, -- Reserved Sprite.color; carried once in Sprite.native.
+                    assert(native.sprite_state(s)), -- Sprite.native
+                }
             end
-            -- Preserve Lua array preallocation; positions follow sync/fields.
-            return {
-                s:GetFilename(), -- Sprite.path
-                s:GetAnimation(), -- Sprite.animation
-                s:GetFrame(), -- Sprite.frame
-                s:GetOverlayAnimation(), -- Sprite.overlay
-                s:GetOverlayFrame(), -- Sprite.overlayFrame
-                s.FlipX, -- Sprite.flipX
-                s.FlipY, -- Sprite.flipY
-                s.Rotation, -- Sprite.rotation
-                vector(s.Scale), -- Sprite.scale
-                vector(s.Offset), -- Sprite.offset
-                false, -- Reserved Sprite.color; carried once in Sprite.native.
-                assert(native.sprite_state(s)), -- Sprite.native
-            }
+            if previous then
+                for index, field in ipairs(value) do
+                    if
+                        field ~= previous[index]
+                        or type(field) == "number" and not sameNumber(field, previous[index])
+                    then
+                        return value
+                    end
+                end
+                return previous
+            end
+            return value
         end
         local function applySprite(s, v)
             if s:GetFilename() ~= v[Sprite.path] then
@@ -224,7 +244,7 @@ return function(wire)
                 if s:GetOverlayAnimation() ~= v[Sprite.overlay] then
                     s:SetOverlayFrame(v[Sprite.overlay], v[Sprite.overlayFrame])
                 end
-            else
+            elseif s:GetOverlayAnimation() ~= "" then
                 s:RemoveOverlay()
             end
             if spritePlan then
@@ -259,7 +279,7 @@ return function(wire)
                 object, names = typed(e, kind)
             end
             -- Preserve Lua array preallocation; positions follow sync/fields.
-            local value = plan and native.entity_fields_capture(s, plan)
+            local value = plan and native.entity_fields_capture(s, plan, numericCapture)
                 or {
                     false, -- Entity.id
                     kind, -- Entity.type
@@ -302,7 +322,14 @@ return function(wire)
             value[Entity.shadow] = visual and assert(native.entity_shadow(s)) or false
             value[Entity.compatibility] = visual
                     and visualCompatibility
-                    and visualCompatibility.capture(e, id, sprite)
+                    and visualCompatibility.capture(
+                        e,
+                        id,
+                        sprite,
+                        kind,
+                        value[Entity.variant],
+                        value[Entity.subtype]
+                    )
                 or false
             value[Entity.minecart] = visual and entityLinks.capture(e, id) or 0
             value[Entity.held] = visual and entityLinks.captureHeld(e, id) or 0
@@ -374,7 +401,14 @@ return function(wire)
                 e:ToLaser().EndPoint = vec(v[Entity.laserEndPoint])
             end
             if visualCompatibility then
-                visualCompatibility.apply(e, v[Entity.compatibility], applySprite)
+                visualCompatibility.apply(
+                    e,
+                    v[Entity.compatibility],
+                    applySprite,
+                    kind,
+                    v[Entity.variant],
+                    v[Entity.subtype]
+                )
             end
             e.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
             e.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE
@@ -390,7 +424,14 @@ return function(wire)
                 entityLinks.apply(e, v[Entity.minecart], ref)
                 entityLinks.applyHeld(e, v[Entity.held], ref)
                 if visualCompatibility and visualCompatibility.link then
-                    visualCompatibility.link(e, v[Entity.compatibility], ref)
+                    visualCompatibility.link(
+                        e,
+                        v[Entity.compatibility],
+                        ref,
+                        v[Entity.type],
+                        v[Entity.variant],
+                        v[Entity.subtype]
+                    )
                 end
             end,
             sprite = sprite,
@@ -398,7 +439,7 @@ return function(wire)
             vector = vector,
             vec = vec,
             reset = function()
-                nextID = 1
+                nextID, numericCapture = 1, {}
                 if tethers then
                     tethers.reset()
                 end

@@ -268,6 +268,7 @@ challenge = _IsaacLanModules["runtime/challenges"]({
     routes = {
         lamb = goalRoute("lamb"),
         mom = goalRoute("mom"),
+        heart = goalRoute("heart"),
         battle_royale = battle,
     },
     effects = {
