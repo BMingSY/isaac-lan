@@ -65,7 +65,7 @@
 
 楼层生成通过 [floor_generation.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/floor_generation.cpp) 的具名能力选择原版生成分支。挑战编号与规则由挑战目录和运行层持有；原生 `Game.Challenge` 保持为零，不触发原版挑战解锁。奖杯和出口清理沿用通用挑战终点组件。
 
-## 当前规则：1005 你瞄我走
+## 当前规则：1005 你的准星
 
 | 项目 | 行为 |
 | --- | --- |

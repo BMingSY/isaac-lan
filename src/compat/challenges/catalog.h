@@ -90,7 +90,7 @@ inline constexpr std::array definitions{
         unrestrictedCharacter,
         0,
         true,
-        "你瞄我走",
+        "你的准星",
         "mom",
         ids::ending::epilogue,
         ids::stage::chapterThreeSecond,

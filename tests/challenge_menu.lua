@@ -857,7 +857,7 @@ _IsaacLan.net_challenges = function()
         [1002] = "运气游戏",
         [1003] = "吃鸡",
         [1004] = "超大房间",
-        [1005] = "你瞄我走",
+        [1005] = "你的准星",
     }) do
         result[tostring(id)] = {
             id = id,
