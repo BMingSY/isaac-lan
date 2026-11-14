@@ -1,4 +1,5 @@
 #include "engine/session_backend.h"
+#include "engine/floor_generation.h"
 #include "engine/rooms.h"
 #include "core/chat.h"
 #include "engine/versions/j460/entrypoints.h"
@@ -141,7 +142,8 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
                              reinterpret_cast<void**>(&original)) == MH_OK &&
                MH_EnableHook(reinterpret_cast<void*>(target)) == MH_OK;
     };
-    return hook(image + j460::entry::managerSave, saveHook, originalSave) &&
+    return installFloorGeneration(image, callbacks.largeFloor) &&
+           hook(image + j460::entry::managerSave, saveHook, originalSave) &&
            hook(image + j460::entry::managerDeleteSave, deleteHook, originalDelete) &&
            hook(image + j460::entry::managerSaveRerun, rerunHook, originalRerun) &&
            hook(image + j460::entry::managerExecuteMenu, menuHook, originalMenu) &&

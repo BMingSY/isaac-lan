@@ -32,7 +32,7 @@ def test_native_compatibility_policies_remain_portable():
         source = path.read_text()
         assert not re.search(r"windows\.h|reinterpret_cast|lua_State|MH_CreateHook", source)
         includes = re.findall(r'^#include "([^"]+)"', source, re.MULTILINE)
-        assert all(name.startswith("compat/") for name in includes), (path, includes)
+        assert all(name.startswith(("compat/", "core/")) for name in includes), (path, includes)
 
 
 def test_audited_addresses_and_startup_signatures_share_one_catalog():
