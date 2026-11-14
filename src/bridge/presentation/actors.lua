@@ -172,15 +172,21 @@ return function(fields)
         return {
             apply = applyActorVisuals,
             walk = walk,
-            departFloor = function(player, animation, same, departureAnimation)
+            departFloor = function(player, animation, same, departureAnimations)
                 -- The generic floor transition is shared by holes and light
                 -- entrances. Replay the authority's action from the reliable
                 -- event, including when its final snapshot was superseded.
                 local ordinaryTransition = 0
                 if animation == ordinaryTransition and not same and not player:IsCoopGhost() then
-                    if departureAnimation == "LightTravel" then
-                        player:AnimateLightTravel()
-                    elseif departureAnimation == "Trapdoor" then
+                    local trapdoor = false
+                    for _, name in ipairs(departureAnimations or {}) do
+                        if name == "LightTravel" then
+                            player:AnimateLightTravel()
+                            return
+                        end
+                        trapdoor = trapdoor or name == "Trapdoor"
+                    end
+                    if trapdoor then
                         player:AnimateTrapdoor()
                     end
                 end

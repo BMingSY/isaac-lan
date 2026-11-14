@@ -91,22 +91,24 @@ end
 function player:AnimateLightTravel()
     departures[#departures + 1] = "LightTravel"
 end
-component.departFloor(player, 0, false, "LightTravel")
+component.departFloor(player, 0, false, { "LightTravel" })
 assert(departures[1] == "LightTravel", "A light entrance was replaced by a downward jump")
-component.departFloor(player, 0, false, "Trapdoor")
+component.departFloor(player, 0, false, { "Trapdoor" })
 assert(departures[2] == "Trapdoor", "The native trapdoor lost its downward jump")
 for _, pose in ipairs({ "", "WalkDown", "UseItem", "TeleportUp", "UnknownModAction" }) do
-    component.departFloor(player, 0, false, pose)
+    component.departFloor(player, 0, false, { pose })
 end
-component.departFloor(player, 0, true, "Trapdoor")
+component.departFloor(player, 0, true, { "Trapdoor" })
 for animation = 1, 6 do
-    component.departFloor(player, animation, false, "LightTravel")
+    component.departFloor(player, animation, false, { "LightTravel" })
 end
 assert(#departures == 2, "An unrelated transition acquired an invented entrance animation")
+component.departFloor(player, 0, false, { "UseItem", "LightTravel" })
+assert(departures[3] == "LightTravel", "An omitted native actor lost the room's departure action")
 player.IsCoopGhost = function()
     return true
 end
-component.departFloor(player, 0, false, "Trapdoor")
-component.departFloor(player, 0, false, "LightTravel")
-assert(#departures == 2, "Co-op ghost acquired a living body's departure")
+component.departFloor(player, 0, false, { "Trapdoor" })
+component.departFloor(player, 0, false, { "LightTravel" })
+assert(#departures == 3, "Co-op ghost acquired a living body's departure")
 print("PASS authoritative light/trapdoor departures, unrelated actions and co-op ghosts")

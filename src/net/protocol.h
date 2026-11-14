@@ -238,7 +238,7 @@ struct LobbyAccess {
 // Begin the game's native transition, rather than discovering a floor change
 // in a snapshot after the host has finished loading it.
 struct Stage {
-    static constexpr std::size_t maxDepartureAnimationLength = 64;
+    static constexpr std::size_t maxDepartureAnimationLength = 64, maxDepartureAnimations = 16;
     std::uint32_t epoch = 0;
     std::uint8_t level = 0, type = 0, animation = 0;
     bool same = false;
@@ -257,8 +257,14 @@ struct Stage {
     std::uint8_t cinematic = 0;
     // Authoritative departure context for native next-floor selection.
     std::int16_t sourceRoom = 0;
-    // Opaque presentation name captured at the authoritative departure barrier.
-    std::string departureAnimation{};
+    // Opaque presentation names captured at the authoritative departure barrier.
+    std::vector<std::string> departureAnimations{};
+    bool validDepartureAnimations() const {
+        return departureAnimations.size() <= maxDepartureAnimations &&
+               std::all_of(
+                   departureAnimations.begin(), departureAnimations.end(),
+                   [](const auto& name) { return name.size() <= maxDepartureAnimationLength; });
+    }
     bool operator==(const Stage&) const = default;
 };
 // A local Mod's native room command, not a client-authored world snapshot.

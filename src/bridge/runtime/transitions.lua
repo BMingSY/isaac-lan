@@ -10,7 +10,7 @@ return function(native, floor, compatibility, level, resetView, presentDeparture
         restart,
         cinematic,
         sourceRoom,
-        departureAnimation
+        departureAnimations
     )
         if not floor.begin(epoch) then
             return false
@@ -34,7 +34,7 @@ return function(native, floor, compatibility, level, resetView, presentDeparture
             native.rooms_begin_floor(same and 1 or 0, animation, sourceRoom),
             "Native floor event failed"
         )
-        presentDeparture(animation, same, departureAnimation)
+        presentDeparture(animation, same, departureAnimations)
         return true
     end
 end

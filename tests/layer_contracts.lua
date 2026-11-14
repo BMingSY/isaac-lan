@@ -107,9 +107,9 @@ end, function(animation, same, departure)
         .. ":"
         .. tostring(same)
         .. ":"
-        .. tostring(departure)
+        .. table.concat(departure or {}, ":")
 end)
-assert(begin(8, 4, 4, 0, false, nil, 0, 0, -8, "LightTravel"))
+assert(begin(8, 4, 4, 0, false, nil, 0, 0, -8, { "LightTravel" }))
 assert(sourceRoom == -8, "Floor event lost the authoritative departure room")
 assert(table.concat(order, ",") == "reset,set-stage,floor:0:0,departure:0:false:LightTravel")
 assert(not begin(8, 1, 0, 0, false, false, 1) and #order == 4)

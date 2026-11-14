@@ -3,6 +3,8 @@ local native = assert(_IsaacLan)
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local linked, chosen, finished, renders = false, false, false, 0
 local cases = {
+    { user = 0, hush = false, light = true, together = true, destination = 10 },
+    { user = 1, hush = false, light = true, together = true, destination = 10 },
     { user = 0, hush = false, light = true, destination = 10 },
     { user = 1, hush = false, light = true, destination = 10 },
     { user = 0, hush = true, destination = 9 },
@@ -14,8 +16,9 @@ local caseIndex, checked, received, snapshots = 1, 0, 0, 0
 local step, stepAt, boss, exitPosition = "crawlspace-init", 0
 local crawlspaceSource, crawlspaceEntrance, crawlspaceSeen, crawlspaceReturned
 local holePoses, lightPoses = 0, 0
-local light
+local light, departingPlayer
 local frame = _IsaacLanFrame
+local sourceStage = LevelStage.STAGE4_2
 local dpadUp = 0x0001 -- XINPUT_GAMEPAD_DPAD_UP, not the action-input bitmap.
 local lightContactOffset, departureTimeout = 4, 600
 local function report(message)
@@ -39,6 +42,31 @@ local function contactExit(case, player)
         player.Position, player.Velocity = exitPosition, Vector.Zero
     end
 end
+-- Background rooms restore interpolated positions before their native update.
+-- Place contact after the entrant's update so that restore cannot discard it.
+local contactOwner = { Name = "Floor departure contact fixture" }
+Isaac.AddCallback(contactOwner, ModCallbacks.MC_POST_PLAYER_UPDATE, function(_, player)
+    if
+        not host
+        or finished
+        or not native.rooms_ready()
+        or Game():GetLevel():GetStage() ~= sourceStage
+    then
+        return
+    end
+    if step == "split" then
+        -- Keep both actors away until the designated entrant touches its exit.
+        player.Position, player.Velocity =
+            Vector(160 + player.ControllerIndex * 40, 360), Vector.Zero
+    elseif
+        step == "depart"
+        and departingPlayer
+        and departingPlayer.Ref
+        and GetPtrHash(player) == GetPtrHash(departingPlayer.Ref)
+    then
+        contactExit(assert(cases[caseIndex]), player)
+    end
+end)
 function _IsaacLanFrame()
     renders = renders + 1
     local status = frame()
@@ -69,7 +97,7 @@ function _IsaacLanFrame()
     assert(finished or status.verified < 1500 * #cases, "Floor-source fixture timed out: " .. step)
     if not finished and checked == #cases then
         assert(crawlspaceSeen and crawlspaceReturned, "Missing crawlspace entry/return")
-        assert(host or holePoses == 4 and lightPoses == 2, "Missing both native departure poses")
+        assert(host or holePoses == 4 and lightPoses == 4, "Missing both native departure poses")
         finished = true
         report("PASS departures=" .. checked .. " snapshots=" .. snapshots .. " crawlspace=true")
     end
@@ -131,7 +159,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 Game().TimeCounter = 0
                 Game():SetStateFlag(GameStateFlag.STATE_HEAVEN_PATH, false)
                 Game():SetStateFlag(GameStateFlag.STATE_SECRET_PATH, false)
-                Game():GetLevel():SetStage(8, 0)
+                Game():GetLevel():SetStage(sourceStage, 0)
                 if caseIndex == 1 then
                     Game():StartStageTransition(true, 0)
                     report("BINDING player=omitted")
@@ -144,7 +172,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 end
                 mark("source", tick)
             elseif step == "source" and tick - stepAt > 120 then
-                assert(Game():GetLevel():GetStage() == 8)
+                assert(Game():GetLevel():GetStage() == sourceStage)
                 local list = Game():GetLevel():GetRooms()
                 boss = nil
                 for i = 0, list.Size - 1 do
@@ -182,13 +210,18 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     end
                 end)
                 if clear and entrance then
-                    local hushSlot = case.hush and case.user or 1 - case.user
-                    assert(native.rooms_move(hushSlot, -8, 0, -1))
+                    if not case.together then
+                        local hushSlot = case.hush and case.user or 1 - case.user
+                        assert(native.rooms_move(hushSlot, -8, 0, -1))
+                    end
                     mark("split", tick)
                 end
             elseif step == "split" and tick - stepAt > 90 then
                 local positions = native.rooms_positions()
-                assert(positions["0"].index ~= positions["1"].index, "Players did not split")
+                assert(
+                    (positions["0"].index == positions["1"].index) == (case.together == true),
+                    "Wrong shared/split-room fixture setup"
+                )
                 actor(case.user, function(player)
                     local room = Game():GetRoom()
                     local index = Game():GetLevel():GetCurrentRoomIndex()
@@ -218,6 +251,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         end
                     end
                     assert(exitPosition, "Native route entrance is missing")
+                    departingPlayer = EntityPtr(player)
                     contactExit(case, player)
                     report(
                         "DEPART user="
@@ -230,7 +264,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 end)
                 mark("depart", tick)
             elseif step == "depart" then
-                if Game():GetLevel():GetStage() ~= 8 then
+                if Game():GetLevel():GetStage() ~= sourceStage then
                     assert(
                         Game():GetLevel():GetStage() == case.destination,
                         "Host chose the wrong branch"
@@ -249,7 +283,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     mark("init", tick)
                 else
                     actor(case.user, function(player)
-                        contactExit(case, player)
+                        if not case.light then
+                            contactExit(case, player)
+                        end
                         if (tick - stepAt) % 120 == 0 then
                             report(
                                 "CONTACT user="
@@ -326,27 +362,31 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             restart,
             cinematic,
             sourceRoom,
-            departureAnimation
+            departureAnimations
         )
             if not same then
                 received = received + 1
                 local case = assert(cases[received], "Unexpected extra floor event")
                 assert(
-                    stage == 8 and animation == 0,
+                    stage == sourceStage and animation == 0,
                     "Departure did not use the native floor transition"
                 )
                 assert((sourceRoom == -8) == case.hush, "Reliable event lost the chosen entrance")
-                if case.user == 0 then
+                if case.user == 0 and not case.together then
                     assert(
                         sourceRoom ~= Game():GetLevel():GetCurrentRoomIndex(),
                         "Fixture did not expose split-room routing"
                     )
                 end
                 local expected = case.light and "LightTravel" or "Trapdoor"
+                local matched = false
+                for _, name in ipairs(departureAnimations) do
+                    matched = matched or name == expected
+                end
                 assert(
-                    departureAnimation == expected,
+                    matched,
                     "Reliable event lost the authoritative entrance action: "
-                        .. tostring(departureAnimation)
+                        .. table.concat(departureAnimations, ",")
                 )
                 report(
                     "EVENT case="
@@ -354,7 +394,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         .. " source="
                         .. sourceRoom
                         .. " animation="
-                        .. departureAnimation
+                        .. table.concat(departureAnimations, ",")
                 )
             end
             local accepted = beginFloor(
@@ -367,7 +407,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 restart,
                 cinematic,
                 sourceRoom,
-                departureAnimation
+                departureAnimations
             )
             if not same then
                 local expected = cases[received].light and "LightTravel" or "Trapdoor"

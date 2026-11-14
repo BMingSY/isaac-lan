@@ -603,8 +603,12 @@ void updateReplica(const backend::Call& original) {
         lua.pushInteger(state, transition->restart);
         lua.pushInteger(state, transition->cinematic);
         lua.pushInteger(state, transition->sourceRoom);
-        lua.pushLString(state, transition->departureAnimation.data(),
-                        transition->departureAnimation.size());
+        lua.createTable(state, transition->departureAnimations.size(), 0);
+        for (std::size_t i = 0; i < transition->departureAnimations.size(); ++i) {
+            const auto& name = transition->departureAnimations[i];
+            lua.pushLString(state, name.data(), name.size());
+            lua.rawSetI(state, -2, i + 1);
+        }
         view.playingCinematic = transition->cinematic != 0;
         view.cinematicReady = false;
         if (view.playingCinematic) {
@@ -1936,7 +1940,7 @@ void pollLocalConsole() {
     backend::hideConsole();
 }
 void beginStage(bool same, int animation, unsigned restart, unsigned cinematic,
-                const std::string& departureAnimation) {
+                std::span<const std::string> departureAnimations) {
     if (!view.gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
         return;
     auto value = backend::stage();
@@ -1951,7 +1955,7 @@ void beginStage(bool same, int animation, unsigned restart, unsigned cinematic,
     }
     value.cinematic = cinematic;
     value.sourceRoom = rooms::floorSourceRoom();
-    value.departureAnimation = departureAnimation;
+    value.departureAnimations.assign(departureAnimations.begin(), departureAnimations.end());
     if (!session->beginStage(value)) {
         fail("Native floor transaction rejected");
         return;

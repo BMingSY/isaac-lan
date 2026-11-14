@@ -1266,14 +1266,19 @@ void stageEvents() {
         stage.seeds[i] = 0x12340000 + i;
     stage.stateFlags = {0x10000, (1u << (44 - 32)) | (1u << (48 - 32))};
     stage.sourceRoom = -8;
-    stage.departureAnimation = "LightTravel";
+    stage.departureAnimations = {"UseItem", "LightTravel"};
     {
         auto invalid = stage;
-        invalid.departureAnimation.assign(Stage::maxDepartureAnimationLength + 1, 'x');
+        invalid.departureAnimations = {std::string(Stage::maxDepartureAnimationLength + 1, 'x')};
         require(!g.peers[0]->beginStage(invalid), "Oversized departure animation accepted");
         const auto message = stageMessage(invalid);
         Reader reader(std::span(message.bytes).subspan(1));
         rejects([&] { readStageChunk(reader); }, "Oversized departure animation decoded");
+        invalid.departureAnimations.assign(Stage::maxDepartureAnimations + 1, "Trapdoor");
+        require(!g.peers[0]->beginStage(invalid), "Too many departure animations accepted");
+        const auto crowded = stageMessage(invalid);
+        Reader crowdedReader(std::span(crowded.bytes).subspan(1));
+        rejects([&] { readStageChunk(crowdedReader); }, "Too many departure animations decoded");
     }
     for (int invalidRoom : {-21, 169}) {
         auto invalid = stage;
@@ -1370,7 +1375,7 @@ void stageDuringRejoin() {
     Stage last{2, 2, 0, 0, false, {}, {}};
     last.stateFlags[1] = 1u << (44 - 32);
     last.sourceRoom = -8;
-    last.departureAnimation = "Trapdoor";
+    last.departureAnimations = {"Trapdoor"};
     require(g.peers[0]->beginStage(last), "Second loading floor event failed");
     g.poll();
     require(!g.peers[1]->takeStage(), "Native event reached an unprepared engine");
@@ -3030,7 +3035,7 @@ void reliableReceive() {
         Reader stageFirst(std::span(chunk.bytes).subspan(1));
         receiver.floor(stageFirst);
         if (changeAnimation)
-            stage.departureAnimation = "LightTravel";
+            stage.departureAnimations = {"UseItem", "LightTravel"};
         else
             ++stage.sourceRoom;
         chunk = stageMessage(stage, bulkChunkSize);
