@@ -102,6 +102,8 @@ Boss 出场共享的定向检查为 `core.intro-barrier`、`native.intro-complet
 
 后悔药分岔选路的离线检查为 `native.rewind-home` 的 `route-checkpoint`，覆盖检查点路线位、实时换层标记、重复采集及失败清理。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case hourglass-routes --case rewind --case floor-sources`，指定隔离双端、独立端口及 `--heap-check --record`，复用进程验证主客机触发原生光柱／地洞、跨层回退后改选路线、重复回退与普通房间回退。
 
+命令补全的定向回归为 `presentation.chat-completion`、`presentation.chat-render`、`presentation.chat-native-input` 和 `bridge.chat`，覆盖前缀／别名、参数用法、Tab 轮换、点击、输入历史、输入法组词、选区及字节上限。实机夹具 [state_chat_completion.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_chat_completion.lua) 通过隔离启动器注入的 `_IsaacLanTest` 获取主客机身份，在普通 Lua 沙箱中运行；复用一对进程检查草稿变化与未提交状态，并录制候选、用法、输入法及选区画面。夹具注入补全／编辑状态，真实 Windows 按键边界由原生输入回归覆盖。
+
 ## 失败记录与回放
 
 启动错误的定向离线检查为 `core.startup-error-contract`、`core.startup-error-messages`、Windows 的 `log.path-and-records` 和 `app.extension-loader`。覆盖稳定编号、未知编号、中文长路径、日志目录失败与文件占用、失败后的原日志保留、DLL 缺失／导出缺失，以及新旧主体的诊断回退；这些检查无需启动游戏。
