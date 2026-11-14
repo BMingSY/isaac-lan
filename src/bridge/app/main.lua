@@ -400,6 +400,10 @@ local chatUI = _IsaacLanModules["presentation/chat"]({
     phase = Phase,
     limits = chatLimits,
     clock = Isaac.GetTime,
+    completion = _IsaacLanModules["presentation/chat_completion"](
+        _IsaacLanModules["core/room_types"],
+        chatLimits.commandBytes
+    ),
 }, _IsaacLanModules["presentation/chat_layout"])
 function _IsaacLanChatRender()
     chatUI.render(status)

@@ -1,5 +1,6 @@
 return function(deps, layout)
     local native, chat = deps.native, deps.chat
+    local completion = assert(deps.completion)
     local ui = {
         input = { open = false, text = "", cursor = 0, anchor = 0 },
         wheel = false,
@@ -21,23 +22,13 @@ return function(deps, layout)
     local scale = 0.85
     local shownEmotes = {}
     local position, drag, mouseDown, lastWidth
-    local copyPressed, copyFeedback
+    local copyPressed, copyFeedback, completionPressed
     local copyWidth, copyFeedbackDuration = 16, 700
-    local completion = {
-        "/h",
-        "/help",
-        "/e",
-        "/echo",
-        "/d6",
-        "/d20",
-        "/d100",
-        "/2d6",
-        "/d100b",
-        "/d100p",
-        "/console",
-        "/c",
-        "/lanbot",
-    }
+    local maxSuggestions = 4
+    local function assignInput(value)
+        native.chat_ui_text(value)
+        ui.input.text, ui.input.cursor, ui.input.anchor = value, #value, #value
+    end
     local function load()
         if assets then
             return
@@ -141,6 +132,7 @@ return function(deps, layout)
             or status.phase == deps.phase.waiting
         native.chat_ui_available(available)
         if not available then
+            completion.reset()
             copyPressed, copyFeedback = nil, nil
             drag, mouseDown = nil, false
             native.emote_poll(0, false)
@@ -152,6 +144,7 @@ return function(deps, layout)
         ui.input = native.chat_ui_state()
         local controls = native.chat_controls()
         if controls.restart and status.prepared then
+            completion.reset()
             native.chat_ui_open(false)
             native.emote_poll(0, false)
             native.chat_ui_modal(false)
@@ -185,8 +178,10 @@ return function(deps, layout)
             end
         end
         if ui.wheel then
+            completion.reset()
             return
         end
+        completion.update(ui.input)
         if ui.input.open then
             if ui.input.submit or (controls.confirm and not ui.input.composing) then
                 if chat.submit(ui.input.text) then
@@ -198,11 +193,9 @@ return function(deps, layout)
                 native.chat_ui_open(false)
                 ui.input.open = false
             elseif ui.input.complete then
-                for _, command in ipairs(completion) do
-                    if command:sub(1, #ui.input.text) == ui.input.text then
-                        native.chat_ui_text(command .. " ")
-                        break
-                    end
+                local value = completion.advance(ui.input)
+                if value then
+                    assignInput(value)
                 end
             end
             ui.scroll = math.max(0, ui.scroll + ui.input.scroll)
@@ -323,15 +316,27 @@ return function(deps, layout)
         }
         local bounds = layout.panel(width, height, hud, position)
         local inputHeight = 20
+        completion.update(ui.input)
+        local suggestionCount = math.min(maxSuggestions, #completion.rows)
+        local hintLines = suggestionCount > 0 and suggestionCount + 1
+            or (completion.usage and 1 or 0)
+        local hintHeight = hintLines > 0 and hintLines * layout.lineHeight + 2 or 0
+        local hintTop = bounds.bottom - inputHeight - hintHeight
         local mouse = native.chat_ui_pointer(width, height)
         local pressed, released = mouse.down and not mouseDown, not mouse.down and mouseDown
+        local overHints = hintHeight > 0
+            and mouse.x >= bounds.x + 6
+            and mouse.x < bounds.x + bounds.width - 6
+            and mouse.y >= hintTop
+            and mouse.y < bounds.bottom - inputHeight
         if not ui.input.open then
-            copyPressed, copyFeedback = nil, nil
+            copyPressed, copyFeedback, completionPressed = nil, nil, nil
         end
         if not ui.input.open or not mouse.down then
             drag = nil
         elseif
             pressed
+            and not overHints
             and mouse.x >= bounds.x
             and mouse.x < bounds.x + bounds.width - copyWidth - 4
             and mouse.y >= bounds.y
@@ -343,6 +348,7 @@ return function(deps, layout)
             position = { x = mouse.x - drag.x, bottom = mouse.y - drag.y }
             bounds = layout.panel(width, height, hud, position)
             position = { x = bounds.x, bottom = bounds.bottom }
+            hintTop = bounds.bottom - inputHeight - hintHeight
         end
         mouseDown = mouse.down
         local x, bottom, panelWidth = bounds.x, bounds.bottom, bounds.width
@@ -371,7 +377,12 @@ return function(deps, layout)
             panel(bounds, bounds.y, bounds.height, backgroundAlpha, background, border)
             rect(x + 6, bottom - inputHeight, panelWidth - 12, 1, border, backgroundAlpha)
         end
-        local shown = ui.input.open and layout.expandedLines or layout.recentLines
+        local shown = ui.input.open
+                and math.max(
+                    0,
+                    math.floor((bounds.height - inputHeight - hintHeight - 8) / layout.lineHeight)
+                )
+            or layout.recentLines
         ui.scroll = math.min(ui.scroll, math.max(0, #lines - shown))
         local ending = #lines - (ui.input.open and ui.scroll or 0)
         local first = math.max(1, ending - shown + 1)
@@ -398,7 +409,10 @@ return function(deps, layout)
                 }
             end
         end
-        local y = bottom - (ui.input.open and inputHeight or 0) - 4 - #rows * layout.lineHeight
+        local y = bottom
+            - (ui.input.open and inputHeight + hintHeight or 0)
+            - 4
+            - #rows * layout.lineHeight
         if not ui.input.open and #rows > 0 then
             panel(
                 bounds,
@@ -446,6 +460,66 @@ return function(deps, layout)
         end
         if released then
             copyPressed = nil
+        end
+        if ui.input.open and hintHeight > 0 then
+            rect(x + 6, hintTop, panelWidth - 12, 1, border, backgroundAlpha)
+            local firstSuggestion = math.max(1, completion.selected - suggestionCount + 1)
+            local hovered
+            for row = 1, suggestionCount do
+                local index = firstSuggestion + row - 1
+                local candidate = completion.rows[index]
+                local rowY = hintTop + 2 + (row - 1) * layout.lineHeight
+                if overHints and mouse.y >= rowY and mouse.y < rowY + layout.lineHeight then
+                    hovered = candidate
+                end
+                if index == completion.selected then
+                    rect(x + 7, rowY, panelWidth - 14, layout.lineHeight, foreground, 0.12)
+                end
+                text(
+                    layout.fit(
+                        candidate.label .. "  " .. candidate.detail,
+                        panelWidth - 20,
+                        measure
+                    ),
+                    x + 9,
+                    rowY,
+                    index == completion.selected and playerColors[2].text or foreground
+                )
+            end
+            if suggestionCount > 0 then
+                text(
+                    "Tab 补全  " .. completion.selected .. "/" .. #completion.rows,
+                    x + 9,
+                    hintTop + 2 + suggestionCount * layout.lineHeight,
+                    foreground,
+                    0.65
+                )
+            else
+                text(
+                    layout.fit(completion.usage, panelWidth - 20, measure),
+                    x + 9,
+                    hintTop + 2,
+                    foreground,
+                    0.7
+                )
+            end
+            if pressed then
+                completionPressed = hovered and { value = hovered.value, query = ui.input.text }
+                    or nil
+            elseif released then
+                if
+                    hovered
+                    and completionPressed
+                    and completionPressed.value == hovered.value
+                    and completionPressed.query == ui.input.text
+                then
+                    assignInput(hovered.value)
+                    completion.reset()
+                end
+                completionPressed = nil
+            end
+        else
+            completionPressed = nil
         end
         if ui.input.open then
             local input = ui.input
@@ -502,9 +576,10 @@ return function(deps, layout)
     function ui.reset()
         native.emote_poll(0, false)
         native.chat_ui_reset()
+        completion.reset()
         shownEmotes = {}
         drag, mouseDown = nil, false
-        copyPressed, copyFeedback = nil, nil
+        copyPressed, copyFeedback, completionPressed = nil, nil, nil
         ui.wheel, ui.scroll, lastRevision, lastEpoch = false, 0, -1, nil
         ui.input = { open = false, text = "", cursor = 0, anchor = 0 }
     end

@@ -131,4 +131,5 @@ runtime/chat_dice
 runtime/teleport
 runtime/chat
 presentation/chat_layout
+presentation/chat_completion
 presentation/chat

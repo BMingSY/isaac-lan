@@ -12,6 +12,7 @@
 - [runtime/chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat.lua) 持有命令队列、消息记录、输出归属、接收范围和去重。`/console`、`/c` 后的文本直接交给原版解析，不维护原版命令白名单；`/e` 在本机完成，掷骰由房主使用独立随机源生成一次。[chat_dice.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat_dice.lua) 负责掷骰表达式的解析、边界检查与求值，通过参数接收随机源，不读取游戏状态。
 - [runtime/teleport.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/teleport.lua) 负责 `/tp` 参数、房间查找和到达事务。房主在输入者的角色作用域内选择已有目标，由原生房间组件执行迁移；到达后核对房间和角色身份，再完成玩家附近的落点放置。
 - [presentation/chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/chat.lua) 只处理本机输入状态、布局、滚动和绘制；文字气泡只渲染同房角色，使用半透明的原版气泡素材。表情选择、动画和气泡复用游戏已有轮盘及角色表情组件；原版资源从游戏读取，不重新分发。背景配置通过启动装配注入，不参与联网一致性。
+- [chat_completion.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/chat_completion.lua) 持有本机补全候选、用法及 Tab 轮换状态；传送房间名称与别名复用房间定义。候选只填写草稿，提交仍经过聊天服务及原版命令解析。
 - [chat_wire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat_wire.lua) 编解码请求、输出、表情。底层 `communication` 是独立于 Mod 动作与世界快照的可靠字节消息；网络层不解析聊天内容。协议版本以 [protocol.h](https://github.com/BMingSY/isaac-lan/blob/main/src/net/protocol.h) 为准，同版本扩展才可联机。
 
 输入者的连接槽由传输层确定。原版命令和 `/tp` 在房主的更新安全边界执行，使用输入者的角色与房间上下文；排队时记录局次、世界代次、房间和维度，执行前不再匹配则取消。`rewind` 使用既有回退事务。没有玩家权限分级；同步方式不改变成员使用命令的资格。
@@ -44,6 +45,14 @@
 面板默认根据属性栏、物品栏和 HUD 偏移预留边距。输入打开时可按住聊天记录区域拖动，输入行不启动拖动；手动位置只受屏幕边界限制，不再避让 HUD。收起、重新打开及会话变化保留本次运行内的位置，HUD 设置变化不移动手动位置；画面尺寸变化时将面板约束在屏幕内并按宽度换行，退出游戏后恢复自动布局。拖动状态在关闭输入或失焦时结束。空内容或仅空白字符按 Enter 或手柄确认时直接忽略，不产生记录，也不清空草稿、关闭输入框或重置滚动位置。
 
 输入打开时，每条消息的最后一条可见行右侧提供复制按钮，点击后复制整条原文，包括当前滚动范围外的内容；不附加玩家编号或 `system:` 等显示前缀。按钮区域不启动拖动，按下后在同一消息的按钮上释放才执行复制，不改变输入草稿或发送消息。成功时图标短暂变为勾，失败时短暂变红；收起后不显示按钮。
+
+## 命令补全
+
+光标位于输入末尾且没有选区时，输入 `/` 会在输入框上方显示命令候选和简短含义；继续输入按前缀筛选。Tab 填入第一条候选，连续按 Tab 轮换同一组候选；点击候选也可填入，Enter 提交。候选区域最多显示四条，随当前候选移动，聊天记录按剩余空间显示。上下键继续浏览输入历史。
+
+`/tp` 提示房间类型、玩家、起始房、列表和坐标用法；`/lanbot` 提示操作、模式和风格；`/opacity` 提示目标与常用百分比，仍可手动输入 0～100 的其他整数。`/c`、`/console` 提示常用原版命令及参数格式，列表不是允许执行的命令集合，未列出的原版或 Mod 命令仍交给原版处理；不补写 Lua 代码、物品 ID 或任意参数正文。补全不执行命令或发送消息。
+
+中文输入法组词、编辑行中或选择文字时暂停提示和补全；关闭输入、退出联机及会话重置清理轮换状态。
 
 ## 传送命令
 
