@@ -1,6 +1,8 @@
 #pragma once
 #include <windows.h>
 #include <cstdint>
+#include <utility>
+#include <vector>
 struct lua_State;
 namespace isaac::presentation {
 // Preserve the native versus screen while simulating independent rooms.
@@ -20,5 +22,7 @@ void reset();
 unsigned playedIntro();
 bool introActive();
 void observeIntro(unsigned slot, unsigned serial, bool active);
+std::vector<std::pair<unsigned, unsigned>> introAudiences();
+bool skipIntro(unsigned serial);
 bool roomPaused();
 } // namespace isaac::presentation

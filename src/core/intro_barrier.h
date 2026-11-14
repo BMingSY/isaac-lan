@@ -46,6 +46,12 @@ class IntroBarrier {
                 return true;
         return false;
     }
+    unsigned audience(unsigned serial, unsigned tick, unsigned connected) const {
+        for (const auto& [room, value] : waiting)
+            if (value.serial == serial && value.blocking && tick - value.tick <= timeoutTicks)
+                return value.audience & connected;
+        return 0;
+    }
     bool paused(Room room, unsigned tick, unsigned connected) {
         const auto entry = waiting.find(room);
         if (entry == waiting.end())

@@ -38,6 +38,15 @@ class PauseScope {
     pause_menu::Intent intent() const;
     PauseScope(const PauseScope&) = delete;
 };
+// Native nightmare Update may only see a confirmation after shared consent.
+class AnimationConfirmScope {
+    int previous;
+
+  public:
+    explicit AnimationConfirmScope(bool approved);
+    ~AnimationConfirmScope();
+    AnimationConfirmScope(const AnimationConfirmScope&) = delete;
+};
 void install(std::uintptr_t image, void (*logger)(const std::string&), bool installed = false);
 FARPROC resolve(HMODULE module, LPCSTR name, FARPROC original);
 bool bind(lua_State*, HMODULE);

@@ -983,6 +983,8 @@ void introBarrier() {
     barrier.observe(0, 1, false);
     require(!barrier.paused(room, 111, 15), "Completed host intro kept its room frozen");
     barrier.start(room, 2, 100, 7);
+    require(barrier.audience(2, 110, 3) == 3 && !barrier.audience(1, 110, 15),
+            "Skip audience included disconnected players or another screen");
     require(barrier.pending(1, 2, 220) && !barrier.pending(3, 2, 220) &&
                 !barrier.pending(1, 1, 220),
             "Delayed boss intro must remain deliverable to its waiting audience");
@@ -993,6 +995,7 @@ void introBarrier() {
     require(barrier.paused(room, 120, 7), "Stale or active intro released combat");
     require(barrier.observe(1, 2, false) == room && !barrier.observe(1, 2, false),
             "Guest control completion must identify its room exactly once");
+    require(barrier.audience(2, 120, 7) == 5, "A finished viewer still needed to approve the skip");
     require(!barrier.pending(1, 2, 221) && barrier.pending(2, 2, 221),
             "Intro completion must stop retries only for the acknowledging guest");
     barrier.observe(0, 2, false);

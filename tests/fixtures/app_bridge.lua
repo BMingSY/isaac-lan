@@ -71,6 +71,8 @@ return function(root, native, modules)
         "presentation/battle_royale",
         "compat/items/glitched",
         "runtime/restart",
+        "runtime/lifecycle_messages",
+        "runtime/animation_skip",
         "runtime/chat_wire",
         "runtime/chat_dice",
         "runtime/teleport",
@@ -84,6 +86,18 @@ return function(root, native, modules)
         modules[name] = dofile(root .. "/src/bridge/" .. name .. ".lua")
     end
     native.net_lifecycle_receive = function() end
+    native.animation_skip_kinds = function()
+        return { none = 0, boss = 1, floor = 2, personal = 3 }
+    end
+    native.animation_skip_view = function()
+        return { kind = 0, id = 0, epoch = 0, events = {}, floorReady = true }
+    end
+    native.animation_skip_request = function()
+        return false
+    end
+    native.animation_skip = function()
+        error("Unexpected animation skip")
+    end
     native.net_lifecycle_send = function()
         return false
     end

@@ -32,6 +32,11 @@ bool capturesInput() {
     return false;
 }
 } // namespace isaac::frontend
+namespace isaac::presentation::animation {
+bool active() {
+    return false;
+}
+} // namespace isaac::presentation::animation
 namespace isaac::engine::items {
 void grantStartingRewards(void*, unsigned) {
     throw std::runtime_error("The menu fixture must not spawn gameplay actors");
@@ -861,6 +866,32 @@ void restartPhysicalRouting() {
     require(!input::restartHeld(), "An ordinary menu action submitted a restart");
 }
 
+void animationConfirmationConsent() {
+    Fixture f;
+    f.press(input::action::menuConfirm);
+    f.press(input::action::item);
+    {
+        input::AnimationConfirmScope waiting(false);
+        require(!f.query(input::action::menuConfirm),
+                "Physical confirmation bypassed animation consent");
+        require(f.query(input::action::menuConfirm, native::entry::inputPressed) &&
+                    f.query(input::action::item),
+                "Animation consent intercepted another native input query");
+        f.clearPhysical();
+        {
+            input::AnimationConfirmScope approved(true);
+            require(f.query(input::action::menuConfirm),
+                    "Approved animation still required a physical confirmation");
+        }
+        require(!f.query(input::action::menuConfirm),
+                "Nested animation consent escaped its native update");
+    }
+    require(!f.query(input::action::menuConfirm), "Animation consent retained a released key");
+    f.press(input::action::menuConfirm);
+    require(f.query(input::action::menuConfirm),
+            "Animation consent changed ordinary native confirmation");
+}
+
 void presentationInputRouting() {
     Fixture f;
     isaac::lan::Frame frame;
@@ -992,6 +1023,7 @@ int main(int argc, char** argv) {
                      {"ordinary-options", ordinaryOptionsRemainLocal},
                      {"gameplay-routing", gameplayRoutingUnchanged},
                      {"restart-physical-routing", restartPhysicalRouting},
+                     {"animation-confirmation-consent", animationConfirmationConsent},
                      {"movement-preview", presentationInputRouting},
                      {"paused-input", pausedInputPreservesOnlyCharge},
                      {"room-transfer-half-input", roomTransferHalfInput}});

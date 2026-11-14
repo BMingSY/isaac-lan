@@ -43,6 +43,8 @@ presentation/hits
 presentation/hit_candidates
 presentation/ping
 presentation/restart
+presentation/vote_progress
+presentation/animation_skip
 presentation/update_notice
 compat/transitions
 compat/items/hourglass
@@ -108,6 +110,8 @@ compat/mods/goodtrip/client
 runtime/session
 runtime/party
 runtime/restart
+runtime/lifecycle_messages
+runtime/animation_skip
 sync/capture
 sync/combat_events
 sync/combat_state

@@ -287,17 +287,31 @@ end
 function _IsaacLanCanEnterRoom(...)
     return challenge.canEnter(...)
 end
+local lifecycleMessages = _IsaacLanModules["runtime/lifecycle_messages"](
+    native.net_lifecycle_send,
+    native.net_lifecycle_receive
+)
 local restart = _IsaacLanModules["runtime/restart"]({
     running = Phase.running,
     now = function()
         return native.api_info().nowMs
     end,
-    send = native.net_lifecycle_send,
-    receive = native.net_lifecycle_receive,
+    send = lifecycleMessages.restart.send,
+    receive = lifecycleMessages.restart.receive,
     request = native.net_restart_request,
     restart = function()
         return native.net_restart(Seeds.Seed2String(Random()):gsub("%s", ""))
     end,
+})
+local animationSkip = _IsaacLanModules["runtime/animation_skip"]({
+    running = Phase.running,
+    kinds = native.animation_skip_kinds(),
+    view = native.animation_skip_view,
+    request = native.animation_skip_request,
+    skip = native.animation_skip,
+    send = lifecycleMessages.animation.send,
+    receive = lifecycleMessages.animation.receive,
+    log = Isaac.DebugString,
 })
 local status, tick = {}, 0
 local lifecycle
@@ -651,7 +665,9 @@ function _IsaacLanFrame()
         chatUI.reset()
     end
     playerOpacity.step()
+    lifecycleMessages.poll()
     restart.poll(status)
+    animationSkip.poll(status)
     integration.poll()
     chat.poll()
     feedback.poll()
