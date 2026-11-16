@@ -5,6 +5,8 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t luaStageTransitionBinding = 0x453660;
+inline constexpr std::uint32_t luaPlayerTransitionBinding = 0x4536e0;
 inline constexpr std::uint32_t playerManagerHasPlayerType = 0x1ef580;
 inline constexpr std::uint32_t playerSwapForgottenForm = 0x38df20;
 inline constexpr std::uint32_t levelLargeFloorCount = 0x30e4c1;

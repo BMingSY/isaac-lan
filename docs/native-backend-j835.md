@@ -34,6 +34,8 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 ## 房间描述符与地图缓存
 
+[楼层转场 Lua 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/stage_transition_binding.h)修正原生注册的参数数量：`Game::StartStageTransition`（RVA `0x2d0aa0`）实际使用 thiscall 接收 bool、int、Player 指针并清栈十二字节，原绑定 `0x453660` 只压入两个参数。适配复用 `0x4536e0` 的三参数原生包装和闭包自身的方法指针；省略第四个 Lua 值时补 nil，显式玩家及额外参数保持不变。Hook 不持有 Lua 状态或角色，安装失败清理自身资源，状态重建后仍读取新闭包。
+
 [房间数据绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_data.cpp)使用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_data.cpp)。编码、校验、稳定配置存储和缓存借用见[房间数据契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#房间描述符与地图缓存)。原生描述符查询 RVA `0x30e0f0` 使用 thiscall 接收索引、维度，清栈 8 字节；特殊房间只支持 `-18..-1`，更小索引在调用前拒绝，不能按 J460 范围写原生共享占位对象。
 
 普通描述符数组为 `Game+0x14`、步长 `0xb8`；格子映射为 `+0x1796c`，房间数量为 `+0x1815c`。当前房间／索引／维度为 `+0x18190/+0x18194/+0x1819c`。描述符与配置标量偏移同上方契约，但保存实体记录步长是 `0x68`；小地图只读取六个具名字段，其余位置保持零值，不复制原生对象。别名或嵌套缓存逆序恢复借用，接收更新与换层清理不会提前释放正在绘制的记录。

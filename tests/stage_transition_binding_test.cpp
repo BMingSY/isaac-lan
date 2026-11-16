@@ -1,6 +1,12 @@
 // Exercise the x86 calling boundary in private memory; no game is started.
 #include "test_support.h"
+#ifdef ISAAC_LAN_TEST_J835
+#include "engine/versions/j835/stage_transition_binding.h"
+namespace native = isaac::engine::j835;
+#else
 #include "engine/versions/j460/stage_transition_binding.h"
+namespace native = isaac::engine::j460;
+#endif
 #include <array>
 #include <cstring>
 
@@ -66,7 +72,6 @@ void entry(unsigned char* target, Binding function) {
 } // namespace
 
 int main() {
-    namespace native = isaac::engine::j460;
     auto* image = static_cast<unsigned char*>(
         VirtualAlloc(nullptr, native::entry::luaPlayerTransitionBinding + 64,
                      MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
@@ -87,7 +92,20 @@ int main() {
         isaac::lua::API api;
         api.getTop = argumentCount;
         api.setTop = setArgumentCount;
+        require(MH_CreateHook(image + native::entry::luaStageTransitionBinding,
+                              reinterpret_cast<void*>(threeArguments), nullptr) == MH_OK,
+                "Prepare stage binding conflict");
+        require(!native::installStageTransitionBinding(base, api), "Conflicting hook accepted");
+        require(MH_CreateHook(image + native::entry::luaStageTransitionBinding,
+                              reinterpret_cast<void*>(threeArguments),
+                              nullptr) == MH_ERROR_ALREADY_CREATED,
+                "Stage binding removed a foreign hook");
+        require(MH_RemoveHook(image + native::entry::luaStageTransitionBinding) == MH_OK,
+                "Release foreign stage binding");
         require(native::installStageTransitionBinding(base, api), "Cannot install stage binding");
+        require(native::installStageTransitionBinding(base, api) &&
+                    !native::installStageTransitionBinding(base + 1, api),
+                "Stage binding retry replaced an installed adapter");
         for (unsigned generation = 0; generation < 3; ++generation) {
             // New Lua closures keep their own method/arguments; the redirect owns no state.
             Arguments next{generation == 1 ? nextStage : stage, &games[generation], generation != 0,

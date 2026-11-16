@@ -295,6 +295,10 @@ foreach(backend j460 j835)
         src/engine/versions/${backend}/room_queries.cpp
         LIBRARIES
         minhook)
+    if(backend STREQUAL "j835")
+        isaac_add_backend_test(stage-transition-binding ${backend} SOURCES
+                               tests/stage_transition_binding_test.cpp LIBRARIES minhook)
+    endif()
     foreach(component moving_box floor_generation)
         string(REPLACE "_" "-" name "${component}")
         if(component STREQUAL "moving_box")
