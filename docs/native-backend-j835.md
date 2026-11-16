@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述原生组件；完整房间调度和启动装配尚未接通。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述原生组件和房间调度绑定；完整后端的构建和启动装配尚未完成。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -31,6 +31,18 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 动画状态的数据、图层帧和挂点帧指针为 `+4/+8/+0xc`；动画数据的图层／数量为 `+0x18/+0x1c`，挂点／数量为 `+0x20/+0x24`，总帧数为 `+0x30`。图层映射从 `+0x38` 开始；描述项步长 `0x10`，图层／挂点帧数分别位于项内 `+8/+0xc`。恢复按本机 ID 和帧数匹配，清空未匹配的挂点游标。两组动画和全部载荷在写入前完成校验。
 
 `AnimationState::Reset` RVA `0x3740` 使用 ECX 接收状态、栈上一个动画参数并清栈 4 字节；空动画通过此入口解除当前动画及帧数组。字符串、图层定义、纹理和帧数组均由游戏管理，扩展只恢复受限标量；贴图变化返回普通路径供 Lua 调用现有游戏加载接口。
+
+## 房间调度绑定
+
+[房间绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/rooms.cpp)向[共享调度](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rooms.cpp)提供原版入口、布局和少量 ABI 适配。Room 大小为 `0x777c`，构造／析构入口为 `0x3a80f0/0x3a89f0`；分配与释放沿用游戏 CRT。PlayerManager 位于 `Game+0x1ba40`，名单向量位于管理器 `+0x10`，不能把名单头作为管理器接收对象。备用身体通过 `0x518ab0` 注销名单，只搬移指针、不析构角色；销毁角色使用 `0x518af0`，接收角色指针和布尔参数并清栈八字节。
+
+每个房间持有 Ambush `+0xc` 起的待执行波次向量及后续标量，根对象为 `Game+0x1c31b8`；前置 XML 配置保持游戏所有权。27 个进程渲染纹理句柄按原生双指针对整体交换和释放，不能只交换资源地址。原版 Boss 血条缓存为 `Game+0x1018f0/+0x1018f4/+0x1018f8`；没有 J460 `Game+0x1ad90` 的换房 Boss 缓存，也没有其结束／恢复控制使用的状态门，缺失槽不读写原生内存。
+
+上层转场 `0x2d07d0` 与底层 `RoomTransition::Start` `0x3e9650` 均使用 thiscall、五个栈参数和二十字节清栈；后者以 RoomTransition 为接收对象。原版 Mom's Hand、Dogma 和死亡证明直接调用底层入口，仍须提交到房间调度；上层原函数转入底层时不重复拦截。迷宫等目的地解析继续由 `Level::ChangeRoom` 执行。
+
+原版 `PlayerManager::NewRoom` 内联分派跟班 Variant 203／221，分别调用 `0x21f500/0x21f790`，均为无栈参数的 thiscall；其他跟班不调用这些方法。到达后的通用状态清理由 `Familiar::ResetRoomState`（`0x20b140`）执行。Dogma 过场使用 `0x4b3800`，stdcall 接收编号 25、cleanup=false，清栈八字节。
+
+原生价格 `0x3d0950` 接收 Variant、SubType、ShopItemId，折扣 `0x3d16f0` 接收 ShopItemId、基础价格，分别清栈十二和八字节。两者均通过当前借用名单识别买家，没有 J460 的显式买家参数；适配只在所属房间的买家作用域中调用，保留原生负价格和折扣结果。
 
 ## 房间描述符与地图缓存
 

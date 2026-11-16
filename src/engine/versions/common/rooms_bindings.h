@@ -3,6 +3,7 @@
 #include "engine/versions/common/forgotten_form.h"
 #include <array>
 #include <cstdint>
+#include <optional>
 namespace isaac::engine::native_rooms {
 inline constexpr unsigned contextFieldCount = 35, renderImageCount = 27, doorCount = 8;
 struct Bindings {
@@ -23,7 +24,7 @@ struct Bindings {
         unsigned engineRoomsAward;
         unsigned engineRoomsChange;
         unsigned engineRoomsCooldown;
-        unsigned engineRoomsDead;
+        std::optional<unsigned> engineRoomsDead;
         unsigned engineRoomsDelete;
         unsigned engineRoomsDesc;
         unsigned engineRoomsDoorPosition;
@@ -35,7 +36,6 @@ struct Bindings {
         unsigned engineRoomsLiving;
         unsigned engineRoomsNPCNewRoom;
         unsigned engineRoomsPostUpdate;
-        unsigned familiarNewRoom;
         unsigned playerNewRoom;
         unsigned roomConstruct;
         unsigned roomDestruct;
@@ -43,7 +43,8 @@ struct Bindings {
         unsigned engineRoomsSave;
         unsigned engineRoomsStageTransition;
         unsigned engineRoomsTransition;
-        unsigned menuTransition;
+        std::optional<unsigned> roomTransitionStart;
+        unsigned colorConstruct;
         unsigned entityPlayerAddCoins;
         unsigned entityPlayerCopyResourcesTo;
         unsigned entityPlayerSyncResources;
@@ -83,10 +84,8 @@ struct Bindings {
         unsigned replicaRevivePlayerGhost;
         unsigned roomAssignLightTexture;
         unsigned roomConfigRandomRoom;
-        unsigned roomDiscountedPrice;
         unsigned roomGetDevilRoomChance;
         unsigned roomIsClear;
-        unsigned roomPickupPrice;
         unsigned roomTransitionUpdate;
         unsigned roomTrySpawnDevilRoomDoor;
         unsigned roomUpdateMusic;
@@ -140,7 +139,7 @@ struct Bindings {
             unsigned certificatePreviousDimension;
             unsigned certificatePreviousRoom;
             unsigned flashTimer;
-            unsigned controlRestoreGuard;
+            std::optional<unsigned> controlRestoreGuard;
             unsigned currentColor;
             unsigned curses;
             unsigned deathCertificateDimension;
@@ -248,11 +247,13 @@ struct Bindings {
             unsigned size;
         } sprite;
     } layout;
-    std::array<std::size_t, contextFieldCount> contextOffsets;
+    std::array<std::optional<std::size_t>, contextFieldCount> contextOffsets;
     std::array<unsigned, renderImageCount> renderImages;
     native_forgotten_form::Layout forgotten;
     bool (*installStageBinding)(std::uintptr_t, const lua::API&);
     void (*beginDogmaCinematic)(std::uintptr_t);
+    void (*familiarNewRoom)(std::uintptr_t, std::uintptr_t);
+    int (*pickupPrice)(std::uintptr_t, std::uintptr_t, int, int, int);
 };
 extern const Bindings bindings;
 } // namespace isaac::engine::native_rooms

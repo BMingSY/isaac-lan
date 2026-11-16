@@ -25,6 +25,9 @@ namespace inputDevice {
 inline constexpr unsigned id = 8;
 } // namespace inputDevice
 namespace manager {
+inline constexpr unsigned cinematicId = 0x1ea834;
+inline constexpr unsigned menuTransition = 0x1ea820;
+
 inline constexpr unsigned menuInputBlock = 0x4a268;
 inline constexpr unsigned nightmare = 0x211bc;
 inline constexpr unsigned music = 0x29a78;
@@ -70,6 +73,29 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
 } // namespace challengeParams
 namespace game {
+inline constexpr unsigned ambushPending = 0x1c31c4;
+inline constexpr unsigned certificateLeaveDoor = 0x18788;
+inline constexpr unsigned certificatePreviousDimension = 0x18798;
+inline constexpr unsigned certificatePreviousRoom = 0x18794;
+inline constexpr unsigned flashTimer = 0x1c3158;
+inline constexpr unsigned currentColor = 0x283b84;
+inline constexpr unsigned deathCertificateDimension = 0x18790;
+inline constexpr unsigned deathCertificateRoom = 0x1878c;
+inline constexpr unsigned deathCertificateReturnTimer = 0x285234;
+inline constexpr unsigned graphicsRefresh = 0x1c3154;
+inline constexpr unsigned itemPool = 0x1a5cc;
+inline constexpr unsigned lastBossRoomListIndex = 0x181a4;
+inline constexpr unsigned leaveDoor = 0x181a8;
+inline constexpr unsigned lerpColor = 0x283bb4;
+inline constexpr unsigned levelFlags = 0x1822c;
+inline constexpr unsigned previousDimension = 0x181a0;
+inline constexpr unsigned previousRoomIndex = 0x18198;
+inline constexpr unsigned sceneSnapshot = 0x1c3160;
+inline constexpr unsigned shouldLerpColor = 0x283b80;
+inline constexpr unsigned specialRoomOrigin = 0x181b8;
+inline constexpr unsigned startingRoom = 0x18160;
+inline constexpr unsigned targetColor = 0x283b9c;
+
 inline constexpr unsigned difficulty = 0x243624;
 inline constexpr unsigned playerHuds = 0x3da4c;
 inline constexpr unsigned descriptors = 0x14, mapOffsets = 0x1796c, roomCount = 0x1815c;
@@ -133,6 +159,13 @@ inline constexpr unsigned state = 0, index = 0x14, direction = 0x10;
 inline constexpr unsigned animation = 0x1c, dimension = 0x18;
 } // namespace roomTransition
 namespace room {
+inline constexpr unsigned camera = 0x11f8;
+inline constexpr unsigned gridHeight = 0x10;
+inline constexpr unsigned gridWidth = 0xc;
+inline constexpr unsigned nextEntityIndex = 0x1214;
+inline constexpr unsigned size = 0x777c;
+inline constexpr unsigned type = 0x8;
+
 inline constexpr unsigned waterX = 0x7344, waterY = 0x7348;
 inline constexpr unsigned gridCells = 0x24, doors = 0x724, doorIndices = 0x744;
 inline constexpr unsigned width = 0xc, height = 0x10, railGrid = 0x7350, railOwner = 0x734c;
@@ -142,6 +175,8 @@ inline constexpr unsigned enteredFrame = 0x11f0;
 inline constexpr unsigned entities = 0x1218;
 } // namespace room
 namespace roomDescriptor {
+inline constexpr unsigned visitedCount = 0x40;
+
 inline constexpr unsigned safeGridIndex = 4, overrideData = 0x14, allowedDoors = 0x18, doors = 0x1c,
                           doorCount = 8;
 inline constexpr int minimumRoom = -18;
@@ -150,6 +185,13 @@ inline constexpr unsigned seeds = 0x58, savedEntities = 0x74;
 inline constexpr unsigned data = 0x10, flags = 0x44;
 } // namespace roomDescriptor
 namespace roomConfig {
+inline constexpr int anyVariant = -0x1;
+inline constexpr unsigned doors = 0x38;
+inline constexpr unsigned maxDifficulty = 0xa;
+inline constexpr unsigned maxType = 0x1d;
+inline constexpr unsigned normalMode = 0x0;
+inline constexpr unsigned specialStage = 0x0;
+
 inline constexpr unsigned shape = 0x48;
 inline constexpr unsigned size = 0x5c, width = 0x46, height = 0x47, stringCapacity = 0x28;
 inline constexpr std::array<unsigned, 10> scalarFields{0,    4,    8,    0xc,  0x10,
@@ -161,9 +203,22 @@ inline constexpr unsigned size = 0x68;
 inline constexpr std::array<unsigned, 6> mapFields{0, 4, 8, 0x14, 0x28, 0x2c};
 } // namespace savedEntity
 namespace entityList {
+inline constexpr unsigned arrayStride = 0x10;
+inline constexpr unsigned effectArray = 0x70;
+inline constexpr unsigned enemyArray = 0x60;
+inline constexpr unsigned firstArray = 0x20;
+inline constexpr unsigned lastArray = 0x90;
+inline constexpr unsigned persistentArray = 0x30;
+
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned child = 0x318;
+inline constexpr unsigned spawner = 0x320;
+inline constexpr unsigned flagsHigh = 0x164;
+inline constexpr unsigned registered = 0x168;
+inline constexpr unsigned updateMethod = 0xc;
+
 inline constexpr unsigned sortingLayer = 0x2b4, renderZOffset = 0x2ac;
 inline constexpr unsigned configuration = 0x288, sizeMultiplier = 0x2cc,
                           gridCollisionPoints = 0x170;
@@ -220,6 +275,9 @@ inline constexpr unsigned rotation = 0x3c4, scale = 0x3c8;
 inline constexpr unsigned minRadius = 0x3a4, maxRadius = 0x3a8;
 } // namespace effect
 namespace familiar {
+inline constexpr unsigned player = 0x360;
+inline constexpr unsigned chargeBar = 0xd04;
+
 inline constexpr unsigned state = 0xcd4, fireCooldown = 0xc9c, headFrameDelay = 0xca0;
 inline constexpr unsigned moveDirection = 0xca4, shootDirection = 0xca8, lastDirection = 0xcac;
 inline constexpr unsigned orbitAngleOffset = 0xcb0, orbitLayer = 0xcc0, orbitSpeed = 0xcbc;
@@ -266,6 +324,14 @@ inline constexpr std::array<unsigned, 6> values{0x3b8, 0x3bc, 0x3c0, 0x3c4, 0x3c
 inline constexpr std::array<unsigned, 2> paths{0x3d0, 0x3dc};
 } // namespace laser
 namespace player {
+inline constexpr unsigned babySkin = 0x1a0c;
+inline constexpr unsigned lastBabySkin = 0x47;
+inline constexpr unsigned darkEsau = 0x1eb8;
+inline constexpr unsigned extraAnimationActive = 0x12e8;
+inline constexpr unsigned lazarusBackup = 0x1d84;
+inline constexpr unsigned redemptionEffect = 0x1e04;
+inline constexpr unsigned roomTransitionTarget = 0x1a3c;
+
 inline constexpr unsigned subplayer = 0x1cb8;
 inline constexpr unsigned history = 0x1d0c, inventoryOrder = 0x1d20, inventorySlots = 16;
 inline constexpr unsigned movingBoxBegin = 0x1c9c, movingBoxEnd = 0x1ca0;
@@ -329,6 +395,7 @@ inline constexpr unsigned stride = 0x130, path = 0;
 inline constexpr unsigned layerStride = 0x10, index = 0, layerId = 4, priority = 8, body = 0xc;
 } // namespace costume
 namespace grid {
+inline constexpr unsigned state = 0xc;
 inline constexpr unsigned sprite = 0x40, extraSprite = 0x164, type = 4, variant = 8, index = 0x24;
 } // namespace grid
 namespace heldBombs {
@@ -376,4 +443,11 @@ inline constexpr unsigned page = 0x38, inputBlocked = 0x20, starting = 1;
 namespace mainMenu {
 inline constexpr unsigned selection = 4;
 }
+namespace camera {
+inline constexpr unsigned focusOverride = 0x8c;
+} // namespace camera
+namespace itemPool {
+inline constexpr unsigned pillEffects = 0x79c;
+inline constexpr unsigned pillIdentified = 0x7d8;
+} // namespace itemPool
 } // namespace isaac::engine::j835::layout

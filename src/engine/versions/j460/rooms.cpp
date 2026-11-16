@@ -9,6 +9,20 @@ void beginDogmaCinematic(std::uintptr_t image) {
     using Movie = void(__stdcall*)(unsigned, bool, unsigned);
     reinterpret_cast<Movie>(image + j460::entry::managerShowCutscene)(25, false, 1);
 }
+void familiarNewRoom(std::uintptr_t image, std::uintptr_t familiar) {
+    using Enter = void(__attribute__((thiscall))*)(void*);
+    reinterpret_cast<Enter>(image +
+                            j460::entry::engineRoomsRoomCall)(reinterpret_cast<void*>(familiar));
+}
+int pickupPrice(std::uintptr_t image, std::uintptr_t room, int variant, int subtype, int shopItem) {
+    using Price = int(__attribute__((thiscall))*)(void*, int, int, int, void*);
+    using Discount = int(__attribute__((thiscall))*)(void*, int, int, void*);
+    auto* target = reinterpret_cast<void*>(room);
+    const auto base = reinterpret_cast<Price>(image + j460::entry::roomPickupPrice)(
+        target, variant, subtype, shopItem, nullptr);
+    return reinterpret_cast<Discount>(image + j460::entry::roomDiscountedPrice)(target, shopItem,
+                                                                                base, nullptr);
+}
 } // namespace
 const Bindings bindings{
     .globalGame = j460::globals::game,
@@ -41,7 +55,6 @@ const Bindings bindings{
         .engineRoomsLiving = j460::entry::engineRoomsLiving,
         .engineRoomsNPCNewRoom = j460::entry::engineRoomsNPCNewRoom,
         .engineRoomsPostUpdate = j460::entry::engineRoomsPostUpdate,
-        .familiarNewRoom = j460::entry::engineRoomsRoomCall,
         .playerNewRoom = j460::entry::engineRoomsRoomCall_3a8350,
         .roomConstruct = j460::entry::engineRoomsRoomCall_3e9400,
         .roomDestruct = j460::entry::engineRoomsRoomCall_3e9ba0,
@@ -49,7 +62,8 @@ const Bindings bindings{
         .engineRoomsSave = j460::entry::engineRoomsSave,
         .engineRoomsStageTransition = j460::entry::engineRoomsStageTransition,
         .engineRoomsTransition = j460::entry::engineRoomsTransition,
-        .menuTransition = j460::entry::engineRoomsTransition_60f550,
+        .roomTransitionStart = std::nullopt,
+        .colorConstruct = j460::entry::engineRoomsTransition_60f550,
         .entityPlayerAddCoins = j460::entry::entityPlayerAddCoins,
         .entityPlayerCopyResourcesTo = j460::entry::entityPlayerCopyResourcesTo,
         .entityPlayerSyncResources = j460::entry::entityPlayerSyncResources,
@@ -89,10 +103,8 @@ const Bindings bindings{
         .replicaRevivePlayerGhost = j460::entry::replicaRevivePlayerGhost,
         .roomAssignLightTexture = j460::entry::roomAssignLightTexture,
         .roomConfigRandomRoom = j460::entry::roomConfigRandomRoom,
-        .roomDiscountedPrice = j460::entry::roomDiscountedPrice,
         .roomGetDevilRoomChance = j460::entry::roomGetDevilRoomChance,
         .roomIsClear = j460::entry::roomIsClear,
-        .roomPickupPrice = j460::entry::roomPickupPrice,
         .roomTransitionUpdate = j460::entry::roomTransitionUpdate,
         .roomTrySpawnDevilRoomDoor = j460::entry::roomTrySpawnDevilRoomDoor,
         .roomUpdateMusic = j460::entry::roomUpdateMusic,
@@ -274,5 +286,7 @@ const Bindings bindings{
     .forgotten = j460::forgotten_form::fields,
     .installStageBinding = j460::installStageTransitionBinding,
     .beginDogmaCinematic = beginDogmaCinematic,
+    .familiarNewRoom = familiarNewRoom,
+    .pickupPrice = pickupPrice,
 };
 } // namespace isaac::engine::native_rooms

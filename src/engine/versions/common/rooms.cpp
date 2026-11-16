@@ -121,6 +121,20 @@ struct Key {
 // Only scalar fields are virtualized. Engine containers, sprites and cameras
 // retain their native owners; no MSVC STL object is copied through MinGW.
 const auto& contextOffsets = bindings.contextOffsets;
+std::uint32_t readContext(unsigned field) {
+    const auto offset = contextOffsets[field];
+    return offset ? at<std::uint32_t>(game(), *offset) : 0;
+}
+void writeContext(unsigned field, std::uint32_t value) {
+    if (const auto offset = contextOffsets[field])
+        at<std::uint32_t>(game(), *offset) = value;
+}
+int controlRestoreState() {
+    // J835 has no J460 game-state gate: its native arrival always releases
+    // controls and Game::End does not test that newer state machine.
+    const auto offset = layout.game.controlRestoreGuard;
+    return offset ? at<int>(game(), *offset) : 0;
+}
 struct AmbushState {
     Vector pendingWaves;
     std::array<std::uint32_t, 13> scalars{};
@@ -156,7 +170,7 @@ struct Room {
     }
     void capture() {
         for (unsigned i = 0; i < context.size(); ++i)
-            context[i] = at<std::uint32_t>(game(), contextOffsets[i]);
+            context[i] = readContext(i);
         graphicsRefresh = at<bool>(game(), layout.game.graphicsRefresh);
         sceneSnapshot = at<unsigned char>(game(), layout.game.sceneSnapshot);
     }
@@ -164,7 +178,7 @@ struct Room {
         selectSharedState(this);
         at<Address>(game(), layout.game.room) = pointer;
         for (unsigned i = 0; i < context.size(); ++i)
-            at<std::uint32_t>(game(), contextOffsets[i]) = context[i];
+            writeContext(i, context[i]);
         at<bool>(game(), layout.game.graphicsRefresh) = graphicsRefresh;
         at<unsigned char>(game(), layout.game.sceneSnapshot) = sceneSnapshot;
     }
@@ -344,7 +358,7 @@ struct Scope {
         for (auto player : players)
             originalControllers[player] = at<int>(player, layout.player.controller);
         for (unsigned i = 0; i < previous.size(); ++i)
-            previous[i] = at<std::uint32_t>(game(), contextOffsets[i]);
+            previous[i] = readContext(i);
         previousRefresh = at<bool>(game(), layout.game.graphicsRefresh);
         previousSnapshot = at<unsigned char>(game(), layout.game.sceneSnapshot);
         // A display callback can scope the same room again. Its temporary
@@ -405,7 +419,7 @@ struct Scope {
         }
         at<Address>(game(), layout.game.room) = previousRoom;
         for (unsigned i = 0; i < previous.size(); ++i)
-            at<std::uint32_t>(game(), contextOffsets[i]) = previous[i];
+            writeContext(i, previous[i]);
         at<bool>(game(), layout.game.graphicsRefresh) = previousRefresh;
         at<unsigned char>(game(), layout.game.sceneSnapshot) = previousSnapshot;
         binding->restoreParent();
@@ -821,7 +835,7 @@ void __attribute__((fastcall)) endGame(void* target, void*, int ending) {
     // lethal damage, so they must receive this terminal event too.
     if (runtime::replica())
         return;
-    const auto state = at<int>(game(), layout.game.controlRestoreGuard);
+    const auto state = controlRestoreState();
     if (state < 2 || state == 6) {
         runtime::prepareEnding();
         originalEnd(target, ending);
@@ -1243,10 +1257,10 @@ bool queue(Address player, int index, int dimension, int door, bool teleport = f
     }
     return true;
 }
-void __attribute__((fastcall)) transition(void* g, void*, int index, int direction, int animation,
-                                          void* player, int dimension) {
+void transitionRequest(void* g, int index, int direction, int animation, void* player,
+                       int dimension, Address caller, const std::function<void()>& original) {
     if (!enabled || transferring) {
-        originalTransition(g, index, direction, animation, player, dimension);
+        original();
         return;
     }
     const auto manager = at<Address>(image, bindings.globalManager);
@@ -1259,7 +1273,6 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
         return;
     }
     const auto who = currentActor(player);
-    const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
     if (!runtime::replica() && !player && scopes.current() &&
         caller == bindings.entry.momsHandTransitionCall + 5 &&
         compat::enemies::capturedRoomReturn(index, at<int>(game(), layout.game.startingRoom),
@@ -1351,7 +1364,7 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
             // stage hook only queues departure, so the current Scope stays
             // valid. Do not let an empty buffer enter ordinary rewind code.
             const bool hadStage = pendingStage.has_value();
-            originalTransition(g, index, direction, animation, player, dimension);
+            original();
             if (!hadStage && pendingStage &&
                 compat::routes::homeTransition(pendingStage->same, pendingStage->animation))
                 pendingStage->player = who;
@@ -1404,6 +1417,38 @@ void __attribute__((fastcall)) transition(void* g, void*, int index, int directi
     // waiting for a TeleportUp animation which the effect will overwrite.
     if (!queue(who, index, dimension, teleport ? -1 : enter, teleport, animation == 3, animation))
         logger("room_transition=REJECTED actor_unresolved");
+}
+bool forwardingUpperTransition = false;
+Transition originalRoomTransitionStart = nullptr;
+void __attribute__((fastcall)) transition(void* g, void*, int index, int direction, int animation,
+                                          void* player, int dimension) {
+    const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
+    transitionRequest(g, index, direction, animation, player, dimension, caller, [&] {
+        struct Restore {
+            bool previous = forwardingUpperTransition;
+            ~Restore() {
+                forwardingUpperTransition = previous;
+            }
+        } restore;
+        forwardingUpperTransition = true;
+        originalTransition(g, index, direction, animation, player, dimension);
+    });
+}
+void __attribute__((fastcall)) startRoomTransition(void* target, void*, int index, int direction,
+                                                   int animation, void* player, int dimension) {
+    const auto forward = [&] {
+        originalRoomTransitionStart(target, index, direction, animation, player, dimension);
+    };
+    if (forwardingUpperTransition) {
+        forward();
+        return;
+    }
+    // J835's Mom's Hand, Dogma and Death Certificate call this lower method
+    // directly. Its receiver is RoomTransition, while policy borrows Game.
+    // Level::ChangeRoom still owns curse routing for these native requests.
+    const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
+    transitionRequest(reinterpret_cast<void*>(game()), index, direction, animation, player,
+                      dimension, caller, forward);
 }
 void __attribute__((fastcall)) change(void* g, void*, int index, int dimension) {
     if (!enabled || transferring) {
@@ -1536,13 +1581,9 @@ int pickupPrice(lua_State* L) {
         return 1;
     }
     Scope scope(*room, {player}, false);
-    using Price = int(__attribute__((thiscall))*)(void*, int, int, int, int);
-    using Discount = int(__attribute__((thiscall))*)(void*, int, int, int);
-    const auto base = engine<Price>(bindings.entry.roomPickupPrice)(
-        reinterpret_cast<void*>(room->pointer), at<int>(pickup, layout.entity.variant),
-        at<int>(pickup, layout.entity.subtype), at<int>(pickup, layout.pickup.shopItemId), 0);
-    const auto price = engine<Discount>(bindings.entry.roomDiscountedPrice)(
-        reinterpret_cast<void*>(room->pointer), at<int>(pickup, layout.pickup.shopItemId), base, 0);
+    const auto price = bindings.pickupPrice(
+        image, room->pointer, at<int>(pickup, layout.entity.variant),
+        at<int>(pickup, layout.entity.subtype), at<int>(pickup, layout.pickup.shopItemId));
     lua.pushInteger(L, price);
     return 1;
 }
@@ -1873,7 +1914,7 @@ bool projectRemote(unsigned slot, const SavedLocation& p) {
         at<int>(room->pointer, layout.room.gridHeight) =
             at<unsigned char>(data, layout.roomConfig.height) + 2;
         for (unsigned i = 0; i < contextOffsets.size(); ++i) {
-            room->context[i] = at<std::uint32_t>(game(), contextOffsets[i]);
+            room->context[i] = readContext(i);
             if (contextOffsets[i] == layout.game.roomIndex)
                 room->context[i] = key.index;
             else if (contextOffsets[i] == layout.game.dimension)
@@ -2918,7 +2959,7 @@ struct RoomTransfer {
                 request.landing.reset();
             }
             for (unsigned i = 0; i < nativeContext.size(); ++i)
-                nativeContext[i] = at<std::uint32_t>(game(), contextOffsets[i]);
+                nativeContext[i] = readContext(i);
         }
         auto found = loaded.find(request.destination);
         created = found == loaded.end() || found->second->replicaShell;
@@ -3078,8 +3119,7 @@ struct RoomTransfer {
             }
             for (auto entity : companions)
                 if (at<unsigned>(entity, layout.entity.type) == 3)
-                    engine<RoomCall>(bindings.entry.familiarNewRoom)(
-                        reinterpret_cast<void*>(entity));
+                    bindings.familiarNewRoom(image, entity);
         }
         for (auto entity : companions) {
             // Dark Esau is transferred after native Init, so its own room
@@ -3138,7 +3178,7 @@ struct RoomTransfer {
         // another room keep their own control and animation state.
         for (auto p : actors)
             completeArrivalControls(request.animation, at<bool>(p, layout.player.controlsEnabled),
-                                    at<int>(game(), layout.game.controlRestoreGuard));
+                                    controlRestoreState());
     }
 
     void run(bool resolve) {
@@ -3469,7 +3509,7 @@ void requestExit(bool save) {
     at<bool>(manager, layout.manager.deleteSaveRequested) = save;
     at<int>(manager, layout.manager.requestedMenu) = 2;
     using Transition = void(__attribute__((thiscall))*)(void*, int);
-    engine<Transition>(bindings.entry.menuTransition)(
+    engine<Transition>(bindings.entry.colorConstruct)(
         reinterpret_cast<void*>(manager + layout.manager.menuTransition), -1);
     at<bool>(manager, layout.manager.menuRequested) = true;
 }
@@ -3634,6 +3674,9 @@ bool install(Address base, void (*log)(const std::string&)) {
                 reinterpret_cast<void**>(&originalNativeRoomChange)) &&
            hook(bindings.entry.engineRoomsTransition, reinterpret_cast<void*>(transition),
                 reinterpret_cast<void**>(&originalTransition)) &&
+           (!bindings.entry.roomTransitionStart ||
+            hook(*bindings.entry.roomTransitionStart, reinterpret_cast<void*>(startRoomTransition),
+                 reinterpret_cast<void**>(&originalRoomTransitionStart))) &&
            hook(bindings.entry.engineRoomsStageTransition, reinterpret_cast<void*>(stageTransition),
                 reinterpret_cast<void**>(&originalStage)) &&
            hook(bindings.entry.levelSetNextStage, reinterpret_cast<void*>(nextStage),
@@ -3646,8 +3689,9 @@ bool install(Address base, void (*log)(const std::string&)) {
                 reinterpret_cast<void**>(&originalIsCoop)) &&
            hook(bindings.entry.engineRoomsLiving, reinterpret_cast<void*>(living),
                 reinterpret_cast<void**>(&originalLiving)) &&
-           hook(bindings.entry.engineRoomsDead, reinterpret_cast<void*>(dead),
-                reinterpret_cast<void**>(&originalDead)) &&
+           (!bindings.entry.engineRoomsDead ||
+            hook(*bindings.entry.engineRoomsDead, reinterpret_cast<void*>(dead),
+                 reinterpret_cast<void**>(&originalDead))) &&
            hook(bindings.entry.playerManagerReviveCoop, reinterpret_cast<void*>(reviveAll),
                 reinterpret_cast<void**>(&originalReviveAll)) &&
            hook(bindings.entry.engineRoomsAward, reinterpret_cast<void*>(award),
