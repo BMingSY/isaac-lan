@@ -285,6 +285,16 @@ foreach(backend j460 j835)
         src/engine/versions/${backend}/animation_skip.cpp
         LIBRARIES
         minhook)
+    isaac_add_backend_test(
+        room-queries
+        ${backend}
+        SOURCES
+        tests/room_queries_test.cpp
+        tests/native_call.cpp
+        src/engine/versions/common/room_queries.cpp
+        src/engine/versions/${backend}/room_queries.cpp
+        LIBRARIES
+        minhook)
     foreach(component moving_box floor_generation)
         string(REPLACE "_" "-" name "${component}")
         if(component STREQUAL "moving_box")

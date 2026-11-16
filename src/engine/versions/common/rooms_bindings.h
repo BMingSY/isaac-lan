@@ -57,7 +57,7 @@ struct Bindings {
         unsigned gameTriggerRKey;
         unsigned gridEntityTrapdoorUpdate;
         unsigned itemPoolGetCardEx;
-        unsigned itemPoolTaintedLostQuery;
+        unsigned itemPoolTaintedLostReturn;
         unsigned keeperPriceQueryReturn;
         unsigned keeperRandomRoomReturn;
         unsigned keeperShopQueryReturn;
@@ -72,7 +72,6 @@ struct Bindings {
         unsigned playerManagerAddExistingPlayer;
         unsigned playerManagerCollectibleCount;
         unsigned playerManagerFindCollectible;
-        unsigned playerManagerFindPlayerType;
         unsigned playerManagerGetCenter;
         unsigned playerManagerRemoveExistingPlayer;
         unsigned playerManagerRemovePlayer;

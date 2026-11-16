@@ -13,6 +13,8 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/room_probe.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/session_backend.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/rooms.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/room_queries.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/room_queries.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/rooms.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/laser_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/laser_state.cpp"

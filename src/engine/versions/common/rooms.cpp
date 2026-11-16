@@ -1,4 +1,5 @@
 #include "engine/versions/common/room_hooks.h"
+#include "engine/versions/common/room_queries.h"
 #include "engine/versions/common/actor_state.h"
 #include "engine/versions/common/room_data.h"
 #include "engine/item_effects.h"
@@ -419,10 +420,8 @@ struct TeamScope : engine::native_rooms::TeamRoster<decltype(scopes), Vector> {
 };
 using FindCollectible = void*(__attribute__((thiscall)) *)(void*, int, void*, bool);
 using CollectibleCount = int(__attribute__((thiscall)) *)(void*, int);
-using FindPlayerType = void*(__attribute__((thiscall)) *)(void*, int);
 FindCollectible originalFindCollectible;
 CollectibleCount originalCollectibleCount;
-FindPlayerType originalFindPlayerType;
 void* __attribute__((fastcall)) findCollectible(void* manager, void*, int item, void* excluded,
                                                 bool backup) {
     if (!compat::items::sharedCollectibleEffect(item))
@@ -436,8 +435,7 @@ int __attribute__((fastcall)) collectibleCount(void* manager, void*, int item) {
     TeamScope team;
     return originalCollectibleCount(manager, item);
 }
-void* __attribute__((fastcall)) findPlayerType(void* manager, void*, int kind) {
-    const auto caller = reinterpret_cast<Address>(__builtin_return_address(0)) - image;
+void withTypeQuery(int kind, Address caller, const std::function<void()>& query) {
     // Share only the native shop and random collectible checks. Personal
     // character checks, including Devil buyers, keep their room/actor scope.
     using compat::characters::TeamEffect;
@@ -446,11 +444,13 @@ void* __attribute__((fastcall)) findPlayerType(void* manager, void*, int kind) {
                          caller == bindings.entry.keeperPriceQueryReturn);
     const bool lost =
         compat::characters::sharedCharacterEffect(kind, TeamEffect::randomCollectibles) &&
-        caller == bindings.entry.itemPoolTaintedLostQuery + 13;
-    if (!keeper && !lost)
-        return originalFindPlayerType(manager, kind);
+        caller == bindings.entry.itemPoolTaintedLostReturn;
+    if (!keeper && !lost) {
+        query();
+        return;
+    }
     TeamScope team;
-    return originalFindPlayerType(manager, kind);
+    query();
 }
 using GetCardEx = int(__stdcall*)(unsigned, unsigned, unsigned, unsigned, bool);
 GetCardEx originalGetCardEx;
@@ -463,8 +463,9 @@ int __stdcall getCardEx(unsigned seed, unsigned special, unsigned rune, unsigned
         TeamScope team;
         shared = compat::characters::sharedCharacterEffect(
                      compat::ids::player::lostB, compat::characters::TeamEffect::randomCards) &&
-                 originalFindPlayerType(reinterpret_cast<void*>(game() + layout.game.playerManager),
-                                        compat::ids::player::lostB) != nullptr;
+                 engine::native_room_queries::hasType(
+                     reinterpret_cast<void*>(game() + layout.game.playerManager),
+                     compat::ids::player::lostB);
     }
     if (!shared)
         return originalGetCardEx(seed, special, rune, suit, nonCards);
@@ -487,9 +488,9 @@ void* __attribute__((fastcall)) randomRoom(void* config, void*, unsigned seed, b
         bool keeper = runtime::startingPartyHasCharacter(compat::ids::player::keeperB);
         if (enabled) {
             TeamScope team;
-            keeper =
-                originalFindPlayerType(reinterpret_cast<void*>(game() + layout.game.playerManager),
-                                       compat::ids::player::keeperB) != nullptr;
+            keeper = engine::native_room_queries::hasType(
+                reinterpret_cast<void*>(game() + layout.game.playerManager),
+                compat::ids::player::keeperB);
         }
         subtype = compat::characters::sharedKeeperShopSubtype(subtype, keeper);
     }
@@ -3603,8 +3604,7 @@ bool install(Address base, void (*log)(const std::string&)) {
            hook(bindings.entry.playerManagerCollectibleCount,
                 reinterpret_cast<void*>(collectibleCount),
                 reinterpret_cast<void**>(&originalCollectibleCount)) &&
-           hook(bindings.entry.playerManagerFindPlayerType, reinterpret_cast<void*>(findPlayerType),
-                reinterpret_cast<void**>(&originalFindPlayerType)) &&
+           engine::native_room_queries::install(image, withTypeQuery) &&
            hook(bindings.entry.itemPoolGetCardEx, reinterpret_cast<void*>(getCardEx),
                 reinterpret_cast<void**>(&originalGetCardEx)) &&
            hook(bindings.entry.roomConfigRandomRoom, reinterpret_cast<void*>(randomRoom),

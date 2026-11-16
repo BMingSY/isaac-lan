@@ -42,6 +42,8 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 ## 角色附属状态
 
+[角色查询绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_queries.cpp)调用 `PlayerManager::HasPlayerType`（RVA `0x1ef580`），ECX 接收管理器，栈上接收角色类型并清栈四字节，结果仅取 AL。原生查询遍历管理器 `+0x10/+0x14` 的名单并排除非零 Variant；不能按 J460 的玩家指针返回值解释 EAX，也不额外改变原版的幽灵筛选规则。[共享查询组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_queries.cpp)让房间策略按调用来源临时借用队伍名单，嵌套调用及异常均恢复外层状态；直接查询只使用当前名单，不重复进入共享策略。安装冲突保留外部 Hook，失败后可重试。该组件尚需完整房间调度接入。
+
 [遗骸形态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/forgotten_form.h)使用[共享形态恢复组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/forgotten_form.h)。原生切换入口 `0x38df20` 以 ECX 接收角色、栈上接收强制切换和播放效果两个布尔参数，清栈八字节。恢复只接受遗骸／游魂的有效配对，类型、合作幽灵和配对指针分别读取 `Player+0x130c/+0x1f88/+0x1cb8`；目标形态相同不重复调用，配对对象仍由游戏持有。该能力尚需完整房间组件调用。
 
 [角色状态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/actor_state.cpp)复用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/actor_state.cpp)，Lua 名称、快照字节和名单限制遵循[角色附属状态契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#角色附属状态)。附属 Sprite 为 `Player+0x36c/+0xf48/+0xe34`，七个蓄力条从 `+0x6a8` 开始、步长 `0x114`；服装向量为 `+0x1170/+0x1174/+0x1178`，步长 `0x130`。借用包装沿用原生 metatable，不接管动画资源。
