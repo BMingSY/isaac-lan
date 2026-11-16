@@ -191,6 +191,8 @@ J460 的采样状态位于实体 `+0x45d`，允许 `0`、`1` 与原生未初始�
 
 ## 转场与暂停
 
+[共享房间调度](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rooms.cpp)从[版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rooms.cpp)取得入口、布局、标量上下文和画面缓冲区位置。玩家管理器对象与玩家向量分别绑定，调用原生管理方法时不得以向量头代替接收对象。房间构造、析构、分配器和画面引用计数均沿用原生入口；作用域交换完整缓冲区引用对，不复制原生容器。特殊房间的下界随版本绑定校验。Lua 换层闭包及 Dogma 过场的 ABI 由版本适配器负责，公共调度不依赖具体版本的头文件。
+
 J460 的 `Game:StartStageTransition(sameStage, animation[, player])` Lua 闭包经适配入口调用与 `MoveToRandomRoom` 相同的三参数绑定（RVA `0x4b8c30`），替换原入口 `0x4b8bb0`；两个原生入口均校验签名。省略玩家时使用公共 Lua ABI 将第四个栈参数补为 `nil`；原生绑定仍从原闭包的 userdata upvalue 读取目标方法，沿用 Game／EntityPlayer 类型检查，将 `nil` 玩家转为空指针。底层 `Game::StartStageTransition`（RVA `0x2fdc10`）为 `thiscall void(Game*, bool, int, EntityPlayer*)`，清理 12 字节栈参数。游戏原生调用、房间来源选择与联机换层屏障继续使用该三参数契约；适配只保留进程内函数入口，不缓存 Lua 状态、闭包或玩家指针，Lua 重载后仍通过同一入口。
 
 内部 C++ 能力 [`actorDepartureAnimation(player)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/visuals.cpp) 只读换层触发玩家正在播放的额外动作。调用方必须在安全更新边界持有有效玩家，且在房间拆卸前调用；入口校验非空与实体类型。J460 的有效标记位于 `Player+0x1398`，动作名来自实体主 Sprite 的当前动画数据 `+0`，使用原生 MSVC 字符串布局；长度不得超过容量或协议的 64 字节上限。无有效额外动作或动画数据时返回空字符串。返回值拥有独立副本，不保留玩家或动画数据指针，不写游戏状态；动作匹配和回放由桥接表现层负责。
