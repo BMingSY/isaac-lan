@@ -2,6 +2,7 @@
 #include "engine/versions/j835/layout.h"
 #include "engine/versions/j835/menu_state.h"
 #include "engine/versions/common/session_bindings.h"
+#include "engine/versions/common/branch_frame.h"
 
 namespace isaac::engine::native_session {
 namespace {
@@ -29,11 +30,9 @@ __attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_j835_compl
     observeCompletion(registers[event], registers[character], difficulty);
 }
 __attribute__((naked)) void isaac_lan_j835_completion() {
-    __asm__ __volatile__(
-        "pushl $0\n\tpushfl\n\tpushal\n\tmovl %esp, %eax\n\t"
-        "andl $-16, %esp\n\tsubl $528, %esp\n\tmovl %eax, 512(%esp)\n\tfxsave (%esp)\n\t"
-        "pushl %eax\n\tcall _isaac_lan_j835_completion_prepare\n\taddl $4, %esp\n\t"
-        "fxrstor (%esp)\n\tmovl 512(%esp), %esp\n\tpopal\n\tpopfl\n\tret");
+    __asm__ __volatile__(ISAAC_LAN_NATIVE_BRANCH_SAVE
+                         "pushl %eax\n\tcall _isaac_lan_j835_completion_prepare\n\taddl $4, "
+                         "%esp\n\t" ISAAC_LAN_NATIVE_BRANCH_RESTORE);
 }
 }
 const CompletionHook completionHook{backend::entry::recordCompletionBoundary,

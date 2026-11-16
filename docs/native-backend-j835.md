@@ -176,6 +176,10 @@ HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规
 
 两个边界保存标志、整数寄存器、SSE、x87 与控制字，只修改目标所需的保存槽。未启用联机挑战时保留原生指针与帧数据。Hook 成组安装，冲突撤销已创建的本组件 Hook，保留外部 Hook；重复安装被拒绝。此接口不改变挑战解锁、路线选择或通关条件。
 
+## 楼层生成
+
+[楼层生成绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/floor_generation.cpp)复用[共享分支组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/floor_generation.cpp)。房间数量与布局比较分别位于 RVA `0x30e4c1/0x30edf3`，均为比较 `Game+0x1c319c` 是否等于原生挑战 21 的七字节指令。Hook 安装在随后条件跳转处，保留原生比较；只有运行层请求大楼层时，将保存的算术标志改为相等，再通过原生跳板选择分支。通用寄存器、栈、SSE、x87 与 MXCSR 完整恢复，回调异常中止会话并保留本次原生分支。入口签名包含比较与跳转；两个 Hook 成组安装、失败回滚，相同配置可供外层装配重试。挑战编号、随机数、布局和分配过程均由原生持有。
+
 ## 玩家 HUD 绑定
 
 [HUD 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/frontend_hud.cpp)向[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend_hud.cpp)提供原生入口与布局。更新、后更新和绘制分别为 RVA `0x5027e0/0x502a20/0x504610`，均以 ECX 接收 HUD、无栈参数；在当前房间视角内执行。后更新和绘制前，从临时玩家名单选择四个主身体及其四个伴生身体，过滤子实体、已移除实体及重复双子，Soul B 不占伴生栏。
@@ -183,6 +187,8 @@ HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规
 PlayerHUD 步长 `0x6b0`，借用玩家指针为 `+0`，刷新标记为 `+0x6a0`。仅绑定变化时调用 `PlayerHUD::Reset`（RVA `0x4f9780`、thiscall、无参数），随后设置目标指针及 `0x101` 刷新标记；不复制心容器、道具缓存或 Sprite。变化后对 `HUD+0xc45c4` 的 HistoryHUD 调用 `0x507c90`，栈参数为 true、清栈 4 字节。对象、容器及资源仍由游戏管理。
 
 StatHUD／HistoryHUD 玩家查询入口为 `0x508370/0x508000`，以 ECX 接收对应 HUD，栈上一个玩家参数、清栈 4 字节。联机只接受本机控制器，历史栏查询额外使用本机玩家名单。StatHUD 从 `+0x114` 起有两个玩家缓存，步长 `0xcc`；发现旧队友缓存时调用 `0x508400` 原生 Reset，再执行查询。退出联机恢复原生选择行为，空对象不被解引用。五个 Hook 成组安装，冲突只撤销本组件已创建的 Hook。
+
+[搬家盒图标绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/moving_box.cpp)在 `PlayerHUD::RenderActiveItem` 的 RVA `0x4fcd69` 接入原生空容器分支，EDI 为玩家，非空／空继续位置分别为 `0x4fcd6f/0x4fd0ec`。原生内容向量为 `Player+0x1c9c/+0x1ca0`；客机仅按同步布尔值选择图标，快照缓存同时核对实体初始种子，重置时清空。主机继续读取原生容器。边界恢复通用寄存器、标志、SSE、x87 与 MXCSR，不写向量、纹理或裁剪数据，不转移对象所有权；安装冲突保留外部 Hook，清理失败状态后可重试。
 
 ## 玩家 HUD 坐标
 

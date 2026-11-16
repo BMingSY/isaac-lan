@@ -4,8 +4,8 @@
 #include <cstdint>
 
 namespace isaac::engine::native_hooks {
-// A component publishes all of its hooks together. Failure removes only hooks
-// created by this attempt, including hooks already enabled before a later error.
+// Own one component's installation attempt. Failure removes only hooks created
+// here, including hooks already enabled before a later error.
 template <unsigned capacity> class Group {
   public:
     Group() = default;

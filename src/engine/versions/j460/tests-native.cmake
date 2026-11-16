@@ -129,16 +129,6 @@ endif()
 add_test(NAME native.forgotten-form COMMAND isaac_lan_forgotten_form_test)
 set_tests_properties(native.forgotten-form PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
 
-add_executable(isaac_lan_floor_generation_test tests/floor_generation_test.cpp)
-target_include_directories(isaac_lan_floor_generation_test PRIVATE src)
-target_link_libraries(isaac_lan_floor_generation_test PRIVATE minhook)
-if(MINGW)
-    target_link_options(isaac_lan_floor_generation_test PRIVATE -static-libgcc -static-libstdc++)
-    target_compile_options(isaac_lan_floor_generation_test PRIVATE -Wall -Wextra -Werror -msse2)
-endif()
-add_test(NAME native.floor-generation COMMAND isaac_lan_floor_generation_test)
-set_tests_properties(native.floor-generation PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-
 add_executable(isaac_lan_stage_transition_binding_test tests/stage_transition_binding_test.cpp)
 target_include_directories(isaac_lan_stage_transition_binding_test PRIVATE src)
 target_link_libraries(isaac_lan_stage_transition_binding_test PRIVATE minhook)
@@ -151,8 +141,7 @@ add_test(NAME native.stage-transition-binding COMMAND isaac_lan_stage_transition
 set_tests_properties(native.stage-transition-binding PROPERTIES TIMEOUT 30 LABELS
                                                                 "offline;native-abi")
 
-add_executable(isaac_lan_active_items_test tests/active_items_test.cpp
-                                           src/engine/versions/j460/moving_box.cpp)
+add_executable(isaac_lan_active_items_test tests/active_items_test.cpp)
 target_include_directories(isaac_lan_active_items_test PRIVATE src)
 target_link_libraries(isaac_lan_active_items_test PRIVATE minhook)
 if(MINGW)

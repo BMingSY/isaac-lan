@@ -5,6 +5,12 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t levelLargeFloorCount = 0x30e4c1;
+inline constexpr std::uint32_t levelLargeFloorShape = 0x30edf3;
+inline constexpr std::uint32_t movingBoxHudContents = 0x4fcd5d;
+inline constexpr std::uint32_t movingBoxHudBranch = 0x4fcd69;
+inline constexpr std::uint32_t movingBoxHudFull = 0x4fcd6f;
+inline constexpr std::uint32_t movingBoxHudEmpty = 0x4fd0ec;
 inline constexpr std::uint32_t nightmareSceneRender = 0x47ce30;
 inline constexpr std::uint32_t nightmareSceneUpdate = 0x47ca00;
 inline constexpr std::uint32_t nightmareSceneShow = 0x47e110;

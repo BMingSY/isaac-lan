@@ -285,6 +285,26 @@ foreach(backend j460 j835)
         src/engine/versions/${backend}/animation_skip.cpp
         LIBRARIES
         minhook)
+    foreach(component moving_box floor_generation)
+        string(REPLACE "_" "-" name "${component}")
+        if(component STREQUAL "moving_box")
+            set(fixture tests/moving_box_backend_test.cpp)
+        else()
+            set(fixture tests/floor_generation_test.cpp)
+        endif()
+        isaac_add_backend_test(
+            ${name}
+            ${backend}
+            SOURCES
+            ${fixture}
+            tests/native_branch.cpp
+            src/engine/versions/${backend}/${component}.cpp
+            src/engine/versions/common/${component}.cpp
+            LIBRARIES
+            minhook
+            COMPILE_OPTIONS
+            -msse2)
+    endforeach()
     isaac_add_backend_test(save ${backend} SOURCES tests/save_backend_test.cpp
                            src/engine/versions/${backend}/save.cpp)
 endforeach()

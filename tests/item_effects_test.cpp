@@ -4,12 +4,14 @@
 #include "engine/versions/common/item_effects.cpp"
 #include "engine/versions/j460/death_certificate_return.cpp"
 #include "engine/versions/j460/moving_box.cpp"
+#include "engine/versions/common/moving_box.cpp"
 #include "engine/versions/j460/cursed_mist.cpp"
 #include "engine/versions/j460/pickup_preview.cpp"
 #include "engine/versions/common/pickup_preview.cpp"
 #include "engine/versions/j460/session_backend.cpp"
 #include "engine/versions/common/session_backend.cpp"
 #include "engine/versions/j460/floor_generation.cpp"
+#include "engine/versions/common/floor_generation.cpp"
 #include "runtime/progression.h"
 #include <array>
 #include <cstring>
