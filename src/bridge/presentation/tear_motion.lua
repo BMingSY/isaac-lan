@@ -17,6 +17,15 @@ local function altitude(height, falling, acceleration, frames)
 end
 return function(Vector)
     return {
+        direction = function(velocity, movement, shotSpeed)
+            if shotSpeed <= 0 then
+                return nil
+            end
+            -- Removing inheritance leaves a vector parallel to the launch aim,
+            -- including when opposing movement was clipped by native shooting.
+            local aim = velocity * (1 / shotSpeed) - movement * inheritanceScale
+            return aim:Dot(aim) > 0 and aim:Normalized() or nil
+        end,
         velocity = function(direction, movement, shotSpeed)
             local inherited = movement * inheritanceScale
             local opposing = inherited:Dot(direction)

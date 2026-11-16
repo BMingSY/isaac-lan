@@ -7,6 +7,8 @@ namespace backend = isaac::engine::j835;
 #include "engine/versions/j460/entrypoints.h"
 namespace backend = isaac::engine::j460;
 #endif
+#include "support/native_entity_types.h"
+#include "engine/versions/common/entity_size.h"
 #include <memory>
 #include <vector>
 
@@ -105,7 +107,10 @@ bool replica() {
 namespace {
 void connectLua() {
     auto& api = adapter::api;
-    api.type = [](lua_State* L, int i) { return L->at(i).type; };
+    api.type = [](lua_State* L, int i) {
+        const auto index = i > 0 ? i - 1 : static_cast<int>(L->stack.size()) + i;
+        return index >= 0 && index < static_cast<int>(L->stack.size()) ? L->at(i).type : -1;
+    };
     api.getTop = [](lua_State* L) { return static_cast<int>(L->stack.size()); };
     api.setTop = [](lua_State* L, int n) { L->stack.resize(n); };
     api.checkStack = [](lua_State*, int) { return int(stackAvailable); };
@@ -193,6 +198,10 @@ void verifyReceiver(void* self, const char* name) {
 void __cdecl setSize(void* self, float value) {
     verifyReceiver(self, "size");
     at<float>(self, sizeOffset) = value;
+}
+void __attribute__((thiscall)) setExplicitSize(void* self, float value,
+                                               isaac::engine::native_entity_size::Multiplier, int) {
+    setSize(self, value);
 }
 void __cdecl setColor(void* self, const void* value) {
     verifyReceiver(self, "color");
@@ -573,6 +582,8 @@ void checkPlansAndNpc() {
     rejects([&] { plan(2, names({"Size"})); }, "Failed Lua stack reservation was ignored");
     stackAvailable = true;
     reset(10);
+    isaac::test::NativeEntityTypes types{reinterpret_cast<Address>(image)};
+    types.npc(reinterpret_cast<Address>(entity.data()));
     auto sprite = entitySprite();
     rejects([&] { call(adapter::npcBoss, {sprite, Value::boolean(true)}); },
             "Host changed NPC class");
@@ -586,6 +597,7 @@ void checkPlansAndNpc() {
     rejects([&] { call(adapter::npcBoss, {sprite, Value::i(1)}); }, "NPC class accepted a number");
     for (unsigned type : {2, 5, 1000}) {
         reset(type);
+        types.effect(reinterpret_cast<Address>(entity.data()));
         rejects([&] { call(adapter::npcBoss, {sprite, Value::boolean(true)}); },
                 "Non-NPC accepted classification");
     }
@@ -656,6 +668,7 @@ int main() {
         adapter::image = reinterpret_cast<Address>(image);
         at<Address>(image, backend::globals::game) = reinterpret_cast<Address>(game.data());
         jump(backend::entry::entityLuaSetSize, reinterpret_cast<Address>(setSize));
+        jump(backend::entry::entitySetSize, reinterpret_cast<Address>(setExplicitSize));
         jump(backend::entry::entityLuaSetColor, reinterpret_cast<Address>(setColor));
         jump(backend::entry::tearSetHeight, reinterpret_cast<Address>(setHeight));
         jump(backend::entry::tearSetScale, reinterpret_cast<Address>(setScale));

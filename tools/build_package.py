@@ -11,27 +11,42 @@ if __package__:
     from .game_profiles import DEFAULT_BACKEND, build_profile, source_profile
 else:
     from game_profiles import DEFAULT_BACKEND, build_profile, source_profile
+import re
+import subprocess
+from extension_package import LOADER_ABI
 
 
 def game_profile(source, backend=DEFAULT_BACKEND):
     return source_profile(backend, root=source)
 
 
-def build(build_directory, output):
+def build(build_directory, output, *, strip_binaries=False):
     source = Path(__file__).resolve().parent.parent
     profile = build_profile(build_directory)
+    strip_tool = None
+    if strip_binaries:
+        cache = (build_directory / "CMakeCache.txt").read_text()
+        match = re.search(r"^CMAKE_STRIP:[^=\n]+=(.+)$", cache, re.MULTILINE)
+        if not match or match[1].endswith("-NOTFOUND"):
+            raise ValueError("The configured Windows toolchain must provide CMAKE_STRIP")
+        strip_tool = match[1]
     output.mkdir(parents=True, exist_ok=False)
     files = {}
     for name in ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe"):
-        contents = (build_directory / name).read_bytes()
-        shutil.copy2(build_directory / name, output / name)
-        files[name] = hashlib.sha256(contents).hexdigest()
+        destination = output / name
+        shutil.copy2(build_directory / name, destination)
+        if strip_tool:
+            # Keep the original build and its symbols for diagnostics. Hash the
+            # final payload so installers and Workshop use these exact bytes.
+            subprocess.run([strip_tool, "--strip-all", str(destination)], check=True)
+        files[name] = hashlib.sha256(destination.read_bytes()).hexdigest()
     version = (source / "VERSION").read_text().strip()
     payload = {
         "format": 1,
         "game_build": profile["game_build"],
         "backend": profile["backend"],
         "extension_version": version,
+        "loader_abi": LOADER_ABI,
         "files": files,
     }
     shutil.copy2(source / "package/install.py", output)
@@ -47,9 +62,9 @@ def build(build_directory, output):
     for mode in ("Install", "Uninstall"):
         (output / f"{mode}.cmd").write_bytes(
             (
-                '@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" -Mode '
+                '@echo off\r\nsetlocal\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" -Mode '
                 + mode
-                + "\r\npause\r\n"
+                + '\r\nset "installer_exit=%errorlevel%"\r\npause\r\nexit /b %installer_exit%\r\n'
             ).encode("ascii")
         )
     shutil.copytree(source / "third_party", output / "licenses")

@@ -5,7 +5,8 @@ return function(env)
         return setmetatable({}, { __mode = "k" })
     end
     local unlocks, stairs = newUnlocks(), nil
-    local fadeOut, fadeIn, timeout = 0.09, 0.12, 0.5
+    local fadeOut, fadeIn, timeout = 0.09, 0.08, 0.5
+    local waitingAlpha, movementAlpha = 0.35, 0.5
     local unlockTimeout = 0.25
     local outward = { { -1, 0 }, { 0, -1 }, { 1, 0 }, { 0, 1 } }
     local function now()
@@ -17,12 +18,7 @@ return function(env)
             if not arrival.at then
                 return arrival.alpha
             end
-            local remaining = 1 - (t - arrival.at) / fadeIn
-            if remaining <= 0 then
-                arrival = nil
-                return 0
-            end
-            return arrival.alpha * remaining
+            return arrival.alpha * math.max(0, 1 - (t - arrival.at) / fadeIn)
         end
         if not departure then
             return 0
@@ -32,10 +28,18 @@ return function(env)
             departure = nil
             return 0
         end
-        return math.min(1, age / fadeOut)
+        -- Keep the source room visible while the authority is still in flight.
+        -- Only a confirmed arrival may cover the room switch completely.
+        return waitingAlpha * math.min(1, age / fadeOut)
     end
     local function finish(blockMovement)
+        if blockMovement and arrival and arrival.blockMovement then
+            return
+        end
         local value = alpha()
+        if blockMovement and departure then
+            value = 1
+        end
         departure = nil
         arrival = value > 0
                 and {
@@ -46,7 +50,7 @@ return function(env)
             or nil
     end
     local function movementBlocked()
-        return alpha() > 0 and arrival ~= nil and arrival.blockMovement
+        return arrival ~= nil and arrival.blockMovement and not arrival.visible
     end
     local function begin()
         if not departure then
@@ -147,13 +151,14 @@ return function(env)
         end,
         alpha = alpha,
         render = function()
-            -- Loading a new room can block between its commit and first draw.
-            -- Keep input held until the reveal is actually presented locally.
+            -- Loading can block before the first draw or during the reveal.
+            -- Release input only after a sufficiently visible frame was drawn.
             if arrival and not arrival.at then
                 arrival.at = now()
             end
             local value = alpha()
             if value <= 0 then
+                arrival = nil
                 return
             end
             if not fill then
@@ -164,6 +169,9 @@ return function(env)
             fill.Scale = env.vector(env.width() / 480, env.height() / 270)
             fill.Color = env.color(0, 0, 0, value, -1, -1, -1)
             fill:Render(env.vector(0, 0))
+            if arrival and value <= movementAlpha then
+                arrival.visible = true
+            end
         end,
         reset = function()
             departure, arrival, fill = nil, nil, nil

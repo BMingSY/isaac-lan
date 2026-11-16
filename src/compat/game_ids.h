@@ -14,6 +14,7 @@ inline constexpr unsigned familiar = 3;
 inline constexpr unsigned needle = 881;
 inline constexpr unsigned bomb = 4;
 inline constexpr unsigned laser = 7;
+inline constexpr unsigned bloodPuppy = 802;
 inline constexpr unsigned hornfel = 906;
 inline constexpr unsigned hornyBoys = 920;
 inline constexpr unsigned rotgut = 911;
@@ -38,6 +39,8 @@ inline constexpr unsigned pickupGhost = 191;
 } // namespace effect
 namespace player {
 inline constexpr int isaac = 0;
+inline constexpr int forgotten = 16;
+inline constexpr int soul = 17;
 inline constexpr int soulB = 40;
 inline constexpr int cainB = 23;
 inline constexpr int blueBabyB = 25;
@@ -62,6 +65,7 @@ inline constexpr int mind = 333;
 inline constexpr int restock = 376;
 inline constexpr int chaos = 402;
 inline constexpr int moreOptions = 414;
+inline constexpr int dInfinity = 489;
 inline constexpr int damoclesPassive = 656;
 inline constexpr int options = 670;
 inline constexpr int sacredOrb = 691;
@@ -92,6 +96,10 @@ inline constexpr unsigned greedier = 3;
 namespace dimension {
 inline constexpr int minesEscape = 1;
 } // namespace dimension
+namespace gameStateFlag {
+inline constexpr unsigned heavenPath = 19;
+inline constexpr unsigned backwardsPath = 48;
+} // namespace gameStateFlag
 namespace roomTransition {
 inline constexpr int mirror = 18;
 } // namespace roomTransition

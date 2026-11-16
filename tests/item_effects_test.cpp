@@ -2,15 +2,22 @@
 #include "test_support.h"
 #include "engine/versions/j460/item_effects.cpp"
 #include "engine/versions/common/item_effects.cpp"
+#include "engine/versions/j460/death_certificate_return.cpp"
+#include "engine/versions/j460/moving_box.cpp"
+#include "engine/versions/j460/cursed_mist.cpp"
 #include "engine/versions/j460/pickup_preview.cpp"
 #include "engine/versions/common/pickup_preview.cpp"
 #include "engine/versions/j460/session_backend.cpp"
 #include "engine/versions/common/session_backend.cpp"
+#include "engine/versions/j460/floor_generation.cpp"
 #include "runtime/progression.h"
 #include <array>
 #include <cstring>
 
 namespace isaac::runtime {
+void abort(const std::string& error) {
+    throw std::runtime_error(error);
+}
 bool replica() {
     return false;
 }
@@ -27,6 +34,10 @@ bool takeCollectiblePickup(int owner, unsigned seed, int id, int charge, bool to
 } // namespace isaac::runtime
 
 namespace isaac::rooms {
+std::vector<SavedLocation> certificateLocations;
+std::vector<SavedLocation> captureLocations() {
+    return certificateLocations;
+}
 bool previewReady = true, localPreviewRoster = false;
 bool revivalScoped = false, scopeAvailable = true;
 unsigned revivalSlot = 0;
@@ -58,6 +69,27 @@ void withView(const std::function<void()>& draw, bool localPlayersOnly) {
     localPreviewRoster = false;
 }
 } // namespace isaac::rooms
+
+extern "C" {
+unsigned certificateBoundaryECX = 0, certificateBoundaryEBX = 0;
+float certificateBoundarySSE = 0;
+__attribute__((naked)) void certificateContinued() {
+    __asm__ __volatile__("movl %ecx, _certificateBoundaryECX\n\t"
+                         "movl %ebx, _certificateBoundaryEBX\n\t"
+                         "movss %xmm7, _certificateBoundarySSE\n\tmovl $17, %eax\n\tret");
+}
+__attribute__((naked)) void certificateCompleted() {
+    __asm__ __volatile__("movl %ecx, _certificateBoundaryECX\n\t"
+                         "movl %ebx, _certificateBoundaryEBX\n\t"
+                         "movss %xmm7, _certificateBoundarySSE\n\tmovl $23, %eax\n\tret");
+}
+__attribute__((naked)) int invokeCertificateBoundary() {
+    __asm__ __volatile__("pushl %ebx\n\tmovl $0x12345678, %ebx\n\t"
+                         "movl $0x87654321, %ecx\n\tmovl $0x3f400000, %eax\n\t"
+                         "movd %eax, %xmm7\n\tcall _isaac_lan_certificate_thunk\n\t"
+                         "popl %ebx\n\tret");
+}
+}
 
 namespace {
 namespace items = isaac::engine::items;
@@ -137,6 +169,15 @@ struct Fixture {
         reinterpret_cast<Grant>(image + native::entry::edensBlessingGranted - 20)(player.data(),
                                                                                   item);
     }
+    template <class F> void publish(unsigned entry, F method) {
+        auto call = image + entry;
+        call[0] = 0xe9;
+        const auto displacement = static_cast<unsigned>(reinterpret_cast<Address>(method) -
+                                                        reinterpret_cast<Address>(call + 5));
+        std::memcpy(call + 1, &displacement, 4);
+        require(FlushInstructionCache(GetCurrentProcess(), call, 5) != 0,
+                "Cannot publish private native method");
+    }
 };
 unsigned nativeQueues = 0;
 void __attribute__((thiscall)) queueFixture(void* player, void* config, int charge,
@@ -207,15 +248,8 @@ void pendingRewardPersistence() {
     *reinterpret_cast<Address*>(f.image + native::globals::manager) =
         reinterpret_cast<Address>(f.manager.data());
     expectedProgress = f.manager.data() + native::layout::manager::progress;
-    auto publish = [&](unsigned entry, auto method) {
-        auto call = f.image + entry;
-        call[0] = 0xe9;
-        const auto displacement = static_cast<unsigned>(reinterpret_cast<Address>(method) -
-                                                        reinterpret_cast<Address>(call + 5));
-        std::memcpy(call + 1, &displacement, 4);
-    };
-    publish(native::entry::progressSaveCloud, saveProgressCloudFixture);
-    publish(native::entry::progressSaveFile, saveProgressFileFixture);
+    f.publish(native::entry::progressSaveCloud, saveProgressCloudFixture);
+    f.publish(native::entry::progressSaveFile, saveProgressFileFixture);
     require(FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size) != 0,
             "Cannot publish private progress save methods");
     constexpr unsigned pendingBlessings = 114;
@@ -233,6 +267,51 @@ void pendingRewardPersistence() {
                 !session::readProgress().achievements[2],
             "Pending reward was lost or host achievements leaked");
     session::image = 0;
+}
+unsigned certificateReturns = 0;
+void __attribute__((thiscall)) certificateReturnFixture(void*, int room, int direction,
+                                                        int animation, void* player,
+                                                        int dimension) {
+    require(room == 84 && direction == -1 && animation == 20 && !player && dimension == 0 &&
+                isaac::rooms::revivalScoped && isaac::rooms::revivalSlot == 1,
+            "Delayed return lost its native ABI or annex occupant");
+    ++certificateReturns;
+    __asm__ __volatile__("pxor %%xmm7, %%xmm7" ::: "xmm7");
+}
+void certificateReturn() {
+    Fixture f;
+    std::vector<unsigned char> game(native::layout::game::deathCertificateReturnTimer +
+                                    sizeof(int));
+    native::image = reinterpret_cast<Address>(f.image);
+    *reinterpret_cast<Address*>(f.image + native::globals::game) =
+        reinterpret_cast<Address>(game.data());
+    auto field = [&](unsigned offset) -> int& {
+        return *reinterpret_cast<int*>(game.data() + offset);
+    };
+    field(native::layout::game::deathCertificateRoom) = 84;
+    f.publish(native::entry::engineRoomsTransition, certificateReturnFixture);
+    FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size);
+    native::isaac_lan_certificate_original = reinterpret_cast<void*>(certificateContinued);
+    native::isaac_lan_certificate_done = reinterpret_cast<void*>(certificateCompleted);
+    isaac::rooms::certificateLocations = {{0, 84, 160, 200}, {2, 103, 200, 280}};
+    certificateReturns = 0;
+    for (unsigned i = 0; i < 3; ++i) {
+        field(native::layout::game::deathCertificateReturnTimer) = 1;
+        require(invokeCertificateBoundary() == 23 && certificateReturns == i + 1 &&
+                    field(native::layout::game::deathCertificateReturnTimer) == 0,
+                "Split-dimension pickup did not finish its native return");
+    }
+    field(native::layout::game::dimension) = 2;
+    require(invokeCertificateBoundary() == 17 && certificateReturns == 3,
+            "Ordinary annex return did not keep the native path");
+    field(native::layout::game::dimension) = 0;
+    isaac::rooms::certificateLocations.clear();
+    require(invokeCertificateBoundary() == 23 && certificateReturns == 3,
+            "Empty annex retained a stale return");
+    require(certificateBoundaryECX == 0x87654321 && certificateBoundaryEBX == 0x12345678 &&
+                certificateBoundarySSE == 0.75f,
+            "Delayed-return adapter corrupted general/SSE registers");
+    native::image = 0;
 }
 void startingRewards() {
     Fixture f;
@@ -253,6 +332,100 @@ void startingRewards() {
     grants.clear();
     items::grantStartingRewards(f.player.data(), 2);
     require(grants.empty(), "A solo start retained a LAN reward plan");
+}
+unsigned completionCalls = 0;
+std::vector<std::array<unsigned, 3>> completionAwards;
+void __stdcall completionFixture(unsigned, unsigned, unsigned) {
+    ++completionCalls;
+}
+void completionObserver(unsigned counter, unsigned bits, unsigned achievement) {
+    require(completionCalls > completionAwards.size(), "Award observed before native completion");
+    completionAwards.push_back({counter, bits, achievement});
+}
+void repeatedCompletionAwards() {
+    namespace session = isaac::engine::session;
+    Fixture f;
+    session::image = reinterpret_cast<Address>(f.image);
+    *reinterpret_cast<Address*>(f.image + native::globals::manager) =
+        reinterpret_cast<Address>(f.manager.data());
+    auto records = reinterpret_cast<isaac::engine::native_completion::CharacterAwards*>(
+        f.image + native::globals::completionDefinitions);
+    records[0][0] = {27, 99};
+    records[0][2] = {41, 33};
+    session::originalRecordCompletion = completionFixture;
+    session::callbacks.completionAward = completionObserver;
+    completionCalls = 0;
+    completionAwards.clear();
+    for (unsigned i = 0; i < 32; ++i) {
+        session::recordCompletionHook(0, 0, 0);
+        session::recordCompletionHook(0, 0, 1);
+        session::recordCompletionHook(2, 0, 0);
+        session::recordCompletionHook(2, 0, 1);
+    }
+    require(completionCalls == 128 && completionAwards.size() == 128 &&
+                completionAwards[0] == std::array<unsigned, 3>{27, 1, 0} &&
+                completionAwards[1] == std::array<unsigned, 3>{27, 3, 99} &&
+                completionAwards[2] == std::array<unsigned, 3>{41, 1, 33} &&
+                completionAwards[3] == std::array<unsigned, 3>{41, 3, 33},
+            "Repeated completion lost its native descriptor or difficulty");
+    {
+        session::ProgressReadOnlyScope scope;
+        session::recordCompletionHook(2, 0, 1);
+    }
+    session::recordCompletionHook(15, 0, 0);
+    session::recordCompletionHook(0, 41, 0);
+    require(completionAwards.size() == 128 && completionCalls == 131,
+            "Read-only replica or invalid descriptor earned a completion award");
+    session::callbacks.completionAward = nullptr;
+    session::originalRecordCompletion = nullptr;
+    session::image = 0;
+}
+std::vector<unsigned> committedUnlocks;
+bool __attribute__((thiscall)) unlockFixture(void* receiver, unsigned id) {
+    namespace session = isaac::engine::session;
+    require(receiver == expectedProgress && !session::at<bool>(reinterpret_cast<Address>(receiver),
+                                                               native::layout::progress::readOnly),
+            "Personal commit used the wrong receiver or stayed read-only");
+    committedUnlocks.push_back(id);
+    static_cast<unsigned char*>(receiver)[native::layout::progress::achievements + id] = 1;
+    return true;
+}
+void __attribute__((thiscall)) evaluateFixture(void* receiver, unsigned id, int delta) {
+    require(receiver == expectedProgress && id == 0 && delta == 0,
+            "Cumulative unlock evaluation changed a counter");
+    const auto personal = isaac::engine::session::readProgress();
+    require(personal.counters[97] == 1 && !personal.achievements[640],
+            "Cumulative unlocks evaluated shared host progress");
+    unlockFixture(receiver, 150);
+}
+void personalProgressCommit() {
+    namespace session = isaac::engine::session;
+    Fixture f;
+    session::image = reinterpret_cast<Address>(f.image);
+    *reinterpret_cast<Address*>(f.image + native::globals::manager) =
+        reinterpret_cast<Address>(f.manager.data());
+    expectedProgress = f.manager.data() + native::layout::manager::progress;
+    f.publish(native::entry::progressTryUnlock, unlockFixture);
+    f.publish(native::entry::progressIncreaseCounter, evaluateFixture);
+    isaac::lan::Progress previous, personal;
+    previous.achievements[1] = 1;
+    personal = previous;
+    personal.achievements[149] = 1;
+    personal.counters[97] = 1;
+    committedUnlocks.clear();
+    {
+        session::ProgressReadOnlyScope scope;
+        session::commitProgress(previous, personal);
+        require(session::at<bool>(reinterpret_cast<Address>(expectedProgress),
+                                  native::layout::progress::readOnly),
+                "Personal commit did not restore the outer read-only scope");
+    }
+    const auto committed = session::readProgress();
+    require(committedUnlocks == std::vector<unsigned>({149, 150}) && committed.achievements[1] &&
+                committed.achievements[149] && committed.achievements[150] &&
+                !committed.achievements[640],
+            "Personal unlock path lost old/new flags or leaked host achievements");
+    session::image = 0;
 }
 void beamDeparture() {
     Fixture f;
@@ -451,15 +624,89 @@ void activeChargeCapabilities() {
             "Unregistered sprite reached native charge methods");
     items::lua = {};
 }
+namespace mist = native::cursed_mist;
+mist::Find mistStub;
+void* mistList;
+int mistVariant;
+std::array<Address, 3> mistEntities;
+mist::QueryResult* __attribute__((thiscall)) mistFindFixture(void* list, mist::QueryResult* result,
+                                                             int type, int variant, int subtype,
+                                                             bool cache, bool ignoreFriendly) {
+    require(list == mistList && type == 3 && variant == mistVariant && subtype == -1 && !cache &&
+                !ignoreFriendly,
+            "Mist familiar query lost its thiscall receiver or six stack arguments");
+    *result = {true, mistEntities.data(), 3, 3};
+    return result;
+}
+void __attribute__((thiscall)) mistPlayerFixture(void* player) {
+    require(player == expectedPlayer, "Mist transition lost its player receiver");
+    mist::QueryResult result{};
+    require(mistStub(mistList, &result, 3, mistVariant, -1, false, false) == &result,
+            "Mist query changed its native result return value");
+    require(result.count == 2 && result.borrowed && result.capacity == 3,
+            "Native mist query retained another player's familiar or changed ownership");
+}
+void cursedMistQueryABI() {
+    Fixture fixture;
+    std::array<std::array<unsigned char, native::layout::familiar::player + sizeof(Address)>, 3>
+        familiars{};
+    const auto owner = reinterpret_cast<Address>(fixture.player.data());
+    for (unsigned i = 0; i < familiars.size(); ++i)
+        *reinterpret_cast<Address*>(familiars[i].data() + native::layout::familiar::player) =
+            i == 1 ? owner + 1 : owner;
+    mist::image = reinterpret_cast<Address>(fixture.image);
+    mist::originalFind = mistFindFixture;
+    mist::originalDisable = mist::originalEnable = mistPlayerFixture;
+    mistList = fixture.manager.data();
+    for (const auto entry :
+         {native::entry::playerMistStoreQueryReturn, native::entry::playerMistRestoreQueryReturn}) {
+        // A private native thiscall caller, returning at the audited query site.
+        // Save EBP; copy all six stack arguments; retain ECX; call the real hook.
+        const unsigned char setup[] = {0x55, 0x8b, 0xec, 0xff, 0x75, 0x1c, 0xff,
+                                       0x75, 0x18, 0xff, 0x75, 0x14, 0xff, 0x75,
+                                       0x10, 0xff, 0x75, 0x0c, 0xff, 0x75, 0x08};
+        auto call = fixture.image + entry - 5;
+        std::memcpy(call - sizeof(setup), setup, sizeof(setup));
+        call[0] = 0xe8;
+        const auto displacement = static_cast<unsigned>(reinterpret_cast<Address>(mist::find) -
+                                                        reinterpret_cast<Address>(call + 5));
+        std::memcpy(call + 1, &displacement, 4);
+        const unsigned char finish[] = {0x5d, 0xc2, 24, 0};
+        std::memcpy(call + 5, finish, sizeof(finish));
+        require(FlushInstructionCache(GetCurrentProcess(), call - sizeof(setup),
+                                      sizeof(setup) + 5 + sizeof(finish)) != 0,
+                "Cannot publish the private mist query caller");
+        mistStub = reinterpret_cast<mist::Find>(call - sizeof(setup));
+        mistVariant = entry == native::entry::playerMistStoreQueryReturn ? -1 : 231;
+        for (unsigned repetition = 0; repetition < 32; ++repetition) {
+            for (unsigned i = 0; i < familiars.size(); ++i)
+                mistEntities[i] = reinterpret_cast<Address>(familiars[i].data());
+            if (mistVariant == -1)
+                mist::disable(fixture.player.data(), nullptr);
+            else
+                mist::enable(fixture.player.data(), nullptr);
+            require(mistEntities[0] == reinterpret_cast<Address>(familiars[0].data()) &&
+                        mistEntities[1] == reinterpret_cast<Address>(familiars[2].data()),
+                    "Mist filtering changed owned familiar order");
+        }
+    }
+    mist::originalFind = nullptr;
+    mist::originalDisable = mist::originalEnable = nullptr;
+    mist::image = 0;
+}
 } // namespace
 int main(int argc, char** argv) {
     return runTests(argc, argv,
                     {{"collectible-pickup", collectiblePickup},
+                     {"certificate-return", certificateReturn},
                      {"active-charge", activeChargeCapabilities},
                      {"starting-rewards", startingRewards},
                      {"beam-departure", beamDeparture},
                      {"blue-room-entry", blueRoomEntry},
                      {"revival-room", revivalRoom},
+                     {"cursed-mist", cursedMistQueryABI},
                      {"pending-reward-persistence", pendingRewardPersistence},
+                     {"repeated-completion-awards", repeatedCompletionAwards},
+                     {"personal-progress-commit", personalProgressCommit},
                      {"local-pickup-preview", localPickupPreview}});
 }

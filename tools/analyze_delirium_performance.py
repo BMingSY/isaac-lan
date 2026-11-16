@@ -131,7 +131,17 @@ def analyze(output, clock):
                 result["ping_ms"] = distribution([int(x["ping"]) for x in selected])
             report["peers"][role][name] = result
 
-    payloads = {name: {"states": 0, "deltas": 0, "wire": 0, "full_wire": 0} for name in ranges}
+    payloads = {
+        name: {
+            "states": 0,
+            "deltas": 0,
+            "wire": 0,
+            "full_wire": 0,
+            "compared_wire": 0,
+            "comparisons": 0,
+        }
+        for name in ranges
+    }
     replays = sorted(output.glob("replay-*/states.csv"))
     for replay in replays:
         for row in rows(replay):
@@ -143,13 +153,21 @@ def analyze(output, clock):
                 value["deltas"] += int(row["delta"])
                 value["wire"] += int(row["wire"])
                 value["full_wire"] += int(row["full_wire"])
+                if int(row["full_wire"]):
+                    value["compared_wire"] += int(row["wire"])
+                    value["comparisons"] += 1
     for name, value in payloads.items():
         if not value["states"]:
             continue
         seconds = (ranges[name][1] - ranges[name][0]) / 1000
-        value["reduction_percent"] = round(100 * (1 - value["wire"] / value["full_wire"]), 3)
+        value["sampled_reduction_percent"] = (
+            round(100 * (1 - value["compared_wire"] / value["full_wire"]), 3)
+            if value["full_wire"]
+            else None
+        )
         value["actual_mbps"] = round(value["wire"] * 8 / seconds / 1e6, 4)
-        value["full_mbps"] = round(value["full_wire"] * 8 / seconds / 1e6, 4)
+        if value["comparisons"] == value["states"]:
+            value["full_mbps"] = round(value["full_wire"] * 8 / seconds / 1e6, 4)
         value["per_peer_hz"] = round(value["states"] / len(replays) / seconds, 3)
         report["payloads"][name] = value
 

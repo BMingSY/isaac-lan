@@ -7,6 +7,7 @@ return function(fields)
     local BRAKING_SPEED_RATIO = 0.85
     local BRAKING_ALIGNMENT = math.cos(math.rad(1))
     local MIN_BRAKING_SPEED = 1
+    local MIN_RECOVERY_SPEED, RECOVERY_SPEED_SCALE, RECOVERY_SETTLED_DISTANCE = 120, 1.5, 1
     local walkingExtras = { Pickup = true, UseItem = true, LiftItem = true, HideItem = true }
     local function actionAllowsMovement(player, actor)
         if player:IsCoopGhost() then
@@ -37,8 +38,15 @@ return function(fields)
         local function coordinates(track, now)
             local age = math.max(0, now - track.at)
             local travel = travelTime(age, track.damping)
-            local decay =
-                math.exp(-math.max(0, now - (track.received or track.at)) / track.correctionTime)
+            local elapsed = math.max(0, now - (track.received or track.at))
+            local decay = math.exp(-elapsed / track.correctionTime)
+            if track.correctionSpeed and track.correctionDistance > 0 then
+                -- A late authority must not release the whole stalled distance
+                -- in one render. Bound correction speed, retaining the short
+                -- exponential tail once the display catches up.
+                decay =
+                    math.max(decay, 1 - elapsed * track.correctionSpeed / track.correctionDistance)
+            end
             return track.x + track.vx * travel + track.cx * decay,
                 track.y + track.vy * travel + track.cy * decay
         end
@@ -79,7 +87,11 @@ return function(fields)
             end
             local travel = travelTime(now - at, damping)
             local cx, cy = 0, 0
+            local recovering = false
             if prior then
+                recovering = now - prior.received > MAX_EXTRAPOLATION
+                    or now - at > MAX_EXTRAPOLATION
+                    or prior.correctionSpeed ~= nil
                 local px, py = coordinates(prior, now)
                 if braking and prior.presented and now - prior.presentedAt <= MAX_EXTRAPOLATION then
                     -- A braking/knockback update has invalidated the old
@@ -91,6 +103,7 @@ return function(fields)
                 if cx * cx + cy * cy >= TELEPORT_DISTANCE ^ 2 then
                     cx, cy = 0, 0
                     damping, braking = 0, false
+                    recovering = false
                 end
             end
             local result = prior or {}
@@ -99,6 +112,14 @@ return function(fields)
             result.vx, result.vy = vx, vy
             result.npc, result.damping = npc, damping
             result.correctionTime = braking and BRAKING_CORRECTION_TIME or CORRECTION_TIME
+            result.correctionDistance = math.sqrt(cx * cx + cy * cy)
+            result.correctionSpeed = recovering
+                    and result.correctionDistance > RECOVERY_SETTLED_DISTANCE
+                    and math.max(
+                        MIN_RECOVERY_SPEED,
+                        math.sqrt(vx * vx + vy * vy) * RECOVERY_SPEED_SCALE
+                    )
+                or nil
             result.stationary = result.vx == 0 and result.vy == 0 and cx == 0 and cy == 0
             return result
         end
@@ -117,12 +138,32 @@ return function(fields)
                 end
             end
         end
-        local function clearForPlayer(room, position, aperture, flying)
+        local POOP_CONTACT_RADIUS, GRID_CONTACT_TOLERANCE = 18, 0.1
+        local function clearForPlayer(room, position, center, radius, aperture, flying)
             local collision = room:GetGridCollisionAtPos(position)
-            return collision == GridCollisionClass.COLLISION_NONE
+            if
+                collision == GridCollisionClass.COLLISION_NONE
                 or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
                 or (flying and (collision == GridCollisionClass.COLLISION_PIT or collision == GridCollisionClass.COLLISION_OBJECT or collision == GridCollisionClass.COLLISION_SOLID))
                 or (aperture and collision == GridCollisionClass.COLLISION_WALL)
+            then
+                return true
+            end
+            if
+                collision == GridCollisionClass.COLLISION_OBJECT
+                or collision == GridCollisionClass.COLLISION_SOLID
+            then
+                -- Grid queries identify a whole tile. Poop uses a smaller round
+                -- boundary; clipping to its tile traps correction at corners.
+                -- Rocks share its collision class but retain the tile boundary.
+                local index = room:GetGridIndex(position)
+                local grid = room:GetGridEntity(index)
+                if grid and grid:GetType() == GridEntityType.GRID_POOP then
+                    return (center - room:GetGridPosition(index)):LengthSquared()
+                        >= (radius + POOP_CONTACT_RADIUS - GRID_CONTACT_TOLERANCE) ^ 2
+                end
+            end
+            return false
         end
         local footprint = {
             { 1, 0 },
@@ -138,7 +179,7 @@ return function(fields)
         local function sweep(room, from, wanted, radius, flying, controls, authority, preview)
             local function clear(position)
                 local aperture = controls and doorCorridor(room, position, preview) ~= nil
-                if not clearForPlayer(room, position, aperture, flying) then
+                if not clearForPlayer(room, position, position, radius, aperture, flying) then
                     return false
                 end
                 for _, offset in ipairs(footprint) do
@@ -146,6 +187,8 @@ return function(fields)
                         not clearForPlayer(
                             room,
                             position + Vector(offset[1] * radius, offset[2] * radius),
+                            position,
+                            radius,
                             aperture,
                             flying
                         )
@@ -349,6 +392,12 @@ return function(fields)
                             m.prediction.teleported = false
                         end))
                         m.prediction:clip(position)
+                        if view.metrics and view.metrics.enabled then
+                            view.metrics.counter(
+                                "prediction.correction_step_millipixels",
+                                math.floor((m.prediction.correctionStep or 0) * 1000)
+                            )
+                        end
                         if actorsPresentation.walk and actorByID[identifier] then
                             actorsPresentation.walk(
                                 p,
@@ -400,6 +449,9 @@ return function(fields)
                     end
                     m.display = position
                     e.Position = position
+                    if view.visuals and not m.actor then
+                        view.visuals.present(m.visual, e, now)
+                    end
                 end
             end
             if view.attachments then
@@ -414,6 +466,11 @@ return function(fields)
         end
         return {
             track = track,
+            trackVisual = function(prior, entity, value, now)
+                if view.visuals then
+                    return view.visuals.observe(prior, entity, value, now, captured)
+                end
+            end,
             sample = sample,
             present = present,
             observe = function(sourceMs, now)

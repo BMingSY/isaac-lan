@@ -5,6 +5,14 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t pickupFlipSpriteSite = 0x2b6cf0;
+inline constexpr std::uint32_t pickupFlipVisibleSite = 0x2bd0b5;
+inline constexpr std::uint32_t progressTryUnlock = 0x484c80;
+inline constexpr std::uint32_t progressIncreaseCounter = 0x484e40;
+inline constexpr std::uint32_t entityDynamicCast = 0x5ec34c;
+inline constexpr std::uint32_t entityRTTIName = 0x7eab20;
+inline constexpr std::uint32_t npcRTTIName = 0x7eab78;
+inline constexpr std::uint32_t entitySetSize = 0x2843a0;
 inline constexpr std::uint32_t engineRoomsDesc = 0x30e0f0;
 inline constexpr std::uint32_t nativeAllocate = 0x5eacf8;
 inline constexpr std::uint32_t nativeDelete = 0x5eb08e;
@@ -159,6 +167,11 @@ inline constexpr std::uint32_t bossOverlayShow = 0x1c130;
 inline constexpr std::uint32_t itemConfigGetTrinket = 0x2fe640;
 inline constexpr std::uint32_t animationStateReset = 0x3740;
 } // namespace entry
+namespace rtti {
+inline constexpr std::uint32_t name = 8;
+inline constexpr std::uint32_t entity = entry::entityRTTIName - name;
+inline constexpr std::uint32_t npc = entry::npcRTTIName - name;
+} // namespace rtti
 namespace globals {
 inline constexpr std::uint32_t menuManager = 0x7fd688;
 inline constexpr std::uint32_t renderer = 0x7c7a30;

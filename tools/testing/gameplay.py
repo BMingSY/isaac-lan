@@ -8,7 +8,7 @@ from testing.lua import support
 
 SOURCE = Path(__file__).resolve().parents[2]
 CASES = [
-    ("motion", "state_motion.lua", 1000),
+    ("motion", "state_motion.lua", 1500),
     # Native white-fire restoration needs an uncleared combat room. Run it
     # before later fixtures consume the fixed first floor's available rooms.
     ("white-fire", "state_white_fire.lua", 420),

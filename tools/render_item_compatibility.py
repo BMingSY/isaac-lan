@@ -3,7 +3,6 @@
 
 import argparse
 import json
-from pathlib import Path
 
 from item_audit import ROOT
 

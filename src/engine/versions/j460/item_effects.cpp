@@ -1,9 +1,17 @@
+#include <windows.h>
 #include "engine/versions/common/item_bindings.h"
+#include "engine/versions/j460/active_items.h"
+#include "engine/versions/j460/inventory_order.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
+#include "engine/versions/j460/cursed_mist.h"
+#include "engine/versions/j460/death_certificate_return.h"
 
 namespace isaac::engine::native_items {
 namespace {
+bool installCompatibility(std::uintptr_t image) {
+    return j460::cursed_mist::install(image) && j460::installDeathCertificateReturn(image);
+}
 int chargeType(std::uintptr_t image, void* player, int slot) {
     using Query = int(__attribute__((thiscall))*)(void*, int);
     return reinterpret_cast<Query>(image + j460::entry::playerActiveChargeType)(player, slot);
@@ -37,5 +45,8 @@ const Bindings bindings{
             .pickup = {j460::layout::pickup::charge, j460::layout::pickup::varData,
                        j460::layout::pickup::pool},
         },
-    .chargeType = chargeType};
+    .chargeType = chargeType,
+    .activeItems = j460::active_items::fields,
+    .inventoryOrder = j460::inventory_order::fields,
+    .installCompatibility = installCompatibility};
 } // namespace isaac::engine::native_items

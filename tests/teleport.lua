@@ -105,17 +105,23 @@ for _, peer in ipairs({ host, guest }) do
         peer.queuedMove = nil
     end
     peer.teleport = factory({
+        roomDefinitions = dofile(root .. "/src/bridge/core/room_types.lua"),
         native = native,
         enums = {
             room = enums.RoomType,
             shape = enums.RoomShape,
             grid = enums.GridRooms,
-            collision = enums.GridCollisionClass,
         },
         game = peer.env.Game,
         player = peer.env.Isaac.GetPlayer,
         hash = peer.env.GetPtrHash,
-        vector = vector,
+        placeNear = dofile(root .. "/src/bridge/runtime/room_placement.lua")({
+            native = native,
+            game = peer.env.Game,
+            player = peer.env.Isaac.GetPlayer,
+            vector = vector,
+            collision = enums.GridCollisionClass,
+        }).near,
         output = function(...)
             return peer.chat.output(...)
         end,

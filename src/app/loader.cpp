@@ -4,22 +4,19 @@
 #include <windows.h>
 #include <cstdint>
 #include <cwchar>
+#include <cstring>
+#include "app/extension_loader.h"
+#include "engine/build.h"
 
 namespace {
 [[noreturn]] void unavailableExport(const char* name, unsigned ordinal) {
-    wchar_t message[256]{};
-    if (*name)
-        swprintf(message, 256,
-                 L"The system winmm.dll does not provide %hs.\nPlease check the "
-                 L"Windows or Proton version.",
-                 name);
-    else
-        swprintf(message, 256,
-                 L"The system winmm.dll does not provide ordinal %u.\nPlease check the "
-                 L"Windows or Proton version.",
-                 ordinal);
-    MessageBoxW(nullptr, message, L"Isaac LAN", MB_OK | MB_ICONERROR);
-    TerminateProcess(GetCurrentProcess(), ERROR_PROC_NOT_FOUND);
+    const auto detail = *name ? std::wstring(name, name + std::strlen(name))
+                              : L"ordinal " + std::to_wstring(ordinal);
+    const auto message =
+        isaac::startup::message({isaac::startup::Code::systemExport, L"winmm.dll", {}, detail});
+    MessageBoxW(nullptr, message.c_str(), L"Isaac LAN", MB_OK | MB_ICONERROR);
+    TerminateProcess(GetCurrentProcess(),
+                     isaac::startup::value(isaac::startup::Code::systemExport));
     __builtin_unreachable();
 }
 } // namespace
@@ -43,28 +40,28 @@ wchar_t extension[MAX_PATH]{};
 void restoreEntry() {
     DWORD old;
     if (!VirtualProtect(entry, 2, PAGE_EXECUTE_READWRITE, &old))
-        TerminateProcess(GetCurrentProcess(), 90);
+        TerminateProcess(GetCurrentProcess(),
+                         isaac::startup::value(isaac::startup::Code::entryRestore));
     __atomic_exchange_n(static_cast<WORD*>(entry), entryBytes, __ATOMIC_SEQ_CST);
     FlushInstructionCache(GetCurrentProcess(), entry, 2);
     DWORD ignored;
     VirtualProtect(entry, 2, old, &ignored);
 }
 DWORD WINAPI initialize(void*) {
-    const auto module = LoadLibraryW(extension);
-    using Bootstrap = DWORD(WINAPI*)(void*);
-    Bootstrap bootstrap = nullptr;
-    if (module) {
-        auto proc = GetProcAddress(module, "IsaacLanBootstrap");
-        memcpy(&bootstrap, &proc, sizeof(proc));
+    isaac::loader::Extension loaded;
+    try {
+        loaded = isaac::loader::load(std::filesystem::path(extension).parent_path(),
+                                     ISAAC_LAN_VERSION, isaac::build::version());
+    } catch (...) {
+        // No engine bootstrap has run yet. Preserve the original installation
+        // if source discovery or staging cannot be completed.
+        loaded = isaac::loader::loadInstalled(extension);
     }
-    const DWORD result = bootstrap ? bootstrap(nullptr) : 100;
+    const DWORD result =
+        loaded.bootstrap ? loaded.bootstrap(nullptr) : isaac::startup::value(loaded.failure.code);
     if (result) {
-        wchar_t message[256];
-        swprintf(message, 256,
-                 L"Isaac LAN could not initialize (code %lu). The game will close.\nPlease check "
-                 L"the installed game and extension versions.",
-                 result);
-        MessageBoxW(nullptr, message, L"Isaac LAN", MB_OK | MB_ICONERROR);
+        const auto message = isaac::loader::failureMessage(loaded, result);
+        MessageBoxW(nullptr, message.c_str(), L"Isaac LAN", MB_OK | MB_ICONERROR);
         TerminateProcess(GetCurrentProcess(), result);
         return result;
     }

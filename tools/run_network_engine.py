@@ -10,7 +10,7 @@ import shutil
 import signal
 import subprocess
 import time
-from testing.engine import finalize_result
+from testing.engine import check_runtime_log, finalize_result
 from testing.lua import bundle_input
 from game_profiles import build_profile, lab_profile
 from game_logs import freeze_probe_logs, probe_text, log_path
@@ -29,7 +29,9 @@ def execute(*args, timeout=30):
 
 def read_log(lab):
     path = log_path(lab)
-    return path.read_text(errors="replace") if path.exists() else ""
+    text = path.read_text(errors="replace") if path.exists() else ""
+    check_runtime_log(text, lab.name)
+    return text
 
 
 def main():
@@ -105,6 +107,11 @@ def main():
         "--lazarus-fixture",
         action="store_true",
         help="Unlock Tainted Lazarus on the owned guest before character menus initialize",
+    )
+    parser.add_argument(
+        "--knife-fixture",
+        action="store_true",
+        help="Unlock Azazel on the owned guest before scenarios that select him",
     )
     parser.add_argument(
         "--automatic",
@@ -267,6 +274,7 @@ def main():
         or args.hush_fixture
         or args.ascent_fixture
         or args.lazarus_fixture
+        or args.knife_fixture
         or args.completion_fixture
     ):
         args.progress_fixture = True
@@ -706,6 +714,7 @@ def main():
                     hush=args.hush_fixture,
                     ascent=args.ascent_fixture,
                     lazarus=args.lazarus_fixture,
+                    knife=args.knife_fixture,
                     completion=args.completion_fixture,
                 )
             response = execute(str(lab / "isaac_lan_lab.exe"), windows(lab), *flags)
@@ -939,6 +948,7 @@ def main():
         exercised = False
         pause_keys = set()
         focus_cycles = set()
+        focus_sets = set()
         recorded = False
         solo_saved, solo_continued, solo_hashes = set(), set(), {}
         release_solo_requests, release_solo_files, release_solo_networks = set(), set(), set()
@@ -1011,6 +1021,15 @@ def main():
                             "ready"
                         )
             if args.focus_cycle:
+                for number, role in re.findall(
+                    r"LAN_NETWORK FOCUS_SET_REQUEST (\d+) (host|client)", logs[0]
+                ):
+                    if number not in focus_sets:
+                        control(processes[roles.index(role)], "Focus")
+                        focus_sets.add(number)
+                        result.setdefault("focus_sets", []).append(
+                            {"request": int(number), "role": role}
+                        )
                 for number in re.findall(r"LAN_NETWORK FOCUS_CYCLE_REQUEST (\d+)", logs[0]):
                     if number not in focus_cycles:
                         for role in ("client", "host", "client"):

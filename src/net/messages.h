@@ -9,6 +9,11 @@ struct InputSample {
     InputFrame input;
     std::optional<InputRoom> room;
 };
+struct InputEvent {
+    std::uint32_t id;
+    InputSample sample;
+};
+inline constexpr std::size_t maxRepeatedInputEvents = 4;
 inline InputSample readInput(Reader& r) {
     InputSample sample{r.u32(), r.input(), {}};
     const auto hasRoom = r.u8();
@@ -27,8 +32,7 @@ inline InputSample readInput(Reader& r) {
     }
     return sample;
 }
-inline Writer inputMessage(const InputSample& sample) {
-    Writer w(Message::input);
+inline void writeInput(Writer& w, const InputSample& sample) {
     w.u32(sample.sequence);
     w.input(sample.input);
     w.u8(sample.room.has_value());
@@ -40,6 +44,30 @@ inline Writer inputMessage(const InputSample& sample) {
         w.u32(room.introSerial);
         w.u8(room.introActive);
     }
+}
+inline void writeInputEvent(Writer& w, const InputEvent& event) {
+    w.u32(event.id);
+    writeInput(w, event.sample);
+}
+inline InputEvent readInputEvent(Reader& r) {
+    InputEvent event{r.u32(), readInput(r)};
+    if (!event.id || !event.sample.input.triggered)
+        throw std::runtime_error("Invalid input event");
+    return event;
+}
+inline Writer inputMessage(const InputSample& sample, std::span<const InputEvent> recent = {}) {
+    if (recent.size() > maxRepeatedInputEvents)
+        throw std::runtime_error("Too many repeated input events");
+    Writer w(Message::input);
+    writeInput(w, sample);
+    w.u8(recent.size());
+    for (const auto& event : recent)
+        writeInputEvent(w, event);
+    return w;
+}
+inline Writer inputEventMessage(const InputEvent& event) {
+    Writer w(Message::inputEdges);
+    writeInputEvent(w, event);
     return w;
 }
 inline std::uint16_t retainedInputEdges(const InputFrame& previous,
@@ -54,7 +82,7 @@ inline void writeRules(Writer& w, const RunRules& rules) {
     w.u16(rules.character);
     w.u8(rules.difficulty);
     w.u8(rules.transient);
-    w.u32(rules.options);
+    w.u64(rules.options);
 }
 inline RunRules readRules(Reader& r) {
     RunRules value;
@@ -64,7 +92,7 @@ inline RunRules readRules(Reader& r) {
     value.difficulty = r.u8();
     const auto transient = r.u8();
     value.transient = transient != 0;
-    value.options = r.u32();
+    value.options = r.u64();
     if (transient > 1 || !value.valid())
         throw std::runtime_error("Invalid run rules");
     return value;
@@ -116,12 +144,17 @@ inline StageChunk readStageChunk(Reader& r) {
     value.restart = r.u8();
     value.cinematic = r.u8();
     value.sourceRoom = static_cast<std::int16_t>(r.u16());
+    const auto actions = r.u8();
+    if (actions > Stage::maxDepartureAnimations)
+        throw std::runtime_error("Too many departure animations");
+    for (unsigned i = 0; i < actions; ++i)
+        value.departureAnimations.push_back(r.string());
     chunk.total = r.u32();
     chunk.offset = r.u32();
     chunk.bytes = r.blob(bulkChunkSize);
     if (!value.epoch || value.level < 1 || value.level > 13 || value.type > 5 || same > 1 ||
         chunk.total > maxSnapshotSize + StateCompression::headerSize || value.restart > 2 ||
-        value.sourceRoom < -20 || value.sourceRoom >= 169 ||
+        value.sourceRoom < -20 || value.sourceRoom >= 169 || !value.validDepartureAnimations() ||
         (value.cinematic && (value.cinematic != 25 || value.level != 13 || value.type != 1 ||
                              value.animation != 1 || same || value.restart || chunk.total)) ||
         (value.restart &&
@@ -145,6 +178,9 @@ inline Writer stageMessage(const Stage& value, std::size_t offset = 0) {
     w.u8(value.restart);
     w.u8(value.cinematic);
     w.u16(static_cast<std::uint16_t>(value.sourceRoom));
+    w.u8(value.departureAnimations.size());
+    for (const auto& name : value.departureAnimations)
+        w.string(name);
     w.u32(value.rewind.size());
     w.u32(offset);
     w.blob(bulkChunk(value.rewind, offset));

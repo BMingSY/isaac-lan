@@ -94,8 +94,8 @@ void jump(unsigned rva, Address fn) {
 void setup() {
     bootstrap::halfUpdate();
     bootstrap::restorePositions();
-    require(events.empty() && bootstrap::installRendering() == 20 &&
-                bootstrap::installUpdates(0, log) == 16,
+    require(events.empty() && bootstrap::installRendering() == isaac::startup::Code::rendering &&
+                bootstrap::installUpdates(0, log) == isaac::startup::Code::roomUpdate,
             "Uninstalled loop became active");
     image = static_cast<unsigned char*>(
         VirtualAlloc(nullptr, 0x940000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
@@ -117,7 +117,8 @@ void setup() {
     auto* second = image + backend::entry::gameUpdateHalf;
     require(MH_CreateHook(second, reinterpret_cast<void*>(nativeHalf), nullptr) == MH_OK,
             "Create foreign half-update hook");
-    require(bootstrap::installUpdates(reinterpret_cast<Address>(image), log) == 17,
+    require(bootstrap::installUpdates(reinterpret_cast<Address>(image), log) ==
+                isaac::startup::Code::halfUpdate,
             "Partial update installation succeeded");
     require(MH_CreateHook(first, reinterpret_cast<void*>(nativeUpdate), nullptr) == MH_OK,
             "Failed update group retained its first hook");
@@ -126,19 +127,22 @@ void setup() {
                     MH_ERROR_ALREADY_CREATED,
             "Rollback removed a foreign hook");
     require(MH_RemoveHook(second) == MH_OK &&
-                bootstrap::installUpdates(reinterpret_cast<Address>(image), log) == 0,
+                bootstrap::installUpdates(reinterpret_cast<Address>(image), log) ==
+                    isaac::startup::Code::success,
             "Update group could not retry");
-    require(bootstrap::installUpdates(reinterpret_cast<Address>(image), log) == 16,
+    require(bootstrap::installUpdates(reinterpret_cast<Address>(image), log) ==
+                isaac::startup::Code::roomUpdate,
             "Duplicate updates installation succeeded");
     auto* render = image + backend::entry::gameRender;
     require(MH_CreateHook(render, reinterpret_cast<void*>(nativeRender), nullptr) == MH_OK,
             "Create foreign render hook");
-    require(bootstrap::installRendering() == 20 &&
+    require(bootstrap::installRendering() == isaac::startup::Code::rendering &&
                 MH_CreateHook(render, reinterpret_cast<void*>(nativeRender), nullptr) ==
                     MH_ERROR_ALREADY_CREATED,
             "Render conflict removed foreign hook");
-    require(MH_RemoveHook(render) == MH_OK && bootstrap::installRendering() == 0 &&
-                bootstrap::installRendering() == 20,
+    require(MH_RemoveHook(render) == MH_OK &&
+                bootstrap::installRendering() == isaac::startup::Code::success &&
+                bootstrap::installRendering() == isaac::startup::Code::rendering,
             "Render retry/duplicate contract changed");
 }
 void loop() {

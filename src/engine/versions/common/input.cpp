@@ -4,6 +4,7 @@
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/input.h"
+#include "engine/animation_skip.h"
 #include "engine/frontend.h"
 #include "engine/rooms.h"
 #include "runtime/session.h"
@@ -34,6 +35,7 @@ constexpr WORD restartChord = XINPUT_GAMEPAD_LEFT_THUMB | XINPUT_GAMEPAD_RIGHT_T
 bool labInput = false;
 bool enabled = false;
 bool menuConfirm = false;
+int animationConfirm = -1;
 bool localPauseInput = false;
 pause_menu::Intent pauseIntent = pause_menu::Intent::none;
 int viewSlot = -1;
@@ -186,6 +188,9 @@ lan::PointerInput captureMouse() {
 bool __attribute__((fastcall)) query(void* manager, void*, int controller, void* callback,
                                      const int* action, void* result, int* source) {
     const auto kind = reinterpret_cast<std::uintptr_t>(callback) - image;
+    if (animationConfirm >= 0 && kind == binding.triggered && action &&
+        *action == input::action::menuConfirm)
+        return animationConfirm != 0;
     if (localPauseInput && enabled && action &&
         (kind == binding.value || kind == binding.pressed || kind == binding.triggered)) {
         if (pauseIntent != pause_menu::Intent::none) {
@@ -375,7 +380,8 @@ void samplePhysicalInput() {
     sampledFrame = frame;
     runtime::pollLocalConsole();
     runtime::refreshAutomation(frame);
-    const bool capturing = frontend::capturesInput() || restartHeld();
+    const bool capturing =
+        frontend::capturesInput() || restartHeld() || presentation::animation::active();
     if (capturing) {
         automation.clear();
         physicalInput = {};
@@ -434,6 +440,12 @@ ViewScope::ViewScope(int slot) : previous(viewSlot) {
 }
 ViewScope::~ViewScope() {
     viewSlot = previous;
+}
+AnimationConfirmScope::AnimationConfirmScope(bool approved) : previous(animationConfirm) {
+    animationConfirm = approved ? 1 : 0;
+}
+AnimationConfirmScope::~AnimationConfirmScope() {
+    animationConfirm = previous;
 }
 PresentationInputScope::PresentationInputScope(const lan::InputFrame& input, int controller)
     : previous(presentationInput), previousController(presentationController) {
@@ -614,6 +626,15 @@ bool menuTriggered(int action, bool controllersOnly) {
                           nullptr))
             return true;
     return false;
+}
+bool menuHeld(int action) {
+    action = binding.nativeAction(action);
+    if (action < 0 || !hookQuery())
+        return false;
+    float value = 0;
+    originalQuery(reinterpret_cast<void*>(image + binding.inputManager), -1,
+                  reinterpret_cast<void*>(image + binding.value), &action, &value, nullptr);
+    return value > 0;
 }
 bool restartHeld() {
     const int action = binding.nativeAction(input::action::restart);

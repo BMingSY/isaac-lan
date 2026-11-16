@@ -2,6 +2,7 @@
 #include "engine/rewind.h"
 #include "compat/items/rewind_targets.h"
 #include "compat/routes/home.h"
+#include "compat/routes/hourglass.h"
 #include "engine/save.h"
 #include "engine/versions/common/rewind_bindings.h"
 #include "net/protocol.h"
@@ -70,6 +71,21 @@ struct RouteScope {
 };
 using Store = void(__stdcall*)(int);
 Store originalStore;
+void storeCheckpoint(int door) {
+    auto& flags = at<std::uint64_t>(game(), bindings.gameLayout.stateFlags);
+    const auto checkpointFlags = compat::routes::hourglassCheckpointFlags(
+        at<int>(game(), bindings.gameLayout.stage), at<int>(game(), bindings.gameLayout.stageType),
+        flags);
+    struct Restore {
+        std::uint64_t& field;
+        std::uint64_t value, mask;
+        ~Restore() {
+            field = (field & ~mask) | (value & mask);
+        }
+    } restore{flags, flags, flags ^ checkpointFlags};
+    flags = checkpointFlags;
+    originalStore(door);
+}
 void __stdcall store(int door) {
     // Native room entry uses two process-wide buffers. LAN keeps one last
     // entry per controller, so background entries cannot replace another
@@ -258,7 +274,7 @@ void remember(unsigned slot, int door, const std::vector<rooms::SavedLocation>& 
         !originalStore)
         return;
     at<int>(game(), bindings.gameLayout.selectedBuffer) = -1;
-    originalStore(door);
+    storeCheckpoint(door);
     const auto buffer = game() + bindings.gameLayout.buffers;
     at<bool>(buffer + bindings.buffer.stride, bindings.buffer.valid) = false;
     if (!at<bool>(buffer, bindings.buffer.valid))

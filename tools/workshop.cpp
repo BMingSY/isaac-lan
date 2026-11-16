@@ -215,8 +215,8 @@ struct Steam {
     }
     void update(std::uint64_t item, const std::filesystem::path& output, const std::string& content,
                 const std::filesystem::path& notesPath, const std::string& language = "",
-                const std::filesystem::path& descriptionPath = {},
-                const std::string& preview = "") {
+                const std::filesystem::path& descriptionPath = {}, const std::string& preview = "",
+                const std::string& title = "") {
         const auto notes = read(notesPath);
         if ((notes.empty() && language.empty()) || notes.find('\0') != std::string::npos)
             throw std::runtime_error("Change notes are empty or invalid");
@@ -226,6 +226,9 @@ struct Steam {
              description.size() >= sizeof(Details::description) ||
              description.find('\0') != std::string::npos))
             throw std::runtime_error("Workshop description or language is invalid");
+        if (!title.empty() && (language.empty() || title.size() >= sizeof(Details::title) ||
+                               title.find('\0') != std::string::npos))
+            throw std::runtime_error("Workshop title or language is invalid");
         const auto handle = function<std::uint64_t(__cdecl*)(void*, std::uint32_t, std::uint64_t)>(
             "SteamAPI_ISteamUGC_StartItemUpdate")(ugc, appId, item);
         if (handle == UINT64_MAX ||
@@ -239,6 +242,9 @@ struct Steam {
              !function<bool(__cdecl*)(void*, std::uint64_t, const char*)>(
                  "SteamAPI_ISteamUGC_SetItemDescription")(ugc, handle, description.c_str())))
             throw std::runtime_error("Workshop description rejected");
+        if (!title.empty() && !function<bool(__cdecl*)(void*, std::uint64_t, const char*)>(
+                                  "SteamAPI_ISteamUGC_SetItemTitle")(ugc, handle, title.c_str()))
+            throw std::runtime_error("Workshop title rejected");
         if (!preview.empty() &&
             !function<bool(__cdecl*)(void*, std::uint64_t, const char*)>(
                 "SteamAPI_ISteamUGC_SetItemPreview")(ugc, handle, preview.c_str()))
@@ -298,10 +304,12 @@ int wmain(int argc, wchar_t** argv) {
         if (argc < 5)
             throw std::runtime_error("Usage: workshop.exe query|download|update|update-page "
                                      "STEAM_API_DLL ITEM_ID OUTPUT_PREFIX "
-                                     "[LANGUAGE | CONTENT NOTES [LANGUAGE DESCRIPTION PREVIEW]]");
+                                     "[LANGUAGE | CONTENT NOTES [LANGUAGE DESCRIPTION PREVIEW "
+                                     "[TITLE]]]");
         const std::wstring command = argv[1];
         if (!((command == L"query" && argc == 6) || (command == L"download" && argc == 5) ||
-              (command == L"update" && argc == 7) || (command == L"update-page" && argc == 10)))
+              (command == L"update" && argc == 7) ||
+              (command == L"update-page" && (argc == 10 || argc == 11))))
             throw std::runtime_error("Invalid Workshop command arguments");
         std::size_t end = 0;
         const std::uint64_t item = std::stoull(argv[3], &end);
@@ -320,7 +328,8 @@ int wmain(int argc, wchar_t** argv) {
                                               : utf8(std::filesystem::absolute(argv[5]).wstring()),
                 argv[6], utf8(argv[7]), argv[8],
                 std::wstring(argv[9]) == L"-" ? ""
-                                              : utf8(std::filesystem::absolute(argv[9]).wstring()));
+                                              : utf8(std::filesystem::absolute(argv[9]).wstring()),
+                argc == 11 ? utf8(argv[10]) : "");
         else
             steam.update(item, argv[4], utf8(std::filesystem::absolute(argv[5]).wstring()),
                          argv[6]);

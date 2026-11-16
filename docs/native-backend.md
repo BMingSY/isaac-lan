@@ -18,19 +18,33 @@
 
 [`entity_fields_plan(type, template)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_fields.cpp)将 Lua 同步组件提供的嵌套字段名数组编译为 userdata。仅支持泪弹、跟班、掉落物和效果实体的具名属性白名单；`false` 为由 Lua 填充的占位，其他实体类型返回 `false`。模板最多 128 个节点、三层深度，不接受地址或偏移。计划只持有字段描述符，不持有游戏对象；线上的字段顺序仍由 Lua schema 决定。
 
-`entity_fields_capture(entity:GetSprite(), plan)`返回同形数组。`entity_fields_apply(sprite, plan, value)`只允许客机调用；一次遍历校验整份数组的形状、类型、有限数值与整数范围，将普通值保存在固定大小的栈缓冲后，再按模板顺序写入。两者要求活动实体的借用 Sprite 与计划类型相符，返回后不保留 Sprite、实体或数组引用。对象分配、回收和实体身份仍由原有生命周期管理。
+`entity_fields_capture(entity:GetSprite(), plan, memo?)`返回同形数组。可选 `memo` 必须由调用方创建为空表并独占维护；接口按实时读取的原生浮点位模式共享向量和颜色叶数组，保留浮点类型及零的符号，最多缓存 256 个数组，满后仍正常采集。调用方不得修改缓存条目或返回的共享叶数组。根数组及字段容器始终新建，占位始终为 `false`；不提供 `memo` 时数组独立。`entity_fields_apply(sprite, plan, value)`只允许客机调用；一次遍历校验整份数组的形状、类型、有限数值与整数范围，将普通值保存在固定大小的栈缓冲后，再按模板顺序写入。两者要求活动实体的借用 Sprite 与计划类型相符；版本后端不跨调用保存 Sprite、实体或数组引用。对象分配、回收和实体身份仍由原有生命周期管理。
 
 `entity_fields_encode(sprite, plan)` 将数值计划直接编码为与 `state_encode` 相同的数组字节，不生成中间 Lua 表；`entity_fields_apply` 也接受这种字节串。此路径仅支持上述四类实体的数值字段，最多 4864 字节，使用固定栈缓冲；解码按计划核对每个数组、数值范围和结束位置，完整校验后才写入该计划的字段。身份、位置、速度及引用仍单独供 Lua 同步组件使用。编码占位只能为 `false`，不接受精灵名称字段或任意内存数据。
 
-`sprite_fields_plan(template)`／`sprite_fields_capture(sprite, plan)`／`sprite_fields_apply(sprite, plan, value)`使用同一模板边界处理精灵字段。支持文件名、动画名、帧、翻转、旋转、缩放、偏移及七个颜色通道；字符串与动画字段只读，动画切换、加载和完整层状态继续使用原有接口。接受借用或 Lua 自有 Sprite，不能将实体计划用于精灵。主动画帧按原版取 floor，叠加帧截断；无动画返回空名称与 `-1`。颜色写入与七参数 Lua `Color` 一致，完整 colorize 状态随后由 `sprite_state` 恢复。
+`sprite_fields_plan(template)`／`sprite_fields_capture(sprite, plan, memo?)`／`sprite_fields_apply(sprite, plan, value)`使用同一模板边界和只读叶数组复用规则处理精灵字段。支持文件名、动画名、帧、翻转、旋转、缩放、偏移及七个颜色通道；字符串与动画字段只读，动画切换、加载和完整层状态继续使用原有接口。接受借用或 Lua 自有 Sprite，不能将实体计划用于精灵。主动画帧按原版取 floor，叠加帧截断；无动画返回空名称与 `-1`。颜色写入与七参数 Lua `Color` 一致，完整 colorize 状态随后由 `sprite_state` 恢复。
 
-字段计划、校验及编解码由两版后端共用。J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_fields.h)。`Size` 调用原 Lua 属性 setter（cdecl，RVA `0x471fa0`）；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。掉落物 `Price` 调用原 thiscall setter（RVA `0x2e2570`），保留商店显示和特殊价格行为；`ShopItemId` 按原 Lua setter 限制在 -2 至 7。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
+字段计划、校验及编解码由两版后端共用。J460 属性布局集中在 [`layout.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)，属性与读写策略在 [`entity_fields.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_fields.h)。`Size` 使用下述尺寸恢复能力；`Color` 构造 44 字节临时颜色值并调用原 setter（cdecl，RVA `0x471f70`），保留其虚方法及精灵颜色处理，不保留该临时指针；`CollisionDamage` 使用实体虚表 `+0x40`；泪弹 `Height`／`Scale` 调用原 thiscall setter（RVA `0x275fc0`／`0x276120`），保留游戏副作用。掉落物 `Price` 调用原 thiscall setter（RVA `0x2e2570`），保留商店显示和特殊价格行为；`ShopItemId` 按原 Lua setter 限制在 -2 至 7。`SortingLayer`（`Entity+0x35c`）和 `RenderZOffset`（`+0x354`）按原 Lua 属性读写有符号 32 位整数，与 `DepthOffset`（`+0x358`）共同参与原生排序，不改变实体所属列表。其余白名单字段采用相同的属性存储，身份、帧计数和实体标志只读；标志、引用、外观与兼容规则仍通过所属适配器应用。入口受版本签名校验，不能用于其他游戏版本。
 
-`entity_npc_boss(npc:GetSprite(), boolean)` 仅供客机恢复活动 NPC 的 Boss 分类。J460 `EntityNPC::IsBoss`（RVA `0x2b8470`）读取 NPC `+0xc3d` 的独立布尔值；它与 `GetBossID()` 返回的类型标识不同。接口只接受借用 Sprite、原版 NPC 类型范围与布尔值，不接收地址、不保留引用，不运行 NPC AI。同步组件将 `IsBoss()` 与六个 scratch／目标坐标 float32 一起编码为 25 字节；完整校验后应用，原生血条仍按这些实体及血量计算。
+`entity_size(entity:GetSprite(), radius)` 仅供客机恢复活动实体的有限数值尺寸，接受借用 Sprite，不接受 Lua 自有 Sprite、地址或偏移。Lua 普通字段恢复与上述批量字段共用 [`entity_size.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_size.h)。实体的 XML 配置指针 `+0x330` 非空时，沿用原 Lua setter（cdecl，RVA `0x471fa0`）。配置为空时，读取本机 `SizeMulti`（`+0x374` 的两个 float）及碰撞点向量（`+0x178` 的 begin／end／capacity，每点 8 字节），校验有限乘数、非默认哨兵和向量边界后，把现有形状及实际点数显式传给原生 `Entity::SetSize`（thiscall，RVA `0x2ac2a0`；参数为 float、两个 float 组成的值类型和 int）。碰撞点由游戏重建，向量内存仍由游戏管理；适配器不借用其他实体配置，不直接复制、分配或释放 MSVC 向量，也不跨调用保存任何原生引用。线上的尺寸字段保持原有布局。
+
+`entity_npc_boss(npc:GetSprite(), boolean)` 仅供客机恢复活动 NPC 的 Boss 分类。J460 `EntityNPC::IsBoss`（RVA `0x2b8470`）读取 NPC `+0xc3d` 的独立布尔值；它与 `GetBossID()` 返回的类型标识不同。接口只接受活动实体的借用 Sprite 与布尔值，并通过游戏的 MSVC RTTI 转换确认 NPC 身份；内容类型编号不用于限制 NPC。非 NPC、失效实体、Lua 自有 Sprite 和主机写入均拒绝，不接收地址、不保留引用，不运行 NPC AI。同步组件将 `IsBoss()` 与六个 scratch／目标坐标 float32 一起编码为 25 字节；完整校验后应用，原生血条仍按这些实体及血量计算。
+
+[`entity_cast::npc`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_cast.h) 与命中反馈共用 NPC 身份判定。它调用游戏的 `__RTDynamicCast` 导入跳板（RVA `0x6f08b1`，`cdecl`，五个栈参数），以 `Entity`／`Entity_NPC` 类型描述符（RVA `0x85d5dc`／`0x85d6ac`）执行非引用转换，返回借用的 NPC 或空值。描述符名称与跳板指令在启动时校验，调用期间不分配游戏对象、不改变所有权。调用者保证实体仍归当前同步或绘制作用域所有；Lua 恢复与本机命中反馈选择另外检查活动状态。
+
+## 诅咒迷雾的随从归属
+
+[迷雾适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/cursed_mist.cpp)仅在联机主机的原生道具禁用／恢复调用期间借用当前角色身份。J460 `Player::DisableCollectibles`（RVA `0x3d8980`）和 `EnableCollectibles`（`0x3d8d20`）均为无栈参数的 `thiscall`；递归处理子角色、异常退出后恢复外层身份，不跨房间或帧缓存角色指针。
+
+`EntityList::FindByType`（RVA `0x1af60`）为 `thiscall`，六个栈参数依次为结果缓冲、类型、变体、子类型、使用缓存、排除友好实体，被调方清理 24 字节并返回结果地址。适配只处理返回点 `0x3d8ade`／`0x3d9046` 的无缓存随从查询，查询种类由[矿坑路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/mines.h)限定。结果描述符的借用标记、数据指针、容量、数量位于 `+0/+4/+8/+12`；校验数量不超过容量及 65536 后，按 `Familiar.Player`（`+0x410`）稳定筛选当前角色的结果。只改查询结果中的地址顺序与数量，不改房间实体列表、结果容量或借用标记。存储载荷、生成、移除和内存回收仍由原生完成；单人、客机及其他查询原样执行。入口与调用返回点均纳入启动签名校验。
 
 ## 实体引用与房间数据
 
-[实体姿态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_pose.cpp)通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_pose.cpp)提供 `actor_pose` 和 `entity_shadow`，仅接受实体的 8 字节借用 Sprite，写入限客机。角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层仅在增删服装后重新取得 Sprite 列表，渲染前仍恢复权威姿态。
+[实体姿态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_pose.cpp)通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_pose.cpp)提供 `actor_pose` 和 `entity_shadow`，仅接受实体的 8 字节借用 Sprite，写入限客机。角色服装姿态按路径与同名出现顺序映射到本机索引，未知路径使用基础层回退。[映射规则](https://github.com/BMingSY/isaac-lan/blob/main/src/core/occurrence_mapping.h)只接收普通字符串视图；版本后端在单次调用内借用原生名称，不跨调用缓存服装地址。Lua 表现层缓存名称与索引映射，每次应用仍重新取得 Sprite 列表并核对本机名称；增删服装后再次取得列表，渲染前恢复权威姿态。权威服装映射仅随不可变视图复用，视图不再被引用时释放。
+
+`room_layout` 的房间元数据和 `map_pickups` 的地图掉落物由 [room_metadata.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_metadata.h) 校验、复用。布局载荷包含维度、房间／网格／列表索引、占用格子、配置标量、门与种子；校验维度、索引、格子、尺寸、形状与载荷结束位置后才替换缓存。相同字节复用解析值，每次调用仍恢复原生描述符及格子登记。配置缓冲由后端持有，描述符只借用其稳定地址；开始楼层、重启或回退时清除解析缓存，保留原生清理仍可能引用的配置存储。
+
+主机房间占格索引逐次比较对应维度的 169 个原生格子值，变化时重建，仅缓存复制值。地图掉落物每房最多 4096 项，每项仅接受原生类型 5／6 的六个元数据字段；相同已校验字节复用本机地图缓存向量。该向量只在地图缓存调用期间借给描述符，随后恢复原有保存向量，楼层与会话清理时释放。缓存不延后读取主机字段，不改变同步格式或原生对象所有权。
 
 [精灵状态组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sprite_state.cpp)通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/sprite_state.cpp)实现 `sprite_state(sprite)`，复制完整精灵层状态为字节串；客机的 `sprite_state(sprite, bytes)` 恢复状态，返回需要替换的贴图层数组，没有贴图变化时返回 `true`。返回值不持有原生引用；Lua 只在数组非空时替换贴图并调用 `LoadGraphics`。捕获缓冲预留容量不改变字段或编码字节。
 
@@ -48,11 +62,15 @@
 
 `familiar_body(sprite[, layers])` 限定跟班的原生身体组件，校验 `Familiar+0xee0` 虚表 RVA `0x764914`。读取返回四个大端有符号图层 ID 和五个借用 Sprite；Sprite 位于组件 `+0x4`，间距 `0x114`，图层位于 `+0x568`。写入仅允许客机，完整校验载荷、图层为 `-1` 或对应 Sprite 的有效图层后提交。Lua 道具适配复用普通 Sprite 编解码，先恢复使用道具时缓存的外观，再恢复绘制图层；不借用当前玩家外观，不执行跟班 AI，不分配或转移原生组件所有权。
 
+`pickup_flip_visual(entitySprite[, visible])` 只接受道具底座的借用 Sprite。读取返回生命逆转阴影的显示标记和借用 Sprite；写入只允许客机设置布尔标记。J460 底座 `+0x5d0` 内嵌阴影 Sprite，`+0x6d9` 是原生绘制使用的标记，构造与绘制位置受启动签名校验。兼容组件使用已有 Sprite 编解码先恢复外观，再设置可见性；空底座仍可显示另一面的道具。接口不复制底座保存状态、不执行翻转或拾取、不改变 Sprite 的原生所有权，借用对象不能跨实体回收保存。
+
 `familiar_tether(sprite)` 限定跟班实体借用 Sprite，检查 `Familiar+0xee0` 的 `UmbilicalBabyData` 虚表 RVA `0x71d264`。返回最多 256 个 XYZ 点和绳索借用 Sprite，无此组件返回 `false`。组件 `+0x8/+0xc/+0x10/+0x14` 为原生 deque 的映射、容量、首项和数量，Sprite 位于 `+0x18`；非零映射容量限定为不超过 4096 的二次幂，数量不能超过容量，非空映射及各点不能为空，所有坐标必须有限。空且未分配的 deque 返回零点快照。
 
 `familiar_tether_render(entitySprite, ropeSprite, bytes)` 仅允许客机绘制，完整校验点载荷后调用 J460 RVA `0x35290` 的原生绳索绘制方法，ABI 为 thiscall，接收零偏移向量指针和分段值 0，清栈 8 字节。零点或单点不调用绘制。只在调用期间借用已有跟班及借用／Lua 自有绳索 Sprite，构造栈上只读 deque 视图并临时替换组件指针，正常返回及 C++ 异常时恢复。不构造／析构原生组件、不转移 Sprite 所有权、不执行跟班 AI 或武器更新。入口字节受启动签名校验。
 
 这些能力由[实体视图组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_visuals.cpp)共享校验、编码和借用边界，版本绑定提供布局与入口；[原版布局](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#跟班组件与实体绘制准备)独立核对。`entity_prepare(sprite)` 仅在权威端为 Needle 调用 `0x14f670`，thiscall 接收实体、无栈参数，准备后台房间中不会进入本机渲染的身体图层；其他实体直接成功，不执行 NPC AI。实体身份只接受 8 字节借用包装，不接受独立 Sprite。
+
+Lua 绘制组件按权威实体 ID 维护实际绳索记录，以 `EntityPtr` 解析跟班和拥有者；绘制只访问这些记录。权威绳索消失、引用失效、换房、换层和会话重置移除记录，不跨视图保留借用 Sprite。
 
 | 能力与实现 | 原生边界 | 校验与所有权 |
 | --- | --- | --- |
@@ -61,6 +79,7 @@
 | [角色持有引用](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_links.h) `actor_held_entity` | Player `+0x1410` 的 `EntityPtr` 供原生抱起渲染使用，独立于 `Parent`／`Child`；赋值位置 RVA `0x3d23e6` 受签名校验 | 读取返回本机实体索引，无对象时为 `-1`；同步组件转换为稳定 ID。写入仅限客机，接受角色和目标的借用 Sprite 或 `false`，拒绝非角色持有者和自引用；使用原生 `EntityPtr.Assign` 注册、替换和清空，目标释放时由游戏撤销引用，不调用拾取／投掷玩法 |
 | [轨道布局](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rails.h) `room_rails` | `Room:GetGridEntity` 不包含 RailManager；房间 `+0x746c` 为 448 字节数组 | 客机整体验证长度、值、尺寸与所有者后写入；空轨道也恢复，Sprite 仍由房间持有 |
 | 客机实体回收 | `Remove()` 不保证立即释放池槽位；J460 跟班池为 64 槽 | 在房间作用域内通过原生更新完成回收，更新前须启用客机 AI 拦截；不扩容原生池，不手工释放对象 |
+| 跟班蓄力显示 | `Familiar+0xdcc` 为对象自有的蓄力 Sprite；`Sprite.Update` 的 RVA 为 `0x9100`，无栈参数的 `thiscall` | 客机拦截跟班更新时只推进该显示动画，充能值仍使用同步的 `FireCooldown`；不执行跟班 AI、发射或伤害，不复制 Sprite，生命周期由游戏管理 |
 | 玩家清房回调 | `Player::TriggerRoomClear`，RVA `0x3a8fd0`，`thiscall void(Player*)`；Lua 没有阻止原生清房效果的前置回调 | 联机客机房间启用期间跳过玩法触发，角色状态由权威快照恢复；主机、单人及原生加载保留原调用，不分配或替换角色对象 |
 | 口袋槽、合成袋、药丸状态 | 原生载荷分别为 32、12、75 字节 | 在库存恢复后应用，完整校验载荷与玩家归属；写入限客机，主动对象与物品池仍由原版管理 |
 
@@ -74,13 +93,31 @@
 
 引用赋值统一调用 `EntityPtr::Assign`，ECX 为引用槽、EDX 为目标实体，无栈参数；替换和清空维护原生观察者集合。重复值不重新登记，读取只返回本机实体索引，不暴露指针。持有炸弹容器为空时，即使快照为空也通过原生 resize（RVA `0x4bd80`，thiscall 接收槽数，清栈 4 字节）初始化渲染所需槽位。所有目标类型在分配或赋值前校验；扩展不接管容器分配器或实体生命周期。原生 resize 只用于空容器的扩张，不用它收缩或销毁含引用的容器。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#原生实体引用)提供自身字段与入口。
 
-角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先移除原房间各实体列表中的引用，再调用原生添加入口；对象仍由游戏持有和销毁，不复制效果、不重放道具使用。没有对应持有者的效果及房间独立效果不随角色迁移。
+`actor_forgotten_form(playerSprite, desiredType)` 仅供客机在该玩家的房间作用域内恢复骸骨／灵魂形态，接受当前名单中玩家的借用 Sprite，目标类型限定为 16／17。后端检查 `Player+0x1d98` 的隐藏身体及两者互补类型，拒绝合作幽灵和无效配对；相同目标不再次切换。调用 `Player::SwapForgottenForm`（RVA `0x3cc200`，`thiscall bool(Player*, bool force, bool quiet)`、`RET 8`），两个标志均为 true，以跳过输入冷却和切换演出。原生交换当前／隐藏身体状态并维护骨架引用，两份分配和所有权均留给游戏；随后同步组件分别恢复两种形态的生命。接口不接受地址、不分配或替换角色，入口受启动签名校验。
 
-`rooms_with_player` 可以切换到客机的远端角色存储壳；该对象不保证网格尺寸、门或房间描述符已经初始化。房间内容只能在主机权威房间或客机当前可见房间查询，可见性须同时比较房间编号和 dimension。远端角色的库存、属性与位置仍可采集，不能将存储壳视为完整房间。
+角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体、子类型和归属决定；归属沿 J460 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先记录原生持久列表成员身份，再移除源列表引用并调用原生添加入口。普通添加未恢复的持久成员通过既有 `AddPersistent`（RVA `0x1b4f0`）登记，避免重复添加；该列表位于 Room 实体容器 `+0x30`，布局归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h)。成员身份在目的房间初始化和跟班入房回调前恢复，适用于换房、跨层聚合和离线角色停放。对象仍由游戏持有和销毁，不复制效果、不重放道具使用；没有对应持有者的效果及房间独立效果不随角色迁移。
+
+迁移的原生离房回调完成后、随行实体迁出前，主机在源房间作用域内通知 `_IsaacLanRoomLeaving()`；回调只借用当前房间，不保留对象。蓝钥匙兼容组件在这里消费源房间各门目标的 `FLAG_BLUE_REDIRECT`，保留其他标记。
+
+原生放置完成后，主机在仅含本次抵达身体的目的房间作用域内通知 `_IsaacLanRoomEntered(door)`。无门到达（`door < 0`）由[落点组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/room_placement.lua)检查房间边界、碰撞范围和飞行能力，只把无效位置移到最近的安全网格；有效位置和常驻玩家保持原状。地窖等横版房间由路线兼容策略保留原生落点。常规门口位置仍由原生入口处理，客机接受主机最终位置。
+
+客机房间请求先核对楼层、维度和实际源房间。对于同维度的非传送请求，主机读取目标描述符 `roomDescriptor::doors`，将邻接格解析为原生 `SafeGridIndex`；只有一个入口指向源房间时才采用该门的落点。源端出口同样唯一时，后端在源房间及所属身体作用域内执行既有步行转场解析，特殊过道等原生重定向先于迁移与标记消费；客机报告的邻接房间不直接决定最终目的地。多个入口、非邻接房间、地图外目的地、跨维度或传送请求不推断入口。描述符仅在查找期间借用，不缓存原生指针或改变房间所有权。
+
+妈手抓取的原生转场调用点为 RVA `0x134752`，以空玩家参数请求起始房间的淡入淡出，调用字节受启动签名校验。后端识别该调用上下文，交由[抓取转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/enemies/room_transitions.h)验证目的地和参数，只排队源房间内已连接的参与者及其受控身体。安全边界完成迁移后按原生 `RoomTransition::ChangeRoom` 的排除标志恢复可见性并提供到达保护；目的地已加载或就是当前房间时同样完成恢复。恢复请求随会话清理，不改变其他房间的玩家状态。
+
+Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端在房间屏障有效期间持续向尚未完成的观看者发送事件，完成确认按观看者清除；离房、断开和屏障超时结束等待。客机在本机视图匹配后播放并记录序号，房间尚未就绪时保留重试机会。载荷沿用八个大端 `u32` 字段，起始 tick 仅记录事件时间，不作为早于屏障的独立过期条件；无需重建房间或重新连接。
+
+`rooms_with_player` 可以切换到客机的远端角色存储壳。壳对象在构造前清零，借用所属楼层描述符并设置房间类型、编号、维度及含边框的网格尺寸，供库存恢复和属性重算查询；尺寸来自配置 `+0x46/+0x47`，写入 Room `+0xc/+0x10` 时各加二，计算规则受启动签名校验。同步地图同时携带有人占用的地图外特殊房间布局，在恢复角色位置前安装描述符。壳不加载真实网格、门、敌人或背景，也不执行入房逻辑；本机进入时才按权威布局完成原生初始化，并强制建立背景资源，不能沿用空壳的绘制缓存。完整房间内容只能在主机权威房间或客机当前可见房间查询，可见性须同时比较房间编号和 dimension；壳只提供安全的空网格上下文，不能用于预测远端玩法。
 
 `rooms_teleport(slot, index, dimension)` 在房主更新安全边界请求传送一个已连接参与者，参数范围为槽位 0–3、房间索引 -20–168、维度 0–2。目标必须具有有效原生房间描述符；入口返回布尔值表示请求是否被接受，不表示已经到达。目标按已确定的房间处理，跳过混乱诅咒选路；迁移、受控身体、随行对象、进入效果和到达动画复用现有房间事务，不增加布局或对象所有权。排队时不启动离开动画，取消不会留下传送中的角色状态。上层负责目标选择、到达确认和失效清理，取消使用 `api_cancel_move`，不对旧楼层执行取消。该内部能力不属于第三方稳定 API。
 
 `rooms_revive_player(slot)` 只接受 0–3 的所属玩家栏位，在主机房间系统启用、没有借用作用域、目标为联机幽灵且挑战允许 `round_revive` 时调用既有 `replicaRevivePlayerGhost` 原生入口。幽灵身份使用 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `player::coopGhost`；复活期间只借用该玩家及其身体的房间名单，不接受或返回原生地址，不自行分配、释放角色。复活时机、回血和资源保留由挑战组件决定。
+
+`actor_lazarus_unpair(index)` 仅供客机恢复长子权里拉撒路的幽灵状态。角色兼容组件根据权威幽灵状态请求挂起第二具身体；后端要求房间系统启用、没有借用作用域，索引指向完整名单内的主人，双向配对身体位于其后、同房、同控制器，分别属于里拉撒路的两种形态，且双方没有隐藏备份。校验失败不写入。后端按 J460 原生降级路径把双方的 `player::lazarusBackup`（`+0x1e6c`）设为彼此，用原生 EntityPtr 赋值清除公开配对引用，将备份设为未注册／不活动、玩家索引为 `-1`，再调用 `PlayerManager::RemoveExistingPlayer`（RVA `0x5b9fc0`，`thiscall void(manager, player)`）移出名单。该入口只移除名单元素，不能传入不在名单中的身体；启动时校验其签名。备份仍由原生玩家对象持有，不销毁或分配角色；既有幽灵／复活入口遍历隐藏备份，`actor_form` 在权威重新列出身体时恢复公开配对和名单。房间作用域负责位置记录，后续实体同步负责跟班状态；接口不接收地址，不调用客机伤害或玩家更新逻辑。
+
+完整名单借用使用 [`room_roster.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_roster.h) 的 `TeamRoster`，只复制 J460 玩家向量的 begin／end／capacity 描述符，不复制角色或持有其分配。借用期间，[`ScopeStack::TeamBinding`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 将完整名单来源指向当前原生向量；重复查询不重新装入保存的描述符，原生扩容、增删和重排均保留。嵌套房间作用域暂借其保存的最新描述符；正常返回及异常退栈先交回更新后的名单，再恢复父作用域。绑定必须按栈顺序销毁，不跨会话、楼层清理或异步调用持有。既有原生入口与启动签名校验保持适用，角色和向量分配／释放仍由后端与 PlayerManager 管理。
+
+角色构造期间调用共享资源广播时，新身体可能尚未登记到房间位置表。此时后端先从已登记参与者用既有 `Player::CopyResourcesTo` 复制本次共享掩码内的资源，再借入完整名单执行原生广播，避免将构造初始值写回队伍。已登记身体、个人资源位及未启用房间系统时沿用各自原生路径；不保存跨帧资源副本、不补发拾取物，也不改变身体分配或资源所有权。
 
 `room_special_template(index, type, variant, seed)` 为主机未访问、未实例化、没有覆盖配置的主维度房间选择原生特殊房间模板。既有 `roomConfigRandomRoom` Hook 记录当前游戏所属的配置对象；接口限定特殊房间库、精确类型和原房间形状。`variant` 非负时指定精确变种，`-1` 时从普通模式模板中随机选择。既有连接的门掩码参与筛选，结果必须包含所有连接门位；选择不消耗房间权重，失败不替换原配置。描述符仅借用游戏配置指针，字符串、生成列表与房间对象仍由游戏持有；布局字段归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/layout.h) 的 `roomDescriptor`／`roomConfig`。接口不传递地址、不构造或释放原生配置，不允许替换已加载房间；具体模板与调用时机由挑战地图策略决定。
 
@@ -90,7 +127,7 @@
 
 `actor_companions` 在空闲客机恢复亲子角色名单。每项为 `id:u32, index:u8, parent:u8, controller:u8, kind:u16, variant:u16, babySkin:i16`，均使用大端；开头为项目数 `u8`，上限 60。父项必须先于子项，控制器必须相同，ID 与索引不得重复。`babySkin` 由 Lua `GetBabySkin()` 采集，限定 `-1..71`，在父角色库存恢复前写入 J460 `Player+0x1aec`；布局由 `GetBabySkin`（RVA `0x2dae00`）签名校验。原生库存缓存通过变体和婴儿身份识别已有伴随角色。角色仍由原生玩家管理器分配、注销，不以本机地址作为线上身份。
 
-房间转移请求可以携带目标房间中的落点，与入口门槽分开保存；明确的入口门槽优先。门槽在原生目的地解析之后、目标房间初始化之前恢复，门布局与角色落点使用同一入口；迷宫重定向保留原生选择的最终方向。落点随单次请求消费，楼层和会话清理同时丢弃请求。后端读取 J460 Player `+0x20a9` 的联机幽灵标记、连接状态、房间键和坐标，将普通值交给[幽灵随队策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/characters/ghost.h)；返回的队友坐标通过既有到达路径写入，不改变对象分配、释放或门的目的地。
+房间转移请求可以携带目标房间中的落点，与入口门槽分开保存；明确的入口门槽优先。已解析的传送加入有人占用的房间且没有指定落点时，使用目标房间内已有玩家的坐标；不沿用来源房间坐标。门槽在原生目的地解析之后、目标房间初始化之前恢复，门布局与角色落点使用同一入口；迷宫重定向保留原生选择的最终方向。落点随单次请求消费，楼层和会话清理同时丢弃请求。后端读取 J460 Player `+0x20a9` 的联机幽灵标记、连接状态、房间键和坐标，将普通值交给[幽灵随队策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/characters/ghost.h)；返回的队友坐标通过既有到达路径写入，不改变对象分配、释放或门的目的地。
 
 进入已有房间或重新接入停放的角色时，后端清空该角色 `Player+0x1b1c/+0x1b20` 的原生转场吸附目标。原生完整入房会将这个向量归零；角色更新对非零目标持续执行位置靠拢。写入仅针对已在迁移名单中的角色，在入房效果之前或重连落点设置时执行一次，不逐帧覆盖，也不改变速度、控制器或对象所有权。布局由 RVA `0x3a4bf2` 的原生清理指令签名校验。
 
@@ -116,6 +153,8 @@ J460 描述符数组为 `Game+0x14`、步长 `0xb8`，三个维度共 507 项；
 
 百宝袋内容变化时，通过 `Game::GetHUD`（RVA `0x178e0`、thiscall、无参数）取得现有 HUD，仅对绑定该角色的八个 PlayerHUD 槽设置 `+0x6ad` 刷新位，槽步长 `0x6dc`；重复快照保留缓存和动画。`actor_poop(sprite, bytes)` 仅为完整名单中的客机里蓝人恢复 10 字节资源快照，四字节大端 mana 和六个队列字节写入 `+0x1f54/+0x1f58`，不改未来随机队列。各接口不跨调用保留玩家、HUD 或 Sprite；[原版布局](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#角色附属状态)独立提供偏移。
 
+黑暗以扫（类型 866、变体 0）随所属角色迁移时，主机调用 `NPC.NewRoom`（RVA `0x2d6d80`，`thiscall void(NPC*)`），让原版按两间房的坐标换算追赶位置。新房间中在原生初始化及 NPC 迁移之后调用；加入已有房间时同样调用一次。调用期间暂借 `Game+0x18308/+0x18310` 的来源房间与维度，返回后恢复；实体保持原有身份和引用，不重新生成，也不放到玩家落点。客机从权威快照恢复 NPC，不执行该角色的原生入房玩法。妈妈的影子加入已有房间时复用同一原生入口和来源上下文。入口受启动签名校验，对象分配与回收仍由游戏管理。
+
 ## 玩家轮廓
 
 [`outlines::withPlayers(connected, render)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/player_outlines.h) 仅在本机房间绘制期间借用 LAN 在线槽位掩码，退出或异常时恢复外层掩码；不缓存角色地址，不增加同步字段。至少两名玩家在线且 `Player+0x1618` 属于有效槽位时，使用表现层的固定配色。单人、退出会话及不属于在线槽位的实体继续原版路径。
@@ -123,6 +162,16 @@ J460 描述符数组为 `Game+0x14`、步长 `0xb8`，三个维度共 507 项；
 J460 后端在 `Player::Render` 的三个轮廓资格分支接入原生绘制：普通身体 Gate／Draw RVA 为 `0x38c481`／`0x38c4df`，特殊精灵为 `0x38c1ef`／`0x38c249`，幽灵／宝宝为 `0x38c66c`／`0x38c6bc`。各边界的 `EBX` 是当前角色，`[EBP+0xc]` 是主绘制标记，前两个分支还保留 `[EBP-0x6d]` 的原生全息分身限制。跳转适配保存通用寄存器、标志与全部 XMM 寄存器，只替换 Steam 名单资格判断；身体、头部、装扮的四方向偏移绘制和颜色栈清理由原版完成。所有边界及续接入口均纳入启动签名校验。
 
 `PlayerManager` 的颜色转换入口 RVA `0x2d060` 使用 thiscall，接收借用的 `ColorMod*` 输出与 `Player*`，返回同一输出指针并弹出 8 字节参数。只在上述三个原生描边调用点改写输出的 44 字节临时 `ColorMod`（RGBA 乘数、四个 colorize 值、RGB 偏移），不写角色或装扮颜色。其他 HUD／效果调用保留原函数；不修改官方联机状态、原生玩家颜色分配、用户配色选项、对象所有权或存档。绘制作用域及配色由[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_outlines.cpp)维护；这些布局与入口仅用于 J460，[原版边界](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#玩家轮廓)使用自己的颜色调用与幽灵绘制。
+
+## 玩家不透明度
+
+[`player_opacity::withPlayers(players, connected, render)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/player_opacity.h) 在本机房间绘制作用域内，将有效 LAN 槽位的角色及角色精灵映射到本机倍率。只借用角色的基础 Sprite（`+0x48`）、额外 Sprite（`+0x41c`）、辅助 Sprite（`+0xee4`、`+0xff8`）及装扮向量（`+0x1220`，步长 `0x130`，上限 4096）；拒绝倒序、未对齐和越界向量。七个充能条及其他实体精灵不在该精灵名单内；泪弹与激光通过原版弹幕绘制边界查询角色归属。嵌套绘制、正常退出和异常退栈均恢复外层映射；不跨绘制缓存游戏地址，不分配或释放游戏对象。
+
+J460 的 Sprite 图层绘制在 RVA `0x9311` 完成原始颜色、图层颜色与颜色栈覆盖的选择，此时 `[EBP-0xf4]` 是所属 Sprite，`[EBP-0x40]` 是栈上的最终 `ColorMod` 副本。受启动签名校验的边界保存通用寄存器、标志及全部 XMM 寄存器，仅将该副本的 Alpha（`ColorMod+0xc`）乘以所属倍率。原生描边和全息颜色也经过此处，每次角色图层绘制只乘一次；角色实体、精灵、图层及全局颜色栈均保持原值，后续水面／房间着色继续由游戏完成。
+
+泪弹 `Render` 在 RVA `0x2792dc` 已由原生转换得到 `EDX=Player*`，并保存原始精灵颜色。仅当该指针属于本次有效 LAN 名单时，将泪弹 `ESI` 的精灵 Alpha（`+0x48+0xa8+0xc`）乘以所属倍率，接回 `0x279351` 的原生绘制；原版在 `MC_POST_TEAR_RENDER` 之前恢复颜色。激光 `Render`（`0x5787b7`）和 `RenderShadowLayer`（`0x57cb25`）使用原生解析的 `EAX=Player*`，分别设置栈上倍率 `[EBP-0x1a0]` 与 `[EBP-0x124]`，接回 `0x5787df`／`0x57cb64`，由游戏处理光束、环和地面层的着色。三个入口及接续地址均有启动签名校验，保存通用寄存器、标志与全部 XMM 寄存器。不解引用名单外的归属指针；未归属、已断开或绘制作用域外的调用保持原版路径。100% 同样绕过原版 Steam 偏好，避免与 LAN 倍率重复应用；不修改官方联机选项、攻击的模拟状态或对象所有权。
+
+内部 Lua 能力 `player_opacity()` 读取启动配置的其他玩家默认百分比；`player_opacity(p1, p2, p3, p4)` 原子更新四个本机百分比，只接受四个 0～100 的 Lua 整数，失败返回 `false` 且保留全部旧值。玩家选择、默认值与会话清理由表现组件负责；接口不接受原生指针，也不更改联网状态。
 
 ## 激光路径呈现
 
@@ -142,7 +191,17 @@ J460 的采样状态位于实体 `+0x45d`，允许 `0`、`1` 与原生未初始�
 
 ## 转场与暂停
 
+J460 的 `Game:StartStageTransition(sameStage, animation[, player])` Lua 闭包经适配入口调用与 `MoveToRandomRoom` 相同的三参数绑定（RVA `0x4b8c30`），替换原入口 `0x4b8bb0`；两个原生入口均校验签名。省略玩家时使用公共 Lua ABI 将第四个栈参数补为 `nil`；原生绑定仍从原闭包的 userdata upvalue 读取目标方法，沿用 Game／EntityPlayer 类型检查，将 `nil` 玩家转为空指针。底层 `Game::StartStageTransition`（RVA `0x2fdc10`）为 `thiscall void(Game*, bool, int, EntityPlayer*)`，清理 12 字节栈参数。游戏原生调用、房间来源选择与联机换层屏障继续使用该三参数契约；适配只保留进程内函数入口，不缓存 Lua 状态、闭包或玩家指针，Lua 重载后仍通过同一入口。
+
+内部 C++ 能力 [`actorDepartureAnimation(player)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/visuals.cpp) 只读换层触发玩家正在播放的额外动作。调用方必须在安全更新边界持有有效玩家，且在房间拆卸前调用；入口校验非空与实体类型。J460 的有效标记位于 `Player+0x1398`，动作名来自实体主 Sprite 的当前动画数据 `+0`，使用原生 MSVC 字符串布局；长度不得超过容量或协议的 64 字节上限。无有效额外动作或动画数据时返回空字符串。返回值拥有独立副本，不保留玩家或动画数据指针，不写游戏状态；动作匹配和回放由桥接表现层负责。
+
 Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；普通 `Game::StartRoomTransition` 同时选路并启动转场，不能直接作为客机结果回放接口。
+
+[`presentation_events`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/presentation.cpp) 保持每条八个 `u32` 的 Boss 出场载荷，按楼层、类型、维度和房间匹配后调用原生 `StartBossIntro`。加入已加载房间只订阅其未完成事件，沿用序号和 Boss ID；主机加入时在到达作用域内启动本机原生画面，客机通过权威视图接收。原始观看者决定等待边界，后来者不延长战斗暂停。每份已接受视图中的事件列表是该接收者仍待播放的完整集合：已播放事件消失时，客机结束对应的剩余出场画面。重复状态按房间与序号去重；等待和已参与名单由 [IntroBarrier](https://github.com/BMingSY/isaac-lan/blob/main/src/core/intro_barrier.h) 管理，完成／超时后不接受新订阅，退出清理名单。载荷字段和协议号不变，不同 DLL 由扩展指纹拒绝连接。
+
+[`finishBossIntro`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/boss_intro.h) 只完成 J460 的 Boss versus 状态，不暴露 Lua 写内存接口。游戏的 `RoomTransition` 位于 `Game+0x1b83c`，模式／已用帧／持续帧在 `+0/+4/+8`，出场 Sprite 在 `+0x38`，Boss 标记在 `+0x238`。仅当标记有效且模式为 2 或 3 时操作：模式 2 清除 Sprite 主动画的播放位，再调用原生 `RoomTransition::Update`（RVA `0x4318a0`）完成音乐和演出收尾；模式 3 将已用帧推进到持续帧，再调用原生完成控制恢复。最多调用两次，不直接改写模式、不重新初始化房间，不分配或保留原生对象；其他转场完全不写入。主机在本机房间名单作用域内执行，客机在已提交视图的本机作用域内执行。
+
+[`animation_skip`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/animation_skip.cpp) 只提供当前动画、观看名单和按事件完成的具名能力；同意收集由[运行组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/animation_skip.lua)负责。Boss 跳过沿用 `finishBossIntro` 和逐观看者控制恢复。换层梦境位于 `Manager+0x21628`，仅在场景 5、对象活动且属于联机运行时处理；`Manager+0x21c10` 标记的 Home 个人梦境由本机直接确认。`NightmareScene::Show`（RVA `0x521ce0`，`thiscall void(Scene*, bool)`）清空上一次许可；`Update`（RVA `0x520510`，`thiscall void(Scene*)`）在受限输入作用域内读取投票许可作为 `ACTION_MENUCONFIRM`，仍由原生更新完成 Sprite、音效和场景退出。`Render`（RVA `0x520940`，`thiscall void(Scene*)`）在原生梦境绘制后接入联机 HUD，供同意进度显示。入口均通过签名校验，接口校验运行、楼层代次和事件身份，不写场景编号，不绕过原版不可跳过的阶段，不分配或保留原生对象。正常单人游戏与结局保留原生行为。
 
 镜子过门调用 `Game::StartRoomTransition` 时，目标已从 `ROOM_MIRROR_IDX` 解析为实际描述符索引和维度；识别依据是 `RoomTransitionAnim.FADE_MIRROR`（18）。[镜像路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/mirror.h)仅对有效门槽位保留原门作为目标入口；屏幕反射不改变世界空间的门槽位。普通过门继续按相邻描述符选择入口。
 
@@ -154,10 +213,14 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 | --- | --- | --- |
 | 换层来源上下文 | `Level::SetNextStage`，RVA `0x3467c0`，`thiscall void(Level*)` | 调用期间临时替换 `Level+0x18304` 来源索引，范围 `[-20, 168]`；返回恢复，事务完成／取消时失效，不切换房间对象 |
 | 已决定的房间转场 | `RoomTransition.Start`，RVA `0x42ee40`，receiver 为 `Game+0x1b83c`，五个栈参数、被调方清理 20 字节 | 回放 index、direction、animation、player、dimension，保留原版尾部完成标志；不重新选择路线 |
+| 沙漏检查点路线标记 | `Game+0x26548` 的 64 位 `GameStateFlag`，由既有原生 Store 写入 GameState | 按[路线策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/routes/hourglass.h)临时投影标记，仅限同步保存调用；返回时恢复实时标记。不改变存档布局、协议或对象所有权 |
 | 暂停菜单 | `pauseMenuShow`、`pauseMenuHide`、`pauseMenuControls`、`optionsSave` | 菜单操作独立于整段 `Game::Controls`，临时使用本机显示名单，返回恢复，不接管菜单或角色所有权 |
 | 原生菜单提示清理 | `input::resetMenuPrompts`，RVA `0x239b0`，`thiscall void(Manager+0x4a950, false)` | 联网启动销毁菜单后调用一次，被调方清理 4 字节，不影响随后暂停菜单提示 |
 | 原生结束回放 | `Game::End`，RVA `0x2f9770`，`thiscall void(Game*, int id)` | `1` 为死亡结算，`2～14` 为结局；房主原生确认后发送可靠结束事件，客机在安全更新边界调用原入口。本机名单只在调用期间借用，不复制结算 Sprite、角色或原生容器；单人保留原调用 |
 | 返回联机菜单 | `menu_context::returnToMain`，仅由待处理的联机返回请求调用 | 等待 `Manager+0x8` 为菜单场景、`+0x10` 为有效存档栏 `1～3` 且菜单对象存在；将 `MenuManager+0x40` 从标题／存档／主菜单页 `1～3` 设为主菜单 `3`，再显示联机界面。结局场景和其他菜单页不写入，不分配或释放原生菜单对象 |
+| 更新提示与退出 | `update_continue()`、`update_exit()` | 仅在待更新提示占用首次开局前主菜单时接受；继续操作清除本进程提示，退出操作向所属窗口发送 `WM_CLOSE`，返回是否成功提交请求。保留正常退出清理，不启动其他进程、不替换已加载 DLL。`input::menuHeld` 只查询本机原生动作值，用于打开／关闭提示后的松键屏障；不写原生菜单或输入对象 |
+
+客机在副本 `Game::Update` 调用期间使用 `pause_menu::FocusPauseScope`，暂时关闭原生失焦自动暂停，结束或异常退栈时恢复原值。选项位于 `Manager+0x2a33c` 的配置对象内 `+0x69`；`Game.Update.focusPauseOption`（RVA `0x2fb840`）校验实际读取该字节的指令及条件分支。暂停状态仍由联机权威决定，本机菜单操作、选项保存、主机及单人更新不进入该作用域；不持久修改用户配置，不分配原生对象。
 
 `session_backend` 在原版 `Game::Controls` 返回后检查 `Game+0x265bc` 的重开淡出动作：`5` 为结算确认，`6` 为长按重开。只有运行层接收联机请求时才清除该动作、`+0x265b0` 的淡出透明度和 `+0x265c4` 的按住帧数；其他转场及单人调用原样保留。不会调用或复制带原生容器的 `Manager::RestartGame` 参数。
 
@@ -170,6 +233,10 @@ J460 采集入口为 `0x305ee0`，`stdcall void(int door)`，清栈 4 字节。�
 联机拦截 `Manager::SaveGame` 的文件写入时仍执行 `Game::CaptureState`。采集包含原生玩家离房清理，调用方随后恢复进房临时效果；两者必须配对。捕获结果只保存在原生 GameState 中，单人存档由会话备份保护，联机退出写入独立会话存档。个人进度合并完成后，`session::persistProgress` 按原生顺序调用 `Progress::SaveCloud`（RVA `0x528ee0`）和 `Progress::SaveFile`（RVA `0x5294f0`），两者均为 `thiscall void(Manager+0x14)`，由原生打开并关闭流；不能直接调用需要已打开流的 `Serialize`。该接口只保存当前存档槽的进度，不分配角色或写入局内存档。
 
 存档编解码共用后端的 [x86 内存流](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/save_stream.h)，J460 默认状态为 `Manager+0xfa4`，临时流字段为 `GameState+0x1fe24`。读取入口 `0x5cc1a0` 为 `thiscall bool(GameState*, Context*, bool)`，联机传入 `false`；此参数不能套用于 J835。解码期间[临时清空四个存档文件名槽](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/save_file_names.h)，阻止原生读档错误清理使用单人文件路径；返回时恢复原生字符串与流指针。输出限制为 8 MiB，短读、越界和写入只读流均使操作失败；部分 GameState 内容不回滚。
+
+`RecordCharacterCompletion`（RVA `0x55aa30`）为 `stdcall void(event, character, difficulty)`，返回时清理 12 字节。观察器保留原生调用与资格判定，只向运行层提供本次通关的计数 ID、普通／困难位及成就 ID；重复通关仍产生通知。事件限定为 0–14、角色为 0–40、难度为 0–3，只读恢复期间不产生奖励。原生描述符表位于 RVA `0x835ed0`，每名角色 18 项，每项两个 32 位 ID；HUD 映射及位计数分类见 [completion_marks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/completion_marks.h)。回调不暴露原生地址，不改变描述符或对象所有权。
+
+`commitProgress` 只用于退出时提交已合并的个人进度：恢复个人计数和原有成就，使用 `Progress::TryUnlock`（RVA `0x529a20`，`thiscall bool(id)`）提交本局解锁，再以 `Progress::IncreaseEventCounter`（RVA `0x529b40`，`thiscall void(id, delta)`）的零增量检查累计条件。提交期间借用可写位并在返回时恢复；运行层须先结束共享进度合并，避免原生同步保存再次合并。该能力不写入局内 Continue 或分配游戏对象。
 
 客机恢复与原生更新使用 `ProgressReadOnlyScope`，按栈保存并恢复 `Manager+0x14` 进度对象的 `+1` 只读位。J460 收藏记录更新（RVA `0x52a2d0`）与成就尝试（RVA `0x529a20`）均先检查此位；复制权威成就／计数不通过这些方法，因此不被拦截。作用域结束恢复原值，不改变主机进度、会话合并或退出持久化。
 
@@ -208,6 +275,12 @@ J460 全局大书位于 `Game+0x1c034`，对象大小 `0x12b8`；48 个配置从
 [胜利圈组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/victory_prompt.cpp) 通过 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/victory_prompt.cpp) 访问 `Game+0x26778`。Controls、Render、Hide 分别为 RVA `0x437fe0/0x437c10/0x438190`，均为 thiscall，无栈参数。动画 `+0x34`、播放位 `+0x44`、选择 `+0x128`、结果 `+0x12c` 和投票位 `+0x130` 只在该对象上使用；动画、字符串和字体仍由游戏持有。
 
 普通联机只显示主机提示，主机使用已锁存菜单按键沿，并关闭原生 Steam 投票等待；客机不消费提示输入。Idle 动画阶段才可确认，原生结果 1 接受、2 拒绝，然后调用 Hide。联机挑战在各端等到 Idle 后拒绝；其他提示和单人会话保留原函数。`victory_lap_prompt` 返回打开、选择、结果、投票和 Idle 五个普通值，每次从当前 Game 读取，空 Game 返回关闭状态。两个 Hook 成组安装，失败撤销本组件 Hook 和借用指针，保留外部 Hook 并允许重试。[原版绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#胜利圈提示) 使用自己的字段，不访问 Steam 投票状态。
+
+## 楼层生成
+
+[floor_generation.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/floor_generation.h) 接受运行层提供的同步布尔查询，仅选择原版超大层生成分支。J460 的房间数量判断位于 RVA `0x340f9f`，布局判断位于 RVA `0x3419df`；两处均为对 `Game+0x26584` 原生挑战编号的七字节比较指令。入口与后续条件跳转受启动签名校验。
+
+后端保留原比较；查询为 true 时，仅将其算术标志改为相等比较的结果，再执行原版分支。通用寄存器、栈与 XMM0–XMM7 均恢复，不写 `Game.Challenge`、诅咒、种子、布局或原生容器。房间数量抽样、随机数推进、布局与房间对象分配仍由原版负责。查询适用于首层、换层与重新生成；无活动挑战时保留原生行为。玩法匹配由上层挑战目录负责。
 
 ## HUD 与本机输入
 
@@ -283,6 +356,16 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 `characters::completionPreview` 只读取调用方提供的个人 `Progress`，不写原生存档。J460 原版角色与替身的计数映射集中在 [completion_marks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/completion_marks.h)。每个计数只取低两位的单人记录，屏蔽官方联机记录；十二层按 `gfx/ui/completion_widget.anm2` 排列，含代表 Delirium 的纸张层。预览的低 24 位每两位保存一层，位 24 表示数据可用；解码拒绝额外位和层值 3。未收录的 Mod 角色返回不可用，仍可正常选角，不伪造未通关记录。
 
 ## 道具与效果
+
+`actor_inventory_order(sprite[, bytes])` 读取或恢复当前名单中玩家的 16 个库存槽顺序，每槽为大端 `i32` 道具 ID，0 表示空槽；玩法适配只用于里以撒。写入只允许客机，在完整解析并校验重复项数量后，把 ID 映射到本机已有历史索引，再一次提交槽位并置该角色 `PlayerHUD+0x6ac` 的库存刷新字节；顺序不变时不触及缓存。历史容器、道具效果、纹理和 HUD 缓存仍归原生代码所有，不复制主机索引、不分配历史条目。J460 的槽数组位于 `Player+0x1e00`，历史向量位于 `+0x1dec`，历史条目步长 `0x1c`、饰品标记 `+0x4`、道具 ID `+0x8`；读取检查向量长度、65536 条上限和每个索引，布局受原生 HUD 读取指令签名校验。实现见 [inventory_order.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/inventory_order.h)。
+
+`items_active_data(sprite[, bytes])` 接受当前原生名单中玩家的借用 Sprite，读取或恢复四个主动槽的 `{id:i32, data:i32}` 大端记录，并在末尾携带一个打包盒非空标志（0／1），共 33 字节。写入只允许客机；完整解析后核对四个 ID 与已恢复的库存一致、空槽状态为 0，并通过[道具状态校验](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/active_data.h)后才提交。D 无限高 16 位为十种骰子的索引，低 16 位保留充能状态。原生描述符位于 `Player+0x1580`，槽间隔 `0x20`，状态在槽内 `+0x1c`；布局由 RVA `0x391519` 的原生写入指令校验。
+
+状态变化只清空该玩家对应槽的原生 HUD 图标键。PlayerHUD 数组起于 `Game+0x1da04`，共 8 项、每项 `0x6dc`，首字段为借用玩家指针；四个主动图标缓存起于 `+0x190`，间隔 `0x1c`。根、步长、清空操作和槽间隔受原生指令签名校验。重复状态不触及缓存；图片加载、释放和绘制继续由原生 HUD 负责，不借用队友图标，也不执行主动道具玩法。实现见 [active_items.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/active_items.h)。
+
+打包盒内容由 `Player+0x1d7c/+0x1d80` 的原生向量边界只读判空。客机标志按玩家地址和实体种子保存，在演出状态重置时清理；不写该向量或主动槽内部状态。`PlayerHUD::RenderActiveItem` 的 RVA `0x4458f2` 分支仅选择原生满盒／空盒裁剪路径，保存通用寄存器、标志和 XMM0–7，图片所有权不变。向量读取与分支受签名校验。实现见 [moving_box.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/moving_box.cpp)。
+
+死亡证明的原生拾取倒计时位于 `Game+0x68d6c`，返回房间和维度位于 `+0x18900/+0x18904`。RVA `0x2fb9bb` 是倒计时完成后的返回边界：主机视口已离开道具区而仍有在线玩家留在其中时，仅为这次原生转场借入该玩家的房间作用域。转场沿用 `thiscall(Game*, int room, int direction, int animation, Player*, int dimension)` 和原生来源字段；没有道具区玩家时只消费已完成的倒计时。单人、客机和视口仍在道具区时走原分支。适配保存通用寄存器、标志及 XMM0–7，错误不跨原生帧展开；不改回溯存档或对象所有权。实现见 [death_certificate_return.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/death_certificate_return.cpp)。
 
 底座拾取、发放、充能及复活作用域使用[共享道具组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/item_effects.cpp)，原生入口与布局由 [J460 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/item_effects.cpp) 提供。`Player::QueueItem` RVA `0x35e050` 使用 `thiscall`，只在底座确认拾取的返回点 `0x2ebe11` 通知运行层，传递玩家栏位、实体种子、道具 ID、充能、Touched、VarData 与来源池。兼容组件接受时不再向原拾取者入队；其他调用点、饰品、开局和恢复沿用原生方法。通知期间不切换房间；结算在模拟作用域退出后、发布视图前完成。源对象和配置指针不进入 Lua，不由适配器释放。
 

@@ -269,6 +269,8 @@ session::Callbacks handlers() {
                 requestedHeld = held;
                 return acceptRestart;
             },
+        .completionAward = {},
+        .largeFloor = nullptr,
     };
 }
 void prepare() {
@@ -531,3 +533,9 @@ int main() {
     require(MH_Uninitialize() == MH_OK && VirtualFree(image, 0, MEM_RELEASE),
             "Release synthetic fixture");
 }
+
+namespace isaac::engine {
+bool installFloorGeneration(std::uintptr_t, bool (*)()) {
+    return true;
+}
+} // namespace isaac::engine

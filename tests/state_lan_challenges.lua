@@ -1021,7 +1021,8 @@ function _IsaacLanFrame()
                 )
             end
             assert(
-                progress:sub(-4) == progressBaseline:sub(-4),
+                _IsaacLanTestProgress.privateCounter(progress)
+                    == _IsaacLanTestProgress.privateCounter(progressBaseline),
                 "Challenge replaced this peer's private progress counter"
             )
             report("LOCAL_PROGRESS_BASELINE_PRESERVED")

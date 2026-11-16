@@ -1,6 +1,6 @@
 import pytest
 
-from testing.delivery import analyze_delivery, time_weighted_age
+from testing.delivery import analyze_delivery, assess_delivery, time_weighted_age
 
 
 def test_time_weighted_age_includes_stalled_delivery():
@@ -25,3 +25,28 @@ def test_delivery_analysis_pairs_original_ticks_and_rejects_missing_evidence():
         analyze_delivery(host, client + client, minimum_samples=2)
     with pytest.raises(ValueError, match="invalid delivery"):
         analyze_delivery(host.replace("ms=1000", "ms=2000"), client, minimum_samples=2)
+
+
+def test_delivery_budgets_reject_slow_but_eventually_successful_recovery():
+    limits = {
+        "arrival_age_ms": {"p95": 250},
+        "update_gap_ms": {"p99": 500},
+        "view_age_ms": {"p95": 350},
+    }
+    host = "WEAK_NET VIEW tick=60 ms=1000\nWEAK_NET VIEW tick=90 ms=2000\n"
+    client = "WEAK_NET APPLY tick=60 ms=1050\nWEAK_NET APPLY tick=90 ms=2050\n"
+    result = analyze_delivery(host, client, minimum_samples=2)
+    decision = assess_delivery(result, limits)
+    assert not decision["passed"]
+    assert {entry["metric"] for entry in decision["failures"]} == {"update_gap_ms", "view_age_ms"}
+    result = analyze_delivery(
+        host.replace("2000", "1100"), client.replace("2050", "1150"), minimum_samples=2
+    )
+    assert assess_delivery(result, limits)["passed"]
+    for invalid in (
+        {},
+        {"arrival_age_ms": {"p95": 1}},
+        dict(limits, view_age_ms={"p95": float("nan")}),
+    ):
+        with pytest.raises(ValueError):
+            assess_delivery(result, invalid)

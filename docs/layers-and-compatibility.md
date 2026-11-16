@@ -53,13 +53,13 @@ Lua 嵌入清单在 [`modules.txt`](https://github.com/BMingSY/isaac-lan/blob/ma
 
 ## 房间作用域
 
-[`ScopeStack`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 只管理逻辑绑定，不读取游戏内存。同房重入和跨房嵌套都增加深度，并借用最外层保存的完整名单；绑定不可复制或移动，乱序恢复／销毁会终止进程。
+[`ScopeStack`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 只管理逻辑绑定，不读取游戏内存。同房重入和跨房嵌套都增加深度，完整名单的来源随借用链传递；绑定不可复制或移动，乱序恢复／销毁会终止进程。
 
-J460 `Scope` 按深度选择独立的临时名单，恢复原生标量与名单后先恢复父房间标识，待共享状态交换和临时分配清理完毕后再解除深度屏障。`TeamScope` 只临时切换完整名单。原生布局、Hook、MSVC 分配与释放仍在版本后端，逻辑退栈测试不能替代实机资源验收。房间迁移和渲染归属见[房间与表现](https://github.com/BMingSY/isaac-lan/blob/main/docs/rooms-and-presentation.md)。
+J460 `Scope` 按深度选择独立的临时名单，恢复原生标量与名单后先恢复父房间标识，待共享状态交换和临时分配清理完毕后再解除深度屏障。`TeamScope` 临时借用完整名单；借用期间的嵌套查询使用同一份活动名单，保留原生增删与重排。嵌套房间作用域保存当前完整名单，退出时将最新名单交回外层借用者。原生布局、Hook、MSVC 分配与释放仍在版本后端，逻辑退栈测试不能替代实机资源验收。房间迁移和渲染归属见[房间与表现](https://github.com/BMingSY/isaac-lan/blob/main/docs/rooms-and-presentation.md)。
 
 ## 采集与副本恢复
 
-[`sync/capture.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/capture.lua) 以 `(epoch, tick)` 标识一次不可变采集代次；同轮发布期间不得推进玩法。公共字段采集一次，角色基础状态与完整表现分别缓存，[`sync/room.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/room.lua) 按房间复用实体／网格视图。声音、演出及道具表现仍按客机采集。采集缓存不跨 tick；同步层按字段投影，网络层只根据两份不透明字节的内容和修订号决定传输。低频依赖仍逐 tick 采集，变化时可靠发送，并在未被应用确认的新视图中携带恢复副本；客机在对应依赖齐全后恢复完整状态。
+[`sync/capture.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/capture.lua) 以 `(epoch, tick)` 标识一次不可变采集代次；同轮发布期间不得推进玩法。公共字段采集一次，角色基础实体状态与完整表现按接收者房间需要分别采集并缓存。同代次内所有角色共享仅包含 ID 的道具目录，各角色的道具数量、生命与充能仍独立读取；目录随 tick、楼层代次或会话重置失效，不保留原生配置对象。[`sync/room.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/room.lua) 按房间复用实体／网格视图。声音、演出及道具表现仍按客机采集。采集缓存不跨 tick；同步层按字段投影，网络层只根据两份不透明字节的内容和修订号决定传输。低频依赖仍逐 tick 采集，变化时可靠发送，并在未被应用确认的新视图中携带恢复副本；客机在对应依赖齐全后恢复完整状态。
 
 [`sync/replica.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/replica.lua) 的顺序为：
 

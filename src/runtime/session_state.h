@@ -41,5 +41,6 @@ struct SavedRun {
     std::vector<std::uint8_t> soloState;
     std::optional<lan::Archive> exitingArchive, resumingArchive;
     std::optional<lan::Progress> localProgress, commonProgress;
+    lan::ProgressAwards earnedProgress;
 };
 } // namespace isaac::runtime

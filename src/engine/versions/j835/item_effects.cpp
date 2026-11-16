@@ -1,4 +1,7 @@
+#include <windows.h>
 #include "engine/versions/common/item_bindings.h"
+#include "engine/versions/j835/active_items.h"
+#include "engine/versions/j835/inventory_order.h"
 #include "engine/versions/j835/entrypoints.h"
 #include "engine/versions/j835/layout.h"
 
@@ -49,5 +52,7 @@ const Bindings bindings{
                            j835::layout::itemConfig::trinket},
             .pickup = {j835::layout::pickup::charge, j835::layout::pickup::varData, std::nullopt},
         },
-    .chargeType = chargeType};
+    .chargeType = chargeType,
+    .activeItems = j835::active_items::fields,
+    .inventoryOrder = j835::inventory_order::fields};
 } // namespace isaac::engine::native_items

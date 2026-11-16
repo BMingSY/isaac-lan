@@ -15,7 +15,8 @@ local localProgress
 local linked, chosen, started, finished = false, false, false, false
 local step, stepAt, floorAt, seenBoss, photo, contact, shoot = "init", 0, 0, false, nil, nil, -1
 local previousStage, previousType, lastFloor, bedroom, living
-local exitContact
+local exitContact, exitDirection
+local EXIT_APPROACH_DISTANCE, EXIT_CONTACT_OFFSET = 60, 4
 local chestMove = -1
 local lastChestInput = -1
 local observed, snapshots, floorEvents = {}, 0, 0
@@ -129,6 +130,7 @@ local function actor(slot, fn)
         fn(player)
     end))
 end
+local beastLayerProbe = _IsaacLanTest.beastLayering and createBeastLayerProbe(native, actor, report)
 local function protect(p)
     p:SetMinDamageCooldown(10000)
     p:AddEntityFlags(EntityFlag.FLAG_NO_DAMAGE_BLINK)
@@ -188,7 +190,9 @@ local function terminalMovement(t)
         terminalWalking, terminalVerified = false, true
     end
 end
+local BOSS_ENTRY_SETTLE_TICKS, BOSS_ENTRY_TIMEOUT_TICKS = 30, 1200
 local bossEntrySlot = 1
+local bossEntryTarget, bossEntryAt
 local function move(index, t, dimension, slot)
     slot = slot or 1
     assert(native.rooms_move(slot, index, dimension or 0, -1))
@@ -238,6 +242,7 @@ local function boss(t, target)
             and 0
         or 1
     move(index, t, nil, bossEntrySlot)
+    bossEntryTarget, bossEntryAt = index, t
     report("BOSS_ENTRY slot=" .. bossEntrySlot)
     mark("boss-enter", t)
 end
@@ -258,6 +263,23 @@ local function pick(variant, subtype)
     end)
     return found
 end
+local function useChest(nextStep, t)
+    if not pick(PickupVariant.PICKUP_BIGCHEST) then
+        return
+    end
+    mark(nextStep, t)
+    -- Native pickup cooldown restarts while ANY player touches a newly
+    -- spawned chest. Clear both actors before the guest walks towards it.
+    for slot = 0, 1 do
+        actor(slot, function(p)
+            p.Position = contact.Ref.Position + Vector(slot == 0 and -80 or 60, 0)
+            p.Velocity = Vector.Zero
+        end)
+    end
+end
+local function approachingChest()
+    return step == "ending-chest" or step == "chest-floor"
+end
 local function exitPosition(kind)
     local result
     actor(1, function()
@@ -277,13 +299,38 @@ local function useExit(kind, t)
     if not pos then
         return false
     end
+    contact = nil
     actor(1, function(p)
+        exitDirection = Vector(1, 0)
+        for _, e in ipairs(Isaac.GetRoomEntities()) do
+            if
+                e.Type == EntityType.ENTITY_EFFECT
+                and e.Variant == EffectVariant.HEAVEN_LIGHT_DOOR
+            then
+                local away = pos - e.Position
+                if away:LengthSquared() > 0 then
+                    exitDirection = away:Normalized()
+                end
+                break
+            end
+        end
         p.Position, p.Velocity = pos, Vector.Zero
     end)
     exitContact = pos
     previousStage, previousType = Game():GetLevel():GetStage(), Game():GetLevel():GetStageType()
     mark("floor-wait", t)
-    report("NATIVE_EXIT kind=" .. kind .. " from=" .. previousStage .. ":" .. previousType)
+    report(
+        "NATIVE_EXIT kind="
+            .. kind
+            .. " from="
+            .. previousStage
+            .. ":"
+            .. previousType
+            .. " approach_x="
+            .. exitDirection.X
+            .. " approach_y="
+            .. exitDirection.Y
+    )
     return true
 end
 local function useEffect(variant, t)
@@ -291,6 +338,7 @@ local function useEffect(variant, t)
     actor(1, function(p)
         for _, e in ipairs(Isaac.GetRoomEntities()) do
             if e.Type == EntityType.ENTITY_EFFECT and e.Variant == variant then
+                contact = EntityPtr(e)
                 p.Position, p.Velocity = e.Position, Vector(1, 0)
                 found = true
                 break
@@ -427,7 +475,9 @@ local function fight(t)
                             .. e:GetSprite():GetFrame()
                     )
                 end
-                local warmup = e.Type == 950 and 200 or 30
+                local warmup = e.Type == 950 and 200
+                    or beastLayerProbe and e.Type == EntityType.ENTITY_BEAST and 360
+                    or 30
                 if
                     not terminalWalking
                     and (not dogmaWarning or e.Type ~= 950 or not dogmaAngelSeen or warningAt and t - warningAt > 150 and attackFrames > 0)
@@ -724,9 +774,9 @@ function _IsaacLanFrame()
                 "PROGRESS_DIFF flags="
                     .. table.concat(diffs, ",")
                     .. " private="
-                    .. string.unpack(">I4", localProgress:sub(-4))
+                    .. _IsaacLanTestProgress.privateCounter(localProgress)
                     .. ">"
-                    .. string.unpack(">I4", progress:sub(-4))
+                    .. _IsaacLanTestProgress.privateCounter(progress)
             )
             -- Native menu loading derives unlocks from earned Boss counters
             -- (for example Eden and the Void gate). Retain every prior flag;
@@ -746,13 +796,17 @@ function _IsaacLanFrame()
                 )
             end
             assert(
-                progress:sub(-4) == localProgress:sub(-4),
+                _IsaacLanTestProgress.privateCounter(progress)
+                    == _IsaacLanTestProgress.privateCounter(localProgress),
                 "Ending replaced this peer's private counter"
             )
             report("LOCAL_PROGRESS_RESTORED")
             report("PASS native ending and session cleanup snapshots=" .. snapshots)
             if caseIndex == #cases then
                 if not finished then
+                    if beastLayerProbe then
+                        beastLayerProbe.finish(true)
+                    end
                     finished = true
                     Isaac.DebugString("LAN_NETWORK PASS all selected native ending routes")
                 end
@@ -807,6 +861,31 @@ local function advance(t)
     local level, name = Game():GetLevel(), cases[caseIndex]
     local stage, kind = level:GetStage(), level:GetStageType()
     observeFloor()
+    if step == "boss-enter" and bossEntryTarget then
+        if t - stepAt <= BOSS_ENTRY_SETTLE_TICKS then
+            return
+        end
+        local actual = assert(native.rooms_positions()[tostring(bossEntrySlot)])
+        if actual.index ~= bossEntryTarget or actual.dimension ~= 0 then
+            assert(t - bossEntryAt < BOSS_ENTRY_TIMEOUT_TICKS, "Boss entry kept redirecting")
+            report(
+                "BOSS_ENTRY_REDIRECT requested="
+                    .. bossEntryTarget
+                    .. " actual="
+                    .. actual.index
+                    .. " dimension="
+                    .. actual.dimension
+            )
+            -- Curse of the Maze may redirect the queued native entry. Retry
+            -- the generated room before combat or waiting for its loot.
+            move(bossEntryTarget, t, nil, bossEntrySlot)
+            mark("boss-enter", t)
+            return
+        end
+        -- Mother subsequently enters a separate arena through the native
+        -- hole. Only confirm the initial room, before that transition.
+        bossEntryTarget = nil
+    end
     if homeOnly and debug10 and not debug10BeastWalking and level:GetCurrentRoomIndex() == -10 then
         local beast
         actor(1, function()
@@ -872,7 +951,7 @@ local function advance(t)
         end
     elseif step == "floor-wait" then
         if stage ~= previousStage or kind ~= previousType then
-            exitContact = nil
+            contact, exitContact, exitDirection = nil, nil, nil
             mark("floor-arrived", t)
             report("ARRIVED stage=" .. stage .. " type=" .. kind)
             lastFloor = stage .. ":" .. kind
@@ -880,9 +959,12 @@ local function advance(t)
             actor(1, function(p)
                 -- Walk into the native exit after its opening animation.
                 -- A stationary overlap can miss its first collision.
+                -- Approach away from the adjacent Cathedral light so the
+                -- fixture cannot select that route while backing off.
                 local away = (t - stepAt) % 90 < 20
-                p.Position = exitContact + (away and Vector(60, 0) or Vector(4, 0))
-                p.Velocity = Vector(away and -1 or 1, 0)
+                p.Position = exitContact
+                    + exitDirection * (away and EXIT_APPROACH_DISTANCE or EXIT_CONTACT_OFFSET)
+                p.Velocity = exitDirection * (away and -1 or 1)
                 if (t - stepAt) % 120 == 0 then
                     local room = Game():GetRoom()
                     local grid = room:GetGridEntity(room:GetGridIndex(exitContact))
@@ -951,6 +1033,11 @@ local function advance(t)
             boss(t)
         end
     elseif step == "boss-enter" and t - stepAt > 130 then
+        actor(bossEntrySlot, function(p)
+            -- Native entry can leave the actor against a closed door with
+            -- residual velocity. Keep scripted combat inside when it opens.
+            p.Position, p.Velocity = Game():GetRoom():GetCenterPos(), Vector.Zero
+        end)
         mark("boss-fight", t)
     elseif step == "boss-enter" and name == "mega-satan" and stage == 11 and t - stepAt > 40 then
         actor(1, function(p)
@@ -988,7 +1075,13 @@ local function advance(t)
     elseif step == "boss-loot" and t - stepAt > 100 then
         if stage == 6 and kind < 4 then
             photo = (name == "blue-baby" or name == "ascent") and 327 or 328
-            if pick(PickupVariant.PICKUP_COLLECTIBLE, photo) then
+            local owned
+            actor(1, function(p)
+                owned = p:HasCollectible(photo)
+            end)
+            -- Native collision may collect the photo during the loot delay,
+            -- removing its pedestal before this scan starts.
+            if owned or pick(PickupVariant.PICKUP_COLLECTIBLE, photo) then
                 mark("photo", t)
             end
         elseif name == "mother" and stage == 6 and kind >= 4 then
@@ -1006,26 +1099,13 @@ local function advance(t)
                 mark("mother-door", t)
             end
         elseif stage == 11 or stage == 12 or name == "mother" and stage == 8 and kind >= 4 then
-            if pick(PickupVariant.PICKUP_BIGCHEST) then
-                mark("ending-chest", t)
-                -- Native pickup cooldown restarts while ANY player touches
-                -- the newly spawned chest. Clear both actors before the
-                -- guest approaches; leaving the host against it blocks both.
-                for slot = 0, 1 do
-                    actor(slot, function(p)
-                        p.Position = contact.Ref.Position + Vector(slot == 0 and -80 or 60, 0)
-                        p.Velocity = Vector.Zero
-                    end)
-                end
-            end
+            useChest("ending-chest", t)
         elseif name == "delirium" and stage == 8 then
             specialEntrance(GridRooms.ROOM_BLUE_WOOM_IDX, t)
         elseif name == "delirium" and stage == 9 then
             specialEntrance(-9, t)
         elseif stage == 10 then
-            if pick(PickupVariant.PICKUP_BIGCHEST) then
-                mark("chest-floor", t)
-            end
+            useChest("chest-floor", t)
         elseif name == "mother" and (stage == 2 or stage == 4) then
             specialEntrance(GridRooms.ROOM_SECRET_EXIT_IDX, t)
         elseif stage == 8 and name == "blue-baby" then
@@ -1407,7 +1487,7 @@ local function advance(t)
             contact = nil
         else
             actor(1, function(p)
-                if step == "ending-chest" and t % 120 == 0 then
+                if approachingChest() and t % 120 == 0 then
                     local pickup, sprite = e:ToPickup(), e:GetSprite()
                     report(
                         "CHEST_STATE state="
@@ -1466,10 +1546,16 @@ local function advance(t)
                         end
                     end
                 end
-                if step == "ending-chest" then
-                    -- Approach through normal guest input. Teleporting into
-                    -- the solid chest can leave the actor pushed outside its
-                    -- trigger, even after Appear has completed.
+                if
+                    approachingChest()
+                    or step == "floor-wait" and e.Type == EntityType.ENTITY_EFFECT
+                then
+                    -- Approach chests and lights through normal guest input.
+                    -- Repeated positioning can miss their native collision
+                    -- or interfere with an entrance animation already begun.
+                    if not p:IsExtraAnimationFinished() then
+                        return
+                    end
                     if t - stepAt < 20 or t % 90 < 20 then
                         p.Position, p.Velocity = e.Position + Vector(60, 0), Vector.Zero
                     else
@@ -1511,7 +1597,12 @@ local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(
         function()
-            if terminalWalking or not host and (shoot >= 0 or homeWalking or chestMove >= 0) then
+            local beastMove = beastLayerProbe and beastLayerProbe.direction(host and 0 or 1) or -1
+            if
+                beastMove >= 0
+                or terminalWalking
+                or not host and (shoot >= 0 or homeWalking or chestMove >= 0)
+            then
                 local values = {}
                 local triggered = not host
                         and chestMove >= 0
@@ -1522,7 +1613,8 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 local direction = ({ 0, 2, 1, 3 })[math.floor(native.api_info().tick / 12) % 4 + 1]
                 for action = 0, testInput.actionCount - 1 do
                     values[action] = (
-                        (homeWalking or terminalWalking) and action == direction
+                        beastMove >= 0 and action == beastMove
+                        or (homeWalking or terminalWalking) and action == direction
                         or not homeWalking and not terminalWalking and chestMove >= 0 and action == chestMove
                         or not homeWalking
                             and not terminalWalking
@@ -1558,6 +1650,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 debug10BeastWalking,
                 crawlspaceReturns,
                 chestMove,
+                beastLayerProbe and beastLayerProbe.capture() or false,
             }),
                 stable
         end,
@@ -1575,6 +1668,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         "Replica crawlspace return context differs"
                     )
                 end))
+            end
+            if beastLayerProbe then
+                beastLayerProbe.restore(meta[9])
             end
             assert(meta[1] == caseIndex, "Ending case changed without a native win")
             terminalWalking = meta[5]
@@ -1659,7 +1755,10 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 -- Check every current snapshot entity, excluding retired ones.
                 for identifier, v in pairs(warnings) do
                     local e = assert(replicasByID[identifier], "Replica Dogma effect missing")
-                    assert(e.Visible == v[8][4], "Replica Dogma effect visibility differs")
+                    local fields = _IsaacLanModules["sync/fields"].entity
+                    local common = v[fields.common]
+                        or native.state_decode(v[fields.nativeFields])[1]
+                    assert(e.Visible == common[4], "Replica Dogma effect visibility differs")
                     if v[4] == 1 then
                         local expected = v[24]
                         assert(

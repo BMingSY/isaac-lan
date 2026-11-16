@@ -5,9 +5,11 @@ import json
 import os
 from pathlib import Path
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch as mock_patch
 import pytest
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -145,17 +147,23 @@ class ProgressFixtureTests(unittest.TestCase):
             flags[identifier] = 1
         self.assertEqual(ascent[32:674], flags)
 
-    def test_lazarus_fixture_changes_only_the_guests_required_unlock(self):
+    def test_character_fixture_changes_only_the_guests_required_unlock(self):
         source = self.baseline()
         ordinary = patch(source, host=False)
-        guest = patch(source, host=False, lazarus=True)
-        flags = bytearray(ordinary[32:674])
-        flags[482] = 1
-        self.assertEqual(guest[32:674], flags)
-        self.assertEqual(guest[674:-4], ordinary[674:-4])
-        self.assertEqual(guest[:32], ordinary[:32])
-        self.assertEqual(struct.unpack_from("<I", guest, len(guest) - 4)[0], checksum(guest[16:-4]))
-        self.assertEqual(patch(source, host=True, lazarus=True), patch(source, host=True))
+        for option, identifier in (("lazarus", 482), ("knife", 79)):
+            with self.subTest(fixture=option):
+                guest = patch(source, host=False, **{option: True})
+                flags = bytearray(ordinary[32:674])
+                flags[identifier] = 1
+                self.assertEqual(guest[32:674], flags)
+                self.assertEqual(guest[674:-4], ordinary[674:-4])
+                self.assertEqual(guest[:32], ordinary[:32])
+                self.assertEqual(
+                    struct.unpack_from("<I", guest, len(guest) - 4)[0], checksum(guest[16:-4])
+                )
+                self.assertEqual(
+                    patch(source, host=True, **{option: True}), patch(source, host=True)
+                )
 
     def test_invalid_baselines_are_rejected_before_writing(self):
         source = self.baseline()
@@ -279,10 +287,20 @@ class PackagingTests(unittest.TestCase):
         (self.build / "game-profile.json").write_text(json.dumps(source_profile()))
         for name in BINARIES:
             (self.build / name).write_bytes(b"fixture:" + name.encode())
+        self.strip_tool = str(self.root / "toolchain with spaces" / "strip.exe")
+        (self.build / "CMakeCache.txt").write_text(f"CMAKE_STRIP:FILEPATH={self.strip_tool}\n")
         self.tag = "v" + (ROOT / "VERSION").read_text().strip()
 
+    def strip_binary(self, command, *, check):
+        self.assertTrue(check)
+        self.assertEqual(command[:2], [self.strip_tool, "--strip-all"])
+        destination = Path(command[2])
+        self.assertNotEqual(destination.parent, self.build)
+        destination.write_bytes(destination.read_bytes().removeprefix(b"fixture:"))
+
     def archive(self):
-        result = release(self.build, self.root / "dist", self.tag)
+        with mock_patch("build_package.subprocess.run", side_effect=self.strip_binary):
+            result = release(self.build, self.root / "dist", self.tag)
         return Path(result["archive"])
 
     def rewrite_archive(self, archive, transform):
@@ -353,6 +371,35 @@ class PackagingTests(unittest.TestCase):
             self.assertEqual(
                 zipped.read(archive.stem + "/FAQ.md"), (ROOT / "docs/faq.md").read_bytes()
             )
+
+    def test_release_strips_copies_before_hashing_and_preserves_build(self):
+        originals = {name: (self.build / name).read_bytes() for name in BINARIES}
+        archive = self.archive()
+        with ZipFile(archive) as zipped:
+            prefix = archive.stem + "/"
+            payload = json.loads(zipped.read(prefix + "payload.json"))
+            for name, original in originals.items():
+                final = zipped.read(prefix + name)
+                self.assertEqual(final, original.removeprefix(b"fixture:"))
+                self.assertEqual(payload["files"][name], hashlib.sha256(final).hexdigest())
+                self.assertEqual((self.build / name).read_bytes(), original)
+
+    def test_release_requires_configured_stripper(self):
+        for cache in ("", "CMAKE_STRIP:FILEPATH=", "CMAKE_STRIP:FILEPATH=CMAKE_STRIP-NOTFOUND"):
+            with self.subTest(cache=cache):
+                (self.build / "CMakeCache.txt").write_text(cache)
+                with self.assertRaisesRegex(ValueError, "CMAKE_STRIP"):
+                    release(self.build, self.root / "dist", self.tag)
+                self.assertFalse(any((self.root / "dist").glob("*.zip*")))
+
+    def test_release_propagates_strip_failure_without_publishing_archive(self):
+        failure = subprocess.CalledProcessError(1, [self.strip_tool])
+        with mock_patch("build_package.subprocess.run", side_effect=failure):
+            with self.assertRaises(subprocess.CalledProcessError):
+                release(self.build, self.root / "dist", self.tag)
+        self.assertFalse(any((self.root / "dist").glob("*.zip*")))
+        for name in BINARIES:
+            self.assertEqual((self.build / name).read_bytes(), b"fixture:" + name.encode())
 
     def test_release_tag_must_match_version(self):
         for tag in ("latest", "v999.0.0", self.tag + "-test", self.tag[1:]):

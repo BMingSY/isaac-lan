@@ -7,7 +7,7 @@ namespace isaac::engine::native_pause {
 // subobjects and root selections. J835 derives its player from roster[0].
 struct Bindings {
     std::uint32_t game, manager, show, hide, controls, saveOptions;
-    unsigned pauseMenu, players, playerController, managerOptions;
+    unsigned pauseMenu, players, playerController, managerOptions, pauseOnFocusLost;
     unsigned selection, options, optionSelection, optionEntries;
     std::optional<unsigned> playerIndex;
     int rootPage, optionsPage, resumeSelection, exitSelection, controllerOption;

@@ -64,6 +64,20 @@ local function cycle()
     local bytes = codec.encode(values)
     assert(#codec.decode(bytes) == 32)
 end
+-- Optional Mod metadata is not allocation identity. Missing/replaced data
+-- must neither respawn retained entities nor leave their public replica ID stale.
+do
+    local values = { { 99, 10, 0, 0, false, false, false, false, false, false, 0, 0, 0, 0 } }
+    reconcile(values, env)
+    local retained, before = refs[99], spawned
+    retained.data = nil
+    reconcile(values, env)
+    assert(refs[99] == retained and spawned == before)
+    retained.data = { __isaac_lan_replica = -1 }
+    reconcile(values, env)
+    assert(retained.data.__isaac_lan_replica == 99, "Replica metadata was not refreshed")
+    reconcile({}, env)
+end
 for _ = 1, 10 do
     cycle()
 end

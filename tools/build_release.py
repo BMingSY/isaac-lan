@@ -22,7 +22,7 @@ def release(build_directory, output, tag):
     checksum = output / f"{name}.zip.sha256"
     if package.exists() or archive.exists() or checksum.exists():
         raise FileExistsError("Release output already exists; choose a fresh directory")
-    payload = build(build_directory, package)
+    payload = build(build_directory, package, strip_binaries=True)
     with ZipFile(archive, "w", compression=ZIP_DEFLATED, compresslevel=9) as zipped:
         for path in sorted(package.rglob("*")):
             if path.is_file():

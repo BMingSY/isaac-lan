@@ -56,13 +56,20 @@ void configure(Level value) {
 bool enabled(Level severity) {
     return severity >= minimum.load();
 }
-bool initialize(const std::filesystem::path& gameLogDirectory) {
+bool initialize(const std::filesystem::path& gameLogDirectory, InitializationFailure* failure) {
     std::lock_guard lock(mutex);
+    if (failure)
+        *failure = {};
+    const auto failed = [failure](const std::filesystem::path& path, std::error_code error) {
+        if (failure)
+            *failure = {path, error};
+        return false;
+    };
     const auto logs = gameLogDirectory / L"isaac-lan/logs";
     std::error_code error;
     std::filesystem::create_directories(logs, error);
     if (error)
-        return false;
+        return failed(logs, error);
     if (launchName.empty()) {
         const auto name = uniqueName();
         for (unsigned suffix = 0; suffix < 1000; ++suffix) {
@@ -70,18 +77,21 @@ bool initialize(const std::filesystem::path& gameLogDirectory) {
             if (std::filesystem::create_directory(logs / launchName, error))
                 break;
             if (error || suffix == 999) {
+                const auto path = logs / launchName;
                 launchName.clear();
-                return false;
+                return failed(path, error ? error : std::make_error_code(std::errc::file_exists));
             }
         }
     } else {
         std::filesystem::create_directories(logs / launchName, error);
         if (error)
-            return false;
+            return failed(logs / launchName, error);
     }
     const auto next = logs / launchName;
-    if (!select(next / L"startup.log"))
-        return false;
+    if (!select(next / L"startup.log")) {
+        const auto status = GetLastError();
+        return failed(next / L"startup.log", {static_cast<int>(status), std::system_category()});
+    }
     launchDirectory = next;
     return true;
 }

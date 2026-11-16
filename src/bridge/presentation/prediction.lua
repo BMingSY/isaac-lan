@@ -9,6 +9,8 @@ local coastingRetention = math.sqrt(0.775)
 local turningRetention = math.sqrt(0.8)
 local inputBase, inputSpeedScale = 0.75, 0.25
 local walkingAcceleration, reverseAcceleration = 0.6, 0.04
+local correctionTime, correctionSpeed = 0.06, 120
+local brakingStart, maxPendingTime = 0.35, 0.5
 local function zero()
     return Vector(0, 0)
 end
@@ -20,11 +22,14 @@ end
 function methods:reset(position, sequence, velocity)
     self.base, self.display, self.position = position, position, position
     self.pending, self.correction = {}, zero()
+    self.pendingTime = 0
+    self.evictedTime, self.evictedSequence = 0, sequence
     self.velocity = velocity or zero()
     self.acknowledged = sequence
     self.authority, self.authorityVelocity = position, self.velocity
     self.rebuild, self.confirmedTick = false, nil
     self.teleported = true
+    self.correctionStep = 0
 end
 function methods:confirm(position, sequence, velocity, tick)
     if
@@ -32,7 +37,21 @@ function methods:confirm(position, sequence, velocity, tick)
     then
         return
     end
-    if (position - self.authority):LengthSquared() >= teleportDistance * teleportDistance then
+    local expected = self.position
+    for i = #self.pending, 1, -1 do
+        local input = self.pending[i]
+        if input.sequence == sequence then
+            expected = input.position
+            break
+        end
+    end
+    -- Sparse confirmations can span a long ordinary walk which is already
+    -- represented by pending inputs. Only snap when the new authority also
+    -- lies outside that predicted path; otherwise retain input and correction.
+    if
+        (position - self.authority):LengthSquared() >= teleportDistance * teleportDistance
+        and (position - expected):LengthSquared() >= teleportDistance * teleportDistance
+    then
         self:reset(position, sequence, velocity)
         self.confirmedTick = tick
         return
@@ -49,9 +68,14 @@ function methods:confirm(position, sequence, velocity, tick)
     self.authority, self.authorityVelocity = position, velocity
     self.confirmedTick, self.acknowledged = tick, sequence
     local remaining = {}
+    if sequence >= self.evictedSequence then
+        self.evictedTime = 0
+    end
+    self.pendingTime = self.evictedTime
     for _, input in ipairs(self.pending) do
         if input.sequence > sequence then
             remaining[#remaining + 1] = input
+            self.pendingTime = self.pendingTime + input.dt
         end
     end
     self.pending = remaining
@@ -115,6 +139,7 @@ function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
         self.position, self.velocity = self.base, self.authorityVelocity
         for _, input in ipairs(self.pending) do
             advance(self, input, resolve)
+            input.position = self.position
         end
         self.correction = self.display - self.position
         self.errorSquared = self.correction:LengthSquared()
@@ -133,27 +158,52 @@ function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
             end
             elapsed = elapsed + input.dt
         end
-        elapsed = math.min(dt, math.max(0, 0.1 - elapsed))
+        elapsed =
+            math.min(dt, math.max(0, 0.1 - elapsed), math.max(0, maxPendingTime - self.pendingTime))
         if elapsed > 0 then
             -- The sequence acknowledges a sampled held state, not a host tick.
             -- Preserve each preview's direction and duration for approximate
             -- replay from the next authority position AND velocity.
             local input = {
                 sequence = sequence,
-                direction = direction,
+                direction = direction
+                    * math.min(
+                        1,
+                        math.max(
+                            0,
+                            (maxPendingTime - self.pendingTime) / (maxPendingTime - brakingStart)
+                        )
+                    ),
                 speed = speed,
                 dt = elapsed,
                 locked = locked,
                 friction = math.max(0, math.min(friction or 1, 1)),
             }
             self.pending[#self.pending + 1] = input
+            self.pendingTime = self.pendingTime + elapsed
             advance(self, input, resolve)
+            input.position = self.position
             if #self.pending > maxHistory then
-                table.remove(self.pending, 1)
+                local evicted = table.remove(self.pending, 1)
+                self.evictedTime = self.evictedTime + evicted.dt
+                self.evictedSequence = evicted.sequence
             end
         end
     end
-    self.correction = self.correction * math.exp(-dt / 0.06)
+    if self.pendingTime >= maxPendingTime then
+        -- Keep the bounded replay until a real acknowledgement retires it.
+        -- New local sequence numbers alone cannot renew the prediction budget.
+        self.velocity = zero()
+    end
+    local distance = math.sqrt(self.correction:LengthSquared())
+    local decay = math.exp(-dt / correctionTime)
+    if distance > 0 then
+        -- Bound only the authority correction. Fresh movement retains its own
+        -- integration, including while a late acknowledgement is catching up.
+        decay = math.max(decay, 1 - correctionSpeed * dt / distance)
+    end
+    self.correctionStep = distance * (1 - decay)
+    self.correction = self.correction * decay
     self.display = self.position + self.correction
     return self.display
 end

@@ -4,6 +4,9 @@ local factory =
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
 local schema = dofile(root .. "/src/bridge/sync/world_schema.lua")
 local epoch, revision, calls = 1, 1, {}
+local catalogs = {}
+local currentRoom = { index = 84, dimension = 0 }
+local connected, playerCount = 7, 3
 local function count(name)
     calls[name] = (calls[name] or 0) + 1
 end
@@ -13,7 +16,7 @@ local positions = {
     ["2"] = { index = 85, dimension = 1 },
 }
 local players = {}
-for index = 0, 2 do
+for index = 0, 3 do
     players[index] = {
         ControllerIndex = index + 1,
         Position = { X = index * 10, Y = 20 },
@@ -64,7 +67,7 @@ local function shared(name)
     }
 end
 local deps = {
-    encode = codec.encode,
+    encode = _IsaacLanCodec and _IsaacLanCodec.state_encode or codec.encode,
     schema = schema,
     game = function()
         return {
@@ -72,7 +75,7 @@ local deps = {
                 return level
             end,
             GetNumPlayers = function()
-                return 3
+                return playerCount
             end,
             GetFrameCount = function()
                 return revision * 2
@@ -83,11 +86,21 @@ local deps = {
         return assert(players[index])
     end,
     entity = function(player, full)
+        if full ~= false then
+            local ownerRoom = positions[tostring(player.ControllerIndex - 1)]
+            assert(
+                currentRoom.index == ownerRoom.index
+                    and currentRoom.dimension == ownerRoom.dimension,
+                "Actor links were resolved against another room's entity indices"
+            )
+        end
         count("entity")
         return { player.ControllerIndex, full == nil, revision }
     end,
-    inventory = function(player)
+    inventory = function(player, catalog)
         count("inventory")
+        assert(type(catalog) == "table")
+        catalogs[#catalogs + 1] = catalog
         return { player.ControllerIndex, revision }
     end,
     sprite = function(value)
@@ -128,6 +141,13 @@ local deps = {
         end
     end,
     native = {
+        rooms_with_player = function(slot, callback)
+            local previous = currentRoom
+            currentRoom = assert(positions[tostring(slot)])
+            callback()
+            currentRoom = previous
+            return true
+        end,
         net_floor_epoch = function()
             return epoch
         end,
@@ -137,7 +157,7 @@ local deps = {
         end,
         rooms_heads = function()
             count("heads")
-            return { ["0"] = 0, ["1"] = 1, ["2"] = 2 }
+            return { ["0"] = 0, ["1"] = 1, ["2"] = 2, ["3"] = 3 }
         end,
         actor_sprites = function(index)
             return { index }
@@ -147,7 +167,7 @@ local deps = {
         end,
         rooms_connected = function()
             count("connected")
-            return 7
+            return connected
         end,
         map_pickups = function()
             count("pickups")
@@ -175,8 +195,10 @@ local function view(slot, tick)
     return result, bytes
 end
 local first = view(0, 10)
+assert(calls.entity == 3, "Visible actors were captured twice for one view")
 local second = view(1, 10)
 local third = view(2, 10)
+assert(catalogs[1] == catalogs[2] and catalogs[2] == catalogs[3])
 for _, name in ipairs({
     "map",
     "positions",
@@ -220,15 +242,28 @@ end
 revision = 2
 assert(view(0, 10).stage == 1)
 assert(view(0, 11).stage == 2)
+local nextCatalog = catalogs[#catalogs]
+assert(nextCatalog ~= catalogs[1], "Next tick reused a stale collectible catalog")
 epoch, revision = 2, 3
 local floorView = view(0, 11)
+assert(catalogs[#catalogs] ~= nextCatalog, "New floor reused a collectible catalog")
 assert(floorView.epoch == 2 and floorView.stage == 3 and floorView.actors[1][4][2] == 3)
 revision = 4
+local priorCatalog = catalogs[#catalogs]
 capture.reset()
 local resetView = view(0, 11)
+assert(catalogs[#catalogs] ~= priorCatalog, "New session reused a collectible catalog")
 assert(resetView.stage == 4 and resetView.map[1][8] == "pickups:4")
 assert(first.stage == 1 and first.map[1][8] == "pickups:1", "New generation mutated an old view")
 local Map = dofile(root .. "/src/bridge/sync/fields.lua").map
+-- Occupied off-map rooms have no Level:GetRooms entry, but every peer needs
+-- their descriptor before reconciling the remote player's inventory.
+positions["0"], positions["1"] = { index = -4, dimension = 0 }, { index = -4, dimension = 0 }
+local specialView = view(2, 12)
+assert(#specialView.map == 2 and specialView.map[2][Map.index] == -4)
+assert(specialView.map[2][Map.layout] and specialView.map[2][Map.dimension] == 0)
+positions["0"], positions["1"] = { index = 84, dimension = 0 }, { index = 84, dimension = 0 }
+assert(#view(2, 13).map == 1, "Unoccupied special-room metadata leaked into a new capture")
 deps.challenge = function()
     count("challenge")
     return { 1003, 1, { revision } }
@@ -253,3 +288,134 @@ assert(
     "Personal discovery changed shared layout"
 )
 print("PASS common capture reuse, per-peer projections, wire equivalence and invalidation")
+
+-- Exercise the production transfer path, including the split between realtime
+-- and stable fields. Compare every cached view with a fresh complete capture.
+local fields = dofile(root .. "/src/bridge/sync/fields.lua")
+local layers = dofile(root .. "/src/bridge/sync/layers.lua")(fields)
+deps.layers = layers
+deps.inventory = function(player)
+    return {
+        player.ControllerIndex,
+        { { 1, revision } },
+        { { 0, 0 } },
+        {},
+        {},
+        { revision, 0 },
+    }
+end
+deps.roomFactory = function()
+    local rooms, atTick, atEpoch = {}
+    return function(_, tick, floorEpoch, at)
+        if atTick ~= tick or atEpoch ~= floorEpoch then
+            rooms, atTick, atEpoch = {}, tick, floorEpoch
+        end
+        local key = at.dimension .. ":" .. at.index
+        rooms[key] = rooms[key]
+            or { true, revision, { { revision } }, {}, "music", key, false, { 0, 0 }, "rails" }
+        return rooms[key]
+    end
+end
+playerCount, connected = 4, 15
+positions["2"] = { index = 84, dimension = 0 }
+positions["3"] = { index = 84, dimension = 0 }
+local transfer = factory(deps)
+local transferEntityReads = 0
+local function transferView(slot, tick)
+    local beforeAudio, beforeEvents = calls["audio:" .. slot] or 0, calls["events:" .. slot] or 0
+    local beforeEntities = calls.entity
+    local realtime, stable = transfer.capture(slot, tick, true)
+    transferEntityReads = transferEntityReads + calls.entity - beforeEntities
+    assert(
+        calls["audio:" .. slot] == beforeAudio + 1 and calls["events:" .. slot] == beforeEvents + 1
+    )
+    local value = layers.join(schema.unpack(codec.decode(realtime), tick), codec.decode(stable))
+    local complete = codec.encode(schema.pack(value))
+    assert(
+        complete == factory(deps).capture(slot, tick),
+        "Layered cache changed authoritative bytes"
+    )
+    return value, complete
+end
+revision = 5
+local saved, savedBytes
+for slot = 1, 3 do
+    local value, bytes = transferView(slot, 20)
+    assert(value.sound == "sound:" .. slot and value.presentation == "events:" .. slot)
+    saved, savedBytes = value, bytes
+end
+assert(transferEntityReads == 4, "Same-room captures performed redundant entity reads")
+assert(transferView(3, 20).actors[1][fields.actor.inventory][fields.inventory.items][1][2] == 5)
+-- A room index in another dimension is a different view. Keep same-room and
+-- split-room recipients together to detect accidental cross-view fragments.
+revision = 6
+positions["2"] = { index = 84, dimension = 1 }
+for slot = 1, 3 do
+    local value = transferView(slot, 21)
+    assert(value.room[fields.room.layout] == (slot == 2 and "1:84" or "0:84"))
+    assert(value.actors[1][fields.actor.entity][2] == (slot ~= 2))
+end
+assert(codec.encode(schema.pack(saved)) == savedBytes, "Later captures mutated a prior view")
+-- Disconnects leave no second recipient, even if its old room is still listed.
+connected, revision = 3, 7
+assert(transferView(1, 22).connected == 3)
+epoch, revision = epoch + 1, 8
+assert(transferView(1, 22).epoch == epoch)
+revision = 9
+transfer.reset()
+assert(transferView(1, 22).actors[1][fields.actor.inventory][fields.inventory.items][1][2] == 9)
+print("PASS layered transfer bytes, peer events, same/split rooms, disconnect, epoch and reset")
+
+-- Stable map records retain their encoded fragments across ticks while every
+-- descriptor and native layout remains live. New epochs and resets drop them.
+local records = {}
+deps.projectMap = function(map)
+    records[#records + 1] = map[1]
+    return map
+end
+local mapCapture = factory(deps)
+mapCapture.capture(1, 40)
+mapCapture.capture(1, 41)
+assert(records[1] == records[2], "Unchanged map record lost value reuse")
+local originalMap = codec.encode(records[1])
+descriptor.DisplayFlags = descriptor.DisplayFlags + 1
+mapCapture.capture(1, 42)
+assert(records[3] ~= records[2], "Live map mutation reused an obsolete record")
+assert(codec.encode(records[1]) == originalMap, "Map reuse mutated a prior snapshot")
+epoch = epoch + 1
+mapCapture.capture(1, 42)
+assert(records[4] ~= records[3], "New floor retained prior map identities")
+mapCapture.reset()
+mapCapture.capture(1, 42)
+assert(records[5] ~= records[4], "New session retained prior map identities")
+print("PASS live map reads and immutable record/fragment reuse")
+
+local gridValues = { { 1, 2, 0, 0, 1, 0, { "rock", 0 }, 1, false } }
+deps.roomFactory = function()
+    return function()
+        return { true, revision, {}, gridValues, "music", "layout", false, { 0, 0 }, "rails" }
+    end
+end
+local originalEncode, fragments = deps.encode, {}
+deps.encode = function(value, memo)
+    fragments[#fragments + 1] = memo[gridValues]
+    return originalEncode(value, memo)
+end
+local gridCapture = factory(deps)
+local function gridView(tick)
+    local bytes = gridCapture.capture(1, tick)
+    assert(codec.encode(codec.decode(bytes)) == bytes, "Grid fragments changed wire bytes")
+end
+gridView(60)
+gridView(61)
+assert(fragments[1] == false and type(fragments[2]) == "table", "Grid fragment was not reused")
+gridValues = { { 1, 2, 0, 1, 0, 0, { "broken", 0 }, 1, false } }
+gridView(62)
+assert(fragments[3] == false, "Changed grid retained obsolete encoded bytes")
+epoch = epoch + 1
+gridView(63)
+assert(fragments[4] == false, "Floor change retained a grid fragment")
+gridCapture.reset()
+gridView(64)
+assert(fragments[5] == false, "Session reset retained a grid fragment")
+print("PASS unchanged grid fragments, live mutations and generation cleanup")

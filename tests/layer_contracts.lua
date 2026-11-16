@@ -101,12 +101,17 @@ local begin = module("runtime/transitions")(native, floor, compatibility, functi
     return level
 end, function()
     order[#order + 1] = "reset"
-end, function(animation, same)
-    order[#order + 1] = "departure:" .. animation .. ":" .. tostring(same)
+end, function(animation, same, departure)
+    order[#order + 1] = "departure:"
+        .. animation
+        .. ":"
+        .. tostring(same)
+        .. ":"
+        .. table.concat(departure or {}, ":")
 end)
-assert(begin(8, 4, 4, 0, false, nil, 0, 0, -8))
+assert(begin(8, 4, 4, 0, false, nil, 0, 0, -8, { "LightTravel" }))
 assert(sourceRoom == -8, "Floor event lost the authoritative departure room")
-assert(table.concat(order, ",") == "reset,set-stage,floor:0:0,departure:0:false")
+assert(table.concat(order, ",") == "reset,set-stage,floor:0:0,departure:0:false:LightTravel")
 assert(not begin(8, 1, 0, 0, false, false, 1) and #order == 4)
 assert(not begin(7, 1, 0, 0, false) and #order == 4)
 assert(sourceRoom == -8, "Rejected events replaced the pending floor source")
@@ -232,6 +237,8 @@ for _, name in ipairs({ "state_motion", "state_floor_items", "state_mod_integrat
         },
         Isaac = { AddCallback = function() end },
         ModCallbacks = { MC_POST_RENDER = 1 },
+        GridEntityType = { GRID_ROCK = 2, GRID_POOP = 14 },
+        Vector = env.Vector,
     }, { __index = _G })
     assert(loadfile(root .. "/tests/" .. name .. ".lua", "t", sandbox))()
     assert(sandbox._IsaacLanFrame ~= frame and sandbox._IsaacLan.net_gate ~= gate)

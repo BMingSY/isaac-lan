@@ -9,6 +9,9 @@ local function body(kind, controller)
         GetPlayerType = function()
             return kind
         end,
+        GetOtherTwin = function()
+            return nil
+        end,
         ChangePlayerType = function()
             error("Flip must not reinitialize a Tainted Lazarus body")
         end,
@@ -50,6 +53,34 @@ end, enums.PlayerType)
 assert(birthright.resolve(2, inventory(38), 2) == dead and listed == 1)
 assert(birthright.resolve(2, inventory(38), 2) == dead and listed == 1)
 assert(birthright.resolve(0, inventory(0), 1) == other and listed == 1)
+local removed = 0
+alive.GetOtherTwin = function()
+    return roster[3]
+end
+local death = module({
+    actor_lazarus_unpair = function(index)
+        assert(index == 1 and roster[1] == other and roster[2] == alive and roster[3] == dead)
+        roster[3] = nil
+        removed = removed + 1
+        return true
+    end,
+}, function(index)
+    return roster[index + 1]
+end, enums.PlayerType)
+assert(death.resolve(1, inventory(29), 2) == alive and removed == 0)
+assert(death.resolve(1, inventory(29, true), 2) == alive and removed == 1)
+assert(death.resolve(1, inventory(29, true), 2) == alive and removed == 1)
+assert(death.resolve(0, inventory(0), 1) == other and removed == 1)
+assert(birthright.resolve(2, inventory(38), 2) == dead and listed == 2)
+local failedDeath = module({
+    actor_lazarus_unpair = function()
+        return false
+    end,
+}, function(index)
+    return roster[index + 1]
+end, enums.PlayerType)
+assert(not pcall(failedDeath.resolve, 1, inventory(29, true), 2))
+assert(roster[1] == other and roster[2] == alive and roster[3] == dead)
 assert(not pcall(birthright.resolve, 3, inventory(0), 2))
 assert(roster[1] == other and roster[2] == alive and roster[3] == dead)
 local redirected = { Ref = dead }
@@ -71,7 +102,7 @@ local broken = module({
 end, enums.PlayerType)
 assert(not pcall(broken.resolve, 0, inventory(38)))
 print(
-    "PASS Tainted Lazarus replacement, Birthright backup listing, idempotence and redirected motion cleanup"
+    "PASS Tainted Lazarus replacement, Birthright death/listing, idempotence and redirected motion cleanup"
 )
 local wire = dofile(root .. "/src/bridge/sync/fields.lua")
 local restore = dofile(root .. "/src/bridge/sync/actor_roster.lua")(wire)

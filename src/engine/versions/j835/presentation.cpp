@@ -1,6 +1,7 @@
 #include "engine/versions/common/presentation_bindings.h"
 #include "engine/versions/j835/entrypoints.h"
 #include "engine/versions/j835/layout.h"
+#include "engine/versions/j835/boss_intro.h"
 #include "engine/versions/j835/player_hud.h"
 
 namespace isaac::engine::native_presentation {
@@ -9,6 +10,13 @@ namespace backend = j835;
 namespace layout = backend::layout;
 template <class T> T& at(Address address, unsigned offset) {
     return *reinterpret_cast<T*>(address + offset);
+}
+void finishIntro(Address image, Address transition) {
+    using Update = void(__attribute__((thiscall))*)(void*);
+    backend::finishBossIntro(transition, [&] {
+        reinterpret_cast<Update>(image + backend::entry::roomTransitionUpdate)(
+            reinterpret_cast<void*>(transition));
+    });
 }
 void prepareActor(Address image, Address game, Address transition) {
     const auto roster = at<Address>(game, layout::game::players);
@@ -58,6 +66,7 @@ const Bindings bindings{
       layout::room::delayedEnemies, layout::room::descriptor},
      {layout::roomDescriptor::data, layout::roomDescriptor::flags},
      {layout::roomConfig::stage, layout::roomConfig::type, layout::roomConfig::variant}},
+    finishIntro,
     prepareActor,
     introMarker,
     canRestoreControls,

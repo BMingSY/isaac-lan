@@ -1,6 +1,45 @@
 local root = assert(arg[1])
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 local codec = dofile(root .. "/src/bridge/sync/codec.lua")
+-- Dispatcher matching uses plain identity values and never retains the native
+-- object. Equal classes still capture/apply/link fresh state every time.
+local dispatchCalls, dispatchMatches = {}, 0
+local dispatcher = dofile(root .. "/src/bridge/compat/visuals.lua")({
+    matches = function(identity)
+        dispatchMatches = dispatchMatches + 1
+        return identity.Type == 1000 and identity.Variant == 172 and identity.SubType == 1
+    end,
+    capture = function(entity)
+        return entity.value
+    end,
+    apply = function(entity, value)
+        entity.value = value
+        dispatchCalls[#dispatchCalls + 1] = "apply"
+    end,
+    link = function(_, value)
+        dispatchCalls[#dispatchCalls + 1] = value
+    end,
+})
+local target = setmetatable({ value = "first" }, {
+    __index = function(_, name)
+        error("Unexpected native identity read: " .. name)
+    end,
+})
+assert(dispatcher.capture(target, nil, nil, 1000, 172, 1) == "first")
+dispatcher.apply(target, "second", nil, 1000, 172, 1)
+dispatcher.link(target, "links", nil, 1000, 172, 1)
+assert(dispatcher.capture(target, nil, nil, 1000, 172, 1) == "second")
+assert(dispatchMatches == 1 and table.concat(dispatchCalls, ",") == "apply,links")
+for _, identity in ipairs({ { 5, 172, 1 }, { 1000, 171, 1 }, { 1000, 172, 0 } }) do
+    assert(dispatcher.capture(target, nil, nil, table.unpack(identity)) == false)
+    dispatcher.apply(target, false, nil, table.unpack(identity))
+    assert(not pcall(dispatcher.apply, target, "bad", nil, table.unpack(identity)))
+end
+assert(dispatcher.capture(target, nil, nil, 1000, 172, 1) == "second")
+local weak = setmetatable({ target }, { __mode = "v" })
+target = nil
+collectgarbage("collect")
+assert(weak[1] == nil, "Visual selection retained a game object")
 local stored = string.pack(">ff", 520, -180)
 local function vector(x, y)
     return { X = x, Y = y }
@@ -176,4 +215,37 @@ local unrelated = effect(3, 78, 0, "")
 assert(visuals.capture(unrelated, nil, captureSprite) == false)
 visuals.apply(unrelated, false, applySprite)
 assert(not pcall(visuals.apply, unrelated, bodyState, applySprite))
-print("PASS special entity geometry, detached costumes, room return and dice presentation")
+-- Flip changes and clears its alternate independently of the main pedestal.
+local flip = dofile(root .. "/src/bridge/compat/items/flip.lua")({
+    pickup_flip_visual = function(e, visible)
+        if visible ~= nil then
+            e.visible = visible
+            return true
+        end
+        return e.visible, e.alternate
+    end,
+}, enums.EntityType, enums.PickupVariant)
+visuals = dofile(root .. "/src/bridge/compat/visuals.lua")(dogma, splitBody, flip)
+local pedestal, replicaPedestal = effect(5, 100, 1, ""), effect(5, 100, 1, "")
+pedestal.visible, pedestal.alternate = true, { path = "alternate item", frame = 3 }
+replicaPedestal.visible, replicaPedestal.alternate = false, { path = "", frame = 0 }
+local function copyFlip()
+    local value = codec.decode(codec.encode({ visuals.capture(pedestal, nil, captureSprite) }))[1]
+    visuals.apply(replicaPedestal, value, applySprite)
+end
+copyFlip()
+copyFlip()
+assert(replicaPedestal.visible and replicaPedestal.alternate.path == "alternate item")
+pedestal.alternate.path, pedestal.alternate.frame = "flipped item", 7
+copyFlip()
+assert(replicaPedestal.alternate.path == "flipped item" and replicaPedestal.alternate.frame == 7)
+pedestal.SubType = 0 -- The empty pedestal can still hold the alternate item.
+copyFlip()
+assert(replicaPedestal.visible)
+pedestal.visible = false -- Both sides taken, Flip removed, or replica reused after room change.
+copyFlip()
+copyFlip()
+assert(not replicaPedestal.visible)
+assert(visuals.capture(effect(5, 20, 1, ""), nil, captureSprite) == false)
+assert(not pcall(visuals.apply, replicaPedestal, "invalid", applySprite))
+print("PASS special entity geometry, detached costumes, Flip, room return and dice presentation")

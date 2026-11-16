@@ -204,6 +204,7 @@ local collision = {
     COLLISION_WALL_EXCEPT_PLAYER = 5,
     COLLISION_WALL = 4,
 }
+local gridType = { GRID_ROCK = 2, GRID_POOP = 14 }
 local actor =
     { 1, 2, { 1 }, {}, { { "body", "LiftItem" } }, false, false, { string.rep("\0", 12), true } }
 local doorBlocked = false
@@ -212,7 +213,10 @@ local localMotion = assert(
     loadfile(
         root .. "/src/bridge/presentation/motion.lua",
         "t",
-        setmetatable({ GridCollisionClass = collision }, { __index = _G })
+        setmetatable(
+            { GridCollisionClass = collision, GridEntityType = gridType },
+            { __index = _G }
+        )
     )
 )()(dofile(root .. "/src/bridge/sync/fields.lua"))({
     rooms_with_player = function(_, fn)
@@ -269,6 +273,13 @@ local function localRender(sequence)
     )
     return player.Position.X
 end
+local lastAuthoritySequence = -1
+local function confirmLocal(sequence)
+    local p = localState.prediction
+    localState.target = p.position
+    p:confirm(p.position, sequence, p.velocity, sequence)
+    lastAuthoritySequence = sequence
+end
 local previous = localRender(0)
 close(localRender(1), previous, "Native first half tick integrates the resting velocity")
 assert(localState.prediction.velocity.X > 0, "Held bag blocked local acceleration")
@@ -276,6 +287,9 @@ for sequence = 2, 30 do
     local position = localRender(sequence)
     assert(position > previous, "Held bag froze local motion between snapshots")
     previous = position
+    if sequence % 10 == 0 then
+        confirmLocal(sequence)
+    end
 end
 -- The item-state bit arrives with the same snapshot as the extra-animation
 -- flag, while the body can still report Walk for several renders. Exercise
@@ -288,6 +302,9 @@ for sequence = 31, 90 do
     local position = localRender(sequence)
     assert(position > previous, "Raising/lowering the bag reset movement prediction")
     previous = position
+    if sequence % 10 == 0 then
+        confirmLocal(sequence)
+    end
 end
 -- Every native split item pose keeps walking, independent of inventory and
 -- item state. Unknown/full-body poses and explicit control locks stay blocked.
@@ -301,7 +318,10 @@ for _, extra in ipairs({ "Pickup", "UseItem", "LiftItem", "HideItem", "" }) do
         sequence = sequence + 1
         local position = localRender(sequence)
         assert(position > previous, extra .. "/" .. body .. " froze pending movement")
-        assert(localState.prediction.acknowledged == -1, "Action fabricated an acknowledgement")
+        assert(
+            localState.prediction.acknowledged == lastAuthoritySequence,
+            "Action fabricated an acknowledgement"
+        )
         previous = position
     end
 end
@@ -389,6 +409,12 @@ local function pairedRender(sequence)
     pairedMotion.present(testInput.buttons(1 << 1), sequence, {}, bodyStates, function(id)
         return bodies[id]
     end, 1)
+    if sequence % 10 == 0 then
+        for _, state in pairs(bodyStates) do
+            local p = state.prediction
+            p:confirm(p.position, sequence, p.velocity, sequence)
+        end
+    end
 end
 for sequence = 0, 20 do
     pairedRender(sequence)
@@ -455,6 +481,8 @@ end
 assert(previousLocked - 100 < 0.001, "Locked position did not settle at the host position")
 extraFinished = true
 animation = "WalkRight"
+-- The unlock view also carries the host's current input confirmation.
+localState.prediction:confirm(Vector(100, 100), 50, Vector(0, 0), 50)
 localRender(51)
 assert(localState.prediction.velocity.X > 0, "Movement waited for another host packet")
 print("PASS action locks retain pending inputs, reconcile delayed state and resume locally")
@@ -644,7 +672,7 @@ for s = 2, 10 do
 end
 assert(player.Position.X > recovered, "Walking did not resume after recovering from a wall")
 print("PASS authority recovery from an overlapping display footprint")
--- The destination's input is gated for the same interval as its local fade.
+-- The destination's input is gated until its local reveal permits movement.
 -- Holding a direction through that interval must not accumulate a path which
 -- is replayed at once when the destination becomes visible.
 room.GetGridCollisionAtPos = function()
@@ -682,6 +710,7 @@ localMotion.reset()
 for s = 0, 20 do
     assert(localRender(s) <= 170, "Closed door admitted ordinary prediction")
 end
+confirmLocal(20)
 doorPreview = 2
 for s = 21, 40 do
     assert(localRender(s) <= 182.001, "Unlock preview left the source room")
@@ -699,6 +728,105 @@ localState.target = Vector(170, 100)
 localState.prediction:confirm(localState.target, 42, Vector(0, 0), 42)
 assert(localRender(42) <= 170.001, "Rejected approach could not reconcile behind the closed door")
 print("PASS key approach, source-room limit, authority confirmation and denial recovery")
+-- J460 contact positions captured while a radius-10 player walks around a
+-- poop at (360, 280). These legal poses are inside the tile's expanded square;
+-- clipping to that square traps correction until it escapes a corner in a burst.
+room.GetDoor = function() end
+room.GetGridIndex = function()
+    return 1
+end
+room.GetGridPosition = function()
+    return Vector(360, 280)
+end
+local contactType = gridType.GRID_POOP
+room.GetGridEntity = function()
+    return {
+        GetType = function()
+            return contactType
+        end,
+    }
+end
+player.CanFly, player.Size, player.MoveSpeed = false, 10, 1
+player.GetMovementInput = function()
+    return Vector(0, 0)
+end
+local contacts = {
+    Vector(331.999725, 280),
+    Vector(332.439301, 284.754395),
+    Vector(333.269287, 288.332825),
+    Vector(334.857849, 292.515015),
+    Vector(337.694611, 296.959839),
+}
+for _, solid in ipairs({ collision.COLLISION_OBJECT, collision.COLLISION_SOLID }) do
+    room.GetGridCollisionAtPos = function(_, position)
+        return position.X >= 340
+                and position.X < 380
+                and position.Y >= 260
+                and position.Y < 300
+                and solid
+            or collision.COLLISION_NONE
+    end
+    for _, contact in ipairs(contacts) do
+        localState.target, localState.display = contact, Vector(300, 280)
+        localState.prediction = prediction.new(localState.display)
+        localMotion.reset()
+        localRender(0)
+        localState.prediction:confirm(contact, 0, Vector(0, 0), 1)
+        for frame = 1, 60 do
+            localRender(frame)
+            assert(
+                (player.Position - Vector(360, 280)):Length() >= 27.95,
+                "Prediction entered the native object contact boundary"
+            )
+        end
+        assert(
+            (player.Position - contact):Length() < 0.01,
+            "Legal native object contact stayed trapped behind a square tile"
+        )
+    end
+end
+-- Breaking the object changes its collision class, allowing the same history
+-- to advance through the cleared tile without retaining an obstacle cache.
+room.GetGridCollisionAtPos = function()
+    return collision.COLLISION_NONE
+end
+localState.target = Vector(360, 280)
+localState.prediction:confirm(localState.target, 60, Vector(0, 0), 2)
+for frame = 61, 120 do
+    localRender(frame)
+end
+assert((player.Position - localState.target):Length() < 0.01)
+-- Rocks share the solid collision class but stop the body at x=330 until it
+-- reaches the tile's bottom edge at y=300; the poop's round boundary cannot apply.
+contactType = gridType.GRID_ROCK
+room.GetGridCollisionAtPos = function(_, position)
+    return position.X >= 340
+            and position.X < 380
+            and position.Y >= 260
+            and position.Y < 300
+            and collision.COLLISION_SOLID
+        or collision.COLLISION_NONE
+end
+localState.target, localState.display = Vector(300, 260), Vector(300, 260)
+localState.prediction = prediction.new(localState.display)
+localMotion.reset()
+localRender(0)
+player.GetMovementInput = function()
+    return Vector(0.7071, 0.7071)
+end
+local rockSamples = 0
+for frame = 1, 60 do
+    localRender(frame)
+    if player.Position.Y <= 300 then
+        assert(player.Position.X < 330.01, "Rock collision incorrectly used the poop boundary")
+        rockSamples = rockSamples + 1
+    end
+    if frame % 10 == 0 then
+        confirmLocal(frame)
+    end
+end
+assert(rockSamples > 5 and player.Position.X > 380)
+print("PASS native poop contact, rock boundary, corner correction and broken-grid cleanup")
 -- Receipt jitter must not restart a remote projectile's simulation clock.
 motion.reset(true)
 state, pause = {}, 0

@@ -11,6 +11,17 @@ void show(std::uintptr_t image);
 void hide(std::uintptr_t image);
 // Match actual visibility without resetting a visible menu's current subpage.
 void synchronize(std::uintptr_t image, bool paused);
+// Replica updates must not reopen the local menu while authority is running.
+// Restore the user's focus-pause option before local menus or settings run.
+class FocusPauseScope {
+    std::uintptr_t option = 0;
+    bool previous = false;
+
+  public:
+    explicit FocusPauseScope(std::uintptr_t image);
+    ~FocusPauseScope();
+    FocusPauseScope(const FocusPauseScope&) = delete;
+};
 void controls(std::uintptr_t image);
 // Decode only actions whose native effect must be coordinated by the session.
 Intent intent(std::uintptr_t image, int action);

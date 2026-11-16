@@ -7,6 +7,12 @@ local A, E, R = fields.actor, fields.entity, fields.room
 local cases = {
     { name = "tears", kind = WeaponType.WEAPON_TEARS },
     {
+        name = "analog-stick",
+        item = CollectibleType.COLLECTIBLE_ANALOG_STICK,
+        kind = WeaponType.WEAPON_TEARS,
+        freeAim = true,
+    },
+    {
         name = "brimstone",
         item = CollectibleType.COLLECTIBLE_BRIMSTONE,
         kind = WeaponType.WEAPON_BRIMSTONE,
@@ -26,7 +32,25 @@ local cases = {
     },
     {
         name = "multishot",
+        walking = true,
         item = CollectibleType.COLLECTIBLE_INNER_EYE,
+        kind = WeaponType.WEAPON_TEARS,
+    },
+    {
+        name = "double-shot",
+        walking = true,
+        item = CollectibleType.COLLECTIBLE_20_20,
+        kind = WeaponType.WEAPON_TEARS,
+    },
+    {
+        name = "quad-shot",
+        walking = true,
+        item = CollectibleType.COLLECTIBLE_MUTANT_SPIDER,
+        kind = WeaponType.WEAPON_TEARS,
+    },
+    {
+        name = "soy-milk",
+        item = CollectibleType.COLLECTIBLE_SOY_MILK,
         kind = WeaponType.WEAPON_TEARS,
     },
     {
@@ -64,6 +88,15 @@ native.diagnostics_counter = function(name, value)
     if current and name == "attack.previews" and value > (metrics[name] or 0) then
         local m = measurements[current.name]
         m.previews = (m.previews or 0) + value - (metrics[name] or 0)
+        if current.freeAim then
+            local direction = Isaac.GetPlayer(1):GetShootingInput()
+            if math.abs(direction.X) > 0.1 and math.abs(direction.Y) > 0.1 then
+                m.diagonalPreviews = (m.diagonalPreviews or 0) + value - (metrics[name] or 0)
+            end
+        end
+        if current.walking and Isaac.GetPlayer(1).Velocity:LengthSquared() > 0.01 then
+            m.walkingPreviews = (m.walkingPreviews or 0) + value - (metrics[name] or 0)
+        end
         if not m.firstPreview then
             m.firstPreview = Isaac.GetTime()
         end
@@ -102,6 +135,9 @@ function _IsaacLanFrame()
             buttons, aiming = 0x4000, "HeadLeft"
         elseif at >= 80 and at < 140 then
             buttons, aiming = 0x8000, "HeadUp"
+            if case.freeAim then
+                buttons = buttons | 0x2000
+            end
         elseif at >= 160 and at < 190 then
             buttons, aiming = 0x1000, "HeadDown"
         end
@@ -121,6 +157,10 @@ function _IsaacLanFrame()
         end
         if case.name == "tears" and at >= 30 and at < 70 then
             buttons = buttons | (at < 50 and 8 or 4)
+        elseif case.walking and at >= 10 and at < 200 then
+            -- Start walking before the first volley and keep changing direction;
+            -- learning must not depend on a stationary opening shot.
+            buttons = buttons | (math.floor((at - 10) / 20) % 2 == 0 and 8 or 4)
         end
     end
     native.test_gamepad(buttons)
@@ -142,10 +182,24 @@ function _IsaacLanFrame()
                 "Latency relay did not separate preview from confirmation"
             )
             assert((metrics["attack.confirmed"] or 0) > 5, "Insufficient tear handoffs")
-            assert(
-                mirror or (measurements.multishot.previews or 0) == 0,
-                "Multi-shot attacks generated false single tears"
-            )
+            if not mirror then
+                assert(
+                    (measurements["analog-stick"].diagonalPreviews or 0) > 0,
+                    "Free-aim shooting never produced a diagonal local preview"
+                )
+                for _, name in ipairs({ "multishot", "double-shot", "quad-shot", "soy-milk" }) do
+                    assert(
+                        (measurements[name].previews or 0) > 0,
+                        "Missing learned launch preview: " .. name
+                    )
+                end
+                for _, name in ipairs({ "multishot", "double-shot", "quad-shot" }) do
+                    assert(
+                        (measurements[name].walkingPreviews or 0) > 0,
+                        "Missing moving multi-shot preview: " .. name
+                    )
+                end
+            end
             assert(
                 headSamples >= (mirror and 4 or 24)
                     and (mirror or (chargeSamples > 5 and releaseSamples > 3))

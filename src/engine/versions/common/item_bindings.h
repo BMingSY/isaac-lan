@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <optional>
+#include "engine/versions/common/active_items.h"
+#include "engine/versions/common/inventory_order.h"
 
 namespace isaac::engine::native_items {
 // Backend-private layouts and calls. Optional pickup pool identifies the native
@@ -45,6 +47,9 @@ struct Bindings {
         } pickup;
     } layout;
     int (*chargeType)(std::uintptr_t, void*, int);
+    native_active_items::Layout activeItems;
+    native_inventory_order::Layout inventoryOrder;
+    bool (*installCompatibility)(std::uintptr_t) = nullptr;
 };
 extern const Bindings bindings;
 inline constexpr int unavailablePool = 0;

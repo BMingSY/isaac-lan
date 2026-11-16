@@ -7,9 +7,6 @@ return function(weapons, items, fields, flags, forms, players)
     }
     local excluded = {}
     for _, name in ipairs({
-        "COLLECTIBLE_INNER_EYE",
-        "COLLECTIBLE_MUTANT_SPIDER",
-        "COLLECTIBLE_20_20",
         "COLLECTIBLE_MOMS_EYE",
         "COLLECTIBLE_LOKIS_HORNS",
         "COLLECTIBLE_THE_WIZ",
@@ -19,11 +16,9 @@ return function(weapons, items, fields, flags, forms, players)
         "COLLECTIBLE_LEAD_PENCIL",
         "COLLECTIBLE_EYE_SORE",
         "COLLECTIBLE_ALMOND_MILK",
-        "COLLECTIBLE_SOY_MILK",
         "COLLECTIBLE_NEPTUNUS",
         "COLLECTIBLE_MONSTROS_LUNG",
         "COLLECTIBLE_MARKED",
-        "COLLECTIBLE_ANALOG_STICK",
         "COLLECTIBLE_TRACTOR_BEAM",
     }) do
         if items[name] then
@@ -31,6 +26,10 @@ return function(weapons, items, fields, flags, forms, players)
         end
     end
     return {
+        freeAim = function(player)
+            return items.COLLECTIBLE_ANALOG_STICK
+                and player:HasCollectible(items.COLLECTIBLE_ANALOG_STICK)
+        end,
         normalTear = function(player)
             return player.TearFlags == flags.TEAR_NORMAL
                 and not player:HasPlayerForm(forms.PLAYERFORM_BOOK_WORM)
@@ -51,13 +50,27 @@ return function(weapons, items, fields, flags, forms, players)
             end
             return { tears = weapon.kind == weapons.WEAPON_TEARS }
         end,
-        singleTear = function(player)
+        tearCount = function(player)
             for _, item in ipairs(excluded) do
                 if player:HasCollectible(item) then
-                    return false
+                    return nil
                 end
             end
-            return true
+            local count = 1
+            for name, amount in pairs({
+                COLLECTIBLE_20_20 = 2,
+                COLLECTIBLE_INNER_EYE = 3,
+                COLLECTIBLE_MUTANT_SPIDER = 4,
+            }) do
+                local item = items[name]
+                if item and player:HasCollectible(item) then
+                    if count ~= 1 or player:GetCollectibleNum(item) ~= 1 then
+                        return nil
+                    end
+                    count = amount
+                end
+            end
+            return count
         end,
     }
 end

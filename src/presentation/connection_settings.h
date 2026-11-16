@@ -7,7 +7,7 @@ namespace isaac::presentation {
 struct ConnectionSettings {
     std::string address;
     unsigned port = 29506;
-    std::uint32_t roomOptions = 0;
+    std::uint64_t roomOptions = 0;
     bool operator==(const ConnectionSettings&) const = default;
 };
 // Local menu preferences, independent of sessions and game save slots.

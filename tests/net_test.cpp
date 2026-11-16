@@ -22,7 +22,11 @@
 #include <source_location>
 using namespace isaac::lan;
 namespace {
-using TestSession = Session;
+constexpr auto testVersion = "0.6.0";
+constexpr std::uint16_t legacyProtocolVersion = 45;
+struct TestSession : Session {
+    explicit TestSession(std::string version = testVersion) : Session(std::move(version)) {}
+};
 LobbyAccess testAccess() {
     LobbyAccess access{{0, 1, 2, 3, 7, 23}, {{1001, 3}}, {0, 1, 2, 3, 7, 23}};
     for (const auto& definition : isaac::compat::challenges::definitions)
@@ -247,6 +251,15 @@ void codec() {
     r.u8();
     require(r.u32() == 0x12345678 && r.blob().size() == 409, "State codec failed");
     r.finish();
+    Reader view(w.bytes);
+    view.u8();
+    view.u32();
+    const auto borrowedBlob = view.blobView();
+    require(borrowedBlob.size() == 409 && borrowedBlob.data() == w.bytes.data() + 9,
+            "Blob view copied or changed the packet payload");
+    view.finish();
+    Reader limited(std::span(w.bytes).subspan(5));
+    rejects([&] { limited.blobView(408); }, "Borrowed blob bypassed its channel size limit");
     std::puts("PASS bounded state codec rejects truncated packets");
 }
 void udpLossRecoveryImpl(bool large) {
@@ -453,6 +466,82 @@ void loadingTimeout() {
     require(frame && frame->tick == 0 && frame->connected == 3,
             "Host did not resume after removing the unready peer");
 }
+void latencyHud() {
+    Group g(3);
+    g.ready();
+    g.step(0);
+    auto& host = *g.peers[0];
+    auto& guest = *g.peers[1];
+    auto& other = *g.peers[2];
+    require(host.syncLatency(1) == -1 && guest.syncLatency(1) == -1,
+            "New session inherited a response measurement");
+    guest.recordSyncLatency(123.4);
+    other.recordSyncLatency(234.6);
+    until([&] {
+        g.poll();
+        return host.networkLatency(1) >= 0 && guest.networkLatency(1) >= 0 &&
+               host.syncLatency(1) == 123 && other.syncLatency(1) == 123 &&
+               host.syncLatency(2) == 235 && guest.syncLatency(2) == 235;
+    });
+    require(host.syncLatency(0) == -1 && host.syncLatency(4) == -1,
+            "Host/invalid slot received a guest response");
+    guest.recordSyncLatency(321);
+    guest.recordSyncLatency(-1);
+    guest.recordSyncLatency(std::numeric_limits<double>::quiet_NaN());
+    require(guest.syncLatency(1) == 321, "Invalid sample poisoned the local reading");
+    // Incoming host reports must not overwrite the guest's fresher local sample.
+    g.poll();
+    require(guest.syncLatency(1) == 321, "Host echo replaced a local response");
+    until([&] {
+        g.poll();
+        return host.syncLatency(1) == -1 && guest.syncLatency(1) == -1 &&
+               other.syncLatency(1) == -1;
+    });
+    require(host.networkLatency(1) >= 0, "Missing state applications stopped network pings");
+    // Without main-thread polling, even the last good RTT must expire for display.
+    const auto untilStale = std::chrono::steady_clock::now() + std::chrono::milliseconds(3100);
+    while (std::chrono::steady_clock::now() < untilStale)
+        Sleep(1);
+    require(host.networkLatency(1) == -1 && guest.networkLatency(1) == -1 &&
+                host.latency()[1] >= 0 && guest.latency()[1] >= 0,
+            "Stale HUD ping remained valid or changed prediction's RTT");
+    guest.recordSyncLatency(90);
+    guest.poll(); // Queue an old-floor report before the host changes epoch.
+    require(host.beginStage({1, 2, 0, 0, false, {}, {}}), "Floor transition failed");
+    until([&] {
+        g.poll();
+        return guest.worldEpoch() == 1 && other.worldEpoch() == 1;
+    });
+    require(host.syncLatency(1) == -1 && guest.syncLatency(1) == -1 && other.syncLatency(1) == -1,
+            "A previous-floor report crossed the epoch boundary");
+    g.step(1);
+    g.publish(1);
+    until([&] {
+        g.poll();
+        if (auto state = guest.takeState()) {
+            guest.applied(state->tick);
+            guest.recordSyncLatency(110);
+        }
+        return host.syncLatency(1) == 110;
+    });
+    auto settings = host.settings();
+    settings.seed = "QWERTY12";
+    require(host.restart(settings), "Restart failed");
+    until([&] {
+        g.poll();
+        return guest.runId() == host.runId() && other.runId() == host.runId();
+    });
+    require(host.syncLatency(1) == -1 && guest.syncLatency(1) == -1,
+            "Restart retained the previous run's response");
+    guest.close();
+    until([&] {
+        host.poll();
+        other.poll();
+        return !(host.connectedMask() & 2);
+    });
+    require(host.networkLatency(1) == -1 && host.syncLatency(1) == -1,
+            "Disconnected guest retained latency readings");
+}
 void inputsAndStates(unsigned n, const char* address = "127.0.0.1",
                      std::array<const char*, maxPlayers> addresses = {}) {
     Group g(n, 0, address, {}, {}, false, addresses);
@@ -622,6 +711,10 @@ void inputBackpressure() {
     peer.submitInput({4, {}, destination});
     Reader reader(peer.unsentTail(Message::input).subspan(1));
     const auto last = readInput(reader);
+    const auto repeated = reader.u8();
+    require(repeated <= maxRepeatedInputEvents, "Held sample exceeded event bound");
+    for (unsigned i = 0; i < repeated; ++i)
+        readInputEvent(reader);
     reader.finish();
     require(last.sequence == 4 && last.room == destination && last.input.triggered == 0,
             "Old-room button edges crossed the destination boundary");
@@ -783,6 +876,8 @@ void endingEvents() {
         Progress progress;
         progress.achievements[7] = 1;
         progress.counters[21] = 5;
+        progress.earned.achievements[7] = 1;
+        progress.earned.counters[97] = 3;
         require(g.peers[0]->beginEnding(id, progress), "Ending broadcast failed");
         require(g.peers[0]->beginEnding(id), "Duplicate native ending was not idempotent");
         require(!g.peers[0]->beginEnding(13), "A terminal event changed its ending");
@@ -1171,6 +1266,20 @@ void stageEvents() {
         stage.seeds[i] = 0x12340000 + i;
     stage.stateFlags = {0x10000, (1u << (44 - 32)) | (1u << (48 - 32))};
     stage.sourceRoom = -8;
+    stage.departureAnimations = {"UseItem", "LightTravel"};
+    {
+        auto invalid = stage;
+        invalid.departureAnimations = {std::string(Stage::maxDepartureAnimationLength + 1, 'x')};
+        require(!g.peers[0]->beginStage(invalid), "Oversized departure animation accepted");
+        const auto message = stageMessage(invalid);
+        Reader reader(std::span(message.bytes).subspan(1));
+        rejects([&] { readStageChunk(reader); }, "Oversized departure animation decoded");
+        invalid.departureAnimations.assign(Stage::maxDepartureAnimations + 1, "Trapdoor");
+        require(!g.peers[0]->beginStage(invalid), "Too many departure animations accepted");
+        const auto crowded = stageMessage(invalid);
+        Reader crowdedReader(std::span(crowded.bytes).subspan(1));
+        rejects([&] { readStageChunk(crowdedReader); }, "Too many departure animations decoded");
+    }
     for (int invalidRoom : {-21, 169}) {
         auto invalid = stage;
         invalid.sourceRoom = invalidRoom;
@@ -1266,6 +1375,7 @@ void stageDuringRejoin() {
     Stage last{2, 2, 0, 0, false, {}, {}};
     last.stateFlags[1] = 1u << (44 - 32);
     last.sourceRoom = -8;
+    last.departureAnimations = {"Trapdoor"};
     require(g.peers[0]->beginStage(last), "Second loading floor event failed");
     g.poll();
     require(!g.peers[1]->takeStage(), "Native event reached an unprepared engine");
@@ -1627,6 +1737,8 @@ void runRules() {
 struct WirePeer {
     ENetHost* endpoint = nullptr;
     ENetPeer* peer = nullptr;
+    bool legacy = false;
+    std::vector<std::vector<std::uint8_t>> received;
     explicit WirePeer(bool listen = false) {
         require(enet_initialize() == 0, "Wire fixture initialization failed");
         ENetAddress address{};
@@ -1639,33 +1751,94 @@ struct WirePeer {
         enet_host_destroy(endpoint);
         enet_deinitialize();
     }
-    void connect(std::uint16_t port) {
+    void connect(std::uint16_t port, std::uint32_t connectData = compatibilityConnectData) {
         ENetAddress address{};
         address.host = htonl(INADDR_LOOPBACK);
         address.port = port;
-        peer = enet_host_connect(endpoint, &address, datagram::channelCount, protocolVersion);
+        peer = enet_host_connect(endpoint, &address, datagram::channelCount, connectData);
         require(peer != nullptr, "Wire fixture connect failed");
     }
     void poll() {
         ENetEvent event{};
         while (enet_host_service(endpoint, &event, 0) > 0) {
-            if (event.type == ENET_EVENT_TYPE_CONNECT)
+            if (event.type == ENET_EVENT_TYPE_CONNECT) {
                 peer = event.peer;
-            else if (event.type == ENET_EVENT_TYPE_RECEIVE)
+                if (legacy && event.data != legacyProtocolVersion)
+                    enet_peer_disconnect_now(event.peer, 0);
+            } else if (event.type == ENET_EVENT_TYPE_RECEIVE) {
+                received.emplace_back(event.packet->data,
+                                      event.packet->data + event.packet->dataLength);
                 enet_packet_destroy(event.packet);
+            }
         }
+    }
+    void sendPacket(std::span<const std::uint8_t> bytes) {
+        auto* packet = enet_packet_create(bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
+        require(packet && enet_peer_send(peer, datagram::reliableChannel, packet) == 0,
+                "Wire fixture send failed");
+        enet_host_flush(endpoint);
+    }
+    void identify(const BuildIdentity& build) {
+        sendPacket(compatibilityPacket(build));
     }
     void send(const Writer& message) {
         Writer envelope(static_cast<Message>(datagram::Envelope::message));
         envelope.u32(0);
         envelope.bytes.insert(envelope.bytes.end(), message.bytes.begin(), message.bytes.end());
-        auto* packet = enet_packet_create(envelope.bytes.data(), envelope.bytes.size(),
-                                          ENET_PACKET_FLAG_RELIABLE);
-        require(packet && enet_peer_send(peer, datagram::reliableChannel, packet) == 0,
-                "Wire fixture send failed");
-        enet_host_flush(endpoint);
+        sendPacket(envelope.bytes);
     }
 };
+void receiveIsolation() {
+    auto io = std::make_shared<NetworkIo>();
+    const BuildIdentity build{testVersion, "receive-isolation"};
+    auto listener = io->listenDatagram(0, build);
+    ENetAddress address{};
+    address.host = htonl(INADDR_LOOPBACK);
+    address.port = listener->port;
+    std::array<std::unique_ptr<Socket>, 2> senders;
+    std::array<std::shared_ptr<ConnectionPipe>, 2> receivers;
+    for (unsigned i = 0; i < senders.size(); ++i) {
+        senders[i] = std::make_unique<Socket>(io, io->connectDatagram(address, build));
+        until([&] {
+            if (auto pipe = listener->accepted.pop())
+                receivers[i] = std::move(*pipe);
+            return receivers[i] && receivers[i]->state.load() == ConnectionPipe::connected &&
+                   senders[i]->pipe->state.load() == ConnectionPipe::connected;
+        });
+    }
+    // Leave one game-thread consumer stalled while its peer fills reliable
+    // capacity. Both receiving connections share the same ENet endpoint.
+    for (unsigned i = 0; i < 200; ++i) {
+        Writer message(Message::communication);
+        message.u32(i);
+        senders[0]->sendMessage(message);
+    }
+    Writer healthy(Message::communication);
+    healthy.u32(12345);
+    senders[1]->sendMessage(healthy);
+    until([&] {
+        senders[0]->flush();
+        if (auto packet = receivers[1]->incoming.pop()) {
+            Reader reader(packet->bytes);
+            require(reader.u8() == static_cast<unsigned>(Message::communication) &&
+                        reader.u32() == 12345,
+                    "Healthy connection received the wrong control message");
+            reader.finish();
+            return true;
+        }
+        return false;
+    });
+    until([&] {
+        senders[0]->flush();
+        return receivers[0]->state.load() == ConnectionPipe::failed;
+    });
+    require(receivers[1]->state.load() == ConnectionPipe::connected,
+            "One overflowing consumer disconnected another player");
+    require(receivers[0]->error == "Connection receive queue limit exceeded",
+            "Overflow did not report the connection-local receive limit");
+    listener->closing.store(true);
+    io->signal();
+}
 void roomOptions() {
     TestSession host, guest;
     require(host.host(0, "test", {}, testAccess()), "Host failed");
@@ -1744,7 +1917,7 @@ void wireRules(Writer& writer, const RunRules& rules) {
     writer.u16(rules.character);
     writer.u8(rules.difficulty);
     writer.u8(rules.transient);
-    writer.u32(rules.options);
+    writer.u64(rules.options);
 }
 void accessWireValidation() {
     const LobbyAccess basic{{0}, {}, {0}};
@@ -1760,6 +1933,7 @@ void accessWireValidation() {
             return remote.peer->state == ENET_PEER_STATE_CONNECTED;
         });
         Writer hello(Message::hello);
+        remote.identify({testVersion, "wire-access"});
         hello.u16(protocolVersion);
         hello.string("wire-access");
         hello.string(std::string(32, 'a'));
@@ -1806,6 +1980,7 @@ void accessWireValidation() {
             return remote.peer != nullptr;
         });
         Writer welcome(Message::welcome);
+        remote.identify({testVersion, "wire-access"});
         welcome.u8(1);
         remote.send(welcome);
         const RunRules rules = scenario == 1 ? RunRules{1001, 2, 23, 0, true} : RunRules{};
@@ -2188,6 +2363,11 @@ void handshake() {
     });
     require(host.phase() == Phase::lobby && host.players() == 1 && !rejected.error().empty(),
             "Rejected handshake damaged host");
+    require(rejected.compatibilityFailure() &&
+                rejected.compatibilityFailure()->issue == CompatibilityIssue::fingerprint &&
+                rejected.compatibilityFailure()->localVersion == testVersion &&
+                rejected.compatibilityFailure()->remoteVersion == testVersion,
+            "Same-version DLL mismatch lost its specific failure");
     TestSession guest;
     require(guest.join("127.0.0.1", host.port(), "supported", {}, {}, testAccess()),
             "Valid join after rejection failed");
@@ -2205,6 +2385,196 @@ void handshake() {
     require(!badIdentity.join("127.0.0.1", host.port(), "supported", "not-an-identity", {},
                               testAccess()),
             "Invalid identity accepted");
+}
+void requireCompatibilityFailure(Session& guest, CompatibilityIssue issue, std::string_view local,
+                                 std::string_view remote) {
+    const auto& failure = guest.compatibilityFailure();
+    require(guest.phase() == Phase::failed && failure && failure->issue == issue &&
+                failure->localVersion == local && failure->remoteVersion == remote,
+            "Compatibility failure lost its reason or versions");
+    require(!guest.takeState().has_value(), "Rejected connection exposed world state");
+}
+void compatibilityVersions() {
+    static std::vector<std::string> logs;
+    for (const auto& versions : {std::pair{"0.6.0", "0.5.1"}, std::pair{"0.5.1", "0.6.0"},
+                                 std::pair{"0.6.0", "0.6.0-rc.1"}}) {
+        logs.clear();
+        Session host(versions.first, [](const std::string& message) { logs.push_back(message); });
+        TestSession existing(versions.first), rejected(versions.second), accepted(versions.first);
+        require(host.host(0, "same-dll", "host-mods", testAccess()), "Host failed");
+        require(
+            existing.join("127.0.0.1", host.port(), "same-dll", {}, "different-mods", testAccess()),
+            "Existing peer join failed");
+        until([&] {
+            host.poll();
+            existing.poll();
+            return existing.phase() == Phase::lobby && host.players() == 2;
+        });
+        require(rejected.join("127.0.0.1", host.port(), "same-dll", {}, {}, testAccess()),
+                "Rejected peer connection failed");
+        until([&] {
+            host.poll();
+            existing.poll();
+            rejected.poll();
+            return rejected.phase() == Phase::failed;
+        });
+        requireCompatibilityFailure(rejected, CompatibilityIssue::version, versions.second,
+                                    versions.first);
+        until([&] {
+            host.poll();
+            return std::any_of(logs.begin(), logs.end(), [&](const auto& log) {
+                return log.find("network_peer_removed") != std::string::npos &&
+                       log.find(versions.first) != std::string::npos &&
+                       log.find(versions.second) != std::string::npos;
+            });
+        });
+        require(host.phase() == Phase::lobby && host.players() == 2 &&
+                    existing.phase() == Phase::lobby && !existing.compatibilityFailure(),
+                "Version rejection disrupted the room or existing peer");
+        require(rejected.reconnect() && !rejected.compatibilityFailure(),
+                "Retry did not clear the prior compatibility failure");
+        until([&] {
+            host.poll();
+            existing.poll();
+            rejected.poll();
+            return rejected.phase() == Phase::failed;
+        });
+        requireCompatibilityFailure(rejected, CompatibilityIssue::version, versions.second,
+                                    versions.first);
+        require(accepted.join("127.0.0.1", host.port(), "same-dll", {}, {}, testAccess()),
+                "Matching version join failed");
+        until([&] {
+            host.poll();
+            existing.poll();
+            accepted.poll();
+            return host.players() == 3 && accepted.phase() == Phase::lobby;
+        });
+        require(accepted.slot() == 2 && host.modsDiffer(),
+                "Rejected peer kept its seat or third-party mods became mandatory");
+    }
+}
+void compatibilityRejoin() {
+    Group group(2);
+    group.ready();
+    group.step(0);
+    const auto identity = group.peers[1]->identity();
+    group.peers[1]->close();
+    until([&] {
+        group.peers[0]->poll();
+        return group.peers[0]->connectedMask() == 1;
+    });
+    for (const bool changedVersion : {true, false}) {
+        TestSession rejected(changedVersion ? "0.6.1" : testVersion);
+        require(rejected.join("127.0.0.1", group.peers[0]->port(),
+                              changedVersion ? "state-test" : "different-dll", identity, {},
+                              testAccess()),
+                "Rejoin connection failed");
+        until([&] {
+            group.peers[0]->poll();
+            rejected.poll();
+            return rejected.phase() == Phase::failed;
+        });
+        requireCompatibilityFailure(rejected,
+                                    changedVersion ? CompatibilityIssue::version
+                                                   : CompatibilityIssue::fingerprint,
+                                    changedVersion ? "0.6.1" : testVersion, testVersion);
+        require(group.peers[0]->phase() == Phase::running && group.peers[0]->connectedMask() == 1 &&
+                    group.peers[0]->players() == 2 && !group.peers[0]->checkpointNeeded(),
+                "Rejected rejoin changed the running room or requested a checkpoint");
+    }
+    require(group.step(1).connected == 1, "Rejected rejoin interrupted host simulation");
+    require(group.peers[1]->reconnect(), "Matching reconnect failed");
+    until([&] {
+        group.poll();
+        return group.peers[1]->phase() == Phase::waiting;
+    });
+    require(!group.peers[1]->compatibilityFailure(),
+            "Reconnect retained a stale compatibility failure");
+    auto checkpoint = group.peers[0]->settings();
+    checkpoint.snapshot.resize(123, 42);
+    require(group.peers[0]->checkpoint(checkpoint, 2), "Rejoin checkpoint failed");
+    until([&] {
+        group.poll();
+        return group.peers[1]->phase() == Phase::running;
+    });
+    require(group.peers[1]->slot() == 1 && group.peers[1]->identity() == identity,
+            "Rejected rejoin displaced the original seat");
+}
+void compatibilityWire() {
+    enum class Scenario { protocol, version, legacy, silent, gameplay, malformed };
+    for (const auto scenario : {Scenario::protocol, Scenario::version, Scenario::legacy,
+                                Scenario::silent, Scenario::gameplay, Scenario::malformed}) {
+        TestSession guest;
+        WirePeer remote(true);
+        remote.legacy = scenario == Scenario::legacy;
+        require(guest.join("127.0.0.1", remote.endpoint->address.port, "wire-compatibility", {}, {},
+                           testAccess()),
+                "Wire join failed");
+        until([&] {
+            guest.poll();
+            remote.poll();
+            return remote.peer != nullptr;
+        });
+        if (scenario == Scenario::protocol || scenario == Scenario::version)
+            remote.identify({scenario == Scenario::version ? "0.7.0" : testVersion,
+                             "wire-compatibility", protocolVersion + 1});
+        else if (scenario == Scenario::gameplay) {
+            Writer start(Message::start);
+            remote.send(start); // Must be rejected before any gameplay decoder runs.
+        } else if (scenario == Scenario::malformed) {
+            auto packet = compatibilityPacket({testVersion, "wire-compatibility"});
+            packet.push_back(0);
+            remote.sendPacket(packet);
+        }
+        until([&] {
+            guest.poll();
+            remote.poll();
+            return guest.phase() == Phase::failed;
+        });
+        requireCompatibilityFailure(guest,
+                                    scenario == Scenario::protocol ? CompatibilityIssue::protocol
+                                    : scenario == Scenario::version
+                                        ? CompatibilityIssue::version
+                                        : CompatibilityIssue::unavailable,
+                                    testVersion,
+                                    scenario == Scenario::protocol  ? testVersion
+                                    : scenario == Scenario::version ? "0.7.0"
+                                                                    : "");
+    }
+    // A legacy guest bypassing the new connect marker still cannot enter a room.
+    TestSession host;
+    require(host.host(0, "wire-compatibility", {}, testAccess()), "Legacy fixture host failed");
+    WirePeer legacy;
+    legacy.connect(host.port(), legacyProtocolVersion);
+    until([&] {
+        host.poll();
+        legacy.poll();
+        return legacy.peer->state == ENET_PEER_STATE_CONNECTED;
+    });
+    Writer hello(Message::hello);
+    hello.u16(legacyProtocolVersion);
+    hello.string("wire-compatibility");
+    hello.string(std::string(32, 'a'));
+    hello.string("");
+    hello.access(testAccess());
+    legacy.send(hello);
+    until([&] {
+        host.poll();
+        legacy.poll();
+        return legacy.peer->state == ENET_PEER_STATE_DISCONNECTED;
+    });
+    require(host.phase() == Phase::lobby && host.players() == 1 && !legacy.received.empty(),
+            "Legacy guest bypassed preflight or did not receive host metadata");
+    require(readCompatibility(legacy.received.front()).version == testVersion,
+            "Host metadata was lost while rejecting a legacy connection");
+    TestSession valid;
+    require(valid.join("127.0.0.1", host.port(), "wire-compatibility", {}, {}, testAccess()),
+            "Join after legacy rejection failed");
+    until([&] {
+        host.poll();
+        valid.poll();
+        return valid.phase() == Phase::lobby && host.players() == 2;
+    });
 }
 void addressRejoin(Group& g) {
     g.ready();
@@ -2657,15 +3027,21 @@ void reliableReceive() {
     receiver.begin(start);
     Reader gapReader(std::span(next.bytes).subspan(1));
     rejects([&] { receiver.snapshot(gapReader); }, "Out-of-order checkpoint chunk accepted");
-    Stage stage{1, 1, 0, 12, false, {}, {}};
-    stage.rewind.resize(6001, 1);
-    auto chunk = stageMessage(stage);
-    Reader stageFirst(std::span(chunk.bytes).subspan(1));
-    receiver.floor(stageFirst);
-    ++stage.sourceRoom;
-    chunk = stageMessage(stage, bulkChunkSize);
-    Reader changed(std::span(chunk.bytes).subspan(1));
-    rejects([&] { receiver.floor(changed); }, "Mixed rewind metadata accepted");
+    for (bool changeAnimation : {false, true}) {
+        receiver.begin(start);
+        Stage stage{1, 1, 0, 12, false, {}, {}};
+        stage.rewind.resize(6001, 1);
+        auto chunk = stageMessage(stage);
+        Reader stageFirst(std::span(chunk.bytes).subspan(1));
+        receiver.floor(stageFirst);
+        if (changeAnimation)
+            stage.departureAnimations = {"UseItem", "LightTravel"};
+        else
+            ++stage.sourceRoom;
+        chunk = stageMessage(stage, bulkChunkSize);
+        Reader changed(std::span(chunk.bytes).subspan(1));
+        rejects([&] { receiver.floor(changed); }, "Mixed rewind metadata accepted");
+    }
 }
 void worldDeltas() {
     Group g(4);
@@ -2728,13 +3104,104 @@ void worldDeltas() {
     });
     const auto resources = g.peers[0]->resources();
     require(resources.deltaSnapshots > 180 &&
-                resources.wireWorldBytes < resources.fullWorldBytes / 2,
-            "Confirmed sparse snapshots did not reduce actual compressed traffic");
+                resources.comparedWorldBytes < resources.fullWorldBytes / 2,
+            "Sampled sparse snapshots did not reduce compressed payload");
     std::printf("DELTA snapshots=%llu deltas=%llu full_wire=%llu actual_wire=%llu\n",
                 static_cast<unsigned long long>(resources.worldSnapshots),
                 static_cast<unsigned long long>(resources.deltaSnapshots),
                 static_cast<unsigned long long>(resources.fullWorldBytes),
                 static_cast<unsigned long long>(resources.wireWorldBytes));
+}
+void sampledCompression() {
+    WorldTransfer sender, receiver;
+    StateCompression codec;
+    std::mt19937 random(107);
+    std::vector<std::uint8_t> bytes(100000);
+    for (auto& byte : bytes)
+        byte = random();
+    unsigned comparisons = 0;
+    for (unsigned tick = 0; tick < 65; ++tick) {
+        bytes[tick] ^= 0x42;
+        WorldState state;
+        state.tick = tick;
+        state.epoch = 1;
+        state.connected = 3;
+        state.bytes = bytes;
+        require(sender.canCapture(40), "Acknowledged sender stopped requesting fresh state");
+        sender.publish(std::move(state));
+        require(!sender.canCapture(40), "Pending state requested redundant capture");
+        const auto packet = sender.next(codec, 40);
+        require(packet.has_value(), "Healthy sender stopped advancing");
+        if (!tick)
+            require(!sender.canCapture(40) && sender.canCapture(40, true),
+                    "An oversized in-flight view blocked its permitted fresh replacement");
+        comparisons += sender.trace.full != 0;
+        Reader reader(std::span(packet->bytes).subspan(1));
+        const auto restored = receiver.receive(reader, codec);
+        require(restored && restored->bytes == bytes, "Sampled compression changed state bytes");
+        require(sender.acknowledge(1, tick), "Decoded sampled state could not become a baseline");
+    }
+    require(comparisons >= 3 && comparisons <= 4 && sender.totals.deltas >= 60,
+            "Healthy prefix stream still compressed both alternatives every frame");
+    require(sender.totals.compared < sender.totals.full / 2,
+            "Sampled comparison accounting included unsampled frames");
+    for (auto& byte : bytes)
+        byte = random();
+    WorldState changed;
+    changed.tick = 65;
+    changed.epoch = 1;
+    changed.connected = 3;
+    changed.bytes = bytes;
+    sender.publish(changed);
+    const auto fallback = sender.next(codec, 40);
+    require(fallback && sender.trace.full && !sender.trace.delta,
+            "Poor prefix compression failed to compare an independent frame immediately");
+    sender.resetSender();
+    require(sender.canCapture(40), "Floor reset retained old capture backpressure");
+    sender.publish(changed);
+    require(sender.next(codec, 40).has_value() && !sender.trace.delta,
+            "Reset sender referenced an expired baseline");
+}
+void captureDemand() {
+    Group group(2);
+    group.ready();
+    group.step(0);
+    until([&] {
+        group.poll();
+        return group.peers[0]->captureRequested(1);
+    });
+    group.publish(0);
+    until([&] {
+        group.poll();
+        // Snapshot metrics and capture demand are published independently by
+        // the IO worker. Wait for both observations before applying a receipt.
+        return group.peers[0]->resources().worldSnapshots == 1 &&
+               !group.peers[0]->captureRequested(1);
+    });
+    until([&] {
+        group.poll();
+        if (auto state = group.peers[1]->takeState()) {
+            group.peers[1]->applied(state->tick);
+            return true;
+        }
+        return false;
+    });
+    until([&] {
+        group.poll();
+        return group.peers[0]->captureRequested(1);
+    });
+    require(!group.peers[0]->captureRequested(0) && !group.peers[1]->captureRequested(1),
+            "Non-authoritative slot requested capture");
+    require(group.peers[0]->beginStage({2, 2, 0, 0, false, {}, {}}),
+            "Capture demand blocked floor control");
+    until([&] {
+        group.poll();
+        return group.peers[1]->takeStage().has_value();
+    });
+    until([&] {
+        group.poll();
+        return group.peers[0]->captureRequested(1);
+    });
 }
 void deliveryBackpressure() {
     Group group(3);
@@ -2916,10 +3383,14 @@ int main(int argc, char** argv) {
         argc, argv,
         {{"codec", codec},
          {"world-deltas", worldDeltas},
+         {"sampled-compression", sampledCompression},
+         {"capture-demand", captureDemand},
          {"wire-compression", wireCompression},
          {"async-network", asyncNetwork},
+         {"latency-hud", latencyHud},
          {"bulk-worker", bulkWorker},
          {"reliable-receive", reliableReceive},
+         {"receive-isolation", receiveIsolation},
          {"delivery-backpressure", deliveryBackpressure},
          {"delta-floor-boundary", deltaFloorBoundary},
          {"compression-limits", compressionLimits},
@@ -2946,6 +3417,9 @@ int main(int argc, char** argv) {
          {"room-options", roomOptions},
          {"lobby-access", lobbyAccess},
          {"handshake", handshake},
+         {"compatibility-versions", compatibilityVersions},
+         {"compatibility-rejoin", compatibilityRejoin},
+         {"compatibility-wire", compatibilityWire},
          {"host-names", hostNames},
          {"ipv6-addresses", ipv6Addresses},
          {"ipv6-inputs", [] { inputsAndStates(2, "::1"); }},

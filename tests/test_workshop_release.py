@@ -2,10 +2,12 @@
 
 from copy import deepcopy
 import hashlib
-from pathlib import Path
+import json
 import shutil
 
 import pytest
+from zipfile import ZipFile
+import extension_package
 
 import workshop_release as workshop
 
@@ -48,7 +50,7 @@ class FakeSteam:
             value["updated"] += 1
         return {"item_id": workshop.ITEM_ID, "result": 1, "legal_agreement_required": False}
 
-    def update_page(self, prefix, content, notes, language, description, preview):
+    def update_page(self, prefix, content, notes, language, description, preview, title=None):
         self.calls.append("update-page-" + language)
         if language == self.fail_language:
             raise TimeoutError("unknown language update outcome")
@@ -57,6 +59,8 @@ class FakeSteam:
         else:
             assert notes.read_bytes() == b""
         self.metadata[language]["description"] = description.read_bytes().decode("utf-8")
+        if title is not None:
+            self.metadata[language]["title"] = title
         if preview is not None:
             self.preview_bytes = preview.read_bytes()
             for value in self.metadata.values():
@@ -78,7 +82,21 @@ def release(tmp_path, monkeypatch):
     for name in ("main.lua", "preview.png", "安装说明.txt", "old-version.zip"):
         (base / name).write_bytes(b"existing content")
     archive = tmp_path / "Isaac-LAN-v0.4.2-windows-x86.zip"
-    archive.write_bytes(b"release validated by the package checker")
+    dll = b"native release bytes validated by the package checker"
+    with ZipFile(archive, "w") as zipped:
+        prefix = archive.stem + "/"
+        zipped.writestr(prefix + "isaac_lan_probe.dll", dll)
+        zipped.writestr(
+            prefix + "payload.json",
+            json.dumps(
+                {
+                    "extension_version": "0.4.2",
+                    "game_build": "1.9.7.17.J460",
+                    "loader_abi": extension_package.LOADER_ABI,
+                    "files": {"isaac_lan_probe.dll": hashlib.sha256(dll).hexdigest()},
+                }
+            ),
+        )
     archive.with_suffix(".zip.sha256").write_text(
         f"{workshop.digest(archive)}  {archive.name}\n", encoding="ascii"
     )
@@ -105,6 +123,8 @@ def test_prepare_uses_fresh_content_and_never_publishes(release):
     assert set(manifest["files"]) == set(workshop.BASE_FILES) | {
         archive.name,
         archive.with_suffix(".zip.sha256").name,
+        "isaac-lan-update/manifest.txt",
+        "isaac-lan-update/isaac_lan_probe.dll",
     }
     assert manifest["files"][archive.name] == workshop.digest(archive)
     assert "<version>0.4.2</version>" in (output / "content/metadata.xml").read_text()
@@ -273,6 +293,36 @@ def test_page_prefix_preserves_both_original_descriptions(release, monkeypatch):
     for language in workshop.LANGUAGES:
         for field in ("title", "owner", "visibility", "banned"):
             assert steam.metadata[language][field] == before[language][field]
+
+
+def test_localized_description_update_retains_previously_visible_title(release, monkeypatch):
+    steam, _, _, output = release
+    steam.metadata["schinese"]["title"] = workshop.TITLE
+    update = steam.update_page
+
+    def recreate_localization(prefix, content, notes, language, description, preview, title=None):
+        if language == "schinese":
+            steam.metadata[language]["title"] = ""
+        return update(prefix, content, notes, language, description, preview, title)
+
+    steam.update_page = recreate_localization
+    prepare_page(release, monkeypatch)
+    result = workshop.publish(steam, output)
+    assert result["metadata_matches_expected"] and result["downloaded_files_match"]
+    assert steam.metadata["schinese"]["title"] == workshop.TITLE
+    assert steam.calls.count("update") == 1
+    assert steam.calls.count("update-page-schinese") == 1
+
+
+def test_page_command_forwards_existing_title_without_content_upload(tmp_path, monkeypatch):
+    steam = workshop.Steam(tmp_path / "helper.exe", tmp_path / "game")
+    calls = []
+    monkeypatch.setattr(steam, "call", lambda *args: calls.append(args))
+    prefix, notes, description = (tmp_path / name for name in ("result", "notes", "description"))
+    steam.update_page(prefix, None, notes, "schinese", description, None, workshop.TITLE)
+    assert calls == [
+        ("update-page", prefix, "-", notes, "schinese", description, "-", workshop.TITLE)
+    ]
 
 
 def test_replace_notes_updates_both_languages_and_preserves_base_description(release):

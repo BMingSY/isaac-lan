@@ -71,13 +71,13 @@ class FrontendProgress {
     FrontendProgress(const Directory& directory, const lan::Progress& personal)
         : directory(directory), progress(directory.manager + directory.progressOffset),
           scene(at<int>(directory.manager, directory.scene)),
-          previous(native_progress::read(progress, directory.progress)) {
+          previous(native_progress::readNative(progress, directory.progress)) {
         native_progress::write(progress, directory.progress, personal);
         // Native achievement predicates waive locks during some challenges.
         at<int>(directory.manager, directory.scene) = 0;
     }
     ~FrontendProgress() {
-        native_progress::write(progress, directory.progress, previous);
+        native_progress::writeNative(progress, directory.progress, previous);
         at<int>(directory.manager, directory.scene) = scene;
     }
     void allowContinuingEden(const lan::Progress& personal) {

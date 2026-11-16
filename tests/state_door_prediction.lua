@@ -7,6 +7,8 @@ local home, away, direction, started = nil, nil, 0, false
 local lastRoom, arriving
 local arrivals, invisibleDistance, fastest = 0, 0, 0
 local priorPosition, priorTime
+local movementProbe = string.rep("\xff", 34)
+local blockedMovement = string.rep("\0", 8)
 local inward = { Vector(1, 0), Vector(0, 1), Vector(-1, 0), Vector(0, -1) }
 local buttons = { 4, 1, 8, 2 }
 local function log(event, data)
@@ -113,7 +115,7 @@ function _IsaacLanFrame()
                 lastRoom = roomID
                 if arriving then
                     local age = now - arriving.at
-                    if age <= 80 then
+                    if _IsaacLanState.filterInput(movementProbe):sub(1, 8) == blockedMovement then
                         invisibleDistance =
                             math.max(invisibleDistance, p.Position:Distance(arriving.position))
                     end
@@ -160,7 +162,7 @@ function _IsaacLanFrame()
                 { arrivals = arrivals, invisibleDistance = invisibleDistance, fastest = fastest }
             )
             assert(arrivals == 2, "Missing new and resident destination coverage")
-            assert(invisibleDistance < 1, "Arrival moved during the reveal: " .. invisibleDistance)
+            assert(invisibleDistance < 1, "Arrival moved before visibility: " .. invisibleDistance)
             assert(fastest < 340, "Arrival replay accelerated beyond ordinary walking: " .. fastest)
         end
         finished = true

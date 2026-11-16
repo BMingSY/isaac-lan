@@ -1,9 +1,18 @@
 #pragma once
 #include <array>
 #include <optional>
+#include <span>
 
 namespace isaac::compat::items {
 inline constexpr int deathCertificateAnimation = 20;
+inline constexpr int deathCertificateDimension = 2;
+inline std::optional<unsigned> deathCertificateReturnSlot(std::span<const int> dimensions,
+                                                          unsigned connected) {
+    for (unsigned slot = 0; slot < dimensions.size(); ++slot)
+        if ((connected & (1u << slot)) && dimensions[slot] == deathCertificateDimension)
+            return slot;
+    return std::nullopt;
+}
 inline bool deathCertificateTransfer(int animation, int sourceDimension, int targetDimension) {
     // Both the native item entry and the delayed collectible return use this
     // animation. Doors and teleport cards within the annex remain individual.

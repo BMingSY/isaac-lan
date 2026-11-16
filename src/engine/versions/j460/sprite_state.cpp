@@ -20,7 +20,7 @@ const Bindings bindings{
      layout::animationState::previousEvents},
     {layout::animationData::layers, layout::animationData::layerCount, layout::animationData::nulls,
      layout::animationData::nullCount, layout::animationData::layerMap,
-     layout::animationData::totalFrames},
+     layout::animationData::totalFrames, layout::animationData::name},
     {layout::animationLayer::stride, layout::animationLayer::id, layout::animationLayer::frameCount,
      layout::animationLayer::nullFrameCount}};
 } // namespace isaac::engine::native_sprite

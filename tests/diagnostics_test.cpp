@@ -1,6 +1,5 @@
 #include "app/configuration.h"
 #include "core/performance.h"
-#include "diagnostics/input_latency.h"
 #include "test_support.h"
 #include <chrono>
 #include <filesystem>
@@ -12,6 +11,7 @@ void defaults() {
     const auto parsed = isaac::configuration::parse(isaac::configuration::defaults);
     require(parsed.warnings.empty(), "Default configuration is invalid");
     require(parsed.settings.inputHz == 60, "Default guest input rate changed");
+    require(parsed.settings.otherPlayersOpacity == 100, "Default player appearance changed");
     require(parsed.settings.chat.backgroundImage.empty() && parsed.settings.chat.opacity == 70,
             "Default chat background is not a translucent solid color");
     require(isaac::configuration::missingDefaults(parsed).empty(),
@@ -22,6 +22,17 @@ void defaults() {
 }
 void validation() {
     using isaac::configuration::parse;
+    for (const auto opacity : {0u, 50u, 100u}) {
+        const auto parsed = parse("[players]\nothers_opacity=" + std::to_string(opacity));
+        require(parsed.warnings.empty() && parsed.settings.otherPlayersOpacity == opacity,
+                "Valid other-player opacity was rejected");
+    }
+    for (const auto value :
+         {"-1", "101", "50.5", "nan", "inf", "50oops", "", "99999999999999999999"}) {
+        const auto parsed = parse("[players]\nothers_opacity=" + std::string(value));
+        require(parsed.warnings.size() == 1 && parsed.settings.otherPlayersOpacity == 100,
+                "Invalid player opacity did not fall back to normal appearance");
+    }
     const auto legacy = parse("[network]\ntransport=tcp\ninput_hz=30");
     require(legacy.settings.inputHz == 30 && legacy.warnings.size() == 1 &&
                 legacy.warnings[0].find("unknown_key=network.transport") != std::string::npos,
@@ -106,6 +117,8 @@ void preservation() {
     const std::string upgraded(std::istreambuf_iterator<char>(file), {});
     require(upgraded.starts_with(custom) && upgraded.find("input_hz = 60") != std::string::npos,
             "Migration replaced user values/comments or omitted new defaults");
+    require(upgraded.find("others_opacity = 100") != std::string::npos,
+            "Existing configuration did not acquire the other-player opacity setting");
     const auto parsed = isaac::configuration::parse(upgraded);
     require(isaac::configuration::missingDefaults(parsed).empty() && parsed.warnings.size() == 1,
             "Migration lost a known key or duplicated an existing setting");
@@ -150,22 +163,6 @@ void preservation() {
             "Oversized configuration was read without a bound");
 }
 void metrics() {
-    using Clock = std::chrono::steady_clock;
-    using namespace std::chrono_literals;
-    isaac::diagnostics::InputLatency latency;
-    const auto start = Clock::time_point{};
-    latency.capture(1, start);
-    require(latency.present(1, start + 8ms) == 8 && !latency.present(1, start + 16ms),
-            "Presentation latency duplicated one input sample");
-    require(latency.confirm(1, start + 90ms) == 90 && !latency.confirm(1, start + 100ms),
-            "Repeated state acknowledgement duplicated latency");
-    latency.capture(129, start + 1s);
-    require(!latency.present(1, start + 1s) && !latency.confirm(2, start + 1s),
-            "Evicted sample was mistaken for a newer input");
-    latency = {};
-    latency.capture(0, start);
-    require(latency.confirm(0, start + 40ms) == 40,
-            "New session retained old input sequence metrics");
     isaac::diagnostics::Window window;
     for (unsigned i = 1; i <= 100; ++i)
         window.add(i);

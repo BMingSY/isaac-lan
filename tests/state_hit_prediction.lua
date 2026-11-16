@@ -277,6 +277,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             end
         end
         if t == 30 then
+            -- Seeded curses also depend on isolated profile progress. Establish
+            -- this fixture's precondition before observing pill preservation.
+            Game():GetLevel():AddCurse(LevelCurse.CURSE_OF_MAZE, false)
             actor(1, function(p)
                 local mapping = {}
                 for color = 1, 13 do
@@ -336,6 +339,20 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 for _, e in ipairs(Isaac.GetRoomEntities()) do
                     if e.Type ~= 1 then
                         e:Remove()
+                    end
+                end
+                -- The destination template may contain rocks in the firing
+                -- lane. These cases exercise contact, veto and flash policy;
+                -- the offline regression separately keeps blocked-line checks.
+                for index = 0, room:GetGridSize() - 1 do
+                    local grid = room:GetGridEntity(index)
+                    if
+                        grid
+                        and grid:GetType() ~= GridEntityType.GRID_WALL
+                        and grid:GetType() ~= GridEntityType.GRID_DOOR
+                        and room:GetGridCollision(index) ~= GridCollisionClass.COLLISION_WALL
+                    then
+                        room:RemoveGridEntity(index, 0, false)
                     end
                 end
                 p.Position, p.Velocity = Vector(260, 280), Vector.Zero
@@ -401,3 +418,13 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
     end, collect, restore, present, beginFloor)
 end
+
+return {
+    done = function()
+        return finished
+    end,
+    cleanup = function()
+        _IsaacLanFrame, native.net_gate = base, gate
+        native.diagnostics_counter = counter
+    end,
+}

@@ -3,11 +3,13 @@
 #include "engine/versions/common/combat_feedback.cpp"
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
+#include "engine/versions/j835/layout.h"
 namespace native = isaac::engine::j835;
 constexpr unsigned seedOffset = 0x344, spriteOffset = 0x3c;
 constexpr unsigned roomOffset = 0x18194, dimensionOffset = 0x1819c;
 #else
 #include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j460/layout.h"
 namespace native = isaac::engine::j460;
 constexpr unsigned seedOffset = 0x3ec, spriteOffset = 0x48;
 constexpr unsigned roomOffset = 0x18304, dimensionOffset = 0x1830c;
@@ -78,6 +80,7 @@ __attribute__((naked)) void invokeDrain() {
 }
 }
 
+#include "support/native_entity_types.h"
 #include <array>
 
 namespace isaac::runtime {
@@ -159,6 +162,7 @@ struct Fixture {
     unsigned char* image =
         static_cast<unsigned char*>(VirtualAlloc(nullptr, native::globals::game + sizeof(Address),
                                                  MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    isaac::test::NativeEntityTypes types{reinterpret_cast<Address>(image)};
     std::array<unsigned char, 0x20000> game{};
     std::array<unsigned char, 0x1000> target{};
     std::array<unsigned char, 16 * recordSize> queue{};
@@ -176,6 +180,8 @@ struct Fixture {
                   {reinterpret_cast<Address>(other.data()),
                    reinterpret_cast<Address>(otherQueue.data())}}}) {
             feedback::at<unsigned>(object, typeOffset) = 10;
+            feedback::at<bool>(object, native::layout::entity::active) = true;
+            types.npc(object);
             feedback::at<Address>(object, queueOffset + 0) = records;
             feedback::at<Address>(object, queueOffset + 4) = records;
         }
@@ -548,6 +554,45 @@ void hookABIAndOwnership() {
                 (combatDrainFlags & 0x41) == 0x41,
             "Queue-drain hook corrupted native registers, flags or floating-point state");
 }
+void customTypes() {
+    Fixture f;
+    const auto target = reinterpret_cast<Address>(f.target.data());
+    for (const auto kind : {6617u, 6621u}) {
+        feedback::at<unsigned>(target, native::layout::entity::type) = kind;
+        require(f.hit(Result::flash), "Custom NPC damage failed");
+        flash(target, static_cast<unsigned>(feedback::events.size()), 3);
+        feedback::drain(target);
+        require(feedback::events.back().duration == 3 && feedback::flashes.contains(target),
+                "Custom NPC lost its confirmed hurt flash");
+    }
+    const std::array<Address, 2> sprite{0, target + native::layout::entity::sprite};
+    feedback::api.getTop = [](lua_State*) { return 1; };
+    // The Lua ABI borrows the wrapper only for this synchronous call.
+    static const Address* wrapper;
+    wrapper = sprite.data();
+    feedback::api.toUserdata = [](lua_State*, int) -> void* {
+        return const_cast<Address*>(wrapper);
+    };
+    feedback::api.rawLength = [](lua_State*, int) -> std::size_t { return 8; };
+    feedback::api.pushBoolean = [](lua_State*, int value) {
+        require(value == 1, "Local hit presentation failed");
+    };
+    isaac::runtime::testReplica = true;
+    require(feedback::present(nullptr) == 1 && feedback::flashes.at(target).local,
+            "Custom NPC rejected local hit presentation");
+    feedback::flashes.clear();
+    f.types.effect(target);
+    for (const auto kind : {10u, 6617u}) {
+        feedback::at<unsigned>(target, native::layout::entity::type) = kind;
+        rejects([] { feedback::present(nullptr); }, "Non-NPC accepted hit presentation");
+        require(feedback::flashes.empty(), "Rejected native class retained a hurt flash");
+    }
+    f.types.npc(target);
+    feedback::at<bool>(target, native::layout::entity::active) = false;
+    rejects([] { feedback::present(nullptr); }, "Inactive NPC accepted hit presentation");
+    require(feedback::flashes.empty(), "Inactive NPC retained hit presentation");
+    isaac::runtime::testReplica = false;
+}
 } // namespace
 int main(int argc, char** argv) {
     return runTests(argc, argv,
@@ -558,5 +603,6 @@ int main(int argc, char** argv) {
                      {"lua-wire-audience", luaWireAndAudience},
                      {"temporary-presentation", temporaryPresentation},
                      {"passive-bounded", passiveAndBounded},
-                     {"hook-abi-ownership", hookABIAndOwnership}});
+                     {"hook-abi-ownership", hookABIAndOwnership},
+                     {"custom-types", customTypes}});
 }

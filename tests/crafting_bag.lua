@@ -190,6 +190,9 @@ local function environment()
         "presentation/attacks",
         "presentation/attack_prediction",
         "presentation/tear_motion",
+        "presentation/entity_visuals",
+        "presentation/attack_matching",
+        "presentation/attack_volley",
         "sync/weapon_pose",
         "compat/items/attack_preview",
         "sync/world_schema",
@@ -206,6 +209,7 @@ local function environment()
         "compat/items/hourglass",
         "compat/items/r_key",
         "compat/items/crafting_bag",
+        "compat/characters/isaac",
         "compat/characters/blue_baby",
     }) do
         modules[name] = module(name)
@@ -222,6 +226,7 @@ local function environment()
     modules["sync/entity_links"] = dofile(root .. "/src/bridge/sync/entity_links.lua")
     modules["compat/bosses/held_bombs"] = dofile(root .. "/src/bridge/compat/bosses/held_bombs.lua")
     modules["compat/items/split_body"] = module("compat/items/split_body")
+    modules["compat/items/flip"] = module("compat/items/flip")
     modules["compat/visuals"] = dofile(root .. "/src/bridge/compat/visuals.lua")
     modules["compat/bosses/dogma"] = function()
         return {}
@@ -253,6 +258,7 @@ local function environment()
         "compat/characters/forgotten",
         "compat/items/glitched",
         "sync/temporary_effects",
+        "runtime/room_placement",
     }) do
         modules[name] = inert
     end

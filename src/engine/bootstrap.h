@@ -2,10 +2,11 @@
 #include <windows.h>
 #include <cstdint>
 #include <string>
+#include "core/startup_error.h"
 struct lua_State;
 namespace isaac::engine::bootstrap {
-int installUpdates(std::uintptr_t image, void (*logger)(const std::string&));
-int installRendering();
+startup::Code installUpdates(std::uintptr_t image, void (*logger)(const std::string&));
+startup::Code installRendering();
 void halfUpdate();
 void restorePositions();
 bool scopeActive();

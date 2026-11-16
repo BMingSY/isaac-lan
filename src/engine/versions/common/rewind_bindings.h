@@ -3,7 +3,7 @@
 
 namespace isaac::engine::native_rewind {
 struct GameLayout {
-    unsigned buffers, selectedBuffer, players, transition;
+    unsigned buffers, selectedBuffer, players, transition, stage, stageType, stateFlags;
 };
 struct PlayerLayout {
     unsigned controller, variant, uses, floorUses;

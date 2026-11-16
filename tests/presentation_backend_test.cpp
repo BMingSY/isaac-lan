@@ -527,11 +527,11 @@ int main() {
         field<unsigned>(room.data(), firstBossOffset) = 41;
         field<unsigned>(room.data(), secondBossOffset) = 42;
         field<int>(room.data(), 0x12cc) = 1;
-        presentation::roomEntered(reinterpret_cast<Address>(room.data()));
+        presentation::roomEntered(reinterpret_cast<Address>(room.data()), true);
         require(starts == 1 && observedFirst == 41 && observedSecond == 42,
                 "Room entry did not use the version's boss cache and delayed enemy count");
         field<int>(room.data(), 0x12cc) = 0;
-        presentation::roomEntered(reinterpret_cast<Address>(room.data()));
+        presentation::roomEntered(reinterpret_cast<Address>(room.data()), true);
         require(starts == 1, "Cleared room replayed its cached boss intro");
         std::array<unsigned char, 0x60> descriptor{}, config{};
         field<Address>(room.data(), 4) = reinterpret_cast<Address>(descriptor.data());
@@ -539,30 +539,31 @@ int main() {
         field<int>(config.data(), 0) = 35;
         field<int>(config.data(), 8) = 1;
         field<int>(config.data(), 12) = 1000;
-        presentation::roomEntered(reinterpret_cast<Address>(room.data()));
+        presentation::roomEntered(reinterpret_cast<Address>(room.data()), true);
         require(starts == 2 && observedFirst == 99 && !observedSecond,
                 "Native special-room entry lost its provisional versus screen");
         field<unsigned>(descriptor.data(), 0x44) = 1;
-        presentation::roomEntered(reinterpret_cast<Address>(room.data()));
+        presentation::roomEntered(reinterpret_cast<Address>(room.data()), true);
         require(starts == 2, "Completed special room replayed its versus screen");
 
         reset();
         audience = 2;
         field<int>(game.data(), roomIndexOffset) = -3;
         field<int>(game.data(), dimensionOffset) = 2;
-        for (unsigned i = 1; i <= 40; ++i)
+        for (unsigned i = 1; i <= 40; ++i) {
+            field<int>(game.data(), roomIndexOffset) = i == 9 ? -3 : static_cast<int>(i);
             start(i, i + 1);
+        }
         const auto queue = collect(1);
         require(queue.size() == 32 * 32 &&
                     queue.substr(0, 32) == event(9, 100, 4, 1, 2, -3, 9, 10) &&
-                    queue.substr(31 * 32) == event(40, 100, 4, 1, 2, -3, 40, 41),
+                    queue.substr(31 * 32) == event(40, 100, 4, 1, 2, 40, 40, 41),
                 "Bounded intro queue changed serialization, signed fields or event order");
-        tick = 190;
+        tick = 700;
         require(collect(1) == queue && collect(-1).empty() && collect(4).empty(),
                 "Intro age or audience boundary changed");
-        tick = 191;
-        require(collect(1).empty(), "Expired intro event remained publishable");
         tick = 701;
+        require(collect(1).empty(), "Expired intro event remained publishable");
         require(!presentation::roomPaused(),
                 "Missing acknowledgement left the room paused forever");
         reset();
@@ -580,16 +581,17 @@ int main() {
                 "Replica intro did not replay in its borrowed local roster");
         require(apply(event(1, 100, 4, 1, 0, 10)) && starts == 1,
                 "Replica replayed a duplicate event");
-        for (const auto& bytes :
-             {event(2, 9, 4, 1, 0, 10), event(3, 100, 5, 1, 0, 10), event(4, 100, 4, 0, 0, 10),
-              event(5, 100, 4, 1, 1, 10), event(6, 100, 4, 1, 0, 20)})
-            require(apply(bytes) && starts == 1, "Replica played a stale or foreign-room intro");
-        require(apply(event(7, 101, 4, 1, 0, 10, 7, 8)) && starts == 2 &&
+        require(apply(event(2, 9, 4, 1, 0, 10)) && starts == 2,
+                "Unacknowledged intro expired before its authority withdrew it");
+        for (const auto& bytes : {event(3, 100, 5, 1, 0, 10), event(4, 100, 4, 0, 0, 10),
+                                  event(5, 100, 4, 1, 1, 10), event(6, 100, 4, 1, 0, 20)})
+            require(apply(bytes) && starts == 2, "Replica played a foreign-room intro");
+        require(apply(event(7, 101, 4, 1, 0, 10, 7, 8)) && starts == 3 &&
                     presentation::playedIntro() == 7 && observedFirst == 7 && observedSecond == 8,
                 "Replica rejected a current event after discarding stale events");
-        require(!apply(std::string(31, '\0')) && !lastError.empty() && starts == 2,
+        require(!apply(std::string(31, '\0')) && !lastError.empty() && starts == 3,
                 "Truncated intro bytes were accepted or replayed");
-        require(!apply(std::string(33 * 32, '\0')) && starts == 2,
+        require(!apply(std::string(33 * 32, '\0')) && starts == 3,
                 "Oversized intro batch was accepted or partially replayed");
 #ifdef ISAAC_LAN_TEST_J835
         auto* actor = players[1].data();
@@ -667,3 +669,13 @@ int main() {
         return 1;
     }
 }
+
+namespace isaac::presentation::animation {
+bool install(std::uintptr_t) {
+    return true;
+}
+void reset() {}
+bool bind(lua_State*, HMODULE) {
+    return true;
+}
+} // namespace isaac::presentation::animation

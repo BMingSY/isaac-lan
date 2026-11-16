@@ -37,6 +37,11 @@ return function(fields)
                     assert(p.ControllerIndex == controller, "Listed backup actor owner differs")
                 end
                 local current, desired = p:GetPlayerType(), inventory[Inventory.type]
+                if inventory[Inventory.ghost] and lazarus(current) and p:GetOtherTwin() then
+                    -- Ghost inventory suspends Birthright. Preserve its second
+                    -- body as the native inactive backup until revival relists it.
+                    assert(native.actor_lazarus_unpair(index), "Cannot suspend Lazarus death twin")
+                end
                 if
                     not inventory[Inventory.ghost]
                     and current ~= desired

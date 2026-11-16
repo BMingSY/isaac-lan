@@ -52,6 +52,21 @@ inline constexpr std::array<std::array<unsigned, 12>, 41> counters{{
     {422, 232, 251, 270, 289, 308, 327, 346, 365, 384, 456, 490}, // 39
     {420, 230, 249, 268, 287, 306, 325, 344, 363, 382, 454, 488}, // 40
 }};
+inline constexpr auto bitCounters = [] {
+    std::array<bool, lan::Progress{}.counters.size()> result{};
+    for (const auto& character : counters)
+        for (auto id : character)
+            result[id] = true;
+    return result;
+}();
+// Native descriptor order differs from completion_widget.anm2 layer order.
+struct Award {
+    unsigned counter, achievement;
+};
+inline constexpr unsigned eventCount = 15, descriptorCount = 18;
+using CharacterAwards = std::array<Award, descriptorCount>;
+static_assert(sizeof(CharacterAwards) == 0x90);
+inline constexpr unsigned heartEvent = 0, normalBits = 1, hardBits = 3;
 inline constexpr std::uint32_t available = 1u << 24;
 inline std::uint32_t preview(unsigned character, const lan::Progress& progress) {
     if (character >= counters.size())

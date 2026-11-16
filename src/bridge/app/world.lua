@@ -30,6 +30,8 @@ local performance = modules["diagnostics/performance"]
     }
 local encode = performance.wrap("encode", native.state_encode or codec.encode)
 local decode = performance.wrap("decode", native.state_decode or codec.decode)
+local decodeView =
+    performance.wrap("decode", native.state_decode_view or native.state_decode or codec.decode)
 local reconcileEntities =
     performance.wrap("apply.entities", component("sync/entities")(EntityType, PickupVariant))
 local reconcileGrids = performance.wrap("apply.grids", component("sync/grids"))
@@ -43,7 +45,7 @@ end)
 local crawlspace = assert(modules["compat/routes/crawlspace"])(function()
     return Game():GetLevel()
 end, Vector, RoomType.ROOM_DUNGEON)
-local forgotten = assert(modules["compat/characters/forgotten"])(PlayerType)
+local forgotten = assert(modules["compat/characters/forgotten"])(PlayerType, native)
 local forms = component("compat/characters/lazarus")(native, function(index)
     return Isaac.GetPlayer(index)
 end, PlayerType)
@@ -53,8 +55,7 @@ local craftingBag = assert(modules["compat/items/crafting_bag"])(native, Collect
 local temporaryEffects = component("sync/temporary_effects")
 local keeper = assert(modules["compat/characters/keeper"])(native, RoomType, PickupVariant)
 state.encode, state.decode = encode, decode
-local tethers =
-    modules["presentation/tethers"](native, Vector, Sprite, EntityType, Isaac.GetRoomEntities)
+local tethers = modules["presentation/tethers"](native, Vector, Sprite, EntityType, EntityPtr)
 local entityCodec = component("sync/entity_codec")(
     native,
     assert(modules["sync/entity_schema"])(EntityType),
@@ -64,7 +65,8 @@ local entityCodec = component("sync/entity_codec")(
         assert(modules["compat/bosses/held_bombs"])(native, EntityType, function()
             return Isaac.GetRoomEntities()
         end),
-        assert(modules["compat/items/split_body"])(native, EntityType, FamiliarVariant)
+        assert(modules["compat/items/split_body"])(native, EntityType, FamiliarVariant),
+        assert(modules["compat/items/flip"])(native, EntityType, PickupVariant)
     ),
     assert(modules["sync/entity_links"])(native, function()
         return Isaac.GetRoomEntities()
@@ -78,7 +80,18 @@ entity = performance.wrap("capture.entity", entity)
 sprite = performance.wrap("capture.sprite", sprite)
 applySprite = performance.wrap("apply.sprite", applySprite)
 entityCodec.apply = performance.wrap("apply.entity", entityCodec.apply)
-function _IsaacLanRoomEntered()
+local roomPlacement = assert(modules["runtime/room_placement"])({
+    game = Game,
+    player = Isaac.GetPlayer,
+    vector = Vector,
+    collision = GridCollisionClass,
+    canPlace = crawlspace.gridPlacement,
+})
+function _IsaacLanRoomLeaving()
+    modules["compat/items/blue_key"](Game(), RoomDescriptor.FLAG_BLUE_REDIRECT)
+end
+function _IsaacLanRoomEntered(door)
+    assert(roomPlacement.arrive(door), "Cannot find a safe room arrival")
     modules["compat/bosses/rotgut"](Game(), Isaac.GetPlayer, RoomType.ROOM_DUNGEON)
     modules["runtime/room_entry"](
         Game():GetRoom(),
@@ -112,9 +125,18 @@ local inventoryState = component("sync/inventory")({
     end,
     extraCollectibles = glitched.extraCollectibles,
     collectibleCount = glitched.count,
+    collectibleReader = glitched.reader,
     subplayer = forgotten.subplayer,
+    restoreForm = forgotten.restoreForm,
+    order = assert(modules["compat/characters/isaac"])(native, PlayerType),
     activeType = ItemType.ITEM_ACTIVE,
     curse = NullItemID.ID_LOST_CURSE,
+    activeData = function(player, value)
+        if value == nil then
+            return native.items_active_data(player:GetSprite())
+        end
+        return native.items_active_data(player:GetSprite(), value)
+    end,
     pockets = function(player, value)
         if value == nil then
             return native.actor_pockets(player:GetSprite())
@@ -127,6 +149,17 @@ local applyInventory = performance.wrap("apply.inventory", inventoryState.apply)
 local actorsPresentation = component("presentation/actors")(native, function(path)
     return Isaac.GetCostumeIdByPath(path)
 end, applySprite)
+local presentationTimeline = modules["presentation/timeline"]()
+local tearTrajectory = modules["presentation/tear_motion"](Vector)
+local entityVisuals = component("presentation/entity_visuals")(
+    native,
+    tearTrajectory,
+    EntityType.ENTITY_TEAR,
+    TearVariant,
+    TearFlags.TEAR_NORMAL
+)
+actorsPresentation.apply = performance.wrap("present.actors", actorsPresentation.apply)
+actorsPresentation.walk = performance.wrap("present.walk", actorsPresentation.walk)
 local attachments = component("presentation/attachments")(native, Vector, EntityType, EffectVariant)
 local attackPolicy = modules["compat/items/attack_preview"](
     WeaponType,
@@ -148,8 +181,15 @@ local attacks = component("presentation/attacks")({
     applySprite = applySprite,
     pose = modules["sync/weapon_pose"],
     policy = attackPolicy,
+    timeline = presentationTimeline,
+    latency = function()
+        local status = _IsaacLanStatus()
+        return math.max(0, status["ping" .. status.slot] or 0) / 2000
+    end,
+    matching = modules["presentation/attack_matching"](tearTrajectory),
+    volley = modules["presentation/attack_volley"](Vector, tearTrajectory),
     prediction = modules["presentation/attack_prediction"](attackPolicy),
-    trajectory = modules["presentation/tear_motion"](Vector),
+    trajectory = tearTrajectory,
     tearType = EntityType.ENTITY_TEAR,
     tearVariants = TearVariant,
     room = function()
@@ -160,6 +200,7 @@ local hits = component("presentation/hits")({
     native = native,
     ledger = modules["presentation/event_ledger"],
     contact = modules["core/contacts"],
+    candidates = modules["presentation/hit_candidates"],
     decode = modules["sync/combat_events"],
     metrics = performance,
     vector = Vector,
@@ -177,10 +218,12 @@ local doorPresentation = modules["presentation/doors"]({
     width = Isaac.GetScreenWidth,
     height = Isaac.GetScreenHeight,
 })
+attacks.present = performance.wrap("present.attacks", attacks.present)
+hits.present = performance.wrap("present.hits", hits.present)
 state.filterInput = doorPresentation.filterInput
 local motionPresentation = component("presentation/motion")(native, actorsPresentation, {
     doors = doorPresentation,
-    timeline = assert(modules["presentation/timeline"])(),
+    timeline = presentationTimeline,
     metrics = performance,
     predictMovement = function(player, room)
         return forgotten.predictMovement(player) and crawlspace.predictMovement(room)
@@ -188,6 +231,7 @@ local motionPresentation = component("presentation/motion")(native, actorsPresen
     attachments = attachments,
     attacks = attacks,
     hits = hits,
+    visuals = entityVisuals,
     vector = Vector,
     player = function(index)
         return Isaac.GetPlayer(index)
@@ -280,7 +324,7 @@ local replica = component("sync/replica")({
     end,
     native = native,
     encode = encode,
-    decode = decode,
+    decode = decodeView,
     schema = worldSchema,
     layers = layers,
     floor = floor,
@@ -339,11 +383,11 @@ end, function()
     deals.reset()
     replica.resetView()
     captureState.reset()
-end, function(animation, same)
+end, function(animation, same, departureAnimations)
     local slot = _IsaacLanStatus().slot
     assert(native.rooms_with_player(slot, function()
         local index = assert(native.rooms_heads()[tostring(slot)])
-        actorsPresentation.departFloor(Isaac.GetPlayer(index), animation, same)
+        actorsPresentation.departFloor(Isaac.GetPlayer(index), animation, same, departureAnimations)
     end))
 end)
 function state.apply(bytes, tick, ack, betweenUpdates, stable)

@@ -9,12 +9,14 @@
 #include "core/room_options.h"
 #include "core/console_command.h"
 #include "runtime/progression.h"
+#include "engine/versions/common/completion_marks.h"
 #include "runtime/session_archive.h"
 #include "runtime/pending_archive.h"
 #include "core/intro_barrier.h"
 #include "runtime/room_map.h"
 #include "compat/bosses/encounters.h"
 #include "compat/bosses/rotgut.h"
+#include "compat/enemies/room_transitions.h"
 #include "compat/routes/mines.h"
 #include "compat/routes/mirror.h"
 #include "compat/routes/curses.h"
@@ -35,6 +37,7 @@
 #include "core/laser_state.h"
 #include "runtime/actor_roster.h"
 #include "runtime/room_scope.h"
+#include "engine/versions/j460/room_roster.h"
 #include "presentation/ambient_effects.h"
 #include <stdexcept>
 #include <type_traits>
@@ -138,6 +141,11 @@ void sharedDealChances() {
 }
 void compatibilityTargets() {
     ownedItemEffects();
+    using isaac::compat::enemies::capturedRoomReturn;
+    require(capturedRoomReturn(84, 84, -1, 1, -1) && !capturedRoomReturn(83, 84, -1, 1, -1) &&
+                !capturedRoomReturn(84, 84, 0, 1, -1) && !capturedRoomReturn(84, 84, -1, 3, -1) &&
+                !capturedRoomReturn(84, 84, -1, 1, 0) && !capturedRoomReturn(-1, -1, -1, 1, -1),
+            "Captured room return must preserve the native start-room fade contract");
     using namespace isaac::compat;
     require(isaac::presentation::localAmbientEffect(1000, 99, 1),
             "Native current spray must remain local presentation");
@@ -204,6 +212,20 @@ void compatibilityTargets() {
     require(items::roomFollower(1000, 83, true) && !items::roomFollower(1000, 83, false) &&
                 !items::roomFollower(1000, 144, true) && !items::roomFollower(3, 83, true),
             "Room handoff left an attached spear behind or moved an unrelated effect");
+    require(items::roomFollower(802, 0, true) && items::roomFollower(802, 1, true) &&
+                !items::roomFollower(802, 0, false) && !items::roomFollower(802, 1, false) &&
+                !items::roomFollower(802, 2, true),
+            "Room handoff lost an owned angry Blood Puppy or moved an unrelated NPC");
+    require(items::roomFollower(1000, 123, true, 6) && !items::roomFollower(1000, 123, false, 6) &&
+                !items::roomFollower(1000, 123, true, 0) && !items::roomFollower(3, 123, true, 6),
+            "Salvation's attached halo remained in the old room or another halo followed");
+    for (unsigned variant : {1u, 2u, 3u})
+        require(items::roomFollower(7, variant, true, 1) &&
+                    !items::roomFollower(7, variant, false, 1) &&
+                    !items::roomFollower(7, variant, true, 0) &&
+                    !items::roomFollower(7, variant, true, 2) &&
+                    !items::roomFollower(2, variant, true, 1),
+                "Ludovico ring stayed behind or an ordinary/unowned attack followed");
     require(characters::lazarus(29) && characters::lazarus(38) && !characters::lazarus(0),
             "Lazarus form matching crossed another character");
     require(characters::taintedJacob(37) && characters::taintedJacob(39) &&
@@ -230,6 +252,14 @@ void compatibilityTargets() {
 void deathCertificateArrival() {
     using isaac::compat::items::deathCertificateArrival;
     using Position = std::array<float, 2>;
+    using isaac::compat::items::deathCertificateReturnSlot;
+    require(deathCertificateReturnSlot(std::array{0, 2, 0, 0}, 3) == 1,
+            "Rewinding the host outside the annex lost the guest's delayed return");
+    require(deathCertificateReturnSlot(std::array{2, 2, 0, 0}, 3) == 0 &&
+                deathCertificateReturnSlot(std::array{2, 2, 0, 0}, 2) == 1 &&
+                !deathCertificateReturnSlot(std::array{0, 2, 0, 0}, 1) &&
+                !deathCertificateReturnSlot(std::array{0, 0, 0, 0}, 15),
+            "Death Certificate return selected an absent or disconnected occupant");
     // A teammate can leave a wide/tall room at pixels outside the annex's
     // 1x1 entry. Only the first arriving head gets native initialization.
     for (const auto source : {Position{1000, 600}, Position{320, 680}}) {
@@ -308,6 +338,58 @@ void roomScopeOwnership() {
     Stack::Binding next(stack, second, slice);
     require(stack.current() == &second && stack.teamRoster() == &slice && stack.depth() == 1,
             "A new room operation retained the old full roster");
+}
+void roomTeamRoster() {
+    // Native vector growth replaces its descriptor during actor creation.
+    // A nested resource query must see the newly listed body, even when the
+    // backing allocation changed, and must not restore a stale vector on exit.
+    using Roster = std::span<int>;
+    using Stack = isaac::rooms::ScopeStack<int, Roster>;
+    Stack stack;
+    int room = 84;
+    std::array original{1, 2};
+    std::array grown{1, 2, 3};
+    std::array replaced{3, 2, 1, 4};
+    std::array local{2};
+    Roster team(original), current(local);
+    Stack::Binding scope(stack, room, team);
+    {
+        isaac::engine::j460::TeamRoster outer(stack, current);
+        current = grown;
+        {
+            isaac::engine::j460::TeamRoster query(stack, current);
+            require(current.size() == 3 && current.back() == 3,
+                    "Nested team query lost the newly created revival body");
+        }
+        require(current.data() == grown.data() && current.size() == 3,
+                "Nested query restored the obsolete native allocation");
+        {
+            Roster saved = current;
+            current = local;
+            Stack::Binding nested(stack, room, saved, &current);
+            try {
+                isaac::engine::j460::TeamRoster callback(stack, current);
+                require(current.data() == grown.data(),
+                        "Nested room borrowed the obsolete outer roster");
+                current = replaced;
+                throw std::runtime_error("callback failed after replacing a body");
+            } catch (const std::runtime_error&) {
+            }
+            require(current.data() == local.data() && saved.data() == replaced.data(),
+                    "Failed callback lost its latest team or room-local roster");
+            current = saved;
+            nested.restoreParent();
+        }
+        require(stack.teamRoster() == &current && current.data() == replaced.data(),
+                "Nested room returned to an obsolete complete-team descriptor");
+    }
+    require(team.size() == 4 && team.data() == replaced.data() && current.data() == local.data(),
+            "Revival roster growth did not survive room restoration");
+    {
+        isaac::engine::j460::TeamRoster disabled(stack, current, false);
+        require(current.data() == local.data() && stack.teamRoster() == &team,
+                "Disabled room integration changed native roster ownership");
+    }
 }
 void roomTransitionContext() {
     isaac::rooms::RoomClock bossClock, residentClock;
@@ -395,6 +477,21 @@ void roomTransitionContext() {
                 resolveEntranceDoor(3, 83, shopNeighbors) == 3,
             "Shop entry ignored the actual departure room or replaced a valid door");
     const std::array<int, 8> multiple{-1, -1, -1, 84, -1, -1, -1, 84};
+    // Guest room requests have no trusted native EnterDoor. A return from
+    // the room on the right must arrive at the resident room's right door,
+    // rather than keeping the departure room's left-side coordinates.
+    const std::array<int, 8> startingNeighbors{83, 71, 85, 97, -1, -1, -1, -1};
+    require(uniqueEntranceDoor(85, startingNeighbors) == 2 &&
+                uniqueEntranceDoor(83, startingNeighbors) == 0 &&
+                uniqueEntranceDoor(71, startingNeighbors) == 1 &&
+                uniqueEntranceDoor(97, startingNeighbors) == 3 &&
+                uniqueEntranceDoor(84, shopNeighbors) == 7,
+            "An adjacent guest request lost its actual departure entrance");
+    require(uniqueEntranceDoor(84, multiple) == -1 &&
+                uniqueEntranceDoor(80, startingNeighbors) == -1 &&
+                uniqueEntranceDoor(-1, startingNeighbors) == -1 &&
+                uniqueEntranceDoor(169, startingNeighbors) == -1,
+            "An ambiguous or non-adjacent guest request invented an entrance");
     require(resolveEntranceDoor(7, 84, multiple) == 7 && resolveEntranceDoor(1, 84, multiple) == 1,
             "Entry resolution guessed between multiple doors to the same room");
     require(resolveEntranceDoor(-1, 84, shopNeighbors) == -1 &&
@@ -886,6 +983,11 @@ void introBarrier() {
     barrier.observe(0, 1, false);
     require(!barrier.paused(room, 111, 15), "Completed host intro kept its room frozen");
     barrier.start(room, 2, 100, 7);
+    require(barrier.audience(2, 110, 3) == 3 && !barrier.audience(1, 110, 15),
+            "Skip audience included disconnected players or another screen");
+    require(barrier.pending(1, 2, 220) && !barrier.pending(3, 2, 220) &&
+                !barrier.pending(1, 1, 220),
+            "Delayed boss intro must remain deliverable to its waiting audience");
     require(barrier.paused(room, 110, 7) && !barrier.paused(other, 110, 7),
             "Intro froze an unrelated room");
     require(!barrier.observe(1, 1, false) && !barrier.observe(2, 2, true),
@@ -893,6 +995,9 @@ void introBarrier() {
     require(barrier.paused(room, 120, 7), "Stale or active intro released combat");
     require(barrier.observe(1, 2, false) == room && !barrier.observe(1, 2, false),
             "Guest control completion must identify its room exactly once");
+    require(barrier.audience(2, 120, 7) == 5, "A finished viewer still needed to approve the skip");
+    require(!barrier.pending(1, 2, 221) && barrier.pending(2, 2, 221),
+            "Intro completion must stop retries only for the acknowledging guest");
     barrier.observe(0, 2, false);
     require(barrier.paused(room, 130, 7), "Combat resumed before every guest finished");
     barrier.observe(2, 2, false);
@@ -901,13 +1006,56 @@ void introBarrier() {
     barrier.observe(0, 3, false);
     require(!barrier.paused(room, 160, 1), "Disconnected guest froze combat");
     barrier.start(room, 4, 200, 3);
+    require(!barrier.pending(1, 4, 801), "Expired intro remained deliverable");
     require(!barrier.paused(room, 801, 3), "Missing acknowledgement froze combat indefinitely");
     barrier.start(room, 5, 900, 3);
     barrier.clear();
     require(!barrier.paused(room, 901, 3), "Session reset retained an intro");
+    require(!barrier.pending(0, 5, 901), "Session reset retained intro delivery");
     barrier.start(other, 6, 1000, 2);
     require(!barrier.observe(0, 6, false) && barrier.observe(1, 6, false) == other,
             "Guest-only intro completed controls for an unrelated host");
+    barrier.start(room, 7, 1100, 3);
+    barrier.observe(0, 7, false);
+    require(!barrier.paused(room, 1101, 1) && !barrier.pending(1, 7, 1101),
+            "A guest who left the intro room kept its combat paused");
+    // Arrival in an already resident room must enroll the newcomer in the
+    // same screen, including a host arriving after a guest started it.
+    for (const auto first : {1u, 2u}) {
+        const auto original = first == 1 ? 0u : 1u, late = 1u - original;
+        barrier.start(room, 8, 1200, first);
+        require(!barrier.join(other, 8, 1210, 3) && !barrier.join(room, 7, 1210, 3),
+                "Arrival joined an unrelated room or stale intro");
+        require(barrier.join(room, 8, 1210, 3) == (1u << late) && barrier.pending(late, 8, 1210),
+                "Late entrant did not receive the running boss intro");
+        require(!barrier.join(room, 8, 1211, 3), "Repeated arrival restarted an intro");
+        barrier.observe(original, 8, false);
+        require(!barrier.join(room, 8, 1212, 3) && !barrier.pending(original, 8, 1212) &&
+                    !barrier.pending(late, 8, 1212) && !barrier.paused(room, 1212, 3),
+                "Late entrant extended the first viewer's wait or kept its screen alive");
+        require(!barrier.join(room, 8, 1213, 7) && !barrier.observe(late, 8, false),
+                "Completed shared intro was replayed or retained its control lock");
+        barrier.start(room, 8, 1250, first);
+        barrier.join(room, 8, 1260, 3);
+        barrier.observe(late, 8, false);
+        require(barrier.paused(room, 1261, 3) && barrier.pending(original, 8, 1261),
+                "Late viewer's skip ended the original viewer's screen");
+        require(!barrier.paused(room, 1262, 1u << late),
+                "Original viewer leaving kept the late viewer waiting");
+    }
+    barrier.start(room, 9, 1300, 1);
+    require(barrier.join(room, 9, 1899, 3) == 2 && !barrier.join(room, 9, 1901, 7) &&
+                !barrier.paused(room, 1901, 7),
+            "Late arrivals extended the intro timeout");
+    barrier.start(room, 10, 2000, 1);
+    barrier.join(room, 10, 2010, 3);
+    barrier.observe(0, 10, false);
+    require(!barrier.paused(room, 2011, 1), "Disconnected late entrant froze combat");
+    barrier.start(room, 11, 2100, 1);
+    barrier.join(room, 11, 2110, 3);
+    barrier.clear();
+    require(!barrier.join(room, 11, 2111, 7) && !barrier.pending(1, 11, 2111),
+            "Floor/session reset retained a late intro subscription");
 }
 void automationInput() {
     using isaac::input::consoleArguments;
@@ -1347,6 +1495,50 @@ void progression() {
                 merged.counters[3] == 43,
             "Counter delta or saturation failed");
     require(mergeProgress(local, common, common) == local, "No-op session changed local progress");
+    using namespace isaac::engine::native_completion;
+    // Repeating an already earned host win still awards the guest. Completion
+    // counters are bit flags: normal -> hard adds bit 2, never a numeric delta.
+    local = {};
+    common = {};
+    common.achievements[42] = 1;
+    common.achievements[43] = 1;
+    common.counters[27] = 3;
+    current = common;
+    current.earned.achievements[42] = 1;
+    current.earned.counters[27] = 3;
+    auto awarded = mergeProgress(local, common, current, bitCounters);
+    require(awarded.achievements[42] && !awarded.achievements[43] && awarded.counters[27] == 3,
+            "Repeated host completion was lost or unrelated host progress leaked");
+    require(mergeProgress(awarded, common, current, bitCounters) == awarded,
+            "Repeated award was not idempotent");
+    current = common = {};
+    local.counters[27] = 1;
+    current.counters[27] = 1;
+    require(mergeProgress(local, common, current, bitCounters).counters[27] == 1,
+            "Normal completion was incorrectly promoted to hard");
+    local.counters[27] = 0;
+    common.counters[27] = 1;
+    current.counters[27] = 3;
+    current.earned.counters[27] = 3;
+    require(mergeProgress(local, common, current, bitCounters).counters[27] == 3,
+            "Hard completion only granted a partial flag");
+    Writer awards(Message::ending);
+    awards.progress(current);
+    require(awards.bytes.size() + 128 < maxMessageSize, "Progress awards exceed lifecycle budget");
+    Reader decoded(awards.bytes);
+    decoded.u8();
+    require(decoded.progress() == current, "Earned progress did not survive transport");
+    decoded.finish();
+    current.earned.achievements[0] = 2;
+    Writer invalid(Message::ending);
+    invalid.progress(current);
+    rejects(
+        [&] {
+            Reader r(invalid.bytes);
+            r.u8();
+            r.progress();
+        },
+        "Invalid earned achievement accepted");
 }
 
 Archive sample(unsigned players = 4) {
@@ -1466,8 +1658,25 @@ void challengeRules() {
             "Battle royale lobby contract mismatch");
     require(!definition->roomOptionsLocked && !luck->roomOptionsLocked,
             "Other challenges lost their independent room options");
-    require(!isaac::compat::challenges::find(1004), "Unknown challenge accepted");
+    const auto* large = isaac::compat::challenges::find(1004);
+    const auto* aim = isaac::compat::challenges::find(1005);
+    require(large && large->character == RunRules{}.character && large->route == "heart" &&
+                large->goalStage == 8 && large->largeFloor && large->transient &&
+                large->difficulty == 0 && !large->roomOptionsLocked && !large->nextPlayerShooting &&
+                !large->friendlyFire,
+            "Large floor challenge must preserve ordinary character selection");
+    require(aim && aim->character == RunRules{}.character && aim->route == "mom" &&
+                aim->goalStage == 6 && aim->nextPlayerShooting && !aim->largeFloor &&
+                aim->transient && aim->difficulty == 0 && !aim->roomOptionsLocked &&
+                !aim->friendlyFire && isaac::compat::challenges::available(*aim, {}),
+            "Rotated shooting must preserve ordinary characters and independent room options");
+    require(!isaac::compat::challenges::find(1006), "Unknown challenge accepted");
     std::array<std::uint8_t, 642> achievements{};
+    require(!isaac::compat::challenges::available(*large, achievements),
+            "Original challenge unlock was bypassed");
+    achievements[4] = 1;
+    require(isaac::compat::challenges::available(*large, achievements),
+            "Original challenge required an unrelated unlock");
     require(!isaac::compat::challenges::available(*definition, achievements),
             "Locked save entered the challenge");
     achievements[78] = 1;
@@ -1516,32 +1725,67 @@ void roomOptionsAndMarks() {
             "Normal run lost room options when saved");
     require(!isaac::roomOptions::valid(isaac::roomOptions::known + 1),
             "Runtime accepted an unknown room option");
-    // A real v3 archive remains readable, defaulting the absent room flags off.
-    Writer legacy(Message::snapshot);
-    legacy.string("IsaacLAN/save/3");
-    legacy.string(archive.fingerprint);
-    legacy.string(archive.settings.seed);
-    legacy.u8(archive.settings.difficulty);
-    legacy.u16(0);
-    legacy.u16(0);
-    legacy.u16(65535);
-    legacy.u8(255);
-    legacy.u8(0);
-    for (auto c : archive.settings.characters)
-        legacy.u16(c);
-    legacy.progress(archive.settings.progress);
-    legacy.u8(archive.locations.size());
-    for (const auto& p : archive.locations) {
-        legacy.u32(p.dimension);
-        legacy.u32(p.index);
-        legacy.u32(std::bit_cast<std::uint32_t>(p.x));
-        legacy.u32(std::bit_cast<std::uint32_t>(p.y));
+    std::uint64_t covered = 0;
+    for (const auto& group : isaac::roomOptions::teleportGroups) {
+        require(!(covered & group.flag) && isaac::roomOptions::valid(group.flag),
+                "Room groups overlap or contain invalid options");
+        covered |= group.flag;
+        for (unsigned bit = 0; bit < isaac::roomOptions::roomTypeCount; ++bit) {
+            const auto member = isaac::roomOptions::firstRoomFlag << bit;
+            if (!(member & group.flag))
+                continue;
+            archive.settings.rules.options = 7 | member;
+            const auto grouped = Archive::decode(archive.encode());
+            require(grouped.settings.rules.options == (7 | group.flag),
+                    "An individual room type did not restore its whole group");
+            require(Archive::decode(grouped.encode()).settings.rules == grouped.settings.rules,
+                    "Group migration was not stable across saves");
+        }
     }
-    legacy.blob(archive.game);
-    legacy.u64(snapshotHash(legacy.bytes));
-    const auto old = Archive::decode(legacy.bytes);
-    require(old.settings.rules == RunRules{} && old.game == archive.game,
-            "Previous save format was lost or enabled friendly fire");
+    require(covered == isaac::roomOptions::autoTeleport && std::popcount(covered) == 27 &&
+                isaac::roomOptions::teleportGroups.size() == 7,
+            "Seven room groups must cover exactly the 27 used room types");
+    archive.settings.rules.options = isaac::roomOptions::roomTypeFlags | 7;
+    require(Archive::decode(archive.encode()).settings.rules.options == isaac::roomOptions::known,
+            "Stored all-types selection did not drop unused teleporter types");
+    archive.settings.rules.options = isaac::roomOptions::known;
+    // v3 omits options; v3/v4 omit awards. Old gather bits migrate once.
+    for (unsigned format : {3u, 4u, 5u}) {
+        for (const auto legacyOptions : {8u, 16u, 24u, 31u}) {
+            Writer legacy(Message::snapshot);
+            legacy.string("IsaacLAN/save/" + std::to_string(format));
+            legacy.string(archive.fingerprint);
+            legacy.string(archive.settings.seed);
+            legacy.u8(archive.settings.difficulty);
+            legacy.u16(0);
+            legacy.u16(0);
+            legacy.u16(65535);
+            legacy.u8(255);
+            legacy.u8(0);
+            if (format != 3)
+                legacy.u32(legacyOptions);
+            for (auto c : archive.settings.characters)
+                legacy.u16(c);
+            legacy.progress(archive.settings.progress, format == 5);
+            legacy.u8(archive.locations.size());
+            for (const auto& p : archive.locations) {
+                legacy.u32(p.dimension);
+                legacy.u32(p.index);
+                legacy.u32(std::bit_cast<std::uint32_t>(p.x));
+                legacy.u32(std::bit_cast<std::uint32_t>(p.y));
+            }
+            legacy.blob(archive.game);
+            legacy.u64(snapshotHash(legacy.bytes));
+            const auto old = Archive::decode(legacy.bytes);
+            require(old.settings.rules.options ==
+                            (format == 3 ? 0 : isaac::roomOptions::migrateLegacy(legacyOptions)) &&
+                        old.settings.progress == archive.settings.progress &&
+                        old.game == archive.game,
+                    "Previous save format lost progress or room options");
+        }
+    }
+    archive.settings.rules.options = isaac::roomOptions::legacyAllRoomGather;
+    rejects([&] { Archive::decode(archive.encode()); }, "New archive accepted noncanonical rules");
 }
 
 void archiveIntegrity() {
@@ -1634,6 +1878,7 @@ int main(int argc, char** argv) {
                      {"room-map", roomMap},
                      {"room-transition-context", roomTransitionContext},
                      {"room-scope-ownership", roomScopeOwnership},
+                     {"room-team-roster", roomTeamRoster},
                      {"compatibility-targets", compatibilityTargets},
                      {"death-certificate-arrival", deathCertificateArrival},
                      {"resolved-room-curses", resolvedRoomCurses},

@@ -71,15 +71,70 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME native.progress-layouts COMMAND isaac_lan_progress_layout_test)
     set_tests_properties(native.progress-layouts PROPERTIES TIMEOUT 30 LABELS "offline;native")
+    add_executable(isaac_lan_startup_error_test tests/startup_error_test.cpp)
+    target_include_directories(isaac_lan_startup_error_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_startup_error_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_startup_error_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    foreach(test_case contract messages)
+        add_test(NAME core.startup-error-${test_case} COMMAND isaac_lan_startup_error_test
+                                                              ${test_case})
+        set_tests_properties(core.startup-error-${test_case} PROPERTIES TIMEOUT 30 LABELS
+                                                                        "offline;core")
+    endforeach()
+    add_executable(isaac_lan_extension_update_test tests/extension_update_test.cpp
+                                                   src/runtime/extension_update.cpp)
+    target_include_directories(isaac_lan_extension_update_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_extension_update_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_extension_update_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    foreach(test_case manifests selection recovery boundaries pending)
+        add_test(NAME runtime.extension-update-${test_case} COMMAND isaac_lan_extension_update_test
+                                                                    ${test_case})
+        set_tests_properties(runtime.extension-update-${test_case} PROPERTIES TIMEOUT 30 LABELS
+                                                                              "offline;runtime")
+    endforeach()
+    add_executable(isaac_lan_update_notice_test tests/update_notice_test.cpp
+                                                src/runtime/update_notice.cpp)
+    target_include_directories(isaac_lan_update_notice_test PRIVATE src)
+    find_package(Threads REQUIRED)
+    target_link_libraries(isaac_lan_update_notice_test PRIVATE Threads::Threads)
+    if(MINGW)
+        target_link_options(isaac_lan_update_notice_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_update_notice_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME runtime.update-notice COMMAND isaac_lan_update_notice_test)
+    set_tests_properties(runtime.update-notice PROPERTIES TIMEOUT 30 LABELS "offline;runtime")
+    add_executable(isaac_lan_compatibility_test tests/compatibility_test.cpp)
+    target_include_directories(isaac_lan_compatibility_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_compatibility_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(isaac_lan_compatibility_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME net.compatibility-codec COMMAND isaac_lan_compatibility_test)
+    set_tests_properties(net.compatibility-codec PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_connection_settings_test tests/connection_settings_test.cpp
                                                       src/presentation/connection_settings.cpp)
     target_include_directories(isaac_lan_connection_settings_test PRIVATE src)
     add_executable(isaac_lan_pointer_input_test tests/pointer_input_test.cpp)
     target_include_directories(isaac_lan_pointer_input_test PRIVATE src)
+    add_executable(isaac_lan_aim_rotation_test tests/aim_rotation_test.cpp)
+    target_include_directories(isaac_lan_aim_rotation_test PRIVATE src)
     add_executable(isaac_lan_minimap_test tests/minimap_test.cpp)
     target_include_directories(isaac_lan_minimap_test PRIVATE src)
     foreach(target isaac_lan_connection_settings_test isaac_lan_pointer_input_test
-                   isaac_lan_minimap_test)
+                   isaac_lan_aim_rotation_test isaac_lan_minimap_test)
         if(MINGW)
             target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
         endif()
@@ -89,9 +144,10 @@ if(BUILD_TESTING)
     endforeach()
     add_test(NAME presentation.connection-settings COMMAND isaac_lan_connection_settings_test)
     add_test(NAME core.pointer-input COMMAND isaac_lan_pointer_input_test)
+    add_test(NAME core.aim-rotation COMMAND isaac_lan_aim_rotation_test)
     add_test(NAME presentation.minimap COMMAND isaac_lan_minimap_test)
-    set_tests_properties(presentation.connection-settings core.pointer-input presentation.minimap
-                         PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    set_tests_properties(presentation.connection-settings core.pointer-input core.aim-rotation
+                         presentation.minimap PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_world_dependencies_test tests/world_dependencies_test.cpp)
     target_include_directories(isaac_lan_world_dependencies_test PRIVATE src)
     if(MINGW)
@@ -100,17 +156,45 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME net.world-dependencies COMMAND isaac_lan_world_dependencies_test)
     set_tests_properties(net.world-dependencies PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_world_pacing_test tests/world_pacing_test.cpp)
+    target_include_directories(isaac_lan_world_pacing_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_world_pacing_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME net.world-pacing COMMAND isaac_lan_world_pacing_test)
+    set_tests_properties(net.world-pacing PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_world_emission_test tests/world_emission_test.cpp)
+    target_include_directories(isaac_lan_world_emission_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_world_emission_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME net.world-emission COMMAND isaac_lan_world_emission_test)
+    set_tests_properties(net.world-emission PROPERTIES TIMEOUT 30 LABELS "offline;core")
+    add_executable(isaac_lan_incoming_queue_test tests/incoming_queue_test.cpp)
+    target_include_directories(isaac_lan_incoming_queue_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_incoming_queue_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME net.incoming-queue COMMAND isaac_lan_incoming_queue_test)
+    set_tests_properties(net.incoming-queue PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_world_shards_test tests/world_shards_test.cpp)
     target_include_directories(isaac_lan_world_shards_test PRIVATE src)
     if(MINGW)
         target_link_options(isaac_lan_world_shards_test PRIVATE -static-libgcc -static-libstdc++)
     endif()
-    foreach(test_case erasures cleanup)
+    foreach(test_case erasures cleanup overhead adaptive)
         add_test(NAME net.world-shards-${test_case} COMMAND isaac_lan_world_shards_test
                                                             ${test_case})
         set_tests_properties(net.world-shards-${test_case} PROPERTIES TIMEOUT 60 LABELS
                                                                       "offline;core")
     endforeach()
+    add_executable(isaac_lan_input_events_test tests/input_events_test.cpp)
+    target_include_directories(isaac_lan_input_events_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_input_events_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME net.input-events COMMAND isaac_lan_input_events_test)
+    set_tests_properties(net.input-events PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_mailbox_test tests/mailbox_test.cpp)
     target_include_directories(isaac_lan_mailbox_test PRIVATE src)
     if(MINGW)
@@ -150,7 +234,43 @@ if(BUILD_TESTING)
                 isaac_lan_state_codec_runner "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_codec.lua"
                 "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(bridge.native-codec PROPERTIES TIMEOUT 60 LABELS "offline;lua;core")
+        add_test(
+            NAME bridge.native-capture-generation
+            COMMAND
+                isaac_lan_state_codec_runner
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/capture_generation.lua"
+                "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(bridge.native-capture-generation PROPERTIES TIMEOUT 60 LABELS
+                                                                         "offline;lua;core")
+        add_test(NAME bridge.native-capture-arrays
+                 COMMAND isaac_lan_state_codec_runner
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_capture_arrays.lua")
+        set_tests_properties(bridge.native-capture-arrays PROPERTIES TIMEOUT 60 LABELS
+                                                                     "offline;lua;core")
     endif()
+    add_executable(isaac_lan_cursed_mist_test tests/cursed_mist_test.cpp)
+    target_include_directories(isaac_lan_cursed_mist_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_cursed_mist_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME native.cursed-mist COMMAND isaac_lan_cursed_mist_test)
+    set_tests_properties(native.cursed-mist PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_room_metadata_test tests/room_metadata_test.cpp
+                                                src/engine/versions/j460/room_data.cpp)
+    target_include_directories(isaac_lan_room_metadata_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_room_metadata_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME native.room-metadata COMMAND isaac_lan_room_metadata_test)
+    set_tests_properties(native.room-metadata PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
+    add_executable(isaac_lan_intro_completion_test tests/intro_completion_test.cpp)
+    target_include_directories(isaac_lan_intro_completion_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_intro_completion_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+    endif()
+    add_test(NAME native.intro-completion COMMAND isaac_lan_intro_completion_test)
+    set_tests_properties(native.intro-completion PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_session_store_test tests/session_store_test.cpp
                                                 src/runtime/session_store.cpp)
     target_include_directories(isaac_lan_session_store_test PRIVATE src)
@@ -174,6 +294,13 @@ if(BUILD_TESTING)
     add_test(NAME runtime.input-schedule COMMAND isaac_lan_input_schedule_test)
     set_tests_properties(runtime.input-schedule PROPERTIES TIMEOUT 30 LABELS "offline;core")
     include("${ISAAC_LAN_BACKEND_DIR}/tests-portable.cmake")
+    add_executable(isaac_lan_latency_test tests/latency_test.cpp)
+    target_include_directories(isaac_lan_latency_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_latency_test PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME runtime.latency COMMAND isaac_lan_latency_test)
+    set_tests_properties(runtime.latency PROPERTIES TIMEOUT 30 LABELS "offline;core")
     add_executable(isaac_lan_deflate_test tests/deflate_test.cpp)
     target_link_libraries(isaac_lan_deflate_test PRIVATE isaac_lan_deflate)
     if(MINGW)
@@ -244,15 +371,21 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/input_wire.cmake")
         set_tests_properties(bridge.input-wire PROPERTIES TIMEOUT 30 LABELS "offline;lua")
         isaac_add_lua_test(bridge.chat chat.lua)
+        isaac_add_lua_test(presentation.player-opacity player_opacity.lua)
         isaac_add_lua_test(bridge.chat-dice chat_dice.lua)
         isaac_add_lua_test(bridge.teleport teleport.lua)
+        isaac_add_lua_test(bridge.room-placement room_placement.lua)
         isaac_add_lua_test(bridge.feedback feedback.lua)
         isaac_add_lua_test(presentation.chat-render chat_presentation.lua)
         isaac_add_lua_test(presentation.chat-repentance chat_presentation.lua vanilla)
         isaac_add_lua_test(presentation.fonts presentation_fonts.lua)
+        isaac_add_lua_test(presentation.chat-completion chat_completion.lua)
         isaac_add_lua_test(bridge.session_lifecycle session_lifecycle.lua)
         isaac_add_lua_test(bridge.party-startup party_startup.lua)
         isaac_add_lua_test(bridge.restart restart.lua)
+        isaac_add_lua_test(bridge.animation-skip animation_skip.lua)
+        isaac_add_lua_test(bridge.lifecycle-messages lifecycle_messages.lua)
+        isaac_add_lua_test(presentation.vote-progress vote_progress.lua)
         isaac_add_lua_test(bridge.capture_generation capture_generation.lua)
         isaac_add_lua_test(bridge.state-layers state_layers.lua)
         isaac_add_lua_test(presentation.timeline presentation_timeline.lua)
@@ -265,11 +398,12 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.battle-royale-hud battle_royale_hud.lua)
         isaac_add_lua_test(bridge.personal-map personal_map.lua)
         isaac_add_lua_test(bridge.clear-charge clear_charge.lua)
-        isaac_add_lua_test(bridge.special-room-gather special_room_gather.lua)
+        isaac_add_lua_test(bridge.room-gather room_gather.lua)
         isaac_add_lua_test(bridge.friendly-fire friendly_fire.lua)
         isaac_add_lua_test(bridge.pvp-items pvp_items.lua)
         isaac_add_lua_test(bridge.challenge_menu challenge_menu.lua)
         isaac_add_lua_test(bridge.menu-repentance challenge_menu.lua vanilla)
+        isaac_add_lua_test(presentation.update-notice update_notice.lua)
         isaac_add_lua_test(bridge.endpoint endpoint.lua)
         isaac_add_lua_test(bridge.ping_hud ping_hud.lua)
         isaac_add_lua_test(bridge.hornfel hornfel.lua)
@@ -277,11 +411,14 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.codec-fragments codec_fragments.lua)
         isaac_add_lua_test(bridge.room-capture room_capture.lua)
         isaac_add_lua_test(bridge.motion-intervals motion_intervals.lua)
+        isaac_add_lua_test(presentation.motion-recovery motion_recovery.lua)
         isaac_add_lua_test(presentation.npc-motion npc_motion.lua)
         isaac_add_lua_test(presentation.hit-events hit_events.lua)
+        isaac_add_lua_test(presentation.hit-candidates hit_candidates.lua)
         isaac_add_lua_test(presentation.attachments attachments.lua)
         isaac_add_lua_test(presentation.attack-prediction attack_prediction.lua)
         isaac_add_lua_test(presentation.tear-motion tear_motion.lua)
+        isaac_add_lua_test(presentation.entity-visuals entity_visuals.lua)
         isaac_add_lua_test(presentation.attacks attack_presentation.lua)
         isaac_add_lua_test(bridge.entity-codec entity_codec.lua)
         isaac_add_lua_test(bridge.layers layer_contracts.lua)
@@ -317,9 +454,13 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.shared-deals shared_deals.lua)
         isaac_add_lua_test(bridge.pills pills.lua)
         isaac_add_lua_test(bridge.pocket-inventory pocket_inventory.lua)
+        isaac_add_lua_test(bridge.inventory-catalog inventory_catalog.lua)
+        isaac_add_lua_test(bridge.inventory-order inventory_order.lua)
         isaac_add_lua_test(bridge.crafting-bag crafting_bag.lua)
         isaac_add_lua_test(bridge.temporary-effects temporary_effects.lua)
         isaac_add_lua_test(bridge.item-room-entry item_room_entry.lua)
+        isaac_add_lua_test(bridge.flat-file flat_file.lua)
+        isaac_add_lua_test(bridge.blue-key blue_key.lua)
         isaac_add_lua_test(bridge.keeper keeper.lua)
         isaac_add_lua_test(bridge.greed greed.lua)
         isaac_add_lua_test(bridge.special-visuals special_visuals.lua)
@@ -354,6 +495,7 @@ if(BUILD_TESTING)
         room-map
         room-transition-context
         room-scope-ownership
+        room-team-roster
         compatibility-targets
         death-certificate-arrival
         resolved-room-curses
@@ -430,10 +572,14 @@ add_library(
     src/presentation/connection_settings.cpp
     src/presentation/chat_background.cpp
     src/diagnostics/runtime_log.cpp
+    src/diagnostics/startup_error.cpp
     src/diagnostics/performance.cpp
     src/diagnostics/crash_signal.cpp
     src/diagnostics/feedback.cpp
     src/runtime/session.cpp
+    src/runtime/extension_update.cpp
+    src/runtime/extension_files.cpp
+    src/runtime/update_notice.cpp
     src/runtime/session_store.cpp
     src/diagnostics/lab_capture.cpp)
 add_library(isaac_lan_build STATIC src/engine/build.cpp)
@@ -538,9 +684,13 @@ if(BUILD_TESTING)
         compression-limits
         wire-compression
         async-network
+        latency-hud
         bulk-worker
         reliable-receive
+        receive-isolation
         world-deltas
+        sampled-compression
+        capture-demand
         delivery-backpressure
         delta-floor-boundary
         inputs-2
@@ -566,6 +716,9 @@ if(BUILD_TESTING)
         run-rules
         room-options
         handshake
+        compatibility-versions
+        compatibility-rejoin
+        compatibility-wire
         host-names
         ipv6-addresses
         ipv6-inputs
@@ -634,8 +787,9 @@ if(BUILD_TESTING)
         target_compile_options(isaac_lan_heap_fixture PRIVATE -Wall -Wextra -Werror)
     endif()
 
-    add_executable(isaac_lan_log_test tests/runtime_log_test.cpp src/diagnostics/runtime_log.cpp
-                                      src/diagnostics/performance.cpp)
+    add_executable(
+        isaac_lan_log_test tests/runtime_log_test.cpp src/diagnostics/runtime_log.cpp
+                           src/diagnostics/performance.cpp src/diagnostics/startup_error.cpp)
     target_link_libraries(isaac_lan_log_test PRIVATE psapi)
     target_include_directories(isaac_lan_log_test PRIVATE src)
     target_compile_definitions(isaac_lan_log_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -648,10 +802,52 @@ if(BUILD_TESTING)
     set_tests_properties(diagnostics.lifecycle PROPERTIES TIMEOUT 30 LABELS "offline;resources")
     set_tests_properties(log.path-and-records PROPERTIES TIMEOUT 30 LABELS "offline;logging")
 endif()
-add_library(isaac_lan_loader SHARED src/app/loader.cpp src/app/loader.def)
+add_library(
+    isaac_lan_loader SHARED
+    src/app/loader.cpp src/app/extension_loader.cpp src/runtime/extension_update.cpp
+    src/runtime/extension_files.cpp src/app/loader.def)
 set_target_properties(isaac_lan_loader PROPERTIES PREFIX "" OUTPUT_NAME "winmm")
 target_include_directories(isaac_lan_loader PRIVATE src)
-target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
+                                                    ISAAC_LAN_VERSION="${ISAAC_LAN_VERSION}")
+target_link_libraries(isaac_lan_loader PRIVATE bcrypt isaac_lan_profile)
+if(BUILD_TESTING)
+    foreach(kind compatible incompatible failing missing_export)
+        add_library(isaac_lan_extension_${kind}_fixture SHARED tests/extension_fixture.cpp)
+        target_include_directories(isaac_lan_extension_${kind}_fixture PRIVATE src)
+        target_compile_definitions(isaac_lan_extension_${kind}_fixture PRIVATE WIN32_LEAN_AND_MEAN
+                                                                               NOMINMAX)
+        if(MINGW)
+            target_link_options(isaac_lan_extension_${kind}_fixture PRIVATE -static-libgcc
+                                -static-libstdc++ -Wl,--kill-at)
+        endif()
+    endforeach()
+    target_compile_definitions(isaac_lan_extension_incompatible_fixture
+                               PRIVATE TEST_LOADER_ABI_OFFSET=1)
+    target_compile_definitions(isaac_lan_extension_failing_fixture PRIVATE TEST_STARTUP_FAILURE=1)
+    target_compile_definitions(isaac_lan_extension_missing_export_fixture
+                               PRIVATE TEST_NO_BOOTSTRAP=1)
+    add_executable(
+        isaac_lan_extension_loader_test
+        tests/extension_loader_test.cpp src/app/extension_loader.cpp
+        src/runtime/extension_update.cpp src/runtime/extension_files.cpp)
+    target_include_directories(isaac_lan_extension_loader_test PRIVATE src)
+    target_compile_definitions(isaac_lan_extension_loader_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(isaac_lan_extension_loader_test PRIVATE bcrypt)
+    if(MINGW)
+        target_compile_options(isaac_lan_extension_loader_test PRIVATE -Wall -Wextra -Werror)
+        target_link_options(isaac_lan_extension_loader_test PRIVATE -static-libgcc
+                            -static-libstdc++ -municode)
+    endif()
+    add_test(
+        NAME app.extension-loader
+        COMMAND
+            isaac_lan_extension_loader_test $<TARGET_FILE:isaac_lan_extension_compatible_fixture>
+            $<TARGET_FILE:isaac_lan_extension_incompatible_fixture>
+            $<TARGET_FILE:isaac_lan_extension_failing_fixture>
+            $<TARGET_FILE:isaac_lan_extension_missing_export_fixture>)
+    set_tests_properties(app.extension-loader PROPERTIES TIMEOUT 30 LABELS "offline;native")
+endif()
 target_compile_definitions(isaac_lan_lab PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(MINGW)
     target_link_options(isaac_lan_heap_watch PRIVATE -static-libgcc -static-libstdc++ -municode

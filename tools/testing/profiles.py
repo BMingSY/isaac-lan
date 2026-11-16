@@ -1,7 +1,7 @@
 """Startup-only native profile fixtures shared by acceptance suites."""
 
 import struct
-from progress_fixture import MAGIC, checksum
+from progress_fixture import AZAZEL_ACHIEVEMENT, MAGDALENE_ACHIEVEMENT, MAGIC, checksum
 
 
 def profile_fixture(source, *, negative=True, tainted_cain=True):
@@ -23,8 +23,8 @@ def profile_fixture(source, *, negative=True, tainted_cain=True):
     return bytes(data)
 
 
-def magdalene_profile(source):
-    """Unlock only native Magdalene in a startup-only disposable profile."""
+def _achievement_profile(source, identifier):
+    """Unlock one qualification without changing counters or opaque sections."""
     if not 2800 <= len(source) <= 4 * 1024 * 1024 or source[:16] != MAGIC:
         raise ValueError("A native J460 progress baseline is required")
     if struct.unpack_from("<I", source, len(source) - 4)[0] != checksum(source[16:-4]):
@@ -34,6 +34,16 @@ def magdalene_profile(source):
     if any(flag > 1 for flag in source[32:674]):
         raise ValueError("Invalid native achievement flags")
     data = bytearray(source)
-    data[32 + 1] = 1
+    data[32 + identifier] = 1
     struct.pack_into("<I", data, len(data) - 4, checksum(data[16:-4]))
     return bytes(data)
+
+
+def magdalene_profile(source):
+    """Unlock only native Magdalene in a startup-only disposable profile."""
+    return _achievement_profile(source, MAGDALENE_ACHIEVEMENT)
+
+
+def azazel_profile(source):
+    """Unlock only native Azazel in a startup-only disposable profile."""
+    return _achievement_profile(source, AZAZEL_ACHIEVEMENT)

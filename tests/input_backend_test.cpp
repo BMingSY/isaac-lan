@@ -386,3 +386,9 @@ int main() {
     require(MH_Uninitialize() == MH_OK && VirtualFree(image, 0, MEM_RELEASE),
             "Release input fixture");
 }
+
+namespace isaac::presentation::animation {
+bool active() {
+    return false;
+}
+} // namespace isaac::presentation::animation

@@ -9,7 +9,7 @@ import re
 import subprocess
 from testing.special_routes import CASES, DIAGNOSTICS, build
 from testing.results import finish_run
-from testing.delivery import analyze_delivery
+from testing.delivery import analyze_delivery, assess_delivery, validate_delivery_limits
 from testing.input_response import measure as measure_response, passed as response_passed
 from testing.engine import configure_interrupts, engine_command, run_engine
 from lab_profile import validate_labs as validate_owned_labs
@@ -48,6 +48,12 @@ def main():
         help="Owned JSON profile for delay, jitter, limits and UDP loss/duplication",
     )
     parser.add_argument(
+        "--delivery-limits",
+        type=Path,
+        default=ROOT / "tests/fixtures/weak_network_limits.json",
+        help="Explicit freshness budgets for the weak-network case",
+    )
+    parser.add_argument(
         "--record-relay",
         action="store_true",
         help="Archive timestamped UDP datagrams from the owned relay",
@@ -73,6 +79,10 @@ def main():
     )
     args = parser.parse_args()
     cases = args.case or CASES
+    delivery_limits = None
+    if "weak-network" in cases:
+        delivery_limits = json.loads(args.delivery_limits.read_text())
+        validate_delivery_limits(delivery_limits)
     if not 0 <= args.latency_ms <= 5000:
         parser.error("Latency must be between 0 and 5000 ms")
     if args.record_relay and not args.latency_ms:
@@ -100,6 +110,8 @@ def main():
     validate_startup(labs)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
+    if delivery_limits is not None:
+        (output / "delivery-limits.json").write_text(json.dumps(delivery_limits, indent=2) + "\n")
     script = output / "suite.lua"
     build(script, cases, first_floor=args.first_floor)
     protected = ProtectedLabs(labs, output, roles=("host", "client"))
@@ -146,11 +158,27 @@ def main():
         command.append("--ascent-fixture")
     if "lazarus" in cases:
         command.append("--lazarus-fixture")
+    if "tainted-feedback" in cases:
+        command.append("--focus-cycle")
+    if any(
+        name in cases
+        for name in (
+            "knife",
+            "mirror-camera",
+            "abyss-escape",
+            "home",
+            "home-debug",
+            "dogma-warning",
+            "beast-layering",
+        )
+    ):
+        command.append("--knife-fixture")
     if any(
         name in cases
         for name in (
             "endings",
             "floor-sources",
+            "hourglass-routes",
             "campaign",
             "victory-lap",
             "victory-no",
@@ -179,6 +207,7 @@ def main():
             name in cases
             for name in (
                 "ascent-compat",
+                "beast-layering",
                 "dogma-warning",
                 "campaign",
                 "victory-lap",
@@ -218,6 +247,7 @@ def main():
                             in (
                                 "home",
                                 "home-debug",
+                                "beast-layering",
                                 "endings",
                                 "dogma-warning",
                                 "ascent-compat",
@@ -242,6 +272,8 @@ def main():
                             and "PARTY_COMPAT " in line
                             or name == "death-certificate"
                             and "DEATH_CERTIFICATE " in line
+                            or name == "feedback-november"
+                            and "FEEDBACK_NOVEMBER " in line
                             or name == "item-generation"
                             and "ITEM_GENERATION " in line
                             or name == "deep-pockets"
@@ -250,6 +282,10 @@ def main():
                             and "LAN_PICKUP_PRESSURE " in line
                             or name == "feedback-b7fs"
                             and "LAN_B7FS " in line
+                            or name == "tainted-feedback"
+                            and "TAINTED_FEEDBACK " in line
+                            or name == "d-infinity"
+                            and "D_INFINITY " in line
                             or name in ("greed", "greedier")
                             and ("GREED mode=" + ("3" if name == "greedier" else "2") + " ") in line
                             or name
@@ -260,6 +296,9 @@ def main():
                                 "attached-motion",
                                 "weak-network",
                                 "entity-fields",
+                                "mod-npcs",
+                                "mod-npcs-tainted",
+                                "entity-size",
                                 "floor-items",
                                 "mod-integrations",
                             )
@@ -284,6 +323,8 @@ def main():
                 (output / "engine/host/log.txt").read_text(errors="replace"),
                 (output / "engine/client/log.txt").read_text(errors="replace"),
             )
+            report["delivery_acceptance"] = assess_delivery(report["delivery"], delivery_limits)
+            report["passed"] = report["passed"] and report["delivery_acceptance"]["passed"]
         if "input-response" in cases and all(
             peer["passed"] for peer in report["cases"]["input-response"].values()
         ):
@@ -302,6 +343,13 @@ def main():
                 "VICTORY_LAP_GUEST_INPUT_IGNORED" in line for line in lap["host"]["checkpoints"]
             )
             report["passed"] = report["passed"] and report["victory_lap_passed"]
+        if "tainted-feedback" in cases:
+            engine = json.loads((output / "engine" / "result.json").read_text())
+            report["focus_sets"] = engine.get("focus_sets", [])
+            report["passed"] &= report["focus_sets"] == [
+                {"request": number, "role": role}
+                for number, role in enumerate(("client", "host", "client", "host", "client"), 1)
+            ]
         if "victory-no" in cases:
             report["victory_no_passed"] = all(
                 any(

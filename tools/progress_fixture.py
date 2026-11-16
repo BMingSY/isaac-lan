@@ -9,6 +9,9 @@ from game_profiles import lab_profile, profile_directory, source_profile
 MAGIC = b"ISAACNGSAVE09R  "
 PROFILE = Path("profile/Documents/My Games") / source_profile()["documents_directory"]
 TAINTED_LAZARUS_ACHIEVEMENT = 482
+MAGDALENE_ACHIEVEMENT = 1
+AZAZEL_ACHIEVEMENT = 79
+AZAZEL_PLAYER_TYPE = 7
 
 
 def checksum(data):
@@ -36,6 +39,7 @@ def patch(
     hush=False,
     ascent=False,
     lazarus=False,
+    knife=False,
     completion=False,
 ):
     if not 2800 <= len(source) <= 4 * 1024 * 1024 or source[:16] != MAGIC:
@@ -70,6 +74,8 @@ def patch(
         achievements[412] = 0
     if lazarus and not host:
         achievements[TAINTED_LAZARUS_ACHIEVEMENT] = 1
+    if knife and not host:
+        achievements[AZAZEL_ACHIEVEMENT] = 1
     if completion:
         # Isaac's twelve original widget layers; online bits deliberately differ
         # from the single-player marks to catch accidental blue/purple overlays.

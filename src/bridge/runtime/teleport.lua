@@ -5,37 +5,7 @@ return function(deps)
     local mapWidth, arrivalTimeout, listingColumns = 13, 3000, 4
     local pending = {}
     local service = {}
-    local definitions = {
-        { enum = "ROOM_DEFAULT", name = "普通房" },
-        { enum = "ROOM_SHOP", name = "商店", aliases = { "shop", "sh" } },
-        { enum = "ROOM_ERROR", name = "错误房", aliases = { "error", "e" } },
-        { enum = "ROOM_TREASURE", name = "宝箱房", aliases = { "treasure", "t" } },
-        { enum = "ROOM_BOSS", name = "Boss房", aliases = { "boss", "b" } },
-        { enum = "ROOM_MINIBOSS", name = "小Boss房" },
-        { enum = "ROOM_SECRET", name = "一秘", aliases = { "secret", "s" } },
-        { enum = "ROOM_SUPERSECRET", name = "二秘", aliases = { "supersecret", "ss" } },
-        { enum = "ROOM_ARCADE", name = "赌博房" },
-        { enum = "ROOM_CURSE", name = "诅咒房" },
-        { enum = "ROOM_CHALLENGE", name = "挑战房" },
-        { enum = "ROOM_LIBRARY", name = "图书馆" },
-        { enum = "ROOM_SACRIFICE", name = "献祭房" },
-        { enum = "ROOM_DEVIL", name = "恶魔房", aliases = { "devil", "d" } },
-        { enum = "ROOM_ANGEL", name = "天使房", aliases = { "angel", "a" } },
-        { enum = "ROOM_DUNGEON", name = "地下室" },
-        { enum = "ROOM_BOSSRUSH", name = "Boss Rush" },
-        { enum = "ROOM_ISAACS", name = "干净卧室" },
-        { enum = "ROOM_BARREN", name = "脏卧室" },
-        { enum = "ROOM_CHEST", name = "宝库" },
-        { enum = "ROOM_DICE", name = "骰子房" },
-        { enum = "ROOM_BLACK_MARKET", name = "黑市" },
-        { enum = "ROOM_GREED_EXIT", name = "贪婪出口" },
-        { enum = "ROOM_PLANETARIUM", name = "星象房" },
-        { enum = "ROOM_TELEPORTER", name = "传送房" },
-        { enum = "ROOM_TELEPORTER_EXIT", name = "传送出口" },
-        { enum = "ROOM_SECRET_EXIT", name = "隐藏出口" },
-        { enum = "ROOM_BLUE", name = "蓝色房间" },
-        { enum = "ROOM_ULTRASECRET", name = "红隐", aliases = { "ultrasecret", "us" } },
-    }
+    local definitions = deps.roomDefinitions
     local names, aliases = {}, {}
     for _, definition in ipairs(definitions) do
         local kind = rooms[definition.enum]
@@ -206,44 +176,7 @@ return function(deps)
         end
         pending[slot] = nil
     end
-    -- Choose a clear tile near the target in the destination's authoritative scope.
-    local function placeNear(slot, target)
-        return inspect(slot, function(game)
-            local room, placements = game:GetRoom(), {}
-            for body = 0, game:GetNumPlayers() - 1 do
-                local player = deps.player(body)
-                local radius, best, distance = player.Size, nil, math.huge
-                for i = 0, room:GetGridSize() - 1 do
-                    local point = room:GetGridPosition(i)
-                    local dx, dy = point.X - target.x, point.Y - target.y
-                    local score = dx * dx + dy * dy
-                    local clear = room:IsPositionInRoom(point, radius)
-                    for _, offset in ipairs({ { 0, 0 }, { -1, -1 }, { -1, 1 }, { 1, -1 }, { 1, 1 } }) do
-                        clear = clear
-                            and room:GetGridCollisionAtPos(
-                                    deps.vector(
-                                        point.X + offset[1] * radius,
-                                        point.Y + offset[2] * radius
-                                    )
-                                )
-                                == deps.enums.collision.COLLISION_NONE
-                    end
-                    if clear and score < distance then
-                        best, distance = point, score
-                    end
-                end
-                if not best then
-                    return false
-                end
-                placements[#placements + 1] = { player = player, position = best }
-            end
-            for _, placement in ipairs(placements) do
-                placement.player.Position = placement.position
-                placement.player.Velocity = deps.vector(0, 0)
-            end
-            return true
-        end)
-    end
+    local placeNear = deps.placeNear
     local function playerTarget(slot)
         local position = native.rooms_positions()[tostring(slot)]
         if not position then

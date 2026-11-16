@@ -22,6 +22,14 @@ return function(deps, goal)
             boss = enums.entity.ENTITY_MOM,
             spawn = true,
         },
+        heart = {
+            floor = function(level)
+                return level:GetStage() == enums.stage.STAGE4_2
+                    and level:GetStageType() < enums.stageType.STAGETYPE_REPENTANCE
+            end,
+            boss = enums.entity.ENTITY_MOMS_HEART,
+            spawn = true,
+        },
     }
     goal = assert(goals[goal])
     local function goalRoom()

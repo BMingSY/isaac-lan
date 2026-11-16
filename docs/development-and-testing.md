@@ -1,6 +1,6 @@
 # 开发与测试
 
-BUG 修复、需求新增和日常重构按影响范围执行离线回归与必要的局部实机验证。发版默认只覆盖基础联机、全部 Boss 和正常结局／路线，不重复开发专项。离线通过不代表实机通过；任务要求不启动游戏时，实机项记为未执行。协作和发布约定见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md)。
+BUG 修复、需求新增和日常重构按影响范围执行离线回归与必要的局部实机验证。小版本发版只做基本验收与全路线验收，大版本额外覆盖全部原版 Boss，不重复开发专项。离线通过不代表实机通过；任务要求不启动游戏时，实机项记为未执行。协作约定见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md)，完整发布流程见仓库 skill [isaac-lan-release](https://github.com/BMingSY/isaac-lan/blob/main/.agents/skills/isaac-lan-release/SKILL.md)。
 
 ## 构建与产物
 
@@ -34,7 +34,9 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 | `isaac_lan_net_test.exe` | 无需游戏的真实 Winsock 测试 |
 | `isaac_lan_lab.exe` | 隔离实例启动与验收 |
 
-[`tools/build_package.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_package.py) 打包前三项、安装脚本、README、FAQ 和许可证。游戏文件、存档、测试产物与构建目录不提交。加载器在扩展初始化后恢复游戏入口，游戏对象／Lua／网络轮询在主线程处理。原生改动须核对调用约定、布局、签名和所有权，见[分层约定](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md)。
+[`tools/build_package.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_package.py) 打包前三项、安装脚本、README、FAQ 和许可证；本地测试包保留原始二进制。[`tools/build_release.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/build_release.py) 从构建目录的 `CMakeCache.txt` 读取 `CMAKE_STRIP`，只剥离发布副本的调试信息和符号表，再生成文件哈希与 ZIP。运行代码、数据、导入／导出与重定位不裁剪；原始构建保留在构建目录，并由 CI 作为 `windows-x86-symbols` 附件保存 7 天供排障。CI 使用 `check_release.py --require-stripped` 检查发布包，工坊更新直接复用包中的主体 DLL。
+
+游戏文件、存档、测试产物与构建目录不提交。加载器在扩展初始化后恢复游戏入口，游戏对象和 Lua 在主线程处理，网络收发由独立线程负责。原生改动须核对调用约定、布局、签名和所有权，见[分层约定](https://github.com/BMingSY/isaac-lan/blob/main/docs/layers-and-compatibility.md)。
 
 ## 离线测试
 
@@ -69,6 +71,12 @@ Hypothesis 还会运行缓存失败样例和缩减步骤，上述预算不是精
 .deps/checks/bin/python -m pytest tests/offline/test_behavior.py -k saved_stall -q
 .deps/checks/bin/python tools/check_scripts.py
 ```
+
+安装器的定向回归为 `tests/test_linux_installer.py`、`tests/test_windows_installer.py` 和 `tests/test_tools.py`。Windows 脚本测试使用 Windows 临时目录、检查器替身与真实 Windows PowerShell，覆盖安装／补回缺失 DLL／卸载、文件占用、损坏清单和失败恢复，不启动游戏；它在 Windows CI 中运行，在有 `powershell.exe` 的 WSL 中也可随 pytest 执行，其他 Linux 环境跳过。WSL 同样将占用／替换用例放在 Windows 文件系统上，另以 Linux 临时目录覆盖 UNC 路径。仅需 Python 标准库的 Windows 入口为 `python tests/test_windows_installer.py`。原生游戏版本校验仍由原生测试和 [check_installer.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/check_installer.py) 覆盖。
+
+自动更新的直接回归为可移植的 `runtime.extension-update-*`、Windows 的 `app.extension-loader`，以及 `tests/test_workshop_release.py`、`tests/test_extension_package.py` 和 `tests/test_ctest_bundle.py`。覆盖数字版本排序、完整复制、重复启动、离线缓存、损坏与不兼容载荷回退、手动安装基线、归属与隔离边界、真实 SHA-256、版本目录动态加载和实际模块路径；Windows 用例只加载合成 DLL，不启动游戏。启动集成的实机检查需在隔离安装中核对首次迁移、工坊源新版而 `mods` 副本旧版时采用更新、下次启动和缓存启动，确认 `startup_extension` 与双方构建指纹；该检查不替代基础联机验收。更新来源及失败契约见[原生扩展更新](https://github.com/BMingSY/isaac-lan/blob/main/docs/extension-updates.md)。
+
+启动更新提示的定向检查为 `runtime.extension-update-pending`、`runtime.update-notice`、`presentation.update-notice` 和 `bridge.challenge_menu`，覆盖实际运行版本比较、未完成／不兼容载荷、后台检查与重试、选择“继续”后的进程级抑制、过期结果、默认退出、按键释放和鼠标操作。实机使用有归属标记的隔离实例，将 [state_update_notice.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_update_notice.lua) 作为 `frontend-scenario.lua`：选完存档后检查原版风格弹窗、键盘／手柄／鼠标选择与底层菜单不穿透，选择“继续”后等待 `LAN_UPDATE_NOTICE CONTINUE_PASS`；另一次必要启动检查“退出游戏”正常关闭。夹具只向同一运行组件提供待更新版本，不代表实际工坊下载或 Steam Deck／Proton 已验收。
 
 只运行可移植 C++／Lua 检查，无需 Windows 工具链或游戏依赖：
 
@@ -127,17 +135,37 @@ python tools/inspect_engine.py "$ISAAC_GAME_EXE" \
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
 
+实体尺寸恢复的定向检查为 `bridge.entity-codec` 和 Windows `native.entity-size`，覆盖无 XML 配置的实体、重复尺寸、实际尺寸变化、原有碰撞形状与非法输入拒绝。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case entity-size --case entity-fields --mod <Mod目录> --heap-check --record`，在同一对进程验证换层后的复活机、分房重聚、检查点重连及常规字段读写对照；用 Allstars 的旧实体表可覆盖配置缺失路径。Mod 文件只复制到隔离目录，不修改原安装；未订阅的创意工坊副本应准备为无 Workshop ID 的本地测试元数据，避免游戏自动移除它，保留 Lua 和资源文件原样。
+
+NPC 类型识别的定向检查为 Windows `native.entity-classification`、`native.combat-feedback` 和 Lua `bridge.entity-codec`，覆盖自定义类型编号、真实 MSVC RTTI 转换、重复分类恢复、命中反馈、非 NPC 与失效对象拒绝。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case mod-npcs --case mod-npcs-tainted --mod <Samael目录> --heap-check --record`，在同一对进程验证表／里角色、NPC scratch 与 Boss 分类、分房重聚、换层及检查点重连；表角色用例先在隔离副本中调用 Mod 自带的里角色解锁接口，随后运行里角色用例。Mod 只复制到隔离目录，Lua 和资源文件保持原样。
+
+视图采集与演出缓存的离线检查为 `native.room-metadata`、`presentation.hit-candidates`、`presentation.hit-events`、`presentation.tethers`、`bridge.actor-costumes` 和 `bridge.inventory-catalog`，覆盖相同字节复用、同长度内容变化、非法数据拒绝、扫掠接触对照、绳索退场、装扮替换和实时库存读取。实机通过 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 组合 `--case view-costs --case hit-prediction --case guest-visuals --case dice-floor --case rewind`，使用独立端口和 `--latency-ms 40 --heap-check --performance --record`，在同一对隔离进程验证反复应用、跟班增删、命中预测、外观、地图和换层回退。这里的诊断计数用于行为断言；开启录像的运行不用于帧耗时对比。
+
 Lua 夹具的输入编解码统一使用 [`tests/support/input.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/support/input.lua)：`neutral` 提供空输入，`buttons` 构造按键掩码，`encode`／`decode` 读写 `values`、`triggered` 和 `pointer`。动作索引与 `ButtonAction` 一致，玩家槽位从 0 开始；场景不自行拼接字段或计算字节偏移。实机启动器将该模块注入为 `_IsaacLanTestInput`，与场景一起冻结到测试脚本；离线测试通过同一模块注入依赖。`bridge.input-wire` 对照生产 C++ 编码，检查字段、默认值和多玩家布局，协议调整集中修改该模块并通过契约校验。
 
 Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，执行原生与 Lua 参考编码的逐字节对照、共享片段、边界／非法输入、分配失败及恢复检查；它通过统一离线入口运行，sanitizer 同时检查绑定和缓冲区的释放。性能比较使用 Release 构建，方法见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md#编解码基准)。
 
 聊天改动的直接回归为 CTest `presentation.chat-input`、`presentation.chat-render`、`bridge.chat`、`bridge.chat-dice`、`diagnostics.*`、`bridge.resume`，以及 Windows `presentation.chat-native-input`（输入法组合状态下开关、按键重复与焦点释放）、`presentation.chat-background`、`net.communication`／`net.integrations`：覆盖 UTF-8 编辑、输入释放、背景配置与 PNG 加载／回退、HUD 避让、拖动与尺寸变化、输出可见性、混合骰与奖惩骰、掷骰去重、同房／同维度筛选、原版命令分发和过期上下文。掷骰与房间共享使用 [state_chat_dice.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_chat_dice.lua)，在同一连接中核对普通／混合／奖惩骰、同房接收、分房隔离和汇合后的接收；保留两端画面并对照完整结果。原生执行与画面使用 [state_chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_chat.lua)，由隔离双端 runner 加载并保留双端画面；夹具开启属性栏、物品栏和最大 HUD 偏移，并通过原版轮盘选择 D6。输出 `CHAT KEYBOARD_READY` 后，对各自所属窗口依次输入 `~`、A、Enter、`~`；随后聚焦主机，打开输入并将记录区域向右上拖动，再关闭输入。960×540 客户区可使用 [lab_window.ps1](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_window.ps1) 的 `-Action Drag -Value '220,350:300,320'`，其他尺寸按客户区像素换算。完成键盘与拖动操作后，在两端隔离游戏目录的 `isaac-lan/chat-interaction.done` 写入完成标记；夹具等待该标记后检查结果，避免窗口操作耗时造成提前断言。完成标记为 `LAN_NETWORK PASS chat console`。背景检查可在一端配置自定义 PNG、另一端保留默认值，对照默认纯色、自定义图片和透明度。实机需核对遮挡、光标、D6 滚动与结果画面及双端相同结果；系统输入法候选仍需单独核对，脚本通过不能代表 IME 或画面通过。
 
+客机通关进度的定向离线检查为 `core.progression`、`core.room-options-marks`、`core.archive-*`、`net.ending-events` 与 `native.item-effects`，覆盖重复奖励、普通／困难标记、旧存档读取、可靠结算和个人原生解锁。实机使用 [state_guest_progress.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_guest_progress.lua)：启动前在隔离存档中设置主机的以撒羔羊标记为 3、成就 149 为已解锁，客机两项为 0；主机成就 640 为 1、客机为 0，作为无关旧进度的对照。普通难度完成原生羔羊与结局后，客机应获得标记 1 和成就 149；再以 `difficulty=1`、`guestMark=1` 执行困难场景，客机标记应升为 3。每轮均检查双端原生通关、退出、大厅个人进度及落盘数据，资料由 `ProtectedLabs` 备份并恢复。
+
+[state_guest_console.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_guest_console.lua) 通过实际聊天请求检查客机移除被动道具、主动道具和饰品，以及分房后的移除；使用主机同 ID 道具作为归属对照。这两个夹具提供统一场景契约，可通过 [testing/lua.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/testing/lua.py) 组合在同一对进程中执行。进度夹具读取原生计数使用共享的 [support/progress.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/support/progress.lua)，不把进度载荷最后四字节当作原生计数。
+
 `/tp` 的离线定向回归为 `bridge.teleport`、`bridge.chat`、`bridge.resume`、`bridge.party-startup` 与 `bridge.layers`；覆盖实际聊天请求链路、坐标方向、大房间与缺角、维度隔离、已生成特殊房间、重复请求、队友落点及跨层／退出清理。原生迁移与画面使用 [state_teleport.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_teleport.lua)，由 [run_teleport.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_teleport.py) 在一组受保护的主客机进程中验证，指定 `--host`、`--client`、`--build`、`--output`、独立 `--port`，使用 `--heap-check --record` 保留异常与画面证据。
+
+[state_feedback_regressions.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_feedback_regressions.lua) 使用同一组进程检查地下室集合落点、原生梯子返回、再次传送进入、持有血田时分房／重聚及远端角色失去飞行的属性重算、生命逆转阴影恢复／翻转／清理和换层。运行 `run_teleport.py --feedback-regressions`，隔离目录、构建、端口和证据参数与上述入口相同；分别检查双端断言和阴影画面。
 
 玩家轮廓的 Windows 离线检查为 `native.player-outlines`（J460）和 `native.player-outlines-j835`，覆盖三条原生分支的寄存器／栈保护、四槽位配色、名单重排、全息分身／非主绘制限制、断开与嵌套／异常清理。J835 另查颜色栈临时值边界、幽灵四方向绘制、已有颜色及原生扩容保留、屏幕坐标恢复、x87／MXCSR／SSE 保存及逐 Hook 冲突回滚。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-outlines --case guest-visuals`，在同一组受保护主客机进程中检查装扮／缩放、重叠、染色、受击闪烁、双角色、幽灵、分房与换层；使用独立端口以及 `--heap-check --record`，对照双端画面。夹具断言与画面审阅分别记录，不能仅凭脚本完成判定描边可见。
 
+Boss 出场共享的定向检查为 `core.intro-barrier`、`native.intro-completion` 与 `run_special_routes.py --case shared-intro`；实机在同一连接中交换先进入 Boss 房间的玩家，错开 40 tick 入场，检查后来进入者的画面、首位观看者结束后截断剩余动画、去重、异房隔离与控制恢复。可与 `--case input-response` 合并，配合 `--latency-ms 40 --heap-check --record` 核对副机纠偏速度和输入响应；移动离线检查为 `bridge.prediction`，覆盖不同绘制频率、重复确认、碰撞和传送。
+
+后悔药分岔选路的离线检查为 `native.rewind-home` 的 `route-checkpoint`，覆盖检查点路线位、实时换层标记、重复采集及失败清理。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case hourglass-routes --case rewind --case floor-sources`，指定隔离双端、独立端口及 `--heap-check --record`，复用进程验证主客机触发原生光柱／地洞、跨层回退后改选路线、重复回退与普通房间回退。
+
+命令补全的定向回归为 `presentation.chat-completion`、`presentation.chat-render`、`presentation.chat-native-input` 和 `bridge.chat`，覆盖前缀／别名、参数用法、Tab 轮换、点击、输入历史、输入法组词、选区及字节上限。实机夹具 [state_chat_completion.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_chat_completion.lua) 通过隔离启动器注入的 `_IsaacLanTest` 获取主客机身份，在普通 Lua 沙箱中运行；复用一对进程检查草稿变化与未提交状态，并录制候选、用法、输入法及选区画面。夹具注入补全／编辑状态，真实 Windows 按键边界由原生输入回归覆盖。
+
 ## 失败记录与回放
+
+启动错误的定向离线检查为 `core.startup-error-contract`、`core.startup-error-messages`、Windows 的 `log.path-and-records` 和 `app.extension-loader`。覆盖稳定编号、未知编号、中文长路径、日志目录失败与文件占用、失败后的原日志保留、DLL 缺失／导出缺失，以及新旧主体的诊断回退；这些检查无需启动游戏。
 
 统一运行按当轮归档保存阶段日志、耗时、`summary.json`、`ctest.xml`、`pytest.xml` 和失败请求。回放命令：
 
@@ -173,6 +201,8 @@ ctest --test-dir build-win32 --output-on-failure
 ```
 
 测试程序不带用例名时运行全部传输测试，通过标记为 `ALL STATE TRANSPORT TESTS PASSED`。
+
+版本准入的定向检查为可移植的 `net.compatibility-codec`，Windows 的 `net.handshake`、`net.compatibility-versions`、`net.compatibility-rejoin`、`net.compatibility-wire`，以及菜单的 `bridge.challenge_menu`。覆盖完整版本号和 DLL 指纹、不同协议的前置交换、旧版／缺失／畸形报文、拒绝后的席位清理、原身份重连，以及双方版本与长版本号的错误显示。网络检查使用真实 ENet 回环连接，不启动游戏。
 
 IPv6 的定向检查为 `net.ipv6-addresses`、`net.ipv6-inputs`、`net.ipv6-rejoin`、`net.dual-stack`、`net.host-fallback` 和 `net.host-names`，覆盖完整地址／接口编号、系统域名解析、双栈混合玩家、输入／分片视图、重连及 IPv6 不可达后的 IPv4 回退。菜单与地址保存同时检查 `bridge.endpoint`、`bridge.challenge_menu`、`presentation.connection-settings` 和 `presentation.chat-native-input`。网络用例使用本机回环地址及 `localhost`，不代表跨公网路由或防火墙已经验证。
 
@@ -211,21 +241,37 @@ python tools/engine_test.py run special-routes -- \
 
 连续玩法组合器在同一局内切换兼容场景，保持绝对网络 tick，仅为夹具转换相对时间；路线组合器在同一组进程中等待原生退出与菜单恢复后再切换。独立启动配置、真实键盘焦点和性能隔离要求仍属于套件执行边界，不能将任意套件直接合并。
 
+[`ProtectedLabs`](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_profile.py) 从备份前到恢复完成持续持有每个隔离目录的占用锁；另一轮测试不得在原生进程退出后、资料尚未恢复时复用目录。恢复先确认所属进程已结束及备份完整，再逐文件核对哈希。异常中断后的恢复也须重新取得同一目录锁。
+
+原生后端在启动及场景轮询时检查游戏日志；发现 Mod 自动更新或 Lua 重载就将本轮判为运行环境变化，保留日志并执行正常收尾，不自动重试。冻结脚本被重新加载后，先前的完成标记不能作为连续执行证据；该判定也不等于已解释同时发生的原生崩溃。
+
+换层 Lua 调用边界的 Windows 离线检查为 `native.stage-transition-binding`，覆盖栈与保存寄存器、原闭包目标、可空玩家参数、重复调用和卸载恢复。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 组合 `--case attack-mirror --case floor-sources --case rewind --heap-check --record`，在同一对隔离进程检查镜面换层、主客机分房选路、回退，以及省略玩家、显式 `nil` 和指定玩家三种 Lua 调用形式。
+
+换层离场动作的离线检查为 `presentation.actor-walking`、`bridge.layers`、`net.stage-events`、`net.stage-during-rejoin`、`net.reliable-receive` 和 `native.actor-animation`，覆盖动作选择、代次去重、可靠交付及原生动作名的只读复制与边界。`--case floor-sources` 移除混乱诅咒后，在同一组进程检查地下室进入／梯子返回，以及主客机分别从同房／分房状态触发光柱、从分房状态触发地洞；核对可靠动作名、客机实际姿态、两端目的地与录帧。
+
+角色复活的名单借用检查为 `core.room-team-roster` 与 `core.room-scope-ownership`，覆盖原生名单扩容、嵌套查询、跨房借用及异常清理；`bridge.actor-forms` 检查长子权身体的死亡挂起、重复幽灵状态及复活重新入列，`bridge.replica_pipeline` 检查形态解析与库存恢复顺序、重复状态和失败边界。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case character-revival --heap-check --record`，默认检查客机里骸骨的 Boss 复活、死亡前后拾取、资源保留、身体配对、闪烁状态和跨房／跨层；夹具 [state_character_revival.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_character_revival.lua) 接受 `revivalOwner`（0／1）及 `revivalKind`（`tainted-forgotten`、`forgotten`、`lazarus`、`lazarus-birthright`、`twins`），可通过现有套件工厂组合，复用同一对进程对照主客机和其他多身体角色。
+
+`special-routes` 的 `--case feedback-items` 检查主客机使用骸骨魂石后的资源、客机里以撒的实际切换及拾取替换、蓝钥匙上锁入口与对侧出口、丢弃后的重访，以及里骸骨分房抱起／投掷／带入其他房间。夹具见 [state_feedback_items.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_feedback_items.lua)；离线契约检查为 `bridge.inventory-order`、`native.inventory-order`、`bridge.blue-key` 和 `bridge.capture_generation`。图标刷新还需对照双端录帧。
+
 `special-routes` 可组合 `local-hud` 和 `guest-visuals` 检查跨房、换层与角色外观；`--record-relay` 配合正数 `--latency-ms` 保存原始传输；`datagrams.bin` 按大端 `double 时间戳 + u8 方向 + u16 长度 + 原始报文` 记录。`item-audit` 与 `special-routes` 默认验证自动加载；若测试宿主的 DLL 搜索策略阻止本地代理加载，可显式选择 `--injected`，只向刚创建的有归属隔离进程注入。该模式不计为自动加载验收，启动参数保留在报告中。
 
 `entity-fields` 使用泪弹、跟班和效果实体，对照游戏 Lua 属性、原生数组与数值块的读写结果，检查完整动画往返、错误输入不写入及外层编解码；它不作性能验收，可与其他功能场景共用进程。`lazarus` 在启动前仅为隔离客机准备所需角色解锁，并在进入联机前核对菜单可选项；存档仍由套件备份和恢复。
 
 `action-prediction` 用正常客机输入和实际拾取覆盖主动、卡牌、正负药丸、道具／饰品／卡牌／药丸拾取及举起类主动，核对房主使用回调、拾取结果、两端动作姿态和客机连续帧移动。`--latency-ms 75` 为两个方向各增加 75 ms；延迟中继本身增加约 150 ms RTT。它检查动作期间及结束后的移动连续性，不预测道具效果或提前确认拾取。
 
+`input-response` 的通过标准同时要求同帧输入、纠偏速度上限和松键时超出惯性与修正预算的额外位移；旧采样缺少 `correction_step` 时不能计为该标准通过。相关离线检查为 `bridge.prediction` 和 `tests/test_input_response_analysis.py`；前者还覆盖持续断流后的移动制动与新确认后的恢复。`presentation.entity-visuals` 检查动画／高度的外推边界、后续确认与实体替换；录帧用于外观审阅，开启录帧时的耗时不能作为独立性能基准。
+
+`motion` 在固定房间检查连续移动、障碍物接触及拆除后的通行；夹具临时关闭并锁住出口，核对两端始终位于起始房间和维度，结束时恢复门状态。意外换房直接报告房间前提失效，不继续使用原房间的障碍物断言。
+
 `attached-motion` 用正常客机移动、点按、蓄力和松键覆盖骸骨、妈刀、圣剑、硫磺火、科技、科技 X 与虚空之喉。它检查武器相对预测身体的位置、激光世界路径／终点及命中特效，并确认独立激光不被绑定到身体。推荐与 `--latency-ms 75 --record-client --heap-check` 配合；场景逐项核对两端实际生成的攻击，不以仅完成会话视为通过。
 
-`attack-response` 测量普通泪弹、硫磺火、妈刀、科技 X、多发与圣剑的按键至朝向、初次泪弹、蓄力和松键显示时间，核对预测弹接管及真实实体归属；`attack-mirror` 在水层镜面房间复用普通泪弹检查。使用 `--latency-ms 40 --performance --record-client --heap-check`，中继每方向延迟 40 ms，合计约 80 ms RTT。可与 `attached-motion` 在同一对进程运行；画面需对照镜像位置与接管前后弹幕。离线检查为 `presentation.attack-prediction`、`presentation.attacks` 及 Windows `native.pause-menu`，覆盖冷却、重复确认、取消、换武器、超时、视图清理和输入作用域恢复。
+`attack-response` 测量普通泪弹、硫磺火、妈刀、科技 X、三眼、20/20、四眼蜘蛛、豆浆与圣剑的按键至朝向、初次泪弹、蓄力和松键显示时间，核对预测弹接管及真实实体归属；三眼、20/20、四眼蜘蛛在首次开火前开始持续走射，必须观察到移动中的多发预览；`attack-mirror` 在水层镜面房间复用普通泪弹检查。使用 `--latency-ms 40 --performance --record-client --heap-check`，中继每方向延迟 40 ms，合计约 80 ms RTT。可与 `motion`、`mirror-camera`、`attached-motion` 在同一对进程运行；画面需对照镜像位置与接管前后弹幕。离线检查为 `presentation.attack-prediction`、`presentation.attacks` 及 Windows `native.pause-menu`，覆盖冷却、重复确认、缺失早期发射与抖动后的匹配、固定多发、取消、换武器、超时、视图清理和输入作用域恢复。
 
 `tear-trajectory` 用正常射击输入覆盖静止、横向往返、0.6／1.6 弹速、尿一／妈妈的高跟鞋改变射程及快速点射。每组停止射击后等待确认完成，要求产生的预览全部接管，并分别核对超时、碰墙和落地计数。与 `attack-mirror` 复用进程检查镜面；沿用每方向 40 ms 的中继。离线 `presentation.tear-motion` 对照 [tear_motion.csv](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/tear_motion.csv) 中的原生轨迹，验证弹速、惯性和纵向运动；`presentation.attack-prediction` 对照原生小数冷却的发射时刻。
 
-`weak-network` 用正常客机输入核对八次主动道具使用不丢失、不重复，以及状态／库存恢复和停止后的预测收敛。使用 `--latency-ms 45 --relay-control tests/fixtures/udp_weak_network.json --case weak-network --case motion` 在同一对进程检查碰墙／松键。[UDP 中继](https://github.com/BMingSY/isaac-lan/blob/main/tools/datagram_relay.py)实际丢弃完整报文、复制报文并按抖动后的时间重排；停传窗口表示突发丢包，排队超过 500 ms 或容量上限也会丢弃。[配置](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/udp_weak_network.json)包含基础 RTT 90 ms、每方向 ±20 ms 抖动、双向限速、5% 丢包和 2% 重复。现场 Ping 还包含调度开销；无损对照移除丢包、抖动与限速。离线 `net.udp-loss` 通过真实套接字覆盖缺片、重排、重复、可靠按键计数、压缩基线恢复和换层。`net.udp-large-recovery` 使用约 88 KiB 的变化区，在 180 tick 测量窗口后另行停传 30 tick，确认视图已滞后，再恢复中继并要求 8 秒内收到停传之后的新状态；测量窗口中的吞吐与已收到视图间隔仍单独检查，恢复期间继续丢包／复制并逐字节核对内容。它不将低频恢复判定为可游玩的刷新率。
+`weak-network` 用正常客机输入核对八次主动道具使用不丢失、不重复，以及状态／库存恢复和停止后的预测收敛。固定战斗阶段保留两个 Horf 和两个 Attack Fly 的原生 AI 与弹幕，客机必须取得足够的战斗状态样本；结束后清理夹具实体和弹幕。使用 `--latency-ms 45 --relay-control tests/fixtures/udp_weak_network.json --case weak-network --case motion` 在同一对进程检查碰墙／松键。[UDP 中继](https://github.com/BMingSY/isaac-lan/blob/main/tools/datagram_relay.py)实际丢弃完整报文、复制报文并按抖动后的时间重排；停传窗口表示突发丢包，排队超过 500 ms 或容量上限也会丢弃。[配置](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/udp_weak_network.json)包含基础 RTT 90 ms、每方向 ±20 ms 抖动、双向限速、5% 丢包和 2% 重复。现场 Ping 还包含调度开销；无损对照移除丢包、抖动与限速。离线 `net.udp-loss` 通过真实套接字覆盖缺片、重排、重复、可靠按键计数、压缩基线恢复和换层。`net.udp-large-recovery` 使用约 88 KiB 的变化区，在 180 tick 测量窗口后另行停传 30 tick，确认视图已滞后，再恢复中继并要求 8 秒内收到停传之后的新状态；测量窗口中的吞吐与已收到视图间隔仍单独检查，恢复期间继续丢包／复制并逐字节核对内容。它不将低频恢复判定为可游玩的刷新率。
 
-弱网报告同时记录到达时的状态年龄、相邻应用间隔和按时间加权的视图年龄；后者计入等待下一份状态期间持续变旧的时间，避免降低发送频率后仅靠到达样本得出改善结论。时间来自同一 Windows 机器上的隔离主客机，不能直接用于不同机器而未校准的时钟。对照须使用相同场景和中继配置，分别冻结构建及夹具，保留每轮失败和恢复记录。
+弱网报告同时记录到达时的状态年龄、相邻应用间隔和按时间加权的视图年龄，并使用[场景阈值](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/weak_network_limits.json)判定整体结果；超过阈值时，即使动作和恢复成功也不算通过。该阈值面向上述标准弱网配置，其他条件通过 `--delivery-limits` 指定预算并随报告保留。离线 `net.world-pacing` 验证有界突发、恢复流量计费、拥塞退让、稳定 RTT 抬升后的恢复及应用卡顿隔离；`net.world-emission` 检查过期分片替换和替代视图的完成保障；`net.incoming-queue` 检查并发交接、可靠顺序与代次清理，真实 UDP 的 `net.receive-isolation` 检查慢消费者不会阻塞同一监听端点的其他连接；`net.world-shards-overhead` 核对小视图冗余及包数预算；`presentation.motion-recovery` 验证断流后的逐帧追赶上限、持续确认、停止和视图清理。时间加权的视图年龄计入等待下一份状态期间持续变旧的时间，避免降低发送频率后仅靠到达样本得出改善结论。时间来自同一 Windows 机器上的隔离主客机，不能直接用于不同机器而未校准的时钟。对照须使用相同场景和中继配置，分别冻结构建及夹具，保留每轮失败和恢复记录。
 
 受保护的实机入口在 `finally` 中等待所属后端收尾，再恢复资料并核对哈希，统一输出 `report.json`、`restored.json` 和 `junit.xml`。报告的 `schema_version` 为 `1`，`status` 区分 `passed`、`failed` 和 `error`，保留各套件原有双端证据和详细结果。JUnit 表示整次套件结果；道具效果、路线与 Boss 覆盖仍读取详细报告。未完成的子项、原生异常或恢复失败不能由一个完成标记覆盖。
 
@@ -237,44 +283,54 @@ python tools/engine_test.py run special-routes -- \
 
 ### 默认发版范围
 
-先执行 `python tools/test.py --profile full`、Windows x86 构建、网络／原生 ABI 测试与安装包校验，冻结候选及产物哈希。实机默认检查以下范围：
+两种规模均先执行 `python tools/test.py --profile full`、Windows x86 构建、网络／原生 ABI 测试与安装包校验，冻结候选及产物哈希。用户指定的分类优先，否则补丁号变化为小版本，次版本或主版本变化为大版本。小版本实机检查基础联机、全部结局和正常路线机制；大版本另加全部原版 Boss：
 
 | 范围 | 入口与通过条件 |
 | --- | --- |
 | 基础联机 | [run_release_acceptance.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_release_acceptance.py)：安装／自动加载、战斗／拾取、分房／换层、五类沙漏、暂停及单人／联机存档隔离 |
 | 全部结局 | [run_endings.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_endings.py)：羔羊（`--first-floor`）、???、Delirium、Mega Satan、Mother、上行至 Beast；双端实际完成路线、原生结局、清理和进度恢复，Mother 经过完整支线楼层 |
-| 全部 Boss | [run_bosses.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_bosses.py)：完整 [boss_catalog.json](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/boss_catalog.json)，包含原生阶段机制；用 [check_boss_coverage.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/check_boss_coverage.py) 合并 Boss、结局与贪婪结果，主客机均无缺项 |
+| 全部 Boss（仅大版本） | [run_bosses.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_bosses.py)：完整 [boss_catalog.json](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/boss_catalog.json)，包含原生阶段机制；用 [check_boss_coverage.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/check_boss_coverage.py) 合并 Boss、结局与贪婪结果，主客机均无缺项 |
 | 正常路线机制 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 选 `greed`、`greedier`、`knife`、`hornfel`：两种贪婪全程、矿车／逃亡、持有炸弹、跨层与重连 |
 
 Boss 整组时限按用例数量预留加载与转场时间，单项进度断言独立生效。整组因人工停止或总时限结束且双端正常退出、资料恢复成功时，覆盖工具可通过 `--partial-arena` 读取原始双端日志，只保留已完成且无重复的单项断言；缺少一端、断言失败和异常退出不计入。原整组报告保持失败，剩余用例用 `--case` 补跑，再汇总全部覆盖。
 
-错误技、达摩剑、创世纪、小夜灯，EID／举袋／水流／切窗口暂停，道具与弹幕压力，输入响应／镜头，以及全道具／卡牌／药丸／角色／Mod 遍历均不列入发版检查，也不因版本包含相关改动而自动追加。用户明确要求时再增加发布专项。已有开发回归结果可以引用，旧验收记录和未决问题保持原结论。完整规则见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md#发布前验收范围)。
+大版本由执行者根据相对上次发布的实际变更，自行选定并执行必要的安装／配置升级与工坊重启更新、异常断线／退出及续玩、协议版本／弱网、道具／角色／第三方 Mod、输入／镜头或性能压力专项，说明与变更的关系，无需等待用户逐项选择。影响范围不明时扩大相关回归；用户明确限定的范围优先。
+
+错误技、达摩剑、创世纪、小夜灯，EID／举袋／水流／切窗口暂停，道具与弹幕压力，输入响应／镜头，不属于每次发版固定必跑范围；小版本不因此重复追加，大版本按影响选择必要专项，不机械执行全道具／卡牌／药丸／角色／Mod 遍历。适用于本次候选的开发回归结果可以引用，旧验收记录和未决问题保持原结论。完整规则见 [AGENTS.md](https://github.com/BMingSY/isaac-lan/blob/main/AGENTS.md#发布前验收范围)。
 
 ## 开发专项入口
 
+超大层与射击轮换使用 [run_large_floor_aim.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_large_floor_aim.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`；可用 `--extra-client` 增加第三、四端，使用 `--heap-check --record` 保留异常与画面证据。所有用例复用同一组进程，按两人超大层、两人至指定人数的射击轮换依次开局；`--challenge 1004` 或 `--challenge 1005` 可只复测对应挑战。覆盖普通路线各层生成、妈心／妈腿奖杯、独立移动、跨房射击、鼠标、蓄力松手、幽灵与断线重连。隔离存档在启动前准备资格，结束后恢复并核对。离线对应 `core.aim-rotation`、`core.challenge-rules`、`bridge.challenges`、`bridge.challenge_menu`、`presentation.attacks` 和 Windows `native.floor-generation`、`native.challenge-hud`、`native.mouse-input`。
+
 房间共享效果使用 [run_room_rules.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_room_rules.py)，指定 `--host`、`--client`、`--build`、`--output` 和独立 `--port`，可加 `--heap-check --record`。工具固定模拟 80 ms RTT，在同一对进程中验证清房充能、分房、主动槽位、充能修正、沙漏回退、普通掷骰与运气挑战，然后仅为启动时读取本机偏好重启一次；两个端口分别用于主机与延迟代理。全部结束后恢复隔离资料，任一阶段失败不计通过。离线对应 `bridge.clear-charge`、`bridge.luck_game`、`presentation.connection-settings`、`core.room-options-marks`。
 
-特殊房间集合使用 [run_teleport.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_teleport.py) 的 `--gather` 模式，复用同样的隔离目录、构建、产物与端口参数，配合 `--heap-check --record`。一组主客机验证走门、Joker 和 `/tp` 触发集合、普通房与普通红房不触发、特殊房离开与重入、地图外房间、同时进房、在途卡牌和换层后再次集合；双端均确认到达后才继续。离线对应 `bridge.special-room-gather`、`bridge.teleport`、`bridge.clear-charge`、`bridge.luck_game`、`bridge.challenge_menu`、`presentation.connection-settings`、`core.room-options-marks` 与 Windows `net.room-options`。
+自动传送使用 [run_teleport.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_teleport.py) 的 `--gather selected` 模式，指定隔离目录、构建、产物与独立端口，可加 `--heap-check --record`。同一组主客机与连接先验证 7 类菜单、实际 `RoomType` 分组契约、多选、全选／清空、准备状态、客机只读和本机偏好隔离，再验证 Boss／隐藏房入房集合、同组红隐与一秘均触发、未选普通房／商店／宝物房不集合、离开与重入及换层后继续生效。`--gather special` 勾选普通房间组以外的 6 类，`--gather all` 全选 7 类；两者覆盖走门、Joker、`/tp`、地图外房间、同时进房、在途卡牌和换层，全选还覆盖普通红房、原生地下室进入和梯子返回。离线 `bridge.room-gather` 覆盖各组全部成员（含并入普通组的支线入口和卧室）、未使用类型排除、单选／多选、重复状态、维度、断线、超时、未完成集合换目标及生命周期清理；菜单、网络、偏好和存档分别覆盖选择传播与高位类型保存。
 
 运气游戏使用 [run_luck_game.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_luck_game.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`，可加 `--heap-check --record`。同一组主客机覆盖挑战开局、开局吞下禁令、非主动底座拾取、购买代价与二选一、主动拾取跳过掷骰、主动转移充能、幸运上升药丸、换层赠送、分房发放、重连和妈腿奖杯退出；工具保护并恢复隔离资料。离线对应 `bridge.luck_game`、`bridge.challenges`、`bridge.challenge_menu`、`bridge.chat`、`core.challenge-rules` 与 Windows `native.item-effects`。
 
-以下入口用于开发修复时的定向回归，不属于发版清单。只选择受改动影响、需要排查或用户明确要求的场景，记录具体用例，不自动运行整个专项目录。
+以下入口用于开发修复时的定向回归，不属于每次发版固定必跑范围；大版本可按变更影响从中选定必要专项。只选择受改动影响、需要排查或用户明确要求的场景，记录具体用例，不自动运行整个专项目录。
+
+玩家不透明度的离线检查为 `presentation.player-opacity`、`bridge.chat`、`bridge.resume`、`diagnostics.defaults`／`validation`／`preservation` 及 Windows `native.player-opacity`／`native.player-outlines`。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-opacity --heap-check --record`，复用一组隔离主客机检查指定槽位、其他玩家、0% 与重置、装扮、受击染色、双子、遗骸、幽灵、分房及换层。配置默认值和非法值回退由离线配置测试覆盖；实机收尾恢复资料并核对哈希，同时核对双端画面中的身体、描边、泪弹、科技激光、硫磺火、科技 X 环及激光地面层，并以敌方弹幕作为不受影响的对照，不能只凭命令回执判定画面通过。夹具检查角色精灵颜色在绘制期间仍保持游戏值、泪弹颜色在原版绘制后恢复，并要求双端均观察到各类攻击。
 
 | 领域 | 入口与范围 |
 | --- | --- |
 | 菜单输入与怪物显示 | [state_npc_motion.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_npc_motion.lua) 配合 `run_network_engine.py --frontend --menu-start --exercise-menu --exercise-lobby-chat --virtual-input --latency-ms 40 --native-record-both --heap-check`，使用独立端口并由 `ProtectedLabs` 保护资料。菜单驱动依赖 LuaDebug 的隔离输入文件，不能搭配 `--no-luadebug`；同一对进程验证地址中 M/F 不改音量／全屏、端口校验、种子编辑与大厅聊天，再采集蜘蛛、冲锋怪、攻击蝇的权威目标和双端轨迹。完成标记为 `LAN_NETWORK NPC_PROBE PASS native pursuit and display capture`；对照轨迹与画面，不以采集完成代替误差结论。离线 `presentation.npc-motion` 使用 [npc_motion.csv](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/npc_motion.csv) 回放原生轨迹，检查制动误差、跳包、重复状态与轨迹清理 |
 | 输入与镜头 | [run_response_acceptance.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_response_acceptance.py)：直连／约 20 ms RTT、输入预览、移动／过门、暂停、主动、蓄力和大房间／镜面；需要画面时用 `--record-view`。[run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `input-response-speeds` 在同一局测试 0.6、1.3、2 三档移速的加速、松键与转向；离线 `bridge.prediction` 对照原版运动采样。多身体预测用 [state_multi_actor_prediction.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_multi_actor_prediction.lua) 检查双子、骸骨切换及魂石身体的生成／退场 |
+| 网格碰撞预测 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case motion --latency-ms 40 --record-client --heap-check` 在同一组进程检查普通移动、碰墙、松键、大便／石头贴边绕行及障碍移除后的通行；核对逐帧位移和静止后的权威位置。离线 `bridge.motion-intervals` 使用原生接触位置验证圆形边界、重复纠偏和网格清理，同时保留墙、坑洞、飞行与过门检查 |
 | 鼠标与地址记忆 | [run_mouse_input.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_mouse_input.py)：指定 `--host`、`--client`、`--build`、`--output` 和独立 `--port`；真实鼠标步骤独占焦点。主客机分别点击并反向瞄准，检查原版四向泪弹、输入归属与松键；重启一对进程验证地址文件回填，第二轮同时用 Analog Stick 检查自由瞄准。两轮均保留双端画面和堆异常证据，结束恢复并核对隔离资料。离线对应 `presentation.connection-settings`、`bridge.challenge_menu`、`core.pointer-input`、`native.mouse-input`、UDP `net.render-inputs` 与 `net.floor-rejoin` |
 | 客机重连 | [state_client_recovery.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_client_recovery.lua) 通过 `run_network_engine.py --frontend --menu-start` 复用一组进程，检查虚拟控制器延迟就绪、新局角色归属、客机单独传送进恶魔房后的主动重连、恢复失败后的手动重试、意外掉线恢复、菜单提示与离开；恢复后再验证投票重开及通关返回大厅的共同退出边界，不代替 Boss／结局路线验收。原生退出不重启进程。执行前用 `ProtectedLabs` 保护隔离资料，收尾后恢复并核对哈希 |
-| 过门输入与预测 | [state_door_prediction.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_door_prediction.lua) 配合 `run_network_engine.py --frontend --menu-start --no-luadebug --virtual-input --latency-ms 40 --completion "PASS feedback observation complete" --native-record-both --heap-check`，指定隔离双端、输出目录与独立端口，由 `ProtectedLabs` 保护并恢复资料。同一组进程检查客机进入新房、返回驻留房间及主机单独过门；记录双端位置和客机权威目标，断言客机淡入前段没有隐形位移、恢复行走没有补跑积压输入。离线覆盖到达／取消淡入、延迟确认，以及原生半帧换房边界 |
+| 过门输入与预测 | [state_door_prediction.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_door_prediction.lua) 配合 `run_network_engine.py --frontend --menu-start --no-luadebug --virtual-input --latency-ms 40 --completion "PASS feedback observation complete" --native-record-both --heap-check`，指定隔离双端、输出目录与独立端口，由 `ProtectedLabs` 保护并恢复资料。同一组进程检查客机进入新房、返回驻留房间及主机单独过门；记录双端位置和客机权威目标，断言客机画面可见前没有隐形位移、恢复行走没有补跑积压输入。离线覆盖到达／取消淡入、延迟确认，以及原生半帧换房边界 |
+| 过门等待计时 | [run_room_handoff.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_room_handoff.py)：指定 `--host`、`--client`、`--build`、`--output`、独立 `--port` 和单向 `--latency-ms`，可加 `--heap-check`。同一对受保护进程和连接中完成客机六次、主机两次普通走门，覆盖新加载房间与队友驻留房间，检查隐形位移与恢复速度；报告等待权威状态、原生加载、状态应用、首帧等待、遮罩纯黑、完整淡入及恢复输入的时间。比较构建时保持夹具、种子和延迟一致；`--record` 用于单独核对双端画面，其计时不作为性能对比 |
 | 特殊移动与幽灵落点 | [state_special_motion.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_special_motion.lua) 配合 `run_network_engine.py --frontend --menu-start --completion "LAN_NETWORK SPECIAL PASS movement and ghost arrival"`，使用独立端口、`--latency-ms 75 --heap-check --native-record-both`；同一组进程检查里骸骨静止／抱起／投掷、飞行越障、地下室，以及普通角色和死亡幽灵经 LTL 房间右侧入口的重复到达与换层清理。夹具使用固定种子并清除楼层诅咒；不代表全门位或诅咒路线覆盖。执行前后用 `ProtectedLabs` 保护并恢复资料 |
 | 混乱诅咒走门 | [state_maze_routing.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_maze_routing.lua) 配合 `run_network_engine.py --frontend --menu-start --completion "LAN_NETWORK MAZE PASS"`，使用独立端口、`--latency-ms 75 --heap-check --native-record-both`。固定种子保留未清理的普通房间作为原生候选，终局房间的全队汇合按路线另行验收；以正常方向输入重复走门，检查原生随机落点、大房间子格归属、双端一致性、进入队友房间后的实体保留、幽灵随队及换层清理；不替换原生随机数或目的地选择。执行前后用 `ProtectedLabs` 保护并恢复资料 |
 | EID、举袋与水流 | [run_client_scenes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_client_scenes.py)，需要完整举放检查时加 `--include-bag-transitions --record-view` |
 | 道具与角色 | [run_item_issues.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_item_issues.py) 或 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的相关场景；按实际改动选择持有者、房间和生命周期条件 |
+| 道具状态与 EID | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `feedback-eid`、`feedback-puppy`、`feedback-flies`、`feedback-esau` 可复用同一组进程，分别检查分房道具说明与隐藏道具、喂养后的两种狂暴血狗跨房及换层、别西卜友方目标与后方敌人的命中表现、同一个小红罐的转交与库存切回。EID 用例必须通过 `--mod` 加载未修改的 EID；使用 `--heap-check --record --frame-ms 33` 保留双端短暂演出证据 |
 | 反馈上传 | [run_feedback.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_feedback.py)：指定 `--host`、`--client`、`--output`，可加 `--heap-check`；同一组主客机经聊天各提交一次 `/feedback`，由内置本地接收端核对请求头、zip 与清单、上一次启动日志和主客机身份，并确认 `/c feedback` 不上传、连续提交受限。夹具通过 `run_network_engine.py --feedback-endpoint` 写入隔离配置，不连接正式服务器；离线对应 `core.feedback-*`、`bridge.feedback` 与 `bridge.chat` |
-| 客机房间与演出 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 可连续选择 `split-render`（五胞胎、圣剑、命运之矛的分房归属及换层）、`mirror-route`（白火、原生镜子门、镜像方向、气泡及死神名册奖励）、`ambush-audio`（挑战战斗、结束与后来进入）、`mother-controls`／`mother-guest`／`mother-together`（三种入场方式、两阶段横穿房间、关闭聊天及控制冷却恢复）、`reconnect-motion`（重连后普通输入横穿房间）、`dice-floor`（原生踩踏、变暗与震动、再次入房不重播）、`room-followers`（跟班重复进入已有房间）、`chain-traps`（真实陵墓刺球锚点及锁链画面）、`secret-exit-doors`（正常走水层入口、汇合与返回门方向）。同一组进程复用连接；第三方组合通过 `--mod`、`--host-mod`、`--client-mod` 指定，资料由工具保护并恢复。`mirror-camera` 和 `room-entry` 分别检查大房间／镜面移动与已加载房间的返回入口 |
+| 客机房间与演出 | [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 可连续选择 `split-render`（五胞胎、圣剑、命运之矛的分房归属及换层）、`mirror-route`（白火、原生镜子门、镜像方向、气泡及死神名册奖励）、`ambush-audio`（挑战战斗、结束与后来进入）、`mother-controls`／`mother-guest`／`mother-together`（三种入场方式、两阶段横穿房间、关闭聊天及控制冷却恢复）、`reconnect-motion`（重连后普通输入横穿房间）、`dice-floor`（原生踩踏、变暗与震动、再次入房不重播）、`room-followers`（跟班重复进入已有房间）、`chain-traps`（真实陵墓刺球锚点及锁链画面）、`secret-exit-doors`（正常走水层入口、汇合与返回门方向）。同一组进程复用连接；第三方组合通过 `--mod`、`--host-mod`、`--client-mod` 指定，资料由工具保护并恢复。`mirror-camera` 和 `room-entry` 分别检查大房间／镜面移动与已加载房间的返回入口；`client-room-entry` 检查客机通过 `StartRoomTransition`／`ChangeRoom` 返回常驻房间的入口，并跨层重复 |
 | 联机挑战 | [run_lan_challenges.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_lan_challenges.py)：`--suite access`／`gameplay`／`hud` 分别检查资格、规则、2–4 人显示与普通会话恢复 |
 | 全队死亡结算 | [run_game_over.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_game_over.py)：指定 `--host`、`--client`、`--output`，可加 `--record --heap-check`；同一双端进程检查参孙魂石、狂怒与里参孙的最后存活者死亡、普通死亡对照、额外生命、结算停留和原版退出。离线对应 `net.ending-events` 与 `net.ending-liveness` |
+| 动画跳过 | [run_animation_skip.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_animation_skip.py)：指定 `--host`、`--client`、`--build`、`--output`，可加 `--record --heap-check`；同一组主客机检查单独观看 Boss、多人同意、键盘 Space／Enter、手柄确认、换层目的地及控制恢复。离线对应 `bridge.animation-skip`、`bridge.lifecycle-messages`、`presentation.vote-progress`、`bridge.restart`、`core.intro-barrier` 和 `native.intro-completion` |
 | 全队重开投票 | [run_restart.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_restart.py)：指定 `--host`、`--client`、`--output`，可加 `--record --heap-check`；同一双端进程连续检查结算确认、手柄组合键、键盘长按 R，交替由主客机发起，核对未全票不重开、连接／选角保留和旧背包清除。键盘检查独占前台焦点；离线对应 `bridge.restart` 与 `net.restart` |
 | 通关返回选人 | [run_network_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_network_engine.py) 配合 `--script tests/state_return_lobby.lua --completion "LAN_NETWORK RETURN_LOBBY PASS two endings" --frontend --menu-start --virtual-input`，指定隔离双端、输出目录和独立端口，可加 `--heap-check --native-record-both`；同一房间连续播放两次原生结局，检查自动显示选人页、重新准备、换角色和三次开局。此夹具直接请求结局，不计为 Boss／路线验收；离线对应 `net.return-lobby` 与 `bridge.challenge_menu` |
 | 受伤移动与药丸归属 | [state_hurt_and_pills.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_hurt_and_pills.lua) 配合 `run_network_engine.py --frontend --menu-start --no-luadebug --virtual-input --latency-ms 40 --completion "PASS hurt movement and pill ownership" --native-record-both --heap-check`，指定隔离双端、输出目录与独立端口，由 `ProtectedLabs` 保护和恢复资料。复用同一组进程验证攻击蝇接触伤害、直接受伤期间的本机移动预测，以及重复速度下降、Bad Trip、I Found Pills、复古视野、麻痹、主机速度提升和分房大颗药丸；断言控制锁定、角色动作、提示文字和屏幕效果的归属，核对双端画面。离线对应 `bridge.motion-intervals` |
@@ -298,7 +354,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 逐帧证据保存在 `host-events.log` 与 `client-events.log`，游戏日志只记录用例边界和问题；报告按单个用例读取证据，保存结论与原始日志哈希，避免长批次汇总占用整批日志的内存。画面采集默认间隔 1000 ms；闪光等短暂效果可使用 `--record --frame-ms 33`，结合实际帧时间人工复核。
 
-每轮冻结 DLL、生成夹具、配方和判定器；复测使用新输出目录。修正判定器后重审已有原始记录，应保留原判定、变更原因、前后哈希及新的审阅报告。触发前提不成立、夹具错误、缺少一端或退出未完成均保留为未通过，不直接归因于道具不兼容。更新 [`item_audit_findings.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_audit_findings.json) 后用 `python tools/render_item_compatibility.py` 生成清单，`--check` 检查一致性；专项结果只写入 `docs/history/` 或 PR。
+每轮冻结 DLL、生成夹具、配方和判定器；复测使用新输出目录。修正判定器后重审已有原始记录，应保留原判定、变更原因、前后哈希及新的审阅报告。触发前提不成立、夹具错误、缺少一端或退出未完成均保留为未通过，不直接归因于道具不兼容。更新 [`item_audit_findings.json`](https://github.com/BMingSY/isaac-lan/blob/main/tests/fixtures/item_audit_findings.json) 后用 `python tools/render_item_compatibility.py` 生成清单，`--check` 检查一致性；专项结果默认留在本地测试产物，用户明确要求入库时才写入 `docs/history/` 或 PR。
 
 ## 隔离执行与记录
 
@@ -318,13 +374,36 @@ python3 tools/validate_replica.py --cases gameplay normal \
   --output "$ISAAC_RUN_OUTPUT" --latency-ms 75 --ffmpeg "$ISAAC_FFMPEG"
 ```
 
-示例的 `gameplay` 串联兼容的输入、复活、蓄力、沙漏与镜头场景，`normal` 使用菜单和正常手柄输入。它们是局部检查入口，不能替代上表全部 Boss 与结局覆盖。
+示例的 `gameplay` 串联兼容的输入、复活、蓄力、沙漏与镜头场景，`normal` 使用菜单和正常手柄输入。它们是局部检查入口，不能替代按版本规模选定的基础、路线或 Boss 覆盖。
 
 现有工具并未自动合并所有分组，执行前仍需安排进程复用。`--latency-ms 75` 为两个方向各附加 75 ms，不能等同所有公网／frp 情况；`--goodtrip` 可传入原样 Mod 目录。
 
 独立分组须使用独立目录、存档、进程、端口和输出；延迟中继还占用相邻端口，例如两组选 30220／30230。前台键盘步骤顺序执行。
 
 画面由隔离进程渲染缓冲区采集，遮挡窗口也可记录。按本轮范围对照双端的战斗、过门、Boss 阶段和换层画面；显示专项另检查镜头、身体／蓄力和演出归属。采样间隙和黑帧候选不能证明没有短暂闪屏。操作与录像归档见 [`tools/NORMAL_GAMEPLAY.md`](https://github.com/BMingSY/isaac-lan/blob/main/tools/NORMAL_GAMEPLAY.md)，性能和堆检查见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。
+
+[鲁多维科科技与硫磺火组合夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_ludovico_rooms.lua)使用 `run_special_routes.py --case ludovico-rooms --case room-followers --heap-check --record` 做定向回归。复用同一组主客机，检查客机持有激光环时的分房、新房间与已加载房间进入、双向汇合、重复进入、异房发起换层及移除道具后再次入房的清理；同时核对两端实体数量、归属、伤害和画面。
+
+## 双开手动测试
+
+在 WSL 中使用 [run_manual_dual.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_manual_dual.py)。常用参数只有主客机角色与额外往返延迟：
+
+```sh
+python3 tools/run_manual_dual.py --characters 以撒 阿撒泻勒 --latency-ms 80
+python3 tools/run_manual_dual.py --launch-only
+python3 tools/run_manual_dual.py --status
+python3 tools/run_manual_dual.py --stop
+```
+
+角色顺序为主机、客机，可用中文名、英文枚举名或数字 PlayerType；`--list-characters` 列出名称，实际可选角色以各端隔离存档为准。选择阿撒泻勒时，工具在备份后临时解锁该角色，收尾时恢复原隔离存档。默认双以撒、0 ms。此工具的 `--latency-ms 80` 表示两方向各增加 40 ms，与自动验收入口的单程参数不同；实际 Ping 还包括本机调度开销。
+
+默认复用已有手动目录 `host-001`／`client-001`，启动前增量构建 `build-win32`、备份配置与存档，临时关闭自动验收夹具。其他位置用 `--host`、`--client`、`--build` 指定。工具只接受带 `.isaac-lan-lab` 标记且未运行的独立副本；首次准备见上节。已有第三方 Mod 的启用状态保留。
+
+双端窗口左右排列，启用音乐并把零音量恢复为 20%；通过正常菜单按键进入第一存档，再自动联机、按所选角色开始随机种子的普通模式，确认实际角色后撤掉启动钩子，将控制交给用户。后台保留延迟中继，不产生移动或战斗输入。关闭两窗口后保存日志并恢复启动前的隔离资料，本次手测进度不覆盖原隔离存档。`--stop` 仅关闭本工具记录且身份匹配的进程，后台异常退出后也可用它尝试恢复。
+
+只需启动两个窗口时使用 `--launch-only`：等待双端菜单出现后交回操作，不选择存档、解锁角色或自动联机开局，也不启用延迟中继；此模式的 `--latency-ms` 必须为 0。窗口排列、资料备份和关闭后的恢复与默认模式相同。
+
+运行记录默认保存在 `test-runs/manual-dual/`；`--status`／`--stop` 默认选择最近一次成功启动，也可通过 `--session` 指定目录。仓库 skill 位于 [isaac-dual-test/SKILL.md](https://github.com/BMingSY/isaac-lan/blob/main/.agents/skills/isaac-dual-test/SKILL.md)。离线用例为 [test_manual_dual.py](https://github.com/BMingSY/isaac-lan/blob/main/tests/test_manual_dual.py)，覆盖角色解析、双端交接、重复启动、失败清理和资料恢复。
 
 ## 修改后的契约检查
 
@@ -336,4 +415,4 @@ python3 tools/validate_replica.py --cases gameplay normal \
 | 会话／楼层 | 准备屏障、事件先于新视图、重连位置、回退清理 |
 | 表现 | 本机归属、原版多人栏位、连续转场画面 |
 
-实机 runner 共用 [`lab_profile.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_profile.py) 备份和恢复带归属标记的资料。恢复前确认进程已退出且备份哈希完整，恢复后逐文件核对；失败结果和原始证据保留在本轮测试产物中。发布验收摘要保存到 `docs/history/`，记录候选及哈希、实际范围、逐项结果、未决问题、重启和恢复；不把过程或成绩追加进设计文档。
+实机 runner 共用 [`lab_profile.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/lab_profile.py) 备份和恢复带归属标记的资料。恢复前确认进程已退出且备份哈希完整，恢复后逐文件核对；失败结果和原始证据保留在本轮测试产物中。发布验收摘要默认保存在本地测试产物，不随版本准备提交，也不单独提 PR 或合并；用户明确要求入库时才保存到 `docs/history/`。摘要记录候选及哈希、实际范围、逐项结果、未决问题、重启和恢复，不把过程或成绩追加进设计文档。

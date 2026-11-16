@@ -1,6 +1,7 @@
 #pragma once
 #include "net/bulk_transfer.h"
 #include "net/compression.h"
+#include "net/world_pacing.h"
 #include <chrono>
 #include <deque>
 #include <optional>
@@ -22,9 +23,10 @@ class WorldTransfer {
         bool complete = false;
         Clock::time_point started = Clock::now();
         std::uint32_t revision = 0;
+        Clock::time_point transmitted = started;
     };
     struct Totals {
-        std::uint64_t snapshots = 0, deltas = 0, raw = 0, wire = 0, full = 0;
+        std::uint64_t snapshots = 0, deltas = 0, raw = 0, wire = 0, full = 0, compared = 0;
     } totals;
     double compressMs = 0, prefixMs = 0, expandMs = 0;
     struct Trace {
@@ -47,6 +49,10 @@ class WorldTransfer {
     bool sendingDelta = false, receivingDelta = false, sendingStable = false,
          receivingStable = false;
     Clock::time_point fullAt{}, baselineAt{}, sentAt{};
+    WorldPacing pacing;
+    int minimumLatency = 0;
+    int networkLatency = -1;
+    unsigned sinceComparison = 0;
 
   public:
     void resetSender() {
@@ -61,6 +67,8 @@ class WorldTransfer {
         pending.reset();
         sending.reset();
         sentAt = {};
+        pacing = {};
+        sinceComparison = 0;
     }
     void resetReceiver() {
         decoded.clear();
@@ -69,6 +77,15 @@ class WorldTransfer {
     }
     void publish(WorldState value) {
         pending = std::move(value);
+    }
+    bool newerThan(std::uint32_t tick) const {
+        return pending && pending->tick > tick;
+    }
+    double bytesPerSecond() const {
+        return pacing.bytesPerSecond();
+    }
+    void abandon(std::uint32_t tick) {
+        std::erase_if(flight, [tick](const auto& value) { return value.tick == tick; });
     }
     bool hasBaseline() const {
         return baseline.has_value();
@@ -94,6 +111,29 @@ class WorldTransfer {
     std::size_t inFlightStates() const {
         return flight.size();
     }
+    bool permitDatagram(std::size_t bytes) {
+        return pacing.consume(bytes, Clock::now());
+    }
+    void observeLatency(int milliseconds) {
+        networkLatency = milliseconds;
+    }
+    void accountWire(std::uint32_t tick, std::size_t bytes, bool reliable = false) {
+        for (auto& value : flight)
+            if (value.tick == tick)
+                value.wireBytes = bytes;
+        if (recovery && recovery->tick == tick)
+            recovery->wireBytes = bytes;
+        if (reliable)
+            pacing.reserve(bytes, Clock::now());
+    }
+    void transmitted(std::uint32_t tick) {
+        const auto now = Clock::now();
+        for (auto& value : flight)
+            if (value.tick == tick)
+                value.transmitted = now;
+        if (recovery && recovery->tick == tick)
+            recovery->transmitted = now;
+    }
     std::size_t worldBytes() const {
         std::size_t size = 0;
         for (const auto* value : {&pending, &sending, &assembling})
@@ -114,12 +154,17 @@ class WorldTransfer {
         // for replacements without making the outstanding byte budget larger.
         return std::min(maxInFlightStates, 2 * pipeline);
     }
-    bool canSend(int minimumLatency) const {
+    bool canCapture(int latency, bool replacing = false) const {
+        if (pending || sending)
+            return false;
+        // A replacement retires the unfinished view before sending. Its byte
+        // budget must not prevent the producer from supplying that replacement.
+        if (replacing)
+            return true;
         if (!flight.empty() && Clock::now() - flight.front().started >= lostStateAge)
-            return pending.has_value();
-        return sending || (pending && flight.size() < window(minimumLatency) &&
-                           inFlightBytes() < maxInFlightBytes &&
-                           cachedBytes() + pending->bytes.capacity() <= maxCachedBytes);
+            return true;
+        return flight.size() < window(latency) && inFlightBytes() < maxInFlightBytes &&
+               cachedBytes() < maxCachedBytes;
     }
     bool acknowledge(std::uint32_t epoch, std::uint32_t tick) {
         if (epoch < sendEpoch)
@@ -132,6 +177,11 @@ class WorldTransfer {
             baseline = std::move(recovery);
             recovery.reset();
             baselineAt = Clock::now();
+            pacing.acknowledge(
+                baseline->wireBytes,
+                std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted)
+                    .count(),
+                networkLatency, baselineAt);
             while (!flight.empty() && flight.front().tick <= tick)
                 flight.pop_front();
             return true;
@@ -145,6 +195,10 @@ class WorldTransfer {
             return false;
         baseline = *found;
         baselineAt = Clock::now();
+        pacing.acknowledge(
+            baseline->wireBytes,
+            std::chrono::duration<double, std::milli>(baselineAt - baseline->transmitted).count(),
+            networkLatency, baselineAt);
         flight.erase(flight.begin(), std::next(found));
         return true;
     }
@@ -156,6 +210,7 @@ class WorldTransfer {
             recovery = flight.back();
     }
     std::optional<Writer> next(StateCompression& codec, int minimumLatency) {
+        this->minimumLatency = minimumLatency;
         if (!sending && pending) {
             // Reduce publication frequency when receipts fall behind. Keep
             // parity groups intact instead of throttling individual datagrams.
@@ -169,7 +224,8 @@ class WorldTransfer {
             // immediately would flood a congested path with newer snapshots.
             while (!flight.empty() && Clock::now() - flight.front().started >= lostStateAge)
                 flight.pop_front();
-            if (flight.size() >= window(minimumLatency) || inFlightBytes() >= maxInFlightBytes ||
+            if (!pacing.ready(datagram::mtu, Clock::now()) ||
+                flight.size() >= window(minimumLatency) || inFlightBytes() >= maxInFlightBytes ||
                 cachedBytes() + pending->bytes.capacity() > maxCachedBytes)
                 return {};
             sending = std::move(pending);
@@ -179,16 +235,18 @@ class WorldTransfer {
             sentAt = began;
             sendingStable = !sending->stable.empty();
             if (sendingStable) {
-                Writer bundle(Message::world);
+                Writer bundle(Message::world, sizeof(std::uint32_t) + sending->stable.size() +
+                                                  sending->bytes.size());
+                bundle.bytes.clear(); // Payload only, without a message tag.
                 bundle.blob(sending->stable);
                 bundle.bytes.insert(bundle.bytes.end(), sending->bytes.begin(),
                                     sending->bytes.end());
-                sending->bytes.assign(bundle.bytes.begin() + 1, bundle.bytes.end());
+                sending->bytes = std::move(bundle.bytes);
                 sending->stable.clear();
             }
             auto raw = std::make_shared<const std::vector<std::uint8_t>>(std::move(sending->bytes));
-            auto full = codec.compress(*raw);
-            const auto fullSize = full.size();
+            std::vector<std::uint8_t> full;
+            std::size_t fullSize = 0;
             sendingDelta = false;
             sendingBase = 0;
             prefixMs = 0;
@@ -199,17 +257,36 @@ class WorldTransfer {
                 auto delta = codec.compress(*raw, *baseline->bytes);
                 prefixMs =
                     std::chrono::duration<double, std::milli>(Clock::now() - prefixBegan).count();
-                if (delta.size() < full.size()) {
-                    full = std::move(delta);
-                    sendingDelta = true;
-                    sendingBase = baseline->tick;
+                full = std::move(delta);
+                sendingDelta = true;
+                sendingBase = baseline->tick;
+            }
+            // Usually the acknowledged prefix wins. Sample the alternative
+            // periodically, and immediately after reset or poor compression.
+            constexpr unsigned comparisonInterval = 30;
+            constexpr std::size_t poorPrefixNumerator = 3, poorPrefixDenominator = 4;
+            const bool compare =
+                !sendingDelta || !sinceComparison || sinceComparison >= comparisonInterval ||
+                full.size() >= raw->size() * poorPrefixNumerator / poorPrefixDenominator;
+            if (compare) {
+                auto independent = codec.compress(*raw);
+                fullSize = independent.size();
+                if (!sendingDelta || independent.size() <= full.size()) {
+                    full = std::move(independent);
+                    sendingDelta = false;
+                    sendingBase = 0;
                 }
+                sinceComparison = 1;
+            } else {
+                ++sinceComparison;
             }
             if (!sendingDelta)
                 fullAt = began;
             totals.raw += raw->size();
             trace = {sending->tick, sendingBase, raw->size(), full.size(), fullSize, sendingDelta};
             totals.full += fullSize;
+            if (fullSize)
+                totals.compared += full.size();
             totals.wire += full.size();
             ++totals.snapshots;
             totals.deltas += sendingDelta;
@@ -222,7 +299,9 @@ class WorldTransfer {
         if (!sending)
             return {};
         const auto& value = *sending;
-        Writer w(Message::world);
+        constexpr auto headerBytes =
+            1 + 7 * sizeof(std::uint32_t) + 4 + maxPlayers * sizeof(std::uint32_t);
+        Writer w(Message::world, headerBytes + value.bytes.size());
         w.u32(value.tick);
         w.u32(sent);
         w.u32(value.bytes.size());
@@ -274,17 +353,14 @@ class WorldTransfer {
         }
         if (!assembling || assembling->tick != tick || total != size)
             throw std::runtime_error("Invalid world state chunk");
-        auto bytes = r.blob(maxWorldSize + StateCompression::headerSize);
+        const auto bytes = r.blobView(maxWorldSize + StateCompression::headerSize);
         if (offset || bytes.size() != total)
             throw std::runtime_error("Invalid datagram world size");
-        assembling->bytes = std::move(bytes);
         r.finish();
         if (lastDecoded && tick <= *lastDecoded) {
             assembling.reset();
             return {};
         }
-        if (assembling->bytes.size() != total)
-            return {};
         const auto began = Clock::now();
         if (receivingDelta) {
             const auto found = std::find_if(decoded.begin(), decoded.end(), [&](const auto& value) {
@@ -294,9 +370,9 @@ class WorldTransfer {
                 assembling.reset();
                 return {};
             }
-            assembling->bytes = codec.expand(assembling->bytes, *found->bytes);
+            assembling->bytes = codec.expand(bytes, *found->bytes);
         } else
-            assembling->bytes = codec.expand(assembling->bytes);
+            assembling->bytes = codec.expand(bytes);
         expandMs = std::chrono::duration<double, std::milli>(Clock::now() - began).count();
         decoded.push_back(
             {tick, std::make_shared<const std::vector<std::uint8_t>>(assembling->bytes)});

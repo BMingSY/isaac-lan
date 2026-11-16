@@ -7,9 +7,9 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from progress_fixture import MAGIC, checksum
+from progress_fixture import AZAZEL_ACHIEVEMENT, MAGDALENE_ACHIEVEMENT, MAGIC, checksum
 from testing.challenges import completion_evidence
-from testing.profiles import profile_fixture
+from testing.profiles import azazel_profile, magdalene_profile, profile_fixture
 
 
 def baseline():
@@ -53,6 +53,27 @@ def test_corrupt_or_unsupported_profiles_are_rejected():
         struct.pack_into("<I", corrupt, len(corrupt) - 4, checksum(corrupt[16:-4]))
         with pytest.raises(ValueError):
             profile_fixture(corrupt)
+
+
+@pytest.mark.parametrize(
+    "prepare,identifier",
+    [(azazel_profile, AZAZEL_ACHIEVEMENT), (magdalene_profile, MAGDALENE_ACHIEVEMENT)],
+)
+def test_selected_character_unlock_preserves_other_progress(prepare, identifier):
+    source = bytearray(baseline())
+    source[32 + identifier] = 0
+    struct.pack_into("<I", source, len(source) - 4, checksum(source[16:-4]))
+    source = bytes(source)
+    result = prepare(source)
+    assert result[32 + identifier] == 1
+    assert result[: 32 + identifier] == source[: 32 + identifier]
+    assert result[33 + identifier : -4] == source[33 + identifier : -4]
+    assert struct.unpack_from("<I", result, len(result) - 4)[0] == checksum(result[16:-4])
+    assert prepare(result) == result
+    corrupt = bytearray(source)
+    corrupt[32 + identifier] = 1
+    with pytest.raises(ValueError, match="checksum"):
+        prepare(corrupt)
 
 
 @pytest.mark.parametrize("ordinal,expected", [(0, 3), (1, 3), (2, 2), (3, 1)])

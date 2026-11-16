@@ -27,6 +27,68 @@ local prediction =
     assert(_IsaacLanPrediction, "Native prediction bootstrap did not publish its API")
 local right, left, stop = Vector(1, 0), Vector(-1, 0), Vector(0, 0)
 local origin, speed, dt = Vector(100, 200), 1, 1 / 60
+-- A stream of fresh local samples does not prove the host is still accepting
+-- them. A sustained blackout must stop speculative travel, not just evict history.
+local stalled = prediction.new(origin)
+stalled:confirm(origin, 0, stop, 0)
+for sequence = 1, 60 do
+    stalled:step(right, sequence, speed, dt)
+end
+local heldPosition = stalled.display
+for sequence = 61, 240 do
+    close(stalled:step(right, sequence, speed, dt), heldPosition)
+end
+assert(stalled.velocity:LengthSquared() == 0, "Blackout retained speculative inertia")
+stalled:confirm(heldPosition, 239, stop, 120)
+for sequence = 241, 250 do
+    stalled:step(right, sequence, speed, dt)
+end
+assert(stalled.display.X > heldPosition.X, "Fresh authority did not resume local walking")
+-- A higher render rate can evict history before the time budget is exhausted.
+-- New host ticks with the same old input ACK must not refund that evicted time.
+for _, hz in ipairs({ 30, 60, 144, 500 }) do
+    local bounded = prediction.new(origin)
+    bounded:confirm(origin, 0, stop, 0)
+    for sequence = 1, hz do
+        bounded:step(right, sequence, speed, 1 / hz)
+    end
+    bounded:confirm(origin, 0, stop, 1)
+    bounded:step(right, hz + 1, speed, 1 / hz)
+    assert(bounded.velocity:LengthSquared() == 0, "Repeated ACK renewed evicted prediction time")
+    bounded:confirm(origin, hz + 1, stop, 2)
+    bounded:step(right, hz + 2, speed, 1 / hz)
+    assert(bounded.velocity.X > 0, "Fresh ACK failed to retire evicted prediction time")
+end
+-- A late authority offset must not turn into a one-frame jump, including when
+-- subsequent confirmations keep arriving during recovery. Input remains live.
+for _, error in ipairs({ 12, 24, 48, 80 }) do
+    local recovering = prediction.new(Vector(0, 0))
+    recovering:confirm(Vector(error, 0), 0, Vector(0, 0), 1)
+    local previous = recovering.display.X
+    for frame = 1, 120 do
+        if frame % 2 == 0 then
+            recovering:confirm(Vector(error, 0), frame - 1, Vector(0, 0), frame)
+        end
+        local current = recovering:step(stop, frame, speed, dt, true).X
+        assert(
+            current >= previous and current - previous <= 2.00001,
+            "Late authority correction exceeded its display speed budget"
+        )
+        previous = current
+    end
+    assert(math.abs(previous - error) < 0.01, "Bounded correction never converged")
+end
+-- The bound is a vector distance per second, independent of render rate.
+for _, rate in ipairs({ 30, 60, 120 }) do
+    local recovering = prediction.new(Vector(0, 0))
+    recovering:confirm(Vector(48, 36), 0, stop, 1)
+    for frame = 1, rate * 2 do
+        local previous = recovering.display
+        local current = recovering:step(stop, frame, speed, 1 / rate, true)
+        assert((current - previous):LengthSquared() <= (120 / rate + 0.00001) ^ 2)
+    end
+    assert((recovering.display - Vector(48, 36)):LengthSquared() < 0.0001)
+end
 -- Measured J460 web half tick: friction precedes both movement and walking.
 local web = prediction.new(Vector(310.66775512695, 280))
 web:reset(web.position, 0, Vector(2.4830493927002 * 60, 0))
@@ -45,6 +107,9 @@ assert(p.velocity.X < initialVelocity, "Local turn waited for the next sample")
 -- stopping instantly and being dragged onward by late authority positions.
 for sequence = 2, 30 do
     p:step(right, sequence, speed, dt)
+    if sequence == 20 then
+        p:confirm(p.position, sequence, p.velocity, sequence)
+    end
 end
 local beforeRelease = p.display.X
 local movingVelocity = p.velocity.X
@@ -165,6 +230,31 @@ end
 assert(#p.pending <= 120, "Missing acknowledgements grew unbounded history")
 print("PASS same-ack host ticks, stale ticks, authoritative velocity and bounded input replay")
 
+-- A delayed packet may cover more than the teleport threshold while the guest
+-- has already predicted that ordinary walk. Keep the still-unacknowledged path
+-- and reconcile from the displayed point instead of snapping back to the packet.
+p = prediction.new(origin)
+p:confirm(origin, 0, stop, 0)
+local delayedPosition, delayedVelocity
+for sequence = 1, 28 do
+    p:step(right, sequence, 2, dt)
+    if sequence == 22 then
+        delayedPosition, delayedVelocity = p.position, p.velocity
+    end
+end
+local beforeDelayed = p.display
+assert((delayedPosition - origin):LengthSquared() > 96 ^ 2)
+p:confirm(delayedPosition, 22, delayedVelocity, 11)
+close(p.display, beforeDelayed)
+assert(#p.pending == 6, "Delayed walking confirmation discarded unacknowledged input")
+close(p:step(stop, 28, speed, 0), beforeDelayed)
+-- A genuine displacement away from both the previous authority and the
+-- predicted walk must still discard that path immediately.
+p:confirm(Vector(600, 400), 120, stop, 60)
+close(p:step(stop, 121, speed, dt), Vector(600, 400))
+assert(#p.pending == 1)
+print("PASS sparse walking confirmations preserve movement and true teleports reset it")
+
 -- Captured from J460 player updates at 30 Hz: starts, releases, reversals and
 -- perpendicular turns at MoveSpeed 0.6, 1, 1.3 and 2. Velocities in the fixture
 -- are native units per half tick; the predictor stores units per second.
@@ -178,6 +268,7 @@ for line in samples:lines() do
     end
     local tick, x, y, vx, vy, dx, dy, moveSpeed = table.unpack(values)
     if previousTick and tick == previousTick + 1 and moveSpeed == previousSpeed then
+        p:confirm(p.position, previousTick, p.velocity, previousTick)
         p:step(Vector(dx, dy), tick, moveSpeed, 1 / 30)
         assert(
             (p.position - Vector(x, y)):LengthSquared() < 0.002 ^ 2,

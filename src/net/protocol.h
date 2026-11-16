@@ -15,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 45;
+constexpr std::uint16_t protocolVersion = 55;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -54,7 +54,8 @@ enum class Message : std::uint8_t {
     restart,
     returnLobby,
     inputEdges,
-    choicePreview
+    choicePreview,
+    syncLatency
 };
 constexpr std::size_t maxIntegrationSize = 2048;
 constexpr std::size_t maxCommunicationSize = 3072;
@@ -147,9 +148,20 @@ struct Frame {
     std::uint8_t connected = 15;
     bool operator==(const Frame&) const = default;
 };
-struct Progress {
+struct ProgressValues {
     std::array<std::uint8_t, 642> achievements{};
     std::array<std::uint32_t, 523> counters{};
+    bool operator==(const ProgressValues&) const = default;
+};
+struct ProgressAwards {
+    std::array<std::uint8_t, 642> achievements{};
+    std::array<std::uint8_t, 523> counters{};
+    bool operator==(const ProgressAwards&) const = default;
+};
+struct Progress : ProgressValues {
+    // Monotonic awards earned in this run, including repeated native awards
+    // whose values were already present in the authority's starting profile.
+    ProgressAwards earned;
     bool operator==(const Progress&) const = default;
 };
 namespace ending {
@@ -226,6 +238,7 @@ struct LobbyAccess {
 // Begin the game's native transition, rather than discovering a floor change
 // in a snapshot after the host has finished loading it.
 struct Stage {
+    static constexpr std::size_t maxDepartureAnimationLength = 64, maxDepartureAnimations = 16;
     std::uint32_t epoch = 0;
     std::uint8_t level = 0, type = 0, animation = 0;
     bool same = false;
@@ -244,6 +257,14 @@ struct Stage {
     std::uint8_t cinematic = 0;
     // Authoritative departure context for native next-floor selection.
     std::int16_t sourceRoom = 0;
+    // Opaque presentation names captured at the authoritative departure barrier.
+    std::vector<std::string> departureAnimations{};
+    bool validDepartureAnimations() const {
+        return departureAnimations.size() <= maxDepartureAnimations &&
+               std::all_of(
+                   departureAnimations.begin(), departureAnimations.end(),
+                   [](const auto& name) { return name.size() <= maxDepartureAnimationLength; });
+    }
     bool operator==(const Stage&) const = default;
 };
 // A local Mod's native room command, not a client-authored world snapshot.
@@ -321,13 +342,19 @@ class Writer {
         u32(static_cast<std::uint32_t>(value.size()));
         bytes.insert(bytes.end(), value.begin(), value.end());
     }
-    void progress(const std::optional<Progress>& p) {
+    void progress(const std::optional<Progress>& p, bool withEarned = true) {
         u8(p.has_value());
         if (p) {
             for (auto n : p->achievements)
                 u8(n);
             for (auto n : p->counters)
                 u32(n);
+            if (withEarned) {
+                for (auto n : p->earned.achievements)
+                    u8(n);
+                for (auto n : p->earned.counters)
+                    u8(n);
+            }
         }
     }
     void access(const LobbyAccess& value) {
@@ -408,15 +435,20 @@ class Reader {
             throw std::runtime_error("Invalid input pointer");
         return out;
     }
-    std::vector<std::uint8_t> blob(std::size_t maximum = maxSnapshotSize) {
+    // Borrowed until the caller releases the containing packet.
+    std::span<const std::uint8_t> blobView(std::size_t maximum = maxSnapshotSize) {
         const auto n = u32();
         if (n > maximum || n > bytes.size() - cursor)
             throw std::runtime_error("Invalid snapshot length");
-        std::vector<std::uint8_t> out(bytes.begin() + cursor, bytes.begin() + cursor + n);
+        const auto out = bytes.subspan(cursor, n);
         cursor += n;
         return out;
     }
-    std::optional<Progress> progress() {
+    std::vector<std::uint8_t> blob(std::size_t maximum = maxSnapshotSize) {
+        const auto value = blobView(maximum);
+        return {value.begin(), value.end()};
+    }
+    std::optional<Progress> progress(bool withEarned = true) {
         const auto present = u8();
         if (present > 1)
             throw std::runtime_error("Invalid progression state");
@@ -430,6 +462,15 @@ class Reader {
         }
         for (auto& n : out.counters)
             n = u32();
+        if (withEarned) {
+            for (auto& n : out.earned.achievements) {
+                n = u8();
+                if (n > 1)
+                    throw std::runtime_error("Invalid earned achievement flag");
+            }
+            for (auto& n : out.earned.counters)
+                n = u8();
+        }
         return out;
     }
     LobbyAccess access() {

@@ -1,4 +1,5 @@
 #include "engine/entity_fields.h"
+#include "engine/lua_capture_arrays.h"
 #include "core/state_codec.h"
 #include "engine/versions/common/entity_fields.h"
 #include "runtime/session.h"
@@ -85,16 +86,21 @@ const Plan& checkedPlan(lua_State* L, int index) {
         throw std::runtime_error("Invalid entity field plan handle");
     return plan;
 }
-Address checkedEntity(lua_State* L, const Plan& plan) {
+Address checkedEntity(lua_State* L) {
     if (api.type(L, 1) != LuaType::userdata || api.rawLength(L, 1) != 8)
         throw std::runtime_error("Expected borrowed entity Sprite");
     const auto wrapper = static_cast<const Address*>(api.toUserdata(L, 1));
     if (wrapper[1] < bindings.layout.entity.sprite)
         throw std::runtime_error("Invalid entity Sprite");
     const auto entity = wrapper[1] - bindings.layout.entity.sprite;
-    if (at<unsigned>(entity, bindings.layout.entity.type) != plan.type ||
-        !at<bool>(entity, bindings.layout.entity.active))
-        throw std::runtime_error("Entity field plan type or lifetime mismatch");
+    if (!at<bool>(entity, bindings.layout.entity.active))
+        throw std::runtime_error("Entity is no longer active");
+    return entity;
+}
+Address checkedEntity(lua_State* L, const Plan& plan) {
+    const auto entity = checkedEntity(L);
+    if (at<unsigned>(entity, bindings.layout.entity.type) != plan.type)
+        throw std::runtime_error("Entity field plan type mismatch");
     return entity;
 }
 Address checkedSprite(lua_State* L) {
@@ -120,13 +126,24 @@ void captureText(lua_State* L, Address value) {
         capacity <= bindings.layout.string.inlineCapacity ? value : at<Address>(value, 0);
     api.pushLString(L, reinterpret_cast<const char*>(address), size);
 }
-void capture(lua_State* L, const Plan& plan, unsigned index, Address entity, unsigned frame) {
+void captureNumbers(lua_State* L, const properties::Field& field, Address entity, int memo) {
+    const auto count = field.kind == Kind::color ? std::size(properties::colorOffsets) : 2;
+    std::array<float, std::size(properties::colorOffsets)> values{};
+    for (unsigned i = 0; i < count; ++i) {
+        const auto offset =
+            field.kind == Kind::color ? properties::colorOffsets[i] : i * sizeof(float);
+        values[i] = at<float>(entity, field.offset + offset);
+    }
+    lua::pushCaptureArray(L, api, std::span<const float>(values).first(count), memo);
+}
+void capture(lua_State* L, const Plan& plan, unsigned index, Address entity, unsigned frame,
+             int memo = 0) {
     const auto& node = plan.nodes[index];
     if (node.array) {
         api.createTable(L, node.count, 0);
         auto child = index + 1;
         for (unsigned i = 1; i <= node.count; ++i) {
-            capture(L, plan, child, entity, frame);
+            capture(L, plan, child, entity, frame, memo);
             api.rawSetI(L, -2, i);
             child = plan.nodes[child].next;
         }
@@ -148,11 +165,8 @@ void capture(lua_State* L, const Plan& plan, unsigned index, Address entity, uns
             api.pushBoolean(L, at<bool>(entity, field.offset));
             break;
         case Kind::vector:
-            api.createTable(L, 2, 0);
-            for (unsigned i = 0; i < 2; ++i) {
-                api.pushNumber(L, at<float>(entity, field.offset + i * sizeof(float)));
-                api.rawSetI(L, -2, i + 1);
-            }
+        case Kind::color:
+            captureNumbers(L, field, entity, memo);
             break;
         case Kind::flags:
             api.pushInteger(L,
@@ -161,13 +175,6 @@ void capture(lua_State* L, const Plan& plan, unsigned index, Address entity, uns
         case Kind::frame:
             api.pushInteger(
                 L, std::bit_cast<std::int32_t>(frame - at<unsigned>(entity, field.offset)));
-            break;
-        case Kind::color:
-            api.createTable(L, std::size(properties::colorOffsets), 0);
-            for (unsigned i = 0; i < std::size(properties::colorOffsets); ++i) {
-                api.pushNumber(L, at<float>(entity, field.offset + properties::colorOffsets[i]));
-                api.rawSetI(L, -2, i + 1);
-            }
             break;
         case Kind::text:
             captureText(L, entity + field.offset);
@@ -246,18 +253,18 @@ void capturePacked(FieldWriter& writer, const Plan& plan, unsigned index, Addres
         }
     }
 }
+void restoreSize(Address entity, float value) {
+    bindings.restoreSize(image, entity, value);
+}
 void writeReal(Address entity, const properties::Field& field, float value) {
     using SetFloat = void(__attribute__((thiscall))*)(void*, float);
     switch (field.write) {
     case Write::direct:
         at<float>(entity, field.offset) = value;
         break;
-    case Write::size: {
-        using SetSize = void(__cdecl*)(void*, float);
-        reinterpret_cast<SetSize>(image + bindings.entry.entityLuaSetSize)(
-            reinterpret_cast<void*>(entity), value);
+    case Write::size:
+        restoreSize(entity, value);
         break;
-    }
     case Write::damage:
         reinterpret_cast<SetFloat>(
             at<Address>(at<Address>(entity, 0), bindings.layout.entity.damageVtableSlot))(
@@ -474,21 +481,31 @@ void apply(const Plan& plan, Address entity, const Values& values) {
         }
     }
 }
+int entitySize(lua_State* L) {
+    char error[192]{};
+    try {
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas restore entity size");
+        const auto entity = checkedEntity(L);
+        const auto value = real(L, 2);
+        restoreSize(entity, value);
+        api.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& exception) {
+        std::snprintf(error, sizeof(error), "%s", exception.what());
+    }
+    api.pushString(L, error);
+    return api.error(L);
+}
 int npcBoss(lua_State* L) {
     char error[192]{};
     try {
         if (!runtime::replica() || api.type(L, 2) != LuaType::boolean)
             throw std::runtime_error("NPC classification requires a replica and a boolean");
-        if (api.type(L, 1) != LuaType::userdata || api.rawLength(L, 1) != 8)
-            throw std::runtime_error("Expected borrowed NPC Sprite");
-        const auto sprite = checkedSprite(L);
-        if (sprite < bindings.layout.entity.sprite)
-            throw std::runtime_error("Invalid NPC Sprite");
-        const auto entity = sprite - bindings.layout.entity.sprite;
-        const auto type = at<unsigned>(entity, bindings.layout.entity.type);
-        if (type < 10 || type >= 1000 || !at<bool>(entity, bindings.layout.entity.active))
-            throw std::runtime_error("NPC classification requires an active NPC");
-        at<bool>(entity, bindings.layout.npc.boss) = api.toBoolean(L, 2);
+        const auto npc = bindings.npc(image, checkedEntity(L));
+        if (!npc)
+            throw std::runtime_error("NPC classification requires an NPC");
+        at<bool>(npc, bindings.layout.npc.boss) = api.toBoolean(L, 2);
         api.pushBoolean(L, true);
         return 1;
     } catch (const std::exception& exception) {
@@ -535,7 +552,7 @@ template <int Operation> int run(lua_State* L) {
                     // Fixed storage owns no heap resource across Lua's longjmp.
                     api.pushLString(L, reinterpret_cast<const char*>(bytes.data()), bytes.size());
                 } else
-                    capture(L, plan, 0, entity, frame);
+                    capture(L, plan, 0, entity, frame, api.type(L, 3) == LuaType::table ? 3 : 0);
             } else {
                 if (!runtime::replica())
                     throw std::runtime_error("Only replicas restore entity fields");
@@ -572,9 +589,12 @@ bool bind(lua_State* L, lua::Module module) {
                    S::isInteger,   S::rawLength,    S::rawGetI,     S::rawSetI,     S::getTop,
                    S::setTop,      S::createTable,  S::newUserdata, S::toUserdata,  S::pushBoolean,
                    S::pushInteger, S::pushNumber,   S::pushString,  S::pushClosure, S::setField,
-                   S::error,       S::checkInteger, S::checkStack,  S::pushLString}))
+                   S::error,       S::checkInteger, S::checkStack,  S::pushLString, S::pushValue,
+                   S::rawGet,      S::rawSet}))
         return false;
     image = reinterpret_cast<Address>(GetModuleHandleW(nullptr));
+    api.pushClosure(L, entitySize, 0);
+    api.setField(L, -2, "entity_size");
     api.pushClosure(L, npcBoss, 0);
     api.setField(L, -2, "entity_npc_boss");
     api.pushClosure(L, run<0>, 0);

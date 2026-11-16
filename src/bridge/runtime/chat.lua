@@ -162,6 +162,9 @@ return function(deps, wire)
         if lower == "lanbot" then
             return { kind = "bot", text = args }
         end
+        if lower == "opacity" then
+            return { kind = "opacity", text = args }
+        end
         if lower == "feedback" or lower == "fb" then
             return { kind = "feedback", text = args }
         end
@@ -318,6 +321,7 @@ return function(deps, wire)
                 "/c /console 命令：原版控制台",
                 "/tp help：传送命令",
                 "/lanbot help：托管命令",
+                "/opacity help：玩家不透明度",
                 "/feedback /fb 描述：上传日志并反馈问题",
             }) do
                 chat.output(line, { audience = "self" })
@@ -331,6 +335,9 @@ return function(deps, wire)
             return true
         elseif parsed.kind == "bot" then
             chat.output(deps.bot(parsed.text), { audience = "self" })
+            return true
+        elseif parsed.kind == "opacity" then
+            chat.output(deps.opacity(parsed.text), { audience = "self" })
             return true
         elseif parsed.kind == "feedback" then
             chat.output(deps.feedback(parsed.text), { audience = "self" })

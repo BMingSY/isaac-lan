@@ -14,7 +14,7 @@ struct Bindings {
             unsigned type, variant, subtype, initSeed, positionX, velocity, friction, hitPoints,
                 maxHitPoints, collisionDamage, visible, flipX, depthOffset, mass, size,
                 spriteRotation, spriteOffset, spriteScale, createdFrame, flags, color, sprite,
-                active, damageVtableSlot;
+                active, damageVtableSlot, sortingLayer, renderZOffset;
         } entity;
         struct Sprite {
             unsigned path, animation, overlay, flipX, flipY, rotation, scale, offset, color, size;
@@ -51,6 +51,8 @@ struct Bindings {
         } game;
     } layout;
     int minimumShopItemId, maximumShopItemId;
+    std::uintptr_t (*npc)(std::uintptr_t image, std::uintptr_t entity);
+    void (*restoreSize)(std::uintptr_t image, std::uintptr_t entity, float value);
 };
 extern const Bindings bindings;
 } // namespace isaac::engine::native_entity_fields

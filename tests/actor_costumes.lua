@@ -116,4 +116,17 @@ for _ = 1, 3 do
     assert(applications[2 + Slots.baseCount].index == Slots.firstCostume + 499)
 end
 actors.reset()
+-- A callback replaces a name without changing the vector size or authority
+-- snapshot. Cached indices must still repair and reacquire the live sprites.
+rebuild({ "red", "blue" })
+local stable = pose({ "red", "blue" })
+actors.apply(player, stable)
+rebuild({ "red", "stale" })
+applications, acquisitions, reads = {}, 0, 0
+actors.apply(player, stable)
+assert(acquisitions == 2 and assigned() == "12,11", "Same-sized callback change used stale indices")
+actors.reset()
+applications = {}
+actors.apply(player, stable)
+assert(assigned() == "12,11", "Reset lost costume occurrence matching")
 print("PASS indexed costume matching, duplicate order, invalidation and repeated render")

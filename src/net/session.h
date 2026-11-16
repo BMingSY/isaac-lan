@@ -1,5 +1,6 @@
 #pragma once
 #include "net/protocol.h"
+#include "net/compatibility.h"
 #include <memory>
 #include <optional>
 
@@ -10,7 +11,7 @@ struct TransportResources {
     std::size_t deliveryWindow = 0;
     std::uint64_t oldestWorldMs = 0, coalescedInputs = 0;
     std::uint64_t worldSnapshots = 0, deltaSnapshots = 0, rawWorldBytes = 0, wireWorldBytes = 0,
-                  fullWorldBytes = 0;
+                  fullWorldBytes = 0, comparedWorldBytes = 0;
 };
 // Main-thread session coordinator. Socket/byte workers exchange owned values;
 // no worker invokes Lua or touches game objects. All traffic uses UDP/ENet.
@@ -21,8 +22,8 @@ class Session {
 
   public:
     using Observer = void (*)(std::string_view, double);
-    explicit Session(void (*logger)(const std::string&) = nullptr, Observer observer = nullptr,
-                     bool debugLogs = false);
+    explicit Session(std::string version, void (*logger)(const std::string&) = nullptr,
+                     Observer observer = nullptr, bool debugLogs = false);
     ~Session();
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
@@ -62,7 +63,8 @@ class Session {
     // Only the host consumes inputs; missing remote samples never stall it.
     std::optional<Frame> take();
     bool ready();
-    bool publish(unsigned slot, const WorldState& state);
+    bool publish(unsigned slot, WorldState state);
+    bool captureRequested(unsigned slot) const;
     std::optional<WorldState> takeState();
     bool beginStage(const Stage&);
     std::optional<Stage> takeStage();
@@ -81,6 +83,10 @@ class Session {
     void applied(std::uint32_t tick);
     std::array<std::uint32_t, maxPlayers> inputSequences() const;
     const std::array<int, maxPlayers>& latency() const;
+    // HUD readings expire independently of the RTT retained for prediction.
+    int networkLatency(unsigned slot) const;
+    int syncLatency(unsigned slot) const;
+    void recordSyncLatency(double milliseconds);
     void completed(std::uint32_t tick);
     const std::string& identity() const;
     Phase phase() const;
@@ -90,6 +96,7 @@ class Session {
     bool isHost() const;
     bool modsDiffer() const;
     const std::string& error() const;
+    const std::optional<CompatibilityFailure>& compatibilityFailure() const;
     const Start& settings() const;
     std::optional<std::uint32_t> verifiedTick() const;
     std::uint16_t port() const;

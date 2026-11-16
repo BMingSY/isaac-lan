@@ -1,6 +1,7 @@
 local root = assert(arg[1])
 local vanilla = arg[2] == "vanilla"
-PlayerType = dofile(root .. "/tests/fixtures/game_enums.lua").PlayerType
+local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
+PlayerType, RoomType = enums.PlayerType, enums.RoomType
 local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels, renderedMarks = {}, {}
@@ -177,7 +178,11 @@ _IsaacLanModules = {
     ["presentation/fonts"] = dofile(root .. "/src/bridge/presentation/fonts.lua"),
     ["presentation/menu_assets"] = dofile(root .. "/src/bridge/presentation/menu_assets.lua"),
     ["presentation/restart"] = dofile(root .. "/src/bridge/presentation/restart.lua"),
+    ["presentation/vote_progress"] = dofile(root .. "/src/bridge/presentation/vote_progress.lua"),
+    ["presentation/animation_skip"] = dofile(root .. "/src/bridge/presentation/animation_skip.lua"),
+    ["presentation/update_notice"] = dofile(root .. "/src/bridge/presentation/update_notice.lua"),
     ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
+    ["core/room_types"] = dofile(root .. "/src/bridge/core/room_types.lua"),
     ["core/endpoint"] = dofile(root .. "/src/bridge/core/endpoint.lua"),
     ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
 }
@@ -199,6 +204,7 @@ _IsaacLanCommand = function(name, value)
     end
 end
 dofile(root .. "/src/bridge/presentation/menu.lua")
+local updateVersion = ""
 local function draw(key, visible, mx, my, clicked)
     labels = {}
     renderedPortraits = {}
@@ -214,7 +220,9 @@ local function draw(key, visible, mx, my, clicked)
         my or -100,
         clicked or false,
         "",
-        ""
+        "",
+        updateVersion,
+        true
     )
 end
 _IsaacLanMenuOpen(true)
@@ -494,6 +502,49 @@ assert(commands[#commands][1] == "retry_save", "Pending snapshot offered no retr
 status.pendingSave, status.saveError = 0, ""
 draw()
 assert(labels["创建房间"] and not labels["重试保存联机存档"])
+
+-- Compatibility failures retain full versions, including a long prerelease,
+-- without UTF-8 truncation or colliding with the existing menu controls.
+status.phase, status.hosting, status.players = 4, 0, 1
+_IsaacLanMenuOpen(true)
+local localVersion = "0.6.0-rc." .. string.rep("1", 23)
+for reason, title in pairs({
+    version = "无法加入：Isaac LAN 版本不一致",
+    fingerprint = "无法加入：版本号相同，但构建不一致",
+    protocol = "无法加入：联机协议不一致",
+    unavailable = "无法加入：未能核对房主版本",
+}) do
+    local remote = reason == "unavailable" and ""
+        or (reason == "version" and "0.7.0-rc." .. string.rep("2", 23) or localVersion)
+    status.compatibilityError =
+        { reason = reason, localVersion = localVersion, remoteVersion = remote }
+    draw()
+    local versions = "房主："
+        .. (remote == "" and "未知" or remote)
+        .. "　你的版本："
+        .. localVersion
+    assert(
+        labels[title]
+            and labels[versions]
+            and labels["请确认双方使用相同版本和构建的 Isaac LAN。"]
+    )
+    assert(labels["加入房间"] and not labels["P1"] and not labels["准备"])
+    assert(utf8.len(versions) and labelPositions[title].y > labelPositions["返回"].y)
+    assert(
+        labelPositions[versions].y > labelPositions[title].y and labelPositions[versions].y < 260
+    )
+    assert(
+        remote == "" or #scaledLabels > 0,
+        "Long versions were truncated instead of fitting the footer"
+    )
+end
+status.phase, status.compatibilityError = 1, nil
+draw()
+assert(
+    not labels["无法加入：未能核对房主版本"],
+    "Retry retained the previous mismatch"
+)
+status.phase, status.hosting, status.players = 0, 1, 2
 
 -- An unrestricted challenge keeps ordinary character cycling on both peers.
 local phaseValues = dofile(root .. "/tests/fixtures/net_phases.lua")
@@ -858,3 +909,187 @@ assert(status.roomOptions == 0, "Leaving the locked challenge did not restore ed
 print("PASS personal completion layers, host-only independent rules and resume selection")
 print("PASS rules submenu, summaries, scrolling, read-only updates and keyboard/mouse navigation")
 print("PASS locked challenge rules on both peers, stale rules pages and returning to ordinary mode")
+
+-- Selecting an early challenge moves focus to lobby row 3. That focus change
+-- must not activate challenge row 3 again during the same render pass.
+_IsaacLan.net_challenges = function()
+    local result = {}
+    for id, name in pairs({
+        [1001] = "恶魔形态",
+        [1002] = "运气游戏",
+        [1003] = "吃鸡",
+        [1004] = "超大房间",
+        [1005] = "你的准星",
+    }) do
+        result[tostring(id)] = {
+            id = id,
+            name = name,
+            character = 65535,
+            difficulty = 0,
+            available = true,
+            team_available = true,
+        }
+    end
+    return result
+end
+status.phase, status.hosting, status.slot, status.challenge = 2, 1, 0, 1001
+for index = 1, 5 do
+    _IsaacLanMenuOpen(true)
+    draw(40)
+    draw(40)
+    draw(13) -- Selected challenge's mode row opens the list.
+    for _ = 2, index do
+        draw(40)
+    end
+    local before = #commands
+    draw(13)
+    assert(status.challenge == 1000 + index, "Challenge selection was overwritten in one frame")
+    assert(#commands == before + 1, "A confirmation activated multiple menu rows")
+end
+print("PASS each challenge confirmation executes exactly once")
+
+-- Drive the actual menu entry with the same extra arguments as the native
+-- frontend, proving the notice owns input before any ordinary menu action.
+local continued, exited = 0, 0
+_IsaacLan.update_continue = function()
+    continued = continued + 1
+    updateVersion = ""
+end
+_IsaacLan.update_exit = function()
+    exited = exited + 1
+    updateVersion = ""
+    return true
+end
+status.phase, status.prepared, status.recovering = _IsaacLan.net_phases().idle, false, false
+updateVersion = "0.7.1"
+dofile(root .. "/src/bridge/presentation/menu.lua")
+local commandsBefore = #commands
+draw(13, false)
+assert(labels["新版 Isaac LAN 已下载"] and exited == 0)
+draw(0, false)
+draw(40, false)
+draw(13, false)
+assert(continued == 1 and exited == 0 and #commands == commandsBefore)
+for _ = 1, 20 do
+    draw(0, false)
+    assert(not labels["新版 Isaac LAN 已下载"])
+end
+dofile(root .. "/src/bridge/presentation/menu.lua")
+draw(0, false)
+assert(
+    not labels["新版 Isaac LAN 已下载"],
+    "Rebuilding Lua cannot reopen a dismissed native notice"
+)
+updateVersion = "0.7.2"
+draw(0, false)
+draw(0, false)
+draw(13, false)
+assert(exited == 1 and #commands == commandsBefore)
+print("PASS menu integration: update input ownership, continue, reconstruction and default exit")
+
+-- Auto teleport is one rule with a nested, independently selectable type list.
+local teleportChallenges = _IsaacLan.net_challenges
+_IsaacLan.net_challenges = function()
+    local definitions = teleportChallenges()
+    definitions["1003"].roomOptionsLocked = true
+    return definitions
+end
+local expectedOptions = dofile(root .. "/tests/fixtures/room_options.lua")(RoomType)
+for i, definition in ipairs(expectedOptions) do
+    options[i] = definition
+end
+local allRoomFlags = options[4].flag
+local bossFlag, hiddenFlag = options[4].groups[2].flag, options[4].groups[5].flag
+local function clickLabel(label)
+    local at = assert(labelPositions[label], "Missing visible menu label: " .. label)
+    draw(0, true, at.x + 3, at.y + 2, true)
+    draw()
+end
+status.phase, status.hosting, status.slot, status.challenge = 2, 1, 0, 0
+status.roomOptions, status.savedPlayers, status.ready0, status.ready1 = 7, 0, 1, 1
+_IsaacLanMenuOpen(true)
+draw()
+clickLabel("房间规则：友伤 +2")
+clickLabel("自动传送：关闭 >")
+assert(labels["自动传送"] and labels["已选 0 类"] and labels["1–6 / 9"])
+assert(status.ready0 == 1 and status.ready1 == 1, "Opening the type list cleared readiness")
+clickLabel("[ ] Boss 房")
+assert(not labels["[ ] 干净卧室"] and not labels["[ ] 传送出口"])
+assert(status.roomOptions == (7 | bossFlag) and labels["已选 1 类"])
+assert(status.ready0 == 0 and status.ready1 == 0)
+-- Scroll to the hidden-room group, whose ultra-secret flag exceeds 32 bits.
+for _ = 1, 3 do
+    draw(40)
+end
+draw()
+assert(labels["[ ] 隐藏房"] and labelPositions["返回"].y == 214)
+clickLabel("[ ] 隐藏房")
+assert(status.roomOptions == (7 | bossFlag | hiddenFlag) and labels["已选 2 类"])
+draw(27)
+draw()
+assert(labels["自动传送：2 类 >"] and labels["已启用 4 项"])
+draw(13)
+draw()
+assert(labels["1–6 / 9"], "Nested Back did not restore the auto-teleport entry")
+clickLabel("全选")
+assert(status.roomOptions == (7 | allRoomFlags) and labels["已选 7 类"])
+clickLabel("清空")
+assert(status.roomOptions == 7 and labels["已选 0 类"], "Clear removed unrelated rules")
+clickLabel("[ ] Boss 房")
+-- A challenge can lock a page already open; no stale action may change rules.
+status.challenge = 1003
+draw()
+previousCommands = #commands
+clickLabel("清空")
+clickLabel("[x] Boss 房")
+assert(#commands == previousCommands and labels["已选 1 类 · 只读"])
+status.challenge, status.hosting, status.slot = 0, 0, 1
+draw()
+previousCommands = #commands
+clickLabel("全选")
+clickLabel("清空")
+clickLabel("[x] Boss 房")
+draw(32)
+assert(#commands == previousCommands, "Guest edited auto teleport through the submenu")
+status.roomOptions = 7 | bossFlag | hiddenFlag -- authoritative update while guest is viewing
+status.savedOptions = status.roomOptions
+draw()
+assert(labels["已选 2 类 · 只读"])
+draw(27)
+draw(13)
+draw()
+assert(labels["自动传送"] and labels["已选 2 类 · 只读"])
+status.phase = phaseValues.waiting
+draw()
+assert(not labels["自动传送"], "Nested type list survived leaving the lobby")
+print(
+    "PASS auto teleport: seven room groups, high bits, bulk actions, nested Back and guest read-only updates"
+)
+
+local groupedUi = { page = "autoTeleport", difficulty = 0, seed = "" }
+local groupedStatus = {
+    phase = 2,
+    hosting = 1,
+    roomOptions = 7 | (options[4].firstRoomFlag << (RoomType.ROOM_BOSS - RoomType.ROOM_DEFAULT)),
+}
+local changed
+local groupedRows = model.rows(groupedUi, groupedStatus, {}, {}, {
+    options = options,
+    command = function(action, value)
+        changed = { action, tonumber(value) }
+    end,
+})
+assert(
+    #groupedRows == 10,
+    "The simplified menu must contain seven groups, two bulk actions and Back"
+)
+for _, row in ipairs(groupedRows) do
+    if row.label == "Boss 房" then
+        assert(row.checked)
+        row.action()
+        assert(
+            changed[1] == "room_options" and changed[2] == 7,
+            "A partial old group toggled its unselected members on"
+        )
+    end
+end

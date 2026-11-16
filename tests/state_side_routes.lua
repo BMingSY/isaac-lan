@@ -7,14 +7,16 @@ local snapshots, checkpoint, observed = 0, {}, {}
 local endTick = route == "poop" and 1000 or route == "hush" and 2200 or 7000
 local frame = _IsaacLanFrame
 local guestType = route == "poop" and 25 or route == "knife" and 7 or 0
+local reportRoute = _IsaacLanTest.abyssEscape and "abyss-escape" or route
 local function report(s)
-    Isaac.DebugString("LAN_NETWORK SIDE " .. route .. " " .. s)
+    Isaac.DebugString("LAN_NETWORK SIDE " .. reportRoute .. " " .. s)
 end
 local function actor(slot, call)
     assert(native.rooms_with_player(slot, function()
         call(Isaac.GetPlayer(assert(native.rooms_heads()[tostring(slot)])))
     end))
 end
+local abyssProbe = _IsaacLanTest.abyssEscape and createAbyssEscapeProbe(native, actor, report)
 function _IsaacLanFrame()
     renders = renders + 1
     if EID and EID.Config then
@@ -50,6 +52,9 @@ function _IsaacLanFrame()
         else
             assert(snapshots > 200, "Insufficient route snapshots")
             assert(observed.complete, "Replica missed route completion: " .. route)
+        end
+        if abyssProbe then
+            abyssProbe.finish(host)
         end
         finished = true
         report("PASS native route snapshots=" .. snapshots)
@@ -289,6 +294,9 @@ local function hush(t)
     end
 end
 local function mines(t)
+    if abyssProbe then
+        abyssProbe.observe(t)
+    end
     if knife then
         actor(1, function()
             local position = native.rooms_positions()["1"]
@@ -344,6 +352,9 @@ local function mines(t)
         source(4, StageType.STAGETYPE_REPENTANCE, t)
     elseif step == "source-wait" and t - stepAt > 160 then
         assert(Game():GetLevel():GetStage() == 4)
+        if abyssProbe then
+            abyssProbe.prepare()
+        end
         origin = Game():GetLevel():GetCurrentRoomIndex()
         local list = Game():GetLevel():GetRooms()
         for i = 0, list.Size - 1 do
@@ -539,6 +550,9 @@ local function mines(t)
             report("CHECKED native knife piece 2 acquired")
         end
     end
+    if checkpoint.complete and abyssProbe then
+        abyssProbe.returned()
+    end
 end
 local gate = native.net_gate
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
@@ -593,6 +607,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 return false
             end
             snapshots = snapshots + 1
+            if abyssProbe then
+                abyssProbe.replica(t)
+            end
             local value = _IsaacLanState.decode(bytes, stable)
             if route == "poop" then
                 for _, a in ipairs(value[9]) do

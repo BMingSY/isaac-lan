@@ -334,7 +334,11 @@ function _IsaacLanFrame()
         for _, id in ipairs({ 636, 637, 640 }) do
             assert(progress:byte(id + 2) == localProgress:byte(id + 2), "Inherited host progress")
         end
-        assert(progress:sub(-4) == localProgress:sub(-4), "Replaced private progress counter")
+        assert(
+            _IsaacLanTestProgress.privateCounter(progress)
+                == _IsaacLanTestProgress.privateCounter(localProgress),
+            "Replaced private progress counter"
+        )
         finished = true
         report("LOCAL_PROGRESS_RESTORED")
         if not host then

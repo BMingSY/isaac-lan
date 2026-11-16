@@ -54,6 +54,8 @@ inline const Field common[] = {
     {"Visible", Kind::boolean, offsets.entity.visible},
     {"FlipX", Kind::boolean, offsets.entity.flipX},
     {"DepthOffset", Kind::real, offsets.entity.depthOffset},
+    {"SortingLayer", Kind::integer, offsets.entity.sortingLayer},
+    {"RenderZOffset", Kind::integer, offsets.entity.renderZOffset},
     {"Mass", Kind::real, offsets.entity.mass},
     {"Size", Kind::real, offsets.entity.size, Write::size},
     {"SpriteRotation", Kind::real, offsets.entity.spriteRotation},

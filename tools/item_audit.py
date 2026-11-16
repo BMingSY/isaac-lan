@@ -4,7 +4,6 @@ import hashlib
 import json
 from itertools import product
 from pathlib import Path
-import re
 
 from item_effect_checks import SHOT_EFFECTS, SUPPORTED_EFFECTS, effect_checks
 from item_consumable_recipes import CONSUMABLE_RECIPES, consumable_recipe
@@ -83,23 +82,6 @@ def catalog_from_log(text):
     if {record["kind"] for record in records} != set(KINDS):
         raise ValueError("Runtime catalog is missing an item category")
     return {"game": "1.9.7.17.J460", "source": "Isaac.GetItemConfig", "items": records}
-
-
-def localize_catalog(catalog, names_file):
-    """Import only ID/name metadata from an unmodified EID names table."""
-    kinds = {"C_ID": "collectible", "T_ID": "trinket", "Card_ID": "card", "Pill_ID": "pill"}
-    names = {}
-    for prefix, number, name in re.findall(
-        r'\[(C_ID|T_ID|Card_ID|Pill_ID)\s*\.\.\s*(\d+)\]\s*=\s*"([^"]+)"', names_file.read_text()
-    ):
-        names[f"{kinds[prefix]}:{number}"] = name
-    for item in catalog["items"]:
-        if item["key"] in names:
-            item["name_zh"] = names[item["key"]]
-    catalog["name_source"] = (
-        "https://github.com/wofsauge/External-Item-Descriptions/blob/master/descriptions/names/zh_cn.lua"
-    )
-    return catalog
 
 
 def lua(value):

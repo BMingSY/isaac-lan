@@ -86,29 +86,60 @@ return function(fields)
                 return
             end
             local room = deps.room()
+            local predicting = 0
+            for _, shot in pairs(shots) do
+                if not shot.used then
+                    predicting = predicting + 1
+                end
+            end
+            local candidates = {}
+            for id, history in pairs(targets) do
+                local enemy = ref(id)
+                if enemy then
+                    local position = enemy.Position
+                    local old = history.last or position
+                    if predicting > 0 and enemy.Visible and not enemy:IsDead() then
+                        candidates[#candidates + 1] = {
+                            id = id,
+                            order = #candidates + 1,
+                            x = position.X,
+                            y = position.Y,
+                            oldX = old.X,
+                            oldY = old.Y,
+                            radius = enemy.Size,
+                        }
+                    end
+                    history.last = deps.vector(position.X, position.Y)
+                end
+            end
+            local query = predicting > 0 and deps.candidates(candidates, predicting)
             for id, shot in pairs(shots) do
                 local e = ref(id)
                 if e and not shot.used then
                     local position = e.Position
                     local tear = e:ToTear()
                     if tear and tear.Height < -5 and e.Visible then
-                        local hit, first = nil, math.huge
-                        for target, history in pairs(targets) do
-                            local enemy = ref(target)
-                            if enemy and enemy.Visible and not enemy:IsDead() then
-                                local old = history.last or enemy.Position
+                        local hit, first, order = nil, math.huge, math.huge
+                        local radius = e.Size
+                        query(
+                            position.X,
+                            position.Y,
+                            shot.last.X,
+                            shot.last.Y,
+                            radius,
+                            function(target)
                                 local t = deps.contact(
-                                    shot.last.X - old.X,
-                                    shot.last.Y - old.Y,
-                                    position.X - enemy.Position.X,
-                                    position.Y - enemy.Position.Y,
-                                    e.Size + enemy.Size
+                                    shot.last.X - target.oldX,
+                                    shot.last.Y - target.oldY,
+                                    position.X - target.x,
+                                    position.Y - target.y,
+                                    radius + target.radius
                                 )
-                                if t and t < first then
-                                    hit, first = target, t
+                                if t and (t < first or (t == first and target.order < order)) then
+                                    hit, first, order = target.id, t, target.order
                                 end
                             end
-                        end
+                        )
                         if hit and room:CheckLine(shot.last, position, 0, 0, false, false) then
                             local frames = math.max(
                                 1,
@@ -122,12 +153,6 @@ return function(fields)
                         end
                     end
                     shot.last = deps.vector(position.X, position.Y)
-                end
-            end
-            for id, history in pairs(targets) do
-                local e = ref(id)
-                if e then
-                    history.last = deps.vector(e.Position.X, e.Position.Y)
                 end
             end
             local active, hidden = ledger.sample(now)

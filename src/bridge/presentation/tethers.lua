@@ -1,8 +1,8 @@
 -- Native rope geometry is presentation state; replica familiar AI never runs.
-return function(native, Vector, Sprite, types, entities)
-    local key = "__isaac_lan_tether"
+return function(native, Vector, Sprite, types, pointer)
+    local records, generation = {}, 0
     local function shifted(record, entity)
-        local value, owner = record.value, record.owner
+        local value, owner = record.value, record.owner and record.owner.Ref
         local head = owner and owner:Exists() and owner.Position - Vector(value[4][1], value[4][2])
             or Vector(0, 0)
         local tail = entity.Position - Vector(value[5][1], value[5][2])
@@ -52,27 +52,31 @@ return function(native, Vector, Sprite, types, entities)
                 { entity.Position.X, entity.Position.Y },
             }
         end,
-        apply = function(entity, value, applySprite)
-            local data = entity:GetData()
+        apply = function(entity, value, applySprite, identifier)
             if not value then
-                data[key] = nil
+                records[identifier] = nil
                 return
             end
-            local record = data[key] or { sprite = Sprite() }
+            local record = records[identifier] or { sprite = Sprite() }
+            record.entity = pointer(entity)
             record.value = value
+            record.generation = generation
             applySprite(record.sprite, value[2])
-            data[key] = record
+            records[identifier] = record
         end,
-        link = function(entity, value, ref)
-            local record = entity:GetData()[key]
+        link = function(_, value, ref, identifier)
+            local record = records[identifier]
             if record then
-                record.owner = ref(value[3])
+                local owner = ref(value[3])
+                record.owner = owner and pointer(owner)
             end
         end,
         render = function()
-            for _, entity in ipairs(entities()) do
-                local record = entity:GetData()[key]
-                if record and entity.Visible then
+            for identifier, record in pairs(records) do
+                local entity = record.entity.Ref
+                if not entity or not entity:Exists() then
+                    records[identifier] = nil
+                elseif entity.Visible then
                     assert(
                         native.familiar_tether_render(
                             entity:GetSprite(),
@@ -80,6 +84,19 @@ return function(native, Vector, Sprite, types, entities)
                             shifted(record, entity)
                         )
                     )
+                end
+            end
+        end,
+        reset = function()
+            records, generation = {}, 0
+        end,
+        beginView = function()
+            generation = generation + 1
+        end,
+        endView = function()
+            for identifier, record in pairs(records) do
+                if record.generation ~= generation then
+                    records[identifier] = nil
                 end
             end
         end,

@@ -38,9 +38,12 @@ local status = {
     phase = 3,
     players = 4,
     connected = 15,
-    ping1 = 35,
-    ping2 = 150,
-    ping3 = 280,
+    network1 = 35,
+    network2 = 150,
+    network3 = 280,
+    sync1 = 70,
+    sync2 = 230,
+    sync3 = 360,
 }
 local function draw()
     draws = {}
@@ -50,30 +53,41 @@ end
 draw()
 assert(#draws == 3)
 for i, slot in ipairs({ "1", "2", "3" }) do
-    assert(draws[i].text == status["ping" .. slot] .. " ms")
+    assert(
+        draws[i].text
+            == "Ping "
+                .. status["network" .. slot]
+                .. " ms / 同步 "
+                .. status["sync" .. slot]
+                .. " ms"
+    )
     assert(draws[i].x == huds[slot].x + 12 and draws[i].y == huds[slot].y - 13)
 end
 status.players, status.connected = 2, 3
 for _, ping in ipairs({ 0, 99, 100, 199, 200, 12345 }) do
-    status.ping1 = ping
+    status.network1 = ping
     draw()
-    assert(#draws == 1 and draws[1].text == ping .. " ms")
+    assert(#draws == 1 and draws[1].text == "Ping " .. ping .. " ms / 同步 70 ms")
 end
 for _, ping in ipairs({ -1, -10 }) do
-    status.ping1 = ping
+    status.network1 = ping
     draw()
-    assert(draws[1].text == "—")
+    assert(draws[1].text == "Ping — / 同步 70 ms")
 end
-status.ping1 = nil
+status.network1, status.sync1 = nil, -1
+status.ping1 = 50 -- Prediction's retained RTT must not masquerade as a fresh reading.
 draw()
-assert(draws[1].text == "—")
+assert(draws[1].text == "Ping — / 同步 —")
+status.network1, status.sync1 = 50, nil
+draw()
+assert(draws[1].text == "Ping 50 ms / 同步 —")
 -- Local-view reordering and room/floor changes provide fresh native anchors.
 huds["1"] = { x = 140.5, y = 20.5 }
 draw()
 assert(draws[1].x == 152 and draws[1].y == 7)
 width, height = 640, 360
 huds["1"] = { x = 639, y = 2 }
-status.ping1 = 12345
+status.network1, status.sync1 = 65534, 65534
 draw()
 assert(draws[1].x + draws[1].width < width and draws[1].y == 1)
 status.connected = 1
@@ -89,4 +103,4 @@ assert(#draws == 0 and reads == before)
 status.prepared, status.phase = true, 2
 draw()
 assert(#draws == 0 and reads == before)
-print("PASS numeric ping HUD, native identity/position, resizing, disconnect and lifecycle cleanup")
+print("PASS dual network/sync HUD, independent unknown values, anchors, resizing and cleanup")

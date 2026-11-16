@@ -8,12 +8,18 @@ return function(fields)
         local entity, inventory, sprite = deps.entity, deps.inventory, deps.sprite
         local poop, craftingBag = deps.poop, deps.craftingBag
         local captureTick, captureEpoch, captureActors, captureVisuals = nil, nil, {}, {}
+        local inventoryCatalog = {}
         local captureEncoded, locations, shared = {}, nil, nil
         local captureStarted = 0
+        local previousActors, previousEncoded, previousMap = {}, {}, {}
+        local currentMap, currentGrids = {}, {}
         local roomState = deps.roomFactory()
         local function reset()
             captureTick, captureEpoch = nil, nil
             captureActors, captureVisuals, captureEncoded = {}, {}, {}
+            previousActors, previousEncoded, previousMap, currentMap = {}, {}, {}, {}
+            currentGrids = {}
+            inventoryCatalog = {}
             locations, shared = nil, nil
             roomState = deps.roomFactory()
         end
@@ -22,9 +28,30 @@ return function(fields)
             local level = game:GetLevel()
             local epoch = native.net_floor_epoch()
             if captureTick ~= tick or captureEpoch ~= epoch then
+                previousActors = captureEpoch == epoch and captureActors or {}
+                previousMap = captureEpoch == epoch and currentMap or {}
+                previousEncoded = {}
+                -- Carry only reusable stable fragments, not the prior room's
+                -- entity graph and all its encoded bytes.
+                for _, actor in pairs(previousActors) do
+                    local items = actor[Actor.inventory][fields.inventory.items]
+                    if items then
+                        previousEncoded[items] = captureEncoded[items]
+                    end
+                end
+                for _, record in pairs(previousMap) do
+                    previousEncoded[record] = captureEncoded[record]
+                end
+                if captureEpoch == epoch then
+                    for grids in pairs(currentGrids) do
+                        previousEncoded[grids] = captureEncoded[grids]
+                    end
+                end
+                currentMap, currentGrids = {}, {}
                 captureTick, captureEpoch = tick, epoch
                 captureStarted = deps.clock and deps.clock() or 0
                 captureActors, captureVisuals, captureEncoded = {}, {}, {}
+                inventoryCatalog = {}
                 locations, shared = nil, nil
             end
             locations = locations or native.rooms_positions()
@@ -37,8 +64,11 @@ return function(fields)
                     base = {
                         [Actor.index] = index,
                         [Actor.controller] = p.ControllerIndex,
-                        [Actor.entity] = entity(p, false),
-                        [Actor.inventory] = inventory(p),
+                        [Actor.inventory] = inventory(
+                            p,
+                            inventoryCatalog,
+                            previousActors[index] and previousActors[index][Actor.inventory]
+                        ),
                         [Actor.visuals] = {},
                         [Actor.pose] = false,
                         [Actor.poop] = poop.capture(p),
@@ -47,6 +77,10 @@ return function(fields)
                         [Actor.babySkin] = p:GetBabySkin(),
                     }
                     captureActors[index] = base
+                    local items = base[Actor.inventory][fields.inventory.items]
+                    if items then
+                        captureEncoded[items] = previousEncoded[items] or false
+                    end
                 end
                 local position = locations[tostring(p.ControllerIndex - 1)]
                 if
@@ -56,6 +90,12 @@ return function(fields)
                 then
                     local full = captureVisuals[index]
                     if not full then
+                        local actorEntity
+                        -- Held entities and minecarts use room-local indices.
+                        -- Resolve them in the actor's room, including remote views.
+                        assert(native.rooms_with_player(p.ControllerIndex - 1, function()
+                            actorEntity = entity(p)
+                        end))
                         local visuals = {}
                         for _, s in
                             ipairs(
@@ -70,7 +110,7 @@ return function(fields)
                         full = {
                             [Actor.index] = index,
                             [Actor.controller] = p.ControllerIndex,
-                            [Actor.entity] = entity(p),
+                            [Actor.entity] = actorEntity,
                             [Actor.inventory] = base[Actor.inventory],
                             [Actor.visuals] = visuals,
                             [Actor.pose] = assert(native.actor_pose(p:GetSprite())),
@@ -83,6 +123,9 @@ return function(fields)
                     end
                     actors[#actors + 1] = full
                 else
+                    -- A visible actor already has a complete entity tuple. Only
+                    -- collect its nonvisual tuple if another room needs it.
+                    base[Actor.entity] = base[Actor.entity] or entity(p, false)
                     actors[#actors + 1] = base
                 end
                 local shared = actors[#actors]
@@ -107,26 +150,59 @@ return function(fields)
                     end
                 end
                 deps.reconcileShared(level, actors)
-                local map = {}
+                local map, included = {}, {}
+                local function addRoom(d, index, dimension)
+                    local key = dimension .. ":" .. index
+                    if included[key] then
+                        return
+                    end
+                    included[key] = true
+                    local value = {
+                        [Map.index] = index,
+                        [Map.display] = d.DisplayFlags,
+                        [Map.visited] = d.VisitedCount,
+                        [Map.clear] = d.Clear,
+                        [Map.clearCount] = d.ClearCount,
+                        [Map.flags] = d.Flags,
+                        [Map.dimension] = dimension,
+                        [Map.pickups] = native.map_pickups(index, dimension),
+                        [Map.layout] = native.room_layout(index, dimension),
+                    }
+                    local prior = previousMap[key]
+                    local same = prior ~= nil
+                    if prior then
+                        for field, entry in ipairs(value) do
+                            if prior[field] ~= entry then
+                                same = false
+                                break
+                            end
+                        end
+                    end
+                    if same then
+                        value = prior
+                    end
+                    currentMap[key] = value
+                    captureEncoded[value] = previousEncoded[value] or false
+                    map[#map + 1] = value
+                end
                 local rooms = level:GetRooms()
                 for i = 0, rooms.Size - 1 do
                     local d = rooms:Get(i)
                     for dimension = 0, 2 do
                         local match = level:GetRoomByIdx(d.SafeGridIndex, dimension)
                         if match and match.Data and match.ListIndex == d.ListIndex then
-                            map[#map + 1] = {
-                                [Map.index] = d.SafeGridIndex,
-                                [Map.display] = d.DisplayFlags,
-                                [Map.visited] = d.VisitedCount,
-                                [Map.clear] = d.Clear,
-                                [Map.clearCount] = d.ClearCount,
-                                [Map.flags] = d.Flags,
-                                [Map.dimension] = dimension,
-                                [Map.pickups] = native.map_pickups(d.SafeGridIndex, dimension),
-                                [Map.layout] = native.room_layout(d.SafeGridIndex, dimension),
-                            }
+                            addRoom(d, d.SafeGridIndex, dimension)
                             break
                         end
+                    end
+                end
+                -- Off-map descriptors are absent from Level:GetRooms(). Remote
+                -- actor inventory still needs their native room metadata.
+                for _, at in pairs(locations) do
+                    if at.index < 0 then
+                        local d = level:GetRoomByIdx(at.index, at.dimension)
+                        assert(d and d.Data, "Missing occupied special-room descriptor")
+                        addRoom(d, at.index, at.dimension)
                     end
                 end
                 shared = {
@@ -152,6 +228,11 @@ return function(fields)
                 captureEncoded[shared.map] = false
             end
             local room = roomState(slot, tick, epoch, view)
+            local grids = room[fields.room.grids]
+            if grids then
+                currentGrids[grids] = true
+                captureEncoded[grids] = captureEncoded[grids] or previousEncoded[grids] or false
+            end
             if captureEncoded[room] == nil then
                 captureEncoded[room] = false
             end
@@ -168,7 +249,7 @@ return function(fields)
             value.items = deps.items.capture(slot)
             value.combat = native.combat_events and assert(native.combat_events(slot)) or nil
             if layered then
-                local realtime, stable = deps.layers.split(value)
+                local realtime, stable = deps.layers.split(value, captureEncoded)
                 return encode(worldSchema.pack(realtime), captureEncoded),
                     encode(stable, captureEncoded)
             end

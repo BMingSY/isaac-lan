@@ -5,6 +5,27 @@ return function(Phase, Command, endpoint)
     local function idle(phase)
         return phase == Phase.idle or phase == Phase.failed or phase == Phase.closed
     end
+    local function compatibilityError(status)
+        local failure = status.compatibilityError
+        if status.phase ~= Phase.failed or not failure then
+            return nil
+        end
+        local reasons = {
+            version = "无法加入：Isaac LAN 版本不一致",
+            fingerprint = "无法加入：版本号相同，但构建不一致",
+            protocol = "无法加入：联机协议不一致",
+            unavailable = "无法加入：未能核对房主版本",
+        }
+        local remote = failure.remoteVersion
+        return {
+            reasons[failure.reason] or reasons.unavailable,
+            "房主："
+                .. (remote and remote ~= "" and remote or "未知")
+                .. "　你的版本："
+                .. failure.localVersion,
+            "请确认双方使用相同版本和构建的 Isaac LAN。",
+        }
+    end
     local function validPort(ui)
         local number = tonumber(ui.port)
         if number and number % 1 == 0 and number >= 1 and number <= 65535 then
@@ -21,7 +42,11 @@ return function(Phase, Command, endpoint)
         end
     end
     local function back(ui)
-        if ui.page == "rules" then
+        if ui.page == "autoTeleport" then
+            ui.page, ui.selection, ui.ruleScroll = "rules", ui.autoReturn or 1, ui.autoScroll or 1
+            ui.autoReturn, ui.autoScroll = nil, nil
+            return true
+        elseif ui.page == "rules" then
             ui.page, ui.selection = "lan", ui.ruleReturn or 1
             ui.ruleReturn, ui.ruleScroll = nil, nil
             return true
@@ -88,6 +113,20 @@ return function(Phase, Command, endpoint)
                 end
             end, not rulesLocked, nil, nil, not host and not rulesLocked and deps.accent or nil)
         end
+        local teleport, roomChoices, selectedRooms = nil, {}, 0
+        for _, definition in ipairs(deps.options or {}) do
+            if definition.key == "autoTeleport" then
+                teleport = definition
+                for _, group in ipairs(definition.groups) do
+                    local checked = ((status.roomOptions or 0) & group.flag) ~= 0
+                    roomChoices[#roomChoices + 1] =
+                        { name = group.name, flag = group.flag, checked = checked }
+                    if checked then
+                        selectedRooms = selectedRooms + 1
+                    end
+                end
+            end
+        end
         if status.pendingSave == 1 then
             row("重试保存联机存档", function()
                 command("retry_save")
@@ -147,18 +186,68 @@ return function(Phase, Command, endpoint)
                     deps.hide()
                 end
             end)
-        elseif phase == Phase.lobby and ui.page == "rules" then
-            ruleCount = selectedRules
-            for _, definition in ipairs(deps.options or {}) do
-                row(definition.name, function()
+        elseif phase == Phase.lobby and ui.page == "autoTeleport" and teleport then
+            ruleCount = selectedRooms
+            local function setRooms(mask)
+                if rulesEditable then
+                    command(
+                        "room_options",
+                        tostring(((status.roomOptions or 0) & ~teleport.flag) | mask)
+                    )
+                end
+            end
+            row("全选", function()
+                setRooms(teleport.flag)
+            end, rulesEditable)
+            row("清空", function()
+                setRooms(0)
+            end, rulesEditable)
+            for _, room in ipairs(roomChoices) do
+                row(room.name, function()
                     if rulesEditable then
+                        local current = status.roomOptions or 0
                         command(
                             "room_options",
-                            tostring((status.roomOptions or 0) ~ definition.flag)
+                            tostring(
+                                room.checked and (current & ~room.flag) or (current | room.flag)
+                            )
                         )
                     end
                 end, rulesEditable)
-                rows[#rows].checked = ((status.roomOptions or 0) & definition.flag) ~= 0
+                rows[#rows].checked = room.checked
+            end
+            row("返回", function()
+                back(ui)
+            end)
+        elseif phase == Phase.lobby and ui.page == "rules" then
+            ruleCount = selectedRules
+            for _, definition in ipairs(deps.options or {}) do
+                if definition == teleport then
+                    local index = #rows + 1
+                    row(
+                        "自动传送："
+                            .. (selectedRooms == 0 and "关闭" or selectedRooms .. " 类")
+                            .. " >",
+                        function()
+                            ui.autoReturn, ui.autoScroll = index, ui.ruleScroll
+                            ui.page, ui.selection, ui.ruleScroll = "autoTeleport", 1, 1
+                        end,
+                        not rulesLocked,
+                        nil,
+                        nil,
+                        not host and deps.accent or nil
+                    )
+                else
+                    row(definition.name, function()
+                        if rulesEditable then
+                            command(
+                                "room_options",
+                                tostring((status.roomOptions or 0) ~ definition.flag)
+                            )
+                        end
+                    end, rulesEditable)
+                    rows[#rows].checked = ((status.roomOptions or 0) & definition.flag) ~= 0
+                end
             end
             row("返回", function()
                 back(ui)
@@ -318,5 +407,12 @@ return function(Phase, Command, endpoint)
         end
         return rows, notice, ruleCount
     end
-    return { rows = rows, validPort = validPort, remember = remember, idle = idle, back = back }
+    return {
+        rows = rows,
+        validPort = validPort,
+        remember = remember,
+        idle = idle,
+        back = back,
+        compatibilityError = compatibilityError,
+    }
 end

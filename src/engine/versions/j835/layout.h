@@ -16,7 +16,7 @@ inline constexpr unsigned head = 0, count = 4;
 inline constexpr unsigned left = 0, parent = 4, right = 8, nil = 0xd, key = 0x10, value = 0x14;
 } // namespace stringTree
 namespace vector {
-inline constexpr unsigned begin = 0, end = 4;
+inline constexpr unsigned begin = 0, end = 4, capacity = 8;
 } // namespace vector
 namespace inputManager {
 inline constexpr unsigned begin = 4, end = 8, stride = 4;
@@ -40,6 +40,7 @@ inline constexpr unsigned cinematicActive = 0x1ea830;
 inline constexpr unsigned menuRequested = 0x1ea818, requestedMenu = 0x1ea81c;
 } // namespace manager
 namespace options {
+inline constexpr unsigned pauseOnFocusLost = 0x57;
 inline constexpr unsigned hudOffset = 0x44;
 inline constexpr unsigned musicVolume = 0x18;
 } // namespace options
@@ -51,7 +52,7 @@ inline constexpr unsigned dirty = 0, readOnly = 1;
 inline constexpr unsigned achievements = 0x38, counters = 0x2b8;
 inline constexpr unsigned achievementCount = 638, counterCount = 496;
 inline constexpr native_progress::Layout fields{achievements, achievementCount, counters,
-                                                counterCount};
+                                                counterCount, true};
 } // namespace progress
 namespace gameState {
 inline constexpr unsigned stream = 0x1fac8;
@@ -69,6 +70,7 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
 } // namespace challengeParams
 namespace game {
+inline constexpr unsigned playerHuds = 0x3da4c;
 inline constexpr unsigned descriptors = 0x14, mapOffsets = 0x1796c, roomCount = 0x1815c;
 inline constexpr std::array<unsigned, 2> mapCaches{0x1a2ac8, 0x1a2c28};
 inline constexpr unsigned mapState = 0x101904, mapTimer = 0x10190c;
@@ -113,7 +115,15 @@ namespace rewindBuffer {
 inline constexpr unsigned valid = 0, state = 4, stride = 0x20298;
 inline constexpr unsigned door = 0x1fad0, tick = 0x1fad4, counters = 0x1fad8;
 } // namespace rewindBuffer
+namespace activeItem {
+inline constexpr unsigned count = 4, stride = 0x1c, data = 0x18;
+} // namespace activeItem
+namespace historyItem {
+inline constexpr unsigned size = 0x1c, trinket = 4, id = 8, maxEntries = 65536;
+} // namespace historyItem
 namespace roomTransition {
+inline constexpr unsigned mode = 0, elapsed = 4, duration = 8, introSprite = 0x38;
+inline constexpr int intro = 2, returning = 3;
 inline constexpr unsigned actor = 0x320, bossIntro = 0x328;
 inline constexpr unsigned state = 0, index = 0x14, direction = 0x10;
 inline constexpr unsigned animation = 0x1c, dimension = 0x18;
@@ -150,6 +160,9 @@ namespace entityList {
 inline constexpr unsigned renderArray = 0x40, data = 4, count = 0xc;
 } // namespace entityList
 namespace entity {
+inline constexpr unsigned sortingLayer = 0x2b4, renderZOffset = 0x2ac;
+inline constexpr unsigned configuration = 0x288, sizeMultiplier = 0x2cc,
+                          gridCollisionPoints = 0x170;
 inline constexpr unsigned parent = 0x314;
 inline constexpr unsigned renderPosition = 0x19c;
 inline constexpr unsigned minecart = 0x32c;
@@ -184,6 +197,7 @@ inline constexpr unsigned left = 0, parent = 4, right = 8;
 inline constexpr unsigned nil = 0xd, id = 0x10, count = 0x14;
 } // namespace inventoryNode
 namespace pickup {
+inline constexpr unsigned flipSprite = 0x51c, flipVisible = 0x625;
 inline constexpr unsigned touched = 0x47c, optionsIndex = 0x478;
 inline constexpr unsigned price = 0x480, autoUpdatePrice = 0x484, shopItemId = 0x488;
 inline constexpr unsigned timeout = 0x48c, wait = 0x490, state = 0x4d0;
@@ -229,6 +243,7 @@ inline constexpr unsigned playing = 0x14, events = 0x18, previousEvents = 0x1c;
 inline constexpr unsigned data = 4, frame = 0x10;
 } // namespace animationState
 namespace animationData {
+inline constexpr unsigned name = 0;
 inline constexpr unsigned layers = 0x18, layerCount = 0x1c, nulls = 0x20, nullCount = 0x24;
 inline constexpr unsigned layerMap = 0x38, totalFrames = 0x30;
 } // namespace animationData
@@ -247,6 +262,8 @@ inline constexpr std::array<unsigned, 6> values{0x3b8, 0x3bc, 0x3c0, 0x3c4, 0x3c
 inline constexpr std::array<unsigned, 2> paths{0x3d0, 0x3dc};
 } // namespace laser
 namespace player {
+inline constexpr unsigned history = 0x1d0c, inventoryOrder = 0x1d20, inventorySlots = 16;
+inline constexpr unsigned movingBoxBegin = 0x1c9c, movingBoxEnd = 0x1ca0;
 inline constexpr unsigned chargeSprites = 0x6a8, pockets = 0x16c8;
 inline constexpr unsigned bagMaterials = 0x1e44, bagPreview = 0x1e4c;
 inline constexpr unsigned poopMana = 0x1e50, poopQueue = 0x1e54;
@@ -273,6 +290,7 @@ inline constexpr std::array<std::array<float, 2>, 4> heartMargins{
     {{-20, -12}, {24, -12}, {-22, 6}, {16, 6}}};
 } // namespace hud
 namespace playerHud {
+inline constexpr unsigned count = 8, activeItems = 0x190, activeStride = 0x1c;
 inline constexpr unsigned bagDirty = 0x6a1;
 inline constexpr unsigned refreshFlags = 0x6a0, refreshAll = 0x101;
 inline constexpr unsigned player = 0, root = 4, index = 8, size = 0x6b0;

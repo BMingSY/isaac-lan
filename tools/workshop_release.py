@@ -2,6 +2,7 @@
 """Prepare, publish or verify the existing Isaac LAN Workshop item (Windows/WSL)."""
 
 import argparse
+from extension_package import prepare_update
 import hashlib
 import json
 import os
@@ -97,9 +98,16 @@ class Steam:
     def update(self, prefix, content, notes):
         return self.call("update", prefix, content, notes)
 
-    def update_page(self, prefix, content, notes, language, description, preview):
+    def update_page(self, prefix, content, notes, language, description, preview, title=None):
         return self.call(
-            "update-page", prefix, content or "-", notes, language, description, preview or "-"
+            "update-page",
+            prefix,
+            content or "-",
+            notes,
+            language,
+            description,
+            preview or "-",
+            *([title] if title else []),
         )
 
 
@@ -215,6 +223,7 @@ def prepare(
         shutil.copy2(source, content / source.name)
     if digest(content / archive.name) != checked["sha256"]:
         raise ValueError("Archive changed during preparation")
+    prepare_update(content / archive.name, content)
     (output / "reviewed-notes.md").write_bytes(reviewed.encode("utf-8"))
     (output / "steam-change-notes.txt").write_bytes(formatted.encode("utf-8"))
     manifest = {
@@ -340,6 +349,7 @@ def publish(steam, output):
                 output / presentation.get("preview_upload_file", "content/preview.png")
                 if index == 0 and presentation["preview_sha256"]
                 else None,
+                manifest["before"][language]["title"] or None,
             )
             write_json(output / f"upload-result-{language}.json", result)
             if result.get("result") != 1 or result.get("legal_agreement_required") is not False:

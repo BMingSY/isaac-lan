@@ -28,6 +28,9 @@ local function stateEnvironment()
         _IsaacLanModules = {
             ["sync/codec"] = codec,
             ["presentation/hits"] = dofile(root .. "/src/bridge/presentation/hits.lua"),
+            ["presentation/hit_candidates"] = dofile(
+                root .. "/src/bridge/presentation/hit_candidates.lua"
+            ),
             ["presentation/event_ledger"] = dofile(
                 root .. "/src/bridge/presentation/event_ledger.lua"
             ),
@@ -47,6 +50,15 @@ local function stateEnvironment()
             ["presentation/tethers"] = dofile(root .. "/src/bridge/presentation/tethers.lua"),
             ["presentation/doors"] = dofile(root .. "/src/bridge/presentation/doors.lua"),
             ["presentation/attacks"] = dofile(root .. "/src/bridge/presentation/attacks.lua"),
+            ["presentation/entity_visuals"] = dofile(
+                root .. "/src/bridge/presentation/entity_visuals.lua"
+            ),
+            ["presentation/attack_matching"] = dofile(
+                root .. "/src/bridge/presentation/attack_matching.lua"
+            ),
+            ["presentation/attack_volley"] = dofile(
+                root .. "/src/bridge/presentation/attack_volley.lua"
+            ),
             ["presentation/attack_prediction"] = dofile(
                 root .. "/src/bridge/presentation/attack_prediction.lua"
             ),
@@ -79,6 +91,7 @@ local function stateEnvironment()
             ["compat/bosses/rotgut"] = dofile(root .. "/src/bridge/compat/bosses/rotgut.lua"),
             ["runtime/transitions"] = dofile(root .. "/src/bridge/runtime/transitions.lua"),
             ["runtime/room_entry"] = dofile(root .. "/src/bridge/runtime/room_entry.lua"),
+            ["runtime/room_placement"] = dofile(root .. "/src/bridge/runtime/room_placement.lua"),
             ["compat/items/room_entry"] = dofile(root .. "/src/bridge/compat/items/room_entry.lua"),
             ["sync/inventory"] = dofile(root .. "/src/bridge/sync/inventory.lua"),
             ["sync/entities"] = dofile(root .. "/src/bridge/sync/entities.lua"),
@@ -110,6 +123,7 @@ local function stateEnvironment()
                 root .. "/src/bridge/compat/bosses/held_bombs.lua"
             ),
             ["compat/items/split_body"] = dofile(root .. "/src/bridge/compat/items/split_body.lua"),
+            ["compat/items/flip"] = dofile(root .. "/src/bridge/compat/items/flip.lua"),
             ["compat/visuals"] = dofile(root .. "/src/bridge/compat/visuals.lua"),
             ["compat/characters/lazarus"] = dofile(
                 root .. "/src/bridge/compat/characters/lazarus.lua"
@@ -117,6 +131,7 @@ local function stateEnvironment()
             ["compat/characters/forgotten"] = dofile(
                 root .. "/src/bridge/compat/characters/forgotten.lua"
             ),
+            ["compat/characters/isaac"] = dofile(root .. "/src/bridge/compat/characters/isaac.lua"),
             ["compat/characters/blue_baby"] = dofile(
                 root .. "/src/bridge/compat/characters/blue_baby.lua"
             ),

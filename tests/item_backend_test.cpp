@@ -416,3 +416,27 @@ int main() {
     require(MH_Uninitialize() == MH_OK && VirtualFree(image, 0, MEM_RELEASE),
             "Release item fixture");
 }
+
+namespace isaac::presentation::moving_box {
+bool capture(std::uintptr_t) {
+    return false;
+}
+void apply(std::uintptr_t, bool) {}
+} // namespace isaac::presentation::moving_box
+namespace isaac::runtime {
+void abort(const std::string& reason) {
+    throw std::runtime_error(reason);
+}
+} // namespace isaac::runtime
+#ifndef ISAAC_LAN_TEST_J835
+namespace isaac::engine::j460 {
+bool installDeathCertificateReturn(std::uintptr_t) {
+    return true;
+}
+namespace cursed_mist {
+bool install(std::uintptr_t) {
+    return true;
+}
+} // namespace cursed_mist
+} // namespace isaac::engine::j460
+#endif

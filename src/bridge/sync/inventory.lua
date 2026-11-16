@@ -9,16 +9,44 @@ return function(fields)
             or function(p, item)
                 return p:GetCollectibleNum(item, true)
             end
+        local function reader(p)
+            if env.collectibleReader then
+                return env.collectibleReader(p)
+            end
+            if env.collectibleCount then
+                return function(item)
+                    return count(p, item)
+                end
+            end
+            local get = p.GetCollectibleNum
+            return function(item)
+                return get(p, item, true)
+            end
+        end
         local function eachCollectible(config, visit)
+            local get = config.GetCollectible
             for item = 1, config:GetCollectibles().Size - 1 do
-                local value = config:GetCollectible(item)
+                local value = get(config, item)
                 if value then
                     visit(item, value)
                 end
             end
             for _, item in ipairs(env.extraCollectibles and env.extraCollectibles(config) or {}) do
-                visit(item, assert(config:GetCollectible(item)))
+                visit(item, assert(get(config, item)))
             end
+        end
+        local function catalogItems(catalog, passive)
+            local key = passive and "passive" or "items"
+            if not catalog[key] then
+                local items = {}
+                eachCollectible(env.config(), function(item, value)
+                    if not passive or value.Type ~= env.activeType then
+                        items[#items + 1] = item
+                    end
+                end)
+                catalog[key] = items
+            end
+            return catalog[key]
         end
         local heartTypes = {
             { field = Heart.broken, name = "BrokenHearts" },
@@ -67,15 +95,47 @@ return function(fields)
                 end
             end
         end
-        local function inventory(p)
-            local items = {}
-            local config = env.config()
-            eachCollectible(config, function(item)
-                local owned = count(p, item)
-                if owned > 0 then
-                    items[#items + 1] = { item, owned } -- Item.id, Item.count
+        local function inventory(p, catalog, previous)
+            local before = previous and previous[Inventory.items]
+            local items, used = nil, 0
+            local function copyPrefix(count)
+                local result = {}
+                for index = 1, count do
+                    result[index] = before[index]
                 end
-            end)
+                return result
+            end
+            local ownedCount = reader(p)
+            local function ownedItem(item)
+                local owned = ownedCount(item)
+                if owned > 0 then
+                    used = used + 1
+                    local prior = before and before[used]
+                    if
+                        not items
+                        and prior
+                        and prior[Item.id] == item
+                        and prior[Item.count] == owned
+                    then
+                        return
+                    end
+                    items = items or copyPrefix(used - 1)
+                    items[used] = { item, owned } -- Item.id, Item.count
+                end
+            end
+            if catalog then
+                -- Capture owns this cache for one immutable tick/floor generation.
+                -- Share only IDs, never native config objects or player counts;
+                -- Mod and generated definitions are enumerated again next tick.
+                for _, item in ipairs(catalogItems(catalog)) do
+                    ownedItem(item)
+                end
+            else
+                eachCollectible(env.config(), ownedItem)
+            end
+            -- Counts and definitions are still read live, including Mod changes.
+            -- Unchanged value tuples remain immutable across capture generations.
+            items = items or (before and used == #before and before) or copyPrefix(used)
             local active = {}
             for slot = 0, LAST_ACTIVE_SLOT do
                 active[#active + 1] = {
@@ -108,16 +168,18 @@ return function(fields)
                     [Subplayer.type] = sub:GetPlayerType(),
                     [Subplayer.hearts] = captureHearts(sub),
                 } or false,
+                [Inventory.activeData] = env.activeData and env.activeData(p) or false,
+                [Inventory.order] = env.order and env.order(p) or false,
             }
         end
         local function applyResources(p, v)
             -- Resources are shared by native co-op, including its hidden ghost
             -- inventory. Conversion alone cannot restore a newer authority value.
             for _, pair in ipairs(sharedResources) do
-                p["Add" .. pair.name](
-                    p,
-                    v[Inventory.resources][pair.field] - p["GetNum" .. pair.name](p)
-                )
+                local delta = v[Inventory.resources][pair.field] - p["GetNum" .. pair.name](p)
+                if delta ~= 0 then
+                    p["Add" .. pair.name](p, delta)
+                end
             end
             for _, flag in ipairs(sharedFlags) do
                 local desired = v[Inventory.resources][flag.field]
@@ -126,13 +188,15 @@ return function(fields)
                 end
             end
         end
-        local function applyInventory(p, v, refreshItems)
+        local function applyInventory(p, v, refreshItems, catalog)
             if v[Inventory.ghost] then
                 applyResources(p, v)
                 return
             end -- Native ghost conversion owns its hidden inventory.
             if p:GetPlayerType() ~= v[Inventory.type] then
-                p:ChangePlayerType(v[Inventory.type])
+                if not (env.restoreForm and env.restoreForm(p, v[Inventory.type])) then
+                    p:ChangePlayerType(v[Inventory.type])
+                end
             end
             local effects = p:GetEffects()
             local delta = v[Inventory.curse] - effects:GetNullEffectNum(env.curse)
@@ -148,19 +212,18 @@ return function(fields)
                 for _, entry in ipairs(v[Inventory.items]) do
                     desired[entry[Item.id]] = entry[Item.count]
                 end
-                local config = env.config()
-                eachCollectible(config, function(item, itemConfig)
-                    if itemConfig.Type ~= env.activeType then
-                        local difference = (desired[item] or 0) - count(p, item)
-                        for _ = 1, math.abs(difference) do
-                            if difference > 0 then
-                                p:AddCollectible(item, 0, false)
-                            else
-                                p:RemoveCollectible(item, true)
-                            end
+                local ownedCount = reader(p)
+                local passive = catalogItems(catalog or {}, true)
+                for _, item in ipairs(passive) do
+                    local difference = (desired[item] or 0) - ownedCount(item)
+                    for _ = 1, math.abs(difference) do
+                        if difference > 0 then
+                            p:AddCollectible(item, 0, false)
+                        else
+                            p:RemoveCollectible(item, true)
                         end
                     end
-                end)
+                end
             end
             for i, active in ipairs(v[Inventory.active]) do
                 local slot = i - 1
@@ -176,7 +239,24 @@ return function(fields)
                         end
                     end
                 end
-                p:SetActiveCharge(active[Active.charge], slot)
+            end
+            if v[Inventory.activeData] then
+                assert(
+                    env.activeData and env.activeData(p, v[Inventory.activeData]),
+                    "Cannot restore active item data"
+                )
+            end
+            if v[Inventory.order] then
+                assert(
+                    env.order and env.order(p, v[Inventory.order]),
+                    "Cannot restore inventory order"
+                )
+            end
+            for i, active in ipairs(v[Inventory.active]) do
+                local slot = i - 1
+                if p:GetActiveCharge(slot) + p:GetBatteryCharge(slot) ~= active[Active.charge] then
+                    p:SetActiveCharge(active[Active.charge], slot)
+                end
             end
             for slot = 0, LAST_POCKET_SLOT do
                 if p:GetTrinket(slot) ~= v[Inventory.trinkets][slot + 1] then
@@ -196,8 +276,14 @@ return function(fields)
                 end
             end
             applyResources(p, v)
-            p:AddSoulCharge(v[Inventory.resources][Resource.soulCharge] - p:GetSoulCharge())
-            p:AddBloodCharge(v[Inventory.resources][Resource.bloodCharge] - p:GetBloodCharge())
+            local soul = v[Inventory.resources][Resource.soulCharge] - p:GetSoulCharge()
+            local blood = v[Inventory.resources][Resource.bloodCharge] - p:GetBloodCharge()
+            if soul ~= 0 then
+                p:AddSoulCharge(soul)
+            end
+            if blood ~= 0 then
+                p:AddBloodCharge(blood)
+            end
             applyHearts(p, v[Inventory.hearts])
             local sub = v[Inventory.subplayer]
             if sub then

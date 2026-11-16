@@ -1,8 +1,10 @@
 #include "engine/session_backend.h"
+#include "engine/floor_generation.h"
 #include "engine/rooms.h"
 #include "engine/versions/common/room_hooks.h"
 #include "core/chat.h"
 #include "engine/versions/common/session_bindings.h"
+#include "engine/versions/common/completion_marks.h"
 #include <MinHook.h>
 #include <cstring>
 
@@ -40,6 +42,23 @@ using Console = void(__attribute__((thiscall)) *)(void*, const void*, bool, void
 Console originalConsole;
 using ConsolePrint = void(__attribute__((thiscall)) *)(void*, const void*, unsigned, unsigned);
 ConsolePrint originalConsolePrint;
+using RecordCompletion = void(__stdcall*)(unsigned, unsigned, unsigned);
+RecordCompletion originalRecordCompletion;
+void __stdcall recordCompletionHook(unsigned event, unsigned character, unsigned difficulty) {
+    originalRecordCompletion(event, character, difficulty);
+    namespace completion = native_completion;
+    // The native caller has already checked run eligibility. This observer
+    // never unlocks anything or changes its result, including repeated wins.
+    if (!callbacks.completionAward || event >= completion::eventCount ||
+        character >= completion::counters.size() || difficulty > 3 ||
+        at<bool>(manager() + binding.managerLayout.progress, binding.progressReadOnly))
+        return;
+    const auto& award = reinterpret_cast<const completion::CharacterAwards*>(
+        image + binding.completionDefinitions)[character][event];
+    const bool hard = difficulty == 1 || difficulty == 3;
+    callbacks.completionAward(award.counter, hard ? completion::hardBits : completion::normalBits,
+                              event != completion::heartEvent || hard ? award.achievement : 0);
+}
 std::string* capturedOutput = nullptr;
 std::string_view nativeText(const void* value) {
     const auto address = reinterpret_cast<std::uintptr_t>(value);
@@ -124,7 +143,7 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
         return false;
     image = base;
     callbacks = handlers;
-    std::array<void*, 12> targets{};
+    std::array<void*, 13> targets{};
     unsigned count = 0;
     auto hook = [&](std::uintptr_t target, auto replacement, auto& original) {
         auto* address = reinterpret_cast<void*>(target);
@@ -135,11 +154,14 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
         return true;
     };
     bool success =
+        installFloorGeneration(image, callbacks.largeFloor) &&
         hook(image + binding.entry.save, saveHook, originalSave) &&
         hook(image + binding.entry.deleteSave, deleteHook, originalDelete) &&
         hook(image + binding.entry.saveRerun, rerunHook, originalRerun) &&
         hook(image + binding.entry.executeMenu, menuHook, originalMenu) &&
         hook(image + binding.entry.serializeProgress, serializeHook, originalSerialize) &&
+        (!binding.recordCompletion ||
+         hook(image + binding.recordCompletion, recordCompletionHook, originalRecordCompletion)) &&
         hook(image + binding.entry.start, startHook, originalStart) &&
         hook(image + binding.entry.executeStart, executeStartHook, originalExecuteStart) &&
         hook(image + binding.entry.update, updateHook, originalUpdate) &&
@@ -148,7 +170,8 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
         hook(image + binding.entry.consolePrint, consolePrintHook, originalConsolePrint) &&
         hook(image + binding.entry.controls, controlsHook, originalControls);
     if (success) {
-        for (auto* target : targets) {
+        for (unsigned i = 0; i < count; ++i) {
+            auto* target = targets[i];
             if (MH_EnableHook(target) != MH_OK) {
                 success = false;
                 break;
@@ -199,6 +222,31 @@ lan::Progress readProgress() {
 }
 void writeProgress(const lan::Progress& value) {
     native_progress::write(manager() + binding.managerLayout.progress, binding.progress, value);
+}
+std::span<const bool> progressBitCounters() {
+    return native_completion::bitCounters;
+}
+void commitProgress(const lan::Progress& previous, const lan::Progress& value) {
+    struct Writable {
+        bool& flag;
+        bool previous;
+        explicit Writable(bool& flag) : flag(flag), previous(flag) {
+            flag = false;
+        }
+        ~Writable() {
+            flag = previous;
+        }
+    } writable(at<bool>(manager() + binding.managerLayout.progress, binding.progressReadOnly));
+    auto personal = value;
+    personal.achievements = previous.achievements;
+    writeProgress(personal);
+    auto progress = reinterpret_cast<void*>(manager() + binding.managerLayout.progress);
+    using Unlock = bool(__attribute__((thiscall))*)(void*, unsigned);
+    for (unsigned id = 1; id < value.achievements.size(); ++id)
+        if (value.achievements[id] && !previous.achievements[id])
+            reinterpret_cast<Unlock>(image + binding.progressTryUnlock)(progress, id);
+    using Increase = void(__attribute__((thiscall))*)(void*, unsigned, int);
+    reinterpret_cast<Increase>(image + binding.progressIncreaseCounter)(progress, 0, 0);
 }
 void persistProgress() {
     binding.persistProgress(image, manager() + binding.managerLayout.progress);

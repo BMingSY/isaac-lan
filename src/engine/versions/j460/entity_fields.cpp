@@ -2,11 +2,24 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include <limits>
+#include <windows.h>
+#include "engine/versions/j460/entity_cast.h"
+#include "engine/versions/j460/entity_size.h"
 
 namespace isaac::engine::native_entity_fields {
 namespace entry = j460::entry;
 namespace layout = j460::layout;
 static_assert(layout::color::size == colorBytes);
+namespace {
+void restoreSize(std::uintptr_t image, std::uintptr_t entity, float value) {
+    using SetDefault = void(__cdecl*)(void*, float);
+    using SetExplicit =
+        void(__attribute__((thiscall))*)(void*, float, j460::entity_size::Multiplier, int);
+    j460::entity_size::restore(entity, value,
+                               reinterpret_cast<SetDefault>(image + entry::entityLuaSetSize),
+                               reinterpret_cast<SetExplicit>(image + entry::entitySetSize));
+}
+} // namespace
 constinit const Bindings bindings{
     {entry::entityLuaSetSize, entry::entityLuaSetColor, entry::tearSetHeight, entry::tearSetScale,
      entry::pickupSetPrice},
@@ -23,7 +36,8 @@ constinit const Bindings bindings{
          layout::entity::spriteOffset, layout::entity::spriteScale,
          layout::entity::createdFrame, layout::entity::flags,
          layout::entity::color,        layout::entity::sprite,
-         layout::entity::active,       layout::entity::damageVtableSlot},
+         layout::entity::active,       layout::entity::damageVtableSlot,
+         layout::entity::sortingLayer, layout::entity::renderZOffset},
         {layout::sprite::path, layout::sprite::animation, layout::sprite::overlay,
          layout::sprite::flipX, layout::sprite::flipY, layout::sprite::rotation,
          layout::sprite::scale, layout::sprite::offset, layout::sprite::color,
@@ -49,5 +63,7 @@ constinit const Bindings bindings{
         {layout::game::frame},
     },
     -2,
-    7};
+    7,
+    j460::entity_cast::npc,
+    restoreSize};
 } // namespace isaac::engine::native_entity_fields

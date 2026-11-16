@@ -30,6 +30,7 @@ struct Bindings {
     } layout;
     // Native object access stays in the version binding. The transition owns
     // its actor reference; adapters must preserve that version's registration.
+    void (*finishIntro)(Address image, Address transition);
     void (*prepareActor)(Address image, Address game, Address transition);
     bool (*introMarker)(Address transition);
     bool (*canRestoreControls)(Address game);

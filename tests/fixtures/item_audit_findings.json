@@ -40,6 +40,12 @@
       "checks": "主客机持有、同房分房四组：全队上限从 99 升至 999，消费后 998；移除后恢复 99，双端一致。",
       "dll_sha256": "fb7307fe5784e36451ca886117e38014c833d2e4892066ba308b437074c0617e"
     },
+    "collectible:565": {
+      "status": "reported",
+      "trigger": "狂暴后持有者进入其他房间",
+      "impact": "有换房后恢复温顺形态的反馈，尚未实机复验。",
+      "fix": "归属明确的狂暴 NPC 随持有者及跟班一起迁移；待实机复验。"
+    },
     "collectible:577": {
       "status": "verified",
       "impact": "已验证共享底座、移除恢复和非持有者受伤；未穷举随机落剑时机。",
@@ -83961,6 +83967,20 @@
       "cases": [
         "collectible:492/host-same",
         "collectible:492/client-split"
+      ]
+    },
+    "collectible:565": {
+      "candidate": "f1cb6bec4ad4ee468ebc857b535c93e7823c2f7d",
+      "dll_sha256": "0c8fc9895b9718aab91ecef33aea78d14828673d415906bf1585e21d8b267aa0",
+      "status": "verified",
+      "effect_status": "verified",
+      "limitation": "客机持有：两种狂暴形态跨房往返、大型狂暴形态换层；未穷举其他组合。",
+      "evidence": [
+        "feedback-item-state-20261109/native18"
+      ],
+      "scope": "正常喂养产生小型、大型狂暴 NPC；主客机确认两种形态往返驻留房与重新加载的房间，原生种子和主机对象保持；大型形态正常换层后保留形态、跟班父实体与持有者。",
+      "cases": [
+        "feedback-puppy"
       ]
     }
   },

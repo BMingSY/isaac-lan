@@ -3,6 +3,7 @@
 #include "engine/versions/common/presentation_bindings.h"
 #include "compat/game_ids.h"
 #include "engine/presentation.h"
+#include "engine/animation_skip.h"
 #include "engine/frontend.h"
 #include "engine/crafting_hud.h"
 #include "engine/challenge_hud.h"
@@ -14,6 +15,7 @@
 #include "net/protocol.h"
 #include <MinHook.h>
 #include <deque>
+#include <map>
 #include <array>
 #include <string>
 #include <utility>
@@ -41,7 +43,8 @@ struct Intro {
     unsigned first, second;
 };
 std::deque<Intro> intros;
-unsigned serial = 0, seen = 0;
+unsigned serial = 0;
+std::map<IntroBarrier::Room, unsigned> seen;
 unsigned played = 0;
 unsigned hostIntro = 0;
 using HasCollectible = bool(__attribute__((thiscall)) *)(void*, int, bool);
@@ -61,8 +64,13 @@ bool __attribute__((fastcall)) visibleCollectible(void* player, void*, int item,
     return originalHasCollectible(player, item, effects);
 }
 IntroBarrier waiting;
+bool simulatingIntro = false;
 using StartIntro = void(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 StartIntro originalIntro;
+void finishIntro() {
+    if (const auto game = currentGame())
+        bindings.finishIntro(image, game + bindings.layout.game.transition);
+}
 void playIntro(void* transition, unsigned first, unsigned second) {
     const auto game = currentGame();
     if (!game)
@@ -182,7 +190,8 @@ int events(lua_State* L) {
             lan::Writer w(lan::Message::world);
             if (slot >= 0 && slot < 4)
                 for (const auto& e : intros) {
-                    if (!(e.audience & (1u << slot)) || runtime::tick() - e.tick > introLifetime)
+                    if (!(e.audience & (1u << slot)) ||
+                        !waiting.pending(slot, e.serial, runtime::tick()))
                         continue;
                     for (auto v :
                          {e.serial, e.tick, static_cast<unsigned>(e.stage),
@@ -204,28 +213,41 @@ int events(lua_State* L) {
         const auto game = currentGame();
         if (!game)
             throw std::runtime_error("Missing game for intro events");
+        bool retained = false;
         for (std::size_t i = 0; i < size / introEventBytes; ++i) {
-            const auto id = r.u32(), tick = r.u32();
+            const auto id = r.u32();
+            r.u32(); // Event origin tick; delivery remains valid until acknowledged.
             const int stage = r.u32(), type = r.u32(), dimension = r.u32(), room = r.u32();
             const auto first = r.u32(), second = r.u32();
-            if (id <= seen)
-                continue;
-            seen = id;
-            if ((runtime::tick() > tick && runtime::tick() - tick > introLifetime) ||
-                stage != at<int>(game, bindings.layout.game.stage) ||
-                type != at<int>(game, bindings.layout.game.stageType) ||
-                dimension != at<int>(game, bindings.layout.game.dimension) ||
-                room != at<int>(game, bindings.layout.game.roomIndex))
+            retained |= id == played;
+            const IntroBarrier::Room key{stage, type, dimension, room};
+            const auto previous = seen.find(key);
+            // A late arrival may join an older event after having watched a
+            // newer one in another room. Deduplicate within its own room.
+            if (previous != seen.end() && id <= previous->second)
                 continue;
             rooms::withView(
                 [&] {
+                    if (stage != at<int>(game, bindings.layout.game.stage) ||
+                        type != at<int>(game, bindings.layout.game.stageType) ||
+                        dimension != at<int>(game, bindings.layout.game.dimension) ||
+                        room != at<int>(game, bindings.layout.game.roomIndex))
+                        return;
                     playIntro(reinterpret_cast<void*>(game + bindings.layout.game.transition),
                               first, second);
+                    // A view can arrive before its room is ready. Only consume an
+                    // event after playing it; the authority retries until completion.
+                    seen[key] = played = id;
+                    retained = true;
                 },
                 true);
-            played = id;
         }
         r.finish();
+        // The complete accepted view carries all still-pending intros. Once
+        // the original audience finishes, its event disappears and a late
+        // viewer completes the native screen instead of extending combat's wait.
+        if (played && !retained && introActive())
+            rooms::withView(finishIntro, true);
         lua.pushBoolean(L, true);
         return 1;
     } catch (const std::exception& e) {
@@ -253,35 +275,56 @@ int victoryPrompt(lua_State* L) {
 }
 } // namespace
 IntroSimulationScope::IntroSimulationScope(bool advance) {
-    if (runtime::replica() || !hostIntro || !rooms::stateReady())
+    if (simulatingIntro)
         return;
-    const auto game = currentGame();
-    if (!game)
-        return;
-    const auto target = game + bindings.layout.game.transition;
-    if (at<int>(target, bindings.layout.transition.state) != enterPhase &&
-        at<int>(target, bindings.layout.transition.state) != exitPhase)
-        return;
-    if (advance && at<int>(game, bindings.layout.game.pauseMenu) == 0) {
-        using Update = void(__attribute__((thiscall))*)(void*);
-        // Game::Update otherwise advances this screen and returns before ANY
-        // Room::Update. Advance it once, then let the room scheduler run.
-        rooms::withRoomPlayers(0, [&] {
-            reinterpret_cast<Update>(image + bindings.entry.updateTransition)(
-                reinterpret_cast<void*>(target));
-        });
-        waiting.observe(0, hostIntro, at<int>(target, bindings.layout.transition.state) != 0);
-        if (at<int>(target, bindings.layout.transition.state) == 0)
+    simulatingIntro = entered = true;
+    try {
+        if (runtime::replica() || !hostIntro || !rooms::stateReady())
+            return;
+        const auto game = currentGame();
+        if (!game)
+            return;
+        const auto target = game + bindings.layout.game.transition;
+        if (at<int>(target, bindings.layout.transition.state) == 0) {
+            observeIntro(0, hostIntro, false);
             hostIntro = 0;
-    }
-    if (at<int>(target, bindings.layout.transition.state) == enterPhase ||
-        at<int>(target, bindings.layout.transition.state) == exitPhase) {
-        transition = target;
-        saved = at<int>(target, bindings.layout.transition.state);
-        at<int>(target, bindings.layout.transition.state) = 0;
+            return;
+        }
+        if (at<int>(target, bindings.layout.transition.state) != 2 &&
+            at<int>(target, bindings.layout.transition.state) != 3)
+            return;
+        if (!waiting.pending(0, hostIntro, runtime::tick())) {
+            rooms::withRoomPlayers(0, finishIntro);
+            hostIntro = 0;
+            return;
+        }
+        if (advance && at<int>(game, bindings.layout.game.pauseMenu) == 0) {
+            using Update = void(__attribute__((thiscall))*)(void*);
+            // Game::Update otherwise advances this screen and returns before ANY
+            // Room::Update. Advance it once, then let the room scheduler run.
+            rooms::withRoomPlayers(0, [&] {
+                reinterpret_cast<Update>(image + bindings.entry.updateTransition)(
+                    reinterpret_cast<void*>(target));
+            });
+            waiting.observe(0, hostIntro, at<int>(target, bindings.layout.transition.state) != 0);
+            if (at<int>(target, bindings.layout.transition.state) == 0)
+                hostIntro = 0;
+        }
+        if (at<int>(target, bindings.layout.transition.state) == enterPhase ||
+            at<int>(target, bindings.layout.transition.state) == exitPhase) {
+            transition = target;
+            saved = at<int>(target, bindings.layout.transition.state);
+            at<int>(target, bindings.layout.transition.state) = 0;
+        }
+    } catch (...) {
+        simulatingIntro = entered = false;
+        throw;
     }
 }
 IntroSimulationScope::~IntroSimulationScope() {
+    if (!entered)
+        return;
+    simulatingIntro = false;
     const auto game = currentGame();
     if (transition && game && game + bindings.layout.game.transition == transition &&
         at<int>(transition, bindings.layout.transition.state) == 0)
@@ -328,9 +371,9 @@ bool installHooks(std::uintptr_t base) {
 }
 } // namespace
 bool install(std::uintptr_t base) {
-    return base && !installed && installCraftingHud(base) && installChallengeHud(base) &&
-           items::install(base) && engine::native_victory_prompt::install(base) &&
-           installHooks(base);
+    return base && !installed && animation::install(base) && installCraftingHud(base) &&
+           installChallengeHud(base) && items::install(base) &&
+           engine::native_victory_prompt::install(base) && installHooks(base);
 }
 bool bind(lua_State* L, HMODULE module) {
     if (!lua.load(module, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::checkInteger,
@@ -351,13 +394,15 @@ bool bind(lua_State* L, HMODULE module) {
     lua.setField(L, -2, "presentation_minimap");
     lua.pushClosure(L, victoryPrompt, 0);
     lua.setField(L, -2, "victory_lap_prompt");
-    return items::bind(L, module);
+    return animation::bind(L, module) && items::bind(L, module);
 }
 void reset() {
+    animation::reset();
     items::reset();
     intros.clear();
     waiting.clear();
-    serial = seen = played = hostIntro = 0;
+    seen.clear();
+    serial = played = hostIntro = 0;
 }
 unsigned playedIntro() {
     return played;
@@ -369,6 +414,35 @@ bool introActive() {
     const auto transition = game + bindings.layout.game.transition;
     const auto mode = at<int>(transition, bindings.layout.transition.state);
     return (mode == enterPhase || mode == exitPhase) && bindings.introMarker(transition);
+}
+std::vector<std::pair<unsigned, unsigned>> introAudiences() {
+    std::vector<std::pair<unsigned, unsigned>> result;
+    if (runtime::replica())
+        return result;
+    for (const auto& event : intros)
+        if (const auto audience =
+                waiting.audience(event.serial, runtime::tick(), rooms::connected()))
+            result.emplace_back(event.serial, audience);
+    return result;
+}
+bool skipIntro(unsigned id) {
+    if (runtime::replica()) {
+        if (played != id || !introActive())
+            return false;
+        rooms::withView(finishIntro, true);
+        return true;
+    }
+    const auto audience = waiting.audience(id, runtime::tick(), rooms::connected());
+    if (!audience)
+        return false;
+    if (hostIntro == id && introActive()) {
+        rooms::withRoomPlayers(0, finishIntro);
+        hostIntro = 0;
+    }
+    for (unsigned slot = 0; slot < lan::maxPlayers; ++slot)
+        if (audience & (1u << slot))
+            observeIntro(slot, id, false);
+    return true;
 }
 void observeIntro(unsigned slot, unsigned id, bool active) {
     const auto completed = waiting.observe(slot, id, active);
@@ -402,11 +476,34 @@ bool roomPaused() {
                          at<int>(game, bindings.layout.game.roomIndex)};
     // A missing acknowledgement must not leave a room frozen after a player
     // disconnects or fails to render. Normal completion is event-specific.
-    return waiting.paused(key, runtime::tick(), rooms::connected());
+    return waiting.paused(key, runtime::tick(), rooms::connected() & rooms::soundAudience());
 }
-void roomEntered(std::uintptr_t room) {
+void roomEntered(std::uintptr_t room, bool created) {
     if (runtime::replica() || !room || !currentGame())
         return;
+    if (!created) {
+        const auto game = currentGame();
+        const IntroBarrier::Room key{at<int>(game, bindings.layout.game.stage),
+                                     at<int>(game, bindings.layout.game.stageType),
+                                     at<int>(game, bindings.layout.game.dimension),
+                                     at<int>(game, bindings.layout.game.roomIndex)};
+        for (auto& event : intros) {
+            if (IntroBarrier::Room{event.stage, event.type, event.dimension, event.room} != key)
+                continue;
+            // Joining a resident room skips native Init. Subscribe its new
+            // occupants to the existing screen without restarting anyone who
+            // has already played it or extending the original timeout.
+            const auto added = waiting.join(key, event.serial, runtime::tick(),
+                                            rooms::soundAudience() & rooms::connected());
+            event.audience |= added;
+            if (added & 1u) {
+                hostIntro = played = event.serial;
+                playIntro(reinterpret_cast<void*>(game + bindings.layout.game.transition),
+                          event.first, event.second);
+            }
+        }
+        return;
+    }
     // These are the same native boss IDs and living-enemy checks used by
     // RoomTransition::ChangeRoom. Per-player room entry skips that global
     // transition, but must retain its original versus presentation.

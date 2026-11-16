@@ -12,6 +12,8 @@
 
 日志随原版 `log.txt` 归档，按启动和局次区分。`startup.log` 记录启动与退出，`runtime.log` 记录局内事件，开启性能统计后另有 `performance.jsonl`。
 
+初始化失败使用统一的[启动错误码](https://github.com/BMingSY/isaac-lan/blob/main/docs/startup-errors.md)，弹窗与可用日志保留失败路径和系统错误。日志创建失败本身可能没有日志，不据此推断为游戏版本不兼容。
+
 每局用新序号，同种子继续也不覆盖；退出后写回启动日志。记录含毫秒时间、时区、等级和 PID，消息换行转义。切换目录关闭旧句柄，错误立即刷新，路径确定前的缓存最多 256 KiB。没有自动轮转或总量限制，可手动清理旧目录。
 
 ## 性能口径
@@ -19,20 +21,21 @@
 | 数据 | 含义 |
 | --- | --- |
 | 进程资源 | 本局时间／窗口时长、CPU 占单核比例、私有内存、工作集、句柄；读取失败为 `null` |
-| 阶段耗时 | 渲染间隔，采集／应用、编码／解码、库存、实体、网格、精灵、压缩／解压；应用另分位置、角色、地图、房间和提交阶段 |
+| 阶段耗时 | 渲染间隔，采集／应用、编码／解码、库存、实体、网格、精灵、压缩／解压；应用另分位置、角色、地图、房间和提交阶段；`present.actors`／`present.walk`／`present.attacks`／`present.hits` 分别测量外观恢复、步行、攻击与命中表现 |
 | 对象与队列 | Lua 堆、实体／网格／地图规模、连接、队列／状态容量、退休会话 |
 | `cached_world_bytes` | 完整视图历史的分配容量 |
 | `world_in_flight_bytes`／`world_in_flight_states` | 发送窗口中的未确认载荷／视图数；不含记录超时后仍在重传的 UDP 恢复包 |
 | `world_delivery_window`／`world_oldest_unapplied_ms` | 有在途视图的连接窗口总和／最旧未确认视图的年龄 |
 | `input_coalesced` | 当前连接合并的未发送输入数量；不包含已交给传输协议的输入 |
 | `world_snapshots_total`／`world_delta_snapshots_total` | 当前会话累计视图数／增量数 |
-| `world_raw_bytes_total`／`world_wire_bytes_total`／`world_full_wire_bytes_total` | 原始字节／已发布压缩载荷／同批完整压缩对照量 |
+| `world_raw_bytes_total`／`world_wire_bytes_total` | 原始字节／已发布压缩载荷（含独立分片头和校验片，不含全部 UDP／ENet 头或可靠重传） |
+| `world_full_wire_bytes_total`／`world_compared_wire_bytes_total` | 抽样帧的完整压缩对照量／同批选中载荷；只以这两个计数计算抽样压缩节省率，不与全部流量相除 |
 
 载荷计数包含实际发送的低频依赖以及大视图校验片和片头；不含 UDP／ENet 封装、重传、frp 或可靠存档流量；实际链路用量以中继记录为准。`compress` 已包含 `delta.encode`，二者不能相加。DEBUG 的 `state_transfer` 提供 `raw`、`wire`、`full_wire`、`delta`、`base`。
 
 网络压缩／解压计时由工作线程产生，通过有界队列交回主线程；队列已满时丢弃诊断样本，不阻塞传输。`checkpoint_capture` 区分主线程原生采集与存档封装耗时；`checkpoint_pack` 记录原始／压缩字节数与后台耗时；`checkpoint_received` 记录后台还原耗时及从启动头到还原完成的时间。这些数据不包含后续原生 Continue 和首份实时视图应用，不能当成完整重连耗时。
 
-`input.present` 测量本机采样到首次绘制回调完成，`input.ack` 测量采样到包含对应确认号的权威视图应用完成；两者都使用本机单调时钟，不包含操作系统送达前的硬件输入时间，也不证明某个射击效果实际触发。`view.age` 是时钟映射估算的采集到应用年龄，不能替代同机日志的实测视图年龄。`prediction.corrections` 记录重放后的纠偏次数，`sum_millipixels`／`max_millipixels` 以千分之一坐标单位记录总量／最大值；`prediction.bucket1`～`bucket5` 分别统计 ≤1、(1,4]、(4,16]、(16,64]、>64 的纠偏幅度。计数包含零偏差，按会话清理，不写入游戏界面。
+`input.present` 测量本机采样到首次绘制回调完成，`input.ack` 测量采样到包含对应确认号的权威视图应用完成；两者都使用本机单调时钟，不包含操作系统送达前的硬件输入时间，也不证明某个射击效果实际触发。`view.age` 是时钟映射估算的采集到应用年龄，不能替代同机日志的实测视图年龄。`prediction.corrections` 记录重放后的纠偏次数，`sum_millipixels`／`max_millipixels` 以千分之一坐标单位记录总量／最大值；`prediction.bucket1`～`bucket5` 分别统计 ≤1、(1,4]、(4,16]、(16,64]、>64 的纠偏幅度。计数包含零偏差，按会话清理，不写入游戏界面。`prediction.correction_step_millipixels` 记录最近一次绘制实际释放的纠偏距离；`attack.handoff_sum_millipixels`／`attack.handoff_max_millipixels` 记录接管时预览与收到的权威位置之间的累计／最大距离，包含传输期间的运动，不能直接当作匹配误差。上述距离计数器均以千分之一游戏坐标单位表示，与阶段耗时分开记录。
 
 均值与最大值使用窗口收到的全部样本；p50／p95／p99 使用最近 512 个样本，成本名及计数器各最多 64 个并按窗口清理。Lua 堆为只读采样，不强制游戏 GC；关闭统计时直接调用原函数。
 
@@ -61,7 +64,9 @@ python tools/benchmark_state_codec.py --runner build-codec/isaac_lan_state_codec
   --iterations 100 --output "$ISAAC_CODEC_REPORT"
 ```
 
-默认输入是模拟库存和实体字段的合成状态，先核对字节一致，再测编码、解码和同房三客机片段复用；不能据此推定游戏帧率。`--snapshot` 可输入一份已还原的完整二进制视图。输出保存逐项 CPU 时间、样本数、均值／P95、速度比、执行器哈希和 JSON／JUnit；缺少一端测量、输入规模不一致或执行失败不能计为完成。报告通过表示对照执行完整，不表示实机性能已通过。
+默认输入是模拟库存和实体字段的合成状态，包含展开数组与 `packed-*` 原生数值块形状；先核对字节一致，再测编码、普通解码、只读视图解码（`decode-view`）和同房三客机片段复用。`transfer-one-peer`、`transfer-three-peers`、`transfer-split-rooms` 还执行生产分层投影及实时／依赖双路编码，分别模拟单客机、三客机同房和分房；每次测量创建独立代次的片段缓存，`bytes` 为该操作全部接收者的载荷总量。这些操作不包含游戏对象采集，不能据此推定游戏帧率。`--snapshot` 可输入一份已还原的完整二进制视图，分层操作仍使用模拟的接收者与房间位置。输出保存逐项 CPU 时间、样本数、均值／P95、速度比、执行器哈希和 JSON／JUnit；缺少一端测量、输入规模不一致或执行失败不能计为完成。报告通过表示对照执行完整，不表示实机性能已通过。
+
+[`run_shared_view_encoding.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_shared_view_encoding.py) 使用 `--host`、`--client` 和两个 `--extra-client` 指定四个隔离实例，连续检查三客机同房、分房、重聚、恶魔交易价格与换层清理。`--build` 选择候选构建，`--output` 保存证据；`--baseline` 仅把普通房价格扫描断言切换为旧行为。每个房间默认准备 200 个静止泪弹（分房共 600 个，避免原生实体池回收使负载变化），预热后各测量 15 秒，`fixture.capture.same/split` 记录每个接收者的生产采集与双路编码总耗时，`fixture.encode.same/split` 记录其中每次编码调用耗时。字节对照和场景准备不计入这些操作，结果不能直接换算帧率。工具要求没有其他运行中的游戏，并在退出后恢复隔离资料、核对哈希。
 
 [`benchmark_compression.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/benchmark_compression.py)比较真实快照的 miniz、LZ4、Zstd 完整帧，以及完整发送路径的 miniz 字节补丁和 Zstd prefix。构建时将 `ISAAC_LAN_LZ4_SOURCE_DIR` 指向上游 LZ4 1.10.0 的 `lib` 目录，生成 `isaac_lan_compression_benchmark`；LZ4 只用于基准，不链接到游戏 DLL。
 

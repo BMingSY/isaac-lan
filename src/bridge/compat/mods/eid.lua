@@ -1,7 +1,7 @@
 local api, wrapping = assert(IsaacLAN), _IsaacLanModules["compat/mods/wrapping"]
 local definition = {
     id = "isaac-lan.compat.eid",
-    adapterVersion = 2,
+    adapterVersion = 3,
     modName = "External Item Descriptions",
     targets = { { workshopId = "836319872" } },
 }
@@ -23,10 +23,11 @@ function definition.probe(target)
     end
     return "ready"
 end
-local function renderReplicas(fn, ...)
+local function renderRoom(replicas, fn, ...)
     -- The replica room's native radius index can lag behind its committed
-    -- entity list. Supplement only EID's description query, and only
-    -- while its render callback owns the local view.
+    -- entity list; on the authority it can include other occupied rooms.
+    -- Restrict EID's description query to the local view before supplementing
+    -- committed replicas that have not entered the native radius index.
     local original = Isaac.FindInRadius
     local partitions = EntityPartition.FAMILIAR
         | EntityPartition.ENEMY
@@ -37,23 +38,36 @@ local function renderReplicas(fn, ...)
         if mask ~= partitions or radius < 0 then
             return result
         end
-        local seen = {}
-        for _, entity in ipairs(result) do
-            seen[GetPtrHash(entity)] = true
+        local roomEntities, members = Isaac.GetRoomEntities(), {}
+        for _, entity in ipairs(roomEntities) do
+            if entity:Exists() then
+                members[GetPtrHash(entity)] = true
+            end
         end
-        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        local seen, filtered = {}, {}
+        for _, entity in ipairs(result) do
+            if entity:Exists() then
+                local key = GetPtrHash(entity)
+                if members[key] and not seen[key] then
+                    filtered[#filtered + 1] = entity
+                    seen[key] = true
+                end
+            end
+        end
+        for _, entity in ipairs(roomEntities) do
             if
-                entity:Exists()
+                replicas
+                and entity:Exists()
                 and entity:GetData().__isaac_lan_replica
                 and not seen[GetPtrHash(entity)]
                 and (entity.Type == 1 or entity.Type == 3 or entity.Type == 5 or entity:IsEnemy())
                 and entity.Position:DistanceSquared(position) <= radius * radius
             then
-                result[#result + 1] = entity
+                filtered[#filtered + 1] = entity
                 seen[GetPtrHash(entity)] = true
             end
         end
-        return result
+        return filtered
     end
     Isaac.FindInRadius = find
     local result = table.pack(pcall(fn, ...))
@@ -169,8 +183,12 @@ function definition.dispatch(target, record, ...)
         local args = table.pack(...)
         return lan:WithLocalView(function()
             target.mod:setPlayer()
-            if record.id == callbacks.MC_POST_RENDER and not lan:IsAuthority() then
-                return renderReplicas(record.original, table.unpack(args, 1, args.n))
+            if record.id == callbacks.MC_POST_RENDER then
+                return renderRoom(
+                    not lan:IsAuthority(),
+                    record.original,
+                    table.unpack(args, 1, args.n)
+                )
             end
             return record.original(table.unpack(args, 1, args.n))
         end)

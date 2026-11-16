@@ -66,6 +66,15 @@ int main() {
     event(WM_KEYDOWN, VK_OEM_3);
     require(chat::capturesInput(), "Toggle did not open chat");
     event(WM_KEYUP, VK_OEM_3);
+    require(event(WM_KEYDOWN, VK_TAB).has_value(), "Completion Tab leaked to gameplay");
+    call("chat_ui_state");
+    require(state.booleans.at("complete"), "Tab did not request completion");
+    call("chat_ui_state");
+    require(!state.booleans.at("complete"), "Completion was delivered twice");
+    event(WM_KEYDOWN, VK_TAB, 1ll << 30);
+    call("chat_ui_state");
+    require(!state.booleans.at("complete"), "Held Tab repeated completion");
+    require(event(WM_KEYUP, VK_TAB).has_value(), "Captured Tab release leaked to gameplay");
     event(WM_IME_STARTCOMPOSITION);
     call("chat_ui_state");
     require(state.booleans.at("composing"), "IME composition did not start");

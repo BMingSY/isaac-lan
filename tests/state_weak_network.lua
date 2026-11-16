@@ -7,11 +7,13 @@ local frame, gate = _IsaacLanFrame, native.net_gate
 local owner = { Name = "Isolated weak-network regression" }
 local item = CollectibleType.COLLECTIBLE_BOOK_OF_REVELATIONS
 local actionCount, finishTick, stopTick = 8, 1500, 1200
+local combatStart, combatEnd = 300, 900
 local renders, activeFrames, used, sent, confirmed, samples = 0, 0, 0, 0, 0, 0
 local linked, chosen, finished = false, false, false
 local nextAction, releaseAt, previousTick, verified = 120, 0, -1, -1
 local lastAuthority, settled = nil, 0
 local sourceRoom
+local enemies, combatSamples = {}, 0
 local function report(message)
     Isaac.DebugString("LAN_NETWORK WEAK_NET " .. message)
 end
@@ -77,6 +79,7 @@ function _IsaacLanFrame()
                 "Action results did not converge"
             )
             assert(samples > 100 and settled > 20, "Insufficient state and stopped-motion coverage")
+            assert(combatSamples > 50, "Insufficient weak-network combat delivery coverage")
         end
         finished = true
         report("PASS actions exactly once, state consistency and recovery")
@@ -127,6 +130,37 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 player:AddEntityFlags(EntityFlag.FLAG_NO_DAMAGE_BLINK)
             end)
             Isaac.GetPlayer(0).Position, Isaac.GetPlayer(0).Velocity = Vector(100, 100), Vector.Zero
+            Isaac.GetPlayer(0):SetMinDamageCooldown(10000)
+        end
+        if tick == combatStart then
+            -- Fixed native workload across candidate builds; actual AI and
+            -- projectiles keep the transport comparison representative.
+            for index, position in ipairs({
+                Vector(220, 160),
+                Vector(420, 160),
+                Vector(220, 380),
+                Vector(420, 380),
+            }) do
+                local kind = index <= 2 and EntityType.ENTITY_HORF or EntityType.ENTITY_ATTACKFLY
+                local enemy = Isaac.Spawn(kind, 0, 0, position, Vector.Zero, nil):ToNPC()
+                enemy.MaxHitPoints, enemy.HitPoints = 10000, 10000
+                enemies[#enemies + 1] = enemy
+            end
+            report("LOAD combat")
+        elseif tick == combatEnd then
+            for _, enemy in ipairs(enemies) do
+                if enemy:Exists() then
+                    enemy:Remove()
+                end
+            end
+            enemies = {}
+            for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                if entity.Type == EntityType.ENTITY_PROJECTILE then
+                    entity:Remove()
+                end
+            end
+            Game():GetRoom():SetClear(true)
+            report("LOAD movement")
         end
         guest(function(player)
             assert(
@@ -146,6 +180,19 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             return false
         end
         local value = worldSchema.unpack(_IsaacLanState.decode(bytes, stable), tick)
+        if tick >= combatStart + 30 and tick < combatEnd and tick ~= previousTick then
+            local count = 0
+            for _, entity in ipairs(value.room[fields.room.entities]) do
+                if
+                    entity[E.type] == EntityType.ENTITY_HORF
+                    or entity[E.type] == EntityType.ENTITY_ATTACKFLY
+                then
+                    count = count + 1
+                end
+            end
+            assert(count == 4, "Weak-network combat workload changed")
+            combatSamples = combatSamples + 1
+        end
         for _, actor in ipairs(value.actors) do
             if actor[A.controller] == 2 then
                 local player = Isaac.GetPlayer(actor[A.index])
@@ -188,5 +235,12 @@ return {
     end,
     cleanup = function()
         native.test_gamepad(0)
+        if host then
+            for _, enemy in ipairs(enemies) do
+                if enemy:Exists() then
+                    enemy:Remove()
+                end
+            end
+        end
     end,
 }

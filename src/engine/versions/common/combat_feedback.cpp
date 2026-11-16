@@ -91,8 +91,7 @@ struct DamageObservation {
     }
 };
 bool npc(Address p) {
-    const auto type = at<unsigned>(p, bindings.entity.type);
-    return type >= 10 && type < 1000;
+    return bindings.npc(image, p) != 0;
 }
 unsigned identify(Address p) {
     if (!p)
@@ -272,6 +271,8 @@ int present(lua_State* L) {
             if (!runtime::replica())
                 throw std::runtime_error("Only replicas select local hit feedback");
             const auto target = checkedEntity(L);
+            if (!at<bool>(target, bindings.entity.active))
+                throw std::runtime_error("Hit feedback requires an active NPC");
             if (!npc(target))
                 throw std::runtime_error("Hit feedback requires an NPC");
             flashes[target] = {at<unsigned>(target, bindings.entity.initSeed),

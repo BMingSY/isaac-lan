@@ -877,3 +877,10 @@ int main() {
         return 1;
     }
 }
+
+namespace isaac::presentation::moving_box {
+bool install(std::uintptr_t) {
+    return true;
+}
+void reset() {}
+} // namespace isaac::presentation::moving_box

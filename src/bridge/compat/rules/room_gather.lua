@@ -2,6 +2,12 @@
 -- cards and commands share the same entry detection and resolved teleport path.
 return function(deps)
     local native, types = deps.native, deps.roomTypes
+    local firstRoomFlag
+    for _, rule in ipairs(native.net_room_options()) do
+        if rule.key == "autoTeleport" then
+            firstRoomFlag = assert(rule.firstRoomFlag)
+        end
+    end
     local arrivalTimeout = 3000
     local previous, pending = {}, nil
     local function sameRoom(a, b)
@@ -12,25 +18,43 @@ return function(deps)
             native.api_cancel_move(slot, batch.destination.index, batch.destination.dimension)
         end
     end
-    local function reset()
+    local function cancelPending(info)
         if pending then
-            local info = native.api_info()
             for slot in pairs(pending.waiting) do
                 cancel(slot, pending, info)
             end
         end
-        previous, pending = {}, nil
+        pending = nil
     end
-    local function special(slot)
+    local function reset()
+        if pending then
+            cancelPending(native.api_info())
+        end
+        previous = {}
+    end
+    local function selected(slot, options)
         local kind
         native.api_with_owner(slot, function()
             kind = deps.game():GetRoom():GetType()
         end)
-        -- Original special types are contiguous, ending at ultra secret.
-        -- A red room with ROOM_DEFAULT remains an ordinary room.
-        return kind and kind > types.ROOM_DEFAULT and kind <= types.ROOM_ULTRASECRET
+        -- Ordinary red rooms retain ROOM_DEFAULT. Room identity includes the
+        -- dimension, but selection uses the entrant's actual original type.
+        return kind
+            and kind >= types.ROOM_DEFAULT
+            and kind <= types.ROOM_ULTRASECRET
+            and (options & (firstRoomFlag << (kind - types.ROOM_DEFAULT))) ~= 0
     end
-    local function step(info)
+    local function placeNear(slot, owner)
+        local target
+        native.api_with_owner(owner, function()
+            local position = deps.player(0).Position
+            target = { x = position.X, y = position.Y }
+        end)
+        if target then
+            deps.placeNear(slot, target)
+        end
+    end
+    local function step(info, options)
         local positions, current = native.rooms_positions(), {}
         for slot = 0, info.players - 1 do
             local position = positions[tostring(slot)]
@@ -40,12 +64,17 @@ return function(deps)
         end
         local before = previous
         previous = current
+        local consumed = {}
         if pending then
             local valid = sameRoom(current[pending.owner], pending.destination)
                 and info.nowMs - pending.started < arrivalTimeout
             for slot, source in pairs(pending.waiting) do
+                consumed[slot] = true
                 local position = current[slot]
                 if not valid or not position or sameRoom(position, pending.destination) then
+                    if valid and sameRoom(position, pending.destination) then
+                        placeNear(slot, pending.owner)
+                    end
                     cancel(slot, pending, info)
                     pending.waiting[slot] = nil
                 elseif not sameRoom(position, source) then
@@ -69,18 +98,19 @@ return function(deps)
             if not next(pending.waiting) then
                 pending = nil
             end
-            -- Consume arrivals together, including partial arrivals. They must
-            -- never become new invitations that pull an exiting player back.
-            return
+            -- Observe subsequent selected entries by the leader or an already
+            -- arrived player, without turning forced arrivals into new entries.
         end
         for owner = 0, info.players - 1 do
             local destination = current[owner]
             if
                 before[owner]
                 and destination
+                and not consumed[owner]
                 and not sameRoom(before[owner], destination)
-                and special(owner)
+                and selected(owner, options)
             then
+                cancelPending(info)
                 local batch = {
                     owner = owner,
                     destination = destination,

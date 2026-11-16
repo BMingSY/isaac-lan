@@ -8,7 +8,11 @@
 #include "presentation/chat_input.h"
 #include "engine/emotes.h"
 #include "engine/build.h"
+#include "engine/module_path.h"
 #include "runtime/session.h"
+#include "runtime/update_notice.h"
+#include "core/extension_package.h"
+#include "core/room_options.h"
 #include "engine/rooms.h"
 #include "engine/input.h"
 #include "net/host_address.h"
@@ -63,6 +67,7 @@ bool lobbyRequested = false;
 bool closeRequested = false, closeSent = false, closeReady = false;
 int menuKey = 0;
 bool menuClick = false;
+bool releaseUpdateInput = false;
 std::string menuText;
 using MenuRender = void(__cdecl*)();
 MenuRender originalMenuRender;
@@ -121,6 +126,63 @@ template <class T> T& read(std::uintptr_t p, unsigned offset) {
 bool menuAvailable() {
     return menu_context::ready(image, bindings.menu);
 }
+bool updateNoticeVisible() {
+    if (!state || bridgeFailed || visible || !menuAvailable() ||
+        updates::startupNotice().version().empty())
+        return false;
+    const auto manager = read<std::uintptr_t>(image, bindings.menu.manager);
+    const auto menus = read<std::uintptr_t>(image, bindings.menu.menus);
+    return !read<bool>(menus, bindings.menu.inputBlocked) &&
+           read<unsigned>(manager, bindings.menu.managerInputBlock) == 0;
+}
+int updateContinue(lua_State*) {
+    if (updateNoticeVisible()) {
+        updates::startupNotice().dismiss();
+        releaseUpdateInput = true;
+        menuKey = 0;
+        menuClick = false;
+        logger("update_notice=CONTINUE");
+    }
+    return 0;
+}
+int updateExit(lua_State* L) {
+    const bool sent = updateNoticeVisible() && window && PostMessageW(window, WM_CLOSE, 0, 0);
+    if (sent) {
+        updates::startupNotice().dismiss();
+        logger("update_notice=EXIT");
+    }
+    lua.pushBoolean(L, sent);
+    return 1;
+}
+int testUpdateNotice(lua_State* L) {
+    const auto* value = lua.toString(L, 1, nullptr);
+    if (value && updates::parseVersion(value)) {
+        const std::string version = value;
+        updates::startupNotice() = updates::Notice([version] { return version; });
+        releaseUpdateInput = false;
+    }
+    return 0;
+}
+void captureMenuKey() {
+    for (const auto& [action, key] : {std::pair{input::action::menuConfirm, VK_RETURN},
+                                      {input::action::menuBack, VK_ESCAPE},
+                                      {input::action::menuLeft, VK_LEFT},
+                                      {input::action::menuRight, VK_RIGHT},
+                                      {input::action::menuUp, VK_UP},
+                                      {input::action::menuDown, VK_DOWN}})
+        if (input::menuTriggered(action)) {
+            menuKey = key;
+            break;
+        }
+}
+bool updateInputReleased() {
+    for (const auto action :
+         {input::action::menuConfirm, input::action::menuBack, input::action::menuLeft,
+          input::action::menuRight, input::action::menuUp, input::action::menuDown})
+        if (input::menuHeld(action))
+            return false;
+    return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0;
+}
 int beginText(lua_State* L) {
     const char* value = lua.toString(L, 1, nullptr);
     const char* field = lua.toString(L, 2, nullptr);
@@ -163,9 +225,11 @@ int loadRoomOptions(lua_State* L) {
 }
 int saveRoomOptions(lua_State* L) {
     auto next = connectionSettings;
-    next.roomOptions = static_cast<std::uint32_t>(lua.toInteger(L, 1, nullptr));
+    next.roomOptions =
+        roomOptions::normalize(static_cast<std::uint64_t>(lua.toInteger(L, 1, nullptr)));
     const bool saved =
-        next == connectionSettings || presentation::saveConnectionSettings(connectionPath, next);
+        roomOptions::valid(next.roomOptions) &&
+        (next == connectionSettings || presentation::saveConnectionSettings(connectionPath, next));
     if (saved)
         connectionSettings = next;
     else
@@ -189,6 +253,25 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
         entryRequested = false;
         originalGameMenuUpdate(menu);
         return;
+    }
+    if (releaseUpdateInput) {
+        releaseUpdateInput = !updateInputReleased();
+        return;
+    }
+    if (visible)
+        updates::startupNotice().dismiss();
+    else {
+        const bool showing = updateNoticeVisible();
+        updates::startupNotice().poll();
+        if (updateNoticeVisible()) {
+            if (!showing) {
+                menuKey = 0;
+                menuClick = false;
+                logger("update_notice=READY version=" + updates::startupNotice().version());
+            } else
+                captureMenuKey();
+            return;
+        }
     }
     if (officialRequested && bindings.menu.onlineSelection) {
         officialRequested = false;
@@ -230,16 +313,7 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
     }
     if (chat_input::capturesInput())
         return;
-    for (const auto& [action, key] : {std::pair{input::action::menuConfirm, VK_RETURN},
-                                      {input::action::menuBack, VK_ESCAPE},
-                                      {input::action::menuLeft, VK_LEFT},
-                                      {input::action::menuRight, VK_RIGHT},
-                                      {input::action::menuUp, VK_UP},
-                                      {input::action::menuDown, VK_DOWN}})
-        if (input::menuTriggered(action)) {
-            menuKey = key;
-            break;
-        }
+    captureMenuKey();
 }
 
 int configurationHash(lua_State* L) {
@@ -376,7 +450,7 @@ void manifest() {
     if (!GetModuleFileNameW(nullptr, executable, std::size(executable)))
         throw std::runtime_error("Cannot locate game directory");
     auto value = app::buildManifest(std::filesystem::path(executable).parent_path(),
-                                    build::version(), logger);
+                                    build::version(), logger, engine::modulePath(&fingerprint));
     fingerprint = std::move(value.fingerprint);
     modFingerprint = std::move(value.mods);
 }
@@ -428,6 +502,9 @@ void poll() {
         return;
     }
     count = std::clamp(number("players"), 0, static_cast<int>(lan::maxPlayers));
+    const auto phase = static_cast<lan::Phase>(number("phase"));
+    if (phase != lan::Phase::idle && phase != lan::Phase::failed && phase != lan::Phase::closed)
+        updates::startupNotice().dismiss();
     prepared = boolean("prepared");
     draining = number("draining");
     error = string("error");
@@ -474,6 +551,10 @@ void poll() {
 LRESULT CALLBACK events(HWND h, UINT message, WPARAM w, LPARAM l) {
     if (message == WM_CLOSE && !closeReady && (prepared || draining || closeRequested)) {
         closeRequested = true;
+        return 0;
+    }
+    if (updateNoticeVisible() && message == WM_LBUTTONDOWN) {
+        menuClick = true;
         return 0;
     }
     if (const auto handled = chat_input::event(h, message, w, l))
@@ -540,7 +621,9 @@ void renderNativeMenu() {
     lua.pushBoolean(state, menuClick);
     lua.pushString(state, localAddresses.c_str());
     lua.pushString(state, error.c_str());
-    if (invoke(9, 1))
+    lua.pushString(state, updateNoticeVisible() ? updates::startupNotice().version().c_str() : "");
+    lua.pushBoolean(state, updateNoticeVisible() && updateInputReleased());
+    if (invoke(11, 1))
         visible = lua.toBoolean(state, -1) != 0;
     else
         bridgeFailed = true;
@@ -599,6 +682,9 @@ BOOL WINAPI swap(HDC dc) {
         localAddresses = addresses();
     }
     poll();
+    const auto manager = read<std::uintptr_t>(image, bindings.menu.manager);
+    if (manager && !engine::native_menu::selectedProfile(image, bindings.menu))
+        updates::startupNotice().dismiss();
     draw();
     diagnostics::render();
     lab_capture::frame(labRoot);
@@ -706,6 +792,14 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.pushBoolean(state, engine::profile().capabilities.nativeEmotes);
         lua.setField(state, -2, "native_emotes");
         lua.setField(state, -2, "capabilities");
+        lua.pushClosure(state, updateContinue, 0);
+        lua.setField(state, -2, "update_continue");
+        lua.pushClosure(state, updateExit, 0);
+        lua.setField(state, -2, "update_exit");
+        if (std::filesystem::exists(std::filesystem::path(labRoot) / L".isaac-lan-lab")) {
+            lua.pushClosure(state, testUpdateNotice, 0);
+            lua.setField(state, -2, "test_update_notice");
+        }
         lua.setGlobal(state, "_IsaacLan");
         lua.pushString(state, fingerprint.c_str());
         lua.setGlobal(state, "_IsaacLanFingerprint");
@@ -748,7 +842,7 @@ void render() {
     renderChat();
 }
 bool capturesInput() {
-    return visible || chat_input::capturesInput();
+    return visible || updateNoticeVisible() || chat_input::capturesInput();
 }
 void configureChat(const chat::Appearance& appearance,
                    const presentation::ChatBackground& background) {

@@ -13,6 +13,7 @@ local env = setmetatable({
     EntityGridCollisionClass = { GRIDCOLL_NONE = 0 },
 }, { __index = _G })
 local laserReads, laserWrites = 0, 0
+local sizeWrites = 0
 local spriteChanges = true
 local geometry = string.pack(">ff", 520, -180)
 local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
@@ -20,6 +21,7 @@ local dogma = dofile(root .. "/src/bridge/compat/bosses/dogma.lua")(
     enums.EntityType,
     enums.EffectVariant
 )
+local npcState = assert(loadfile(root .. "/src/bridge/sync/npc.lua", "t", env))()
 local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "t", env))()(
     dofile(root .. "/src/bridge/sync/fields.lua")
 )(
@@ -30,8 +32,22 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
         entity_prepare = function()
             return true
         end,
+        entity_size = function(sprite, value)
+            sizeWrites = sizeWrites + 1
+            if sprite.setSize then
+                sprite.setSize(value)
+            else
+                rawset(sprite.entity, "Size", value)
+            end
+            return true
+        end,
         entity_shadow = function()
             return ""
+        end,
+        entity_npc_boss = function(sprite, boss)
+            assert(sprite.entity:ToNPC(), "Boss classification reached another native class")
+            sprite.entity.boss = boss
+            return true
         end,
         sprite_state = function(_, bytes)
             return bytes and spriteChanges or ""
@@ -47,11 +63,7 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
         end,
     },
     schemas,
-    {
-        capture = function()
-            return false
-        end,
-    },
+    npcState,
     dogma,
     {
         capture = function()
@@ -64,7 +76,7 @@ local component = assert(loadfile(root .. "/src/bridge/sync/entity_codec.lua", "
         apply = function() end,
     }
 )
-local function entity(kind, flags)
+local function entity(kind, flags, npc)
     local e = {
         Type = kind,
         Variant = 0,
@@ -81,11 +93,16 @@ local function entity(kind, flags)
         flags = flags,
         data = {},
         sprite = {},
+        V1 = { X = 0, Y = 0 },
+        V2 = { X = 0, Y = 0 },
+        TargetPosition = { X = 320, Y = 280 },
+        boss = false,
     }
+    e.sprite.entity = e
     for _, name in ipairs(schemas.common) do
         e[name] = 0
     end
-    for _, name in ipairs(schemas.byType[kind]) do
+    for _, name in ipairs(schemas.byType[kind] or schemas.byType.npc) do
         e[name] = 0
     end
     e.Visible, e.DepthOffset = true, 10
@@ -105,7 +122,10 @@ local function entity(kind, flags)
         return self
     end
     function e:ToNPC()
-        return nil
+        return (npc or kind == enums.EntityType.ENTITY_BEAST) and self or nil
+    end
+    function e:IsBoss()
+        return self.boss
     end
     function e:ToEffect()
         return self
@@ -174,6 +194,75 @@ assert(target.Position.X == 12 and target.Velocity.Y == 3 and target.EndPoint.X 
 assert(target.EntityCollisionClass == 0 and target.GridCollisionClass == 0 and laserWrites == 1)
 component.apply(target, state)
 assert(target.DepthOffset == -9990, "Repeated snapshots must not accumulate the floor offset")
+-- Background bosses must keep their native sorting layer independently of
+-- the order in which the replica allocated the actors and NPCs.
+local background, backgroundReplica =
+    entity(enums.EntityType.ENTITY_BEAST, 0), entity(enums.EntityType.ENTITY_BEAST, 0)
+background.SortingLayer, background.RenderZOffset = 0, -80
+backgroundReplica.SortingLayer, backgroundReplica.RenderZOffset = 2, 0
+for _ = 1, 3 do
+    component.apply(backgroundReplica, component.capture(background, false))
+    assert(
+        backgroundReplica.SortingLayer == 0 and backgroundReplica.RenderZOffset == -80,
+        "A background entity retained its replica allocation's render order"
+    )
+end
+background.SortingLayer, background.RenderZOffset = 2, 120
+component.apply(backgroundReplica, component.capture(background, false))
+assert(
+    backgroundReplica.SortingLayer == 2 and backgroundReplica.RenderZOffset == 120,
+    "A phase change retained the old background layer"
+)
+-- Custom NPC identity is independent of its numeric content type. Exercise
+-- production capture, wire encoding and repeated scratch/classification apply.
+for _, kind in ipairs({ 6617, 6621 }) do
+    local custom, replica = entity(kind, 0, true), entity(kind, 0, true)
+    custom.V1, custom.V2 = env.Vector(1, 2), env.Vector(3, 4)
+    custom.TargetPosition = env.Vector(80, 120)
+    for _, boss in ipairs({ true, true, false }) do
+        custom.boss = boss
+        local bytes = codec.encode(component.capture(custom, false))
+        component.apply(replica, codec.decode(bytes))
+        component.apply(replica, codec.decode(bytes))
+        assert(replica.boss == boss and replica.V1.X == 1 and replica.V2.Y == 4)
+        assert(replica.TargetPosition.X == 80 and replica.TargetPosition.Y == 120)
+    end
+end
+local actor, actorReplica =
+    entity(enums.EntityType.ENTITY_PLAYER, 0), entity(enums.EntityType.ENTITY_PLAYER, 0)
+actor.SortingLayer, actor.RenderZOffset = 1, 50
+actorReplica.SortingLayer, actorReplica.RenderZOffset = 2, -50
+component.apply(actorReplica, component.capture(actor, false))
+assert(
+    actorReplica.SortingLayer == 1 and actorReplica.RenderZOffset == 50,
+    "Actor render order was not restored"
+)
+-- A live slot can have no XML definition. Its Size getter works, while the
+-- public property setter dereferences absent defaults even for the same value.
+local slot, slotReplica = entity(7, 0), entity(7, 0)
+slot.Type, slotReplica.Type, slot.Variant, slotReplica.Variant = 6, 6, 19, 19
+local replicaRadius = 1
+slotReplica.Size = nil
+slotReplica.sprite.setSize = function(value)
+    replicaRadius = value
+end
+setmetatable(slotReplica, {
+    __index = function(_, name)
+        assert(name == "Size")
+        return replicaRadius
+    end,
+    __newindex = function(object, name, value)
+        assert(name ~= "Size", "Replica called the unsafe XML-dependent Size setter")
+        rawset(object, name, value)
+    end,
+})
+local beforeSizes = sizeWrites
+for _, radius in ipairs({ 1, 1, 5.5, 5.5, 1 }) do
+    slot.Size = radius
+    component.apply(slotReplica, component.capture(slot, false))
+    assert(slotReplica.Size == radius, "Replica size did not follow the authority")
+end
+assert(sizeWrites == beforeSizes + 5, "Slot bypassed the native size adapter")
 local actor, replica = entity(1, 1), entity(1, 128)
 -- Replica Player::Update does not count down the native arrival/input lock.
 -- An authoritative zero must release it, while a live cooldown remains locked.
@@ -248,7 +337,7 @@ assert(
     "Compact sprite contract changed"
 )
 local animation, overlay = "Walk", "Glow"
-local animationChanges, overlayChanges = 0, 0
+local animationChanges, overlayChanges, overlayRemovals = 0, 0, 0
 function sourceSprite:GetAnimation()
     return animation
 end
@@ -262,7 +351,7 @@ function sourceSprite:SetOverlayFrame(name)
     overlay, overlayChanges = name, overlayChanges + 1
 end
 function sourceSprite:RemoveOverlay()
-    overlay = ""
+    overlay, overlayRemovals = "", overlayRemovals + 1
 end
 component.applySprite(sourceSprite, expectedSprite)
 assert(animationChanges == 0 and overlayChanges == 0, "Unchanged animations restarted")
@@ -271,6 +360,13 @@ switched[2], switched[4] = "Idle", "Flash"
 component.applySprite(sourceSprite, switched)
 component.applySprite(sourceSprite, switched)
 assert(animationChanges == 1 and overlayChanges == 1, "Animation switch did not occur once")
+local emptyOverlay = wire.decode(wire.encode(switched))
+emptyOverlay[4] = ""
+component.applySprite(sourceSprite, emptyOverlay)
+component.applySprite(sourceSprite, emptyOverlay)
+assert(overlay == "" and overlayRemovals == 1, "Empty overlay was reset repeatedly")
+component.applySprite(sourceSprite, switched)
+assert(overlay == "Flash", "An overlay could not resume after removal")
 local value = wire.decode(wire.encode(component.capture(warning)))
 assert(value[24] == geometry)
 component.apply(beam, value)
@@ -378,4 +474,53 @@ packedComponent.apply(beam, packedState)
 assert(table.concat(applied, ",") == "outer,packed", "Packed plan was not restored")
 packedState[26] = false
 assert(not pcall(packedComponent.apply, beam, packedState), "Missing packed fields accepted")
+-- Inject the nil GetData result reported by the host log. This exercises the
+-- optional diagnostic write, not the native lifecycle that produced the nil.
+-- Synchronization must preserve the ID and links supplied by the native registry.
+local ids, nextNativeID = {}, 100
+packedNative.combat_identity = function(sprite)
+    if not ids[sprite] then
+        nextNativeID = nextNativeID + 1
+        ids[sprite] = nextNativeID
+    end
+    return ids[sprite]
+end
+local sourceWithoutData = entity(enums.EntityType.ENTITY_TEAR, 0)
+sourceWithoutData.data = nil
+warning.data = nil
+warning.Parent, warning.SpawnerEntity = sourceWithoutData, sourceWithoutData
+local withoutData = packedComponent.capture(warning, false)
+assert(withoutData[1] == ids[warning.sprite] and withoutData[11] == ids[sourceWithoutData.sprite])
+assert(withoutData[11] == withoutData[12], "Missing Lua data changed a shared source identity")
+for _ = 1, 3 do
+    local repeated = codec.decode(codec.encode(packedComponent.capture(warning, false)))
+    assert(repeated[1] == withoutData[1] and repeated[11] == withoutData[11])
+end
+warning.data = {}
+packedComponent.capture(warning, false)
+assert(warning.data.__isaac_lan_entity == withoutData[1], "Diagnostic mirror changed native ID")
+sourceWithoutData.Exists = function()
+    return false
+end
+local withoutSource = packedComponent.capture(warning, false)
+assert(withoutSource[11] == 0 and withoutSource[12] == 0, "Nonexistent source retained a link")
+local nativeIdentity = packedNative.combat_identity
+packedNative.combat_identity = function()
+    return false
+end
+assert(
+    not pcall(packedComponent.capture, warning, false),
+    "Native identity failure was hidden by the diagnostic guard"
+)
+packedNative.combat_identity = nativeIdentity
+warning.Parent, warning.SpawnerEntity = nil, nil
+packedComponent.reset()
+assert(packedComponent.capture(warning, false)[1] == withoutData[1])
+
+-- Sprite reuse preserves the numeric wire representation, including signed zero.
+beam.sprite.Rotation = -0.0
+local negative = component.sprite(beam.sprite)
+beam.sprite.Rotation = 0.0
+local positive = component.sprite(beam.sprite, negative)
+assert(positive ~= negative and 1 / positive[8] > 0 and 1 / negative[8] < 0)
 print("PASS portable entity fields, native laser state and replica lifecycle flag ownership")

@@ -1,0 +1,3 @@
+interface:
+  display_name: "以撒双开手测"
+  short_description: "按主客机角色与往返延迟启动两个隔离实例，进入游戏后交回手动测试"

@@ -45,13 +45,14 @@ local input = codec.encode({
 assert(not doors.movementBlocked() and doors.filterInput(input) == input)
 doors.begin()
 time = 45
-assert(math.abs(doors.alpha() - 0.5) < 0.001)
+assert(math.abs(doors.alpha() - 0.175) < 0.001)
 assert(not doors.movementBlocked(), "Departure stopped the input needed to cross the door")
 doors.render()
 doors.begin()
 time = 100
-assert(doors.alpha() == 1, "Repeated doorway samples restarted departure")
+assert(doors.alpha() == 0.35, "Waiting for the host obscured the source room")
 doors.arrive()
+assert(doors.alpha() == 1, "Confirmed arrival did not cover the room switch")
 assert(doors.movementBlocked(), "Arrival fade allowed invisible local movement")
 doors.render()
 local filtered = doors.filterInput(input)
@@ -69,10 +70,15 @@ assert(
     doors.filterInput(input .. "extension") == filtered .. "extension",
     "Movement filtering discarded fields it does not own"
 )
-time = 160
-assert(math.abs(doors.alpha() - 0.5) < 0.001)
+time = 145
+assert(doors.alpha() > 0 and doors.alpha() < 0.5)
+assert(doors.movementBlocked(), "Elapsed time released input before a visible frame")
+doors.render()
+assert(not doors.movementBlocked(), "Visible destination waited for the entire fade")
+assert(doors.filterInput(input) == input)
 time = 230
 assert(doors.alpha() == 0)
+doors.render()
 assert(
     not doors.movementBlocked() and doors.filterInput(input) == input,
     "Arrival retained held input"
@@ -89,7 +95,7 @@ assert(doors.alpha() == 0, "Rejected doorway left the view obscured")
 doors.begin()
 time = 1100
 doors.reset()
-assert(doors.alpha() == 0 and draws == 2, "Pause/floor/session reset leaked a transition")
+assert(doors.alpha() == 0 and draws == 3, "Pause/floor/session reset leaked a transition")
 doors.begin()
 time = 1200
 doors.arrive()
@@ -97,11 +103,22 @@ time = 1700
 assert(doors.alpha() == 1 and doors.movementBlocked(), "Room loading consumed the unseen reveal")
 assert(doors.filterInput(input) == filtered, "Loading released the arrival input hold")
 doors.render()
-time = 1760
-assert(math.abs(doors.alpha() - 0.5) < 0.001, "Reveal did not begin on its first actual draw")
+time = 1720
+assert(math.abs(doors.alpha() - 0.75) < 0.001, "Reveal did not begin on its first actual draw")
+doors.arrive()
+assert(math.abs(doors.alpha() - 0.75) < 0.001, "Repeated arrival restarted the reveal")
+doors.render()
+assert(doors.movementBlocked(), "Mostly covered destination released movement")
 time = 1830
-assert(doors.alpha() == 0 and not doors.movementBlocked())
+assert(doors.alpha() == 0 and doors.movementBlocked(), "A stalled draw released unseen movement")
+doors.render()
+assert(not doors.movementBlocked())
 doors.reset()
+doors.begin()
+doors.arrive()
+assert(doors.alpha() == 1 and doors.movementBlocked(), "Immediate arrival lost its first draw")
+doors.reset()
+assert(not doors.movementBlocked() and doors.filterInput(input) == input)
 print("PASS local door departure, confirmed arrival, cancellation, rejection and reset")
 
 local function point(x, y)
@@ -177,11 +194,11 @@ stair = {
 }
 doors.preview(room, player, point(76, 0), point(1, 0))
 time = 2345
-assert(math.abs(doors.alpha() - 0.5) < 0.001, "Crawlspace approach omitted its departure")
+assert(math.abs(doors.alpha() - 0.175) < 0.001, "Crawlspace approach omitted its departure")
 doors.preview(room, player, point(106, 0), point(1, 0))
-assert(math.abs(doors.alpha() - 0.5) < 0.001, "Crossing the entrance cancelled its preview")
+assert(math.abs(doors.alpha() - 0.175) < 0.001, "Crossing the entrance cancelled its preview")
 doors.preview(room, player, point(0, 0), point(-1, 0), {})
-assert(math.abs(doors.alpha() - 0.5) < 0.001, "A second controlled body cancelled the entrance")
+assert(math.abs(doors.alpha() - 0.175) < 0.001, "A second controlled body cancelled the entrance")
 doors.arrive()
 assert(doors.movementBlocked())
 doors.reset()

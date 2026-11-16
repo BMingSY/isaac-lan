@@ -1,10 +1,12 @@
 #include "engine/item_effects.h"
+#include "engine/moving_box.h"
 #include "engine/rooms.h"
 #include "engine/versions/common/item_bindings.h"
 #include "compat/items/starting_rewards.h"
 #include <MinHook.h>
 #include "engine/lua_api.h"
 #include "runtime/session.h"
+#include "net/protocol.h"
 #include <cstring>
 #include <array>
 
@@ -109,8 +111,8 @@ void __attribute__((fastcall)) queueLegacy(void* player, void*, void* config, in
     queueAt(reinterpret_cast<Address>(__builtin_return_address(0)), player, config, charge, flags,
             data, native_items::unavailablePool);
 }
-Address playerArgument(lua_State* L) {
-    if (!rooms::virtualized() || runtime::replica() || !rooms::viewReady() ||
+Address playerArgument(lua_State* L, bool snapshot = false) {
+    if (!rooms::virtualized() || (!snapshot && (runtime::replica() || !rooms::viewReady())) ||
         lua.rawLength(L, 1) != spriteWrapperBytes)
         return 0;
     const auto wrapper = static_cast<Address*>(lua.toUserdata(L, 1));
@@ -131,11 +133,86 @@ Address playerArgument(lua_State* L) {
         found |= at<Address>(entry, 0) == actor;
     const auto controller = found ? at<int>(actor, layout.player.controller) : 0;
     return found && controller >= 1 && controller <= 4 &&
-                   (rooms::connected() & (1u << (controller - 1))) &&
+                   (snapshot || (rooms::connected() & (1u << (controller - 1)))) &&
                    at<unsigned>(actor, layout.entity.type) == playerEntity &&
-                   at<bool>(actor, layout.entity.active)
+                   (snapshot || at<bool>(actor, layout.entity.active))
                ? actor
                : 0;
+}
+int inventoryOrder(lua_State* L) {
+    try {
+        const auto actor = playerArgument(L, true);
+        if (!actor)
+            throw std::runtime_error("Inventory order requires a listed player");
+        if (lua.getTop(L) == 1) {
+            lan::Writer writer(lan::Message::world);
+            for (const auto id :
+                 engine::native_inventory_order::capture(binding.inventoryOrder, actor))
+                writer.u32(static_cast<std::uint32_t>(id));
+            lua.pushLString(L, reinterpret_cast<const char*>(writer.bytes.data() + 1),
+                            writer.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas restore inventory order");
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 2, &size);
+        lan::Reader reader({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        engine::native_inventory_order::State desired;
+        for (auto& id : desired)
+            id = std::bit_cast<std::int32_t>(reader.u32());
+        reader.finish();
+        engine::native_inventory_order::restore(binding.inventoryOrder, actor,
+                                                at<Address>(image, binding.globals.game), desired);
+        lua.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+}
+int activeData(lua_State* L) {
+    try {
+        const auto actor = playerArgument(L, true);
+        if (!actor)
+            throw std::runtime_error("Active item data requires a listed player");
+        if (lua.getTop(L) == 1) {
+            lan::Writer writer(lan::Message::world);
+            for (const auto& item :
+                 engine::native_active_items::capture(binding.activeItems, actor)) {
+                writer.u32(static_cast<std::uint32_t>(item.id));
+                writer.u32(static_cast<std::uint32_t>(item.data));
+            }
+            writer.u8(presentation::moving_box::capture(actor));
+            lua.pushLString(L, reinterpret_cast<const char*>(writer.bytes.data() + 1),
+                            writer.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas restore active item data");
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 2, &size);
+        lan::Reader reader({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        engine::native_active_items::State state;
+        for (auto& item : state) {
+            item.id = std::bit_cast<std::int32_t>(reader.u32());
+            item.data = std::bit_cast<std::int32_t>(reader.u32());
+        }
+        const auto boxFull = reader.u8();
+        if (boxFull > 1)
+            throw std::runtime_error("Invalid Moving Box display state");
+        reader.finish();
+        engine::native_active_items::restore(binding.activeItems, actor,
+                                             at<Address>(image, binding.globals.game), state);
+        presentation::moving_box::apply(actor, boxFull != 0);
+        lua.pushBoolean(L, true);
+        return 1;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
 }
 Address itemConfig(int id) {
     using Config = Address(__cdecl*)();
@@ -263,6 +340,8 @@ bool install(Address base) {
                    reinterpret_cast<void**>(&originalReviveCollectible)) &&
               hook(binding.entry.playerReviveTrinket, reviveTrinket,
                    reinterpret_cast<void**>(&originalReviveTrinket));
+    if (ok && binding.installCompatibility)
+        ok = binding.installCompatibility(base);
     if (ok) {
         originalAdd = forwardAdd;
         originalQueue = forwardQueue;
@@ -289,16 +368,18 @@ bool install(Address base) {
 }
 bool bind(lua_State* L, HMODULE module) {
     using S = isaac::lua::Symbol;
-    if (!lua.load(module,
-                  {S::toUserdata, S::rawLength, S::checkInteger, S::toBoolean, S::pushInteger,
-                   S::pushBoolean, S::pushString, S::pushClosure, S::setField}))
+    if (!lua.load(module, {S::toUserdata, S::rawLength, S::checkInteger, S::toBoolean,
+                           S::pushInteger, S::pushBoolean, S::pushString, S::pushClosure,
+                           S::setField, S::getTop, S::checkString, S::pushLString}))
         return false;
-    for (const auto& [key, fn] : std::array<std::pair<const char*, isaac::lua::Function>, 5>{
+    for (const auto& [key, fn] : std::array<std::pair<const char*, isaac::lua::Function>, 7>{
              {{"items_take_collectible", take},
               {"items_give_collectible", give},
               {"items_collectible_name", name},
               {"items_active_charge", activeCharge},
-              {"items_add_active_charge", addActiveCharge}}}) {
+              {"items_add_active_charge", addActiveCharge},
+              {"items_active_data", activeData},
+              {"actor_inventory_order", inventoryOrder}}}) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, key);
     }

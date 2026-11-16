@@ -1,3 +1,4 @@
+#include "engine/moving_box.h"
 #include "engine/versions/common/room_hooks.h"
 #include "engine/versions/common/scene_update.h"
 #include "engine/lua_api.h"
@@ -962,7 +963,7 @@ bool installHooks(Address base) {
 } // namespace
 bool install(Address base) {
     return base && !installed && engine::native_scene_update::install(base) &&
-           pickup_preview::install(base) && installHooks(base);
+           pickup_preview::install(base) && moving_box::install(base) && installHooks(base);
 }
 bool bind(lua_State* L, HMODULE module) {
     if (!lua.load(module, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::checkInteger,
@@ -1066,6 +1067,7 @@ void advance() {
             rooms::withPlayer(slot, [&] { originalUpdate(owned[slot]->data(), false); });
 }
 void reset(bool preservePixels) {
+    moving_box::reset();
     ++screenGeneration;
     screenSlot = -1;
     for (auto& screen : screens) {

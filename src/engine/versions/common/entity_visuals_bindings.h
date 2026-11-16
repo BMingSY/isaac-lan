@@ -11,6 +11,7 @@ struct Bindings {
     struct Tether {
         unsigned dataVtable, points, capacity, first, count, sprite, size;
     } tether;
+    unsigned entityVariant, flipSprite, flipVisible;
 };
 extern const Bindings bindings;
 } // namespace isaac::engine::native_visuals

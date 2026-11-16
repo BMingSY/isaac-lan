@@ -24,6 +24,14 @@ function _IsaacLanMinimapRender()
     end
 end
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
+local refreshFlatFileDoors = _IsaacLanModules["compat/items/flat_file"]({
+    native = native,
+    game = Game,
+    player = Isaac.GetPlayer,
+    trinket = TrinketType.TRINKET_FLAT_FILE,
+    curseRoom = RoomType.ROOM_CURSE,
+    doorSlots = DoorSlot.NUM_DOOR_SLOTS,
+})
 local friendlyFire = _IsaacLanModules["compat/rules/friendly_fire"]({
     policy = _IsaacLanModules["compat/rules/pvp_damage"],
     attacks = _IsaacLanModules["compat/rules/pvp_attacks"],
@@ -77,16 +85,25 @@ local function lootAllocation()
     })
 end
 local allocation = lootAllocation()
+local placeNear = _IsaacLanModules["runtime/room_placement"]({
+    native = native,
+    game = Game,
+    player = Isaac.GetPlayer,
+    vector = Vector,
+    collision = GridCollisionClass,
+}).near
 local roomRules = _IsaacLanModules["runtime/room_rules"]({
     native = native,
     allocation = allocation,
     allow = function(key)
         return not challenge or challenge.allow(key)
     end,
-    gather = _IsaacLanModules["compat/rules/special_rooms"]({
+    gather = _IsaacLanModules["compat/rules/room_gather"]({
         native = native,
         game = Game,
         roomTypes = RoomType,
+        player = Isaac.GetPlayer,
+        placeNear = placeNear,
     }),
     charge = _IsaacLanModules["compat/rules/clear_charge"]({
         native = native,
@@ -185,6 +202,7 @@ challenge = _IsaacLanModules["runtime/challenges"]({
     routes = {
         lamb = goalRoute("lamb"),
         mom = goalRoute("mom"),
+        heart = goalRoute("heart"),
         battle_royale = battle,
     },
     effects = {
@@ -264,21 +282,36 @@ function _IsaacLanChallengeStep()
     challenge.step()
     roomRules.step()
     friendlyFire.step()
+    refreshFlatFileDoors()
 end
 function _IsaacLanCanEnterRoom(...)
     return challenge.canEnter(...)
 end
+local lifecycleMessages = _IsaacLanModules["runtime/lifecycle_messages"](
+    native.net_lifecycle_send,
+    native.net_lifecycle_receive
+)
 local restart = _IsaacLanModules["runtime/restart"]({
     running = Phase.running,
     now = function()
         return native.api_info().nowMs
     end,
-    send = native.net_lifecycle_send,
-    receive = native.net_lifecycle_receive,
+    send = lifecycleMessages.restart.send,
+    receive = lifecycleMessages.restart.receive,
     request = native.net_restart_request,
     restart = function()
         return native.net_restart(Seeds.Seed2String(Random()):gsub("%s", ""))
     end,
+})
+local animationSkip = _IsaacLanModules["runtime/animation_skip"]({
+    running = Phase.running,
+    kinds = native.animation_skip_kinds(),
+    view = native.animation_skip_view,
+    request = native.animation_skip_request,
+    skip = native.animation_skip,
+    send = lifecycleMessages.animation.send,
+    receive = lifecycleMessages.animation.receive,
+    log = Isaac.DebugString,
 })
 local status, tick = {}, 0
 local lifecycle
@@ -312,6 +345,11 @@ local bot = _IsaacLanModules["lanbot"]({
 }, _IsaacLanModules)
 local chatLimits = native.chat_limits()
 local emotes = native.emote_count and native.emote_count() or 0
+local playerOpacity = _IsaacLanModules["presentation/player_opacity"]({
+    default = native.player_opacity(),
+    info = native.api_info,
+    apply = native.player_opacity,
+})
 chat = _IsaacLanModules["runtime/chat"]({
     limits = chatLimits,
     nonce = native.api_nonce,
@@ -322,22 +360,23 @@ chat = _IsaacLanModules["runtime/chat"]({
     roll = native.chat_roll,
     dice = _IsaacLanModules["runtime/chat_dice"],
     teleport = _IsaacLanModules["runtime/teleport"]({
+        roomDefinitions = _IsaacLanModules["core/room_types"],
         native = native,
         game = Game,
         player = Isaac.GetPlayer,
         hash = GetPtrHash,
-        vector = Vector,
+        placeNear = placeNear,
         enums = {
             room = RoomType,
             shape = RoomShape,
             grid = GridRooms,
-            collision = GridCollisionClass,
         },
         output = function(text, options)
             return chat.output(text, options)
         end,
     }),
     bot = bot.command,
+    opacity = playerOpacity.command,
     feedback = function(text)
         return feedback.submit(text, function(message)
             chat.output(message, { audience = "self" })
@@ -365,6 +404,10 @@ local chatUI = _IsaacLanModules["presentation/chat"]({
     phase = Phase,
     limits = chatLimits,
     clock = Isaac.GetTime,
+    completion = _IsaacLanModules["presentation/chat_completion"](
+        _IsaacLanModules["core/room_types"],
+        chatLimits.commandBytes
+    ),
 }, _IsaacLanModules["presentation/chat_layout"])
 function _IsaacLanChatRender()
     chatUI.render(status)
@@ -419,6 +462,7 @@ function _IsaacLanActionStep()
     challenge.step()
     roomRules.step()
     friendlyFire.prepare()
+    refreshFlatFileDoors()
     if native.api_info().ready == 1 then
         _IsaacLanModules["compat/mods/goodtrip/authority"].observe()
     end
@@ -531,6 +575,7 @@ end)
 function _IsaacLanCommand(action, value)
     if action == "host" then
         bot.reset()
+        playerOpacity.reset()
         chat.reset()
         chatUI.reset()
         lifecycle.close()
@@ -540,6 +585,7 @@ function _IsaacLanCommand(action, value)
         savedPlayers, savedOptions = native.net_saved_info()
     elseif action == "join" then
         bot.reset()
+        playerOpacity.reset()
         chat.reset()
         chatUI.reset()
         lifecycle.close()
@@ -622,10 +668,14 @@ function _IsaacLanFrame()
         )
     then
         chatSession = false
+        playerOpacity.reset()
         chat.reset()
         chatUI.reset()
     end
+    playerOpacity.step()
+    lifecycleMessages.poll()
     restart.poll(status)
+    animationSkip.poll(status)
     integration.poll()
     chat.poll()
     feedback.poll()

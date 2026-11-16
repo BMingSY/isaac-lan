@@ -45,7 +45,9 @@ native_bootstrap::Logger log;
 rooms::RoomCall originalRoomUpdate, originalGameRender;
 native_bootstrap::HalfUpdate originalHalfUpdate;
 bool updatesInstalled = false, renderingInstalled = false;
-constexpr int roomUpdateFailure = 16, halfUpdateFailure = 17, renderingFailure = 20;
+constexpr auto roomUpdateFailure = startup::Code::roomUpdate;
+constexpr auto halfUpdateFailure = startup::Code::halfUpdate;
+constexpr auto renderingFailure = startup::Code::rendering;
 lua::API lua;
 template <class T> bool read(std::uintptr_t address, T& value) {
     SIZE_T count = 0;
@@ -129,7 +131,7 @@ int audit(lua_State* L) {
     return 1;
 }
 } // namespace
-int installUpdates(Address base, native_bootstrap::Logger logger) {
+startup::Code installUpdates(Address base, native_bootstrap::Logger logger) {
     if (!base || updatesInstalled)
         return roomUpdateFailure;
     image = base;
@@ -142,7 +144,7 @@ int installUpdates(Address base, native_bootstrap::Logger logger) {
     const std::array<void**, 2> originals{reinterpret_cast<void**>(&originalRoomUpdate),
                                           reinterpret_cast<void**>(&originalHalfUpdate)};
     unsigned created = 0;
-    int error = 0;
+    auto error = startup::Code::success;
     for (unsigned i = 0; i < targets.size(); ++i) {
         if (MH_CreateHook(targets[i], detours[i], originals[i]) != MH_OK) {
             error = i == 0 ? roomUpdateFailure : halfUpdateFailure;
@@ -150,13 +152,13 @@ int installUpdates(Address base, native_bootstrap::Logger logger) {
         }
         ++created;
     }
-    if (!error)
+    if (error == startup::Code::success)
         for (unsigned i = 0; i < targets.size(); ++i)
             if (MH_EnableHook(targets[i]) != MH_OK) {
                 error = i == 0 ? roomUpdateFailure : halfUpdateFailure;
                 break;
             }
-    if (error) {
+    if (error != startup::Code::success) {
         while (created)
             MH_RemoveHook(targets[--created]);
         originalRoomUpdate = nullptr;
@@ -168,9 +170,9 @@ int installUpdates(Address base, native_bootstrap::Logger logger) {
     updatesInstalled = true;
     if (bindings.probe)
         bindings.probe->initialize(image, log);
-    return 0;
+    return startup::Code::success;
 }
-int installRendering() {
+startup::Code installRendering() {
     if (!updatesInstalled || renderingInstalled)
         return renderingFailure;
     auto* target = reinterpret_cast<void*>(image + bindings.entry.gameRender);
@@ -183,7 +185,7 @@ int installRendering() {
         return renderingFailure;
     }
     renderingInstalled = true;
-    return 0;
+    return startup::Code::success;
 }
 void halfUpdate() {
     if (updatesInstalled)

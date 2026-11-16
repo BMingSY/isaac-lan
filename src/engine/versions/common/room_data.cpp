@@ -1,4 +1,5 @@
 #include "engine/versions/common/room_data.h"
+#include "engine/versions/common/room_metadata.h"
 #include "engine/versions/common/room_data_bindings.h"
 #include "engine/lua_api.h"
 #include "runtime/session.h"
@@ -13,11 +14,10 @@ namespace isaac::engine::native_room_data {
 namespace {
 using Address = std::uintptr_t;
 using RoomCall = void(__attribute__((thiscall)) *)(void*);
-constexpr unsigned maxMapEntities = 4096, mapHeaderBytes = 8, mapRecordBytes = 24;
+constexpr unsigned maxMapEntities = 4096;
 constexpr unsigned dimensionCount = 3, roomsPerDimension = level_grid::cellCount;
 constexpr unsigned floorRoomCount = dimensionCount * roomsPerDimension;
 constexpr unsigned doorCount = 8, seedCount = 4;
-constexpr unsigned maxRoomShape = 12, maxRoomType = 32, maxRoomWidth = 26, maxRoomHeight = 14;
 struct Key {
     int dimension, index;
     auto operator<=>(const Key&) const = default;
@@ -54,6 +54,9 @@ Key queryKey(lua_State* L) {
 // Descriptors borrow these scalar-only configurations. Keep stable storage
 // through floor/game cleanup; replacing a key copies into its existing block.
 std::map<Key, std::vector<std::uint8_t>> replicaLayouts;
+std::map<Key, metadata::Layout> decodedLayouts;
+std::map<Key, metadata::Pickups> decodedPickups;
+metadata::CellIndex roomCells;
 // The native minimap reads saved entities, which replicas never simulate or
 // save. Supply pickup metadata only while caching the map; room loading and
 // saving must retain their original owned vectors.
@@ -100,28 +103,15 @@ int mapPickups(lua_State* L) {
             throw std::runtime_error("Only replicas receive map pickups");
         std::size_t size = 0;
         const auto bytes = lua.checkString(L, 1, &size);
-        if (size < mapHeaderBytes || (size - mapHeaderBytes) % mapRecordBytes ||
-            size > mapHeaderBytes + maxMapEntities * mapRecordBytes)
-            throw std::runtime_error("Invalid map pickups");
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(bytes), size});
         Key key{static_cast<int>(r.u32()), static_cast<int>(r.u32())};
-        if (key.dimension < 0 || key.dimension >= static_cast<int>(dimensionCount) ||
-            key.index < bindings.minimumRoom || key.index >= static_cast<int>(roomsPerDimension))
+        if (!validKey(key.dimension, key.index))
             throw std::runtime_error("Invalid map room");
-        auto entities = std::make_shared<MapStorage>((size - mapHeaderBytes) / mapRecordBytes *
-                                                     bindings.savedEntity.size);
-        for (unsigned i = 0; i < entities->size(); i += bindings.savedEntity.size) {
-            const auto entity = reinterpret_cast<Address>(entities->data()) + i;
-            for (auto offset : bindings.savedEntity.fields)
-                at<unsigned>(entity, offset) = r.u32();
-            if (at<unsigned>(entity, 0) != 5 && at<unsigned>(entity, 0) != 6)
-                throw std::runtime_error("Invalid map entity");
-        }
-        r.finish();
+        auto& decoded = decodedPickups[key];
+        const bool changed = decoded.update({reinterpret_cast<const std::uint8_t*>(bytes), size});
         auto& previous = replicaMapEntities[key];
-        const bool changed = previous ? *previous != *entities : !entities->empty();
         if (!previous || changed)
-            previous = std::move(entities);
+            previous = std::make_shared<MapStorage>(decoded.entities);
         lua.pushBoolean(L, true);
         lua.pushBoolean(L, changed);
         return 2;
@@ -208,13 +198,15 @@ int roomLayout(lua_State* L) {
             w.u32(at<int>(desc, bindings.roomDescriptor.listIndex));
             // Large rooms occupy several cells; the minimap uses this native
             // cell-to-descriptor table rather than GetRoomByIdx's fallback.
-            std::vector<unsigned> cells;
-            if (index >= 0)
-                for (unsigned cell = 0; cell < roomsPerDimension; ++cell)
-                    if (at<int>(game(), bindings.game.mapOffsets +
-                                            (dimension * roomsPerDimension + cell) * 4) ==
-                        at<int>(desc, bindings.roomDescriptor.listIndex))
-                        cells.push_back(cell);
+            const auto& cells =
+                index < 0
+                    ? std::vector<unsigned>{}
+                    : roomCells.get(
+                          dimension, at<int>(desc, bindings.roomDescriptor.listIndex),
+                          std::span<const int, roomsPerDimension>(
+                              reinterpret_cast<const int*>(game() + bindings.game.mapOffsets) +
+                                  dimension * roomsPerDimension,
+                              roomsPerDimension));
             w.u8(cells.size());
             for (auto cell : cells)
                 w.u8(cell);
@@ -239,45 +231,16 @@ int roomLayout(lua_State* L) {
         const auto data = lua.checkString(L, 1, &size);
         lan::Reader r({reinterpret_cast<const std::uint8_t*>(data), size});
         Key key{static_cast<int>(r.u32()), static_cast<int>(r.u32())};
-        const int gridIndex = r.u32(), listIndex = r.u32();
-        std::vector<unsigned> cells(r.u8());
-        for (auto& cell : cells)
-            cell = r.u8();
-        std::vector<std::uint8_t> config(bindings.config.size);
-        auto address = reinterpret_cast<Address>(config.data());
-        for (auto offset : bindings.config.fields)
-            at<unsigned>(address, offset) = r.u32();
-        at<unsigned char>(address, bindings.config.width) = r.u8();
-        at<unsigned char>(address, bindings.config.height) = r.u8();
-        // An empty native MSVC small string and no initial spawns. Entity and
-        // grid state is installed by the authoritative snapshot after Init.
-        at<unsigned>(address, bindings.config.stringCapacity) = bindings.config.inlineCapacity;
-        const auto allowed = r.u32();
-        std::array<unsigned, doorCount> doors{};
-        for (auto& door : doors)
-            door = r.u32();
-        std::array<unsigned, seedCount> seeds{};
-        for (auto& seed : seeds)
-            seed = r.u32();
-        r.finish();
-        if (!rooms::validLayoutIndices(key.dimension, key.index, gridIndex, listIndex) ||
-            key.index < bindings.minimumRoom || gridIndex < bindings.minimumRoom ||
-            listIndex >= static_cast<int>(floorRoomCount) - bindings.minimumRoom ||
-            (key.index >= 0 && std::find(cells.begin(), cells.end(), key.index) == cells.end()) ||
-            std::any_of(cells.begin(), cells.end(),
-                        [](auto cell) { return cell >= roomsPerDimension; }) ||
-            at<unsigned>(address, bindings.config.shape) < 1 ||
-            at<unsigned>(address, bindings.config.shape) > maxRoomShape ||
-            at<unsigned>(address, bindings.config.type) < 1 ||
-            at<unsigned>(address, bindings.config.type) > maxRoomType ||
-            !at<unsigned char>(address, bindings.config.width) ||
-            at<unsigned char>(address, bindings.config.width) > maxRoomWidth ||
-            !at<unsigned char>(address, bindings.config.height) ||
-            at<unsigned char>(address, bindings.config.height) > maxRoomHeight)
-            throw std::runtime_error(
-                "Invalid authoritative room layout dimension=" + std::to_string(key.dimension) +
-                " index=" + std::to_string(key.index) + " grid=" + std::to_string(gridIndex) +
-                " list=" + std::to_string(listIndex));
+        if (!validKey(key.dimension, key.index))
+            throw std::runtime_error("Invalid layout room");
+        auto& decoded = decodedLayouts[key];
+        decoded.update({reinterpret_cast<const std::uint8_t*>(data), size});
+        const auto gridIndex = decoded.gridIndex, listIndex = decoded.listIndex;
+        const auto& cells = decoded.cells;
+        const auto& config = decoded.config;
+        const auto allowed = decoded.allowed;
+        const auto& doors = decoded.doors;
+        const auto& seeds = decoded.seeds;
         using Desc = void*(__attribute__((thiscall))*)(void*, int, int);
         // All floor descriptors are constructed by the game at startup. A new
         // red room has no replica index yet: GetRoomByIdx returns a shared
@@ -386,6 +349,9 @@ void borrowMapPickups(const std::function<void()>& cache) {
 } // namespace
 void resetMap() {
     replicaMapEntities.clear();
+    decodedLayouts.clear();
+    decodedPickups.clear();
+    roomCells.reset();
 }
 void withMapPickups(const std::function<void()>& cache) {
     borrowMapPickups(cache);

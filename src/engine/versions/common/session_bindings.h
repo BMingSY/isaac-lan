@@ -30,6 +30,8 @@ struct Bindings {
     int gameScene, exitMenu, gameOverRestart, heldRestart;
     // Persistence uses each version's native file/cloud selection and ownership.
     void (*persistProgress)(std::uintptr_t image, std::uintptr_t progress);
+    unsigned recordCompletion = 0, completionDefinitions = 0;
+    unsigned progressTryUnlock = 0, progressIncreaseCounter = 0;
 };
 extern const Bindings bindings;
 } // namespace isaac::engine::native_session

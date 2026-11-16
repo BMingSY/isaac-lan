@@ -5,6 +5,7 @@
 #include "runtime/session_store.h"
 #include "runtime/input_schedule.h"
 #include "compat/challenges/catalog.h"
+#include "compat/challenges/aim_rotation.h"
 #include "engine/characters.h"
 #include "engine/item_presentation.h"
 #include "engine/presentation.h"
@@ -23,12 +24,13 @@
 #include "core/room_options.h"
 #include "diagnostics/runtime_log.h"
 #include "diagnostics/performance.h"
-#include "diagnostics/input_latency.h"
+#include "core/input_latency.h"
 #include "engine/session_backend.h"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <chrono>
+#include <optional>
 
 namespace backend = isaac::engine::session;
 
@@ -47,7 +49,7 @@ constexpr auto restartHoldDuration = std::chrono::milliseconds(550);
 
 LaunchState launch;
 SessionView view;
-diagnostics::InputLatency inputLatency;
+core::InputLatency inputLatency;
 SavedRun saves;
 std::string sessionFingerprint;
 bool requestRestart(bool held) {
@@ -102,6 +104,16 @@ bool validRules(const lan::RunRules& rules) {
         expected.options = rules.options;
     return roomOptions::valid(rules.options) && (!rules.id || definition) && rules == expected &&
            (rules.options & requiredOptions) == requiredOptions;
+}
+bool remoteShooting() {
+    const auto* definition =
+        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return challengeActive() && definition && definition->nextPlayerShooting;
+}
+bool largeFloor() {
+    const auto* definition =
+        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return challengeActive() && definition && definition->largeFloor;
 }
 bool beginNetworkRun() {
     if (saves.networkRun)
@@ -177,7 +189,9 @@ std::optional<lan::Archive> readArchive() {
     }
 }
 lan::Progress readProgress() {
-    return backend::readProgress();
+    auto progress = backend::readProgress();
+    progress.earned = saves.earnedProgress;
+    return progress;
 }
 lan::LobbyAccess personalAccess() {
     // Embedded modules load during Lua initialization, before the native save
@@ -203,6 +217,16 @@ lan::LobbyAccess personalAccess() {
 }
 void writeProgress(const lan::Progress& value) {
     backend::writeProgress(value);
+    saves.earnedProgress = value.earned;
+}
+void completionAward(unsigned counter, unsigned bits, unsigned achievement) {
+    if (!saves.localProgress || !view.gated || !session || !session->isHost())
+        return;
+    if (counter && counter < saves.earnedProgress.counters.size() &&
+        backend::progressBitCounters()[counter])
+        saves.earnedProgress.counters[counter] |= bits;
+    if (achievement && achievement < saves.earnedProgress.achievements.size())
+        saves.earnedProgress.achievements[achievement] = 1;
 }
 void restoreProgress() {
     if (!saves.localProgress || !saves.commonProgress)
@@ -210,9 +234,15 @@ void restoreProgress() {
     const auto current = readProgress();
     // Keep each user's previous progress. Only changes earned during this
     // shared run are merged back; the host's old achievements are not granted.
-    writeProgress(lan::mergeProgress(*saves.localProgress, *saves.commonProgress, current));
+    const auto local = *saves.localProgress;
+    const auto merged =
+        lan::mergeProgress(local, *saves.commonProgress, current, backend::progressBitCounters());
+    saves.earnedProgress = {};
     saves.localProgress.reset();
     saves.commonProgress.reset();
+    // Native unlocks may save progress synchronously. They now own personal
+    // values and must not pass through the shared-run merger a second time.
+    backend::commitProgress(local, merged);
 }
 void serializeProgress(const backend::Call& original) {
     if (!saves.localProgress || !saves.commonProgress) {
@@ -220,9 +250,12 @@ void serializeProgress(const backend::Call& original) {
         return;
     }
     const auto current = readProgress();
-    writeProgress(lan::mergeProgress(*saves.localProgress, *saves.commonProgress, current));
+    // Serialization temporarily borrows personal values without replacing the
+    // run's award ledger or triggering native unlock notifications.
+    backend::writeProgress(lan::mergeProgress(*saves.localProgress, *saves.commonProgress, current,
+                                              backend::progressBitCounters()));
     original();
-    writeProgress(current);
+    backend::writeProgress(current);
     if (logger)
         logger("progress_save=ISOLATED");
 }
@@ -370,13 +403,18 @@ bool call(int reference, int arguments, int results, int stackBefore) {
     lua.setTop(state, stackBefore);
     return false;
 }
-void integrationCallback(const char* name) {
+void integrationCallback(const char* name, std::optional<int> argument = std::nullopt) {
     if (!state || !view.gated || !session)
         return;
     const int top = lua.getTop(state);
-    if (lua.getGlobal(state, name) == 6 && lua.pcall(state, 0, 0, 0, 0, nullptr) && logger) {
-        const auto reason = lua.toString(state, -1, nullptr);
-        logger(std::string("integration_error=") + name + " " + (reason ? reason : "Lua error"));
+    if (lua.getGlobal(state, name) == 6) {
+        if (argument)
+            lua.pushInteger(state, *argument);
+        if (lua.pcall(state, argument ? 1 : 0, 0, 0, 0, nullptr) && logger) {
+            const auto reason = lua.toString(state, -1, nullptr);
+            logger(std::string("integration_error=") + name + " " +
+                   (reason ? reason : "Lua error"));
+        }
     }
     lua.setTop(state, top);
 }
@@ -388,7 +426,8 @@ void publishState() {
     // first view after setConnected has restored the actor and room.
     const auto simulatedMask = rooms::connected();
     for (unsigned slot = 1; slot < session->players(); ++slot) {
-        if (!(simulatedMask & session->connectedMask() & (1u << slot)))
+        if (!(simulatedMask & session->connectedMask() & (1u << slot)) ||
+            !session->captureRequested(slot))
             continue;
         const int top = lua.getTop(state);
         const auto began = InputClock::now();
@@ -416,7 +455,7 @@ void publishState() {
         packet.bytes.assign(bytes, bytes + size);
         if (stableSize)
             packet.stable.assign(stable, stable + stableSize);
-        session->publish(slot, packet);
+        session->publish(slot, std::move(packet));
         lua.setTop(state, top);
     }
     session->poll();
@@ -469,7 +508,7 @@ bool captureNextInput(bool simulationStep = false) {
         fail("Local input sequence rejected");
         return false;
     }
-    if (!session->isHost() && diagnostics::enabled())
+    if (!session->isHost())
         inputLatency.capture(nextInputTick);
     ++nextInputTick;
     return true;
@@ -511,9 +550,13 @@ bool applyReplicaView(bool betweenUpdates) {
         lua.setTop(state, top);
         if (!applied)
             return false;
-        if (diagnostics::enabled())
-            if (auto elapsed = inputLatency.confirm(packet->inputSequences[session->slot()]))
-                diagnostics::sample("input.ack", *elapsed);
+        // Zero also means no input has arrived yet; wait for an unambiguous ack.
+        if (const auto sequence = packet->inputSequences[session->slot()]; sequence)
+            if (auto elapsed = inputLatency.confirm(sequence)) {
+                session->recordSyncLatency(*elapsed);
+                if (diagnostics::enabled())
+                    diagnostics::sample("input.ack", *elapsed);
+            }
         currentTick = packet->tick;
         nextTick = currentTick + 1;
         input::setMenuOwner(packet->pauseOwner);
@@ -542,6 +585,7 @@ void updateReplica(const backend::Call& original) {
         // before a deferred native floor event can name its player object.
         rooms::setConnected(session->connectedMask() | (1u << session->slot()));
         view.floorEpoch = transition->epoch;
+        inputLatency = {};
         // Native Forget Me Now, five-pip rooms and R Key update Seeds before
         // starting the transition. A stage number alone regenerates the old
         // client topology, whose missing descriptor can crash the minimap.
@@ -559,13 +603,19 @@ void updateReplica(const backend::Call& original) {
         lua.pushInteger(state, transition->restart);
         lua.pushInteger(state, transition->cinematic);
         lua.pushInteger(state, transition->sourceRoom);
+        lua.createTable(state, transition->departureAnimations.size(), 0);
+        for (std::size_t i = 0; i < transition->departureAnimations.size(); ++i) {
+            const auto& name = transition->departureAnimations[i];
+            lua.pushLString(state, name.data(), name.size());
+            lua.rawSetI(state, -2, i + 1);
+        }
         view.playingCinematic = transition->cinematic != 0;
         view.cinematicReady = false;
         if (view.playingCinematic) {
             input::reset();
             view.pendingHalf = false;
         }
-        if (!call(stageRef, 9, 0, top))
+        if (!call(stageRef, 10, 0, top))
             return;
         rooms::finishFrame();
         if (logger)
@@ -580,7 +630,10 @@ void updateReplica(const backend::Call& original) {
     presentation.players = session->players();
     presentation.connected = session->connectedMask();
     input::apply(presentation);
-    original();
+    {
+        pause_menu::FocusPauseScope focusPause(executableImage);
+        original();
+    }
     rooms::finishFrame();
     if (committedView)
         integrationCallback("_IsaacLanViewCommitted");
@@ -738,6 +791,8 @@ void updateOne(const backend::Call& original) {
     }
     if (!(frame->connected & (1u << session->slot())))
         rooms::requestExit(false);
+    if (remoteShooting())
+        compat::challenges::rotateShooting(frame->inputs, frame->players, frame->connected);
     input::apply(*frame);
     const int top = lua.getTop(state);
     lan::Writer packed(lan::Message::input);
@@ -801,7 +856,7 @@ int host(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(logger,
+    session = std::make_unique<lan::Session>(ISAAC_LAN_VERSION, logger,
                                              diagnostics::enabled() ? diagnostics::sample : nullptr,
                                              logging::enabled(logging::Level::debug));
     sessionFingerprint = fingerprint;
@@ -818,7 +873,7 @@ int join(lua_State* L) {
         lua.pushBoolean(L, false);
         return 1;
     }
-    session = std::make_unique<lan::Session>(logger,
+    session = std::make_unique<lan::Session>(ISAAC_LAN_VERSION, logger,
                                              diagnostics::enabled() ? diagnostics::sample : nullptr,
                                              logging::enabled(logging::Level::debug));
     sessionFingerprint = fingerprint;
@@ -882,6 +937,7 @@ int poll(lua_State* L) {
         diagnostics::counter("world_raw_bytes_total", resource.rawWorldBytes);
         diagnostics::counter("world_wire_bytes_total", resource.wireWorldBytes);
         diagnostics::counter("world_full_wire_bytes_total", resource.fullWorldBytes);
+        diagnostics::counter("world_compared_wire_bytes_total", resource.comparedWorldBytes);
         diagnostics::counter("retiring_sessions", retiring.size());
     }
     if (rejoinAt && InputClock::now() >= *rejoinAt) {
@@ -930,11 +986,23 @@ int poll(lua_State* L) {
     integer("scene", backend::scene());
     lua.pushString(L, session ? session->error().c_str() : "");
     lua.setField(L, -2, "error");
+    if (session && session->phase() == lan::Phase::failed && session->compatibilityFailure()) {
+        const auto& failure = *session->compatibilityFailure();
+        lua.createTable(L, 0, 3);
+        lua.pushString(L, lan::compatibilityName(failure.issue));
+        lua.setField(L, -2, "reason");
+        lua.pushString(L, failure.localVersion.c_str());
+        lua.setField(L, -2, "localVersion");
+        lua.pushString(L, failure.remoteVersion.c_str());
+        lua.setField(L, -2, "remoteVersion");
+        lua.setField(L, -2, "compatibilityError");
+    }
     lua.pushString(L, session ? session->settings().seed.c_str() : "");
     lua.setField(L, -2, "seed");
     integer("difficulty", session ? session->settings().difficulty : 0);
     integer("challenge", session ? session->rules().id : 0);
     integer("challengeVersion", session ? session->rules().version : 0);
+    integer("remoteShooting", remoteShooting() ? 1 : 0);
     integer("roomOptions", session ? session->rules().options : 0);
     integer("pause", backend::pause());
     integer("pauseOwner", input::menuOwner());
@@ -956,6 +1024,8 @@ int poll(lua_State* L) {
             lua.setField(L, -2, ("marks" + std::to_string(i)).c_str());
         }
         integer(("ping" + std::to_string(i)).c_str(), session ? session->latency()[i] : -1);
+        integer(("network" + std::to_string(i)).c_str(), session ? session->networkLatency(i) : -1);
+        integer(("sync" + std::to_string(i)).c_str(), session ? session->syncLatency(i) : -1);
         lua.pushBoolean(L, session && i < session->players() &&
                                session->access()[i].allowsRules(session->rules()));
         lua.setField(L, -2, ("eligible" + std::to_string(i)).c_str());
@@ -1173,7 +1243,7 @@ int roomOptionDefinitions(lua_State* L) {
     lua.createTable(L, roomOptions::definitions.size(), 0);
     unsigned index = 0;
     for (const auto& definition : roomOptions::definitions) {
-        lua.createTable(L, 0, 4);
+        lua.createTable(L, 0, 6);
         lua.pushInteger(L, definition.flag);
         lua.setField(L, -2, "flag");
         lua.pushString(L, definition.key.data());
@@ -1182,19 +1252,36 @@ int roomOptionDefinitions(lua_State* L) {
         lua.setField(L, -2, "name");
         lua.pushString(L, definition.shortName.data());
         lua.setField(L, -2, "shortName");
+        if (definition.flag == roomOptions::autoTeleport) {
+            lua.pushInteger(L, roomOptions::firstRoomFlag);
+            lua.setField(L, -2, "firstRoomFlag");
+            lua.createTable(L, roomOptions::teleportGroups.size(), 0);
+            unsigned groupIndex = 0;
+            for (const auto& group : roomOptions::teleportGroups) {
+                lua.createTable(L, 0, 3);
+                lua.pushInteger(L, group.flag);
+                lua.setField(L, -2, "flag");
+                lua.pushString(L, group.key.data());
+                lua.setField(L, -2, "key");
+                lua.pushString(L, group.name.data());
+                lua.setField(L, -2, "name");
+                lua.rawSetI(L, -2, ++groupIndex);
+            }
+            lua.setField(L, -2, "groups");
+        }
         lua.rawSetI(L, -2, ++index);
     }
     return 1;
 }
 int configureRoomOptions(lua_State* L) {
     const auto value = lua.checkInteger(L, 1);
+    const auto options = roomOptions::normalize(static_cast<std::uint64_t>(value));
     const auto* definition = session ? compat::challenges::find(session->rules().id) : nullptr;
     bool accepted = false;
     if (session && (!definition || !definition->roomOptionsLocked) && value >= 0 &&
-        value <= std::numeric_limits<std::uint32_t>::max() &&
-        roomOptions::valid(static_cast<std::uint32_t>(value))) {
+        roomOptions::valid(options)) {
         auto rules = session->rules();
-        rules.options = static_cast<std::uint32_t>(value);
+        rules.options = options;
         rules.options |= rulesFor(definition).options;
         accepted = session->configureRules(rules);
     }
@@ -1396,6 +1483,7 @@ int close(lua_State* L) {
             lua.unref(L, registry, reference);
     captureRef = applyRef = captureStateRef = restoreStateRef = presentRef = stageRef = -2;
     view.clearSnapshots();
+    inputLatency = {};
     lastInputRoom.reset();
     if (!keep) {
         session.reset();
@@ -1643,9 +1731,10 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     logger = log;
     runHalf = halfUpdate;
     restorePositions = restore;
-    return backend::install(image, {saveGame, deleteGame, saveRerun, serializeProgress,
-                                    executeStart, startGame, update, consoleUpdate, consoleCommand,
-                                    controls, executeMenu, requestRestart});
+    return backend::install(image,
+                            {saveGame, deleteGame, saveRerun, serializeProgress, executeStart,
+                             startGame, update, consoleUpdate, consoleCommand, controls,
+                             executeMenu, requestRestart, completionAward, largeFloor});
 }
 void configureNetwork(unsigned hz) {
     inputHz = hz;
@@ -1809,7 +1898,9 @@ void present() {
     const int top = lua.getTop(state);
     lua.rawGetI(state, registry, presentRef);
     lan::Writer packed(lan::Message::input);
-    const auto preview = input::previewPhysicalInput();
+    auto preview = input::previewPhysicalInput();
+    if (remoteShooting())
+        compat::challenges::copyShooting(preview, lan::InputFrame{});
     const input::PresentationInputScope presentationInput(preview, localViewSlot() + 1);
     packed.input(preview);
     lua.pushLString(state, reinterpret_cast<const char*>(packed.bytes.data() + 1),
@@ -1848,7 +1939,8 @@ void pollLocalConsole() {
         return;
     backend::hideConsole();
 }
-void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) {
+void beginStage(bool same, int animation, unsigned restart, unsigned cinematic,
+                std::span<const std::string> departureAnimations) {
     if (!view.gated || !session || !session->isHost() || session->phase() != lan::Phase::running)
         return;
     auto value = backend::stage();
@@ -1863,6 +1955,7 @@ void beginStage(bool same, int animation, unsigned restart, unsigned cinematic) 
     }
     value.cinematic = cinematic;
     value.sourceRoom = rooms::floorSourceRoom();
+    value.departureAnimations.assign(departureAnimations.begin(), departureAnimations.end());
     if (!session->beginStage(value)) {
         fail("Native floor transaction rejected");
         return;
@@ -1933,9 +2026,13 @@ void requestWindowClose() {
 void abort(const std::string& error) {
     fail(error);
 }
-void roomEntered() {
+void roomEntered(int door) {
     if (!replica())
-        integrationCallback("_IsaacLanRoomEntered");
+        integrationCallback("_IsaacLanRoomEntered", door);
+}
+void roomLeaving() {
+    if (!replica())
+        integrationCallback("_IsaacLanRoomLeaving");
 }
 void halfStarted() {
     if (view.gated)

@@ -2,6 +2,8 @@
 return function(root, native, modules)
     local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
     RoomType = RoomType or enums.RoomType
+    TrinketType = TrinketType or enums.TrinketType
+    DoorSlot = DoorSlot or enums.DoorSlot
     RoomShape = RoomShape or enums.RoomShape
     GridRooms = GridRooms or enums.GridRooms
     GridCollisionClass = GridCollisionClass or enums.GridCollisionClass
@@ -25,7 +27,7 @@ return function(root, native, modules)
             { flag = 1, key = "friendlyFire", name = "队友伤害" },
             { flag = 2, key = "sharedClearCharge" },
             { flag = 4, key = "lootRoll" },
-            { flag = 8, key = "specialRoomGather" },
+            { key = "autoTeleport", flag = ((1 << 29) - 1) << 5, firstRoomFlag = 1 << 5 },
         }
     end
     native.menu_room_options = native.menu_room_options or function()
@@ -41,17 +43,23 @@ return function(root, native, modules)
         end
     native.chat_style = { opacity = 70, background = 0x231b18, border = 0x79604c, text = 0xe8dfcb }
     native.presentation_assets = dofile(root .. "/tests/fixtures/presentation_assets.lua")()
+    native.player_opacity = native.player_opacity
+        or function(...)
+            return select("#", ...) == 0 and 100 or true
+        end
     for _, name in ipairs({
         "core/contacts",
         "core/endpoint",
+        "core/room_types",
         "compat/rules/pvp_damage",
         "compat/rules/pvp_attacks",
         "compat/rules/pvp_health",
         "compat/items/pvp",
+        "compat/items/flat_file",
         "compat/rules/friendly_fire",
         "compat/rules/loot_roll",
         "compat/rules/clear_charge",
-        "compat/rules/special_rooms",
+        "compat/rules/room_gather",
         "runtime/room_rules",
         "compat/challenges/luck_game",
         "compat/challenges/battle_royale_rules",
@@ -64,18 +72,35 @@ return function(root, native, modules)
         "presentation/battle_royale",
         "compat/items/glitched",
         "runtime/restart",
+        "runtime/lifecycle_messages",
+        "runtime/animation_skip",
         "runtime/chat_wire",
         "runtime/chat_dice",
         "runtime/teleport",
+        "runtime/room_placement",
         "runtime/chat",
         "presentation/chat_layout",
         "presentation/fonts",
+        "presentation/chat_completion",
         "presentation/chat",
+        "presentation/player_opacity",
         "diagnostics/feedback",
     }) do
         modules[name] = dofile(root .. "/src/bridge/" .. name .. ".lua")
     end
     native.net_lifecycle_receive = function() end
+    native.animation_skip_kinds = function()
+        return { none = 0, boss = 1, floor = 2, personal = 3 }
+    end
+    native.animation_skip_view = function()
+        return { kind = 0, id = 0, epoch = 0, events = {}, floorReady = true }
+    end
+    native.animation_skip_request = function()
+        return false
+    end
+    native.animation_skip = function()
+        error("Unexpected animation skip")
+    end
     native.net_lifecycle_send = function()
         return false
     end

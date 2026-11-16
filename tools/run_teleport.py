@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate teleport commands or special room gathering with one protected pair."""
+"""Validate teleport commands or room gathering with one protected pair."""
 
 import argparse
 import json
@@ -23,7 +23,19 @@ def main():
     parser.add_argument("--port", type=int, default=34300)
     parser.add_argument("--heap-check", action="store_true")
     parser.add_argument("--record", action="store_true")
-    parser.add_argument("--gather", action="store_true", help="Validate the special room rule")
+    suite = parser.add_mutually_exclusive_group()
+    suite.add_argument(
+        "--gather",
+        nargs="?",
+        choices=("special", "all", "selected"),
+        const="special",
+        help="Validate all special types, all types, or the type menu with Boss/hidden-room selection",
+    )
+    suite.add_argument(
+        "--feedback-regressions",
+        action="store_true",
+        help="Validate crawlspace gathering, remote inventory caches and Flip visuals",
+    )
     parser.add_argument(
         "--injected", action="store_true", help="Use explicit injection in owned labs"
     )
@@ -38,15 +50,53 @@ def main():
     protected = ProtectedLabs(labs, output)
     report = {"passed": False, "protected": protected.report()}
     try:
-        fixture = "state_special_room_gather.lua" if args.gather else "state_teleport.lua"
-        completion = (
-            "LAN_GATHER PASS special room rule" if args.gather else "LAN_TP PASS teleport commands"
+        fixture = (
+            ROOT / "tests" / ("state_room_gather.lua" if args.gather else "state_teleport.lua")
         )
+        if args.gather == "all":
+            source = fixture.read_text()
+            fixture = output / "all-room-gather.lua"
+            fixture.write_text("_IsaacLanTest.gatherAllRooms = true\n" + source)
+        if args.gather == "selected":
+            gather = fixture.read_text()
+            menu = (
+                "local expectedOptions = (function()\n"
+                + (ROOT / "tests/fixtures/room_options.lua").read_text()
+                + "\nend)()(RoomType)\n"
+                + (ROOT / "tests/state_auto_teleport_menu.lua").read_text()
+            )
+            fixture = output / "selected-room-gather.lua"
+            fixture.write_text(
+                "local menuScenario = (function()\n" + menu + "\nend)()\n"
+                "local menuFrame = _IsaacLanFrame\n"
+                "local function startGather()\n"
+                "_IsaacLanTest.gatherSelected, _IsaacLanTest.gatherConnected = true, true\n"
+                + gather
+                + "\nend\n"
+                "function _IsaacLanFrame()\n"
+                "    local status = menuFrame()\n"
+                "    if menuScenario.done() then\n"
+                "        menuScenario.cleanup()\n"
+                "        startGather()\n"
+                "    end\n"
+                "    return status\n"
+                "end\n"
+            )
+        completion = (
+            f"LAN_GATHER PASS {args.gather} room rule"
+            if args.gather
+            else "LAN_TP PASS teleport commands"
+        )
+        if args.feedback_regressions:
+            fixture, completion = (
+                ROOT / "tests/state_feedback_regressions.lua",
+                "LAN_FEEDBACK PASS regression probes",
+            )
         command = engine_command(
             labs,
             args.build,
             output / "engine",
-            ROOT / "tests" / fixture,
+            fixture,
             completion,
             "--frontend",
             "--no-luadebug",

@@ -25,7 +25,7 @@ struct Bindings {
         unsigned data, layerFrames, nullFrames, frame, playing, events, previousEvents;
     } animation;
     struct AnimationData {
-        unsigned layers, layerCount, nulls, nullCount, layerMap, totalFrames;
+        unsigned layers, layerCount, nulls, nullCount, layerMap, totalFrames, name;
     } data;
     struct AnimationLayer {
         unsigned stride, id, frameCount, nullFrameCount;

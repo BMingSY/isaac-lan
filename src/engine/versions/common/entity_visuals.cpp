@@ -24,6 +24,35 @@ Address entitySprite(lua_State* L, int index) {
         throw std::runtime_error("Invalid entity Sprite wrapper");
     return sample[1] - bindings.entitySprite;
 }
+int pickupFlipVisual(lua_State* L) {
+    try {
+        if (!bindings.flipSprite)
+            throw std::runtime_error("Flip visual binding is unavailable");
+        const auto entity = entitySprite(L, 1);
+        if (at<unsigned>(entity, bindings.entityType) != 5 ||
+            at<unsigned>(entity, bindings.entityVariant) != 100)
+            throw std::runtime_error("Flip visual requires a collectible pedestal");
+        if (lua.getTop(L) != 1) {
+            if (!runtime::replica() || lua.getTop(L) != 2 || lua.type(L, 2) != 1)
+                throw std::runtime_error("Only replicas restore Flip visibility");
+            at<bool>(entity, bindings.flipVisible) = lua.toBoolean(L, 2);
+            lua.pushBoolean(L, true);
+            return 1;
+        }
+        lua.pushBoolean(L, at<bool>(entity, bindings.flipVisible));
+        const auto source = static_cast<Address*>(lua.toUserdata(L, 1));
+        const auto wrapper = static_cast<Address*>(lua.newUserdata(L, 8));
+        wrapper[0] = source[0];
+        wrapper[1] = entity + bindings.flipSprite;
+        lua.getMetatable(L, 1);
+        lua.setMetatable(L, -2);
+        return 2;
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+}
 int prepareEntity(lua_State* L) {
     try {
         if (runtime::replica() || lua.getTop(L) != 1)
@@ -218,7 +247,8 @@ int renderTether(lua_State* L) {
 bool bind(lua_State* L, HMODULE module, Address base) {
     if (!base || bindings.tether.size > maxTetherDataBytes ||
         bindings.tether.sprite + bindings.spriteSize > bindings.tether.size ||
-        !lua.load(module, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::toUserdata,
+        !lua.load(module, {isaac::lua::Symbol::getTop, isaac::lua::Symbol::type,
+                           isaac::lua::Symbol::toBoolean, isaac::lua::Symbol::toUserdata,
                            isaac::lua::Symbol::rawLength, isaac::lua::Symbol::newUserdata,
                            isaac::lua::Symbol::getMetatable, isaac::lua::Symbol::setMetatable,
                            isaac::lua::Symbol::checkString, isaac::lua::Symbol::pushLString,
@@ -235,6 +265,8 @@ bool bind(lua_State* L, HMODULE module, Address base) {
     lua.setField(L, -2, "familiar_tether_render");
     lua.pushClosure(L, prepareEntity, 0);
     lua.setField(L, -2, "entity_prepare");
+    lua.pushClosure(L, pickupFlipVisual, 0);
+    lua.setField(L, -2, "pickup_flip_visual");
     return true;
 }
 } // namespace isaac::engine::native_visuals

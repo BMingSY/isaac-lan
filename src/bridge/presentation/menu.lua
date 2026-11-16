@@ -13,11 +13,14 @@ local ui = {
 }
 local Phase = _IsaacLan.net_phases()
 local Command = _IsaacLan.net_commands()
-local renderRestart = _IsaacLanModules["presentation/restart"]()
+local drawVote = _IsaacLanModules["presentation/vote_progress"]()
+local renderRestart = _IsaacLanModules["presentation/restart"](drawVote)
+local renderSkip = _IsaacLanModules["presentation/animation_skip"](drawVote)
 local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
 -- menu_key reports Windows virtual-key codes from the native frontend.
 local Key =
     { escape = 27, enter = 13, up = 38, down = 40, tab = 9, space = 32, left = 37, right = 39 }
+local renderUpdateNotice = _IsaacLanModules["presentation/update_notice"](Key, _IsaacLan)
 local model =
     _IsaacLanModules["presentation/menu_model"](Phase, Command, _IsaacLanModules["core/endpoint"])
 local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
@@ -32,6 +35,7 @@ function _IsaacLanMenuOpen(returning)
         or "lan"
     ui.selection, ui.editing = 1, nil
     ui.ruleReturn, ui.ruleScroll = nil, nil
+    ui.autoReturn, ui.autoScroll = nil, nil
     _IsaacLan.menu_text_end()
 end
 local previousMouse = Vector(-1000, -1000)
@@ -125,7 +129,9 @@ function _IsaacLanMenuRender(
     my,
     clicked,
     addresses,
-    networkError
+    networkError,
+    updateVersion,
+    updateReleased
 )
     local status = _IsaacLanStatus()
     local phase = status.phase or Phase.idle
@@ -183,13 +189,34 @@ function _IsaacLanMenuRender(
     local function hit(x, y, w, h)
         return mouse.X >= x and mouse.X < x + w and mouse.Y >= y and mouse.Y < y + h
     end
+    if available and updateVersion and updateVersion ~= "" then
+        renderUpdateNotice(
+            { key = key, clicked = clicked, moved = moved, released = updateReleased },
+            {
+                assets = assets,
+                width = width,
+                height = height,
+                centered = centered,
+                panel = function()
+                    assets.panel(origin, true)
+                end,
+                pointer = pointer,
+                hit = hit,
+            }
+        )
+        return false
+    end
     if phase ~= ui.lastPhase then
         if phase == Phase.running and ui.lastPhase == Phase.lobby then
             visible = false
         end
         ui.selection, ui.editing, ui.lastPhase = 1, nil, phase
-        if phase ~= Phase.lobby and (ui.page == "rules" or ui.page == "challenges") then
+        if
+            phase ~= Phase.lobby
+            and (ui.page == "rules" or ui.page == "autoTeleport" or ui.page == "challenges")
+        then
             ui.page, ui.ruleReturn, ui.ruleScroll = "lan", nil, nil
+            ui.autoReturn, ui.autoScroll = nil, nil
         end
         _IsaacLan.menu_text_end()
     end
@@ -225,7 +252,11 @@ function _IsaacLanMenuRender(
     end
     if not visible then
         renderPing(status, assets[10])
-        renderRestart(status, assets[10])
+        if (status.skipVotes or 0) ~= 0 then
+            renderSkip(status, assets[10])
+        else
+            renderRestart(status, assets[10])
+        end
         local banner
         if phase == Phase.waiting then
             banner = "正在当前层归队 · 队友继续游戏"
@@ -279,6 +310,7 @@ function _IsaacLanMenuRender(
     local rulesPage = ruleCount ~= nil
     centered(
         modes and "联机模式"
+            or ui.page == "autoTeleport" and "自动传送"
             or rulesPage and "房间规则"
             or ui.page == "challenges" and "联机挑战"
             or "局域网联机",
@@ -288,9 +320,9 @@ function _IsaacLanMenuRender(
     )
     if rulesPage then
         centered(
-            "已启用 "
+            (ui.page == "autoTeleport" and "已选 " or "已启用 ")
                 .. ruleCount
-                .. " 项"
+                .. (ui.page == "autoTeleport" and " 类" or " 项")
                 .. (host and not (challenge and challenge.roomOptionsLocked) and "" or " · 只读"),
             110,
             82,
@@ -310,13 +342,7 @@ function _IsaacLanMenuRender(
     elseif notice == "returning" then
         centered("等待队友结算结束", 110, 100, 12)
     elseif notice == "waiting" then
-        centered(
-            phase == Phase.waiting and "正在当前层归队" or "正在连接或加载…",
-            110,
-            100,
-            12
-        )
-        centered("队友可以继续游戏", 110, 124, 10)
+        centered("正在连接...", 110, 100, 12)
     end
     local yStart = (
         status.recovering
@@ -352,19 +378,23 @@ function _IsaacLanMenuRender(
         end
         ui.selection = math.min(ui.selection, #rows)
     end
+    local activated = false
     local function renderRow(i, item, y, height)
         if moved and hit(38 + shift, y - 2, 147, height) and not ui.editing then
             ui.selection = i
         end
         if clicked and hit(38 + shift, y - 2, 147, height) then
             ui.selection = i
-            if item.enabled then
+            if item.enabled and not activated then
+                activated = true
                 item.action()
             end
-        elseif i == ui.selection and not ui.editing and item.enabled then
+        elseif i == ui.selection and not ui.editing and item.enabled and not activated then
             if key == Key.enter or key == Key.space then
+                activated = true
                 item.action()
             elseif item.change and (key == Key.left or key == Key.right) then
+                activated = true
                 item.change(key == Key.left and -1 or 1)
             end
         end
@@ -417,7 +447,7 @@ function _IsaacLanMenuRender(
             renderRow(i, item, yStart + (i - 1) * gap, math.min(gap, 22))
         end
     end
-    for i = 0, (modes and -1 or 3) do
+    for i = 0, ((modes or count == 0) and -1 or 3) do
         local x, y = 198 + (i % 2) * 132, 17 + math.floor(i / 2) * 108
         assets.seat(origin, x, y, i)
         if i < count then
@@ -451,6 +481,9 @@ function _IsaacLanMenuRender(
     end
     local message = status.saveError and status.saveError ~= "" and status.saveError
         or (ui.errorText ~= "" and ui.errorText or networkError)
+    local compatibilityLines = (not status.saveError or status.saveError == "")
+        and ui.errorText == ""
+        and model.compatibilityError(status)
     local messageColor = red
     if message == "" and phase == Phase.lobby and challenge and challenge.nextBag == 1 then
         local missing = {}
@@ -467,7 +500,7 @@ function _IsaacLanMenuRender(
         message = "Mod 不一致或无法核对，可能会造成未知的影响"
         messageColor = amber
     end
-    local footerY = message ~= "" and 235 or 243
+    local footerY = compatibilityLines and 206 or (message ~= "" and 235 or 243)
     if rulesPage then
         text(
             host and "方向选择 · 确认勾选 · 返回退出"
@@ -498,7 +531,11 @@ function _IsaacLanMenuRender(
             10
         )
     end
-    if message ~= "" then
+    if compatibilityLines then
+        for i, line in ipairs(compatibilityLines) do
+            centered(line, 240, 212 + i * 12, 10, red, 430)
+        end
+    elseif message ~= "" then
         centered(message:sub(1, 100), 240, 250, 10, messageColor)
     end
     return visible

@@ -16,6 +16,9 @@ return function(native, rooms, pickups)
         pickup.Price = value
     end
     local function current()
+        if Game():GetRoom():GetType() ~= rooms.ROOM_DEVIL then
+            return
+        end
         local player = Isaac.GetPlayer(0)
         for _, entity in ipairs(Isaac.GetRoomEntities()) do
             local pickup = entity:ToPickup()

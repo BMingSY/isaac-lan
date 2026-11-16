@@ -74,5 +74,9 @@ constinit const Bindings bindings{
     .gameOverRestart = backend::fadeAction::gameOverRestart,
     .heldRestart = backend::fadeAction::heldRestart,
     .persistProgress = persistProgress,
+    .recordCompletion = backend::entry::recordCharacterCompletion,
+    .completionDefinitions = backend::globals::completionDefinitions,
+    .progressTryUnlock = backend::entry::progressTryUnlock,
+    .progressIncreaseCounter = backend::entry::progressIncreaseCounter,
 };
 } // namespace isaac::engine::native_session

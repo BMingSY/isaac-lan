@@ -7,7 +7,8 @@ local frame, gate = _IsaacLanFrame, native.net_gate
 local renders, linked, chosen, finished = 0, false, false, false
 local step, stepAt, round = "prepare", 0, 0
 local origin, large, returnRoom, explore, selected, stage
-local searched
+local searched, rewound
+local certificatePickupGroup = 1
 local function report(text)
     Isaac.DebugString("LAN_NETWORK DEATH_CERTIFICATE " .. text)
 end
@@ -183,6 +184,26 @@ local function advance(t)
                     and pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE
                     and pickup.SubType > 0
                 then
+                    report(
+                        "PEDESTAL item=" .. pickup.SubType .. " group=" .. pickup.OptionsPickupIndex
+                    )
+                end
+                if
+                    pickup
+                    and pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE
+                    and pickup.SubType > 0
+                    and pickup.OptionsPickupIndex == certificatePickupGroup
+                then
+                    if round == 0 and not rewound then
+                        pickup:Morph(
+                            EntityType.ENTITY_PICKUP,
+                            PickupVariant.PICKUP_COLLECTIBLE,
+                            CollectibleType.COLLECTIBLE_BIRTHRIGHT,
+                            false,
+                            false,
+                            false
+                        )
+                    end
                     selected = EntityPtr(pickup)
                     break
                 end
@@ -230,7 +251,13 @@ local function advance(t)
             mark("returned", t)
         end
     elseif step == "returned" and t - stepAt >= 90 then
-        if round == 0 then
+        if round == 0 and not rewound then
+            rewound = true
+            actor(1, function(p)
+                p:UseActiveItem(CollectibleType.COLLECTIBLE_GLOWING_HOUR_GLASS, UseFlag.USE_NOANIM)
+            end)
+            mark("rewind", t)
+        elseif round == 0 then
             round = 1
             move(0, origin)
             move(1, large)
@@ -242,6 +269,14 @@ local function advance(t)
             end)
             mark("floor", t)
         end
+    elseif step == "rewind" and t - stepAt >= 90 then
+        assert(
+            location(0).dimension == 0 and location(1).dimension == 2,
+            "Rewind did not exercise a host outside the guest's annex"
+        )
+        report("PASS rewind split dimensions")
+        searched = {}
+        mark("select", t)
     elseif step == "floor" and level:GetStage() == stage + 1 and t - stepAt >= 60 then
         for slot = 0, 1 do
             assert(location(slot).dimension == 0, "New floor retained annex dimension")

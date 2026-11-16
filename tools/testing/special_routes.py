@@ -15,15 +15,18 @@ DIAGNOSTICS = (
     "deep-pockets",
     "party-compat",
     "death-certificate",
+    "feedback-november",
     "victory-lap",
     "victory-no",
     "audio",
     "rewind",
+    "hourglass-routes",
     "home-debug",
     "home",
     "endings",
     "motion",
     "input-response",
+    "shared-intro",
     "input-response-speeds",
     "action-prediction",
     "attack-response",
@@ -32,11 +35,26 @@ DIAGNOSTICS = (
     "attached-motion",
     "weak-network",
     "entity-fields",
+    "mod-npcs",
+    "mod-npcs-tainted",
+    "view-costs",
+    "hit-prediction",
+    "entity-size",
     "pickup-pressure",
     "local-hud",
     "guest-visuals",
+    "character-revival",
     "player-outlines",
+    "player-opacity",
     "feedback-b7fs",
+    "feedback-october",
+    "tainted-feedback",
+    "feedback-items",
+    "feedback-eid",
+    "feedback-puppy",
+    "feedback-flies",
+    "feedback-esau",
+    "d-infinity",
     "floor-items",
     "floor-sources",
     "mod-integrations",
@@ -53,12 +71,17 @@ DIAGNOSTICS = (
     "lanbot-spiders",
     "lanbot-greed",
     "room-entry",
+    "client-room-entry",
     "mother-controls",
     "mother-guest",
     "mother-together",
     "reconnect-motion",
     "dice-floor",
     "room-followers",
+    "ludovico-rooms",
+    "item-room-effects",
+    "abyss-escape",
+    "beast-layering",
     "chain-traps",
     "secret-exit-doors",
     "split-render",
@@ -87,9 +110,11 @@ def build(output, cases=CASES, *, first_floor=False):
             "home": "state_endings.lua",
             "home-debug": "state_endings.lua",
             "rewind": "state_hourglass.lua",
+            "hourglass-routes": "state_hourglass_routes.lua",
             "endings": "state_endings.lua",
             "motion": "state_motion.lua",
             "input-response": "state_input_response.lua",
+            "shared-intro": "state_shared_intro.lua",
             "input-response-speeds": "state_input_response.lua",
             "action-prediction": "state_action_prediction.lua",
             "attack-response": "state_attack_response.lua",
@@ -98,11 +123,26 @@ def build(output, cases=CASES, *, first_floor=False):
             "attached-motion": "state_attached_motion.lua",
             "weak-network": "state_weak_network.lua",
             "entity-fields": "state_entity_fields.lua",
+            "mod-npcs": "state_mod_npcs.lua",
+            "mod-npcs-tainted": "state_mod_npcs.lua",
+            "view-costs": "state_view_costs.lua",
+            "hit-prediction": "state_hit_prediction.lua",
+            "entity-size": "state_entity_size.lua",
             "pickup-pressure": "state_pickup_pressure.lua",
             "local-hud": "state_local_hud.lua",
             "guest-visuals": "state_guest_visuals.lua",
+            "character-revival": "state_character_revival.lua",
             "player-outlines": "state_player_outlines.lua",
+            "player-opacity": "state_player_outlines.lua",
             "feedback-b7fs": "state_feedback_b7fs.lua",
+            "feedback-october": "state_feedback_20261027.lua",
+            "tainted-feedback": "state_tainted_feedback.lua",
+            "feedback-items": "state_feedback_items.lua",
+            "feedback-eid": "state_feedback_item_state.lua",
+            "feedback-puppy": "state_feedback_item_state.lua",
+            "feedback-flies": "state_feedback_item_state.lua",
+            "feedback-esau": "state_feedback_item_state.lua",
+            "d-infinity": "state_d_infinity.lua",
             "floor-items": "state_floor_items.lua",
             "floor-sources": "state_floor_sources.lua",
             "mod-integrations": "state_mod_integrations.lua",
@@ -111,6 +151,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "shared-deals": "state_shared_deals.lua",
             "party-compat": "state_party_compat.lua",
             "death-certificate": "state_death_certificate.lua",
+            "feedback-november": "state_feedback_november.lua",
             "item-generation": "state_item_generation.lua",
             "deep-pockets": "state_deep_pockets.lua",
             "victory-lap": "state_endings.lua",
@@ -125,12 +166,17 @@ def build(output, cases=CASES, *, first_floor=False):
             "lanbot-spiders": "state_lanbot_spiders.lua",
             "lanbot-greed": "state_lanbot_greed.lua",
             "room-entry": "state_room_entry.lua",
+            "client-room-entry": "state_client_room_entry.lua",
             "mother-controls": "state_mother_controls.lua",
             "mother-guest": "state_mother_controls.lua",
             "mother-together": "state_mother_controls.lua",
             "reconnect-motion": "state_reconnect_motion.lua",
             "dice-floor": "state_dice_floor.lua",
             "room-followers": "state_room_followers.lua",
+            "ludovico-rooms": "state_ludovico_rooms.lua",
+            "item-room-effects": "state_item_room_effects.lua",
+            "abyss-escape": "state_side_routes.lua",
+            "beast-layering": "state_endings.lua",
             "chain-traps": "state_chain_traps.lua",
             "secret-exit-doors": "state_secret_exit.lua",
             "split-render": "state_split_render.lua",
@@ -140,13 +186,17 @@ def build(output, cases=CASES, *, first_floor=False):
             "hornfel": "state_hornfel.lua",
         }.get(name, "state_side_routes.lua")
         options = {
-            "route": name,
+            "route": "knife" if name == "abyss-escape" else name,
+            "abyssEscape": name == "abyss-escape",
+            "beastLayering": name == "beast-layering",
+            "playerOpacity": name == "player-opacity",
             "integrationDual": name == "mod-integrations-dual",
+            "modNpcTainted": name == "mod-npcs-tainted",
             "motherEntrant": 1 if name == "mother-guest" else 0,
             "motherTogether": name == "mother-together",
             "inputResponseSpeeds": name == "input-response-speeds",
             "attackMirror": name == "attack-mirror",
-            "homeOnly": name in ("home", "home-debug", "dogma-warning"),
+            "homeOnly": name in ("home", "home-debug", "dogma-warning", "beast-layering"),
             "dogmaWarning": name in ("dogma-warning", "ascent-compat"),
             "crawlspace": name == "ascent-compat",
             "debug10": name == "home-debug",
@@ -157,7 +207,7 @@ def build(output, cases=CASES, *, first_floor=False):
             "firstFloor": first_floor and name == "endings",
             "greedCampaign": name in ("greed", "greedier"),
         }
-        if name in ("home", "home-debug", "dogma-warning", "ascent-compat"):
+        if name in ("home", "home-debug", "dogma-warning", "ascent-compat", "beast-layering"):
             options["endingRoutes"] = ["ascent"]
         elif name in ("campaign", "victory-lap", "victory-no"):
             options["endingRoutes"] = ["lamb"]
@@ -175,6 +225,18 @@ def build(output, cases=CASES, *, first_floor=False):
                 + "\nend)()\n"
                 + "local worldSchema = (function()\n"
                 + (ROOT / "src/bridge/sync/world_schema.lua").read_text()
+                + "\nend)()\n"
+            )
+        if name == "abyss-escape":
+            prelude = (
+                "local createAbyssEscapeProbe = (function()\n"
+                + (ROOT / "tests/fixtures/abyss_escape_probe.lua").read_text()
+                + "\nend)()\n"
+            )
+        if name == "beast-layering":
+            prelude = (
+                "local createBeastLayerProbe = (function()\n"
+                + (ROOT / "tests/fixtures/beast_layer_probe.lua").read_text()
                 + "\nend)()\n"
             )
         if name == "entity-fields":

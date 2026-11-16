@@ -28,4 +28,4 @@
 
 Lua 的道具池接口不能按原生注册表顺序恢复指定定义，现有静态库存枚举也不包含负编号。特殊定义适配位于 [glitched.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/glitched.lua)，通用库存通过注入的额外编号列表采集和应用；背包仍通过原生 AddCollectible／RemoveCollectible 应用差量，避免重复快照反复添加被动效果。
 
-错误技的共享效果与验证状态见[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)。其他道具的原生接口见[后端参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#道具与效果)，专项入口见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#按需专项)。
+错误技的共享效果与验证状态见[道具清单](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)。其他道具的原生接口见[后端参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#道具与效果)，专项入口见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#开发专项入口)。

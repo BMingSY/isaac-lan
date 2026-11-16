@@ -30,6 +30,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../common/grid_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/entity_pose.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/entity_pose.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/actor_animation.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/sprite_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/sprite_state.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/input.cpp"
@@ -69,4 +70,10 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../common/minimap.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/frontend_hud.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/frontend_hud.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/animation_skip.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/player_opacity.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/floor_generation.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/moving_box.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/death_certificate_return.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/cursed_mist.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/emotes.cpp")

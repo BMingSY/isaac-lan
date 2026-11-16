@@ -25,6 +25,8 @@ return {
         curse = 10,
         pockets = 11,
         subplayer = 12,
+        activeData = 13,
+        order = 14,
     },
     subplayer = { type = 1, hearts = 2 },
     input = { left = 1, right = 2, up = 3, down = 4 },

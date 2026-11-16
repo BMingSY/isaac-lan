@@ -1,11 +1,36 @@
 #include "engine/state_codec.h"
+#include "engine/lua_capture_arrays.h"
 #include <lua.hpp>
 #include <dlfcn.h>
 #include <cstring>
 #include <cstdlib>
 #include <iostream>
+#include <array>
+#include <cstdio>
 
 namespace {
+isaac::lua::API captureApi;
+int captureArray(lua_State* state) {
+    char error[192]{};
+    try {
+        luaL_checktype(state, 1, LUA_TTABLE);
+        const auto count = lua_rawlen(state, 1);
+        std::array<float, 7> values{};
+        if (count > values.size())
+            return luaL_error(state, "Capture test array is too large");
+        for (std::size_t i = 0; i < count; ++i) {
+            lua_rawgeti(state, 1, i + 1);
+            values[i] = static_cast<float>(luaL_checknumber(state, -1));
+            lua_pop(state, 1);
+        }
+        isaac::lua::pushCaptureArray(state, captureApi, std::span<const float>(values).first(count),
+                                     lua_istable(state, 2) ? 2 : 0);
+        return 1;
+    } catch (const std::exception& exception) {
+        std::snprintf(error, sizeof(error), "%s", exception.what());
+    }
+    return luaL_error(state, "%s", error);
+}
 int allocationBudget = -1;
 void* allocate(void*, void* pointer, std::size_t previous, std::size_t size) {
     if (!size) {
@@ -57,6 +82,19 @@ int main(int argc, char** argv) {
     }
     lua_pushcfunction(state, withAllocationBudget);
     lua_setfield(state, -2, "with_allocation_limit");
+    using S = isaac::lua::Symbol;
+    if (!captureApi.load(nullptr,
+                         {S::pushLString, S::rawGet, S::setTop, S::createTable, S::pushNumber,
+                          S::rawSetI, S::rawLength, S::getTop, S::pushValue, S::rawSet},
+                         resolve)) {
+        std::cerr << "Cannot load Lua 5.3 capture ABI\n";
+        lua_close(state);
+        return 2;
+    }
+    lua_pushcfunction(state, captureArray);
+    lua_setfield(state, -2, "capture_array");
+    lua_pushinteger(state, isaac::lua::maxCaptureArrays);
+    lua_setfield(state, -2, "capture_array_limit");
     lua_setglobal(state, "_IsaacLanCodec");
     lua_createtable(state, argc - 2, 0);
     for (int i = 1; i < argc; ++i) {

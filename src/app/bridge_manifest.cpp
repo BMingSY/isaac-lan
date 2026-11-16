@@ -5,14 +5,15 @@
 
 namespace isaac::app {
 BridgeManifest buildManifest(const std::filesystem::path& directory, std::string_view version,
-                             void (*logger)(const std::string&)) {
+                             void (*logger)(const std::string&),
+                             const std::filesystem::path& extensionPath) {
     namespace fs = std::filesystem;
     BridgeManifest result;
     app::ContentHash hash;
     hash.text("Isaac LAN/build-v1");
     hash.text(std::string(version));
     ContentHash extension;
-    extension.file(directory / L"isaac_lan_probe.dll");
+    extension.file(extensionPath.empty() ? directory / L"isaac_lan_probe.dll" : extensionPath);
     hash.text(extension.finish());
     result.fingerprint = hash.finish();
     // Mods are advisory, including unreadable files. They never enter the

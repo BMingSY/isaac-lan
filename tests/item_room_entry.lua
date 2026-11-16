@@ -1,13 +1,20 @@
 local root = assert(arg[1])
 local combat = dofile(root .. "/src/bridge/runtime/room_entry.lua")
 local items = dofile(root .. "/src/bridge/compat/items/room_entry.lua")
-local types = { ROOM_DEFAULT = 1, ROOM_BOSS = 5, ROOM_TREASURE = 4 }
-local collectibles = { COLLECTIBLE_MERCURIUS = 590 }
+local types =
+    { ROOM_DEFAULT = 1, ROOM_BOSS = 5, ROOM_TREASURE = 4, ROOM_SECRET = 7, ROOM_SUPERSECRET = 8 }
+local collectibles = { COLLECTIBLE_MERCURIUS = 590, COLLECTIBLE_XRAY_VISION = 76 }
 local trinkets = { TRINKET_DOOR_STOP = 124 }
 local flags = { STATE_SLOWER_ENEMIES = 24 }
 local function room(kind)
     local result = { kind = kind, doors = {}, slow = 0, watch = 0, bossClosed = false }
-    for slot, target in ipairs({ types.ROOM_DEFAULT, types.ROOM_BOSS, types.ROOM_TREASURE }) do
+    for slot, target in ipairs({
+        types.ROOM_DEFAULT,
+        types.ROOM_BOSS,
+        types.ROOM_TREASURE,
+        types.ROOM_SECRET,
+        types.ROOM_SUPERSECRET,
+    }) do
         local door = {
             TargetRoomType = target,
             opened = false,
@@ -22,6 +29,13 @@ local function room(kind)
             self.opened = false
         end
         function door:Open()
+            self.opened = true
+        end
+        function door:IsRoomType(value)
+            return value == kind or value == self.TargetRoomType
+        end
+        function door:TryBlowOpen(explosion, player)
+            assert(explosion == false and player)
             self.opened = true
         end
         result.doors[slot - 1] = door
@@ -43,7 +57,7 @@ local function room(kind)
     end
     return result
 end
-local function enter(destination, holders, slowFloor, stoppers, entry, nearDoor)
+local function enter(destination, holders, slowFloor, stoppers, entry, nearDoor, xrays)
     -- The real lifecycle closes combat exits before applying item exceptions.
     combat(destination, types.ROOM_BOSS, function(r)
         r.bossClosed = true
@@ -73,6 +87,9 @@ local function enter(destination, holders, slowFloor, stoppers, entry, nearDoor)
                 return stoppers and stoppers[index + 1] or false
             end,
             HasCollectible = function(_, id)
+                if id == collectibles.COLLECTIBLE_XRAY_VISION then
+                    return xrays and xrays[index + 1] or false
+                end
                 assert(id == collectibles.COLLECTIBLE_MERCURIUS)
                 return holders[index + 1]
             end,
@@ -121,5 +138,23 @@ enter(nextFloor, { false }, false)
 assert(
     nextFloor.slow == 0 and nextFloor.watch == 0,
     "Previous-floor pill effect survived a new floor"
+)
+local secret = room(types.ROOM_SECRET)
+for _ = 1, 3 do
+    enter(ordinary, { false, false }, false, nil, nil, nil, { false, true })
+    assert(ordinary.doors[3].opened and ordinary.doors[4].opened, "X-ray lost hidden entrances")
+    assert(
+        not ordinary.doors[0].opened
+            and not ordinary.doors[1].opened
+            and not ordinary.doors[2].opened,
+        "X-ray opened unrelated exits"
+    )
+    enter(secret, { false }, false, nil, nil, nil, { true })
+    assert(secret.doors[0].opened, "X-ray did not preserve the return through a hidden doorway")
+end
+enter(ordinary, { false }, false)
+assert(
+    not ordinary.doors[3].opened and not ordinary.doors[4].opened,
+    "X-ray leaked across rooms or item removal"
 )
 print("PASS item room entry: combat doors, scoped holder, repeated entry and floor slow lifetime")

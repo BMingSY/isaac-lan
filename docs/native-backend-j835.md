@@ -52,6 +52,8 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 分配与带大小的释放入口为 `0x5eacf8/0x5eb08e`，均 cdecl；参数分别为字节数，以及指针、字节数。共享组件保留 MSVC 大向量的 4096 字节阈值、32 字节对齐及 `0x23` 字节额外空间，释放使用原分配指针，原生析构可继续接管。快照和原生容器完整校验后准备两组空间，分配失败不修改任何旧路径或实体字段；不重建激光、不执行伤害或转移实体所有权。
 
+`pickup_flip_visual` 的道具底座阴影 Sprite 位于 `Pickup+0x51c`，可见标记位于 `+0x625`，分别由构造位置 `0x2b6cf0` 和绘制判断 `0x2bd0b5` 校验。读取只借用 Sprite，写入只允许客机设置布尔标记；不执行翻转或拾取，不转移 Sprite 所有权。
+
 ## 角色姿态与实体阴影
 
 [实体姿态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entity_pose.cpp)复用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_pose.cpp)。`actor_pose` 与 `entity_shadow` 的编码、校验和所有权遵循[实体姿态契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)，不跨版本交换会话。只接受实体借用 Sprite，写入限客机；捕获和恢复返回后不保留玩家、武器或服装指针。
@@ -216,6 +218,8 @@ J835 没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制�
 
 进度位于 `Manager+0x14`；成就数组从 `+0x38` 开始，共 638 字节，计数数组从 `+0x2b8` 开始，共 496 个 uint32。[进度复制组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/progress.h) 只读写这些元素，共同网络结构的剩余元素补零，不触及相邻收藏记录或按忏悔＋的数组长度访问原版对象。
 
+通关计数在原版中使用 0／1／2 表示未完成、普通和困难，网络进度使用 0／1／3 的完成位。进度组件仅对完成标记的事件编号转换，其他累计计数保留原值；菜单临时借用个人进度时另存原始数组，退出作用域后精确恢复原生值。
+
 个人进度持久化先标记 `Progress+0` 为脏，再调用 RVA `0x4848f0`，ABI 为 `thiscall void(Progress*, bool backup)`，传入 `true`。原生方法检查初始化标记，保存日期备份，并按 Steam 接口及游戏设置选择云端或本地文件；流的打开、关闭和所有权仍由游戏管理。不能直接调用需要有效输出流的序列化入口 `0x4836a0`。只读作用域临时设置 `Progress+1`，嵌套返回时恢复原值。
 
 ## 沙漏检查点与转场
@@ -348,18 +352,21 @@ Music 位于 `Manager+0x29a78`，当前／排队曲目 ID 为 `+0x30c/+0x310`。
 
 | 属性 | J835 原生边界 |
 | --- | --- |
-| `Size` | `0x40e460`，`cdecl void(Entity*, float)`；保留碰撞尺寸的原生更新 |
+| `Size` | 有实体配置时使用 `0x40e460`，`cdecl void(Entity*, float)`；无配置时调用 `0x2843a0`，`thiscall void(Entity*, float radius, Vector multiplier, int points)`，清栈 16 字节，保留原生碰撞尺寸更新 |
 | `Color` | `0x40e430`，`cdecl void(Entity*, const Color*)`；44 字节临时值包含七个通道和置零的 colorize，由原 setter 调用实体虚方法 |
 | `CollisionDamage` | 实体虚表 `+0x3c`，`thiscall void(Entity*, float)` |
 | 泪弹 `Height`／`Scale` | `0x2500f0`／`0x250250`，`thiscall void(Tear*, float)`；保留高度及精灵缩放的副作用 |
 | 掉落物 `Price` | `0x2b91e0`，`thiscall void(Pickup*, int)`；重复价格仍执行原生显示更新 |
+| `SortingLayer`／`RenderZOffset` | `Entity+0x2b4/+0x2ac` 的 int32；不改变实体所属列表 |
 | 掉落物 `ShopItemId` | Lua setter 直接写入 `Pickup+0x488` 的 int32；J460 的 -2 至 7 限制不适用 |
 
 完整属性偏移集中在 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/layout.h)。实体借用 Sprite 位于 `Entity+0x3c`，存活字节为 `+0x16a`；实体帧数为 `Game+0x1a30dc` 减 `Entity+0x280`，保留 uint32 回绕和有符号返回语义。身份、帧数、标志和精灵名称仍为只读字段。
 
 Sprite 原生对象为 `0x114` 字节，Lua 自有 wrapper 为 `0x11c` 字节、借用 wrapper 为 8 字节。两版动画状态、44 字节颜色和 MSVC 字符串字段具有相同布局，但声明仍属于版本绑定。名称在调用内复制，动画数据、文本缓冲和临时 setter 参数不跨调用保留，不转移资源所有权。
 
-`entity_npc_boss` 只允许客机恢复活动 NPC 的分类字节 `+0xb8d`，与 `EntityNPC::IsBoss`（`0x28f570`）一致。该标记独立于 Boss 类型编号，不触发 AI 或分配实体。完整实体姿态与其他原生引用接口不属于这一字段组件。
+尺寸恢复读取 `Entity+0x288` 的借用配置指针；无配置实体使用 `+0x2cc` 的原尺寸倍数和 `+0x170` 的碰撞点向量，在校验有限值、向量边界和点数后调用原生 setter，不自行分配或释放碰撞点。
+
+NPC 身份通过 RVA `0x5ec34c` 的 MSVC `__RTDynamicCast` 导入跳板判定，Entity／EntityNPC 类型描述符位于 RVA `0x7eab18/0x7eab70`；描述符名与入口受签名校验，不用数值类型范围排除 Mod NPC。`entity_npc_boss` 只允许客机恢复活动 NPC 的分类字节 `+0xb8d`，与 `EntityNPC::IsBoss`（`0x28f570`）一致。该标记独立于 Boss 类型编号，不触发 AI 或分配实体。完整实体姿态与其他原生引用接口不属于这一字段组件。
 
 ## NPC 命中与受击绘制
 

@@ -1,4 +1,5 @@
 #include "net/session.h"
+#include "net/latency.h"
 #include "net/side_channel.h"
 #include "net/messages.h"
 #include "net/peer.h"
@@ -50,7 +51,8 @@ struct Session::Impl {
     bool winsock = false, hosting = false, connecting = false, localReady = false,
          initialStarted = false;
     Phase state = Phase::idle;
-    std::string failure, fingerprint, identity, mods, hostIP;
+    std::string failure, version, fingerprint, identity, mods, hostIP;
+    std::optional<CompatibilityFailure> compatibilityFailure;
     std::shared_ptr<HostResolution> resolving;
     std::vector<ENetAddress> hostAddresses;
     std::size_t nextHostAddress = 0;
@@ -76,6 +78,7 @@ struct Session::Impl {
     std::array<std::optional<InputRoom>, maxPlayers> inputRooms{};
     std::array<std::uint32_t, maxPlayers> sequences{};
     std::array<int, maxPlayers> latency{0, -1, -1, -1};
+    std::array<LatencySample, maxPlayers> networkLatency{}, syncLatency{};
     Clock::time_point latencyAt = Clock::now() - std::chrono::seconds(1);
     std::uint32_t nextInput = 0, nextConsume = 0, committed = 0;
     std::optional<std::uint32_t> consumedLocal, verified;
@@ -95,12 +98,13 @@ struct Session::Impl {
     std::size_t snapshotSize = 0;
     std::uint32_t takenWorldEpoch = 0;
     std::uint64_t worldSnapshots = 0, deltaSnapshots = 0, rawWorldBytes = 0, wireWorldBytes = 0,
-                  fullWorldBytes = 0;
+                  fullWorldBytes = 0, comparedWorldBytes = 0;
     std::uint64_t snapshotChecksum = 0;
     Clock::time_point progress = Clock::now(), checkpointAt = Clock::now();
 
-    explicit Impl(void (*log)(const std::string&), Observer observe = nullptr, bool debug = false)
-        : observer(observe), debugLogs(debug), logger(log) {
+    explicit Impl(std::string modVersion, void (*log)(const std::string&),
+                  Observer observe = nullptr, bool debug = false)
+        : observer(observe), debugLogs(debug), logger(log), version(std::move(modVersion)) {
         WSADATA data{};
         winsock = WSAStartup(MAKEWORD(2, 2), &data) == 0;
         if (winsock) {
@@ -154,6 +158,7 @@ struct Session::Impl {
             rawWorldBytes += totals.raw.load();
             wireWorldBytes += totals.wire.load();
             fullWorldBytes += totals.full.load();
+            comparedWorldBytes += totals.compared.load();
         }
         peer.reset();
     }
@@ -171,6 +176,7 @@ struct Session::Impl {
         latest = {};
         inputRooms = {};
         sequences = {};
+        syncLatency = {};
         commands = {};
         roomRequests = {};
         receivedState.reset();
@@ -188,8 +194,7 @@ struct Session::Impl {
             if (p) {
                 p->ready = p->hasInput = false;
                 p->inputSequence = 0;
-                p->edgeSequence.reset();
-                p->inputEdges.clear();
+                p->inputEvents = {};
                 p->acknowledged.reset();
                 p->resetWorldCache(integrationEpoch);
                 p->sendingStage.reset();
@@ -205,7 +210,8 @@ struct Session::Impl {
         while (nextHostAddress < hostAddresses.size()) {
             const auto& address = hostAddresses[nextHostAddress++];
             try {
-                peers[0] = std::make_unique<Peer>(io, io->connectDatagram(address));
+                peers[0] = std::make_unique<Peer>(
+                    io, io->connectDatagram(address, {version, fingerprint}));
                 connecting = true;
                 const auto now = Clock::now();
                 const auto candidates = hostAddresses.size() - nextHostAddress + 1;
@@ -223,6 +229,9 @@ struct Session::Impl {
     void fail(const std::string& reason) {
         if (state == Phase::failed)
             return;
+        if (!hosting && peers[0] &&
+            peers[0]->pipe->state.load(std::memory_order_acquire) == ConnectionPipe::failed)
+            compatibilityFailure = peers[0]->pipe->compatibilityFailure;
         failure = reason;
         state = Phase::failed;
         if (logger)
@@ -265,9 +274,19 @@ struct Session::Impl {
         return true;
     }
     void measureLatency() {
-        if (!hosting)
-            return;
         const auto now = Clock::now();
+        if (!hosting) {
+            if (state == Phase::running && localReady && peers[0] &&
+                now - latencyAt >= LatencySample::reportInterval) {
+                latencyAt = now;
+                Writer report(Message::syncLatency);
+                report.string(integrationRun);
+                report.u32(integrationEpoch);
+                syncLatency[localSlot].write(report, now);
+                peers[0]->sendMessage(report);
+            }
+            return;
+        }
         for (unsigned slot = 1; slot < maxPlayers; ++slot)
             if (auto& peer = peers[slot]; peer && peer->accepted) {
                 if (now - peer->pingAt < std::chrono::seconds(peer->pingPending ? 5 : 1) ||
@@ -278,14 +297,21 @@ struct Session::Impl {
                 peer->sendMessage(ping);
                 peer->pingAt = now;
                 peer->pingPending = true;
-            } else
+            } else {
                 latency[slot] = -1;
-        if (now - latencyAt < std::chrono::seconds(1))
+                networkLatency[slot] = {};
+                syncLatency[slot] = {};
+            }
+        if (now - latencyAt < LatencySample::reportInterval)
             return;
         latencyAt = now;
         Writer info(Message::latency);
-        for (auto ms : latency)
-            info.u16(ms < 0 ? 65535 : std::min(ms, 65534));
+        info.string(integrationRun);
+        info.u32(integrationEpoch);
+        for (unsigned slot = 0; slot < maxPlayers; ++slot) {
+            networkLatency[slot].write(info, now);
+            syncLatency[slot].write(info, now);
+        }
         broadcast(info);
     }
     void updateMods(bool force = false) {
@@ -322,6 +348,9 @@ struct Session::Impl {
                     std::swap(choices[i], choices[next]);
                     std::swap(identities[i], identities[next]);
                     std::swap(access[i], access[next]);
+                    std::swap(latency[i], latency[next]);
+                    std::swap(networkLatency[i], networkLatency[next]);
+                    std::swap(syncLatency[i], syncLatency[next]);
                 }
                 ++next;
             }
@@ -431,6 +460,9 @@ struct Session::Impl {
         inputRooms[slot].reset();
         commands[slot] = Command::none;
         roomRequests[slot].reset();
+        latency[slot] = -1;
+        networkLatency[slot] = {};
+        syncLatency[slot] = {};
         retirePeer(peers[slot]);
         for (auto* channel : {&integration, &communication, &lifecycle})
             std::erase_if(channel->queue,
@@ -502,17 +534,33 @@ struct Session::Impl {
                     std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - p.pingAt)
                         .count()));
                 p.pingPending = false;
-                if (p.minimumLatency < 0 || latency[slot] < p.minimumLatency)
-                    p.minimumLatency = latency[slot];
+                networkLatency[slot].record(latency[slot]);
+                p.minimumLatency = p.pathLatency.observe(latency[slot], Clock::now());
                 p.pipe->minimumLatency.store(p.minimumLatency);
             }
             return;
         }
         if (type == Message::latency && !hosting && p.accepted) {
-            for (auto& ms : latency) {
-                const auto value = r.u16();
-                ms = value == 65535 ? -1 : value;
+            const auto run = r.string();
+            const auto epoch = r.u32();
+            const auto now = Clock::now();
+            for (unsigned i = 0; i < maxPlayers; ++i) {
+                networkLatency[i] = LatencySample::read(r, now);
+                const auto response = LatencySample::read(r, now);
+                if (const auto ms = networkLatency[i].value(now); ms >= 0)
+                    latency[i] = ms;
+                if (i != localSlot && run == integrationRun && epoch == integrationEpoch)
+                    syncLatency[i] = response;
             }
+            return;
+        }
+        if (type == Message::syncLatency && hosting && p.accepted) {
+            const auto run = r.string();
+            const auto epoch = r.u32();
+            const auto response = LatencySample::read(r);
+            if (state == Phase::running && p.ready && (activeMask & (1u << slot)) && !ending &&
+                !cinematicEpoch && run == integrationRun && epoch == integrationEpoch)
+                syncLatency[slot] = response;
             return;
         }
         if (type == Message::error)
@@ -595,14 +643,14 @@ struct Session::Impl {
                 p.inputAt = Clock::now();
                 p.hasInput = false;
                 p.inputSequence = 0;
-                p.edgeSequence.reset();
-                p.inputEdges.clear();
+                p.inputEvents = {};
                 latest[slot] = {};
                 inputRooms[slot].reset();
                 // Readiness starts a new input stream after loading/rejoin.
                 // A view can precede its first sample; acknowledging the old
                 // stream would make prediction reject new inputs until catch-up.
                 sequences[slot] = 0;
+                syncLatency[slot] = {};
                 // A slow loader may have an older floor checkpoint. Deliver
                 // the latest native floor event before its first live view.
                 if (p.floorAfterLoad) {
@@ -619,21 +667,31 @@ struct Session::Impl {
             if ((type == Message::input || type == Message::inputEdges) &&
                 (state == Phase::running || state == Phase::finishing ||
                  state == Phase::returning)) {
+                const bool accepting = p.ready && !p.waiting && state == Phase::running;
+                if (type == Message::inputEdges) {
+                    const auto event = readInputEvent(r);
+                    r.finish();
+                    if (accepting)
+                        p.inputEvents.receive(event);
+                    return;
+                }
                 const auto sample = readInput(r);
+                const auto count = r.u8();
+                if (count > maxRepeatedInputEvents)
+                    throw std::runtime_error("Too many repeated input events");
+                for (unsigned i = 0; i < count; ++i) {
+                    const auto event = readInputEvent(r);
+                    if (event.sample.sequence > sample.sequence)
+                        throw std::runtime_error("Input event precedes its sample");
+                    if (accepting)
+                        p.inputEvents.receive(event);
+                }
+                r.finish();
+                if (!accepting)
+                    return;
                 const auto sequence = sample.sequence;
                 const auto& value = sample.input;
                 const auto& room = sample.room;
-                if (!p.ready || p.waiting || state != Phase::running)
-                    return;
-                if (type == Message::inputEdges) {
-                    if (p.edgeSequence && sequence <= *p.edgeSequence)
-                        return;
-                    p.edgeSequence = sequence;
-                    if (p.inputEdges.size() >= 128)
-                        throw std::runtime_error("Input event queue limit exceeded");
-                    p.inputEdges.push_back(sample);
-                    return;
-                }
                 if (p.hasInput && sequence <= p.inputSequence)
                     return;
                 if (value.triggered)
@@ -784,6 +842,7 @@ struct Session::Impl {
                 throw std::runtime_error("Invalid waiting roster");
             state = Phase::waiting;
             localReady = false;
+            syncLatency = {};
             receivedState.reset();
             return;
         }
@@ -819,6 +878,7 @@ struct Session::Impl {
                 restartPending = true;
             }
             localReady = false;
+            syncLatency = {};
             receivedState.reset();
             startSettings = value;
             runRules = value.rules;
@@ -859,6 +919,7 @@ struct Session::Impl {
     }
     void receiveStage(Stage value) {
         integrationEpoch = value.epoch;
+        syncLatency = {};
         if (value.cinematic) {
             if (cinematicEpoch)
                 throw std::runtime_error("Overlapping cinematic transaction");
@@ -991,6 +1052,8 @@ struct Session::Impl {
                     slot = i;
                 });
             } catch (const std::exception& e) {
+                if (logger)
+                    logger("network_rejoin_rejected reason=" + std::string(e.what()));
                 try {
                     Writer w(Message::error);
                     w.string(std::string(e.what()).substr(0, 240));
@@ -1024,15 +1087,17 @@ struct Session::Impl {
         }
     }
 };
-Session::Session(void (*logger)(const std::string&), Observer observer, bool debugLogs)
-    : impl(std::make_unique<Impl>(logger, observer, debugLogs)) {}
+Session::Session(std::string version, void (*logger)(const std::string&), Observer observer,
+                 bool debugLogs)
+    : impl(std::make_unique<Impl>(std::move(version), logger, observer, debugLogs)) {}
 Session::~Session() = default;
 bool Session::host(std::uint16_t port, const std::string& fingerprint, const std::string& mods,
                    const LobbyAccess& access) {
-    if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty() || !access.valid())
+    if (!impl->winsock || impl->state != Phase::idle ||
+        !BuildIdentity{impl->version, fingerprint}.valid() || !access.valid())
         return false;
     try {
-        impl->listener = impl->io->listenDatagram(port);
+        impl->listener = impl->io->listenDatagram(port, {impl->version, fingerprint});
         impl->boundPort = impl->listener->port;
         impl->hosting = true;
         impl->fingerprint = fingerprint;
@@ -1048,7 +1113,8 @@ bool Session::host(std::uint16_t port, const std::string& fingerprint, const std
 bool Session::join(const std::string& ip, std::uint16_t port, const std::string& fingerprint,
                    const std::string& identity, const std::string& mods,
                    const LobbyAccess& access) {
-    if (!impl->winsock || impl->state != Phase::idle || fingerprint.empty() || !access.valid())
+    if (!impl->winsock || impl->state != Phase::idle ||
+        !BuildIdentity{impl->version, fingerprint}.valid() || !access.valid())
         return false;
     try {
         impl->identity = identity.empty() ? randomIdentity() : identity;
@@ -1087,7 +1153,7 @@ bool Session::reconnect() {
     if (retiring.size() >= maxRetiringConnections)
         return false;
     const auto ip = impl->hostIP, identity = impl->identity, fingerprint = impl->fingerprint,
-               mods = impl->mods;
+               mods = impl->mods, version = impl->version;
     const auto port = impl->boundPort;
     const auto logger = impl->logger;
     const auto observer = impl->observer;
@@ -1096,7 +1162,7 @@ bool Session::reconnect() {
     const auto access = impl->localAccess;
     impl->shutdown();
     retiring.push_back(std::move(impl));
-    impl = std::make_unique<Impl>(logger, observer, debug);
+    impl = std::make_unique<Impl>(version, logger, observer, debug);
     impl->choices = choices;
     return join(ip, port, fingerprint, identity, mods, access);
 }
@@ -1104,6 +1170,7 @@ bool Session::beginStage(const Stage& value) {
     if (!impl->hosting || impl->state != Phase::running || impl->ending)
         return false;
     if (value.sourceRoom < -20 || value.sourceRoom >= 169 || value.restart > 2 ||
+        !value.validDepartureAnimations() ||
         (value.restart && (value.same || value.animation || value.level != 1 || value.type ||
                            !value.rewind.empty() || value.cinematic)) ||
         impl->cinematicEpoch ||
@@ -1116,6 +1183,7 @@ bool Session::beginStage(const Stage& value) {
         impl->cinematicReadyMask = 0;
     }
     impl->integrationEpoch = value.epoch;
+    impl->syncLatency = {};
     for (auto& p : impl->peers)
         if (p)
             p->resetWorldCache(value.epoch);
@@ -1276,6 +1344,8 @@ void Session::poll() {
             auto& p = *impl->peers[0];
             const auto status = p.pipe->state.load(std::memory_order_acquire);
             if (status == ConnectionPipe::failed || status == ConnectionPipe::closed) {
+                if (status == ConnectionPipe::failed && p.pipe->compatibilityFailure)
+                    throw std::runtime_error(p.pipe->error);
                 impl->connectNextAddress();
                 return;
             }
@@ -1378,10 +1448,10 @@ void Session::poll() {
         if (impl->hosting) {
             impl->receiveReturning();
             impl->updateMods();
-            impl->measureLatency();
             impl->finishCinematic();
             impl->sendPending();
         }
+        impl->measureLatency();
         for (unsigned i = 0; i < maxPlayers; ++i)
             if (impl->peers[i]) {
                 try {
@@ -1484,6 +1554,7 @@ bool Session::start(const Start& settings) {
             return false;
     impl->integrationRun = randomIdentity();
     impl->integrationEpoch = 0;
+    impl->syncLatency = {};
     impl->integration.queue.clear();
     impl->startSettings = settings;
     impl->startSettings.firstTick = 0;
@@ -1763,15 +1834,23 @@ bool Session::ready() {
     }
     return true;
 }
-bool Session::publish(unsigned slot, const WorldState& state) {
+bool Session::publish(unsigned slot, WorldState state) {
     if (!impl->hosting || impl->state != Phase::running || impl->ending || impl->cinematicEpoch ||
         !slot || slot >= impl->playerCount || state.bytes.empty() ||
         state.bytes.size() + state.stable.size() + (state.stable.empty() ? 0 : 4) > maxWorldSize ||
         state.tick >= impl->nextConsume)
         return false;
     if (auto& p = impl->peers[slot]; p && p->ready)
-        p->pending = state;
+        p->pending = std::move(state);
     return true;
+}
+bool Session::captureRequested(unsigned slot) const {
+    if (!impl->hosting || impl->state != Phase::running || impl->ending || impl->cinematicEpoch ||
+        !slot || slot >= impl->playerCount)
+        return false;
+    const auto& peer = impl->peers[slot];
+    return peer && peer->ready && !peer->pending && peer->pipe &&
+           peer->pipe->captureRequested.load(std::memory_order_acquire);
 }
 std::optional<WorldState> Session::takeState() {
     if (impl->hosting || !impl->localReady || !impl->receivedState)
@@ -1805,6 +1884,22 @@ std::array<std::uint32_t, maxPlayers> Session::inputSequences() const {
 const std::array<int, maxPlayers>& Session::latency() const {
     return impl->latency;
 }
+int Session::networkLatency(unsigned slot) const {
+    return slot < maxPlayers ? impl->networkLatency[slot].value() : -1;
+}
+int Session::syncLatency(unsigned slot) const {
+    return slot < maxPlayers && impl->state == Phase::running && !impl->ending &&
+                   !impl->cinematicEpoch && (impl->activeMask & (1u << slot))
+               ? impl->syncLatency[slot].value()
+               : -1;
+}
+void Session::recordSyncLatency(double milliseconds) {
+    if (!impl->hosting && impl->state == Phase::running && impl->localReady && !impl->ending &&
+        !impl->cinematicEpoch && impl->takenWorldEpoch == impl->integrationEpoch &&
+        std::isfinite(milliseconds) && milliseconds >= 0)
+        impl->syncLatency[impl->localSlot].record(
+            static_cast<int>(std::min<double>(std::round(milliseconds), LatencySample::maximum)));
+}
 const std::string& Session::identity() const {
     return impl->identity;
 }
@@ -1829,6 +1924,9 @@ bool Session::modsDiffer() const {
 const std::string& Session::error() const {
     return impl->failure;
 }
+const std::optional<CompatibilityFailure>& Session::compatibilityFailure() const {
+    return impl->compatibilityFailure;
+}
 const Start& Session::settings() const {
     return impl->startSettings;
 }
@@ -1845,6 +1943,7 @@ TransportResources Session::resources() const {
     out.rawWorldBytes = impl->rawWorldBytes;
     out.wireWorldBytes = impl->wireWorldBytes;
     out.fullWorldBytes = impl->fullWorldBytes;
+    out.comparedWorldBytes = impl->comparedWorldBytes;
     out.connections = impl->listener != nullptr;
     const auto observe = [&out](const auto& p) {
         if (!p)
@@ -1867,6 +1966,7 @@ TransportResources Session::resources() const {
             out.rawWorldBytes += world.raw.load();
             out.wireWorldBytes += world.wire.load();
             out.fullWorldBytes += world.full.load();
+            out.comparedWorldBytes += world.compared.load();
         }
         if (p->pending)
             out.worldBytes += p->pending->bytes.capacity();

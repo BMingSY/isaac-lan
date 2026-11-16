@@ -147,4 +147,102 @@ for tick = 1, 3 do
     })
 end
 assert(captures == 3 and reclaimed == 0, "Ambient particles forced native room cleanup")
+
+-- Grid reads remain live, including external changes and replacements. Only
+-- equal immutable records are retained across consecutive capture generations.
+local fields = dofile(root .. "/src/bridge/sync/fields.lua")
+local codec = dofile(root .. "/src/bridge/sync/codec.lua")
+local Room, Grid, Door = fields.room, fields.grid, fields.door
+local pose = { "idle", 0 }
+local door = {
+    Slot = 0,
+    TargetRoomIndex = 85,
+    CurrentRoomType = 1,
+    TargetRoomType = 1,
+    Direction = 0,
+    Busted = false,
+    ExtraVisible = false,
+    locked = true,
+    IsLocked = function(self)
+        return self.locked
+    end,
+    GetSprite = function()
+        return pose
+    end,
+}
+local grid = {
+    State = 0,
+    CollisionClass = 1,
+    VarData = 0,
+    variant = 1,
+    seed = 9,
+    GetType = function()
+        return 16
+    end,
+    GetVariant = function(self)
+        return self.variant
+    end,
+    GetSprite = function()
+        return pose
+    end,
+    GetSaveState = function(self)
+        return { SpawnSeed = self.seed }
+    end,
+    ToDoor = function()
+        return door
+    end,
+}
+local grids = { [0] = grid }
+room.GetGridSize = function()
+    return 2
+end
+room.GetGridEntity = function(_, index)
+    return grids[index]
+end
+native.door_sprite = function(value)
+    return value
+end
+local previousSprite
+local cached = dofile(root .. "/src/bridge/sync/room.lua")(fields)(native, function()
+    return { 1, 10, 0, 0 }
+end, function(value, previous)
+    previousSprite = previous
+    return value
+end, {
+    capture = function()
+        return "return"
+    end,
+}, enums.EntityType, localEffect)
+local location = { dimension = 0, index = 84 }
+local first = cached(1, 20, 2, location)
+local firstBytes = codec.encode(first)
+local same = cached(1, 21, 2, location)
+assert(same[Room.grids] == first[Room.grids] and same[Room.entities] ~= first[Room.entities])
+assert(previousSprite == pose, "Previous grid sprite was not supplied")
+door.locked = false
+local unlocked = cached(1, 22, 2, location)
+assert(unlocked[Room.grids] ~= first[Room.grids])
+assert(not unlocked[Room.grids][1][Grid.door][Door.locked])
+assert(codec.encode(first) == firstBytes, "Grid reuse mutated a prior view")
+pose = { "open", 1 }
+local animated = cached(1, 23, 2, location)
+assert(animated[Room.grids][1][Grid.sprite] == pose)
+grid.variant, grid.seed, grid.State, grid.CollisionClass, grid.VarData = 2, 10, 3, 0, 8
+local changed = cached(1, 24, 2, location)[Room.grids][1]
+assert(changed[Grid.variant] == 2 and changed[Grid.seed] == 10 and changed[Grid.state] == 3)
+assert(changed[Grid.collision] == 0 and changed[Grid.data] == 8)
+grids[0] = nil
+assert(#cached(1, 25, 2, location)[Room.grids] == 0)
+grids[1] = grid
+local replaced = cached(1, 26, 2, location)
+assert(replaced[Room.grids][1][Grid.index] == 1)
+cached(1, 27, 2, { dimension = 1, index = 84 })
+assert(previousSprite == nil, "Another dimension reused prior captures")
+cached(1, 28, 2, location)
+assert(previousSprite == nil, "An unobserved room retained capture history")
+cached(1, 28, 3, location)
+assert(previousSprite == nil, "New floor reused a prior capture")
+cached(1, 27, 3, location)
+assert(previousSprite == nil, "A regressed tick retained future captures")
+print("PASS live grid reuse, door animation, replacement and room/floor invalidation")
 print("PASS room views capture once per room/tick and clear on tick/floor changes")

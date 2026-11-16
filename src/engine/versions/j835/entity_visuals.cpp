@@ -13,5 +13,8 @@ const Bindings bindings{
     backend::entry::familiarRenderTether,
     {layout::familiarBody::dataVtable, layout::familiarBody::sprites, layout::familiarBody::layers},
     {layout::tether::dataVtable, layout::tether::points, layout::tether::capacity,
-     layout::tether::first, layout::tether::count, layout::tether::sprite, layout::tether::size}};
+     layout::tether::first, layout::tether::count, layout::tether::sprite, layout::tether::size},
+    layout::entity::variant,
+    layout::pickup::flipSprite,
+    layout::pickup::flipVisible};
 } // namespace isaac::engine::native_visuals

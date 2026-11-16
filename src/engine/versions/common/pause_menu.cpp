@@ -87,6 +87,18 @@ void synchronize(Address image, bool paused) {
     else
         hide(image);
 }
+FocusPauseScope::FocusPauseScope(Address image) {
+    if (image)
+        if (const auto manager = at<Address>(image, binding.manager)) {
+            option = manager + binding.managerOptions + binding.pauseOnFocusLost;
+            previous = at<bool>(option);
+            at<bool>(option) = false;
+        }
+}
+FocusPauseScope::~FocusPauseScope() {
+    if (option)
+        at<bool>(option) = previous;
+}
 Intent intent(Address image, int action) {
     const auto p = menu(image);
     if (!p || at<int>(p) != binding.rootPage)
