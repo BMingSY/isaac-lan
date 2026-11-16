@@ -37,7 +37,7 @@
 #include "core/laser_state.h"
 #include "runtime/actor_roster.h"
 #include "runtime/room_scope.h"
-#include "engine/versions/j460/room_roster.h"
+#include "engine/versions/common/room_roster.h"
 #include "presentation/ambient_effects.h"
 #include <stdexcept>
 #include <type_traits>
@@ -354,10 +354,10 @@ void roomTeamRoster() {
     Roster team(original), current(local);
     Stack::Binding scope(stack, room, team);
     {
-        isaac::engine::j460::TeamRoster outer(stack, current);
+        isaac::engine::native_rooms::TeamRoster outer(stack, current);
         current = grown;
         {
-            isaac::engine::j460::TeamRoster query(stack, current);
+            isaac::engine::native_rooms::TeamRoster query(stack, current);
             require(current.size() == 3 && current.back() == 3,
                     "Nested team query lost the newly created revival body");
         }
@@ -368,7 +368,7 @@ void roomTeamRoster() {
             current = local;
             Stack::Binding nested(stack, room, saved, &current);
             try {
-                isaac::engine::j460::TeamRoster callback(stack, current);
+                isaac::engine::native_rooms::TeamRoster callback(stack, current);
                 require(current.data() == grown.data(),
                         "Nested room borrowed the obsolete outer roster");
                 current = replaced;
@@ -386,7 +386,7 @@ void roomTeamRoster() {
     require(team.size() == 4 && team.data() == replaced.data() && current.data() == local.data(),
             "Revival roster growth did not survive room restoration");
     {
-        isaac::engine::j460::TeamRoster disabled(stack, current, false);
+        isaac::engine::native_rooms::TeamRoster disabled(stack, current, false);
         require(current.data() == local.data() && stack.teamRoster() == &team,
                 "Disabled room integration changed native roster ownership");
     }

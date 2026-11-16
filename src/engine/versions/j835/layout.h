@@ -266,6 +266,7 @@ inline constexpr std::array<unsigned, 6> values{0x3b8, 0x3bc, 0x3c0, 0x3c4, 0x3c
 inline constexpr std::array<unsigned, 2> paths{0x3d0, 0x3dc};
 } // namespace laser
 namespace player {
+inline constexpr unsigned subplayer = 0x1cb8;
 inline constexpr unsigned history = 0x1d0c, inventoryOrder = 0x1d20, inventorySlots = 16;
 inline constexpr unsigned movingBoxBegin = 0x1c9c, movingBoxEnd = 0x1ca0;
 inline constexpr unsigned chargeSprites = 0x6a8, pockets = 0x16c8;

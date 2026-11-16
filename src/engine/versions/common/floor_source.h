@@ -1,15 +1,17 @@
 #pragma once
 #include <optional>
 
-namespace isaac::engine::j460 {
+namespace isaac::engine::native_rooms {
 // SetNextStage reads the departure room long after StartStageTransition.
 // Retain only its scalar index; never retain or activate an old Room object.
 class FloorSource {
     std::optional<int> source;
+    int minimumRoom;
 
   public:
+    explicit FloorSource(int minimum) : minimumRoom(minimum) {}
     bool begin(int index) {
-        if (index < -20 || index >= 169)
+        if (index < minimumRoom || index >= 169)
             return false;
         source = index;
         return true;
@@ -36,4 +38,4 @@ class FloorSource {
         next();
     }
 };
-} // namespace isaac::engine::j460
+} // namespace isaac::engine::native_rooms

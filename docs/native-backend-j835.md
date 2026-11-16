@@ -42,6 +42,8 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 ## 角色附属状态
 
+[遗骸形态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/forgotten_form.h)使用[共享形态恢复组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/forgotten_form.h)。原生切换入口 `0x38df20` 以 ECX 接收角色、栈上接收强制切换和播放效果两个布尔参数，清栈八字节。恢复只接受遗骸／游魂的有效配对，类型、合作幽灵和配对指针分别读取 `Player+0x130c/+0x1f88/+0x1cb8`；目标形态相同不重复调用，配对对象仍由游戏持有。该能力尚需完整房间组件调用。
+
 [角色状态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/actor_state.cpp)复用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/actor_state.cpp)，Lua 名称、快照字节和名单限制遵循[角色附属状态契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#角色附属状态)。附属 Sprite 为 `Player+0x36c/+0xf48/+0xe34`，七个蓄力条从 `+0x6a8` 开始、步长 `0x114`；服装向量为 `+0x1170/+0x1174/+0x1178`，步长 `0x130`。借用包装沿用原生 metatable，不接管动画资源。
 
 四个口袋记录从 `+0x16c8` 开始、步长 8；百宝袋八个材料与预览 ID 为 `+0x1e44/+0x1e4c`；里蓝人 mana 与六字节资源队列为 `+0x1e50/+0x1e54`。仅完整名单中的客机玩家可恢复状态，整份载荷先校验再写入，不触及后续随机资源。百宝袋变化经 `Game::GetHUD`（RVA `0x127c0`、thiscall、无参数）取得 HUD，八个 PlayerHUD 步长 `0x6b0`，只设置绑定该角色的 `+0x6a1` 刷新位；重复状态不刷新，缺少 HUD 时保留已恢复材料供后续绑定使用。

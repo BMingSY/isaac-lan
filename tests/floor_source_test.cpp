@@ -1,10 +1,10 @@
 #include "test_support.h"
-#include "engine/versions/j460/floor_source.h"
+#include "engine/versions/common/floor_source.h"
 #include <stdexcept>
 
 int main() {
-    using isaac::engine::j460::FloorSource;
-    FloorSource source;
+    using isaac::engine::native_rooms::FloorSource;
+    FloorSource source(-20);
     // J460 SetNextStage's Womb II branch: source index -8 selects Blue Womb;
     // the ordinary departure selects stage 10 (Sheol/Cathedral).
     for (int authority : {-8, -9, 84, 168}) {
@@ -52,5 +52,9 @@ int main() {
     require(source.begin(0) && source.room(84) == 0, "Room zero was treated as an absent source");
     source.reset();
     require(source.room(84) == 84, "Reset retained a pending source");
+    FloorSource original(-18);
+    require(original.begin(-18) && !original.begin(-19) && !original.begin(-20) &&
+                original.room(84) == -18 && original.begin(168) && !original.begin(169),
+            "Original Repentance accepted descriptors outside its native negative-room array");
     std::puts("PASS native floor source selection, split-room branches and cleanup");
 }

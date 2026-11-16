@@ -115,7 +115,7 @@ Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端
 
 `actor_lazarus_unpair(index)` 仅供客机恢复长子权里拉撒路的幽灵状态。角色兼容组件根据权威幽灵状态请求挂起第二具身体；后端要求房间系统启用、没有借用作用域，索引指向完整名单内的主人，双向配对身体位于其后、同房、同控制器，分别属于里拉撒路的两种形态，且双方没有隐藏备份。校验失败不写入。后端按 J460 原生降级路径把双方的 `player::lazarusBackup`（`+0x1e6c`）设为彼此，用原生 EntityPtr 赋值清除公开配对引用，将备份设为未注册／不活动、玩家索引为 `-1`，再调用 `PlayerManager::RemoveExistingPlayer`（RVA `0x5b9fc0`，`thiscall void(manager, player)`）移出名单。该入口只移除名单元素，不能传入不在名单中的身体；启动时校验其签名。备份仍由原生玩家对象持有，不销毁或分配角色；既有幽灵／复活入口遍历隐藏备份，`actor_form` 在权威重新列出身体时恢复公开配对和名单。房间作用域负责位置记录，后续实体同步负责跟班状态；接口不接收地址，不调用客机伤害或玩家更新逻辑。
 
-完整名单借用使用 [`room_roster.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_roster.h) 的 `TeamRoster`，只复制 J460 玩家向量的 begin／end／capacity 描述符，不复制角色或持有其分配。借用期间，[`ScopeStack::TeamBinding`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 将完整名单来源指向当前原生向量；重复查询不重新装入保存的描述符，原生扩容、增删和重排均保留。嵌套房间作用域暂借其保存的最新描述符；正常返回及异常退栈先交回更新后的名单，再恢复父作用域。绑定必须按栈顺序销毁，不跨会话、楼层清理或异步调用持有。既有原生入口与启动签名校验保持适用，角色和向量分配／释放仍由后端与 PlayerManager 管理。
+完整名单借用使用 [`room_roster.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_roster.h) 的 `TeamRoster`，只复制原生玩家向量的 begin／end／capacity 描述符，不复制角色或持有其分配。借用期间，[`ScopeStack::TeamBinding`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 将完整名单来源指向当前原生向量；重复查询不重新装入保存的描述符，原生扩容、增删和重排均保留。嵌套房间作用域暂借其保存的最新描述符；正常返回及异常退栈先交回更新后的名单，再恢复父作用域。绑定必须按栈顺序销毁，不跨会话、楼层清理或异步调用持有。既有原生入口与启动签名校验保持适用，角色和向量分配／释放仍由后端与 PlayerManager 管理。
 
 角色构造期间调用共享资源广播时，新身体可能尚未登记到房间位置表。此时后端先从已登记参与者用既有 `Player::CopyResourcesTo` 复制本次共享掩码内的资源，再借入完整名单执行原生广播，避免将构造初始值写回队伍。已登记身体、个人资源位及未启用房间系统时沿用各自原生路径；不保存跨帧资源副本、不补发拾取物，也不改变身体分配或资源所有权。
 

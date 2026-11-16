@@ -53,9 +53,9 @@
 
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
-#include "engine/versions/j460/floor_source.h"
+#include "engine/versions/common/floor_source.h"
 #include "engine/versions/common/room_routing.h"
-#include "engine/versions/j460/room_roster.h"
+#include "engine/versions/common/room_roster.h"
 #include "engine/versions/j460/stage_transition_binding.h"
 #include "engine/versions/j460/forgotten_form.h"
 namespace j460 = isaac::engine::j460;
@@ -283,7 +283,7 @@ struct StageRequest {
     int sourceDimension = 0;
 };
 std::optional<StageRequest> pendingStage;
-j460::FloorSource floorSource;
+engine::native_rooms::FloorSource floorSource{j460::layout::roomDescriptor::minimumRoom};
 struct TeamTransition {
     Key room;
     std::function<void()> begin;
@@ -421,7 +421,7 @@ struct Scope {
         binding.reset();
     }
 };
-struct TeamScope : j460::TeamRoster<decltype(scopes), Vector> {
+struct TeamScope : engine::native_rooms::TeamRoster<decltype(scopes), Vector> {
     TeamScope() : TeamRoster(scopes, roster(), enabled) {}
 };
 using FindCollectible = void*(__attribute__((thiscall)) *)(void*, int, void*, bool);

@@ -2,7 +2,7 @@
 #include <optional>
 #include <type_traits>
 
-namespace isaac::engine::j460 {
+namespace isaac::engine::native_rooms {
 // Borrows only the native vector descriptor. PlayerManager retains allocation
 // ownership; callers reconcile any room-local roster after the borrow ends.
 template <class Stack, class Roster> class TeamRoster {
@@ -32,4 +32,4 @@ template <class Stack, class Roster> class TeamRoster {
     Roster saved_;
     std::optional<typename Stack::TeamBinding> binding_;
 };
-} // namespace isaac::engine::j460
+} // namespace isaac::engine::native_rooms
