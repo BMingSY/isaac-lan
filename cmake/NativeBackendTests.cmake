@@ -273,6 +273,17 @@ foreach(backend j460 j835)
         src/engine/versions/${backend}/session_backend.cpp
         src/engine/versions/common/session_backend.cpp
         LIBRARIES
+        minhook
+        COMPILE_OPTIONS
+        -msse2)
+    isaac_add_backend_test(
+        animation-skip
+        ${backend}
+        SOURCES
+        tests/animation_skip_backend_test.cpp
+        tests/native_call.cpp
+        src/engine/versions/${backend}/animation_skip.cpp
+        LIBRARIES
         minhook)
     isaac_add_backend_test(save ${backend} SOURCES tests/save_backend_test.cpp
                            src/engine/versions/${backend}/save.cpp)

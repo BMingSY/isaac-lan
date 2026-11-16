@@ -20,6 +20,15 @@ struct Game {
     unsigned pauseMenu, console, stage, stageType, floorSeeds, stateFlags;
     unsigned fadeAction, fadeAlpha, restartHeldFrames;
 };
+// Version-owned call/branch adapters observe native-eligible awards. The session
+// component owns installation and rollback with its other lifecycle hooks.
+struct CompletionHook {
+    unsigned target;
+    void* detour;
+    void** original;
+};
+extern const CompletionHook completionHook;
+void observeCompletion(unsigned event, unsigned character, unsigned difficulty) noexcept;
 struct Bindings {
     std::uint32_t manager, game;
     Entries entry;
@@ -30,7 +39,7 @@ struct Bindings {
     int gameScene, exitMenu, gameOverRestart, heldRestart;
     // Persistence uses each version's native file/cloud selection and ownership.
     void (*persistProgress)(std::uintptr_t image, std::uintptr_t progress);
-    unsigned recordCompletion = 0, completionDefinitions = 0;
+    unsigned completionDefinitions = 0;
     unsigned progressTryUnlock = 0, progressIncreaseCounter = 0;
 };
 extern const Bindings bindings;

@@ -352,15 +352,15 @@ void repeatedCompletionAwards() {
         f.image + native::globals::completionDefinitions);
     records[0][0] = {27, 99};
     records[0][2] = {41, 33};
-    session::originalRecordCompletion = completionFixture;
+    isaac::engine::native_session::originalRecordCompletion = completionFixture;
     session::callbacks.completionAward = completionObserver;
     completionCalls = 0;
     completionAwards.clear();
     for (unsigned i = 0; i < 32; ++i) {
-        session::recordCompletionHook(0, 0, 0);
-        session::recordCompletionHook(0, 0, 1);
-        session::recordCompletionHook(2, 0, 0);
-        session::recordCompletionHook(2, 0, 1);
+        isaac::engine::native_session::recordCompletion(0, 0, 0);
+        isaac::engine::native_session::recordCompletion(0, 0, 1);
+        isaac::engine::native_session::recordCompletion(2, 0, 0);
+        isaac::engine::native_session::recordCompletion(2, 0, 1);
     }
     require(completionCalls == 128 && completionAwards.size() == 128 &&
                 completionAwards[0] == std::array<unsigned, 3>{27, 1, 0} &&
@@ -370,14 +370,14 @@ void repeatedCompletionAwards() {
             "Repeated completion lost its native descriptor or difficulty");
     {
         session::ProgressReadOnlyScope scope;
-        session::recordCompletionHook(2, 0, 1);
+        isaac::engine::native_session::recordCompletion(2, 0, 1);
     }
-    session::recordCompletionHook(15, 0, 0);
-    session::recordCompletionHook(0, 41, 0);
+    isaac::engine::native_session::recordCompletion(15, 0, 0);
+    isaac::engine::native_session::recordCompletion(0, 41, 0);
     require(completionAwards.size() == 128 && completionCalls == 131,
             "Read-only replica or invalid descriptor earned a completion award");
     session::callbacks.completionAward = nullptr;
-    session::originalRecordCompletion = nullptr;
+    isaac::engine::native_session::originalRecordCompletion = nullptr;
     session::image = 0;
 }
 std::vector<unsigned> committedUnlocks;

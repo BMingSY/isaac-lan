@@ -5,6 +5,7 @@
 #include "core/chat.h"
 #include "engine/versions/common/session_bindings.h"
 #include "engine/versions/common/completion_marks.h"
+#include "runtime/session.h"
 #include <MinHook.h>
 #include <cstring>
 
@@ -42,14 +43,11 @@ using Console = void(__attribute__((thiscall)) *)(void*, const void*, bool, void
 Console originalConsole;
 using ConsolePrint = void(__attribute__((thiscall)) *)(void*, const void*, unsigned, unsigned);
 ConsolePrint originalConsolePrint;
-using RecordCompletion = void(__stdcall*)(unsigned, unsigned, unsigned);
-RecordCompletion originalRecordCompletion;
-void __stdcall recordCompletionHook(unsigned event, unsigned character, unsigned difficulty) {
-    originalRecordCompletion(event, character, difficulty);
+void recordCompletion(unsigned event, unsigned character, unsigned difficulty) {
     namespace completion = native_completion;
     // The native caller has already checked run eligibility. This observer
     // never unlocks anything or changes its result, including repeated wins.
-    if (!callbacks.completionAward || event >= completion::eventCount ||
+    if (!image || !manager() || !callbacks.completionAward || event >= completion::eventCount ||
         character >= completion::counters.size() || difficulty > 3 ||
         at<bool>(manager() + binding.managerLayout.progress, binding.progressReadOnly))
         return;
@@ -160,8 +158,8 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
         hook(image + binding.entry.saveRerun, rerunHook, originalRerun) &&
         hook(image + binding.entry.executeMenu, menuHook, originalMenu) &&
         hook(image + binding.entry.serializeProgress, serializeHook, originalSerialize) &&
-        (!binding.recordCompletion ||
-         hook(image + binding.recordCompletion, recordCompletionHook, originalRecordCompletion)) &&
+        hook(image + native_session::completionHook.target, native_session::completionHook.detour,
+             *native_session::completionHook.original) &&
         hook(image + binding.entry.start, startHook, originalStart) &&
         hook(image + binding.entry.executeStart, executeStartHook, originalExecuteStart) &&
         hook(image + binding.entry.update, updateHook, originalUpdate) &&
@@ -362,3 +360,15 @@ void applyStage(const lan::Stage& value) {
                 value.stateFlags.data(), sizeof(value.stateFlags));
 }
 } // namespace isaac::engine::session
+
+namespace isaac::engine::native_session {
+void observeCompletion(unsigned event, unsigned character, unsigned difficulty) noexcept {
+    try {
+        session::recordCompletion(event, character, difficulty);
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+    } catch (...) {
+        runtime::abort("Native completion observer failed");
+    }
+}
+} // namespace isaac::engine::native_session

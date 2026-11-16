@@ -7,6 +7,7 @@ namespace isaac::engine::native_session {
 namespace {
 namespace backend = j835;
 namespace layout = backend::layout;
+void* originalRecordCompletion;
 void persistProgress(std::uintptr_t image, std::uintptr_t progress) {
     using Flush = void(__attribute__((thiscall))*)(void*, bool);
     *reinterpret_cast<bool*>(progress + j835::layout::progress::dirty) = true;
@@ -16,6 +17,28 @@ void persistProgress(std::uintptr_t image, std::uintptr_t progress) {
                                                                   true);
 }
 } // namespace
+extern "C" {
+__attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_j835_completion_prepare(
+    std::uintptr_t* registers) noexcept {
+    // Native RecordPlayerCompletion has already excluded ghosts, dependent
+    // bodies and duplicate twins, and selected EBX's descriptor in ECX.
+    enum Register : unsigned { game = 0, event = 1, character = 4, continuation = 9 };
+    registers[continuation] = reinterpret_cast<std::uintptr_t>(originalRecordCompletion);
+    const auto difficulty =
+        *reinterpret_cast<const unsigned*>(registers[game] + layout::game::difficulty);
+    observeCompletion(registers[event], registers[character], difficulty);
+}
+__attribute__((naked)) void isaac_lan_j835_completion() {
+    __asm__ __volatile__(
+        "pushl $0\n\tpushfl\n\tpushal\n\tmovl %esp, %eax\n\t"
+        "andl $-16, %esp\n\tsubl $528, %esp\n\tmovl %eax, 512(%esp)\n\tfxsave (%esp)\n\t"
+        "pushl %eax\n\tcall _isaac_lan_j835_completion_prepare\n\taddl $4, %esp\n\t"
+        "fxrstor (%esp)\n\tmovl 512(%esp), %esp\n\tpopal\n\tpopfl\n\tret");
+}
+}
+const CompletionHook completionHook{backend::entry::recordCompletionBoundary,
+                                    reinterpret_cast<void*>(isaac_lan_j835_completion),
+                                    &originalRecordCompletion};
 constinit const Bindings bindings{
     .manager = backend::globals::manager,
     .game = backend::globals::game,
@@ -76,6 +99,7 @@ constinit const Bindings bindings{
     .gameOverRestart = backend::fadeAction::gameOverRestart,
     .heldRestart = backend::fadeAction::heldRestart,
     .persistProgress = persistProgress,
+    .completionDefinitions = backend::globals::completionDefinitions,
     .progressTryUnlock = backend::entry::progressTryUnlock,
     .progressIncreaseCounter = backend::entry::progressIncreaseCounter,
 };

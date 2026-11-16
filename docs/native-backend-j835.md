@@ -118,6 +118,8 @@ Hornfel／Horny Boys 的持有炸弹容器位于 `NPC+0xb40`，分别限定两�
 
 HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规则；小地图只发布前端实际绘制观察到的普通值。两处演出 Hook 成组创建，冲突只撤销本组件 Hook；道具、百宝袋、挑战 HUD 和胜利圈提示各自管理安装，任一失败由启动装配中止。上述组件仍依赖完整房间调度与启动装配，不能单独作为可安装联机实现。
 
+换层梦境的[动画跳过绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/animation_skip.cpp)复用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/animation_skip.cpp)。`NightmareScene` 位于 `Manager+0x211bc`，场景编号为 5，`+0` 为活动状态，`+0x5e8` 区分 Home 个人梦境。`Show`／`Update`／`Render` 入口为 `0x47e110/0x47ca00/0x47ce30`，均为 thiscall；Show 接收一个 bool 并清栈 4 字节，后两者无栈参数。Show 清空旧许可，Update 通过受限确认输入作用域等待当前动画的同意，Render 在原生画面后绘制联机 HUD。换层完成还要求 `Game+0x1ba0c` 的原生 StageTransition 状态归零。游戏对象和场景编号均由原生持有，接口按事件与楼层代次拒绝过期请求，三个 Hook 成组安装并在失败时回滚。
+
 ## 玩家轮廓
 
 [J835 轮廓后端](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/player_outlines.cpp)与 J460 共用[绘制作用域及配色](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_outlines.cpp)。只在本机房间绘制的 `withPlayers` 作用域内启用，至少两个在线槽位，角色 `+0x154c` 的控制器须属于在线槽位；嵌套调用、断开和异常离开均恢复外层名单。
@@ -219,6 +221,8 @@ J835 没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制�
 进度位于 `Manager+0x14`；成就数组从 `+0x38` 开始，共 638 字节，计数数组从 `+0x2b8` 开始，共 496 个 uint32。[进度复制组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/progress.h) 只读写这些元素，共同网络结构的剩余元素补零，不触及相邻收藏记录或按忏悔＋的数组长度访问原版对象。
 
 通关计数在原版中使用 0／1／2 表示未完成、普通和困难，网络进度使用 0／1／3 的完成位。进度组件仅对完成标记的事件编号转换，其他累计计数保留原值；菜单临时借用个人进度时另存原始数组，退出作用域后精确恢复原生值。
+
+原版 `Manager::RecordPlayerCompletion`（`0x4b5040`，stdcall、一个事件参数）在函数内部遍历角色。[会话适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/session_backend.cpp)只观察 `0x4b5185` 的内部边界：原生已排除幽灵、依附身体和重复双子，ESI 为事件、EBX 为所选角色、EDI 为 Game，难度位于 `Game+0x243624`。描述表位于 RVA `0x7c5fe0`，每角色 18 对计数／成就编号。观察记录本局获得的普通／困难完成位，重复通关同样通知；心脏的普通完成不授予困难成就。只读进度不产生通知，原生更新和解锁仍完整执行。边界保存通用寄存器、标志、SSE、x87 与 MXCSR，回调异常交给会话中止处理，不能穿过原生栈帧。
 
 个人进度持久化先标记 `Progress+0` 为脏，再调用 RVA `0x4848f0`，ABI 为 `thiscall void(Progress*, bool backup)`，传入 `true`。原生方法检查初始化标记，保存日期备份，并按 Steam 接口及游戏设置选择云端或本地文件；流的打开、关闭和所有权仍由游戏管理。不能直接调用需要有效输出流的序列化入口 `0x4836a0`。只读作用域临时设置 `Progress+1`，嵌套返回时恢复原值。
 

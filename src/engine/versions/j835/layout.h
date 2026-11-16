@@ -70,6 +70,7 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
 } // namespace challengeParams
 namespace game {
+inline constexpr unsigned difficulty = 0x243624;
 inline constexpr unsigned playerHuds = 0x3da4c;
 inline constexpr unsigned descriptors = 0x14, mapOffsets = 0x1796c, roomCount = 0x1815c;
 inline constexpr std::array<unsigned, 2> mapCaches{0x1a2ac8, 0x1a2c28};
@@ -83,6 +84,7 @@ inline constexpr unsigned hud = 0x3da4c;
 inline constexpr unsigned victoryPrompt = 0x1c33fc;
 inline constexpr unsigned rewindBuffers = 0x243648, selectedRewindBuffer = 0x283b78;
 inline constexpr unsigned roomTransition = 0x1b6c0;
+inline constexpr unsigned stageTransition = 0x1ba0c;
 inline constexpr unsigned frame = 0x1a30dc;
 inline constexpr unsigned generatedItems = 0x283c20;
 inline constexpr unsigned room = 0x18190;
@@ -105,6 +107,8 @@ namespace bossOverlay {
 inline constexpr unsigned state = 0, id = 4, sprite = 8;
 } // namespace bossOverlay
 namespace nightmare {
+inline constexpr unsigned active = 0;
+inline constexpr int scene = 5;
 inline constexpr unsigned home = 0x5e8, index = 0x3a0, background = 0x20, bubble = 0x134;
 } // namespace nightmare
 namespace prompt {

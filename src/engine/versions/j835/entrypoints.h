@@ -5,6 +5,11 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t nightmareSceneRender = 0x47ce30;
+inline constexpr std::uint32_t nightmareSceneUpdate = 0x47ca00;
+inline constexpr std::uint32_t nightmareSceneShow = 0x47e110;
+inline constexpr std::uint32_t stageTransitionActiveSite = 0x2cdcb6;
+inline constexpr std::uint32_t recordCompletionBoundary = 0x4b5185;
 inline constexpr std::uint32_t pickupFlipSpriteSite = 0x2b6cf0;
 inline constexpr std::uint32_t pickupFlipVisibleSite = 0x2bd0b5;
 inline constexpr std::uint32_t progressTryUnlock = 0x484c80;
@@ -173,6 +178,7 @@ inline constexpr std::uint32_t entity = entry::entityRTTIName - name;
 inline constexpr std::uint32_t npc = entry::npcRTTIName - name;
 } // namespace rtti
 namespace globals {
+inline constexpr std::uint32_t completionDefinitions = 0x7c5fe0;
 inline constexpr std::uint32_t menuManager = 0x7fd688;
 inline constexpr std::uint32_t renderer = 0x7c7a30;
 inline constexpr std::uint32_t colorStack = 0x7fec10;

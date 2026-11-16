@@ -7,6 +7,12 @@ namespace isaac::engine::native_session {
 namespace {
 namespace backend = j460;
 namespace layout = backend::layout;
+using RecordCompletion = void(__stdcall*)(unsigned, unsigned, unsigned);
+RecordCompletion originalRecordCompletion;
+void __stdcall recordCompletion(unsigned event, unsigned character, unsigned difficulty) {
+    originalRecordCompletion(event, character, difficulty);
+    observeCompletion(event, character, difficulty);
+}
 void persistProgress(std::uintptr_t image, std::uintptr_t progress) {
     using Method = void(__attribute__((thiscall))*)(void*);
     auto* object = reinterpret_cast<void*>(progress);
@@ -14,6 +20,9 @@ void persistProgress(std::uintptr_t image, std::uintptr_t progress) {
     reinterpret_cast<Method>(image + j460::entry::progressSaveFile)(object);
 }
 } // namespace
+const CompletionHook completionHook{backend::entry::recordCharacterCompletion,
+                                    reinterpret_cast<void*>(recordCompletion),
+                                    reinterpret_cast<void**>(&originalRecordCompletion)};
 constinit const Bindings bindings{
     .manager = backend::globals::manager,
     .game = backend::globals::game,
@@ -74,7 +83,6 @@ constinit const Bindings bindings{
     .gameOverRestart = backend::fadeAction::gameOverRestart,
     .heldRestart = backend::fadeAction::heldRestart,
     .persistProgress = persistProgress,
-    .recordCompletion = backend::entry::recordCharacterCompletion,
     .completionDefinitions = backend::globals::completionDefinitions,
     .progressTryUnlock = backend::entry::progressTryUnlock,
     .progressIncreaseCounter = backend::entry::progressIncreaseCounter,

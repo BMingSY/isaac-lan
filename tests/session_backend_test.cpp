@@ -18,6 +18,33 @@ namespace backend = isaac::engine::j460;
 #include <cstring>
 #include <vector>
 
+#ifdef ISAAC_LAN_TEST_J835
+extern "C" {
+void* completionTarget = nullptr;
+void* completionGame = nullptr;
+unsigned completionEvent = 0, completionCharacter = 0;
+unsigned completionBefore = 0, completionAfter = 0, completionFlags = 0;
+unsigned completionRegisters[8]{};
+alignas(16) unsigned char completionInitialFloating[512]{}, completionFloating[512]{};
+__attribute__((naked)) void completionOriginal() {
+    __asm__ __volatile__("pushfl\n\tpushal\n\tmovl %esp, %esi\n\t"
+                         "movl $_completionRegisters, %edi\n\tmovl $8, %ecx\n\tcld\n\trep movsl\n\t"
+                         "movl 32(%esp), %eax\n\tmovl %eax, _completionFlags\n\t"
+                         "fxsave _completionFloating\n\tpopal\n\tpopfl\n\tret");
+}
+__attribute__((naked)) void invokeCompletion() {
+    __asm__ __volatile__(
+        "pushfl\n\tpushal\n\tmovl %esp, _completionBefore\n\tmovl $0x12345678, %ebp\n\t"
+        "movl _completionGame, %edi\n\tmovl _completionEvent, %esi\n\t"
+        "movl _completionCharacter, %ebx\n\tmovl $0x87654321, %eax\n\t"
+        "movl $0x22334455, %edx\n\tmovl $0x33445566, %ecx\n\t"
+        "pcmpeqd %xmm7, %xmm7\n\tfld1\n\tfxsave _completionInitialFloating\n\t"
+        "cmpl %eax, %eax\n\tstc\n\tcall *_completionTarget\n\t"
+        "movl %esp, _completionAfter\n\tmovl _completionBefore, %esp\n\tfstp %st(0)\n\t"
+        "popal\n\tpopfl\n\tret");
+}
+}
+#endif
 namespace {
 namespace session = isaac::engine::session;
 using Address = std::uintptr_t;
@@ -51,6 +78,9 @@ bool forward = true, acceptRestart = true, requestedHeld;
 unsigned restartRequests, nativeControls, parsedSeeds, allocations;
 int controlAction;
 std::vector<std::string> events;
+std::vector<std::array<unsigned, 3>> awards;
+std::string observerError;
+bool throwAward = false;
 std::string consolePayload = "result";
 constexpr Address presentationActor = 0x12345678;
 template <class T> T& field(void* base, unsigned offset = 0) {
@@ -87,6 +117,23 @@ void __cdecl unrelated() {
 }
 void __cdecl replacement() {
     events.emplace_back("unrelated-hook");
+}
+#ifndef ISAAC_LAN_TEST_J835
+unsigned nativeCompletions = 0;
+void __stdcall completionOriginal(unsigned, unsigned, unsigned) {
+    ++nativeCompletions;
+}
+#endif
+void award(unsigned counter, unsigned bits, unsigned achievement) {
+    awards.push_back({counter, bits, achievement});
+#ifdef ISAAC_LAN_TEST_J835
+    unsigned control;
+    __asm__ __volatile__("stmxcsr %0" : "=m"(control));
+    control ^= 0x6000;
+    __asm__ __volatile__("pxor %%xmm7, %%xmm7\n\tfninit\n\tldmxcsr %0" : : "m"(control) : "xmm7");
+#endif
+    if (throwAward)
+        throw std::runtime_error("Fixture award failure");
 }
 void __cdecl controls() {
     ++nativeControls;
@@ -269,7 +316,7 @@ session::Callbacks handlers() {
                 requestedHeld = held;
                 return acceptRestart;
             },
-        .completionAward = {},
+        .completionAward = award,
         .largeFloor = nullptr,
     };
 }
@@ -300,9 +347,11 @@ void prepare() {
     patch(backend::entry::runtimeNetStartGame, startNew);
 #ifdef ISAAC_LAN_TEST_J835
     patch(backend::entry::progressPersist, persist);
+    patch(backend::entry::recordCompletionBoundary, completionOriginal);
 #else
     patch(backend::entry::progressSaveCloud, persistCloud);
     patch(backend::entry::progressSaveFile, persistFile);
+    patch(backend::entry::recordCharacterCompletion, completionOriginal);
 #endif
     constexpr unsigned independent = 0x1000;
     patch(independent, unrelated);
@@ -329,6 +378,66 @@ void prepare() {
     require(session::managerReady() && session::gameReady(), "Native globals");
     require(!session::install(reinterpret_cast<Address>(image), handlers()),
             "Duplicate installation");
+}
+void completion() {
+    // The native descriptor table uses an 18-entry, two-word record per character.
+    constexpr unsigned character = 5, stride = 18 * 8;
+    const auto descriptor = backend::globals::completionDefinitions + character * stride;
+    field<std::array<unsigned, 2>>(image, descriptor) = {32, 45};
+    field<std::array<unsigned, 2>>(image, descriptor + 8) = {46, 67};
+    const auto invoke = [&](unsigned event, unsigned owner, unsigned difficulty) {
+#ifdef ISAAC_LAN_TEST_J835
+        completionTarget = image + backend::entry::recordCompletionBoundary;
+        completionGame = game.data();
+        completionEvent = event;
+        completionCharacter = owner;
+        field<unsigned>(game.data(), 0x243624) = difficulty;
+        invokeCompletion();
+        require(completionBefore == completionAfter &&
+                    completionRegisters[0] == reinterpret_cast<Address>(game.data()) &&
+                    completionRegisters[1] == event && completionRegisters[2] == 0x12345678 &&
+                    completionRegisters[4] == owner && completionRegisters[5] == 0x22334455 &&
+                    completionRegisters[6] == 0x33445566 && completionRegisters[7] == 0x87654321 &&
+                    (completionFlags & 0x41) == 0x41,
+                "Completion branch damaged stack, registers or flags");
+        require(std::memcmp(completionInitialFloating, completionFloating, 28) == 0 &&
+                    std::memcmp(completionInitialFloating + 32, completionFloating + 32, 10) == 0 &&
+                    std::memcmp(completionInitialFloating + 160, completionFloating + 160, 128) ==
+                        0,
+                "Completion branch damaged x87, MXCSR or SSE state");
+#else
+        const auto before = nativeCompletions;
+        entry<void(__stdcall*)(unsigned, unsigned, unsigned)>(
+            backend::entry::recordCharacterCompletion)(event, owner, difficulty);
+        require(nativeCompletions == before + 1, "Completion observer suppressed native call");
+#endif
+    };
+    for (unsigned difficulty : {0u, 1u, 2u, 3u}) {
+        awards.clear();
+        const bool hard = difficulty == 1 || difficulty == 3;
+        invoke(0, character, difficulty);
+        invoke(1, character, difficulty);
+        invoke(1, character, difficulty); // Already-earned marks are still run earnings.
+        const std::vector<std::array<unsigned, 3>> expected{{32, hard ? 3u : 1u, hard ? 45u : 0u},
+                                                            {46, hard ? 3u : 1u, 67},
+                                                            {46, hard ? 3u : 1u, 67}};
+        require(awards == expected, "Completion event mapping, difficulty or repeated award");
+    }
+    awards.clear();
+    invoke(15, character, 1);
+    invoke(1, 41, 1);
+    invoke(1, character, 4);
+    {
+        session::ProgressReadOnlyScope scope;
+        invoke(1, character, 1);
+    }
+    require(awards.empty(), "Out-of-range or borrowed progress earned a completion");
+    throwAward = true;
+    invoke(1, character, 1);
+    require(observerError == "Fixture award failure", "Observer failure crossed native frame");
+    throwAward = false;
+    invoke(1, character, 1);
+    require(awards.size() == 2, "Observer did not recover after callback failure");
 }
 void hooks() {
     events.clear();
@@ -526,6 +635,7 @@ std::uintptr_t presentationPlayer(void*) {
 } // namespace isaac::rooms
 int main() {
     prepare();
+    completion();
     hooks();
     state();
     restart();
@@ -539,3 +649,9 @@ bool installFloorGeneration(std::uintptr_t, bool (*)()) {
     return true;
 }
 } // namespace isaac::engine
+
+namespace isaac::runtime {
+void abort(const std::string& error) {
+    observerError = error;
+}
+} // namespace isaac::runtime
