@@ -407,7 +407,7 @@ inline constexpr unsigned container = 0xb40, map = 4, capacity = 8, first = 0xc,
                           blockElements = 4;
 } // namespace heldBombs
 namespace spriteRenderFrame {
-inline constexpr std::ptrdiff_t sprite = -0xcc, color = -0x12c;
+inline constexpr std::ptrdiff_t sprite = -0xcc, alpha = -0xc8;
 }
 namespace laserRenderFrame {
 inline constexpr std::ptrdiff_t segmentEntity = -0x30, shadowEntity = -0x58;

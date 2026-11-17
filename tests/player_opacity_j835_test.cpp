@@ -16,6 +16,7 @@ std::array<unsigned char, 1024> frame{}, projectile{}, intermediary{};
 std::array<unsigned char, layout::player::controller + sizeof(int)> player{};
 using Color = std::array<float, 11>;
 Color drawColor{};
+float consumedAlpha = 0;
 std::optional<float> expectedFactor;
 unsigned draws = 0;
 const auto sprite = reinterpret_cast<Address>(projectile.data()) + layout::entity::sprite;
@@ -66,7 +67,18 @@ void prepare() {
         const auto entry = opacity::entries[pass];
         std::memset(image + entry, 0x90, 5);
         auto* code = image + entry + 5;
-        if (pass != opacity::sprite) {
+        if (pass == opacity::sprite) {
+            // Native draw paths consume the cached EBP-0xc8 scalar, not
+            // Color+0xc at EBP-0x120. Keep this fixture address independent
+            // of the production binding, and preserve all live registers.
+            const unsigned char load[]{0x50, 0x8b, 0x85, 0x38, 0xff, 0xff, 0xff, 0xa3};
+            std::memcpy(code, load, sizeof(load));
+            code += sizeof(load);
+            at<Address>(reinterpret_cast<Address>(code), 0) =
+                reinterpret_cast<Address>(&consumedAlpha);
+            code += sizeof(Address);
+            *code++ = 0x58;
+        } else {
             const unsigned char cleanup[]{0x8d, 0x64, 0x24, 12};
             std::memcpy(code, cleanup, sizeof(cleanup));
             code += sizeof(cleanup);
@@ -130,11 +142,12 @@ void install() {
 }
 void boundary(unsigned pass, float expected) {
     const Color source{0.3f, 0.7f, 0.9f, 0.8f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f};
-    auto& color = pass == opacity::sprite ? at<Color>(frameBase, layout::spriteRenderFrame::color)
-                                          : drawColor;
+    auto& color = pass == opacity::sprite ? at<Color>(frameBase, -0x12c) : drawColor;
     color = source;
+    at<float>(frameBase, -0xc8) = source[3];
     auto wanted = source;
-    wanted[3] = expected;
+    if (pass != opacity::sprite)
+        wanted[3] = expected;
     const auto snapshot = projectile;
     native_fixture::Registers registers{sprite,     sprite,     frameBase,  0,
                                         0x44445555, 0x55556666, 0x66667777, 0x77778888};
@@ -142,6 +155,8 @@ void boundary(unsigned pass, float expected) {
     require(result.balanced && result.floatingPreserved && color == wanted &&
                 projectile == snapshot,
             "Opacity boundary changed source state, tint channels, stack or floating state");
+    if (pass == opacity::sprite)
+        require(consumedAlpha == expected, "Native sprite draw consumed an unscaled cached alpha");
     for (unsigned i = 0; i < registers.size(); ++i)
         if (i != 3)
             require(result.registers[i] == registers[i], "Opacity boundary corrupted a register");

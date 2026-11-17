@@ -93,8 +93,10 @@ __attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_opacity_pr
     if (pass == sprite) {
         const auto source = field<Address>(stack, layout::spriteRenderFrame::sprite);
         if (const auto factor = spriteFactor(source))
-            *reinterpret_cast<float*>(stack + layout::spriteRenderFrame::color +
-                                      layout::color::alpha) *= *factor;
+            // All native shader paths copy the cached alpha into their draw
+            // RGBA after this boundary. The full Color's alpha was already
+            // cached and is no longer read for opacity here.
+            *reinterpret_cast<float*>(stack + layout::spriteRenderFrame::alpha) *= *factor;
         return;
     }
     Address entity;
