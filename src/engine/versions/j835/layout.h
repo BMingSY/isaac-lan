@@ -391,7 +391,7 @@ inline constexpr unsigned kind = 0x2c, modifiers = 0x30, maxChargeMethod = 6;
 inline constexpr std::array<unsigned, 3> charge{0xc, 0x10, 0x14};
 } // namespace weapon
 namespace costume {
-inline constexpr unsigned stride = 0x130, path = 0;
+inline constexpr unsigned stride = 0x130, path = 0, maximum = 4096;
 inline constexpr unsigned layerStride = 0x10, index = 0, layerId = 4, priority = 8, body = 0xc;
 } // namespace costume
 namespace grid {
@@ -402,6 +402,12 @@ namespace heldBombs {
 inline constexpr unsigned container = 0xb40, map = 4, capacity = 8, first = 0xc, count = 0x10,
                           blockElements = 4;
 } // namespace heldBombs
+namespace spriteRenderFrame {
+inline constexpr std::ptrdiff_t sprite = -0xcc, color = -0x12c;
+}
+namespace laserRenderFrame {
+inline constexpr std::ptrdiff_t segmentEntity = -0x30, shadowEntity = -0x58;
+}
 namespace playerRenderFrame {
 inline constexpr std::ptrdiff_t mainPass = 0xc, hologram = -0x79, color = -0x3c;
 }

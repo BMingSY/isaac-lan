@@ -76,6 +76,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/animation_skip.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/animation_skip.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/player_opacity.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../common/player_opacity.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/floor_generation.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../common/floor_generation.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/moving_box.cpp"

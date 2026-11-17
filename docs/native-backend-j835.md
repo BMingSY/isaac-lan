@@ -148,6 +148,16 @@ HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规
 
 三条边界保存通用寄存器、标志、SSE、x87 和 MXCSR；只有进入颜色调用时按原生约定设置 ECX。安装成组回滚，冲突保留外部 Hook。对象、装扮颜色、官方联机状态与存档不写入，所有边界及原生调用均接受启动签名检查。
 
+## 玩家不透明度
+
+[J835 不透明度适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/player_opacity.cpp)复用[共享设置和绘制名单](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_opacity.cpp)，Lua 参数与返回值见[不透明度契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#玩家不透明度)。有效控制器为 `Player+0x154c` 的 1～4，角色 Sprite 为 `+0x3c/+0x36c/+0xf48/+0xe34`，装扮向量为 `+0x1170/+0x1174`、步长 `0x130`、上限 4096。名单、临时弹幕倍率与嵌套绘制均在作用域退出时恢复，不跨房持有地址。
+
+原版没有忏悔＋的在线透明度分支。Sprite 最终颜色边界为 `0x4079`，`[EBP-0xcc]` 为 Sprite，`[EBP-0x12c]` 为完整栈上颜色副本，Alpha 位于颜色 `+0xc`。仅乘该副本的 Alpha，不改实体、图层、全局颜色栈或原有着色。`Sprite::Render`（`0x51e0`）与 `RenderLayer`（`0x5250`）使用 thiscall，分别清栈十二和十六字节；只在已校验的实体／激光绘制返回点借入弹幕 Sprite 倍率，原生调用返回后立即退出，Mod 绘制回调保留原始颜色。
+
+泪弹使用直接生成者，激光沿 `Entity+0x320` 生成者链取末端玩家；名单外或断开的归属不着色，最多检查 128 个链接，循环链不生效。分段光束、端点与直线光束在 `0x4d25d1/0x4d2bca/0x4d39d9`，阴影分段与端点在 `0x4d5fec/0x4d651f` 提交临时顶点颜色。每处第三个栈参数指向独立 RGBA 副本，只乘该副本的 Alpha；后续 shader 着色复制颜色 `+0x10` 起的通道，不重复乘 Alpha。生成者布局、调用点和最终颜色入口均由启动签名约束；UV、光束样本、命中状态和游戏对象所有权不变。
+
+八个 Hook 成组安装，失败只撤销本组件创建的 Hook，可重试；重复安装要求同一映像。内联边界保存通用寄存器、标志、x87、XMM0–7 和 MXCSR，不将临时倍率保留到后续绘制。
+
 ## Home 场景推进
 
 [场景更新绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/scene_update.cpp) 接入[共享更新门控](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/scene_update.cpp)。J835 没有独立的 BossOverlay 更新入口；`Game::Update` 在 RVA `0x2ce36e` 从 EDI 指向的 Game 读取 `+0x1cf20`，随后内联更新动画、处理 Home 路线标记，至 `0x2ce4c1` 进入下一更新块。

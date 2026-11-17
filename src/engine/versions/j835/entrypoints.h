@@ -5,6 +5,17 @@
 // backend: there is no sources.cmake and builds must reject selection.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t spriteRender = 0x51e0;
+inline constexpr std::uint32_t spriteRenderLayer = 0x5250;
+inline constexpr std::uint32_t spriteRenderColor = 0x4079;
+inline constexpr std::uint32_t entitySpriteRenderReturn = 0x2885f4;
+inline constexpr std::uint32_t laserSpriteRenderReturn = 0x4d341c;
+inline constexpr std::uint32_t laserLayerRenderReturn = 0x4d2d03;
+inline constexpr std::uint32_t laserSegmentColor = 0x4d25d1;
+inline constexpr std::uint32_t laserCapColor = 0x4d2bca;
+inline constexpr std::uint32_t laserStraightColor = 0x4d39d9;
+inline constexpr std::uint32_t laserShadowSegmentColor = 0x4d5fec;
+inline constexpr std::uint32_t laserShadowCapColor = 0x4d651f;
 inline constexpr std::uint32_t luaStageTransitionBinding = 0x453660;
 inline constexpr std::uint32_t luaPlayerTransitionBinding = 0x4536e0;
 inline constexpr std::uint32_t playerManagerHasPlayerType = 0x1ef580;

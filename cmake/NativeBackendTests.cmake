@@ -336,3 +336,14 @@ isaac_add_backend_test(
     character-catalog j835 SOURCES tests/character_catalog_test.cpp
     src/engine/versions/j835/characters.cpp src/engine/versions/common/character_catalogue.cpp)
 isaac_add_backend_test(forgotten-form j835 SOURCES tests/forgotten_form_test.cpp)
+
+isaac_add_backend_test(
+    player-opacity
+    j835
+    SOURCES
+    tests/player_opacity_j835_test.cpp
+    tests/native_branch.cpp
+    LIBRARIES
+    minhook
+    COMPILE_OPTIONS
+    -msse2)
