@@ -266,6 +266,7 @@ inline constexpr std::uint32_t playerHasCollectible = 0x3706e0;
 inline constexpr std::uint32_t roomNightLightQuery = 0x410dad;
 inline constexpr std::uint32_t generatedItemRestoreCall = 0x5e036b;
 inline constexpr std::uint32_t generatedItemCreate = 0x5dcc70;
+inline constexpr std::uint32_t generatedItemTrigger = 0x5e01b0;
 inline constexpr std::uint32_t generatedInventoryQuery = 0x3707b5;
 inline constexpr std::uint32_t generatedInventoryCountRead = 0x5e04de;
 inline constexpr std::uint32_t playerManagerFindCollectible = 0x5be080;

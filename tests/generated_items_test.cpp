@@ -15,6 +15,41 @@ std::array<std::array<unsigned, 2>, 1024> configs{};
 std::array<std::array<unsigned, 3>, 1024> entries{};
 std::array<Address, 1024> pointers{};
 std::array<Address, 3> registry{};
+struct EffectCall {
+    int id;
+    void* player;
+    unsigned event;
+    void* entity;
+    const void* position;
+    const void* velocity;
+    bool operator==(const EffectCall&) const = default;
+};
+std::vector<EffectCall> effectCalls;
+void __attribute__((stdcall)) triggerFixture(int id, void* player, unsigned event, void* entity,
+                                             const void* position, const void* velocity) {
+    effectCalls.push_back({id, player, event, entity, position, velocity});
+}
+void checkEffectAuthority() {
+    adapter::originalTriggerEffects = triggerFixture;
+    const adapter::TriggerEffects trigger = adapter::triggerEffects;
+    int player = 0, entity = 0;
+    std::array<float, 2> position{11, 23}, velocity{-2, 7};
+    // Both active use (event 0) and passive event chains share this native ABI.
+    // Repeated snapshots/local updates must not execute either on the replica.
+    for (bool isReplica : {false, true, false}) {
+        replica = isReplica;
+        for (unsigned event = 0; event != 9; ++event) {
+            const auto before = effectCalls.size();
+            trigger(-4, &player, event, &entity, position.data(), velocity.data());
+            require(effectCalls.size() == before + (isReplica ? 0 : 1),
+                    "Generated effects executed outside their authority");
+            if (!isReplica)
+                require(effectCalls.back() == EffectCall{-4, &player, event, &entity,
+                                                         position.data(), velocity.data()},
+                        "Generated effect ABI lost its borrowed arguments");
+        }
+    }
+}
 void reset() {
     registry = {reinterpret_cast<Address>(pointers.data()),
                 reinterpret_cast<Address>(pointers.data()),
@@ -51,6 +86,7 @@ void abort(const std::string& message) {
 } // namespace isaac::runtime
 int main() {
     try {
+        checkEffectAuthority();
         Address game = reinterpret_cast<Address>(registry.data()) - 0x67758;
         adapter::image = reinterpret_cast<Address>(&game) - isaac::engine::j460::globals::game;
         adapter::originalGenerate = generateFixture;

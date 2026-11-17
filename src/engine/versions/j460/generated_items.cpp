@@ -16,6 +16,9 @@ template <class T> const T& at(Address p, unsigned offset = 0) {
 }
 using Generate = int(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 Generate originalGenerate;
+using TriggerEffects = void(__attribute__((stdcall)) *)(int, void*, unsigned, void*, const void*,
+                                                        const void*);
+TriggerEffects originalTriggerEffects;
 isaac::lua::API lua{};
 namespace layout = engine::j460::layout;
 constexpr unsigned maxOwnedCount = 65535, maxNativePlayers = 32;
@@ -108,6 +111,14 @@ int __attribute__((fastcall)) generate(void* self, void*, unsigned seed, unsigne
         return (flags & generateActiveFlag) ? activePlaceholder : passivePlaceholder;
     return originalGenerate(self, seed, flags);
 }
+void __attribute__((stdcall)) triggerEffects(int id, void* player, unsigned event, void* entity,
+                                             const void* position, const void* velocity) {
+    // Restoring a replica can spawn entities and rebuild player inventories.
+    // Generated event chains must not run gameplay again during that work or
+    // during local presentation updates; their results come from the authority.
+    if (!runtime::replica())
+        originalTriggerEffects(id, player, event, entity, position, velocity);
+}
 int state(lua_State* L) {
     try {
         const auto destination = registry();
@@ -151,9 +162,13 @@ int state(lua_State* L) {
 bool install(std::uintptr_t base) {
     image = base;
     const auto target = reinterpret_cast<void*>(image + engine::j460::entry::generatedItemCreate);
+    const auto trigger = reinterpret_cast<void*>(image + engine::j460::entry::generatedItemTrigger);
     return MH_CreateHook(target, reinterpret_cast<void*>(generate),
                          reinterpret_cast<void**>(&originalGenerate)) == MH_OK &&
-           MH_EnableHook(target) == MH_OK;
+           MH_EnableHook(target) == MH_OK &&
+           MH_CreateHook(trigger, reinterpret_cast<void*>(triggerEffects),
+                         reinterpret_cast<void**>(&originalTriggerEffects)) == MH_OK &&
+           MH_EnableHook(trigger) == MH_OK;
 }
 bool bind(lua_State* L, HMODULE module) {
     using S = isaac::lua::Symbol;
