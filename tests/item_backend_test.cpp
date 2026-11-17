@@ -428,11 +428,13 @@ void abort(const std::string& reason) {
     throw std::runtime_error(reason);
 }
 } // namespace isaac::runtime
-#ifndef ISAAC_LAN_TEST_J835
-namespace isaac::engine::j460 {
-bool installDeathCertificateReturn(std::uintptr_t) {
+namespace isaac::engine::native_certificate_return {
+bool install(std::uintptr_t) {
     return true;
 }
+} // namespace isaac::engine::native_certificate_return
+#ifndef ISAAC_LAN_TEST_J835
+namespace isaac::engine::j460 {
 namespace cursed_mist {
 bool install(std::uintptr_t) {
     return true;

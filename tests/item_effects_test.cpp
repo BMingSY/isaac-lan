@@ -3,6 +3,7 @@
 #include "engine/versions/j460/item_effects.cpp"
 #include "engine/versions/common/item_effects.cpp"
 #include "engine/versions/j460/death_certificate_return.cpp"
+#include "engine/versions/common/death_certificate_return.cpp"
 #include "engine/versions/j460/moving_box.cpp"
 #include "engine/versions/common/moving_box.cpp"
 #include "engine/versions/j460/cursed_mist.cpp"
@@ -281,10 +282,11 @@ void __attribute__((thiscall)) certificateReturnFixture(void*, int room, int dir
     __asm__ __volatile__("pxor %%xmm7, %%xmm7" ::: "xmm7");
 }
 void certificateReturn() {
+    namespace certificate = isaac::engine::native_certificate_return;
     Fixture f;
     std::vector<unsigned char> game(native::layout::game::deathCertificateReturnTimer +
                                     sizeof(int));
-    native::image = reinterpret_cast<Address>(f.image);
+    certificate::image = reinterpret_cast<Address>(f.image);
     *reinterpret_cast<Address*>(f.image + native::globals::game) =
         reinterpret_cast<Address>(game.data());
     auto field = [&](unsigned offset) -> int& {
@@ -293,8 +295,8 @@ void certificateReturn() {
     field(native::layout::game::deathCertificateRoom) = 84;
     f.publish(native::entry::engineRoomsTransition, certificateReturnFixture);
     FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size);
-    native::isaac_lan_certificate_original = reinterpret_cast<void*>(certificateContinued);
-    native::isaac_lan_certificate_done = reinterpret_cast<void*>(certificateCompleted);
+    certificate::original = reinterpret_cast<void*>(certificateContinued);
+    certificate::done = reinterpret_cast<void*>(certificateCompleted);
     isaac::rooms::certificateLocations = {{0, 84, 160, 200}, {2, 103, 200, 280}};
     certificateReturns = 0;
     for (unsigned i = 0; i < 3; ++i) {
@@ -313,7 +315,7 @@ void certificateReturn() {
     require(certificateBoundaryECX == 0x87654321 && certificateBoundaryEBX == 0x12345678 &&
                 certificateBoundarySSE == 0.75f,
             "Delayed-return adapter corrupted general/SSE registers");
-    native::image = 0;
+    certificate::image = 0;
 }
 void startingRewards() {
     Fixture f;

@@ -5,12 +5,12 @@
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/cursed_mist.h"
-#include "engine/versions/j460/death_certificate_return.h"
+#include "engine/versions/common/death_certificate_return.h"
 
 namespace isaac::engine::native_items {
 namespace {
 bool installCompatibility(std::uintptr_t image) {
-    return j460::cursed_mist::install(image) && j460::installDeathCertificateReturn(image);
+    return j460::cursed_mist::install(image) && native_certificate_return::install(image);
 }
 int chargeType(std::uintptr_t image, void* player, int slot) {
     using Query = int(__attribute__((thiscall))*)(void*, int);

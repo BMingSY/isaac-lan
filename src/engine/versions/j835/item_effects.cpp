@@ -1,5 +1,6 @@
 #include <windows.h>
 #include "engine/versions/common/item_bindings.h"
+#include "engine/versions/common/death_certificate_return.h"
 #include "engine/versions/j835/active_items.h"
 #include "engine/versions/j835/inventory_order.h"
 #include "engine/versions/j835/entrypoints.h"
@@ -54,5 +55,6 @@ const Bindings bindings{
         },
     .chargeType = chargeType,
     .activeItems = j835::active_items::fields,
-    .inventoryOrder = j835::inventory_order::fields};
+    .inventoryOrder = j835::inventory_order::fields,
+    .installCompatibility = native_certificate_return::install};
 } // namespace isaac::engine::native_items

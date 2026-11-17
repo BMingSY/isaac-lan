@@ -350,6 +350,10 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 桥接仅接受八字节借用 Sprite 包装、当前权威房间内已连接的活动玩家，并核对玩家列表、类型 `+0x28`、存在位 `+0x16a` 和控制器 `+0x154c`。精灵位于实体 `+0x3c`，初始种子为 `+0x344`；不向 Lua 暴露这些地址。配置目录通过 cdecl `0x27930` 取得，再由 thiscall `0x2fe5e0` 查询道具，包括原生生成道具的处理；字符串立即复制，仍由游戏管理其存储。
 
+死亡证明的延迟返回使用[共享返回组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/death_certificate_return.cpp)和[J835 原生适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/death_certificate_return.cpp)。倒计时为 `Game+0x285234`，来源房间／有符号维度为 `+0x1878c/+0x18790`；返回边界 `0x2ce54e`、完成后续点 `0x2ce598` 受启动签名校验。主机视口已离开道具区时，只为这次返回借入仍在线的道具区玩家，使用上层转场 `0x2d07d0`；来源房间为 `-2` 时沿用原版规则将维度归零。没有在线道具区玩家时仅消费倒计时；单人、客机和视口仍在道具区时继续原生分支。
+
+返回适配保存通用寄存器、标志、x87、XMM0–7 和 MXCSR，异常终止会话且不跨原生帧展开；借入的房间和角色均不转移所有权。Hook 冲突不撤销其他组件的 Hook，失败可重试，重复安装只接受相同映像。
+
 安装将发放、入队及两种复活 Hook 全部创建后再启用；失败只撤销自己创建的 Hook 并清除旁路，允许重试。玩法效果、拾取分配和开局奖励规则仍属于上层兼容组件；本组件没有完成整个原版房间和实体后端。
 
 错误道具注册表、原生生成与存档恢复、负编号库存查询的接口和所有权见[错误道具定义](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md)。这部分复用共享定义组件，不改变现有同步字段、编码或扩展接口。

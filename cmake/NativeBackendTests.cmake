@@ -307,12 +307,14 @@ foreach(backend j460 j835)
         isaac_add_backend_test(stage-transition-binding ${backend} SOURCES
                                tests/stage_transition_binding_test.cpp LIBRARIES minhook)
     endif()
-    foreach(component moving_box floor_generation)
+    foreach(component moving_box floor_generation death_certificate_return)
         string(REPLACE "_" "-" name "${component}")
         if(component STREQUAL "moving_box")
             set(fixture tests/moving_box_backend_test.cpp)
-        else()
+        elseif(component STREQUAL "floor_generation")
             set(fixture tests/floor_generation_test.cpp)
+        else()
+            set(fixture tests/death_certificate_return_test.cpp)
         endif()
         isaac_add_backend_test(
             ${name}
