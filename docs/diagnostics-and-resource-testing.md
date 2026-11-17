@@ -102,7 +102,7 @@ python3 tools/run_special_routes.py \
 
 `--latency-ms` 是每个方向的中继延迟，40 ms 对应约 80 ms RTT；道具审计也接受此选项。实际载荷差异用相同稳定档位中的累计计数差除以视图数，不能直接比较时长不同的整局总量。增量命中率不能替代客机应用耗时：收到的增量仍需还原完整视图并恢复游戏对象。
 
-[`run_projectile_pressure.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_projectile_pressure.py) 使用同一组主客机依次检查空房、守财奴的食泪症／硫磺火／圣心组合、200／500 颗移动泪弹和 64 条旋转激光。每档持续 360 tick，预热 90 tick，收尾 10 tick 不计入统计；双端核对合成弹幕数量，道具组合必须实际发射激光。输出每档帧间隔、采集／应用耗时、原始字节数及样本数。合成弹幕保持存活并关闭主机碰撞，用于比较同步成本，不代表自然战斗的伤害或吞吐量。
+[`run_projectile_pressure.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_projectile_pressure.py) 使用同一组主客机依次检查空房、店主的食泪症／硫磺火／圣心组合、200／500 颗移动泪弹和 64 条旋转激光。每档持续 360 tick，预热 90 tick，收尾 10 tick 不计入统计；双端核对合成弹幕数量，道具组合必须实际发射激光。输出每档帧间隔、采集／应用耗时、原始字节数及样本数。合成弹幕保持存活并关闭主机碰撞，用于比较同步成本，不代表自然战斗的伤害或吞吐量。
 
 ```sh
 python3 tools/run_projectile_pressure.py \
