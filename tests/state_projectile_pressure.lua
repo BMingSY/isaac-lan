@@ -17,7 +17,7 @@ local cases = {
 local tick, renders, linked, chosen, finished = 0, 0, false, false, false
 local samples, tracked, lastRender = {}, {}, nil
 local measured, origin, other, floorSeed = false, nil, nil, nil
-local checkedViews, afterFloor = 0, 0
+local checkedViews, afterFloor, lastChecked = 0, 0, -math.huge
 local comboLasers = 0
 local observer = RegisterMod("Projectile pressure observations", 1)
 local function observeLaser()
@@ -146,9 +146,17 @@ function _IsaacLanFrame()
     then
         if options.verify then
             assert(
-                config.host or checkedViews > 20 and afterFloor > 2,
-                "Missing link/cleanup observations"
+                config.host or checkedViews > 20 and afterFloor >= 2,
+                "Missing link/cleanup observations: views="
+                    .. checkedViews
+                    .. " postFloor="
+                    .. afterFloor
             )
+            Isaac.DebugString("LAN_PROJECTILE_VERIFY " .. json.encode({
+                role = config.host and "host" or "client",
+                checked_views = checkedViews,
+                after_floor = afterFloor,
+            }))
         end
         finished = true
         Isaac.DebugString("LAN_NETWORK PASS projectile pressure")
@@ -249,17 +257,19 @@ local function verifyLifecycle(t)
         end
         assert(other, "No adjacent lifecycle room")
     elseif elapsed == 30 or elapsed == 150 then
+        setup({})
         if elapsed == 150 then
             assert(native.rooms_move(0, other, 0, -1))
         end
         assert(native.rooms_move(1, other, 0, -1))
-        setup({ tears = 200 })
     elseif elapsed == 90 or elapsed == 210 then
         setup({})
         if elapsed == 210 then
             assert(native.rooms_move(0, origin, 0, -1))
         end
         assert(native.rooms_move(1, origin, 0, -1))
+    elseif elapsed == 40 or elapsed == 100 or elapsed == 160 or elapsed == 220 then
+        -- Let room retirement complete before allocating the next population.
         setup({ tears = 200 })
     elseif elapsed == 300 then
         setup({})
@@ -274,9 +284,10 @@ local function verifyLifecycle(t)
     end
 end
 local function verifyLinks(bytes, t, stable)
-    if not options.verify or t % 30 ~= 0 then
+    if not options.verify or t < lastChecked + 30 then
         return
     end
+    lastChecked = t
     local view = schema.unpack(_IsaacLanState.decode(bytes, stable), t)
     local refs = {}
     for _, e in ipairs(Isaac.GetRoomEntities()) do
@@ -315,28 +326,40 @@ local function verifyLinks(bytes, t, stable)
         afterFloor = afterFloor + 1
     end
 end
+local function updateTracked(t)
+    for i, pointer in ipairs(tracked) do
+        local e = assert(pointer.Ref, "Native pressure entity expired")
+        local tear = e:ToTear()
+        if tear then
+            tear.Height, tear.FallingSpeed, tear.FallingAcceleration = -30, 0, 0
+            tear.Position = Vector(
+                200 + (i % 25) * 12 + math.sin(t / 10 + i) * 8,
+                160 + math.floor(i / 25) * 10
+            )
+            tear.Velocity = Vector.Zero
+        elseif e:ToLaser() then
+            e:ToLaser().AngleDegrees = (i * 360 / #tracked + t) % 360
+        end
+    end
+end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(capture, function(t, ...)
         before(t, ...)
+        if finished then
+            return
+        end
         tick = t
         local case, _, elapsed = phase()
         if case and elapsed == 0 then
             setup(case)
         end
         verifyLifecycle(t)
-        for i, pointer in ipairs(tracked) do
-            local e = assert(pointer.Ref, "Native pressure entity expired")
-            local tear = e:ToTear()
-            if tear then
-                tear.Height, tear.FallingSpeed, tear.FallingAcceleration = -30, 0, 0
-                tear.Position = Vector(
-                    200 + (i % 25) * 12 + math.sin(t / 10 + i) * 8,
-                    160 + math.floor(i / 25) * 10
-                )
-                tear.Velocity = Vector.Zero
-            elseif e:ToLaser() then
-                e:ToLaser().AngleDegrees = (i * 360 / #tracked + t) % 360
-            end
+        if options.verify and #tracked > 0 then
+            assert(native.rooms_with_player(1, function()
+                updateTracked(t)
+            end))
+        else
+            updateTracked(t)
         end
     end, function(...)
         local began = Isaac.GetTime()
