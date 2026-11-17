@@ -4,6 +4,11 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t glitchedGridStyle = 0x3137d7;
+inline constexpr std::uint32_t glitchedRockStyle = 0x31a0b9;
+inline constexpr std::uint32_t glitchedBackdropType = 0x3eb1f8;
+inline constexpr std::uint32_t glitchedBackdropStyle = 0x3f157f;
+inline constexpr std::uint32_t glitchedRoomConfig = 0x590bbf;
 inline constexpr std::uint32_t playerSmeltedTrinketVector = 0x3cb962;
 inline constexpr std::uint32_t playerSmeltedTrinketCounters = 0x3cb977;
 inline constexpr std::uint32_t entityDynamicCast = 0x6f08b1;
@@ -269,6 +274,7 @@ inline constexpr std::uint32_t playerHasCollectible = 0x3706e0;
 inline constexpr std::uint32_t roomNightLightQuery = 0x410dad;
 inline constexpr std::uint32_t generatedItemRestoreCall = 0x5e036b;
 inline constexpr std::uint32_t generatedItemCreate = 0x5dcc70;
+inline constexpr std::uint32_t generatedItemTrigger = 0x5e01b0;
 inline constexpr std::uint32_t generatedInventoryQuery = 0x3707b5;
 inline constexpr std::uint32_t generatedInventoryCountRead = 0x5e04de;
 inline constexpr std::uint32_t playerManagerFindCollectible = 0x5be080;

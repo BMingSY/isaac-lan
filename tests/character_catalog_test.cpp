@@ -272,6 +272,13 @@ int main() {
         }
         require(find(value, 0).name == "Localized Isaac",
                 "Native localized character name was lost");
+        for (unsigned index = 0; index < nativeTypes.size(); ++index)
+            require(find(value, nativeTypes[index]).counterpart ==
+                        nativeTypes[(index + nativeTypes.size() / 2) % nativeTypes.size()],
+                    "Vanilla counterpart did not follow the native menu slot");
+        require(find(value, 41).counterpart == 42 && find(value, 42).counterpart == 41 &&
+                    !find(value, 46).counterpart && !find(value, 48).counterpart,
+                "Mod counterpart did not follow its visible native pairing");
         for (auto type : {41u, 42u, 46u, 47u, 48u}) {
             const auto& entry = find(value, type);
             require(entry.selectable && entry.unlocked,

@@ -78,6 +78,17 @@
 
 四人时射击控制关系为 P1 → P2 → P3 → P4 → P1，二人与三人按同样顺序闭环。射击转交由 [aim_rotation.h](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/challenges/aim_rotation.h) 定义，在房主接受并过滤本轮输入后执行；网络仍传输各玩家自己的原始输入。鼠标使用来源玩家提供的房间坐标，由接收角色的原生射击锚点计算方向。客机保留本机移动预测，受队友控制的攻击使用已确认的方向、蓄力和弹幕表现。
 
+## 当前规则：1006 挑战45
+
+| 项目 | 行为 |
+| --- | --- |
+| 资格与开局 | 大厅直接可选，无挑战解锁要求；普通难度、2–4 人，自由选择各自已解锁的角色 |
+| 道具 | 每个席位开局持有错误技；错误道具由主机生成并执行随机效果，客机恢复相同定义、库存和结果 |
+| 房间 | 使用原版 DELETE THIS 的错乱房间外观；房间规则由房主自由选择 |
+| 路线与终点 | 沿原版挑战路线前往宝箱层，不要求普通存档已解锁相应路线；??? 所在 Boss 房清场后领取奖杯，结束全队挑战 |
+
+[开局组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/challenges/delete_this.lua)只由权威端初始化每个席位一次；跨房、跨层、重复视图不重复发放，后续移除错误技不会被立即补回。错误道具使用已有的[生成定义与库存契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md)。[原生挑战环境能力](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-challenge.md)提供原版房间外观与路线查询，不接管联机选角和奖杯完成流程。
+
 ## 规则与生命周期
 
 切换规则清空全员准备状态；加入、选角、准备和启动分别校验本机存档资格及规则代次。普通选角使用原生菜单目录与可选判定，包含本机已加载的 Mod 角色。新开局所需的消耗型资格不重复限制已有角色恢复。

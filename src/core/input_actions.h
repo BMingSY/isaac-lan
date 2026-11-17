@@ -8,4 +8,5 @@ inline constexpr int drop = 11;
 inline constexpr int menuPause = 12, menuConfirm = 14, menuBack = 15;
 inline constexpr int restart = 18, emote = 30;
 inline constexpr int menuLeft = 20, menuRight = 21, menuUp = 22, menuDown = 23;
+inline constexpr int menuRightShoulder = 25;
 } // namespace isaac::input::action

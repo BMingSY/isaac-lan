@@ -6,8 +6,8 @@ local fields = assert(_IsaacLanModules["sync/fields"])
 local schema = assert(_IsaacLanModules["sync/world_schema"])
 local Actor, Entity, Inventory, Item = fields.actor, fields.entity, fields.inventory, fields.item
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
-local success = _IsaacLanTest.passivesOnly
-        and "PASS generated passive effects and native continuation"
+local success = _IsaacLanTest.triggersOnly and "PASS generated triggers and native continuation"
+    or _IsaacLanTest.passivesOnly and "PASS generated passive effects and native continuation"
     or "PASS shared rewards, Genesis, generated effects and native continuation"
 local frame = _IsaacLanFrame
 local owner = { Name = "Isolated item issue acceptance" }
@@ -21,6 +21,7 @@ local genesisCases = { { 1, true }, { 0, false }, { 0, true }, { 1, false } }
 local retryObserved = false
 local genesisOtherInventory
 local pickedGenerated, pickedTargets = {}, {}
+local generatedTriggerSeed = 1377168
 local function report(message)
     Isaac.DebugString("LAN_NETWORK ISSUE_ITEMS " .. message)
 end
@@ -81,6 +82,31 @@ local function clean(slot)
         room:SetClear(true)
         p.Position, p.Velocity = room:GetCenterPos() + Vector(0, 90), Vector.Zero
         p:SetMinDamageCooldown(90)
+    end)
+end
+local function triggerGenerated(slot, removed)
+    actor(slot, function(p, room)
+        local delay, speed = p.MaxFireDelay, p.MoveSpeed
+        Isaac.Spawn(
+            EntityType.ENTITY_PICKUP,
+            PickupVariant.PICKUP_BOMBCHEST,
+            0,
+            room:GetCenterPos() - Vector(60, 30),
+            Vector.Zero,
+            nil
+        )
+        if removed then
+            assert(
+                p.MaxFireDelay == delay and p.MoveSpeed == speed,
+                "Removed generated item still triggered"
+            )
+        else
+            assert(
+                p.MaxFireDelay < delay and p.MoveSpeed < speed,
+                "Generated chest trigger did not execute on authority"
+            )
+        end
+        report("GENERATED_TRIGGER slot=" .. slot .. " removed=" .. tostring(removed == true))
     end)
 end
 local function pedestals(slot)
@@ -250,6 +276,10 @@ local function advance(t)
         return
     end
     if round == 2 then
+        if _IsaacLanTest.triggersOnly and t == 30 then
+            triggerGenerated(0)
+            triggerGenerated(1)
+        end
         if t >= 90 and not completed then
             assert(
                 native.generated_items() == savedDefinitions,
@@ -279,6 +309,12 @@ local function advance(t)
             end
         end
         assert(other and native.rooms_move(1, other, 0, -1))
+        if _IsaacLanTest.triggersOnly then
+            clean(0)
+            clean(1)
+            mark("tm-trigger-grant", t)
+            return
+        end
         if _IsaacLanTest.passivesOnly then
             mark("tm-prepare", t)
             return
@@ -289,6 +325,52 @@ local function advance(t)
             p:UseActiveItem(577, UseFlag.USE_NOANIM | UseFlag.USE_NOANNOUNCER)
         end)
         mark("damocles", t)
+    elseif step == "tm-trigger-grant" and t - stepAt >= 45 then
+        for slot = 0, 1 do
+            actor(slot, function(p)
+                p:AddCollectible(CollectibleType.COLLECTIBLE_TMTRAINER, 0, false)
+                local id = Game()
+                    :GetItemPool()
+                    :GetCollectible(ItemPoolType.POOL_TREASURE, false, generatedTriggerSeed)
+                assert(
+                    id < 0
+                        and Isaac.GetItemConfig():GetCollectible(id).Type
+                            == ItemType.ITEM_PASSIVE
+                )
+                pickedTargets[slot] = id
+                p:AddCollectible(id, 0, true)
+                p:AddCollectible(id, 0, true)
+                assert(collectibleCount(p, id) == 2)
+            end)
+        end
+        mark("tm-trigger-split", t)
+    elseif step == "tm-trigger-split" or step == "tm-trigger-shared" then
+        local age = t - stepAt
+        if age == 30 or age == 60 then
+            triggerGenerated(0)
+            triggerGenerated(1)
+        elseif age >= 90 then
+            if step == "tm-trigger-split" then
+                local at = native.rooms_positions()["0"]
+                assert(native.rooms_move(1, at.index, at.dimension, -1))
+                mark("tm-trigger-shared", t)
+            else
+                actor(0, function(p)
+                    p:RemoveCollectible(pickedTargets[0], true)
+                    p:RemoveCollectible(pickedTargets[0], true)
+                    assert(collectibleCount(p, pickedTargets[0]) == 0)
+                end)
+                mark("tm-trigger-removed", t)
+            end
+        end
+    elseif step == "tm-trigger-removed" and t - stepAt >= 45 then
+        triggerGenerated(0, true)
+        actor(0, function(p)
+            p:AddCollectible(pickedTargets[0], 0, true)
+        end)
+        triggerGenerated(0)
+        savedDefinitions = native.generated_items()
+        mark("tm-same-room", t)
     elseif step == "damocles" and t - stepAt >= 30 then
         assert(not player(0):HasCollectible(656) and player(1):HasCollectible(656))
         spawn(0, 1)
@@ -534,6 +616,10 @@ local function advance(t)
             "Floor transition changed existing definitions"
         )
         savedDefinitions = native.generated_items()
+        if _IsaacLanTest.triggersOnly then
+            triggerGenerated(0)
+            triggerGenerated(1)
+        end
         report(
             "TMTRAINER same-room and floor transition survived definitions="
                 .. #savedDefinitions / 4

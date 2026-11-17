@@ -383,6 +383,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(presentation.timeline presentation_timeline.lua)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
         isaac_add_lua_test(bridge.challenges challenges.lua)
+        isaac_add_lua_test(bridge.delete-this delete_this.lua)
         isaac_add_lua_test(bridge.luck_game luck_game.lua)
         isaac_add_lua_test(bridge.battle-royale battle_royale.lua)
         isaac_add_lua_test(bridge.battle-royale-resources battle_royale_resources.lua)
@@ -394,6 +395,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.friendly-fire friendly_fire.lua)
         isaac_add_lua_test(bridge.pvp-items pvp_items.lua)
         isaac_add_lua_test(bridge.challenge_menu challenge_menu.lua)
+        isaac_add_lua_test(presentation.menu-characters menu_characters.lua)
         isaac_add_lua_test(presentation.update-notice update_notice.lua)
         isaac_add_lua_test(bridge.endpoint endpoint.lua)
         isaac_add_lua_test(bridge.ping_hud ping_hud.lua)
@@ -587,6 +589,7 @@ add_library(
     src/engine/versions/j460/crafting_hud.cpp
     src/engine/versions/j460/challenge_hud.cpp
     src/engine/versions/j460/floor_generation.cpp
+    src/engine/versions/j460/generated_challenge.cpp
     src/engine/versions/j460/characters.cpp
     src/engine/versions/j460/pause_menu.cpp
     src/engine/versions/j460/item_presentation.cpp
@@ -721,6 +724,7 @@ if(BUILD_TESTING)
         input-rooms
         lobby
         lobby-access
+        deferred-choice
         run-rules
         room-options
         handshake
@@ -823,7 +827,8 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME native.forgotten-form COMMAND isaac_lan_forgotten_form_test)
     set_tests_properties(native.forgotten-form PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
-    add_executable(isaac_lan_item_effects_test tests/item_effects_test.cpp)
+    add_executable(isaac_lan_item_effects_test tests/item_effects_test.cpp
+                                               src/engine/versions/j460/generated_challenge.cpp)
     target_include_directories(isaac_lan_item_effects_test PRIVATE src)
     target_link_libraries(isaac_lan_item_effects_test PRIVATE minhook)
     if(MINGW)
@@ -866,6 +871,18 @@ if(BUILD_TESTING)
         target_compile_options(isaac_lan_floor_generation_test PRIVATE -Wall -Wextra -Werror -msse2)
     endif()
     add_test(NAME native.floor-generation COMMAND isaac_lan_floor_generation_test)
+    add_executable(isaac_lan_generated_challenge_test tests/generated_challenge_test.cpp)
+    target_include_directories(isaac_lan_generated_challenge_test PRIVATE src)
+    target_link_libraries(isaac_lan_generated_challenge_test PRIVATE minhook)
+    if(MINGW)
+        target_link_options(isaac_lan_generated_challenge_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+        target_compile_options(isaac_lan_generated_challenge_test PRIVATE -Wall -Wextra -Werror
+                                                                          -msse2)
+    endif()
+    add_test(NAME native.generated-challenge COMMAND isaac_lan_generated_challenge_test)
+    set_tests_properties(native.generated-challenge PROPERTIES TIMEOUT 30 LABELS
+                                                               "offline;native-abi")
     set_tests_properties(native.challenge-hud native.floor-generation
                          PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_room_routing_test tests/room_routing_test.cpp)

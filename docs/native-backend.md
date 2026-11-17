@@ -197,6 +197,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 后端保留原比较；查询为 true 时，仅将其算术标志改为相等比较的结果，再执行原版分支。通用寄存器、栈与 XMM0–XMM7 均恢复，不写 `Game.Challenge`、诅咒、种子、布局或原生容器。房间数量抽样、随机数推进、布局与房间对象分配仍由原版负责。查询适用于首层、换层与重新生成；无活动挑战时保留原生行为。玩法匹配由上层挑战目录负责。
 
+原版错误道具挑战的房间外观与路线查询由独立的 [generated_challenge.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/generated_challenge.h) 能力提供；调用范围、ABI、签名和借用字段的生命周期见[原版错误道具挑战环境](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-challenge.md)。
+
 ## HUD 与本机输入
 
 `input_ready()` 在控制器锁内检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在；仅借用原生设备列表，设备对象仍由游戏分配和释放。运行协调器在此条件满足后请求开局；角色的槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
@@ -251,10 +253,12 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 原版 Lua API 不提供完整角色菜单目录和可选判定。[characters::catalogue](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/characters.h) 复制原生名称、画像与资格数据，Lua 不接收原生指针。
 
-- 原版两页菜单表 RVA `0x724140`，每条 `0x18`、每页 18 条；画像页表 RVA `0x724120`。随机占位行按位置排除。
+- 原版两页菜单表 RVA `0x724140`，每条 `0x18`、每页 18 条；画像页表 RVA `0x724120`。随机占位行按位置排除；两页相同位置给出表／里配对。
 - Manager 的 PlayerConfig 向量位于 `+0x2a678/+0x2a67c`，记录大小 `0x148`。按原生 Mod 菜单规则排除 `hidden +0x128` 和子配置，里页使用配对 `+0x124`；不另维护固定 ID 或成就表。
 - `MenuCharacter::Available` RVA `0x546cd0` 使用菜单记录作 receiver，栈参数为 0，被调方清理 4 字节。查询期间借入本机 642 个成就字节、523 个计数和 frontend scene；禁止在该作用域内执行 Lua、回调、存档或分配，返回前完整恢复。续玩只临时豁免已消耗的伊甸令牌。
 - 校验配置范围、数量、ID、字符串长度和配对索引；入口和 Mod 枚举锚 RVA `0x54919e` 受签名校验。字符串立即复制，原生 MSVC 字符串由游戏销毁。
+
+`net_characters()` 的目录条目用 `tainted` 标明分组，`counterpart` 为另一组对应的目录角色 ID；没有有效配对时省略。配对可尚未解锁，选角必须另查返回的可选 ID 列表。联机菜单只在当前组内循环和随机。`net_choose_random(group, ready)` 以个人可选 ID 和目录分组生成候选集合；`net_poll()` 返回的 `random0..3` 标识大厅的随机选择，角色卡显示问号并隐藏通关标记。运行层仅在主机发起新局时抽取最终 ID，准备／取消准备不触发抽取，启动参数只携带最终角色。表／里切换复用 J460 单人选角的 `ACTION_MENURB`（25，键盘 E／手柄右肩键），原生输入查询沿用现有菜单作用域，选角行右侧固定位置绘制原版 `gfx/ui/main menu/pageswapwidget.anm2` 的按键与切换符号层，省略底纸；角色名在预留宽度内显示。
 
 `characters::completionPreview` 只读取调用方提供的个人 `Progress`，不写原生存档。J460 原版角色与替身的计数映射集中在 [completion_marks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/completion_marks.h)。每个计数只取低两位的单人记录，屏蔽官方联机记录；十二层按 `gfx/ui/completion_widget.anm2` 排列，含代表 Delirium 的纸张层。预览的低 24 位每两位保存一层，位 24 表示数据可用；解码拒绝额外位和层值 3。未收录的 Mod 角色返回不可用，仍可正常选角，不伪造未通关记录。
 

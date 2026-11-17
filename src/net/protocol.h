@@ -15,7 +15,7 @@
 
 namespace isaac::lan {
 using RunRules = isaac::RunRules;
-constexpr std::uint16_t protocolVersion = 55;
+constexpr std::uint16_t protocolVersion = 56;
 constexpr std::size_t maxPlayers = 4;
 constexpr std::size_t actionCount = 16;
 constexpr std::uint16_t maxInputValue = 65535;
@@ -193,6 +193,13 @@ struct Choice {
     bool ready = false;
     // Opaque, bounded presentation metadata owned by this participant.
     std::uint32_t preview = 0;
+    // Empty fixes one ID. Otherwise the participant delegates the final choice
+    // to a bounded subset of their declared access, resolved by the runtime.
+    std::vector<std::uint16_t> candidates{};
+    bool accepts(std::uint16_t value) const {
+        return candidates.empty() ? value == character
+                                  : std::binary_search(candidates.begin(), candidates.end(), value);
+    }
     bool operator==(const Choice&) const = default;
 };
 struct RuleKey {
@@ -227,6 +234,19 @@ struct LobbyAccess {
     bool allowsCharacter(std::uint16_t character, bool continuing = false) const {
         const auto& values = continuing ? unlockedCharacters : characters;
         return std::binary_search(values.begin(), values.end(), character);
+    }
+    bool allowsChoice(const Choice& choice) const {
+        if (!allowsCharacter(choice.character))
+            return false;
+        if (choice.candidates.empty())
+            return true;
+        return choice.preview == 0 && choice.candidates.size() <= characters.size() &&
+               std::is_sorted(choice.candidates.begin(), choice.candidates.end()) &&
+               choice.accepts(choice.character) &&
+               std::adjacent_find(choice.candidates.begin(), choice.candidates.end()) ==
+                   choice.candidates.end() &&
+               std::includes(characters.begin(), characters.end(), choice.candidates.begin(),
+                             choice.candidates.end());
     }
     bool allowsRules(const RunRules& value, bool continuing = false) const {
         return value.valid() &&
@@ -378,6 +398,23 @@ class Writer {
             u16(rule.version);
         }
     }
+    void choice(const Choice& value, const LobbyAccess& access) {
+        const bool deferred = !value.candidates.empty();
+        if (deferred && !access.allowsChoice(value))
+            throw std::runtime_error("Invalid choice candidates");
+        u16(value.character);
+        u8(value.ready);
+        u32(value.preview);
+        u8(deferred);
+        if (deferred)
+            for (std::size_t i = 0; i < access.characters.size(); i += 8) {
+                std::uint8_t mask = 0;
+                for (unsigned bit = 0; bit < 8 && i + bit < access.characters.size(); ++bit)
+                    if (value.accepts(access.characters[i + bit]))
+                        mask |= 1u << bit;
+                u8(mask);
+            }
+    }
 };
 
 class Reader {
@@ -497,6 +534,29 @@ class Reader {
         }
         if (!value.valid())
             throw std::runtime_error("Invalid lobby access");
+        return value;
+    }
+    Choice choice(const LobbyAccess& access) {
+        Choice value;
+        value.character = u16();
+        const auto ready = u8();
+        value.ready = ready != 0;
+        value.preview = u32();
+        const auto deferred = u8();
+        if (ready > 1 || deferred > 1)
+            throw std::runtime_error("Invalid choice flags");
+        if (deferred) {
+            for (std::size_t i = 0; i < access.characters.size(); i += 8) {
+                const auto mask = u8();
+                if (access.characters.size() - i < 8 && (mask >> (access.characters.size() - i)))
+                    throw std::runtime_error("Invalid choice candidate bits");
+                for (unsigned bit = 0; bit < 8 && i + bit < access.characters.size(); ++bit)
+                    if (mask & (1u << bit))
+                        value.candidates.push_back(access.characters[i + bit]);
+            }
+            if (value.candidates.empty() || !access.allowsChoice(value))
+                throw std::runtime_error("Invalid choice candidates");
+        }
         return value;
     }
     void finish() const {

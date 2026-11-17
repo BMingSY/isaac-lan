@@ -4,7 +4,7 @@ PlayerType, RoomType = enums.PlayerType, enums.RoomType
 local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels, renderedMarks = {}, {}
-local labelPositions = {}
+local labelPositions, renderedSwitches = {}, {}
 local options = { { flag = 1, key = "friendlyFire", name = "队友伤害", shortName = "友伤" } }
 local noop = function() end
 local remembered = { "", 29506 }
@@ -48,14 +48,18 @@ Sprite = function()
         SetFrame = function(self, animation)
             self.animation = animation
         end,
-        Render = function(self)
+        Render = function(self, position)
             if self.path == "gfx/ui/completion_widget.anm2" then
                 renderedMarks[#renderedMarks + 1] = { table.unpack(self.layers) }
             elseif self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
                 renderedPortraits[#renderedPortraits + 1] = { self.path, self.animation }
             end
         end,
-        RenderLayer = noop,
+        RenderLayer = function(self, _, position)
+            if self.path == "gfx/ui/main menu/pageswapwidget.anm2" then
+                renderedSwitches[#renderedSwitches + 1] = position
+            end
+        end,
         SetLayerFrame = function(self, layer, frame)
             self.layers = self.layers or {}
             self.layers[layer + 1] = frame
@@ -170,6 +174,9 @@ _IsaacLanModules = {
     ["presentation/animation_skip"] = dofile(root .. "/src/bridge/presentation/animation_skip.lua"),
     ["presentation/update_notice"] = dofile(root .. "/src/bridge/presentation/update_notice.lua"),
     ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
+    ["presentation/menu_characters"] = dofile(
+        root .. "/src/bridge/presentation/menu_characters.lua"
+    ),
     ["core/room_types"] = dofile(root .. "/src/bridge/core/room_types.lua"),
     ["core/endpoint"] = dofile(root .. "/src/bridge/core/endpoint.lua"),
     ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
@@ -181,11 +188,14 @@ _IsaacLanCommand = function(name, value)
         status.ready0, status.ready1 = 0, 0
         if status.challenge ~= 0 then
             status.choice0, status.choice1 = 23, 23
+            status.random0, status.random1 = false, false
         end
-    elseif name == "choose" then
+    elseif name == "choose" or name == "choose_random" then
         local character, ready = value:match("^(%d+):(%d+)$")
+        status["random" .. status.slot] = name == "choose_random"
         status["choice" .. status.slot], status["ready" .. status.slot] =
-            tonumber(character), tonumber(ready)
+            name == "choose_random" and (character == "1" and 23 or 0) or tonumber(character),
+            tonumber(ready)
     elseif name == "room_options" then
         status.roomOptions = tonumber(value)
         status.ready0, status.ready1 = 0, 0
@@ -198,7 +208,7 @@ local function draw(key, visible, mx, my, clicked)
     renderedPortraits = {}
     scaledLabels = {}
     renderedMarks = {}
-    labelPositions = {}
+    labelPositions, renderedSwitches = {}, {}
     return _IsaacLanMenuRender(
         true,
         visible ~= false,
@@ -232,25 +242,46 @@ draw(38)
 draw(38)
 local count = #commands
 draw(39)
+draw(69)
 assert(#commands == count)
 draw(40)
 draw(40)
 draw(39)
 draw()
 assert(status.challenge == 0 and labels["普通"] and labels["继续上次联机"])
--- Ordinary character cycling uses the personal save's list, with catalog names.
+-- The same E/menu shoulder event switches groups; arrows stay in the group.
 _IsaacLanMenuOpen(true)
 status.choice0 = 0
-draw(39)
+catalog["0"].counterpart, catalog["23"].counterpart = 23, 0
+draw(69)
 draw()
 assert(status.choice0 == 23 and labels["里·该隐"])
 assert(renderedPortraits[1][1] == "native-tainted.anm2" and renderedPortraits[1][2] == "03_Cain")
+draw(39)
+draw()
+assert(status.choice0 == 23 and status.random0 and labels["?"])
+assert(renderedPortraits[1][2] == "00_Random")
+draw(69)
+draw()
+assert(status.choice0 == 0 and status.random0 and labels["?"])
+assert(#renderedSwitches == 2 and renderedSwitches[1].X > labelPositions["?"].x)
+assert(not labels["E / RB：表／里"])
+-- Both player cards stay anonymous after ready, and completion marks stay hidden.
+status.random1, status.ready1, status.ready0 = true, 1, 1
+draw()
+assert(renderedPortraits[1][2] == "00_Random" and renderedPortraits[2][2] == "00_Random")
+assert(not labels["以撒"] and not labels["里·该隐"] and #renderedMarks == 0)
+status.random1, status.ready1, status.ready0 = false, 0, 0
+-- The native widget also provides a mouse hit target.
+draw(0, true, renderedSwitches[1].X, renderedSwitches[1].Y, true)
+assert(status.random0 and status.choice0 == 23)
+draw(69)
 draw(39)
 assert(status.choice0 == 0)
 draw()
 assert(labels["以撒"] and not labels["Isaac"])
 characters = { 0 }
-draw(39)
+draw(69)
 assert(status.choice0 == 0)
 characters = { 0, 23 }
 -- Native metadata and ordering include dynamically registered Mod roles.
@@ -277,17 +308,23 @@ for _, label in ipairs(scaledLabels) do
         nameRenders = nameRenders + 1
         local width = utf8.len(longName) * 8 * label.scale
         assert(label.scale > 0 and label.scale < 1)
-        assert(width <= (label.x == 49 and 138 or 110))
+        assert(width <= (label.x == 49 and 105 or 110) + 0.001)
     end
 end
 assert(nameRenders == 2, "Long Mod name did not fit both the row and player card")
 assert(renderedPortraits[1][1] == "mod-menu.anm2" and renderedPortraits[1][2] == "目录角色")
+draw(39)
+draw()
+assert(status.choice0 == 0 and status.random0 and labels["?"])
+draw(69)
 draw(39)
 assert(status.choice0 == 23)
 draw(39)
 draw()
 assert(status.choice0 == 41 and labels["无菜单画像"])
 assert(renderedPortraits[1][2] == "00_Random")
+draw(39)
+draw(69)
 draw(39)
 assert(status.choice0 == 0)
 -- Mod names remain untouched even when they match a vanilla English name.
@@ -373,7 +410,8 @@ assert(labels["保存并结束联机"])
 local actions = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     _IsaacLan.net_phases(),
     _IsaacLan.net_commands(),
-    _IsaacLanModules["core/endpoint"]
+    _IsaacLanModules["core/endpoint"],
+    _IsaacLanModules["presentation/menu_characters"]()
 )
 local sent, hidden = {}, 0
 local deps = {
@@ -537,7 +575,8 @@ local phaseValues = dofile(root .. "/tests/fixtures/net_phases.lua")
 local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     phaseValues,
     dofile(root .. "/tests/fixtures/net_commands.lua"),
-    _IsaacLanModules["core/endpoint"]
+    _IsaacLanModules["core/endpoint"],
+    _IsaacLanModules["presentation/menu_characters"]()
 )
 for _, host in ipairs({ 0, 1 }) do
     local selected
@@ -862,6 +901,7 @@ _IsaacLan.net_challenges = function()
         [1003] = "吃鸡",
         [1004] = "超大房间",
         [1005] = "你的准星",
+        [1006] = "挑战45",
     }) do
         result[tostring(id)] = {
             id = id,
@@ -875,7 +915,7 @@ _IsaacLan.net_challenges = function()
     return result
 end
 status.phase, status.hosting, status.slot, status.challenge = 2, 1, 0, 1001
-for index = 1, 5 do
+for index = 1, 6 do
     _IsaacLanMenuOpen(true)
     draw(40)
     draw(40)
