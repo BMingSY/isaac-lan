@@ -4,6 +4,8 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t playerSmeltedTrinketVector = 0x3cb962;
+inline constexpr std::uint32_t playerSmeltedTrinketCounters = 0x3cb977;
 inline constexpr std::uint32_t entityDynamicCast = 0x6f08b1;
 inline constexpr std::uint32_t entityRTTIName = 0x85d5e4;
 inline constexpr std::uint32_t npcRTTIName = 0x85d6b4;
@@ -246,6 +248,7 @@ inline constexpr std::uint32_t itemConfigGetCollectible = 0x32fd10;
 inline constexpr std::uint32_t itemConfigGetTrinket = 0x32fd70;
 inline constexpr std::uint32_t nPCNeedlePrepareVisual = 0x14f670;
 inline constexpr std::uint32_t gridEntityTrapdoorUpdate = 0x31fef0;
+inline constexpr std::uint32_t gridEntityTntUpdate = 0x31f090;
 inline constexpr std::uint32_t entityPlayerAddCoins = 0x359400;
 inline constexpr std::uint32_t entityPlayerSyncResources = 0x3597e0;
 inline constexpr std::uint32_t entityPlayerCopyResourcesTo = 0x3596a0;

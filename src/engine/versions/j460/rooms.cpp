@@ -2760,6 +2760,14 @@ void __attribute__((fastcall)) doorUpdate(void* door, void*) {
         originalDoorUpdate(door);
 }
 RoomCall originalTrapdoorUpdate = nullptr;
+RoomCall originalTntUpdate = nullptr;
+void __attribute__((fastcall)) tntUpdate(void* tnt, void*) {
+    // Native TNT owns an unsynchronized explosion countdown. Running it after
+    // applying a replica snapshot can replay ReadyToExplode over Blown and
+    // trigger another explosion. The host supplies state, collision and pose.
+    if (!runtime::replica())
+        originalTntUpdate(tnt);
+}
 void __attribute__((fastcall)) trapdoorUpdate(void* trapdoor, void*) {
     if (runtime::replica())
         return;
@@ -4092,6 +4100,8 @@ bool install(Address base, void (*log)(const std::string&)) {
                 reinterpret_cast<void**>(&originalDoorUpdate)) &&
            hook(j460::entry::gridEntityTrapdoorUpdate, reinterpret_cast<void*>(trapdoorUpdate),
                 reinterpret_cast<void**>(&originalTrapdoorUpdate)) &&
+           hook(j460::entry::gridEntityTntUpdate, reinterpret_cast<void*>(tntUpdate),
+                reinterpret_cast<void**>(&originalTntUpdate)) &&
            hook(j460::entry::nPCNeedlePrepareVisual, reinterpret_cast<void*>(needleVisual),
                 reinterpret_cast<void**>(&originalNeedleVisual)) &&
            hook(j460::entry::engineRoomsPostUpdate, reinterpret_cast<void*>(postUpdate),

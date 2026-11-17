@@ -5,7 +5,7 @@ return function(fields)
         fields.actor, fields.room, fields.entity, fields.inventory
     local Location, HOST_SLOT = fields.location, 0
     local shared = { "map", "progress", "curses", "deals", "pills", "glitched" }
-    local inventoryFields = { Inventory.items, Inventory.trinkets }
+    local inventoryFields = { Inventory.items, Inventory.trinkets, Inventory.smeltedTrinkets }
     local roomFields = { Room.layout, Room.rails, Room.crawlspace }
     local function copy(value)
         local result = {}

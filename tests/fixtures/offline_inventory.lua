@@ -9,7 +9,8 @@ return function(
     restoreForm,
     activeData,
     collectibleReader,
-    order
+    order,
+    smeltedTrinkets
 )
     local module = dofile(root .. "/src/bridge/sync/inventory.lua")(
         dofile(root .. "/src/bridge/sync/fields.lua")
@@ -42,6 +43,8 @@ return function(
         restoreForm = restoreForm,
         activeData = activeData,
         order = order,
+        smeltedTrinkets = smeltedTrinkets,
+        allCacheFlags = 0xffff,
     })
     local player
     function fixture.reset(ghost)
@@ -60,6 +63,7 @@ return function(
             resources = { 0, 0, 0, 0, 0 },
             itemMutations = 0,
             resourceDelta = 0,
+            cacheEvaluations = 0,
         }, {
             __index = function(_, name)
                 return assert(methods[name], "Unsupported offline player method: " .. name)
@@ -103,6 +107,13 @@ return function(
     end
     function methods:GetSprite()
         return self
+    end
+    function methods:AddCacheFlags(flags)
+        self.cacheFlags = flags
+    end
+    function methods:EvaluateItems()
+        assert(self.cacheFlags == 0xffff)
+        self.cacheEvaluations = self.cacheEvaluations + 1
     end
     function methods:AddCollectible(id, _, _, slot)
         self.itemMutations = self.itemMutations + 1

@@ -130,6 +130,13 @@ local inventoryState = component("sync/inventory")({
     restoreForm = forgotten.restoreForm,
     order = assert(modules["compat/characters/isaac"])(native, PlayerType),
     activeType = ItemType.ITEM_ACTIVE,
+    allCacheFlags = CacheFlag.CACHE_ALL,
+    smeltedTrinkets = function(player, value)
+        if value == nil then
+            return native.actor_smelted_trinkets(player:GetSprite())
+        end
+        return native.actor_smelted_trinkets(player:GetSprite(), value)
+    end,
     curse = NullItemID.ID_LOST_CURSE,
     activeData = function(player, value)
         if value == nil then
