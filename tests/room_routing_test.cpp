@@ -22,6 +22,7 @@ extern "C" {
 unsigned roomBoundaryVisits = 0;
 unsigned roomBoundaryECX = 0, roomBoundaryEBX = 0;
 unsigned roomBoundarySSE = 0, roomBoundaryFlags = 0, roomBoundaryMXCSR = 0;
+unsigned roomPreparedImage = 0, roomBoundaryImage = 0;
 double roomBoundaryX87 = 0;
 void* roomBoundaryTarget = nullptr;
 void* roomMazeTarget = nullptr;
@@ -31,7 +32,9 @@ unsigned char roomBoundaryFrame[16]{};
     "movl %ebx, _roomBoundaryEBX\n\tmovd %xmm7, _roomBoundarySSE\n\t"                              \
     "fstpl _roomBoundaryX87\n\tstmxcsr _roomBoundaryMXCSR\n\t"
 __attribute__((naked)) int roomBoundaryContinue() {
-    __asm__ __volatile__(CAPTURE_REGISTERS "incl _roomBoundaryVisits\n\tmovl $17, %eax\n\tret");
+    __asm__ __volatile__(CAPTURE_REGISTERS
+                         "movl _roomPreparedImage, %eax\n\tmovl %eax, _roomBoundaryImage\n\t"
+                         "incl _roomBoundaryVisits\n\tmovl $17, %eax\n\tret");
 }
 __attribute__((naked)) int roomBoundaryResident() {
     __asm__ __volatile__(CAPTURE_REGISTERS "movl $23, %eax\n\tret");
@@ -53,6 +56,17 @@ __attribute__((naked)) int invokeMazeBoundary() {
 }
 namespace {
 unsigned addedCalls = 0, removedCalls = 0;
+#ifdef ISAAC_LAN_TEST_J835
+unsigned imagePreparationCalls = 0;
+bool failImagePreparation = false;
+void __cdecl prepareImages() {
+    ++imagePreparationCalls;
+    if (failImagePreparation)
+        throw std::runtime_error("surface allocation failed");
+    roomPreparedImage = 0x1234;
+    __asm__ __volatile__("pxor %%xmm7, %%xmm7\n\tfninit" ::: "xmm7");
+}
+#endif
 unsigned __cdecl addedCurses() {
     ++addedCalls;
     return 0x28;
@@ -100,6 +114,9 @@ int main() {
         patch(fakeImage, backend::entry::levelMazeBranchEnd, roomBoundaryResident);
         patch(fakeImage, backend::entry::gameAddedSeedCurses, addedCurses);
         patch(fakeImage, backend::entry::gameRemovedSeedCurses, removedCurses);
+#ifdef ISAAC_LAN_TEST_J835
+        patch(fakeImage, backend::entry::roomPrepareRenderImages, prepareImages);
+#endif
         FlushInstructionCache(GetCurrentProcess(), fakeImage, imageSize);
         auto* foreign = fakeImage + backend::entry::levelMazeBranch;
         auto* resolved = fakeImage + backend::entry::levelRoomEntryResolved;
@@ -132,18 +149,28 @@ int main() {
                 "Missing Game reached native seed queries");
         gamePointer = reinterpret_cast<std::uintptr_t>(fakeGame.data());
         require(invokeRoomBoundary() == 17, "Unmanaged native room entry was intercepted");
+#ifdef ISAAC_LAN_TEST_J835
+        require(imagePreparationCalls == 0, "Unmanaged entry allocated scheduler surfaces");
+#endif
         unsigned prepared = 0;
         for (const auto& [fresh, redirected] :
              {std::pair{true, false}, std::pair{true, true}, std::pair{false, false},
               std::pair{false, true}, std::pair{true, false}}) {
             roomBoundaryFrame[redirectOffset] = redirected;
             const auto calls = roomBoundaryVisits;
+#ifdef ISAAC_LAN_TEST_J835
+            const auto allocations = imagePreparationCalls;
+#endif
             withResolvedRoomEntry(
                 [&](RoomArrival arrival) {
                     require(arrival.index == 70 && arrival.dimension == 0 && arrival.door == 3 &&
                                 arrival.redirected == redirected,
                             "Boundary did not expose the native resolved room and entrance");
                     ++prepared;
+                    // Destination activation exchanges global image owners.
+                    // A new room's slots are empty even if its constructor
+                    // observed the departure room's allocated surfaces.
+                    roomPreparedImage = 0;
                     __asm__ __volatile__("pxor %%xmm7, %%xmm7\n\tfninit" ::: "xmm7");
                     const unsigned altered = control ^ 0x6000;
                     __asm__ __volatile__("ldmxcsr %0" : : "m"(altered));
@@ -156,9 +183,33 @@ int main() {
             preserved(control);
             require(roomBoundaryVisits == calls + (fresh ? 1 : 0),
                     "Native destination initialized more than once");
+#ifdef ISAAC_LAN_TEST_J835
+            require(imagePreparationCalls == allocations + (fresh ? 1 : 0) &&
+                        (!fresh || roomBoundaryImage == 0x1234),
+                    "Fresh entry consumed empty surfaces or resident entry allocated them");
+#endif
             require(!pending, "Native entry retained a borrowed callback");
         }
         require(prepared == 5, "Room callback was repeated or lost");
+#ifdef ISAAC_LAN_TEST_J835
+        failImagePreparation = true;
+        const auto visits = roomBoundaryVisits;
+        bool allocationFailed = false;
+        try {
+            withResolvedRoomEntry(
+                [](RoomArrival) { return true; },
+                [&] {
+                    require(invokeRoomBoundary() == 23,
+                            "Failed surface preparation continued native initialization");
+                });
+        } catch (const std::runtime_error& error) {
+            allocationFailed = std::string(error.what()) == "surface allocation failed";
+        }
+        require(allocationFailed && !pending && visits == roomBoundaryVisits,
+                "Surface failure lost its error or retained its borrowed callback");
+        preserved(control);
+        failImagePreparation = false;
+#endif
         // A rejected nested scope must leave the outer borrowed callback intact.
         withResolvedRoomEntry(
             [&](RoomArrival) {

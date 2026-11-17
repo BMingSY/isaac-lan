@@ -253,6 +253,7 @@ inline constexpr std::uint32_t playerTriggerRoomClear = 0x36e140;
 inline constexpr std::uint32_t replicaMorphToCoopGhost = 0x39aba0;
 inline constexpr std::uint32_t replicaRevivePlayerGhost = 0x39a8a0;
 inline constexpr std::uint32_t roomAssignLightTexture = 0x7700;
+inline constexpr std::uint32_t roomPrepareRenderImages = 0x3a91c0;
 inline constexpr std::uint32_t roomConfigRandomRoom = 0x3e7180;
 inline constexpr std::uint32_t roomDiscountedPrice = 0x3d16f0;
 inline constexpr std::uint32_t roomGetDevilRoomChance = 0x3b7040;

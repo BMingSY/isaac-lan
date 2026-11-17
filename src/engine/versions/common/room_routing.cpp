@@ -74,7 +74,12 @@ __attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_room_resol
             {read<int>(game, bindings.layout.roomIndex), read<int>(game, bindings.layout.dimension),
              read<int>(game, bindings.layout.enterDoor),
              read<unsigned char>(registers[frame], bindings.layout.redirected) != 0});
+        if (initialize && bindings.entry.prepareImages) {
+            using PrepareImages = void(__cdecl*)();
+            reinterpret_cast<PrepareImages>(image + *bindings.entry.prepareImages)();
+        }
     } catch (...) {
+        initialize = false;
         pending->error = std::current_exception();
     }
     if (!initialize)

@@ -38,7 +38,7 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 [房间绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/rooms.cpp)向[共享调度](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rooms.cpp)提供原版入口、布局和少量 ABI 适配。Room 大小为 `0x777c`，构造／析构入口为 `0x3a80f0/0x3a89f0`；分配与释放沿用游戏 CRT。PlayerManager 位于 `Game+0x1ba40`，名单向量位于管理器 `+0x10`，不能把名单头作为管理器接收对象。备用身体通过 `0x518ab0` 注销名单，只搬移指针、不析构角色；销毁角色使用 `0x518af0`，接收角色指针和布尔参数并清栈八字节。
 
-每个房间持有 Ambush `+0xc` 起的待执行波次向量及后续标量，根对象为 `Game+0x1c31b8`；前置 XML 配置保持游戏所有权。27 个进程渲染纹理句柄按原生双指针对整体交换和释放，不能只交换资源地址。原版 Boss 血条缓存为 `Game+0x1018f0/+0x1018f4/+0x1018f8`；没有 J460 `Game+0x1ad90` 的换房 Boss 缓存，也没有其结束／恢复控制使用的状态门，缺失槽不读写原生内存。
+每个房间持有 Ambush `+0xc` 起的待执行波次向量及后续标量，根对象为 `Game+0x1c31b8`；前置 XML 配置保持游戏所有权。27 个进程渲染纹理句柄按原生双指针对整体交换和释放，不能只交换资源地址。 原版构造函数创建这些进程纹理，但此时仍是离开房间的作用域；目的房间激活后、原生 `Room::Init` 之前，解析边界调用 `0x3a91c0`（cdecl、无参数）补齐空槽。该入口按现有屏幕尺寸分配原生表面和引用所有者，保留非空句柄；已驻留房间、未受调度的原生换房和存储壳不额外调用。纹理创建失败时跳过原生初始化并把异常交还调度，不在下一帧绘制时补救已经使用的空纹理。原版 Boss 血条缓存为 `Game+0x1018f0/+0x1018f4/+0x1018f8`；没有 J460 `Game+0x1ad90` 的换房 Boss 缓存，也没有其结束／恢复控制使用的状态门，缺失槽不读写原生内存。
 
 上层转场 `0x2d07d0` 与底层 `RoomTransition::Start` `0x3e9650` 均使用 thiscall、五个栈参数和二十字节清栈；后者以 RoomTransition 为接收对象。原版 Mom's Hand、Dogma 和死亡证明直接调用底层入口，仍须提交到房间调度；上层原函数转入底层时不重复拦截。迷宫等目的地解析继续由 `Level::ChangeRoom` 执行。
 
@@ -58,9 +58,9 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 ## 角色附属状态
 
-[角色查询绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_queries.cpp)调用 `PlayerManager::HasPlayerType`（RVA `0x1ef580`），ECX 接收管理器，栈上接收角色类型并清栈四字节，结果仅取 AL。原生查询遍历管理器 `+0x10/+0x14` 的名单并排除非零 Variant；不能按 J460 的玩家指针返回值解释 EAX，也不额外改变原版的幽灵筛选规则。[共享查询组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_queries.cpp)让房间策略按调用来源临时借用队伍名单，嵌套调用及异常均恢复外层状态；直接查询只使用当前名单，不重复进入共享策略。安装冲突保留外部 Hook，失败后可重试。该组件尚需完整房间调度接入。
+[角色查询绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/room_queries.cpp)调用 `PlayerManager::HasPlayerType`（RVA `0x1ef580`），ECX 接收管理器，栈上接收角色类型并清栈四字节，结果仅取 AL。原生查询遍历管理器 `+0x10/+0x14` 的名单并排除非零 Variant；不能按 J460 的玩家指针返回值解释 EAX，也不额外改变原版的幽灵筛选规则。[共享查询组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/room_queries.cpp)让房间策略按调用来源临时借用队伍名单，嵌套调用及异常均恢复外层状态；直接查询只使用当前名单，不重复进入共享策略。安装冲突保留外部 Hook，失败后可重试。该组件由完整房间调度装配。
 
-[遗骸形态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/forgotten_form.h)使用[共享形态恢复组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/forgotten_form.h)。原生切换入口 `0x38df20` 以 ECX 接收角色、栈上接收强制切换和播放效果两个布尔参数，清栈八字节。恢复只接受遗骸／游魂的有效配对，类型、合作幽灵和配对指针分别读取 `Player+0x130c/+0x1f88/+0x1cb8`；目标形态相同不重复调用，配对对象仍由游戏持有。该能力尚需完整房间组件调用。
+[遗骸形态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/forgotten_form.h)使用[共享形态恢复组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/forgotten_form.h)。原生切换入口 `0x38df20` 以 ECX 接收角色、栈上接收强制切换和播放效果两个布尔参数，清栈八字节。恢复只接受遗骸／游魂的有效配对，类型、合作幽灵和配对指针分别读取 `Player+0x130c/+0x1f88/+0x1cb8`；目标形态相同不重复调用，配对对象仍由游戏持有。该能力由房间组件调用。
 
 [角色状态绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/actor_state.cpp)复用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/actor_state.cpp)，Lua 名称、快照字节和名单限制遵循[角色附属状态契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#角色附属状态)。附属 Sprite 为 `Player+0x36c/+0xf48/+0xe34`，七个蓄力条从 `+0x6a8` 开始、步长 `0x114`；服装向量为 `+0x1170/+0x1174/+0x1178`，步长 `0x130`。借用包装沿用原生 metatable，不接管动画资源。
 
@@ -136,7 +136,7 @@ Hornfel／Horny Boys 的持有炸弹容器位于 `NPC+0xb40`，分别限定两�
 
 回放前将转场目标 `+0x14/+0x18` 设置为当前房间／维度，角色按当前名单通过原生引用接口登记。入场推进只在主机、本机房间、状态就绪且未暂停时执行；同步房间模拟期间暂时隐藏模式，正常返回或异常离开恢复，不能覆盖新转场或已释放的 Game。客机完成确认只在事件原房间和非结束状态下恢复对应角色的控制；断线与超时释放等待。J835 不使用 J460 的附加控制保护字段。
 
-HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规则；小地图只发布前端实际绘制观察到的普通值。两处演出 Hook 成组创建，冲突只撤销本组件 Hook；道具、百宝袋、挑战 HUD 和胜利圈提示各自管理安装，任一失败由启动装配中止。上述组件仍依赖完整房间调度与启动装配，不能单独作为可安装联机实现。
+HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规则；小地图只发布前端实际绘制观察到的普通值。两处演出 Hook 成组创建，冲突只撤销本组件 Hook；道具、百宝袋、挑战 HUD 和胜利圈提示各自管理安装，任一失败由启动装配中止。上述组件由共享房间调度和启动装配连接。
 
 换层梦境的[动画跳过绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/animation_skip.cpp)复用[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/animation_skip.cpp)。`NightmareScene` 位于 `Manager+0x211bc`，场景编号为 5，`+0` 为活动状态，`+0x5e8` 区分 Home 个人梦境。`Show`／`Update`／`Render` 入口为 `0x47e110/0x47ca00/0x47ce30`，均为 thiscall；Show 接收一个 bool 并清栈 4 字节，后两者无栈参数。Show 清空旧许可，Update 通过受限确认输入作用域等待当前动画的同意，Render 在原生画面后绘制联机 HUD。换层完成还要求 `Game+0x1ba0c` 的原生 StageTransition 状态归零。游戏对象和场景编号均由原生持有，接口按事件与楼层代次拒绝过期请求，三个 Hook 成组安装并在失败时回滚。
 
@@ -170,7 +170,7 @@ HUD 桥接从 `Game+0x3da4c` 取得借用对象，使用下方的原版坐标规
 
 ## 道具演出与屏幕状态
 
-[原版道具演出绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/item_presentation.cpp) 提供入口、布局和自定义文字适配；对象所有权、事件编码、显示权限及生命周期见[共享契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#道具演出事件与对象)。组件依赖完整房间调度，不能独立形成可安装后端。
+[原版道具演出绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/item_presentation.cpp) 提供入口、布局和自定义文字适配；对象所有权、事件编码、显示权限及生命周期见[共享契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#道具演出事件与对象)。组件通过共享房间调度取得当前视图。
 
 | 原生操作 | J835 入口与 ABI |
 | --- | --- |
@@ -295,7 +295,7 @@ J835 没有独立的布局／坐标查询方法；`HUD::Render` 在心形绘制�
 
 插值位置恢复沿 `Room+0x125c/+0x1264` 的渲染数组遍历，仅在 `Entity+0x16d` 为真时将 `+0x29c/+0x2a0` 复制回 `+0x294/+0x298` 并清除标记。无当前 Game／Room／数组时返回，不持有实体或数组指针。房间进入帧位于 `Room+0x11f0`，使用与游戏帧相同的 uint32 回绕语义。
 
-诊断接口 `audit` 与 `trace_callback` 可核对当前楼层、房间、帧数、人数及有界回调栈；它们不控制正常玩法。J460 的独立双房间实验仍由 [room_probe.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_probe.cpp) 管理原生对象，J835 不注册尚未适配的实验接口。完整原版房间调度仍需独立后端，不能用诊断实验替代。
+诊断接口 `audit` 与 `trace_callback` 可核对当前楼层、房间、帧数、人数及有界回调栈；它们不控制正常玩法。J460 的独立双房间实验仍由 [room_probe.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/room_probe.cpp) 管理原生对象，J835 不注册尚未适配的实验接口。正式房间调度由原版绑定和共享调度组件提供。
 
 ## 会话原生绑定
 
@@ -331,7 +331,7 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 两版游戏自带枚举中的前十六个动作与菜单方向 `20..23` 相同；原版重开为 `16`，没有原生表情动作。差异集中在 [input_actions.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input_actions.h)，不能把忏悔＋的 UI 动作编号直接传给原版。[共享输入路由](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input.cpp) 通过 [J835 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input.cpp) 使用上述组件：物理采集、虚拟 XInput、权威输入、按键沿消费、暂停意图、呈现预测和退出恢复共用实现。上层请求的重开动作映射为原版 `16`，不存在的表情动作直接返回未触发；原生进入路由的动作编号保持原样，不做二次映射。采集以 `Manager+0x4a264` 的渲染帧编号去重，网络输入仍使用相同的十六动作与世界坐标鼠标目标契约。
 
-原版按钮提示只由 `MenuManager::RenderButtonLayout` 绘制；原生开局清理会销毁该菜单，Manager 内没有 J460 的持久提示组。因此原版菜单提示重置适配不访问额外对象。共享输入组件尚需房间和完整启动后端装配，不能单独作为可安装的原版联机后端。
+原版按钮提示只由 `MenuManager::RenderButtonLayout` 绘制；原生开局清理会销毁该菜单，Manager 内没有 J460 的持久提示组。因此原版菜单提示重置适配不访问额外对象。共享输入组件由房间和启动后端装配，按当前视图借用名单。
 
 [鼠标适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/mouse_input.cpp) 只借入 `Player::Controls` 内联鼠标块的 `0x3439ac`／`0x343ca2` 两个边界，保留其余玩家控制流程。该块以 EDI 接收角色、EBP 指向局部帧，鼠标生效位为 `EBP-0x150`，输出为 `-0x15c/-0x158`。物理查询借用独立的有界局部帧运行原生鼠标块，在结束边界直接返回，不继续执行玩家控制；嵌套查询按线程恢复前一借用帧。适配器不分配原生角色、不修改控制器身份，也不持有角色指针。
 
@@ -433,7 +433,7 @@ NPC 身份通过 RVA `0x5ec34c` 的 MSVC `__RTDynamicCast` 导入跳板判定，
 
 联机玩法更新期间跳过原生预览更新，在本机视角就绪后借用本机玩家名单执行。Room 指针为 `Game+0x18190`；实体列表位于 `Room+0x1218`，渲染数组为列表 `+0x40`，数据／数量为数组 `+4/+0xc`。先复制本次类型为掉落物的实体指针，再依次调用原生更新，允许原生预览创建期间更换数组。无效视角、空 Game／Room／列表不执行更新；已经移除但仍在渲染列表中的掉落物仍交给原生方法清理预览，不能仅按活动位跳过。
 
-这些指针只在当前同步视角调用内借用，不保留到下帧；房间切换、异常退出与重连沿用房间视角的恢复边界。Hook 失败清除自身旁路并允许重试，单人原生更新完整透传。该组件仍依赖尚未接通的完整 J835 房间调度。
+这些指针只在当前同步视角调用内借用，不保留到下帧；房间切换、异常退出与重连沿用房间视角的恢复边界。Hook 失败清除自身旁路并允许重试，单人原生更新完整透传。同步视角由 J835 绑定连接的共享房间调度提供。
 
 ## 暂停菜单
 
@@ -441,7 +441,7 @@ NPC 身份通过 RVA `0x5ec34c` 的 MSVC `__RTDynamicCast` 导入跳板判定，
 
 根页值为 `1`，选择字段为 `+8`，继续选项为 `1`、退出为 `2`；选项页值为 `2`。选项对象位于暂停菜单 `+0x806a8`，选择字段 `+4`，条目向量为 `+0x260` 的首尾及容量指针。选中 ID `1` 的确认操作会重新分配控制器，应由联机输入路由拦截；普通选项保留原生处理。越界选择或无效向量不能进入控制器分配路径。由同伴恢复游戏时，先调用 `thiscall void(OptionsConfig*)` 的保存入口 `0x4805a0`，接收 `Manager+0x29df8`，再隐藏选项页。
 
-原版没有暂停菜单玩家索引，原生显示和控制读取 `Game+0x1ba50` 名单的首位角色，控制器字段为 `Player+0x154c`。本机菜单调用必须位于房间视图提供的临时名单中；菜单组件不交换或保留名单，不仿造忏悔＋的索引字段。重复暂停状态保留当前子页、选择及借用名单；退出房间视图后仍由房间组件恢复名单。该菜单绑定尚未构成完整 J835 房间视图实现。
+原版没有暂停菜单玩家索引，原生显示和控制读取 `Game+0x1ba50` 名单的首位角色，控制器字段为 `Player+0x154c`。本机菜单调用必须位于房间视图提供的临时名单中；菜单组件不交换或保留名单，不仿造忏悔＋的索引字段。重复暂停状态保留当前子页、选择及借用名单；退出房间视图后仍由房间组件恢复名单。
 
 ## 角色目录与表现
 
