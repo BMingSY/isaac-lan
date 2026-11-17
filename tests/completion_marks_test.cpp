@@ -1,4 +1,4 @@
-#include "engine/versions/j460/completion_marks.h"
+#include "engine/versions/common/completion_marks.h"
 #include <cstdio>
 #include <stdexcept>
 
@@ -10,7 +10,7 @@ void require(bool value, const char* message) {
 } // namespace
 int main() {
     try {
-        using namespace isaac::engine::j460::completion;
+        using namespace isaac::engine::native_completion;
         isaac::lan::Progress host, guest;
         // Isaac: paper, heart, cross, inverted cross. Higher bits belong to
         // official online completion and must not change the single-player card.

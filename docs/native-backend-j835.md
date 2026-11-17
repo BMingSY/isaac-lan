@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 尚无可构建的完整联机后端。[J835 目录](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 提供下述原生组件和房间调度绑定；完整后端的构建和启动装配尚未完成。CMake 和版本生成器仍拒绝将它们链接为可安装后端。可构建完整后端为 [J460](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
+原版《忏悔》`1.7.9b.J835` 使用 [J835 后端](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835)，通过 `-DISAAC_LAN_BACKEND=j835` 构建完整联机 DLL、加载器与匹配的安装包。版本后端提供本页列出的入口、布局和 ABI 适配，共享组件负责房间调度、会话和表现作用域；构建及启动均按所选版本校验，不从 J460 借用地址。原版没有官方表情轮盘，`native_emotes=false`；LAN 文字聊天继续使用普通气泡。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 
@@ -364,7 +364,7 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 返回适配保存通用寄存器、标志、x87、XMM0–7 和 MXCSR，异常终止会话且不跨原生帧展开；借入的房间和角色均不转移所有权。Hook 冲突不撤销其他组件的 Hook，失败可重试，重复安装只接受相同映像。
 
-安装将发放、入队及两种复活 Hook 全部创建后再启用；失败只撤销自己创建的 Hook 并清除旁路，允许重试。玩法效果、拾取分配和开局奖励规则仍属于上层兼容组件；本组件没有完成整个原版房间和实体后端。
+安装将发放、入队及两种复活 Hook 全部创建后再启用；失败只撤销自己创建的 Hook 并清除旁路，允许重试。玩法效果、拾取分配和开局奖励规则仍属于上层兼容组件。
 
 错误道具注册表、原生生成与存档恢复、负编号库存查询的接口和所有权见[错误道具定义](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md)。这部分复用共享定义组件，不改变现有同步字段、编码或扩展接口。
 

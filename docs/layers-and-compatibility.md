@@ -16,11 +16,11 @@
 | [`src/presentation/`](https://github.com/BMingSY/isaac-lan/tree/main/src/presentation)、[`src/bridge/presentation/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/presentation) | 菜单、预测、镜头、外观和音画；不决定权威玩法 |
 | [`src/bridge/lanbot.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/lanbot.lua)、[`src/bridge/lanbot/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/lanbot) | 读取已有视图并合成正常输入 |
 | [`src/core/`](https://github.com/BMingSY/isaac-lan/tree/main/src/core)、[`src/bridge/core/`](https://github.com/BMingSY/isaac-lan/tree/main/src/bridge/core) | 可离线执行的数据规则与共享几何，不依赖游戏布局或 Hook |
-| [`src/engine/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine)、[`src/engine/versions/j460/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j460) | 能力接口、版本检测、原生调用、布局、Hook 与对象所有权 |
+| [`src/engine/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine)、[`src/engine/versions/`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions) | 能力接口、版本检测、原生调用、布局、Hook 与对象所有权 |
 | [`src/diagnostics/`](https://github.com/BMingSY/isaac-lan/tree/main/src/diagnostics) | 日志、性能、隔离采集与反馈上传；诊断开关不控制玩法 |
 | [`tests/`](https://github.com/BMingSY/isaac-lan/tree/main/tests)、[`tools/`](https://github.com/BMingSY/isaac-lan/tree/main/tools) | 回归夹具、构建与验收；不得成为生产玩法依赖 |
 
-装配层注入运行、同步、兼容与表现组件。运行协调器通过 [`engine/session_backend.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/session_backend.h) 调用具名能力；J460 后端安装 Hook，回调只传普通值和限同步调用的原版操作，不向运行层暴露原生对象。Lua ABI 声明与符号加载共用 [`engine/lua_api.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。
+装配层注入运行、同步、兼容与表现组件。运行协调器通过 [`engine/session_backend.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/session_backend.h) 调用具名能力；所选版本后端安装 Hook，回调只传普通值和限同步调用的原版操作，不向运行层暴露原生对象。Lua ABI 声明与符号加载共用 [`engine/lua_api.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。
 
 版本选择由 [Backend.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/Backend.cmake) 在构建时完成，每个 DLL 只链接一个后端。[Profile](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/profile.h) 提供版本身份、资料目录、Lua 模块和已实现的能力；公共版本检查读取同一份生成描述。ABI、Hook 原函数和借用对象声明留在后端私有头中；运行、表现和诊断组件使用具名能力查询状态。已核对可以共用算法与调用边界的组件使用后端内部的 [common](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/common) 实现；各版绑定持有自己的地址、对象偏移、数组边界、属性范围和调用参数。共享更新入口只装配房间、运行和表现组件；诊断实验及其原生资源留在独立探针中，不承担正常玩法。一个进程内不切换后端。
 
@@ -40,8 +40,8 @@ Lua 嵌入清单在 [`modules.txt`](https://github.com/BMingSY/isaac-lan/blob/ma
 | 存档压缩／解压任务及完成结果 | 大数据工作线程与主线程结果票据 | 取消、会话退出或楼层事务替换；过期结果不能进入新会话 |
 | 会话身份、输入确认、楼层代次 | 运行协调器 | 新会话、换层、重建和回退 |
 | 桥接启动阶段与准备代次 | [`bridge/runtime/session.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/session.lua) | 关闭、取消；原生错误进入失败阶段 |
-| 房间绑定、深度、借用的完整名单 | [`runtime/room_scope.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 与 J460 `Scope` | 按栈顺序完成原生恢复与清理 |
-| 房间、角色、精灵与 MSVC 容器 | J460 后端与游戏 | 原生替换、卸载或销毁 |
+| 房间绑定、深度、借用的完整名单 | [`runtime/room_scope.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/room_scope.h) 与后端共享 `Scope` | 按栈顺序完成原生恢复与清理 |
+| 房间、角色、精灵与 MSVC 容器 | 版本后端与游戏 | 原生替换、卸载或销毁 |
 | 实体 `ID → EntityPtr`、库存应用缓存 | [`sync/replica.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/replica.lua) | 实体删除、角色替换、新一局 |
 | 公共字段、角色和编码片段缓存 | [`sync/capture.lua`](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/capture.lua) | tick／楼层代次变化、转场、新一局 |
 | 移动与预测轨迹 | 副本与移动表现组件 | 换房、转场、新一局 |
@@ -76,6 +76,6 @@ Lua 嵌入清单在 [`modules.txt`](https://github.com/BMingSY/isaac-lan/blob/ma
 
 通用字段与一致性属于同步组件，特殊玩法属于对应兼容组件。策略接收普通值，Lua 适配调用游戏 API 或具名后端能力，装配层只注册与连接组件。特殊玩法不能向网络层泄漏游戏对象或匹配规则。
 
-字段位置由 [fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 schema 统一定义，游戏 ID 使用枚举或 [game_ids.h](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/game_ids.h)。原生能力、校验和对象所有权见 [J460 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)，变更所需检查见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#修改后的契约检查)。
+字段位置由 [fields.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/sync/fields.lua) 和 schema 统一定义，游戏 ID 使用枚举或 [game_ids.h](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/game_ids.h)。原生能力、校验和对象所有权见 [J460 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)和 [J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md)，变更所需检查见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md#修改后的契约检查)。
 
 当前效果与支持范围分别维护在[角色](https://github.com/BMingSY/isaac-lan/blob/main/docs/character-compatibility.md)、[道具](https://github.com/BMingSY/isaac-lan/blob/main/docs/item-effect-compatibility.md)、[第三方 Mod](https://github.com/BMingSY/isaac-lan/blob/main/docs/mod-compatibility.md)和[挑战](https://github.com/BMingSY/isaac-lan/blob/main/docs/lan-challenges.md)参考中。对第三方开放的能力遵循独立的 [API 契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/third-party-mod-integration.md)。

@@ -1,8 +1,8 @@
 #pragma once
 #include <cstdint>
 
-// J835 entries audited against the original executable. This is not a complete
-// backend: there is no sources.cmake and builds must reject selection.
+// J835 entrypoints audited against the original 1.7.9b executable.
+// Layouts and native calling conventions belong to this backend.
 namespace isaac::engine::j835 {
 namespace entry {
 inline constexpr std::uint32_t spriteRender = 0x51e0;

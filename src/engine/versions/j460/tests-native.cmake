@@ -20,8 +20,8 @@ add_test(NAME native.item-effects COMMAND isaac_lan_item_effects_test)
 set_tests_properties(native.item-effects PROPERTIES TIMEOUT 30 LABELS "offline;native")
 add_executable(
     isaac_lan_character_catalog_test
-    tests/character_catalog_test.cpp ${ISAAC_LAN_BACKEND_DIR}/characters.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/../common/character_catalogue.cpp)
+    tests/character_catalog_test.cpp ${CMAKE_CURRENT_LIST_DIR}/characters.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../common/character_catalogue.cpp)
 target_include_directories(isaac_lan_character_catalog_test PRIVATE src)
 if(MINGW)
     target_link_options(isaac_lan_character_catalog_test PRIVATE -static-libgcc -static-libstdc++)
@@ -32,13 +32,13 @@ set_tests_properties(native.character-catalog PROPERTIES TIMEOUT 30 LABELS "offl
 add_executable(
     isaac_lan_pause_menu_test
     tests/pause_menu_test.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/input.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/pause_menu.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/../common/pause_menu.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/input_devices.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/../common/input_devices.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/player_input.cpp
-    ${ISAAC_LAN_BACKEND_DIR}/../common/player_input.cpp)
+    ${CMAKE_CURRENT_LIST_DIR}/input.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/pause_menu.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../common/pause_menu.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/input_devices.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../common/input_devices.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/player_input.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../common/player_input.cpp)
 target_include_directories(isaac_lan_pause_menu_test PRIVATE src)
 target_link_libraries(isaac_lan_pause_menu_test PRIVATE minhook)
 if(MINGW)

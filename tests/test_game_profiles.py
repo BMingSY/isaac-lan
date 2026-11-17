@@ -164,7 +164,7 @@ def test_legacy_lab_snapshot_still_identifies_its_documents_directory(tmp_path):
     assert profile_directory(tmp_path) == tmp_path / "profile/Documents/My Games/Isaac Fixture"
 
 
-def test_repentance_metadata_cannot_enable_an_incomplete_native_backend(tmp_path):
+def test_repentance_backend_generates_original_capabilities(tmp_path):
     metadata = backend_metadata("j835")
     assert metadata["game_build"] == "1.7.9b.J835"
     assert metadata["documents_directory"] == "Binding of Isaac Repentance"
@@ -173,11 +173,10 @@ def test_repentance_metadata_cannot_enable_an_incomplete_native_backend(tmp_path
     assert {font["path"] for font in metadata["presentation"]["fonts"].values()} == {
         "font/cjk/lanapixel.fnt"
     }
-    with pytest.raises(ValueError, match="Native backend is not implemented: j835"):
-        generate("j835", tmp_path / "output")
-    assert not (tmp_path / "output").exists()
+    selected = generate("j835", tmp_path / "output")
+    assert selected["signatures"]
     build = tmp_path / "build"
-    result = subprocess.run(
+    subprocess.run(
         [
             "cmake",
             "-S",
@@ -188,11 +187,33 @@ def test_repentance_metadata_cannot_enable_an_incomplete_native_backend(tmp_path
             "-DISAAC_LAN_BUILD_ENGINE=OFF",
             "-DBUILD_TESTING=OFF",
         ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert build_profile(build) == selected
+
+
+def test_metadata_alone_cannot_enable_an_incomplete_native_backend(tmp_path):
+    metadata = backend_metadata("j835")
+    metadata["backend"] = "fixture"
+    directory = tmp_path / "src/engine/versions/fixture"
+    directory.mkdir(parents=True)
+    (directory / "profile.json").write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match="Native backend is not implemented: fixture"):
+        source_profile("fixture", root=tmp_path)
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.20)\nproject(backend_fixture NONE)\n"
+        f'include("{ROOT / "cmake/Backend.cmake"}")\n'
+    )
+    build = tmp_path / "build"
+    result = subprocess.run(
+        ["cmake", "-S", str(tmp_path), "-B", str(build), "-DISAAC_LAN_BACKEND=fixture"],
         capture_output=True,
         text=True,
     )
     assert result.returncode != 0
-    assert "Native backend j835 has metadata but no implementation" in result.stderr
+    assert "Native backend fixture has metadata but no implementation" in result.stderr
     assert not (build / "game-profile.json").exists()
 
 

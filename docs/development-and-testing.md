@@ -6,11 +6,11 @@ BUG 修复、需求新增和日常重构按影响范围执行离线回归与必�
 
 构建命令见[项目 README](https://github.com/BMingSY/isaac-lan/blob/main/README.md#源码构建)：C++20、Windows x86 工具链，以及指定版本的 Dear ImGui／MinHook 源码。CMake 默认启用 `BUILD_TESTING`，只构建产物可设为 `OFF`。
 
-原生后端由 `-DISAAC_LAN_BACKEND=j460` 在配置时选择，当前可选后端只有 `j460`；未知标识立即失败。每个后端在自己的 `sources.cmake`、`tests-portable.cmake` 和 `tests-native.cmake` 中登记实现与测试。不同后端使用独立构建目录，避免混用二进制和资料。
+原生后端在配置时通过 `-DISAAC_LAN_BACKEND=j460`（默认，忏悔＋ `1.9.7.17.J460`）或 `-DISAAC_LAN_BACKEND=j835`（忏悔 `1.7.9b.J835`）选择；未知标识和仅有元数据的未完成后端立即失败。两个版本使用独立构建目录，两端使用同一游戏版本和扩展构建，不能混联。原版的能力、资源与调用边界见 [J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md)。
 
-[`j835`](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835) 包含原版《忏悔》的版本／资源描述、存档编解码、会话原生绑定、输入设备／查询适配、暂停菜单和角色目录组件，以及 Lua 初始化参考，尚无可构建的完整后端。配置与版本生成器拒绝将其当成完整实现；状态和接口边界见 [J835 参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md)。
+后端自己的 `sources.cmake` 登记版本适配，通用实现由 [common/sources.cmake](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/sources.cmake) 统一登记。可移植后端检查位于 [common/tests-portable.cmake](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/tests-portable.cmake)；Windows 同时构建 [J460 专项夹具](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/tests-native.cmake)和 [NativeBackendTests.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/NativeBackendTests.cmake) 中的双版本组件夹具。夹具使用私有映像，不加载游戏程序；组件可独立检查，不以生成完整 DLL 代替原生行为验收。`common` 不能作为游戏版本选择。
 
-[NativeBackendTests.cmake](https://github.com/BMingSY/isaac-lan/blob/main/cmake/NativeBackendTests.cmake) 可以单独编译未完成后端的组件夹具；不加载游戏程序，也不生成该后端的可安装 DLL。后端内部的 [common](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/common) 实现不能当作独立游戏版本选择。
+实机工具以所选构建的 `game-profile.json` 确定资料目录、Lua 模块和启动条件。J835 没有忏悔＋的 Beta 确认选项；其 `testing.progress_fixture` 为空，J460 专用进度文件／内存夹具不得用于原版。无需解锁准备的开发场景可通过 [run_network_engine.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_network_engine.py) 在 `ProtectedLabs` 保护下执行，不传入 `--progress-fixture`。
 
 | 定向检查 | 离线范围 |
 | --- | --- |
