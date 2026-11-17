@@ -119,7 +119,9 @@ inline constexpr unsigned curses = 0xc, seedCurses = 0x1c3170;
 inline constexpr unsigned playerManager = 0x1ba40;
 inline constexpr unsigned players = 0x1ba50;
 inline constexpr unsigned stage = 0, stageType = 4;
-inline constexpr unsigned floorSeeds = 0x1bb1c, stateFlags = 0x1c3168;
+// Stage transport covers Seeds' 0x54-byte scalar prefix, not only its
+// fourteen floor seeds at +0x18. The following map head/count stay local.
+inline constexpr unsigned floorSeeds = 0x1bb04, stateFlags = 0x1c3168;
 inline constexpr unsigned pauseMenu = 0x10203c, console = 0x1bb60;
 inline constexpr unsigned fadeAlpha = 0x1c31a8, fadeAction = 0x1c31b0;
 inline constexpr unsigned restartHeldFrames = 0x1c31b4;

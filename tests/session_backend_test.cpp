@@ -57,7 +57,7 @@ constexpr unsigned stateOffset = 0xf34, continueFlag = 0x209c4, continueIntent =
 constexpr unsigned deleteIntent = 0x1ea814, cinematicIntent = 0x1ea830;
 constexpr unsigned menuIntent = 0x1ea818, menuTarget = 0x1ea81c;
 constexpr unsigned pauseOffset = 0x10203c, consoleOffset = 0x1bb60, consoleState = 0x20;
-constexpr unsigned floorSeeds = 0x1bb1c, stateFlags = 0x1c3168;
+constexpr unsigned floorSeeds = 0x1bb04, stateFlags = 0x1c3168;
 constexpr unsigned fadeAction = 0x1c31b0, fadeAlpha = 0x1c31a8, heldFrames = 0x1c31b4;
 constexpr unsigned achievementCount = 638, counterCount = 496, countersOffset = 0x2b8;
 constexpr int restartAction = 4, heldAction = 5;
@@ -550,11 +550,18 @@ void state() {
 #endif
     field<int>(game.data()) = 7;
     field<int>(game.data(), 4) = 2;
-    field<std::uint32_t>(game.data(), floorSeeds) = 123;
+    constexpr unsigned seedScalarBytes = 0x54;
+    constexpr std::array<std::uint32_t, 4> nativeOwners{0x13572468, 7, 0x24681357, 9};
+    // Native Seeds ends in an owning map, followed by another Game member.
+    // Neither pointer, count nor adjacent object may cross the stage wire.
+    std::memcpy(game.data() + floorSeeds + seedScalarBytes, nativeOwners.data(),
+                sizeof(nativeOwners));
+    for (unsigned i = 0; i < seedScalarBytes / sizeof(std::uint32_t); ++i)
+        field<std::uint32_t>(game.data(), floorSeeds + i * sizeof(std::uint32_t)) = 123 + i;
     field<std::uint32_t>(game.data(), stateFlags) = 456;
     auto stage = session::stage();
-    require(stage.level == 7 && stage.type == 2 && stage.seeds[0] == 123 &&
-                stage.stateFlags[0] == 456,
+    require(stage.level == 7 && stage.type == 2 && stage.seeds.front() == 123 &&
+                stage.seeds.back() == 143 && stage.stateFlags[0] == 456,
             "Stage capture");
     stage.level = 1;
     stage.seeds.fill(987);
@@ -564,6 +571,9 @@ void state() {
     require(applied.level == 7 && applied.seeds == stage.seeds &&
                 applied.stateFlags == stage.stateFlags,
             "Apply seeds and route flags without forcing the native transition");
+    require(std::memcmp(game.data() + floorSeeds + seedScalarBytes, nativeOwners.data(),
+                        sizeof(nativeOwners)) == 0,
+            "Stage synchronization overwrote native map ownership or an adjacent object");
 }
 void restart() {
     for (bool accepted : {false, true}) {
