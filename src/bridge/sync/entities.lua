@@ -18,7 +18,7 @@ return function(fields)
                 return (parent and parent.Type == types.ENTITY_PLAYER)
                     or (spawner and spawner.Type == types.ENTITY_PLAYER)
             end
-            local currentObjects = {}
+            local currentObjects, retained = {}, {}
             local removed = false
             -- Native entity pools are bounded. Free obsolete allocations before
             -- spawning replacements, or the factory can overwrite a retained one.
@@ -32,6 +32,7 @@ return function(fields)
                     and e.SubType == v[Entity.subtype]
                 then
                     currentObjects[env.key(e)] = true
+                    retained[v[Entity.id]] = e
                 end
             end
             for _, e in ipairs(env.entities()) do
@@ -46,12 +47,16 @@ return function(fields)
                 end
             end
             if removed then
+                retained = nil
                 env.reclaim()
             end
+            local spawned = false
             for _, v in ipairs(values) do
-                local e = env.ref(v[Entity.id])
+                local cached = retained and retained[v[Entity.id]]
+                local e = cached or env.ref(v[Entity.id])
                 if
                     e
+                    and not cached
                     and (
                         not e:Exists()
                         or e.Type ~= v[Entity.type]
@@ -64,6 +69,9 @@ return function(fields)
                 end
                 local registered = e ~= nil
                 if not e then
+                    -- Factory calls can retire retained allocations in bounded
+                    -- native pools. Never reuse borrowed refs across that boundary.
+                    retained, spawned = nil, true
                     -- Spawn subtype zero rolls a new collectible, even for an empty pedestal.
                     local subtype = v[Entity.type] == types.ENTITY_PICKUP
                             and v[Entity.variant] == pickups.PICKUP_COLLECTIBLE
@@ -83,31 +91,58 @@ return function(fields)
                     assert(optionalTear(v), "Replica spawn failed")
                 end
             end
-            for _, e in ipairs(env.entities()) do
-                if
-                    not currentObjects[env.key(e)]
-                    and e:Exists()
-                    and e.Type ~= types.ENTITY_PLAYER
-                then
-                    -- Remove implicit native segments before applying links.
-                    -- Membership uses allocations, independently of Mod GetData.
-                    if not (env.localEffect and env.localEffect(e)) then
-                        env.discard(e)
+            if spawned then
+                for _, e in ipairs(env.entities()) do
+                    if
+                        not currentObjects[env.key(e)]
+                        and e:Exists()
+                        and e.Type ~= types.ENTITY_PLAYER
+                    then
+                        -- Remove implicit native segments before applying links.
+                        -- Membership uses allocations, independently of Mod GetData.
+                        if not (env.localEffect and env.localEffect(e)) then
+                            env.discard(e)
+                        end
                     end
                 end
             end
             local missingTears = 0
+            -- The allocation/cleanup phase is complete. Resolve shared targets
+            -- once for this linking pass; nothing survives into the next view.
+            local linked, keys = {}, {}
+            local function ref(identifier)
+                if not identifier or identifier == 0 then
+                    return nil
+                end
+                if linked[identifier] == nil then
+                    linked[identifier] = env.ref(identifier) or false
+                end
+                return linked[identifier] or nil
+            end
+            local function link(e, name, identifier)
+                local target = ref(identifier)
+                local current = e[name]
+                if current and target then
+                    keys[identifier] = keys[identifier] or env.key(target)
+                    if env.key(current) == keys[identifier] then
+                        return
+                    end
+                end
+                if current or target then
+                    e[name] = target
+                end
+            end
             -- Native NPC spawns can allocate their own segments. Removing those extra
             -- entities unlinks their parent, so install authoritative links afterward.
             for _, v in ipairs(values) do
-                local e = env.ref(v[Entity.id])
+                local e = ref(v[Entity.id])
                 if e then
-                    e.Parent = env.ref(v[Entity.parent])
-                    e.SpawnerEntity = env.ref(v[Entity.spawner])
-                    e.Child = env.ref(v[Entity.child])
-                    e.Target = env.ref(v[Entity.target])
+                    link(e, "Parent", v[Entity.parent])
+                    link(e, "SpawnerEntity", v[Entity.spawner])
+                    link(e, "Child", v[Entity.child])
+                    link(e, "Target", v[Entity.target])
                     if env.link then
-                        env.link(e, v, env.ref)
+                        env.link(e, v, ref)
                     end
                 else
                     -- Native initialization can create poofs in the effect pool
