@@ -328,6 +328,7 @@ inline constexpr std::array<unsigned, 6> values{0x3b8, 0x3bc, 0x3c0, 0x3c4, 0x3c
 inline constexpr std::array<unsigned, 2> paths{0x3d0, 0x3dc};
 } // namespace laser
 namespace player {
+inline constexpr unsigned smeltedTrinkets = 0x1670;
 inline constexpr unsigned babySkin = 0x1a0c;
 inline constexpr unsigned lastBabySkin = 0x47;
 inline constexpr unsigned darkEsau = 0x1eb8;

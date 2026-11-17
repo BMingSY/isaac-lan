@@ -3,6 +3,7 @@
 #include "engine/versions/common/death_certificate_return.h"
 #include "engine/versions/j835/active_items.h"
 #include "engine/versions/j835/inventory_order.h"
+#include "engine/versions/j835/smelted_trinkets.h"
 #include "engine/versions/j835/entrypoints.h"
 #include "engine/versions/j835/layout.h"
 
@@ -56,5 +57,6 @@ const Bindings bindings{
     .chargeType = chargeType,
     .activeItems = j835::active_items::fields,
     .inventoryOrder = j835::inventory_order::fields,
+    .smeltedTrinkets = j835::smelted_trinkets::fields,
     .installCompatibility = native_certificate_return::install};
 } // namespace isaac::engine::native_items

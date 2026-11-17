@@ -86,6 +86,7 @@ const Bindings bindings{
         .gameNextVictoryLap = j835::entry::gameNextVictoryLap,
         .gameTriggerRKey = j835::entry::gameTriggerRKey,
         .gridEntityTrapdoorUpdate = j835::entry::gridEntityTrapdoorUpdate,
+        .gridEntityTntUpdate = j835::entry::gridEntityTntUpdate,
         .itemPoolGetCardEx = j835::entry::itemPoolGetCardEx,
         .itemPoolTaintedLostReturn = j835::entry::itemPoolTaintedLostReturn,
         .keeperPriceQueryReturn = j835::entry::keeperPriceQueryReturn,

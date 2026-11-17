@@ -10,6 +10,9 @@ for _, workload in ipairs(workloads) do
     for _, actor in ipairs(view.actors) do
         actor[fields.actor.inventory][fields.inventory.resources] = { 0, 0, 0, 0, 0, 0, 0 }
         actor[fields.actor.inventory][fields.inventory.trinkets] = {}
+        for field = fields.inventory.cards, fields.inventory.smeltedTrinkets do
+            actor[fields.actor.inventory][field] = false
+        end
         actor[fields.actor.poop] = false
         actor[fields.actor.craftingBag] = { "bag", false }
         actor[fields.actor.temporaryEffects] = { 0, 1, 2 }
@@ -38,6 +41,17 @@ for _, workload in ipairs(workloads) do
     view.actors[1][fields.actor.inventory][fields.inventory.items] = { { 25, 2 } }
     local _, changed = layers.split(view)
     assert(codec.encode(changed) ~= stableBytes, "Inventory change lost its revision")
+    actor[fields.actor.inventory][fields.inventory.items] = schema.unpack(
+        codec.decode(complete),
+        42
+    ).actors[1][fields.actor.inventory][fields.inventory.items]
+    actor[fields.actor.inventory][fields.inventory.smeltedTrinkets] =
+        string.pack(">I2I2I2I2", 1, 39, 2, 1)
+    local _, swallowed = layers.split(view)
+    assert(
+        codec.encode(swallowed) ~= stableBytes,
+        "Swallowed effects lost their dependency revision"
+    )
     local invalid = schema.unpack(codec.decode(dynamicBytes), 42)
     invalid.actors[1][fields.actor.entity][fields.entity.id] = -100
     assert(not pcall(layers.join, invalid, codec.decode(stableBytes)))

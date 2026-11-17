@@ -57,6 +57,7 @@ struct Bindings {
         unsigned gameNextVictoryLap;
         unsigned gameTriggerRKey;
         unsigned gridEntityTrapdoorUpdate;
+        unsigned gridEntityTntUpdate;
         unsigned itemPoolGetCardEx;
         unsigned itemPoolTaintedLostReturn;
         unsigned keeperPriceQueryReturn;

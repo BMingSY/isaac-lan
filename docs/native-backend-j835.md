@@ -100,6 +100,8 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 门包装仅引用现有动画，不能按忏悔＋的附加 Sprite 偏移访问原版对象。恢复已有门时验证其类型、索引和房间归属；清空槽表不销毁网格对象。原生创建失败恢复原目标索引。轨道数组全部校验后一次提交，空轨道同样恢复，不触及随后由游戏持有的 Sprite。房间变化后从当前 Game 重新解析对象，不保留跨房指针。
 
+TNT 更新入口为 `0x2ee310`，以 ECX 接收网格、无栈参数，受启动签名校验。共享房间组件仅在客机跳过该原生更新，避免本机倒计时改写权威动画或重复爆炸；主机与单人继续原生调用。网格的内存、渲染和销毁仍由游戏持有，不读写倒计时字段。
+
 ## 跟班组件与实体绘制准备
 
 [版本绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entity_visuals.cpp)向[共享实体视图](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_visuals.cpp)提供跟班组件与 Needle 绘制准备入口。Lua 名称、编码和权限遵循[能力契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#实体引用与房间数据)，不改变同步字段。实体身份来自 `Entity+0x3c` 的 8 字节借用 Sprite；附加数据位于 `Familiar+0xe18`，不能沿用 J460 的 `+0xee0`。
@@ -361,6 +363,8 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 | 离房激光 | 只处理玩家 `+0x13a0` 的原生激光引用，先 Remove，再以 fastcall `0x28cf00` 清空引用；不释放实体内存、不清除 `+0x1814` 的剩余持续时间 |
 
 桥接仅接受八字节借用 Sprite 包装、当前权威房间内已连接的活动玩家，并核对玩家列表、类型 `+0x28`、存在位 `+0x16a` 和控制器 `+0x154c`。精灵位于实体 `+0x3c`，初始种子为 `+0x344`；不向 Lua 暴露这些地址。配置目录通过 cdecl `0x27930` 取得，再由 thiscall `0x2fe5e0` 查询道具，包括原生生成道具的处理；字符串立即复制，仍由游戏管理其存储。
+
+`actor_smelted_trinkets` 使用[共享吞饰品组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/smelted_trinkets.h)，载荷与客机写入限制见[接口契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md#道具与效果)。J835 的 `Player+0x1670` 为游戏持有的向量，每项两个 `i16` 计数，普通／金色位于 `+0/+2`。容器遍历与计数操作的签名 `0x368cba/0x368c8d` 校验该布局。恢复先验证全部条目，再原位更新计数并清零省略项；不调整容量、不触发使用道具、不改持有饰品或历史条目。计数变化后的属性刷新由同步层执行。
 
 死亡证明的延迟返回使用[共享返回组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/death_certificate_return.cpp)和[J835 原生适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/death_certificate_return.cpp)。倒计时为 `Game+0x285234`，来源房间／有符号维度为 `+0x1878c/+0x18790`；返回边界 `0x2ce54e`、完成后续点 `0x2ce598` 受启动签名校验。主机视口已离开道具区时，只为这次返回借入仍在线的道具区玩家，使用上层转场 `0x2d07d0`；来源房间为 `-2` 时沿用原版规则将维度归零。没有在线道具区玩家时仅消费倒计时；单人、客机和视口仍在道具区时继续原生分支。
 

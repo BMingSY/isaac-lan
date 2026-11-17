@@ -76,6 +76,7 @@ const Bindings bindings{
         .gameNextVictoryLap = j460::entry::gameNextVictoryLap,
         .gameTriggerRKey = j460::entry::gameTriggerRKey,
         .gridEntityTrapdoorUpdate = j460::entry::gridEntityTrapdoorUpdate,
+        .gridEntityTntUpdate = j460::entry::gridEntityTntUpdate,
         .itemPoolGetCardEx = j460::entry::itemPoolGetCardEx,
         .itemPoolTaintedLostReturn = j460::entry::itemPoolTaintedLostReturn,
         .keeperPriceQueryReturn = j460::entry::keeperPriceQueryReturn,

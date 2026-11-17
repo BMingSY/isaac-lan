@@ -5,6 +5,9 @@
 // Layouts and native calling conventions belong to this backend.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t playerSmeltedTrinketCounters = 0x368c8d;
+inline constexpr std::uint32_t playerSmeltedTrinketVector = 0x368cba;
+inline constexpr std::uint32_t gridEntityTntUpdate = 0x2ee310;
 inline constexpr std::uint32_t spriteRender = 0x51e0;
 inline constexpr std::uint32_t spriteRenderLayer = 0x5250;
 inline constexpr std::uint32_t spriteRenderColor = 0x4079;

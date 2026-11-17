@@ -139,6 +139,50 @@ Address playerArgument(lua_State* L, bool snapshot = false) {
                ? actor
                : 0;
 }
+int smeltedTrinkets(lua_State* L) {
+    try {
+        const auto actor = playerArgument(L, true);
+        if (!actor)
+            throw std::runtime_error("Smelted trinkets require a listed player");
+        namespace smelted = engine::native_smelted_trinkets;
+        if (lua.getTop(L) == 1) {
+            const auto values = smelted::capture(binding.smeltedTrinkets, actor);
+            lan::Writer writer(lan::Message::world);
+            writer.u16(values.size());
+            for (const auto& entry : values) {
+                writer.u16(entry.id);
+                writer.u16(entry.counts.normal);
+                writer.u16(entry.counts.golden);
+            }
+            lua.pushLString(L, reinterpret_cast<const char*>(writer.bytes.data() + 1),
+                            writer.bytes.size() - 1);
+            return 1;
+        }
+        if (!runtime::replica())
+            throw std::runtime_error("Only replicas restore smelted trinkets");
+        std::size_t size = 0;
+        const auto bytes = lua.checkString(L, 2, &size);
+        lan::Reader reader({reinterpret_cast<const std::uint8_t*>(bytes), size});
+        const auto count = reader.u16();
+        if (count >= smelted::maxTypes)
+            throw std::runtime_error("Too many smelted trinkets");
+        smelted::State desired;
+        desired.reserve(count);
+        for (unsigned i = 0; i < count; ++i) {
+            const auto id = reader.u16(), normal = reader.u16(), golden = reader.u16();
+            if (normal > INT16_MAX || golden > INT16_MAX)
+                throw std::runtime_error("Invalid smelted trinket count");
+            desired.push_back(
+                {id, {static_cast<std::int16_t>(normal), static_cast<std::int16_t>(golden)}});
+        }
+        reader.finish();
+        lua.pushInteger(L, smelted::restore(binding.smeltedTrinkets, actor, desired) ? 1 : 0);
+    } catch (const std::exception& error) {
+        runtime::abort(error.what());
+        lua.pushBoolean(L, false);
+    }
+    return 1;
+}
 int inventoryOrder(lua_State* L) {
     try {
         const auto actor = playerArgument(L, true);
@@ -372,14 +416,15 @@ bool bind(lua_State* L, HMODULE module) {
                            S::pushInteger, S::pushBoolean, S::pushString, S::pushClosure,
                            S::setField, S::getTop, S::checkString, S::pushLString}))
         return false;
-    for (const auto& [key, fn] : std::array<std::pair<const char*, isaac::lua::Function>, 7>{
+    for (const auto& [key, fn] : std::array<std::pair<const char*, isaac::lua::Function>, 8>{
              {{"items_take_collectible", take},
               {"items_give_collectible", give},
               {"items_collectible_name", name},
               {"items_active_charge", activeCharge},
               {"items_add_active_charge", addActiveCharge},
               {"items_active_data", activeData},
-              {"actor_inventory_order", inventoryOrder}}}) {
+              {"actor_inventory_order", inventoryOrder},
+              {"actor_smelted_trinkets", smeltedTrinkets}}}) {
         lua.pushClosure(L, fn, 0);
         lua.setField(L, -2, key);
     }

@@ -2,6 +2,7 @@
 #include "engine/versions/common/item_bindings.h"
 #include "engine/versions/j460/active_items.h"
 #include "engine/versions/j460/inventory_order.h"
+#include "engine/versions/j460/smelted_trinkets.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include "engine/versions/j460/cursed_mist.h"
@@ -48,5 +49,6 @@ const Bindings bindings{
     .chargeType = chargeType,
     .activeItems = j460::active_items::fields,
     .inventoryOrder = j460::inventory_order::fields,
+    .smeltedTrinkets = j460::smelted_trinkets::fields,
     .installCompatibility = installCompatibility};
 } // namespace isaac::engine::native_items

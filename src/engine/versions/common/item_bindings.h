@@ -3,6 +3,7 @@
 #include <optional>
 #include "engine/versions/common/active_items.h"
 #include "engine/versions/common/inventory_order.h"
+#include "engine/versions/common/smelted_trinkets.h"
 
 namespace isaac::engine::native_items {
 // Backend-private layouts and calls. Optional pickup pool identifies the native
@@ -49,6 +50,7 @@ struct Bindings {
     int (*chargeType)(std::uintptr_t, void*, int);
     native_active_items::Layout activeItems;
     native_inventory_order::Layout inventoryOrder;
+    native_smelted_trinkets::Layout smeltedTrinkets;
     bool (*installCompatibility)(std::uintptr_t) = nullptr;
 };
 extern const Bindings bindings;

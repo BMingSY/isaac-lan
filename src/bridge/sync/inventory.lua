@@ -170,6 +170,8 @@ return function(fields)
                 } or false,
                 [Inventory.activeData] = env.activeData and env.activeData(p) or false,
                 [Inventory.order] = env.order and env.order(p) or false,
+                [Inventory.smeltedTrinkets] = env.smeltedTrinkets and env.smeltedTrinkets(p)
+                    or false,
             }
         end
         local function applyResources(p, v)
@@ -273,6 +275,16 @@ return function(fields)
                         end
                     end
                     break
+                end
+            end
+            if v[Inventory.smeltedTrinkets] then
+                local changed = assert(
+                    env.smeltedTrinkets and env.smeltedTrinkets(p, v[Inventory.smeltedTrinkets]),
+                    "Cannot restore smelted trinkets"
+                )
+                if changed ~= 0 then
+                    p:AddCacheFlags(env.allCacheFlags)
+                    p:EvaluateItems()
                 end
             end
             applyResources(p, v)
