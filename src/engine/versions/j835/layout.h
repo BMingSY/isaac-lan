@@ -37,6 +37,7 @@ inline constexpr unsigned progress = 0x14, scene = 0x8;
 inline constexpr unsigned stringTable = 0x4a234;
 inline constexpr unsigned characterConfigs = 0x29f90;
 inline constexpr unsigned saveState = 0xf34;
+inline constexpr unsigned saveChecksum = 0xf28;
 inline constexpr unsigned saveSlot = 0x10, continueAvailable = 0x209c4;
 inline constexpr unsigned continueRequested = 0x1ea6c1, deleteSaveRequested = 0x1ea814;
 inline constexpr unsigned cinematicActive = 0x1ea830;
@@ -59,6 +60,7 @@ inline constexpr native_progress::Layout fields{achievements, achievementCount, 
 } // namespace progress
 namespace gameState {
 inline constexpr unsigned stream = 0x1fac8;
+inline constexpr unsigned checksumXor = 0x96696996;
 // Local primary/backup and Steam primary/backup MSVC strings. Native Clear
 // preserves these; Read consults them only for logging and failure deletion.
 inline constexpr std::array<unsigned, 4> fileNames{0x1fa60, 0x1fa78, 0x1fa98, 0x1fab0};

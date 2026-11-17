@@ -21,6 +21,7 @@ namespace backend = isaac::engine::j460;
 namespace {
 constexpr unsigned imageSize = 0x900000, stateSize = 0x21000;
 constexpr std::uintptr_t previousStream = 0x12345678;
+constexpr unsigned previousChecksum = 0x13579bdf;
 constexpr std::array<std::uint8_t, 24> payload{'s', 'a', 'v', 'e', 1, 2,  3,  4,  5,  6,  7,  8,
                                                9,   10,  11,  12,  0, 17, 18, 19, 20, 21, 22, 23};
 enum class Mode { normal, reject, shortRead, badSeek, overflow, writeOnRead, throwError };
@@ -76,6 +77,14 @@ bool __attribute__((thiscall)) writer(void* state, void* context) {
 bool readState(void* state, void* context) {
     ++reads;
     const auto stream = contextStream(state, context);
+#ifdef ISAAC_LAN_TEST_J835
+    // Model the mandatory J835 disk-save checksum comparison independently
+    // of its production layout. The reader must still reject invalid bytes.
+    std::uint32_t trailer;
+    std::memcpy(&trailer, payload.data() + payload.size() - sizeof(trailer), sizeof(trailer));
+    require(at<unsigned>(manager.data(), 0xf28) == (trailer ^ 0x96696996),
+            "Memory restore compared against the unrelated last disk save");
+#endif
     for (const auto offset : backend::layout::gameState::fileNames)
         require(at<char>(state, offset) == 0 && at<unsigned>(state, offset + 16) == 0 &&
                     at<unsigned>(state, offset + 20) == 15,
@@ -86,7 +95,8 @@ bool readState(void* state, void* context) {
     const auto read = method<Transfer>(stream, 5);
     const auto count = mode == Mode::shortRead ? actual.size() : payload.size();
     require(read(stream, actual.data(), 1, count) == payload.size(), "Unexpected read count");
-    require(std::equal(payload.begin(), payload.end(), actual.begin()), "Native bytes changed");
+    if (!std::equal(payload.begin(), payload.end(), actual.begin()))
+        return false;
     require(method<Eof>(stream, 4)(stream), "EOF vtable slot differs");
     const auto seek = method<Seek>(stream, 3);
     seek(stream, -4, 2);
@@ -130,6 +140,9 @@ void prepare(void* state, Mode next = Mode::normal) {
     clears = reads = writes = captures = 0;
     std::memset(state, 0xa5, stateSize);
     at<std::uintptr_t>(state, backend::layout::gameState::stream) = previousStream;
+#ifdef ISAAC_LAN_TEST_J835
+    at<unsigned>(manager.data(), 0xf28) = previousChecksum;
+#endif
     // Exact-byte restoration includes strings with heap storage and embedded
     // nulls; the extension must neither allocate nor free those native buffers.
     for (const auto offset : backend::layout::gameState::fileNames)
@@ -138,6 +151,10 @@ void prepare(void* state, Mode next = Mode::normal) {
 void checkRestored(const std::vector<std::uint8_t>& before) {
     require(std::memcmp(expectedState, before.data(), stateSize) == 0,
             "Borrowed native stream/filename fields were not restored");
+#ifdef ISAAC_LAN_TEST_J835
+    require(at<unsigned>(manager.data(), 0xf28) == previousChecksum,
+            "Memory restore retained a checkpoint's checksum in native disk-save state");
+#endif
 }
 void contract() {
     const auto base = reinterpret_cast<std::uintptr_t>(image);
@@ -167,6 +184,12 @@ void contract() {
                     "Native/stream read failure was ignored");
             checkRestored(before);
         }
+        mode = Mode::normal;
+        auto damaged = encoded;
+        damaged[16] ^= 1;
+        require(!isaac::save::decodeAt(base, reinterpret_cast<std::uintptr_t>(state), damaged),
+                "Memory restore ignored native rejection of a damaged body with the same trailer");
+        checkRestored(before);
         for (auto next : {Mode::reject, Mode::overflow}) {
             mode = next;
             require(isaac::save::encodeAt(base, reinterpret_cast<std::uintptr_t>(state)).empty(),

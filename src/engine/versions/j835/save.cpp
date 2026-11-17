@@ -38,6 +38,24 @@ bool decodeAt(std::uintptr_t image, std::uintptr_t gameState, std::span<const st
         streamField(gameState), bytes, [&] { clear(reinterpret_cast<void*>(gameState)); },
         [&](stream::Context& context) {
             const stream::FileNames names(gameState, backend::layout::gameState::fileNames);
+            // J835 always compares a valid stream's checksum with the last
+            // local disk save. Unlike J460 it has no checkProgress argument.
+            // Borrow that scalar for this in-memory read; the native reader
+            // still computes and validates the stream's own checksum first.
+            const auto manager =
+                *reinterpret_cast<std::uintptr_t*>(image + backend::globals::manager);
+            auto& expected =
+                *reinterpret_cast<std::uint32_t*>(manager + backend::layout::manager::saveChecksum);
+            struct Restore {
+                std::uint32_t& field;
+                const std::uint32_t previous;
+                ~Restore() {
+                    field = previous;
+                }
+            } restore{expected, expected};
+            std::uint32_t trailer;
+            std::memcpy(&trailer, bytes.data() + bytes.size() - sizeof(trailer), sizeof(trailer));
+            expected = trailer ^ backend::layout::gameState::checksumXor;
             return read(reinterpret_cast<void*>(gameState), &context);
         });
 }
