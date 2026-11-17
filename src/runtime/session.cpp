@@ -1216,7 +1216,7 @@ int characterList(lua_State* L) {
     }
     lua.createTable(L, 0, catalogue.entries.size());
     for (const auto& entry : catalogue.entries) {
-        lua.createTable(L, 0, 5);
+        lua.createTable(L, 0, 6);
         for (const auto& [key, value] :
              {std::pair{"name", &entry.name}, std::pair{"animation", &entry.animation},
               std::pair{"portraitPath", &entry.portraitPath},
@@ -1226,6 +1226,10 @@ int characterList(lua_State* L) {
         }
         lua.pushBoolean(L, entry.tainted);
         lua.setField(L, -2, "tainted");
+        if (entry.counterpart) {
+            lua.pushInteger(L, *entry.counterpart);
+            lua.setField(L, -2, "counterpart");
+        }
         lua.setField(L, -2, std::to_string(entry.type).c_str());
     }
     return 2;

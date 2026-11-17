@@ -170,6 +170,9 @@ _IsaacLanModules = {
     ["presentation/animation_skip"] = dofile(root .. "/src/bridge/presentation/animation_skip.lua"),
     ["presentation/update_notice"] = dofile(root .. "/src/bridge/presentation/update_notice.lua"),
     ["presentation/menu_model"] = dofile(root .. "/src/bridge/presentation/menu_model.lua"),
+    ["presentation/menu_characters"] = dofile(
+        root .. "/src/bridge/presentation/menu_characters.lua"
+    ),
     ["core/room_types"] = dofile(root .. "/src/bridge/core/room_types.lua"),
     ["core/endpoint"] = dofile(root .. "/src/bridge/core/endpoint.lua"),
     ["presentation/ping"] = dofile(root .. "/src/bridge/presentation/ping.lua"),
@@ -232,25 +235,34 @@ draw(38)
 draw(38)
 local count = #commands
 draw(39)
+draw(69)
 assert(#commands == count)
 draw(40)
 draw(40)
 draw(39)
 draw()
 assert(status.challenge == 0 and labels["普通"] and labels["继续上次联机"])
--- Ordinary character cycling uses the personal save's list, with catalog names.
+-- The same E/menu shoulder event switches groups; arrows stay in the group.
 _IsaacLanMenuOpen(true)
 status.choice0 = 0
-draw(39)
+catalog["0"].counterpart, catalog["23"].counterpart = 23, 0
+draw(69)
 draw()
 assert(status.choice0 == 23 and labels["里·该隐"])
 assert(renderedPortraits[1][1] == "native-tainted.anm2" and renderedPortraits[1][2] == "03_Cain")
+draw(39)
+draw()
+assert(status.choice0 == 23 and labels["随机里角色"])
+assert(renderedPortraits[1][2] == "00_Random")
+draw(69)
+draw()
+assert(labels["随机角色"] and not labels["随机里角色"])
 draw(39)
 assert(status.choice0 == 0)
 draw()
 assert(labels["以撒"] and not labels["Isaac"])
 characters = { 0 }
-draw(39)
+draw(69)
 assert(status.choice0 == 0)
 characters = { 0, 23 }
 -- Native metadata and ordering include dynamically registered Mod roles.
@@ -283,11 +295,17 @@ end
 assert(nameRenders == 2, "Long Mod name did not fit both the row and player card")
 assert(renderedPortraits[1][1] == "mod-menu.anm2" and renderedPortraits[1][2] == "目录角色")
 draw(39)
+draw()
+assert(status.choice0 == 4096 and labels["随机角色"])
+draw(69)
+draw(39)
 assert(status.choice0 == 23)
 draw(39)
 draw()
 assert(status.choice0 == 41 and labels["无菜单画像"])
 assert(renderedPortraits[1][2] == "00_Random")
+draw(39)
+draw(69)
 draw(39)
 assert(status.choice0 == 0)
 -- Mod names remain untouched even when they match a vanilla English name.
@@ -373,7 +391,8 @@ assert(labels["保存并结束联机"])
 local actions = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     _IsaacLan.net_phases(),
     _IsaacLan.net_commands(),
-    _IsaacLanModules["core/endpoint"]
+    _IsaacLanModules["core/endpoint"],
+    _IsaacLanModules["presentation/menu_characters"]()
 )
 local sent, hidden = {}, 0
 local deps = {
@@ -537,7 +556,8 @@ local phaseValues = dofile(root .. "/tests/fixtures/net_phases.lua")
 local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     phaseValues,
     dofile(root .. "/tests/fixtures/net_commands.lua"),
-    _IsaacLanModules["core/endpoint"]
+    _IsaacLanModules["core/endpoint"],
+    _IsaacLanModules["presentation/menu_characters"]()
 )
 for _, host in ipairs({ 0, 1 }) do
     local selected

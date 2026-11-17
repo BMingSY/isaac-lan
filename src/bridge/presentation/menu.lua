@@ -18,11 +18,25 @@ local renderRestart = _IsaacLanModules["presentation/restart"](drawVote)
 local renderSkip = _IsaacLanModules["presentation/animation_skip"](drawVote)
 local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
 -- menu_key reports Windows virtual-key codes from the native frontend.
-local Key =
-    { escape = 27, enter = 13, up = 38, down = 40, tab = 9, space = 32, left = 37, right = 39 }
+local Key = {
+    escape = 27,
+    enter = 13,
+    up = 38,
+    down = 40,
+    tab = 9,
+    space = 32,
+    left = 37,
+    right = 39,
+    toggle = 69,
+}
 local renderUpdateNotice = _IsaacLanModules["presentation/update_notice"](Key, _IsaacLan)
-local model =
-    _IsaacLanModules["presentation/menu_model"](Phase, Command, _IsaacLanModules["core/endpoint"])
+local characters = _IsaacLanModules["presentation/menu_characters"]()
+local model = _IsaacLanModules["presentation/menu_model"](
+    Phase,
+    Command,
+    _IsaacLanModules["core/endpoint"],
+    characters
+)
 local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
 local challenges = _IsaacLan.net_challenges()
 local roomOptions = _IsaacLan.net_room_options()
@@ -80,6 +94,10 @@ local characterNames = {
     [PlayerType.PLAYER_THESOUL_B] = "里·灵魂",
 }
 local function character(id)
+    if id == characters.random then
+        return ui.randomCharacter and ui.randomCharacter.tainted and "随机里角色"
+            or "随机角色"
+    end
     local entry = characterCatalog[tostring(id)]
     return characterNames[id] or (entry and entry.name) or ("角色 " .. id)
 end
@@ -226,6 +244,7 @@ function _IsaacLanMenuRender(
             visible = false
         end
         ui.selection, ui.editing, ui.lastPhase = 1, nil, phase
+        ui.randomCharacter = nil
         if
             phase ~= Phase.lobby
             and (ui.page == "rules" or ui.page == "autoTeleport" or ui.page == "challenges")
@@ -307,6 +326,7 @@ function _IsaacLanMenuRender(
         command = _IsaacLanCommand,
         native = _IsaacLan,
         character = character,
+        catalog = characterCatalog,
         accent = amber,
         options = roomOptions,
         hide = function()
@@ -402,6 +422,9 @@ function _IsaacLanMenuRender(
             elseif item.change and (key == Key.left or key == Key.right) then
                 activated = true
                 item.change(key == Key.left and -1 or 1)
+            elseif item.toggle and key == Key.toggle then
+                activated = true
+                item.toggle()
             end
         end
         local label = item.label
@@ -462,6 +485,9 @@ function _IsaacLanMenuRender(
         if i < count then
             local id = status[(phase == Phase.lobby and "choice" or "character") .. i] or 0
             local marks = phase == Phase.lobby and status["marks" .. i] or nil
+            if phase == Phase.lobby and i == localSlot and ui.randomCharacter then
+                id, marks = characters.random, nil
+            end
             local portraitX = x + (marks and 34 or 63)
             portrait(id):Render(pos(portraitX, y + 45))
             centered(character(id), portraitX, y + 66, 10, nil, marks and 60 or 110)
@@ -528,6 +554,9 @@ function _IsaacLanMenuRender(
             footerY,
             10
         )
+        if rows[ui.selection] and rows[ui.selection].toggle and rows[ui.selection].enabled then
+            text("E / RB：表／里", 300, footerY, 10)
+        end
     elseif phase == Phase.running then
         text("共同楼层 · 分头探索", 25, footerY, 10)
     else

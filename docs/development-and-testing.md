@@ -74,6 +74,8 @@ ctest --test-dir build-core --output-on-failure
 | Windows 传输 | IPv4／IPv6 UDP、双栈域名与回退、输入事件、积压、重连、事务顺序及 UDP 丢包／乱序 | 不启动游戏 |
 | 隔离实机／正常操作 | 原生机制、入口与连续画面 | 结果限定于所用版本、夹具和采样范围 |
 
+菜单选角的定向检查为 `presentation.menu-characters`、`bridge.challenge_menu`、`native.character-catalog` 和 `native.frontend-menu`，覆盖表／里分组、原版与 Mod 配对、个人可选范围、随机准备、延迟确认、挑战锁定和退出清理。实机夹具 [state_character_menu.lua](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_character_menu.lua) 在同一对隔离进程内操作两组随机项并开局，核对双端准备结果与实际角色；需要至少一对已解锁角色，可加载 [registered_characters](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures/registered_characters)。通过 `run_network_engine.py` 的 `--frontend --menu-start` 执行，使用受保护的隔离资料、独立端口及 `--heap-check --native-record-both`。该夹具注入菜单按键事件，物理键盘与手柄仍需单独核对。
+
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
 
 实体尺寸恢复的定向检查为 `bridge.entity-codec` 和 Windows `native.entity-size`，覆盖无 XML 配置的实体、重复尺寸、实际尺寸变化、原有碰撞形状与非法输入拒绝。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case entity-size --case entity-fields --mod <Mod目录> --heap-check --record`，在同一对进程验证换层后的复活机、分房重聚、检查点重连及常规字段读写对照；用 Allstars 的旧实体表可覆盖配置缺失路径。Mod 文件只复制到隔离目录，不修改原安装；未订阅的创意工坊副本应准备为无 Workshop ID 的本地测试元数据，避免游戏自动移除它，保留 Lua 和资源文件原样。

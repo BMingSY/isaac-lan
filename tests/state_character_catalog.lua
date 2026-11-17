@@ -261,6 +261,7 @@ function _IsaacLanFrame()
     assert(done or now - startAt < 180000, "Native character case stalled")
     return status
 end
+local menuGroup, menuRandom
 function _IsaacLanMenuRender(
     available,
     visible,
@@ -285,18 +286,38 @@ function _IsaacLanMenuRender(
             and choice ~= expected(ordinal)
             and now >= nextKeyAt
         then
-            local choices = checkCatalog()
-            local index
-            for i, id in ipairs(choices) do
-                if id == choice then
-                    index = i
-                    break
-                end
+            local choices, catalog = checkCatalog()
+            local entry = catalog[tostring(choice)]
+            local target = catalog[tostring(expected(ordinal))].tainted
+            if menuSteps == 0 then
+                menuGroup, menuRandom = entry.tainted, false
             end
-            assert(index, "Lobby selected a character outside the native list")
-            pendingChoice = choices[index % #choices + 1]
-            nextKeyAt, key, menuSteps = now + 250, 39, menuSteps + 1
-            assert(menuSteps <= #choices, "Native menu failed to reach the requested Mod character")
+            if menuGroup ~= target then
+                key, menuGroup = 69, target
+                for _, id in ipairs(choices) do
+                    if id == entry.counterpart then
+                        pendingChoice = id
+                    end
+                end
+                menuRandom = not pendingChoice
+            else
+                local group, index = {}, 0
+                for _, id in ipairs(choices) do
+                    if catalog[tostring(id)].tainted == menuGroup then
+                        group[#group + 1] = id
+                        if id == choice and not menuRandom then
+                            index = #group
+                        end
+                    end
+                end
+                pendingChoice = group[(index + 1) % (#group + 1)]
+                menuRandom, key = not pendingChoice, 39
+            end
+            nextKeyAt, menuSteps = now + 250, menuSteps + 1
+            assert(
+                menuSteps <= #choices + 2,
+                "Native menu failed to reach the requested Mod character"
+            )
         end
     end
     return baseMenu(available, visible, key, typed, mx, my, clicked, addresses, networkError)
