@@ -18,6 +18,7 @@ local tick, renders, linked, chosen, finished = 0, 0, false, false, false
 local samples, tracked, lastRender = {}, {}, nil
 local measured, origin, other, floorSeed = false, nil, nil, nil
 local checkedViews, afterFloor, lastChecked = 0, 0, -math.huge
+local populationTick = -math.huge
 local comboLasers = 0
 local observer = RegisterMod("Projectile pressure observations", 1)
 local function observeLaser()
@@ -61,6 +62,13 @@ local function report()
         assert(metrics.render and metrics.render.count >= 100, "Insufficient steady frames")
         local views = metrics[config.host and "capture" or "apply"]
         assert(views and views.count >= 100, "Insufficient completed views")
+        assert(
+            metrics.tears
+                and metrics.tears.count >= 3
+                and metrics.lasers
+                and metrics.lasers.count >= 3,
+            "Insufficient projectile population observations"
+        )
         for _, stat in pairs(metrics) do
             stat.mean = stat.sum / stat.count
             stat.sum = nil
@@ -119,7 +127,8 @@ function _IsaacLanFrame()
             sample("sync_ms", status.sync1 or 0)
         end
         local case, _, elapsed = phase()
-        if elapsed >= warmup and tick % 30 == 0 then
+        if elapsed >= warmup and tick >= populationTick + 30 then
+            populationTick = tick
             local tears, lasers = 0, 0
             for _, e in ipairs(Isaac.GetRoomEntities()) do
                 if e.Type == EntityType.ENTITY_TEAR then
