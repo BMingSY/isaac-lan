@@ -3,6 +3,7 @@ return function(root, native, modules)
     local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
     RoomType = RoomType or enums.RoomType
     TrinketType = TrinketType or enums.TrinketType
+    CollectibleType = CollectibleType or enums.CollectibleType
     DoorSlot = DoorSlot or enums.DoorSlot
     RoomShape = RoomShape or enums.RoomShape
     GridRooms = GridRooms or enums.GridRooms
