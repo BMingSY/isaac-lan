@@ -5,8 +5,11 @@ return function(root)
         dofile(root .. "/src/bridge/sync/fields.lua")
     )(enums.EntityType, enums.PickupVariant)
     local fixture, allocations, refs, spawned, removed, room = {}, {}, {}, 0, 0, "0:1"
+    local linkNames = { Parent = true, SpawnerEntity = true, Child = true, Target = true }
+    local linkWrites = 0
     local function new(id, kind, variant, subtype, selectedRoom)
-        local e = {
+        local links = {}
+        local e = setmetatable({
             Type = kind,
             Variant = variant,
             SubType = subtype,
@@ -15,7 +18,19 @@ return function(root)
             identifier = id,
             alive = true,
             allocated = true,
-        }
+        }, {
+            __index = function(_, name)
+                return links[name]
+            end,
+            __newindex = function(self, name, value)
+                if linkNames[name] then
+                    linkWrites = linkWrites + 1
+                    links[name] = value
+                else
+                    rawset(self, name, value)
+                end
+            end,
+        })
         function e:Exists()
             return self.alive
         end
@@ -34,9 +49,14 @@ return function(root)
     end
     function fixture.reset()
         allocations, refs, spawned, removed, room = {}, {}, 0, 0, "0:1"
+        linkWrites = 0
         -- An unrelated player and a second room must survive reconciliation.
         refs[-1] = new(-1, 1, 0, 0, room)
         refs[900] = new(900, 10, 0, 0, "0:2")
+    end
+    fixture.ref = ref
+    function fixture.linkWrites()
+        return linkWrites
     end
     function fixture.apply(
         selectedRoom,
