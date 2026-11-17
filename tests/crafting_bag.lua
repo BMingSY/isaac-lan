@@ -305,7 +305,12 @@ local function environment()
         return {
             sameItems = module("sync/inventory")(modules["sync/fields"])({}).sameItems,
             capture = function(p)
-                return { 23, {}, {}, {}, {}, {}, {}, {}, p.ghost }
+                local value = { 23, {}, {}, {}, {}, {}, {}, {}, p.ghost }
+                local inventory = modules["sync/fields"].inventory
+                for field = inventory.curse, inventory.smeltedTrinkets do
+                    value[field] = false
+                end
+                return value
             end,
             apply = function(p, value)
                 -- Reproduce native inventory/character setters clearing private state.
