@@ -145,17 +145,23 @@ function _IsaacLanFrame()
         and not finished
     then
         if options.verify then
-            assert(
-                config.host or checkedViews > 20 and afterFloor >= 2,
-                "Missing link/cleanup observations: views="
-                    .. checkedViews
-                    .. " postFloor="
-                    .. afterFloor
-            )
+            -- The verified network clock can lead the last applied view during
+            -- floor preparation. Wait for actual post-floor observations.
+            if not config.host and (checkedViews <= 20 or afterFloor < 2) then
+                assert(
+                    tick < firstTick + duration * #cases + 750,
+                    "Missing link/cleanup observations: views="
+                        .. checkedViews
+                        .. " postFloor="
+                        .. afterFloor
+                )
+                return status
+            end
             Isaac.DebugString("LAN_PROJECTILE_VERIFY " .. json.encode({
                 role = config.host and "host" or "client",
                 checked_views = checkedViews,
                 after_floor = afterFloor,
+                last_checked = lastChecked ~= -math.huge and lastChecked or nil,
             }))
         end
         finished = true
