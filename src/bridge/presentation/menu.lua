@@ -38,6 +38,7 @@ local model = _IsaacLanModules["presentation/menu_model"](
     characters
 )
 local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
+local CHARACTER_SWAP_ICON_LAYER, CHARACTER_SWAP_KEY_LAYER = 1, 2
 local challenges = _IsaacLan.net_challenges()
 local roomOptions = _IsaacLan.net_room_options()
 local idle = model.idle
@@ -142,7 +143,7 @@ local function load()
     sprite("portraits", root .. "characterportraits.anm2", "01_Isaac")
     sprite("marks", "gfx/ui/completion_widget.anm2", "Idle")
     sprite("characterSwap", root .. "pageswapwidget.anm2", "Idle")
-    assets.characterSwap.Scale = Vector(0.5, 0.5)
+    assets.characterSwap.Scale = Vector(0.4, 0.4)
     sprite("fill", "gfx/ui/bossoverlay_whiteout.anm2", "Fade")
     assets.fill:SetFrame("Fade", 15)
     for _, size in ipairs({ 10, 12, 16 }) do
@@ -413,7 +414,7 @@ function _IsaacLanMenuRender(
             ui.selection = i
             if item.enabled and not activated then
                 activated = true
-                if item.toggle and hit(48 + shift, y - 6, 32, 24) then
+                if item.toggle and hit(160 + shift, y - 3, 24, 18) then
                     if item.canToggle then
                         item.toggle()
                     end
@@ -442,9 +443,11 @@ function _IsaacLanMenuRender(
         end
         local labelX, maxWidth = 49 + shift, 138
         if item.toggle then
-            labelX, maxWidth = 88 + shift, 99
-            assets.characterSwap.Color = Color(1, 1, 1, item.canToggle and 1 or 0.35)
-            assets.characterSwap:Render(pos(63 + shift, y + 5))
+            maxWidth = 105
+            assets.characterSwap.Color = Color(0.65, 0.65, 0.65, item.canToggle and 0.65 or 0.3)
+            local hint = pos(173 + shift, y + 6)
+            assets.characterSwap:RenderLayer(CHARACTER_SWAP_ICON_LAYER, hint)
+            assets.characterSwap:RenderLayer(CHARACTER_SWAP_KEY_LAYER, hint)
         end
         local size = assets[12]:GetStringWidthUTF8(label) > maxWidth and 10 or 12
         text(label, labelX, y, size, item.color or (item.enabled and ink or faded), maxWidth)

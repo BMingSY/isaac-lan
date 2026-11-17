@@ -51,13 +51,15 @@ Sprite = function()
         Render = function(self, position)
             if self.path == "gfx/ui/completion_widget.anm2" then
                 renderedMarks[#renderedMarks + 1] = { table.unpack(self.layers) }
-            elseif self.path == "gfx/ui/main menu/pageswapwidget.anm2" then
-                renderedSwitches[#renderedSwitches + 1] = position
             elseif self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
                 renderedPortraits[#renderedPortraits + 1] = { self.path, self.animation }
             end
         end,
-        RenderLayer = noop,
+        RenderLayer = function(self, _, position)
+            if self.path == "gfx/ui/main menu/pageswapwidget.anm2" then
+                renderedSwitches[#renderedSwitches + 1] = position
+            end
+        end,
         SetLayerFrame = function(self, layer, frame)
             self.layers = self.layers or {}
             self.layers[layer + 1] = frame
@@ -262,7 +264,7 @@ assert(renderedPortraits[1][2] == "00_Random")
 draw(69)
 draw()
 assert(status.choice0 == 0 and status.random0 and labels["?"])
-assert(#renderedSwitches == 1 and renderedSwitches[1].X < labelPositions["?"].x)
+assert(#renderedSwitches == 2 and renderedSwitches[1].X > labelPositions["?"].x)
 assert(not labels["E / RB：表／里"])
 -- Both player cards stay anonymous after ready, and completion marks stay hidden.
 status.random1, status.ready1, status.ready0 = true, 1, 1
@@ -306,7 +308,7 @@ for _, label in ipairs(scaledLabels) do
         nameRenders = nameRenders + 1
         local width = utf8.len(longName) * 8 * label.scale
         assert(label.scale > 0 and label.scale < 1)
-        assert(width <= (label.x == 88 and 99 or 110) + 0.001)
+        assert(width <= (label.x == 49 and 105 or 110) + 0.001)
     end
 end
 assert(nameRenders == 2, "Long Mod name did not fit both the row and player card")
