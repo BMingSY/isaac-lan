@@ -34,7 +34,7 @@ def main():
         parser.error("Require port 1024..65534 and one-way latency 0..500 ms")
     output = args.output.resolve()
     labs = validate_labs([args.host, args.client], output)
-    idle(labs, exclusive=True)
+    idle(labs, exclusive=not args.verify)
     validate_startup(labs)
     output.mkdir(parents=True, exist_ok=False)
     protected = ProtectedLabs(labs, output)
@@ -84,7 +84,7 @@ def main():
                     for line in path.read_text(errors="replace").splitlines()
                     if "LAN_PROJECTILE_PRESSURE {" in line
                 ]
-        idle(labs, exclusive=True)
+        idle(labs, exclusive=not args.verify)
     finally:
         finish_run(protected, report, output)
     print(json.dumps({"passed": report["passed"], "restored": report["restored"]}))

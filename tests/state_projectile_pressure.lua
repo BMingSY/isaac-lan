@@ -59,6 +59,8 @@ local function report()
     for index, case in ipairs(cases) do
         local metrics = assert(samples[index], "Missing pressure phase: " .. case.name)
         assert(metrics.render and metrics.render.count >= 100, "Insufficient steady frames")
+        local views = metrics[config.host and "capture" or "apply"]
+        assert(views and views.count >= 100, "Insufficient completed views")
         for _, stat in pairs(metrics) do
             stat.mean = stat.sum / stat.count
             stat.sum = nil
@@ -173,8 +175,14 @@ local function setup(case)
         player:ChangePlayerType(case.combo and PlayerType.PLAYER_KEEPER or PlayerType.PLAYER_ISAAC)
         for i = 0, Game():GetNumPlayers() - 1 do
             local p = Isaac.GetPlayer(i)
-            p.Position, p.Velocity = Vector(100, 220 + i * 60), Vector.Zero
-            p:SetMinDamageCooldown(100000)
+            -- Later correctness phases split the players into different rooms.
+            if
+                tick <= firstTick + duration * #cases
+                or p.ControllerIndex == player.ControllerIndex
+            then
+                p.Position, p.Velocity = Vector(100, 220 + i * 60), Vector.Zero
+                p:SetMinDamageCooldown(100000)
+            end
         end
         if case.combo then
             for _, item in ipairs(items) do
@@ -290,6 +298,7 @@ local function verifyLinks(bytes, t, stable)
             Target = fields.entity.target,
         }) do
             local expected, actual = refs[value[field]], entity[name]
+            assert(value[field] == 0 or expected, "Missing authoritative link target")
             assert(
                 (not actual and not expected)
                     or (actual and expected and GetPtrHash(actual) == GetPtrHash(expected)),
