@@ -2,6 +2,7 @@ local root = assert(arg[1])
 local routeFactory = dofile(root .. "/src/bridge/compat/routes/challenge_goal.lua")
 local coordinator = dofile(root .. "/src/bridge/runtime/challenges.lua")
 local stage, kind, clear, enemy = 11, 0, true, 273
+local enemyVariant = 0
 local finish, morphs, transitions, layouts = 0, 0, {}, 0
 local chestEnding = 0
 local grids, effects, pendingRemoval, gridRemovals = {}, {}, {}, 0
@@ -23,7 +24,7 @@ local data = {
                 EntryCount = 1,
                 Entries = {
                     Get = function()
-                        return { Type = enemy }
+                        return { Type = enemy, Variant = enemyVariant }
                     end,
                 },
             }
@@ -488,3 +489,32 @@ for _, floorType in ipairs({ 0, 1, 2, 3 }) do
     assert(spawned == before + 1, "Restored Heart reward spawned twice")
 end
 print("PASS Heart/It Lives room identity, Womb variants, reward restore and exit cleanup")
+enums.entity.ENTITY_ISAAC = 102
+local blueBaby = routeFactory(goalDeps, "blue_baby")
+effects, grids, pendingRemoval = {}, {}, {}
+for _, wrong in ipairs({
+    { 10, 1, 102, 0 },
+    { 11, 0, 102, 1 },
+    { 11, 1, 102, 0 },
+    { 11, 1, 273, 0 },
+}) do
+    stage, kind, enemy, enemyVariant = table.unpack(wrong)
+    local p = chest()
+    blueBaby.pickup(p)
+    assert(p.Variant == 340, "Challenge 45 accepted the wrong terminal boss")
+end
+stage, kind, enemy, enemyVariant, clear = 11, 1, 102, 1, false
+local trophy = chest()
+blueBaby.pickup(trophy)
+assert(trophy.Variant == 340, "Challenge 45 completed before the boss was defeated")
+clear = true
+blueBaby.pickup(trophy)
+assert(trophy.Variant == 370)
+blueBaby.pickup(trophy)
+local beforeBlue = finish
+blueBaby.collide(trophy, player)
+assert(finish == beforeBlue)
+trophy.Wait = 0
+blueBaby.collide(trophy, player)
+assert(finish == beforeBlue + 1)
+print("PASS Challenge 45 Chest/??? identity, reward restoration and trophy completion")

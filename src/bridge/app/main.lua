@@ -203,10 +203,16 @@ challenge = _IsaacLanModules["runtime/challenges"]({
         lamb = goalRoute("lamb"),
         mom = goalRoute("mom"),
         heart = goalRoute("heart"),
+        blue_baby = goalRoute("blue_baby"),
         battle_royale = battle,
     },
     effects = {
         [battleRules.id] = battle,
+        [1006] = _IsaacLanModules["compat/challenges/delete_this"]({
+            party = allocation.party,
+            scoped = allocation.scoped,
+            tmtrainer = CollectibleType.COLLECTIBLE_TMTRAINER,
+        }),
         [1002] = _IsaacLanModules["compat/challenges/luck_game"]({
             allocation = lootAllocation(),
             native = native,

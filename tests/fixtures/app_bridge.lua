@@ -61,6 +61,7 @@ return function(root, native, modules)
         "compat/rules/room_gather",
         "runtime/room_rules",
         "compat/challenges/luck_game",
+        "compat/challenges/delete_this",
         "compat/challenges/battle_royale_rules",
         "compat/challenges/battle_royale_resources",
         "compat/challenges/battle_royale_rewards",

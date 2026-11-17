@@ -1,6 +1,7 @@
 #include "engine/item_effects.h"
 #include "engine/lua_api.h"
 #include "engine/rooms.h"
+#include "engine/generated_challenge.h"
 #include "engine/pause_menu.h"
 #include "engine/visuals.h"
 #include "engine/audio.h"
@@ -782,6 +783,7 @@ RoomCall originalAward;
 void __attribute__((fastcall)) award(void* room, void*) {
     if (runtime::replica())
         return;
+    engine::GeneratedChallengeRewardScope challengeScope;
     if (!runtime::allowChallengeEvent("shared_award")) {
         originalAward(room);
         return;

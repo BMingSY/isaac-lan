@@ -196,6 +196,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 
 后端保留原比较；查询为 true 时，仅将其算术标志改为相等比较的结果，再执行原版分支。通用寄存器、栈与 XMM0–XMM7 均恢复，不写 `Game.Challenge`、诅咒、种子、布局或原生容器。房间数量抽样、随机数推进、布局与房间对象分配仍由原版负责。查询适用于首层、换层与重新生成；无活动挑战时保留原生行为。玩法匹配由上层挑战目录负责。
 
+原版错误道具挑战的房间外观与路线查询由独立的 [generated_challenge.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/generated_challenge.h) 能力提供；调用范围、ABI、签名和借用字段的生命周期见[原版错误道具挑战环境](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-challenge.md)。
+
 ## HUD 与本机输入
 
 `input_ready()` 在控制器锁内检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在；仅借用原生设备列表，设备对象仍由游戏分配和释放。运行协调器在此条件满足后请求开局；角色的槽位绑定仍由 `input_assign` 与角色生命周期组件负责。

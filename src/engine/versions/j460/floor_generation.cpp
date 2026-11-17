@@ -1,4 +1,5 @@
 #include "engine/floor_generation.h"
+#include "engine/versions/j460/branch_hook.h"
 #include "engine/versions/j460/entrypoints.h"
 #include "engine/versions/j460/layout.h"
 #include <MinHook.h>
@@ -8,7 +9,8 @@ namespace {
 bool (*useLargeFloor)() = nullptr;
 constexpr unsigned nativeLargeFloorChallenge = 21;
 constexpr unsigned compareBytes = 7;
-constexpr std::uint32_t arithmeticFlags = 0x8d5, equalFlags = 0x44;
+constexpr auto arithmeticFlags = j460::branch::arithmeticFlags,
+               equalFlags = j460::branch::equalFlags;
 void* originals[2]{};
 } // namespace
 extern "C" {
@@ -24,18 +26,8 @@ __attribute__((used, force_align_arg_pointer)) void __cdecl isaac_lan_floor_prep
 
 #define ISAAC_LAN_FLOOR_THUNK(destination)                                                         \
     __asm__ __volatile__(                                                                          \
-        "cmpl $%c[challenge], %c[offset](%%eax)\n\t"                                               \
-        "pushfl\n\tpushal\n\tsubl $128, %%esp\n\t"                                                 \
-        "movups %%xmm0, (%%esp)\n\tmovups %%xmm1, 16(%%esp)\n\t"                                   \
-        "movups %%xmm2, 32(%%esp)\n\tmovups %%xmm3, 48(%%esp)\n\t"                                 \
-        "movups %%xmm4, 64(%%esp)\n\tmovups %%xmm5, 80(%%esp)\n\t"                                 \
-        "movups %%xmm6, 96(%%esp)\n\tmovups %%xmm7, 112(%%esp)\n\t"                                \
-        "leal 128(%%esp), %%eax\n\tpushl %%eax\n\tcall _isaac_lan_floor_prepare\n\t"               \
-        "addl $4, %%esp\n\tmovups (%%esp), %%xmm0\n\tmovups 16(%%esp), %%xmm1\n\t"                 \
-        "movups 32(%%esp), %%xmm2\n\tmovups 48(%%esp), %%xmm3\n\t"                                 \
-        "movups 64(%%esp), %%xmm4\n\tmovups 80(%%esp), %%xmm5\n\t"                                 \
-        "movups 96(%%esp), %%xmm6\n\tmovups 112(%%esp), %%xmm7\n\t"                                \
-        "addl $128, %%esp\n\tpopal\n\tpopfl\n\tjmp *_" #destination                                \
+        "cmpl $%c[challenge], %c[offset](%%eax)\n\t" ISAAC_LAN_BRANCH_CALL(                        \
+            isaac_lan_floor_prepare) "jmp *_" #destination                                         \
         :                                                                                          \
         : [challenge] "i"(nativeLargeFloorChallenge), [offset] "i"(j460::layout::game::challenge))
 

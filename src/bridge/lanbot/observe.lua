@@ -490,6 +490,10 @@ return function(native, bridge, nav, terrain, items, actorPose, networkStatus)
                             result.dangers[#result.dangers + 1] = value
                             map.zones[#map.zones + 1] = value
                         end
+                    elseif pickup and pickup.Variant == PickupVariant.PICKUP_TROPHY then
+                        value.kind = "trophy"
+                        value.cell = nav.cell(map, value.x, value.y)
+                        addExit(value, result.clear and pickup.Wait <= 0)
                     elseif pickup and pickup.Variant == PickupVariant.PICKUP_BIGCHEST then
                         value.kind = "bigchest"
                         value.cell = nav.cell(map, value.x, value.y)
@@ -521,7 +525,7 @@ return function(native, bridge, nav, terrain, items, actorPose, networkStatus)
                         value.id = "pickup:" .. value.id
                         value.collectible = variant == PickupVariant.PICKUP_COLLECTIBLE
                         local config = value.collectible
-                            and pickup.SubType > 0
+                            and pickup.SubType ~= 0
                             and Isaac.GetItemConfig():GetCollectible(pickup.SubType)
                         local activeSwap = config
                             and config.Type == ItemType.ITEM_ACTIVE
@@ -562,7 +566,7 @@ return function(native, bridge, nav, terrain, items, actorPose, networkStatus)
                         value.heal = variant == PickupVariant.PICKUP_HEART
                             and usefulHeart(player, pickup.SubType)
                         local useful = value.heal
-                            or value.collectible and not activeSwap and pickup.SubType > 0 and player:CanPickupItem()
+                            or value.collectible and not activeSwap and pickup.SubType ~= 0 and player:CanPickupItem()
                             or variant == PickupVariant.PICKUP_COIN and player:GetNumCoins() < 99
                             or variant == PickupVariant.PICKUP_KEY and p.keys < 99
                             or variant == PickupVariant.PICKUP_BOMB

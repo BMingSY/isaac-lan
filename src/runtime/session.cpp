@@ -115,6 +115,11 @@ bool largeFloor() {
         session ? compat::challenges::find(session->settings().rules.id) : nullptr;
     return challengeActive() && definition && definition->largeFloor;
 }
+bool deleteThis() {
+    const auto* definition =
+        session ? compat::challenges::find(session->settings().rules.id) : nullptr;
+    return challengeActive() && definition && definition->deleteThis;
+}
 bool beginNetworkRun() {
     if (saves.networkRun)
         return true;
@@ -1734,7 +1739,7 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     return backend::install(image,
                             {saveGame, deleteGame, saveRerun, serializeProgress, executeStart,
                              startGame, update, consoleUpdate, consoleCommand, controls,
-                             executeMenu, requestRestart, completionAward, largeFloor});
+                             executeMenu, requestRestart, completionAward, largeFloor, deleteThis});
 }
 void configureNetwork(unsigned hz) {
     inputHz = hz;

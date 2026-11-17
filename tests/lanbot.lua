@@ -652,6 +652,7 @@ PickupVariant = {
     PICKUP_KEY = 30,
     PICKUP_BOMB = 40,
     PICKUP_BIGCHEST = 340,
+    PICKUP_TROPHY = 370,
 }
 HeartSubType = {
     HEART_SOUL = 3,
@@ -1410,6 +1411,22 @@ test("observer protects exits and unselected doorways from ordinary movement", f
     assert(nav.passable(obs.map, 440, 160, 10, obs.doors[1]))
     room.GetGridEntity, room.GetDoor = getGrid, getDoor
 end)
+test(
+    "generated item pickups and challenge trophies use normal pickup and exit navigation",
+    function()
+        local item = fakeEntity(5)
+        item.Variant, item.SubType, item.Price, item.Wait =
+            PickupVariant.PICKUP_COLLECTIBLE, -1, 0, 0
+        entities = { item }
+        assert(#observe.read(1, localInfo).pickups == 1, "Generated passive was ignored")
+        item.Variant, item.Wait = PickupVariant.PICKUP_TROPHY, 30
+        assert(not observe.read(2, localInfo).exit, "Trophy drop delay was ignored")
+        item.Wait = 0
+        local obs = assert(observe.read(3, localInfo))
+        assert(obs.exit and obs.exit.kind == "trophy" and #obs.pickups == 0)
+        entities = {}
+    end
+)
 test("closed Boss exit retreats, waits for native opening and then contacts it", function()
     local getGrid, player = room.GetGridEntity, roster[2]
     local oldPosition, oldVelocity = player.Position, player.Velocity
@@ -1945,6 +1962,21 @@ test("crowd clears the arrival doorway before starting an orbit", function()
     obs.actor.x = 320
     bot.step(3)
     assert(bot.task == "kite" and bot.kite)
+end)
+test("sideways doorway departure releases a Boss exit spawned on the arrival goal", function()
+    local obs, plan = snapshot(), planner.new()
+    obs.actor.x, obs.actor.y = 320, 155
+    obs.doors = { door(1, "0:2", { x = 320, y = 120, dx = 0, dy = -1 }) }
+    plan:observe(obs)
+    assert(plan:arrival(obs).task == "leave_door")
+    obs.actor.x = 117
+    obs.exit = { id = "trapdoor", x = 320, y = 200, kind = "trapdoor", radius = 20 }
+    obs.exit.cell = nav.cell(obs.map, obs.exit.x, obs.exit.y)
+    obs.map.walk[obs.exit.cell] = false
+    obs.map.exitCells = { [obs.exit.cell] = true }
+    plan:observe(obs)
+    assert(plan:arrival(obs) == nil and plan:nextExit())
+    assert(plan:choose(obs, "run", "balanced").task == "move_to_exit")
 end)
 test("crowd orbit keeps direction and advances before delayed arrival", function()
     local obs, memory = snapshot(), {}

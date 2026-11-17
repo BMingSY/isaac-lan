@@ -21,6 +21,7 @@ struct Callbacks {
     bool (*restartRequest)(bool held);
     void (*completionAward)(unsigned counter, unsigned bits, unsigned achievement);
     bool (*largeFloor)();
+    bool (*deleteThis)();
 };
 bool install(std::uintptr_t image, const Callbacks& callbacks);
 bool managerReady();

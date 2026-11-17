@@ -21,6 +21,7 @@ struct Definition {
     bool roomOptionsLocked = false;
     bool largeFloor = false;
     bool nextPlayerShooting = false;
+    bool deleteThis = false;
 };
 inline constexpr std::array definitions{
     Definition{
@@ -97,6 +98,25 @@ inline constexpr std::array definitions{
         ids::stageType::original,
         false,
         {},
+        false,
+        false,
+        false,
+        true,
+    },
+    Definition{
+        1006,
+        1,
+        unrestrictedCharacter,
+        0,
+        true,
+        "挑战45",
+        "blue_baby",
+        ids::ending::epilogue,
+        ids::stage::chestOrDarkRoom,
+        ids::stageType::wrathOfTheLamb,
+        false,
+        {},
+        false,
         false,
         false,
         false,

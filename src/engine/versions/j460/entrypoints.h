@@ -4,6 +4,11 @@
 // Audited J460 entrypoints. signatures.inc uses the same constants for startup checks.
 namespace isaac::engine::j460 {
 namespace entry {
+inline constexpr std::uint32_t glitchedGridStyle = 0x3137d7;
+inline constexpr std::uint32_t glitchedRockStyle = 0x31a0b9;
+inline constexpr std::uint32_t glitchedBackdropType = 0x3eb1f8;
+inline constexpr std::uint32_t glitchedBackdropStyle = 0x3f157f;
+inline constexpr std::uint32_t glitchedRoomConfig = 0x590bbf;
 inline constexpr std::uint32_t entityDynamicCast = 0x6f08b1;
 inline constexpr std::uint32_t entityRTTIName = 0x85d5e4;
 inline constexpr std::uint32_t npcRTTIName = 0x85d6b4;
