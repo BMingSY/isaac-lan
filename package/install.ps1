@@ -294,7 +294,7 @@ try {
         }
     }
     Write-Output $(if ($Mode -eq 'Install') {
-            'Installed. Start the game from Steam and select Online on the main menu.'
+            'Installed. Start the game from Steam.'
         } else {
             'Uninstalled. Session data and logs were preserved.'
         })
