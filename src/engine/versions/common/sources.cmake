@@ -1,4 +1,5 @@
 set(ISAAC_LAN_COMMON_BACKEND_SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/native_files.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/character_catalogue.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/session_backend.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/input_devices.cpp"

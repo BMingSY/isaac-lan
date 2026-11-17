@@ -347,3 +347,7 @@ isaac_add_backend_test(
     minhook
     COMPILE_OPTIONS
     -msse2)
+isaac_add_backend_test(native-files common SOURCES tests/native_files_test.cpp
+                       src/engine/versions/common/native_files.cpp)
+add_test(NAME native.native-files-streams COMMAND isaac_lan_native_files_common_test streams)
+set_tests_properties(native.native-files-streams PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")

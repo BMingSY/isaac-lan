@@ -1,4 +1,6 @@
 #include "engine/item_effects.h"
+#include "engine/imports.h"
+#include "engine/native_files.h"
 #include "engine/lua_api.h"
 #include "engine/state_codec.h"
 #include "engine/entity_fields.h"
@@ -95,22 +97,6 @@ HANDLE WINAPI nativeOpenFile(LPCSTR name, DWORD access, DWORD sharing,
         observeNativeLog(name);
     return handle;
 }
-using NativeFopen = void*(__cdecl*)(const char*, const char*);
-using NativeFiopen = void*(__cdecl*)(const char*, int, int);
-NativeFopen originalFopen;
-NativeFiopen originalFiopen;
-void* __cdecl nativeFopen(const char* name, const char* mode) {
-    const auto file = originalFopen(name, mode);
-    if (file && mode && std::strpbrk(mode, "wa+"))
-        observeNativeLog(name);
-    return file;
-}
-void* __cdecl nativeFiopen(const char* name, int mode, int protection) {
-    const auto file = originalFiopen(name, mode, protection);
-    if (file && (mode & (2 | 8)))
-        observeNativeLog(name);
-    return file;
-}
 
 std::string utf8(const std::wstring& s) {
     int size = WideCharToMultiByte(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0,
@@ -171,32 +157,8 @@ bool __cdecl noSteamRelaunch(unsigned int) {
 }
 
 bool replaceImport(const char* name, void* replacement, void** original = nullptr) {
-    const auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
-    const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(image + dos->e_lfanew);
-    auto imports = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(
-        image + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
-    for (; imports->Name; ++imports) {
-        auto names = reinterpret_cast<const IMAGE_THUNK_DATA*>(image + imports->OriginalFirstThunk);
-        auto addresses = reinterpret_cast<IMAGE_THUNK_DATA*>(image + imports->FirstThunk);
-        for (; names->u1.AddressOfData; ++names, ++addresses) {
-            if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal))
-                continue;
-            const auto entry =
-                reinterpret_cast<const IMAGE_IMPORT_BY_NAME*>(image + names->u1.AddressOfData);
-            if (strcmp(reinterpret_cast<const char*>(entry->Name), name) != 0)
-                continue;
-            DWORD before;
-            if (!VirtualProtect(&addresses->u1.Function, sizeof(void*), PAGE_READWRITE, &before))
-                return false;
-            if (original)
-                *original = reinterpret_cast<void*>(addresses->u1.Function);
-            addresses->u1.Function = reinterpret_cast<ULONG_PTR>(replacement);
-            DWORD ignored;
-            VirtualProtect(&addresses->u1.Function, sizeof(void*), before, &ignored);
-            return true;
-        }
-    }
-    return false;
+    return isaac::engine::imports::replace(image, name, replacement, original) ==
+           isaac::engine::imports::Result::replaced;
 }
 
 isaac::lua::API lua{};
@@ -353,15 +315,9 @@ DWORD initialize() {
         return fail(StartupCode::importBinding, {}, {}, L"GetProcAddress");
     if (!replaceImport("CreateFileA", reinterpret_cast<void*>(nativeOpenFile)))
         return fail(StartupCode::importBinding, {}, {}, L"CreateFileA");
-    // Native loggers use both CRT stdio and C++ streams. Preserve the game's
-    // own CRT file objects; observe their successful opens without borrowing
-    // or closing them from this DLL's different runtime.
-    if (!replaceImport("fopen", reinterpret_cast<void*>(nativeFopen),
-                       reinterpret_cast<void**>(&originalFopen)))
-        return fail(StartupCode::importBinding, {}, {}, L"fopen");
-    if (!replaceImport("?_Fiopen@std@@YAPAU_iobuf@@PBDHH@Z", reinterpret_cast<void*>(nativeFiopen),
-                       reinterpret_cast<void**>(&originalFiopen)))
-        return fail(StartupCode::importBinding, {}, {}, L"_Fiopen");
+    if (const auto error = isaac::engine::native_files::install(image, observeNativeLog);
+        !error.empty())
+        return fail(StartupCode::importBinding, {}, {}, wide(error));
     if (isolated)
         replaceImport("SteamAPI_RestartAppIfNecessary", reinterpret_cast<void*>(noSteamRelaunch));
     if (!replaceImport("GetActiveWindow", reinterpret_cast<void*>(localActiveWindow)))

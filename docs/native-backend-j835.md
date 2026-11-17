@@ -6,6 +6,8 @@
 
 `LuaEngine::Init` 为 `thiscall void(LuaEngine*, bool)`，入口和签名位于 [entrypoints.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/entrypoints.h) 与 [signatures.inc](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/signatures.inc)。初始化完成后的 Lua 状态指针位于 `LuaEngine + 0x18`，只可借用；状态的创建、重置和销毁仍由游戏持有。初始化可能在同一进程内重复发生，不能将先前状态的引用、注册表键或回调复用于新状态。该入口资料不授权其他布局读写，也不代表完整 ABI 验收。
 
+原生文件打开观察使用游戏自己的 `fopen` 导入，成功的写入打开只通知日志组件，不借用、关闭或替换游戏 CRT 的 FILE 对象。J835 不导入 MSVC `_Fiopen`；共享组件仅在该导入存在时安装 C++ 流观察，存在但不可写的 IAT 槽仍使启动失败。安装失败恢复已替换的 stdio 槽，观察异常不改变原生返回值或 LastError。
+
 Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/lua_api.h)。该游戏导入表没有 `SteamAPI_RestartAppIfNecessary`；隔离启动不能把该导入的存在当成必要条件。资料隔离仍须在游戏入口前完成，不能在 Lua 初始化后才更改存档位置。
 
 ## 主菜单入口
