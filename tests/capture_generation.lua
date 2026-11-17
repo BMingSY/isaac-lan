@@ -295,7 +295,7 @@ local fields = dofile(root .. "/src/bridge/sync/fields.lua")
 local layers = dofile(root .. "/src/bridge/sync/layers.lua")(fields)
 deps.layers = layers
 deps.inventory = function(player)
-    return {
+    local value = {
         player.ControllerIndex,
         { { 1, revision } },
         { { 0, 0 } },
@@ -303,6 +303,10 @@ deps.inventory = function(player)
         {},
         { revision, 0 },
     }
+    for i = fields.inventory.cards, fields.inventory.smeltedTrinkets do
+        value[i] = false
+    end
+    return value
 end
 deps.roomFactory = function()
     local rooms, atTick, atEpoch = {}
