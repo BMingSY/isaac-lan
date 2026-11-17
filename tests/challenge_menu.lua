@@ -4,7 +4,7 @@ PlayerType, RoomType = enums.PlayerType, enums.RoomType
 local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels, renderedMarks = {}, {}
-local labelPositions = {}
+local labelPositions, renderedSwitches = {}, {}
 local options = { { flag = 1, key = "friendlyFire", name = "队友伤害", shortName = "友伤" } }
 local noop = function() end
 local remembered = { "", 29506 }
@@ -48,9 +48,11 @@ Sprite = function()
         SetFrame = function(self, animation)
             self.animation = animation
         end,
-        Render = function(self)
+        Render = function(self, position)
             if self.path == "gfx/ui/completion_widget.anm2" then
                 renderedMarks[#renderedMarks + 1] = { table.unpack(self.layers) }
+            elseif self.path == "gfx/ui/main menu/pageswapwidget.anm2" then
+                renderedSwitches[#renderedSwitches + 1] = position
             elseif self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
                 renderedPortraits[#renderedPortraits + 1] = { self.path, self.animation }
             end
@@ -184,11 +186,14 @@ _IsaacLanCommand = function(name, value)
         status.ready0, status.ready1 = 0, 0
         if status.challenge ~= 0 then
             status.choice0, status.choice1 = 23, 23
+            status.random0, status.random1 = false, false
         end
-    elseif name == "choose" then
+    elseif name == "choose" or name == "choose_random" then
         local character, ready = value:match("^(%d+):(%d+)$")
+        status["random" .. status.slot] = name == "choose_random"
         status["choice" .. status.slot], status["ready" .. status.slot] =
-            tonumber(character), tonumber(ready)
+            name == "choose_random" and (character == "1" and 23 or 0) or tonumber(character),
+            tonumber(ready)
     elseif name == "room_options" then
         status.roomOptions = tonumber(value)
         status.ready0, status.ready1 = 0, 0
@@ -201,7 +206,7 @@ local function draw(key, visible, mx, my, clicked)
     renderedPortraits = {}
     scaledLabels = {}
     renderedMarks = {}
-    labelPositions = {}
+    labelPositions, renderedSwitches = {}, {}
     return _IsaacLanMenuRender(
         true,
         visible ~= false,
@@ -252,11 +257,23 @@ assert(status.choice0 == 23 and labels["里·该隐"])
 assert(renderedPortraits[1][1] == "native-tainted.anm2" and renderedPortraits[1][2] == "03_Cain")
 draw(39)
 draw()
-assert(status.choice0 == 23 and labels["随机里角色"])
+assert(status.choice0 == 23 and status.random0 and labels["?"])
 assert(renderedPortraits[1][2] == "00_Random")
 draw(69)
 draw()
-assert(labels["随机角色"] and not labels["随机里角色"])
+assert(status.choice0 == 0 and status.random0 and labels["?"])
+assert(#renderedSwitches == 1 and renderedSwitches[1].X < labelPositions["?"].x)
+assert(not labels["E / RB：表／里"])
+-- Both player cards stay anonymous after ready, and completion marks stay hidden.
+status.random1, status.ready1, status.ready0 = true, 1, 1
+draw()
+assert(renderedPortraits[1][2] == "00_Random" and renderedPortraits[2][2] == "00_Random")
+assert(not labels["以撒"] and not labels["里·该隐"] and #renderedMarks == 0)
+status.random1, status.ready1, status.ready0 = false, 0, 0
+-- The native widget also provides a mouse hit target.
+draw(0, true, renderedSwitches[1].X, renderedSwitches[1].Y, true)
+assert(status.random0 and status.choice0 == 23)
+draw(69)
 draw(39)
 assert(status.choice0 == 0)
 draw()
@@ -289,14 +306,14 @@ for _, label in ipairs(scaledLabels) do
         nameRenders = nameRenders + 1
         local width = utf8.len(longName) * 8 * label.scale
         assert(label.scale > 0 and label.scale < 1)
-        assert(width <= (label.x == 49 and 138 or 110))
+        assert(width <= (label.x == 88 and 99 or 110) + 0.001)
     end
 end
 assert(nameRenders == 2, "Long Mod name did not fit both the row and player card")
 assert(renderedPortraits[1][1] == "mod-menu.anm2" and renderedPortraits[1][2] == "目录角色")
 draw(39)
 draw()
-assert(status.choice0 == 4096 and labels["随机角色"])
+assert(status.choice0 == 0 and status.random0 and labels["?"])
 draw(69)
 draw(39)
 assert(status.choice0 == 23)

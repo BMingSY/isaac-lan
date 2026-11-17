@@ -58,9 +58,6 @@ return function(Phase, Command, endpoint, characters)
     end
     local function rows(ui, status, characterChoices, challenges, deps)
         local phase = status.phase or Phase.idle
-        if phase ~= Phase.lobby then
-            ui.randomCharacter = nil
-        end
         local modes = ui.page == "modes"
         local challenge = challenges[tostring(status.challenge or 0)]
         local notice, ruleCount
@@ -273,19 +270,19 @@ return function(Phase, Command, endpoint, characters)
             end
         elseif phase == Phase.lobby then
             local selection = characters.selection(
-                ui,
                 choice,
                 ready,
+                status["random" .. localSlot] == true,
                 not ready and (not challenge or challenge.character == UNRESTRICTED_CHARACTER),
                 characterChoices,
                 deps.catalog or {},
-                command,
-                deps.random or math.random
+                command
             )
             row(selection.label or deps.character(choice), function()
                 selection.cycle(1)
             end, selection.enabled, selection.cycle)
             rows[#rows].toggle = selection.toggle
+            rows[#rows].canToggle = selection.canToggle
             row(
                 ready and "取消准备" or "准备",
                 selection.prepare,

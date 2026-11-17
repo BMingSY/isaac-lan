@@ -23,27 +23,25 @@ for _, slot in ipairs({ 0, 1 }) do
         slot = slot,
         players = 2,
     }
-    local choiceKey, readyKey = "choice" .. slot, "ready" .. slot
+    local choiceKey, readyKey, randomKey = "choice" .. slot, "ready" .. slot, "random" .. slot
     status[choiceKey], status[readyKey], status["eligible" .. slot] = 0, 0, true
     local choices = { 0, 1, 41, 21, 4096 } -- 22 is locked in this personal save.
-    local sent, draws, randomIndex, fail = {}, 0, 1, false
+    local sent, fail = {}, false
     local deps = {
         character = tostring,
         catalog = catalog,
-        random = function(size)
-            draws = draws + 1
-            assert(randomIndex <= size)
-            return randomIndex
-        end,
         command = function(action, value)
             if fail then
                 error("selection rejected")
             end
             sent[#sent + 1] = { action, value }
-            if action == "choose" then
+            if action == "choose" or action == "choose_random" then
                 local id, ready = value:match("^(%d+):([01])$")
-                assert(id, "Random placeholder escaped into the network command")
-                status[choiceKey], status[readyKey] = tonumber(id), tonumber(ready)
+                assert(id)
+                status[randomKey] = action == "choose_random"
+                status[choiceKey] = action == "choose_random" and (id == "1" and 21 or 0)
+                    or tonumber(id)
+                status[readyKey] = tonumber(ready)
             end
         end,
     }
@@ -65,7 +63,7 @@ for _, slot in ipairs({ 0, 1 }) do
     end
     -- Pairing, including sparse Mod IDs, comes from metadata, never ID arithmetic.
     toggle()
-    assert(status[choiceKey] == 21)
+    assert(status[choiceKey] == 21 and not status[randomKey])
     change(1)
     assert(status[choiceKey] == 4096)
     toggle()
@@ -73,86 +71,78 @@ for _, slot in ipairs({ 0, 1 }) do
     change(-1)
     assert(status[choiceKey] == 1)
     toggle()
-    assert(rows()[1].label == "随机里角色", "Locked counterpart became selectable")
+    assert(
+        rows()[1].label == "?" and status[choiceKey] == 21,
+        "Locked counterpart became selectable"
+    )
     toggle()
-    assert(rows()[1].label == "随机角色")
+    assert(rows()[1].label == "?" and status[choiceKey] == 0)
     change(1)
-    assert(status[choiceKey] == 0)
-    -- Rendering and switching groups never draw. Ready draws once from that pool.
+    assert(status[choiceKey] == 0 and not status[randomKey])
+    -- Random is a synchronized selection, still unknown after ready/unready.
     for _, tainted in ipairs({ false, true }) do
-        local expected = tainted and { 21, 4096 } or { 0, 1, 41 }
-        for index, id in ipairs(expected) do
-            status[choiceKey], status[readyKey] = tainted and 21 or 0, 0
-            change(-1)
-            local before = draws
-            for _ = 1, 10 do
-                rows()
-            end
-            assert(draws == before and ui.randomCharacter)
-            randomIndex = index
-            prepare()
-            assert(draws == before + 1 and status[choiceKey] == id and status[readyKey] == 1)
-            assert(not rows()[1].enabled and not ui.randomCharacter)
-            change(1)
-            toggle()
-            assert(status[choiceKey] == id, "Ready character changed")
-            prepare()
-            assert(status[readyKey] == 0 and draws == before + 1)
+        status[choiceKey], status[readyKey], status[randomKey] = tainted and 21 or 0, 0, false
+        change(-1)
+        assert(rows()[1].label == "?" and status[randomKey])
+        local before = #sent
+        for _ = 1, 10 do
+            rows()
         end
+        assert(#sent == before, "Rendering changed the selection")
+        prepare()
+        assert(sent[#sent][1] == "choose_random" and sent[#sent][2] == (tainted and "1:1" or "0:1"))
+        assert(status[readyKey] == 1 and status[randomKey] and rows()[1].label == "?")
+        assert(not rows()[1].enabled and not rows()[1].canToggle)
+        before = #sent
+        change(1)
+        toggle()
+        assert(#sent == before, "Ready selection changed")
+        prepare()
+        assert(status[readyKey] == 0 and status[randomKey] and rows()[1].label == "?")
+        change(1)
+        assert(not status[randomKey])
     end
-    -- Failed commands preserve random selection; retry uses only valid choices.
-    status[choiceKey], status[readyKey], randomIndex = 0, 0, 1
+    -- Failed commands and delayed acknowledgements never resolve a concrete ID.
+    status[choiceKey], status[readyKey], status[randomKey] = 0, 0, false
     change(-1)
     fail = true
     prepare()
-    assert(ui.randomCharacter and ui.errorText:find("selection rejected"))
+    assert(status[randomKey] and status[readyKey] == 0 and ui.errorText:find("selection rejected"))
     fail = false
-    prepare()
-    rows()
-    assert(not ui.randomCharacter and status[readyKey] == 1 and ui.errorText == "")
-    prepare()
-    -- A delayed guest acknowledgement does not draw again or ready the old ID.
-    status[choiceKey], randomIndex = 0, 2
-    choices = { 0, 1, 21 }
-    change(-1)
     local immediate, queued = deps.command, {}
     deps.command = function(action, value)
         queued[#queued + 1] = { action, value }
     end
-    local before = draws
     prepare()
     prepare()
-    assert(draws == before + 1 and queued[1][2] == "1:1" and queued[2][2] == "1:1")
+    assert(queued[1][1] == "choose_random" and queued[1][2] == "0:1")
+    assert(queued[2][1] == "choose_random" and queued[2][2] == "0:1")
     deps.command = immediate
     immediate(table.unpack(queued[1]))
-    assert(not rows()[1].enabled and not ui.randomCharacter)
+    assert(not rows()[1].enabled and rows()[1].label == "?" and ui.errorText == "")
     prepare()
-    status[choiceKey] = 0
-    -- Empty alternative, empty catalogue, and a catalogue disappearing while random.
+    -- No opposite group and no eligible choices disable the corresponding controls.
     choices = { 0 }
+    change(1)
+    assert(not rows()[1].canToggle)
     toggle()
-    assert(not ui.randomCharacter and status[choiceKey] == 0)
+    assert(not status[randomKey] and status[choiceKey] == 0)
     change(-1)
     choices = {}
-    local empty = rows()
-    assert(not empty[1].enabled and not empty[2].enabled and not ui.randomCharacter)
+    assert(not rows()[1].enabled and not rows()[2].enabled)
     choices = { 0, 21 }
-    -- Fixed challenges and room/session changes invalidate local pending choices.
-    change(-1)
-    status.challenge, status[choiceKey] = 1, 21
-    assert(not rows()[1].enabled and not ui.randomCharacter)
+    -- Authoritative fixed challenges and new sessions replace deferred state.
+    status.challenge, status[choiceKey], status[randomKey] = 1, 21, false
+    assert(not rows()[1].enabled and not rows()[1].canToggle)
     toggle()
-    assert(status[choiceKey] == 21)
+    assert(status[choiceKey] == 21 and not status[randomKey])
     status.challenge = 2
     assert(rows()[1].enabled)
     change(-1)
-    status[choiceKey] = 0
-    assert(rows()[1].label == "0" and not ui.randomCharacter)
-    change(-1)
+    assert(rows()[1].label == "?")
     status.phase = Phase.closed
     rows()
-    assert(not ui.randomCharacter)
-    status.phase = Phase.lobby
+    status.phase, status[choiceKey], status[randomKey] = Phase.lobby, 0, false
     assert(rows()[1].label == "0")
 end
-print("PASS grouped selection, native pairing, random ready, eligibility and lifecycle")
+print("PASS grouped selection, native pairing, deferred readiness and eligibility")

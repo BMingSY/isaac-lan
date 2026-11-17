@@ -95,8 +95,7 @@ local characterNames = {
 }
 local function character(id)
     if id == characters.random then
-        return ui.randomCharacter and ui.randomCharacter.tainted and "随机里角色"
-            or "随机角色"
+        return "?"
     end
     local entry = characterCatalog[tostring(id)]
     return characterNames[id] or (entry and entry.name) or ("角色 " .. id)
@@ -142,6 +141,8 @@ local function load()
     sprite("sketches", root .. "charactermenubg.anm2", "Idle")
     sprite("portraits", root .. "characterportraits.anm2", "01_Isaac")
     sprite("marks", "gfx/ui/completion_widget.anm2", "Idle")
+    sprite("characterSwap", root .. "pageswapwidget.anm2", "Idle")
+    assets.characterSwap.Scale = Vector(0.5, 0.5)
     sprite("fill", "gfx/ui/bossoverlay_whiteout.anm2", "Fade")
     assets.fill:SetFrame("Fade", 15)
     for _, size in ipairs({ 10, 12, 16 }) do
@@ -244,7 +245,6 @@ function _IsaacLanMenuRender(
             visible = false
         end
         ui.selection, ui.editing, ui.lastPhase = 1, nil, phase
-        ui.randomCharacter = nil
         if
             phase ~= Phase.lobby
             and (ui.page == "rules" or ui.page == "autoTeleport" or ui.page == "challenges")
@@ -413,7 +413,13 @@ function _IsaacLanMenuRender(
             ui.selection = i
             if item.enabled and not activated then
                 activated = true
-                item.action()
+                if item.toggle and hit(48 + shift, y - 6, 32, 24) then
+                    if item.canToggle then
+                        item.toggle()
+                    end
+                else
+                    item.action()
+                end
             end
         elseif i == ui.selection and not ui.editing and item.enabled and not activated then
             if key == Key.enter or key == Key.space then
@@ -434,8 +440,14 @@ function _IsaacLanMenuRender(
         if item.field and ui.editing == item.field then
             label = (item.field == "port" and "端口：" or "") .. ui[item.field] .. "_"
         end
-        local size = assets[12]:GetStringWidthUTF8(label) > 138 and 10 or 12
-        text(label, 49 + shift, y, size, item.color or (item.enabled and ink or faded), 138)
+        local labelX, maxWidth = 49 + shift, 138
+        if item.toggle then
+            labelX, maxWidth = 88 + shift, 99
+            assets.characterSwap.Color = Color(1, 1, 1, item.canToggle and 1 or 0.35)
+            assets.characterSwap:Render(pos(63 + shift, y + 5))
+        end
+        local size = assets[12]:GetStringWidthUTF8(label) > maxWidth and 10 or 12
+        text(label, labelX, y, size, item.color or (item.enabled and ink or faded), maxWidth)
         if i == ui.selection then
             pointer(37 + shift, y + 5)
         end
@@ -485,12 +497,14 @@ function _IsaacLanMenuRender(
         if i < count then
             local id = status[(phase == Phase.lobby and "choice" or "character") .. i] or 0
             local marks = phase == Phase.lobby and status["marks" .. i] or nil
-            if phase == Phase.lobby and i == localSlot and ui.randomCharacter then
+            if phase == Phase.lobby and status["random" .. i] then
                 id, marks = characters.random, nil
             end
             local portraitX = x + (marks and 34 or 63)
             portrait(id):Render(pos(portraitX, y + 45))
-            centered(character(id), portraitX, y + 66, 10, nil, marks and 60 or 110)
+            if id ~= characters.random then
+                centered(character(id), portraitX, y + 66, 10, nil, marks and 60 or 110)
+            end
             if marks then
                 assets.marks.Scale = Vector(0.65, 0.65)
                 for layerId, state in ipairs(marks) do
@@ -554,9 +568,6 @@ function _IsaacLanMenuRender(
             footerY,
             10
         )
-        if rows[ui.selection] and rows[ui.selection].toggle and rows[ui.selection].enabled then
-            text("E / RB：表／里", 300, footerY, 10)
-        end
     elseif phase == Phase.running then
         text("共同楼层 · 分头探索", 25, footerY, 10)
     else

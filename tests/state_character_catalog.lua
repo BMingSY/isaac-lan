@@ -179,7 +179,11 @@ function _IsaacLanFrame()
             assert(not native.net_choose(22, 0), "Locked vanilla choice was accepted")
             _IsaacLanMenuOpen(true)
         end
-        if not chosen and status["choice" .. ordinal] == expected(ordinal) then
+        if
+            not chosen
+            and not status["random" .. ordinal]
+            and status["choice" .. ordinal] == expected(ordinal)
+        then
             if not selectedAt then
                 selectedAt = now
                 local _, catalog = checkCatalog()
@@ -261,7 +265,6 @@ function _IsaacLanFrame()
     assert(done or now - startAt < 180000, "Native character case stalled")
     return status
 end
-local menuGroup, menuRandom
 function _IsaacLanMenuRender(
     available,
     visible,
@@ -277,21 +280,20 @@ function _IsaacLanMenuRender(
     if case and ordinal < #case.kinds and status.phase == 2 and menuOpened then
         visible, key, typed, mx, my, clicked = true, 0, "", -100, -100, false
         local choice, now = status["choice" .. ordinal], native.api_info().nowMs
-        if pendingChoice and choice == pendingChoice then
+        local menuRandom = status["random" .. ordinal] == true
+        if pendingChoice and choice == pendingChoice and not menuRandom then
             pendingChoice = nil
         end
         if
             not chosen
             and not pendingChoice
-            and choice ~= expected(ordinal)
+            and (menuRandom or choice ~= expected(ordinal))
             and now >= nextKeyAt
         then
             local choices, catalog = checkCatalog()
             local entry = catalog[tostring(choice)]
             local target = catalog[tostring(expected(ordinal))].tainted
-            if menuSteps == 0 then
-                menuGroup, menuRandom = entry.tainted, false
-            end
+            local menuGroup = entry.tainted
             if menuGroup ~= target then
                 key, menuGroup = 69, target
                 for _, id in ipairs(choices) do
@@ -299,7 +301,6 @@ function _IsaacLanMenuRender(
                         pendingChoice = id
                     end
                 end
-                menuRandom = not pendingChoice
             else
                 local group, index = {}, 0
                 for _, id in ipairs(choices) do
@@ -311,7 +312,7 @@ function _IsaacLanMenuRender(
                     end
                 end
                 pendingChoice = group[(index + 1) % (#group + 1)]
-                menuRandom, key = not pendingChoice, 39
+                key = 39
             end
             nextKeyAt, menuSteps = now + 250, menuSteps + 1
             assert(

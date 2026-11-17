@@ -720,6 +720,7 @@ if(BUILD_TESTING)
         input-rooms
         lobby
         lobby-access
+        deferred-choice
         run-rules
         room-options
         handshake
