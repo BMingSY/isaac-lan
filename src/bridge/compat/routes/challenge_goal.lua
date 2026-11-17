@@ -11,6 +11,14 @@ return function(deps, goal)
             end,
             boss = enums.entity.ENTITY_THE_LAMB,
         },
+        blue_baby = {
+            floor = function(level)
+                return level:GetStage() == enums.stage.STAGE6
+                    and level:GetStageType() == enums.stageType.STAGETYPE_WOTL
+            end,
+            boss = enums.entity.ENTITY_ISAAC,
+            variant = 1,
+        },
         mom = {
             floor = function(level)
                 return level:GetStage() == enums.stage.STAGE3_2
@@ -44,7 +52,10 @@ return function(deps, goal)
         for i = 0, data.SpawnCount - 1 do
             local spawn = data.Spawns:Get(i)
             for j = 0, spawn.EntryCount - 1 do
-                if spawn.Entries:Get(j).Type == goal.boss then
+                local entry = spawn.Entries:Get(j)
+                if
+                    entry.Type == goal.boss and (not goal.variant or entry.Variant == goal.variant)
+                then
                     return true
                 end
             end

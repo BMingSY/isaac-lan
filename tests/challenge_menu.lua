@@ -901,6 +901,7 @@ _IsaacLan.net_challenges = function()
         [1003] = "吃鸡",
         [1004] = "超大房间",
         [1005] = "你的准星",
+        [1006] = "挑战45",
     }) do
         result[tostring(id)] = {
             id = id,
@@ -914,7 +915,7 @@ _IsaacLan.net_challenges = function()
     return result
 end
 status.phase, status.hosting, status.slot, status.challenge = 2, 1, 0, 1001
-for index = 1, 5 do
+for index = 1, 6 do
     _IsaacLanMenuOpen(true)
     draw(40)
     draw(40)

@@ -105,7 +105,10 @@ return function(nav, greed, items)
             return nil
         end
         local inward = -((obs.actor.x - door.x) * door.dx + (obs.actor.y - door.y) * door.dy)
-        if inward >= 70 then
+        local across = math.abs((obs.actor.x - door.x) * door.dy - (obs.actor.y - door.y) * door.dx)
+        -- Combat may move the actor sideways out of the doorway. A stale
+        -- arrival goal must not pull it back over a newly spawned floor exit.
+        if inward >= 70 or across >= 70 then
             self.entry = nil
             return nil
         end
