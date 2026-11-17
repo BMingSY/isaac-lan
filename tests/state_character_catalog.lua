@@ -179,7 +179,11 @@ function _IsaacLanFrame()
             assert(not native.net_choose(22, 0), "Locked vanilla choice was accepted")
             _IsaacLanMenuOpen(true)
         end
-        if not chosen and status["choice" .. ordinal] == expected(ordinal) then
+        if
+            not chosen
+            and not status["random" .. ordinal]
+            and status["choice" .. ordinal] == expected(ordinal)
+        then
             if not selectedAt then
                 selectedAt = now
                 local _, catalog = checkCatalog()
@@ -276,27 +280,45 @@ function _IsaacLanMenuRender(
     if case and ordinal < #case.kinds and status.phase == 2 and menuOpened then
         visible, key, typed, mx, my, clicked = true, 0, "", -100, -100, false
         local choice, now = status["choice" .. ordinal], native.api_info().nowMs
-        if pendingChoice and choice == pendingChoice then
+        local menuRandom = status["random" .. ordinal] == true
+        if pendingChoice and choice == pendingChoice and not menuRandom then
             pendingChoice = nil
         end
         if
             not chosen
             and not pendingChoice
-            and choice ~= expected(ordinal)
+            and (menuRandom or choice ~= expected(ordinal))
             and now >= nextKeyAt
         then
-            local choices = checkCatalog()
-            local index
-            for i, id in ipairs(choices) do
-                if id == choice then
-                    index = i
-                    break
+            local choices, catalog = checkCatalog()
+            local entry = catalog[tostring(choice)]
+            local target = catalog[tostring(expected(ordinal))].tainted
+            local menuGroup = entry.tainted
+            if menuGroup ~= target then
+                key, menuGroup = 69, target
+                for _, id in ipairs(choices) do
+                    if id == entry.counterpart then
+                        pendingChoice = id
+                    end
                 end
+            else
+                local group, index = {}, 0
+                for _, id in ipairs(choices) do
+                    if catalog[tostring(id)].tainted == menuGroup then
+                        group[#group + 1] = id
+                        if id == choice and not menuRandom then
+                            index = #group
+                        end
+                    end
+                end
+                pendingChoice = group[(index + 1) % (#group + 1)]
+                key = 39
             end
-            assert(index, "Lobby selected a character outside the native list")
-            pendingChoice = choices[index % #choices + 1]
-            nextKeyAt, key, menuSteps = now + 250, 39, menuSteps + 1
-            assert(menuSteps <= #choices, "Native menu failed to reach the requested Mod character")
+            nextKeyAt, menuSteps = now + 250, menuSteps + 1
+            assert(
+                menuSteps <= #choices + 2,
+                "Native menu failed to reach the requested Mod character"
+            )
         end
     end
     return baseMenu(available, visible, key, typed, mx, my, clicked, addresses, networkError)

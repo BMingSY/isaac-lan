@@ -22,6 +22,7 @@ template <class T> T& at(Address address, unsigned offset = 0) {
 constexpr unsigned configStride = 0x148;
 constexpr unsigned menuStride = 0x18;
 constexpr unsigned entriesPerPage = 18;
+constexpr unsigned counterpartOffset = 0x124;
 constexpr unsigned edenCounter = 21;
 
 std::optional<std::string> nativeString(Address address) {
@@ -116,14 +117,16 @@ Catalogue catalogue(std::uintptr_t image, const lan::Progress& personal) {
     };
     std::unordered_set<unsigned> seen;
     std::vector<Choice> choices;
-    auto add = [&](unsigned type, bool tainted, Address record, const std::string& animation,
-                   const std::string& portraitAnm2Path) {
+    auto add = [&](unsigned type, unsigned counterpart, bool tainted, Address record,
+                   const std::string& animation, const std::string& portraitAnm2Path) {
         const auto cfg = config(type);
         if (!cfg || type > 65535 || !seen.insert(type).second)
             return;
         Entry entry;
         entry.type = static_cast<std::uint16_t>(type);
         entry.tainted = tainted;
+        if (counterpart != type && counterpart <= 65535 && config(counterpart))
+            entry.counterpart = static_cast<std::uint16_t>(counterpart);
         const auto raw = nativeString(cfg + 4).value_or("");
         entry.name = displayName(image, manager, raw);
         if (entry.name.empty())
@@ -150,7 +153,10 @@ Catalogue catalogue(std::uintptr_t image, const lan::Progress& personal) {
         for (unsigned index = 1; index < entriesPerPage; ++index) {
             const auto record = image + engine::j460::globals::characterMenuEntries +
                                 (page * entriesPerPage + index) * menuStride;
-            add(at<unsigned>(record, 4), page != 0, record, text(at<Address>(record)), portrait);
+            const auto other = image + engine::j460::globals::characterMenuEntries +
+                               ((1 - page) * entriesPerPage + index) * menuStride;
+            add(at<unsigned>(record, 4), at<unsigned>(other, 4), page != 0, record,
+                text(at<Address>(record)), portrait);
         }
         for (unsigned type = 41; type < count; ++type) {
             const auto cfg = config(type);
@@ -158,9 +164,17 @@ Catalogue catalogue(std::uintptr_t image, const lan::Progress& personal) {
             // pairing. Do not invent a blacklist for non-starting forms.
             if (!cfg || at<bool>(cfg, 0x128) || at<unsigned>(cfg, 0x11c) != 0)
                 continue;
-            const auto selected = page ? at<unsigned>(cfg, 0x124) : type;
-            add(selected, page != 0, 0, "", "");
+            const auto paired = at<unsigned>(cfg, counterpartOffset);
+            const auto selected = page ? paired : type;
+            add(selected, page ? type : paired, page != 0, 0, "", "");
         }
+    }
+    for (auto& entry : result.entries) {
+        if (entry.counterpart &&
+            std::none_of(result.entries.begin(), result.entries.end(), [&](const auto& other) {
+                return other.type == *entry.counterpart && other.tainted != entry.tainted;
+            }))
+            entry.counterpart.reset();
     }
     {
         FrontendProgress scope(manager, personal);

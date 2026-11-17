@@ -18,12 +18,27 @@ local renderRestart = _IsaacLanModules["presentation/restart"](drawVote)
 local renderSkip = _IsaacLanModules["presentation/animation_skip"](drawVote)
 local renderPing = _IsaacLanModules["presentation/ping"](_IsaacLan, Phase)
 -- menu_key reports Windows virtual-key codes from the native frontend.
-local Key =
-    { escape = 27, enter = 13, up = 38, down = 40, tab = 9, space = 32, left = 37, right = 39 }
+local Key = {
+    escape = 27,
+    enter = 13,
+    up = 38,
+    down = 40,
+    tab = 9,
+    space = 32,
+    left = 37,
+    right = 39,
+    toggle = 69,
+}
 local renderUpdateNotice = _IsaacLanModules["presentation/update_notice"](Key, _IsaacLan)
-local model =
-    _IsaacLanModules["presentation/menu_model"](Phase, Command, _IsaacLanModules["core/endpoint"])
+local characters = _IsaacLanModules["presentation/menu_characters"]()
+local model = _IsaacLanModules["presentation/menu_model"](
+    Phase,
+    Command,
+    _IsaacLanModules["core/endpoint"],
+    characters
+)
 local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
+local CHARACTER_SWAP_ICON_LAYER, CHARACTER_SWAP_KEY_LAYER = 1, 2
 local challenges = _IsaacLan.net_challenges()
 local roomOptions = _IsaacLan.net_room_options()
 local idle = model.idle
@@ -80,6 +95,9 @@ local characterNames = {
     [PlayerType.PLAYER_THESOUL_B] = "里·灵魂",
 }
 local function character(id)
+    if id == characters.random then
+        return "?"
+    end
     local entry = characterCatalog[tostring(id)]
     return characterNames[id] or (entry and entry.name) or ("角色 " .. id)
 end
@@ -124,6 +142,8 @@ local function load()
     sprite("sketches", root .. "charactermenubg.anm2", "Idle")
     sprite("portraits", root .. "characterportraits.anm2", "01_Isaac")
     sprite("marks", "gfx/ui/completion_widget.anm2", "Idle")
+    sprite("characterSwap", root .. "pageswapwidget.anm2", "Idle")
+    assets.characterSwap.Scale = Vector(0.4, 0.4)
     sprite("fill", "gfx/ui/bossoverlay_whiteout.anm2", "Fade")
     assets.fill:SetFrame("Fade", 15)
     for _, size in ipairs({ 10, 12, 16 }) do
@@ -307,6 +327,7 @@ function _IsaacLanMenuRender(
         command = _IsaacLanCommand,
         native = _IsaacLan,
         character = character,
+        catalog = characterCatalog,
         accent = amber,
         options = roomOptions,
         hide = function()
@@ -393,7 +414,13 @@ function _IsaacLanMenuRender(
             ui.selection = i
             if item.enabled and not activated then
                 activated = true
-                item.action()
+                if item.toggle and hit(160 + shift, y - 3, 24, 18) then
+                    if item.canToggle then
+                        item.toggle()
+                    end
+                else
+                    item.action()
+                end
             end
         elseif i == ui.selection and not ui.editing and item.enabled and not activated then
             if key == Key.enter or key == Key.space then
@@ -402,6 +429,9 @@ function _IsaacLanMenuRender(
             elseif item.change and (key == Key.left or key == Key.right) then
                 activated = true
                 item.change(key == Key.left and -1 or 1)
+            elseif item.toggle and key == Key.toggle then
+                activated = true
+                item.toggle()
             end
         end
         local label = item.label
@@ -411,8 +441,16 @@ function _IsaacLanMenuRender(
         if item.field and ui.editing == item.field then
             label = (item.field == "port" and "端口：" or "") .. ui[item.field] .. "_"
         end
-        local size = assets[12]:GetStringWidthUTF8(label) > 138 and 10 or 12
-        text(label, 49 + shift, y, size, item.color or (item.enabled and ink or faded), 138)
+        local labelX, maxWidth = 49 + shift, 138
+        if item.toggle then
+            maxWidth = 105
+            assets.characterSwap.Color = Color(0.65, 0.65, 0.65, item.canToggle and 0.65 or 0.3)
+            local hint = pos(173 + shift, y + 6)
+            assets.characterSwap:RenderLayer(CHARACTER_SWAP_ICON_LAYER, hint)
+            assets.characterSwap:RenderLayer(CHARACTER_SWAP_KEY_LAYER, hint)
+        end
+        local size = assets[12]:GetStringWidthUTF8(label) > maxWidth and 10 or 12
+        text(label, labelX, y, size, item.color or (item.enabled and ink or faded), maxWidth)
         if i == ui.selection then
             pointer(37 + shift, y + 5)
         end
@@ -462,9 +500,14 @@ function _IsaacLanMenuRender(
         if i < count then
             local id = status[(phase == Phase.lobby and "choice" or "character") .. i] or 0
             local marks = phase == Phase.lobby and status["marks" .. i] or nil
+            if phase == Phase.lobby and status["random" .. i] then
+                id, marks = characters.random, nil
+            end
             local portraitX = x + (marks and 34 or 63)
             portrait(id):Render(pos(portraitX, y + 45))
-            centered(character(id), portraitX, y + 66, 10, nil, marks and 60 or 110)
+            if id ~= characters.random then
+                centered(character(id), portraitX, y + 66, 10, nil, marks and 60 or 110)
+            end
             if marks then
                 assets.marks.Scale = Vector(0.65, 0.65)
                 for layerId, state in ipairs(marks) do
