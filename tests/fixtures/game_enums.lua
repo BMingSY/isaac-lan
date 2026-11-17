@@ -2,6 +2,7 @@
 -- Keep scenario inputs/expected wire values literal so ID drift stays visible.
 -- Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 return {
+    CacheFlag = { CACHE_ALL = 0xffff },
     WeaponType = {
         WEAPON_TEARS = 1,
         WEAPON_BRIMSTONE = 2,

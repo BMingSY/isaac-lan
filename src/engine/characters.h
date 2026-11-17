@@ -9,6 +9,7 @@ namespace isaac::characters {
 struct Entry {
     std::uint16_t type;
     std::string name, animation, portraitPath, portraitAnm2Path;
+    std::optional<std::uint16_t> counterpart;
     bool tainted = false, selectable = false, unlocked = false;
 };
 struct Catalogue {

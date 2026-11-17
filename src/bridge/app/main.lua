@@ -643,6 +643,9 @@ function _IsaacLanCommand(action, value)
     elseif action == "choose" then
         local character, ready = value:match("^(%d+):([01])$")
         assert(character and native.net_choose(tonumber(character), tonumber(ready)))
+    elseif action == "choose_random" then
+        local group, ready = value:match("^([01]):([01])$")
+        assert(group and native.net_choose_random(tonumber(group), tonumber(ready)))
     elseif action == "close" then
         assert(not lifecycle.ready(), "A running game must exit through the shared pause menu")
         lifecycle.close()

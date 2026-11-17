@@ -31,6 +31,7 @@
 #include <fstream>
 #include <chrono>
 #include <optional>
+#include <random>
 
 namespace backend = isaac::engine::session;
 
@@ -918,7 +919,8 @@ int poll(lua_State* L) {
     }
     if (session)
         session->poll();
-    if (session && session->phase() == lan::Phase::lobby && backend::managerReady()) {
+    if (session && session->phase() == lan::Phase::lobby && backend::managerReady() &&
+        session->choices()[session->slot()].candidates.empty()) {
         const auto character = session->choices()[session->slot()].character;
         session->publishChoicePreview(
             character, characters::completionPreview(
@@ -1019,6 +1021,8 @@ int poll(lua_State* L) {
                 session ? session->choices()[i].character : 0);
         integer(("ready" + std::to_string(i)).c_str(),
                 session && session->choices()[i].ready ? 1 : 0);
+        lua.pushBoolean(L, session && !session->choices()[i].candidates.empty());
+        lua.setField(L, -2, ("random" + std::to_string(i)).c_str());
         if (const auto marks =
                 characters::completionLayers(session ? session->choices()[i].preview : 0)) {
             lua.createTable(L, marks->size(), 0);
@@ -1221,7 +1225,7 @@ int characterList(lua_State* L) {
     }
     lua.createTable(L, 0, catalogue.entries.size());
     for (const auto& entry : catalogue.entries) {
-        lua.createTable(L, 0, 5);
+        lua.createTable(L, 0, 6);
         for (const auto& [key, value] :
              {std::pair{"name", &entry.name}, std::pair{"animation", &entry.animation},
               std::pair{"portraitPath", &entry.portraitPath},
@@ -1231,6 +1235,10 @@ int characterList(lua_State* L) {
         }
         lua.pushBoolean(L, entry.tainted);
         lua.setField(L, -2, "tainted");
+        if (entry.counterpart) {
+            lua.pushInteger(L, *entry.counterpart);
+            lua.setField(L, -2, "counterpart");
+        }
         lua.setField(L, -2, std::to_string(entry.type).c_str());
     }
     return 2;
@@ -1309,7 +1317,8 @@ int start(lua_State* L) {
     std::array<long long, lan::maxPlayers> characters;
     for (unsigned i = 0; i < lan::maxPlayers; ++i)
         characters[i] = lua.checkInteger(L, i + 3);
-    if (!session || difficulty < 0 || difficulty > 3) {
+    if (!session || !session->isHost() || session->phase() != lan::Phase::lobby || difficulty < 0 ||
+        difficulty > 3) {
         lua.pushBoolean(L, false);
         return 1;
     }
@@ -1329,6 +1338,20 @@ int start(lua_State* L) {
         }
         settings.characters[i] = static_cast<std::uint16_t>(characters[i]);
     }
+    // Resolve only at the launch boundary. Lobby choices and previews remain
+    // deferred on every peer, including after ready/unready and rule changes.
+    std::random_device random;
+    for (unsigned i = 0; i < session->players(); ++i) {
+        const auto& choice = session->choices()[i];
+        if (!choice.candidates.empty()) {
+            if (!choice.ready) {
+                lua.pushBoolean(L, false);
+                return 1;
+            }
+            std::uniform_int_distribution<std::size_t> pick(0, choice.candidates.size() - 1);
+            settings.characters[i] = choice.candidates[pick(random)];
+        }
+    }
     lua.pushBoolean(L, session->start(settings));
     return 1;
 }
@@ -1340,6 +1363,28 @@ int choose(lua_State* L) {
                                 characters::completionPreview(character, saves.localProgress
                                                                              ? *saves.localProgress
                                                                              : readProgress())}));
+    return 1;
+}
+int chooseRandom(lua_State* L) {
+    const auto group = lua.checkInteger(L, 1), ready = lua.checkInteger(L, 2);
+    if (!session || (group != 0 && group != 1) || (ready != 0 && ready != 1)) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    lan::Choice choice;
+    choice.ready = ready != 0;
+    const auto catalogue = characters::catalogue(
+        executableImage, saves.localProgress ? *saves.localProgress : readProgress());
+    for (const auto& entry : catalogue.entries)
+        if (entry.tainted == (group != 0) && session->localAccess().allowsCharacter(entry.type))
+            choice.candidates.push_back(entry.type);
+    std::sort(choice.candidates.begin(), choice.candidates.end());
+    if (choice.candidates.empty()) {
+        lua.pushBoolean(L, false);
+        return 1;
+    }
+    choice.character = choice.candidates.front();
+    lua.pushBoolean(L, session->choose(std::move(choice)));
     return 1;
 }
 int progressValues(lua_State* L) {
@@ -2117,6 +2162,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("net_finish_challenge", finishChallenge);
     function("net_start", start);
     function("net_choose", choose);
+    function("net_choose_random", chooseRandom);
     function("net_engine_start", startEngine);
     function("net_gate", gate);
     function("net_close", close);

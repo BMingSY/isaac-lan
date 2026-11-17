@@ -395,6 +395,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.friendly-fire friendly_fire.lua)
         isaac_add_lua_test(bridge.pvp-items pvp_items.lua)
         isaac_add_lua_test(bridge.challenge_menu challenge_menu.lua)
+        isaac_add_lua_test(presentation.menu-characters menu_characters.lua)
         isaac_add_lua_test(presentation.update-notice update_notice.lua)
         isaac_add_lua_test(bridge.endpoint endpoint.lua)
         isaac_add_lua_test(bridge.ping_hud ping_hud.lua)
@@ -448,6 +449,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.pocket-inventory pocket_inventory.lua)
         isaac_add_lua_test(bridge.inventory-catalog inventory_catalog.lua)
         isaac_add_lua_test(bridge.inventory-order inventory_order.lua)
+        isaac_add_lua_test(bridge.smelted-trinkets smelted_trinkets.lua)
         isaac_add_lua_test(bridge.crafting-bag crafting_bag.lua)
         isaac_add_lua_test(bridge.temporary-effects temporary_effects.lua)
         isaac_add_lua_test(bridge.item-room-entry item_room_entry.lua)
@@ -721,6 +723,7 @@ if(BUILD_TESTING)
         input-rooms
         lobby
         lobby-access
+        deferred-choice
         run-rules
         room-options
         handshake
@@ -934,6 +937,15 @@ if(BUILD_TESTING)
     add_test(NAME native.active-items COMMAND isaac_lan_active_items_test)
     set_tests_properties(native.active-items PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     add_executable(isaac_lan_inventory_order_test tests/inventory_order_test.cpp)
+    add_executable(isaac_lan_smelted_trinkets_test tests/smelted_trinkets_test.cpp)
+    target_include_directories(isaac_lan_smelted_trinkets_test PRIVATE src)
+    if(MINGW)
+        target_link_options(isaac_lan_smelted_trinkets_test PRIVATE -static-libgcc
+                            -static-libstdc++)
+        target_compile_options(isaac_lan_smelted_trinkets_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME native.smelted-trinkets COMMAND isaac_lan_smelted_trinkets_test)
+    set_tests_properties(native.smelted-trinkets PROPERTIES TIMEOUT 30 LABELS "offline;native-abi")
     target_include_directories(isaac_lan_inventory_order_test PRIVATE src)
     if(MINGW)
         target_link_options(isaac_lan_inventory_order_test PRIVATE -static-libgcc -static-libstdc++)

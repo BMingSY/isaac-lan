@@ -61,6 +61,7 @@ Lua 绘制组件按权威实体 ID 维护实际绳索记录，以 `EntityPtr` �
 | [角色持有引用](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entity_links.h) `actor_held_entity` | Player `+0x1410` 的 `EntityPtr` 供原生抱起渲染使用，独立于 `Parent`／`Child`；赋值位置 RVA `0x3d23e6` 受签名校验 | 读取返回本机实体索引，无对象时为 `-1`；同步组件转换为稳定 ID。写入仅限客机，接受角色和目标的借用 Sprite 或 `false`，拒绝非角色持有者和自引用；使用原生 `EntityPtr.Assign` 注册、替换和清空，目标释放时由游戏撤销引用，不调用拾取／投掷玩法 |
 | [轨道布局](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/rails.h) `room_rails` | `Room:GetGridEntity` 不包含 RailManager；房间 `+0x746c` 为 448 字节数组 | 客机整体验证长度、值、尺寸与所有者后写入；空轨道也恢复，Sprite 仍由房间持有 |
 | 客机实体回收 | `Remove()` 不保证立即释放池槽位；J460 跟班池为 64 槽 | 在房间作用域内通过原生更新完成回收，更新前须启用客机 AI 拦截；不扩容原生池，不手工释放对象 |
+| TNT 更新 | `GridEntityTNT::Update`，RVA `0x31f090`，无栈参数的 `thiscall`；入口受启动签名校验 | 客机跳过原生倒计时、动画选择和爆炸，状态、碰撞与完整姿态由主机恢复；主机及单人保留原调用。对象分配、释放和渲染仍由游戏持有，不读写私有倒计时 |
 | 跟班蓄力显示 | `Familiar+0xdcc` 为对象自有的蓄力 Sprite；`Sprite.Update` 的 RVA 为 `0x9100`，无栈参数的 `thiscall` | 客机拦截跟班更新时只推进该显示动画，充能值仍使用同步的 `FireCooldown`；不执行跟班 AI、发射或伤害，不复制 Sprite，生命周期由游戏管理 |
 | 玩家清房回调 | `Player::TriggerRoomClear`，RVA `0x3a8fd0`，`thiscall void(Player*)`；Lua 没有阻止原生清房效果的前置回调 | 联机客机房间启用期间跳过玩法触发，角色状态由权威快照恢复；主机、单人及原生加载保留原调用，不分配或替换角色对象 |
 | 口袋槽、合成袋、药丸状态 | 原生载荷分别为 32、12、75 字节 | 在库存恢复后应用，完整校验载荷与玩家归属；写入限客机，主动对象与物品池仍由原版管理 |
@@ -252,16 +253,20 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 原版 Lua API 不提供完整角色菜单目录和可选判定。[characters::catalogue](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/characters.h) 复制原生名称、画像与资格数据，Lua 不接收原生指针。
 
-- 原版两页菜单表 RVA `0x724140`，每条 `0x18`、每页 18 条；画像页表 RVA `0x724120`。随机占位行按位置排除。
+- 原版两页菜单表 RVA `0x724140`，每条 `0x18`、每页 18 条；画像页表 RVA `0x724120`。随机占位行按位置排除；两页相同位置给出表／里配对。
 - Manager 的 PlayerConfig 向量位于 `+0x2a678/+0x2a67c`，记录大小 `0x148`。按原生 Mod 菜单规则排除 `hidden +0x128` 和子配置，里页使用配对 `+0x124`；不另维护固定 ID 或成就表。
 - `MenuCharacter::Available` RVA `0x546cd0` 使用菜单记录作 receiver，栈参数为 0，被调方清理 4 字节。查询期间借入本机 642 个成就字节、523 个计数和 frontend scene；禁止在该作用域内执行 Lua、回调、存档或分配，返回前完整恢复。续玩只临时豁免已消耗的伊甸令牌。
 - 校验配置范围、数量、ID、字符串长度和配对索引；入口和 Mod 枚举锚 RVA `0x54919e` 受签名校验。字符串立即复制，原生 MSVC 字符串由游戏销毁。
+
+`net_characters()` 的目录条目用 `tainted` 标明分组，`counterpart` 为另一组对应的目录角色 ID；没有有效配对时省略。配对可尚未解锁，选角必须另查返回的可选 ID 列表。联机菜单只在当前组内循环和随机。`net_choose_random(group, ready)` 以个人可选 ID 和目录分组生成候选集合；`net_poll()` 返回的 `random0..3` 标识大厅的随机选择，角色卡显示问号并隐藏通关标记。运行层仅在主机发起新局时抽取最终 ID，准备／取消准备不触发抽取，启动参数只携带最终角色。表／里切换复用 J460 单人选角的 `ACTION_MENURB`（25，键盘 E／手柄右肩键），原生输入查询沿用现有菜单作用域，选角行右侧固定位置绘制原版 `gfx/ui/main menu/pageswapwidget.anm2` 的按键与切换符号层，省略底纸；角色名在预留宽度内显示。
 
 `characters::completionPreview` 只读取调用方提供的个人 `Progress`，不写原生存档。J460 原版角色与替身的计数映射集中在 [completion_marks.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/completion_marks.h)。每个计数只取低两位的单人记录，屏蔽官方联机记录；十二层按 `gfx/ui/completion_widget.anm2` 排列，含代表 Delirium 的纸张层。预览的低 24 位每两位保存一层，位 24 表示数据可用；解码拒绝额外位和层值 3。未收录的 Mod 角色返回不可用，仍可正常选角，不伪造未通关记录。
 
 ## 道具与效果
 
 `actor_inventory_order(sprite[, bytes])` 读取或恢复当前名单中玩家的 16 个库存槽顺序，每槽为大端 `i32` 道具 ID，0 表示空槽；玩法适配只用于里以撒。写入只允许客机，在完整解析并校验重复项数量后，把 ID 映射到本机已有历史索引，再一次提交槽位并置该角色 `PlayerHUD+0x6ac` 的库存刷新字节；顺序不变时不触及缓存。历史容器、道具效果、纹理和 HUD 缓存仍归原生代码所有，不复制主机索引、不分配历史条目。J460 的槽数组位于 `Player+0x1e00`，历史向量位于 `+0x1dec`，历史条目步长 `0x1c`、饰品标记 `+0x4`、道具 ID `+0x8`；读取检查向量长度、65536 条上限和每个索引，布局受原生 HUD 读取指令签名校验。实现见 [inventory_order.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/inventory_order.h)。
+
+`actor_smelted_trinkets(sprite[, bytes])` 读取当前名单中玩家的已吞饰品；写入只允许客机，返回 0 表示未变、1 表示已变，失败返回 `false` 并终止当前恢复。载荷为大端 `u16` 条目数，后接严格递增的 `{u16 id, u16 normal, u16 golden}`；编号范围为 1～32767 且必须存在于本机容器，数量各为 0～32767，每项至少有一种数量非零。J460 的 `Player+0x1748` 为游戏持有的配置大小向量，每项两个 `i16` 计数，普通／金色偏移分别为 0／2；原生倍率读取指令签名验证该布局。恢复在完整解析、校验向量范围和全部条目后原位写计数，清零省略项，不调整向量大小、不转移所有权、不触发使用道具、拾取奖励或历史条目。调用方在数量变化后刷新属性。实现见 [smelted_trinkets.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/smelted_trinkets.h)。
 
 `items_active_data(sprite[, bytes])` 接受当前原生名单中玩家的借用 Sprite，读取或恢复四个主动槽的 `{id:i32, data:i32}` 大端记录，并在末尾携带一个打包盒非空标志（0／1），共 33 字节。写入只允许客机；完整解析后核对四个 ID 与已恢复的库存一致、空槽状态为 0，并通过[道具状态校验](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/active_data.h)后才提交。D 无限高 16 位为十种骰子的索引，低 16 位保留充能状态。原生描述符位于 `Player+0x1580`，槽间隔 `0x20`，状态在槽内 `+0x1c`；布局由 RVA `0x391519` 的原生写入指令校验。
 

@@ -284,6 +284,7 @@ inline constexpr unsigned shopItemId = 0x53c, timeout = 0x540, wait = 0x544, sta
 inline constexpr unsigned flipSprite = 0x5d0, flipVisible = 0x6d9;
 } // namespace pickup
 namespace player {
+inline constexpr unsigned smeltedTrinkets = 0x1748;
 inline constexpr unsigned extraAnimationActive = 0x1398;
 inline constexpr unsigned movingBoxBegin = 0x1d7c, movingBoxEnd = 0x1d80;
 inline constexpr unsigned history = 0x1dec, inventoryOrder = 0x1e00, inventorySlots = 16;
