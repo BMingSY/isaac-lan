@@ -105,12 +105,12 @@ function _IsaacLanActionStep()
     assert(native.actor_ghost(native.rooms_heads()["1"], 1) and actor(1):IsCoopGhost())
     local positions = native.rooms_positions()
     assert(positions["0"].index ~= positions["1"].index)
-    assert(_IsaacLanChatSubmit("/revive P2"))
+    assert(_IsaacLanChatSubmit("/rebirth P2"))
     step()
     assert(
         not actor(1):IsCoopGhost() and native.rooms_positions()["1"].index == positions["1"].index
     )
-    assert(chatHas("2P 已复活"))
+    assert(chatHas("2P 已重生"))
     crossRoomRevived = true
     report("host revived guest in the other room")
 end
@@ -154,21 +154,21 @@ function _IsaacLanFrame()
             end
             if not guestSelf and actor(1):IsCoopGhost() and not split then
                 guestSelf = true
-                assert(_IsaacLanChatSubmit("/revive"))
+                assert(_IsaacLanChatSubmit("/rebirth"))
             elseif
                 not repeatChecked
                 and guestSelf
-                and chatHas("2P 已复活")
+                and chatHas("2P 已重生")
                 and not actor(1):IsCoopGhost()
             then
                 repeatChecked = true
-                assert(_IsaacLanChatSubmit("/revive 2p"))
-                assert(_IsaacLanChatSubmit("/c revive 4p"))
-                assert(not _IsaacLanChatSubmit("/revive 5p"))
+                assert(_IsaacLanChatSubmit("/rebirth 2p"))
+                assert(_IsaacLanChatSubmit("/c rebirth 4p"))
+                assert(not _IsaacLanChatSubmit("/rebirth 5p"))
             elseif not guestTarget and actor(0):IsCoopGhost() then
                 guestTarget = true
-                assert(_IsaacLanChatSubmit("/c revive 1p"))
-            elseif guestTarget and split and chatHas("1P 已复活") then
+                assert(_IsaacLanChatSubmit("/c rebirth 1p"))
+            elseif guestTarget and split and chatHas("1P 已重生") then
                 splitAgain = splitAgain or s.verified
             end
         end

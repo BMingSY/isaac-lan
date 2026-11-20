@@ -190,10 +190,10 @@ assert(
 assert(#other.messages == before + 1)
 local unchangedHost, unchangedOther = #host.messages, #other.messages
 for _, case in ipairs({
-    { "/revive", 1, "2P 已复活" },
-    { "/REVIVE 1P", 0, "1P 已复活" },
-    { "/c revive P3", 2, "3P 已复活" },
-    { "/console revive 4", 3, "4P 未在线" },
+    { "/rebirth", 1, "2P 已重生" },
+    { "/REBIRTH 1P", 0, "1P 已重生" },
+    { "/c rebirth P3", 2, "3P 已重生" },
+    { "/console rebirth 4", 3, "4P 未在线" },
 }) do
     assert(guest.submit(case[1]))
     poll()
@@ -202,17 +202,19 @@ for _, case in ipairs({
     assert(revivals[#revivals] == case[2] and guest.messages[#guest.messages].text == case[3])
 end
 assert(#host.messages == unchangedHost and #other.messages == unchangedOther and #revivals == 4)
-assert(guest.parse("/c revive self").target == "self")
+assert(guest.parse("/c rebirth self").target == "self")
 assert(guest.parse("/c 复活 2p").kind == "native")
 for _, invalid in ipairs({
     "/复活",
+    "/重生",
+    "/revive",
     "/复活 2p",
-    "/revive 自己",
-    "/c revive 自己",
-    "/revive 0",
-    "/revive 5P",
-    "/c revive 2p 3p",
-    "/revive P2P",
+    "/rebirth 自己",
+    "/c rebirth 自己",
+    "/rebirth 0",
+    "/rebirth 5P",
+    "/c rebirth 2p 3p",
+    "/rebirth P2P",
 }) do
     assert(not guest.submit(invalid))
 end
@@ -542,7 +544,7 @@ for _, alias in ipairs({ "/h", "/help" }) do
         "--room",
         "/c",
         "/console",
-        "/revive",
+        "/rebirth",
         "/lanbot help",
         "/opacity help",
         "/feedback",

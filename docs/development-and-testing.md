@@ -137,7 +137,7 @@ python tools/inspect_engine.py "$ISAAC_GAME_EXE" \
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
 
-两版的 `--case revive-command` 检查合作幽灵在同房与分房时通过联机控制台复活。`--case boss-reward-pickup` 验证主机取走第一个 Boss 奖励后，客机实际拾取弹簧锁钥匙、获得幸运与魂心、拾取两把钥匙并跨房保留效果。两版的 `--case devil-combat` 在已打开的恶魔房出口旁触发战斗，由客机实际尝试出门，并在清房后沿原路离开。
+两版的 `--case revive-command` 检查合作幽灵在同房与分房时通过 `/rebirth` 重生。`--case boss-reward-pickup` 验证主机取走第一个 Boss 奖励后，客机实际拾取弹簧锁钥匙、获得幸运与魂心、拾取两把钥匙并跨房保留效果。两版的 `--case devil-combat` 在已打开的恶魔房出口旁触发战斗，由客机实际尝试出门，并在清房后沿原路离开。
 
 实体尺寸恢复的定向检查为 `bridge.entity-codec` 和 Windows `native.entity-size`，覆盖无 XML 配置的实体、重复尺寸、实际尺寸变化、原有碰撞形状与非法输入拒绝。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case entity-size --case entity-fields --mod <Mod目录> --heap-check --record`，在同一对进程验证换层后的复活机、分房重聚、检查点重连及常规字段读写对照；用 Allstars 的旧实体表可覆盖配置缺失路径。Mod 文件只复制到隔离目录，不修改原安装；未订阅的创意工坊副本应准备为无 Workshop ID 的本地测试元数据，避免游戏自动移除它，保留 Lua 和资源文件原样。
 
