@@ -6,6 +6,7 @@ local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels, renderedMarks = {}, {}
 local labelPositions, renderedSwitches = {}, {}
+local titleDraws = {}
 local options = { { flag = 1, key = "friendlyFire", name = "队友伤害", shortName = "友伤" } }
 local noop = function() end
 local remembered = { "", 29506 }
@@ -37,10 +38,22 @@ Sprite = function()
     return {
         Load = function(self, path)
             if vanilla then
-                assert(not path:find("online", 1, true), "Vanilla menu requested online DLC art")
+                assert(
+                    not path:find("gfx/ui/main menu/online", 1, true),
+                    "Vanilla menu requested online DLC art"
+                )
             end
             self.path = path
         end,
+        IsLoaded = function(self)
+            return self.path ~= nil
+        end,
+        ReplaceSpritesheet = function(self, layer, path)
+            assert(path:match("^resources%-dlc3%.zh/font/TeamMeatFontExtended16Bold_[01]%.png$"))
+            self.sheets = self.sheets or {}
+            self.sheets[layer] = path
+        end,
+        LoadGraphics = noop,
         Play = function(self, animation)
             if animation ~= "missing" then
                 self.animation = animation
@@ -53,7 +66,10 @@ Sprite = function()
             self.animation = animation
         end,
         Render = function(self, position)
-            if self.path == "gfx/ui/completion_widget.anm2" then
+            if self.path == "cache/menu/online.anm2" then
+                assert(self.sheets[0] and self.sheets[9])
+                titleDraws[#titleDraws + 1] = { position, self.animation, self.Rotation }
+            elseif self.path == "gfx/ui/completion_widget.anm2" then
                 renderedMarks[#renderedMarks + 1] = { table.unpack(self.layers) }
             elseif self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
                 renderedPortraits[#renderedPortraits + 1] = { self.path, self.animation }
@@ -722,21 +738,21 @@ end
 do
     status = { phase = 0, hosting = 0, players = 0 }
     Options = { Language = "zh" }
-    labels = {}
+    titleDraws = {}
     _IsaacLanMainMenuEntry(184, 97)
-    assert((labels["联"] ~= nil) == vanilla and (labels["式"] ~= nil) == vanilla)
+    assert(#titleDraws == (vanilla and 1 or 0))
     if vanilla then
-        local first = labelPositions["联"]
+        local first = titleDraws[1][1]
+        assert(titleDraws[1][2] == "Chinese" and titleDraws[1][3] == -15)
         _IsaacLanMainMenuEntry(204, 157)
-        assert(labelPositions["联"].x == first.x + 20 and labelPositions["联"].y == first.y + 60)
+        assert(titleDraws[2][1].X == first.X + 20 and titleDraws[2][1].Y == first.Y + 60)
     end
     Options.Language = "en"
-    labels = {}
     _IsaacLanMainMenuEntry(184, 97)
-    assert((labels["O"] ~= nil) == vanilla and (labels["E"] ~= nil) == vanilla)
-    labels = {}
+    assert(not vanilla or titleDraws[#titleDraws][2] == "English")
+    titleDraws = {}
     assert(not _IsaacLanMenuRender(true, false, 0, "", 0, 0, false, "", ""))
-    assert(not labels["联"] and not labels["O"])
+    assert(#titleDraws == 0)
 end
 
 -- Each card renders its owner's twelve native single-player layers.

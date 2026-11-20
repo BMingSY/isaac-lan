@@ -35,6 +35,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/generated_items.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/rewind.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/frontend.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/menu_navigation.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/minimap.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/frontend_hud.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/animation_skip.cpp"

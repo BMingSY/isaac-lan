@@ -61,6 +61,10 @@ foreach(backend j510 j835)
                            tests/native_call.cpp src/engine/versions/${backend}/actor_state.cpp)
     isaac_add_backend_test(frontend-menu ${backend} SOURCES tests/frontend_menu_test.cpp
                            src/engine/versions/${backend}/frontend.cpp)
+    if(backend STREQUAL "j835")
+        target_sources(isaac_lan_frontend_menu_j835_test
+                       PRIVATE src/engine/versions/j835/menu_navigation.cpp)
+    endif()
     isaac_add_backend_test(
         minimap
         ${backend}

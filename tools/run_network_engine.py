@@ -550,15 +550,6 @@ def main():
             control(pid, "Capture", windows(args.output.resolve() / f"{role}-lobby-cn.png"))
             (args.release_solo_coordination / f"solo-lobby-{role}.ack").write_text("ready")
             return
-        if action == "show-lobby" and not has_official_lobby:
-            # The inserted Online row and Challenges share a stock cursor value.
-            # Approach from above to verify the actual player-facing entry.
-            for _ in range(10):
-                if snapshot["selected"] == 0:
-                    break
-                control(pid, "Keys", "{UP}")
-                time.sleep(0.2)
-                snapshot = menu_state(pid)
         # New Run is row zero, Continue row one. Read back each move instead of
         # assuming the native cursor retained its previous session's position.
         target = {"new-run": 0, "continue": 1, "show-lobby": 2}[action]

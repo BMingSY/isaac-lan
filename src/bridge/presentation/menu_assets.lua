@@ -50,22 +50,44 @@ return function(resources, font)
         local check = sprite(root .. "seedsmenu.anm2", "Checkmark", 1)
         local checkLayer = 10
         local ink = KColor(0.18, 0.14, 0.14, 1)
-        local titles = {}
-        function assets.mainEntry(x, y, language)
-            local title = language == "zh" and "联机模式" or "ONLINE"
-            local glyphs = titles[title]
-            if not glyphs then
-                glyphs = {}
-                local advance = 0
-                for _, codepoint in utf8.codes(title) do
-                    local letter = utf8.char(codepoint)
-                    glyphs[#glyphs + 1] = { letter, advance, -math.floor(advance * 0.16) }
-                    advance = advance + assets[16]:GetStringWidthUTF8(letter)
+        local title
+        if resources.main_title then
+            title = Sprite()
+            title:Load(resources.main_title, false)
+            if title:IsLoaded() then
+                -- Layers use the two pages of Repentance's own Chinese menu font.
+                local pages = { 1, 0, 0, 1, 1, 1, 1, 1, 1, 1 }
+                for index, page in ipairs(pages) do
+                    title:ReplaceSpritesheet(
+                        index - 1,
+                        "resources-dlc3.zh/font/TeamMeatFontExtended16Bold_" .. page .. ".png"
+                    )
                 end
-                titles[title] = glyphs
+                title:LoadGraphics()
+                title.Rotation = -15
+                title.Color = Color(0.18, 0.14, 0.14, 1, 0, 0, 0)
+            else
+                title = nil
             end
-            for _, glyph in ipairs(glyphs) do
-                assets[16]:DrawStringUTF8(glyph[1], x + glyph[2], y + glyph[3], ink, 0, false)
+        end
+        local animation
+        function assets.mainEntry(x, y, language)
+            if title then
+                local nextAnimation = language == "zh" and "Chinese" or "English"
+                if animation ~= nextAnimation then
+                    animation = nextAnimation
+                    title:SetFrame(animation, 0)
+                end
+                title:Render(Vector(x, y))
+            else
+                assets[16]:DrawStringUTF8(
+                    language == "zh" and "联机模式" or "ONLINE",
+                    x,
+                    y,
+                    ink,
+                    0,
+                    false
+                )
             end
         end
         function assets.panel(origin, modes)
