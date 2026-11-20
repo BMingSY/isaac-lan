@@ -284,8 +284,8 @@ function _IsaacLanMenuRender(
     end
     if not visible then
         renderPing(status, assets[10])
-        if (status.skipVotes or 0) ~= 0 then
-            renderSkip(status, assets[10])
+        if status.bossIntro or (status.skipVotes or 0) ~= 0 then
+            renderSkip(status, assets[10], message)
         else
             renderRestart(status, assets[10])
         end

@@ -127,6 +127,7 @@ void __attribute__((fastcall)) startIntro(void* transition, void*, unsigned firs
     // entry must notify its occupants without taking over the host's viewport.
     if (audience & 1u) {
         hostIntro = event.serial;
+        waiting.observe(0, hostIntro, true);
         played = event.serial;
         playIntro(transition, first, second);
     }
@@ -295,6 +296,7 @@ IntroSimulationScope::IntroSimulationScope(bool advance) {
             return;
         if (!waiting.pending(0, hostIntro, runtime::tick())) {
             rooms::withRoomPlayers(0, finishIntro);
+            observeIntro(0, hostIntro, false);
             hostIntro = 0;
             return;
         }
@@ -435,13 +437,13 @@ bool skipIntro(unsigned id) {
     const auto audience = waiting.audience(id, runtime::tick(), rooms::connected());
     if (!audience)
         return false;
-    if (hostIntro == id && introActive()) {
-        rooms::withRoomPlayers(0, finishIntro);
+    waiting.finish(id);
+    if (hostIntro == id) {
+        if (introActive())
+            rooms::withRoomPlayers(0, finishIntro);
+        observeIntro(0, id, false);
         hostIntro = 0;
     }
-    for (unsigned slot = 0; slot < lan::maxPlayers; ++slot)
-        if (audience & (1u << slot))
-            observeIntro(slot, id, false);
     return true;
 }
 void observeIntro(unsigned slot, unsigned id, bool active) {
@@ -498,6 +500,7 @@ void roomEntered(std::uintptr_t room, bool created) {
             event.audience |= added;
             if (added & 1u) {
                 hostIntro = played = event.serial;
+                waiting.observe(0, hostIntro, true);
                 playIntro(reinterpret_cast<void*>(game + bindings.layout.game.transition),
                           event.first, event.second);
             }

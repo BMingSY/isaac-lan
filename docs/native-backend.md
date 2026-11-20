@@ -202,7 +202,7 @@ J510 的 `Game:StartStageTransition(sameStage, animation[, player])` Lua 闭包�
 
 Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；普通 `Game::StartRoomTransition` 同时选路并启动转场，不能直接作为客机结果回放接口。
 
-[`presentation_events`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/presentation.cpp) 保持每条八个 `u32` 的 Boss 出场载荷，按楼层、类型、维度和房间匹配后调用原生 `StartBossIntro`。加入已加载房间只订阅其未完成事件，沿用序号和 Boss ID；主机加入时在到达作用域内启动本机原生画面，客机通过权威视图接收。原始观看者决定等待边界，后来者不延长战斗暂停。每份已接受视图中的事件列表是该接收者仍待播放的完整集合：已播放事件消失时，客机结束对应的剩余出场画面。重复状态按房间与序号去重；等待和已参与名单由 [IntroBarrier](https://github.com/BMingSY/isaac-lan/blob/main/src/core/intro_barrier.h) 管理，完成／超时后不接受新订阅，退出清理名单。载荷字段和协议号不变，不同 DLL 由扩展指纹拒绝连接。
+[`presentation_events`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/presentation.cpp) 保持每条八个 `u32` 的 Boss 出场载荷，按楼层、类型、维度和房间匹配后调用原生 `StartBossIntro`。加入已加载房间只订阅其未完成事件，沿用序号和 Boss ID；主机加入时在到达作用域内启动本机原生画面，客机通过权威视图接收。原始观看者决定动画时长。客机确认看到了该事件后，已接受视图中移除事件会截断剩余动画。房主持续暂停这个房间的战斗，直到仍在房间的观看者逐个确认本机画面已结束。投票通过也沿用同一结束确认。重复状态按房间与序号去重；等待和已参与名单由 [IntroBarrier](https://github.com/BMingSY/isaac-lan/blob/main/src/core/intro_barrier.h) 管理，完成／超时后不接受新订阅，退出清理名单。载荷字段和协议号不变，不同 DLL 由扩展指纹拒绝连接。
 
 [`finishBossIntro`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/boss_intro.h) 只完成 J510 的 Boss versus 状态，不暴露 Lua 写内存接口。游戏的 `RoomTransition` 位于 `Game+0x1b83c`，模式／已用帧／持续帧在 `+0/+4/+8`，出场 Sprite 在 `+0x38`，Boss 标记在 `+0x238`。仅当标记有效且模式为 2 或 3 时操作：模式 2 清除 Sprite 主动画的播放位，再调用原生 `RoomTransition::Update`（RVA `0x43a5d0`）完成音乐和演出收尾；模式 3 将已用帧推进到持续帧，再调用原生完成控制恢复。最多调用两次，不直接改写模式、不重新初始化房间，不分配或保留原生对象；其他转场完全不写入。主机在本机房间名单作用域内执行，客机在已提交视图的本机作用域内执行。
 

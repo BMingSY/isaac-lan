@@ -35,12 +35,18 @@ local font = {
 }
 local progress = dofile(root .. "/src/bridge/presentation/vote_progress.lua")()
 local render = dofile(root .. "/src/bridge/presentation/animation_skip.lua")(progress)
-render({ skipVotes = 0, skipMembers = 3 }, font)
-render({ skipVotes = 4, skipMembers = 4 }, font)
+local function message(value)
+    return value
+end
+render({ bossIntro = true, skipVotes = 0, skipMembers = 0 }, font, message)
+assert(labels["按确认键跳过"], "Guest received no hint before voting state arrived")
+labels = {}
+render({ skipVotes = 0, skipMembers = 3 }, font, message)
+render({ skipVotes = 4, skipMembers = 4 }, font, message)
 assert(rectangles == 0, "Idle or single-player skip drew a vote indicator")
 for players = 2, 4 do
     labels, rectangles = {}, 0
-    render({ skipVotes = 1, skipMembers = (1 << players) - 1 }, font)
+    render({ skipVotes = 1, skipMembers = (1 << players) - 1 }, font, message)
     assert(labels["跳过 1/" .. players] and labels[">>"] and rectangles > 0)
 end
 labels = {}

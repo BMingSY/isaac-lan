@@ -23,6 +23,24 @@ function _IsaacLanMinimapRender()
         battleHud.renderMap()
     end
 end
+local revivalMachine, challenge
+if native.rooms_machine_revival then
+    local decoration = EffectVariant.BACKDROP_DECORATION
+    revivalMachine = _IsaacLanModules["compat/items/revival_machine"](
+        native,
+        _IsaacLanModules["presentation/fonts"],
+        decoration,
+        function()
+            return challenge.allow("coop_revive")
+        end
+    )
+    Isaac.AddCallback(owner, ModCallbacks.MC_POST_EFFECT_RENDER, revivalMachine.render, decoration)
+end
+local devilCombat = _IsaacLanModules["compat/routes/devil_combat"](
+    native,
+    _IsaacLanModules["compat/items/door_stop"]
+)
+callback(ModCallbacks.MC_POST_PEFFECT_UPDATE, devilCombat.update)
 local keeper = _IsaacLanModules["compat/characters/keeper"](native, RoomType, PickupVariant)
 local refreshFlatFileDoors = _IsaacLanModules["compat/items/flat_file"]({
     native = native,
@@ -66,7 +84,7 @@ end)
 callback(ModCallbacks.MC_PRE_USE_ITEM, function(_, item, _, player)
     friendlyFire.beforeUseItem(item, player)
 end)
-local challenge, chat, feedback
+local chat, feedback
 local function lootAllocation()
     return _IsaacLanModules["compat/rules/loot_roll"]({
         native = native,
@@ -269,6 +287,10 @@ callback(ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, pickup, collider)
     return challenge.collide(pickup, collider)
 end)
 callback(ModCallbacks.MC_POST_NEW_LEVEL, function()
+    devilCombat.reset()
+    if revivalMachine then
+        revivalMachine.reset()
+    end
     challenge.level()
 end)
 callback(ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD, function()
@@ -469,7 +491,11 @@ function _IsaacLanActionStep()
     roomRules.step()
     friendlyFire.prepare()
     refreshFlatFileDoors()
-    if native.api_info().ready == 1 then
+    local info = native.api_info()
+    if revivalMachine then
+        revivalMachine.step(info)
+    end
+    if info.ready == 1 then
         _IsaacLanModules["compat/mods/goodtrip/authority"].observe()
     end
     integration.actions.step()
@@ -535,6 +561,10 @@ local function prepareCheckpoint()
     end
 end
 callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
+    devilCombat.reset()
+    if revivalMachine then
+        revivalMachine.reset()
+    end
     friendlyFire.reset()
     roomRules.reset()
     game = Game()
@@ -564,6 +594,10 @@ callback(ModCallbacks.MC_POST_UPDATE, function()
     prepareCheckpoint()
 end)
 callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
+    devilCombat.reset()
+    if revivalMachine then
+        revivalMachine.reset()
+    end
     friendlyFire.reset()
     roomRules.reset()
     challenge.reset()
