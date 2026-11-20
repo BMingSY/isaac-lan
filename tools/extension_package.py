@@ -50,7 +50,7 @@ def prepare_update(archive, content):
     with ZipFile(archive) as zipped:
         prefix = archive.stem + "/"
         index = json.loads(zipped.read(prefix + "payload.json"))
-        if index.get("format") == 2:
+        if index.get("format") == 3:
             for backend in bundle_backends(index):
                 directory = prefix + f"backends/{backend}/"
                 payload = json.loads(zipped.read(directory + "payload.json"))

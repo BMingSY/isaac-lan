@@ -814,12 +814,12 @@ endif()
 add_library(
     isaac_lan_loader SHARED
     src/app/loader.cpp src/app/extension_loader.cpp src/runtime/extension_update.cpp
-    src/runtime/extension_files.cpp src/app/loader.def)
+    src/runtime/extension_files.cpp src/engine/game_version.cpp src/app/loader.def)
 set_target_properties(isaac_lan_loader PROPERTIES PREFIX "" OUTPUT_NAME "winmm")
-target_include_directories(isaac_lan_loader PRIVATE src)
+target_include_directories(isaac_lan_loader PRIVATE src "${PROJECT_BINARY_DIR}/generated")
 target_compile_definitions(isaac_lan_loader PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
                                                     ISAAC_LAN_VERSION="${ISAAC_LAN_VERSION}")
-target_link_libraries(isaac_lan_loader PRIVATE bcrypt isaac_lan_profile)
+target_link_libraries(isaac_lan_loader PRIVATE bcrypt)
 if(BUILD_TESTING)
     foreach(kind compatible incompatible failing missing_export)
         add_library(isaac_lan_extension_${kind}_fixture SHARED tests/extension_fixture.cpp)
@@ -839,8 +839,10 @@ if(BUILD_TESTING)
     add_executable(
         isaac_lan_extension_loader_test
         tests/extension_loader_test.cpp src/app/extension_loader.cpp
-        src/runtime/extension_update.cpp src/runtime/extension_files.cpp)
-    target_include_directories(isaac_lan_extension_loader_test PRIVATE src)
+        src/runtime/extension_update.cpp src/runtime/extension_files.cpp
+        src/engine/game_version.cpp)
+    target_include_directories(isaac_lan_extension_loader_test
+                               PRIVATE src "${PROJECT_BINARY_DIR}/generated")
     target_compile_definitions(isaac_lan_extension_loader_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     target_link_libraries(isaac_lan_extension_loader_test PRIVATE bcrypt)
     if(MINGW)

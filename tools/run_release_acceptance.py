@@ -9,13 +9,15 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
+from build_package import stage_binary
 
 from testing.results import finish_run
 from testing.engine import configure_interrupts, engine_command
 from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle, windows
 from game_logs import log_path
-from game_profiles import build_profile, bundle_backends
+from game_profiles import build_profile, installer_payload
 from testing.profiles import magdalene_profile
 from testing.pause import ITEMS_PAGE, peer_evidence as pause_evidence
 
@@ -81,17 +83,20 @@ def main():
     output = args.output.resolve()
     if not 1 <= args.port < 65535:
         parser.error("Invalid port")
-    payload = json.loads((args.package / "payload.json").read_text())
-    if payload.get("format") == 2:
-        backend = build_profile(args.build)["backend"]
-        if backend not in bundle_backends(payload):
-            parser.error("The release package does not contain the selected game build")
-        payload = json.loads((args.package / "backends" / backend / "payload.json").read_text())
-        if payload.get("backend") != backend:
-            parser.error("The release manifest differs from the selected game backend")
-    for name, digest in payload["files"].items():
-        if hashlib.sha256((args.build / name).read_bytes()).hexdigest() != digest:
-            parser.error("The built native files must match the frozen release package")
+    directory, payload = installer_payload(args.package, build_profile(args.build)["backend"])
+    with tempfile.TemporaryDirectory() as temporary:
+        for name, expected in payload["files"].items():
+            packed = (args.package if name == "winmm.dll" else directory) / name
+            if hashlib.sha256(packed.read_bytes()).hexdigest() != expected:
+                parser.error(f"Frozen release package hash differs: {name}")
+            # Both backend manifests bind the same loader from the shared build.
+            if name == "winmm.dll" and directory != args.package:
+                continue
+            if hashlib.sha256((args.build / name).read_bytes()).hexdigest() != expected:
+                if stage_binary(args.build, name, Path(temporary) / name, True) != expected:
+                    parser.error(
+                        f"Built native file differs from the frozen release package: {name}"
+                    )
     idle(labs)
     progress = magdalene_profile(
         (log_path(labs[1]).parent / "persistentgamedata1.dat").read_bytes()
@@ -114,6 +119,8 @@ def main():
         "--menu-start",
         "--virtual-input",
         "--installed",
+        "--installed-package",
+        str(args.package.resolve()),
         "--keyboard-pause",
         "--menu-port",
         str(args.port),

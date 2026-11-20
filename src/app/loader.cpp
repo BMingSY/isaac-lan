@@ -6,7 +6,7 @@
 #include <cwchar>
 #include <cstring>
 #include "app/extension_loader.h"
-#include "engine/build.h"
+#include "engine/game_version.h"
 
 namespace {
 [[noreturn]] void unavailableExport(const char* name, unsigned ordinal) {
@@ -36,7 +36,8 @@ FARPROC lan_winmm_functions[193]{};
 namespace {
 void* entry = nullptr;
 WORD entryBytes = 0;
-wchar_t extension[MAX_PATH]{};
+wchar_t executable[MAX_PATH]{};
+std::size_t imageSize{};
 void restoreEntry() {
     DWORD old;
     if (!VirtualProtect(entry, 2, PAGE_EXECUTE_READWRITE, &old))
@@ -50,12 +51,11 @@ void restoreEntry() {
 DWORD WINAPI initialize(void*) {
     isaac::loader::Extension loaded;
     try {
-        loaded = isaac::loader::load(std::filesystem::path(extension).parent_path(),
-                                     ISAAC_LAN_VERSION, isaac::build::version());
+        const auto version = isaac::engine::identifyGame(GetModuleHandleW(nullptr), imageSize);
+        loaded = isaac::loader::load(std::filesystem::path(executable).parent_path(),
+                                     ISAAC_LAN_VERSION, version);
     } catch (...) {
-        // No engine bootstrap has run yet. Preserve the original installation
-        // if source discovery or staging cannot be completed.
-        loaded = isaac::loader::loadInstalled(extension);
+        loaded.failure = {isaac::startup::Code::extensionLoad, executable, {}, {}};
     }
     const DWORD result =
         loaded.bootstrap ? loaded.bootstrap(nullptr) : isaac::startup::value(loaded.failure.code);
@@ -98,23 +98,19 @@ bool forwardExports() {
     return true;
 }
 bool gateEntry() {
-    wchar_t executable[MAX_PATH]{};
-    if (!GetModuleFileNameW(nullptr, executable, MAX_PATH))
+    const auto length = GetModuleFileNameW(nullptr, executable, MAX_PATH);
+    if (!length || length >= MAX_PATH)
         return false;
     const auto filename = wcsrchr(executable, L'\\');
     if (!filename || _wcsicmp(filename + 1, L"isaac-ng.exe"))
         return true;
-    const auto length = static_cast<std::size_t>(filename - executable) + 1;
-    if (length + 20 >= MAX_PATH)
-        return false;
-    wcsncpy(extension, executable, length);
-    wcscat(extension, L"isaac_lan_probe.dll");
     const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
     const auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
     const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
     if (dos->e_magic != IMAGE_DOS_SIGNATURE || nt->Signature != IMAGE_NT_SIGNATURE ||
         nt->FileHeader.Machine != IMAGE_FILE_MACHINE_I386)
         return false;
+    imageSize = nt->OptionalHeader.SizeOfImage;
     entry = reinterpret_cast<void*>(base + nt->OptionalHeader.AddressOfEntryPoint);
     memcpy(&entryBytes, entry, 2);
     DWORD old;

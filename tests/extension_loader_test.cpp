@@ -1,5 +1,8 @@
 #include "app/extension_loader.h"
 #include "core/extension_package.h"
+#include "supported_game_versions.h"
+#include <algorithm>
+#include <vector>
 #include "runtime/extension_update.h"
 #include "runtime/extension_files.h"
 #include <cstring>
@@ -31,8 +34,9 @@ void prepare(const fs::path& directory, const fs::path& fixture, const std::stri
               "\ngame_build=1.9.7.19.J510\nloader_abi=" + std::to_string(loaderABI) +
               "\nsha256=" + isaac::updates::fileHash(directory / payloadFile) + "\n");
 }
-fs::path load(const fs::path& game) {
-    const auto loaded = isaac::loader::load(game, "0.6.3", "1.9.7.19.J510");
+constexpr auto plus = &isaac::engine::supportedGameVersions[0];
+fs::path load(const fs::path& game, const isaac::engine::GameVersion* version = plus) {
+    const auto loaded = isaac::loader::load(game, "0.6.3", version);
     require(loaded.module && loaded.bootstrap, "load extension and bootstrap export");
     using ModulePath = const wchar_t*(__cdecl*)();
     const auto proc = GetProcAddress(loaded.module, "IsaacLanTestModulePath");
@@ -115,6 +119,40 @@ int wmain(int argc, wchar_t** argv) {
         write(game / "isaac-lan/session.keep", "preserved session");
         fs::copy_file(compatible, game / payloadFile);
         require(load(game) == game / payloadFile, "no package uses installed root");
+        require(plus->backend == "j510", "legacy fixture uses the Repentance+ build");
+        const auto split = temporary.root / "split";
+        std::vector<char> image;
+        for (const auto& expected : isaac::engine::supportedGameVersions) {
+            const auto marker = std::string(expected.version) + "-";
+            image.assign(expected.markerRva + marker.size(), 0);
+            std::copy(marker.begin(), marker.end(), image.begin() + expected.markerRva);
+            auto version = isaac::engine::identifyGame(image.data(), image.size());
+            require(version == &expected, "identify the running game's exact version marker");
+            const auto body = split / "isaac-lan/backends" / version->backend / payloadFile;
+            fs::create_directories(body.parent_path());
+            fs::copy_file(compatible, body);
+            require(load(split, version) == body,
+                    "one installation routes each game to its own DLL");
+            require(!isaac::engine::identifyGame(image.data(), image.size() - 1),
+                    "reject truncated version marker");
+            image.back() = 'X';
+            require(!isaac::engine::identifyGame(image.data(), image.size()),
+                    "reject changed marker delimiter");
+        }
+        image.clear();
+        for (const auto& candidate : isaac::engine::supportedGameVersions) {
+            const auto marker = std::string(candidate.version) + "-";
+            image.resize(std::max(image.size(), candidate.markerRva + marker.size()), 0);
+            std::copy(marker.begin(), marker.end(), image.begin() + candidate.markerRva);
+        }
+        require(!isaac::engine::identifyGame(image.data(), image.size()),
+                "ambiguous markers cannot choose a backend");
+        require(!isaac::loader::load(split, "0.6.3", nullptr).module,
+                "unknown game cannot load a baseline");
+        fs::remove(split / "isaac-lan/backends" / plus->backend / payloadFile);
+        fs::copy_file(compatible, split / payloadFile);
+        require(!isaac::loader::load(split, "0.6.3", plus).module,
+                "missing backend cannot adopt a leftover root DLL");
         prepare(source, compatible, "0.6.4");
         auto active = load(game);
         require(active != game / payloadFile &&
@@ -122,7 +160,7 @@ int wmain(int argc, wchar_t** argv) {
                 "raw Workshop source is adopted before any mods refresh");
         require(isaac::updates::fileHash(active) == isaac::updates::fileHash(compatible),
                 "BCrypt verifies exact cached bytes");
-        const auto held = isaac::loader::load(game, "0.6.3", "1.9.7.19.J510");
+        const auto held = isaac::loader::load(game, "0.6.3", plus);
         require(held.module != nullptr, "hold an existing session DLL open");
         prepare(source, compatible, "0.6.5");
         const auto newer = load(game);

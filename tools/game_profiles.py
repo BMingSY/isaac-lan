@@ -126,9 +126,22 @@ def lab_profile(lab):
 
 
 def bundle_backends(index):
-    if index != {"format": 2, "backends": list(RELEASE_BACKENDS)}:
+    if index != {"format": 3, "backends": list(RELEASE_BACKENDS)}:
         raise ValueError("Release manifest must include both supported game backends")
     return RELEASE_BACKENDS
+
+
+def installer_payload(package, backend):
+    directory = Path(package)
+    payload = json.loads((directory / "payload.json").read_text())
+    if payload.get("format") == 3:
+        if backend not in bundle_backends(payload):
+            raise ValueError("The installer does not contain the selected backend")
+        directory = directory / "backends" / backend
+        payload = json.loads((directory / "payload.json").read_text())
+    if payload.get("backend") != backend:
+        raise ValueError("The installer differs from the selected backend")
+    return directory, payload
 
 
 def release_name(tag):

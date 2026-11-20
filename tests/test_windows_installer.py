@@ -128,6 +128,8 @@ public class Checker {
     def write_payload(self):
         payload = {
             "format": 1,
+            "extension_version": "0.8.0",
+            "loader_abi": 1,
             "game_build": "1.9.7.19.J510",
             "backend": "j510",
             "linux_files": {
@@ -180,7 +182,12 @@ public class Checker {
         parent = root / "backends"
         plus = parent / "j510"
         plus.mkdir(parents=True)
-        for name in (*OWNED, "isaac_lan_check.exe", "game-profile.json", "payload.json"):
+        for name in (
+            "isaac_lan_probe.dll",
+            "isaac_lan_check.exe",
+            "game-profile.json",
+            "payload.json",
+        ):
             (root / name).rename(plus / name)
         vanilla = parent / "j835"
         shutil.copytree(plus, vanilla)
@@ -192,24 +199,39 @@ public class Checker {
         manifest["linux_files"]["game-profile.json"] = hashlib.sha256(
             (vanilla / "game-profile.json").read_bytes()
         ).hexdigest()
-        for name in OWNED:
-            (vanilla / name).write_bytes(("j835-" + name).encode())
-            manifest["files"][name] = hashlib.sha256((vanilla / name).read_bytes()).hexdigest()
+        probe = "isaac_lan_probe.dll"
+        (vanilla / probe).write_bytes(b"j835 probe")
+        manifest["files"][probe] = hashlib.sha256((vanilla / probe).read_bytes()).hexdigest()
         (vanilla / "payload.json").write_text(json.dumps(manifest))
-        (root / "payload.json").write_text(json.dumps({"format": 2, "backends": ["j510", "j835"]}))
+        (root / "payload.json").write_text(json.dumps({"format": 3, "backends": ["j510", "j835"]}))
         executable = self.game / "isaac-ng.exe"
+        executable.write_text("j835")
+        # Both identically named DLLs and the old root DLL must roll back together.
+        legacy = self.installed_files()
+        self.run_installer(
+            code="IO_ERROR",
+            inject=r"""
+function Move-Item {
+    param($LiteralPath, $Destination, [switch]$Force)
+    if ((Split-Path -Leaf $Destination) -eq 'installation.json') { throw 'injected record failure' }
+    Microsoft.PowerShell.Management\Move-Item @PSBoundParameters
+}
+""",
+        )
+        self.assertEqual(self.installed_files(), legacy)
+        self.assertFalse((self.game / "isaac-lan/backends").exists())
+        self.run_installer()
+        record = json.loads((self.game / "isaac-lan/installation.json").read_text())
+        self.assertEqual(record["format"], 2)
+        self.assertFalse((self.game / probe).exists())
         for backend in ("j835", "j510"):
             executable.write_text(backend)
-            self.run_installer()
-            record = json.loads((self.game / "isaac-lan/installation.json").read_text())
-            self.assertEqual(record["backend"], backend)
             self.assertEqual(
-                json.loads(self.run_installer("Status"))["gameBuild"], record["game_build"]
+                json.loads(self.run_installer("Status"))["gameBuild"], record["backends"][backend]
             )
-            for name in OWNED:
-                self.assertEqual(
-                    (self.game / name).read_bytes(), (parent / backend / name).read_bytes()
-                )
+            target = self.game / "isaac-lan/backends" / backend / probe
+            self.assertEqual(target.read_bytes(), (parent / backend / probe).read_bytes())
+        self.assertEqual((self.game / "winmm.dll").read_bytes(), (root / "winmm.dll").read_bytes())
         before = self.installed_files()
         executable.write_text("compatible")
         self.run_installer(code="PACKAGE_INVALID")
@@ -218,6 +240,7 @@ public class Checker {
         self.assertEqual(self.installed_files(), before)
         self.run_installer("Uninstall")
         self.assertFalse(any(self.installed_files().values()))
+        self.assertFalse((self.game / "isaac-lan/backends").exists())
 
     def test_install_repair_upgrade_status_uninstall(self):
         self.run_installer()

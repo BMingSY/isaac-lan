@@ -41,40 +41,51 @@ Extension resolve(HMODULE module, const std::filesystem::path& path) {
 } // namespace
 
 Extension load(const std::filesystem::path& game, std::string_view baselineVersion,
-               std::string_view gameBuild) {
-    const auto fallback = game / updates::payloadFile;
+               const engine::GameVersion* version) {
+    if (!version)
+        return {nullptr,
+                nullptr,
+                {startup::Code::gameCompatibility, (game / L"isaac-ng.exe").wstring(), {}, {}}};
+    const auto backends = game / "isaac-lan/backends";
+    auto fallback = backends / version->backend / updates::payloadFile;
+    // Single-backend development packages and isolated fixtures use a flat directory.
+    std::error_code error;
+    if (std::filesystem::symlink_status(backends, error).type() ==
+            std::filesystem::file_type::not_found &&
+        std::filesystem::is_regular_file(game / updates::payloadFile, error))
+        fallback = game / updates::payloadFile;
     updates::Selection selection{{fallback}, {}, {}};
     if (!labGame(game)) {
-        selection = updates::select(game, updates::workshopSource(game), baselineVersion, gameBuild,
-                                    updates::fileHash);
+        selection = updates::select(game, updates::workshopSource(game), baselineVersion,
+                                    version->version, updates::fileHash, fallback);
     }
     if (!selection.detail.empty())
         OutputDebugStringA(("Isaac LAN update: " + selection.detail + "\n").c_str());
     Extension last;
     for (const auto& path : selection.candidates) {
-        const auto module =
-            LoadLibraryExW(path.c_str(), nullptr,
-                           LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-        last = resolve(module, path);
+        last = loadInstalled(path);
         if (!last.module)
             continue;
         bool compatible = true;
         if (path != fallback) {
             using ABI = unsigned(__cdecl*)();
             ABI abi{};
-            const auto proc = GetProcAddress(module, "IsaacLanLoaderABI");
+            const auto proc = GetProcAddress(last.module, "IsaacLanLoaderABI");
             std::memcpy(&abi, &proc, sizeof(proc));
             compatible = abi && abi() == updates::loaderABI;
         }
         if (compatible)
             return last;
-        FreeLibrary(module);
+        FreeLibrary(last.module);
         last = {};
     }
     return last;
 }
 Extension loadInstalled(const std::filesystem::path& path) {
-    return resolve(LoadLibraryW(path.c_str()), path);
+    return resolve(
+        LoadLibraryExW(path.c_str(), nullptr,
+                       LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS),
+        path);
 }
 std::wstring failureMessage(const Extension& extension, DWORD code) {
     if (!code)

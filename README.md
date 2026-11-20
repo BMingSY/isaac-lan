@@ -5,13 +5,13 @@
 ## 功能
 
 - 共享楼层，分房探索与战斗，随时进入队友房间汇合。
-- 允许加载其他 Mod，保留原版多人 UI 和官方联机入口。
+- 允许加载其他 Mod，保留原版多人 UI。忏悔＋的官方联机入口仍然可用。
 - 小地图显示玩家位置，支持 Ping 显示和断线重连。
 
 ## 安装
 
-1. 忏悔和忏悔＋使用同一个安装包。解压后运行 `Install.cmd`，安装器会自动识别游戏版本。
-2. 保持游戏是关闭状态，选择游戏目录中的 `isaac-ng.exe`。
+1. 关闭游戏，解压通用安装包并运行 `Install.cmd`。已安装旧版的玩家也可以直接运行它升级。
+2. 选择游戏目录里的 `isaac-ng.exe`。安装器会同时安装忏悔和忏悔＋的联机扩展。在 Steam 切换这两个受支持的游戏版本后，重新启动游戏即可。
 3. 从 Steam 启动游戏并选择存档，在主菜单选择第三项 **Online／联机模式**。忏悔直接进入局域网联机，忏悔＋需再选**局域网联机**。
 
 所有玩家需要使用相同游戏版本和同一份联机扩展。
@@ -77,7 +77,7 @@ text_color = E8DFCB
 
 ## 创建与加入
 
-1. 房主设置端口，点击“创建房间”，把自己的 IPv4 地址或域名和端口告诉队友。
+1. 房主设置端口，点击“创建房间”，把自己的 IPv4 地址、IPv6 地址或域名，以及端口告诉队友。
 2. 队友填写房主 IP／域名和端口，点击“加入房间”。
 3. 所有人选择角色并准备，由房主开始游戏。
 
@@ -85,7 +85,7 @@ text_color = E8DFCB
 
 ## 卸载
 
-关闭游戏，运行 `Uninstall.cmd`，选择同一个 `isaac-ng.exe`。卸载会保留联机存档。
+关闭游戏，运行 `Uninstall.cmd` 并选择同一个 `isaac-ng.exe`。两版扩展会一并卸载，配置和联机存档会保留。
 
 ## 技术文档
 
@@ -100,17 +100,21 @@ text_color = E8DFCB
 将 `ISAAC_IMGUI_SOURCE` 和 `ISAAC_MINHOOK_SOURCE` 设为对应依赖源码位置后执行：
 
 ```sh
-cmake -S . -B build-win32 -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86.cmake \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DIMGUI_SOURCE_DIR="$ISAAC_IMGUI_SOURCE" \
-  -DMINHOOK_SOURCE_DIR="$ISAAC_MINHOOK_SOURCE"
-cmake --build build-win32
-python3 tools/build_package.py --build build-win32 --output dist/Isaac-LAN-J510
+for backend in j835 j510
+do
+  cmake -S . -B "build-$backend" -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86.cmake \
+    -DCMAKE_BUILD_TYPE=Release -DISAAC_LAN_BACKEND="$backend" \
+    -DIMGUI_SOURCE_DIR="$ISAAC_IMGUI_SOURCE" \
+    -DMINHOOK_SOURCE_DIR="$ISAAC_MINHOOK_SOURCE"
+  cmake --build "build-$backend" --target isaac_lan_probe isaac_lan_check
+done
+cmake --build build-j510 --target isaac_lan_loader
+python3 tools/build_package.py --build build-j835 --build build-j510 --output dist/Isaac-LAN
 ```
 
 ## 问题与建议
 
-可以在游戏内直接反馈：联机时在聊天中输入 `/feedback 问题描述`。扩展会把本次和上一次启动的日志、原版 `log.txt` 与 `config.ini` 上传到作者服务器，成功后显示反馈编号，报告问题时附上编号即可。日志只有作者查看，不会公开，路径中的 Windows 用户名会被替换；上传失败时会提示本地保存的反馈包位置。收集范围见[反馈上传](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)。
+可以在游戏内直接反馈：联机时在聊天中输入 `/feedback 问题描述`。反馈会附上游戏和扩展版本、本次和上一次启动的日志、原版 `log.txt` 与 `config.ini`，上传到作者服务器后显示反馈编号，报告问题时附上编号即可。日志只有作者查看，不会公开，路径中的 Windows 用户名会被替换；上传失败时会提示本地保存的反馈包位置。收集范围见[反馈上传](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)。
 
 也可以提交到 [Issues](https://github.com/BMingSY/isaac-lan/issues)，写明游戏版本、主客机、复现步骤和使用的其他 Mod；遇到联机异常时可以附上对应启动的完整日志归档。
