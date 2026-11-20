@@ -644,6 +644,32 @@ dofile(root .. "/src/bridge/presentation/menu.lua")
 _IsaacLanMenuOpen(true)
 draw()
 assert(labels["192.168.1.42"] and labels["端口：32123"])
+-- Exercise the render/edit path that receives the native editor's buffer each frame.
+for _, case in ipairs({
+    { "::1", "::1", 32123 },
+    { "[2001:db8::abcd]", "[2001:db8::abcd]", 32123 },
+    { "fe80::1%12", "fe80::1%12", 32123 },
+    { "::ffff:192.168.1.1", "::ffff:192.168.1.1", 32123 },
+    { "[::1]:31415", "::1", 31415 },
+}) do
+    _IsaacLanMenuOpen(true)
+    draw(40)
+    draw(13)
+    if case[1] == "::1" then
+        for i = 1, #case[1] do
+            _IsaacLanMenuRender(true, true, 0, case[1]:sub(1, i), -100, -100, false, "", "")
+        end
+    end
+    _IsaacLanMenuRender(true, true, 13, case[1], -100, -100, false, "", "")
+    assert(remembered[1] == case[2] and remembered[2] == case[3])
+    draw(40)
+    draw(40)
+    draw(13)
+    local command = commands[#commands]
+    local host, port = _IsaacLanModules["core/endpoint"].parse(command[2])
+    assert(command[1] == "join" and host == (case[2]:match("^%[(.*)%]$") or case[2]))
+    assert(port == case[3])
+end
 for _, port in ipairs({ "", "0", "65536", "123.5" }) do
     local prefs = { page = "lan", ip = "room.example.com", port = port }
     local count = savedCount
