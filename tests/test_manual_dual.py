@@ -330,6 +330,25 @@ def test_reused_pid_with_changed_path_or_start_is_not_owned(monkeypatch):
     assert dual.live_owned([original]) == []
 
 
+def test_requested_mod_and_post_mom_are_scoped_to_manual_session(session, monkeypatch):
+    lab = session.labs[0]
+    marker = lab / "game/mods/real-mod/disable.it"
+    marker.write_text("disabled")
+    (marker.parent / "main.lua").touch()
+    config = dual.read_json(session.output / "config.json")
+    config.update(launch_only=True, mods=["real-mod"], post_mom=True)
+    files = dual.SetupFiles(session.output)
+    monkeypatch.setattr(dual, "post_mom_profile", lambda data: data + b":womb")
+    dual.prepare(lab, 0, config, files)
+    assert not marker.exists()
+    options = dual.log_path(lab).parent
+    assert "EnableMods=1" in (options / "options.ini").read_text()
+    assert "EnableDebugConsole=0" in (options / "options.ini").read_text()
+    assert (options / "persistentgamedata1.dat").read_bytes().endswith(b":womb")
+    files.restore()
+    assert marker.read_text() == "disabled"
+
+
 @pytest.mark.parametrize(
     "response,count", [("", 0), ("[]", 0), ('{"pid":1}', 1), ('[{"pid":1},{"pid":2}]', 2)]
 )

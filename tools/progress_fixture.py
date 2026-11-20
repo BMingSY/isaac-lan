@@ -23,6 +23,7 @@ LAYOUTS = {
 }
 MAGIC = LAYOUTS["j510"].magic
 PROFILE = Path("profile/Documents/My Games") / source_profile()["documents_directory"]
+WOMB_ACHIEVEMENT = 4
 TAINTED_LAZARUS_ACHIEVEMENT = 482
 MAGDALENE_ACHIEVEMENT = 1
 AZAZEL_ACHIEVEMENT = 79
@@ -84,7 +85,7 @@ def patch(
     achievements[layout.private_achievement] = int(host)
     struct.pack_into("<I", data, counters + layout.private_counter * 4, 98765 if host else 321)
     if ascent and host:
-        for identifier in (4, 57, 635):
+        for identifier in (WOMB_ACHIEVEMENT, 57, 635):
             achievements[identifier] = 1
     if endings:
         if host:

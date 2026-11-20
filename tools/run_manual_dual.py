@@ -47,6 +47,16 @@ def parser():
     result.add_argument(
         "--launch-only", action="store_true", help="只启动到菜单，不选择存档或自动联机开局"
     )
+    result.add_argument(
+        "--mod",
+        action="append",
+        default=[],
+        metavar="目录名",
+        help="启用两端隔离目录中的指定 Mod，可重复",
+    )
+    result.add_argument(
+        "--post-mom", action="store_true", help="临时解锁子宫并关闭控制台，保留当前通关标记"
+    )
     actions = result.add_mutually_exclusive_group()
     actions.add_argument("--status", action="store_true", help="查看最近一次双开的状态")
     actions.add_argument("--stop", action="store_true", help="关闭本工具启动的两端并恢复隔离资料")
@@ -137,6 +147,8 @@ def start(args):
         "character_names": args.characters,
         "latency_ms": args.latency_ms,
         "launch_only": args.launch_only,
+        "mods": args.mod,
+        "post_mom": args.post_mom,
         "dll_sha256": hashlib.sha256((frozen / "isaac_lan_probe.dll").read_bytes()).hexdigest(),
     }
     write_json(output / "config.json", config)

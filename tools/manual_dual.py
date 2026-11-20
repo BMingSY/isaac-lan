@@ -17,7 +17,7 @@ from game_logs import freeze_probe_logs, log_path
 from lab_profile import ProtectedLabs, idle, validate_startup, windows
 from progress_fixture import AZAZEL_PLAYER_TYPE
 from testing.lua import literal
-from testing.profiles import azazel_profile
+from testing.profiles import azazel_profile, post_mom_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLES = ("host", "client")
@@ -138,7 +138,7 @@ class SetupFiles:
                 path.unlink(missing_ok=True)
 
 
-def configure_options(lab, slot):
+def configure_options(lab, slot, *, mods=False, post_mom=False):
     path = log_path(lab).parent / "options.ini"
     options = configparser.ConfigParser()
     options.optionxform = str
@@ -154,6 +154,10 @@ def configure_options(lab, slot):
         WindowPosX=str(16 + slot * 952),
         WindowPosY="16",
     )
+    if mods:
+        values["EnableMods"] = "1"
+    if post_mom:
+        values["EnableDebugConsole"] = "0"
     for name in ("MusicVolume", "SFXVolume"):
         if float(values.get(name, "0")) <= 0:
             values[name] = "0.2000"
@@ -177,7 +181,22 @@ def prepare(lab, slot, config, files):
             files.write(mod / "disable.it", "")
     shutil.copy2(build / "isaac_lan_probe.dll", lab / "game/isaac_lan_probe.dll")
     shutil.copy2(build / "isaac_lan_lab.exe", lab / "isaac_lan_lab.exe")
-    configure_options(lab, slot)
+    for name in config.get("mods", []):
+        directory = lab / "game/mods" / name
+        if (
+            Path(name).name != name
+            or not directory.resolve().is_relative_to(lab / "game/mods")
+            or not (directory / "main.lua").is_file()
+            or (directory / ".lan-compat-fixture").exists()
+            or name == "lan_native_internal_probe"
+        ):
+            raise ValueError(f"隔离目录缺少指定的 Lua Mod：{name}")
+        files.remove(directory / "disable.it")
+    post_mom = config.get("post_mom", False)
+    configure_options(lab, slot, mods=bool(config.get("mods")), post_mom=post_mom)
+    if post_mom:
+        progress = log_path(lab).parent / "persistentgamedata1.dat"
+        progress.write_bytes(post_mom_profile(progress.read_bytes()))
     launch_only = config.get("launch_only", False)
     if not launch_only and config["characters"][slot] in ("PLAYER_AZAZEL", AZAZEL_PLAYER_TYPE):
         progress = log_path(lab).parent / "persistentgamedata1.dat"
@@ -203,14 +222,18 @@ def prepare(lab, slot, config, files):
 
 def processes():
     command = (
+        "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); "
         "@(Get-Process -Name isaac-ng -ErrorAction SilentlyContinue | ForEach-Object { "
-        "@{pid=$_.Id; path=$_.Path; started=$_.StartTime.ToUniversalTime().Ticks.ToString()} "
+        "try { $path=$_.Path; $start=$_.StartTime; if ($path -and $start) { "
+        "@{pid=$_.Id; path=$path; started=$start.ToUniversalTime().Ticks.ToString()} } "
+        "} catch { Write-Verbose $_ } "
         "}) | ConvertTo-Json -Compress"
     )
     result = subprocess.run(
         ["powershell.exe", "-NoProfile", "-Command", command],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=20,
         check=True,
     )
