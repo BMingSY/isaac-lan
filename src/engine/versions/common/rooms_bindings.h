@@ -68,6 +68,7 @@ struct Bindings {
         unsigned levelSetNextStage;
         unsigned levelSwapRooms;
         unsigned luaPostNewRoom;
+        unsigned collectibleRevivalRoomCall, trinketRevivalRoomCall;
         unsigned momsHandTransitionCall;
         unsigned nPCNeedlePrepareVisual;
         unsigned playerAnimateTeleport;
