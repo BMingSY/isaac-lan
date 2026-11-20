@@ -47,11 +47,11 @@ inline bool acceptsInput(std::uintptr_t image, const Layout& fields) {
            (!fields.starting || !read<bool>(menus, *fields.starting));
 }
 inline bool entrySelected(std::uintptr_t image, const Layout& fields, void* menu, bool confirm,
-                          bool alternate) {
+                          bool localSelected) {
     if (!menu || !acceptsInput(image, fields))
         return false;
     if (!fields.onlineSelection)
-        return alternate;
+        return confirm && localSelected;
     return confirm && read<int>(reinterpret_cast<std::uintptr_t>(menu), fields.selection) ==
                           *fields.onlineSelection;
 }

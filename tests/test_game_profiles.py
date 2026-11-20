@@ -181,6 +181,7 @@ def test_unknown_backend_is_rejected_before_generating_files(tmp_path):
     "path,scale",
     [
         ("font/../private.fnt", 1),
+        ("resources-dlc3.zh/font/../private.fnt", 1),
         ("font//private.fnt", 1),
         ("font/a\\b.fnt", 1),
         ("font/a\nb.fnt", 1),
@@ -213,7 +214,9 @@ def test_repentance_backend_generates_original_capabilities(tmp_path):
     assert metadata["capabilities"]["native_emotes"] is False
     assert metadata["presentation"]["native_lobby"] is False
     assert {font["path"] for font in metadata["presentation"]["fonts"].values()} == {
-        "font/cjk/lanapixel.fnt"
+        "resources-dlc3.zh/font/TeamMeatFontExtended10.fnt",
+        "resources-dlc3.zh/font/TeamMeatFontExtended12.fnt",
+        "resources-dlc3.zh/font/TeamMeatFontExtended16Bold.fnt",
     }
     selected = generate("j835", tmp_path / "output")
     assert selected["signatures"]

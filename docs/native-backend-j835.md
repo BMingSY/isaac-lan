@@ -12,7 +12,9 @@ Lua ABI 为 5.3，符号加载复用 [lua_api.h](https://github.com/BMingSY/isaa
 
 ## 主菜单入口
 
-[前端绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/frontend.cpp)与 J510 共用[前端装配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend.cpp)和[菜单边界](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/menu_context.h)。J835 没有官方 Online 项；选定存档后的主菜单提供“局域网 →”，鼠标点击或菜单向右动作请求打开局域网界面。确认 Stats 等原生选项不被接管。Lua 只注册 `menu_open`，不注册 `menu_official`；返回直接关闭局域网界面。
+[前端绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/frontend.cpp)与 J510 共用[前端装配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/frontend.cpp)和[菜单边界](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/menu_context.h)。选定存档后，第三项“联机模式”位于“继续游戏”和“挑战”之间，支持上下选择、确认和鼠标点击。确认后直接进入局域网联机，退出局域网页面即回到主菜单。
+
+主菜单对象位于 MenuManager `+0x80fac`，选择字段为对象 `+4`，游戏持有的 Sprite 内嵌于 `+0x10`。主菜单的纸张绘制入口为 RVA `0x4d9f70`，使用 thiscall，无栈参数。文字和鼠标命中使用本次纸张绘制的屏幕坐标，即对象的位置 `+8/+0xc` 加上 MenuManager 的当前视图位置 `+0x3c/+0x40`。滑入和滑出期间都沿用这一坐标。绘制时按图层 ID 找到六项原生文字和指针，临时调整纵坐标，为联机入口留出一行，绘制后恢复全部坐标。图层缺失时沿用原生绘制。额外选项的焦点由前端持有，其余选项沿用游戏的选择编号和动作。
 
 MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、主菜单页为 1、2、3。入口要求 Manager 菜单场景、存档栏 1～3、主菜单页，且 MenuManager `+0x20` 输入阻塞、`+1` 启动请求和 Manager `+0x4a268` 阻塞均为空。主菜单更新 RVA `0x4d92c0` 使用 thiscall、无参数；菜单绘制 RVA `0x4e19d0` 无接收对象及栈参数。显式返回大厅只把标题／存档／主菜单页选择为主菜单，不分配菜单或跳过未选存档流程。Lua 状态重建时重新绑定回调并清理旧输入、菜单和地图视图。
 
@@ -453,6 +455,6 @@ NPC 身份通过 RVA `0x5ec34c` 的 MSVC `__RTDynamicCast` 导入跳板判定，
 
 [角色目录](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/characters.cpp) 通过原生目录读取角色、里角色及 Mod 角色，复用两版共有的目录算法。原版选择条件入口为 RVA `0x4a1ea0`，`thiscall bool(record*, int)`；翻译入口为 RVA `0x56b880`，使用 `Manager+0x4a234` 的字符串表。选择条件在临时安装本机个人进度和菜单场景后求值，返回时恢复；伊甸继续游戏只临时豁免已经消耗的代币，不更改实际进度。目录只返回复制后的名称、资源路径和可选状态，不持有原生容器。完成标记使用共同的原版事件编号，替代身体映射到对应起始角色。
 
-原版菜单与聊天使用游戏自带的 `font/cjk/lanapixel.fnt`，逻辑字号和缩放由版本描述声明。大厅面板使用两版共有的白色填充 Sprite，角色画像与完成标记沿用游戏资源。没有官方联机、原生表情轮盘或忏悔＋大厅美术时，不显示相关入口，也不加载对应资源。上述表现适配与原生联机后端的可用性独立。
+菜单与聊天从原版中文资源目录 `resources-dlc3.zh/font/` 加载 TeamMeatFontExtended 的 10、12 和 16Bold 三种字号。完整资源路径让其他游戏语言也能显示局域网界面的中文。大厅使用挑战菜单的图钉纸、种子菜单的便签和勾选标记，以及主菜单的指针。角色画像与完成标记沿用游戏资源。官方在线服务和原生表情轮盘按版本能力显示。
 
 候选入口可以参考 [REPENTOGON 1.0.12e](https://github.com/TeamREPENTOGON/REPENTOGON/tree/1.0.12e/libzhl/functions)，但参考特征码不是当前游戏的 ABI 保证。审计必须保留多重匹配并核对实际调用点、参数、返回值、对象布局与所有权；不把 J510 地址或字段偏移套入 J835。离线与实机边界见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。
