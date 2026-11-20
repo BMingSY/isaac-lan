@@ -376,9 +376,9 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 返回适配保存通用寄存器、标志、x87、XMM0–7 和 MXCSR，异常终止会话且不跨原生帧展开；借入的房间和角色均不转移所有权。Hook 冲突不撤销其他组件的 Hook，失败可重试，重复安装只接受相同映像。
 
-原版联机复活机调用 `rooms_machine_revival(payerSlot, ghostSlot)`。入口只在未嵌套的主机房间上下文接受两个不同的在线席位，检查两人同处普通维度的起始房、付款者有实体、目标为合作幽灵，且挑战允许合作复活。它借用目标的角色名单执行原生幽灵复活，返回实体是否已还原。房间效果和出场位置由游戏管理，生成机器、价格和扣款由 [Lua 兼容组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/revival_machine.lua) 管理。
-
 安装将发放、入队及两种复活 Hook 全部创建后再启用；失败只撤销自己创建的 Hook 并清除旁路，允许重试。玩法效果、拾取分配和开局奖励规则仍属于上层兼容组件。
+
+忏悔的游戏资源没有忏悔＋的复活机实体（6.19），局内使用[联机控制台的复活命令](https://github.com/BMingSY/isaac-lan/blob/main/docs/chat-console.md)。幽灵复活接口见[原生后端参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。
 
 错误道具注册表、原生生成与存档恢复、负编号库存查询的接口和所有权见[错误道具定义](https://github.com/BMingSY/isaac-lan/blob/main/docs/generated-item-definitions.md)。这部分复用共享定义组件，不改变现有同步字段、编码或扩展接口。
 
