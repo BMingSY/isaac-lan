@@ -195,7 +195,7 @@ def main():
     parser.add_argument(
         "--exercise-menu",
         action="store_true",
-        help="Use original Online entry, isolated field typing, lobby ready and start controls",
+        help="Use the game-specific LAN entry, field typing, lobby ready and start controls",
     )
     parser.add_argument(
         "--exercise-lobby-chat",
@@ -319,6 +319,9 @@ def main():
     script = args.script
     source_script = script.read_bytes()
     selected_profile = build_profile(args.build)
+    has_official_lobby = selected_profile["presentation"]["native_lobby"]
+    if args.exercise_official and not has_official_lobby:
+        parser.error("The selected game has no official Online entry")
     body = source_script.decode("utf-8")
     if args.progress_fixture:
         # Wait for the selected save slot before the scenario can connect.
@@ -546,9 +549,7 @@ def main():
             control(pid, "Capture", windows(args.output.resolve() / f"{role}-lobby-cn.png"))
             (args.release_solo_coordination / f"solo-lobby-{role}.ack").write_text("ready")
             return
-        local_entry = (
-            action == "show-lobby" and not selected_profile["presentation"]["native_lobby"]
-        )
+        local_entry = action == "show-lobby" and not has_official_lobby
         # New Run is row zero, Continue row one. Read back each move instead of
         # assuming the native cursor retained its previous session's position.
         target = {"new-run": 0, "continue": 1, "show-lobby": 2}[action]
@@ -568,7 +569,7 @@ def main():
                 if overlay_visible():
                     break
             else:
-                raise RuntimeError("The native Online entry did not open the LAN lobby")
+                raise RuntimeError("The native menu entry did not open the LAN lobby")
             time.sleep(0.5)
             control(pid, "Capture", windows(args.output.resolve() / f"{role}-lobby-cn.png"))
             (args.release_solo_coordination / f"solo-lobby-{role}.ack").write_text("ready")
@@ -835,8 +836,12 @@ def main():
                     if args.exercise_menu
                     else lambda pid, key: control(pid, "PostKeys", key)
                 )
-                navigate(pid, "{DOWN}")  # Continue is disabled in the empty lab profile.
-                navigate(pid, "{ENTER}")
+                if has_official_lobby:
+                    # With Continue disabled the next row is Online.
+                    navigate(pid, "{DOWN}")
+                    navigate(pid, "{ENTER}")
+                else:
+                    navigate(pid, "{RIGHT}")
                 if args.capture_ui:
                     control(pid, "Capture", windows(args.output.resolve() / (role + "-menu.png")))
                 if args.exercise_menu:
@@ -878,8 +883,9 @@ def main():
                             "Original Online did not return to the game menu"
                         )
                         menu_control(pid, "{ENTER}")  # Reopen the mode chooser.
-                    menu_control(pid, "{DOWN}")  # LAN in the Online mode chooser.
-                    menu_control(pid, "{ENTER}")
+                    if has_official_lobby:
+                        menu_control(pid, "{DOWN}")  # LAN in the Online mode chooser.
+                        menu_control(pid, "{ENTER}")
                     if role == "client":
                         menu_control(pid, "{DOWN}")
                         menu_control(pid, "{ENTER}")
