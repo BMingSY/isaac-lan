@@ -89,7 +89,7 @@ def main():
     (coordination / "pause").mkdir(parents=True)
     (coordination / "pause/step.txt").write_text("1")
     script = output / "suite.lua"
-    build_suite(script, windows(coordination), args.cases)
+    build_suite(script, windows(coordination), args.cases, backend=payload["backend"])
     subprocess.run([shutil.which("luac5.3") or "luac", "-p", str(script)], check=True)
     protected = ProtectedLabs(labs, output, roles=("host", "client"))
     command = engine_command(

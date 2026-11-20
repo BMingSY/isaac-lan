@@ -7,12 +7,15 @@ local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local mode = assert(_IsaacLanTest.releaseHourglass)
 local modes = {
     ["cross-floor"] = { difficulty = 0, cross = true },
-    ["greed-start"] = { difficulty = 2, special = true },
+    ["greed-start"] = { difficulty = 2, firstVisit = true },
     ["greed-neighbor"] = { difficulty = 2 },
-    ["greedier-start"] = { difficulty = 3, special = true },
+    ["greedier-start"] = { difficulty = 3, firstVisit = true },
     ["greedier-neighbor"] = { difficulty = 3 },
 }
 local case = assert(modes[mode], "Unknown release hourglass case")
+local destination = _IsaacLanTest.greedStartDestination
+assert(destination == "rewind" or destination == "error-room")
+local errorRoom = case.firstVisit and destination == "error-room"
 local hourglass, marker =
     CollectibleType.COLLECTIBLE_GLOWING_HOUR_GLASS, CollectibleType.COLLECTIBLE_PENTAGRAM
 local WALK_AT, WALK_END = 1200, 1220
@@ -112,7 +115,7 @@ local function preparePlayers()
     end
 end
 local function mutateAndUse(t)
-    if case.special then
+    if errorRoom then
         checkpoint = roster()
     end
     for slot = 0, 1 do
@@ -151,11 +154,11 @@ local function checkInventory(player, slot)
         "Original independent inventory changed"
     )
     assert(
-        player:GetNumCoins() == (case.special and 27 or 20),
+        player:GetNumCoins() == (errorRoom and 27 or 20),
         "Native route restored the wrong shared coins"
     )
     assert(
-        player:HasCollectible(marker) == not not case.special,
+        player:HasCollectible(marker) == not not errorRoom,
         "Native route restored the wrong inventory version"
     )
 end
@@ -196,7 +199,7 @@ local function checkResult(positionsStrict)
             checkInventory(player, slot)
             assert(player.Visible, "Native transition left a living player invisible")
             local position = positions[tostring(slot)]
-            if case.special then
+            if errorRoom then
                 assert(
                     position.index == GridRooms.ROOM_ERROR_IDX
                         and position.dimension == 0
@@ -258,7 +261,7 @@ local function advance(t)
     end
     if
         phase == "used"
-        and case.special
+        and errorRoom
         and native.rooms_ready()
         and native.api_info().worldEpoch == useEpoch + 1
     then
@@ -280,7 +283,9 @@ local function advance(t)
         preparePlayers()
         mark("prepared", t)
     elseif phase == "prepared" and t - phaseAt > 30 and usable() then
-        if case.special then
+        if case.firstVisit then
+            -- R Key stores a checkpoint for both players before the first room.
+            checkpoint = roster()
             beforeEpoch = native.api_info().worldEpoch
             actor(0, function(player)
                 player:UseActiveItem(CollectibleType.COLLECTIBLE_R_KEY, UseFlag.USE_NOANIM)
@@ -385,7 +390,7 @@ local function advance(t)
                 .. " room1="
                 .. native.rooms_positions()["1"].index
                 .. " coins="
-                .. (case.special and 27 or 20)
+                .. (errorRoom and 27 or 20)
                 .. " visible=true controls=true"
         )
         mark("wait-walk", t)
@@ -554,7 +559,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     assert(
                         rewindEvents == 1
                             and floorEvents == (case.cross and 1 or 0)
-                            and restartEvents == (case.special and 1 or 0),
+                            and restartEvents == (case.firstVisit and 1 or 0),
                         "Reliable transaction counts differ"
                     )
                     for slot = 0, 1 do
@@ -579,15 +584,6 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     "Unexpected duplicate rewind event"
                 )
                 selected, savedLocations = decodeTransition(rewind)
-                assert(
-                    selected.animation == (case.special and 3 or 12) and selected.dimension == 0,
-                    "Replica did not receive the authority's native route"
-                )
-                assert(
-                    not case.special or selected.index == GridRooms.ROOM_ERROR_IDX,
-                    "Greed first-visit special route did not select I AM ERROR"
-                )
-                reliableEpoch = epoch
                 report(
                     "SELECTED_NATIVE index="
                         .. selected.index
@@ -598,11 +594,19 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                         .. " dimension="
                         .. selected.dimension
                 )
+                assert(
+                    selected.dimension == 0 and selected.animation == (errorRoom and 3 or 12),
+                    "Replica did not receive this game's native hourglass route"
+                )
+                local expectedRoom = errorRoom and GridRooms.ROOM_ERROR_IDX
+                    or savedLocations[2].index
+                assert(selected.index == expectedRoom, "Native hourglass destination differs")
+                reliableEpoch = epoch
             elseif restart == 1 then
                 restartEvents = restartEvents + 1
                 restartEpoch = epoch
                 assert(
-                    case.special and restartEvents == 1 and animation == 0,
+                    case.firstVisit and restartEvents == 1 and animation == 0,
                     "Unexpected R Key event"
                 )
             else
