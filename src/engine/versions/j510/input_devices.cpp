@@ -11,5 +11,5 @@ const Bindings bindings{j510::globals::inputManager,
                         j510::layout::inputManager::end,
                         j510::layout::inputManager::stride,
                         j510::layout::inputDevice::id,
-                        0};
+                        j510::layout::inputDevice::firstGamepadId};
 } // namespace isaac::engine::native_devices

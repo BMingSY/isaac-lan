@@ -24,6 +24,7 @@ inline constexpr unsigned begin = 8, end = 12, stride = 8;
 inline constexpr unsigned queryMethod = 0x74;
 } // namespace inputManager
 namespace inputDevice {
+inline constexpr int keyboardId = -2, firstGamepadId = 0;
 inline constexpr unsigned id = 12;
 } // namespace inputDevice
 namespace manager {

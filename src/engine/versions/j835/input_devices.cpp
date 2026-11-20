@@ -11,5 +11,5 @@ const Bindings bindings{j835::globals::inputManager,
                         j835::layout::inputManager::end,
                         j835::layout::inputManager::stride,
                         j835::layout::inputDevice::id,
-                        1};
+                        j835::layout::inputDevice::firstGamepadId};
 } // namespace isaac::engine::native_devices

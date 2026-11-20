@@ -13,7 +13,8 @@ inline Vector origin(void* player, ShootingEntity shootingEntity) {
     return native_mouse::origin(player, shootingEntity, fields);
 }
 inline lan::PointerInput capture(void* player, Aim original, ShootingEntity shootingEntity) {
-    return native_mouse::capture(player, original, shootingEntity, fields);
+    return native_mouse::capture(player, original, shootingEntity, fields,
+                                 layout::inputDevice::keyboardId);
 }
 inline bool replay(void* player, const lan::PointerInput& pointer, Vector* result,
                    ShootingEntity shootingEntity) {

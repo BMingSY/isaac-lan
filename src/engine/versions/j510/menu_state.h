@@ -19,7 +19,7 @@ namespace pausePage {
 inline constexpr int root = 1, options = 2;
 }
 namespace pauseSelection {
-inline constexpr int resume = 2, exit = 3;
+inline constexpr int resume = 0, exit = 3;
 }
 namespace pauseOption {
 inline constexpr int controller = 1;

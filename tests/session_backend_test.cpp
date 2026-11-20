@@ -106,6 +106,11 @@ void dispatch(const char* label, const session::Call& original) {
 void __cdecl save() {
     events.emplace_back("save");
 }
+#ifdef ISAAC_LAN_TEST_J835
+void __attribute__((fastcall)) eraseSlot(void*, void*) {
+    events.emplace_back("erase-slot-file");
+}
+#endif
 void __cdecl erase() {
     events.emplace_back("delete");
 }
@@ -296,7 +301,11 @@ void __attribute__((fastcall)) command(void* object, void*, const String* text, 
 session::Callbacks handlers() {
     return {
         .save = [](const auto& call) { dispatch("save-hook", call); },
-        .deleteSave = [](const auto& call) { dispatch("delete-hook", call); },
+        .protectsSoloSave =
+            [] {
+                events.emplace_back("delete-hook");
+                return !forward;
+            },
         .saveRerun = [](const auto& call) { dispatch("rerun-hook", call); },
         .serializeProgress = [](const auto& call) { dispatch("serialize-hook", call); },
         .executeStart = [](const auto& call) { dispatch("execute-start-hook", call); },
@@ -327,6 +336,9 @@ void prepare() {
     require(image && MH_Initialize() == MH_OK, "Initialize synthetic image");
     patch(backend::entry::managerSave, save);
     patch(backend::entry::managerDeleteSave, erase);
+#ifdef ISAAC_LAN_TEST_J835
+    patch(backend::entry::gameStateDeleteFile, eraseSlot);
+#endif
     patch(backend::entry::managerSaveRerun, rerun);
     patch(backend::entry::managerExecuteMenu, executeMenu);
     patch(backend::entry::progressSerialize, serialize);
@@ -464,6 +476,20 @@ void hooks() {
         }
         require(events == expected, "Hook forwarding and suppression order");
     }
+#ifdef ISAAC_LAN_TEST_J835
+    for (const bool protectedSlot : {true, false}) {
+        forward = !protectedSlot;
+        events.clear();
+        const auto eraseFile = entry<Method>(backend::entry::gameStateDeleteFile);
+        eraseFile(manager.data() + stateOffset);
+        eraseFile(game.data());
+        require(
+            events == std::vector<std::string>{"delete-hook",
+                                               protectedSlot ? "clear" : "erase-slot-file",
+                                               "erase-slot-file"},
+            "Original exit must preserve the protected solo file and pass through unrelated slots");
+    }
+#endif
     forward = true;
     events.clear();
     entry<Method>(backend::entry::progressSerialize)(manager.data() + progressOffset + 0x1000);

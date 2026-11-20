@@ -22,6 +22,7 @@ namespace inputManager {
 inline constexpr unsigned begin = 4, end = 8, stride = 4;
 } // namespace inputManager
 namespace inputDevice {
+inline constexpr int keyboardId = 0, firstGamepadId = 1;
 inline constexpr unsigned id = 8;
 } // namespace inputDevice
 namespace manager {

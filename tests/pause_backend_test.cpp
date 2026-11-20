@@ -31,12 +31,12 @@ constexpr unsigned pauseOffset = 0x23a7c, optionsOffset = 0x5b0;
 constexpr unsigned optionsSelection = 8, optionsEntries = 0x27c;
 constexpr unsigned playersOffset = 0x1baa8, controllerOffset = 0x161c;
 constexpr unsigned managerOptions = 0x2a614;
-constexpr int resumeSelection = 2, exitSelection = 3;
+constexpr int resumeSelection = 0, exitSelection = 3;
 #endif
 using Address = std::uintptr_t;
 constexpr unsigned imageSize = privateGameImageBytes;
 unsigned char* image;
-std::vector<unsigned char> game(0x190000), manager(0x2a500);
+std::vector<unsigned char> game(0x190000), manager(managerOptions + 0x100);
 std::array<std::array<unsigned char, 0x2200>, 4> players{};
 std::array<Address, 4> roster;
 std::array<int, 4> options{5, 4, 1, 7};

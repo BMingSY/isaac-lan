@@ -64,6 +64,7 @@ constinit const Bindings bindings{
             .constructSeeds = backend::entry::runtimeNetSeedConstructor,
             .setSeed = backend::entry::runtimeNetSetSeed,
             .startNew = backend::entry::runtimeNetStartGame,
+            .deleteSlotFile = backend::entry::gameStateDeleteFile,
         },
     .managerLayout =
         {

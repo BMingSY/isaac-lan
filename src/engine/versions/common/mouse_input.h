@@ -13,7 +13,7 @@ inline Vector origin(void* player, ShootingEntity shootingEntity, const Layout& 
             *reinterpret_cast<const float*>(address + layout.positionY)};
 }
 inline lan::PointerInput capture(void* player, Aim original, ShootingEntity shootingEntity,
-                                 const Layout& layout) {
+                                 const Layout& layout, int keyboardDeviceId) {
     // Only this synchronous physical query borrows keyboard identity. Do not
     // call AssignController or change any device/roster ownership.
     auto& controller =
@@ -25,7 +25,7 @@ inline lan::PointerInput capture(void* player, Aim original, ShootingEntity shoo
             field = value;
         }
     } restore{controller, controller};
-    controller = 0;
+    controller = keyboardDeviceId;
     Vector aim;
     if (!original(player, &aim, false))
         return {};

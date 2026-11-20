@@ -10,6 +10,7 @@ struct Bindings {
     std::uint32_t game, manager, inputManager;
     std::uint32_t pressed, triggered, value, shootingEntity;
     unsigned renderFrame, pauseMenu, players;
+    int keyboardDeviceId, firstGamepadId;
     native_mouse::Layout mouse;
     bool (*installQuery)(std::uintptr_t, Detour, Query&, void (*)(const std::string&));
     bool (*installMouse)(std::uintptr_t, native_mouse::Router, native_mouse::Aim&);

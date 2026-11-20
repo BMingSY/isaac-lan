@@ -8,6 +8,18 @@ local phase, at, origin, arena = "start", 0, nil, nil
 local departed, rejoined, leaveRequested, joinRequested = false, false, false, false
 local exitAt, snapshots, held, seenFloors, clearTicks = nil, 0, 0, {}, 0
 local visible, railViews, cartViews = 0, 0, 0
+local function mountedCoverageReady()
+    return snapshots > 300 and held > 0 and visible > 100 and railViews > 300 and cartViews > 300
+end
+local function coverageSummary()
+    return ("snapshots=%d held=%d visible=%d rails=%d carts=%d"):format(
+        snapshots,
+        held,
+        visible,
+        railViews,
+        cartViews
+    )
+end
 local owner = { Name = "Hornfel replica regression" }
 local function report(message)
     Isaac.DebugString("LAN_NETWORK SIDE hornfel " .. message)
@@ -44,10 +56,16 @@ function _IsaacLanFrame()
     if host and s.phase == 2 and s.players == 2 and s.ready0 == 1 and s.ready1 == 1 then
         _IsaacLanCommand("start", "0N1B0EE9:0:0:0:0:0")
     end
-    if not host and not leaveRequested and s.phase == 3 and s.verified >= 850 then
+    if
+        not host
+        and not leaveRequested
+        and s.phase == 3
+        and s.verified >= 850
+        and mountedCoverageReady()
+    then
         leaveRequested = true
         assert(native.net_command(4))
-        report("LEAVE")
+        report("LEAVE " .. coverageSummary())
     end
     if
         exitAt
@@ -283,28 +301,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             clearTicks = not found and seenFloors[4] and clearTicks + 1 or 0
             if clearTicks >= 60 and rejoined and not finished then
                 assert(
-                    snapshots > 300
-                        and held > 0
-                        and visible > 100
-                        and railViews > 300
-                        and cartViews > 300
-                        and seenFloors[3]
-                        and seenFloors[4],
-                    "Missing Hornfel coverage"
+                    mountedCoverageReady() and seenFloors[3] and seenFloors[4],
+                    "Missing Hornfel coverage: " .. coverageSummary()
                 )
                 finished = true
-                report(
-                    "PASS client snapshots="
-                        .. snapshots
-                        .. " held="
-                        .. held
-                        .. " visible="
-                        .. visible
-                        .. " rails="
-                        .. railViews
-                        .. " carts="
-                        .. cartViews
-                )
+                report("PASS client " .. coverageSummary())
             end
         end,
         present,

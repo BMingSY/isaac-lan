@@ -18,10 +18,11 @@ from testing.engine import configure_interrupts, engine_command, run_engine
 from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle
 from game_logs import log_path
+from game_profiles import build_profile
 from lab_profile import windows
 
 ROOT = Path(__file__).resolve().parents[1]
-from testing.pause import COMPLETION, peer_evidence
+from testing.pause import COMPLETION, ITEMS_PAGE, peer_evidence
 
 
 def main():
@@ -55,6 +56,7 @@ def main():
     coordination = output / "coordination"
     coordination.mkdir()
     (coordination / "step.txt").write_text("1")
+    items_page = ITEMS_PAGE[build_profile(args.build)["backend"]]
     script = output / "suite.lua"
     script.write_text(
         "local pauseCoordination = "
@@ -63,6 +65,9 @@ def main():
         + str(args.pause_pulses)
         + "\nlocal pauseFeedback = "
         + ("true" if args.eid_feedback else "false")
+        + "\n"
+        + "_IsaacLanTest.pauseItemsPage = "
+        + json.dumps(items_page)
         + "\n"
         + (ROOT / "tests/state_pause_menu.lua").read_text()
     )
@@ -117,7 +122,9 @@ def main():
         for role in ("host", "client"):
             log = output / "engine" / role / "log.txt"
             text = log.read_text(errors="replace") if log.exists() else ""
-            report["peers"][role] = peer_evidence(text, role == "host", args.pause_pulses)
+            report["peers"][role] = peer_evidence(
+                text, role == "host", args.pause_pulses, items_page=items_page
+            )
             if args.eid_feedback:
                 feedback = all(
                     marker in text

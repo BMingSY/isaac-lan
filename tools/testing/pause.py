@@ -1,14 +1,15 @@
 """Native pause assertions shared by focused and release acceptance."""
 
+ITEMS_PAGE = {"j835": False, "j510": True}
 COMPLETION = "LAN_NETWORK PASS native pause menu"
 
 
-def peer_evidence(text, host, pulses):
+def peer_evidence(text, host, pulses, *, items_page=True):
     required = [COMPLETION, "SHORT_PRESSES edges=" + str(pulses)]
     for name in (
         "guest-start",
-        "guest-up-items",
-        "guest-items",
+        *(("guest-select-items", "guest-items", "guest-items-back") if items_page else ()),
+        "guest-options",
         "guest-music-change",
         "guest-root-resume",
         "guest-root-exit",

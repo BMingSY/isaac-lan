@@ -149,12 +149,8 @@ void saveGame(const backend::Call& original) {
     // in memory: only our separate session archive may be written for this run.
     backend::captureSave();
 }
-void deleteGame(const backend::Call& original) {
-    if (!saves.networkRun) {
-        original();
-        return;
-    }
-    backend::suppressDelete();
+bool protectsSoloSave() {
+    return saves.networkRun;
 }
 void saveRerun(const backend::Call& original) {
     if (!saves.networkRun)
@@ -1698,7 +1694,8 @@ int sharedCommand(lua_State* L) {
     return 1;
 }
 int pauseMenuState(lua_State* L) {
-    const auto value = pause_menu::state(executableImage);
+    pause_menu::State value;
+    rooms::withView([&] { value = pause_menu::state(executableImage); }, true);
     lua.createTable(L, 0, 4);
     for (const auto& [key, field] :
          {std::pair{"page", value.page}, std::pair{"selection", value.selection},
@@ -1782,7 +1779,7 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     runHalf = halfUpdate;
     restorePositions = restore;
     return backend::install(image,
-                            {saveGame, deleteGame, saveRerun, serializeProgress, executeStart,
+                            {saveGame, protectsSoloSave, saveRerun, serializeProgress, executeStart,
                              startGame, update, consoleUpdate, consoleCommand, controls,
                              executeMenu, requestRestart, completionAward, largeFloor, deleteThis});
 }

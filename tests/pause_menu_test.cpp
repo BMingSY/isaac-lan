@@ -52,6 +52,7 @@ namespace native = isaac::engine::j510;
 using Address = std::uintptr_t;
 static_assert(sizeof(Address) == 4);
 constexpr unsigned imageSize = privateGameImageBytes, menuOffset = 0x23a7c;
+constexpr int resumeRow = 0, inventoryRow = 2, exitRow = 3;
 constexpr unsigned optionsOffset = menuOffset + 0x5b0, playerIndexOffset = menuOffset + 0xfb4;
 template <class T> T& field(void* memory, unsigned offset = 0) {
     return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(memory) + offset);
@@ -232,9 +233,9 @@ void __attribute__((thiscall)) controlsFixture(void* receiver) {
         if (f.query(23))
             ++f.selection();
         if (f.query(14)) {
-            if (f.selection() == 3)
+            if (f.selection() == exitRow)
                 ++f.nativeExits;
-            else if (f.selection() == 2)
+            else if (f.selection() == resumeRow)
                 ++f.nativeResumes;
         }
         if (f.query(12) || f.query(15))
@@ -368,9 +369,9 @@ void nativePauseDrift() {
     menu::synchronize(f.base(), true);
     for (int page : {1, 2, 3}) {
         f.page() = page;
-        f.selection() = 3;
+        f.selection() = exitRow;
         menu::synchronize(f.base(), true);
-        require(f.page() == page && f.selection() == 3 && f.shows == 1,
+        require(f.page() == page && f.selection() == exitRow && f.shows == 1,
                 "Repeated paused snapshots reset the local submenu");
     }
     f.page() = 0;
@@ -528,9 +529,9 @@ void rootIntents() {
         f.page() = page;
         for (int selected : {-1, 0, 1, 2, 3, 4}) {
             f.selection() = selected;
-            const auto expected = page == 1 && selected == 2   ? menu::Intent::resume
-                                  : page == 1 && selected == 3 ? menu::Intent::exit
-                                                               : menu::Intent::none;
+            const auto expected = page == 1 && selected == resumeRow ? menu::Intent::resume
+                                  : page == 1 && selected == exitRow ? menu::Intent::exit
+                                                                     : menu::Intent::none;
             require(menu::intent(f.base(), 14) == expected,
                     "Confirm escaped root-page selection rules");
             for (int action : {12, 15})
@@ -628,7 +629,7 @@ void sameFrameNavigationAndExit() {
     Fixture f;
     f.accept();
     f.page() = 1;
-    f.selection() = 2;
+    f.selection() = inventoryRow;
     f.mode = NativeControls::root;
     f.press(23);
     f.press(14);
@@ -637,7 +638,7 @@ void sameFrameNavigationAndExit() {
     {
         input::PauseScope scoped(1);
         menu::controls(f.base());
-        require(f.selection() == 3 && scoped.intent() == menu::Intent::exit,
+        require(f.selection() == exitRow && scoped.intent() == menu::Intent::exit,
                 "Same-frame native Down then Confirm used the stale pre-navigation selection");
         require(f.nativeExits == 0 && f.nativeResumes == 0,
                 "Native exit fade or resume executed before the session could coordinate it");
@@ -653,7 +654,7 @@ void sameFrameNavigationAndExit() {
             "Pause intent or native ECX receiver escaped the scoped call");
     for (int action : {12, 14, 15}) {
         f.clearPhysical();
-        f.selection() = 2;
+        f.selection() = resumeRow;
         f.press(action);
         input::PauseScope scoped(1);
         menu::controls(f.base());
@@ -666,7 +667,7 @@ void nestedInputScopes() {
     Fixture f;
     f.accept();
     f.page() = 1;
-    f.selection() = 3;
+    f.selection() = exitRow;
     f.press(14);
     {
         input::ViewScope presentation(2);
@@ -678,7 +679,7 @@ void nestedInputScopes() {
                 input::PauseScope inner(3);
                 require(input::viewSlot == 3 && inner.intent() == menu::Intent::none,
                         "Nested pause reused an outer pending intent");
-                f.selection() = 2;
+                f.selection() = resumeRow;
                 require(!f.query(14) && inner.intent() == menu::Intent::resume,
                         "Nested pause failed to capture its independent resume");
             }
@@ -780,7 +781,7 @@ void restartPhysicalRouting() {
     f.accept();
     f.press(input::action::restart);
     require(input::restartHeld(), "LAN restart lost physical input behind accepted gameplay input");
-    require(f.queries.front().controller == 0, "Restart did not query the physical keyboard");
+    require(f.queries.front().controller == -2, "Restart did not query the J510 physical keyboard");
     f.clearPhysical();
     require(!input::restartHeld(), "Restart retained a released key");
     f.press(input::action::menuBack);

@@ -11,6 +11,8 @@ struct Entries {
         controls;
     std::uint32_t capture, clear, resetPause, stringAssign, stringDestroy;
     std::uint32_t parseSeed, constructSeeds, setSeed, startNew;
+    // Original Repentance also erases this slot directly during a no-save exit.
+    std::uint32_t deleteSlotFile = 0;
 };
 struct Manager {
     unsigned scene, saveSlot, progress, saveState, continueAvailable, continueRequested;

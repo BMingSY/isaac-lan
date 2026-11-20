@@ -8,7 +8,7 @@ namespace isaac::engine::session {
 using Call = std::function<void()>;
 struct Callbacks {
     void (*save)(const Call&);
-    void (*deleteSave)(const Call&);
+    bool (*protectsSoloSave)();
     void (*saveRerun)(const Call&);
     void (*serializeProgress)(const Call&);
     void (*executeStart)(const Call&);

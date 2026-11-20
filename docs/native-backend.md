@@ -225,6 +225,8 @@ Lua `SetStage` 不能提供原生过场中延迟选层所需的来源房间；�
 | 返回联机菜单 | `menu_context::returnToMain`，仅由待处理的联机返回请求调用 | 等待 `Manager+0x8` 为菜单场景、`+0x10` 为有效存档栏 `1～3` 且菜单对象存在；将 `MenuManager+0x40` 从标题／存档／主菜单页 `1～3` 设为主菜单 `3`，再显示联机界面。结局场景和其他菜单页不写入，不分配或释放原生菜单对象 |
 | 更新提示与退出 | `update_continue()`、`update_exit()` | 仅在待更新提示占用首次开局前主菜单时接受；继续操作清除本进程提示，退出操作向所属窗口发送 `WM_CLOSE`，返回是否成功提交请求。保留正常退出清理，不启动其他进程、不替换已加载 DLL。`input::menuHeld` 只查询本机原生动作值，用于打开／关闭提示后的松键屏障；不写原生菜单或输入对象 |
 
+J510 暂停根页从上到下为继续、选项、物品和退出，打开时光标位于继续。联机在本机房间视图内读取光标，并把继续和退出交由会话协调。
+
 客机在副本 `Game::Update` 调用期间使用 `pause_menu::FocusPauseScope`，暂时关闭原生失焦自动暂停，结束或异常退栈时恢复原值。选项位于 `Manager+0x2a614` 的配置对象内 `+0x69`；`Game.Update.focusPauseOption`（RVA `0x3024e0`）校验实际读取该字节的指令及条件分支。暂停状态仍由联机权威决定，本机菜单操作、选项保存、主机及单人更新不进入该作用域；不持久修改用户配置，不分配原生对象。
 
 `session_backend` 在原版 `Game::Controls` 返回后检查 `Game+0x265cc` 的重开淡出动作：`5` 为结算确认，`6` 为长按重开。只有运行层接收联机请求时才清除该动作、`+0x265c0` 的淡出透明度和 `+0x265d4` 的按住帧数；其他转场及单人调用原样保留。不会调用或复制带原生容器的 `Manager::RestartGame` 参数。
@@ -299,7 +301,7 @@ J510 全局大书位于 `Game+0x1c034`，对象大小 `0x12b8`；48 个配置从
 
 物理采集、虚拟 XInput、权威输入分发、按键沿消费和退出恢复位于[共享输入组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input.cpp)。[J510 输入绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/input.cpp) 提供原生查询／鼠标入口、布局、动作映射与菜单提示重置。查询通过输入管理器虚表 `+0x74` 安装，失败撤销本组件创建的 Hook；鼠标旁路保留原生 thiscall 参数。采集按 `Manager+0x4ae94` 的渲染帧编号去重；重复采集消费按键沿但保留按住值，不更改网络字段与编码顺序。
 
-`input_ready()` 根据同一份受锁保护的设备 ID 快照，检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在。[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化原生扫描 `0x68d4c0` 与轮询 `0x68d870` 的完整事务，允许同线程回调重入，离开联机后继续保护断开清理。J510 输入管理器 RVA `0x87f0a8` 的列表首尾为 `+8/+12`，元素八字节，设备 ID 位于 `+12`。键盘保留负编号，联机期间把四个手柄（含原生编号 0）分配到 1–4；组件不修改元素中的原生所有权字段。退出只恢复仍存在且编号未被独立更改的设备，设备对象仍由游戏分配和释放。运行协调器在就绪后请求开局；角色槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
+`input_ready()` 根据同一份受锁保护的设备 ID 快照，检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在。[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化原生扫描 `0x68d4c0` 与轮询 `0x68d870` 的完整事务，允许同线程回调重入，离开联机后继续保护断开清理。J510 输入管理器 RVA `0x87f0a8` 的列表首尾为 `+8/+12`，元素八字节，设备 ID 位于 `+12`。输入采集的逻辑键盘槽 0 查询原生设备 ID −2，联机期间把四个手柄（含原生编号 0）分配到 1–4；组件不修改元素中的原生所有权字段。退出只恢复仍存在且编号未被独立更改的设备，设备对象仍由游戏分配和释放。运行协调器在就绪后请求开局；角色槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
 
 `players_spawn` 和 `input_assign` 通过[共享玩家组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_input.cpp) 使用 [J510 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/player_input.cpp)。J510 `PlayerManager` 与其玩家向量起点均为 `Game+0x1baa8`；创建 `0x5d1340` 接收管理器和角色类型，分配 `0x3aede0` 接收角色、控制器和伴生传播标志，初始化 `0x3c52a0` 接收角色，均为 thiscall。初始化和开局奖励后重新读取向量，为新增身体设置控制器与当前／上一位置，然后由 `0x18de0` 取得 HUD 并调用 `0x5bf8f0` 分配显示槽位。已有角色保持原样；对象和向量由游戏持有，部分原生创建失败不提供回滚。
 
@@ -319,7 +321,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 | HUD 终点 | 绘制标记 RVA `0x5bc04c`，参数读取边界 `0x5bc670` | 原生查询照常执行，仅在 HUD 内替换 EAX 中的借用结果；标量视图不进入玩法或原生容器析构 |
 | 挑战完成 | `Game::FinishChallenge`，RVA `0x30beb0` | 在可靠结束后的安全边界调用；原版 `Game::Challenge` 为 0，不写入同编号原版挑战解锁 |
 | 呈现预测输入 | `input::PresentationInputScope` 借用当前本机 `InputFrame`；桥接通过 Lua `EntityPlayer:GetMovementInput()`／`GetShootingInput()` 查询各身体 | 仅在客机呈现回调内覆盖本机控制器的移动、射击与分离键查询，包含托管输入；离开作用域恢复，不消费按键边沿、不改权威输入或角色对象 |
-| 鼠标瞄准 | `Player.MouseAim` RVA `0x3c2b10`，`thiscall bool(Player*, Vector*, bool)`，被调方清理 8 字节；`Player.ShootingEntity` RVA `0x381780`，`thiscall Entity*(Player*)` | 采集只在同步调用期间将本机角色 `+0x161c` 借用为键盘 ID 0，调用原版坐标转换后恢复；不调用控制器分配、不持有实体。目标以射击实体（为空时为角色）的 `+0x33c/+0x340` 为锚点，原版输出为目标差乘 `0.2`。回放按连接槽位选择目标并使用当前射击实体计算差值，继续由原版处理武器；单人调用原入口。坐标校验和生命周期遵循[输入契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#输入与时间) |
+| 鼠标瞄准 | `Player.MouseAim` RVA `0x3c2b10`，`thiscall bool(Player*, Vector*, bool)`，被调方清理 8 字节；`Player.ShootingEntity` RVA `0x381780`，`thiscall Entity*(Player*)` | 采集只在同步调用期间将本机角色 `+0x161c` 借用为原生键盘 ID −2，调用原版坐标转换后恢复；不调用控制器分配、不持有实体。目标以射击实体（为空时为角色）的 `+0x33c/+0x340` 为锚点，原版输出为目标差乘 `0.2`。回放按连接槽位选择目标并使用当前射击实体计算差值，继续由原版处理武器；单人调用原入口。坐标校验和生命周期遵循[输入契约](https://github.com/BMingSY/isaac-lan/blob/main/docs/synchronization.md#输入与时间) |
 
 挑战目标的[共享组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/challenge_hud.cpp) 仅在 HUD 内的两个指令边界介入。J510 的目标存在位是 CL，无解锁标志是栈帧 `EBP-0xa2`；参数读取前的 EAX 指向 164 字节借用视图，只有终点 `+0x40` 与路线类型 `+0x80` 非零，其余字段清零。它不替换 `Game::GetChallengeParams` 本身，不写入 Game、每日挑战或原生参数对象。离开联机挑战后原样传递原生寄存器和参数；边界保存整数寄存器、标志位、SSE、x87 与控制字。两处 Hook 成组安装，失败只撤销本组件创建的 Hook，重复安装被拒绝。[J835 绑定](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md#挑战目标-hud) 使用自己的内联读取点和旧版路线标志。
 

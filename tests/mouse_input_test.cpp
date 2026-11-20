@@ -18,7 +18,7 @@ void* __attribute__((thiscall)) anchor(void* object) {
     return detached ? companion.data() : nullptr;
 }
 bool __attribute__((thiscall)) physical(void* object, mouse::Vector* result, bool raw) {
-    require(object == player.data() && at<int>(object, layout::player::controller) == 0 && !raw,
+    require(object == player.data() && at<int>(object, layout::player::controller) == -2 && !raw,
             "Physical capture did not borrow keyboard identity");
     *result = direction;
     return down;

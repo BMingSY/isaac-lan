@@ -16,12 +16,12 @@ from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle, windows
 from game_logs import log_path
 from testing.profiles import magdalene_profile
-from testing.pause import peer_evidence as pause_evidence
+from testing.pause import ITEMS_PAGE, peer_evidence as pause_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def evidence(text, host, cases=CASES):
+def evidence(text, host, cases=CASES, *, pause_items_page=True):
     required = [COMPLETION]
     if "smoke" in cases:
         required.append("RELEASE_SMOKE PASS authority=" + str(host).lower())
@@ -41,7 +41,11 @@ def evidence(text, host, cases=CASES):
             "RELEASE_SOLO SAVE_EXIT_CALLBACK sequence=2 should_save=true",
             "RELEASE_SOLO PASS native_new_run=true native_save_exit=true native_continue=true lan_between=true",
         ]
-    pause = pause_evidence(text, host, 8) if "pause" in cases else {"passed": True, "skipped": True}
+    pause = (
+        pause_evidence(text, host, 8, items_page=pause_items_page)
+        if "pause" in cases
+        else {"passed": True, "skipped": True}
+    )
     missing = [marker for marker in required if marker not in text]
     return {
         "passed": not missing and pause["passed"] and "LAN_NETWORK FAILED" not in text,
@@ -140,6 +144,7 @@ def main():
                 (output / "engine" / role / "log.txt").read_text(errors="replace"),
                 role == "host",
                 args.cases,
+                pause_items_page=ITEMS_PAGE[payload["backend"]],
             )
             for role in ("host", "client")
         }

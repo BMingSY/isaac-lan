@@ -53,17 +53,17 @@ namespace mouse = isaac::engine::native_mouse;
 namespace backend = isaac::engine::j835;
 constexpr unsigned rosterOffset = 0x1ba50, controllerOffset = 0x154c, pauseOffset = 0x10203c;
 constexpr unsigned frameOffset = 0x4a264, xOffset = 0x294, yOffset = 0x298;
-constexpr int restartAction = 16, resumeSelection = 1;
+constexpr int keyboardDevice = 0, restartAction = 16, resumeSelection = 1;
 #else
 namespace backend = isaac::engine::j510;
 constexpr unsigned rosterOffset = 0x1baa8, controllerOffset = 0x161c, pauseOffset = 0x23a7c;
 constexpr unsigned frameOffset = 0x4ae94, xOffset = 0x33c, yOffset = 0x340;
-constexpr int restartAction = 18, resumeSelection = 2;
+constexpr int keyboardDevice = -2, restartAction = 18, resumeSelection = 0;
 #endif
 using Address = std::uintptr_t;
 constexpr unsigned imageSize = privateGameImageBytes;
 unsigned char* image;
-std::vector<unsigned char> game(0x190000), manager(0x4ad00);
+std::vector<unsigned char> game(0x190000), manager(frameOffset + sizeof(unsigned));
 std::array<std::array<unsigned char, 0x2200>, 4> players{};
 std::array<Address, 4> roster;
 #ifndef ISAAC_LAN_TEST_J835
@@ -87,13 +87,16 @@ void* receiver() {
     return image + backend::globals::inputManager;
 }
 float readPhysical(void* object, int action, int controller, int* source, bool edge) {
-    require(object == receiver() && action >= 0 && action < 33 && controller >= -1 &&
-                controller < 5,
+    require(object == receiver() && action >= 0 && action < 33 &&
+                controller >= std::min(-1, keyboardDevice) && controller < 5,
             "Native input receiver or parameter ABI mismatch");
     ++physicalCalls;
     requests.push_back({action, controller});
     float result = 0;
-    for (int i = controller < 0 ? 0 : controller; i <= (controller < 0 ? 4 : controller); ++i) {
+    for (int i = 0; i < 5; ++i) {
+        const int device = i == 0 ? keyboardDevice : i;
+        if (controller != -1 && controller != device)
+            continue;
         const float next =
             edge ? float(action < 32 && (edges[i] & (1u << action)) != 0) : values[i][action];
         if (next > result) {
@@ -152,7 +155,8 @@ void* __attribute__((thiscall)) shootingEntity(void* player) {
     return nullptr;
 }
 bool __attribute__((thiscall)) physicalMouse(void* player, mouse::Vector* aim, bool raw) {
-    require(player == players[1].data() && field<int>(player, controllerOffset) == 0 && !raw,
+    require(player == players[1].data() && field<int>(player, controllerOffset) == keyboardDevice &&
+                !raw,
             "Physical mouse did not borrow the local actor's keyboard identity");
     *aim = {20, -10};
     return true;
@@ -199,7 +203,7 @@ void mouseRouting() {
 #ifndef ISAAC_LAN_TEST_J835
     require(input::hookMouseAim(), "Install Plus mouse ABI adapter");
     const auto call = reinterpret_cast<mouse::Aim>(image + backend::entry::playerMouseAim);
-    field<int>(players[1].data(), controllerOffset) = 0;
+    field<int>(players[1].data(), controllerOffset) = keyboardDevice;
     require(call(players[1].data(), &result, false) && result.x == 20 && result.y == -10,
             "Plus adapter did not forward the original mouse call");
     field<int>(players[1].data(), controllerOffset) = 2;
@@ -310,7 +314,8 @@ void physicalCapture() {
     edges = {};
     values[0][input::action::moveRight] = 0.75f;
     values[0][13] = 1;
-    edges[0] = (1u << input::action::item) | (1u << 13);
+    const auto keyboardEdges = (1u << input::action::item) | (1u << input::action::menuBack);
+    edges[0] = keyboardEdges | (1u << 13);
     field<float>(players[1].data(), xOffset) = 300;
     field<float>(players[1].data(), yOffset) = 200;
     input::originalMouseAim = physicalMouse;
@@ -322,8 +327,9 @@ void physicalCapture() {
             "Physical input must sample once per render frame and restore borrowed identity");
     const auto first = capture();
     require(first.values[input::action::moveRight] == 49151 && first.values[13] == 0 &&
-                first.triggered == (1u << input::action::item) && first.pointer.active &&
-                first.pointer.x == 400 && first.pointer.y == 150,
+                first.triggered == (keyboardEdges | (1u << input::action::menuPause)) &&
+                first.values[input::action::menuPause] == lan::maxInputValue &&
+                first.pointer.active && first.pointer.x == 400 && first.pointer.y == 150,
             "Physical input, local map removal or pointer normalization changed");
     require(capture().triggered == 0 && input::previewPhysicalInput().values[1] == 49151,
             "A repeated capture replayed button edges or consumed held values");
@@ -347,7 +353,14 @@ void versionActionsAndCleanup() {
     values = {};
     edges = {};
     values[0][restartAction] = 1;
-    require(input::restartHeld(), "Canonical restart was not mapped to the native version");
+    require(input::restartHeld(), "Canonical restart was not mapped to the native keyboard");
+    edges[0] = 1u << input::action::menuBack;
+    require(input::menuTriggered(input::action::menuBack) &&
+                !input::menuTriggered(input::action::menuBack, true),
+            "Controller-only menu input consumed a keyboard edge");
+    edges[1] = edges[0];
+    require(input::menuTriggered(input::action::menuBack, true), "Menu ignored the first gamepad");
+    edges = {};
     values = {};
 #ifdef ISAAC_LAN_TEST_J835
     values[0][18] = 1; // Original mute occupies Plus's restart number.

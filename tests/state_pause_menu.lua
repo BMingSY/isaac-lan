@@ -5,6 +5,13 @@ local file = assert(io.open("./lan-test-role.txt", "r"))
 local ordinal = file:read("*l") == "host" and 0 or 1
 file:close()
 local host = ordinal == 0
+local itemsPage = _IsaacLanTest.pauseItemsPage
+assert(type(itemsPage) == "boolean")
+local resumeRow, optionsRow, exitRow = 1, 0, 2
+local itemsRow = 2
+if itemsPage then
+    resumeRow, optionsRow, exitRow = 0, 1, 3
+end
 local character = pauseFeedback and 0 or ordinal
 local START, UP, DOWN, LEFT, RIGHT, CONFIRM, BACK = 16, 1, 2, 4, 8, 4096, 8192
 local renders, starts, exits, snapshots = 0, 0, 0, 0
@@ -77,14 +84,14 @@ local function hostUnchanged(s, m)
     )
     if host then
         assert(
-            m.page == 1 and m.selection == 2 and m.controller == 1,
+            m.page == 1 and m.selection == resumeRow and m.controller == 1,
             "Guest navigation moved the host pause menu"
         )
     end
 end
 local function guestPage(page)
     return function(s, m)
-        return host and pausedRoot(2, 2, 1)(s, m)
+        return host and pausedRoot(resumeRow, resumeRow, 1)(s, m)
             or not host
                 and running(s)
                 and Game():IsPaused()
@@ -120,35 +127,13 @@ local steps = {
             Isaac.DebugString("LAN_NETWORK KEYBOARD_PAUSE_REQUEST 1 client")
             return true
         end,
-        check = pausedRoot(2, 2, 1),
+        check = pausedRoot(resumeRow, resumeRow, 1),
     },
     {
-        name = "guest-up-items",
+        name = "guest-select-options",
         actor = 1,
-        button = UP,
-        check = pausedRoot(2, 1, 1),
-        guard = hostUnchanged,
-    },
-    {
-        name = "guest-items",
-        actor = 1,
-        button = CONFIRM,
-        check = guestPage(3),
-        guard = hostUnchanged,
-        hold = 1800,
-    },
-    {
-        name = "guest-items-back",
-        actor = 1,
-        button = BACK,
-        check = guestPage(1),
-        guard = hostUnchanged,
-    },
-    {
-        name = "guest-up-options",
-        actor = 1,
-        navigate = rootTarget(0),
-        check = pausedRoot(2, 0, 1),
+        navigate = rootTarget(optionsRow),
+        check = pausedRoot(resumeRow, optionsRow, 1),
         guard = hostUnchanged,
     },
     {
@@ -200,8 +185,8 @@ local steps = {
     {
         name = "guest-select-resume",
         actor = 1,
-        navigate = rootTarget(2),
-        check = pausedRoot(2, 2, 1),
+        navigate = rootTarget(resumeRow),
+        check = pausedRoot(resumeRow, resumeRow, 1),
         guard = hostUnchanged,
     },
     {
@@ -213,6 +198,35 @@ local steps = {
         end,
     },
 }
+if itemsPage then
+    local inventory = {
+        {
+            name = "guest-select-items",
+            actor = 1,
+            navigate = rootTarget(itemsRow),
+            check = pausedRoot(resumeRow, itemsRow, 1),
+            guard = hostUnchanged,
+        },
+        {
+            name = "guest-items",
+            actor = 1,
+            button = CONFIRM,
+            check = guestPage(3),
+            guard = hostUnchanged,
+            hold = 1800,
+        },
+        {
+            name = "guest-items-back",
+            actor = 1,
+            button = BACK,
+            check = guestPage(1),
+            guard = hostUnchanged,
+        },
+    }
+    for i, value in ipairs(inventory) do
+        table.insert(steps, i + 2, value)
+    end
+end
 if pauseFeedback then
     table.insert(steps, 2, {
         name = "eid-stable",
@@ -300,18 +314,23 @@ for n = 1, pausePulses do
         actor = 1,
         button = START,
         short = true,
-        check = n % 2 == 1 and pausedRoot(2, 2, 1) or function(s, m)
+        check = n % 2 == 1 and pausedRoot(resumeRow, resumeRow, 1) or function(s, m)
             return running(s) and not Game():IsPaused() and m.page == 0
         end,
     }
 end
 local tail = {
-    { name = "guest-exit-pause", actor = 1, button = START, check = pausedRoot(2, 2, 1) },
+    {
+        name = "guest-exit-pause",
+        actor = 1,
+        button = START,
+        check = pausedRoot(resumeRow, resumeRow, 1),
+    },
     {
         name = "guest-select-exit",
         actor = 1,
-        button = DOWN,
-        check = pausedRoot(2, 3, 1),
+        navigate = rootTarget(exitRow),
+        check = pausedRoot(resumeRow, exitRow, 1),
         guard = hostUnchanged,
     },
     {
@@ -355,8 +374,18 @@ local tail = {
                 and starts == (host and 1 or 2)
         end,
     },
-    { name = "host-exit-pause", actor = 0, button = START, check = pausedRoot(2, 2, 0) },
-    { name = "host-select-exit", actor = 0, button = DOWN, check = pausedRoot(3, 2, 0) },
+    {
+        name = "host-exit-pause",
+        actor = 0,
+        button = START,
+        check = pausedRoot(resumeRow, resumeRow, 0),
+    },
+    {
+        name = "host-select-exit",
+        actor = 0,
+        navigate = rootTarget(exitRow),
+        check = pausedRoot(exitRow, resumeRow, 0),
+    },
     {
         name = "host-root-exit",
         actor = 0,
@@ -537,7 +566,20 @@ function _IsaacLanFrame()
     if host and acknowledged and read("done-" .. current .. "-1.txt") then
         write("step.txt", tostring(current + 1))
     end
-    assert(now - stepAt < 45000, "Native pause step stalled: " .. step.name)
+    if now - stepAt >= 45000 then
+        error(
+            ("Native pause step %s stalled: phase=%s paused=%s owner=%s page=%s selection=%s controller=%s option=%s"):format(
+                step.name,
+                s.phase,
+                tostring(Game():IsPaused()),
+                s.pauseOwner,
+                m.page,
+                m.selection,
+                m.controller,
+                m.optionId
+            )
+        )
+    end
     return s
 end
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)

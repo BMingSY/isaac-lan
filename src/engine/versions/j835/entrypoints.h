@@ -109,6 +109,7 @@ inline constexpr std::uint32_t engineSaveWrite = 0x521a00;
 inline constexpr std::uint32_t engineSaveRead = 0x524320;
 inline constexpr std::uint32_t managerSave = 0x4b3850;
 inline constexpr std::uint32_t managerDeleteSave = 0x4b3b70;
+inline constexpr std::uint32_t gameStateDeleteFile = 0x520ac0;
 inline constexpr std::uint32_t managerSaveRerun = 0x4b3bb0;
 inline constexpr std::uint32_t managerExecuteMenu = 0x4b43d0;
 inline constexpr std::uint32_t managerExecuteStart = 0x4b3fd0;

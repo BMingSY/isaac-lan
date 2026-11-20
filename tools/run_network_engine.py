@@ -495,7 +495,8 @@ def main():
         if action == "save-exit":
             control(pid, "Keys", "{ESC}")
             time.sleep(0.3)
-            for key in ("{DOWN}", "{ENTER}"):
+            exit_key = "{UP}" if selected_profile["backend"] == "j510" else "{DOWN}"
+            for key in (exit_key, "{ENTER}"):
                 control(pid, "Keys", key)
                 time.sleep(0.2)
             return
@@ -1072,7 +1073,7 @@ def main():
                     r"LAN_NETWORK KEYBOARD_PAUSE_REQUEST (\d+) (host|client)", logs[0]
                 ):
                     if number not in pause_keys:
-                        control(processes[roles.index(role)], "PostKeys", "{ESC}")
+                        control(processes[roles.index(role)], "Keys", "{ESC}")
                         pause_keys.add(number)
                         result.setdefault("keyboard_pause", []).append(
                             {"request": int(number), "role": role, "key": "Escape"}

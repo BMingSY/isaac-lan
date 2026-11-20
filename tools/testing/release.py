@@ -3,6 +3,7 @@
 import json
 from game_profiles import DEFAULT_BACKEND
 from testing.lua import factory, write_suite
+from testing.pause import ITEMS_PAGE
 
 
 HOURGLASS = (
@@ -32,6 +33,7 @@ def build_suite(output, coordination, cases=CASES, *, backend=DEFAULT_BACKEND):
             options = {"releaseHourglass": name, "greedStartDestination": first_visit}
         elif name == "pause":
             filename = "state_pause_menu.lua"
+            options = {"pauseItemsPage": ITEMS_PAGE[backend]}
             prefix = (
                 "local pauseCoordination = "
                 + json.dumps(coordination + "/pause")

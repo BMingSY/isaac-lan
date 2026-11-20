@@ -32,6 +32,7 @@ std::uintptr_t game() {
 using Plain = void(__cdecl*)();
 using Method = void(__attribute__((thiscall)) *)(void*);
 Plain originalSave, originalDelete, originalRerun, originalControls;
+Method originalSlotDelete;
 Method originalSerialize, originalExecuteStart, originalUpdate, originalConsoleUpdate, originalMenu;
 struct Seeds {
     static constexpr unsigned wordCount = 23;
@@ -81,7 +82,21 @@ void __cdecl saveHook() {
     callbacks.save(originalSave);
 }
 void __cdecl deleteHook() {
-    callbacks.deleteSave(originalDelete);
+    if (callbacks.protectsSoloSave())
+        suppressDelete();
+    else
+        originalDelete();
+}
+void __attribute__((fastcall)) deleteSlotHook(void* state, void*) {
+    const auto owner = manager();
+    if (owner &&
+        reinterpret_cast<std::uintptr_t>(state) == owner + binding.managerLayout.saveState &&
+        callbacks.protectsSoloSave()) {
+        // Keep the native in-memory cleanup without removing the solo file.
+        reinterpret_cast<Method>(image + binding.entry.clear)(state);
+        return;
+    }
+    originalSlotDelete(state);
 }
 void __cdecl rerunHook() {
     callbacks.saveRerun(originalRerun);
@@ -142,7 +157,7 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
         return false;
     image = base;
     callbacks = handlers;
-    std::array<void*, 13> targets{};
+    std::array<void*, 14> targets{};
     unsigned count = 0;
     auto hook = [&](std::uintptr_t target, auto replacement, auto& original) {
         auto* address = reinterpret_cast<void*>(target);
@@ -157,6 +172,8 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
         installGeneratedChallenge(image, callbacks.deleteThis) &&
         hook(image + binding.entry.save, saveHook, originalSave) &&
         hook(image + binding.entry.deleteSave, deleteHook, originalDelete) &&
+        (!binding.entry.deleteSlotFile ||
+         hook(image + binding.entry.deleteSlotFile, deleteSlotHook, originalSlotDelete)) &&
         hook(image + binding.entry.saveRerun, rerunHook, originalRerun) &&
         hook(image + binding.entry.executeMenu, menuHook, originalMenu) &&
         hook(image + binding.entry.serializeProgress, serializeHook, originalSerialize) &&

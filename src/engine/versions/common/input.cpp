@@ -181,7 +181,8 @@ lan::PointerInput captureMouse() {
         const auto player = at<std::uintptr_t>(entry, 0);
         if (player && at<int>(player, binding.mouse.controller) == slot + 1)
             return engine::native_mouse::capture(reinterpret_cast<void*>(player), originalMouseAim,
-                                                 shootingEntity(), binding.mouse);
+                                                 shootingEntity(), binding.mouse,
+                                                 binding.keyboardDeviceId);
     }
     return {};
 }
@@ -368,6 +369,9 @@ int botInput(lua_State* L) {
     lua.pushBoolean(L, valid);
     return 1;
 }
+int physicalDeviceId(unsigned source) {
+    return source == 0 ? binding.keyboardDeviceId : static_cast<int>(source);
+}
 void samplePhysicalInput() {
     if (!originalQuery)
         return;
@@ -389,13 +393,14 @@ void samplePhysicalInput() {
     void* inputManager = reinterpret_cast<void*>(image + binding.inputManager);
     for (unsigned source = 0; source < physicalInput.size(); ++source) {
         auto& input = physicalInput[source];
+        const int device = physicalDeviceId(source);
         for (int action = 0; action < 16; ++action) {
             float value = 0;
-            originalQuery(inputManager, source, reinterpret_cast<void*>(image + binding.value),
+            originalQuery(inputManager, device, reinterpret_cast<void*>(image + binding.value),
                           &action, &value, nullptr);
             input.values[action] =
                 static_cast<std::uint16_t>(std::clamp(value, 0.0f, 1.0f) * 65535.0f + 0.5f);
-            if (originalQuery(inputManager, source,
+            if (originalQuery(inputManager, device,
                               reinterpret_cast<void*>(image + binding.triggered), &action, nullptr,
                               nullptr))
                 input.triggered |= 1u << action;
@@ -619,7 +624,8 @@ bool menuTriggered(int action, bool controllersOnly) {
     action = binding.nativeAction(action);
     if (action < 0 || !hookQuery())
         return false;
-    const int first = controllersOnly ? 1 : -1, last = controllersOnly ? lan::maxPlayers : -1;
+    const int first = controllersOnly ? binding.firstGamepadId : -1;
+    const int last = controllersOnly ? lan::maxPlayers : -1;
     for (int controller = first; controller <= last; ++controller)
         if (originalQuery(reinterpret_cast<void*>(image + binding.inputManager), controller,
                           reinterpret_cast<void*>(image + binding.triggered), &action, nullptr,
@@ -640,9 +646,9 @@ bool restartHeld() {
     const int action = binding.nativeAction(input::action::restart);
     if (hookQuery())
         for (unsigned source = 0; source < physicalInput.size(); ++source)
-            if (originalQuery(reinterpret_cast<void*>(image + binding.inputManager), source,
-                              reinterpret_cast<void*>(image + binding.pressed), &action, nullptr,
-                              nullptr))
+            if (originalQuery(
+                    reinterpret_cast<void*>(image + binding.inputManager), physicalDeviceId(source),
+                    reinterpret_cast<void*>(image + binding.pressed), &action, nullptr, nullptr))
                 return true;
     const auto provider = std::find_if(xinputProviders.begin(), xinputProviders.end(),
                                        [](const auto& p) { return p.state != nullptr; });
