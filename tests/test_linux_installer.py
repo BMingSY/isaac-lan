@@ -3,13 +3,13 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
-import struct
 import subprocess
 import sys
 
 import pytest
 
 from tools.build_package import game_profile
+from tools.testing.installer import game_image
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("linux_install", ROOT / "package/install.py")
@@ -23,34 +23,7 @@ def package_game(tmp_path, monkeypatch):
     package.mkdir()
     game.mkdir()
     profile = game_profile(ROOT)
-    size = profile["minimum_image_size"] + 0x1000
-    image = bytearray(size)
-    image[:2] = b"MZ"
-    struct.pack_into("<I", image, 60, 128)
-    image[128:132] = b"PE\0\0"
-    struct.pack_into("<HHIIIHH", image, 132, 0x14C, 3, 0, 0, 0, 224, 2)
-    struct.pack_into("<H", image, 152, 0x10B)
-    struct.pack_into("<I", image, 208, size)
-    for index, section in enumerate(profile["sections"]):
-        struct.pack_into(
-            "<8sIIIIIIHHI",
-            image,
-            376 + index * 40,
-            b"section",
-            section["size"],
-            section["start"],
-            section["size"],
-            section["start"],
-            0,
-            0,
-            0,
-            0,
-            section["flags"],
-        )
-    marker = profile["game_build"].encode() + b"-"
-    image[profile["version_rva"] : profile["version_rva"] + len(marker)] = marker
-    for signature in profile["signatures"]:
-        image[signature["rva"] : signature["rva"] + 16] = bytes.fromhex(signature["bytes"])
+    image = game_image(profile)
     (game / "isaac-ng.exe").write_bytes(image)
     (game / "save.dat").write_bytes(b"keep the original save")
     (package / "game-profile.json").write_text(json.dumps(profile))
