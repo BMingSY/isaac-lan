@@ -1,6 +1,7 @@
 #pragma once
 #include "net/protocol.h"
 #include <functional>
+#include <optional>
 #include <string_view>
 
 namespace isaac::engine::session {
@@ -28,6 +29,8 @@ bool managerReady();
 bool gameReady();
 bool continueAvailable();
 void continueAvailable(bool value);
+std::optional<std::uint32_t> soloDiskChecksum();
+void restoreSoloDiskChecksum(std::optional<std::uint32_t> value);
 unsigned saveSlot();
 void captureSave();
 void suppressDelete();

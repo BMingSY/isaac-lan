@@ -127,6 +127,7 @@ bool beginNetworkRun() {
     if (!retryArchive())
         return false;
     saves.soloContinueAvailable = backend::continueAvailable();
+    const auto diskChecksum = backend::soloDiskChecksum();
     saves.soloState =
         saves.soloContinueAvailable ? save::encode(executableImage) : std::vector<std::uint8_t>{};
     if (saves.soloContinueAvailable && saves.soloState.empty()) {
@@ -134,6 +135,7 @@ bool beginNetworkRun() {
             logger("solo_backup=FAILED");
         return false;
     }
+    saves.soloDiskChecksum = diskChecksum;
     saves.networkRun = true;
     rooms::setConnected(lan::allPlayersMask);
     return true;
@@ -1732,6 +1734,10 @@ void beforeExit(bool save) {
 void afterExit(bool save) {
     if (!saves.networkRun)
         return;
+    // The original no-save exit clears the disk checksum after its file-delete
+    // call. Restore the personal value before progress is written or menus reload.
+    backend::restoreSoloDiskChecksum(saves.soloDiskChecksum);
+    saves.soloDiskChecksum.reset();
     restoreProgress();
     const bool host = saves.exitingHost;
     saves.exitingHost = false;

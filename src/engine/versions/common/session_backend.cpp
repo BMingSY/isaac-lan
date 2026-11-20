@@ -212,6 +212,17 @@ bool managerReady() {
 bool gameReady() {
     return image && game();
 }
+std::optional<std::uint32_t> soloDiskChecksum() {
+    const auto field = binding.managerLayout.soloDiskChecksum;
+    if (!field)
+        return std::nullopt;
+    return at<std::uint32_t>(manager(), *field);
+}
+void restoreSoloDiskChecksum(std::optional<std::uint32_t> value) {
+    const auto field = binding.managerLayout.soloDiskChecksum;
+    if (field && value)
+        at<std::uint32_t>(manager(), *field) = *value;
+}
 bool continueAvailable() {
     return at<bool>(manager(), binding.managerLayout.continueAvailable);
 }

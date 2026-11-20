@@ -39,6 +39,7 @@ struct SavedRun {
     bool networkRun = false, soloContinueAvailable = false;
     bool exitingHost = false, exitingTransient = false;
     std::vector<std::uint8_t> soloState;
+    std::optional<std::uint32_t> soloDiskChecksum;
     std::optional<lan::Archive> exitingArchive, resumingArchive;
     std::optional<lan::Progress> localProgress, commonProgress;
     lan::ProgressAwards earnedProgress;

@@ -1,5 +1,6 @@
 #pragma once
 #include "engine/versions/common/progress.h"
+#include <optional>
 
 namespace isaac::engine::native_session {
 // Private native bindings. Public session callbacks retain no game addresses.
@@ -17,6 +18,7 @@ struct Entries {
 struct Manager {
     unsigned scene, saveSlot, progress, saveState, continueAvailable, continueRequested;
     unsigned deleteSaveRequested, cinematicActive, menuRequested, requestedMenu;
+    std::optional<unsigned> soloDiskChecksum = std::nullopt;
 };
 struct Game {
     unsigned pauseMenu, console, stage, stageType, floorSeeds, stateFlags;

@@ -516,6 +516,19 @@ void state() {
             "Continue availability");
     session::continueAvailable(false);
     require(!session::continueAvailable(), "Restore solo availability");
+#ifdef ISAAC_LAN_TEST_J835
+    auto& diskChecksum = field<std::uint32_t>(manager.data(), 0xf28);
+    for (std::uint32_t original : {0u, 0x38c649f2u}) {
+        diskChecksum = original;
+        const auto saved = session::soloDiskChecksum();
+        diskChecksum = 0x76543210;
+        session::restoreSoloDiskChecksum(saved);
+        require(saved == original && diskChecksum == original,
+                "Restore the exact personal disk checksum");
+    }
+#else
+    require(!session::soloDiskChecksum(), "Plus does not use an original disk checksum guard");
+#endif
     session::requestContinue();
     require(field<bool>(manager.data(), continueIntent), "Continue request");
     field<unsigned>(manager.data(), 0x10) = 3;

@@ -78,6 +78,7 @@ constinit const Bindings bindings{
             .cinematicActive = layout::manager::cinematicActive,
             .menuRequested = layout::manager::menuRequested,
             .requestedMenu = layout::manager::requestedMenu,
+            .soloDiskChecksum = layout::manager::saveChecksum,
         },
     .gameLayout =
         {
