@@ -284,14 +284,14 @@ function _IsaacLanMenuRender(
     end
     if not visible then
         renderPing(status, assets[10])
-        if status.bossIntro or (status.skipVotes or 0) ~= 0 then
+        if (status.skipVotes or 0) ~= 0 then
             renderSkip(status, assets[10], message)
         else
             renderRestart(status, assets[10])
         end
         local banner
         if phase == Phase.waiting then
-            banner = message("正在当前层归队 · 队友继续游戏")
+            banner = message("正在重连…")
         elseif status.prepared and (status.pause or 0) > 0 then
             banner =
                 message("P%d 暂停了游戏，由发起者恢复", (status.pauseOwner or 0) + 1)
@@ -572,35 +572,12 @@ function _IsaacLanMenuRender(
     if not resources.native_lobby and notice == "unavailable" then
         footerY = math.min(footerY, 227)
     end
-    if rulesPage then
-        text(
-            message(
-                host and "方向选择 · 确认勾选 · 返回退出"
-                    or "方向查看 · 返回退出"
-            ),
-            25,
-            footerY,
-            10
-        )
-    elseif phase == Phase.lobby and ui.page ~= "challenges" then
+    if not rulesPage and phase == Phase.lobby and ui.page ~= "challenges" then
         if not host then
             text(message("房主地址：%s", ui.ip), 25, footerY - 12, 10)
         end
         text(
             message("%s 端口：%s", status.transport:upper(), host and status.port or ui.port),
-            25,
-            footerY,
-            10
-        )
-    elseif phase == Phase.running then
-        text(message("共同楼层 · 分头探索"), 25, footerY, 10)
-    else
-        text(
-            message(
-                ui.editing and "输入后确认 · 支持粘贴"
-                    or status.recovering and "方向选择 · 确认进入"
-                    or "方向选择 · 确认进入 · 返回退出"
-            ),
             25,
             footerY,
             10

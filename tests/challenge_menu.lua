@@ -239,13 +239,27 @@ _IsaacLanCommand = function(name, value)
 end
 dofile(root .. "/src/bridge/presentation/menu.lua")
 local updateVersion = ""
+local removedFooters = {
+    "方向选择 · 确认进入 · 返回退出",
+    "方向选择 · 确认进入",
+    "输入后确认 · 支持粘贴",
+    "方向选择 · 确认勾选 · 返回退出",
+    "方向查看 · 返回退出",
+    "共同楼层 · 分头探索",
+    "Move to select / Confirm to enter / Back to exit",
+    "Move to select / Confirm to enter",
+    "Type or paste, then confirm",
+    "Move to select / Confirm to toggle / Back to exit",
+    "Move to browse / Back to exit",
+    "Same floor / Explore separately",
+}
 local function draw(key, visible, mx, my, clicked)
     labels = {}
     renderedPortraits = {}
     scaledLabels = {}
     renderedMarks = {}
     labelPositions, renderedSwitches = {}, {}
-    return _IsaacLanMenuRender(
+    local result = _IsaacLanMenuRender(
         true,
         visible ~= false,
         key or 0,
@@ -258,6 +272,10 @@ local function draw(key, visible, mx, my, clicked)
         updateVersion,
         true
     )
+    for _, footer in ipairs(removedFooters) do
+        assert(not labels[footer], "Unexpected menu footer: " .. footer)
+    end
+    return result
 end
 _IsaacLanMenuOpen(true)
 draw()
@@ -830,6 +848,10 @@ status.phase = phaseValues.waiting
 draw()
 assert(#renderedMarks == 0, "Loading a saved character displayed unrelated lobby-choice marks")
 assert(not labels["房间规则"], "Rules page survived a lobby lifecycle change")
+
+labels = {}
+_IsaacLanMenuRender(false, false, 0, "", -1000, -1000, false, "", "")
+assert(labels["正在重连…"] and not labels["正在当前层归队 · 队友继续游戏"])
 
 -- Future independent checkboxes retain other flags when toggled.
 local selected

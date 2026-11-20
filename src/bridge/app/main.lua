@@ -23,19 +23,6 @@ function _IsaacLanMinimapRender()
         battleHud.renderMap()
     end
 end
-local revivalMachine, challenge
-if native.rooms_machine_revival then
-    local decoration = EffectVariant.BACKDROP_DECORATION
-    revivalMachine = _IsaacLanModules["compat/items/revival_machine"](
-        native,
-        _IsaacLanModules["presentation/fonts"],
-        decoration,
-        function()
-            return challenge.allow("coop_revive")
-        end
-    )
-    Isaac.AddCallback(owner, ModCallbacks.MC_POST_EFFECT_RENDER, revivalMachine.render, decoration)
-end
 local devilCombat = _IsaacLanModules["compat/routes/devil_combat"](
     native,
     _IsaacLanModules["compat/items/door_stop"]
@@ -110,6 +97,7 @@ local placeNear = _IsaacLanModules["runtime/room_placement"]({
     vector = Vector,
     collision = GridCollisionClass,
 }).near
+local challenge
 local roomRules = _IsaacLanModules["runtime/room_rules"]({
     native = native,
     allocation = allocation,
@@ -288,9 +276,6 @@ callback(ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, pickup, collider)
 end)
 callback(ModCallbacks.MC_POST_NEW_LEVEL, function()
     devilCombat.reset()
-    if revivalMachine then
-        revivalMachine.reset()
-    end
     challenge.level()
 end)
 callback(ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD, function()
@@ -385,6 +370,7 @@ chat = _IsaacLanModules["runtime/chat"]({
     send = native.chat_send,
     receive = native.chat_receive,
     execute = native.chat_execute,
+    revive = native.rooms_coop_revive,
     roll = native.chat_roll,
     dice = _IsaacLanModules["runtime/chat_dice"],
     teleport = _IsaacLanModules["runtime/teleport"]({
@@ -492,9 +478,6 @@ function _IsaacLanActionStep()
     friendlyFire.prepare()
     refreshFlatFileDoors()
     local info = native.api_info()
-    if revivalMachine then
-        revivalMachine.step(info)
-    end
     if info.ready == 1 then
         _IsaacLanModules["compat/mods/goodtrip/authority"].observe()
     end
@@ -562,9 +545,6 @@ local function prepareCheckpoint()
 end
 callback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continued)
     devilCombat.reset()
-    if revivalMachine then
-        revivalMachine.reset()
-    end
     friendlyFire.reset()
     roomRules.reset()
     game = Game()
@@ -595,9 +575,6 @@ callback(ModCallbacks.MC_POST_UPDATE, function()
 end)
 callback(ModCallbacks.MC_PRE_GAME_EXIT, function()
     devilCombat.reset()
-    if revivalMachine then
-        revivalMachine.reset()
-    end
     friendlyFire.reset()
     roomRules.reset()
     challenge.reset()

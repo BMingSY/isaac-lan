@@ -112,7 +112,10 @@ Boss 演出事件使用独立序号和楼层／维度／房间身份。权威端
 
 `rooms_teleport(slot, index, dimension)` 在房主更新安全边界请求传送一个已连接参与者，参数范围为槽位 0–3、房间索引 -20–168、维度 0–2。目标必须具有有效原生房间描述符；入口返回布尔值表示请求是否被接受，不表示已经到达。目标按已确定的房间处理，跳过混乱诅咒选路；迁移、受控身体、随行对象、进入效果和到达动画复用现有房间事务，不增加布局或对象所有权。排队时不启动离开动画，取消不会留下传送中的角色状态。上层负责目标选择、到达确认和失效清理，取消使用 `api_cancel_move`，不对旧楼层执行取消。该内部能力不属于第三方稳定 API。
 
-`rooms_revive_player(slot)` 只接受 0–3 的所属玩家栏位，在主机房间系统启用、没有借用作用域、目标为联机幽灵且挑战允许 `round_revive` 时调用既有 `replicaRevivePlayerGhost` 原生入口。幽灵身份使用 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/layout.h) 的 `player::coopGhost`；复活期间只借用该玩家及其身体的房间名单，不接受或返回原生地址，不自行分配、释放角色。复活时机、回血和资源保留由挑战组件决定。
+两版的合作复活接口都调用版本绑定的 `replicaRevivePlayerGhost`，只借用目标所属房间内该玩家及其身体的名单。幽灵标志取自两版布局中的玩家字段 [J835](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/layout.h) 和 [J510](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/layout.h)。身体和背包由游戏管理。接口接受 0–3 的玩家席位，调用时须位于主机房间系统的最外层。
+
+- `rooms_revive_player(slot)` 用于挑战回合，目标为合作幽灵且挑战允许 `round_revive` 时复活，返回是否成功。复活时机、回血和资源保留由挑战组件决定。
+- `rooms_coop_revive(slot)` 用于联机控制台，按 `coop_revive` 挑战规则处理在线合作幽灵。返回 `revived`、`alive`、`offline`、`forbidden` 或 `unavailable`，复活后再次读取目标的幽灵标志确认结果。
 
 `actor_lazarus_unpair(index)` 仅供客机恢复长子权里拉撒路的幽灵状态。角色兼容组件根据权威幽灵状态请求挂起第二具身体；后端要求房间系统启用、没有借用作用域，索引指向完整名单内的主人，双向配对身体位于其后、同房、同控制器，分别属于里拉撒路的两种形态，且双方没有隐藏备份。校验失败不写入。后端按 J510 原生降级路径把双方的 `player::lazarusBackup`（`+0x1e6c`）设为彼此，用原生 EntityPtr 赋值清除公开配对引用，将备份设为未注册／不活动、玩家索引为 `-1`，再调用 `PlayerManager::RemoveExistingPlayer`（RVA `0x5d1630`，`thiscall void(manager, player)`）移出名单。该入口只移除名单元素，不能传入不在名单中的身体；启动时校验其签名。备份仍由原生玩家对象持有，不销毁或分配角色；既有幽灵／复活入口遍历隐藏备份，`actor_form` 在权威重新列出身体时恢复公开配对和名单。房间作用域负责位置记录，后续实体同步负责跟班状态；接口不接收地址，不调用客机伤害或玩家更新逻辑。
 

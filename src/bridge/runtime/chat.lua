@@ -110,6 +110,31 @@ return function(deps, wire)
         end
         return text, "party"
     end
+    local function parseRevive(args)
+        local target = args:match("^%s*(.-)%s*$"):lower()
+        if target == "" or target == "自己" or target == "self" then
+            return { kind = "revive", target = "self" }
+        end
+        local number = target:match("^([1-4])p?$") or target:match("^p([1-4])$")
+        if number then
+            return { kind = "revive", target = tonumber(number) - 1 }
+        end
+        return nil, "用法：/复活 [1p～4p]，省略玩家编号复活自己"
+    end
+    local function revive(owner, target)
+        local slot = target == "self" and owner or target
+        local result = deps.revive(slot)
+        if result == "revived" then
+            return string.format("%dP 已复活", slot + 1)
+        elseif result == "alive" then
+            return string.format("%dP 当前不是合作幽灵", slot + 1)
+        elseif result == "offline" then
+            return string.format("%dP 未在线", slot + 1)
+        elseif result == "forbidden" then
+            return "当前挑战禁止合作复活"
+        end
+        return "当前无法复活"
+    end
     function chat.parse(text)
         local count = length(text)
         if not count or #text > limits.commandBytes then
@@ -168,6 +193,9 @@ return function(deps, wire)
         if lower == "feedback" or lower == "fb" then
             return { kind = "feedback", text = args }
         end
+        if lower == "revive" or lower == "复活" then
+            return parseRevive(args)
+        end
         if lower == "tp" then
             local target, reason = deps.teleport.parse(args)
             if not target then
@@ -179,6 +207,10 @@ return function(deps, wire)
             args = args:gsub("^%s+", "")
             if args == "" then
                 return nil, "用法：/console 原版命令，例如 /c giveitem c1"
+            end
+            local verb, rest = args:match("^(%S+)%s*(.*)$")
+            if verb:lower() == "revive" or verb == "复活" then
+                return parseRevive(rest)
             end
             return { kind = "native", text = args }
         end
@@ -277,7 +309,7 @@ return function(deps, wire)
             )
         elseif parsed.kind == "dice" then
             rollExpression(sender, parsed.dice, parsed.audience)
-        elseif parsed.kind == "native" or parsed.kind == "teleport" then
+        elseif parsed.kind == "native" or parsed.kind == "teleport" or parsed.kind == "revive" then
             if deps.info().ready ~= 1 then
                 errorTo("命令未执行：游戏尚未就绪", sender)
                 return
@@ -320,6 +352,7 @@ return function(deps, wire)
                 "聊天／掷骰末尾加 --room：仅当前房间共享",
                 "/c /console 命令：原版控制台",
                 "/tp help：传送命令",
+                "/复活 /revive [玩家编号]：复活自己或队友",
                 "/lanbot help：托管命令",
                 "/opacity help：玩家不透明度",
                 "/feedback /fb 描述：上传日志并反馈问题",
@@ -458,7 +491,12 @@ return function(deps, wire)
             return
         end
         executingOwner = request.owner
-        local execute = request.kind == "teleport" and deps.teleport.execute or deps.execute
+        local execute = deps.execute
+        if request.kind == "teleport" then
+            execute = deps.teleport.execute
+        elseif request.kind == "revive" then
+            execute = revive
+        end
         local ok, result = pcall(execute, request.owner, request.command)
         executingOwner = nil
         if not ok then
