@@ -62,6 +62,21 @@ local glitched = dofile(root .. "/src/bridge/compat/items/glitched.lua")({
         return count
     end,
 })
+local bound = {}
+local pedestal = { Type = 5, Variant = 100 }
+function pedestal:ToPickup()
+    return self
+end
+function pedestal:Morph(kind, variant, id, keepPrice, keepSeed, ignoreModifiers)
+    assert(
+        kind == self.Type and variant == self.Variant and keepPrice and keepSeed and ignoreModifiers
+    )
+    bound[#bound + 1] = id
+end
+for _, subtype in ipairs({ 0, 25, 0xfffffbff, 0xfffffc00, 0xfffffffe, 0xffffffff, -2 }) do
+    glitched.restorePedestal(pedestal, subtype)
+end
+assert(table.concat(bound, ",") == "-1024,-2,-1,-2", "Wrong generated pedestal definition")
 local first = factory(root, nil, nil, glitched.extraCollectibles, glitched.count)
 local second = factory(root, nil, nil, glitched.extraCollectibles, glitched.count)
 local value = first.read()[1]

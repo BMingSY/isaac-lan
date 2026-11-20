@@ -14,7 +14,7 @@
 | 玩家数量树头指针／大小 | `+0x1fcc/+0x1fd0` | `+0x1ec4/+0x1ec8` |
 | 版本绑定 | [J510](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/generated_items.cpp) | [J835](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/generated_items.cpp) |
 
-生成函数均为 `thiscall int(registry*, uint32 seed, uint32 flags)`，清理八字节栈参数。原生注册表最多 1024 项，编号为 `~index`，即 `-1…-1024`；条目 `+0` 指向 ItemConfig，`+8` 保存规范化种子，ItemConfig `+4` 保存编号。原生恢复调用按序传入规范化种子与 `flags=0`。程序身份和适用范围见 [J510](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)／[J835](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md) 后端参考；J835 组件尚不构成完整可安装后端。
+生成函数均为 `thiscall int(registry*, uint32 seed, uint32 flags)`，清理八字节栈参数。原生注册表最多 1024 项，编号为 `~index`，即 `-1…-1024`。条目 `+0` 指向 ItemConfig，`+8` 保存规范化种子，ItemConfig `+4` 保存编号。原生恢复调用按序传入规范化种子与 `flags=0`。程序身份和适用范围见 [J510](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)／[J835](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend-j835.md) 后端参考。
 
 `generated_items()` 采集、`generated_items(bytes)` 恢复定义。载荷最多 4096 字节，先检查长度、非零种子和已有前缀，再依次调用原生生成器追加缺少的后缀；重复快照不重复生成，冲突、倒退或生成失败终止会话。失败不提供原生对象回滚，不自行清空或释放已经存在的定义。
 
@@ -26,7 +26,7 @@
 
 ## 同步与生命周期
 
-定义恢复必须先于引用负编号的实体和库存恢复。底座生成规则由道具兼容策略决定，恢复只重建相同定义和数量，不重新触发拾取或使用效果。原生存档拥有生成定义的保存／继续生命周期。
+客机先恢复定义，再恢复引用该定义的底座和库存。游戏以无符号 32 位数提供底座的 `SubType`。如果新底座被 TMTRAINER 替换成占位道具，兼容组件将编号还原为负数，调用 `EntityPickup:Morph` 绑定本机生成的图像，保留价格和种子并跳过道具修饰。随后应用房主的底座状态和动画。同一底座收到后续快照时复用已绑定的图像。原生存档负责保存和继续游戏时的定义恢复。
 
 Lua 的道具池接口不能按原生注册表顺序恢复指定定义，现有静态库存枚举也不包含负编号。特殊定义适配位于 [glitched.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/compat/items/glitched.lua)，通用库存通过注入的额外编号列表采集和应用；背包仍通过原生 AddCollectible／RemoveCollectible 应用差量，避免重复快照反复添加被动效果。
 
