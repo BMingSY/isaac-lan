@@ -1,7 +1,18 @@
 -- Glitched definitions use negative IDs, outside ItemConfig's static array.
 local MAX_DEFINITIONS = 1024
+local UINT32_RANGE = 1 << 32
 return function(native)
     return {
+        restorePedestal = function(entity, subtype)
+            -- Entity.SubType exposes the unsigned bits of a generated collectible ID.
+            local id = subtype >= UINT32_RANGE - MAX_DEFINITIONS and subtype - UINT32_RANGE
+                or subtype
+            if id >= -MAX_DEFINITIONS and id < 0 then
+                local pickup = entity:ToPickup()
+                -- Bind the existing definition and its generated texture without rolling TMTRAINER.
+                pickup:Morph(pickup.Type, pickup.Variant, id, true, true, true)
+            end
+        end,
         reader = function(player)
             local get = player.GetCollectibleNum
             -- Bind methods for this operation only; counts and generated IDs
