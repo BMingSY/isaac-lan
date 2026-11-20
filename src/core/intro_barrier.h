@@ -11,7 +11,7 @@ class IntroBarrier {
     static constexpr unsigned timeoutTicks = 600;
     void start(Room room, unsigned serial, unsigned tick, unsigned audience) {
         if (audience)
-            waiting[room] = {serial, tick, audience, audience, audience};
+            waiting[room] = {serial, tick, audience, audience, audience, 0};
     }
     unsigned join(Room room, unsigned serial, unsigned tick, unsigned audience) {
         const auto entry = waiting.find(room);
@@ -26,10 +26,13 @@ class IntroBarrier {
         return added;
     }
     std::optional<Room> observe(unsigned slot, unsigned serial, bool active) {
-        if (slot >= 4 || active)
+        if (slot >= 4)
             return std::nullopt;
         for (auto& [room, value] : waiting) {
             if (value.serial == serial && (value.audience & (1u << slot))) {
+                value.observed |= 1u << slot;
+                if (active)
+                    return std::nullopt;
                 value.audience &= ~(1u << slot);
                 value.blocking &= ~(1u << slot);
                 return room;
@@ -37,11 +40,17 @@ class IntroBarrier {
         }
         return std::nullopt;
     }
+    void finish(unsigned serial) {
+        for (auto& [room, value] : waiting)
+            if (value.serial == serial)
+                value.blocking = 0;
+    }
     bool pending(unsigned slot, unsigned serial, unsigned tick) const {
         if (slot >= 4)
             return false;
         for (const auto& [room, value] : waiting)
-            if (value.serial == serial && value.blocking && (value.audience & (1u << slot)) &&
+            if (value.serial == serial && (value.audience & (1u << slot)) &&
+                (value.blocking || !(value.observed & (1u << slot))) &&
                 tick - value.tick <= timeoutTicks)
                 return true;
         return false;
@@ -58,7 +67,7 @@ class IntroBarrier {
             return false;
         entry->second.audience &= connected;
         entry->second.blocking &= connected;
-        if (!entry->second.blocking || tick - entry->second.tick > timeoutTicks) {
+        if (!entry->second.audience || tick - entry->second.tick > timeoutTicks) {
             waiting.erase(entry);
             return false;
         }
@@ -70,8 +79,9 @@ class IntroBarrier {
 
   private:
     struct Wait {
-        // Late arrivals receive the screen but do not extend its original wait.
-        unsigned serial, tick, audience, enrolled, blocking;
+        // Original viewers set the duration. Every enrolled viewer must receive the
+        // event and dismiss their own screen before this room resumes combat.
+        unsigned serial, tick, audience, enrolled, blocking, observed;
     };
     std::map<Room, Wait> waiting;
 };

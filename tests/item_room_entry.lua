@@ -1,6 +1,7 @@
 local root = assert(arg[1])
 local combat = dofile(root .. "/src/bridge/runtime/room_entry.lua")
 local items = dofile(root .. "/src/bridge/compat/items/room_entry.lua")
+local doorStop = dofile(root .. "/src/bridge/compat/items/door_stop.lua")
 local types =
     { ROOM_DEFAULT = 1, ROOM_BOSS = 5, ROOM_TREASURE = 4, ROOM_SECRET = 7, ROOM_SUPERSECRET = 8 }
 local collectibles = { COLLECTIBLE_MERCURIUS = 590, COLLECTIBLE_XRAY_VISION = 76 }
@@ -94,7 +95,7 @@ local function enter(destination, holders, slowFloor, stoppers, entry, nearDoor,
                 return holders[index + 1]
             end,
         }
-    end, types, collectibles, trinkets)
+    end, types, collectibles, trinkets, doorStop)
 end
 local ordinary, boss, other =
     room(types.ROOM_DEFAULT), room(types.ROOM_BOSS), room(types.ROOM_DEFAULT)

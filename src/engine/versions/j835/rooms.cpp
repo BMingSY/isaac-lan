@@ -298,5 +298,6 @@ const Bindings bindings{
     .beginDogmaCinematic = beginDogmaCinematic,
     .familiarNewRoom = familiarNewRoom,
     .pickupPrice = pickupPrice,
+    .needsRevivalMachine = true,
 };
 } // namespace isaac::engine::native_rooms

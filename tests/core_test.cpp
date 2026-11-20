@@ -1030,10 +1030,14 @@ void introBarrier() {
                 "Late entrant did not receive the running boss intro");
         require(!barrier.join(room, 8, 1211, 3), "Repeated arrival restarted an intro");
         barrier.observe(original, 8, false);
+        require(barrier.pending(late, 8, 1212) && barrier.paused(room, 1212, 3),
+                "Lost the event before a delayed guest could receive and acknowledge it");
+        barrier.observe(late, 8, true);
         require(!barrier.join(room, 8, 1212, 3) && !barrier.pending(original, 8, 1212) &&
-                    !barrier.pending(late, 8, 1212) && !barrier.paused(room, 1212, 3),
-                "Late entrant extended the first viewer's wait or kept its screen alive");
-        require(!barrier.join(room, 8, 1213, 7) && !barrier.observe(late, 8, false),
+                    !barrier.pending(late, 8, 1212) && barrier.paused(room, 1212, 3),
+                "Late entrant kept receiving the screen or fought while still watching");
+        require(!barrier.join(room, 8, 1213, 7) && barrier.observe(late, 8, false) == room &&
+                    !barrier.paused(room, 1213, 3),
                 "Completed shared intro was replayed or retained its control lock");
         barrier.start(room, 8, 1250, first);
         barrier.join(room, 8, 1260, 3);
@@ -1051,6 +1055,14 @@ void introBarrier() {
     barrier.join(room, 10, 2010, 3);
     barrier.observe(0, 10, false);
     require(!barrier.paused(room, 2011, 1), "Disconnected late entrant froze combat");
+    barrier.start(room, 12, 2050, 3);
+    barrier.observe(1, 12, true);
+    barrier.finish(12);
+    barrier.observe(0, 12, false);
+    require(!barrier.pending(1, 12, 2051) && barrier.paused(room, 2051, 3),
+            "A skip vote released combat before the guest dismissed the screen");
+    barrier.observe(1, 12, false);
+    require(!barrier.paused(room, 2052, 3), "Skip dismissal left combat frozen");
     barrier.start(room, 11, 2100, 1);
     barrier.join(room, 11, 2110, 3);
     barrier.clear();
