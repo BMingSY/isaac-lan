@@ -112,14 +112,14 @@ return function(deps, wire)
     end
     local function parseRevive(args)
         local target = args:match("^%s*(.-)%s*$"):lower()
-        if target == "" or target == "自己" or target == "self" then
+        if target == "" or target == "self" then
             return { kind = "revive", target = "self" }
         end
         local number = target:match("^([1-4])p?$") or target:match("^p([1-4])$")
         if number then
             return { kind = "revive", target = tonumber(number) - 1 }
         end
-        return nil, "用法：/复活 [1p～4p]，省略玩家编号复活自己"
+        return nil, "用 /revive 复活自己，或用 /revive 2p 复活队友（1p 至 4p）"
     end
     local function revive(owner, target)
         local slot = target == "self" and owner or target
@@ -193,7 +193,7 @@ return function(deps, wire)
         if lower == "feedback" or lower == "fb" then
             return { kind = "feedback", text = args }
         end
-        if lower == "revive" or lower == "复活" then
+        if lower == "revive" then
             return parseRevive(args)
         end
         if lower == "tp" then
@@ -209,7 +209,7 @@ return function(deps, wire)
                 return nil, "用法：/console 原版命令，例如 /c giveitem c1"
             end
             local verb, rest = args:match("^(%S+)%s*(.*)$")
-            if verb:lower() == "revive" or verb == "复活" then
+            if verb:lower() == "revive" then
                 return parseRevive(rest)
             end
             return { kind = "native", text = args }
@@ -352,7 +352,7 @@ return function(deps, wire)
                 "聊天／掷骰末尾加 --room：仅当前房间共享",
                 "/c /console 命令：原版控制台",
                 "/tp help：传送命令",
-                "/复活 /revive [玩家编号]：复活自己或队友",
+                "/revive [1p-4p]：复活自己或队友",
                 "/lanbot help：托管命令",
                 "/opacity help：玩家不透明度",
                 "/feedback /fb 描述：上传日志并反馈问题",
