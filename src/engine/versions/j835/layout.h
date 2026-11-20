@@ -75,6 +75,7 @@ namespace challengeParams {
 inline constexpr unsigned stage = 0x40, alternatePath = 0x6d, secretPath = 0x88;
 } // namespace challengeParams
 namespace game {
+inline constexpr unsigned challenge = 0x1c319c;
 inline constexpr unsigned ambushPending = 0x1c31c4;
 inline constexpr unsigned certificateLeaveDoor = 0x18788;
 inline constexpr unsigned certificatePreviousDimension = 0x18798;

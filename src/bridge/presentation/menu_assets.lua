@@ -11,6 +11,8 @@ return function(resources, font)
     local root = "gfx/ui/main menu/"
     assets.sketches = sprite(root .. "charactermenubg.anm2", "Idle")
     assets.portraits = sprite(root .. "characterportraits.anm2", "01_Isaac")
+    assets.characterSwap = sprite(root .. "pageswapwidget.anm2", "Idle")
+    assets.characterSwap.Scale = Vector(0.4, 0.4)
     assets.marks = sprite("gfx/ui/completion_widget.anm2", "Idle")
     assets.fill = sprite("gfx/ui/bossoverlay_whiteout.anm2", "Fade", 15)
     assets[10], assets[12], assets[16] = font("small"), font("normal"), font("heading")

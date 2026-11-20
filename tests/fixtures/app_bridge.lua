@@ -3,6 +3,7 @@ return function(root, native, modules)
     local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
     RoomType = RoomType or enums.RoomType
     TrinketType = TrinketType or enums.TrinketType
+    CollectibleType = CollectibleType or enums.CollectibleType
     DoorSlot = DoorSlot or enums.DoorSlot
     RoomShape = RoomShape or enums.RoomShape
     GridRooms = GridRooms or enums.GridRooms
@@ -62,6 +63,7 @@ return function(root, native, modules)
         "compat/rules/room_gather",
         "runtime/room_rules",
         "compat/challenges/luck_game",
+        "compat/challenges/delete_this",
         "compat/challenges/battle_royale_rules",
         "compat/challenges/battle_royale_resources",
         "compat/challenges/battle_royale_rewards",

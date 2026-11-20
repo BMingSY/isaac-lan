@@ -1670,7 +1670,15 @@ void challengeRules() {
                 aim->transient && aim->difficulty == 0 && !aim->roomOptionsLocked &&
                 !aim->friendlyFire && isaac::compat::challenges::available(*aim, {}),
             "Rotated shooting must preserve ordinary characters and independent room options");
-    require(!isaac::compat::challenges::find(1006), "Unknown challenge accepted");
+    const auto* generated = isaac::compat::challenges::find(1006);
+    require(generated && generated->name == "挑战45" &&
+                generated->character == RunRules{}.character && generated->route == "blue_baby" &&
+                generated->goalStage == 11 && generated->goalStageType == 1 &&
+                generated->deleteThis && generated->transient && generated->difficulty == 0 &&
+                !generated->roomOptionsLocked && !generated->friendlyFire &&
+                isaac::compat::challenges::available(*generated, {}),
+            "Challenge 45 must be directly available with free characters and room options");
+    require(!isaac::compat::challenges::find(1007), "Unknown challenge accepted");
     std::array<std::uint8_t, 642> achievements{};
     require(!isaac::compat::challenges::available(*large, achievements),
             "Original challenge unlock was bypassed");

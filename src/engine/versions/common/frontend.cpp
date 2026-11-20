@@ -169,7 +169,8 @@ void captureMenuKey() {
                                       {input::action::menuLeft, VK_LEFT},
                                       {input::action::menuRight, VK_RIGHT},
                                       {input::action::menuUp, VK_UP},
-                                      {input::action::menuDown, VK_DOWN}})
+                                      {input::action::menuDown, VK_DOWN},
+                                      {input::action::menuRightShoulder, 'E'}})
         if (input::menuTriggered(action)) {
             menuKey = key;
             break;

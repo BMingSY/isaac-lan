@@ -1,6 +1,6 @@
 local UNRESTRICTED_CHARACTER = 65535
 -- Menu decisions and actions are independent of fonts, sprites and mouse geometry.
-return function(Phase, Command, endpoint)
+return function(Phase, Command, endpoint, characters)
     local CHALLENGE_MODE, MODE_COUNT = 4, 5
     local function idle(phase)
         return phase == Phase.idle or phase == Phase.failed or phase == Phase.closed
@@ -275,33 +275,25 @@ return function(Phase, Command, endpoint)
                 notice = "unavailable"
             end
         elseif phase == Phase.lobby then
-            local choices = characterChoices
-            local function cycle(delta)
-                if #choices == 0 then
-                    return
-                end
-                local index = 1
-                for i, v in ipairs(choices) do
-                    if v == choice then
-                        index = i
-                        break
-                    end
-                end
-                command("choose", choices[(index - 1 + delta) % #choices + 1] .. ":0")
-            end
-            row(
-                deps.character(choice),
-                function()
-                    cycle(1)
-                end,
-                not ready
-                    and (not challenge or challenge.character == UNRESTRICTED_CHARACTER)
-                    and #choices > 0,
-                cycle
+            local selection = characters.selection(
+                choice,
+                ready,
+                status["random" .. localSlot] == true,
+                not ready and (not challenge or challenge.character == UNRESTRICTED_CHARACTER),
+                characterChoices,
+                deps.catalog or {},
+                command
             )
-            row(ready and "取消准备" or "准备", function()
-                command("choose", choice .. (ready and ":0" or ":1"))
-            end, ready or status["eligible" .. localSlot] == true)
+            row(selection.label or deps.character(choice), function()
+                selection.cycle(1)
+            end, selection.enabled, selection.cycle)
+            rows[#rows].toggle = selection.toggle
+            rows[#rows].canToggle = selection.canToggle
+            row(
+                ready and "取消准备" or "准备",
+                selection.prepare,
+                ready or status["eligible" .. localSlot] == true and selection.canPrepare
+            )
             if host then
                 local function changeMode(delta)
                     local nextMode = ((challenge and CHALLENGE_MODE or ui.difficulty) + delta)

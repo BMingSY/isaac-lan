@@ -40,6 +40,7 @@ set(ISAAC_LAN_BACKEND_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/animation_skip.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/player_opacity.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/floor_generation.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/generated_challenge.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/moving_box.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/death_certificate_return.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/emotes.cpp"

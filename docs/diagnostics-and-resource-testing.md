@@ -102,6 +102,16 @@ python3 tools/run_special_routes.py \
 
 `--latency-ms` 是每个方向的中继延迟，40 ms 对应约 80 ms RTT；道具审计也接受此选项。实际载荷差异用相同稳定档位中的累计计数差除以视图数，不能直接比较时长不同的整局总量。增量命中率不能替代客机应用耗时：收到的增量仍需还原完整视图并恢复游戏对象。
 
+[`run_projectile_pressure.py`](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_projectile_pressure.py) 使用同一组主客机依次检查空房、店主的食泪症／硫磺火／圣心组合、200／500 颗移动泪弹和 64 条旋转激光。每档持续 360 tick，预热 90 tick，收尾 10 tick 不计入统计；双端核对合成弹幕数量，道具组合必须实际发射激光。输出每档帧间隔、采集／应用耗时、原始字节数及样本数。合成弹幕保持存活并关闭主机碰撞，用于比较同步成本，不代表自然战斗的伤害或吞吐量。
+
+```sh
+python3 tools/run_projectile_pressure.py \
+  --host "$ISAAC_HOST_LAB" --client "$ISAAC_CLIENT_LAB" \
+  --build "$ISAAC_CANDIDATE_BUILD" --latency-ms 40 --output "$ISAAC_RUN_OUTPUT"
+```
+
+默认关闭详细诊断和录像；`--phase-profile` 增加逐实体计时，用于定位成本，不能与默认设置的结果直接比较。`--verify --heap-check` 用于单独的正确性轮次，额外逐项核对实体引用和副本碰撞隔离，并在相同进程内验证分房、重聚、重新进入和重建楼层。基线与候选使用相同夹具与参数，测量期间不得并行运行其他游戏或构建；工具自动备份和恢复隔离资料。
+
 `engine_test.py run item-audit -- --mode stress ...` 默认开启性能统计、关闭堆观察与录像；原生异常专项可加 `--heap-check`，画面可加 `--record`，两者的测量需与纯性能轮次区分。其他道具审计模式仍保留堆观察。`stress:idle-baseline`、`stress:idle-inventory-100/300/500` 和 `stress:idle-copies-1000` 禁止自动攻击，要求双端至少 100 个渲染样本且 P95 不超过 33.33 ms；原有未带 `idle-` 的场景仍包含短暂攻击，必须分别解释。
 
 `--no-phase-profile` 将本轮隔离配置的详细诊断显式关闭，用于对照默认生产设置；夹具自身仍逐帧记录渲染间隔，并记录每次采集、应用耗时和字节数，验收预算不变。大量实体下，逐实体／精灵的详细计时会干扰结果，基线与候选必须使用同一诊断设置。

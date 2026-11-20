@@ -391,6 +391,7 @@ if(BUILD_TESTING)
         isaac_add_lua_test(presentation.timeline presentation_timeline.lua)
         isaac_add_lua_test(bridge.replica_pipeline replica_pipeline.lua)
         isaac_add_lua_test(bridge.challenges challenges.lua)
+        isaac_add_lua_test(bridge.delete-this delete_this.lua)
         isaac_add_lua_test(bridge.luck_game luck_game.lua)
         isaac_add_lua_test(bridge.battle-royale battle_royale.lua)
         isaac_add_lua_test(bridge.battle-royale-resources battle_royale_resources.lua)
@@ -403,11 +404,13 @@ if(BUILD_TESTING)
         isaac_add_lua_test(bridge.pvp-items pvp_items.lua)
         isaac_add_lua_test(bridge.challenge_menu challenge_menu.lua)
         isaac_add_lua_test(bridge.menu-repentance challenge_menu.lua vanilla)
+        isaac_add_lua_test(presentation.menu-characters menu_characters.lua)
         isaac_add_lua_test(presentation.update-notice update_notice.lua)
         isaac_add_lua_test(bridge.endpoint endpoint.lua)
         isaac_add_lua_test(bridge.ping_hud ping_hud.lua)
         isaac_add_lua_test(bridge.hornfel hornfel.lua)
         isaac_add_lua_test(bridge.entity_links entity_links.lua)
+        isaac_add_lua_test(bridge.entity-reconciliation entity_reconciliation.lua)
         isaac_add_lua_test(bridge.codec-fragments codec_fragments.lua)
         isaac_add_lua_test(bridge.room-capture room_capture.lua)
         isaac_add_lua_test(bridge.motion-intervals motion_intervals.lua)
@@ -715,6 +718,7 @@ if(BUILD_TESTING)
         input-rooms
         lobby
         lobby-access
+        deferred-choice
         run-rules
         room-options
         handshake

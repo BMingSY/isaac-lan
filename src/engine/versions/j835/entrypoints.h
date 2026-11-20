@@ -5,6 +5,12 @@
 // Layouts and native calling conventions belong to this backend.
 namespace isaac::engine::j835 {
 namespace entry {
+inline constexpr std::uint32_t glitchedGridStyle = 0x2e38e2;
+inline constexpr std::uint32_t glitchedRockStyle = 0x2e9d07;
+inline constexpr std::uint32_t glitchedBackdropType = 0x3a9f70;
+inline constexpr std::uint32_t glitchedBackdropStyle = 0x3afc25;
+inline constexpr std::uint32_t glitchedRoomConfig = 0x4e84d4;
+inline constexpr std::uint32_t generatedItemTrigger = 0x535b00;
 inline constexpr std::uint32_t playerSmeltedTrinketCounters = 0x368c8d;
 inline constexpr std::uint32_t playerSmeltedTrinketVector = 0x368cba;
 inline constexpr std::uint32_t gridEntityTntUpdate = 0x2ee310;

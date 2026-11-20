@@ -16,6 +16,7 @@ presentation/player_opacity
 presentation/menu_model
 presentation/fonts
 presentation/menu_assets
+presentation/menu_characters
 presentation/audio
 presentation/motion
 presentation/attachments
@@ -120,6 +121,7 @@ sync/combat_state
 sync/replica
 compat/routes/challenge_goal
 compat/challenges/luck_game
+compat/challenges/delete_this
 compat/challenges/battle_royale_rules
 compat/challenges/battle_royale_resources
 compat/challenges/battle_royale_rewards

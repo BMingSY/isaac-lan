@@ -36,6 +36,41 @@ auto& registry = *reinterpret_cast<std::array<Address, 3>*>(
 using Generate = int(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 Generate nativeGenerate, nativeRestore;
 bool failGeneration = false;
+struct EffectCall {
+    int id;
+    void* player;
+    unsigned event;
+    void* entity;
+    const void* position;
+    const void* velocity;
+    bool operator==(const EffectCall&) const = default;
+};
+std::vector<EffectCall> effectCalls;
+void __attribute__((stdcall)) triggerFixture(int id, void* player, unsigned event, void* entity,
+                                             const void* position, const void* velocity) {
+    effectCalls.push_back({id, player, event, entity, position, velocity});
+}
+void checkEffectAuthority() {
+    const auto trigger =
+        reinterpret_cast<adapter::TriggerEffects>(image + backend::entry::generatedItemTrigger);
+    int player = 0, entity = 0;
+    std::array<float, 2> position{11, 23}, velocity{-2, 7};
+    // Both active use (event 0) and passive event chains share this native ABI.
+    // Repeated snapshots/local updates must not execute either on the replica.
+    for (bool isReplica : {false, true, false}) {
+        replica = isReplica;
+        for (unsigned event = 0; event != 9; ++event) {
+            const auto before = effectCalls.size();
+            trigger(-4, &player, event, &entity, position.data(), velocity.data());
+            require(effectCalls.size() == before + (isReplica ? 0 : 1),
+                    "Generated effects executed outside their authority");
+            if (!isReplica)
+                require(effectCalls.back() == EffectCall{-4, &player, event, &entity,
+                                                         position.data(), velocity.data()},
+                        "Generated effect ABI lost its borrowed arguments");
+        }
+    }
+}
 void reset() {
     registry = {reinterpret_cast<Address>(pointers.data()),
                 reinterpret_cast<Address>(pointers.data()),
@@ -84,6 +119,12 @@ int main() {
             reinterpret_cast<Address>(generateFixture) - reinterpret_cast<Address>(target + 5);
         std::memcpy(target + 1, &relative, 4);
         std::memset(target + 5, 0x90, 11);
+        auto* effects = image + backend::entry::generatedItemTrigger;
+        effects[0] = 0xe9;
+        const auto effectsOffset =
+            reinterpret_cast<Address>(triggerFixture) - reinterpret_cast<Address>(effects + 5);
+        std::memcpy(effects + 1, &effectsOffset, 4);
+        std::memset(effects + 5, 0x90, 11);
         // Copy both original arguments before CALL. Its return address is the
         // audited native save-restoration site, then consume the caller's args.
         auto* restore = image + backend::entry::generatedItemRestoreCall;
@@ -113,6 +154,7 @@ int main() {
                 "Generator install did not recover");
         require(!adapter::install(reinterpret_cast<Address>(image)),
                 "Duplicate generator install succeeded");
+        checkEffectAuthority();
         adapter::lua.getTop = [](lua_State*) { return static_cast<int>(arguments); };
         adapter::lua.checkString = [](lua_State*, int, std::size_t* size) {
             *size = input.size();

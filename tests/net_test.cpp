@@ -833,7 +833,7 @@ void endingEvents() {
         }
     }
     for (unsigned count = 2; count <= 4; ++count)
-        for (unsigned scenario = 0; scenario < 5; ++scenario) {
+        for (unsigned scenario = 0; scenario < 6; ++scenario) {
             const RunRules rules = scenario == 1 || scenario == 2 || scenario == 4
                                        ? RunRules{1001, 2, 23, 0, true}
                                        : RunRules{};
@@ -1948,9 +1948,7 @@ void accessWireValidation() {
         const auto choose = [&](std::uint16_t character) {
             Writer choice(Message::choice);
             choice.u32(0);
-            choice.u16(character);
-            choice.u8(1);
-            choice.u32(0);
+            choice.choice({character, true}, basic);
             remote.send(choice);
             Writer marker(Message::integration);
             const std::array<std::uint8_t, 1> bytes{1};
@@ -1968,11 +1966,12 @@ void accessWireValidation() {
         require(host.choices()[1] == Choice{0, true}, "Raw allowed choice rejected");
     }
     // A host cannot replace this peer's declaration or force an inaccessible start.
-    for (unsigned scenario = 0; scenario < 5; ++scenario) {
+    for (unsigned scenario = 0; scenario < 6; ++scenario) {
         TestSession guest;
         WirePeer remote(true);
+        const LobbyAccess local = scenario == 5 ? LobbyAccess{{0, 1}, {}, {0, 1}} : basic;
         require(
-            guest.join("127.0.0.1", remote.endpoint->address.port, "wire-access", {}, {}, basic),
+            guest.join("127.0.0.1", remote.endpoint->address.port, "wire-access", {}, {}, local),
             "Wire guest failed");
         until([&] {
             guest.poll();
@@ -1989,15 +1988,12 @@ void accessWireValidation() {
         lobby.u8(1);
         lobby.u32(0);
         wireRules(lobby, rules);
-        for (unsigned i = 0; i < maxPlayers; ++i) {
-            lobby.u16(0);
-            lobby.u8(0);
-            lobby.u32(0);
-        }
-        lobby.access(testAccess());
-        lobby.access(scenario == 2 ? testAccess() : basic);
-        lobby.access({});
-        lobby.access({});
+        const std::array<LobbyAccess, maxPlayers> access{testAccess(),
+                                                         scenario == 2 ? testAccess() : local};
+        for (const auto& value : access)
+            lobby.access(value);
+        for (unsigned i = 0; i < maxPlayers; ++i)
+            lobby.choice(i == 1 && scenario == 5 ? Choice{0, true, 0, {0}} : Choice{}, access[i]);
         remote.send(lobby);
         if (scenario != 2) {
             Writer start(Message::start);
@@ -2005,7 +2001,7 @@ void accessWireValidation() {
             start.string("YV039KQF");
             start.u8(0);
             for (unsigned i = 0; i < maxPlayers; ++i)
-                start.u16(i == 1 && scenario < 3 ? 23 : 0);
+                start.u16(i == 1 ? (scenario < 3 ? 23 : scenario == 5 ? 1 : 0) : 0);
             start.progress(std::nullopt);
             start.string(std::string(32, 'b'));
             start.u32(0);
@@ -2014,7 +2010,7 @@ void accessWireValidation() {
             start.u32(0);
             start.u64(snapshotHash({}));
             remote.send(start);
-            if (scenario >= 3) {
+            if (scenario == 3 || scenario == 4) {
                 Writer ending(Message::ending);
                 ending.u8(6);
                 ending.u8(scenario == 3 ? 1 : 2);
@@ -2027,12 +2023,170 @@ void accessWireValidation() {
             remote.poll();
             return guest.phase() == Phase::failed;
         });
-        require(guest.error().find(scenario >= 3   ? "Invalid authoritative ending"
+        require(guest.error().find(scenario == 5   ? "outside the selected candidates"
+                                   : scenario >= 3 ? "Invalid authoritative ending"
                                    : scenario == 2 ? "changed local"
                                                    : "unavailable") != std::string::npos,
                 "Client rejected forged access for an unrelated reason");
     }
 }
+void deferredChoice() {
+    const auto access = testAccess();
+    const Choice hostChoice{0, true, 0, {0, 1}}, guestChoice{3, true, 0, {3, 7}};
+    require(access.allowsChoice(hostChoice) && hostChoice.accepts(1) && !hostChoice.accepts(3),
+            "Deferred subset did not constrain launch");
+    Writer encoded(Message::choice);
+    encoded.choice(hostChoice, access);
+    Reader decoded(encoded.bytes);
+    decoded.u8();
+    require(decoded.choice(access) == hostChoice, "Deferred choice round trip changed state");
+    decoded.finish();
+    for (std::size_t length = 1; length < encoded.bytes.size(); ++length)
+        rejects(
+            [&] {
+                Reader truncated(std::span(encoded.bytes).first(length));
+                truncated.u8();
+                truncated.choice(access);
+            },
+            "Truncated deferred choice accepted");
+    for (const auto& invalid : std::vector<Choice>{{0, true, 0, {0, 0}},
+                                                   {0, true, 0, {1, 0}},
+                                                   {0, true, 0, {0, 4096}},
+                                                   {0, true, 0, {1}},
+                                                   {0, true, 1, {0}}}) {
+        require(!access.allowsChoice(invalid), "Invalid deferred subset accepted");
+        rejects([&] { Writer(Message::choice).choice(invalid, access); },
+                "Invalid deferred subset encoded");
+    }
+    for (auto mask : {0u, 0x40u, 0x41u, 2u}) {
+        Writer invalid(Message::choice);
+        invalid.u16(0);
+        invalid.u8(1);
+        invalid.u32(0);
+        invalid.u8(1);
+        invalid.u8(mask);
+        rejects(
+            [&] {
+                Reader r(invalid.bytes);
+                r.u8();
+                r.choice(access);
+            },
+            "Empty, reserved or anchorless candidate mask accepted");
+    }
+    LobbyAccess maximum;
+    for (unsigned i = 0; i < 256; ++i)
+        maximum.characters.push_back(i);
+    maximum.unlockedCharacters = maximum.characters;
+    for (unsigned i = 1; i <= 64; ++i)
+        maximum.rules.push_back({static_cast<std::uint16_t>(i), 1});
+    Writer roster(Message::lobby);
+    for (unsigned i = 0; i < maxPlayers; ++i)
+        roster.access(maximum);
+    for (unsigned i = 0; i < maxPlayers; ++i)
+        roster.choice({0, true, 0, maximum.characters}, maximum);
+    require(roster.bytes.size() + 64 <= maxMessageSize, "Deferred roster exceeds message bound");
+    Reader full(roster.bytes);
+    full.u8();
+    for (unsigned i = 0; i < maxPlayers; ++i)
+        require(full.access() == maximum, "Maximum access changed");
+    for (unsigned i = 0; i < maxPlayers; ++i)
+        require(full.choice(maximum).candidates == maximum.characters, "Maximum subset changed");
+    full.finish();
+
+    TestSession host, guest;
+    require(host.host(0, "deferred-choice", {}, access), "Deferred host failed");
+    require(guest.join("127.0.0.1", host.port(), "deferred-choice", {}, {}, access),
+            "Deferred guest failed");
+    const auto poll = [&] {
+        host.poll();
+        guest.poll();
+        require(host.phase() != Phase::failed && guest.phase() != Phase::failed,
+                "Deferred session failed");
+    };
+    until([&] {
+        poll();
+        return host.players() == 2 && guest.phase() == Phase::lobby;
+    });
+    require(host.choose(hostChoice) && guest.choose(guestChoice) && guest.choose(guestChoice),
+            "Repeated deferred readiness failed");
+    // A concrete preview queued before the lobby acknowledgement cannot expose a role.
+    require(guest.publishChoicePreview(0, 0x1000001), "Old preview enqueue failed");
+    until([&] {
+        poll();
+        return guest.choices()[0] == hostChoice && guest.choices()[1] == guestChoice;
+    });
+    require(!host.publishChoicePreview(0, 0x1000001) && !guest.publishChoicePreview(3, 0x1000001),
+            "Deferred choice accepted a personal preview");
+    RunRules options;
+    options.options = isaac::roomOptions::known;
+    require(host.configureRules(options), "Deferred room rules failed");
+    until([&] {
+        poll();
+        return guest.rules() == options;
+    });
+    require(!host.choices()[0].ready && !host.choices()[1].ready &&
+                guest.choices()[0].candidates == hostChoice.candidates &&
+                guest.choices()[1].candidates == guestChoice.candidates,
+            "Rule change resolved a deferred choice or retained readiness");
+    const RunRules fixed{1001, 3, 23, 0, true};
+    require(host.configureRules(fixed), "Fixed rule change failed");
+    until([&] {
+        poll();
+        return guest.rules() == fixed;
+    });
+    require(host.choices()[0].candidates.empty() && guest.choices()[1].candidates.empty() &&
+                guest.choices()[1].character == 23 && !host.choose(hostChoice) &&
+                !guest.choose(guestChoice),
+            "Fixed challenge retained deferred selection");
+    require(host.configureRules({}), "Normal rule restore failed");
+    until([&] {
+        poll();
+        return guest.rules() == RunRules{};
+    });
+    require(host.choose(hostChoice) && guest.choose(guestChoice), "Deferred readiness failed");
+    until([&] {
+        poll();
+        return host.choices()[1] == guestChoice;
+    });
+    Start start;
+    start.seed = "YV039KQF";
+    start.characters[0] = 1;
+    start.characters[1] = 2;
+    require(!host.start(start), "Launch ignored the deferred subset");
+    start.characters[1] = 7;
+    require(host.start(start), "Resolved launch failed");
+    until([&] {
+        poll();
+        return guest.phase() == Phase::running;
+    });
+    require(guest.settings().characters == start.characters && host.choices()[0] == hostChoice &&
+                guest.choices()[1] == guestChoice,
+            "Launch exposed the roster in lobby choices or changed its result");
+    require(host.ready() && guest.ready() && host.submit(0, {}), "Deferred engine setup failed");
+    until([&] {
+        poll();
+        if (const auto frame = host.take()) {
+            host.completed(frame->tick);
+            return true;
+        }
+        return false;
+    });
+    require(host.beginEnding(ending::firstCinematic), "Deferred ending failed");
+    until([&] {
+        poll();
+        return guest.takeEnding().has_value();
+    });
+    require(host.returnToLobby() && guest.returnToLobby(), "Deferred return failed");
+    until([&] {
+        poll();
+        return host.phase() == Phase::lobby && guest.phase() == Phase::lobby;
+    });
+    require(!guest.choices()[0].ready && !guest.choices()[1].ready &&
+                guest.choices()[0].candidates == hostChoice.candidates &&
+                guest.choices()[1].candidates == guestChoice.candidates,
+            "Return revealed the previous result or retained readiness");
+}
+
 void lobbyAccess() {
     accessWireValidation();
     const RunRules rules{1001, 2, 23, 0, true};
@@ -3416,6 +3570,7 @@ int main(int argc, char** argv) {
          {"run-rules", runRules},
          {"room-options", roomOptions},
          {"lobby-access", lobbyAccess},
+         {"deferred-choice", deferredChoice},
          {"handshake", handshake},
          {"compatibility-versions", compatibilityVersions},
          {"compatibility-rejoin", compatibilityRejoin},

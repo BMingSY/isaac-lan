@@ -4,7 +4,8 @@
 
 namespace isaac::engine::native_generated_items {
 const Bindings bindings{
-    .entry = {j460::entry::generatedItemCreate, j460::entry::generatedItemRestoreCall},
+    .entry = {j460::entry::generatedItemCreate, j460::entry::generatedItemRestoreCall,
+              j460::entry::generatedItemTrigger},
     .game = j460::globals::game,
     .layout = {
         .player = {j460::layout::player::generatedInventoryHead,

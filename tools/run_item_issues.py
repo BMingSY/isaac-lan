@@ -24,7 +24,9 @@ def main():
     parser.add_argument("--build", type=Path, default=ROOT / "build-win32")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--port", type=int, default=51840)
-    parser.add_argument("--tm-passives-only", action="store_true")
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument("--tm-passives-only", action="store_true")
+    scope.add_argument("--tm-triggers-only", action="store_true")
     parser.add_argument("--injected-bootstrap", action="store_true")
     args = parser.parse_args()
     labs = validate_owned_labs(
@@ -36,6 +38,7 @@ def main():
     script = output / "scenario.lua"
     script.write_text(
         ("_IsaacLanTest.passivesOnly = true\n" if args.tm_passives_only else "")
+        + ("_IsaacLanTest.triggersOnly = true\n" if args.tm_triggers_only else "")
         + (ROOT / "tests/state_issue_items.lua").read_text()
     )
     protected = ProtectedLabs(labs, output)
@@ -44,7 +47,9 @@ def main():
         args.build,
         output / "engine",
         script,
-        "PASS generated passive effects and native continuation"
+        "PASS generated triggers and native continuation"
+        if args.tm_triggers_only
+        else "PASS generated passive effects and native continuation"
         if args.tm_passives_only
         else "PASS shared rewards, Genesis, generated effects and native continuation",
         "--frontend",

@@ -359,16 +359,20 @@ struct Session::Impl {
         for (unsigned i = 0; i < playerCount; ++i) {
             auto& choice = choices[i];
             const auto previous = choice.character;
-            if (runRules.character != 65535)
+            if (runRules.character != 65535) {
+                choice.candidates.clear();
                 choice.character = runRules.character;
-            else if (!access[i].allowsCharacter(choice.character) && !access[i].characters.empty())
+            } else if (!access[i].allowsChoice(choice) && !access[i].characters.empty()) {
+                choice.candidates.clear();
                 choice.character = access[i].characters.front();
+                choice.ready = false;
+            }
             if (choice.character != previous)
                 choice.preview = 0;
         }
         const bool allowed = rulesAvailable(runRules);
         for (unsigned i = 0; i < playerCount; ++i)
-            if (!allowed || !access[i].allowsCharacter(choices[i].character))
+            if (!allowed || !access[i].allowsChoice(choices[i]))
                 choices[i].ready = false;
         for (unsigned i = 1; i < playerCount; ++i) {
             Writer w(Message::lobby);
@@ -376,13 +380,10 @@ struct Session::Impl {
             w.u8(i);
             w.u32(rulesRevision);
             writeRules(w, runRules);
-            for (auto choice : choices) {
-                w.u16(choice.character);
-                w.u8(choice.ready);
-                w.u32(choice.preview);
-            }
             for (const auto& value : access)
                 w.access(value);
+            for (unsigned slot = 0; slot < maxPlayers; ++slot)
+                w.choice(choices[slot], access[slot]);
             peers[i]->sendMessage(w);
         }
         lobbyDirty = false;
@@ -592,17 +593,16 @@ struct Session::Impl {
             }
             if (type == Message::choice && state == Phase::lobby) {
                 const auto revision = r.u32();
-                const auto c = r.u16(), ready = static_cast<std::uint16_t>(r.u8());
-                const auto preview = r.u32();
-                if (ready > 1)
-                    throw std::runtime_error("Invalid ready flag");
+                auto choice = r.choice(access[slot]);
                 if (revision != rulesRevision)
                     return; // Choice from the previous lobby rules.
-                if (runRules.character != 65535 && c != runRules.character)
+                if (runRules.character != 65535 &&
+                    (choice.character != runRules.character || !choice.candidates.empty()))
                     return;
-                if (!access[slot].allowsCharacter(c) || (ready && !rulesAvailable(runRules)))
+                if (!access[slot].allowsChoice(choice) ||
+                    (choice.ready && !rulesAvailable(runRules)))
                     return;
-                choices[slot] = {c, ready != 0, preview};
+                choices[slot] = std::move(choice);
                 choicesRequired = true;
                 lobbyDirty = true;
                 return;
@@ -612,7 +612,8 @@ struct Session::Impl {
                 const auto character = r.u16();
                 const auto preview = r.u32();
                 if (state == Phase::lobby && revision == rulesRevision &&
-                    choices[slot].character == character && choices[slot].preview != preview) {
+                    choices[slot].candidates.empty() && choices[slot].character == character &&
+                    choices[slot].preview != preview) {
                     choices[slot].preview = preview;
                     lobbyDirty = true;
                 }
@@ -818,16 +819,10 @@ struct Session::Impl {
             if (playerCount < 2 || playerCount > maxPlayers || !localSlot ||
                 localSlot >= playerCount)
                 throw std::runtime_error("Invalid lobby");
-            for (auto& c : choices) {
-                c.character = r.u16();
-                const auto n = r.u8();
-                if (n > 1)
-                    throw std::runtime_error("Invalid ready flag");
-                c.ready = n != 0;
-                c.preview = r.u32();
-            }
             for (auto& value : access)
                 value = r.access();
+            for (unsigned slot = 0; slot < maxPlayers; ++slot)
+                choices[slot] = r.choice(access[slot]);
             if (access[localSlot] != localAccess)
                 throw std::runtime_error("Lobby changed local profile access");
             activeMask = (1u << playerCount) - 1;
@@ -869,6 +864,9 @@ struct Session::Impl {
                  value.characters[localSlot] != value.rules.character) ||
                 (value.rules.difficulty != 255 && value.difficulty != value.rules.difficulty))
                 throw std::runtime_error("Start is unavailable for the local profile");
+            if (state == Phase::lobby && !snapshotSize && !choices[localSlot].candidates.empty() &&
+                !choices[localSlot].accepts(value.characters[localSlot]))
+                throw std::runtime_error("Start is outside the selected candidates");
             if (restarting) {
                 if (snapshotSize || value.firstTick || value.rules != runRules ||
                     value.characters != startSettings.characters ||
@@ -1543,7 +1541,7 @@ bool Session::start(const Start& settings) {
     if (impl->choicesRequired)
         for (unsigned i = 0; i < impl->playerCount; ++i)
             if (!impl->choices[i].ready ||
-                (settings.snapshot.empty() && impl->choices[i].character != settings.characters[i]))
+                (settings.snapshot.empty() && !impl->choices[i].accepts(settings.characters[i])))
                 return false;
     if ((settings.rules.difficulty != 255 && settings.difficulty != settings.rules.difficulty))
         return false;
@@ -1666,8 +1664,9 @@ bool Session::checkpointNeeded() const {
 }
 bool Session::choose(Choice choice) {
     if (impl->state != Phase::lobby ||
-        (impl->runRules.character != 65535 && choice.character != impl->runRules.character) ||
-        !impl->localAccess.allowsCharacter(choice.character) ||
+        (impl->runRules.character != 65535 &&
+         (choice.character != impl->runRules.character || !choice.candidates.empty())) ||
+        !impl->localAccess.allowsChoice(choice) ||
         (choice.ready && !impl->rulesAvailable(impl->runRules)))
         return false;
     impl->publishedPreview.reset();
@@ -1678,15 +1677,14 @@ bool Session::choose(Choice choice) {
     } else {
         Writer w(Message::choice);
         w.u32(impl->rulesRevision);
-        w.u16(choice.character);
-        w.u8(choice.ready);
-        w.u32(choice.preview);
+        w.choice(choice, impl->localAccess);
         impl->peers[0]->sendMessage(w);
     }
     return true;
 }
 bool Session::publishChoicePreview(std::uint16_t character, std::uint32_t preview) {
-    if (impl->state != Phase::lobby || impl->choices[impl->localSlot].character != character)
+    if (impl->state != Phase::lobby || !impl->choices[impl->localSlot].candidates.empty() ||
+        impl->choices[impl->localSlot].character != character)
         return false;
     const auto value = std::pair{impl->rulesRevision, Choice{character, false, preview}};
     if (impl->publishedPreview == value)
@@ -1717,11 +1715,13 @@ bool Session::configureRules(const RunRules& rules) {
         auto& choice = impl->choices[i];
         const auto previous = choice.character;
         choice.ready = false;
-        if (rules.character != 65535)
+        if (rules.character != 65535) {
+            choice.candidates.clear();
             choice.character = rules.character;
-        else if (!impl->access[i].allowsCharacter(choice.character) &&
-                 !impl->access[i].characters.empty())
+        } else if (!impl->access[i].allowsChoice(choice) && !impl->access[i].characters.empty()) {
+            choice.candidates.clear();
             choice.character = impl->access[i].characters.front();
+        }
         if (choice.character != previous)
             choice.preview = 0;
     }

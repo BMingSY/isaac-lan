@@ -2,7 +2,7 @@
 #include "engine/versions/common/generated_item_bindings.h"
 #include "runtime/session.h"
 #include "net/protocol.h"
-#include <MinHook.h>
+#include "engine/versions/common/hooks.h"
 #include "engine/lua_api.h"
 #include "compat/game_ids.h"
 
@@ -15,6 +15,9 @@ template <class T> const T& at(Address p, unsigned offset = 0) {
 }
 using Generate = int(__attribute__((thiscall)) *)(void*, unsigned, unsigned);
 Generate originalGenerate;
+using TriggerEffects = void(__attribute__((stdcall)) *)(int, void*, unsigned, void*, const void*,
+                                                        const void*);
+TriggerEffects originalTriggerEffects;
 isaac::lua::API lua{};
 using engine::native_generated_items::bindings;
 bool installed;
@@ -113,6 +116,14 @@ int __attribute__((fastcall)) generate(void* self, void*, unsigned seed, unsigne
         return (flags & generateActiveFlag) ? activePlaceholder : passivePlaceholder;
     return originalGenerate(self, seed, flags);
 }
+void __attribute__((stdcall)) triggerEffects(int id, void* player, unsigned event, void* entity,
+                                             const void* position, const void* velocity) {
+    // Restoring a replica can spawn entities and rebuild player inventories.
+    // Generated event chains must not run gameplay again during that work or
+    // during local presentation updates; their results come from the authority.
+    if (!runtime::replica())
+        originalTriggerEffects(id, player, event, entity, position, velocity);
+}
 int state(lua_State* L) {
     try {
         const auto destination = registry();
@@ -157,16 +168,15 @@ bool install(std::uintptr_t base) {
     if (!base || installed)
         return false;
     image = base;
-    const auto target = reinterpret_cast<void*>(image + bindings.entry.create);
-    if (MH_CreateHook(target, reinterpret_cast<void*>(generate),
-                      reinterpret_cast<void**>(&originalGenerate)) == MH_OK) {
-        if (MH_EnableHook(target) == MH_OK) {
-            installed = true;
-            return true;
-        }
-        MH_RemoveHook(target);
+    engine::native_hooks::Group<2> hooks;
+    if (hooks.add(image + bindings.entry.create, generate, originalGenerate) &&
+        hooks.add(image + bindings.entry.trigger, triggerEffects, originalTriggerEffects) &&
+        hooks.enable()) {
+        installed = true;
+        return true;
     }
     originalGenerate = nullptr;
+    originalTriggerEffects = nullptr;
     image = 0;
     return false;
 }

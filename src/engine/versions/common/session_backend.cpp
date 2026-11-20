@@ -1,5 +1,6 @@
 #include "engine/session_backend.h"
 #include "engine/floor_generation.h"
+#include "engine/generated_challenge.h"
 #include "engine/rooms.h"
 #include "engine/versions/common/room_hooks.h"
 #include "core/chat.h"
@@ -153,6 +154,7 @@ bool install(std::uintptr_t base, const Callbacks& handlers) {
     };
     bool success =
         installFloorGeneration(image, callbacks.largeFloor) &&
+        installGeneratedChallenge(image, callbacks.deleteThis) &&
         hook(image + binding.entry.save, saveHook, originalSave) &&
         hook(image + binding.entry.deleteSave, deleteHook, originalDelete) &&
         hook(image + binding.entry.saveRerun, rerunHook, originalRerun) &&

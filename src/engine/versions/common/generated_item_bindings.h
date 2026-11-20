@@ -4,7 +4,7 @@
 namespace isaac::engine::native_generated_items {
 struct Bindings {
     struct Entries {
-        std::uint32_t create, restoreCall;
+        std::uint32_t create, restoreCall, trigger;
     } entry;
     std::uint32_t game;
     struct Layout {

@@ -318,6 +318,7 @@ session::Callbacks handlers() {
             },
         .completionAward = award,
         .largeFloor = nullptr,
+        .deleteThis = nullptr,
     };
 }
 void prepare() {
@@ -655,6 +656,9 @@ int main() {
 }
 
 namespace isaac::engine {
+bool installGeneratedChallenge(std::uintptr_t, bool (*)()) {
+    return true;
+}
 bool installFloorGeneration(std::uintptr_t, bool (*)()) {
     return true;
 }

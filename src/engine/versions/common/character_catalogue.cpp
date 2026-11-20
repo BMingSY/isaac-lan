@@ -110,14 +110,16 @@ characters::Catalogue catalogue(const Directory& directory, const lan::Progress&
     };
     std::unordered_set<unsigned> seen;
     std::vector<Choice> choices;
-    auto add = [&](unsigned type, bool tainted, Address record, const std::string& animation,
-                   const std::string& portraitAnm2Path) {
+    auto add = [&](unsigned type, unsigned counterpart, bool tainted, Address record,
+                   const std::string& animation, const std::string& portraitAnm2Path) {
         const auto cfg = findConfig(type);
         if (!cfg || type >= maxTypes || !seen.insert(type).second)
             return;
         characters::Entry entry;
         entry.type = static_cast<std::uint16_t>(type);
         entry.tainted = tainted;
+        if (counterpart != type && counterpart < maxTypes && findConfig(counterpart))
+            entry.counterpart = static_cast<std::uint16_t>(counterpart);
         const auto raw = nativeString(cfg + config::name).value_or("");
         entry.name = displayName(directory, raw);
         if (entry.name.empty())
@@ -143,8 +145,10 @@ characters::Catalogue catalogue(const Directory& directory, const lan::Progress&
             text(at<Address>(directory.pages, page * pageLayout::size + pageLayout::portrait));
         for (unsigned index = 1; index < entriesPerPage; ++index) {
             const auto record = directory.entries + (page * entriesPerPage + index) * menuStride;
-            add(at<unsigned>(record, menuEntry::type), page != 0, record,
-                text(at<Address>(record, menuEntry::name)), portrait);
+            const auto other =
+                directory.entries + ((1 - page) * entriesPerPage + index) * menuStride;
+            add(at<unsigned>(record, menuEntry::type), at<unsigned>(other, menuEntry::type),
+                page != 0, record, text(at<Address>(record, menuEntry::name)), portrait);
         }
         for (unsigned type = nativeTypes; type < count; ++type) {
             const auto cfg = findConfig(type);
@@ -153,9 +157,16 @@ characters::Catalogue catalogue(const Directory& directory, const lan::Progress&
             if (!cfg || at<bool>(cfg, config::hidden) ||
                 at<unsigned>(cfg, config::parentNameSize) != 0)
                 continue;
-            const auto selected = page ? at<unsigned>(cfg, config::taintedType) : type;
-            add(selected, page != 0, 0, "", "");
+            const auto paired = at<unsigned>(cfg, config::taintedType);
+            add(page ? paired : type, page ? type : paired, page != 0, 0, "", "");
         }
+    }
+    for (auto& entry : result.entries) {
+        if (entry.counterpart &&
+            std::none_of(result.entries.begin(), result.entries.end(), [&](const auto& other) {
+                return other.type == *entry.counterpart && other.tainted != entry.tainted;
+            }))
+            entry.counterpart.reset();
     }
     {
         FrontendProgress scope(directory, personal);
