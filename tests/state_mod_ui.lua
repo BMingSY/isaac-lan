@@ -1,6 +1,6 @@
 -- Actual, unmodified Good Trip; input enters through the native XInput path.
 local native = assert(_IsaacLan)
-assert(ButtonAction.ACTION_MAP == 13, "J460 map action changed")
+assert(ButtonAction.ACTION_MAP == 13, "J510 map action changed")
 local f = assert(io.open("./lan-test-role.txt", "r"))
 local host = f:read("*l") == "host"
 f:close()

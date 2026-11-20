@@ -213,7 +213,7 @@ return function(native, bridge, nav, terrain, items, actorPose, networkStatus)
                     if not to.breakable or clear or not hit then
                         return clear
                     end
-                    -- J460 can return the final free position just before the
+                    -- J510 can return the final free position just before the
                     -- blocked cell. Inspect at most the next cell along that
                     -- ray; never skip a rock or another poop to reach a target.
                     local dx, dy = to.x - hit.X, to.y - hit.Y

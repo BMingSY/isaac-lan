@@ -127,6 +127,7 @@ bool beginNetworkRun() {
     if (!retryArchive())
         return false;
     saves.soloContinueAvailable = backend::continueAvailable();
+    const auto diskChecksum = backend::soloDiskChecksum();
     saves.soloState =
         saves.soloContinueAvailable ? save::encode(executableImage) : std::vector<std::uint8_t>{};
     if (saves.soloContinueAvailable && saves.soloState.empty()) {
@@ -134,6 +135,7 @@ bool beginNetworkRun() {
             logger("solo_backup=FAILED");
         return false;
     }
+    saves.soloDiskChecksum = diskChecksum;
     saves.networkRun = true;
     rooms::setConnected(lan::allPlayersMask);
     return true;
@@ -149,12 +151,8 @@ void saveGame(const backend::Call& original) {
     // in memory: only our separate session archive may be written for this run.
     backend::captureSave();
 }
-void deleteGame(const backend::Call& original) {
-    if (!saves.networkRun) {
-        original();
-        return;
-    }
-    backend::suppressDelete();
+bool protectsSoloSave() {
+    return saves.networkRun;
 }
 void saveRerun(const backend::Call& original) {
     if (!saves.networkRun)
@@ -1698,7 +1696,8 @@ int sharedCommand(lua_State* L) {
     return 1;
 }
 int pauseMenuState(lua_State* L) {
-    const auto value = pause_menu::state(executableImage);
+    pause_menu::State value;
+    rooms::withView([&] { value = pause_menu::state(executableImage); }, true);
     lua.createTable(L, 0, 4);
     for (const auto& [key, field] :
          {std::pair{"page", value.page}, std::pair{"selection", value.selection},
@@ -1735,6 +1734,10 @@ void beforeExit(bool save) {
 void afterExit(bool save) {
     if (!saves.networkRun)
         return;
+    // The original no-save exit clears the disk checksum after its file-delete
+    // call. Restore the personal value before progress is written or menus reload.
+    backend::restoreSoloDiskChecksum(saves.soloDiskChecksum);
+    saves.soloDiskChecksum.reset();
     restoreProgress();
     const bool host = saves.exitingHost;
     saves.exitingHost = false;
@@ -1782,7 +1785,7 @@ bool install(std::uintptr_t image, void (*log)(const std::string&), void (*halfU
     runHalf = halfUpdate;
     restorePositions = restore;
     return backend::install(image,
-                            {saveGame, deleteGame, saveRerun, serializeProgress, executeStart,
+                            {saveGame, protectsSoloSave, saveRerun, serializeProgress, executeStart,
                              startGame, update, consoleUpdate, consoleCommand, controls,
                              executeMenu, requestRestart, completionAward, largeFloor, deleteThis});
 }

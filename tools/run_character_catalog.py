@@ -9,10 +9,9 @@ import argparse
 import json
 from pathlib import Path
 import re
-import struct
 import subprocess
 
-from progress_fixture import MAGIC, checksum
+from progress_fixture import progress_layout
 from testing.results import finish_run
 from testing.engine import configure_interrupts, engine_command, run_engine
 from lab_profile import validate_labs as validate_owned_labs
@@ -31,15 +30,8 @@ def validate_labs(labs):
 
 
 def progress_evidence(source):
-    if not 2800 <= len(source) <= 4 * 1024 * 1024 or source[:16] != MAGIC:
-        raise ValueError("A native J460 progress baseline is required")
-    if struct.unpack_from("<I", source, len(source) - 4)[0] != checksum(source[16:-4]):
-        raise ValueError("Native progress baseline checksum differs")
-    if struct.unpack_from("<3I", source, 20) != (1, 642, 642):
-        raise ValueError("Unsupported native achievement section")
-    flags = source[32:674]
-    if any(flag > 1 for flag in flags):
-        raise ValueError("Invalid native achievement flags")
+    layout = progress_layout(source)
+    flags = source[32 : 32 + layout.achievements]
     if flags[475]:
         raise ValueError("This fixture requires achievement 475 locked before startup")
     if flags[477]:

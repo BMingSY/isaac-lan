@@ -28,11 +28,11 @@ void prepare(const fs::path& directory, const fs::path& fixture, const std::stri
     fs::copy_file(fixture, directory / payloadFile);
     write(directory / manifestFile,
           std::string(manifestMagic) + "\nversion=" + version +
-              "\ngame_build=1.9.7.17.J460\nloader_abi=" + std::to_string(loaderABI) +
+              "\ngame_build=1.9.7.19.J510\nloader_abi=" + std::to_string(loaderABI) +
               "\nsha256=" + isaac::updates::fileHash(directory / payloadFile) + "\n");
 }
 fs::path load(const fs::path& game) {
-    const auto loaded = isaac::loader::load(game, "0.6.3", "1.9.7.17.J460");
+    const auto loaded = isaac::loader::load(game, "0.6.3", "1.9.7.19.J510");
     require(loaded.module && loaded.bootstrap, "load extension and bootstrap export");
     using ModulePath = const wchar_t*(__cdecl*)();
     const auto proc = GetProcAddress(loaded.module, "IsaacLanTestModulePath");
@@ -122,7 +122,7 @@ int wmain(int argc, wchar_t** argv) {
                 "raw Workshop source is adopted before any mods refresh");
         require(isaac::updates::fileHash(active) == isaac::updates::fileHash(compatible),
                 "BCrypt verifies exact cached bytes");
-        const auto held = isaac::loader::load(game, "0.6.3", "1.9.7.17.J460");
+        const auto held = isaac::loader::load(game, "0.6.3", "1.9.7.19.J510");
         require(held.module != nullptr, "hold an existing session DLL open");
         prepare(source, compatible, "0.6.5");
         const auto newer = load(game);
@@ -154,7 +154,7 @@ int wmain(int argc, wchar_t** argv) {
         write(labGame / "isaac-lan/session.keep", "preserved fixture");
         fs::copy_file(compatible, labGame / payloadFile);
         prepare(source, compatible, "0.6.4");
-        isaac::updates::select(labGame, source, "0.6.3", "1.9.7.17.J460", isaac::updates::fileHash);
+        isaac::updates::select(labGame, source, "0.6.3", "1.9.7.19.J510", isaac::updates::fileHash);
         wchar_t previous[32768]{};
         GetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", previous, std::size(previous));
         SetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", lab.c_str());

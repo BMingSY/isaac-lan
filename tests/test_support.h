@@ -4,6 +4,9 @@
 #include <stdexcept>
 #include <string_view>
 
+// Space for the complete private PE image of either supported game.
+inline constexpr unsigned privateGameImageBytes = 0x900000;
+
 inline void require(bool value, const char* message) {
     if (!value)
         throw std::runtime_error(message);

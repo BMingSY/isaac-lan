@@ -1,15 +1,27 @@
 // Private x86 image only: no game process, files, input or hooks are installed.
 #include "test_support.h"
-#include "engine/versions/j460/item_effects.cpp"
-#include "engine/versions/j460/death_certificate_return.cpp"
-#include "engine/versions/j460/moving_box.cpp"
-#include "engine/versions/j460/cursed_mist.cpp"
-#include "engine/versions/j460/pickup_preview.cpp"
-#include "engine/versions/j460/session_backend.cpp"
-#include "engine/versions/j460/floor_generation.cpp"
+#include "engine/versions/j510/item_effects.cpp"
+#include "engine/versions/common/item_effects.cpp"
+#include "engine/versions/j510/death_certificate_return.cpp"
+#include "engine/versions/common/death_certificate_return.cpp"
+#include "engine/versions/j510/moving_box.cpp"
+#include "engine/versions/common/moving_box.cpp"
+#include "engine/versions/j510/cursed_mist.cpp"
+#include "engine/versions/j510/pickup_preview.cpp"
+#include "engine/versions/common/pickup_preview.cpp"
+#include "engine/versions/j510/session_backend.cpp"
+#include "engine/versions/common/session_backend.cpp"
+#include "engine/versions/j510/floor_generation.cpp"
+#include "engine/versions/common/floor_generation.cpp"
 #include "runtime/progression.h"
 #include <array>
 #include <cstring>
+
+namespace isaac::engine {
+bool installGeneratedChallenge(std::uintptr_t, bool (*)()) {
+    return true;
+}
+} // namespace isaac::engine
 
 namespace isaac::runtime {
 void abort(const std::string& error) {
@@ -90,7 +102,7 @@ __attribute__((naked)) int invokeCertificateBoundary() {
 
 namespace {
 namespace items = isaac::engine::items;
-namespace native = isaac::engine::j460;
+namespace native = isaac::engine::j510;
 using Address = std::uintptr_t;
 static_assert(sizeof(Address) == 4);
 std::vector<int> grants;
@@ -276,10 +288,11 @@ void __attribute__((thiscall)) certificateReturnFixture(void*, int room, int dir
     __asm__ __volatile__("pxor %%xmm7, %%xmm7" ::: "xmm7");
 }
 void certificateReturn() {
+    namespace certificate = isaac::engine::native_certificate_return;
     Fixture f;
     std::vector<unsigned char> game(native::layout::game::deathCertificateReturnTimer +
                                     sizeof(int));
-    native::image = reinterpret_cast<Address>(f.image);
+    certificate::image = reinterpret_cast<Address>(f.image);
     *reinterpret_cast<Address*>(f.image + native::globals::game) =
         reinterpret_cast<Address>(game.data());
     auto field = [&](unsigned offset) -> int& {
@@ -288,8 +301,8 @@ void certificateReturn() {
     field(native::layout::game::deathCertificateRoom) = 84;
     f.publish(native::entry::engineRoomsTransition, certificateReturnFixture);
     FlushInstructionCache(GetCurrentProcess(), f.image, Fixture::size);
-    native::isaac_lan_certificate_original = reinterpret_cast<void*>(certificateContinued);
-    native::isaac_lan_certificate_done = reinterpret_cast<void*>(certificateCompleted);
+    certificate::original = reinterpret_cast<void*>(certificateContinued);
+    certificate::done = reinterpret_cast<void*>(certificateCompleted);
     isaac::rooms::certificateLocations = {{0, 84, 160, 200}, {2, 103, 200, 280}};
     certificateReturns = 0;
     for (unsigned i = 0; i < 3; ++i) {
@@ -308,7 +321,7 @@ void certificateReturn() {
     require(certificateBoundaryECX == 0x87654321 && certificateBoundaryEBX == 0x12345678 &&
                 certificateBoundarySSE == 0.75f,
             "Delayed-return adapter corrupted general/SSE registers");
-    native::image = 0;
+    certificate::image = 0;
 }
 void startingRewards() {
     Fixture f;
@@ -345,19 +358,19 @@ void repeatedCompletionAwards() {
     session::image = reinterpret_cast<Address>(f.image);
     *reinterpret_cast<Address*>(f.image + native::globals::manager) =
         reinterpret_cast<Address>(f.manager.data());
-    auto records = reinterpret_cast<native::completion::CharacterAwards*>(
+    auto records = reinterpret_cast<isaac::engine::native_completion::CharacterAwards*>(
         f.image + native::globals::completionDefinitions);
     records[0][0] = {27, 99};
     records[0][2] = {41, 33};
-    session::originalRecordCompletion = completionFixture;
+    isaac::engine::native_session::originalRecordCompletion = completionFixture;
     session::callbacks.completionAward = completionObserver;
     completionCalls = 0;
     completionAwards.clear();
     for (unsigned i = 0; i < 32; ++i) {
-        session::recordCompletionHook(0, 0, 0);
-        session::recordCompletionHook(0, 0, 1);
-        session::recordCompletionHook(2, 0, 0);
-        session::recordCompletionHook(2, 0, 1);
+        isaac::engine::native_session::recordCompletion(0, 0, 0);
+        isaac::engine::native_session::recordCompletion(0, 0, 1);
+        isaac::engine::native_session::recordCompletion(2, 0, 0);
+        isaac::engine::native_session::recordCompletion(2, 0, 1);
     }
     require(completionCalls == 128 && completionAwards.size() == 128 &&
                 completionAwards[0] == std::array<unsigned, 3>{27, 1, 0} &&
@@ -367,14 +380,14 @@ void repeatedCompletionAwards() {
             "Repeated completion lost its native descriptor or difficulty");
     {
         session::ProgressReadOnlyScope scope;
-        session::recordCompletionHook(2, 0, 1);
+        isaac::engine::native_session::recordCompletion(2, 0, 1);
     }
-    session::recordCompletionHook(15, 0, 0);
-    session::recordCompletionHook(0, 41, 0);
+    isaac::engine::native_session::recordCompletion(15, 0, 0);
+    isaac::engine::native_session::recordCompletion(0, 41, 0);
     require(completionAwards.size() == 128 && completionCalls == 131,
             "Read-only replica or invalid descriptor earned a completion award");
     session::callbacks.completionAward = nullptr;
-    session::originalRecordCompletion = nullptr;
+    isaac::engine::native_session::originalRecordCompletion = nullptr;
     session::image = 0;
 }
 std::vector<unsigned> committedUnlocks;
@@ -475,7 +488,7 @@ void __attribute__((thiscall)) reviveCollectibleFixture(void* player, unsigned i
 }
 void __attribute__((thiscall)) reviveTrinketFixture(void* player, unsigned id, unsigned scratch) {
     require(player == expectedPlayer && id == 23 && scratch == 0x12345678,
-            "Trinket revival changed native arguments or dropped J460's second stack word");
+            "Trinket revival changed native arguments or dropped J510's second stack word");
     require(isaac::rooms::revivalScoped == isaac::rooms::scopeAvailable,
             "Trinket revival escaped its actor scope");
     ++revivalCalls;

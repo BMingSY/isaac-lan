@@ -1,9 +1,9 @@
-#include "engine/versions/j460/boss_intro.h"
+#include "engine/versions/j510/boss_intro.h"
 #include "test_support.h"
 #include <array>
 
 namespace {
-namespace field = isaac::engine::j460::layout::roomTransition;
+namespace field = isaac::engine::j510::layout::roomTransition;
 struct Transition {
     std::array<int, 160> storage{};
     int& at(unsigned offset) {
@@ -21,8 +21,8 @@ void completion() {
         value.at(field::elapsed) = 3;
         value.at(field::duration) = 15;
         constexpr auto playing = field::introSprite +
-                                 isaac::engine::j460::layout::sprite::animation +
-                                 isaac::engine::j460::layout::animationState::playing;
+                                 isaac::engine::j510::layout::sprite::animation +
+                                 isaac::engine::j510::layout::animationState::playing;
         auto& spritePlaying = *reinterpret_cast<bool*>(value.address() + playing);
         spritePlaying = true;
         unsigned calls = 0;
@@ -41,10 +41,10 @@ void completion() {
                 controls = true;
             }
         };
-        isaac::engine::j460::finishBossIntro(value.address(), update);
+        isaac::engine::j510::finishBossIntro(value.address(), update);
         require(controls && calls == (phase == field::intro ? 2u : 1u),
                 "Boss intro did not complete through the native state machine");
-        isaac::engine::j460::finishBossIntro(value.address(), update);
+        isaac::engine::j510::finishBossIntro(value.address(), update);
         require(calls == (phase == field::intro ? 2u : 1u), "Completed screen ran cleanup twice");
     }
 }
@@ -57,7 +57,7 @@ void boundaries() {
             value.at(field::mode) = phase;
             value.at(field::bossIntro) = boss;
             const auto before = value.storage;
-            isaac::engine::j460::finishBossIntro(value.address(), [] {
+            isaac::engine::j510::finishBossIntro(value.address(), [] {
                 require(false, "Boss completion entered an unrelated native transition");
             });
             require(value.storage == before, "Boss completion modified an unrelated transition");

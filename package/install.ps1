@@ -4,14 +4,13 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$expectedBuild = '1.9.7.17.J460'
 $ownedFiles = @('winmm.dll', 'isaac_lan_probe.dll')
 $win32Errors = @{ AccessDenied = 5; SharingViolation = 32; LockViolation = 33; HandleDiskFull = 39; FileExists = 80; DiskFull = 112; AlreadyExists = 183 }
 $failureCode = 'GAME_PATH'
 $hints = @{
     GAME_PATH = 'Select the game folder containing isaac-ng.exe (Steam > Manage > Browse local files).'
     PACKAGE_INVALID = 'Extract the entire release ZIP into a new folder and retry. Check security-software quarantine if a file is missing.'
-    GAME_INCOMPATIBLE = "Use Windows Repentance+ $expectedBuild. In Steam, check the game version and verify installed files."
+    GAME_INCOMPATIBLE = "Use the Windows game version specified in this package manifest. In Steam, check the game version and verify installed files."
     CHECKER_FAILED = 'Run the installer from a fully extracted release ZIP. Check security-software blocks and keep the error details if the checker still cannot start.'
     GAME_RUNNING = 'Close Isaac, wait for it to exit, then retry. Do not replace DLLs while the game is running.'
     INSTALLATION_INVALID = 'Restore .isaac-lan-install and isaac-lan/installation.json from the same installation backup. Keep session data and logs; do not delete them to bypass this check.'
@@ -115,7 +114,7 @@ try {
     if (!$GameDirectory) {
         Add-Type -AssemblyName System.Windows.Forms
         $dialog = [Windows.Forms.OpenFileDialog]::new()
-        $dialog.Title = 'Select The Binding of Isaac Repentance+ / isaac-ng.exe'
+        $dialog.Title = 'Select The Binding of Isaac / isaac-ng.exe'
         $dialog.Filter = 'Isaac executable|isaac-ng.exe'
         try {
             if ($dialog.ShowDialog() -ne [Windows.Forms.DialogResult]::OK) {
@@ -159,7 +158,7 @@ try {
         $failureCode = 'PACKAGE_INVALID'
         $payload = ReadJson (Join-Path $PSScriptRoot 'payload.json')
         AssertManifest $payload @('winmm.dll', 'isaac_lan_probe.dll', 'isaac_lan_check.exe')
-        if ((Property $payload 'game_build') -ne $expectedBuild) {
+        if ([string]::IsNullOrWhiteSpace((Property $payload 'game_build'))) {
             throw 'Invalid package game_build.'
         }
         foreach ($name in @('winmm.dll', 'isaac_lan_probe.dll', 'isaac_lan_check.exe')) {
@@ -169,6 +168,16 @@ try {
                 throw "Package file failed verification: $name"
             }
         }
+        $profilePath = Join-Path $PSScriptRoot 'game-profile.json'
+        AssertRegular $profilePath
+        if ((Hash $profilePath) -ne $payload.linux_files.'game-profile.json') {
+            throw 'Package game profile failed verification.'
+        }
+        $profile = Get-Content -LiteralPath $profilePath -Raw | ConvertFrom-Json
+        if ($profile.format -ne 1 -or $profile.game_build -ne $payload.game_build -or $profile.backend -ne $payload.backend) {
+            throw 'Package game profile differs from manifest.'
+        }
+        $expectedBuild = $profile.game_build
         # The checker parses the PE as data; it never starts the selected game.
         $failureCode = 'CHECKER_FAILED'
         $checkOutput = (& (Join-Path $PSScriptRoot 'isaac_lan_check.exe') $executable | Out-String).Trim()
@@ -285,7 +294,7 @@ try {
         }
     }
     Write-Output $(if ($Mode -eq 'Install') {
-            'Installed. Start the game from Steam and select Online on the main menu.'
+            'Installed. Start the game from Steam.'
         } else {
             'Uninstalled. Session data and logs were preserved.'
         })

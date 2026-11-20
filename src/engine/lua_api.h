@@ -41,6 +41,8 @@ enum class Symbol {
     toString,
     getTop,
     getGlobal,
+    setGlobal,
+    loadBuffer,
     setTop,
     type,
     ref,
@@ -79,6 +81,9 @@ struct API {
     const char*(ISAAC_LUA_CALL* toString)(lua_State*, int, std::size_t*) = nullptr;
     int(ISAAC_LUA_CALL* getTop)(lua_State*) = nullptr;
     int(ISAAC_LUA_CALL* getGlobal)(lua_State*, const char*) = nullptr;
+    void(ISAAC_LUA_CALL* setGlobal)(lua_State*, const char*) = nullptr;
+    int(ISAAC_LUA_CALL* loadBuffer)(lua_State*, const char*, std::size_t, const char*,
+                                    const char*) = nullptr;
     void(ISAAC_LUA_CALL* setTop)(lua_State*, int) = nullptr;
     int(ISAAC_LUA_CALL* type)(lua_State*, int) = nullptr;
     int(ISAAC_LUA_CALL* ref)(lua_State*, int) = nullptr;
@@ -165,6 +170,14 @@ struct API {
                 break;
             case Symbol::getGlobal:
                 if (!bind(next.getGlobal, resolve(module, "lua_getglobal")))
+                    return false;
+                break;
+            case Symbol::setGlobal:
+                if (!bind(next.setGlobal, resolve(module, "lua_setglobal")))
+                    return false;
+                break;
+            case Symbol::loadBuffer:
+                if (!bind(next.loadBuffer, resolve(module, "luaL_loadbufferx")))
                     return false;
                 break;
             case Symbol::setTop:

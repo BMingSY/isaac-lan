@@ -6,52 +6,23 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+
+if __package__:
+    from .game_profiles import DEFAULT_BACKEND, build_profile, source_profile
+else:
+    from game_profiles import DEFAULT_BACKEND, build_profile, source_profile
 import re
 import subprocess
 from extension_package import LOADER_ABI
 
 
-def game_profile(source):
-    backend = source / "src/engine/versions/j460"
-    header = (backend / "entrypoints.h").read_text()
-    addresses = dict(re.findall(r"std::uint32_t (\w+) = (0x[0-9a-f]+);", header))
-    declarations = (backend / "profile.h").read_text()
-    profile = {
-        "format": 1,
-        "game_build": re.search(r'char version\[\] = "([^"]+)"', declarations)[1],
-        "version_rva": int(re.search(r"versionRva = (0x[0-9a-f]+)", declarations)[1], 16),
-        "minimum_image_size": int(
-            re.search(r"minimumImageSize = (0x[0-9a-f]+)", declarations)[1], 16
-        ),
-        "sections": [
-            dict(zip(("start", "size", "flags"), (int(value, 16) for value in values)))
-            for values in re.findall(
-                r"RequiredSection\{(0x[0-9a-f]+), (0x[0-9a-f]+), (0x[0-9a-f]+)\}", declarations
-            )
-        ],
-        "signatures": [],
-    }
-    signatures = (backend / "signatures.inc").read_text()
-    for entry, name, values, mask in re.findall(
-        r'\{j460::entry::(\w+),\s*"([^"]+)",\s*\{([^}]+)\},\s*(0x[0-9a-f]+)\}', signatures
-    ):
-        data = bytes(int(value.strip(), 0) for value in values.split(","))
-        assert len(data) == 16
-        profile["signatures"].append(
-            {
-                "name": name,
-                "rva": int(addresses[entry], 16),
-                "bytes": data.hex(),
-                "mask": int(mask, 16),
-            }
-        )
-    assert len(profile["signatures"]) == len(re.findall(r"\{j460::entry::", signatures))
-    assert len(profile["sections"]) == 3
-    return profile
+def game_profile(source, backend=DEFAULT_BACKEND):
+    return source_profile(backend, root=source)
 
 
 def build(build_directory, output, *, strip_binaries=False):
     source = Path(__file__).resolve().parent.parent
+    profile = build_profile(build_directory)
     strip_tool = None
     if strip_binaries:
         cache = (build_directory / "CMakeCache.txt").read_text()
@@ -72,13 +43,14 @@ def build(build_directory, output, *, strip_binaries=False):
     version = (source / "VERSION").read_text().strip()
     payload = {
         "format": 1,
-        "game_build": "1.9.7.17.J460",
+        "game_build": profile["game_build"],
+        "backend": profile["backend"],
         "extension_version": version,
         "loader_abi": LOADER_ABI,
         "files": files,
     }
     shutil.copy2(source / "package/install.py", output)
-    (output / "game-profile.json").write_text(json.dumps(game_profile(source), indent=2) + "\n")
+    (output / "game-profile.json").write_text(json.dumps(profile, indent=2) + "\n")
     payload["linux_files"] = {
         name: hashlib.sha256((output / name).read_bytes()).hexdigest()
         for name in ("install.py", "game-profile.json")

@@ -1,9 +1,11 @@
 #include "engine/item_effects.h"
+#include "engine/imports.h"
+#include "engine/native_files.h"
 #include "engine/lua_api.h"
 #include "engine/state_codec.h"
 #include "engine/entity_fields.h"
-// J460 native adapter. Lab launches retain explicit profile isolation; ordinary
-// launches require the installer marker, J460 layout and compatible entry points.
+// Selected native adapter. Lab launches retain explicit profile isolation; ordinary
+// launches require the installer marker, matching layout and audited entry points.
 #include <windows.h>
 #include <MinHook.h>
 #include <shlobj.h>
@@ -95,22 +97,6 @@ HANDLE WINAPI nativeOpenFile(LPCSTR name, DWORD access, DWORD sharing,
         observeNativeLog(name);
     return handle;
 }
-using NativeFopen = void*(__cdecl*)(const char*, const char*);
-using NativeFiopen = void*(__cdecl*)(const char*, int, int);
-NativeFopen originalFopen;
-NativeFiopen originalFiopen;
-void* __cdecl nativeFopen(const char* name, const char* mode) {
-    const auto file = originalFopen(name, mode);
-    if (file && mode && std::strpbrk(mode, "wa+"))
-        observeNativeLog(name);
-    return file;
-}
-void* __cdecl nativeFiopen(const char* name, int mode, int protection) {
-    const auto file = originalFiopen(name, mode, protection);
-    if (file && (mode & (2 | 8)))
-        observeNativeLog(name);
-    return file;
-}
 
 std::string utf8(const std::wstring& s) {
     int size = WideCharToMultiByte(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0,
@@ -171,32 +157,8 @@ bool __cdecl noSteamRelaunch(unsigned int) {
 }
 
 bool replaceImport(const char* name, void* replacement, void** original = nullptr) {
-    const auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
-    const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(image + dos->e_lfanew);
-    auto imports = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(
-        image + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
-    for (; imports->Name; ++imports) {
-        auto names = reinterpret_cast<const IMAGE_THUNK_DATA*>(image + imports->OriginalFirstThunk);
-        auto addresses = reinterpret_cast<IMAGE_THUNK_DATA*>(image + imports->FirstThunk);
-        for (; names->u1.AddressOfData; ++names, ++addresses) {
-            if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal))
-                continue;
-            const auto entry =
-                reinterpret_cast<const IMAGE_IMPORT_BY_NAME*>(image + names->u1.AddressOfData);
-            if (strcmp(reinterpret_cast<const char*>(entry->Name), name) != 0)
-                continue;
-            DWORD before;
-            if (!VirtualProtect(&addresses->u1.Function, sizeof(void*), PAGE_READWRITE, &before))
-                return false;
-            if (original)
-                *original = reinterpret_cast<void*>(addresses->u1.Function);
-            addresses->u1.Function = reinterpret_cast<ULONG_PTR>(replacement);
-            DWORD ignored;
-            VirtualProtect(&addresses->u1.Function, sizeof(void*), before, &ignored);
-            return true;
-        }
-    }
-    return false;
+    return isaac::engine::imports::replace(image, name, replacement, original) ==
+           isaac::engine::imports::Result::replaced;
 }
 
 isaac::lua::API lua{};
@@ -271,8 +233,8 @@ DWORD initialize() {
     wchar_t documents[MAX_PATH]{};
     std::filesystem::path logDirectory;
     if (isolated)
-        logDirectory =
-            std::filesystem::path(env) / L"profile/Documents/My Games/Binding of Isaac Repentance+";
+        logDirectory = std::filesystem::path(env) / L"profile/Documents/My Games" /
+                       std::filesystem::path(isaac::engine::profile().documentsDirectory);
     else {
         const auto result =
             SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documents);
@@ -280,7 +242,8 @@ DWORD initialize() {
             return fail(StartupCode::documentsDirectory, {}, {},
                         L"SHGetFolderPathW HRESULT=" +
                             std::to_wstring(static_cast<unsigned long>(result)));
-        logDirectory = std::filesystem::path(documents) / L"My Games/Binding of Isaac Repentance+";
+        logDirectory = std::filesystem::path(documents) / L"My Games" /
+                       std::filesystem::path(isaac::engine::profile().documentsDirectory);
     }
     const auto config = isaac::configuration::load(directory / L"isaac-lan/config.ini");
     settings = config.settings;
@@ -296,7 +259,7 @@ DWORD initialize() {
         isaac::updates::startupNotice() = isaac::updates::Notice([directory] {
             const auto update = isaac::updates::pending(
                 directory, isaac::updates::workshopSource(directory), ISAAC_LAN_VERSION,
-                isaac::build::version, isaac::updates::fileHash);
+                isaac::build::version(), isaac::updates::fileHash);
             return update ? update->version : std::string{};
         });
     }
@@ -308,7 +271,7 @@ DWORD initialize() {
         feedbackEndpoint = isaac::feedback::defaultEndpoint;
     if (!isaac::feedback::configure({directory / L"isaac-lan/config.ini", feedbackEndpoint,
                                      "isaac-lan/" ISAAC_LAN_VERSION,
-                                     std::string(isaac::build::version)}))
+                                     std::string(isaac::build::version())}))
         log("config_warning=invalid_value=feedback.endpoint");
     const auto chatBackground = isaac::presentation::prepareChatBackground(
         directory / L"isaac-lan", settings.chat.backgroundImage);
@@ -341,7 +304,7 @@ DWORD initialize() {
         log("game_compatibility=FAILED " + compatibilityError);
         return fail(StartupCode::gameCompatibility, executable, {}, wide(compatibilityError));
     }
-    log("game_compatibility=PASS build=" + std::string(isaac::build::version));
+    log("game_compatibility=PASS build=" + std::string(isaac::build::version()));
     isaac::input::install(image, log, installed);
     if (isolated) {
         profile = utf8(root + L"\\profile");
@@ -352,15 +315,9 @@ DWORD initialize() {
         return fail(StartupCode::importBinding, {}, {}, L"GetProcAddress");
     if (!replaceImport("CreateFileA", reinterpret_cast<void*>(nativeOpenFile)))
         return fail(StartupCode::importBinding, {}, {}, L"CreateFileA");
-    // Native loggers use both CRT stdio and C++ streams. Preserve the game's
-    // own CRT file objects; observe their successful opens without borrowing
-    // or closing them from this DLL's different runtime.
-    if (!replaceImport("fopen", reinterpret_cast<void*>(nativeFopen),
-                       reinterpret_cast<void**>(&originalFopen)))
-        return fail(StartupCode::importBinding, {}, {}, L"fopen");
-    if (!replaceImport("?_Fiopen@std@@YAPAU_iobuf@@PBDHH@Z", reinterpret_cast<void*>(nativeFiopen),
-                       reinterpret_cast<void**>(&originalFiopen)))
-        return fail(StartupCode::importBinding, {}, {}, L"_Fiopen");
+    if (const auto error = isaac::engine::native_files::install(image, observeNativeLog);
+        !error.empty())
+        return fail(StartupCode::importBinding, {}, {}, wide(error));
     if (isolated)
         replaceImport("SteamAPI_RestartAppIfNecessary", reinterpret_cast<void*>(noSteamRelaunch));
     if (!replaceImport("GetActiveWindow", reinterpret_cast<void*>(localActiveWindow)))
@@ -372,8 +329,8 @@ DWORD initialize() {
     if (const auto error = isaac::engine::bootstrap::installUpdates(image, log);
         error != StartupCode::success)
         return fail(error);
-    log(std::string("bootstrap=PASS version=1.9.7.17.J460 isolation=") +
-        (isolated ? "profile_redirect" : "installed"));
+    log(std::string("bootstrap=PASS version=") + isaac::build::version() +
+        " isolation=" + (isolated ? "profile_redirect" : "installed"));
     log(std::string("installation_mode=") + (installed ? "installed" : "lab"));
     if (!isaac::runtime::install(image, log, isaac::engine::bootstrap::halfUpdate,
                                  isaac::engine::bootstrap::restorePositions))
@@ -432,7 +389,7 @@ extern "C" __declspec(dllexport) const wchar_t* __cdecl IsaacLanBootstrapError()
 extern "C" __declspec(dllexport) int __cdecl luaopen_isaac_lan_probe(lua_State* L) {
     if (!initialized)
         return 0;
-    HMODULE module = GetModuleHandleW(L"Lua5.3.3r.dll");
+    HMODULE module = GetModuleHandleA(isaac::engine::profile().luaModule);
     if (!module)
         return 0;
     if (!lua.load(module,

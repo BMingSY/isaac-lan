@@ -14,9 +14,6 @@
 #include <vector>
 #include <algorithm>
 
-#include "engine/versions/j460/entrypoints.h"
-namespace j460 = isaac::engine::j460;
-
 namespace isaac::lab_capture {
 namespace {
 struct Image {
@@ -114,11 +111,8 @@ void frame(const std::wstring& labRoot) {
     value.sequence = ++sequence;
     value.tick = runtime::tick();
     value.playing = rooms::stateReady();
-    if (value.playing) {
-        const auto image = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
-        const auto game = *reinterpret_cast<std::uintptr_t*>(image + j460::globals::game);
-        value.room = *reinterpret_cast<int*>(game + 0x18304);
-    }
+    if (value.playing)
+        value.room = rooms::currentRoomIndex();
     using BindFramebuffer = void(APIENTRY*)(GLenum, GLuint);
     BindFramebuffer bind = nullptr;
     const auto proc = wglGetProcAddress("glBindFramebuffer");

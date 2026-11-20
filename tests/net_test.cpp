@@ -3327,10 +3327,11 @@ void captureDemand() {
     group.publish(0);
     until([&] {
         group.poll();
-        return group.peers[0]->resources().worldSnapshots == 1;
+        // Snapshot metrics and capture demand are published independently by
+        // the IO worker. Wait for both observations before applying a receipt.
+        return group.peers[0]->resources().worldSnapshots == 1 &&
+               !group.peers[0]->captureRequested(1);
     });
-    require(!group.peers[0]->captureRequested(1),
-            "Bootstrap without receipt kept requesting capture");
     until([&] {
         group.poll();
         if (auto state = group.peers[1]->takeState()) {

@@ -1,9 +1,8 @@
 param([Parameter(Mandatory = $true)][int]$GameProcessId, [int]$WatchSeconds = 0, [string]$OutputFile = '')
 $ErrorActionPreference = 'Stop'
 $process = Get-Process -Id $GameProcessId
-if ($process.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') {
-    throw 'Owned isolated game required.'
-}
+. (Join-Path $PSScriptRoot 'lab_observations.ps1')
+$layout = Get-LabObservationLayout $process
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -27,20 +26,20 @@ function Read32([long]$address) {
 }
 function ReadHud {
     $base = $process.MainModule.BaseAddress.ToInt64()
-    $game = Read32 ($base + 0x871678)
-    $stats = $game + 0x1da04 + 0x59a4
+    $game = Read32 ($base + $layout.game)
+    $stats = $game + $layout.hud + $layout.stats
     $entries = @()
     for ($i = 0; $i -lt 2; $i++) {
         $player = Read32 ($stats + 0x114 + $i * 0xcc)
         if ($player -ne 0) {
             $damageBits = Read32 ($stats + 0x140 + $i * 0xcc)
-            $entries += [ordered]@{column = $i; controller = (Read32 ($player + 0x1618)); damage = [BitConverter]::ToSingle([BitConverter]::GetBytes([uint32]$damageBits), 0) }
+            $entries += [ordered]@{column = $i; controller = (Read32 ($player + $layout.controller)); damage = [BitConverter]::ToSingle([BitConverter]::GetBytes([uint32]$damageBits), 0) }
         }
     }
-    $primary = Read32 ($game + 0x1da04)
+    $primary = Read32 ($game + $layout.hud)
     $players = @(); $history = @()
     for ($i = 0; $i -lt 8; $i++) {
-        $part = $game + 0x1da04 + $i * 0x6dc; $p = Read32 $part
+        $part = $game + $layout.hud + $i * $layout.partBytes; $p = Read32 $part
         if ($p) {
             $hearts = 0
             for ($j = 0; $j -lt 24; $j++) {
@@ -48,20 +47,20 @@ function ReadHud {
                     $hearts++
                 }
             }
-            $players += [ordered]@{slot = $i; controller = (Read32 ($p + 0x1618)); hearts = $hearts; max_hearts = (Read32 ($p + 0x1340)); visible = ((Read32 ($p + 0x170) -shr 8) -band 255) }
+            $players += [ordered]@{slot = $i; controller = (Read32 ($p + $layout.controller)); hearts = $hearts; max_hearts = (Read32 ($p + $layout.maxHearts)); visible = ((Read32 ($p + $layout.visible)) -band 255) }
         }
     }
     for ($i = 0; $i -lt 2; $i++) {
-        $p = Read32 ($game + 0x1da04 + 0x5c54 + $i * 0x14)
+        $p = Read32 ($game + $layout.hud + $layout.history + $i * 0x14)
         if ($p) {
-            $history += [ordered]@{column = $i; controller = (Read32 ($p + 0x1618)) }
+            $history += [ordered]@{column = $i; controller = (Read32 ($p + $layout.controller)) }
         }
     }
     return [ordered]@{entries = @($entries); players = @($players); history = @($history); primary_controller = $(if ($primary) {
-                Read32 ($primary + 0x1618)
+                Read32 ($primary + $layout.controller)
             } else {
                 -1
-            }); stage = (Read32 $game); stage_transition = (Read32 ($game + 0x1ba78))
+            }); stage = (Read32 $game); stage_transition = (Read32 ($game + $layout.stageTransition))
     }
 }
 try {

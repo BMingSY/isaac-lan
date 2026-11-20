@@ -1,8 +1,12 @@
-#include "engine/versions/j460/room_metadata.h"
+#include "engine/versions/common/room_metadata.h"
 #include "test_support.h"
 #include <numeric>
 
-using namespace isaac::engine::j460::room_metadata;
+using namespace isaac::engine::native_room_data::metadata;
+using isaac::engine::native_room_data::bindings;
+constexpr std::array<unsigned, 10> configWords{0, 4, 8, 12, 16, 0x2c, 0x38, 0x3c, 0x48, 0x4c};
+constexpr unsigned configType = 8, configShape = 0x48, configStringCapacity = 0x28;
+constexpr std::array<unsigned, 6> pickupFields{0, 4, 8, 0x14, 0x28, 0x2c};
 using isaac::lan::Message;
 using isaac::lan::Writer;
 std::vector<std::uint8_t> layout(int dimension = 0, int index = 84, unsigned seed = 1) {
@@ -74,7 +78,7 @@ int main() {
     require(metadata.entities.data() == entries, "Identical pickups reallocated");
     require(metadata.update(pickups(6, 20)), "Same-sized pickup replacement missed");
     rejects([&] { metadata.update(pickups(10)); });
-    require(metadata.entities[0][0] == 6, "Invalid pickup replaced prior data");
+    require(metadata.entities[0] == 6, "Invalid pickup replaced prior data");
     bytes.resize(8);
     require(metadata.update(bytes) && metadata.entities.empty(), "Empty room retained pickups");
     metadata = {};

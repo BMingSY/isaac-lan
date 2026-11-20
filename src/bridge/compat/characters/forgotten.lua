@@ -1,5 +1,5 @@
 -- The tainted skeleton is moved by carrying/throwing, not directional input.
--- GetMovementInput returns the owner's input for both bodies in J460.
+-- GetMovementInput returns the owner's input for both bodies in J510.
 return function(types, native)
     local function paired(kind)
         return kind == types.PLAYER_THEFORGOTTEN or kind == types.PLAYER_THESOUL

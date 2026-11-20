@@ -3,14 +3,15 @@
 from pathlib import Path
 import re
 import shutil
+from game_profiles import profile_directory
 
 
 def log_path(lab):
-    return lab / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt"
+    return profile_directory(lab) / "log.txt"
 
 
 def launch_directory(lab, process_id=None):
-    logs = lab / "profile/Documents/My Games/Binding of Isaac Repentance+/isaac-lan/logs"
+    logs = profile_directory(lab) / "isaac-lan/logs"
     candidates = [
         path
         for path in logs.glob("*")
@@ -25,7 +26,7 @@ def probe_path(lab):
     launch = launch_directory(lab)
     if launch:
         return launch / "startup.log"
-    native = lab / "profile/Documents/My Games/Binding of Isaac Repentance+/isaac-lan/probe.log"
+    native = profile_directory(lab) / "isaac-lan/probe.log"
     present = [path for path in (native, lab / "probe.log") if path.is_file()]
     return max(present, key=lambda path: path.stat().st_mtime_ns) if present else native
 

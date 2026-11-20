@@ -1,33 +1,12 @@
 #include "test_support.h"
-#include "engine/versions/j460/active_items.h"
-#include "engine/moving_box.h"
+#include "engine/versions/j510/active_items.h"
 #include <cstdio>
 #include <vector>
 
-namespace isaac::runtime {
-bool isReplica = false;
-bool replica() {
-    return isReplica;
-}
-} // namespace isaac::runtime
-extern "C" {
-extern void* isaac_lan_box_full;
-extern void* isaac_lan_box_empty;
-void isaac_lan_box_icon_thunk();
-__attribute__((naked)) void boxFull() {
-    __asm__ __volatile__("movl $1, %eax\n\tret");
-}
-__attribute__((naked)) void boxEmpty() {
-    __asm__ __volatile__("xorl %eax, %eax\n\tret");
-}
-__attribute__((naked)) bool drawBox(std::uintptr_t) {
-    __asm__ __volatile__("movl 4(%esp), %ecx\n\tjmp _isaac_lan_box_icon_thunk");
-}
-}
-
+using isaac::engine::native_active_items::field;
 int main() {
     try {
-        using namespace isaac::engine::j460;
+        using namespace isaac::engine::j510;
         using namespace active_items;
         std::vector<std::uint8_t> playerBytes(0x2200, 0), gameBytes(0x24000, 0xa5);
         const auto player = reinterpret_cast<Address>(playerBytes.data());
@@ -86,27 +65,6 @@ int main() {
         desired[0] = {105, 0};
         restore(player, game, desired);
         require(capture(player) == desired, "Replaced active retained D Infinity selection");
-        namespace box = isaac::presentation::moving_box;
-        isaac_lan_box_full = reinterpret_cast<void*>(boxFull);
-        isaac_lan_box_empty = reinterpret_cast<void*>(boxEmpty);
-        require(!box::capture(player) && !drawBox(player), "Empty box icon was full");
-        field<Address>(player, layout::player::movingBoxBegin) = 0x1000;
-        field<Address>(player, layout::player::movingBoxEnd) = 0x1010;
-        require(box::capture(player) && drawBox(player), "Native full box icon was empty");
-        const auto fullPlayer = playerBytes;
-        isaac::runtime::isReplica = true;
-        for (const bool full : {false, true, true, false}) {
-            box::apply(player, full);
-            require(box::capture(player) == full && drawBox(player) == full &&
-                        playerBytes == fullPlayer,
-                    "Moving Box HUD changed native contents or lost the authoritative state");
-        }
-        ++field<unsigned>(player, layout::entity::initSeed);
-        require(drawBox(player), "Reallocated player inherited an old box view");
-        box::apply(player, false);
-        box::reset();
-        require(drawBox(player), "Reset retained a replica box icon");
-        isaac::runtime::isReplica = false;
         std::puts("PASS active slot state, all dice, stable caches, validation and replacement");
         return 0;
     } catch (const std::exception& error) {

@@ -1,4 +1,4 @@
-#include "engine/versions/j460/generated_challenge.cpp"
+#include "engine/versions/common/generated_challenge.cpp"
 #include "test_support.h"
 #include <vector>
 
@@ -6,6 +6,7 @@ extern "C" {
 unsigned observedGeneratedFlags = 0, observedGeneratedEAX = 0, observedGeneratedECX = 0;
 unsigned observedGeneratedEDX = 0, observedGeneratedEDI = 0, observedGeneratedEBX = 0;
 float observedGeneratedScale = 0;
+unsigned generatedChallengeValue;
 __attribute__((naked)) void generatedStyleReturn() {
     __asm__ __volatile__(
         "pushfl\n\tpopl _observedGeneratedFlags\n\t"
@@ -18,7 +19,8 @@ __attribute__((naked, fastcall)) void invokeGeneratedStyle(void*, void (*)()) {
                          "movl %edx, %esi\n\tmovl %ecx, %edi\n\tmovl %ecx, %edx\n\t"
                          "movl $0x3f400000, %eax\n\tmovd %eax, %xmm2\n\t"
                          "movl $0xaabbccdd, %eax\n\tmovl $0x11223344, %ebx\n\t"
-                         "call *%esi\n\tpopl %esi\n\tpopl %edi\n\tpopl %ebx\n\tret");
+                         "cmpl $45, _generatedChallengeValue\n\tcall *%esi\n\tpopl %esi\n\tpopl "
+                         "%edi\n\tpopl %ebx\n\tret");
 }
 }
 namespace {
@@ -31,25 +33,26 @@ int __stdcall chestFixture(bool alternate) {
     return 27;
 }
 } // namespace
+namespace isaac::runtime {
+void abort(const std::string& error) {
+    throw std::runtime_error(error);
+}
+} // namespace isaac::runtime
 int main() {
     using namespace isaac::engine;
-    std::vector<unsigned> game((j460::layout::game::challenge + 4) / 4, 0);
+    std::vector<unsigned> game((bindings.challenge + 4) / 4, 0);
     auto gameAddress = reinterpret_cast<std::uintptr_t>(game.data());
-    generatedChallengeImage = reinterpret_cast<std::uintptr_t>(&gameAddress) - j460::globals::game;
+    generatedChallengeImage = reinterpret_cast<std::uintptr_t>(&gameAddress) - bindings.game;
     static bool enabled = false;
     useGeneratedChallenge = [] { return enabled; };
-    challengeField = &game[j460::layout::game::challenge / 4];
+    challengeField = &game[bindings.challenge / 4];
     originalChestEnding = chestFixture;
-    for (auto target :
-         {&isaac_lan_glitched_grid_return, &isaac_lan_glitched_rock_return,
-          &isaac_lan_glitched_backdrop_type_return, &isaac_lan_glitched_backdrop_return,
-          &isaac_lan_glitched_room_config_return})
-        *target = reinterpret_cast<void*>(generatedStyleReturn);
+    styleOriginals.fill(reinterpret_cast<void*>(generatedStyleReturn));
     constexpr unsigned zeroFlag = 0x40;
     for (bool requested : {false, true, false}) {
         enabled = requested;
         for (unsigned challenge : {0u, 21u, 45u}) {
-            *challengeField = challenge;
+            generatedChallengeValue = *challengeField = challenge;
             const auto before = game;
             for (auto thunk : {isaac_lan_glitched_grid, isaac_lan_glitched_rock,
                                isaac_lan_glitched_backdrop_type, isaac_lan_glitched_backdrop,

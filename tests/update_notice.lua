@@ -27,7 +27,7 @@ local function fixture()
             assets = { fill = { Render = function() end }, lobby = {} },
             width = 480,
             height = 270,
-            layer = function() end,
+            panel = function() end,
             centered = function(text)
                 result.labels[text] = true
             end,

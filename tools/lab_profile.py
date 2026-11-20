@@ -9,13 +9,17 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+from game_profiles import lab_profile, profile_directory
 
 
 def validate_startup(labs):
     for lab in labs:
+        beta_option = lab_profile(lab).get("testing", {}).get("accepted_beta_option")
+        if not beta_option:
+            continue
         options = configparser.ConfigParser()
-        options.read(lab / "profile/Documents/My Games/Binding of Isaac Repentance+/options.ini")
-        if options.get("Options", "AcceptedPublicBeta_v1.9.7.17", fallback="0") != "1":
+        options.read(profile_directory(lab) / "options.ini")
+        if options.get("Options", beta_option, fallback="0") != "1":
             raise ValueError(
                 f"{lab.name}: finish the native first-start Beta notice before auditing; "
                 "background Lua progress does not prove the gameplay view is visible"

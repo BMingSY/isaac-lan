@@ -46,7 +46,7 @@ return function(fields)
             return pointer and pointer.Ref or nil
         end
         local function discard(e)
-            -- J460 can keep a removed NPC in its floor-render queue for one update.
+            -- J510 can keep a removed NPC in its floor-render queue for one update.
             -- Its replica has no native death update to turn that pose into gore;
             -- hiding before removal prevents baking the old silhouette into the floor.
             e.Visible = false

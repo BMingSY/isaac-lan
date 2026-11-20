@@ -95,7 +95,7 @@ return function(
     end
     function methods:GetCollectibleNum(id)
         if id < 0 then
-            return 0 -- J460 rejects generated IDs in its ordinary count API.
+            return 0 -- J510 rejects generated IDs in its ordinary count API.
         end
         local count = self.items[id] or 0
         for _, entry in ipairs(self.actives) do

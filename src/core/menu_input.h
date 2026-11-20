@@ -62,7 +62,7 @@ inline void captureRoomInput(lan::InputFrame& input, std::optional<lan::InputRoo
     input = transitionInput(input, sameFloor);
 }
 inline void keyboardPause(lan::InputFrame& input, bool paused) {
-    // J460 accepts keyboard Escape as MENU_BACK only on controller zero.
+    // Keyboard Escape produces MENU_BACK on the physical keyboard source.
     // LAN actors use controllers 1..4, whose pause entry requires MENU_PAUSE.
     // Keep Back unchanged inside a menu so its native navigation still works.
     if (!paused && (input.triggered & (1u << action::menuBack))) {

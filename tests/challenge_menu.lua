@@ -1,4 +1,5 @@
 local root = assert(arg[1])
+local vanilla = arg[2] == "vanilla"
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 PlayerType, RoomType = enums.PlayerType, enums.RoomType
 local labels, commands = {}, {}
@@ -35,6 +36,9 @@ Color = KColor
 Sprite = function()
     return {
         Load = function(self, path)
+            if vanilla then
+                assert(not path:find("online", 1, true), "Vanilla menu requested online DLC art")
+            end
             self.path = path
         end,
         Play = function(self, animation)
@@ -68,7 +72,11 @@ Sprite = function()
 end
 Font = function()
     return {
-        Load = noop,
+        Load = function(_, path)
+            if vanilla then
+                assert(path == "font/cjk/lanapixel.fnt", "Vanilla menu requested a Plus font")
+            end
+        end,
         IsLoaded = function()
             return true
         end,
@@ -131,6 +139,8 @@ _IsaacLanStatus = function()
     return status
 end
 _IsaacLan = {
+    presentation_assets = dofile(root .. "/tests/fixtures/presentation_assets.lua")(vanilla),
+    menu_official = not vanilla and noop or nil,
     net_room_options = function()
         return options
     end,
@@ -169,6 +179,8 @@ _IsaacLan = {
     end,
 }
 _IsaacLanModules = {
+    ["presentation/fonts"] = dofile(root .. "/src/bridge/presentation/fonts.lua"),
+    ["presentation/menu_assets"] = dofile(root .. "/src/bridge/presentation/menu_assets.lua"),
     ["presentation/restart"] = dofile(root .. "/src/bridge/presentation/restart.lua"),
     ["presentation/vote_progress"] = dofile(root .. "/src/bridge/presentation/vote_progress.lua"),
     ["presentation/animation_skip"] = dofile(root .. "/src/bridge/presentation/animation_skip.lua"),
@@ -506,12 +518,14 @@ draw()
 assert(labels["以撒"] and not labels["里·该隐"])
 assert(labels["准备"] and labels["开始游戏"] and not labels["等待队友结算结束"])
 assert(renderedPortraits[1][2] == "01_Isaac" and renderedPortraits[2][2] == "01_Isaac")
--- Native MainMenu can remain behind the returning LAN page. Two Back presses
--- close the LAN/mode overlay without invoking a lobby action.
+-- Native MainMenu can remain behind the returning LAN page. Back closes it
+-- without a lobby action; Plus first returns through its mode selector.
 status.phase, status.prepared = 0, false
 _IsaacLanMenuOpen(true)
 count = #commands
-assert(draw(27))
+if not vanilla then
+    assert(draw(27))
+end
 assert(not draw(27))
 assert(#commands == count)
 print("PASS challenge selection, role cards, reconnect roster, clean HUD and transient exit")
@@ -669,6 +683,30 @@ local rows = actions.rows(prefs, status, {}, {}, deps)
 rows[4].action()
 assert(remembered[1] == prefs.ip and remembered[2] == 1234)
 assert(sent[#sent][1] == "join" and sent[#sent][2] == "host.example.com:1234")
+
+-- A backend without official online opens LAN directly and returns to the
+-- underlying game menu through both Escape and the normal Back row.
+status = { phase = 0, hosting = 0, players = 0 }
+_IsaacLanMenuOpen(false)
+draw()
+if vanilla then
+    assert(labels["创建房间"] and not labels["官方联机"])
+    assert(not draw(27), "Vanilla Escape opened an unavailable mode selector")
+    _IsaacLanMenuOpen(false)
+    for _ = 1, 4 do
+        draw(40)
+    end
+    assert(not draw(13), "Vanilla Back did not close the LAN overlay")
+else
+    assert(labels["官方联机"] and labels["局域网联机"])
+    draw(40)
+    draw(13)
+    draw()
+    assert(labels["创建房间"])
+    assert(draw(27))
+    draw()
+    assert(labels["官方联机"], "Plus Escape lost the existing mode selector")
+end
 for _, host in ipairs({ "2001:db8::abcd", "[2001:db8::abcd]", "fe80::1%12", "::ffff:127.0.0.1" }) do
     prefs.ip = host
     rows = actions.rows(prefs, status, {}, {}, deps)
@@ -677,6 +715,26 @@ for _, host in ipairs({ "2001:db8::abcd", "[2001:db8::abcd]", "fe80::1%12", "::f
     assert(sent[#sent][1] == "join" and port == 1234)
     assert(address == (host:match("^%[(.*)%]$") or host))
     assert(remembered[1] == host and remembered[2] == 1234)
+end
+
+-- Vanilla has a main-menu mouse entry; title/save/game pages and Plus do not.
+do
+    status = { phase = 0, hosting = 0, players = 0 }
+    local opened = 0
+    _IsaacLan.menu_open = vanilla and function()
+        opened = opened + 1
+    end or nil
+    assert(not draw(0, false, 30, 246, false))
+    assert((labels["局域网 →"] ~= nil) == vanilla)
+    draw(0, false, 30, 246, true)
+    assert(opened == (vanilla and 1 or 0))
+    draw(0, false, 200, 200, true)
+    assert(opened == (vanilla and 1 or 0), "Outside click opened LAN")
+    assert(not _IsaacLanMenuRender(false, false, 0, "", 30, 246, true, "", ""))
+    assert(opened == (vanilla and 1 or 0), "Unavailable game menu opened LAN")
+    _IsaacLanMenuOpen(false)
+    draw(0, true, 30, 246, true)
+    assert(opened == (vanilla and 1 or 0), "Visible overlay reopened itself")
 end
 
 -- Each card renders its owner's twelve native single-player layers.

@@ -61,7 +61,7 @@ return function(types)
             "Touched",
             "Wait",
         },
-        -- J460 exposes SampleLaser as userdata, not a boolean property.
+        -- J510 exposes SampleLaser as userdata, not a boolean property.
         -- The native sampling flag and path are already carried by laser_path.
         [types.ENTITY_LASER] = {
             "Angle",

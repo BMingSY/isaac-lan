@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from item_audit import catalog_from_log, events, select_cases, summarize_case
 from lab_profile import validate_labs, validate_startup
+from game_profiles import source_profile
 
 
 def test_idle_stress_preserves_inventory_and_disables_attack():
@@ -1478,12 +1479,15 @@ def test_manual_lab_alias_is_refused(tmp_path):
 
 
 def test_first_start_notice_must_be_cleared_before_native_audit(tmp_path):
+    profile = source_profile()
+    profile["testing"]["accepted_beta_option"] = "AcceptedPublicBeta_fixture"
+    (tmp_path / "game-profile.json").write_text(json.dumps(profile))
     options = tmp_path / "profile/Documents/My Games/Binding of Isaac Repentance+/options.ini"
     options.parent.mkdir(parents=True)
     options.write_text("[Options]\nEnableMods=1\n")
     with pytest.raises(ValueError, match="first-start Beta notice"):
         validate_startup([tmp_path])
-    options.write_text("[Options]\nAcceptedPublicBeta_v1.9.7.17=1\n")
+    options.write_text("[Options]\nAcceptedPublicBeta_fixture=1\n")
     validate_startup([tmp_path])
 
 

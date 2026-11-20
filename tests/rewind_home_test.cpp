@@ -1,20 +1,45 @@
 // Exercise the production hourglass adapter in a private x86 image. Native
-// route selection is modelled by ABI callees; no game, save file or hook runs.
+// route selection is modelled by ABI callees. Only fixture entry points are
+// hooked; no game or save file is loaded.
 #include "test_support.h"
-#include "engine/versions/j460/rewind.cpp"
+#include "engine/versions/common/rewind.cpp"
+#ifdef ISAAC_LAN_TEST_J835
+#include "engine/versions/j835/entrypoints.h"
+#include "engine/versions/j835/layout.h"
+#else
+#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j510/layout.h"
+#endif
 #include "compat/game_ids.h"
-#include "engine/versions/j460/layout.h"
 #include <algorithm>
 #include <limits>
 #include <string>
 
 namespace {
 namespace rewind = isaac::rewind;
-namespace native = isaac::engine::j460;
+#ifdef ISAAC_LAN_TEST_J835
+namespace native = isaac::engine::j835;
+constexpr unsigned bufferOffset = 0x243648, bufferStride = 0x20298;
+constexpr unsigned selectedBuffer = 0x283b78, transitionOffset = 0x1b6c0;
+constexpr unsigned doorOffset = 0x1fad0, tickOffset = 0x1fad4, countersOffset = 0x1fad8;
+constexpr unsigned counterCount = 496, controllerOffset = 0x154c, playersOffset = 0x1ba50;
+constexpr unsigned usesOffset = 0x1cc8, floorUsesOffset = 0x1ccc;
+constexpr bool originalRepentance = true;
+#else
+namespace native = isaac::engine::j510;
+constexpr unsigned bufferOffset = 0x26e8c, bufferStride = 0x20788;
+constexpr unsigned selectedBuffer = 0x67d9c, transitionOffset = 0x1b83c;
+constexpr unsigned doorOffset = 0x1ff54, tickOffset = 0x1ff58, countersOffset = 0x1ff5c;
+constexpr unsigned counterCount = 523, controllerOffset = 0x161c, playersOffset = 0x1baa8;
+constexpr unsigned usesOffset = 0x1da8, floorUsesOffset = 0x1dac;
+constexpr bool originalRepentance = false;
+#endif
 using Address = std::uintptr_t;
 using Location = isaac::rooms::SavedLocation;
 static_assert(sizeof(Address) == 4);
-constexpr unsigned imageSize = 0x880000, bufferOffset = 0x269ec;
+constexpr unsigned imageSize = privateGameImageBytes;
+constexpr unsigned wireCounterCount = 523;
+constexpr unsigned tailCounterOffset = 0x265d0, tailFlagOffset = 0x67e34;
 template <class T> T& field(void* memory, unsigned offset = 0) {
     return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(memory) + offset);
 }
@@ -26,7 +51,7 @@ void __attribute__((thiscall)) lowerFixture(void*, int, int, int, void*, int);
 void __attribute__((thiscall)) stageFixture(void*, bool, int, void*);
 struct Fixture {
     std::uint8_t* image = nullptr;
-    std::vector<std::uint8_t> game = std::vector<std::uint8_t>(0x68000, 0);
+    std::vector<std::uint8_t> game = std::vector<std::uint8_t>(0x290000, 0);
     std::array<std::array<std::uint8_t, 0x2200>, 4> players{};
     std::array<Address, 4> roster{};
     std::vector<std::uint8_t> savedBytes{0x31, 0x72, 0x25, 0x19};
@@ -38,9 +63,10 @@ struct Fixture {
     std::vector<std::uint8_t> luaBytes;
     std::optional<rewind::NativeTransition> lowerExpected;
     bool replica = false, virtualized = true, decodeAllowed = true, storeReady = true;
-    bool encodeAllowed = true, homeAtCanonicalStart = true, firstVisit = true,
+    bool encodeAllowed = true, homeAtCanonicalStart = !originalRepentance, firstVisit = true,
          prepareAllowed = true;
     bool decisionReturned = false;
+    bool throwRoute = false;
     int viewRoom = 97, transitionState = 1, transitionActive = 1;
     std::array<int, 4> sourceRooms{84, 97, 98, 99};
     std::array<bool, 4> sourceFirstVisit{true, false, false, false};
@@ -63,6 +89,7 @@ struct Fixture {
             field<std::uint32_t>(image, offset + 1) = static_cast<std::uint32_t>(
                 reinterpret_cast<Address>(target) - reinterpret_cast<Address>(image + offset + 5));
         };
+        jump(native::entry::gameStoreHourglass, storeFixture);
         jump(native::entry::engineRoomsTransition, wrapperFixture);
         jump(native::entry::engineRoomsStageTransition, stageFixture);
         jump(native::entry::roomTransitionStart, lowerFixture);
@@ -70,15 +97,16 @@ struct Fixture {
                 "Cannot publish private rewind ABI trampolines");
         field<Address>(image, native::globals::game) = reinterpret_cast<Address>(game.data());
         for (unsigned slot = 0; slot < 4; ++slot) {
-            field<int>(players[slot].data(), 0x1618) = static_cast<int>(slot + 1);
-            field<unsigned>(players[slot].data(), 0x1da8) = 31 + slot;
-            field<unsigned>(players[slot].data(), 0x1dac) = 7 + slot;
+            field<int>(players[slot].data(), controllerOffset) = static_cast<int>(slot + 1);
+            field<unsigned>(players[slot].data(), usesOffset) = 31 + slot;
+            field<unsigned>(players[slot].data(), floorUsesOffset) = 7 + slot;
             roster[slot] = reinterpret_cast<Address>(players[slot].data());
         }
-        field<Address>(game.data(), 0x1baa8) = reinterpret_cast<Address>(roster.data());
-        field<Address>(game.data(), 0x1baac) = reinterpret_cast<Address>(roster.data() + 4);
-        field<int>(game.data(), 0x265c0) = 0x12345678;
-        field<bool>(game.data(), 0x67744) = true;
+        field<Address>(game.data(), playersOffset) = reinterpret_cast<Address>(roster.data());
+        field<Address>(game.data(), playersOffset + 4) =
+            reinterpret_cast<Address>(roster.data() + 4);
+        field<int>(game.data(), tailCounterOffset) = 0x12345678;
+        field<bool>(game.data(), tailFlagOffset) = true;
         rewind::reset();
         rewind::image = base();
         rewind::originalStore = storeFixture;
@@ -89,6 +117,7 @@ struct Fixture {
         rewind::nativeHome = nullptr;
         rewind::originalStore = nullptr;
         rewind::image = 0;
+        rewind::installed = false;
         rewind::lua = {};
         current = nullptr;
         VirtualFree(image, 0, MEM_RELEASE);
@@ -120,7 +149,7 @@ struct Fixture {
         result.locations = locations;
         result.door = door;
         result.tick = tick;
-        for (unsigned i = 0; i < result.counters.size(); ++i)
+        for (unsigned i = 0; i < counterCount; ++i)
             result.counters[i] = counter(i);
         return result;
     }
@@ -142,17 +171,18 @@ struct Fixture {
     void verifyArguments(void* receiver, bool lower, int index, int direction, int animation,
                          void* player, int dimension) {
         const auto target = lower ? chosenTransition() : requestedTransition();
-        if (receiver != game.data() + (lower ? 0x1b83c : 0) || index != target.index ||
+        if (receiver != game.data() + (lower ? transitionOffset : 0) || index != target.index ||
             direction != target.direction || animation != target.animation ||
             player != players[userSlot].data() || dimension != target.dimension)
             reject("Room transition thiscall receiver or five stack arguments differ");
-        if (field<int>(game.data(), 0x676ac) != 0 || !field<bool>(game.data(), bufferOffset) ||
-            field<bool>(game.data(), bufferOffset + 0x20660) ||
-            field<unsigned>(game.data(), bufferOffset + 0x1fe2c) != door ||
-            field<unsigned>(game.data(), bufferOffset + 0x1fe30) != tick)
+        if (field<int>(game.data(), selectedBuffer) != 0 ||
+            !field<bool>(game.data(), bufferOffset) ||
+            field<bool>(game.data(), bufferOffset + bufferStride) ||
+            field<unsigned>(game.data(), bufferOffset + doorOffset) != door ||
+            field<unsigned>(game.data(), bufferOffset + tickOffset) != tick)
             reject("Native rewind buffer flags, door or tick were not restored before transition");
-        for (unsigned i = 0; i < 523; ++i)
-            if (field<unsigned>(game.data(), bufferOffset + 0x1fe34 + i * 4) != counter(i))
+        for (unsigned i = 0; i < counterCount; ++i)
+            if (field<unsigned>(game.data(), bufferOffset + countersOffset + i * 4) != counter(i))
                 reject("Native transition saw another checkpoint's counters");
     }
 };
@@ -172,13 +202,13 @@ void __stdcall storeFixture(int door) {
     f.events.push_back("store");
     f.storedStateFlags = field<std::uint64_t>(f.game.data(), native::layout::game::stateFlags);
     field<std::uint64_t>(f.game.data(), native::layout::game::stateFlags) |= f.storeAddedFlags;
-    if (door != static_cast<int>(f.door) || field<int>(f.game.data(), 0x676ac) != -1)
+    if (door != static_cast<int>(f.door) || field<int>(f.game.data(), selectedBuffer) != -1)
         f.reject("Native Store did not receive the checkpoint door and cleared rewind timer");
     field<bool>(f.game.data(), bufferOffset) = f.storeReady;
-    field<unsigned>(f.game.data(), bufferOffset + 0x1fe2c) = f.door;
-    field<unsigned>(f.game.data(), bufferOffset + 0x1fe30) = f.tick;
-    for (unsigned i = 0; i < 523; ++i)
-        field<unsigned>(f.game.data(), bufferOffset + 0x1fe34 + i * 4) = f.counter(i);
+    field<unsigned>(f.game.data(), bufferOffset + doorOffset) = f.door;
+    field<unsigned>(f.game.data(), bufferOffset + tickOffset) = f.tick;
+    for (unsigned i = 0; i < counterCount; ++i)
+        field<unsigned>(f.game.data(), bufferOffset + countersOffset + i * 4) = f.counter(i);
 }
 void __attribute__((thiscall)) lowerFixture(void* receiver, int index, int direction, int animation,
                                             void* player, int dimension) {
@@ -186,12 +216,12 @@ void __attribute__((thiscall)) lowerFixture(void* receiver, int index, int direc
     f.verifyArguments(receiver, true, index, direction, animation, player, dimension);
     ++f.lowerCalls;
     f.events.push_back("native-room-start");
-    field<int>(f.game.data(), 0x1b83c) = f.transitionState;
-    field<int>(f.game.data(), 0x1b83c + 0x238) = f.transitionActive;
-    field<int>(f.game.data(), 0x1b83c + 0x14) = index;
-    field<int>(f.game.data(), 0x1b83c + 0x10) = direction;
-    field<int>(f.game.data(), 0x1b83c + 0x1c) = animation;
-    field<int>(f.game.data(), 0x1b83c + 0x18) = dimension;
+    field<int>(f.game.data(), transitionOffset) = f.transitionState;
+    field<int>(f.game.data(), transitionOffset + 0x238) = f.transitionActive;
+    field<int>(f.game.data(), transitionOffset + 0x14) = index;
+    field<int>(f.game.data(), transitionOffset + 0x10) = direction;
+    field<int>(f.game.data(), transitionOffset + 0x1c) = animation;
+    field<int>(f.game.data(), transitionOffset + 0x18) = dimension;
 }
 void __attribute__((thiscall)) stageFixture(void* receiver, bool same, int animation,
                                             void* player) {
@@ -216,18 +246,23 @@ void __attribute__((thiscall)) wrapperFixture(void* receiver, int index, int dir
     f.verifyArguments(receiver, false, index, direction, animation, player, dimension);
     ++f.wrappers;
     f.events.push_back("native-route-decision");
-    if (f.specialRoomType == 16 && f.specialRoomStage == 35) {
+    if (f.throwRoute)
+        throw std::runtime_error("fixture native route failure");
+    const bool home =
+        f.homeAtCanonicalStart &&
+        (originalRepentance || (f.difficulty < 2 && f.firstVisit && f.viewRoom == 84));
+    if (f.specialRoomType == 16 && f.specialRoomStage == 35 && !(originalRepentance && home)) {
         // This native room branch teleports in place and returns without
         // starting RoomTransition. The authority must publish that absence.
         ++f.teleports;
-        field<int>(f.game.data(), 0x1b83c) = 0;
+        field<int>(f.game.data(), transitionOffset) = 0;
         f.events.push_back("native-local-teleport");
-    } else if (f.difficulty < 2 && f.homeAtCanonicalStart && f.firstVisit && f.viewRoom == 84) {
+    } else if (home) {
         using Stage = void(__attribute__((thiscall))*)(void*, bool, int, void*);
         reinterpret_cast<Stage>(f.base() + native::entry::engineRoomsStageTransition)(
             receiver, false, 6, nullptr);
     } else {
-        if (f.difficulty >= 2 && f.firstVisit && f.viewRoom == 84) {
+        if (!originalRepentance && f.difficulty >= 2 && f.firstVisit && f.viewRoom == 84) {
             ++f.greedCalls;
             f.events.push_back("native-greed-special");
             f.lowerExpected = rewind::NativeTransition{-2, 0, 3, 0};
@@ -235,11 +270,13 @@ void __attribute__((thiscall)) wrapperFixture(void* receiver, int index, int dir
         const auto selected = f.chosenTransition();
         using Transition = void(__attribute__((thiscall))*)(void*, int, int, int, void*, int);
         reinterpret_cast<Transition>(f.base() + native::entry::roomTransitionStart)(
-            f.game.data() + 0x1b83c, selected.index, selected.direction, selected.animation, player,
-            selected.dimension);
-        if (f.transitionState && f.transitionActive)
-            field<int>(f.game.data(), 0x265c0) = 0;
-        field<bool>(f.game.data(), 0x67744) = false;
+            f.game.data() + transitionOffset, selected.index, selected.direction,
+            selected.animation, player, selected.dimension);
+        if (!originalRepentance) {
+            if (f.transitionState && f.transitionActive)
+                field<int>(f.game.data(), tailCounterOffset) = 0;
+            field<bool>(f.game.data(), tailFlagOffset) = false;
+        }
     }
     f.decisionReturned = true;
     f.events.push_back("native-route-return");
@@ -318,6 +355,7 @@ void abort(const std::string& reason) {
 namespace {
 void homeTransaction() {
     Fixture f;
+    f.homeAtCanonicalStart = true;
     f.sourceRooms[0] = 97;
     f.sourceRooms[1] = 84;
     f.sourceFirstVisit[0] = false;
@@ -366,13 +404,14 @@ void replicaHomeFallback() {
             for (int active : {0, 1}) {
                 Fixture f;
                 f.replica = true;
+                f.homeAtCanonicalStart = true;
                 f.difficulty = difficulty;
                 f.viewRoom = 84;
                 f.transitionState = state;
                 f.transitionActive = active;
                 const auto bytes = f.payload(f.chosenTransition());
-                field<unsigned>(f.players[1].data(), 0x1da8) = 900;
-                field<unsigned>(f.players[1].data(), 0x1dac) = 800;
+                field<unsigned>(f.players[1].data(), usesOffset) = 900;
+                field<unsigned>(f.players[1].data(), floorUsesOffset) = 800;
                 require(rewind::startRewind(bytes), "Replica rejected the host's ordinary rewind");
                 f.validABI();
                 require(f.events == std::vector<std::string>{"before-start", "decode",
@@ -383,13 +422,14 @@ void replicaHomeFallback() {
                             f.stageEvents == 0 && f.nativeStages == 0 && f.rewindEvents.empty() &&
                             f.prepares == 0 && f.cleanups == 1,
                         "Replica reselected Home or emitted an authoritative event");
-                require(field<int>(f.game.data(), 0x265c0) == (state && active ? 0 : 0x12345678) &&
-                            !field<bool>(f.game.data(), 0x67744),
+                require(field<int>(f.game.data(), tailCounterOffset) ==
+                                (!originalRepentance && state && active ? 0 : 0x12345678) &&
+                            field<bool>(f.game.data(), tailFlagOffset) == originalRepentance,
                         "Replica fallback did not reproduce the native wrapper's conditional tail "
                         "flags");
                 require(
-                    field<unsigned>(f.players[1].data(), 0x1da8) == 32 &&
-                        field<unsigned>(f.players[1].data(), 0x1dac) == 8 &&
+                    field<unsigned>(f.players[1].data(), usesOffset) == 32 &&
+                        field<unsigned>(f.players[1].data(), floorUsesOffset) == 8 &&
                         f.resumed.size() == 1 && sameLocations(f.resumed[0], f.locations),
                     "Replica lost authoritative hourglass charges or per-player target locations");
             }
@@ -418,11 +458,15 @@ void greedReplaysAuthoritySelection() {
         f.sourceFirstVisit[1] = true;
         require(rewind::startRewind(f.payload()), "Host Greed native rewind failed");
         f.validABI();
-        require(f.wrappers == 1 && f.greedCalls == 1 && f.lowerCalls == 1 && f.capturedHomes == 0 &&
-                    f.stageEvents == 0 && f.nativeStages == 0 && f.rewindEvents.size() == 1 &&
-                    f.rewindEvents[0] == f.payload(rewind::NativeTransition{-2, 0, 3, 0}) &&
-                    f.resumed.size() == 1 && f.resumed[0].empty(),
-                "Host did not preserve Greed's actual error-room teleport and native landing");
+        const auto expected =
+            originalRepentance ? f.requestedTransition() : rewind::NativeTransition{-2, 0, 3, 0};
+        require(f.wrappers == 1 && f.greedCalls == (originalRepentance ? 0u : 1u) &&
+                    f.lowerCalls == 1 && f.capturedHomes == 0 && f.stageEvents == 0 &&
+                    f.nativeStages == 0 && f.rewindEvents.size() == 1 &&
+                    f.rewindEvents[0] == f.payload(expected) && f.resumed.size() == 1 &&
+                    (originalRepentance ? sameLocations(f.resumed[0], f.locations)
+                                        : f.resumed[0].empty()),
+                "Host changed this version's native Greed transition or landing");
         const auto wire = f.rewindEvents[0];
         f.clearCalls();
         f.replica = true;
@@ -431,9 +475,9 @@ void greedReplaysAuthoritySelection() {
         f.validABI();
         require(f.wrappers == 0 && f.greedCalls == 0 && f.lowerCalls == 1 && f.stageEvents == 0 &&
                     f.nativeStages == 0 && f.rewindEvents.empty() && f.resumed.size() == 1 &&
-                    f.resumed[0].empty(),
-                "Greed replica did not replay index -2/animation 3/dimension 0 with its native "
-                "landing preserved");
+                    (originalRepentance ? sameLocations(f.resumed[0], f.locations)
+                                        : f.resumed[0].empty()),
+                "Greed replica changed the authority's native selection or landing");
     }
 }
 void nativeEarlyReturn() {
@@ -442,7 +486,7 @@ void nativeEarlyReturn() {
         Fixture f;
         f.specialRoomType = roomType;
         f.specialRoomStage = roomStage;
-        field<int>(f.game.data(), 0x1b83c) = 1;
+        field<int>(f.game.data(), transitionOffset) = 1;
         require(rewind::startRewind(f.payload()), "Host native early-return route failed");
         f.validABI();
         if (roomType != 16 || roomStage != 35) {
@@ -473,16 +517,16 @@ void nativeEarlyReturn() {
         f.viewRoom = 84;
         f.specialRoomType = f.specialRoomStage = 0;
         // Inactive selection must not infer a transition from replica memory.
-        field<int>(f.game.data(), 0x1b83c) = 1;
-        field<int>(f.game.data(), 0x265c0) = 0x12345678;
-        field<bool>(f.game.data(), 0x67744) = true;
+        field<int>(f.game.data(), transitionOffset) = 1;
+        field<int>(f.game.data(), tailCounterOffset) = 0x12345678;
+        field<bool>(f.game.data(), tailFlagOffset) = true;
         require(rewind::startRewind(wire), "Replica rejected the authority's inactive choice");
         f.validABI();
         require(f.events == std::vector<std::string>{"before-start", "decode", "resume"} &&
                     f.wrappers == 0 && f.lowerCalls == 0 && f.teleports == 0 &&
                     f.stageEvents == 0 && f.resumed.size() == 1 && f.resumed[0].empty() &&
-                    field<int>(f.game.data(), 0x265c0) == 0x12345678 &&
-                    field<bool>(f.game.data(), 0x67744),
+                    field<int>(f.game.data(), tailCounterOffset) == 0x12345678 &&
+                    field<bool>(f.game.data(), tailFlagOffset),
                 "Inactive replica choice started a transition or restored obsolete checkpoint "
                 "locations");
     }
@@ -593,6 +637,7 @@ void nestedCapture() {
 }
 void repeatAndReset() {
     Fixture f;
+    f.homeAtCanonicalStart = true;
     f.sourceRooms[1] = 84;
     f.sourceFirstVisit[1] = true;
     require(!rewind::request(1) && !rewind::executePending(), "Missing checkpoint was executable");
@@ -694,7 +739,7 @@ void storeBoundary() {
     rewind::store(f.door);
     require(f.stored == 0, "Virtual room entry replaced the process-wide native checkpoint");
     f.virtualized = false;
-    field<int>(f.game.data(), 0x676ac) = -1;
+    field<int>(f.game.data(), selectedBuffer) = -1;
     rewind::store(f.door);
     require(f.stored == 1, "Ordinary native room entry stopped forwarding Store");
     f.replica = true;
@@ -781,6 +826,132 @@ void put32(std::vector<std::uint8_t>& bytes, unsigned offset, std::uint32_t valu
     for (unsigned i = 0; i < 4; ++i)
         bytes[offset + i] = static_cast<std::uint8_t>(value >> ((3 - i) * 8));
 }
+void wireCompatibilityAndCounterBounds() {
+    Fixture f;
+    const auto plain = f.payload(), selected = f.payload(f.chosenTransition());
+    // Frozen from the pre-refactor J510 production encoder. J835 differs only
+    // by zeroing the 27 counters absent from its native progress array.
+    require(plain.size() == 2160 && selected.size() == 2176 &&
+                isaac::lan::snapshotHash(plain) ==
+                    (originalRepentance ? 0xb7dacf1396ee3e0cull : 0x6e4989e11936cbd5ull) &&
+                isaac::lan::snapshotHash(selected) ==
+                    (originalRepentance ? 0x0431436ef40d9479ull : 0xd26ca400b67a37fcull),
+            "Native rewind changed the frozen checkpoint wire bytes");
+    const auto secondary = bufferOffset + bufferStride;
+    std::fill_n(f.game.begin() + secondary, 128, 0xa5);
+    f.remember();
+    require(rewind::request(1) && rewind::executePending(),
+            "Remembered native counter prefix did not restore");
+    f.validABI();
+    require(f.rewindEvents.size() == 1 && f.rewindEvents[0] == selected && f.game[secondary] == 0 &&
+                std::all_of(f.game.begin() + secondary + 1, f.game.begin() + secondary + 128,
+                            [](auto byte) { return byte == 0xa5; }),
+            "Checkpoint counters read or overwrote the adjacent native buffer");
+    if constexpr (originalRepentance) {
+        f.clearCalls();
+        const auto before = f.game;
+        for (unsigned counter : {counterCount, wireCounterCount - 1}) {
+            auto invalid = selected;
+            put32(invalid, 18 + counter * 4, 1);
+            rehash(invalid);
+            require(!rewind::startRewind(invalid) && f.events.empty() && f.game == before,
+                    "Absent J835 progress counters reached native restoration");
+        }
+    }
+}
+void nativeFailureAndMissingContext() {
+    Fixture f;
+    const auto bytes = f.payload();
+    f.throwRoute = true;
+    rejects([&] { rewind::startRewind(bytes); }, "Native route exception was swallowed");
+    require(f.wrappers == 1 && f.rewindEvents.empty() && f.stageEvents == 0 && f.resumed.empty() &&
+                !rewind::captureStage(false, 6),
+            "Native exception leaked a route capture, publication or restored locations");
+    f.clearCalls();
+    f.throwRoute = false;
+    require(rewind::startRewind(bytes) && f.rewindEvents.size() == 1,
+            "Native failure poisoned a later rewind transaction");
+    f.clearCalls();
+    const auto before = f.game;
+    field<Address>(f.image, native::globals::game) = 0;
+    require(!rewind::startRewind(bytes) && f.events.empty() && f.game == before,
+            "Missing Game entered native rewind");
+    rewind::remember(1, f.door, f.locations);
+    require(f.events.empty(), "Missing Game entered native checkpoint capture");
+    rejects([&] { f.payload(); }, "Missing Game produced a checkpoint");
+    field<Address>(f.image, native::globals::game) = reinterpret_cast<Address>(f.game.data());
+    f.roster[1] = 0;
+    require(rewind::actor(1) == 0, "Null roster entry was accepted as the hourglass user");
+    f.roster[1] = reinterpret_cast<Address>(f.players[1].data());
+    field<Address>(f.game.data(), playersOffset + 4) =
+        reinterpret_cast<Address>(f.roster.data()) + 1;
+    require(rewind::actor(1) == 0, "Misaligned roster length was traversed");
+    rewind::image = 0;
+    require(!rewind::startRewind(bytes), "Uninstalled backend entered native rewind");
+    f.validABI();
+}
+void versionNativeHomeDecision() {
+    // J835's native first-stage / state-flag decision is independent of the
+    // J510 first-visit, starting-room and Greed guards. Neither is reselected
+    // by the common adapter or the replica.
+    for (unsigned difficulty : {0, 1, 2, 3}) {
+        Fixture f;
+        f.homeAtCanonicalStart = true;
+        f.firstVisit = false;
+        f.sourceFirstVisit[1] = false;
+        f.difficulty = difficulty;
+        require(rewind::startRewind(f.payload()), "Native Home decision was not completed");
+        f.validABI();
+        require(f.stageEvents == (originalRepentance ? 1u : 0u) &&
+                    f.nativeStages == f.stageEvents &&
+                    f.rewindEvents.size() == (originalRepentance ? 0u : 1u),
+                "Common rewind substituted another version's native Home decision");
+    }
+}
+void __stdcall foreignStore(int) {
+    current->events.push_back("foreign-store");
+}
+void hookOwnershipAndRetry() {
+    Fixture f;
+    struct Hooks {
+        Hooks() {
+            require(MH_Initialize() == MH_OK, "Cannot initialize fixture MinHook");
+        }
+        ~Hooks() {
+            MH_Uninitialize();
+        }
+    } hooks;
+    rewind::image = 0;
+    rewind::originalStore = nullptr;
+    require(!rewind::install(0), "Zero image installed native rewind");
+    const auto target = reinterpret_cast<void*>(f.base() + native::entry::gameStoreHourglass);
+    require(MH_CreateHook(target, reinterpret_cast<void*>(foreignStore), nullptr) == MH_OK &&
+                MH_EnableHook(target) == MH_OK,
+            "Cannot install conflicting fixture hook");
+    require(!rewind::install(f.base()) && rewind::image == 0 && !rewind::originalStore,
+            "Hook conflict left partial native rewind state");
+    reinterpret_cast<rewind::Store>(target)(f.door);
+    require(f.events == std::vector<std::string>{"foreign-store"},
+            "Native rewind removed another component's hook");
+    require(MH_RemoveHook(target) == MH_OK && rewind::install(f.base()),
+            "Native rewind could not retry after the conflict was removed");
+    const auto original = rewind::originalStore;
+    require(!rewind::install(f.base()) && rewind::originalStore == original,
+            "Repeated install replaced a live rewind trampoline");
+    f.clearCalls();
+    reinterpret_cast<rewind::Store>(target)(f.door);
+    require(f.events.empty(), "Hook allowed a virtual room to replace native buffers");
+    f.virtualized = false;
+    field<int>(f.game.data(), selectedBuffer) = -1;
+    reinterpret_cast<rewind::Store>(target)(f.door);
+    require(f.stored == 1 && f.events == std::vector<std::string>{"store"},
+            "Hook changed the original stdcall door argument or forwarding");
+    f.virtualized = true;
+    f.remember();
+    require(f.stored == 2 && rewind::request(1) && rewind::executePending(),
+            "Explicit capture did not bypass the virtual-room hook through its trampoline");
+    f.validABI();
+}
 void malformedPayloads() {
     Fixture f;
     const auto good = f.payload();
@@ -796,7 +967,7 @@ void malformedPayloads() {
     auto bytes = good;
     bytes.back() ^= 1;
     reject(bytes);
-    constexpr unsigned countOffset = 2 + 4 * 4 + 523 * 4;
+    constexpr unsigned countOffset = 2 + 4 * 4 + wireCounterCount * 4;
     for (const auto& change : std::array<std::pair<unsigned, unsigned>, 6>{
              {{0, 255}, {1, 4}, {countOffset, 0}, {countOffset, 1}, {countOffset, 5}, {1, 2}}}) {
         bytes = good;
@@ -953,6 +1124,10 @@ int main(int argc, char** argv) {
                      {"native-home-source-guards", nativeHomeSourceGuards},
                      {"cancel-preserves-checkpoints", cancelPreservesCheckpoints},
                      {"store-boundary", storeBoundary},
+                     {"wire-counter-bounds", wireCompatibilityAndCounterBounds},
+                     {"native-failure-context", nativeFailureAndMissingContext},
+                     {"version-home-decision", versionNativeHomeDecision},
+                     {"hook-ownership-retry", hookOwnershipAndRetry},
                      {"route-checkpoint", routeCheckpoint},
                      {"malformed-payloads", malformedPayloads},
                      {"selected-payload-bounds", selectedPayloadBounds},

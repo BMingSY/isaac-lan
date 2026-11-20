@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+from game_profiles import build_profile
 
 
 def main():
@@ -21,10 +22,12 @@ def main():
     for name in ("isaac_lan_probe.dll", "isaac_lan_lab.exe"):
         if not args.build.joinpath(name).is_file():
             raise SystemExit(f"Missing build artifact: {name}")
+    profile = build_profile(args.build)
     game = args.lab / "game"
-    save = args.lab / "profile/Documents/My Games/Binding of Isaac Repentance+"
+    save = args.lab / "profile/Documents/My Games" / profile["documents_directory"]
     save.mkdir(parents=True)
     game.mkdir()
+    (args.lab / "game-profile.json").write_text(json.dumps(profile, indent=2) + "\n")
     (args.lab / ".isaac-lan-lab").write_text("Disposable isolated development instance.\n")
     manifest = {}
     for source in args.game.iterdir():

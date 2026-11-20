@@ -14,6 +14,8 @@ sync/actor_roster
 presentation/actors
 presentation/player_opacity
 presentation/menu_model
+presentation/fonts
+presentation/menu_assets
 presentation/menu_characters
 presentation/audio
 presentation/motion

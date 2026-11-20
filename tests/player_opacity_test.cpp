@@ -1,6 +1,7 @@
 // Exercise the production x86 color boundary with private players and stack frames.
 #include "test_support.h"
-#include "engine/versions/j460/player_opacity.cpp"
+#include "engine/versions/j510/player_opacity.cpp"
+#include "engine/versions/common/player_opacity.cpp"
 #include <climits>
 #include <cmath>
 #include <cstdio>
@@ -8,7 +9,7 @@
 #include <vector>
 
 namespace opacity = isaac::presentation::player_opacity;
-namespace layout = isaac::engine::j460::layout;
+namespace layout = isaac::engine::j510::layout;
 using Address = std::uintptr_t;
 extern "C" {
 unsigned char opacityFrame[512]{};
@@ -266,12 +267,46 @@ void settings() {
         require(!accepted && opacity::percentages == before, "Wrong arity changed opacity");
     }
 }
+void installation() {
+    constexpr unsigned size = 0x600000;
+    auto* image = static_cast<unsigned char*>(
+        VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    require(image && MH_Initialize() == MH_OK, "Initialize Plus opacity hooks");
+    for (const auto& boundary : opacity::boundaries) {
+        std::memset(image + boundary.gate, 0x90, 8);
+        image[boundary.gate + 8] = 0xc3;
+    }
+    FlushInstructionCache(GetCurrentProcess(), image, size);
+    const auto base = reinterpret_cast<Address>(image);
+    require(!opacity::install(0), "Missing Plus opacity image accepted");
+    for (const auto& collision : opacity::boundaries) {
+        require(MH_CreateHook(image + collision.gate, reinterpret_cast<void*>(opacityOriginal),
+                              nullptr) == MH_OK &&
+                    !opacity::install(base),
+                "Partial Plus opacity install succeeded");
+        for (const auto& boundary : opacity::boundaries) {
+            const auto result = MH_CreateHook(image + boundary.gate,
+                                              reinterpret_cast<void*>(opacityOriginal), nullptr);
+            require(result == (boundary.gate == collision.gate ? MH_ERROR_ALREADY_CREATED : MH_OK),
+                    "Plus opacity rollback retained its hook or removed a foreign hook");
+            if (boundary.gate != collision.gate)
+                MH_RemoveHook(image + boundary.gate);
+        }
+        require(MH_RemoveHook(image + collision.gate) == MH_OK,
+                "Remove conflicting Plus opacity hook");
+    }
+    require(opacity::install(base) && opacity::install(base) && !opacity::install(base + 1),
+            "Plus opacity install did not recover or accepted a different image");
+    require(MH_Uninitialize() == MH_OK && VirtualFree(image, 0, MEM_RELEASE),
+            "Release Plus opacity fixture");
+}
 } // namespace
 int main() {
     try {
         rendering();
         projectiles();
         settings();
+        installation();
         std::puts(
             "PASS player opacity x86 colors, tears/lasers, ownership, nested cleanup and bounds");
         return 0;

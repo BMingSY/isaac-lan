@@ -412,11 +412,15 @@ assert(ready and not scenario.done())
 
 
 @pytest.mark.parametrize("role", ["host", "client"])
-def test_pause_scenario_is_pending_during_startup(tmp_path, role):
+@pytest.mark.parametrize("items_page", [False, True])
+def test_pause_scenario_is_pending_during_startup(tmp_path, role, items_page):
     role_file = tmp_path / "role.txt"
     role_file.write_text(role)
     source = (
         lua_support.support()
+        + "HAS_ITEMS_PAGE = "
+        + str(items_page).lower()
+        + "\n"
         + """
 local registered = {}
 Isaac = {
@@ -424,7 +428,7 @@ Isaac = {
     RemoveCallback = function(_, _, callback) registered[callback] = nil end,
 }
 ModCallbacks = { MC_POST_GAME_STARTED = 1, MC_PRE_GAME_EXIT = 2 }
-_IsaacLanTest = { port = "1234" }
+_IsaacLanTest = { port = "1234", pauseItemsPage = HAS_ITEMS_PAGE }
 _IsaacLan = {
     pause_menu_state = function() error("Pause menu read during startup") end,
     net_gate = function() end,

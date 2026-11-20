@@ -14,11 +14,10 @@ import sys
 import tempfile
 
 OWNED = ("winmm.dll", "isaac_lan_probe.dll")
-EXPECTED_BUILD = "1.9.7.17.J460"
 HINTS = {
     "GAME_PATH": "Select the game folder containing isaac-ng.exe (Steam > Manage > Browse local files).",
     "PACKAGE_INVALID": "Extract the entire release ZIP into a new folder and retry. Check security-software quarantine if a file is missing.",
-    "GAME_INCOMPATIBLE": f"Use Windows Repentance+ {EXPECTED_BUILD}. In Steam, check the game version and verify installed files; Linux/Steam Deck must use Proton.",
+    "GAME_INCOMPATIBLE": "Use the Windows game version specified in this package manifest. In Steam, check the game version and verify installed files; Linux/Steam Deck must use Proton.",
     "GAME_RUNNING": "Close Isaac, wait for it to exit, then retry. Do not replace DLLs while the game is running.",
     "INSTALLATION_INVALID": "Restore .isaac-lan-install and isaac-lan/installation.json from the same installation backup. Keep session data and logs; do not delete them to bypass this check.",
     "FILE_CONFLICT": "Back up the named file and identify its owner. Uninstall another extension with its own installer, or restore the matching Isaac LAN file from your backup, then retry.",
@@ -107,7 +106,7 @@ def check_game(path, profile):
         or read("<H", optional)[0] != 0x10B
         or image_size < profile["minimum_image_size"]
     ):
-        raise ValueError("Expected Windows Repentance+ J460, 32-bit x86")
+        raise ValueError("Expected a supported Windows Isaac build, 32-bit x86")
     sections = []
     for i in range(count):
         _, virtual_size, rva, raw_size, raw, _, _, _, _, characteristics = read(
@@ -134,7 +133,7 @@ def check_game(path, profile):
 
     marker = profile["game_build"].encode("ascii") + b"-"
     if at(profile["version_rva"], len(marker)) != marker:
-        raise ValueError("Unsupported game version; expected Repentance+ 1.9.7.17.J460")
+        raise ValueError(f"Unsupported game version; expected {profile['game_build']}")
     for signature in profile["signatures"]:
         expected = bytes.fromhex(signature["bytes"])
         actual = at(signature["rva"], len(expected))
@@ -193,7 +192,7 @@ def install(package, game, mode="Install"):
         check_manifest(
             payload, ("install.py", "game-profile.json"), "PACKAGE_INVALID", "linux_files"
         )
-        if payload.get("game_build") != EXPECTED_BUILD:
+        if not isinstance(payload.get("game_build"), str) or not payload["game_build"]:
             raise InstallerError("PACKAGE_INVALID", "Invalid package game_build")
         for field, names in (
             ("files", (*OWNED, "isaac_lan_check.exe")),
@@ -206,7 +205,11 @@ def install(package, game, mode="Install"):
                 except (ValueError, FileNotFoundError) as error:
                     raise InstallerError("PACKAGE_INVALID", f"{package / name}: {error}") from error
         profile = read_json(package / "game-profile.json", "PACKAGE_INVALID")
-        if profile.get("format") != 1 or profile.get("game_build") != payload["game_build"]:
+        if (
+            profile.get("format") != 1
+            or profile.get("game_build") != payload["game_build"]
+            or profile.get("backend") != payload.get("backend")
+        ):
             raise InstallerError("PACKAGE_INVALID", "Invalid game profile")
         try:
             check_game(game / "isaac-ng.exe", profile)

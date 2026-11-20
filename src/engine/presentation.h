@@ -9,6 +9,7 @@ namespace isaac::presentation {
 class IntroSimulationScope {
     std::uintptr_t transition = 0;
     int saved = 0;
+    bool entered = false;
 
   public:
     explicit IntroSimulationScope(bool advance = false);

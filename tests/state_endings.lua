@@ -761,7 +761,7 @@ function _IsaacLanFrame()
             assert(s.players == 2 and s.connected == 3, "Ending lost the LAN room")
             local progress = native.net_progress()
             local diffs = {}
-            for i = 2, 643 do
+            for i = 2, 1 + _IsaacLanTestProgress.achievementCount do
                 if progress:byte(i) ~= localProgress:byte(i) then
                     diffs[#diffs + 1] = (i - 2)
                         .. ":"
@@ -781,7 +781,7 @@ function _IsaacLanFrame()
             -- Native menu loading derives unlocks from earned Boss counters
             -- (for example Eden and the Void gate). Retain every prior flag;
             -- do not mistake new earned flags for a replaced save.
-            for i = 2, 643 do
+            for i = 2, 1 + _IsaacLanTestProgress.achievementCount do
                 assert(
                     localProgress:byte(i) == 0 or progress:byte(i) == 1,
                     "Ending discarded a prior local achievement: " .. (i - 2)
@@ -789,7 +789,7 @@ function _IsaacLanFrame()
             end
             -- These host-only prerequisites cannot be earned by a seeded
             -- normal Isaac route: Death Certificate, Dead God, online daily.
-            for _, id in ipairs({ 636, 637, 640 }) do
+            for _, id in ipairs({ 636, 637, _IsaacLanTestProgress.privateAchievement }) do
                 assert(
                     progress:byte(id + 2) == localProgress:byte(id + 2),
                     "Ending inherited host-only prior achievement: " .. id
@@ -835,7 +835,10 @@ function _IsaacLanFrame()
         localProgress = native.net_progress()
         _IsaacLanCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)
         Isaac.DebugString("LAN_NETWORK MENU_READY")
-        report("LOCAL_UNLOCK_BASELINE achievement640=" .. native.net_progress():byte(642))
+        report(
+            "LOCAL_UNLOCK_BASELINE private="
+                .. localProgress:byte(2 + _IsaacLanTestProgress.privateAchievement)
+        )
     end
     if s.phase == 2 and not chosen then
         chosen = true

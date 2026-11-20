@@ -1,6 +1,7 @@
 local root = assert(arg[1])
 local testInput = dofile(root .. "/tests/support/input.lua")
 _IsaacLanTestInput = testInput
+_IsaacLanTestProgress = dofile(root .. "/tests/support/progress.lua")
 LevelStateFlag = { STATE_MINESHAFT_ESCAPE = 22 }
 for _, route in ipairs({ "poop", "knife", "hush" }) do
     for _, host in ipairs({ true, false }) do

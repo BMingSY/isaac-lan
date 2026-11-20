@@ -1,11 +1,20 @@
 #pragma once
-#include "engine/versions/j460/entrypoints.h"
-#include "test_support.h"
+#ifdef ISAAC_LAN_TEST_J835
+#include "engine/versions/j835/entrypoints.h"
+#else
+#include "engine/versions/j510/entrypoints.h"
+#endif
+#include "../test_support.h"
 #include <windows.h>
 #include <array>
 #include <cstring>
 
 namespace isaac::test {
+#ifdef ISAAC_LAN_TEST_J835
+namespace native_test_backend = engine::j835;
+#else
+namespace native_test_backend = engine::j510;
+#endif
 // Synthetic MSVC x86 RTTI, consumed by the actual Windows CRT. No game objects,
 // game executable, hooks or entity-type-based stand-in for dynamic_cast.
 class NativeEntityTypes {
@@ -52,28 +61,29 @@ class NativeEntityTypes {
 
   public:
     explicit NativeEntityTypes(Address image)
-        : npc_(reinterpret_cast<Type*>(image + engine::j460::rtti::npc),
-               reinterpret_cast<Type*>(image + engine::j460::rtti::entity)),
-          effectClass_(&effect_, reinterpret_cast<Type*>(image + engine::j460::rtti::entity)) {
+        : npc_(reinterpret_cast<Type*>(image + native_test_backend::rtti::npc),
+               reinterpret_cast<Type*>(image + native_test_backend::rtti::entity)),
+          effectClass_(&effect_,
+                       reinterpret_cast<Type*>(image + native_test_backend::rtti::entity)) {
         static_assert(sizeof(Address) == 4 && sizeof(Base) == 28 && sizeof(Locator) == 20);
         require(image != 0, "Private native image allocation failed");
         require(cast_ != nullptr, "MSVC x86 RTTI runtime unavailable");
         const auto name = [&](Address descriptor, const char* value) {
-            std::memcpy(reinterpret_cast<void*>(descriptor + engine::j460::rtti::name), value,
-                        std::strlen(value) + 1);
+            std::memcpy(reinterpret_cast<void*>(descriptor + native_test_backend::rtti::name),
+                        value, std::strlen(value) + 1);
         };
-        name(image + engine::j460::rtti::entity, ".?AVEntity@IsaacRepentancePlus@@");
-        name(image + engine::j460::rtti::npc, ".?AVEntity_NPC@IsaacRepentancePlus@@");
+        name(image + native_test_backend::rtti::entity, ".?AVEntity@IsaacRepentancePlus@@");
+        name(image + native_test_backend::rtti::npc, ".?AVEntity_NPC@IsaacRepentancePlus@@");
         name(reinterpret_cast<Address>(&effect_), ".?AVEntity_Effect@IsaacRepentancePlus@@");
         // Match the audited game's import thunk, redirected to the real CRT.
         const std::array<unsigned char, 2> jump{0xff, 0x25};
-        std::memcpy(reinterpret_cast<void*>(image + engine::j460::entry::entityDynamicCast),
+        std::memcpy(reinterpret_cast<void*>(image + native_test_backend::entry::entityDynamicCast),
                     jump.data(), jump.size());
-        *reinterpret_cast<Address*>(image + engine::j460::entry::entityDynamicCast + jump.size()) =
-            reinterpret_cast<Address>(&cast_);
+        *reinterpret_cast<Address*>(image + native_test_backend::entry::entityDynamicCast +
+                                    jump.size()) = reinterpret_cast<Address>(&cast_);
         FlushInstructionCache(
             GetCurrentProcess(),
-            reinterpret_cast<void*>(image + engine::j460::entry::entityDynamicCast), 6);
+            reinterpret_cast<void*>(image + native_test_backend::entry::entityDynamicCast), 6);
     }
     NativeEntityTypes(const NativeEntityTypes&) = delete;
     ~NativeEntityTypes() {

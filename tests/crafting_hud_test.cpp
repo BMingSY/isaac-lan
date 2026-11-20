@@ -1,5 +1,23 @@
 // Execute both production x86 HUD detours without loading the game.
 #include "test_support.h"
+#include "engine/crafting_hud.h"
+#include <MinHook.h>
+#include <windows.h>
+#include <cstring>
+#include <vector>
+#ifdef ISAAC_LAN_TEST_J835
+#include "engine/versions/j835/entrypoints.h"
+namespace backend = isaac::engine::j835;
+constexpr unsigned controllerOffset = 0x154c, ghostOffset = 0x1f88;
+constexpr unsigned activeBase = 0x14c4, activeStride = 0x1c;
+constexpr unsigned hudSize = 0x6b0, rootSize = hudSize * 8;
+#else
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
+constexpr unsigned controllerOffset = 0x161c, ghostOffset = 0x20a9;
+constexpr unsigned activeBase = 0x1580, activeStride = 0x20;
+constexpr unsigned hudSize = 0x6dc, rootSize = 0x5954;
+#endif
 #include <array>
 #include <bit>
 #include <cstdint>
@@ -19,8 +37,8 @@ extern void* isaac_lan_crafting_pocket_original;
 extern void* isaac_lan_crafting_get_active_item;
 extern const float* isaac_lan_crafting_screen_width;
 extern const float* isaac_lan_crafting_screen_height;
-void isaac_lan_crafting_hud_thunk();
-void isaac_lan_crafting_pocket_thunk();
+void* bagTarget = nullptr;
+void* pocketTarget = nullptr;
 unsigned hudCalls = 0, activeItemCalls = 0;
 std::uintptr_t observedHud = 0, observedPosition = 0, invocationHud = 0, invocationPosition = 0;
 int observedLayout = 0, invocationLayout = 0;
@@ -33,7 +51,8 @@ std::array<std::uint32_t, 6> observedGpr{}, returnedGpr{};
 std::array<float, 2> observedPositionValue{};
 int __attribute__((thiscall)) activeItemFixture(void* player, int slot) {
     ++activeItemCalls;
-    return *reinterpret_cast<int*>(static_cast<std::uint8_t*>(player) + 0x1580 + 0x20 * slot);
+    return *reinterpret_cast<int*>(static_cast<std::uint8_t*>(player) + activeBase +
+                                   activeStride * slot);
 }
 #define RECORD_REGISTERS                                                                           \
     "pushfl\n\tpopl _observedFlags\n\t"                                                            \
@@ -51,11 +70,17 @@ int __attribute__((thiscall)) activeItemFixture(void* player, int slot) {
 __attribute__((naked)) void originalBagFixture() {
     __asm__ __volatile__(RECORD_REGISTERS "ret $4");
 }
+#ifdef ISAAC_LAN_TEST_J835
+__attribute__((naked)) void originalPocketFixture() {
+    __asm__ __volatile__(RECORD_REGISTERS "movd %xmm3, _observedAlpha\n\tret $4");
+}
+#else
 __attribute__((naked)) void originalPocketFixture() {
     __asm__ __volatile__(RECORD_REGISTERS
                          "movl 8(%esp), %eax\n\tmovl %eax, _observedLayout\n\t"
                          "movl 12(%esp), %eax\n\tmovl %eax, _observedAlpha\n\tret $12");
 }
+#endif
 #undef RECORD_REGISTERS
 #define LOAD_REGISTERS                                                                             \
     "movups _invocationXmm, %xmm0\n\t"                                                             \
@@ -77,25 +102,35 @@ __attribute__((naked)) void originalPocketFixture() {
     "movups %xmm6, _returnedXmm+96\n\tmovups %xmm7, _returnedXmm+112\n\t"
 __attribute__((naked)) void invokeBagFixture() {
     __asm__ __volatile__("pushfl\n\tpushal\n\tmovl %esp, _invocationStack\n\t" LOAD_REGISTERS
-                         "pushl _invocationPosition\n\tcall _isaac_lan_crafting_hud_thunk\n\t"
+                         "pushl _invocationPosition\n\tcall *_bagTarget\n\t"
                          "movl %esp, _returnedStack\n\tmovl %eax, _savedReturnEax\n\t"
                          "movl -4(%esp), %eax\n\tmovl %eax, _returnedPositionArgument\n\t"
                          "movl _savedReturnEax, %eax\n\t" RECORD_RETURNED "popal\n\tpopfl\n\tret");
 }
+#ifdef ISAAC_LAN_TEST_J835
+__attribute__((naked)) void invokePocketFixture() {
+    __asm__ __volatile__("pushfl\n\tpushal\n\tmovl %esp, _invocationStack\n\t" LOAD_REGISTERS
+                         "pushl _invocationPosition\n\tcall *_pocketTarget\n\t"
+                         "movl %esp, _returnedStack\n\tmovl %eax, _savedReturnEax\n\t"
+                         "movl -4(%esp), %eax\n\tmovl %eax, _returnedPositionArgument\n\t"
+                         "movl _savedReturnEax, %eax\n\t" RECORD_RETURNED "popal\n\tpopfl\n\tret");
+}
+#else
 __attribute__((naked)) void invokePocketFixture() {
     __asm__ __volatile__("pushfl\n\tpushal\n\tmovl %esp, _invocationStack\n\t" LOAD_REGISTERS
                          "pushl _invocationAlpha\n\tpushl _invocationLayout\n\t"
-                         "pushl _invocationPosition\n\tcall _isaac_lan_crafting_pocket_thunk\n\t"
+                         "pushl _invocationPosition\n\tcall *_pocketTarget\n\t"
                          "movl %esp, _returnedStack\n\tmovl %eax, _savedReturnEax\n\t"
                          "movl -12(%esp), %eax\n\tmovl %eax, _returnedPositionArgument\n\t"
                          "movl -8(%esp), %eax\n\tmovl %eax, _returnedLayoutArgument\n\t"
                          "movl -4(%esp), %eax\n\tmovl %eax, _returnedAlphaArgument\n\t"
                          "movl _savedReturnEax, %eax\n\t" RECORD_RETURNED "popal\n\tpopfl\n\tret");
 }
+#endif
 #undef LOAD_REGISTERS
 #undef RECORD_RETURNED
 }
-float screenWidth = 640, screenHeight = 360;
+float screenWidth = 640, screenHeight = 360, expectedPocketScale = 1;
 std::array<float, 2> expectedAnchor{612, 342};
 void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout, float scale) {
     std::array<float, 2> position{12 + layout * 21.0f, 34 - layout * 7.0f};
@@ -106,7 +141,13 @@ void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout
     invocationAlpha = std::bit_cast<std::uint32_t>(layout ? 0.35f : 1.0f);
     for (unsigned i = 0; i < invocationXmm.size(); ++i)
         invocationXmm[i] = 0x3e800001u + i;
+#ifdef ISAAC_LAN_TEST_J835
+    invocationXmm[8] = std::bit_cast<std::uint32_t>(scale);
+    if (pocket)
+        invocationXmm[12] = invocationAlpha;
+#else
     invocationXmm[pocket ? 12 : 8] = std::bit_cast<std::uint32_t>(scale);
+#endif
     observedXmm.fill(0);
     observedGpr.fill(0);
     hudCalls = 0;
@@ -116,10 +157,12 @@ void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout
     require(returnedStack == invocationStack, "HUD unbalanced the caller stack");
     require(returnedPositionArgument == invocationPosition,
             "HUD changed the original position argument");
+#ifndef ISAAC_LAN_TEST_J835
     if (pocket)
         require(returnedLayoutArgument == std::uint32_t(layout) &&
                     returnedAlphaArgument == invocationAlpha,
                 "HUD changed the original layout/alpha argument slots");
+#endif
     const std::array<std::uint32_t, 6> expectedGpr{0x1234, 0x2345, 0x3456, 0x4567, 0x5678, 0x6789};
     if (expected) {
         require(observedHud == expected, "HUD used the wrong borrowed receiver");
@@ -128,14 +171,20 @@ void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout
             require(observedPosition != reinterpret_cast<std::uintptr_t>(&position) &&
                         observedPositionValue == expectedAnchor,
                     "Local pocket did not use a separate native bottom-right anchor");
+#ifdef ISAAC_LAN_TEST_J835
+            expectedXmm[8] = std::bit_cast<std::uint32_t>(expectedPocketScale);
+#else
             require(observedLayout == 0, "Local pocket kept a compact co-op layout");
             expectedXmm[12] = std::bit_cast<std::uint32_t>(1.0f);
+#endif
         } else {
             require(observedPosition == reinterpret_cast<std::uintptr_t>(&position) &&
                         observedPositionValue == originalPosition,
                     "Ordinary pocket or inner bag changed the caller's position");
+#ifndef ISAAC_LAN_TEST_J835
             if (pocket)
                 require(observedLayout == layout, "Ordinary pocket changed its layout");
+#endif
         }
         if (pocket)
             require(observedAlpha == invocationAlpha, "Pocket HUD changed alpha");
@@ -149,20 +198,71 @@ void invoke(bool pocket, std::uintptr_t hud, std::uintptr_t expected, int layout
         require((returnedFlags & 0x8c5) == 0x44, "Hidden HUD changed arithmetic flags");
     }
 }
+void patch(unsigned char* image, unsigned rva, auto function) {
+    std::memset(image + rva, 0x90, 16);
+    image[rva] = 0xe9;
+    const auto relative = reinterpret_cast<std::uintptr_t>(function) -
+                          reinterpret_cast<std::uintptr_t>(image + rva + 5);
+    std::memcpy(image + rva + 1, &relative, sizeof(relative));
+}
 int main() {
     try {
-        isaac_lan_crafting_hud_original = reinterpret_cast<void*>(originalBagFixture);
-        isaac_lan_crafting_pocket_original = reinterpret_cast<void*>(originalPocketFixture);
-        isaac_lan_crafting_get_active_item = reinterpret_cast<void*>(activeItemFixture);
+        require(!isaac::presentation::installCraftingHud(0), "Missing image installed HUD hooks");
+        constexpr unsigned imageSize = 0x900000;
+        auto* image = static_cast<unsigned char*>(
+            VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+        require(image && MH_Initialize() == MH_OK, "Allocate crafting HUD fixture");
+        patch(image, backend::entry::craftingBagHudRender, originalBagFixture);
+        patch(image, backend::entry::playerHudPocketRender, originalPocketFixture);
+        patch(image, backend::entry::playerGetActiveItem, activeItemFixture);
+        FlushInstructionCache(GetCurrentProcess(), image, imageSize);
+        bagTarget = image + backend::entry::craftingBagHudRender;
+        pocketTarget = image + backend::entry::playerHudPocketRender;
+        const auto imageAddress = reinterpret_cast<std::uintptr_t>(image);
+        for (auto* conflict : {pocketTarget, bagTarget}) {
+            require(MH_CreateHook(conflict, reinterpret_cast<void*>(originalBagFixture), nullptr) ==
+                        MH_OK,
+                    "Prepare crafting hook conflict");
+            require(!isaac::presentation::installCraftingHud(imageAddress) &&
+                        !isaac_lan_crafting_hud_original && !isaac_lan_crafting_pocket_original &&
+                        !isaac_lan_crafting_get_active_item && !isaac_lan_crafting_screen_width &&
+                        !isaac_lan_crafting_screen_height,
+                    "Crafting installation retained partial hooks or native pointers");
+            require(MH_CreateHook(conflict, reinterpret_cast<void*>(originalBagFixture), nullptr) ==
+                        MH_ERROR_ALREADY_CREATED,
+                    "Crafting rollback removed a foreign hook");
+            auto* other = conflict == pocketTarget ? bagTarget : pocketTarget;
+            require(MH_CreateHook(other, reinterpret_cast<void*>(originalBagFixture), nullptr) ==
+                        MH_OK,
+                    "Crafting rollback leaked an owned hook");
+            require(MH_RemoveHook(other) == MH_OK && MH_RemoveHook(conflict) == MH_OK,
+                    "Remove fixture hooks");
+        }
+        require(isaac::presentation::installCraftingHud(imageAddress) &&
+                    !isaac::presentation::installCraftingHud(imageAddress),
+                "Crafting installation did not recover or duplicate overwrote its trampolines");
+        const auto nativeActiveItem = isaac_lan_crafting_get_active_item;
+        require(isaac_lan_crafting_screen_width ==
+                        reinterpret_cast<float*>(image + backend::globals::logicalWidth) &&
+                    isaac_lan_crafting_screen_height ==
+                        reinterpret_cast<float*>(image + backend::globals::logicalHeight),
+                "Crafting binding selected the wrong viewport globals");
         isaac_lan_crafting_screen_width = &screenWidth;
         isaac_lan_crafting_screen_height = &screenHeight;
-        constexpr unsigned hudSize = 0x6dc, hudCount = 8;
+#ifdef ISAAC_LAN_TEST_J835
+        std::vector<std::uint8_t> manager(0x29e40);
+        auto& managerPointer =
+            *reinterpret_cast<std::uintptr_t*>(image + backend::globals::manager);
+        managerPointer = reinterpret_cast<std::uintptr_t>(manager.data());
+#endif
+        constexpr unsigned hudCount = 8;
         alignas(16) std::array<std::array<std::uint8_t, 0x2200>, 4> players{};
-        alignas(16) std::array<std::uint8_t, 0x5954> root{};
+        alignas(16) std::array<std::uint8_t, rootSize> root{};
         const auto rootAddress = reinterpret_cast<std::uintptr_t>(root.data());
         const auto hudAt = [&](unsigned index) { return rootAddress + index * hudSize; };
         const auto item = [&](unsigned player, unsigned slot, int value) {
-            *reinterpret_cast<int*>(players[player].data() + 0x1580 + 0x20 * slot) = value;
+            *reinterpret_cast<int*>(players[player].data() + activeBase + activeStride * slot) =
+                value;
         };
         // Native HUD record order is independent of LAN slot order.
         const std::array<unsigned, 4> order{2, 0, 3, 1};
@@ -170,20 +270,25 @@ int main() {
         for (unsigned i = 0; i < hudCount; ++i) {
             auto* hud = reinterpret_cast<std::uintptr_t*>(root.data() + i * hudSize);
             hud[1] = rootAddress;
+            *reinterpret_cast<short*>(reinterpret_cast<std::uint8_t*>(hud) + 8) = i;
             if (i < players.size()) {
                 const auto slot = order[i];
                 hud[0] = reinterpret_cast<std::uintptr_t>(players[slot].data());
-                *reinterpret_cast<int*>(players[slot].data() + 0x1618) = slot + 1;
+                *reinterpret_cast<int*>(players[slot].data() + controllerOffset) = slot + 1;
                 item(slot, 0, 710);
                 hudFor[slot] = hudAt(i);
             }
         }
         const auto verify = [&](std::uintptr_t source, std::uintptr_t expectedBag,
                                 std::uintptr_t expectedPocket) {
+#ifdef ISAAC_LAN_TEST_J835
+            expectedPocketScale =
+                source && *reinterpret_cast<const short*>(source + 8) > 0 ? -1 : 1;
+#endif
             const auto beforePlayers = players;
             const auto beforeRoot = root;
             for (int layout : {0, 1, 3})
-                for (float scale : {0.5f, 1.0f}) {
+                for (float scale : {-0.5f, 0.5f, 1.0f}) {
                     invoke(false, source, expectedBag, layout, scale);
                     invoke(true, source, expectedPocket, layout, scale);
                 }
@@ -210,16 +315,28 @@ int main() {
                 // Explicit expected anchors cover both logical resolutions,
                 // HUD offset endpoints, and incoming compact layouts/scales.
                 for (const std::array<float, 6> geometry : {
+#ifdef ISAAC_LAN_TEST_J835
+                         std::array<float, 6>{480, 270, 1, 0, 452, 252},
+                         {480, 270, 0, 0, 468, 258},
+                         {640, 360, 1, 0, 612, 342},
+                         {640, 360, 0, 0, 628, 348},
+                         {640, 360, 0.25f, 0, 624, 346.5f},
+#else
                          std::array<float, 6>{480, 270, 0, 0, 452, 252},
                          {480, 270, 10, 10, 462, 262},
                          {640, 360, 0, 0, 612, 342},
                          {640, 360, 10, 10, 622, 352},
                          {640, 360, -10, -10, 602, 332},
+#endif
                      }) {
                     screenWidth = geometry[0];
                     screenHeight = geometry[1];
+#ifdef ISAAC_LAN_TEST_J835
+                    *reinterpret_cast<float*>(manager.data() + 0x29e3c) = geometry[2];
+#else
                     *reinterpret_cast<float*>(root.data() + 0x594c) = geometry[2];
                     *reinterpret_cast<float*>(root.data() + 0x5950) = geometry[3];
+#endif
                     expectedAnchor = {geometry[4], geometry[5]};
                     for (unsigned source = 0; source < count; ++source)
                         verify(hudFor[source], source == local ? hudFor[next] : 0,
@@ -227,12 +344,12 @@ int main() {
                 }
                 // Local ghost keeps its fixed next seat. Target ghost hides
                 // only the bag, retaining local cards, pills and pocket icons.
-                players[local][0x20a9] = 1;
+                players[local][ghostOffset] = 1;
                 verify(hudFor[local], hudFor[next], hudFor[local]);
-                players[local][0x20a9] = 0;
-                players[next][0x20a9] = 1;
+                players[local][ghostOffset] = 0;
+                players[next][ghostOffset] = 1;
                 verify(hudFor[local], 0, hudFor[local]);
-                players[next][0x20a9] = 0;
+                players[next][ghostOffset] = 0;
                 item(next, 0, 0);
                 verify(hudFor[local], 0, hudFor[local]);
                 for (unsigned slot = 0; slot < 4; ++slot) {
@@ -262,7 +379,7 @@ int main() {
                 sourceHud[0] = sourcePlayer;
                 isaac_lan_crafting_get_active_item = nullptr;
                 verify(hudFor[local], 0, hudFor[local]);
-                isaac_lan_crafting_get_active_item = reinterpret_cast<void*>(activeItemFixture);
+                isaac_lan_crafting_get_active_item = nativeActiveItem;
                 isaac::runtime::target = local;
                 verify(hudFor[local], 0, hudFor[local]);
                 for (int invalid : {-2, 4}) {
@@ -277,6 +394,32 @@ int main() {
                 }
                 verify(0, 0, 0);
             }
+#ifdef ISAAC_LAN_TEST_J835
+        isaac::runtime::local = 0;
+        isaac::runtime::target = 1;
+        managerPointer = 0;
+        verify(hudFor[0], hudFor[1], 0);
+        managerPointer = reinterpret_cast<std::uintptr_t>(manager.data());
+        // The nonprimary HUD cancels its mirror; the native younger-twin
+        // exception already uses right-side alignment and must keep scale +1.
+        *reinterpret_cast<int*>(players[0].data() + 0x1550) = 5;
+        *reinterpret_cast<int*>(players[1].data() + 0x1550) = 3;
+        auto& twin = *reinterpret_cast<std::uintptr_t*>(players[0].data() + 0x1d80);
+        twin = reinterpret_cast<std::uintptr_t>(players[1].data());
+        expectedPocketScale = 1;
+        invoke(true, hudFor[0], hudFor[0], 3, 0.5f);
+        *reinterpret_cast<int*>(players[1].data() + 0x1550) = 5;
+        expectedPocketScale = -1;
+        invoke(true, hudFor[0], hudFor[0], 3, -0.5f);
+        twin = reinterpret_cast<std::uintptr_t>(players[0].data());
+        invoke(true, hudFor[0], hudFor[0], 3, 1.0f);
+        twin = 0;
+        *reinterpret_cast<short*>(hudFor[0] + 8) = 0;
+        expectedPocketScale = 1;
+        invoke(true, hudFor[0], hudFor[0], 3, 0.5f);
+#endif
+        require(MH_Uninitialize() == MH_OK, "Remove crafting HUD hooks");
+        VirtualFree(image, 0, MEM_RELEASE);
         std::puts("PASS production x86 HUD: next bag with full bottom-right local pocket; "
                   "2/3/4 seats, screen size and HUD offset anchors; alpha, GPR, other SSE and "
                   "flags preserved; ordinary passthrough, remote/invalid hidden; no mutation");

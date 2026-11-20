@@ -51,7 +51,7 @@ DWORD WINAPI initialize(void*) {
     isaac::loader::Extension loaded;
     try {
         loaded = isaac::loader::load(std::filesystem::path(extension).parent_path(),
-                                     ISAAC_LAN_VERSION, isaac::build::version);
+                                     ISAAC_LAN_VERSION, isaac::build::version());
     } catch (...) {
         // No engine bootstrap has run yet. Preserve the original installation
         // if source discovery or staging cannot be completed.

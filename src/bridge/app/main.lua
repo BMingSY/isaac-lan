@@ -350,7 +350,7 @@ local bot = _IsaacLanModules["lanbot"]({
     end,
 }, _IsaacLanModules)
 local chatLimits = native.chat_limits()
-local emotes = native.emote_count()
+local emotes = native.emote_count and native.emote_count() or 0
 local playerOpacity = _IsaacLanModules["presentation/player_opacity"]({
     default = native.player_opacity(),
     info = native.api_info,
@@ -398,8 +398,12 @@ chat = _IsaacLanModules["runtime/chat"]({
         return native.rooms_positions()[tostring(slot)]
     end,
 }, _IsaacLanModules["runtime/chat_wire"])
+local menuFonts = _IsaacLanModules["presentation/fonts"](native.presentation_assets.fonts)
 local chatUI = _IsaacLanModules["presentation/chat"]({
     native = native,
+    font = function()
+        return menuFonts("small")
+    end,
     game = Game,
     options = Options,
     chat = chat,

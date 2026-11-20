@@ -43,6 +43,7 @@ return function(root, native, modules)
             return true
         end
     native.chat_style = { opacity = 70, background = 0x231b18, border = 0x79604c, text = 0xe8dfcb }
+    native.presentation_assets = dofile(root .. "/tests/fixtures/presentation_assets.lua")()
     native.player_opacity = native.player_opacity
         or function(...)
             return select("#", ...) == 0 and 100 or true
@@ -81,6 +82,7 @@ return function(root, native, modules)
         "runtime/room_placement",
         "runtime/chat",
         "presentation/chat_layout",
+        "presentation/fonts",
         "presentation/chat_completion",
         "presentation/chat",
         "presentation/player_opacity",

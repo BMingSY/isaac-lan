@@ -1,0 +1,51 @@
+{
+    "format": 1,
+    "backend": "j835",
+    "game_build": "1.7.9b.J835",
+    "game_name": "Repentance",
+    "documents_directory": "Binding of Isaac Repentance",
+    "lua_module": "Lua5.3.3r.dll",
+    "version_rva": 7699228,
+    "minimum_image_size": 8949760,
+    "sections": [
+        {
+            "start": 4096,
+            "size": 6310708,
+            "flags": 1610612768
+        },
+        {
+            "start": 6316032,
+            "size": 1716062,
+            "flags": 1073741888
+        },
+        {
+            "start": 8032256,
+            "size": 397540,
+            "flags": 3221225536
+        }
+    ],
+    "capabilities": {
+        "native_emotes": false
+    },
+    "presentation": {
+        "native_lobby": false,
+        "fonts": {
+            "small": {
+                "path": "font/cjk/lanapixel.fnt",
+                "scale": 1
+            },
+            "normal": {
+                "path": "font/cjk/lanapixel.fnt",
+                "scale": 1.2
+            },
+            "heading": {
+                "path": "font/cjk/lanapixel.fnt",
+                "scale": 1.6
+            }
+        }
+    },
+    "testing": {
+        "progress_fixture": "j835",
+        "accepted_beta_option": null
+    }
+}

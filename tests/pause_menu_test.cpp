@@ -1,11 +1,13 @@
-// Private x86 image: exercise the real J460 menu calls and input-query hook.
+// Private x86 image: exercise the real J510 menu calls and input-query hook.
 // Including input.cpp keeps the query hook under test without installing hooks
 // in a process or exposing a production API solely for tests.
 #include "test_support.h"
-#include "engine/versions/j460/input.cpp"
+#include "engine/versions/common/input.cpp"
+#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j510/layout.h"
+#include <MinHook.h>
 #include <array>
 #include <vector>
-#include <thread>
 
 namespace {
 int localViewer = 1;
@@ -46,11 +48,12 @@ void grantStartingRewards(void*, unsigned) {
 namespace {
 namespace menu = isaac::pause_menu;
 namespace input = isaac::input;
-namespace native = isaac::engine::j460;
+namespace native = isaac::engine::j510;
 using Address = std::uintptr_t;
 static_assert(sizeof(Address) == 4);
-constexpr unsigned imageSize = 0x880000, menuOffset = 0x23a74;
-constexpr unsigned optionsOffset = menuOffset + 0x5b0, playerIndexOffset = menuOffset + 0xfac;
+constexpr unsigned imageSize = privateGameImageBytes, menuOffset = 0x23a7c;
+constexpr int resumeRow = 0, inventoryRow = 2, exitRow = 3;
+constexpr unsigned optionsOffset = menuOffset + 0x5b0, playerIndexOffset = menuOffset + 0xfb4;
 template <class T> T& field(void* memory, unsigned offset = 0) {
     return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(memory) + offset);
 }
@@ -104,7 +107,7 @@ struct Fixture {
         field<Address>(image, native::globals::game) = reinterpret_cast<Address>(game.data());
         field<Address>(image, native::globals::manager) = reinterpret_cast<Address>(manager.data());
         for (unsigned slot = 0; slot < 4; ++slot)
-            field<int>(players[slot].data(), 0x1618) = static_cast<int>(slot + 1);
+            field<int>(players[slot].data(), 0x161c) = static_cast<int>(slot + 1);
         reorder({0, 1, 2, 3});
         entries[0] = 4;
         entries[1] = 0;
@@ -168,7 +171,7 @@ struct Fixture {
     }
     bool query(int action, unsigned kind = native::entry::inputTriggered, float* result = nullptr,
                int* source = nullptr) {
-        return input::query(image + 0x857b18, nullptr, queryController,
+        return input::query(image + 0x87f0a8, nullptr, queryController,
                             reinterpret_cast<void*>(base() + kind), &action, result, source);
     }
     void press(unsigned action) {
@@ -183,7 +186,7 @@ struct Fixture {
     void onlyLocalQueries() const {
         require(!queries.empty(), "Expected native physical queries");
         for (const auto& query : queries)
-            require(query.receiver == image + 0x857b18 && query.controller == -1,
+            require(query.receiver == image + 0x87f0a8 && query.controller == -1,
                     "Pause input queried a peer controller instead of the local source");
     }
 };
@@ -200,7 +203,7 @@ void __attribute__((thiscall)) hideFixture(void* receiver) {
     current->page() = 0;
 }
 void __attribute__((thiscall)) saveOptionsFixture(void* receiver) {
-    current->validReceiver &= receiver == current->manager.data() + 0x2a33c && current->page() == 2;
+    current->validReceiver &= receiver == current->manager.data() + 0x2a614 && current->page() == 2;
     ++current->saves;
     current->saveHideOrder.push_back('S');
 }
@@ -230,9 +233,9 @@ void __attribute__((thiscall)) controlsFixture(void* receiver) {
         if (f.query(23))
             ++f.selection();
         if (f.query(14)) {
-            if (f.selection() == 3)
+            if (f.selection() == exitRow)
                 ++f.nativeExits;
-            else if (f.selection() == 2)
+            else if (f.selection() == resumeRow)
                 ++f.nativeResumes;
         }
         if (f.query(12) || f.query(15))
@@ -366,9 +369,9 @@ void nativePauseDrift() {
     menu::synchronize(f.base(), true);
     for (int page : {1, 2, 3}) {
         f.page() = page;
-        f.selection() = 3;
+        f.selection() = exitRow;
         menu::synchronize(f.base(), true);
-        require(f.page() == page && f.selection() == 3 && f.shows == 1,
+        require(f.page() == page && f.selection() == exitRow && f.shows == 1,
                 "Repeated paused snapshots reset the local submenu");
     }
     f.page() = 0;
@@ -487,87 +490,6 @@ void xinputProviderRouting() {
     input::xinputProviders = {};
 }
 
-struct DisconnectFixture {
-    HANDLE entered = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    HANDLE release = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    HANDLE competing = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    std::atomic<unsigned> traversals{0}, frees{0};
-    std::atomic<bool> live{true}, overlap{false};
-    ~DisconnectFixture() {
-        CloseHandle(entered);
-        CloseHandle(release);
-        CloseHandle(competing);
-    }
-    void disconnect() {
-        const auto ordinal = ++traversals;
-        const bool retained = live;
-        if (ordinal == 1) {
-            SetEvent(entered);
-            WaitForSingleObject(release, 5000);
-        } else
-            SetEvent(competing);
-        if (retained) {
-            // Model the native vector pointer retained across the XInput call.
-            // The old paths could both reach free() with this same pointer.
-            if (!live.exchange(false))
-                overlap = true;
-            ++frees;
-        }
-    }
-};
-DisconnectFixture* disconnectFixture = nullptr;
-void __cdecl disconnectDevice() {
-    disconnectFixture->disconnect();
-}
-void __cdecl connectCallback() {
-    input::pollDevices(); // Native connect callback reenters the poll routine.
-}
-void inputDisconnectTransactions() {
-    input::originalEnumerateDevices = disconnectDevice;
-    input::originalPollDevices = disconnectDevice;
-    {
-        DisconnectFixture unguarded;
-        disconnectFixture = &unguarded;
-        std::thread foreground(disconnectDevice);
-        const bool started = WaitForSingleObject(unguarded.entered, 5000) == WAIT_OBJECT_0;
-        std::thread background(disconnectDevice);
-        const bool raced = WaitForSingleObject(unguarded.competing, 5000) == WAIT_OBJECT_0;
-        background.join();
-        SetEvent(unguarded.release);
-        foreground.join();
-        require(started && raced && unguarded.frees == 2 && unguarded.overlap,
-                "Disconnect regression did not reproduce the unguarded double release");
-    }
-    // Exercise both orderings and the post-LAN drain (virtualDevices=false).
-    for (const bool lan : {true, false})
-        for (const bool scanFirst : {true, false}) {
-            input::virtualDevices = lan;
-            DisconnectFixture f;
-            disconnectFixture = &f;
-            const auto first = scanFirst ? input::enumerateDevices : input::pollDevices;
-            const auto second = scanFirst ? input::pollDevices : input::enumerateDevices;
-            std::thread foreground(first);
-            const bool started = WaitForSingleObject(f.entered, 5000) == WAIT_OBJECT_0;
-            std::thread background(second);
-            const auto competing = WaitForSingleObject(f.competing, 50);
-            SetEvent(f.release);
-            foreground.join();
-            background.join();
-            require(started && competing == WAIT_TIMEOUT && f.traversals == 2 && f.frees == 1 &&
-                        !f.overlap,
-                    "Hotplug and polling retained/freed the same disconnected native device");
-        }
-    DisconnectFixture nested;
-    disconnectFixture = &nested;
-    SetEvent(nested.release);
-    input::originalEnumerateDevices = connectCallback;
-    input::enumerateDevices();
-    require(nested.traversals == 1 && nested.frees == 1,
-            "Native connect callback could not reenter input polling");
-    input::originalEnumerateDevices = input::originalPollDevices = nullptr;
-    disconnectFixture = nullptr;
-}
-
 void invalidRosters() {
     Fixture f;
     const auto begin = reinterpret_cast<Address>(f.roster.data());
@@ -607,9 +529,9 @@ void rootIntents() {
         f.page() = page;
         for (int selected : {-1, 0, 1, 2, 3, 4}) {
             f.selection() = selected;
-            const auto expected = page == 1 && selected == 2   ? menu::Intent::resume
-                                  : page == 1 && selected == 3 ? menu::Intent::exit
-                                                               : menu::Intent::none;
+            const auto expected = page == 1 && selected == resumeRow ? menu::Intent::resume
+                                  : page == 1 && selected == exitRow ? menu::Intent::exit
+                                                                     : menu::Intent::none;
             require(menu::intent(f.base(), 14) == expected,
                     "Confirm escaped root-page selection rules");
             for (int action : {12, 15})
@@ -707,7 +629,7 @@ void sameFrameNavigationAndExit() {
     Fixture f;
     f.accept();
     f.page() = 1;
-    f.selection() = 2;
+    f.selection() = inventoryRow;
     f.mode = NativeControls::root;
     f.press(23);
     f.press(14);
@@ -716,7 +638,7 @@ void sameFrameNavigationAndExit() {
     {
         input::PauseScope scoped(1);
         menu::controls(f.base());
-        require(f.selection() == 3 && scoped.intent() == menu::Intent::exit,
+        require(f.selection() == exitRow && scoped.intent() == menu::Intent::exit,
                 "Same-frame native Down then Confirm used the stale pre-navigation selection");
         require(f.nativeExits == 0 && f.nativeResumes == 0,
                 "Native exit fade or resume executed before the session could coordinate it");
@@ -732,7 +654,7 @@ void sameFrameNavigationAndExit() {
             "Pause intent or native ECX receiver escaped the scoped call");
     for (int action : {12, 14, 15}) {
         f.clearPhysical();
-        f.selection() = 2;
+        f.selection() = resumeRow;
         f.press(action);
         input::PauseScope scoped(1);
         menu::controls(f.base());
@@ -745,7 +667,7 @@ void nestedInputScopes() {
     Fixture f;
     f.accept();
     f.page() = 1;
-    f.selection() = 3;
+    f.selection() = exitRow;
     f.press(14);
     {
         input::ViewScope presentation(2);
@@ -757,7 +679,7 @@ void nestedInputScopes() {
                 input::PauseScope inner(3);
                 require(input::viewSlot == 3 && inner.intent() == menu::Intent::none,
                         "Nested pause reused an outer pending intent");
-                f.selection() = 2;
+                f.selection() = resumeRow;
                 require(!f.query(14) && inner.intent() == menu::Intent::resume,
                         "Nested pause failed to capture its independent resume");
             }
@@ -859,7 +781,7 @@ void restartPhysicalRouting() {
     f.accept();
     f.press(input::action::restart);
     require(input::restartHeld(), "LAN restart lost physical input behind accepted gameplay input");
-    require(f.queries.front().controller == 0, "Restart did not query the physical keyboard");
+    require(f.queries.front().controller == -2, "Restart did not query the J510 physical keyboard");
     f.clearPhysical();
     require(!input::restartHeld(), "Restart retained a released key");
     f.press(input::action::menuBack);
@@ -1012,7 +934,6 @@ int main(int argc, char** argv) {
                      {"native-pause-drift", nativePauseDrift},
                      {"replica-focus-pause", focusPauseDoesNotReopenReplica},
                      {"xinput-provider-routing", xinputProviderRouting},
-                     {"input-disconnect-transactions", inputDisconnectTransactions},
                      {"viewer-scopes", viewerScopes},
                      {"invalid-rosters", invalidRosters},
                      {"root-intents", rootIntents},

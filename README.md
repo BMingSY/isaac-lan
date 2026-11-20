@@ -1,6 +1,6 @@
 # Isaac LAN
 
-《以撒的结合：忏悔＋》局域网联机扩展，支持 2–4 人，适用于 Windows 版 **v1.9.7.17.J460**。
+《以撒的结合》2–4 人局域网联机扩展，支持 Windows 版**忏悔 v1.7.9b.J835** 和**忏悔＋ v1.9.7.19.J510**。
 
 ## 功能
 
@@ -10,15 +10,15 @@
 
 ## 安装
 
-1. 解压完整安装包，运行 `Install.cmd`。
+1. 忏悔选择文件名含 `j835` 的安装包，忏悔＋选择常规安装包。解压后运行 `Install.cmd`。
 2. 保持游戏是关闭状态，选择游戏目录中的 `isaac-ng.exe`。
-3. 从 Steam 正常启动游戏，选择存档栏，进入 **Online／在线联机 → 局域网联机**。
+3. 从 Steam 启动游戏并选择存档。忏悔在主菜单点击**局域网 →** 或按向右键，忏悔＋进入 **Online／在线联机 → 局域网联机**。
 
 所有玩家需要使用相同游戏版本和同一份联机扩展。
 
 ### Linux／Steam Deck（Proton）
 
-需要 Windows 版 J460、Proton 11.0-2 及以上。
+需要以上两个 Windows 游戏版本之一及 Proton 11.0-2 或更高版本。
 
 将 `ISAAC_GAME_DIRECTORY` 设为游戏安装位置后执行：
 
@@ -106,7 +106,7 @@ cmake -S . -B build-win32 -G Ninja \
   -DIMGUI_SOURCE_DIR="$ISAAC_IMGUI_SOURCE" \
   -DMINHOOK_SOURCE_DIR="$ISAAC_MINHOOK_SOURCE"
 cmake --build build-win32
-python3 tools/build_package.py --build build-win32 --output dist/Isaac-LAN-J460
+python3 tools/build_package.py --build build-win32 --output dist/Isaac-LAN-J510
 ```
 
 ## 问题与建议

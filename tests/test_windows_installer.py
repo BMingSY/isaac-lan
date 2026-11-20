@@ -108,12 +108,31 @@ public class Checker {
         shutil.copy2(self.checker, self.package / "isaac_lan_check.exe")
         for name in OWNED:
             (self.package / name).write_bytes(name.encode())
+        subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "tools/generate_game_profile.py"),
+                "--backend",
+                "j510",
+                "--output",
+                str(self.package),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         self.write_payload()
 
     def write_payload(self):
         payload = {
             "format": 1,
-            "game_build": "1.9.7.17.J460",
+            "game_build": "1.9.7.19.J510",
+            "backend": "j510",
+            "linux_files": {
+                "game-profile.json": hashlib.sha256(
+                    (self.package / "game-profile.json").read_bytes()
+                ).hexdigest(),
+            },
             "files": {
                 name: hashlib.sha256((self.package / name).read_bytes()).hexdigest()
                 for name in (*OWNED, "isaac_lan_check.exe")

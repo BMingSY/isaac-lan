@@ -8,6 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import prepare_lab
+from game_profiles import source_profile
 
 
 @pytest.mark.parametrize("owned,loader", [(True, True), (False, True), (True, False)])
@@ -15,6 +16,7 @@ def test_preparation_preserves_only_existing_loader_ownership(tmp_path, monkeypa
     source, build, lab = (tmp_path / name for name in ("source", "build", "lab"))
     source.mkdir()
     build.mkdir()
+    (build / "game-profile.json").write_text(json.dumps(source_profile()))
     (source / "isaac-ng.exe").write_bytes(b"game")
     (source / "mods").mkdir()
     (source / "resources").mkdir()

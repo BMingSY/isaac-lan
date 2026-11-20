@@ -10,6 +10,7 @@ from zipfile import ZipFile
 
 import pefile
 from extension_package import LOADER_ABI
+from game_profiles import release_name
 
 
 BINARIES = {"winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe"}
@@ -54,8 +55,8 @@ SYSTEM_DLLS = {
 def check(archive, tag, *, require_stripped=False):
     if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
         raise ValueError("Expected a version tag such as v0.1.0")
-    expected_name = f"Isaac-LAN-{tag}-windows-x86.zip"
-    if archive.name != expected_name:
+    supported = {release_name(tag, backend) + ".zip": backend for backend in ("j510", "j835")}
+    if archive.name not in supported:
         raise ValueError("Unexpected release archive name")
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     checksum = archive.with_suffix(".zip.sha256")
@@ -70,9 +71,11 @@ def check(archive, tag, *, require_stripped=False):
         if zipped.testzip() is not None:
             raise ValueError("Release archive is damaged")
         payload = json.loads(zipped.read(prefix + "payload.json"))
+        if payload.get("backend") != supported[archive.name]:
+            raise ValueError("Release archive name and game backend differ")
         if (
             payload.get("format") != 1
-            or payload.get("game_build") != "1.9.7.17.J460"
+            or not payload.get("game_build")
             or payload.get("extension_version") != tag[1:]
             or (
                 "loader_abi" in payload
@@ -81,6 +84,13 @@ def check(archive, tag, *, require_stripped=False):
             or set(payload["files"]) != BINARIES
         ):
             raise ValueError("Release manifest differs")
+        from game_profiles import validate
+
+        profile = validate(json.loads(zipped.read(prefix + "game-profile.json")))
+        if profile["game_build"] != payload["game_build"] or profile["backend"] != payload.get(
+            "backend"
+        ):
+            raise ValueError("Release game profile differs from manifest")
         for name in sorted(BINARIES):
             contents = zipped.read(prefix + name)
             if hashlib.sha256(contents).hexdigest() != payload["files"][name]:

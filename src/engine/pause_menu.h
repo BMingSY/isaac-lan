@@ -26,7 +26,8 @@ void controls(std::uintptr_t image);
 // Decode only actions whose native effect must be coordinated by the session.
 Intent intent(std::uintptr_t image, int action);
 bool changesController(std::uintptr_t image, int action);
-// Keep the menu's player index in the current native roster's coordinates.
+// Keep a native menu player index in roster coordinates when one exists.
+// Menus which derive their player from roster[0] use the borrowed room view.
 void selectPlayer(std::uintptr_t image, unsigned slot);
 class ViewScope {
     std::uintptr_t menu = 0;

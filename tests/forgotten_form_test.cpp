@@ -1,10 +1,18 @@
 #include "test_support.h"
-#include "engine/versions/j460/forgotten_form.h"
+#ifdef ISAAC_LAN_TEST_J835
+#include "engine/versions/j835/forgotten_form.h"
+namespace native = isaac::engine::j835;
+constexpr unsigned playerType = 0x130c, coopGhost = 0x1f88, subplayer = 0x1cb8;
+#else
+#include "engine/versions/j510/forgotten_form.h"
+namespace native = isaac::engine::j510;
+constexpr unsigned playerType = 0x13c4, coopGhost = 0x20a9, subplayer = 0x1d98;
+#endif
+constexpr unsigned entityType = 0x28;
 #include <array>
 #include <utility>
 
 namespace {
-namespace native = isaac::engine::j460;
 namespace ids = isaac::compat::ids;
 using Address = std::uintptr_t;
 std::array<std::uint8_t, 0x2100> player{}, hidden{};
@@ -15,8 +23,7 @@ template <class T> T& field(auto& body, unsigned offset) {
 bool __attribute__((thiscall)) swap(void* object, bool force, bool quiet) {
     require(object == player.data() && force && quiet, "Incorrect native swap ABI/flags");
     ++calls;
-    std::swap(field<int>(player, native::layout::player::type),
-              field<int>(hidden, native::layout::player::type));
+    std::swap(field<int>(player, playerType), field<int>(hidden, playerType));
     return true;
 }
 bool restore(int desired) {
@@ -29,27 +36,25 @@ void rejects(int desired) {
 } // namespace
 int main() {
     static_assert(sizeof(Address) == 4);
-    field<unsigned>(hidden, native::layout::entity::type) = 1;
-    field<int>(player, native::layout::player::type) = ids::player::forgotten;
-    field<int>(hidden, native::layout::player::type) = ids::player::soul;
-    field<Address>(player, native::layout::player::subplayer) =
-        reinterpret_cast<Address>(hidden.data());
+    field<unsigned>(hidden, entityType) = 1;
+    field<int>(player, playerType) = ids::player::forgotten;
+    field<int>(hidden, playerType) = ids::player::soul;
+    field<Address>(player, subplayer) = reinterpret_cast<Address>(hidden.data());
     require(restore(ids::player::forgotten) && calls == 0, "Repeated form was not idempotent");
     require(restore(ids::player::soul) && calls == 1, "Forgotten did not switch to Soul");
     require(restore(ids::player::soul) && calls == 1, "Repeated Soul toggled back");
     require(restore(ids::player::forgotten) && calls == 2, "Soul did not switch to Forgotten");
     rejects(ids::player::isaac);
-    field<bool>(player, native::layout::player::coopGhost) = true;
+    field<bool>(player, coopGhost) = true;
     rejects(ids::player::soul);
-    field<bool>(player, native::layout::player::coopGhost) = false;
-    field<int>(hidden, native::layout::player::type) = ids::player::forgotten;
+    field<bool>(player, coopGhost) = false;
+    field<int>(hidden, playerType) = ids::player::forgotten;
     rejects(ids::player::soul);
-    field<int>(hidden, native::layout::player::type) = ids::player::soul;
-    field<unsigned>(hidden, native::layout::entity::type) = 1000;
+    field<int>(hidden, playerType) = ids::player::soul;
+    field<unsigned>(hidden, entityType) = 1000;
     rejects(ids::player::soul);
-    field<Address>(player, native::layout::player::subplayer) = 0;
+    field<Address>(player, subplayer) = 0;
     rejects(ids::player::soul);
-    field<Address>(player, native::layout::player::subplayer) =
-        reinterpret_cast<Address>(player.data());
+    field<Address>(player, subplayer) = reinterpret_cast<Address>(player.data());
     rejects(ids::player::soul);
 }

@@ -9,6 +9,8 @@ import shutil
 import subprocess
 import struct
 from build_package import build
+from game_profiles import build_profile
+from testing.installer import game_image
 
 
 def windows(path):
@@ -97,39 +99,36 @@ def check(game, build_directory, output):
     run("Uninstall")
     assert hashlib.sha256((target / "isaac-ng.exe").read_bytes()).hexdigest() == original_exe
     executable = (target / "isaac-ng.exe").read_bytes()
-    assert executable.count(b"bootstp\0") == 1
-    clean = executable.replace(b"bootstp\0", b"userenv\0")
-    # This reconstruction was verified against the cached official Steam depot manifest.
-    assert (
-        hashlib.sha256(clean).hexdigest()
-        == "3bdfc8bae0dc7e334b76009d0ad45dfbb16ee5f00c06ffbc3a0094e34d44616b"
-    )
+    profile = build_profile(build_directory)
+    clean = game_image(profile)
     patched = bytearray(clean)
-    pe = struct.unpack_from("<I", patched, 0x3C)[0]
-    patched[pe + 8 : pe + 12] = (
-        b"\x01\x02\x03\x04"  # Build timestamp metadata is not engine compatibility.
-    )
-    patched[0x716534] ^= 1  # Unused .text file padding, outside its virtual code length.
+    pe = struct.unpack_from("<I", clean, 0x3C)[0]
+    struct.pack_into("<I", patched, pe + 8, 1)  # Timestamp metadata.
     patched.extend(b"Unrelated patch metadata\0")
-    wrong_version = clean.replace(b"1.9.7.17.J460", b"1.9.7.16.J459")
+    wrong_version = bytearray(clean)
+    wrong_version[profile["version_rva"]] ^= 1
     wrong_arch = bytearray(clean)
     struct.pack_into("<H", wrong_arch, pe + 4, 0x8664)
-    conflicting = bytearray(clean)
-    conflicting[0x2FADC0 - 0x1000 + 0x400] = 0xCC  # Game::Update entry.
-    console_update_conflict = bytearray(clean)
-    console_update_conflict[0x28B260 - 0x1000 + 0x400] = 0xCC
-    console_command_conflict = bytearray(clean)
-    console_command_conflict[0x28CDC0 - 0x1000 + 0x400] = 0xCC
     variants = [
-        ("stock_j460", clean, True, True),
+        ("installed_" + profile["backend"], executable, True, True),
         ("unrelated_patch", patched, True, True),
-        ("changed_engine_entry", conflicting, True, False),
-        ("changed_console_update", console_update_conflict, True, False),
-        ("changed_console_command", console_command_conflict, True, False),
         ("wrong_version", wrong_version, False, False),
         ("wrong_architecture", wrong_arch, False, False),
         ("truncated_file", clean[:1024], False, False),
     ]
+    signatures = {s["name"].replace(".", "").lower(): s for s in profile["signatures"]}
+    conflicts = {}
+    for label, name in [
+        ("changed_engine_entry", "gameupdate"),
+        ("changed_console_update", "consoleupdate"),
+        ("changed_console_command", "consoleruncommand"),
+    ]:
+        signature = signatures[name]
+        offset = next(i for i in range(16) if signature["mask"] & (1 << i))
+        conflicting = bytearray(clean)
+        conflicting[signature["rva"] + offset] ^= 1
+        conflicts[label] = f"{signature['name']} at RVA 0x{signature['rva']:08x}"
+        variants.append((label, conflicting, True, False))
     results = {}
     for label, data, install_ok, code_ok in variants:
         (target / "isaac-ng.exe").write_bytes(data)
@@ -145,8 +144,8 @@ def check(game, build_directory, output):
             timeout=30,
         )
         assert (checked.returncode == 0) == code_ok, (label, checked.stdout)
-        if label == "changed_engine_entry":
-            assert "Game.Update at RVA 0x002fadc0" in checked.stdout
+        if label in conflicts:
+            assert conflicts[label] in checked.stdout, checked.stdout
         assert (target / "isaac-ng.exe").read_bytes() == data
         results[label] = {
             "installation_allowed": install_ok,

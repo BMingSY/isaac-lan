@@ -3,7 +3,8 @@ local native, config, input = _IsaacLan, _IsaacLanTest, _IsaacLanTestInput
 local fields = _IsaacLanModules["sync/fields"]
 local schema = _IsaacLanModules["sync/world_schema"]
 local Phase, frame, gate = native.net_phases(), _IsaacLanFrame, native.net_gate
-local renders, linked, chosen, finished = 0, false, false, false
+local menu, menuReady = _IsaacLanMenuRender, false
+local menuFrames, linked, chosen, finished = 0, false, false, false
 local origin, other, expectedTnt, observedTick
 local renderSamples, reentrySamples, inventorySamples = 0, 0, 0
 local floorSeed, postFloorSamples = nil, 0
@@ -11,6 +12,10 @@ local trinket = TrinketType.TRINKET_CANCER
 local held = TrinketType.TRINKET_CURVED_HORN
 local function report(text)
     Isaac.DebugString("LAN_NETWORK TNT_SMELTER " .. text)
+end
+function _IsaacLanMenuRender(available, ...)
+    menuReady = available
+    return menu(available, ...)
 end
 local function actor(slot, fn)
     assert(native.rooms_with_player(slot, function()
@@ -72,8 +77,10 @@ observer:AddCallback(ModCallbacks.MC_POST_RENDER, function()
     end
 end)
 function _IsaacLanFrame()
-    renders = renders + 1
-    if not linked and renders >= (config.host and 60 or 120) then
+    -- Count only frames after native save selection. The lab also verifies
+    -- per-peer progress before the host's shared state replaces it.
+    menuFrames = menuReady and menuFrames + 1 or 0
+    if not linked and menuFrames >= (config.host and 300 or 360) then
         linked = true
         _IsaacLanCommand(
             config.host and "host" or "join",
@@ -220,5 +227,8 @@ end
 return {
     done = function()
         return finished
+    end,
+    cleanup = function()
+        _IsaacLanFrame, native.net_gate, _IsaacLanMenuRender = frame, gate, menu
     end,
 }

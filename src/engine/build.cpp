@@ -9,21 +9,9 @@
 #include <stdexcept>
 #include <vector>
 
-#include "engine/versions/j460/entrypoints.h"
-namespace j460 = isaac::engine::j460;
-
 namespace isaac::build {
 namespace {
-
-struct Signature {
-    std::uint32_t rva;
-    const char* name;
-    std::array<unsigned char, 16> bytes;
-    std::uint16_t mask;
-};
-constexpr Signature signatures[] = {
-#include "engine/versions/j460/signatures.inc"
-};
+using engine::Signature;
 std::string conflict(const Signature& signature) {
     char address[32];
     std::snprintf(address, sizeof(address), " at RVA 0x%08lx",
@@ -75,8 +63,9 @@ class FileImage {
         const auto optionalOffset = nt + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER);
         const auto optional = read<IMAGE_OPTIONAL_HEADER32>(optionalOffset);
         if (optional.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC ||
-            optional.SizeOfImage < j460::minimumImageSize)
-            throw std::runtime_error("Unsupported game image layout; expected Repentance+ J460.");
+            optional.SizeOfImage < engine::profile().minimumImageSize)
+            throw std::runtime_error(std::string("Unsupported game image layout; expected ") +
+                                     version());
         for (unsigned i = 0; i < file.NumberOfSections; ++i) {
             const auto section = read<IMAGE_SECTION_HEADER>(
                 optionalOffset + file.SizeOfOptionalHeader + i * sizeof(IMAGE_SECTION_HEADER));
@@ -98,15 +87,18 @@ class FileImage {
                        (section.Characteristics & flags) == flags;
             });
         };
-        if (std::any_of(j460::requiredSections.begin(), j460::requiredSections.end(),
+        if (std::any_of(engine::profile().sections.begin(), engine::profile().sections.end(),
                         [&](const auto& section) {
                             return !covers(section.start, section.size, section.flags);
                         }))
-            throw std::runtime_error("Unsupported game section layout; expected Repentance+ J460.");
-        const auto marker = at(j460::versionRva, sizeof(version));
-        if (std::memcmp(marker.data(), version, sizeof(version) - 1) != 0 || marker.back() != '-')
+            throw std::runtime_error(std::string("Unsupported game section layout; expected ") +
+                                     version());
+        const auto markerLength = std::strlen(version());
+        const auto marker = at(engine::profile().versionRva, markerLength + 1);
+        if (std::memcmp(marker.data(), version(), markerLength) != 0 || marker.back() != '-')
             throw std::runtime_error(
-                "Unsupported game build. This extension requires Repentance+ 1.9.7.17.J460.");
+                std::string("Unsupported game build. This extension requires ") +
+                engine::profile().name + " " + version());
     }
     std::span<const unsigned char> at(std::uint32_t rva, std::size_t size) const {
         for (const auto& section : sections) {
@@ -125,7 +117,7 @@ std::string checkFile(const std::filesystem::path& path, bool checkCode) {
     try {
         FileImage file(path);
         if (checkCode)
-            for (const auto& signature : signatures)
+            for (const auto& signature : engine::profile().signatures)
                 if (!matches(signature, file.at(signature.rva, signature.bytes.size()).data()))
                     return conflict(signature);
         return {};
@@ -134,7 +126,7 @@ std::string checkFile(const std::filesystem::path& path, bool checkCode) {
     }
 }
 std::string checkMemory(std::uintptr_t image) {
-    for (const auto& signature : signatures) {
+    for (const auto& signature : engine::profile().signatures) {
         std::array<unsigned char, 16> bytes{};
         SIZE_T size = 0;
         if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(image + signature.rva),

@@ -1,6 +1,8 @@
 local root = assert(arg[1])
 local factory = dofile(root .. "/src/bridge/presentation/chat.lua")
 local layout = dofile(root .. "/src/bridge/presentation/chat_layout.lua")
+local fonts = dofile(root .. "/src/bridge/presentation/fonts.lua")
+local resources = dofile(root .. "/tests/fixtures/presentation_assets.lua")(arg[2] == "vanilla")
 local completion = dofile(root .. "/src/bridge/presentation/chat_completion.lua")
 local roomDefinitions = dofile(root .. "/src/bridge/core/room_types.lua")
 local draws, loads, missing = {}, {}, false
@@ -56,7 +58,12 @@ function Sprite()
 end
 function Font()
     return {
-        Load = function() end,
+        Load = function(_, path)
+            assert(path == resources.fonts.small.path)
+        end,
+        IsLoaded = function()
+            return true
+        end,
         GetStringWidthUTF8 = function(_, value)
             return (utf8.len(value) or 0) * 5
         end,
@@ -88,6 +95,9 @@ local function create(image, opacity, options, messages, service)
         end
     end
     local ui = factory({
+        font = function()
+            return fonts(resources.fonts)("small")
+        end,
         game = Game,
         native = {
             chat_style = {
@@ -133,7 +143,7 @@ local function create(image, opacity, options, messages, service)
             chat_ui_modal = function(value)
                 modal = value
             end,
-            emote_poll = function(_, enabled)
+            emote_poll = not (options and options.noEmotes) and function(_, enabled)
                 emoteEnabled = enabled
                 return { open = false, selected = 0 }
             end,
@@ -656,3 +666,21 @@ assert(#submissions == 0)
 print(
     "PASS chat appearance, private history, LAN input, HUD dragging, message copy and completion UI"
 )
+
+texts, draws, sceneReady = {}, {}, true
+local beforeOnlineLoads = loads["gfx/OnlineEmotes.anm2"] or 0
+local withoutEmotes = create(
+    nil,
+    75,
+    { noEmotes = true, FoundHUD = false, ExtraHUDStyle = 0, HUDOffset = 0 },
+    {
+        { kind = "team", owner = 0, text = "fallback bubble", time = 0, bubble = true },
+    }
+)
+withoutEmotes.step({ phase = 3, prepared = true, slot = 0, connected = 15 })
+withoutEmotes.render({ phase = 3, prepared = true, slot = 0, connected = 15 })
+assert(
+    (loads["gfx/OnlineEmotes.anm2"] or 0) == beforeOnlineLoads,
+    "Unavailable emote assets loaded"
+)
+assert(drawn("fallback bubble"), "Chat bubble fallback did not render")

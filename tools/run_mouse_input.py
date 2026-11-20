@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify mouse capture/aiming and connection preferences in owned Windows labs."""
 
+from game_profiles import profile_directory
 import argparse
 import configparser
 import json
@@ -62,7 +63,7 @@ def main():
     }
     try:
         for lab in labs:
-            path = lab / "profile/Documents/My Games/Binding of Isaac Repentance+/options.ini"
+            path = profile_directory(lab) / "options.ini"
             options = configparser.ConfigParser()
             options.optionxform = str
             options.read(path)

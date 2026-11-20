@@ -1,5 +1,5 @@
 {
-  "source": "J460 native bosses.xml, entities2.xml and special-room catalog (IDs only; no game assets)",
+  "source": "J510 native bosses.xml, entities2.xml and special-room catalog (IDs only; no game assets)",
   "arena": [
     {
       "key": "angel-271-0",

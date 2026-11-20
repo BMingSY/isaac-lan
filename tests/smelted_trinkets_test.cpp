@@ -1,16 +1,24 @@
 #include "test_support.h"
-#include "engine/versions/j460/smelted_trinkets.h"
+#ifdef ISAAC_LAN_TEST_J835
+#include "engine/versions/j835/smelted_trinkets.h"
+namespace backend = isaac::engine::j835;
+inline constexpr unsigned vectorOffset = 0x1670;
+#else
+#include "engine/versions/j510/smelted_trinkets.h"
+namespace backend = isaac::engine::j510;
+inline constexpr unsigned vectorOffset = 0x1748;
+#endif
 #include <array>
 #include <cstdio>
 
 int main() {
     try {
-        using namespace isaac::engine::j460;
+        using namespace backend;
         using namespace smelted_trinkets;
         std::array<std::uint8_t, 0x2200> playerBytes{};
         std::array<Counts, 191> counts{};
         const auto player = reinterpret_cast<Address>(playerBytes.data());
-        auto* vector = reinterpret_cast<Address*>(player + layout::player::smeltedTrinkets);
+        auto* vector = reinterpret_cast<Address*>(player + vectorOffset);
         vector[0] = reinterpret_cast<Address>(counts.data());
         vector[1] = vector[2] = reinterpret_cast<Address>(counts.data() + counts.size());
         const auto originalPlayer = playerBytes;

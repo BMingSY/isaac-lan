@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check unanimous restarts and native keyboard/controller input with one owned pair."""
 
+from game_profiles import profile_directory
 import argparse
 import json
 from pathlib import Path
@@ -63,9 +64,7 @@ def main():
             while process.poll() is None:
                 runner = (output / "runner.log").read_text(errors="replace")
                 for lab, role in zip(labs, ("host", "client"), strict=True):
-                    game_log = (
-                        lab / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt"
-                    )
+                    game_log = profile_directory(lab) / "log.txt"
                     text = game_log.read_text(errors="replace") if game_log.exists() else ""
                     for run in (2, 5):
                         key = (role, run)

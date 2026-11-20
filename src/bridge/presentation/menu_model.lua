@@ -142,12 +142,14 @@ return function(Phase, Command, endpoint, characters)
                 command("leave")
             end)
         elseif modes then
-            row("官方联机", function()
-                if command("close") then
-                    deps.native.menu_official()
-                    deps.hide()
-                end
-            end)
+            if deps.native.menu_official then
+                row("官方联机", function()
+                    if command("close") then
+                        deps.native.menu_official()
+                        deps.hide()
+                    end
+                end)
+            end
             row("局域网联机", function()
                 ui.page = "lan"
                 ui.selection = 1
@@ -177,8 +179,12 @@ return function(Phase, Command, endpoint, characters)
                 end
             end, ui.ip ~= "")
             row("返回", function()
-                ui.page = "modes"
-                ui.selection = 2
+                if deps.native.menu_official then
+                    ui.page = "modes"
+                    ui.selection = 2
+                else
+                    deps.hide()
+                end
             end)
         elseif phase == Phase.lobby and ui.page == "autoTeleport" and teleport then
             ruleCount = selectedRooms

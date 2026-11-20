@@ -35,23 +35,25 @@ def test_native_compatibility_policies_remain_portable():
         assert all(name.startswith(("compat/", "core/")) for name in includes), (path, includes)
 
 
-def test_audited_addresses_and_startup_signatures_share_one_catalog():
-    backend = ROOT / "src/engine/versions/j460"
+@pytest.mark.parametrize(
+    "backend", sorted(path.parent for path in (ROOT / "src/engine/versions").glob("*/profile.json"))
+)
+def test_audited_addresses_and_startup_signatures_share_one_catalog(backend):
     names = set(re.findall(r"std::uint32_t (\w+) =", (backend / "entrypoints.h").read_text()))
     signatures = (backend / "signatures.inc").read_text()
-    entries = re.findall(r"\{j460::entry::(\w+),", signatures)
+    entries = re.findall(rf"\{{{re.escape(backend.name)}::entry::(\w+),", signatures)
     assert entries and len(entries) == len(set(entries))
     assert set(entries) <= names
     assert not re.search(r'\{0x[0-9a-f]+,\s*"', signatures)
 
 
 def test_runtime_and_presentation_do_not_implement_game_backends():
-    for layer in ("app", "runtime", "presentation"):
+    for layer in ("app", "runtime", "presentation", "diagnostics"):
         for path in (ROOT / "src" / layer).rglob("*"):
             if path.suffix not in (".h", ".cpp"):
                 continue
             source = path.read_text()
-            assert not re.search(r"engine/versions/|j460::|MH_CreateHook|MH_EnableHook", source), (
+            assert not re.search(r"engine/versions/|j510::|MH_CreateHook|MH_EnableHook", source), (
                 path
             )
 

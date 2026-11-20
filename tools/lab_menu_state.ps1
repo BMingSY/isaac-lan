@@ -1,9 +1,8 @@
 param([Parameter(Mandatory = $true)][int]$GameProcessId)
 $ErrorActionPreference = 'Stop'
 $process = Get-Process -Id $GameProcessId
-if ($process.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') {
-    throw 'Owned isolated game required.'
-}
+. (Join-Path $PSScriptRoot 'lab_observations.ps1')
+$layout = Get-LabObservationLayout $process
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -27,20 +26,20 @@ function Read32([long]$address) {
 }
 try {
     $base = $process.MainModule.BaseAddress.ToInt64()
-    $manager = Read32 ($base + 0x87169c)
-    $menu = Read32 ($base + 0x872a20)
+    $manager = Read32 ($base + $layout.manager)
+    $menu = Read32 ($base + $layout.menus)
     # The menu allocation is absent during native startup and gameplay.
     # Report an unready menu instead of dereferencing a null pointer.
     $snapshot = [ordered]@{gameState = 0; menu = -1; selected = -1; fileState = -1; fileSelected = -1; dialogs = 0 }
     if ($manager -ne 0) {
         $snapshot.gameState = Read32 ($manager + 8)
-        $snapshot.dialogs = Read32 ($manager + 0x4d074)
+        $snapshot.dialogs = Read32 ($manager + $layout.dialogs)
     }
     if ($menu -ne 0) {
-        $snapshot.menu = Read32 ($menu + 0x40)
-        $snapshot.selected = Read32 ($menu + 0xb94)
-        $snapshot.fileState = Read32 ($menu + 0x2f4)
-        $snapshot.fileSelected = Read32 ($menu + 0x2f8)
+        $snapshot.menu = Read32 ($menu + $layout.page)
+        $snapshot.selected = Read32 ($menu + $layout.selected)
+        $snapshot.fileState = Read32 ($menu + $layout.fileState)
+        $snapshot.fileSelected = Read32 ($menu + $layout.fileSelected)
     }
     $snapshot | ConvertTo-Json
 } finally {

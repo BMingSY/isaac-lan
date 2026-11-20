@@ -3,7 +3,7 @@ return function(game, getPlayer, roomTypes, collectibles, trinkets)
     local room = game:GetRoom()
     local level = game:GetLevel()
     -- Horse-pill flags 24/25 are native LevelStateFlag entries not exported
-    -- by the J460 Lua enum. GetStateFlag still accepts these entries.
+    -- by the J510 Lua enum. GetStateFlag still accepts these entries.
     local slowEnemiesFloorFlag = 24
     if level:GetStateFlag(slowEnemiesFloorFlag) then
         -- Native horse Drowsy uses the floor flag and an unbounded room timer.

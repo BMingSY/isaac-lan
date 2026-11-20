@@ -2,12 +2,14 @@
 
 import configparser
 import fcntl
+import json
 import shutil
 import subprocess
 from types import SimpleNamespace
 
 import pytest
 
+from game_profiles import source_profile
 import lab_profile
 import manual_dual as dual
 from progress_fixture import AZAZEL_PLAYER_TYPE
@@ -52,13 +54,14 @@ def session(tmp_path, monkeypatch):
         (lab / "game/mods/real-mod").mkdir()
         (lab / "game/isaac-ng.exe").write_bytes(b"isolated game")
         (lab / ".isaac-lan-lab").touch()
+        (lab / "game-profile.json").write_text(json.dumps(source_profile()))
         (lab / "virtual-input.test").write_text("previous fixture")
         (lab / "frontend-scenario.lua").write_text("previous startup")
         (lab / "game/manual-dual-ready.json").write_text('{"session":"stale","ready":true}')
         options = dual.log_path(lab).parent
         options.mkdir(parents=True)
         (options / "options.ini").write_text(
-            "[Options]\nAcceptedPublicBeta_v1.9.7.17=1\nMusicEnabled=0\nMusicVolume=0\nSFXVolume=0.4\nCustomOption=keep\n"
+            "[Options]\nAcceptedPublicBeta_v1.9.7.19=1\nMusicEnabled=0\nMusicVolume=0\nSFXVolume=0.4\nCustomOption=keep\n"
         )
         (options / "persistentgamedata1.dat").write_bytes(b"personal progress")
     build, output = tmp_path / "build", tmp_path / "run"

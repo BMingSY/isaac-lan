@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise shared item rewards and generated definitions in one protected pair."""
 
+from game_profiles import profile_directory
 import argparse
 import json
 from pathlib import Path
@@ -80,9 +81,7 @@ def main():
         with (output / "engine.log").open("w") as log:
             process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
             while process.poll() is None:
-                game_log = (
-                    labs[0] / "profile/Documents/My Games/Binding of Isaac Repentance+/log.txt"
-                )
+                game_log = profile_directory(labs[0]) / "log.txt"
                 text = game_log.read_text(errors="replace") if game_log.exists() else ""
                 if blocked and "LAN_NETWORK ISSUE_ITEMS SAVE_RETRY_READY" in text:
                     for path in blocked:

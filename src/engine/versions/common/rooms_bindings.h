@@ -1,0 +1,260 @@
+#pragma once
+#include "engine/lua_api.h"
+#include "engine/versions/common/forgotten_form.h"
+#include <array>
+#include <cstdint>
+#include <optional>
+namespace isaac::engine::native_rooms {
+inline constexpr unsigned contextFieldCount = 35, renderImageCount = 27, doorCount = 8;
+struct Bindings {
+    unsigned globalGame, globalManager;
+    struct Entries {
+        unsigned ambushDestroyWaveQueue;
+        unsigned cameraDrag;
+        unsigned cameraSmooth;
+        unsigned colorModStateLerp;
+        unsigned dealAngelShare;
+        unsigned doorUpdate;
+        unsigned playerInitialize;
+        unsigned playerSpawn;
+        unsigned engineRoomsAdd;
+        unsigned engineRoomsAddPersistent;
+        unsigned engineRoomsAllocate;
+        unsigned engineRoomsAssign;
+        unsigned engineRoomsAward;
+        unsigned engineRoomsChange;
+        unsigned engineRoomsCooldown;
+        std::optional<unsigned> engineRoomsDead;
+        unsigned engineRoomsDelete;
+        unsigned engineRoomsDesc;
+        unsigned engineRoomsDoorPosition;
+        unsigned engineRoomsExitGame;
+        unsigned engineRoomsGetHUD;
+        unsigned engineRoomsInvalidate;
+        unsigned engineRoomsIsCoop;
+        unsigned engineRoomsLeaveRoom;
+        unsigned engineRoomsLiving;
+        unsigned engineRoomsNPCNewRoom;
+        unsigned engineRoomsPostUpdate;
+        unsigned playerNewRoom;
+        unsigned roomConstruct;
+        unsigned roomDestruct;
+        unsigned hudAssignPlayers;
+        unsigned engineRoomsSave;
+        unsigned engineRoomsStageTransition;
+        unsigned engineRoomsTransition;
+        std::optional<unsigned> roomTransitionStart;
+        unsigned colorConstruct;
+        unsigned entityPlayerAddCoins;
+        unsigned entityPlayerCopyResourcesTo;
+        unsigned entityPlayerSyncResources;
+        unsigned entityPtrAssign;
+        unsigned entityPtrAssignTwin;
+        unsigned familiarResetRoomState;
+        unsigned gameEnd;
+        unsigned gameFinishChallenge;
+        unsigned gameGetChestEnding;
+        unsigned gameNextVictoryLap;
+        unsigned gameTriggerRKey;
+        unsigned gridEntityTrapdoorUpdate;
+        unsigned gridEntityTntUpdate;
+        unsigned itemPoolGetCardEx;
+        unsigned itemPoolTaintedLostReturn;
+        unsigned keeperPriceQueryReturn;
+        unsigned keeperRandomRoomReturn;
+        unsigned keeperShopQueryReturn;
+        unsigned levelInitializeDevilAngelRoom;
+        unsigned levelMazeSwapReturn;
+        unsigned levelSetNextStage;
+        unsigned levelSwapRooms;
+        unsigned luaPostNewRoom;
+        unsigned momsHandTransitionCall;
+        unsigned nPCNeedlePrepareVisual;
+        unsigned playerAnimateTeleport;
+        unsigned playerManagerAddExistingPlayer;
+        unsigned playerManagerCollectibleCount;
+        unsigned playerManagerFindCollectible;
+        unsigned playerManagerGetCenter;
+        unsigned playerManagerRemoveExistingPlayer;
+        unsigned playerManagerRemovePlayer;
+        unsigned playerManagerReplacePlayer;
+        unsigned playerManagerReviveCoop;
+        unsigned playerSwapForgottenForm;
+        unsigned playerTriggerRoomClear;
+        unsigned replicaMorphToCoopGhost;
+        unsigned replicaRevivePlayerGhost;
+        unsigned roomAssignLightTexture;
+        unsigned roomConfigRandomRoom;
+        unsigned roomGetDevilRoomChance;
+        unsigned roomIsClear;
+        unsigned roomTransitionUpdate;
+        unsigned roomTrySpawnDevilRoomDoor;
+        unsigned roomUpdateMusic;
+        unsigned spriteIsFinished;
+        unsigned spritePlay;
+        unsigned spriteUpdate;
+        unsigned emoteUpdate;
+    } entry;
+    struct Layout {
+        struct Camera {
+            unsigned focusOverride;
+        } camera;
+        struct Entity {
+            unsigned active;
+            unsigned child;
+            unsigned flagsHigh;
+            unsigned index;
+            unsigned interpolated;
+            unsigned parent;
+            unsigned positionX;
+            unsigned positionY;
+            unsigned previousX;
+            unsigned previousY;
+            unsigned registered;
+            unsigned spawner;
+            unsigned sprite;
+            unsigned subtype;
+            unsigned type;
+            unsigned variant;
+            unsigned updateMethod;
+            unsigned velocity;
+            unsigned visible;
+        } entity;
+        struct EntityList {
+            unsigned arrayStride;
+            unsigned count;
+            unsigned data;
+            unsigned effectArray, enemyArray;
+            unsigned firstArray;
+            unsigned lastArray;
+            unsigned persistentArray;
+            unsigned renderArray;
+        } entityList;
+        struct Familiar {
+            unsigned chargeBar;
+            unsigned player;
+        } familiar;
+        struct Game {
+            unsigned ambushPending;
+            unsigned certificateLeaveDoor;
+            unsigned certificatePreviousDimension;
+            unsigned certificatePreviousRoom;
+            unsigned flashTimer;
+            std::optional<unsigned> controlRestoreGuard;
+            unsigned currentColor;
+            unsigned curses;
+            unsigned deathCertificateDimension;
+            unsigned deathCertificateRoom;
+            unsigned difficulty;
+            unsigned dimension;
+            unsigned enterDoor;
+            unsigned frame;
+            unsigned graphicsRefresh;
+            unsigned itemPool;
+            unsigned lastBossRoomListIndex;
+            unsigned leaveDoor;
+            unsigned lerpColor;
+            unsigned levelFlags;
+            unsigned playerManager;
+            unsigned players;
+            unsigned previousDimension;
+            unsigned previousRoomIndex;
+            unsigned room;
+            unsigned roomIndex;
+            unsigned roomTransition;
+            unsigned sceneSnapshot;
+            unsigned seedCurses;
+            unsigned shouldLerpColor;
+            unsigned specialRoomOrigin;
+            unsigned stage;
+            unsigned stageTransition;
+            unsigned stageType;
+            unsigned startingRoom;
+            unsigned targetColor;
+        } game;
+        struct Grid {
+            unsigned sprite;
+            unsigned state;
+        } grid;
+        struct ItemPool {
+            unsigned pillEffects;
+            unsigned pillIdentified;
+        } itemPool;
+        struct Manager {
+            unsigned cinematicActive;
+            unsigned cinematicId;
+            unsigned deleteSaveRequested;
+            unsigned menuRequested;
+            unsigned menuTransition;
+            unsigned renderFrame;
+            unsigned requestedMenu;
+        } manager;
+        struct Pickup {
+            unsigned shopItemId;
+        } pickup;
+        struct Player {
+            unsigned babySkin;
+            unsigned chargeSprites;
+            unsigned controller;
+            unsigned controlsEnabled;
+            unsigned coopGhost;
+            unsigned darkEsau;
+            unsigned emote;
+            unsigned extraAnimationActive;
+            unsigned index;
+            int lastBabySkin;
+            unsigned lazarusBackup;
+            unsigned redemptionEffect;
+            unsigned roomTransitionTarget;
+            unsigned twin;
+            unsigned type;
+        } player;
+        struct Room {
+            unsigned camera;
+            unsigned descriptor;
+            unsigned enteredFrame;
+            unsigned entities;
+            unsigned gridHeight;
+            unsigned gridWidth;
+            unsigned nextEntityIndex;
+            unsigned size;
+            unsigned type;
+        } room;
+        struct RoomConfig {
+            int anyVariant;
+            unsigned doors;
+            unsigned height;
+            unsigned maxDifficulty;
+            unsigned maxType;
+            unsigned normalMode;
+            unsigned shape;
+            unsigned specialStage;
+            unsigned type;
+            unsigned variant;
+            unsigned width;
+        } roomConfig;
+        struct RoomDescriptor {
+            unsigned allowedDoors;
+            unsigned data;
+            unsigned dimension;
+            unsigned doors;
+            unsigned listIndex;
+            int minimumRoom;
+            unsigned overrideData;
+            unsigned safeGridIndex;
+            unsigned visitedCount;
+        } roomDescriptor;
+        struct Sprite {
+            unsigned size;
+        } sprite;
+    } layout;
+    std::array<std::optional<std::size_t>, contextFieldCount> contextOffsets;
+    std::array<unsigned, renderImageCount> renderImages;
+    native_forgotten_form::Layout forgotten;
+    bool (*installStageBinding)(std::uintptr_t, const lua::API&);
+    void (*beginDogmaCinematic)(std::uintptr_t);
+    void (*familiarNewRoom)(std::uintptr_t, std::uintptr_t);
+    int (*pickupPrice)(std::uintptr_t, std::uintptr_t, int, int, int);
+};
+extern const Bindings bindings;
+} // namespace isaac::engine::native_rooms

@@ -1,14 +1,17 @@
 #pragma once
 
 // Portable subsets of the game's EntityType, PlayerType, LevelStage, StageType
-// and Difficulty enums. Values match the existing J460 policies; these are
+// and Difficulty enums. Values match the existing J510 policies; these are
 // gameplay IDs, never native object layouts or network message tags.
 // Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 namespace isaac::compat::ids {
 namespace entity {
+inline constexpr unsigned player = 1;
+inline constexpr unsigned minecart = 965;
 inline constexpr unsigned pickup = 5;
 inline constexpr unsigned tear = 2;
 inline constexpr unsigned familiar = 3;
+inline constexpr unsigned needle = 881;
 inline constexpr unsigned bomb = 4;
 inline constexpr unsigned laser = 7;
 inline constexpr unsigned bloodPuppy = 802;
@@ -40,6 +43,7 @@ inline constexpr int forgotten = 16;
 inline constexpr int soul = 17;
 inline constexpr int soulB = 40;
 inline constexpr int cainB = 23;
+inline constexpr int blueBabyB = 25;
 inline constexpr int keeper = 14;
 inline constexpr int keeperB = 33;
 inline constexpr int lostB = 31;
@@ -49,6 +53,7 @@ inline constexpr int lazarusSecondB = 38;
 inline constexpr int jacobSecondB = 39;
 } // namespace player
 namespace collectible {
+inline constexpr int bagOfCrafting = 710;
 inline constexpr int nightLight = 425;
 inline constexpr int compass = 21;
 inline constexpr int treasureMap = 54;

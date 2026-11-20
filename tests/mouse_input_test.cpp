@@ -1,11 +1,11 @@
-#include "engine/versions/j460/mouse_input.h"
+#include "engine/versions/j510/mouse_input.h"
 #include "test_support.h"
 #include <array>
 #include <limits>
 
 namespace {
-namespace mouse = isaac::engine::j460::mouse_input;
-namespace layout = isaac::engine::j460::layout;
+namespace mouse = isaac::engine::j510::mouse_input;
+namespace layout = isaac::engine::j510::layout;
 static_assert(sizeof(void*) == 4);
 alignas(4) std::array<std::byte, 0x1620> player{}, companion{};
 bool down = true, detached = false;
@@ -18,7 +18,7 @@ void* __attribute__((thiscall)) anchor(void* object) {
     return detached ? companion.data() : nullptr;
 }
 bool __attribute__((thiscall)) physical(void* object, mouse::Vector* result, bool raw) {
-    require(object == player.data() && at<int>(object, layout::player::controller) == 0 && !raw,
+    require(object == player.data() && at<int>(object, layout::player::controller) == -2 && !raw,
             "Physical capture did not borrow keyboard identity");
     *result = direction;
     return down;
@@ -55,5 +55,5 @@ int main() {
     direction.x = std::numeric_limits<float>::quiet_NaN();
     require(!mouse::capture(player.data(), physical, anchor).active,
             "Invalid native pointer was transmitted");
-    std::puts("PASS J460 mouse ABI, four controllers, shooting anchors and ownership restoration");
+    std::puts("PASS J510 mouse ABI, four controllers, shooting anchors and ownership restoration");
 }
