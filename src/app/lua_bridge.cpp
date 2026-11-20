@@ -7,15 +7,26 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include "presentation/animation_cache.h"
 
 namespace isaac::app {
-void loadBridge(lua_State* state, const lua::API& lua,
-                const std::function<bool(int, int)>& invoke) {
+void loadBridge(lua_State* state, const lua::API& lua, const std::function<bool(int, int)>& invoke,
+                const std::filesystem::path& menuDirectory) {
     const auto& resources = engine::profile().presentation;
     lua.getGlobal(state, "_IsaacLan");
-    lua.createTable(state, 0, 2);
+    lua.createTable(state, 0, 3);
     lua.pushBoolean(state, resources.nativeLobby);
     lua.setField(state, -2, "native_lobby");
+    if (!resources.nativeLobby) {
+        try {
+            const auto path = presentation::cacheAnimation(
+                menuDirectory / L"cache/menu/online.anm2", menuTitleSource);
+            lua.pushString(state, path.c_str());
+            lua.setField(state, -2, "main_title");
+        } catch (const std::exception&) {
+            // The stock font can still draw a readable row on a read-only installation.
+        }
+    }
     lua.createTable(state, 0, 3);
     for (const auto& [name, font] :
          {std::pair{"small", resources.small}, std::pair{"normal", resources.normal},

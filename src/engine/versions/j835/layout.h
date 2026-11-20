@@ -298,7 +298,7 @@ inline constexpr unsigned offset = 0x94, scale = 0x9c, rotation = 0xa4, color = 
 inline constexpr unsigned flipX = 0x100, flipY = 0x101;
 } // namespace sprite
 namespace spriteLayer {
-inline constexpr unsigned positionY = 0x44;
+inline constexpr unsigned positionX = 0x40, positionY = 0x44;
 inline constexpr unsigned size = 0x9c, data = 0, id = 0, path = 8, flags = 0x88;
 inline constexpr std::array<unsigned, 3> booleans{0x32, 0x33, 0x74};
 inline constexpr std::array<unsigned, 18> numbers{0x34, 0x38, 0x3c, 0x40, 0x44, 0x48,

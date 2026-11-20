@@ -14,4 +14,5 @@ inline constexpr char stateSource[] = R"IsaacLAN(@ISAAC_LAN_STATE@)IsaacLAN";
 inline constexpr char predictionSource[] = R"IsaacLAN(@ISAAC_LAN_PREDICTION@)IsaacLAN";
 inline constexpr char bridgeSource[] = R"IsaacLAN(@ISAAC_LAN_BRIDGE@)IsaacLAN";
 inline constexpr char menuSource[] = R"IsaacLAN(@ISAAC_LAN_MENU@)IsaacLAN";
+inline constexpr char menuTitleSource[] = R"IsaacLAN(@ISAAC_LAN_MENU_TITLE@)IsaacLAN";
 } // namespace isaac::app

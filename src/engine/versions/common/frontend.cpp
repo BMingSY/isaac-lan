@@ -61,7 +61,7 @@ lua_State* state = nullptr;
 constexpr int luaTable = 5, luaFunction = 6;
 isaac::lua::API lua;
 bool bridgeFailed = false, visible = false, guiReady = false;
-bool officialRequested = false, insertedSelected = false;
+bool officialRequested = false;
 std::optional<main_rows::Position> mainPaper;
 enum class MainMenuPointer { none, hover, confirm };
 MainMenuPointer mainPointer = MainMenuPointer::none;
@@ -251,7 +251,6 @@ int officialMenu(lua_State*) {
 void openMenu();
 void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
     if (!state || bridgeFailed || !menuAvailable()) {
-        insertedSelected = false;
         mainPointer = MainMenuPointer::none;
         originalGameMenuUpdate(menu);
         return;
@@ -285,43 +284,16 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
         return;
     }
     if (!visible) {
-        const bool confirm = input::menuTriggered(input::action::menuConfirm);
-        bool clicked = false;
-        if (mainPaper && menu_context::acceptsInput(image, bindings.menu)) {
-            auto& native =
-                read<int>(reinterpret_cast<std::uintptr_t>(menu), bindings.menu.selection);
-            const auto pointer = mainPointer;
-            mainPointer = MainMenuPointer::none;
-            if (pointer != MainMenuPointer::none) {
-                insertedSelected = true;
-                native = main_rows::online;
-                clicked = pointer == MainMenuPointer::confirm;
-            }
-            const bool up = input::menuTriggered(input::action::menuUp);
-            const bool down = input::menuTriggered(input::action::menuDown);
-            if (insertedSelected) {
-                if (!confirm && !clicked && (up || down)) {
-                    // Navigate from the other side using the stock update, so a
-                    // disabled Continue or a modded selection keeps its semantics.
-                    native = up ? main_rows::online : main_rows::online - 1;
-                    insertedSelected = false;
-                    originalGameMenuUpdate(menu);
-                    return;
-                }
-                if (!confirm && !clicked && input::menuTriggered(input::action::menuBack))
-                    insertedSelected = false;
-            } else if (up || down) {
-                const auto before = native;
-                originalGameMenuUpdate(menu);
-                if (main_rows::crossesOnline(before, native, up, down)) {
-                    insertedSelected = true;
-                    native = main_rows::online;
-                }
-                return;
-            }
+        bool confirm = input::menuTriggered(input::action::menuConfirm);
+        if (mainPointer != MainMenuPointer::none && mainPaper &&
+            menu_context::acceptsInput(image, bindings.menu)) {
+            read<int>(reinterpret_cast<std::uintptr_t>(menu), bindings.menu.selection) =
+                main_rows::online;
+            confirm |= mainPointer == MainMenuPointer::confirm;
         }
-        if (menu_context::entrySelected(image, bindings.menu, menu, confirm || clicked,
-                                        mainPaper && insertedSelected)) {
+        mainPointer = MainMenuPointer::none;
+        if ((bindings.menu.onlineSelection || mainPaper) &&
+            menu_context::entrySelected(image, bindings.menu, menu, confirm)) {
             visible = true;
             menuKey = 0;
             menuClick = false;
@@ -694,12 +666,11 @@ void renderChat() {
     lua.setTop(state, top);
 }
 void __attribute__((fastcall)) gameMenuRender(void* menu, void*) {
-    if (!state || bridgeFailed || visible || updateNoticeVisible()) {
+    if (!state || bridgeFailed) {
         originalGameMenuRender(menu);
         return;
     }
-    const auto paper =
-        bindings.insertedRow->draw(image, menu, insertedSelected, originalGameMenuRender);
+    const auto paper = bindings.insertedRow->draw(image, menu, originalGameMenuRender);
     if (!paper || !main_rows::labelVisible(*paper, read<float>(image, bindings.logicalWidth),
                                            read<float>(image, bindings.logicalHeight)))
         return;
@@ -777,7 +748,7 @@ void __cdecl close(lua_State* L) {
 void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
     originalInit(engine, debug);
     bridgeFailed = false;
-    visible = officialRequested = insertedSelected = false;
+    visible = officialRequested = false;
     mainPaper.reset();
     mainPointer = MainMenuPointer::none;
     menuKey = 0;
@@ -876,7 +847,7 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.setGlobal(state, "_IsaacLan");
         lua.pushString(state, fingerprint.c_str());
         lua.setGlobal(state, "_IsaacLanFingerprint");
-        app::loadBridge(state, lua, invoke);
+        app::loadBridge(state, lua, invoke, connectionPath.parent_path());
         logger("frontend_bridge=READY manifest=" + fingerprint);
         const auto scenario = std::filesystem::path(labRoot) / L"frontend-scenario.lua";
         if (std::filesystem::exists(std::filesystem::path(labRoot) / L".isaac-lan-lab") &&
@@ -972,6 +943,7 @@ bool install(std::uintptr_t base, const std::wstring& root, void (*log)(const st
            MH_CreateHook(reinterpret_cast<void*>(image + bindings.menuUpdate),
                          reinterpret_cast<void*>(gameMenuUpdate),
                          reinterpret_cast<void**>(&originalGameMenuUpdate)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + bindings.menuUpdate)) == MH_OK;
+           MH_EnableHook(reinterpret_cast<void*>(image + bindings.menuUpdate)) == MH_OK &&
+           (!bindings.insertedRow || bindings.insertedRow->installNavigation(image));
 }
 } // namespace isaac::frontend
