@@ -47,6 +47,12 @@ function AssertRegular([string]$Path) {
         throw "Expected an ordinary file: $Path"
     }
 }
+function AssertDirectory([string]$Path) {
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if (!$item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw "Expected an ordinary directory: $Path"
+    }
+}
 function Property($Object, [string]$Name) {
     if ($null -ne $Object) {
         $property = $Object.PSObject.Properties[$Name]
@@ -83,6 +89,28 @@ function AssertManifest($Value, [string[]]$Names) {
             throw "Missing or invalid SHA-256 entry: $name"
         }
     }
+}
+function ReadPayload([string]$Directory, $Manifest, [string]$Backend) {
+    $names = @('winmm.dll', 'isaac_lan_probe.dll', 'isaac_lan_check.exe')
+    AssertManifest $Manifest $names
+    foreach ($name in $names) {
+        $source = Join-Path $Directory $name
+        AssertRegular $source
+        if ((Hash $source) -ne $Manifest.files.$name) {
+            throw "Package file failed verification: $name"
+        }
+    }
+    $profilePath = Join-Path $Directory 'game-profile.json'
+    $profile = ReadJson $profilePath
+    if ((Hash $profilePath) -ne $Manifest.linux_files.'game-profile.json') {
+        throw 'Package game profile failed verification.'
+    }
+    if ([string]::IsNullOrWhiteSpace((Property $Manifest 'game_build')) -or
+        $profile.format -ne 1 -or $profile.game_build -cne $Manifest.game_build -or
+        $profile.backend -cne $Manifest.backend -or ($Backend -and $Backend -cne $profile.backend)) {
+        throw 'Package game profile differs from manifest.'
+    }
+    return $Manifest
 }
 function FailureMessage($Failure, [string]$Code) {
     # Preserve the recovery instructions even when the original failure was I/O.
@@ -137,10 +165,7 @@ try {
     $installed = Test-Path -LiteralPath $marker
     $failureCode = 'INSTALLATION_INVALID'
     if (Test-Path -LiteralPath $dataDirectory) {
-        $item = Get-Item -LiteralPath $dataDirectory
-        if (!$item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            throw "Expected an ordinary directory: $dataDirectory"
-        }
+        AssertDirectory $dataDirectory
     }
     if (!$installed -and (Test-Path -LiteralPath $record)) {
         throw "Installation record exists without its marker: $record"
@@ -156,42 +181,65 @@ try {
     }
     if ($Mode -ne 'Uninstall') {
         $failureCode = 'PACKAGE_INVALID'
-        $payload = ReadJson (Join-Path $PSScriptRoot 'payload.json')
-        AssertManifest $payload @('winmm.dll', 'isaac_lan_probe.dll', 'isaac_lan_check.exe')
-        if ([string]::IsNullOrWhiteSpace((Property $payload 'game_build'))) {
-            throw 'Invalid package game_build.'
-        }
-        foreach ($name in @('winmm.dll', 'isaac_lan_probe.dll', 'isaac_lan_check.exe')) {
-            $source = Join-Path $PSScriptRoot $name
-            AssertRegular $source
-            if ((Hash $source) -ne $payload.files.$name) {
-                throw "Package file failed verification: $name"
+        $index = ReadJson (Join-Path $PSScriptRoot 'payload.json')
+        $bundled = (Property $index 'format') -eq 2
+        $payloadDirectory = $null
+        $details = @()
+        if ($bundled) {
+            $backends = $index.backends
+            if ($backends -isnot [array] -or !$backends.Count -or
+                @($backends | Select-Object -Unique).Count -ne $backends.Count) {
+                throw 'Invalid package backend list.'
             }
+            $parent = Join-Path $PSScriptRoot 'backends'
+            AssertDirectory $parent
+        } else {
+            $backends = @('')
         }
-        $profilePath = Join-Path $PSScriptRoot 'game-profile.json'
-        AssertRegular $profilePath
-        if ((Hash $profilePath) -ne $payload.linux_files.'game-profile.json') {
-            throw 'Package game profile failed verification.'
+        foreach ($backend in $backends) {
+            $failureCode = 'PACKAGE_INVALID'
+            $directory = $PSScriptRoot
+            $manifest = $index
+            if ($bundled) {
+                if ($backend -isnot [string] -or $backend -cnotmatch '^[a-z][a-z0-9_]*$') {
+                    throw 'Invalid package backend.'
+                }
+                $directory = Join-Path $parent $backend
+                AssertDirectory $directory
+                $manifest = ReadJson (Join-Path $directory 'payload.json')
+            }
+            $candidate = ReadPayload $directory $manifest $backend
+            # Each native checker reads the selected PE without starting the game.
+            $failureCode = 'CHECKER_FAILED'
+            $checkOutput = (& (Join-Path $directory 'isaac_lan_check.exe') $executable | Out-String).Trim()
+            if ($LASTEXITCODE -notin @(0, 1)) {
+                throw "Game checker exited with code ${LASTEXITCODE}: $checkOutput"
+            }
+            if ($LASTEXITCODE -eq 0) {
+                if ($payloadDirectory) {
+                    $failureCode = 'PACKAGE_INVALID'
+                    throw 'Multiple game backends match this executable.'
+                }
+                $payloadDirectory = $directory
+                $payload = $candidate
+                $detail = $checkOutput
+            }
+            $details += "$($candidate.game_build): $checkOutput"
         }
-        $profile = Get-Content -LiteralPath $profilePath -Raw | ConvertFrom-Json
-        if ($profile.format -ne 1 -or $profile.game_build -ne $payload.game_build -or $profile.backend -ne $payload.backend) {
-            throw 'Package game profile differs from manifest.'
+        $compatible = $null -ne $payloadDirectory
+        $expectedBuild = $null
+        if ($compatible) {
+            $expectedBuild = $payload.game_build
+        } else {
+            $detail = $details -join "`n"
         }
-        $expectedBuild = $profile.game_build
-        # The checker parses the PE as data; it never starts the selected game.
-        $failureCode = 'CHECKER_FAILED'
-        $checkOutput = (& (Join-Path $PSScriptRoot 'isaac_lan_check.exe') $executable | Out-String).Trim()
-        if ($LASTEXITCODE -notin @(0, 1)) {
-            throw "Game checker exited with code ${LASTEXITCODE}: $checkOutput"
-        }
-        $compatible = $LASTEXITCODE -eq 0
         if ($Mode -eq 'Status') {
-            [ordered]@{installed = $installed; gameCompatible = $compatible; gameBuild = $expectedBuild; detail = $checkOutput; directory = $GameDirectory } | ConvertTo-Json
+            [ordered]@{installed = $installed; gameCompatible = $compatible; gameBuild = $expectedBuild; detail = $detail; directory = $GameDirectory } | ConvertTo-Json
             exit 0
         }
         if (!$compatible) {
             $failureCode = 'GAME_INCOMPATIBLE'
-            throw $checkOutput
+            throw $detail
         }
     }
     $failureCode = 'GAME_RUNNING'
@@ -235,7 +283,7 @@ try {
         WriteUtf8 (Join-Path $transaction 'recovery.json') (@{directory = $GameDirectory; files = $recoveryFiles } | ConvertTo-Json -Depth 5)
         if ($Mode -eq 'Install') {
             foreach ($name in $ownedFiles) {
-                Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $transaction $name)
+                Copy-Item -LiteralPath (Join-Path $payloadDirectory $name) -Destination (Join-Path $transaction $name)
             }
             WriteUtf8 (Join-Path $transaction 'installation.json') ($payload | ConvertTo-Json -Depth 5)
             WriteUtf8 (Join-Path $transaction '.isaac-lan-install') "IsaacLAN/1`n"
@@ -298,6 +346,7 @@ try {
         } else {
             'Uninstalled. Session data and logs were preserved.'
         })
+    exit 0
 } catch {
     [Console]::Error.WriteLine((FailureMessage $_ $failureCode))
     exit 1

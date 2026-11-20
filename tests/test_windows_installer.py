@@ -83,6 +83,8 @@ public class Checker {
     public static int Main(string[] args) {
         string content = File.ReadAllText(args[0]);
         Console.WriteLine(content);
+        if (content == "j510" || content == "j835")
+            return content == new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory).Name ? 0 : 1;
         return content == "compatible" ? 0 : content == "unsupported" ? 1 : 7;
     }
 }
@@ -171,6 +173,51 @@ public class Checker {
             self.assertNotIn("CategoryInfo", output)
         self.assertEqual((self.game / "save.dat").read_bytes(), b"preserve saves")
         return output
+
+    def test_bundle_dispatch_and_legacy_upgrade(self):
+        self.run_installer()
+        root = self.package
+        parent = root / "backends"
+        plus = parent / "j510"
+        plus.mkdir(parents=True)
+        for name in (*OWNED, "isaac_lan_check.exe", "game-profile.json", "payload.json"):
+            (root / name).rename(plus / name)
+        vanilla = parent / "j835"
+        shutil.copytree(plus, vanilla)
+        profile = json.loads((vanilla / "game-profile.json").read_text())
+        profile.update(backend="j835", game_build="1.7.9b.J835")
+        (vanilla / "game-profile.json").write_text(json.dumps(profile))
+        manifest = json.loads((vanilla / "payload.json").read_text())
+        manifest.update(backend=profile["backend"], game_build=profile["game_build"])
+        manifest["linux_files"]["game-profile.json"] = hashlib.sha256(
+            (vanilla / "game-profile.json").read_bytes()
+        ).hexdigest()
+        for name in OWNED:
+            (vanilla / name).write_bytes(("j835-" + name).encode())
+            manifest["files"][name] = hashlib.sha256((vanilla / name).read_bytes()).hexdigest()
+        (vanilla / "payload.json").write_text(json.dumps(manifest))
+        (root / "payload.json").write_text(json.dumps({"format": 2, "backends": ["j510", "j835"]}))
+        executable = self.game / "isaac-ng.exe"
+        for backend in ("j835", "j510"):
+            executable.write_text(backend)
+            self.run_installer()
+            record = json.loads((self.game / "isaac-lan/installation.json").read_text())
+            self.assertEqual(record["backend"], backend)
+            self.assertEqual(
+                json.loads(self.run_installer("Status"))["gameBuild"], record["game_build"]
+            )
+            for name in OWNED:
+                self.assertEqual(
+                    (self.game / name).read_bytes(), (parent / backend / name).read_bytes()
+                )
+        before = self.installed_files()
+        executable.write_text("compatible")
+        self.run_installer(code="PACKAGE_INVALID")
+        executable.write_text("unsupported")
+        self.run_installer(code="GAME_INCOMPATIBLE")
+        self.assertEqual(self.installed_files(), before)
+        self.run_installer("Uninstall")
+        self.assertFalse(any(self.installed_files().values()))
 
     def test_install_repair_upgrade_status_uninstall(self):
         self.run_installer()
