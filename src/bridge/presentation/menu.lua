@@ -31,12 +31,8 @@ local Key = {
 }
 local renderUpdateNotice = _IsaacLanModules["presentation/update_notice"](Key, _IsaacLan)
 local characters = _IsaacLanModules["presentation/menu_characters"]()
-local model = _IsaacLanModules["presentation/menu_model"](
-    Phase,
-    Command,
-    _IsaacLanModules["core/endpoint"],
-    characters
-)
+local endpoint = _IsaacLanModules["core/endpoint"]
+local model = _IsaacLanModules["presentation/menu_model"](Phase, Command, endpoint, characters)
 local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
 local CHARACTER_SWAP_ICON_LAYER, CHARACTER_SWAP_KEY_LAYER = 1, 2
 local challenges = _IsaacLan.net_challenges()
@@ -383,7 +379,13 @@ function _IsaacLanMenuRender(
     local gap = #rows > 7 and 17 or (#rows > 6 and 19 or 23)
     if ui.editing then
         if ui.editing == "ip" then
-            ui.ip = typed:gsub("[^a-zA-Z0-9%.%-]", ""):sub(1, 253)
+            ui.ip = typed -- The native editor filters and bounds both typing and paste.
+            if key == Key.enter then
+                local host, port = endpoint.parse(typed)
+                if host then
+                    ui.ip, ui.port = host, tostring(port)
+                end
+            end
         elseif ui.editing == "port" then
             ui.port = typed:gsub("[^%d]", ""):sub(1, 5)
         else
