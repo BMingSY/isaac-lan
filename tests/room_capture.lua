@@ -244,5 +244,13 @@ cached(1, 28, 3, location)
 assert(previousSprite == nil, "New floor reused a prior capture")
 cached(1, 27, 3, location)
 assert(previousSprite == nil, "A regressed tick retained future captures")
+-- Inserting or removing a lower occupied index shifts the later tuple's position.
+local tail = cached(1, 29, 3, location)[Room.grids][1]
+grids[0] = grid
+local inserted = cached(1, 30, 3, location)[Room.grids]
+assert(#inserted == 2 and inserted[1][Grid.index] == 0 and inserted[2] == tail)
+grids[0] = nil
+local removed = cached(1, 31, 3, location)[Room.grids]
+assert(#removed == 1 and removed[1] == tail and #inserted == 2)
 print("PASS live grid reuse, door animation, replacement and room/floor invalidation")
 print("PASS room views capture once per room/tick and clear on tick/floor changes")
