@@ -17,7 +17,7 @@ constexpr unsigned pageOffset = 0x38, blockedOffset = 0x20, managerBlock = 0x4a2
 constexpr bool official = false;
 #else
 constexpr unsigned managerGlobal = 0x89a0d4, menusGlobal = 0x89a8e4;
-constexpr unsigned pageOffset = 0x40, blockedOffset = 0xd, managerBlock = 0x4d074;
+constexpr unsigned pageOffset = 0x40, blockedOffset = 0xd, managerBlock = 0x4d44c;
 constexpr bool official = true;
 #endif
 } // namespace

@@ -1,19 +1,8 @@
 param([Parameter(Mandatory = $true)][int]$GameProcessId)
 $ErrorActionPreference = 'Stop'
 $process = Get-Process -Id $GameProcessId
-if ($process.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') {
-    throw 'Owned isolated game required.'
-}
-$lab = Split-Path (Split-Path $process.Path -Parent) -Parent
-if (-not (Test-Path -LiteralPath (Join-Path $lab '.isaac-lan-lab') -PathType Leaf)) {
-    throw 'A marked isolated game is required.'
-}
-$profile = Get-Content -Raw -LiteralPath (Join-Path $lab 'game-profile.json') | ConvertFrom-Json
-$layout = switch ($profile.game_build) {
-    '1.7.9b.J835' { @{ manager = 0x7fd680; menus = 0x7fd688; dialogs = 0x4a268; page = 0x38; selected = 0x80fb0; fileState = 0x634; fileSelected = 0x638 } }
-    '1.9.7.19.J510' { @{ manager = 0x89a0d4; menus = 0x89a8e4; dialogs = 0x4d074; page = 0x40; selected = 0xb94; fileState = 0x2f4; fileSelected = 0x2f8 } }
-    default { throw 'Unsupported isolated menu layout.' }
-}
+. (Join-Path $PSScriptRoot 'lab_observations.ps1')
+$layout = Get-LabObservationLayout $process
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;

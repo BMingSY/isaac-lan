@@ -1,9 +1,8 @@
 param([Parameter(Mandatory = $true)][int]$GameProcessId, [Parameter(Mandatory = $true)][string]$OutputDirectory, [int]$Seconds = 15, [switch]$BackgroundCapture)
 $ErrorActionPreference = 'Stop'
 $p = Get-Process -Id $GameProcessId
-if ($p.Path -notmatch '^D:\\isaac-lan-lab\\[^\\]+\\game\\isaac-ng\.exe$') {
-    throw 'Owned isolated game required.'
-}
+. (Join-Path $PSScriptRoot 'lab_observations.ps1')
+$layout = Get-LabObservationLayout $p
 New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
 Add-Type -AssemblyName System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing @'
@@ -22,9 +21,9 @@ public static class LanVisualSeries {
  [DllImport("kernel32.dll")] static extern bool ReadProcessMemory(IntPtr h,IntPtr p,byte[] b,UIntPtr n,out UIntPtr read);
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
  static uint Read(IntPtr h,long p) { byte[] b=new byte[4];UIntPtr n;if(!ReadProcessMemory(h,new IntPtr(p),b,new UIntPtr(4),out n))throw new Exception("Memory read failed");return BitConverter.ToUInt32(b,0); }
- public static void Capture(int pid,string output,int seconds,bool background) {
+ public static void Capture(int pid,string output,int seconds,bool background,int gameGlobal,int frameOffset,int roomOffset,int colorOffset) {
   var p=Process.GetProcessById(pid);var handle=OpenProcess(0x10,false,pid);
-  try { long game=Read(handle,p.MainModule.BaseAddress.ToInt64()+0x871678);Rect r;GetWindowRect(p.MainWindowHandle,out r);
+  try { long game=Read(handle,p.MainModule.BaseAddress.ToInt64()+gameGlobal);Rect r;GetWindowRect(p.MainWindowHandle,out r);
    using(var b=new Bitmap(r.R-r.L,r.B-r.T))using(var g=Graphics.FromImage(b))using(var log=new StreamWriter(Path.Combine(output,"frames.csv"))) {
     log.WriteLine("sample,tick,room,r,g,b,color_r,color_g,color_b,color_a,brightness,contrast");var watch=Stopwatch.StartNew();int sample=0;
     while(watch.Elapsed.TotalSeconds<seconds) {
@@ -33,8 +32,8 @@ public static class LanVisualSeries {
      else g.CopyFromScreen(r.L,r.T,0,0,b.Size);
      double red=0,green=0,blue=0;int count=0;
      for(int y=180;y<220;y+=4)for(int x=400;x<440;x+=4){var v=b.GetPixel(x,y);red+=v.R;green+=v.G;blue+=v.B;count++;}
-     string line=sample+","+Read(handle,game+0x264f8)+","+Read(handle,game+0x18304)+","+(red/count)+","+(green/count)+","+(blue/count);
-     for(int i=0;i<6;i++)line+=","+BitConverter.ToSingle(BitConverter.GetBytes(Read(handle,game+0x676b8+i*4)),0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+     string line=sample+","+Read(handle,game+frameOffset)+","+Read(handle,game+roomOffset)+","+(red/count)+","+(green/count)+","+(blue/count);
+     for(int i=0;i<6;i++)line+=","+BitConverter.ToSingle(BitConverter.GetBytes(Read(handle,game+colorOffset+i*4)),0).ToString(System.Globalization.CultureInfo.InvariantCulture);
      if(red+green+blue<100)throw new Exception("Window capture did not contain a rendered room");
      log.WriteLine(line);if(sample%3==0)b.Save(Path.Combine(output,"frame-"+sample.ToString("D4")+".png"),ImageFormat.Png);
      sample++;System.Threading.Thread.Sleep(25);
@@ -56,4 +55,4 @@ if (!$BackgroundCapture) {
     [void][LanVisualSeries]::AttachThreadInput($current, $other, $false)
     Start-Sleep -Milliseconds 200
 }
-[LanVisualSeries]::Capture($GameProcessId, $OutputDirectory, $Seconds, [bool]$BackgroundCapture)
+[LanVisualSeries]::Capture($GameProcessId, $OutputDirectory, $Seconds, [bool]$BackgroundCapture, $layout.game, $layout.frame, $layout.room, $layout.color)

@@ -49,7 +49,7 @@ inline constexpr unsigned requestedMenu = 0x4b564;
 inline constexpr unsigned chat = 0x4c9a8;
 inline constexpr unsigned chatFont = 0x4b14c;
 inline constexpr unsigned pendingEmote = 0x4d054;
-inline constexpr unsigned menuInputBlock = 0x4d074;
+inline constexpr unsigned menuInputBlock = 0x4d44c;
 } // namespace manager
 namespace options {
 inline constexpr unsigned musicVolume = 0x18;

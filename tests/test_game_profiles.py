@@ -3,6 +3,7 @@
 import copy
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -78,6 +79,47 @@ int main() {
         profile["presentation"]["fonts"]["heading"]["path"],
         "1.0",
     ]
+
+
+@pytest.mark.parametrize("backend", ["j835", "j510"])
+def test_lab_observations_read_the_selected_backend_layout(backend, tmp_path):
+    directory = ROOT / "src/engine/versions" / backend
+    values = dict(
+        re.findall(
+            r"^    (\w+) = (0x[0-9a-f]+)$",
+            (directory / "lab_observations.psd1").read_text(),
+            re.MULTILINE,
+        )
+    )
+    native_fields = {
+        "manager": "globals::manager",
+        "menus": "globals::menuManager",
+        "game": "globals::game",
+        "dialogs": "layout::manager::menuInputBlock",
+        "page": "layout::menuManager::page",
+        "hud": "layout::game::hud",
+        "history": "layout::hud::history",
+        "partBytes": "layout::playerHud::size",
+        "controller": "layout::player::controller",
+        "visible": "layout::entity::visible",
+        "stageTransition": "layout::game::stageTransition",
+        "frame": "layout::game::frame",
+        "room": "layout::game::roomIndex",
+        "color": "layout::game::currentColor",
+    }
+    source = tmp_path / "observations.cpp"
+    source.write_text(
+        f'#include "engine/versions/{backend}/entrypoints.h"\n'
+        f'#include "engine/versions/{backend}/layout.h"\n'
+        f"using namespace isaac::engine::{backend};\n"
+        + "".join(
+            f'static_assert({field} == {values[key]}, "{key}");\n'
+            for key, field in native_fields.items()
+        )
+    )
+    subprocess.run(
+        ["c++", "-std=c++20", "-fsyntax-only", "-I", str(ROOT / "src"), str(source)], check=True
+    )
 
 
 def test_package_uses_build_snapshot_instead_of_source_default(tmp_path):
