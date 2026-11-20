@@ -14,7 +14,7 @@ Steam 未下载或仍在下载的更新不保证在本次启动生效；本组�
 
 ## 包契约
 
-[发布准备工具](https://github.com/BMingSY/isaac-lan/blob/main/tools/workshop_release.py)保留完整 ZIP，并从已经校验的 ZIP 提取主体 DLL 到上述更新子目录。SHA-256、扩展版本、游戏版本来自 ZIP 的 `payload.json`，不另行构建主体。缺少 `loader_abi` 的旧安装包只提供手动安装，不生成自动更新载荷。
+[发布准备工具](https://github.com/BMingSY/isaac-lan/blob/main/tools/workshop_release.py)保留完整 ZIP，并从已经校验的 ZIP 提取两个游戏版本各自的主体 DLL 和清单。忏悔＋沿用 `isaac-lan-update/` 根目录，忏悔使用其下以完整游戏版本命名的子目录，例如 `1.7.9b.J835/`。加载器优先读取本游戏版本的子目录，读取根目录时也校验清单中的游戏版本。SHA-256、扩展版本和游戏版本来自各后端的 `payload.json`，不另行构建主体。缺少 `loader_abi` 的旧安装包只提供手动安装，不生成自动更新载荷。
 
 [契约常量](https://github.com/BMingSY/isaac-lan/blob/main/src/core/extension_package.h)同时供 C++ 消费者和 [Python 打包组件](https://github.com/BMingSY/isaac-lan/blob/main/tools/extension_package.py)使用。`manifest.txt` 为 ASCII，依次包含以下五行，每行以换行结束；读取支持 LF 和 CRLF，不接受附加行：
 

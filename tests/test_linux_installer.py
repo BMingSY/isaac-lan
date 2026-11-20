@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from tools.build_package import game_profile
+from tools.build_package import build_bundle, game_profile
 from tools.testing.installer import game_image
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -130,6 +130,39 @@ def installed_files(game):
         game / "isaac-lan/installation.json",
     ]
     return {path: path.read_bytes() if path.exists() else None for path in paths}
+
+
+def test_bundle_routes_installs_upgrades_game_switch_and_uninstall(package_game, tmp_path):
+    legacy, game = package_game
+    installer.install(legacy, game)
+    builds = []
+    profiles = {}
+    for backend in ("j510", "j835"):
+        build = tmp_path / backend
+        build.mkdir()
+        profiles[backend] = game_profile(ROOT, backend)
+        (build / "game-profile.json").write_text(json.dumps(profiles[backend]))
+        for name in (*installer.OWNED, "isaac_lan_check.exe"):
+            (build / name).write_bytes(f"{backend}/{name}".encode())
+        builds.append(build)
+    bundle = tmp_path / "universal"
+    build_bundle(builds, bundle)
+    for backend, profile in profiles.items():
+        (game / "isaac-ng.exe").write_bytes(game_image(profile))
+        assert installer.install(bundle, game, "Status")["gameBuild"] == profile["game_build"]
+        assert installer.install(bundle, game)["installed"]
+        for name in installer.OWNED:
+            assert (game / name).read_bytes() == f"{backend}/{name}".encode()
+        assert json.loads((game / "isaac-lan/installation.json").read_text())["backend"] == backend
+    before = installed_files(game)
+    (game / "isaac-ng.exe").write_bytes(b"unsupported")
+    assert not installer.install(bundle, game, "Status")["gameCompatible"]
+    with pytest.raises(installer.InstallerError) as caught:
+        installer.install(bundle, game)
+    assert caught.value.code == "GAME_INCOMPATIBLE"
+    assert installed_files(game) == before
+    assert not installer.install(bundle, game, "Uninstall")["installed"]
+    assert (game / "save.dat").read_bytes() == b"keep the original save"
 
 
 @pytest.mark.parametrize("mode", ["Install", "Uninstall"])

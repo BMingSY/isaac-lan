@@ -106,6 +106,22 @@ void selection() {
     fixture.package("0.6.9");
     require(read(fixture.select().candidates.front()) == "next", "workshop cannot downgrade cache");
 }
+void multiversion() {
+    Fixture fixture;
+    fixture.package();
+    constexpr auto vanilla = "1.7.9b.J835";
+    const auto specific = fixture.source / vanilla;
+    write(specific / manifestFile, manifest("0.6.4", "next", vanilla));
+    write(specific / payloadFile, "next");
+    const auto plus = fixture.select();
+    const auto base = select(fixture.game, fixture.source, "0.6.3", vanilla, hash);
+    require(read(plus.candidates.front()) == "new", "Repentance+ uses the root update");
+    require(read(base.candidates.front()) == "next", "Repentance uses its own update");
+    fs::remove_all(fixture.game / "isaac-lan/versions");
+    fs::remove_all(specific);
+    require(!pending(fixture.game, fixture.source, "0.6.3", vanilla, hash),
+            "missing Repentance update cannot use the Repentance+ DLL");
+}
 void recovery() {
     Fixture fixture;
     fixture.package();
@@ -206,6 +222,8 @@ int main(int argc, char** argv) {
             manifests();
         else if (name == "selection")
             selection();
+        else if (name == "multiversion")
+            multiversion();
         else if (name == "recovery")
             recovery();
         else if (name == "boundaries")

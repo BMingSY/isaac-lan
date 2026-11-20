@@ -81,8 +81,7 @@ def digest(path):
     return hashlib.sha256(regular(path).read_bytes()).hexdigest()
 
 
-def check_game(path, profile):
-    data = regular(path).read_bytes()
+def check_game(data, profile):
     if len(data) < 64 or len(data) > 512 * 1024 * 1024 or data[:2] != b"MZ":
         raise ValueError("Expected a Windows Isaac executable")
 
@@ -157,6 +156,69 @@ def game_running():
     return False
 
 
+def payloads(package):
+    index = read_json(package / "payload.json", "PACKAGE_INVALID")
+    if index.get("format") != 2:
+        yield package, index, None
+        return
+    backends = index.get("backends")
+    if (
+        not isinstance(backends, list)
+        or not backends
+        or not all(isinstance(b, str) and re.fullmatch(r"[a-z][a-z0-9_]*", b) for b in backends)
+        or len(set(backends)) != len(backends)
+    ):
+        raise InstallerError("PACKAGE_INVALID", "Invalid package backend list")
+    parent = package / "backends"
+    for backend in backends:
+        directory = parent / backend
+        if parent.is_symlink() or directory.is_symlink() or not directory.is_dir():
+            raise InstallerError("PACKAGE_INVALID", f"Expected an ordinary directory: {directory}")
+        yield directory, read_json(directory / "payload.json", "PACKAGE_INVALID"), backend
+
+
+def select_payload(package, executable):
+    image = regular(executable).read_bytes()
+    selected = None
+    details = []
+    for directory, payload, backend in payloads(package):
+        for field, names in (
+            ("files", (*OWNED, "isaac_lan_check.exe")),
+            ("linux_files", ("install.py", "game-profile.json")),
+        ):
+            check_manifest(payload, names, "PACKAGE_INVALID", field)
+            for name in names:
+                path = (package if name == "install.py" else directory) / name
+                try:
+                    if digest(path) != payload[field][name]:
+                        raise ValueError(f"Package file failed verification: {name}")
+                except (ValueError, FileNotFoundError) as error:
+                    raise InstallerError("PACKAGE_INVALID", f"{path}: {error}") from error
+        profile = read_json(directory / "game-profile.json", "PACKAGE_INVALID")
+        if (
+            not isinstance(payload.get("game_build"), str)
+            or not payload["game_build"]
+            or profile.get("format") != 1
+            or profile.get("game_build") != payload["game_build"]
+            or profile.get("backend") != payload.get("backend")
+            or (backend is not None and profile["backend"] != backend)
+        ):
+            raise InstallerError("PACKAGE_INVALID", "Invalid game profile")
+        try:
+            check_game(image, profile)
+        except (ValueError, struct.error) as error:
+            details.append(f"{profile['game_build']}: {error}")
+            continue
+        except (KeyError, TypeError, AttributeError) as error:
+            raise InstallerError("PACKAGE_INVALID", f"Invalid game profile: {error}") from error
+        if selected is not None:
+            raise InstallerError("PACKAGE_INVALID", "Multiple game backends match this executable")
+        selected = directory, payload
+    if selected is None:
+        raise InstallerError("GAME_INCOMPATIBLE", "\n".join(details))
+    return selected
+
+
 def install(package, game, mode="Install"):
     if mode not in ("Install", "Uninstall", "Status"):
         raise ValueError(f"Unknown installation mode: {mode}")
@@ -187,48 +249,22 @@ def install(package, game, mode="Install"):
         )
     payload = None
     if mode != "Uninstall":
-        payload = read_json(package / "payload.json", "PACKAGE_INVALID")
-        check_manifest(payload, (*OWNED, "isaac_lan_check.exe"), "PACKAGE_INVALID")
-        check_manifest(
-            payload, ("install.py", "game-profile.json"), "PACKAGE_INVALID", "linux_files"
-        )
-        if not isinstance(payload.get("game_build"), str) or not payload["game_build"]:
-            raise InstallerError("PACKAGE_INVALID", "Invalid package game_build")
-        for field, names in (
-            ("files", (*OWNED, "isaac_lan_check.exe")),
-            ("linux_files", ("install.py", "game-profile.json")),
-        ):
-            for name in names:
-                try:
-                    if digest(package / name) != payload[field][name]:
-                        raise ValueError(f"Package file failed verification: {name}")
-                except (ValueError, FileNotFoundError) as error:
-                    raise InstallerError("PACKAGE_INVALID", f"{package / name}: {error}") from error
-        profile = read_json(package / "game-profile.json", "PACKAGE_INVALID")
-        if (
-            profile.get("format") != 1
-            or profile.get("game_build") != payload["game_build"]
-            or profile.get("backend") != payload.get("backend")
-        ):
-            raise InstallerError("PACKAGE_INVALID", "Invalid game profile")
         try:
-            check_game(game / "isaac-ng.exe", profile)
-        except (ValueError, struct.error) as error:
-            if mode != "Status":
-                raise InstallerError("GAME_INCOMPATIBLE", str(error)) from error
+            payload_directory, payload = select_payload(package, game / "isaac-ng.exe")
+        except InstallerError as error:
+            if mode != "Status" or error.code != "GAME_INCOMPATIBLE":
+                raise
             return {
                 "installed": installed,
                 "gameCompatible": False,
                 "detail": str(error),
-                "nextStep": HINTS["GAME_INCOMPATIBLE"],
+                "nextStep": HINTS[error.code],
             }
-        except (KeyError, TypeError, AttributeError) as error:
-            raise InstallerError("PACKAGE_INVALID", f"Invalid game profile: {error}") from error
         if mode == "Status":
             return {
                 "installed": installed,
                 "gameCompatible": True,
-                "gameBuild": profile["game_build"],
+                "gameBuild": payload["game_build"],
             }
     if game_running():
         raise InstallerError("GAME_RUNNING", "Isaac is still running")
@@ -268,7 +304,7 @@ def install(package, game, mode="Install"):
         )
         if mode == "Install":
             for name in OWNED:
-                shutil.copyfile(package / name, staging / name)
+                shutil.copyfile(payload_directory / name, staging / name)
             (staging / "installation.json").write_text(
                 json.dumps(payload, indent=2) + "\n", encoding="utf-8"
             )

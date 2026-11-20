@@ -15,6 +15,7 @@ from testing.engine import configure_interrupts, engine_command
 from lab_profile import validate_labs as validate_owned_labs
 from lab_profile import ProtectedLabs, idle, windows
 from game_logs import log_path
+from game_profiles import build_profile, bundle_backends
 from testing.profiles import magdalene_profile
 from testing.pause import ITEMS_PAGE, peer_evidence as pause_evidence
 
@@ -81,6 +82,13 @@ def main():
     if not 1 <= args.port < 65535:
         parser.error("Invalid port")
     payload = json.loads((args.package / "payload.json").read_text())
+    if payload.get("format") == 2:
+        backend = build_profile(args.build)["backend"]
+        if backend not in bundle_backends(payload):
+            parser.error("The release package does not contain the selected game build")
+        payload = json.loads((args.package / "backends" / backend / "payload.json").read_text())
+        if payload.get("backend") != backend:
+            parser.error("The release manifest differs from the selected game backend")
     for name, digest in payload["files"].items():
         if hashlib.sha256((args.build / name).read_bytes()).hexdigest() != digest:
             parser.error("The built native files must match the frozen release package")

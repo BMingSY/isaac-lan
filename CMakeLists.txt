@@ -95,7 +95,7 @@ if(BUILD_TESTING)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(isaac_lan_extension_update_test PRIVATE -Wall -Wextra -Werror)
     endif()
-    foreach(test_case manifests selection recovery boundaries pending)
+    foreach(test_case manifests selection multiversion recovery boundaries pending)
         add_test(NAME runtime.extension-update-${test_case} COMMAND isaac_lan_extension_update_test
                                                                     ${test_case})
         set_tests_properties(runtime.extension-update-${test_case} PROPERTIES TIMEOUT 30 LABELS

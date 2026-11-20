@@ -1,6 +1,6 @@
 # J835 原生接口参考
 
-原版《忏悔》`1.7.9b.J835` 使用 [J835 后端](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835)，通过 `-DISAAC_LAN_BACKEND=j835` 构建完整联机 DLL、加载器与匹配的安装包。版本后端提供本页列出的入口、布局和 ABI 适配，共享组件负责房间调度、会话和表现作用域；构建及启动均按所选版本校验，不从 J510 借用地址。原版没有官方表情轮盘，`native_emotes=false`；LAN 文字聊天继续使用普通气泡。
+原版《忏悔》`1.7.9b.J835` 使用 [J835 后端](https://github.com/BMingSY/isaac-lan/tree/main/src/engine/versions/j835)，通过 `-DISAAC_LAN_BACKEND=j835` 构建联机 DLL、加载器和版本检查器。通用安装包根据玩家选择的游戏程序安装对应文件。版本后端提供本页列出的入口、布局和 ABI 适配，共享组件负责房间调度、会话和表现作用域；构建及启动均按所选版本校验，不从 J510 借用地址。原版没有官方表情轮盘，`native_emotes=false`；LAN 文字聊天继续使用普通气泡。
 
 目标游戏程序 SHA-256 为 `04469d0c3d3581936fcf85bea5f9f4f3a65b2ccf96b36310456c9626bac36dc6`，架构为 Windows x86。版本标记、PE 节区、Lua DLL 和资料目录以 [profile.json](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/profile.json) 为准。两端须使用相同游戏和扩展构建，不能与忏悔＋混联。
 

@@ -19,7 +19,8 @@ from testing.gameplay import CASES, CHECKPOINTS, build as build_suite
 from build_package import build
 from game_profiles import source_profile
 from build_release import release
-from check_release import FILES, check
+from check_release import FILES, LEGACY_FILES, check
+from extension_package import prepare_update
 from game_logs import freeze_probe_logs, probe_path, probe_text
 from check_performance import summarize
 from testing.engine import finalize_result
@@ -308,6 +309,13 @@ class PackagingTests(unittest.TestCase):
             (self.build / name).write_bytes(b"fixture:" + name.encode())
         self.strip_tool = str(self.root / "toolchain with spaces" / "strip.exe")
         (self.build / "CMakeCache.txt").write_text(f"CMAKE_STRIP:FILEPATH={self.strip_tool}\n")
+        self.vanilla = self.root / "vanilla"
+        self.vanilla.mkdir()
+        (self.vanilla / "game-profile.json").write_text(json.dumps(source_profile("j835")))
+        (self.vanilla / "CMakeCache.txt").write_text(f"CMAKE_STRIP:FILEPATH={self.strip_tool}\n")
+        for name in BINARIES:
+            (self.vanilla / name).write_bytes(b"fixture:j835-" + name.encode())
+        self.builds = [self.vanilla, self.build]
         self.tag = "v" + (ROOT / "VERSION").read_text().strip()
 
     def strip_binary(self, command, *, check):
@@ -319,7 +327,7 @@ class PackagingTests(unittest.TestCase):
 
     def archive(self):
         with mock_patch("build_package.subprocess.run", side_effect=self.strip_binary):
-            result = release(self.build, self.root / "dist", self.tag)
+            result = release(self.builds, self.root / "dist", self.tag)
         return Path(result["archive"])
 
     def rewrite_archive(self, archive, transform):
@@ -345,7 +353,8 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(payload["extension_version"], self.tag[1:])
         self.assertEqual(json.loads((output / "payload.json").read_text()), payload)
         self.assertEqual(
-            {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()}, FILES
+            {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()},
+            LEGACY_FILES,
         )
         for name in BINARIES:
             original = (self.build / name).read_bytes()
@@ -391,33 +400,57 @@ class PackagingTests(unittest.TestCase):
                 zipped.read(archive.stem + "/FAQ.md"), (ROOT / "docs/faq.md").read_bytes()
             )
 
-    def test_both_release_archives_coexist_and_identify_their_game(self):
-        plus = self.archive()
-        (self.build / "game-profile.json").write_text(json.dumps(source_profile("j835")))
-        vanilla = self.archive()
-        self.assertTrue(plus.is_file())
-        self.assertEqual(vanilla.name, f"Isaac-LAN-{self.tag}-j835-windows-x86.zip")
-        with ZipFile(vanilla) as zipped:
-            profile = json.loads(zipped.read(vanilla.stem + "/payload.json"))
-        self.assertEqual((profile["backend"], profile["game_build"]), ("j835", "1.7.9b.J835"))
+    def test_one_release_selects_distinct_backend_payloads(self):
+        archive = self.archive()
+        self.assertEqual(list(archive.parent.glob("*.zip")), [archive])
+        with ZipFile(archive) as zipped:
+            root = archive.stem + "/"
+            index = json.loads(zipped.read(root + "payload.json"))
+            self.assertEqual(index, {"format": 2, "backends": ["j510", "j835"]})
+            for backend in index["backends"]:
+                prefix = root + f"backends/{backend}/"
+                manifest = json.loads(zipped.read(prefix + "payload.json"))
+                self.assertEqual(manifest["backend"], backend)
+                self.assertEqual(manifest["game_build"], source_profile(backend)["game_build"])
+                for name in BINARIES:
+                    source = self.build if backend == "j510" else self.vanilla
+                    self.assertEqual(
+                        zipped.read(prefix + name),
+                        (source / name).read_bytes().removeprefix(b"fixture:"),
+                    )
+            wrong = zipped.read(root + "backends/j835/payload.json")
         self.rewrite_archive(
-            vanilla,
-            lambda files: files.update(
-                {
-                    vanilla.stem + "/payload.json": json.dumps(
-                        {**profile, "backend": "j510"}
-                    ).encode()
-                }
-            ),
+            archive, lambda files: files.update({root + "backends/j510/payload.json": wrong})
         )
-        with self.assertRaisesRegex(ValueError, "archive name and game backend differ"):
-            check(vanilla, self.tag)
+        with self.assertRaisesRegex(ValueError, "manifest"):
+            check(archive, self.tag)
+
+    def test_release_requires_each_backend_once(self):
+        for builds in ([self.build], [self.vanilla, self.vanilla]):
+            with self.subTest(builds=builds), self.assertRaises(ValueError):
+                release(builds, self.root / "dist", self.tag)
+            self.assertFalse(any((self.root / "dist").glob("*.zip*")))
+
+    def test_workshop_uses_both_release_dlls(self):
+        archive = self.archive()
+        content = self.root / "workshop"
+        prepare_update(archive, content)
+        root = content / "isaac-lan-update"
+        with ZipFile(archive) as zipped:
+            for backend in ("j510", "j835"):
+                build = source_profile(backend)["game_build"]
+                destination = root if backend == "j510" else root / build
+                dll = zipped.read(archive.stem + f"/backends/{backend}/isaac_lan_probe.dll")
+                self.assertEqual((destination / "isaac_lan_probe.dll").read_bytes(), dll)
+                manifest = (destination / "manifest.txt").read_text().splitlines()
+                self.assertIn("game_build=" + build, manifest)
+                self.assertIn("sha256=" + hashlib.sha256(dll).hexdigest(), manifest)
 
     def test_release_strips_copies_before_hashing_and_preserves_build(self):
         originals = {name: (self.build / name).read_bytes() for name in BINARIES}
         archive = self.archive()
         with ZipFile(archive) as zipped:
-            prefix = archive.stem + "/"
+            prefix = archive.stem + "/backends/j510/"
             payload = json.loads(zipped.read(prefix + "payload.json"))
             for name, original in originals.items():
                 final = zipped.read(prefix + name)
@@ -430,14 +463,14 @@ class PackagingTests(unittest.TestCase):
             with self.subTest(cache=cache):
                 (self.build / "CMakeCache.txt").write_text(cache)
                 with self.assertRaisesRegex(ValueError, "CMAKE_STRIP"):
-                    release(self.build, self.root / "dist", self.tag)
+                    release(self.builds, self.root / "dist", self.tag)
                 self.assertFalse(any((self.root / "dist").glob("*.zip*")))
 
     def test_release_propagates_strip_failure_without_publishing_archive(self):
         failure = subprocess.CalledProcessError(1, [self.strip_tool])
         with mock_patch("build_package.subprocess.run", side_effect=failure):
             with self.assertRaises(subprocess.CalledProcessError):
-                release(self.build, self.root / "dist", self.tag)
+                release(self.builds, self.root / "dist", self.tag)
         self.assertFalse(any((self.root / "dist").glob("*.zip*")))
         for name in BINARIES:
             self.assertEqual((self.build / name).read_bytes(), b"fixture:" + name.encode())
@@ -445,7 +478,7 @@ class PackagingTests(unittest.TestCase):
     def test_release_tag_must_match_version(self):
         for tag in ("latest", "v999.0.0", self.tag + "-test", self.tag[1:]):
             with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, "match VERSION"):
-                release(self.build, self.root / "dist", tag)
+                release(self.builds, self.root / "dist", tag)
         self.assertFalse((self.root / "dist").exists())
 
     def test_release_preserves_existing_outputs(self):
@@ -456,7 +489,7 @@ class PackagingTests(unittest.TestCase):
                 existing = output / (f"Isaac-LAN-{self.tag}-windows-x86" + suffix)
                 existing.write_bytes(b"untouched")
                 with self.assertRaises(FileExistsError):
-                    release(self.build, output, self.tag)
+                    release(self.builds, output, self.tag)
                 self.assertEqual(existing.read_bytes(), b"untouched")
 
     def test_check_rejects_invalid_tag_and_filename(self):
@@ -501,7 +534,7 @@ class PackagingTests(unittest.TestCase):
 
     def test_check_rejects_manifest_changes(self):
         archive = self.archive()
-        name = archive.stem + "/payload.json"
+        name = archive.stem + "/backends/j510/payload.json"
         with ZipFile(archive) as zipped:
             original = json.loads(zipped.read(name))
         for field, wrong in (
@@ -521,7 +554,7 @@ class PackagingTests(unittest.TestCase):
 
     def test_check_rejects_binary_tampering(self):
         archive = self.archive()
-        name = archive.stem + "/isaac_lan_check.exe"
+        name = archive.stem + "/backends/j510/isaac_lan_check.exe"
         self.rewrite_archive(archive, lambda files: files.update({name: b"tampered"}))
         with self.assertRaisesRegex(ValueError, "file hash"):
             check(archive, self.tag)
