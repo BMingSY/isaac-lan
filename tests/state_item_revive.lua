@@ -1,14 +1,11 @@
 -- Exercise native item revivals with a teammate in another occupied room.
 local native = assert(_IsaacLan)
-local f = assert(io.open("./lan-test-role.txt", "r"))
-local host = f:read("*l") == "host"
-f:close()
-f = assert(io.open("./lan-test-menu-port.txt", "r"))
-local port = f:read("*l")
-f:close()
+local config = assert(_IsaacLanTest)
+local host, port = config.host, config.port
 local function report(text)
     Isaac.DebugString("LAN_NETWORK " .. text)
 end
+local origin, other, approach
 local renders, linked, chosen, finished = 0, false, false, false
 local originalFrame = _IsaacLanFrame
 function _IsaacLanFrame()
@@ -37,7 +34,6 @@ function _IsaacLanFrame()
     return s
 end
 local gate = native.net_gate
-local origin, other
 native.net_gate = function(capture, before, collect, restore, present, beginFloor)
     return gate(capture, function(t, n, b)
         before(t, n, b)
@@ -47,12 +43,15 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             for i = 0, rooms.Size - 1 do
                 local d = rooms:Get(i)
                 if d.SafeGridIndex ~= origin and d.Data.Type == RoomType.ROOM_DEFAULT then
+                    if other then
+                        approach = d.SafeGridIndex
+                        break
+                    end
                     other = d.SafeGridIndex
-                    break
                 end
             end
-            assert(other)
-            assert(native.rooms_move(1, other, 0, 0))
+            assert(approach)
+            assert(native.rooms_move(0, other, 0, -1))
         end
         if t == 40 then
             for slot = 0, 1 do
@@ -100,19 +99,42 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             )
             assert(p.Visible, "Collar revival left the player hidden")
             assert(p:GetDamageCooldown() == 0, "Revived body retained a frozen damage blink")
-            assert(native.rooms_positions()["0"], "Revived controller lost its room")
+            assert(
+                native.rooms_positions()["0"].index == origin,
+                "Collar did not revive the host in the room before death"
+            )
             p:RemoveCollectible(CollectibleType.COLLECTIBLE_GUPPYS_COLLAR)
-            p:AddCollectible(CollectibleType.COLLECTIBLE_DEAD_CAT)
+            assert(native.rooms_with_player(1, function()
+                local guest = Isaac.GetPlayer(0)
+                assert(guest.ControllerIndex == 2)
+                guest:AddCollectible(CollectibleType.COLLECTIBLE_DEAD_CAT)
+            end, 1))
+            assert(native.rooms_move(0, other, 0, -1))
+            assert(native.rooms_move(1, approach, 0, -1))
             report("COLLAR revived")
         end
+        if t == 395 then
+            assert(native.rooms_move(1, other, 0, -1))
+        end
         if t == 420 then
-            assert(native.rooms_with_player(0, function()
-                Isaac.GetPlayer(0):Kill()
-            end))
+            assert(
+                native.rooms_positions()["0"].index == other
+                    and native.rooms_positions()["1"].index == other
+            )
+            assert(native.rooms_with_player(1, function()
+                local guest = Isaac.GetPlayer(0)
+                assert(guest.ControllerIndex == 2 and guest:GetExtraLives() > 0)
+                guest:Kill()
+            end, 1))
             report("DEAD_CAT killed")
         end
         if t == 730 then
-            local p = Isaac.GetPlayer(0)
+            local positions = native.rooms_positions()
+            assert(
+                positions["1"].index == approach and positions["0"].index == other,
+                "Dead Cat used another player's room history or moved a living teammate"
+            )
+            local p = Isaac.GetPlayer(native.rooms_heads()["1"])
             assert(
                 not p:IsDead() and not p:IsCoopGhost() and p.Visible,
                 "Dead Cat did not restore the body"
