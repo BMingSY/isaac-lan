@@ -134,6 +134,12 @@ local function load()
         _IsaacLanModules["presentation/fonts"](resources.fonts)
     )
 end
+function _IsaacLanMainMenuEntry(x, y)
+    load()
+    if assets.mainEntry then
+        assets.mainEntry(x, y, Options and Options.Language)
+    end
+end
 function _IsaacLanMenuRender(
     available,
     visible,
@@ -256,12 +262,6 @@ function _IsaacLanMenuRender(
             key = 0
         elseif not status.recovering then
             visible = false
-        end
-    end
-    if not visible and available and _IsaacLan.menu_open then
-        text("局域网 →", 26, 242, 12, hit(24, 238, 100, 22) and red or ink)
-        if clicked and hit(24, 238, 100, 22) then
-            _IsaacLan.menu_open()
         end
     end
     if not visible then

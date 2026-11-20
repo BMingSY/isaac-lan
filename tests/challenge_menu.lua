@@ -74,7 +74,10 @@ Font = function()
     return {
         Load = function(_, path)
             if vanilla then
-                assert(path == "font/cjk/lanapixel.fnt", "Vanilla menu requested a Plus font")
+                assert(
+                    path:find("resources-dlc3.zh/font/TeamMeatFontExtended", 1, true) == 1,
+                    "Expected a native Repentance menu font"
+                )
             end
         end,
         IsLoaded = function()
@@ -518,8 +521,7 @@ draw()
 assert(labels["以撒"] and not labels["里·该隐"])
 assert(labels["准备"] and labels["开始游戏"] and not labels["等待队友结算结束"])
 assert(renderedPortraits[1][2] == "01_Isaac" and renderedPortraits[2][2] == "01_Isaac")
--- Native MainMenu can remain behind the returning LAN page. Back closes it
--- without a lobby action; Plus first returns through its mode selector.
+-- A returning LAN page uses each game's normal Back action.
 status.phase, status.prepared = 0, false
 _IsaacLanMenuOpen(true)
 count = #commands
@@ -684,28 +686,27 @@ rows[4].action()
 assert(remembered[1] == prefs.ip and remembered[2] == 1234)
 assert(sent[#sent][1] == "join" and sent[#sent][2] == "host.example.com:1234")
 
--- A backend without official online opens LAN directly and returns to the
--- underlying game menu through both Escape and the normal Back row.
+-- Repentance opens LAN directly. Plus offers its official online mode first.
 status = { phase = 0, hosting = 0, players = 0 }
 _IsaacLanMenuOpen(false)
 draw()
-if vanilla then
-    assert(labels["创建房间"] and not labels["官方联机"])
-    assert(not draw(27), "Vanilla Escape opened an unavailable mode selector")
-    _IsaacLanMenuOpen(false)
-    for _ = 1, 4 do
-        draw(40)
-    end
-    assert(not draw(13), "Vanilla Back did not close the LAN overlay")
-else
-    assert(labels["官方联机"] and labels["局域网联机"])
+if not vanilla then
+    assert(labels["联机模式"] and labels["局域网联机"] and labels["官方联机"])
     draw(40)
     draw(13)
     draw()
-    assert(labels["创建房间"])
-    assert(draw(27))
+end
+assert(labels["创建房间"] and not labels["官方联机"])
+if vanilla then
+    assert(not draw(27), "Back from Repentance LAN must return to the main menu")
+    _IsaacLanMenuOpen(false)
+    draw(38) -- Wrap to the visible Back row.
+    assert(not draw(13), "The Back row must return directly to the Repentance main menu")
+else
+    assert(draw(27), "Back from Plus LAN must keep the mode chooser open")
     draw()
-    assert(labels["官方联机"], "Plus Escape lost the existing mode selector")
+    assert(labels["联机模式"] and not labels["创建房间"])
+    assert(not draw(27), "Back from the chooser must return to the main menu")
 end
 for _, host in ipairs({ "2001:db8::abcd", "[2001:db8::abcd]", "fe80::1%12", "::ffff:127.0.0.1" }) do
     prefs.ip = host
@@ -717,24 +718,25 @@ for _, host in ipairs({ "2001:db8::abcd", "[2001:db8::abcd]", "fe80::1%12", "::f
     assert(remembered[1] == host and remembered[2] == 1234)
 end
 
--- Vanilla has a main-menu mouse entry; title/save/game pages and Plus do not.
+-- The row follows the moving paper and is never painted by the fixed overlay.
 do
     status = { phase = 0, hosting = 0, players = 0 }
-    local opened = 0
-    _IsaacLan.menu_open = vanilla and function()
-        opened = opened + 1
-    end or nil
-    assert(not draw(0, false, 30, 246, false))
-    assert((labels["局域网 →"] ~= nil) == vanilla)
-    draw(0, false, 30, 246, true)
-    assert(opened == (vanilla and 1 or 0))
-    draw(0, false, 200, 200, true)
-    assert(opened == (vanilla and 1 or 0), "Outside click opened LAN")
-    assert(not _IsaacLanMenuRender(false, false, 0, "", 30, 246, true, "", ""))
-    assert(opened == (vanilla and 1 or 0), "Unavailable game menu opened LAN")
-    _IsaacLanMenuOpen(false)
-    draw(0, true, 30, 246, true)
-    assert(opened == (vanilla and 1 or 0), "Visible overlay reopened itself")
+    Options = { Language = "zh" }
+    labels = {}
+    _IsaacLanMainMenuEntry(184, 97)
+    assert((labels["联"] ~= nil) == vanilla and (labels["式"] ~= nil) == vanilla)
+    if vanilla then
+        local first = labelPositions["联"]
+        _IsaacLanMainMenuEntry(204, 157)
+        assert(labelPositions["联"].x == first.x + 20 and labelPositions["联"].y == first.y + 60)
+    end
+    Options.Language = "en"
+    labels = {}
+    _IsaacLanMainMenuEntry(184, 97)
+    assert((labels["O"] ~= nil) == vanilla and (labels["E"] ~= nil) == vanilla)
+    labels = {}
+    assert(not _IsaacLanMenuRender(true, false, 0, "", 0, 0, false, "", ""))
+    assert(not labels["联"] and not labels["O"])
 end
 
 -- Each card renders its owner's twelve native single-player layers.

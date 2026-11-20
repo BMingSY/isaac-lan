@@ -3,9 +3,12 @@ return function(vanilla)
         return {
             native_lobby = false,
             fonts = {
-                small = { path = "font/cjk/lanapixel.fnt", scale = 1 },
-                normal = { path = "font/cjk/lanapixel.fnt", scale = 1.2 },
-                heading = { path = "font/cjk/lanapixel.fnt", scale = 1.6 },
+                small = { path = "resources-dlc3.zh/font/TeamMeatFontExtended10.fnt", scale = 1 },
+                normal = { path = "resources-dlc3.zh/font/TeamMeatFontExtended12.fnt", scale = 1 },
+                heading = {
+                    path = "resources-dlc3.zh/font/TeamMeatFontExtended16Bold.fnt",
+                    scale = 1,
+                },
             },
         }
     end
