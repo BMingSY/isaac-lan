@@ -52,7 +52,7 @@ void __attribute__((fastcall)) controls(void* object, void*) {
     }
     if (runtime::replica())
         return;
-    // J460 has a Steam-vote field; the original game has no such field.
+    // J510 has a Steam-vote field; the original game has no such field.
     if (bindings.nativeVote)
         at<bool>(address, *bindings.nativeVote) = false;
     // Native render edges do not last until every simulation step. Consume

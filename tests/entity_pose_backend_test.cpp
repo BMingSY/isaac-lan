@@ -12,9 +12,9 @@ constexpr unsigned weaponsBegin = 0x1328, weaponKind = 0x2c, weaponModifiers = 0
 constexpr std::array<unsigned, 4> shadowOffsets{0x150, 0x154, 0x158, 0x2a8};
 #else
 constexpr unsigned spriteOffset = 0x48, costumeBegin = 0x1220, costumeEnd = 0x1224;
-constexpr unsigned layerBegin = 0x122c, flagFirst = 0x1398, flagSecond = 0x139a;
-constexpr unsigned blinkTime = 0x1338, damageCooldown = 0x13bc, nightAngle = 0x1ae4;
-constexpr unsigned weaponsBegin = 0x13dc, weaponKind = 0x30, weaponModifiers = 0x34;
+constexpr unsigned layerBegin = 0x122c, flagFirst = 0x139c, flagSecond = 0x139e;
+constexpr unsigned blinkTime = 0x1338, damageCooldown = 0x13c0, nightAngle = 0x1ae4;
+constexpr unsigned weaponsBegin = 0x13e0, weaponKind = 0x30, weaponModifiers = 0x34;
 constexpr std::array<unsigned, 4> shadowOffsets{0x15c, 0x160, 0x164, 0x350};
 #endif
 struct lua_State {

@@ -51,7 +51,7 @@ isaac_add_backend_test(
     src/engine/versions/j835/input_queries.cpp
     LIBRARIES
     minhook)
-foreach(backend j460 j835)
+foreach(backend j510 j835)
     isaac_add_backend_test(smelted-trinkets ${backend} SOURCES tests/smelted_trinkets_test.cpp)
     isaac_add_backend_test(room-data ${backend} SOURCES tests/room_data_backend_test.cpp
                            tests/native_call.cpp src/engine/versions/${backend}/room_data.cpp)

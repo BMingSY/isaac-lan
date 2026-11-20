@@ -1,7 +1,7 @@
 #pragma once
 
 // Portable subsets of the game's EntityType, PlayerType, LevelStage, StageType
-// and Difficulty enums. Values match the existing J460 policies; these are
+// and Difficulty enums. Values match the existing J510 policies; these are
 // gameplay IDs, never native object layouts or network message tags.
 // Reference: https://wofsauge.github.io/IsaacDocs/rep/enums/EntityType.html
 namespace isaac::compat::ids {

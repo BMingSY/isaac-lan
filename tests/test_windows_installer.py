@@ -113,7 +113,7 @@ public class Checker {
                 sys.executable,
                 str(ROOT / "tools/generate_game_profile.py"),
                 "--backend",
-                "j460",
+                "j510",
                 "--output",
                 str(self.package),
             ],
@@ -126,8 +126,8 @@ public class Checker {
     def write_payload(self):
         payload = {
             "format": 1,
-            "game_build": "1.9.7.17.J460",
-            "backend": "j460",
+            "game_build": "1.9.7.19.J510",
+            "backend": "j510",
             "linux_files": {
                 "game-profile.json": hashlib.sha256(
                     (self.package / "game-profile.json").read_bytes()

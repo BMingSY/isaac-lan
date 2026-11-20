@@ -9,8 +9,8 @@
 namespace backend = isaac::engine::j835;
 constexpr unsigned updateEntry = backend::entry::bossOverlayUpdateBoundary;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
 constexpr unsigned updateEntry = backend::entry::bossOverlayUpdate;
 #endif
 namespace isaac::runtime {

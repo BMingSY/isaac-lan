@@ -104,7 +104,7 @@ __attribute__((naked)) void isaac_lan_crafting_hud_thunk() {
                          "jmp *_isaac_lan_crafting_hud_original\n\t1:\n\t" RESTORE_HUD_REGISTERS
                          "ret $4");
 }
-// J460: ECX=PlayerHUD, XMM3=scale; Vector*, layout and alpha occupy 12 stack
+// J510: ECX=PlayerHUD, XMM3=scale; Vector*, layout and alpha occupy 12 stack
 // bytes. Keep the local actor's cards, pills and active-item icon. Native 3/4
 // player layouts move this whole region into a small HUD; draw the full native
 // bottom-right layout instead, without changing the caller's Vector or HUD.

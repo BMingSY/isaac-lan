@@ -519,7 +519,7 @@ room.GetGridCollisionAtPos = function()
 end
 
 -- Native movement queries return the same input for the tainted skeleton
--- Co-op ghosts retain CanFly=false in J460 but traverse pits and rocks.
+-- Co-op ghosts retain CanFly=false in J510 but traverse pits and rocks.
 local wasGhost = player.IsCoopGhost
 player.IsCoopGhost = function()
     return true
@@ -728,7 +728,7 @@ localState.target = Vector(170, 100)
 localState.prediction:confirm(localState.target, 42, Vector(0, 0), 42)
 assert(localRender(42) <= 170.001, "Rejected approach could not reconcile behind the closed door")
 print("PASS key approach, source-room limit, authority confirmation and denial recovery")
--- J460 contact positions captured while a radius-10 player walks around a
+-- J510 contact positions captured while a radius-10 player walks around a
 -- poop at (360, 280). These legal poses are inside the tile's expanded square;
 -- clipping to that square traps correction until it escapes a corner in a burst.
 room.GetDoor = function() end

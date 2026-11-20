@@ -7,10 +7,10 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned roomOffset = 0x18194, dimensionOffset = 0x1819c, doorOffset = 0x181ac;
 constexpr unsigned seedCursesOffset = 0x1c3170, redirectOffset = 0xf;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
 constexpr unsigned roomOffset = 0x18304, dimensionOffset = 0x1830c, doorOffset = 0x1831c;
-constexpr unsigned seedCursesOffset = 0x26550, redirectOffset = 0xb;
+constexpr unsigned seedCursesOffset = 0x26560, redirectOffset = 0xb;
 #endif
 #include <array>
 #include <cstdio>
@@ -94,7 +94,7 @@ int main() {
         using namespace isaac::engine::native_room_routing;
         require(!installRoomRouting(0) && currentCurses() == 0,
                 "Missing image reached native code");
-        constexpr unsigned imageSize = 0x890000;
+        constexpr unsigned imageSize = privateGameImageBytes;
         auto* fakeImage = static_cast<unsigned char*>(
             VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
         require(fakeImage && MH_Initialize() == MH_OK, "Allocate native fixture");

@@ -6,8 +6,8 @@
 namespace backend = isaac::engine::j835;
 constexpr unsigned roomOffset = 0x18190, existsOffset = 0x16a;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
 constexpr unsigned roomOffset = 0x18300, existsOffset = 0x172;
 #endif
 #include <MinHook.h>
@@ -18,7 +18,7 @@ namespace {
 namespace preview = isaac::presentation::pickup_preview;
 using Address = std::uintptr_t;
 using Update = void(__attribute__((thiscall)) *)(void*);
-constexpr unsigned imageSize = 0x890000, renderData = 0x125c, renderCount = 0x1264;
+constexpr unsigned imageSize = privateGameImageBytes, renderData = 0x125c, renderCount = 0x1264;
 unsigned char* image;
 std::array<unsigned char, 0x18400> game{};
 std::array<std::array<unsigned char, 0x1300>, 2> roomObjects{};

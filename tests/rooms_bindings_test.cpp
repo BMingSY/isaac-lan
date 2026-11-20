@@ -7,8 +7,8 @@
 #include "engine/versions/j835/entrypoints.h"
 namespace backend = isaac::engine::j835;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
 #endif
 
 namespace {

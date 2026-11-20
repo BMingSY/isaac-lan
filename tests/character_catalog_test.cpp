@@ -5,8 +5,8 @@
 #include "engine/versions/j835/entrypoints.h"
 namespace backend = isaac::engine::j835;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
 #endif
 #include "net/protocol.h"
 #define WIN32_LEAN_AND_MEAN
@@ -23,17 +23,18 @@ namespace backend = isaac::engine::j460;
 #include <vector>
 
 namespace {
-constexpr std::size_t imageSize = 0x880000, managerSize = 0x4a940;
+constexpr std::size_t imageSize = privateGameImageBytes;
 constexpr unsigned menuStride = 24, configStride = 0x148, flagsOffset = 0x14 + 0x38;
 #ifdef ISAAC_LAN_TEST_J835
 constexpr unsigned menuOffset = 0x60d6b0, countersOffset = 0x14 + 0x2b8;
 constexpr unsigned stringTableOffset = 0x4a234, configsOffset = 0x29f90;
 constexpr unsigned achievementCount = 638, counterCount = 496, availableRva = 0x4a1ea0;
 #else
-constexpr unsigned menuOffset = 0x724140, countersOffset = 0x14 + 0x2bc;
-constexpr unsigned stringTableOffset = 0x4a920, configsOffset = 0x2a678;
-constexpr unsigned achievementCount = 642, counterCount = 523, availableRva = 0x546cd0;
+constexpr unsigned menuOffset = 0x743b50, countersOffset = 0x14 + 0x2bc;
+constexpr unsigned stringTableOffset = 0x4abf8, configsOffset = 0x2a950;
+constexpr unsigned achievementCount = 642, counterCount = 523, availableRva = 0x55c260;
 #endif
+constexpr std::size_t managerSize = stringTableOffset + 0x100;
 constexpr std::array<unsigned, 34> nativeTypes{0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 13,
                                                14, 15, 16, 18, 19, 21, 22, 23, 24, 25, 26, 27,
                                                28, 29, 30, 31, 32, 33, 34, 35, 36, 37};

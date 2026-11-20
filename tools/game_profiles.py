@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_BACKEND = "j460"
+DEFAULT_BACKEND = "j510"
 
 
 def validate(profile):
@@ -119,11 +119,24 @@ def build_profile(build):
 
 def lab_profile(lab):
     path = Path(lab) / "game-profile.json"
-    if path.is_file():
-        return validate(json.loads(path.read_text()))
-    # Existing marked labs predate per-build metadata and belong to J460.
-    return source_profile()
+    if not path.is_file():
+        raise ValueError("Missing game-profile.json; prepare this lab with a supported game build")
+    return validate(json.loads(path.read_text()))
+
+
+def release_name(tag, backend):
+    # Keep the established Repentance+ download name for existing clients.
+    suffix = {"j510": "", "j835": "-j835"}[backend]
+    return f"Isaac-LAN-{tag}{suffix}-windows-x86"
 
 
 def profile_directory(lab):
-    return Path(lab) / "profile/Documents/My Games" / lab_profile(lab)["documents_directory"]
+    lab = Path(lab)
+    # Historical Repentance+ logs predate the snapshot. Reading a log path
+    # does not qualify its game or save for a new native test.
+    directory = (
+        lab_profile(lab)["documents_directory"]
+        if (lab / "game-profile.json").is_file()
+        else "Binding of Isaac Repentance+"
+    )
+    return lab / "profile/Documents/My Games" / directory

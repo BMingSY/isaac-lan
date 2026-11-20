@@ -189,7 +189,7 @@ void json() {
     const feedback::Manifest value{"他说 \"卡住了\"\n然后\\退出",
                                    "2026-10-21T10:15:00+08:00",
                                    "isaac-lan/0.4.2",
-                                   "1.9.7.17.J460",
+                                   "1.9.7.19.J510",
                                    {{"phase", "running"}},
                                    {"EID", "Mod \"x\""},
                                    {"logs/a.log"}};

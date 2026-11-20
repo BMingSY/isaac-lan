@@ -25,7 +25,14 @@ function _IsaacLanFrame()
     native.test_gamepad(0)
     local s = frame()
     assert(s.phase ~= 4 and s.phase ~= 9, s.error)
-    local fixture = s.scene == 1 and select(2, native.progress_values(640, 522))
+    local fixture = s.scene == 1
+        and select(
+            2,
+            native.progress_values(
+                _IsaacLanTestProgress.privateAchievement,
+                _IsaacLanTestProgress.counterIndex
+            )
+        )
     if not linked and fixture == (host and 98765 or 321) and renders >= (host and 300 or 360) then
         linked = true
         _IsaacLanCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)

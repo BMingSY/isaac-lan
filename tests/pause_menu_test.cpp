@@ -1,10 +1,10 @@
-// Private x86 image: exercise the real J460 menu calls and input-query hook.
+// Private x86 image: exercise the real J510 menu calls and input-query hook.
 // Including input.cpp keeps the query hook under test without installing hooks
 // in a process or exposing a production API solely for tests.
 #include "test_support.h"
 #include "engine/versions/common/input.cpp"
-#include "engine/versions/j460/entrypoints.h"
-#include "engine/versions/j460/layout.h"
+#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j510/layout.h"
 #include <MinHook.h>
 #include <array>
 #include <vector>
@@ -48,11 +48,11 @@ void grantStartingRewards(void*, unsigned) {
 namespace {
 namespace menu = isaac::pause_menu;
 namespace input = isaac::input;
-namespace native = isaac::engine::j460;
+namespace native = isaac::engine::j510;
 using Address = std::uintptr_t;
 static_assert(sizeof(Address) == 4);
-constexpr unsigned imageSize = 0x880000, menuOffset = 0x23a74;
-constexpr unsigned optionsOffset = menuOffset + 0x5b0, playerIndexOffset = menuOffset + 0xfac;
+constexpr unsigned imageSize = privateGameImageBytes, menuOffset = 0x23a7c;
+constexpr unsigned optionsOffset = menuOffset + 0x5b0, playerIndexOffset = menuOffset + 0xfb4;
 template <class T> T& field(void* memory, unsigned offset = 0) {
     return *reinterpret_cast<T*>(static_cast<std::uint8_t*>(memory) + offset);
 }
@@ -106,7 +106,7 @@ struct Fixture {
         field<Address>(image, native::globals::game) = reinterpret_cast<Address>(game.data());
         field<Address>(image, native::globals::manager) = reinterpret_cast<Address>(manager.data());
         for (unsigned slot = 0; slot < 4; ++slot)
-            field<int>(players[slot].data(), 0x1618) = static_cast<int>(slot + 1);
+            field<int>(players[slot].data(), 0x161c) = static_cast<int>(slot + 1);
         reorder({0, 1, 2, 3});
         entries[0] = 4;
         entries[1] = 0;
@@ -170,7 +170,7 @@ struct Fixture {
     }
     bool query(int action, unsigned kind = native::entry::inputTriggered, float* result = nullptr,
                int* source = nullptr) {
-        return input::query(image + 0x857b18, nullptr, queryController,
+        return input::query(image + 0x87f0a8, nullptr, queryController,
                             reinterpret_cast<void*>(base() + kind), &action, result, source);
     }
     void press(unsigned action) {
@@ -185,7 +185,7 @@ struct Fixture {
     void onlyLocalQueries() const {
         require(!queries.empty(), "Expected native physical queries");
         for (const auto& query : queries)
-            require(query.receiver == image + 0x857b18 && query.controller == -1,
+            require(query.receiver == image + 0x87f0a8 && query.controller == -1,
                     "Pause input queried a peer controller instead of the local source");
     }
 };
@@ -202,7 +202,7 @@ void __attribute__((thiscall)) hideFixture(void* receiver) {
     current->page() = 0;
 }
 void __attribute__((thiscall)) saveOptionsFixture(void* receiver) {
-    current->validReceiver &= receiver == current->manager.data() + 0x2a33c && current->page() == 2;
+    current->validReceiver &= receiver == current->manager.data() + 0x2a614 && current->page() == 2;
     ++current->saves;
     current->saveHideOrder.push_back('S');
 }

@@ -1,12 +1,27 @@
-"""Prepare J460 progress fixtures before native menus cache character unlocks."""
+"""Prepare versioned progress fixtures before native menus cache character unlocks."""
 
 from pathlib import Path
+from dataclasses import dataclass
 import os
 import struct
 import tempfile
 from game_profiles import lab_profile, profile_directory, source_profile
 
-MAGIC = b"ISAACNGSAVE09R  "
+
+@dataclass(frozen=True)
+class ProgressLayout:
+    magic: bytes
+    achievements: int
+    counters: int
+    private_achievement: int
+    private_counter: int
+
+
+LAYOUTS = {
+    "j835": ProgressLayout(b"ISAACNGSAVE09R  ", 638, 496, 637, 495),
+    "j510": ProgressLayout(b"ISAACNGSAVE10R  ", 642, 523, 640, 522),
+}
+MAGIC = LAYOUTS["j510"].magic
 PROFILE = Path("profile/Documents/My Games") / source_profile()["documents_directory"]
 TAINTED_LAZARUS_ACHIEVEMENT = 482
 MAGDALENE_ACHIEVEMENT = 1
@@ -15,7 +30,7 @@ AZAZEL_PLAYER_TYPE = 7
 
 
 def checksum(data):
-    # J460 uses arithmetic shifts when generating its CRC table. Its result
+    # Both games use arithmetic shifts when generating their CRC table. Its result
     # differs from standard CRC32. The magic is excluded, the opaque version
     # word is included, and the checksum is stored at the end of the file.
     table = []
@@ -30,10 +45,29 @@ def checksum(data):
     return result ^ 0xFFFFFFFF
 
 
+def progress_layout(source, backend=None):
+    if not 2800 <= len(source) <= 4 * 1024 * 1024:
+        raise ValueError("A native progress baseline is required")
+    layout = next((item for item in LAYOUTS.values() if source[:16] == item.magic), None)
+    if layout is None or (backend is not None and layout != LAYOUTS.get(backend)):
+        raise ValueError("A native progress baseline for the selected game build is required")
+    if struct.unpack_from("<I", source, len(source) - 4)[0] != checksum(source[16:-4]):
+        raise ValueError("Native progress baseline checksum differs")
+    count = layout.achievements
+    if struct.unpack_from("<3I", source, 20) != (1, count, count):
+        raise ValueError("Unsupported native achievement section")
+    if struct.unpack_from("<3I", source, 32 + count) != (2, layout.counters * 4, layout.counters):
+        raise ValueError("Unsupported native counter section")
+    if any(value > 1 for value in source[32 : 32 + count]):
+        raise ValueError("Invalid native achievement flags")
+    return layout
+
+
 def patch(
     source,
     *,
     host,
+    backend=None,
     endings=False,
     alt_path=False,
     hush=False,
@@ -42,28 +76,19 @@ def patch(
     knife=False,
     completion=False,
 ):
-    if not 2800 <= len(source) <= 4 * 1024 * 1024 or source[:16] != MAGIC:
-        raise ValueError("A native J460 persistentgamedata1.dat baseline is required")
-    if struct.unpack_from("<I", source, len(source) - 4)[0] != checksum(source[16:-4]):
-        raise ValueError("Native progress baseline checksum differs")
-    if struct.unpack_from("<3I", source, 20) != (1, 642, 642):
-        raise ValueError("Unsupported native achievement section")
-    counter_section = 32 + 642
-    if struct.unpack_from("<3I", source, counter_section) != (2, 523 * 4, 523):
-        raise ValueError("Unsupported native counter section")
+    layout = progress_layout(source, backend)
+    counter_section = 32 + layout.achievements
     data = bytearray(source)
-    achievements = memoryview(data)[32 : 32 + 642]
-    if any(value > 1 for value in achievements):
-        raise ValueError("Invalid native achievement flags")
+    achievements = memoryview(data)[32:counter_section]
     counters = counter_section + 12
-    achievements[640] = int(host)
-    struct.pack_into("<I", data, counters + 522 * 4, 98765 if host else 321)
+    achievements[layout.private_achievement] = int(host)
+    struct.pack_into("<I", data, counters + layout.private_counter * 4, 98765 if host else 321)
     if ascent and host:
         for identifier in (4, 57, 635):
             achievements[identifier] = 1
     if endings:
         if host:
-            achievements[:] = bytes([1]) * 642
+            achievements[:] = bytes([1]) * layout.achievements
         else:
             achievements[407] = 0
     if hush:
@@ -89,12 +114,14 @@ def patch(
 
 def prepare(lab, **options):
     lab = Path(lab).resolve()
-    if lab_profile(lab).get("testing", {}).get("progress_fixture") != "j460":
-        raise ValueError("No audited progress fixture for this game backend")
     path = profile_directory(lab) / "persistentgamedata1.dat"
     if not (lab / ".isaac-lan-lab").is_file() or not path.resolve().is_relative_to(lab):
         raise ValueError("An owned isolated progress file is required")
-    data = patch(path.read_bytes(), **options)
+    profile = lab_profile(lab)
+    backend = profile["backend"]
+    if backend not in LAYOUTS or profile.get("testing", {}).get("progress_fixture") != backend:
+        raise ValueError("No audited progress fixture for this game backend")
+    data = patch(path.read_bytes(), backend=backend, **options)
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(

@@ -13,12 +13,12 @@ constexpr unsigned firstBossOffset = 0x1d1c, secondBossOffset = 0x1d20;
 constexpr unsigned controllerOffset = 0x154c, controlsOffset = 0x360, markerOffset = 0x328;
 constexpr unsigned hudOffset = 0x3da4c, hudVisibleOffset = 0xc3eb6, hudStride = 0x6b0;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
 constexpr unsigned transitionOffset = 0x1b83c, playersOffset = 0x1baa8, managerOffset = 0x1baa8;
-constexpr unsigned roomIndexOffset = 0x18304, dimensionOffset = 0x1830c, pauseOffset = 0x23a74;
+constexpr unsigned roomIndexOffset = 0x18304, dimensionOffset = 0x1830c, pauseOffset = 0x23a7c;
 constexpr unsigned firstBossOffset = 0x1bb0, secondBossOffset = 0x1bb4;
-constexpr unsigned controllerOffset = 0x1618, controlsOffset = 0x410, markerOffset = 0x238;
+constexpr unsigned controllerOffset = 0x161c, controlsOffset = 0x410, markerOffset = 0x238;
 constexpr unsigned hudOffset = 0x1da04, hudVisibleOffset = 0x54cc, hudStride = 0x6dc;
 #endif
 struct lua_State {
@@ -442,9 +442,9 @@ int main() {
         audience = 2;
         field<int>(game.data(), roomIndexOffset) = 20;
         start();
-        field<int>(game.data(), 0x26614) = 2;
+        field<int>(game.data(), 0x26628) = 2;
         presentation::observeIntro(1, 1, false);
-        require(!restores, "J460 control restoration bypassed its native guard");
+        require(!restores, "J510 control restoration bypassed its native guard");
 #endif
         reset();
         audience = 3;
@@ -649,7 +649,7 @@ int main() {
 #else
         require(first.at("layout") == 0 && first.at("x") == 100 && first.at("y") == 50 &&
                     second.at("layout") == 1 && second.at("x") == 110 && second.at("y") == 55,
-                "J460 HUD binding changed native coordinates or controller identity");
+                "J510 HUD binding changed native coordinates or controller identity");
 #endif
         field<bool>(hud, hudVisibleOffset) = false;
         lua_State hiddenHud;

@@ -9,7 +9,13 @@ import subprocess
 
 from game_logs import log_path
 from lab_profile import ProtectedLabs, idle, validate_labs, validate_startup
-from progress_fixture import checksum, MAGDALENE_ACHIEVEMENT, AZAZEL_ACHIEVEMENT, AZAZEL_PLAYER_TYPE
+from progress_fixture import (
+    checksum,
+    progress_layout,
+    MAGDALENE_ACHIEVEMENT,
+    AZAZEL_ACHIEVEMENT,
+    AZAZEL_PLAYER_TYPE,
+)
 from testing.challenges import completion_evidence
 from testing.engine import configure_interrupts, engine_command, run_engine
 from testing.lua import factory, write_suite
@@ -83,7 +89,9 @@ def main():
     profile = bytearray(profile_fixture(template.read_bytes()))
     # Use an otherwise locked native profile to exercise original-challenge
     # route access independently of ordinary Womb/Polaroid unlocks.
-    achievements_start, achievement_count, counters_start, counter_count = 32, 642, 686, 523
+    layout = progress_layout(profile)
+    achievements_start, achievement_count = 32, layout.achievements
+    counters_start, counter_count = achievements_start + achievement_count + 12, layout.counters
     profile[achievements_start : achievements_start + achievement_count] = bytes(achievement_count)
     qualifications = [
         achievement

@@ -15,7 +15,7 @@ def archive(tmp_path, **changes):
     dll = b"exact release DLL bytes"
     payload = {
         "extension_version": "0.6.4",
-        "game_build": "1.9.7.17.J460",
+        "game_build": "1.9.7.19.J510",
         "loader_abi": package.LOADER_ABI,
         "files": {"isaac_lan_probe.dll": hashlib.sha256(dll).hexdigest()},
     }
@@ -35,7 +35,7 @@ def test_payload_is_exact_release_bytes_and_contract(tmp_path):
     assert (update / package.constant("payloadFile")).read_bytes() == dll
     assert (update / package.constant("manifestFile")).read_bytes() == (
         f"{package.constant('manifestMagic')}\nversion=0.6.4\n"
-        f"game_build=1.9.7.17.J460\nloader_abi={package.LOADER_ABI}\n"
+        f"game_build=1.9.7.19.J510\nloader_abi={package.LOADER_ABI}\n"
         f"sha256={hashlib.sha256(dll).hexdigest()}\n"
     ).encode("ascii")
     assert workshop_release.ITEM_ID == package.constant("workshopItem")

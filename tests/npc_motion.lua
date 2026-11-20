@@ -64,7 +64,7 @@ local function replay(rows, npc, gap)
     end
     return error, brakingError
 end
--- Two native J460 runs: burst/brake spider, charger and turning attack fly.
+-- Two native J510 runs: burst/brake spider, charger and turning attack fly.
 -- Replay identical observations at 80 ms RTT, also merging alternate packets.
 for name, rows in pairs(cases) do
     assert(#rows >= 200)

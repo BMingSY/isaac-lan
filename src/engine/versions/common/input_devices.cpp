@@ -93,7 +93,7 @@ void assignLanIds(std::uintptr_t image) {
         return;
     std::vector<DeviceId> devices;
     visit(image, [&](auto device, int id) {
-        if (id > 0)
+        if (id >= bindings.firstGamepadId)
             devices.push_back({device, id, 0});
     });
     constexpr unsigned controllerCount = 4;

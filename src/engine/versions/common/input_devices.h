@@ -9,6 +9,7 @@ namespace isaac::engine::native_devices {
 struct Bindings {
     std::uint32_t manager, enumerate, poll, update;
     unsigned begin, end, stride, deviceId;
+    int firstGamepadId;
 };
 extern const Bindings bindings;
 bool install(std::uintptr_t image, void (*log)(const std::string&));

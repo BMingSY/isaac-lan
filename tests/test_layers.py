@@ -53,7 +53,7 @@ def test_runtime_and_presentation_do_not_implement_game_backends():
             if path.suffix not in (".h", ".cpp"):
                 continue
             source = path.read_text()
-            assert not re.search(r"engine/versions/|j460::|MH_CreateHook|MH_EnableHook", source), (
+            assert not re.search(r"engine/versions/|j510::|MH_CreateHook|MH_EnableHook", source), (
                 path
             )
 

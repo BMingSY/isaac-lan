@@ -4,7 +4,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j510/entrypoints.h"
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -26,15 +26,15 @@ constexpr unsigned playersOffset = 0x1ba50, controllerOffset = 0x154c;
 constexpr unsigned managerOptions = 0x29df8;
 constexpr int resumeSelection = 1, exitSelection = 2;
 #else
-namespace backend = isaac::engine::j460;
-constexpr unsigned pauseOffset = 0x23a74, optionsOffset = 0x5b0;
+namespace backend = isaac::engine::j510;
+constexpr unsigned pauseOffset = 0x23a7c, optionsOffset = 0x5b0;
 constexpr unsigned optionsSelection = 8, optionsEntries = 0x27c;
-constexpr unsigned playersOffset = 0x1baa8, controllerOffset = 0x1618;
-constexpr unsigned managerOptions = 0x2a33c;
+constexpr unsigned playersOffset = 0x1baa8, controllerOffset = 0x161c;
+constexpr unsigned managerOptions = 0x2a614;
 constexpr int resumeSelection = 2, exitSelection = 3;
 #endif
 using Address = std::uintptr_t;
-constexpr unsigned imageSize = 0x890000;
+constexpr unsigned imageSize = privateGameImageBytes;
 unsigned char* image;
 std::vector<unsigned char> game(0x190000), manager(0x2a500);
 std::array<std::array<unsigned char, 0x2200>, 4> players{};
@@ -181,7 +181,7 @@ void playerView() {
     menu::selectPlayer(base(), 1);
     require(menu::state(base()).controller == 2,
             "Plus pause selection did not follow controller identity");
-    field<int>(pause(), 0xfac) = 0;
+    field<int>(pause(), 0xfb4) = 0;
 #endif
     // The room view lends a reordered roster with the local actor first.
     std::swap(roster[0], roster[1]);

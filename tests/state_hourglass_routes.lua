@@ -89,7 +89,14 @@ function _IsaacLanFrame()
         Isaac.DebugString("LAN_NETWORK FAILED " .. status.error)
     end
     assert(status.phase ~= 4 and status.phase ~= 9, status.error)
-    local fixture = status.scene == 1 and select(2, native.progress_values(640, 522))
+    local fixture = status.scene == 1
+        and select(
+            2,
+            native.progress_values(
+                _IsaacLanTestProgress.privateAchievement,
+                _IsaacLanTestProgress.counterIndex
+            )
+        )
     if not linked and fixture == (host and 98765 or 321) and renders >= (host and 300 or 360) then
         linked = true
         _IsaacLanCommand(host and "host" or "join", host and port or "127.0.0.1:" .. port)

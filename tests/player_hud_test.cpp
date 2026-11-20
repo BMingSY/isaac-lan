@@ -1,4 +1,4 @@
-#include "engine/versions/j460/player_hud.h"
+#include "engine/versions/j510/player_hud.h"
 #include "engine/versions/j835/player_hud.h"
 #include <vector>
 #include <array>
@@ -77,7 +77,7 @@ void checkJ835() {
 }
 } // namespace
 int main() {
-    using isaac::engine::j460::player_hud::anchor;
+    using isaac::engine::j510::player_hud::anchor;
     alignas(std::uintptr_t) std::array<std::byte, 0x54d0> hudBytes{};
     alignas(std::uintptr_t) std::array<std::byte, 0x1620> playerBytes{};
     const auto hud = reinterpret_cast<std::uintptr_t>(hudBytes.data());
@@ -106,7 +106,7 @@ int main() {
         require(!get(hud, 0) && calls == 0, "Empty HUD reached native position code");
         for (unsigned index = 0; index < 4; ++index) {
             write(hud + index * 0x6dc, 0, player);
-            write(player, 0x1618, 4 - static_cast<int>(index));
+            write(player, 0x161c, 4 - static_cast<int>(index));
             mode = index;
             auto value = get(hud, index);
             require(value && value->slot == 3 - static_cast<int>(index) && value->layout == mode &&
@@ -119,13 +119,13 @@ int main() {
             y = 20;
             const auto before = calls;
             for (int controller : {0, -1, 5, std::numeric_limits<int>::min()}) {
-                write(player, 0x1618, controller);
+                write(player, 0x161c, controller);
                 require(!get(hud, index), "Invalid controller accepted");
             }
             require(calls == before, "Invalid player reached native position code");
         }
         require(!get(hud, 4), "Twin HUD produced a duplicate indicator");
-        write(player, 0x1618, 1);
+        write(player, 0x161c, 1);
         mode = 4;
         require(!get(hud, 0), "Invalid native layout accepted");
         mode = 0;
@@ -133,7 +133,7 @@ int main() {
                               std::numeric_limits<float>::quiet_NaN()})
             require(!anchor(hud, 0, invalid, 270, layout, position) &&
                         !anchor(hud, 0, 480, invalid, layout, position),
-                    "J460 invalid viewport accepted");
+                    "J510 invalid viewport accepted");
         write(hud, 0x54cc, false);
         require(!get(hud, 0), "HUD hide retained a visible anchor");
         std::cout << "PASS both native player HUD layouts, heart coordinates, identity and "

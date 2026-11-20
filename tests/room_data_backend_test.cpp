@@ -12,11 +12,11 @@ constexpr unsigned waterOffset = 0x7344, savedStride = 0x68, mapState = 0x101904
 constexpr std::array<unsigned, 2> caches{0x1a2ac8, 0x1a2c28};
 constexpr int minimumRoom = -18;
 #else
-constexpr unsigned gameGlobal = 0x871678, descEntry = 0x340bc0, cacheEntry = 0x58b5e0;
+constexpr unsigned gameGlobal = 0x899538, descEntry = 0x348580, cacheEntry = 0x5a2800;
 constexpr unsigned roomOffset = 0x18300, indexOffset = 0x18304, dimensionOffset = 0x1830c;
-constexpr unsigned mapOffset = 0x17adc, countOffset = 0x182cc, frameOffset = 0x264f8;
-constexpr unsigned waterOffset = 0x7460, savedStride = 0x78, mapState = 0x22ed4, mapTimer = 0x22edc;
-constexpr std::array<unsigned, 2> caches{0x25ee4, 0x26044};
+constexpr unsigned mapOffset = 0x17adc, countOffset = 0x182cc, frameOffset = 0x26508;
+constexpr unsigned waterOffset = 0x7478, savedStride = 0x78, mapState = 0x22ed4, mapTimer = 0x22edc;
+constexpr std::array<unsigned, 2> caches{0x25ef4, 0x26054};
 constexpr int minimumRoom = -20;
 #endif
 struct lua_State {
@@ -234,8 +234,8 @@ void abort(const std::string& message) {
 int main() {
     try {
         configure();
-        image = static_cast<unsigned char*>(
-            VirtualAlloc(nullptr, 0x880000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+        image = static_cast<unsigned char*>(VirtualAlloc(
+            nullptr, privateGameImageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
         require(image, "Allocate room data fixture");
         state::image = address(image);
         jump(descEntry, reinterpret_cast<void*>(descriptor));
@@ -312,7 +312,7 @@ int main() {
         require(descCalls == beforeCalls, "Unsupported vanilla special room wrote sentinel");
 #else
         require(success(receive(state::roomLayout, layoutPacket(-20, -20))),
-                "J460 special room range changed");
+                "J510 special room range changed");
 #endif
         select(host);
         replica = false;

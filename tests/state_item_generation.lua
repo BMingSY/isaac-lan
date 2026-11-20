@@ -1,4 +1,4 @@
--- Exercise the actual J460 pools with two players in separate room contexts.
+-- Exercise the actual J510 pools with two players in separate room contexts.
 local native = assert(_IsaacLan)
 local host, port = _IsaacLanTest.host, _IsaacLanTest.port
 local frame = _IsaacLanFrame

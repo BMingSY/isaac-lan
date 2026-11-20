@@ -68,7 +68,7 @@ def inspect(upload):
         assert "game/log.txt" in names and "config/config.ini" in names
         assert any(RUN_LOG.fullmatch(name) for name in names), names
         assert b"[feedback]" in archive.read("config/config.ini")
-    assert manifest["schema"] == 1 and manifest["game"] == "1.9.7.17.J460"
+    assert manifest["schema"] == 1 and manifest["game"] == "1.9.7.19.J510"
     assert manifest["context"]["phase"] == "running"
     return manifest
 

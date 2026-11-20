@@ -3,7 +3,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j510/entrypoints.h"
 #endif
 #include <limits>
 
@@ -21,17 +21,17 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned roomOffset = 0x18190, indexOffset = 0x18194, dimensionOffset = 0x1819c;
 constexpr unsigned musicOffset = 0x29a78, volumeOffset = 0x29e10;
 #else
-namespace backend = isaac::engine::j460;
+namespace backend = isaac::engine::j510;
 constexpr unsigned roomOffset = 0x18300, indexOffset = 0x18304, dimensionOffset = 0x1830c;
-constexpr unsigned musicOffset = 0x29fbc, volumeOffset = 0x2a354;
+constexpr unsigned musicOffset = 0x2a10c, volumeOffset = 0x2a62c;
 #endif
-constexpr unsigned currentOffset = 0x30c, queuedOffset = 0x310, imageSize = 0x890000;
+constexpr unsigned currentOffset = 0x30c, queuedOffset = 0x310, imageSize = privateGameImageBytes;
 using Address = std::uintptr_t;
 using Music = void(__attribute__((thiscall)) *)(void*, int, float);
 using Sound = void(__attribute__((thiscall)) *)(void*, int, float, int, bool, float, float);
 unsigned char* image;
 std::array<unsigned char, 0x18400> game{};
-std::array<unsigned char, 0x2a400> manager{};
+std::array<unsigned char, 0x2a800> manager{};
 std::array<unsigned char, 8> room{}, sfx{};
 bool replica = false, failSelector = false;
 unsigned tick = 100, epoch = 1, audience = 1, selectorCalls = 0;

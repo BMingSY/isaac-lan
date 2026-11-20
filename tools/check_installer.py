@@ -111,7 +111,7 @@ def check(game, build_directory, output):
     )
     patched[0x716534] ^= 1  # Unused .text file padding, outside its virtual code length.
     patched.extend(b"Unrelated patch metadata\0")
-    wrong_version = clean.replace(b"1.9.7.17.J460", b"1.9.7.16.J459")
+    wrong_version = clean.replace(b"1.9.7.19.J510", b"1.9.7.16.J459")
     wrong_arch = bytearray(clean)
     struct.pack_into("<H", wrong_arch, pe + 4, 0x8664)
     conflicting = bytearray(clean)
@@ -121,7 +121,7 @@ def check(game, build_directory, output):
     console_command_conflict = bytearray(clean)
     console_command_conflict[0x28CDC0 - 0x1000 + 0x400] = 0xCC
     variants = [
-        ("stock_j460", clean, True, True),
+        ("stock_j510", clean, True, True),
         ("unrelated_patch", patched, True, True),
         ("changed_engine_entry", conflicting, True, False),
         ("changed_console_update", console_update_conflict, True, False),

@@ -12,4 +12,4 @@
 | 里骸骨（Tainted Forgotten） | 灵魂保留本地行走预测，骨架使用主机的运动轨迹，不随灵魂方向输入产生步行偏移；抱起和投掷按所属房间的实体关系同步；Boss 复活后新建灵魂继续参与名单和状态同步，共享金币、炸弹、钥匙按原生规则保留。 |
 | 联机幽灵 | 所在房间没有在线存活队友时随队转移，使用目标房间中存活队友的位置落地；仍有存活队友同房时保留自由移动，客机预测允许飞越坑洞与地面障碍。 |
 
-里游魂的原版 J460 生成规则：只保留攻击性候选，品质 0／1 额外有五分之一概率重抽；允许特殊卡时有十分之一概率替换为神圣卡。后端仅在生成查询期间借用完整名单，保留原版种子与算法；个人生命、飞行与出生库存不共享。入口与签名见 [`entrypoints.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/entrypoints.h) 和 [`signatures.inc`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j460/signatures.inc)。
+里游魂的原版 J510 生成规则：只保留攻击性候选，品质 0／1 额外有五分之一概率重抽；允许特殊卡时有十分之一概率替换为神圣卡。后端仅在生成查询期间借用完整名单，保留原版种子与算法；个人生命、飞行与出生库存不共享。入口与签名见 [`entrypoints.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/entrypoints.h) 和 [`signatures.inc`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/signatures.inc)。

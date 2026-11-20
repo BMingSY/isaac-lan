@@ -23,7 +23,7 @@ from check_release import FILES, check
 from game_logs import freeze_probe_logs, probe_path, probe_text
 from check_performance import summarize
 from testing.engine import finalize_result
-from progress_fixture import MAGIC, PROFILE, checksum, patch, prepare
+from progress_fixture import LAYOUTS, MAGIC, PROFILE, checksum, patch, prepare
 from testing.special_routes import lanbot_behavior_passed, lanbot_greed_result
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -108,6 +108,24 @@ class ProgressFixtureTests(unittest.TestCase):
         self.assertEqual(checksum(b""), 0xFEDCBA76)
         self.assertEqual(checksum(bytes(range(256))), 0xE3797CD9)
 
+    def test_original_save_preserves_opaque_tail_and_uses_its_own_marker(self):
+        layout = LAYOUTS["j835"]
+        data = layout.magic + struct.pack("<4I", 4, 1, 638, 638) + bytes(638)
+        data += struct.pack("<3I", 2, 1984, 496) + bytes(1984) + bytes(range(200))
+        source = data + struct.pack("<I", checksum(data[16:]))
+        for host in (True, False):
+            result = patch(source, backend="j835", host=host, endings=True)
+            self.assertEqual(result[32 + 637], int(host))
+            self.assertEqual(
+                struct.unpack_from("<I", result, 32 + 638 + 12 + 495 * 4)[0], 98765 if host else 321
+            )
+            self.assertEqual(source[-204:-4], result[-204:-4])
+            self.assertEqual(len(source), len(result))
+        with self.assertRaisesRegex(ValueError, "selected game build"):
+            patch(source, backend="j510", host=True)
+        with self.assertRaisesRegex(ValueError, "selected game build"):
+            patch(self.baseline(), backend="j835", host=True)
+
     def test_completion_fixture_keeps_distinct_personal_and_online_marks(self):
         source = self.baseline()
         for host in (True, False):
@@ -190,6 +208,7 @@ class ProgressFixtureTests(unittest.TestCase):
                 prepare(lab, host=True)
             self.assertEqual(path.read_bytes(), source)
             (lab / ".isaac-lan-lab").touch()
+            (lab / "game-profile.json").write_text(json.dumps(source_profile()))
             prepare(lab, host=True, endings=True)
             self.assertEqual(path.read_bytes(), patch(source, host=True, endings=True))
             self.assertEqual(list(path.parent.glob(".lan-progress-*")), [])
@@ -322,7 +341,7 @@ class PackagingTests(unittest.TestCase):
         output = self.root / "package"
         payload = build(self.build, output)
         self.assertEqual(payload["format"], 1)
-        self.assertEqual(payload["game_build"], "1.9.7.17.J460")
+        self.assertEqual(payload["game_build"], "1.9.7.19.J510")
         self.assertEqual(payload["extension_version"], self.tag[1:])
         self.assertEqual(json.loads((output / "payload.json").read_text()), payload)
         self.assertEqual(
@@ -371,6 +390,28 @@ class PackagingTests(unittest.TestCase):
             self.assertEqual(
                 zipped.read(archive.stem + "/FAQ.md"), (ROOT / "docs/faq.md").read_bytes()
             )
+
+    def test_both_release_archives_coexist_and_identify_their_game(self):
+        plus = self.archive()
+        (self.build / "game-profile.json").write_text(json.dumps(source_profile("j835")))
+        vanilla = self.archive()
+        self.assertTrue(plus.is_file())
+        self.assertEqual(vanilla.name, f"Isaac-LAN-{self.tag}-j835-windows-x86.zip")
+        with ZipFile(vanilla) as zipped:
+            profile = json.loads(zipped.read(vanilla.stem + "/payload.json"))
+        self.assertEqual((profile["backend"], profile["game_build"]), ("j835", "1.7.9b.J835"))
+        self.rewrite_archive(
+            vanilla,
+            lambda files: files.update(
+                {
+                    vanilla.stem + "/payload.json": json.dumps(
+                        {**profile, "backend": "j510"}
+                    ).encode()
+                }
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "archive name and game backend differ"):
+            check(vanilla, self.tag)
 
     def test_release_strips_copies_before_hashing_and_preserves_build(self):
         originals = {name: (self.build / name).read_bytes() for name in BINARIES}

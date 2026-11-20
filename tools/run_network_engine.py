@@ -11,12 +11,12 @@ import signal
 import subprocess
 import time
 from testing.engine import check_runtime_log, finalize_result
-from testing.lua import bundle_input
+from testing.lua import bundle_input, literal
 from game_profiles import build_profile, lab_profile
 from game_logs import freeze_probe_logs, probe_text, log_path
 from lab_profile import windows
 from check_performance import summarize_tree
-from progress_fixture import prepare as prepare_progress_fixture
+from progress_fixture import LAYOUTS, prepare as prepare_progress_fixture
 
 
 def execute(*args, timeout=30):
@@ -318,7 +318,23 @@ def main():
     source = Path(__file__).resolve().parent.parent
     script = args.script
     source_script = script.read_bytes()
-    scenario = bundle_input(source_script.decode("utf-8")).encode("utf-8")
+    selected_profile = build_profile(args.build)
+    body = source_script.decode("utf-8")
+    if args.progress_fixture:
+        # Wait for the selected save slot before the scenario can connect.
+        # This reads through the game's own progression API on its render thread.
+        body = (
+            "local originalFrame = _IsaacLanFrame\n;(function()\n"
+            + body
+            + "\nend)()\nlocal scenarioFrame = _IsaacLanFrame\n"
+            + "function _IsaacLanFrame()\n"
+            + "    local status = originalFrame()\n"
+            + "    if status.scene == 1 and _IsaacLanTestProgress.startupMatches("
+            + "_IsaacLan.net_progress(), _IsaacLanFixture) then\n"
+            + '        Isaac.DebugString("LAN_NETWORK PROGRESS_FIXTURE_READY")\n'
+            + "        _IsaacLanFrame = scenarioFrame\n    end\n    return status\nend\n"
+        )
+    scenario = bundle_input(body, progress=LAYOUTS[selected_profile["backend"]]).encode("utf-8")
     window = labs[0].parent / "lab_window.ps1"
     processes = []
     result = {
@@ -330,7 +346,6 @@ def main():
     }
     if args.exercise_menu:
         result["menu_port"] = args.menu_port
-    selected_profile = build_profile(args.build)
     for lab in [args.host, args.client, *args.extra_client]:
         owned_profile = lab_profile(lab)
         if any(owned_profile[key] != selected_profile[key] for key in ("backend", "game_build")):
@@ -497,7 +512,11 @@ def main():
         for _ in range(32):
             visible = overlay_visible()
             if snapshot["gameState"] == 1 and snapshot["menu"] == 3 and not snapshot["dialogs"]:
-                if visible is False or (action == "show-lobby" and visible is True):
+                if (
+                    (visible is None and args.solo_fixture)
+                    or visible is False
+                    or (action == "show-lobby" and visible is True)
+                ):
                     break
                 key = "{ESC}" if visible else None
             else:
@@ -527,11 +546,14 @@ def main():
             control(pid, "Capture", windows(args.output.resolve() / f"{role}-lobby-cn.png"))
             (args.release_solo_coordination / f"solo-lobby-{role}.ack").write_text("ready")
             return
+        local_entry = (
+            action == "show-lobby" and not selected_profile["presentation"]["native_lobby"]
+        )
         # New Run is row zero, Continue row one. Read back each move instead of
         # assuming the native cursor retained its previous session's position.
         target = {"new-run": 0, "continue": 1, "show-lobby": 2}[action]
         for _ in range(10):
-            if snapshot["selected"] == target:
+            if local_entry or snapshot["selected"] == target:
                 break
             control(pid, "Keys", "{UP}" if snapshot["selected"] > target else "{DOWN}")
             time.sleep(0.2)
@@ -539,7 +561,7 @@ def main():
         else:
             raise RuntimeError(f"Native solo menu row was not selected: {snapshot}")
         result.setdefault("solo_gui", []).append({"role": role, "action": action, "menu": snapshot})
-        control(pid, "Keys", "{ENTER}")
+        control(pid, "Keys", "{RIGHT}" if local_entry else "{ENTER}")
         if action == "show-lobby":
             for _ in range(30):
                 time.sleep(0.2)
@@ -632,6 +654,18 @@ def main():
                         raise RuntimeError("Refusing to overwrite an unowned compatibility fixture")
                     shutil.rmtree(destination)
                 shutil.copytree(fixture, destination)
+            fixture_config = {
+                "host": role == "host",
+                "endings": args.endings_fixture,
+                "altPath": args.alt_path_fixture,
+                "hush": args.hush_fixture,
+                "ascent": args.ascent_fixture,
+            }
+            fixture_header = (
+                "_IsaacLanFixture = " + literal(fixture_config) + "\n"
+                if args.progress_fixture
+                else ""
+            )
             if args.frontend:
                 (lab / "frontend.test").write_text("Internal frontend test only.\n")
                 (internal / "disable.it").touch()
@@ -643,7 +677,8 @@ def main():
                 }
                 result.setdefault("scenario_config", {})[role] = scenario_config
                 (lab / "frontend-scenario.lua").write_text(
-                    "_IsaacLanTest = { host = "
+                    fixture_header
+                    + "_IsaacLanTest = { host = "
                     + ("true" if scenario_config["host"] else "false")
                     + ', port = "'
                     + scenario_config["port"]
@@ -659,7 +694,9 @@ def main():
                 (lab / "frontend.test").unlink(missing_ok=True)
                 (lab / "frontend-scenario.lua").unlink(missing_ok=True)
                 (internal / "disable.it").unlink(missing_ok=True)
-                shutil.copy2(tested_script, internal / "main.lua")
+                (internal / "main.lua").write_text(
+                    fixture_header + tested_script.read_text(encoding="utf-8"), encoding="utf-8"
+                )
             (log_path(lab).parent / "gamestate1.dat").unlink(missing_ok=True)
             log_path(lab).unlink(missing_ok=True)
             for file in (lab / "game").glob("lan-test-digest-*.txt"):
@@ -783,27 +820,14 @@ def main():
                 control(pid, "PostKeys", "{ENTER}")
                 time.sleep(1)
                 if args.progress_fixture:
-                    fixture = [
-                        "powershell.exe",
-                        "-NoProfile",
-                        "-ExecutionPolicy",
-                        "Bypass",
-                        "-File",
-                        windows(source / "tools/lab_progress.ps1"),
-                        "-GameProcessId",
-                        str(pid),
-                    ]
-                    if role == "host":
-                        fixture.append("-HostFixture")
-                    if args.alt_path_fixture:
-                        fixture.append("-AltPathFixture")
-                    if args.endings_fixture:
-                        fixture.append("-EndingsFixture")
-                    if args.ascent_fixture:
-                        fixture.append("-AscentFixture")
-                    if args.hush_fixture:
-                        fixture.append("-HushFixture")
-                    print(execute(*fixture), flush=True)
+                    fixture_deadline = time.monotonic() + 25
+                    while "LAN_NETWORK PROGRESS_FIXTURE_READY" not in read_log(lab):
+                        if time.monotonic() >= fixture_deadline:
+                            raise RuntimeError(
+                                f"{role}: selected native save did not match the startup fixture"
+                            )
+                        time.sleep(0.1)
+                    print(f"{role}: native progress fixture verified at startup", flush=True)
                     hold.unlink()
             if args.exercise_menu or (args.capture_ui and role == "host"):
                 navigate = (
@@ -1051,25 +1075,8 @@ def main():
                 for lab, role, pid, log in zip(labs, roles, processes, logs):
                     saved_file = log_path(lab).parent / "gamestate1.dat"
 
-                    def solo_action(action):
-                        print(
-                            execute(
-                                "powershell.exe",
-                                "-NoProfile",
-                                "-ExecutionPolicy",
-                                "Bypass",
-                                "-File",
-                                windows(source / "tools/lab_solo.ps1"),
-                                "-GameProcessId",
-                                str(pid),
-                                "-Action",
-                                action,
-                            ),
-                            flush=True,
-                        )
-
                     if role not in solo_saved and "LAN_NETWORK SOLO_READY" in log:
-                        solo_action("SaveExit")
+                        release_solo_gui(pid, "save-exit")
                         solo_saved.add(role)
                     if (
                         role not in solo_hashes
@@ -1088,7 +1095,7 @@ def main():
                             hashlib.sha256(saved_file.read_bytes()).hexdigest() == solo_hashes[role]
                         ), "LAN overwrote an existing native solo save"
                         result.setdefault("preserved_solo_sha256", {})[role] = solo_hashes[role]
-                        solo_action("Continue")
+                        release_solo_gui(pid, "continue")
                         solo_continued.add(role)
             if (
                 args.exercise_input

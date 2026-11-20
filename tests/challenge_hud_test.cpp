@@ -10,8 +10,8 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned presenceRegister = 5, parameterRegister = 6, noUnlocksDistance = 0x99;
 constexpr unsigned parameterBoundary = backend::entry::hUDChallengeParamsRead;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
 constexpr unsigned presenceRegister = 6, parameterRegister = 7, noUnlocksDistance = 0xa2;
 constexpr unsigned parameterBoundary = backend::entry::hUDChallengeParamsReturn;
 #endif

@@ -10,8 +10,8 @@
 constexpr unsigned queryEntry = isaac::engine::j835::entry::playerManagerHasPlayerType;
 constexpr bool returnsPointer = false;
 #else
-#include "engine/versions/j460/entrypoints.h"
-constexpr unsigned queryEntry = isaac::engine::j460::entry::playerManagerFindPlayerType;
+#include "engine/versions/j510/entrypoints.h"
+constexpr unsigned queryEntry = isaac::engine::j510::entry::playerManagerFindPlayerType;
 constexpr bool returnsPointer = true;
 #endif
 

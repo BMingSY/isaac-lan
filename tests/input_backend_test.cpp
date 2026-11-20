@@ -5,7 +5,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j510/entrypoints.h"
 #endif
 #include <MinHook.h>
 #include <array>
@@ -55,13 +55,13 @@ constexpr unsigned rosterOffset = 0x1ba50, controllerOffset = 0x154c, pauseOffse
 constexpr unsigned frameOffset = 0x4a264, xOffset = 0x294, yOffset = 0x298;
 constexpr int restartAction = 16, resumeSelection = 1;
 #else
-namespace backend = isaac::engine::j460;
-constexpr unsigned rosterOffset = 0x1baa8, controllerOffset = 0x1618, pauseOffset = 0x23a74;
-constexpr unsigned frameOffset = 0x4abbc, xOffset = 0x33c, yOffset = 0x340;
+namespace backend = isaac::engine::j510;
+constexpr unsigned rosterOffset = 0x1baa8, controllerOffset = 0x161c, pauseOffset = 0x23a7c;
+constexpr unsigned frameOffset = 0x4ae94, xOffset = 0x33c, yOffset = 0x340;
 constexpr int restartAction = 18, resumeSelection = 2;
 #endif
 using Address = std::uintptr_t;
-constexpr unsigned imageSize = 0x890000;
+constexpr unsigned imageSize = privateGameImageBytes;
 unsigned char* image;
 std::vector<unsigned char> game(0x190000), manager(0x4ad00);
 std::array<std::array<unsigned char, 0x2200>, 4> players{};

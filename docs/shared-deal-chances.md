@@ -13,16 +13,16 @@
 
 ## 必要的原生能力
 
-现有 Lua API 不能让实际恶魔／天使房生成临时读取分房后的完整玩家名单，也不能覆盖原版 Found HUD 使用的内部条件天使概率。因此在 J460 后端提供具名 `deal_chances()` 查询／应用与 `deal_chances_reset()` 清理能力，原版查询在限定的上下文中执行，公式与战斗模拟名单仍由原版管理。
+现有 Lua API 不能让实际恶魔／天使房生成临时读取分房后的完整玩家名单，也不能覆盖原版 Found HUD 使用的内部条件天使概率。因此在 J510 后端提供具名 `deal_chances()` 查询／应用与 `deal_chances_reset()` 清理能力，原版查询在限定的上下文中执行，公式与战斗模拟名单仍由原版管理。
 
-适用 J460，游戏标识见[后端参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。原生入口如下：
+适用 J510，游戏标识见[后端参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/native-backend.md)。原生入口如下：
 
 | 入口 | RVA | 用途与 ABI |
 | --- | --- | --- |
-| `Room::GetDevilRoomChance` | `0x3f92b0` | Lua 公开查询、HUD 和实际开门共用；`thiscall`，x87 返回 |
-| 原版条件天使概率查询 | `0x3f96f0` | HUD 与房间类型初始化共用；无参数，XMM0 返回 |
-| `Level::InitializeDevilAngelRoom` | `0x3499a0` | 决定实际生成类型；`thiscall(bool, bool)` |
-| `Room::TrySpawnDevilRoomDoor` | `0x3f83b0` | 原版清房开门及公开 API；`thiscall(bool, bool)` |
+| `Room::GetDevilRoomChance` | `0x401b60` | Lua 公开查询、HUD 和实际开门共用；`thiscall`，x87 返回 |
+| 原版条件天使概率查询 | `0x401fa0` | HUD 与房间类型初始化共用；无参数，XMM0 返回 |
+| `Level::InitializeDevilAngelRoom` | `0x351870` | 决定实际生成类型；`thiscall(bool, bool)` |
+| `Room::TrySpawnDevilRoomDoor` | `0x400c60` | 原版清房开门及公开 API；`thiscall(bool, bool)` |
 
 四个入口均受启动签名校验。条件天使查询的 SSE 返回约定由后端桥接，普通 C++／Lua 浮点接口使用正常 ABI，返回边界须正确转换 x87 与 XMM0。
 
@@ -34,4 +34,4 @@
 
 原版部分临时保证开门效果保存在 Room 中。用相同的全队／Boss 惩罚上下文查询已有房间对象，取原版已经计算的最大总概率，从而让异房保证效果也对整队生效；不把同一效果相加，不复制效果，不延长原版对象生命周期。该处理仅适用于原版总概率查询已经识别的房间效果。
 
-API 仅允许客机写有限、非负且可表示为 float 的总概率和 0–1 的条件天使概率，先整体校验后更新一对值，不允许房主接收客机概率。缓存只保存数值，不保存原生指针。规则依据以实际 J460 调用链为准；[Room Lua API 文档](https://wofsauge.github.io/IsaacDocs/rep/Room.html#getdevilroomchance) 用于核对公开查询的含义，旧 Repentance 的示例公式不直接移植到 Repentance+。
+API 仅允许客机写有限、非负且可表示为 float 的总概率和 0–1 的条件天使概率，先整体校验后更新一对值，不允许房主接收客机概率。缓存只保存数值，不保存原生指针。规则依据以实际 J510 调用链为准；[Room Lua API 文档](https://wofsauge.github.io/IsaacDocs/rep/Room.html#getdevilroomchance) 用于核对公开查询的含义，旧 Repentance 的示例公式不直接移植到 Repentance+。

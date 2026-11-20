@@ -4,8 +4,8 @@
 #include "engine/versions/j835/entrypoints.h"
 namespace backend = isaac::engine::j835;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
 #endif
 #include "support/native_entity_types.h"
 #include "engine/versions/common/entity_size.h"
@@ -180,7 +180,7 @@ constexpr unsigned heightOffset = 0x360, scaleOffset = 0x370, priceOffset = 0x48
 constexpr unsigned bossOffset = 0xb8d, damageMethod = 0x3c;
 constexpr unsigned positionOffset = 0x294, flagsOffset = 0x160, createdOffset = 0x280;
 #else
-constexpr unsigned spriteOffset = 0x48, activeOffset = 0x172, frameOffset = 0x264f8;
+constexpr unsigned spriteOffset = 0x48, activeOffset = 0x172, frameOffset = 0x26508;
 constexpr unsigned sizeOffset = 0x370, colorOffset = 0x1b8, damageOffset = 0x388;
 constexpr unsigned heightOffset = 0x410, scaleOffset = 0x420, priceOffset = 0x534;
 constexpr unsigned bossOffset = 0xc3d, damageMethod = 0x40;
@@ -662,8 +662,8 @@ void checkSprite() {
 int main() {
     try {
         connectLua();
-        image = static_cast<unsigned char*>(
-            VirtualAlloc(nullptr, 0x890000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+        image = static_cast<unsigned char*>(VirtualAlloc(
+            nullptr, privateGameImageBytes, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
         require(image, "Allocate isolated field fixture image");
         adapter::image = reinterpret_cast<Address>(image);
         at<Address>(image, backend::globals::game) = reinterpret_cast<Address>(game.data());
@@ -674,7 +674,7 @@ int main() {
         jump(backend::entry::tearSetScale, reinterpret_cast<Address>(setScale));
         jump(backend::entry::pickupSetPrice, reinterpret_cast<Address>(setPrice));
         vtable[damageMethod / 4] = reinterpret_cast<Address>(setDamage);
-        FlushInstructionCache(GetCurrentProcess(), image, 0x890000);
+        FlushInstructionCache(GetCurrentProcess(), image, privateGameImageBytes);
         for (unsigned type : {2, 3, 5, 1000})
             checkFields(type, commonFields);
         checkFields(2, tears);

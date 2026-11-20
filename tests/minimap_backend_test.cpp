@@ -10,10 +10,10 @@ constexpr unsigned roomOffset = 0x18194, dimensionOffset = 0x1819c;
 constexpr unsigned widthOffset = 0x80, heightOffset = 0x84, textureEntry = 0x55f990;
 constexpr std::array<unsigned, 4> entries{0x4e55f0, 0x4e5e50, 0x4e2e40, 0x565030};
 #else
-constexpr unsigned gameGlobal = 0x871678, renderer = 0x8798e0, mapOffset = 0x25ecc;
+constexpr unsigned gameGlobal = 0x899538, renderer = 0x89e890, mapOffset = 0x25edc;
 constexpr unsigned roomOffset = 0x18304, dimensionOffset = 0x1830c;
 constexpr unsigned widthOffset = 0x10, heightOffset = 0x14, textureEntry = 0x1000;
-constexpr std::array<unsigned, 4> entries{0x58dba0, 0x58e4d0, 0x58b5e0, 0x619180};
+constexpr std::array<unsigned, 4> entries{0x5a4d80, 0x5a56c0, 0x5a2800, 0x632700};
 #endif
 namespace {
 namespace map = isaac::engine::native_minimap;
@@ -66,11 +66,11 @@ void* __attribute__((fastcall)) textureNative(void* value, void*, const float* q
                                               const float* c, const float* d) {
     require(a == colors[0].data() && b == colors[1].data() && c == colors[2].data() &&
                 d == colors[3].data(),
-            "J835 draw lost a corner color or used the J460 ABI");
+            "J835 draw lost a corner color or used the J510 ABI");
 #else
 void* __attribute__((fastcall)) textureNative(void* value, void*, const void* quad,
                                               const void* dest, bool transparent) {
-    require(transparent, "J460 draw lost transparency argument");
+    require(transparent, "J510 draw lost transparency argument");
 #endif
     require(value == texture.data() && quad == source.data() && dest == destination.data(),
             "Texture draw changed borrowed inputs");
@@ -149,8 +149,8 @@ void withMapPickups(const std::function<void()>& fn) {
 } // namespace isaac::rooms
 int main() {
     try {
-        image = static_cast<unsigned char*>(
-            VirtualAlloc(nullptr, 0x880000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+        image = static_cast<unsigned char*>(VirtualAlloc(
+            nullptr, privateGameImageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
         require(image && MH_Initialize() == MH_OK, "Allocate minimap fixture");
         const std::array<void*, 4> functions{
             reinterpret_cast<void*>(updateNative), reinterpret_cast<void*>(renderNative),
@@ -158,7 +158,7 @@ int main() {
         for (unsigned i = 0; i < entries.size(); ++i)
             jump(entries[i], functions[i]);
         jump(textureEntry, reinterpret_cast<void*>(textureNative));
-        FlushInstructionCache(GetCurrentProcess(), image, 0x880000);
+        FlushInstructionCache(GetCurrentProcess(), image, privateGameImageBytes);
         require(!map::install(0, overlay), "Null image installed minimap hooks");
         for (unsigned conflict = 0; conflict < 3; ++conflict) {
             auto* target = image + entries[conflict];

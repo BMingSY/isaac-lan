@@ -1,5 +1,5 @@
 set(ISAAC_LAN_BACKEND
-    "j460"
+    "j510"
     CACHE STRING "Audited native game backend")
 if(NOT ISAAC_LAN_BACKEND MATCHES "^[a-z0-9_]+$")
     message(FATAL_ERROR "Invalid ISAAC_LAN_BACKEND identifier")

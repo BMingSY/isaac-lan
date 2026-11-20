@@ -15,7 +15,7 @@ local renders, linked, chosen, started, won, exited = 0, false, false, false, fa
 local step, stepAt, bossRoom, seenBoss = "init", 0, nil, false
 local chestMove = false
 local done = false
-local LAMB_UNLOCK, LAMB_MARK, PRIVATE_UNLOCK = 149, 97, 640
+local LAMB_UNLOCK, LAMB_MARK, PRIVATE_UNLOCK = 149, 97, _IsaacLanTestProgress.privateAchievement
 local function report(text)
     Isaac.DebugString("LAN_NETWORK GUEST_PROGRESS " .. text)
 end

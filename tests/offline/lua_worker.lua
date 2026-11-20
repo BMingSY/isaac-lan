@@ -217,7 +217,7 @@ local actions = {
                 return 17
             end,
             GetSprite = function()
-                -- Vanilla J460 Sprite has Play, but no HasAnimation method.
+                -- Vanilla J510 Sprite has Play, but no HasAnimation method.
                 return {
                     Play = function(_, name, force)
                         assert(force)

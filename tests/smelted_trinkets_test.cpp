@@ -4,8 +4,8 @@
 namespace backend = isaac::engine::j835;
 inline constexpr unsigned vectorOffset = 0x1670;
 #else
-#include "engine/versions/j460/smelted_trinkets.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/smelted_trinkets.h"
+namespace backend = isaac::engine::j510;
 inline constexpr unsigned vectorOffset = 0x1748;
 #endif
 #include <array>

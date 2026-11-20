@@ -9,13 +9,14 @@ import re
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from build_package import build
+from game_profiles import build_profile, release_name
 
 
 def release(build_directory, output, tag):
     version = (Path(__file__).resolve().parents[1] / "VERSION").read_text().strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version) or tag != f"v{version}":
         raise ValueError("Release tag must match VERSION")
-    name = f"Isaac-LAN-{tag}-windows-x86"
+    name = release_name(tag, build_profile(build_directory)["backend"])
     output.mkdir(parents=True, exist_ok=True)
     package = output / name
     archive = output / f"{name}.zip"

@@ -45,7 +45,7 @@
         }
     },
     "testing": {
-        "progress_fixture": null,
+        "progress_fixture": "j835",
         "accepted_beta_option": null
     }
 }

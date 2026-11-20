@@ -3,8 +3,13 @@
 #include "engine/versions/j835/layout.h"
 
 namespace isaac::engine::native_devices {
-const Bindings bindings{j835::globals::inputManager,        j835::entry::inputEnumerateDevices,
-                        j835::entry::inputPollDevices,      j835::entry::inputUpdate,
-                        j835::layout::inputManager::begin,  j835::layout::inputManager::end,
-                        j835::layout::inputManager::stride, j835::layout::inputDevice::id};
+const Bindings bindings{j835::globals::inputManager,
+                        j835::entry::inputEnumerateDevices,
+                        j835::entry::inputPollDevices,
+                        j835::entry::inputUpdate,
+                        j835::layout::inputManager::begin,
+                        j835::layout::inputManager::end,
+                        j835::layout::inputManager::stride,
+                        j835::layout::inputDevice::id,
+                        1};
 } // namespace isaac::engine::native_devices

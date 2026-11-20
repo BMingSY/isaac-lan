@@ -16,7 +16,7 @@ constexpr unsigned managerGlobal = 0x7fd680, menusGlobal = 0x7fd688;
 constexpr unsigned pageOffset = 0x38, blockedOffset = 0x20, managerBlock = 0x4a268;
 constexpr bool official = false;
 #else
-constexpr unsigned managerGlobal = 0x87169c, menusGlobal = 0x872a20;
+constexpr unsigned managerGlobal = 0x89a0d4, menusGlobal = 0x89a8e4;
 constexpr unsigned pageOffset = 0x40, blockedOffset = 0xd, managerBlock = 0x4d074;
 constexpr bool official = true;
 #endif
@@ -24,7 +24,7 @@ constexpr bool official = true;
 int main() {
     namespace context = isaac::engine::native_menu;
     const auto& fields = isaac::engine::native_frontend::bindings.menu;
-    std::vector<std::byte> imageBytes(0x880000), managerBytes(0x4e000);
+    std::vector<std::byte> imageBytes(privateGameImageBytes), managerBytes(0x4e000);
     std::array<std::byte, 0x50> menuBytes{}, mainBytes{};
     const auto image = reinterpret_cast<Address>(imageBytes.data());
     const auto manager = reinterpret_cast<Address>(managerBytes.data());

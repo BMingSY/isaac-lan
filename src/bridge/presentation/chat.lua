@@ -272,7 +272,7 @@ return function(deps, layout)
                                 width,
                                 height
                             )
-                            -- J460 Bubble: body spans x=-19..18, y=-18..11;
+                            -- J510 Bubble: body spans x=-19..18, y=-18..11;
                             -- the original tail extends below the text body.
                             local sx, sy = bubbleWidth / 38, bubbleHeight / 30
                             x, y = layout.avoidOverlap(

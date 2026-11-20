@@ -11,8 +11,8 @@ constexpr unsigned pocketsOffset = 0x16c8, bagOffset = 0x1e44, previewOffset = 0
 constexpr unsigned poopMana = 0x1e50, poopQueue = 0x1e54, hudStride = 0x6b0, bagDirty = 0x6a1;
 constexpr std::array<unsigned, 3> spriteOffsets{0x36c, 0xf48, 0xe34};
 #else
-constexpr unsigned gameGlobal = 0x871678, getHudEntry = 0x178e0, spriteOffset = 0x48;
-constexpr unsigned typeOffset = 0x13c0, costumesOffset = 0x1220, chargesOffset = 0x758;
+constexpr unsigned gameGlobal = 0x899538, getHudEntry = 0x18de0, spriteOffset = 0x48;
+constexpr unsigned typeOffset = 0x13c4, costumesOffset = 0x1220, chargesOffset = 0x758;
 constexpr unsigned pocketsOffset = 0x17a0, bagOffset = 0x1f44, previewOffset = 0x1f4c;
 constexpr unsigned poopMana = 0x1f54, poopQueue = 0x1f58, hudStride = 0x6dc, bagDirty = 0x6ad;
 constexpr std::array<unsigned, 3> spriteOffsets{0x41c, 0xff8, 0xee4};
@@ -143,8 +143,8 @@ void abort(const std::string& message) {
 int main() {
     try {
         configure();
-        auto* image = static_cast<unsigned char*>(
-            VirtualAlloc(nullptr, 0x880000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+        auto* image = static_cast<unsigned char*>(VirtualAlloc(
+            nullptr, privateGameImageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
         require(image, "Allocate actor-state fixture");
         state::image = address(image);
         auto* entry = image + getHudEntry;

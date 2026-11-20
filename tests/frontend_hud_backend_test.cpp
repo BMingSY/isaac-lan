@@ -12,12 +12,12 @@ constexpr unsigned partSize = 0x6b0, refreshOffset = 0x6a0;
 constexpr std::array<unsigned, 8> entries{0x508370, 0x508400, 0x508000, 0x507c90,
                                           0x4f9780, 0x5027e0, 0x502a20, 0x504610};
 #else
-constexpr unsigned gameGlobal = 0x871678, playersOffset = 0x1baa8, historyOffset = 0x5c54;
-constexpr unsigned controllerOffset = 0x1618, indexOffset = 0x161c, twinOffset = 0x1e68,
-                   kindOffset = 0x13c0, parentOffset = 0x3bc, activeOffset = 0x172;
+constexpr unsigned gameGlobal = 0x899538, playersOffset = 0x1baa8, historyOffset = 0x5c54;
+constexpr unsigned controllerOffset = 0x161c, indexOffset = 0x1620, twinOffset = 0x1e68,
+                   kindOffset = 0x13c4, parentOffset = 0x3bc, activeOffset = 0x172;
 constexpr unsigned partSize = 0x6dc, refreshOffset = 0x6ac;
-constexpr std::array<unsigned, 8> entries{0x44bf30, 0x44bfd0, 0x43bbc0, 0x43b850,
-                                          0x441cf0, 0x5a2990, 0x5a2b30, 0x5a3eb0};
+constexpr std::array<unsigned, 8> entries{0x454c80, 0x454d20, 0x4446d0, 0x444360,
+                                          0x44ab40, 0x5b9c00, 0x5b9da0, 0x5bb020};
 #endif
 namespace {
 namespace view = isaac::engine::native_frontend_hud;
@@ -93,7 +93,7 @@ void installHooks() {
         reinterpret_cast<void*>(postNative),     reinterpret_cast<void*>(renderNative)};
     for (unsigned i = 0; i < entries.size(); ++i)
         jump(image + entries[i], functions[i]);
-    FlushInstructionCache(GetCurrentProcess(), image, 0x880000);
+    FlushInstructionCache(GetCurrentProcess(), image, privateGameImageBytes);
     require(!view::install(0), "Null image installed frontend HUD hooks");
     const std::array<unsigned, 5> hooks{entries[0], entries[2], entries[5], entries[6], entries[7]};
     for (unsigned conflict = 0; conflict < hooks.size(); ++conflict) {
@@ -136,8 +136,8 @@ void withView(const std::function<void()>& render, bool localOnly) {
 } // namespace isaac::rooms
 int main() {
     try {
-        image = static_cast<unsigned char*>(
-            VirtualAlloc(nullptr, 0x880000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+        image = static_cast<unsigned char*>(VirtualAlloc(
+            nullptr, privateGameImageBytes, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
         require(image && MH_Initialize() == MH_OK, "Allocate frontend HUD fixture");
         installHooks();
         std::vector<unsigned char> game(0x1bc00), hud(historyOffset + 0x100, 0xa5);

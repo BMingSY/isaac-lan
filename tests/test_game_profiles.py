@@ -35,7 +35,7 @@ def fixture_profile():
 
 
 def test_generated_profile_and_header_use_the_selected_backend(tmp_path):
-    profile = generate("j460", tmp_path)
+    profile = generate("j510", tmp_path)
     assert build_profile(tmp_path) == source_profile() == profile
     assert profile["signatures"] and profile["capabilities"]["native_emotes"]
     # Compile the generated descriptor and observe its public values and catalog.
@@ -112,7 +112,7 @@ def test_lab_uses_its_profile_and_refuses_an_unaudited_progress_fixture(tmp_path
     with pytest.raises(ValueError, match="No audited progress fixture"):
         prepare(tmp_path, host=True)
     assert save.read_bytes() == b"preserve another version's save"
-    # A malformed explicit profile must not fall back to J460.
+    # A malformed explicit profile must not fall back to J510.
     (tmp_path / "game-profile.json").write_text("{}")
     with pytest.raises(ValueError):
         lab_profile(tmp_path)
@@ -130,7 +130,7 @@ def test_unknown_backend_is_rejected_before_generating_files(tmp_path):
     with pytest.raises(FileNotFoundError):
         generate("unimplemented", tmp_path / "out")
     assert not (tmp_path / "out").exists()
-    for name in ("../j460", "j460/../j460", "j460;main"):
+    for name in ("../j510", "j510/../j510", "j510;main"):
         with pytest.raises(ValueError):
             source_profile(name)
 
@@ -220,7 +220,7 @@ def test_metadata_alone_cannot_enable_an_incomplete_native_backend(tmp_path):
 def test_resource_fixtures_match_each_backends_metadata():
     # Execute the Lua fixture and compare values; the fixture's version branch
     # must not drift from the metadata that the native bridge actually exports.
-    for backend, vanilla in [("j460", False), ("j835", True)]:
+    for backend, vanilla in [("j510", False), ("j835", True)]:
         script = f'''
 local r = dofile("{ROOT}/tests/fixtures/presentation_assets.lua")({str(vanilla).lower()})
 print(tostring(r.native_lobby))

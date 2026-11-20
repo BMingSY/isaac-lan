@@ -3,7 +3,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j510/entrypoints.h"
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -24,11 +24,11 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned managerOffset = 0x7e7c98, beginOffset = 4, endOffset = 8;
 constexpr unsigned stride = 4, idOffset = 8, updateEntry = 0x56a150;
 #else
-namespace backend = isaac::engine::j460;
-constexpr unsigned managerOffset = 0x857b18, beginOffset = 8, endOffset = 12;
+namespace backend = isaac::engine::j510;
+constexpr unsigned managerOffset = 0x87f0a8, beginOffset = 8, endOffset = 12;
 constexpr unsigned stride = 8, idOffset = 12, updateEntry = 0;
 #endif
-constexpr unsigned imageSize = 0x890000;
+constexpr unsigned imageSize = privateGameImageBytes;
 using Address = std::uintptr_t;
 using Poll = void(__cdecl*)();
 using Update = void(__attribute__((thiscall)) *)(void*);
@@ -111,7 +111,12 @@ void setup() {
             "Installed device hooks did not forward their native calls");
 }
 void layoutAndRestore() {
-    const std::array<int, 7> original{0, 13, 4, 11, 7, -1, 99};
+#ifdef ISAAC_LAN_TEST_J835
+    constexpr int keyboard = 0, firstPad = 4;
+#else
+    constexpr int keyboard = -2, firstPad = 0;
+#endif
+    const std::array<int, 7> original{keyboard, 13, firstPad, 11, 7, -1, 99};
     entries.fill(0xa5);
     for (unsigned i = 0; i < objects.size(); ++i) {
         objects[i].fill(0xa5);
@@ -120,11 +125,11 @@ void layoutAndRestore() {
     }
     roster(4); // Keyboard plus only three gamepads: do not partly assign.
     devices::assignLanIds(base());
-    require(devices::ids(base()) == std::vector<int>({0, 13, 4, 11}),
+    require(devices::ids(base()) == std::vector<int>({keyboard, 13, firstPad, 11}),
             "Partial device discovery changed identities");
     roster(objects.size());
     devices::assignLanIds(base());
-    require(devices::ids(base()) == std::vector<int>({0, 4, 1, 3, 2, -1, 99}),
+    require(devices::ids(base()) == std::vector<int>({keyboard, 4, 1, 3, 2, -1, 99}),
             "Controller assignment changed keyboard, extra devices or native ordering");
     devices::assignLanIds(base());
     devices::restoreIds(base());
@@ -142,7 +147,7 @@ void layoutAndRestore() {
     objects[1].fill(0x5a);
     field<int>(objects[2].data(), idOffset) = 88; // Native identity changed independently.
     devices::restoreIds(base());
-    require(devices::ids(base()) == std::vector<int>({0, 88, 11, 7, -1, 99}),
+    require(devices::ids(base()) == std::vector<int>({keyboard, 88, 11, 7, -1, 99}),
             "Restore touched a missing device or overwrote an independently changed identity");
     require(
         std::all_of(objects[1].begin(), objects[1].end(), [](auto byte) { return byte == 0x5a; }),

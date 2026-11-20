@@ -20,6 +20,7 @@ from lab_profile import ProtectedLabs, idle
 from game_logs import log_path
 from lab_profile import windows
 from testing.profiles import profile_fixture
+from progress_fixture import progress_layout
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -143,9 +144,8 @@ def main():
     prepared_profiles = []
     for index, (role, lab) in enumerate(zip(roles, labs)):
         progress = (log_path(lab).parent / "persistentgamedata1.dat").read_bytes()
-        if progress[:16] != b"ISAACNGSAVE09R  " or len(progress) < 674:
-            raise ValueError("Expected a native J460 progress baseline")
-        flags = progress[32:674]
+        layout = progress_layout(progress)
+        flags = progress[32 : 32 + layout.achievements]
         if args.suite == "access" and flags[475]:
             raise ValueError("Access fixture requires a baseline with Tainted Magdalene locked")
         report["initial_progress"][role] = {

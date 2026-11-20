@@ -8,11 +8,11 @@
 constexpr unsigned gameGlobal = 0x7fd65c, gameRoom = 0x18190, railOffset = 0x7350;
 constexpr unsigned extraSprite = 0x164, removeEntry = 0x3d9b00, makeEntry = 0x3ad410;
 #else
-#include "engine/versions/j460/entrypoints.h"
-constexpr unsigned gameGlobal = isaac::engine::j460::globals::game, gameRoom = 0x18300;
-constexpr unsigned railOffset = 0x746c, extraSprite = 0x27c;
-constexpr unsigned removeEntry = isaac::engine::j460::entry::roomRemoveGridEntityImmediate;
-constexpr unsigned makeEntry = 0x3eea90;
+#include "engine/versions/j510/entrypoints.h"
+constexpr unsigned gameGlobal = isaac::engine::j510::globals::game, gameRoom = 0x18300;
+constexpr unsigned railOffset = 0x7484, extraSprite = 0x27c;
+constexpr unsigned removeEntry = isaac::engine::j510::entry::roomRemoveGridEntityImmediate;
+constexpr unsigned makeEntry = 0x3f6e60;
 #endif
 struct lua_State {
     int top = 0;

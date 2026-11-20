@@ -5,9 +5,9 @@
 #include "engine/versions/j835/layout.h"
 namespace backend = isaac::engine::j835;
 #else
-#include "engine/versions/j460/entrypoints.h"
-#include "engine/versions/j460/layout.h"
-namespace backend = isaac::engine::j460;
+#include "engine/versions/j510/entrypoints.h"
+#include "engine/versions/j510/layout.h"
+namespace backend = isaac::engine::j510;
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -21,6 +21,11 @@ namespace backend = isaac::engine::j460;
 namespace {
 constexpr unsigned imageSize = 0x900000, stateSize = 0x21000;
 constexpr std::uintptr_t previousStream = 0x12345678;
+#ifdef ISAAC_LAN_TEST_J835
+constexpr std::array<unsigned, 4> nativeFileNames{0x1fa60, 0x1fa78, 0x1fa98, 0x1fab0};
+#else
+constexpr std::array<unsigned, 4> nativeFileNames{0x1fecc, 0x1fee4, 0x1ff1c, 0x1ff34};
+#endif
 constexpr unsigned previousChecksum = 0x13579bdf;
 constexpr std::array<std::uint8_t, 24> payload{'s', 'a', 'v', 'e', 1, 2,  3,  4,  5,  6,  7,  8,
                                                9,   10,  11,  12,  0, 17, 18, 19, 20, 21, 22, 23};
@@ -85,7 +90,7 @@ bool readState(void* state, void* context) {
     require(at<unsigned>(manager.data(), 0xf28) == (trailer ^ 0x96696996),
             "Memory restore compared against the unrelated last disk save");
 #endif
-    for (const auto offset : backend::layout::gameState::fileNames)
+    for (const auto offset : nativeFileNames)
         require(at<char>(state, offset) == 0 && at<unsigned>(state, offset + 16) == 0 &&
                     at<unsigned>(state, offset + 20) == 15,
                 "Native error handler must not see local or Steam save filenames");
@@ -145,7 +150,7 @@ void prepare(void* state, Mode next = Mode::normal) {
 #endif
     // Exact-byte restoration includes strings with heap storage and embedded
     // nulls; the extension must neither allocate nor free those native buffers.
-    for (const auto offset : backend::layout::gameState::fileNames)
+    for (const auto offset : nativeFileNames)
         at<unsigned>(state, offset + 20) = 32;
 }
 void checkRestored(const std::vector<std::uint8_t>& before) {

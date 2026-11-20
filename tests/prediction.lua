@@ -89,7 +89,7 @@ for _, rate in ipairs({ 30, 60, 120 }) do
     end
     assert((recovering.display - Vector(48, 36)):LengthSquared() < 0.0001)
 end
--- Measured J460 web half tick: friction precedes both movement and walking.
+-- Measured J510 web half tick: friction precedes both movement and walking.
 local web = prediction.new(Vector(310.66775512695, 280))
 web:reset(web.position, 0, Vector(2.4830493927002 * 60, 0))
 local slowed = web:step(right, 1, 1, dt, false, nil, 0.86602538824081)
@@ -255,7 +255,7 @@ close(p:step(stop, 121, speed, dt), Vector(600, 400))
 assert(#p.pending == 1)
 print("PASS sparse walking confirmations preserve movement and true teleports reset it")
 
--- Captured from J460 player updates at 30 Hz: starts, releases, reversals and
+-- Captured from J510 player updates at 30 Hz: starts, releases, reversals and
 -- perpendicular turns at MoveSpeed 0.6, 1, 1.3 and 2. Velocities in the fixture
 -- are native units per half tick; the predictor stores units per second.
 local samples = assert(io.open(root .. "/tests/fixtures/prediction_motion.csv", "r"))

@@ -6,9 +6,9 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned roomOffset = 0x18190, playersOffset = 0x1ba50, frameOffset = 0x1a30dc;
 constexpr unsigned positionOffset = 0x294, previousOffset = 0x29c, interpolatedOffset = 0x16d;
 #else
-#include "engine/versions/j460/room_probe.cpp"
-namespace backend = isaac::engine::j460;
-constexpr unsigned roomOffset = 0x18300, playersOffset = 0x1baa8, frameOffset = 0x264f8;
+#include "engine/versions/j510/room_probe.cpp"
+namespace backend = isaac::engine::j510;
+constexpr unsigned roomOffset = 0x18300, playersOffset = 0x1baa8, frameOffset = 0x26508;
 constexpr unsigned positionOffset = 0x33c, previousOffset = 0x344, interpolatedOffset = 0x175;
 #endif
 #include <map>
@@ -223,7 +223,7 @@ void probes() {
 #ifdef ISAAC_LAN_TEST_J835
     require(L.functions.size() == 2, "Original backend exposed an unaudited room experiment");
 #else
-    require(L.functions.size() == 6, "J460 experiment bindings were dropped");
+    require(L.functions.size() == 6, "J510 experiment bindings were dropped");
     // Exercise the moved experiment with borrowed fixture rooms. Allocation,
     // native construction and destruction are not simulated here.
     backend::backgroundRoom = reinterpret_cast<Address>(background.data());

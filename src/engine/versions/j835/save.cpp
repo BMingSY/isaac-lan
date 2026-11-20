@@ -39,7 +39,7 @@ bool decodeAt(std::uintptr_t image, std::uintptr_t gameState, std::span<const st
         [&](stream::Context& context) {
             const stream::FileNames names(gameState, backend::layout::gameState::fileNames);
             // J835 always compares a valid stream's checksum with the last
-            // local disk save. Unlike J460 it has no checkProgress argument.
+            // local disk save. Unlike J510 it has no checkProgress argument.
             // Borrow that scalar for this in-memory read; the native reader
             // still computes and validates the stream's own checksum first.
             const auto manager =

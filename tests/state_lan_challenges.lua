@@ -985,7 +985,7 @@ function _IsaacLanFrame()
             local fullAt =
                 tonumber(read(challengeCoordination .. "/fill-done-" .. current .. ".txt"))
             if fullAt and verified >= fullAt + 90 and not hudOffsetZeroed then
-                -- J460's Lua setter clamps values above 0.01. Preserve the
+                -- J510's Lua setter clamps values above 0.01. Preserve the
                 -- native options.ini offset for the first full-bag frames,
                 -- then test the other endpoint by setting zero only once.
                 Options.HUDOffset = 0

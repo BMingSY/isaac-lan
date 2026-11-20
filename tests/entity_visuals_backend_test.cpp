@@ -11,7 +11,7 @@ constexpr unsigned prepareEntry = 0x13c430, renderEntry = 0x26810;
 #else
 constexpr unsigned spriteOffset = 0x48, extraOffset = 0xee0, layerStride = 0xa0;
 constexpr unsigned bodyVtable = 0x764914, tetherVtable = 0x71d264;
-constexpr unsigned prepareEntry = 0x14f670, renderEntry = 0x35290;
+constexpr unsigned prepareEntry = 0x155ea0, renderEntry = 0x394b0;
 #endif
 struct lua_State {
     int top = 1;

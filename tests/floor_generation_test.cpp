@@ -6,9 +6,9 @@
 namespace backend = isaac::engine::j835;
 constexpr unsigned challengeOffset = 0x1c319c;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
-constexpr unsigned challengeOffset = 0x26584;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
+constexpr unsigned challengeOffset = 0x26594;
 #endif
 #include <windows.h>
 #include <MinHook.h>

@@ -81,7 +81,7 @@ def catalog_from_log(text):
         raise ValueError("Runtime catalog is truncated")
     if {record["kind"] for record in records} != set(KINDS):
         raise ValueError("Runtime catalog is missing an item category")
-    return {"game": "1.9.7.17.J460", "source": "Isaac.GetItemConfig", "items": records}
+    return {"game": "1.9.7.19.J510", "source": "Isaac.GetItemConfig", "items": records}
 
 
 def lua(value):

@@ -4,8 +4,8 @@
 #include "engine/versions/j835/stage_transition_binding.h"
 namespace native = isaac::engine::j835;
 #else
-#include "engine/versions/j460/stage_transition_binding.h"
-namespace native = isaac::engine::j460;
+#include "engine/versions/j510/stage_transition_binding.h"
+namespace native = isaac::engine::j510;
 #endif
 #include <array>
 #include <cstring>

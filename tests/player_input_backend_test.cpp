@@ -3,7 +3,7 @@
 #ifdef ISAAC_LAN_TEST_J835
 #include "engine/versions/j835/entrypoints.h"
 #else
-#include "engine/versions/j460/entrypoints.h"
+#include "engine/versions/j510/entrypoints.h"
 #endif
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -28,8 +28,8 @@ constexpr auto initializeRva = backend::entry::playerInitialize;
 constexpr auto getHUDRva = backend::entry::gameGetHUD;
 constexpr auto assignHUDsRva = backend::entry::hudAssignPlayers;
 #else
-namespace backend = isaac::engine::j460;
-constexpr unsigned managerOffset = 0x1baa8, rosterOffset = 0x1baa8, controllerOffset = 0x1618;
+namespace backend = isaac::engine::j510;
+constexpr unsigned managerOffset = 0x1baa8, rosterOffset = 0x1baa8, controllerOffset = 0x161c;
 constexpr unsigned positionX = 0x33c, positionY = 0x340, previousX = 0x344, previousY = 0x348;
 constexpr unsigned hudOffset = 0x1da04;
 constexpr auto spawnRva = backend::entry::engineInputSpawn;
@@ -38,7 +38,7 @@ constexpr auto initializeRva = backend::entry::engineInputInitialize;
 constexpr auto getHUDRva = backend::entry::engineRoomsGetHUD;
 constexpr auto assignHUDsRva = backend::entry::engineRoomsRoomCall_5a8620;
 #endif
-constexpr unsigned imageSize = 0x890000;
+constexpr unsigned imageSize = privateGameImageBytes;
 unsigned char* image;
 std::vector<unsigned char> game(0x41000, 0xa5);
 std::array<std::array<unsigned char, 0x2700>, 8> actors;

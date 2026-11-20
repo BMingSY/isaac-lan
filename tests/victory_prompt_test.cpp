@@ -10,9 +10,9 @@
 namespace backend = isaac::engine::j835;
 constexpr unsigned promptOffset = 0x1c33fc, selectionOffset = 0x80218, resultOffset = 0x8021c;
 #else
-#include "engine/versions/j460/entrypoints.h"
-namespace backend = isaac::engine::j460;
-constexpr unsigned promptOffset = 0x26778, selectionOffset = 0x128, resultOffset = 0x12c;
+#include "engine/versions/j510/entrypoints.h"
+namespace backend = isaac::engine::j510;
+constexpr unsigned promptOffset = 0x26c18, selectionOffset = 0x128, resultOffset = 0x12c;
 #endif
 namespace isaac::runtime {
 int slot = -1;

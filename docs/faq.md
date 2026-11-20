@@ -8,7 +8,7 @@ A：脚本会输出 `Isaac LAN [错误类别]`、具体原因和 `Next step` 处
 | --- | --- |
 | `GAME_PATH` | 在 Steam 中选择「管理 → 浏览本地文件」，使用包含 `isaac-ng.exe` 的游戏目录；Windows 文件选择框选择该文件。 |
 | `PACKAGE_INVALID` | 将完整发布 ZIP 重新解压到一个新目录，不混用不同版本的文件。缺文件时检查安全软件的隔离记录。 |
-| `GAME_INCOMPATIBLE` | 核对游戏为 Windows Repentance+ `1.9.7.17.J460`，必要时通过 Steam 验证文件；Linux／Steam Deck 使用 Proton 版。 |
+| `GAME_INCOMPATIBLE` | 核对游戏为 Windows Repentance+ `1.9.7.19.J510`，必要时通过 Steam 验证文件；Linux／Steam Deck 使用 Proton 版。 |
 | `CHECKER_FAILED` | 游戏检查程序未正常运行。确认安装包已完整解压，检查安全软件的拦截记录；仍失败时保留完整报错。 |
 | `GAME_RUNNING`、`FILE_IN_USE` | 退出游戏以及占用报错文件的程序，等待进程退出后重试。 |
 | `FILE_EXISTS` | Windows 在替换被占用的文件时也可能返回「文件已存在」。先关闭占用程序后重试；仍失败时保留完整报错，不要手动删除目标文件来绕过检查。 |
