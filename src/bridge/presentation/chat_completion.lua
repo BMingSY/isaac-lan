@@ -1,6 +1,11 @@
 -- Local suggestions only; command execution remains owned by the chat service.
 return function(roomDefinitions, maxBytes)
     assert(maxBytes, "Chat command byte limit is required")
+    local revive = {
+        names = { "revive", "复活" },
+        detail = "复活自己或队友",
+        usage = "[玩家编号]",
+    }
     local commands = {
         { names = { "help", "h" }, detail = "查看命令" },
         { names = { "c", "console" }, detail = "原版控制台", usage = "<原版命令>" },
@@ -15,6 +20,7 @@ return function(roomDefinitions, maxBytes)
         { names = { "d100" }, detail = "掷百分骰" },
         { names = { "d100b" }, detail = "奖励骰" },
         { names = { "d100p" }, detail = "惩罚骰" },
+        revive,
     }
     local nativeCommands = {
         { names = { "help" }, detail = "原版命令帮助" },
@@ -29,6 +35,7 @@ return function(roomDefinitions, maxBytes)
         { names = { "clear" }, detail = "清空原版控制台" },
         { names = { "lua" }, detail = "执行 Lua", usage = "<代码>" },
         { names = { "luarun" }, detail = "执行 Lua 文件", usage = "<文件名>" },
+        revive,
     }
     local botCommands = {
         { names = { "on" }, detail = "开启托管" },
@@ -142,6 +149,9 @@ return function(roomDefinitions, maxBytes)
             else
                 local nativeCommand = named(nativeCommands, words[1])
                 if nativeCommand then
+                    if nativeCommand == revive and argument == 2 then
+                        definitions = players
+                    end
                     usage = "/"
                         .. name
                         .. " "
@@ -151,6 +161,8 @@ return function(roomDefinitions, maxBytes)
                     usage = nil
                 end
             end
+        elseif command == revive and argument == 1 then
+            definitions = players
         elseif command.names[1] == "tp" then
             if argument == 1 then
                 definitions = targets

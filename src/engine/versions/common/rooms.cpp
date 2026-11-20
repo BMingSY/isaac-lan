@@ -43,6 +43,7 @@
 #include <MinHook.h>
 #include <algorithm>
 #include <array>
+#include <string_view>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -2371,6 +2372,11 @@ int actorGhost(lua_State* L) {
     lua.pushBoolean(L, true);
     return 1;
 }
+bool reviveGhost(Room& room, Address head) {
+    Scope scope(room, controlledActors(head));
+    engine<RoomCall>(bindings.entry.replicaRevivePlayerGhost)(reinterpret_cast<void*>(head));
+    return !at<bool>(head, layout.player.coopGhost);
+}
 int revivePlayer(lua_State* L) {
     const auto slot = lua.checkInteger(L, 1);
     const auto head = slot >= 0 && slot < 4 ? participant(slot) : 0;
@@ -2378,30 +2384,25 @@ int revivePlayer(lua_State* L) {
     const bool valid = enabled && !runtime::replica() && !scopes.depth() && room &&
                        at<bool>(head, layout.player.coopGhost) && runtime::challengeActive() &&
                        runtime::allowChallengeEvent("round_revive");
-    if (valid) {
-        Scope scope(*room, controlledActors(head));
-        engine<RoomCall>(bindings.entry.replicaRevivePlayerGhost)(reinterpret_cast<void*>(head));
-    }
-    lua.pushBoolean(L, valid);
+    lua.pushBoolean(L, valid && reviveGhost(*room, head));
     return 1;
 }
-int machineRevival(lua_State* L) {
-    const auto payerSlot = lua.checkInteger(L, 1), ghostSlot = lua.checkInteger(L, 2);
-    const auto payer = payerSlot >= 0 && payerSlot < 4 ? participant(payerSlot) : 0;
-    const auto ghost = ghostSlot >= 0 && ghostSlot < 4 ? participant(ghostSlot) : 0;
-    const auto room = payer ? findRoom(payer) : nullptr;
-    bool revived = false;
-    if (enabled && !runtime::replica() && !scopes.depth() && room && ghost && payer != ghost &&
-        (connectedMask & (1u << payerSlot)) && (connectedMask & (1u << ghostSlot)) &&
-        findRoom(ghost) == room && room->key.dimension == 0 &&
-        room->key.index == at<int>(game(), layout.game.startingRoom) &&
-        !at<bool>(payer, layout.player.coopGhost) && at<bool>(ghost, layout.player.coopGhost) &&
-        runtime::allowChallengeEvent("coop_revive")) {
-        Scope scope(*room, controlledActors(ghost));
-        engine<RoomCall>(bindings.entry.replicaRevivePlayerGhost)(reinterpret_cast<void*>(ghost));
-        revived = !at<bool>(ghost, layout.player.coopGhost);
+int coopRevive(lua_State* L) {
+    const auto slot = lua.checkInteger(L, 1);
+    std::string_view result = "unavailable";
+    if (!runtime::replica() && stateReady() && slot >= 0 && slot < lan::maxPlayers) {
+        const auto head = participant(slot);
+        const auto room = head ? findRoom(head) : nullptr;
+        if (!(connectedMask & (1u << slot)) || !head)
+            result = "offline";
+        else if (!runtime::allowChallengeEvent("coop_revive"))
+            result = "forbidden";
+        else if (room && !at<bool>(head, layout.player.coopGhost))
+            result = "alive";
+        else if (room && reviveGhost(*room, head))
+            result = "revived";
     }
-    lua.pushBoolean(L, revived);
+    lua.pushLString(L, result.data(), result.size());
     return 1;
 }
 std::map<Address, RoomCall> entityUpdates;
@@ -3811,8 +3812,7 @@ bool bind(lua_State* L, HMODULE module) {
     function("actor_companions", actorCompanions);
     function("actor_ghost", actorGhost);
     function("rooms_revive_player", revivePlayer);
-    if (bindings.needsRevivalMachine)
-        function("rooms_machine_revival", machineRevival);
+    function("rooms_coop_revive", coopRevive);
     function("rooms_set_connected", setConnections);
     function("rooms_connected", connections);
     function("rooms_begin_floor", beginFloor);

@@ -46,7 +46,6 @@ function _IsaacLanFrame()
                         local was = combat[current]
                         local npc = e:ToNPC()
                         if playing then
-                            assert(s.bossIntro, "Missing skip hint during local Boss introduction")
                             local shots = #Isaac.FindByType(EntityType.ENTITY_PROJECTILE)
                             if was and was.seed == e.InitSeed then
                                 assert(

@@ -137,7 +137,7 @@ python tools/inspect_engine.py "$ISAAC_GAME_EXE" \
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
 
-忏悔的 `--case revival-machine` 检查第二层起始房机器、硬币不足、单次付费和客机幽灵复活。两版的 `--case devil-combat` 在已打开的恶魔房出口旁触发战斗，由客机实际尝试出门，并在清房后沿原路离开。
+两版的 `--case revive-command` 检查合作幽灵在同房与分房时通过联机控制台复活。`--case boss-reward-pickup` 验证主机取走第一个 Boss 奖励后，客机实际拾取弹簧锁钥匙、获得幸运与魂心、拾取两把钥匙并跨房保留效果。两版的 `--case devil-combat` 在已打开的恶魔房出口旁触发战斗，由客机实际尝试出门，并在清房后沿原路离开。
 
 实体尺寸恢复的定向检查为 `bridge.entity-codec` 和 Windows `native.entity-size`，覆盖无 XML 配置的实体、重复尺寸、实际尺寸变化、原有碰撞形状与非法输入拒绝。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case entity-size --case entity-fields --mod <Mod目录> --heap-check --record`，在同一对进程验证换层后的复活机、分房重聚、检查点重连及常规字段读写对照；用 Allstars 的旧实体表可覆盖配置缺失路径。Mod 文件只复制到隔离目录，不修改原安装；未订阅的创意工坊副本应准备为无 Workshop ID 的本地测试元数据，避免游戏自动移除它，保留 Lua 和资源文件原样。
 
@@ -161,7 +161,7 @@ Linux 的 `bridge.native-codec` 在真实 Lua 5.3 中加载生产 C++ 绑定，�
 
 玩家轮廓的 Windows 离线检查为 `native.player-outlines`（J510）和 `native.player-outlines-j835`，覆盖三条原生分支的寄存器／栈保护、四槽位配色、名单重排、全息分身／非主绘制限制、断开与嵌套／异常清理。J835 另查颜色栈临时值边界、幽灵四方向绘制、已有颜色及原生扩容保留、屏幕坐标恢复、x87／MXCSR／SSE 保存及逐 Hook 冲突回滚。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case player-outlines --case guest-visuals`，在同一组受保护主客机进程中检查装扮／缩放、重叠、染色、受击闪烁、双角色、幽灵、分房与换层；使用独立端口以及 `--heap-check --record`，对照双端画面。夹具断言与画面审阅分别记录，不能仅凭脚本完成判定描边可见。
 
-Boss 出场共享的定向检查为 `core.intro-barrier`、`native.intro-completion` 与 `run_special_routes.py --case shared-intro`；实机在同一连接中交换先进入 Boss 房间的玩家，错开 40 tick 入场，检查后来进入者的画面、首位观看者结束后截断剩余动画、跳过提示、画面期间的 Boss 位置与攻击、战斗恢复及异房隔离。可与 `--case input-response` 合并，配合 `--latency-ms 40 --heap-check --record` 核对副机纠偏速度和输入响应；移动离线检查为 `bridge.prediction`，覆盖不同绘制频率、重复确认、碰撞和传送。
+Boss 出场共享的定向检查为 `core.intro-barrier`、`native.intro-completion` 与 `run_special_routes.py --case shared-intro`；实机在同一连接中交换先进入 Boss 房间的玩家，错开 40 tick 入场，检查后来进入者的画面、首位观看者结束后截断剩余动画、画面期间的 Boss 位置与攻击、战斗恢复及异房隔离。可与 `--case input-response` 合并，配合 `--latency-ms 40 --heap-check --record` 核对副机纠偏速度和输入响应；移动离线检查为 `bridge.prediction`，覆盖不同绘制频率、重复确认、碰撞和传送。
 
 后悔药分岔选路的离线检查为 `native.rewind-home` 的 `route-checkpoint`，覆盖检查点路线位、实时换层标记、重复采集及失败清理。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case hourglass-routes --case rewind --case floor-sources`，指定隔离双端、独立端口及 `--heap-check --record`，复用进程验证主客机触发原生光柱／地洞、跨层回退后改选路线、重复回退与普通房间回退。
 

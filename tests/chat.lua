@@ -8,7 +8,7 @@ local emoteCount = 59
 local limits = { characters = 60, commandBytes = 2048, history = 200, dice = 999 }
 local now, rolls, executions = 100, 0, {}
 local blocked, executeHook, rollHook = {}, nil, nil
-local feedbackCalls = {}
+local feedbackCalls, revivals = {}, {}
 local peers, inbox, packets = {}, { {}, {}, {} }, {}
 for slot = 0, 2 do
     local info = {
@@ -72,6 +72,11 @@ for slot = 0, 2 do
                 return executeHook(owner, text)
             end
             return "结果：" .. text
+        end,
+        revive = function(target)
+            assert(slot == 0, "A replica executed a revival")
+            revivals[#revivals + 1] = target
+            return target == 3 and "offline" or "revived"
         end,
         roll = function(n)
             assert(slot == 0, "A guest generated a dice result")
@@ -183,6 +188,23 @@ assert(
     guest.messages[#guest.messages].text == "结果：unknown_native_command arbitrary arguments"
 )
 assert(#other.messages == before + 1)
+local unchangedHost, unchangedOther = #host.messages, #other.messages
+for _, case in ipairs({
+    { "/复活", 1, "2P 已复活" },
+    { "/REVIVE 1P", 0, "1P 已复活" },
+    { "/c 复活 P3", 2, "3P 已复活" },
+    { "/console revive 4", 3, "4P 未在线" },
+}) do
+    assert(guest.submit(case[1]))
+    poll()
+    host.step()
+    poll()
+    assert(revivals[#revivals] == case[2] and guest.messages[#guest.messages].text == case[3])
+end
+assert(#host.messages == unchangedHost and #other.messages == unchangedOther and #revivals == 4)
+for _, invalid in ipairs({ "/复活 0", "/revive 5P", "/c revive 2p 3p", "/revive P2P" }) do
+    assert(not guest.submit(invalid))
+end
 assert(not guest.submit("/giveitem c1"))
 assert(not guest.submit("/console"))
 assert(guest.submit("/c giveitem c1"))

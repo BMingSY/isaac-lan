@@ -9,19 +9,21 @@
 ## 职责与数据流
 
 - [core/chat.h](https://github.com/BMingSY/isaac-lan/blob/main/src/core/chat.h) 持有字符／字节限制、UTF-8 编辑和历史记录；Win32 输入适配在版本后端，处理 `~`、剪贴板和 IME，编辑期间隔离本机玩法输入，关闭后需释放已按住的动作键。
-- [runtime/chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat.lua) 持有命令队列、消息记录、输出归属、接收范围和去重。`/console`、`/c` 后的文本直接交给原版解析，不维护原版命令白名单；`/e` 在本机完成，掷骰由房主使用独立随机源生成一次。[chat_dice.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat_dice.lua) 负责掷骰表达式的解析、边界检查与求值，通过参数接收随机源，不读取游戏状态。
+- [runtime/chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat.lua) 持有命令队列、消息记录、输出归属、接收范围和去重。`/console`、`/c` 由联机控制台处理复活和房间回退，其余文本交给原版解析；`/e` 在本机完成，掷骰由房主使用独立随机源生成一次。[chat_dice.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat_dice.lua) 负责掷骰表达式的解析、边界检查与求值，通过参数接收随机源，不读取游戏状态。
 - [runtime/teleport.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/teleport.lua) 负责 `/tp` 参数、房间查找和到达事务。房主在输入者的角色作用域内选择已有目标，由原生房间组件执行迁移；到达后核对房间和角色身份，再完成玩家附近的落点放置。
 - [presentation/chat.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/chat.lua) 只处理本机输入状态、布局、滚动和绘制；文字气泡只渲染同房角色，使用半透明的原版气泡素材。表情选择、动画和气泡复用游戏已有轮盘及角色表情组件；原版资源从游戏读取，不重新分发。背景配置通过启动装配注入，不参与联网一致性。
 - [chat_completion.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/chat_completion.lua) 持有本机补全候选、用法及 Tab 轮换状态；传送房间名称与别名复用房间定义。候选只填写草稿，提交仍经过聊天服务及原版命令解析。
 - [chat_wire.lua](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/runtime/chat_wire.lua) 编解码请求、输出、表情。底层 `communication` 是独立于 Mod 动作与世界快照的可靠字节消息；网络层不解析聊天内容。协议版本以 [protocol.h](https://github.com/BMingSY/isaac-lan/blob/main/src/net/protocol.h) 为准，同版本扩展才可联机。
 
-输入者的连接槽由传输层确定。原版命令和 `/tp` 在房主的更新安全边界执行，使用输入者的角色与房间上下文；排队时记录局次、世界代次、房间和维度，执行前不再匹配则取消。`rewind` 使用既有回退事务。没有玩家权限分级；同步方式不改变成员使用命令的资格。
+输入者的连接槽由传输层确定。原版命令、复活和 `/tp` 在房主的更新安全边界执行，使用输入者的角色与房间上下文；排队时记录局次、世界代次、房间和维度，执行前不再匹配则取消。`rewind` 使用既有回退事务。没有玩家权限分级；同步方式不改变成员使用命令的资格。
 
 已解析的斜杠命令提交后先写入本机聊天记录，显示为 `system: /c g c333`，不广播、不显示气泡；原版命令没有返回文字时也保留这条记录。记录表示提交内容，执行错误只向提交者输出。输入开头的空白不影响命令识别；缺少控制台前缀的 `lua`、`luarun` 和含 `dofile(...)`、`loadfile(...)` 的文本只在本机报错，不作为普通聊天发送。掷骰结果包含执行者编号、表达式、逐骰明细与总和，例如 `1P 掷骰：2D6 = [3 + 5] = 8`；单骰省略重复的总和。接收者的聊天记录和对应角色气泡使用相同文字。
 
 文字聊天和掷骰默认全队共享，末尾的独立参数 `--room` 将本条消息限定为房间共享；该参数不解析原版控制台或 `/e` 的参数内容。房主处理房间消息时核对发送者提交时的局次、世界代次、房间和维度；上下文失效或游戏未就绪时，只向发送者报告失败，不掷骰或转发。接收者按处理时的房间与维度选择，并排除已断开的成员；房主不在该房间时也不写入本机记录。房间输出正文带 `【房间】` 标记，沿用现有文本消息格式；积压输出保留分发时选定的接收者。
 
-`/h`、`/help` 在本机记录中列出命令、别名和掷骰范围，不广播、不显示气泡。`/c` 不补充原版没有的命令，`/c help` 仍按当前游戏及已加载 Mod 的行为执行。
+`/h`、`/help` 在本机记录中列出命令、别名和掷骰范围，不广播、不显示气泡。`/c help` 列出当前游戏及已加载 Mod 的原版控制台命令。
+
+联机游戏中，`/复活` 或 `/revive` 复活自己。加玩家编号可复活在线队友，例如 `/复活 2p`。也可以输入 `/c revive 2p`。主客机均可使用，目标为合作幽灵时在其所在房间复活。禁止合作复活的挑战沿用挑战规则。执行结果仅提交者可见。
 
 `/opacity` 在本机调整玩家身体、头部、装扮、描边及其泪弹、激光的不透明度，主客机各自独立设置。数值为 0～100 的整数：0 完全透明，100 保留游戏原本外观；与游戏当前 Alpha 相乘，保留原有染色、闪烁和渐隐。泪弹、科技激光、硫磺火和科技 X 环沿用原版弹幕淡化；敌方弹幕、跟班本体、炸弹、刀类武器及 HUD 不受此设置影响。
 

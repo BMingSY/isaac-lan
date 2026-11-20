@@ -1,7 +1,6 @@
 -- Source messages keep the existing Chinese menu. The original game's LAN
 -- pages choose their translation from Options.Language, including live changes.
 local english = {
-    ["按确认键跳过"] = "Confirm to skip",
     ["跳过 "] = "Skip ",
     ["联机模式"] = "Online",
     ["局域网联机"] = "LAN Co-op",
@@ -69,7 +68,6 @@ local english = {
     ["结束挑战（不保存）"] = "End Challenge (No Save)",
     ["保存并结束联机"] = "Save and End Run",
     ["返回游戏"] = "Back to Game",
-    ["正在当前层归队 · 队友继续游戏"] = "Rejoining this floor while teammates play",
     ["P%d 暂停了游戏，由发起者恢复"] = "Paused by P%d. Only this player can resume.",
     ["正在重连…"] = "Reconnecting...",
     ["重连失败，请重试"] = "Reconnect failed. Try again.",
@@ -79,14 +77,8 @@ local english = {
     ["%s 需解锁底片与里该隐"] = "%s must unlock The Negative and Tainted Cain",
     ["、"] = ", ",
     ["Mod 不一致或无法核对，可能会造成未知的影响"] = "Mods differ or could not be checked. Gameplay may be affected.",
-    ["方向选择 · 确认勾选 · 返回退出"] = "Move to select / Confirm to toggle / Back to exit",
-    ["方向查看 · 返回退出"] = "Move to browse / Back to exit",
     ["房主地址：%s"] = "Host: %s",
     ["%s 端口：%s"] = "%s port: %s",
-    ["共同楼层 · 分头探索"] = "Same floor / Explore separately",
-    ["输入后确认 · 支持粘贴"] = "Type or paste, then confirm",
-    ["方向选择 · 确认进入"] = "Move to select / Confirm to enter",
-    ["方向选择 · 确认进入 · 返回退出"] = "Move to select / Confirm to enter / Back to exit",
     ["端口范围：1–65535"] = "Port must be between 1 and 65535",
     ["无法加入：Isaac LAN 版本不一致"] = "Cannot join: Isaac LAN versions differ",
     ["无法加入：版本号相同，但构建不一致"] = "Cannot join: Isaac LAN builds differ",
