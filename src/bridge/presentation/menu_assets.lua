@@ -1,5 +1,13 @@
 -- Each game supplies its own menu paper, pointer and typography.
-return function(resources, font)
+local englishFonts = {
+    small = { path = "font/TeamMeatFont10.fnt", scale = 1 },
+    normal = { path = "font/TeamMeatFont12.fnt", scale = 1 },
+    heading = { path = "font/TeamMeatFont16Bold.fnt", scale = 1 },
+}
+return function(resources, createFonts, language)
+    local font = createFonts(
+        not resources.native_lobby and language ~= "zh" and englishFonts or resources.fonts
+    )
     local assets = { characterPortraits = {} }
     local function sprite(path, animation, frame)
         local value = Sprite()

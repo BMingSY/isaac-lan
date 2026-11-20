@@ -1,5 +1,12 @@
 -- The game's own menu sprites and bitmap fonts. No redistributed game assets.
 local assets
+local resources = _IsaacLan.presentation_assets
+local menuLocale = _IsaacLanModules["presentation/menu_locale"]
+-- Options.Language is valid once the game presents a menu.
+local translate = menuLocale(true)
+local function message(value, ...)
+    return translate(value, ...)
+end
 local savedAddress, savedPort = _IsaacLan.menu_connection()
 local ui = {
     ip = savedAddress,
@@ -32,7 +39,8 @@ local Key = {
 local renderUpdateNotice = _IsaacLanModules["presentation/update_notice"](Key, _IsaacLan)
 local characters = _IsaacLanModules["presentation/menu_characters"]()
 local endpoint = _IsaacLanModules["core/endpoint"]
-local model = _IsaacLanModules["presentation/menu_model"](Phase, Command, endpoint, characters)
+local model =
+    _IsaacLanModules["presentation/menu_model"](Phase, Command, endpoint, characters, message)
 local RULE_LIST_ROWS, RULE_LIST_TOP, RULE_LIST_GAP, RULE_BACK_Y = 6, 100, 17, 214
 local CHARACTER_SWAP_ICON_LAYER, CHARACTER_SWAP_KEY_LAYER = 1, 2
 local challenges = _IsaacLan.net_challenges()
@@ -99,7 +107,12 @@ local function character(id)
         return "?"
     end
     local entry = characterCatalog[tostring(id)]
-    return characterNames[id] or (entry and entry.name) or ("角色 " .. id)
+    local name = characterNames[id]
+    if not name then
+        return (entry and entry.name) or message("角色 %d", id)
+    end
+    local tainted = name:match("^里·(.+)")
+    return tainted and message("里·%s", message(tainted)) or message(name)
 end
 local function portrait(id)
     local entry = characterCatalog[tostring(id)]
@@ -125,13 +138,16 @@ local faded = KColor(0.47, 0.42, 0.41, 1)
 local red = KColor(0.44, 0.06, 0.06, 1)
 local amber = KColor(0.45, 0.27, 0.06, 1)
 local function load()
-    if assets then
+    local language = not resources.native_lobby and Options.Language
+    local locale = menuLocale(resources.native_lobby, language)
+    if assets and translate == locale then
         return
     end
-    local resources = _IsaacLan.presentation_assets
+    translate = locale
     assets = _IsaacLanModules["presentation/menu_assets"](
         resources,
-        _IsaacLanModules["presentation/fonts"](resources.fonts)
+        _IsaacLanModules["presentation/fonts"],
+        language
     )
 end
 function _IsaacLanMainMenuEntry(x, y)
@@ -216,7 +232,9 @@ function _IsaacLanMenuRender(
                 assets = assets,
                 width = width,
                 height = height,
-                centered = centered,
+                centered = function(value, ...)
+                    centered(message(value), ...)
+                end,
                 panel = function()
                     assets.panel(origin, true)
                 end,
@@ -273,11 +291,10 @@ function _IsaacLanMenuRender(
         end
         local banner
         if phase == Phase.waiting then
-            banner = "正在当前层归队 · 队友继续游戏"
+            banner = message("正在当前层归队 · 队友继续游戏")
         elseif status.prepared and (status.pause or 0) > 0 then
-            banner = "P"
-                .. ((status.pauseOwner or 0) + 1)
-                .. " 暂停了游戏，由发起者恢复"
+            banner =
+                message("P%d 暂停了游戏，由发起者恢复", (status.pauseOwner or 0) + 1)
         end
         if banner then
             assets.banner(origin)
@@ -323,22 +340,23 @@ function _IsaacLanMenuRender(
         end,
     })
     local rulesPage = ruleCount ~= nil
-    centered(
+    local heading = message(
         modes and "联机模式"
             or ui.page == "autoTeleport" and "自动传送"
             or rulesPage and "房间规则"
             or ui.page == "challenges" and "联机挑战"
-            or "局域网联机",
-        110 + shift,
-        58,
-        16
+            or "局域网联机"
     )
+    if resources.native_lobby then
+        centered(heading, 110 + shift, 58, 16)
+    end
     if rulesPage then
         centered(
-            (ui.page == "autoTeleport" and "已选 " or "已启用 ")
-                .. ruleCount
-                .. (ui.page == "autoTeleport" and " 类" or " 项")
-                .. (host and not (challenge and challenge.roomOptionsLocked) and "" or " · 只读"),
+            message(ui.page == "autoTeleport" and "已选 %d 类" or "已启用 %d 项", ruleCount)
+                .. (
+                    host and not (challenge and challenge.roomOptionsLocked) and ""
+                    or message(" · 只读")
+                ),
             110,
             82,
             10,
@@ -347,17 +365,17 @@ function _IsaacLanMenuRender(
     end
     if notice == "reconnecting" or notice == "reconnect_failed" then
         centered(
-            notice == "reconnecting" and "正在重连…" or "重连失败，请重试",
+            message(notice == "reconnecting" and "正在重连…" or "重连失败，请重试"),
             110,
             100,
             12
         )
     elseif notice == "unavailable" then
-        centered("全员需解锁底片与里该隐", 240, 250, 10, red)
+        centered(message("全员需解锁底片与里该隐"), 240, 250, 10, red)
     elseif notice == "returning" then
-        centered("等待队友结算结束", 110, 100, 12)
+        centered(message("等待队友结算结束"), 110, 100, 12)
     elseif notice == "waiting" then
-        centered("正在连接...", 110, 100, 12)
+        centered(message("正在连接..."), 110, 100, 12)
     end
     local yStart = (
         status.recovering
@@ -433,7 +451,8 @@ function _IsaacLanMenuRender(
             label = (item.checked and "[x] " or "[ ] ") .. label
         end
         if item.field and ui.editing == item.field then
-            label = (item.field == "port" and "端口：" or "") .. ui[item.field] .. "_"
+            label = (item.field == "port" and message("端口：%s", ui.port) or ui[item.field])
+                .. "_"
         end
         local labelX, maxWidth = 49 + shift, 138
         if item.toggle then
@@ -508,27 +527,32 @@ function _IsaacLanMenuRender(
             end
             if phase == Phase.lobby and status["ready" .. i] == 1 then
                 assets.ready(origin, x, y)
-                centered("已准备", x + 63, y + 78, 10, ink)
+                centered(message("已准备"), x + 63, y + 78, 10, ink)
             else
                 centered(
-                    phase == Phase.lobby and "选择中"
-                        or ((status.connected or 0) & (1 << i) ~= 0 and "在线" or "等待归队"),
+                    message(
+                        phase == Phase.lobby and "选择中"
+                            or (
+                                (status.connected or 0) & (1 << i) ~= 0 and "在线"
+                                or "等待归队"
+                            )
+                    ),
                     x + 63,
                     y + 78,
                     10
                 )
             end
         else
-            centered("等待玩家", x + 63, y + 52, 10, faded)
+            centered(message("等待玩家"), x + 63, y + 52, 10, faded)
         end
     end
-    local message = status.saveError and status.saveError ~= "" and status.saveError
+    local errorText = status.saveError and status.saveError ~= "" and status.saveError
         or (ui.errorText ~= "" and ui.errorText or networkError)
     local compatibilityLines = (not status.saveError or status.saveError == "")
         and ui.errorText == ""
         and model.compatibilityError(status)
     local messageColor = red
-    if message == "" and phase == Phase.lobby and challenge and challenge.nextBag == 1 then
+    if errorText == "" and phase == Phase.lobby and challenge and challenge.nextBag == 1 then
         local missing = {}
         for i = 0, count - 1 do
             if status["eligible" .. i] ~= true then
@@ -536,39 +560,47 @@ function _IsaacLanMenuRender(
             end
         end
         if #missing > 0 then
-            message = table.concat(missing, "、") .. " 需解锁底片与里该隐"
+            errorText =
+                message("%s 需解锁底片与里该隐", table.concat(missing, message("、")))
         end
     end
-    if message == "" and status.modMismatch == 1 then
-        message = "Mod 不一致或无法核对，可能会造成未知的影响"
+    if errorText == "" and status.modMismatch == 1 then
+        errorText = message("Mod 不一致或无法核对，可能会造成未知的影响")
         messageColor = amber
     end
-    local footerY = compatibilityLines and 206 or (message ~= "" and 235 or 243)
+    local footerY = compatibilityLines and 206 or (errorText ~= "" and 235 or 243)
+    if not resources.native_lobby and notice == "unavailable" then
+        footerY = math.min(footerY, 227)
+    end
     if rulesPage then
         text(
-            host and "方向选择 · 确认勾选 · 返回退出"
-                or "方向查看 · 返回退出",
+            message(
+                host and "方向选择 · 确认勾选 · 返回退出"
+                    or "方向查看 · 返回退出"
+            ),
             25,
             footerY,
             10
         )
     elseif phase == Phase.lobby and ui.page ~= "challenges" then
         if not host then
-            text("房主地址：" .. ui.ip, 25, footerY - 12, 10)
+            text(message("房主地址：%s", ui.ip), 25, footerY - 12, 10)
         end
         text(
-            status.transport:upper() .. " 端口：" .. (host and status.port or ui.port),
+            message("%s 端口：%s", status.transport:upper(), host and status.port or ui.port),
             25,
             footerY,
             10
         )
     elseif phase == Phase.running then
-        text("共同楼层 · 分头探索", 25, footerY, 10)
+        text(message("共同楼层 · 分头探索"), 25, footerY, 10)
     else
         text(
-            ui.editing and "输入后确认 · 支持粘贴"
-                or status.recovering and "方向选择 · 确认进入"
-                or "方向选择 · 确认进入 · 返回退出",
+            message(
+                ui.editing and "输入后确认 · 支持粘贴"
+                    or status.recovering and "方向选择 · 确认进入"
+                    or "方向选择 · 确认进入 · 返回退出"
+            ),
             25,
             footerY,
             10
@@ -578,8 +610,17 @@ function _IsaacLanMenuRender(
         for i, line in ipairs(compatibilityLines) do
             centered(line, 240, 212 + i * 12, 10, red, 430)
         end
-    elseif message ~= "" then
-        centered(message:sub(1, 100), 240, 250, 10, messageColor)
+    elseif errorText ~= "" then
+        if resources.native_lobby then
+            centered(errorText:sub(1, 100), 240, 250, 10, messageColor)
+        else
+            centered(message(errorText), 240, 250, 10, messageColor, 430)
+        end
+    end
+    -- J835 queues font quads. Draw its heading after the cursor and cards
+    -- so their native sprite submissions cannot overwrite its glyph vertices.
+    if not resources.native_lobby then
+        centered(heading, 110 + shift, 58, 16, nil, 146)
     end
     return visible
 end

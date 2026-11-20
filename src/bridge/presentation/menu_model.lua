@@ -1,6 +1,6 @@
 local UNRESTRICTED_CHARACTER = 65535
 -- Menu decisions and actions are independent of fonts, sprites and mouse geometry.
-return function(Phase, Command, endpoint, characters)
+return function(Phase, Command, endpoint, characters, text)
     local CHALLENGE_MODE, MODE_COUNT = 4, 5
     local function idle(phase)
         return phase == Phase.idle or phase == Phase.failed or phase == Phase.closed
@@ -18,12 +18,13 @@ return function(Phase, Command, endpoint, characters)
         }
         local remote = failure.remoteVersion
         return {
-            reasons[failure.reason] or reasons.unavailable,
-            "房主："
-                .. (remote and remote ~= "" and remote or "未知")
-                .. "　你的版本："
-                .. failure.localVersion,
-            "请确认双方使用相同版本和构建的 Isaac LAN。",
+            text(reasons[failure.reason] or reasons.unavailable),
+            text(
+                "房主：%s　你的版本：%s",
+                remote and remote ~= "" and remote or text("未知"),
+                failure.localVersion
+            ),
+            text("请确认双方使用相同版本和构建的 Isaac LAN。"),
         }
     end
     local function validPort(ui)
@@ -102,12 +103,12 @@ return function(Phase, Command, endpoint, characters)
             end
         end
         local function ruleEntry()
-            local summary = firstRule or "无"
+            local summary = text(firstRule or "无")
             if selectedRules > 1 then
                 summary = summary .. " +" .. (selectedRules - 1)
             end
             local index = #rows + 1
-            row("房间规则：" .. summary, function()
+            row(text("房间规则：%s", summary), function()
                 if not rulesLocked then
                     ui.page, ui.selection, ui.ruleScroll, ui.ruleReturn = "rules", 1, 1, index
                 end
@@ -120,7 +121,7 @@ return function(Phase, Command, endpoint, characters)
                 for _, group in ipairs(definition.groups) do
                     local checked = ((status.roomOptions or 0) & group.flag) ~= 0
                     roomChoices[#roomChoices + 1] =
-                        { name = group.name, flag = group.flag, checked = checked }
+                        { name = text(group.name), flag = group.flag, checked = checked }
                     if checked then
                         selectedRooms = selectedRooms + 1
                     end
@@ -128,57 +129,57 @@ return function(Phase, Command, endpoint, characters)
             end
         end
         if status.pendingSave == 1 then
-            row("重试保存联机存档", function()
+            row(text("重试保存联机存档"), function()
                 command("retry_save")
             end)
-            row("返回", deps.hide)
+            row(text("返回"), deps.hide)
         elseif not host and (status.recovering or phase == Phase.running) then
             local busy = status.recovering and (phase ~= Phase.failed or status.prepared)
             notice = status.recovering and (busy and "reconnecting" or "reconnect_failed") or nil
-            row("重连游戏", function()
+            row(text("重连游戏"), function()
                 command("reconnect")
             end, not busy)
-            row("离开游戏", function()
+            row(text("离开游戏"), function()
                 command("leave")
             end)
         elseif modes then
             if deps.native.menu_official then
-                row("官方联机", function()
+                row(text("官方联机"), function()
                     if command("close") then
                         deps.native.menu_official()
                         deps.hide()
                     end
                 end)
             end
-            row("局域网联机", function()
+            row(text("局域网联机"), function()
                 ui.page = "lan"
                 ui.selection = 1
             end)
-            row("返回", function()
+            row(text("返回"), function()
                 deps.hide()
             end)
         elseif idle(phase) then
-            row("创建房间", function()
+            row(text("创建房间"), function()
                 if validPort(ui) then
                     remember(ui, deps.native)
                     command("host", ui.port)
                 end
             end)
-            row(ui.ip == "" and "输入房主的 IP" or ui.ip, function()
+            row(ui.ip == "" and text("输入房主的 IP") or ui.ip, function()
                 ui.editing = "ip"
                 deps.native.menu_text_begin(ui.ip, "ip")
             end, true, nil, "ip")
-            row("端口：" .. ui.port, function()
+            row(text("端口：%s", ui.port), function()
                 ui.editing = "port"
                 deps.native.menu_text_begin(ui.port, "port")
             end, true, nil, "port")
-            row("加入房间", function()
+            row(text("加入房间"), function()
                 if validPort(ui) then
                     remember(ui, deps.native)
                     command("join", endpoint.format(ui.ip, ui.port))
                 end
             end, ui.ip ~= "")
-            row("返回", function()
+            row(text("返回"), function()
                 if deps.native.menu_official then
                     ui.page = "modes"
                     ui.selection = 2
@@ -196,10 +197,10 @@ return function(Phase, Command, endpoint, characters)
                     )
                 end
             end
-            row("全选", function()
+            row(text("全选"), function()
                 setRooms(teleport.flag)
             end, rulesEditable)
-            row("清空", function()
+            row(text("清空"), function()
                 setRooms(0)
             end, rulesEditable)
             for _, room in ipairs(roomChoices) do
@@ -216,7 +217,7 @@ return function(Phase, Command, endpoint, characters)
                 end, rulesEditable)
                 rows[#rows].checked = room.checked
             end
-            row("返回", function()
+            row(text("返回"), function()
                 back(ui)
             end)
         elseif phase == Phase.lobby and ui.page == "rules" then
@@ -225,9 +226,10 @@ return function(Phase, Command, endpoint, characters)
                 if definition == teleport then
                     local index = #rows + 1
                     row(
-                        "自动传送："
-                            .. (selectedRooms == 0 and "关闭" or selectedRooms .. " 类")
-                            .. " >",
+                        text(
+                            "自动传送：%s >",
+                            selectedRooms == 0 and text("关闭") or text("%d 类", selectedRooms)
+                        ),
                         function()
                             ui.autoReturn, ui.autoScroll = index, ui.ruleScroll
                             ui.page, ui.selection, ui.ruleScroll = "autoTeleport", 1, 1
@@ -238,7 +240,7 @@ return function(Phase, Command, endpoint, characters)
                         not host and deps.accent or nil
                     )
                 else
-                    row(definition.name, function()
+                    row(text(definition.name), function()
                         if rulesEditable then
                             command(
                                 "room_options",
@@ -249,7 +251,7 @@ return function(Phase, Command, endpoint, characters)
                     rows[#rows].checked = ((status.roomOptions or 0) & definition.flag) ~= 0
                 end
             end
-            row("返回", function()
+            row(text("返回"), function()
                 back(ui)
             end)
         elseif phase == Phase.lobby and ui.page == "challenges" and host then
@@ -260,14 +262,14 @@ return function(Phase, Command, endpoint, characters)
             table.sort(ids)
             for _, id in ipairs(ids) do
                 local definition = challenges[tostring(id)]
-                row(id .. " " .. definition.name, function()
+                row(id .. " " .. text(definition.name), function()
                     if command("challenge", tostring(id)) then
                         ui.difficulty = definition.difficulty
                         ui.page, ui.selection = "lan", 3
                     end
                 end, definition.team_available, nil, nil, deps.accent)
             end
-            row("返回", function()
+            row(text("返回"), function()
                 back(ui)
             end)
             local preview = challenges[tostring(ids[ui.selection] or ids[1])]
@@ -290,7 +292,7 @@ return function(Phase, Command, endpoint, characters)
             rows[#rows].toggle = selection.toggle
             rows[#rows].canToggle = selection.canToggle
             row(
-                ready and "取消准备" or "准备",
+                text(ready and "取消准备" or "准备"),
                 selection.prepare,
                 ready or status["eligible" .. localSlot] == true and selection.canPrepare
             )
@@ -305,8 +307,10 @@ return function(Phase, Command, endpoint, characters)
                     end
                 end
                 row(
-                    challenge and ("挑战：" .. challenge.id .. " " .. challenge.name)
-                        or ({ "普通", "困难", "贪婪", "贪婪加强" })[ui.difficulty + 1],
+                    challenge and text("挑战：%d %s", challenge.id, text(challenge.name))
+                        or text(
+                            ({ "普通", "困难", "贪婪", "贪婪加强" })[ui.difficulty + 1]
+                        ),
                     function()
                         if challenge then
                             ui.page, ui.selection = "challenges", 1
@@ -319,7 +323,7 @@ return function(Phase, Command, endpoint, characters)
                     nil,
                     challenge and deps.accent
                 )
-                row(ui.seed == "" and "种子：随机" or ui.seed, function()
+                row(ui.seed == "" and text("种子：随机") or ui.seed, function()
                     ui.editing = "seed"
                     deps.native.menu_text_begin(ui.seed, "seed")
                 end, true, nil, "seed")
@@ -330,7 +334,7 @@ return function(Phase, Command, endpoint, characters)
                         and status["ready" .. i] == 1
                         and status["eligible" .. i] == true
                 end
-                row("开始游戏", function()
+                row(text("开始游戏"), function()
                     local settings = (ui.seed == "" and "RANDOM" or ui.seed)
                         .. ":"
                         .. (challenge and challenge.difficulty or ui.difficulty)
@@ -343,11 +347,11 @@ return function(Phase, Command, endpoint, characters)
                 end, allReady)
                 if not challenge and (status.savedPlayers or 0) >= 2 then
                     if (status.savedOptions or 0) ~= (status.roomOptions or 0) then
-                        row("载入上次规则", function()
+                        row(text("载入上次规则"), function()
                             command("room_options", tostring(status.savedOptions or 0))
                         end, count == status.savedPlayers)
                     else
-                        row("继续上次联机", function()
+                        row(text("继续上次联机"), function()
                             if command("resume") then
                                 deps.hide()
                             end
@@ -357,7 +361,7 @@ return function(Phase, Command, endpoint, characters)
             end
             if not host and challenge then
                 row(
-                    "挑战：" .. challenge.id .. " " .. challenge.name,
+                    text("挑战：%d %s", challenge.id, text(challenge.name)),
                     function() end,
                     false,
                     nil,
@@ -368,31 +372,34 @@ return function(Phase, Command, endpoint, characters)
             if not host then
                 ruleEntry()
             end
-            row("离开房间", function()
+            row(text("离开房间"), function()
                 command("close")
             end)
         elseif phase == Phase.running then
             if (status.pause or 0) == 0 then
-                row("暂停全队", function()
+                row(text("暂停全队"), function()
                     command("control", tostring(Command.pause))
                 end)
             else
-                row("恢复游戏", function()
+                row(text("恢复游戏"), function()
                     if command("control", tostring(Command.resume)) then
                         deps.hide()
                     end
                 end, localSlot == status.pauseOwner)
             end
-            row(challenge and "结束挑战（不保存）" or "保存并结束联机", function()
-                command("control", tostring(Command.saveExit))
-            end)
-            row("返回游戏", function()
+            row(
+                text(challenge and "结束挑战（不保存）" or "保存并结束联机"),
+                function()
+                    command("control", tostring(Command.saveExit))
+                end
+            )
+            row(text("返回游戏"), function()
                 deps.hide()
             end)
         else
             notice = phase == Phase.returning and "returning" or "waiting"
             if not status.prepared then
-                row("离开房间", function()
+                row(text("离开房间"), function()
                     command("close")
                 end)
             end

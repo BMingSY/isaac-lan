@@ -457,6 +457,6 @@ NPC 身份通过 RVA `0x5ec34c` 的 MSVC `__RTDynamicCast` 导入跳板判定，
 
 [角色目录](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/characters.cpp) 通过原生目录读取角色、里角色及 Mod 角色，复用两版共有的目录算法。原版选择条件入口为 RVA `0x4a1ea0`，`thiscall bool(record*, int)`；翻译入口为 RVA `0x56b880`，使用 `Manager+0x4a234` 的字符串表。选择条件在临时安装本机个人进度和菜单场景后求值，返回时恢复；伊甸继续游戏只临时豁免已经消耗的代币，不更改实际进度。目录只返回复制后的名称、资源路径和可选状态，不持有原生容器。完成标记使用共同的原版事件编号，替代身体映射到对应起始角色。
 
-菜单与聊天从原版中文资源目录 `resources-dlc3.zh/font/` 加载 TeamMeatFontExtended 的 10、12 和 16Bold 三种字号。完整资源路径让其他游戏语言也能显示局域网界面的中文。主菜单标题的 ANM2 描述只记录官方字形的位置，字体图像由游戏提供，渲染时整行旋转。大厅使用挑战菜单的图钉纸、种子菜单的便签和勾选标记，以及主菜单的指针。角色画像与完成标记沿用游戏资源。官方在线服务和原生表情轮盘按版本能力显示。
+局域网界面跟随游戏语言，中文使用 `resources-dlc3.zh/font/` 下的 TeamMeatFontExtended，英文使用 `font/` 下的 TeamMeatFont。其他游戏语言使用英文。两套官方字体均使用 10、12 和 16Bold 三种字号。聊天使用能显示中文的官方扩展字体。主菜单标题的 ANM2 描述只记录官方字形的位置，字体图像由游戏提供，渲染时整行旋转。大厅使用挑战菜单的图钉纸、种子菜单的便签和勾选标记，以及主菜单的指针。角色画像与完成标记沿用游戏资源。官方在线服务和原生表情轮盘按版本能力显示。
 
 候选入口可以参考 [REPENTOGON 1.0.12e](https://github.com/TeamREPENTOGON/REPENTOGON/tree/1.0.12e/libzhl/functions)，但参考特征码不是当前游戏的 ABI 保证。审计必须保留多重匹配并核对实际调用点、参数、返回值、对象布局与所有权；不把 J510 地址或字段偏移套入 J835。离线与实机边界见[开发与测试](https://github.com/BMingSY/isaac-lan/blob/main/docs/development-and-testing.md)。

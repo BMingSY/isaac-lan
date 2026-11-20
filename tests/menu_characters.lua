@@ -5,7 +5,8 @@ local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     Phase,
     dofile(root .. "/tests/fixtures/net_commands.lua"),
     dofile(root .. "/src/bridge/core/endpoint.lua"),
-    characters
+    characters,
+    dofile(root .. "/src/bridge/presentation/menu_locale.lua")(true)
 )
 local catalog = {
     ["0"] = { tainted = false, counterpart = 21 },
