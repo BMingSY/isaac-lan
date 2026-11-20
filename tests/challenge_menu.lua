@@ -2,6 +2,7 @@ local root = assert(arg[1])
 local vanilla = arg[2] == "vanilla"
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 PlayerType, RoomType = enums.PlayerType, enums.RoomType
+Options = { Language = "zh" }
 local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels, renderedMarks = {}, {}
@@ -91,7 +92,10 @@ Font = function()
         Load = function(_, path)
             if vanilla then
                 assert(
-                    path:find("resources-dlc3.zh/font/TeamMeatFontExtended", 1, true) == 1,
+                    Options.Language == "zh"
+                            and path:find("resources-dlc3.zh/font/TeamMeatFontExtended", 1, true) == 1
+                        or Options.Language ~= "zh"
+                            and path:find("font/TeamMeatFont", 1, true) == 1,
                     "Expected a native Repentance menu font"
                 )
             end
@@ -198,6 +202,7 @@ _IsaacLan = {
     end,
 }
 _IsaacLanModules = {
+    ["presentation/menu_locale"] = dofile(root .. "/src/bridge/presentation/menu_locale.lua"),
     ["presentation/fonts"] = dofile(root .. "/src/bridge/presentation/fonts.lua"),
     ["presentation/menu_assets"] = dofile(root .. "/src/bridge/presentation/menu_assets.lua"),
     ["presentation/restart"] = dofile(root .. "/src/bridge/presentation/restart.lua"),
@@ -442,7 +447,8 @@ local actions = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     _IsaacLan.net_phases(),
     _IsaacLan.net_commands(),
     _IsaacLanModules["core/endpoint"],
-    _IsaacLanModules["presentation/menu_characters"]()
+    _IsaacLanModules["presentation/menu_characters"](),
+    _IsaacLanModules["presentation/menu_locale"](true)
 )
 local sent, hidden = {}, 0
 local deps = {
@@ -608,7 +614,8 @@ local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     phaseValues,
     dofile(root .. "/tests/fixtures/net_commands.lua"),
     _IsaacLanModules["core/endpoint"],
-    _IsaacLanModules["presentation/menu_characters"]()
+    _IsaacLanModules["presentation/menu_characters"](),
+    _IsaacLanModules["presentation/menu_locale"](true)
 )
 for _, host in ipairs({ 0, 1 }) do
     local selected
@@ -753,6 +760,7 @@ do
     titleDraws = {}
     assert(not _IsaacLanMenuRender(true, false, 0, "", 0, 0, false, "", ""))
     assert(#titleDraws == 0)
+    Options.Language = "zh"
 end
 
 -- Each card renders its owner's twelve native single-player layers.
@@ -1177,3 +1185,67 @@ for _, row in ipairs(groupedRows) do
         )
     end
 end
+
+-- Use the same open menu while the game changes language. Plus retains the
+-- existing Chinese LAN page in every game locale. User input stays verbatim.
+do
+    remembered = { "", 29506 }
+    status = { phase = 0, hosting = 0, players = 0 }
+    Options.Language = "en"
+    dofile(root .. "/src/bridge/presentation/menu.lua")
+    _IsaacLanMenuOpen(true)
+    draw()
+    if vanilla then
+        assert(
+            labels["LAN Co-op"]
+                and labels["Create Room"]
+                and labels["Enter Host IP"]
+                and labels["Port: 29506"]
+        )
+        assert(labels["Join Room"] and labels["Back"] and not labels["局域网联机"])
+        status = {
+            phase = 2,
+            hosting = 1,
+            players = 2,
+            slot = 0,
+            choice0 = 23,
+            choice1 = 0,
+            eligible0 = true,
+            eligible1 = true,
+            ready1 = 1,
+            connected = 3,
+            transport = "udp",
+            port = 29506,
+        }
+        draw()
+        assert(
+            labels["Tainted Cain"]
+                and labels["Isaac"]
+                and labels["Seed: Random"]
+                and labels["Open Slot"]
+        )
+        assert(labels["Rules: None"] and labels["Choosing"] and labels["Ready"])
+        for _ = 1, 4 do
+            draw(40)
+        end
+        draw(13)
+        draw()
+        assert(labels["Room Rules"] and labels["[ ] Friendly Fire"])
+        Options.Language = "zh"
+        draw()
+        assert(labels["房间规则"] and labels["[ ] 队友伤害"] and not labels["Room Rules"])
+        Options.Language = "fr"
+        draw()
+        assert(labels["Room Rules"] and labels["Back"])
+        status = {
+            phase = 4,
+            compatibilityError = { reason = "version", localVersion = "1.2", remoteVersion = "2.3" },
+        }
+        draw()
+        assert(labels["Cannot join: Isaac LAN versions differ"] and labels["Host: 2.3 / You: 1.2"])
+    else
+        assert(labels["局域网联机"] and labels["创建房间"] and not labels["Create Room"])
+    end
+    Options.Language = "zh"
+end
+print("PASS live Chinese and English Repentance LAN, English fallback and original Plus locale")
