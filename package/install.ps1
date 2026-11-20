@@ -7,6 +7,8 @@ Set-StrictMode -Version Latest
 $ownedFiles = @('winmm.dll', 'isaac_lan_probe.dll')
 $win32Errors = @{ AccessDenied = 5; SharingViolation = 32; LockViolation = 33; HandleDiskFull = 39; FileExists = 80; DiskFull = 112; AlreadyExists = 183 }
 $failureCode = 'GAME_PATH'
+$installationLock = $null
+$lockHeld = $false
 $hints = @{
     GAME_PATH = 'Select the game folder containing isaac-ng.exe (Steam > Manage > Browse local files).'
     PACKAGE_INVALID = 'Extract the entire release ZIP into a new folder and retry. Check security-software quarantine if a file is missing.'
@@ -53,6 +55,17 @@ function AssertDirectory([string]$Path) {
         throw "Expected an ordinary directory: $Path"
     }
 }
+function RemoveEmptyDirectories($Paths) {
+    foreach ($path in ($Paths | Sort-Object Length -Descending)) {
+        try {
+            if ([IO.Directory]::Exists($path) -and ![IO.Directory]::GetFileSystemEntries($path).Count) {
+                [IO.Directory]::Delete($path)
+            }
+        } catch {
+            [Console]::Error.WriteLine("Isaac LAN: Could not remove empty directory ${path}: $($_.Exception.Message)")
+        }
+    }
+}
 function Property($Object, [string]$Name) {
     if ($null -ne $Object) {
         $property = $Object.PSObject.Properties[$Name]
@@ -77,9 +90,9 @@ function ReadJson([string]$Path) {
         throw "Cannot read ${Path}: $($_.Exception.Message)"
     }
 }
-function AssertManifest($Value, [string[]]$Names) {
+function AssertManifest($Value, [string[]]$Names, [int]$ExpectedFormat = 1) {
     $format = Property $Value 'format'
-    if (($format -isnot [int] -and $format -isnot [long]) -or $format -ne 1) {
+    if (($format -isnot [int] -and $format -isnot [long]) -or $format -ne $ExpectedFormat) {
         throw 'Unsupported manifest format.'
     }
     $files = Property $Value 'files'
@@ -90,11 +103,41 @@ function AssertManifest($Value, [string[]]$Names) {
         }
     }
 }
+function BackendFile([string]$Backend) {
+    return "isaac-lan/backends/$Backend/isaac_lan_probe.dll"
+}
+function InstalledFiles($Record) {
+    if ((Property $Record 'format') -eq 2) {
+        $backends = Property $Record 'backends'
+        if ($backends -isnot [Management.Automation.PSCustomObject] -or !@($backends.PSObject.Properties).Count) {
+            throw 'Invalid installed backend list.'
+        }
+        $names = @('winmm.dll')
+        foreach ($item in $backends.PSObject.Properties) {
+            if ($item.Name -cnotmatch '^j[0-9]+$' -or $item.Value -isnot [string] -or !$item.Value) {
+                throw 'Invalid installed backend.'
+            }
+            $names += BackendFile $item.Name
+        }
+        AssertManifest $Record $names 2
+        if (@($Record.files.PSObject.Properties).Count -ne $names.Count) {
+            throw 'Unexpected installed file.'
+        }
+    } else {
+        $names = $ownedFiles
+        AssertManifest $Record $names
+    }
+    return $names
+}
 function ReadPayload([string]$Directory, $Manifest, [string]$Backend) {
     $names = @('winmm.dll', 'isaac_lan_probe.dll', 'isaac_lan_check.exe')
     AssertManifest $Manifest $names
     foreach ($name in $names) {
-        $source = Join-Path $Directory $name
+        $source = if ($name -eq 'winmm.dll') {
+            Join-Path $PSScriptRoot $name
+        } else {
+            Join-Path $Directory $name
+        }
         AssertRegular $source
         if ((Hash $source) -ne $Manifest.files.$name) {
             throw "Package file failed verification: $name"
@@ -159,6 +202,22 @@ try {
     $GameDirectory = (Resolve-Path -LiteralPath $GameDirectory).ProviderPath
     $executable = Join-Path $GameDirectory 'isaac-ng.exe'
     AssertRegular $executable
+    $failureCode = 'FILE_IN_USE'
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        $key = [BitConverter]::ToString($algorithm.ComputeHash([Text.Encoding]::UTF8.GetBytes($GameDirectory.TrimEnd('\').ToUpperInvariant())))
+    } finally {
+        $algorithm.Dispose()
+    }
+    $installationLock = [Threading.Mutex]::new($false, "Local\IsaacLAN-Install-$key")
+    try {
+        $lockHeld = $installationLock.WaitOne(0)
+    } catch [Threading.AbandonedMutexException] {
+        $lockHeld = $true
+    }
+    if (!$lockHeld) {
+        throw 'Another installer is using this game directory.'
+    }
     $marker = Join-Path $GameDirectory '.isaac-lan-install'
     $dataDirectory = Join-Path $GameDirectory 'isaac-lan'
     $record = Join-Path $dataDirectory 'installation.json'
@@ -170,20 +229,24 @@ try {
     if (!$installed -and (Test-Path -LiteralPath $record)) {
         throw "Installation record exists without its marker: $record"
     }
-    $previous = $null
+    $previousFiles = [ordered]@{}
     if ($installed) {
         AssertRegular $marker
         if ([IO.File]::ReadAllText($marker).Trim() -ne 'IsaacLAN/1') {
             throw "Unrecognized installation marker: $marker"
         }
         $previous = ReadJson $record
-        AssertManifest $previous $ownedFiles
+        foreach ($name in @(InstalledFiles $previous)) {
+            $previousFiles[$name] = $previous.files.$name
+        }
     }
+    $sources = [ordered]@{}
     if ($Mode -ne 'Uninstall') {
         $failureCode = 'PACKAGE_INVALID'
         $index = ReadJson (Join-Path $PSScriptRoot 'payload.json')
-        $bundled = (Property $index 'format') -eq 2
-        $payloadDirectory = $null
+        $bundled = (Property $index 'format') -eq 3
+        $expectedBuild = $null
+        $payload = $null
         $details = @()
         if ($bundled) {
             $backends = $index.backends
@@ -201,7 +264,7 @@ try {
             $directory = $PSScriptRoot
             $manifest = $index
             if ($bundled) {
-                if ($backend -isnot [string] -or $backend -cnotmatch '^[a-z][a-z0-9_]*$') {
+                if ($backend -isnot [string] -or $backend -cnotmatch '^j[0-9]+$') {
                     throw 'Invalid package backend.'
                 }
                 $directory = Join-Path $parent $backend
@@ -209,6 +272,27 @@ try {
                 $manifest = ReadJson (Join-Path $directory 'payload.json')
             }
             $candidate = ReadPayload $directory $manifest $backend
+            if ($bundled) {
+                if ($candidate.extension_version -isnot [string] -or !$candidate.extension_version -or ($candidate.loader_abi -isnot [int] -and $candidate.loader_abi -isnot [long])) {
+                    throw 'Invalid extension version or loader ABI.'
+                }
+                if (!$payload) {
+                    $payload = [ordered]@{format = 2; extension_version = $candidate.extension_version; loader_abi = $candidate.loader_abi; backends = [ordered]@{}; files = [ordered]@{'winmm.dll' = $candidate.files.'winmm.dll' } }
+                    $sources['winmm.dll'] = Join-Path $PSScriptRoot 'winmm.dll'
+                }
+                if ($payload.extension_version -cne $candidate.extension_version -or $payload.loader_abi -ne $candidate.loader_abi) {
+                    throw 'Backend extension versions or loader ABIs differ.'
+                }
+                $name = BackendFile $backend
+                $payload.backends[$backend] = $candidate.game_build
+                $payload.files[$name] = $candidate.files.'isaac_lan_probe.dll'
+                $sources[$name] = Join-Path $directory 'isaac_lan_probe.dll'
+            } else {
+                $payload = $candidate
+                foreach ($name in $ownedFiles) {
+                    $sources[$name] = Join-Path $directory $name
+                }
+            }
             # Each native checker reads the selected PE without starting the game.
             $failureCode = 'CHECKER_FAILED'
             $checkOutput = (& (Join-Path $directory 'isaac_lan_check.exe') $executable | Out-String).Trim()
@@ -216,21 +300,17 @@ try {
                 throw "Game checker exited with code ${LASTEXITCODE}: $checkOutput"
             }
             if ($LASTEXITCODE -eq 0) {
-                if ($payloadDirectory) {
+                if ($expectedBuild) {
                     $failureCode = 'PACKAGE_INVALID'
                     throw 'Multiple game backends match this executable.'
                 }
-                $payloadDirectory = $directory
-                $payload = $candidate
+                $expectedBuild = $candidate.game_build
                 $detail = $checkOutput
             }
             $details += "$($candidate.game_build): $checkOutput"
         }
-        $compatible = $null -ne $payloadDirectory
-        $expectedBuild = $null
-        if ($compatible) {
-            $expectedBuild = $payload.game_build
-        } else {
+        $compatible = $null -ne $expectedBuild
+        if (!$compatible) {
             $detail = $details -join "`n"
         }
         if ($Mode -eq 'Status') {
@@ -249,11 +329,24 @@ try {
         }
     }
     $failureCode = 'FILE_CONFLICT'
-    foreach ($name in $ownedFiles) {
-        $destination = Join-Path $GameDirectory $name
+    $names = @(@($sources.Keys) + @($previousFiles.Keys) | Select-Object -Unique)
+    if (!$names.Count) {
+        $names = $ownedFiles
+    }
+    $parents = @{}
+    $targets = [ordered]@{}
+    foreach ($name in $names) {
+        $destination = [IO.Path]::GetFullPath((Join-Path $GameDirectory $name))
+        $targets[$destination] = $name.Replace('/', '_')
+        for ($parent = Split-Path -Parent $destination; $parent -ne $GameDirectory; $parent = Split-Path -Parent $parent) {
+            if (Test-Path -LiteralPath $parent) {
+                AssertDirectory $parent
+            }
+            $parents[$parent] = $parents[$parent] -or $sources.Contains($name)
+        }
         if (Test-Path -LiteralPath $destination) {
             AssertRegular $destination
-            if (!$installed -or !$previous.files.$name -or (Hash $destination) -ne $previous.files.$name) {
+            if (!$previousFiles.Contains($name) -or (Hash $destination) -ne $previousFiles[$name]) {
                 throw "Existing $destination is not an unchanged Isaac LAN file. It was left untouched."
             }
         }
@@ -266,38 +359,50 @@ try {
     $failureCode = 'IO_ERROR'
     $transaction = Join-Path $GameDirectory ('.isaac-lan-transaction-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $transaction | Out-Null
-    $targets = @($ownedFiles | ForEach-Object { Join-Path $GameDirectory $_ }) + @($record, $marker)
+    $targets[$record] = 'installation.json'
+    $targets[$marker] = '.isaac-lan-install'
+    $created = @()
     $backups = @{}
     $touched = @()
     $preserveRecovery = $false
     try {
-        foreach ($target in $targets) {
+        foreach ($target in $targets.Keys) {
             $backups[$target] = $null
             if (Test-Path -LiteralPath $target) {
-                $backup = 'old-' + (Split-Path -Leaf $target)
+                $backup = 'old-' + $targets[$target]
                 Copy-Item -LiteralPath $target -Destination (Join-Path $transaction $backup)
                 $backups[$target] = $backup
             }
         }
-        $recoveryFiles = @($targets | ForEach-Object { @{path = $_; backup = $backups[$_] } })
+        $recoveryFiles = @($targets.Keys | ForEach-Object { @{path = $_; backup = $backups[$_] } })
         WriteUtf8 (Join-Path $transaction 'recovery.json') (@{directory = $GameDirectory; files = $recoveryFiles } | ConvertTo-Json -Depth 5)
         if ($Mode -eq 'Install') {
-            foreach ($name in $ownedFiles) {
-                Copy-Item -LiteralPath (Join-Path $payloadDirectory $name) -Destination (Join-Path $transaction $name)
+            foreach ($name in $sources.Keys) {
+                $staged = Join-Path $transaction $name.Replace('/', '_')
+                Copy-Item -LiteralPath $sources[$name] -Destination $staged
+                if ((Hash $staged) -ne $payload.files.$name) {
+                    $failureCode = 'PACKAGE_INVALID'
+                    throw "Package file changed while staging: $name"
+                }
             }
             WriteUtf8 (Join-Path $transaction 'installation.json') ($payload | ConvertTo-Json -Depth 5)
             WriteUtf8 (Join-Path $transaction '.isaac-lan-install') "IsaacLAN/1`n"
         }
         try {
             if ($Mode -eq 'Install') {
-                if (!(Test-Path -LiteralPath $dataDirectory)) {
-                    New-Item -ItemType Directory -Path $dataDirectory | Out-Null
+                $parents[$dataDirectory] = $true
+                foreach ($parent in ($parents.Keys | Sort-Object Length)) {
+                    if ($parents[$parent] -and !(Test-Path -LiteralPath $parent)) {
+                        [IO.Directory]::CreateDirectory($parent) | Out-Null
+                        $created += $parent
+                    }
                 }
             }
-            foreach ($target in $targets) {
+            foreach ($target in $targets.Keys) {
                 $touched += $target
-                if ($Mode -eq 'Install') {
-                    Move-Item -LiteralPath (Join-Path $transaction (Split-Path -Leaf $target)) -Destination $target -Force
+                $staged = Join-Path $transaction $targets[$target]
+                if (Test-Path -LiteralPath $staged) {
+                    Move-Item -LiteralPath $staged -Destination $target -Force
                 } elseif (Test-Path -LiteralPath $target) {
                     Remove-Item -LiteralPath $target
                 }
@@ -325,6 +430,7 @@ try {
                     $failures += "${target}: $($_.Exception.Message)"
                 }
             }
+            RemoveEmptyDirectories $created
             if ($failures.Count -gt 0) {
                 $failureCode = 'ROLLBACK_FAILED'
                 throw "Operation failed: $($original.Exception.Message)`nRecovery folder: $transaction`n$($failures -join "`n")"
@@ -341,6 +447,7 @@ try {
             }
         }
     }
+    RemoveEmptyDirectories @($parents.Keys | Where-Object { $_ -ne $dataDirectory })
     Write-Output $(if ($Mode -eq 'Install') {
             'Installed. Start the game from Steam.'
         } else {
@@ -350,4 +457,11 @@ try {
 } catch {
     [Console]::Error.WriteLine((FailureMessage $_ $failureCode))
     exit 1
+} finally {
+    if ($lockHeld) {
+        $installationLock.ReleaseMutex()
+    }
+    if ($installationLock) {
+        $installationLock.Dispose()
+    }
 }

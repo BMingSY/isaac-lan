@@ -56,7 +56,8 @@ struct Fixture {
         write(source / payloadFile, bytes);
     }
     Selection select(std::string_view baseline = "0.6.3", FileHash hasher = hash) {
-        auto selection = isaac::updates::select(game, source, baseline, gameBuild, hasher);
+        auto selection =
+            isaac::updates::select(game, source, baseline, gameBuild, hasher, game / payloadFile);
         require(read(game / payloadFile) == "installed DLL", "root DLL remains unchanged");
         require(read(game / "isaac-lan/session.keep") == "saved session", "session preserved");
         require(read(game / "isaac-lan/installation.json") == "installation ownership unchanged",

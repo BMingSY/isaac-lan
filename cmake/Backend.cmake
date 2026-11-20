@@ -13,11 +13,13 @@ if(NOT EXISTS "${ISAAC_LAN_BACKEND_DIR}/sources.cmake")
     message(FATAL_ERROR "Unsupported ISAAC_LAN_BACKEND: ${ISAAC_LAN_BACKEND}")
 endif()
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
+file(GLOB game_version_profiles CONFIGURE_DEPENDS
+     "${PROJECT_SOURCE_DIR}/src/engine/versions/*/profile.json")
 set_property(
     DIRECTORY
     APPEND
     PROPERTY CMAKE_CONFIGURE_DEPENDS
-             "${ISAAC_LAN_BACKEND_DIR}/profile.json"
+             ${game_version_profiles}
              "${ISAAC_LAN_BACKEND_DIR}/entrypoints.h"
              "${ISAAC_LAN_BACKEND_DIR}/signatures.inc"
              "${PROJECT_SOURCE_DIR}/tools/game_profiles.py"

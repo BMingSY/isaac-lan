@@ -3,7 +3,7 @@
 import argparse
 import json
 from pathlib import Path
-from game_profiles import source_profile
+from game_profiles import RELEASE_BACKENDS, backend_metadata, source_profile
 
 
 def generate(backend, output):
@@ -48,6 +48,19 @@ def generate(backend, output):
         "",
     ]
     (output / "selected_game_profile.h").write_text("\n".join(lines))
+    versions = [
+        "#pragma once",
+        '#include "engine/game_version.h"',
+        "namespace isaac::engine {",
+        "inline constexpr GameVersion supportedGameVersions[] = {",
+    ]
+    for name in RELEASE_BACKENDS:
+        metadata = backend_metadata(name)
+        versions.append(
+            f'    {{"{name}", {json.dumps(metadata["game_build"])}, {hex(metadata["version_rva"])} }},'
+        )
+    versions += ["};", "} // namespace isaac::engine", ""]
+    (output / "supported_game_versions.h").write_text("\n".join(versions))
     return profile
 
 

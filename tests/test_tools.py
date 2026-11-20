@@ -320,8 +320,8 @@ class PackagingTests(unittest.TestCase):
 
     def strip_binary(self, command, *, check):
         self.assertTrue(check)
-        self.assertEqual(command[:2], [self.strip_tool, "--strip-all"])
-        destination = Path(command[2])
+        self.assertEqual(command[:3], [self.strip_tool, "--strip-all", "--preserve-dates"])
+        destination = Path(command[3])
         self.assertNotEqual(destination.parent, self.build)
         destination.write_bytes(destination.read_bytes().removeprefix(b"fixture:"))
 
@@ -406,16 +406,18 @@ class PackagingTests(unittest.TestCase):
         with ZipFile(archive) as zipped:
             root = archive.stem + "/"
             index = json.loads(zipped.read(root + "payload.json"))
-            self.assertEqual(index, {"format": 2, "backends": ["j510", "j835"]})
+            self.assertEqual(index, {"format": 3, "backends": ["j510", "j835"]})
             for backend in index["backends"]:
                 prefix = root + f"backends/{backend}/"
                 manifest = json.loads(zipped.read(prefix + "payload.json"))
                 self.assertEqual(manifest["backend"], backend)
                 self.assertEqual(manifest["game_build"], source_profile(backend)["game_build"])
                 for name in BINARIES:
-                    source = self.build if backend == "j510" else self.vanilla
+                    source = (
+                        self.build if backend == "j510" or name == "winmm.dll" else self.vanilla
+                    )
                     self.assertEqual(
-                        zipped.read(prefix + name),
+                        zipped.read((root if name == "winmm.dll" else prefix) + name),
                         (source / name).read_bytes().removeprefix(b"fixture:"),
                     )
             wrong = zipped.read(root + "backends/j835/payload.json")
@@ -453,7 +455,7 @@ class PackagingTests(unittest.TestCase):
             prefix = archive.stem + "/backends/j510/"
             payload = json.loads(zipped.read(prefix + "payload.json"))
             for name, original in originals.items():
-                final = zipped.read(prefix + name)
+                final = zipped.read((archive.stem + "/" if name == "winmm.dll" else prefix) + name)
                 self.assertEqual(final, original.removeprefix(b"fixture:"))
                 self.assertEqual(payload["files"][name], hashlib.sha256(final).hexdigest())
                 self.assertEqual((self.build / name).read_bytes(), original)

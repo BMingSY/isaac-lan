@@ -132,9 +132,8 @@ def installed_files(game):
     return {path: path.read_bytes() if path.exists() else None for path in paths}
 
 
-def test_bundle_routes_installs_upgrades_game_switch_and_uninstall(package_game, tmp_path):
-    legacy, game = package_game
-    installer.install(legacy, game)
+@pytest.fixture
+def universal_bundle(tmp_path):
     builds = []
     profiles = {}
     for backend in ("j510", "j835"):
@@ -147,13 +146,24 @@ def test_bundle_routes_installs_upgrades_game_switch_and_uninstall(package_game,
         builds.append(build)
     bundle = tmp_path / "universal"
     build_bundle(builds, bundle)
+    return bundle, profiles
+
+
+def test_bundle_routes_installs_upgrades_game_switch_and_uninstall(package_game, universal_bundle):
+    legacy, game = package_game
+    installer.install(legacy, game)
+    bundle, profiles = universal_bundle
+    assert installer.install(bundle, game)["installed"]
+    record = json.loads((game / "isaac-lan/installation.json").read_text())
+    assert record["format"] == 2
+    assert not (game / "isaac_lan_probe.dll").exists()
+    assert (game / "winmm.dll").read_bytes() == (bundle / "winmm.dll").read_bytes()
     for backend, profile in profiles.items():
         (game / "isaac-ng.exe").write_bytes(game_image(profile))
         assert installer.install(bundle, game, "Status")["gameBuild"] == profile["game_build"]
-        assert installer.install(bundle, game)["installed"]
-        for name in installer.OWNED:
-            assert (game / name).read_bytes() == f"{backend}/{name}".encode()
-        assert json.loads((game / "isaac-lan/installation.json").read_text())["backend"] == backend
+        assert record["backends"][backend] == profile["game_build"]
+        target = game / "isaac-lan/backends" / backend / "isaac_lan_probe.dll"
+        assert target.read_bytes() == f"{backend}/isaac_lan_probe.dll".encode()
     before = installed_files(game)
     (game / "isaac-ng.exe").write_bytes(b"unsupported")
     assert not installer.install(bundle, game, "Status")["gameCompatible"]
@@ -162,7 +172,84 @@ def test_bundle_routes_installs_upgrades_game_switch_and_uninstall(package_game,
     assert caught.value.code == "GAME_INCOMPATIBLE"
     assert installed_files(game) == before
     assert not installer.install(bundle, game, "Uninstall")["installed"]
+    assert not (game / "isaac-lan/backends").exists()
     assert (game / "save.dat").read_bytes() == b"keep the original save"
+
+
+def test_bundle_repair_and_rollback_both_named_probes(package_game, universal_bundle, monkeypatch):
+    _, game = package_game
+    bundle, profiles = universal_bundle
+    installer.install(bundle, game)
+    record = game / "isaac-lan/installation.json"
+    installed = json.loads(record.read_text())
+    originals = {name: (game / name).read_bytes() for name in installed["files"]}
+    for backend in profiles:
+        directory = bundle / "backends" / backend
+        probe = directory / "isaac_lan_probe.dll"
+        probe.write_bytes(backend.encode())
+        manifest = json.loads((directory / "payload.json").read_text())
+        manifest["files"][probe.name] = installer.digest(probe)
+        (directory / "payload.json").write_text(json.dumps(manifest))
+    replace = installer.os.replace
+
+    def fail_record(source, target):
+        if target == record:
+            raise OSError("record write failed")
+        return replace(source, target)
+
+    with monkeypatch.context() as m:
+        m.setattr(installer.os, "replace", fail_record)
+        with pytest.raises(OSError, match="record write failed"):
+            installer.install(bundle, game)
+    assert json.loads(record.read_text()) == installed
+    assert {n: (game / n).read_bytes() for n in originals} == originals
+    (game / installer.backend_file("j835")).unlink()
+    assert installer.install(bundle, game)["installed"]
+    assert (game / installer.backend_file("j835")).read_bytes() == b"j835"
+    extra = game / "isaac-lan/backends/j835/player.txt"
+    extra.write_text("keep")
+    installer.install(bundle, game, "Uninstall")
+    assert extra.read_text() == "keep"
+    assert not (game / "isaac-lan/backends/j510").exists()
+
+
+def test_bundle_preserves_foreign_target_and_rejects_symlinked_parent(
+    package_game, universal_bundle, tmp_path
+):
+    _, game = package_game
+    bundle, _ = universal_bundle
+    parent = game / "isaac-lan/backends"
+    parent.mkdir(parents=True)
+    external = tmp_path / "external"
+    external.mkdir()
+    (parent / "j835").symlink_to(external, target_is_directory=True)
+    with pytest.raises(installer.InstallerError, match="ordinary directory"):
+        installer.install(bundle, game)
+    assert list(external.iterdir()) == []
+    (parent / "j835").unlink()
+    (parent / "j835").mkdir()
+    foreign = game / installer.backend_file("j835")
+    foreign.write_bytes(b"foreign")
+    with pytest.raises(installer.InstallerError) as caught:
+        installer.install(bundle, game)
+    assert caught.value.code == "FILE_CONFLICT"
+    assert foreign.read_bytes() == b"foreign" and not (game / "winmm.dll").exists()
+
+
+def test_concurrent_installer_leaves_directory_untouched(package_game):
+    fcntl = pytest.importorskip("fcntl")
+
+    package, game = package_game
+    lock = installer.os.open(game, installer.os.O_RDONLY | installer.os.O_DIRECTORY)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        with pytest.raises(installer.InstallerError) as caught:
+            installer.install(package, game)
+        assert caught.value.code == "FILE_IN_USE"
+        assert not (game / "winmm.dll").exists()
+    finally:
+        installer.os.close(lock)
+    assert installer.install(package, game)["installed"]
 
 
 @pytest.mark.parametrize("mode", ["Install", "Uninstall"])

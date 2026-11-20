@@ -23,23 +23,25 @@ def game_profile(source, backend=DEFAULT_BACKEND):
     return source_profile(backend, root=source)
 
 
-def write_payload(build_directory, output, profile, strip_binaries):
-    strip_tool = None
+def stage_binary(build_directory, name, destination, strip_binaries):
+    shutil.copy2(build_directory / name, destination)
     if strip_binaries:
         cache = (build_directory / "CMakeCache.txt").read_text()
         match = re.search(r"^CMAKE_STRIP:[^=\n]+=(.+)$", cache, re.MULTILINE)
         if not match or match[1].endswith("-NOTFOUND"):
             raise ValueError("The configured Windows toolchain must provide CMAKE_STRIP")
-        strip_tool = match[1]
-    files = {}
-    for name in ("winmm.dll", "isaac_lan_probe.dll", "isaac_lan_check.exe"):
-        destination = output / name
-        shutil.copy2(build_directory / name, destination)
-        if strip_tool:
-            # Keep the original build and its symbols for diagnostics. Hash the
-            # final payload so installers and Workshop use these exact bytes.
-            subprocess.run([strip_tool, "--strip-all", str(destination)], check=True)
-        files[name] = hashlib.sha256(destination.read_bytes()).hexdigest()
+        # PE stripping otherwise replaces the build timestamp with the current time.
+        subprocess.run([match[1], "--strip-all", "--preserve-dates", str(destination)], check=True)
+    return hashlib.sha256(destination.read_bytes()).hexdigest()
+
+
+def write_payload(build_directory, output, profile, strip_binaries, shared_loader=None):
+    files = {
+        "winmm.dll": shared_loader
+        or stage_binary(build_directory, "winmm.dll", output / "winmm.dll", strip_binaries)
+    }
+    for name in ("isaac_lan_probe.dll", "isaac_lan_check.exe"):
+        files[name] = stage_binary(build_directory, name, output / name, strip_binaries)
     version = (ROOT / "VERSION").read_text().strip()
     payload = {
         "format": 1,
@@ -92,12 +94,15 @@ def build_bundle(build_directories, output, *, strip_binaries=False):
     if builds.keys() != set(RELEASE_BACKENDS):
         raise ValueError(f"Release requires builds for {', '.join(RELEASE_BACKENDS)}")
     write_installer(output)
+    shared_loader = stage_binary(
+        builds[DEFAULT_BACKEND][0], "winmm.dll", output / "winmm.dll", strip_binaries
+    )
     for backend in RELEASE_BACKENDS:
         directory, profile = builds[backend]
         target = output / "backends" / backend
         target.mkdir(parents=True)
-        write_payload(directory, target, profile, strip_binaries)
-    index = {"format": 2, "backends": list(RELEASE_BACKENDS)}
+        write_payload(directory, target, profile, strip_binaries, shared_loader)
+    index = {"format": 3, "backends": list(RELEASE_BACKENDS)}
     (output / "payload.json").write_text(json.dumps(index, indent=2) + "\n")
     return index
 

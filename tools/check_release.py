@@ -30,9 +30,15 @@ SHARED_FILES = {
     "licenses/ENet-LICENSE.txt",
 }
 LEGACY_FILES = SHARED_FILES | PAYLOAD_FILES
-FILES = SHARED_FILES | {
-    f"backends/{backend}/{name}" for backend in RELEASE_BACKENDS for name in PAYLOAD_FILES
-}
+FILES = (
+    SHARED_FILES
+    | {"winmm.dll"}
+    | {
+        f"backends/{backend}/{name}"
+        for backend in RELEASE_BACKENDS
+        for name in PAYLOAD_FILES - {"winmm.dll"}
+    }
+)
 SYSTEM_DLLS = {
     "bcrypt.dll",
     "dwmapi.dll",
@@ -76,7 +82,12 @@ def check_payload(zipped, root, prefix, backend, tag, require_stripped, bundled)
     ):
         raise ValueError("Release game profile differs from manifest")
     for name in BINARIES:
-        if hashlib.sha256(zipped.read(prefix + name)).hexdigest() != payload["files"][name]:
+        if (
+            hashlib.sha256(
+                zipped.read((root if name == "winmm.dll" else prefix) + name)
+            ).hexdigest()
+            != payload["files"][name]
+        ):
             raise ValueError(f"Package file hash differs: {name}")
     if set(payload.get("linux_files", {})) != {"install.py", "game-profile.json"}:
         raise ValueError("Linux installer manifest differs")
@@ -86,7 +97,7 @@ def check_payload(zipped, root, prefix, backend, tag, require_stripped, bundled)
             raise ValueError(f"Package file hash differs: {name}")
     imports = {}
     for name in sorted(BINARIES):
-        contents = zipped.read(prefix + name)
+        contents = zipped.read((root if name == "winmm.dll" else prefix) + name)
         pe = pefile.PE(data=contents, fast_load=True)
         try:
             if pe.FILE_HEADER.Machine != 0x14C or pe.OPTIONAL_HEADER.Magic != 0x10B:
