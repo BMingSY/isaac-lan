@@ -104,7 +104,8 @@ function _IsaacLanRoomEntered(door)
         Isaac.GetPlayer,
         RoomType,
         CollectibleType,
-        TrinketType
+        TrinketType,
+        modules["compat/items/door_stop"]
     )
 end
 local worldSchema = assert(modules["sync/world_schema"])

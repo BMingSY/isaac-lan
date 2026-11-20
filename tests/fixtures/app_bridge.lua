@@ -23,6 +23,7 @@ return function(root, native, modules)
     ModCallbacks.MC_ENTITY_TAKE_DMG = ModCallbacks.MC_ENTITY_TAKE_DMG or 11
     ModCallbacks.MC_USE_ITEM = ModCallbacks.MC_USE_ITEM or 12
     ModCallbacks.MC_PRE_USE_ITEM = ModCallbacks.MC_PRE_USE_ITEM or 13
+    ModCallbacks.MC_POST_PEFFECT_UPDATE = ModCallbacks.MC_POST_PEFFECT_UPDATE or 14
     native.net_room_options = function()
         return {
             { flag = 1, key = "friendlyFire", name = "队友伤害" },
@@ -57,6 +58,8 @@ return function(root, native, modules)
         "compat/rules/pvp_health",
         "compat/items/pvp",
         "compat/items/flat_file",
+        "compat/items/door_stop",
+        "compat/routes/devil_combat",
         "compat/rules/friendly_fire",
         "compat/rules/loot_roll",
         "compat/rules/clear_charge",

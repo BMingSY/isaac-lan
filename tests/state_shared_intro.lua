@@ -5,7 +5,8 @@ local frame, gate = _IsaacLanFrame, native.net_gate
 local renders, linked, chosen, finished = 0, false, false, false
 local boss, tick = nil, 0
 local samples, starts, active = { 0, 0 }, { 0, 0 }, false
-local checked = {}
+local checked, combat, combatSamples = {}, {}, { 0, 0 }
+local resumed = {}
 local startedAt, endedAt = {}, {}
 local function report(text)
     Isaac.DebugString("LAN_NETWORK SHARED_INTRO " .. text)
@@ -36,6 +37,50 @@ function _IsaacLanFrame()
     if s.prepared and native.rooms_ready() then
         local current = phase(tick)
         local playing = native.presentation_active()
+        local slot = host and 0 or 1
+        local position = native.rooms_positions()[tostring(slot)]
+        if position and position.index == boss and (playing or combat[current]) then
+            assert(native.rooms_with_player(slot, function()
+                for _, e in ipairs(Isaac.GetRoomEntities()) do
+                    if e:IsBoss() and e:IsActiveEnemy(false) then
+                        local was = combat[current]
+                        local npc = e:ToNPC()
+                        if playing then
+                            assert(s.bossIntro, "Missing skip hint during local Boss introduction")
+                            local shots = #Isaac.FindByType(EntityType.ENTITY_PROJECTILE)
+                            if was and was.seed == e.InitSeed then
+                                assert(
+                                    (not host or position.updates == was.updates)
+                                        and e.Position:DistanceSquared(was.pos) < 0.01
+                                        and npc.State == was.state
+                                        and shots == was.shots,
+                                    "Boss moved, attacked or received an authoritative update during the intro"
+                                )
+                            end
+                            combat[current] = {
+                                seed = e.InitSeed,
+                                updates = position.updates,
+                                pos = e.Position,
+                                state = npc.State,
+                                shots = shots,
+                            }
+                            combatSamples[current] = combatSamples[current] + 1
+                        elseif
+                            was
+                            and was.seed == e.InitSeed
+                            and (
+                                (host and position.updates > was.updates)
+                                or npc.State ~= was.state
+                                or e.Position:DistanceSquared(was.pos) >= 0.01
+                            )
+                        then
+                            resumed[current] = true
+                        end
+                        break
+                    end
+                end
+            end))
+        end
         if playing then
             samples[current] = samples[current] + 1
             if not active then
@@ -67,6 +112,10 @@ function _IsaacLanFrame()
                     assert(Game():GetLevel():GetCurrentRoomIndex() == boss, "Intro changed rooms")
                 end, 1),
                 "Intro control check could not enter the local room at tick " .. tick
+            )
+            assert(
+                combatSamples[current] > 5 and resumed[current],
+                "Missing frozen and resumed boss behaviour"
             )
             checked[current] = true
             report("RECOVERED phase=" .. current .. " tick=" .. tick)

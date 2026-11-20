@@ -1,6 +1,8 @@
 -- Source messages keep the existing Chinese menu. The original game's LAN
 -- pages choose their translation from Options.Language, including live changes.
 local english = {
+    ["按确认键跳过"] = "Confirm to skip",
+    ["跳过 "] = "Skip ",
     ["联机模式"] = "Online",
     ["局域网联机"] = "LAN Co-op",
     ["官方联机"] = "Online Play",

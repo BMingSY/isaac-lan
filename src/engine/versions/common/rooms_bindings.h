@@ -68,6 +68,7 @@ struct Bindings {
         unsigned levelSetNextStage;
         unsigned levelSwapRooms;
         unsigned luaPostNewRoom;
+        unsigned collectibleRevivalRoomCall, trinketRevivalRoomCall;
         unsigned momsHandTransitionCall;
         unsigned nPCNeedlePrepareVisual;
         unsigned playerAnimateTeleport;
@@ -255,6 +256,7 @@ struct Bindings {
     void (*beginDogmaCinematic)(std::uintptr_t);
     void (*familiarNewRoom)(std::uintptr_t, std::uintptr_t);
     int (*pickupPrice)(std::uintptr_t, std::uintptr_t, int, int, int);
+    bool needsRevivalMachine = false;
 };
 extern const Bindings bindings;
 } // namespace isaac::engine::native_rooms

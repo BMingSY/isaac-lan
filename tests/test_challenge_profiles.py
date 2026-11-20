@@ -7,9 +7,15 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from progress_fixture import AZAZEL_ACHIEVEMENT, MAGDALENE_ACHIEVEMENT, MAGIC, checksum
+from progress_fixture import (
+    AZAZEL_ACHIEVEMENT,
+    MAGDALENE_ACHIEVEMENT,
+    MAGIC,
+    WOMB_ACHIEVEMENT,
+    checksum,
+)
 from testing.challenges import completion_evidence
-from testing.profiles import azazel_profile, magdalene_profile, profile_fixture
+from testing.profiles import azazel_profile, magdalene_profile, post_mom_profile, profile_fixture
 
 
 def baseline():
@@ -57,7 +63,11 @@ def test_corrupt_or_unsupported_profiles_are_rejected():
 
 @pytest.mark.parametrize(
     "prepare,identifier",
-    [(azazel_profile, AZAZEL_ACHIEVEMENT), (magdalene_profile, MAGDALENE_ACHIEVEMENT)],
+    [
+        (azazel_profile, AZAZEL_ACHIEVEMENT),
+        (post_mom_profile, WOMB_ACHIEVEMENT),
+        (magdalene_profile, MAGDALENE_ACHIEVEMENT),
+    ],
 )
 def test_selected_character_unlock_preserves_other_progress(prepare, identifier):
     source = bytearray(baseline())

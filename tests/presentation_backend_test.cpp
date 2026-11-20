@@ -10,7 +10,7 @@ namespace backend = isaac::engine::j835;
 constexpr unsigned transitionOffset = 0x1b6c0, playersOffset = 0x1ba50, managerOffset = 0x1ba40;
 constexpr unsigned roomIndexOffset = 0x18194, dimensionOffset = 0x1819c, pauseOffset = 0x10203c;
 constexpr unsigned firstBossOffset = 0x1d1c, secondBossOffset = 0x1d20;
-constexpr unsigned controllerOffset = 0x154c, controlsOffset = 0x360, markerOffset = 0x328;
+constexpr unsigned controllerOffset = 0x154c, controlsOffset = 0x360, markerOffset = 0x348;
 constexpr unsigned hudOffset = 0x3da4c, hudVisibleOffset = 0xc3eb6, hudStride = 0x6b0;
 #else
 #include "engine/versions/j510/entrypoints.h"
@@ -101,7 +101,7 @@ void __attribute__((fastcall)) nativeStart(void* object, void*, unsigned first, 
     observedDimension = field<int>(object, 0x18);
     observedRoster = currentRoster();
 #ifdef ISAAC_LAN_TEST_J835
-    observedActor = reinterpret_cast<void*>(field<Address>(object, 0x320));
+    observedActor = reinterpret_cast<void*>(field<Address>(object, 0x340));
     field<bool>(object, markerOffset) = true;
 #else
     observedActor = reinterpret_cast<void*>(field<Address>(game.data(), 0x1bb74));
@@ -133,7 +133,7 @@ bool __attribute__((fastcall)) nativeHas(void* object, void*, int item, bool eff
     return true;
 }
 void __attribute__((fastcall)) nativeAssign(void* reference, void* actor) {
-    require(reference == static_cast<unsigned char*>(transition()) + 0x320,
+    require(reference == static_cast<unsigned char*>(transition()) + 0x340,
             "Intro assigned an unrelated EntityPtr");
     auto* slot = static_cast<Address*>(reference);
     auto& old = registered[*slot];
@@ -597,7 +597,7 @@ int main() {
         auto* actor = players[1].data();
         for (auto* reference : registered[reinterpret_cast<Address>(actor)])
             *reference = 0;
-        require(!field<Address>(transition(), 0x320),
+        require(!field<Address>(transition(), 0x340),
                 "Destroying the actor did not clear the registered transition reference");
 #endif
         field<Address>(image, backend::globals::game) = 0;

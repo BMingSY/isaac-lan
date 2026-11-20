@@ -54,7 +54,7 @@ return function(deps)
     end
     return {
         poll = function(status)
-            status.skipVotes, status.skipMembers = 0, 0
+            status.skipVotes, status.skipMembers, status.bossIntro = 0, 0, false
             local valid = status.phase == deps.running
                 and status.restarting ~= 1
                 and #status.runId == 32
@@ -68,6 +68,7 @@ return function(deps)
             end
             local host, bit = status.hosting == 1, 1 << status.slot
             local view = deps.view()
+            status.bossIntro = view.kind == Kind.boss
             local localKey = view.kind ~= Kind.none and key(view.epoch, view.kind, view.id) or nil
             if host then
                 local live = {}

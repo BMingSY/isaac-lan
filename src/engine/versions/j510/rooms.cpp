@@ -87,6 +87,8 @@ const Bindings bindings{
         .levelSetNextStage = j510::entry::levelSetNextStage,
         .levelSwapRooms = j510::entry::levelSwapRooms,
         .luaPostNewRoom = j510::entry::luaPostNewRoom,
+        .collectibleRevivalRoomCall = j510::entry::collectibleRevivalRoomCall,
+        .trinketRevivalRoomCall = j510::entry::trinketRevivalRoomCall,
         .momsHandTransitionCall = j510::entry::momsHandTransitionCall,
         .nPCNeedlePrepareVisual = j510::entry::nPCNeedlePrepareVisual,
         .playerAnimateTeleport = j510::entry::playerAnimateTeleport,

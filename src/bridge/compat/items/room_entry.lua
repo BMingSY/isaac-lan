@@ -1,5 +1,5 @@
 -- Called in the arriving room's roster after generic combat-door handling.
-return function(game, getPlayer, roomTypes, collectibles, trinkets)
+return function(game, getPlayer, roomTypes, collectibles, trinkets, doorStop)
     local room = game:GetRoom()
     local level = game:GetLevel()
     -- Horse-pill flags 24/25 are native LevelStateFlag entries not exported
@@ -15,26 +15,9 @@ return function(game, getPlayer, roomTypes, collectibles, trinkets)
     end
     for index = 0, game:GetNumPlayers() - 1 do
         local player = getPlayer(index)
-        if player:HasTrinket(trinkets.TRINKET_DOOR_STOP) then
-            local door = room:GetDoor(level.EnterDoor)
-            if level.EnterDoor == -1 then
-                -- Native non-door entries use the first nearby door, if any.
-                local nearbyDoorDistanceSquared = 100 * 100
-                for slot = 0, 7 do
-                    local candidate = room:GetDoor(slot)
-                    if
-                        candidate
-                        and candidate.Position:DistanceSquared(player.Position)
-                            < nearbyDoorDistanceSquared
-                    then
-                        door = candidate
-                        break
-                    end
-                end
-            end
-            if door then
-                door:Open()
-            end
+        local heldDoor = doorStop(room, level, player, trinkets.TRINKET_DOOR_STOP)
+        if heldDoor then
+            heldDoor:Open()
         end
         if
             room:GetType() == roomTypes.ROOM_DEFAULT

@@ -8,9 +8,10 @@ description: "在 isaac-lan 仓库双开主客机供用户手动测试，按指�
 在仓库根目录使用 [run_manual_dual.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_manual_dual.py)，不要临时重写启动脚本或使用自动玩法验收工具代替手动测试。
 
 ```bash
-python3 tools/run_manual_dual.py --characters 以撒 阿撒泻勒 --latency-ms 80
+python3 tools/run_manual_dual.py --characters 以撒 阿撒泻勒 --latency-ms 80 --mod goodtrip_1630477831 --post-mom
 ```
 
+- 给用户手动游玩的两端启用 GoodTrip，交接前在各自的游戏日志核对其脚本已加载；其他已安装的 Mod 可重复传入 `--mod`。检验通关标记用 `--post-mom`，它在本次隔离档上解锁子宫、保留原有标记、关闭调试控制台。
 - `--characters` 顺序为主机、客机。接受菜单中文名、英文枚举名及数字 PlayerType；不确定名称时运行 `--list-characters`。例如 `里以撒`、`tainted-isaac`、`PLAYER_ISAAC_B` 均可。
 - `--latency-ms` 是增加的往返延迟，80 表示每方向 40 ms；实际 Ping 还含调度开销。用户若明确说单程延迟，乘二后传入。
 - 沿用用户本次会话已给出的角色与延迟；没有指定时用双以撒、0 ms，不为默认参数反复询问。

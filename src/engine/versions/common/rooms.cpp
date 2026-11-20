@@ -282,6 +282,8 @@ struct Request {
 };
 std::vector<Request> pending;
 std::set<unsigned> pendingArrivalRecovery;
+// The same occupied room can have a different previous room for each seat.
+std::array<std::optional<Key>, lan::maxPlayers> previousSeatRoom;
 struct StageRequest {
     bool same;
     int animation;
@@ -1373,6 +1375,20 @@ void transitionRequest(void* g, int index, int direction, int animation, void* p
         }
         return;
     }
+    // These are the collectible and trinket branches that read Level's last
+    // room. Keep native in-place revivals and explicit Mod destinations intact.
+    if (!runtime::replica() && who &&
+        (caller == bindings.entry.collectibleRevivalRoomCall + 5 ||
+         caller == bindings.entry.trinketRevivalRoomCall + 5)) {
+        const auto slot = slotOf(who);
+        if (const auto previous = previousSeatRoom[slot];
+            previous &&
+            queue(who, previous->index, previous->dimension, at<int>(game(), layout.game.enterDoor),
+                  false, false, animation, std::nullopt, RoomRouting::resolved)) {
+            pendingArrivalRecovery.insert(slot);
+            return;
+        }
+    }
     // Native item revivals (Dead Cat, Collar, Ankh, 1up) hide the actor until
     // RoomTransition::ChangeRoom restores visibility. Our per-actor transfer
     // bypasses that process-wide screen, including when the previous room is
@@ -2369,6 +2385,25 @@ int revivePlayer(lua_State* L) {
     lua.pushBoolean(L, valid);
     return 1;
 }
+int machineRevival(lua_State* L) {
+    const auto payerSlot = lua.checkInteger(L, 1), ghostSlot = lua.checkInteger(L, 2);
+    const auto payer = payerSlot >= 0 && payerSlot < 4 ? participant(payerSlot) : 0;
+    const auto ghost = ghostSlot >= 0 && ghostSlot < 4 ? participant(ghostSlot) : 0;
+    const auto room = payer ? findRoom(payer) : nullptr;
+    bool revived = false;
+    if (enabled && !runtime::replica() && !scopes.depth() && room && ghost && payer != ghost &&
+        (connectedMask & (1u << payerSlot)) && (connectedMask & (1u << ghostSlot)) &&
+        findRoom(ghost) == room && room->key.dimension == 0 &&
+        room->key.index == at<int>(game(), layout.game.startingRoom) &&
+        !at<bool>(payer, layout.player.coopGhost) && at<bool>(ghost, layout.player.coopGhost) &&
+        runtime::allowChallengeEvent("coop_revive")) {
+        Scope scope(*room, controlledActors(ghost));
+        engine<RoomCall>(bindings.entry.replicaRevivePlayerGhost)(reinterpret_cast<void*>(ghost));
+        revived = !at<bool>(ghost, layout.player.coopGhost);
+    }
+    lua.pushBoolean(L, revived);
+    return 1;
+}
 std::map<Address, RoomCall> entityUpdates;
 RoomCall originalNeedleVisual = nullptr;
 void __attribute__((fastcall)) needleVisual(void* npc, void*) {
@@ -3235,6 +3270,8 @@ struct RoomTransfer {
             }
             arrive();
         }
+        if (!runtime::replica() && !restoringSavedLocations && from->key != to->key)
+            previousSeatRoom[slotOf(request.player)] = from->key;
         canonical();
         logger("room_transfer slot=" + std::to_string(slotOf(request.player)) +
                " from=" + std::to_string(from->key.index) + " to=" + std::to_string(to->key.index) +
@@ -3561,6 +3598,7 @@ bool prepareRewind(unsigned slot) {
     return true;
 }
 void beforeStart(bool preserveItemPixels) {
+    previousSeatRoom.fill(std::nullopt);
     replicaCompanions.clear();
     floorSource.reset();
     replicaDeals.reset();
@@ -3773,6 +3811,8 @@ bool bind(lua_State* L, HMODULE module) {
     function("actor_companions", actorCompanions);
     function("actor_ghost", actorGhost);
     function("rooms_revive_player", revivePlayer);
+    if (bindings.needsRevivalMachine)
+        function("rooms_machine_revival", machineRevival);
     function("rooms_set_connected", setConnections);
     function("rooms_connected", connections);
     function("rooms_begin_floor", beginFloor);

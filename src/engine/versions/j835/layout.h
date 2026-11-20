@@ -160,7 +160,7 @@ inline constexpr unsigned size = 0x1c, trinket = 4, id = 8, maxEntries = 65536;
 namespace roomTransition {
 inline constexpr unsigned mode = 0, elapsed = 4, duration = 8, introSprite = 0x38;
 inline constexpr int intro = 2, returning = 3;
-inline constexpr unsigned actor = 0x320, bossIntro = 0x328;
+inline constexpr unsigned actor = 0x340, bossIntro = 0x348;
 inline constexpr unsigned state = 0, index = 0x14, direction = 0x10;
 inline constexpr unsigned animation = 0x1c, dimension = 0x18;
 } // namespace roomTransition

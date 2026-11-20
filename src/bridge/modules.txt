@@ -77,7 +77,10 @@ compat/items/split_body
 compat/items/flip
 compat/items/attack_preview
 compat/items/room_entry
+compat/items/door_stop
 compat/items/flat_file
+compat/items/revival_machine
+compat/routes/devil_combat
 compat/items/glitched
 compat/routes/crawlspace
 compat/routes/dice_floor
