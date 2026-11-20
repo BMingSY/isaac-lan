@@ -49,7 +49,7 @@ def validate(profile):
             path, scale = font.get("path"), font.get("scale")
             if (
                 not isinstance(path, str)
-                or not path.startswith("font/")
+                or not path.startswith(("font/", "resources-dlc3.zh/font/"))
                 or not path.endswith(".fnt")
                 or any(c in path for c in "\\:")
                 or any(ord(c) < 32 for c in path)

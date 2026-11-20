@@ -6,6 +6,7 @@
 #include "app/bridge_manifest.h"
 #include "engine/lua_api.h"
 #include "presentation/chat_input.h"
+#include "presentation/main_menu.h"
 #include "engine/emotes.h"
 #include "engine/build.h"
 #include "engine/module_path.h"
@@ -46,6 +47,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM,
 namespace isaac::frontend {
 using engine::native_frontend::bindings;
 namespace menu_context = engine::native_menu;
+namespace main_rows = presentation::main_menu;
 namespace {
 std::uintptr_t image;
 chat::Appearance chatAppearance;
@@ -59,7 +61,10 @@ lua_State* state = nullptr;
 constexpr int luaTable = 5, luaFunction = 6;
 isaac::lua::API lua;
 bool bridgeFailed = false, visible = false, guiReady = false;
-bool officialRequested = false, entryRequested = false;
+bool officialRequested = false;
+std::optional<main_rows::Position> mainPaper;
+enum class MainMenuPointer { none, hover, confirm };
+MainMenuPointer mainPointer = MainMenuPointer::none;
 std::string error, fingerprint, modFingerprint;
 int count = 0, draining = 0;
 bool prepared = false;
@@ -73,6 +78,7 @@ using MenuRender = void(__cdecl*)();
 MenuRender originalMenuRender;
 using MenuUpdate = void(__attribute__((thiscall)) *)(void*);
 MenuUpdate originalGameMenuUpdate;
+engine::native_frontend::DrawMainMenu originalGameMenuRender;
 std::string localAddresses;
 std::string addresses() {
     ULONG size = 16384;
@@ -242,16 +248,10 @@ int officialMenu(lua_State*) {
     officialRequested = true;
     return 0;
 }
-int requestMenu(lua_State*) {
-    if (!bindings.menu.onlineSelection && menu_context::acceptsInput(image, bindings.menu) &&
-        !visible)
-        entryRequested = true;
-    return 0;
-}
 void openMenu();
 void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
     if (!state || bridgeFailed || !menuAvailable()) {
-        entryRequested = false;
+        mainPointer = MainMenuPointer::none;
         originalGameMenuUpdate(menu);
         return;
     }
@@ -284,12 +284,16 @@ void __attribute__((fastcall)) gameMenuUpdate(void* menu, void*) {
         return;
     }
     if (!visible) {
-        const bool confirm =
-            bindings.menu.onlineSelection && input::menuTriggered(input::action::menuConfirm);
-        const bool alternate = !bindings.menu.onlineSelection &&
-                               (entryRequested || input::menuTriggered(input::action::menuRight));
-        entryRequested = false;
-        if (menu_context::entrySelected(image, bindings.menu, menu, confirm, alternate)) {
+        bool confirm = input::menuTriggered(input::action::menuConfirm);
+        if (mainPointer != MainMenuPointer::none && mainPaper &&
+            menu_context::acceptsInput(image, bindings.menu)) {
+            read<int>(reinterpret_cast<std::uintptr_t>(menu), bindings.menu.selection) =
+                main_rows::online;
+            confirm |= mainPointer == MainMenuPointer::confirm;
+        }
+        mainPointer = MainMenuPointer::none;
+        if ((bindings.menu.onlineSelection || mainPaper) &&
+            menu_context::entrySelected(image, bindings.menu, menu, confirm)) {
             visible = true;
             menuKey = 0;
             menuClick = false;
@@ -549,6 +553,23 @@ void poll() {
         }
     }
 }
+bool mainMenuPointer(HWND h, LPARAM coordinates, bool confirm) {
+    if (!mainPaper || !state || bridgeFailed || visible || updateNoticeVisible() ||
+        !menu_context::acceptsInput(image, bindings.menu))
+        return false;
+    RECT client{};
+    if (!GetClientRect(h, &client) || !client.right || !client.bottom)
+        return false;
+    const auto width = read<float>(image, bindings.logicalWidth),
+               height = read<float>(image, bindings.logicalHeight);
+    const float x = static_cast<short>(LOWORD(coordinates)) * width / client.right;
+    const float y = static_cast<short>(HIWORD(coordinates)) * height / client.bottom;
+    if (!main_rows::hitsOnline(*mainPaper, x, y))
+        return false;
+    if (mainPointer != MainMenuPointer::confirm)
+        mainPointer = confirm ? MainMenuPointer::confirm : MainMenuPointer::hover;
+    return true;
+}
 LRESULT CALLBACK events(HWND h, UINT message, WPARAM w, LPARAM l) {
     if (message == WM_CLOSE && !closeReady && (prepared || draining || closeRequested)) {
         closeRequested = true;
@@ -560,8 +581,10 @@ LRESULT CALLBACK events(HWND h, UINT message, WPARAM w, LPARAM l) {
     }
     if (const auto handled = chat_input::event(h, message, w, l))
         return *handled;
-    if ((visible || (!bindings.menu.onlineSelection && menuAvailable())) &&
-        message == WM_LBUTTONDOWN)
+    if ((message == WM_MOUSEMOVE || message == WM_LBUTTONDOWN) &&
+        mainMenuPointer(h, l, message == WM_LBUTTONDOWN) && message == WM_LBUTTONDOWN)
+        return 0;
+    if (visible && message == WM_LBUTTONDOWN)
         menuClick = true;
     return CallWindowProcW(originalWndProc, h, message, w, l);
 }
@@ -642,7 +665,28 @@ void renderChat() {
         invoke(0, 0);
     lua.setTop(state, top);
 }
+void __attribute__((fastcall)) gameMenuRender(void* menu, void*) {
+    if (!state || bridgeFailed) {
+        originalGameMenuRender(menu);
+        return;
+    }
+    const auto paper = bindings.insertedRow->draw(image, menu, originalGameMenuRender);
+    if (!paper || !main_rows::labelVisible(*paper, read<float>(image, bindings.logicalWidth),
+                                           read<float>(image, bindings.logicalHeight)))
+        return;
+    const int top = lua.getTop(state);
+    if (lua.getGlobal(state, "_IsaacLanMainMenuEntry") == luaFunction) {
+        lua.pushNumber(state, paper->x + main_rows::labelX);
+        lua.pushNumber(state, paper->y + main_rows::labelY);
+        if (invoke(2, 0))
+            mainPaper = paper;
+        else
+            bridgeFailed = true;
+    }
+    lua.setTop(state, top);
+}
 void __cdecl menuRender() {
+    mainPaper.reset();
     originalMenuRender();
     renderNativeMenu();
     renderChat();
@@ -704,7 +748,9 @@ void __cdecl close(lua_State* L) {
 void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
     originalInit(engine, debug);
     bridgeFailed = false;
-    visible = officialRequested = entryRequested = false;
+    visible = officialRequested = false;
+    mainPaper.reset();
+    mainPointer = MainMenuPointer::none;
     menuKey = 0;
     menuClick = false;
     menuText.clear();
@@ -785,9 +831,6 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         if (bindings.menu.onlineSelection) {
             lua.pushClosure(state, officialMenu, 0);
             lua.setField(state, -2, "menu_official");
-        } else {
-            lua.pushClosure(state, requestMenu, 0);
-            lua.setField(state, -2, "menu_open");
         }
         lua.createTable(state, 0, 1);
         lua.pushBoolean(state, engine::profile().capabilities.nativeEmotes);
@@ -804,7 +847,7 @@ void __attribute__((fastcall)) init(void* engine, void*, bool debug) {
         lua.setGlobal(state, "_IsaacLan");
         lua.pushString(state, fingerprint.c_str());
         lua.setGlobal(state, "_IsaacLanFingerprint");
-        app::loadBridge(state, lua, invoke);
+        app::loadBridge(state, lua, invoke, connectionPath.parent_path());
         logger("frontend_bridge=READY manifest=" + fingerprint);
         const auto scenario = std::filesystem::path(labRoot) / L"frontend-scenario.lua";
         if (std::filesystem::exists(std::filesystem::path(labRoot) / L".isaac-lan-lab") &&
@@ -891,9 +934,16 @@ bool install(std::uintptr_t base, const std::wstring& root, void (*log)(const st
                          reinterpret_cast<void*>(menuRender),
                          reinterpret_cast<void**>(&originalMenuRender)) == MH_OK &&
            MH_EnableHook(reinterpret_cast<void*>(image + bindings.menuRender)) == MH_OK &&
+           (!bindings.insertedRow ||
+            (MH_CreateHook(reinterpret_cast<void*>(image + bindings.insertedRow->drawMainMenu),
+                           reinterpret_cast<void*>(gameMenuRender),
+                           reinterpret_cast<void**>(&originalGameMenuRender)) == MH_OK &&
+             MH_EnableHook(reinterpret_cast<void*>(image + bindings.insertedRow->drawMainMenu)) ==
+                 MH_OK)) &&
            MH_CreateHook(reinterpret_cast<void*>(image + bindings.menuUpdate),
                          reinterpret_cast<void*>(gameMenuUpdate),
                          reinterpret_cast<void**>(&originalGameMenuUpdate)) == MH_OK &&
-           MH_EnableHook(reinterpret_cast<void*>(image + bindings.menuUpdate)) == MH_OK;
+           MH_EnableHook(reinterpret_cast<void*>(image + bindings.menuUpdate)) == MH_OK &&
+           (!bindings.insertedRow || bindings.insertedRow->installNavigation(image));
 }
 } // namespace isaac::frontend

@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <optional>
+#include "presentation/main_menu.h"
 namespace isaac::engine::native_menu {
 struct Layout {
     unsigned manager, menus, scene, saveSlot, page, inputBlocked, managerInputBlock;
@@ -46,13 +47,9 @@ inline bool acceptsInput(std::uintptr_t image, const Layout& fields) {
            !read<unsigned>(manager, fields.managerInputBlock) &&
            (!fields.starting || !read<bool>(menus, *fields.starting));
 }
-inline bool entrySelected(std::uintptr_t image, const Layout& fields, void* menu, bool confirm,
-                          bool alternate) {
-    if (!menu || !acceptsInput(image, fields))
-        return false;
-    if (!fields.onlineSelection)
-        return alternate;
-    return confirm && read<int>(reinterpret_cast<std::uintptr_t>(menu), fields.selection) ==
-                          *fields.onlineSelection;
+inline bool entrySelected(std::uintptr_t image, const Layout& fields, void* menu, bool confirm) {
+    return confirm && menu && acceptsInput(image, fields) &&
+           read<int>(reinterpret_cast<std::uintptr_t>(menu), fields.selection) ==
+               fields.onlineSelection.value_or(presentation::main_menu::online);
 }
 } // namespace isaac::engine::native_menu

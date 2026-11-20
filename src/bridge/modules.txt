@@ -13,6 +13,7 @@ sync/weapon_pose
 sync/actor_roster
 presentation/actors
 presentation/player_opacity
+presentation/menu_locale
 presentation/menu_model
 presentation/fonts
 presentation/menu_assets

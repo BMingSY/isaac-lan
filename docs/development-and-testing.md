@@ -94,7 +94,7 @@ ctest --test-dir build-core --output-on-failure
 | Windows 传输 | IPv4／IPv6 UDP、双栈域名与回退、输入事件、积压、重连、事务顺序及 UDP 丢包／乱序 | 不启动游戏 |
 | 隔离实机／正常操作 | 原生机制、入口与连续画面 | 结果限定于所用版本、夹具和采样范围 |
 
-版本资源的离线检查为 `presentation.fonts`、`presentation.chat-render`、`presentation.chat-repentance`、`bridge.challenge_menu` 和 `bridge.menu-repentance`，覆盖资源选择、字体宽度与缩放、菜单操作及缺少官方联机入口时的返回行为。相应夹具会拒绝原版环境访问忏悔＋专属字体／大厅美术；它不证明实际画面或原生后端可用。
+版本资源的离线检查为 `presentation.fonts`、`presentation.chat-render`、`presentation.chat-repentance`、`bridge.challenge_menu` 和 `bridge.menu-repentance`，覆盖字体选择和宽度、菜单操作和各版本的入口与返回路径。`native.frontend-menu-j835` 检查原生确认分派、循环边界、转场坐标、鼠标命中和绘制后图层复原。实机核对中英文主菜单、切页期间文字与纸张的相对位置，以及键盘、鼠标进入与返回局域网的操作。
 
 沙漏原生适配的离线检查为 `native.rewind-home-j510`、`native.rewind-home-j835`，由[同一夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/rewind_home_test.cpp) 分别链接两版绑定，覆盖检查点字节、原生计数边界、Home／普通转场、各版贪婪选择、客机结果回放、跨房来源、重复请求、清理与 Hook 冲突。夹具只执行扩展和合成原生入口；真实 GameState 副作用、完整房间恢复及画面仍属于实机范围。
 

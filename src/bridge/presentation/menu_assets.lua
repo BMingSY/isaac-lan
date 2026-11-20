@@ -1,6 +1,13 @@
--- Load only the resources declared by the selected backend. Vanilla Repentance
--- uses the common whiteout sprite for paper panels, without online DLC artwork.
-return function(resources, font)
+-- Each game supplies its own menu paper, pointer and typography.
+local englishFonts = {
+    small = { path = "font/TeamMeatFont10.fnt", scale = 1 },
+    normal = { path = "font/TeamMeatFont12.fnt", scale = 1 },
+    heading = { path = "font/TeamMeatFont16Bold.fnt", scale = 1 },
+}
+return function(resources, createFonts, language)
+    local font = createFonts(
+        not resources.native_lobby and language ~= "zh" and englishFonts or resources.fonts
+    )
     local assets = { characterPortraits = {} }
     local function sprite(path, animation, frame)
         local value = Sprite()
@@ -41,55 +48,83 @@ return function(resources, font)
             cards:RenderLayer(5, origin + Vector(x, y))
         end
     else
-        local paper = { 0.82, 0.77, 0.66 }
-        local edge = { 0.28, 0.22, 0.17 }
-        local shadow = { 0.12, 0.10, 0.08 }
-        local colors = {
-            KColor(0.45, 0.12, 0.10, 1),
-            KColor(0.10, 0.23, 0.40, 1),
-            KColor(0.40, 0.30, 0.08, 1),
-            KColor(0.13, 0.32, 0.16, 1),
-        }
-        local function rect(origin, x, y, width, height, color)
-            assets.fill.Scale = Vector(width / 480, height / 270)
-            assets.fill.Color = Color(0, 0, 0, 1, color[1] - 1, color[2] - 1, color[3] - 1)
-            assets.fill:Render(origin + Vector(x, y))
-        end
-        local function panel(origin, x, y, width, height)
-            rect(origin, x + 3, y + 3, width, height, shadow)
-            rect(origin, x, y, width, height, edge)
-            rect(origin, x + 1, y + 1, width - 2, height - 2, paper)
-        end
-        function assets.panel(origin, modes)
-            panel(origin, 15 + (modes and 128 or 0), 45, 185, 181)
-        end
-        function assets.banner(origin)
-            panel(origin, 80, 19, 320, 20)
-        end
-        function assets.pointer(origin, x, y)
-            for step = 0, 4 do
-                rect(origin, x + step, y + step, 1, 9 - step * 2, edge)
+        -- The original challenge sheet is a pinned menu paper. Its seventh paper
+        -- starts far down the scrolling challenge list, so anchor its visible art here.
+        local paper = sprite(root .. "challengemenu.anm2", "Idle")
+        local pinPaperLayer = 29
+        local note = sprite(root .. "seedunlockpaper.anm2", "Idle")
+        local cursor = sprite(root .. "gamemenu.anm2", "Idle")
+        local cursorLayer = 6
+        local check = sprite(root .. "seedsmenu.anm2", "Checkmark", 1)
+        local checkLayer = 10
+        local ink = KColor(0.18, 0.14, 0.14, 1)
+        local title
+        if resources.main_title then
+            title = Sprite()
+            title:Load(resources.main_title, false)
+            if title:IsLoaded() then
+                -- Layers use the two pages of Repentance's own Chinese menu font.
+                local pages = { 1, 0, 0, 1, 1, 1, 1, 1, 1, 1 }
+                for index, page in ipairs(pages) do
+                    title:ReplaceSpritesheet(
+                        index - 1,
+                        "resources-dlc3.zh/font/TeamMeatFontExtended16Bold_" .. page .. ".png"
+                    )
+                end
+                title:LoadGraphics()
+                title.Rotation = -15
+                title.Color = Color(0.18, 0.14, 0.14, 1, 0, 0, 0)
+            else
+                title = nil
             end
         end
+        local animation
+        function assets.mainEntry(x, y, language)
+            if title then
+                local nextAnimation = language == "zh" and "Chinese" or "English"
+                if animation ~= nextAnimation then
+                    animation = nextAnimation
+                    title:SetFrame(animation, 0)
+                end
+                title:Render(Vector(x, y))
+            else
+                assets[16]:DrawStringUTF8(
+                    language == "zh" and "联机模式" or "ONLINE",
+                    x,
+                    y,
+                    ink,
+                    0,
+                    false
+                )
+            end
+        end
+        function assets.panel(origin, modes)
+            paper.Scale = Vector(0.70, 0.80)
+            paper:RenderLayer(pinPaperLayer, origin + Vector(-65 + (modes and 128 or 0), -624))
+        end
+        function assets.banner(origin)
+            note.Scale = Vector(0.70, 0.22)
+            note:RenderLayer(0, origin + Vector(240, 30))
+        end
+        function assets.pointer(origin, x, y)
+            cursor:RenderLayer(cursorLayer, origin + Vector(x - 169, y - 69))
+        end
         function assets.seat(origin, x, y, slot)
-            panel(origin, x + 2, y + 4, 123, 100)
-            assets[10]:DrawStringUTF8(
-                "P" .. (slot + 1),
-                origin.X + x + 8,
-                origin.Y + y + 9,
-                colors[slot + 1],
+            note.Scale = Vector(0.46, 0.82)
+            note:RenderLayer(0, origin + Vector(x + 68, y + 54))
+            local font = assets[12]
+            local label = "P" .. (slot + 1)
+            font:DrawStringUTF8(
+                label,
+                origin.X + x + 68 - font:GetStringWidthUTF8(label) / 2,
+                origin.Y + y + 8,
+                ink,
                 0,
                 false
             )
         end
         function assets.ready(origin, x, y)
-            local green = { 0.13, 0.32, 0.16 }
-            for step = 0, 2 do
-                rect(origin, x + 104 + step, y + 13 + step, 2, 2, green)
-            end
-            for step = 0, 5 do
-                rect(origin, x + 107 + step, y + 15 - step, 2, 2, green)
-            end
+            check:RenderLayer(checkLayer, origin + Vector(x + 105, y + 18))
         end
     end
     return assets

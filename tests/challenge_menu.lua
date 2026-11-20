@@ -2,10 +2,12 @@ local root = assert(arg[1])
 local vanilla = arg[2] == "vanilla"
 local enums = dofile(root .. "/tests/fixtures/game_enums.lua")
 PlayerType, RoomType = enums.PlayerType, enums.RoomType
+Options = { Language = "zh" }
 local labels, commands = {}, {}
 local renderedPortraits = {}
 local scaledLabels, renderedMarks = {}, {}
 local labelPositions, renderedSwitches = {}, {}
+local titleDraws = {}
 local options = { { flag = 1, key = "friendlyFire", name = "队友伤害", shortName = "友伤" } }
 local noop = function() end
 local remembered = { "", 29506 }
@@ -37,10 +39,22 @@ Sprite = function()
     return {
         Load = function(self, path)
             if vanilla then
-                assert(not path:find("online", 1, true), "Vanilla menu requested online DLC art")
+                assert(
+                    not path:find("gfx/ui/main menu/online", 1, true),
+                    "Vanilla menu requested online DLC art"
+                )
             end
             self.path = path
         end,
+        IsLoaded = function(self)
+            return self.path ~= nil
+        end,
+        ReplaceSpritesheet = function(self, layer, path)
+            assert(path:match("^resources%-dlc3%.zh/font/TeamMeatFontExtended16Bold_[01]%.png$"))
+            self.sheets = self.sheets or {}
+            self.sheets[layer] = path
+        end,
+        LoadGraphics = noop,
         Play = function(self, animation)
             if animation ~= "missing" then
                 self.animation = animation
@@ -53,7 +67,10 @@ Sprite = function()
             self.animation = animation
         end,
         Render = function(self, position)
-            if self.path == "gfx/ui/completion_widget.anm2" then
+            if self.path == "cache/menu/online.anm2" then
+                assert(self.sheets[0] and self.sheets[9])
+                titleDraws[#titleDraws + 1] = { position, self.animation, self.Rotation }
+            elseif self.path == "gfx/ui/completion_widget.anm2" then
                 renderedMarks[#renderedMarks + 1] = { table.unpack(self.layers) }
             elseif self.path ~= "gfx/ui/bossoverlay_whiteout.anm2" then
                 renderedPortraits[#renderedPortraits + 1] = { self.path, self.animation }
@@ -74,7 +91,13 @@ Font = function()
     return {
         Load = function(_, path)
             if vanilla then
-                assert(path == "font/cjk/lanapixel.fnt", "Vanilla menu requested a Plus font")
+                assert(
+                    Options.Language == "zh"
+                            and path:find("resources-dlc3.zh/font/TeamMeatFontExtended", 1, true) == 1
+                        or Options.Language ~= "zh"
+                            and path:find("font/TeamMeatFont", 1, true) == 1,
+                    "Expected a native Repentance menu font"
+                )
             end
         end,
         IsLoaded = function()
@@ -179,6 +202,7 @@ _IsaacLan = {
     end,
 }
 _IsaacLanModules = {
+    ["presentation/menu_locale"] = dofile(root .. "/src/bridge/presentation/menu_locale.lua"),
     ["presentation/fonts"] = dofile(root .. "/src/bridge/presentation/fonts.lua"),
     ["presentation/menu_assets"] = dofile(root .. "/src/bridge/presentation/menu_assets.lua"),
     ["presentation/restart"] = dofile(root .. "/src/bridge/presentation/restart.lua"),
@@ -423,7 +447,8 @@ local actions = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     _IsaacLan.net_phases(),
     _IsaacLan.net_commands(),
     _IsaacLanModules["core/endpoint"],
-    _IsaacLanModules["presentation/menu_characters"]()
+    _IsaacLanModules["presentation/menu_characters"](),
+    _IsaacLanModules["presentation/menu_locale"](true)
 )
 local sent, hidden = {}, 0
 local deps = {
@@ -518,8 +543,7 @@ draw()
 assert(labels["以撒"] and not labels["里·该隐"])
 assert(labels["准备"] and labels["开始游戏"] and not labels["等待队友结算结束"])
 assert(renderedPortraits[1][2] == "01_Isaac" and renderedPortraits[2][2] == "01_Isaac")
--- Native MainMenu can remain behind the returning LAN page. Back closes it
--- without a lobby action; Plus first returns through its mode selector.
+-- A returning LAN page uses each game's normal Back action.
 status.phase, status.prepared = 0, false
 _IsaacLanMenuOpen(true)
 count = #commands
@@ -590,7 +614,8 @@ local model = dofile(root .. "/src/bridge/presentation/menu_model.lua")(
     phaseValues,
     dofile(root .. "/tests/fixtures/net_commands.lua"),
     _IsaacLanModules["core/endpoint"],
-    _IsaacLanModules["presentation/menu_characters"]()
+    _IsaacLanModules["presentation/menu_characters"](),
+    _IsaacLanModules["presentation/menu_locale"](true)
 )
 for _, host in ipairs({ 0, 1 }) do
     local selected
@@ -684,28 +709,27 @@ rows[4].action()
 assert(remembered[1] == prefs.ip and remembered[2] == 1234)
 assert(sent[#sent][1] == "join" and sent[#sent][2] == "host.example.com:1234")
 
--- A backend without official online opens LAN directly and returns to the
--- underlying game menu through both Escape and the normal Back row.
+-- Repentance opens LAN directly. Plus offers its official online mode first.
 status = { phase = 0, hosting = 0, players = 0 }
 _IsaacLanMenuOpen(false)
 draw()
-if vanilla then
-    assert(labels["创建房间"] and not labels["官方联机"])
-    assert(not draw(27), "Vanilla Escape opened an unavailable mode selector")
-    _IsaacLanMenuOpen(false)
-    for _ = 1, 4 do
-        draw(40)
-    end
-    assert(not draw(13), "Vanilla Back did not close the LAN overlay")
-else
-    assert(labels["官方联机"] and labels["局域网联机"])
+if not vanilla then
+    assert(labels["联机模式"] and labels["局域网联机"] and labels["官方联机"])
     draw(40)
     draw(13)
     draw()
-    assert(labels["创建房间"])
-    assert(draw(27))
+end
+assert(labels["创建房间"] and not labels["官方联机"])
+if vanilla then
+    assert(not draw(27), "Back from Repentance LAN must return to the main menu")
+    _IsaacLanMenuOpen(false)
+    draw(38) -- Wrap to the visible Back row.
+    assert(not draw(13), "The Back row must return directly to the Repentance main menu")
+else
+    assert(draw(27), "Back from Plus LAN must keep the mode chooser open")
     draw()
-    assert(labels["官方联机"], "Plus Escape lost the existing mode selector")
+    assert(labels["联机模式"] and not labels["创建房间"])
+    assert(not draw(27), "Back from the chooser must return to the main menu")
 end
 for _, host in ipairs({ "2001:db8::abcd", "[2001:db8::abcd]", "fe80::1%12", "::ffff:127.0.0.1" }) do
     prefs.ip = host
@@ -717,24 +741,26 @@ for _, host in ipairs({ "2001:db8::abcd", "[2001:db8::abcd]", "fe80::1%12", "::f
     assert(remembered[1] == host and remembered[2] == 1234)
 end
 
--- Vanilla has a main-menu mouse entry; title/save/game pages and Plus do not.
+-- The row follows the moving paper and is never painted by the fixed overlay.
 do
     status = { phase = 0, hosting = 0, players = 0 }
-    local opened = 0
-    _IsaacLan.menu_open = vanilla and function()
-        opened = opened + 1
-    end or nil
-    assert(not draw(0, false, 30, 246, false))
-    assert((labels["局域网 →"] ~= nil) == vanilla)
-    draw(0, false, 30, 246, true)
-    assert(opened == (vanilla and 1 or 0))
-    draw(0, false, 200, 200, true)
-    assert(opened == (vanilla and 1 or 0), "Outside click opened LAN")
-    assert(not _IsaacLanMenuRender(false, false, 0, "", 30, 246, true, "", ""))
-    assert(opened == (vanilla and 1 or 0), "Unavailable game menu opened LAN")
-    _IsaacLanMenuOpen(false)
-    draw(0, true, 30, 246, true)
-    assert(opened == (vanilla and 1 or 0), "Visible overlay reopened itself")
+    Options = { Language = "zh" }
+    titleDraws = {}
+    _IsaacLanMainMenuEntry(184, 97)
+    assert(#titleDraws == (vanilla and 1 or 0))
+    if vanilla then
+        local first = titleDraws[1][1]
+        assert(titleDraws[1][2] == "Chinese" and titleDraws[1][3] == -15)
+        _IsaacLanMainMenuEntry(204, 157)
+        assert(titleDraws[2][1].X == first.X + 20 and titleDraws[2][1].Y == first.Y + 60)
+    end
+    Options.Language = "en"
+    _IsaacLanMainMenuEntry(184, 97)
+    assert(not vanilla or titleDraws[#titleDraws][2] == "English")
+    titleDraws = {}
+    assert(not _IsaacLanMenuRender(true, false, 0, "", 0, 0, false, "", ""))
+    assert(#titleDraws == 0)
+    Options.Language = "zh"
 end
 
 -- Each card renders its owner's twelve native single-player layers.
@@ -1159,3 +1185,67 @@ for _, row in ipairs(groupedRows) do
         )
     end
 end
+
+-- Use the same open menu while the game changes language. Plus retains the
+-- existing Chinese LAN page in every game locale. User input stays verbatim.
+do
+    remembered = { "", 29506 }
+    status = { phase = 0, hosting = 0, players = 0 }
+    Options.Language = "en"
+    dofile(root .. "/src/bridge/presentation/menu.lua")
+    _IsaacLanMenuOpen(true)
+    draw()
+    if vanilla then
+        assert(
+            labels["LAN Co-op"]
+                and labels["Create Room"]
+                and labels["Enter Host IP"]
+                and labels["Port: 29506"]
+        )
+        assert(labels["Join Room"] and labels["Back"] and not labels["局域网联机"])
+        status = {
+            phase = 2,
+            hosting = 1,
+            players = 2,
+            slot = 0,
+            choice0 = 23,
+            choice1 = 0,
+            eligible0 = true,
+            eligible1 = true,
+            ready1 = 1,
+            connected = 3,
+            transport = "udp",
+            port = 29506,
+        }
+        draw()
+        assert(
+            labels["Tainted Cain"]
+                and labels["Isaac"]
+                and labels["Seed: Random"]
+                and labels["Open Slot"]
+        )
+        assert(labels["Rules: None"] and labels["Choosing"] and labels["Ready"])
+        for _ = 1, 4 do
+            draw(40)
+        end
+        draw(13)
+        draw()
+        assert(labels["Room Rules"] and labels["[ ] Friendly Fire"])
+        Options.Language = "zh"
+        draw()
+        assert(labels["房间规则"] and labels["[ ] 队友伤害"] and not labels["Room Rules"])
+        Options.Language = "fr"
+        draw()
+        assert(labels["Room Rules"] and labels["Back"])
+        status = {
+            phase = 4,
+            compatibilityError = { reason = "version", localVersion = "1.2", remoteVersion = "2.3" },
+        }
+        draw()
+        assert(labels["Cannot join: Isaac LAN versions differ"] and labels["Host: 2.3 / You: 1.2"])
+    else
+        assert(labels["局域网联机"] and labels["创建房间"] and not labels["Create Room"])
+    end
+    Options.Language = "zh"
+end
+print("PASS live Chinese and English Repentance LAN, English fallback and original Plus locale")

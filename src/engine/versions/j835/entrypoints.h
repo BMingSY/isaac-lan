@@ -52,6 +52,7 @@ inline constexpr std::uint32_t engineRoomsDesc = 0x30e0f0;
 inline constexpr std::uint32_t nativeAllocate = 0x5eacf8;
 inline constexpr std::uint32_t nativeDelete = 0x5eb08e;
 inline constexpr std::uint32_t menuGameUpdate = 0x4d92c0;
+inline constexpr std::uint32_t menuGameRender = 0x4d9f70;
 inline constexpr std::uint32_t menuManagerRender = 0x4e19d0;
 inline constexpr std::uint32_t textureRender = 0x55f990;
 inline constexpr std::uint32_t minimapUpdate = 0x4e55f0;

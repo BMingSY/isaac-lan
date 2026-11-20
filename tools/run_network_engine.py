@@ -550,12 +550,11 @@ def main():
             control(pid, "Capture", windows(args.output.resolve() / f"{role}-lobby-cn.png"))
             (args.release_solo_coordination / f"solo-lobby-{role}.ack").write_text("ready")
             return
-        local_entry = action == "show-lobby" and not has_official_lobby
         # New Run is row zero, Continue row one. Read back each move instead of
         # assuming the native cursor retained its previous session's position.
         target = {"new-run": 0, "continue": 1, "show-lobby": 2}[action]
         for _ in range(10):
-            if local_entry or snapshot["selected"] == target:
+            if snapshot["selected"] == target:
                 break
             control(pid, "Keys", "{UP}" if snapshot["selected"] > target else "{DOWN}")
             time.sleep(0.2)
@@ -563,7 +562,7 @@ def main():
         else:
             raise RuntimeError(f"Native solo menu row was not selected: {snapshot}")
         result.setdefault("solo_gui", []).append({"role": role, "action": action, "menu": snapshot})
-        control(pid, "Keys", "{RIGHT}" if local_entry else "{ENTER}")
+        control(pid, "Keys", "{ENTER}")
         if action == "show-lobby":
             for _ in range(30):
                 time.sleep(0.2)
@@ -837,12 +836,13 @@ def main():
                     if args.exercise_menu
                     else lambda pid, key: control(pid, "PostKeys", key)
                 )
-                if has_official_lobby:
-                    # With Continue disabled the next row is Online.
+                # Navigate the same visible third item on both versions. The
+                # underlying native menu may skip Continue on an empty save.
+                for _ in range(4):
+                    if menu_state(pid)["selected"] == 2:
+                        break
                     navigate(pid, "{DOWN}")
-                    navigate(pid, "{ENTER}")
-                else:
-                    navigate(pid, "{RIGHT}")
+                navigate(pid, "{ENTER}")
                 if args.capture_ui:
                     control(pid, "Capture", windows(args.output.resolve() / (role + "-menu.png")))
                 if args.exercise_menu:

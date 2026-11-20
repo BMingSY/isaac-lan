@@ -26,7 +26,7 @@
 
 [Lua 装配](https://github.com/BMingSY/isaac-lan/blob/main/src/app/lua_bridge.cpp)与[构建指纹](https://github.com/BMingSY/isaac-lan/blob/main/src/app/bridge_manifest.cpp)由应用组件管理；后端在原生 Lua 初始化后调用装配，并负责状态销毁通知和栈恢复。指纹包含游戏版本及扩展 DLL 的内容，Mod 清单保持独立提示。Windows 文字、剪贴板和输入法处理位于[表现组件](https://github.com/BMingSY/isaac-lan/blob/main/src/presentation/chat_input.cpp)，使用共用 Lua ABI；游戏菜单和 HUD 的内存访问仍由后端负责。
 
-菜单字体、缩放和官方大厅美术的可用性由后端描述提供，应用装配将其传给 [字体组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/fonts.lua)与[菜单资源组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/menu_assets.lua)。表现组件不以版本号分支，不加载未声明的官方大厅资源；没有官方联机接口时直接进入局域网页面。菜单规则、聊天和同步契约共用原有实现。
+菜单字体、缩放和大厅美术的可用性由后端描述提供，应用装配将其传给[字体组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/fonts.lua)与[菜单资源组件](https://github.com/BMingSY/isaac-lan/blob/main/src/bridge/presentation/menu_assets.lua)。主菜单第三项在忏悔中直接打开局域网菜单，在提供官方在线服务的忏悔＋中打开模式选择页。各版本使用游戏自带的字体和纸张，局域网菜单、聊天和同步契约共用。
 
 会话视图、启动请求和存档保护分别由 [`session_state.h`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_state.h) 中的状态组件持有，存档文件操作由 [`session_store.cpp`](https://github.com/BMingSY/isaac-lan/blob/main/src/runtime/session_store.cpp) 管理。会话协议状态留在主线程的 `net/session.cpp` 与 `net/peer.h`；`net/socket.h` 负责有界数据交接，`net/network_io.cpp`／`net/udp_io.cpp` 的网络线程独占连接、收发和实时压缩上下文。`net/world_transfer.h` 管理实时视图基线与分块，`net/reliable_transfer.h`／`net/reliable_receiver.h` 管理可靠大数据的分块与组装，`net/byte_worker.cpp` 执行存档字节任务；域名解析位于 `net/host_resolution.cpp`。
 

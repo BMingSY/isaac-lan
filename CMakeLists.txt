@@ -542,10 +542,13 @@ set_property(
     APPEND
     PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/app/main.lua")
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/presentation/menu.lua" ISAAC_LAN_MENU)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/presentation/repentance_menu_title.anm2"
+     ISAAC_LAN_MENU_TITLE)
 set_property(
     DIRECTORY
     APPEND
-    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/presentation/menu.lua")
+    PROPERTY CMAKE_CONFIGURE_DEPENDS "src/bridge/presentation/menu.lua"
+             "src/bridge/presentation/repentance_menu_title.anm2")
 set(ISAAC_LAN_INTEGRATION_MODULES "")
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/modules.txt" ISAAC_LAN_MODULE_NAMES)
 set_property(
