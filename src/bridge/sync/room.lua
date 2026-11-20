@@ -3,15 +3,62 @@ return function(fields)
     -- Complete, immutable room views shared by peers in the same room/tick.
     return function(native, entity, sprite, crawlspace, types, localEffect)
         local captureTick, captureEpoch, rooms, currentGrids, previousGrids
+        local function captureDoor(door, previous)
+            if not door then
+                return false
+            end
+            local slot, target = door.Slot, door.TargetRoomIndex
+            local roomType, targetType = door.CurrentRoomType, door.TargetRoomType
+            local direction, locked = door.Direction, door:IsLocked()
+            local busted, visible = door.Busted, door.ExtraVisible
+            local pose = sprite(
+                assert(native.door_sprite(door:GetSprite())),
+                previous and previous[Door.sprite]
+            )
+            if
+                previous
+                and previous[Door.slot] == slot
+                and previous[Door.target] == target
+                and previous[Door.roomType] == roomType
+                and previous[Door.targetType] == targetType
+                and previous[Door.direction] == direction
+                and previous[Door.locked] == locked
+                and previous[Door.busted] == busted
+                and previous[Door.visible] == visible
+                and previous[Door.sprite] == pose
+            then
+                return previous
+            end
+            -- Wire order from sync/fields.door.
+            return { slot, target, roomType, targetType, direction, locked, busted, visible, pose }
+        end
+        local function captureGrid(index, grid, previous)
+            local door = captureDoor(grid:ToDoor(), previous and previous[Grid.door])
+            local kind, variant = grid:GetType(), grid:GetVariant()
+            local state, collision, data = grid.State, grid.CollisionClass, grid.VarData
+            local pose = sprite(grid:GetSprite(), previous and previous[Grid.sprite])
+            local seed = grid:GetSaveState().SpawnSeed
+            if
+                previous
+                and previous[Grid.type] == kind
+                and previous[Grid.variant] == variant
+                and previous[Grid.state] == state
+                and previous[Grid.collision] == collision
+                and previous[Grid.data] == data
+                and previous[Grid.sprite] == pose
+                and previous[Grid.seed] == seed
+                and previous[Grid.door] == door
+            then
+                return previous
+            end
+            -- Wire order from sync/fields.grid. The caller matches by grid index.
+            return { index, kind, variant, state, collision, data, pose, seed, door }
+        end
         local function collect(slot, previous)
             local value
             assert(native.rooms_with_player(slot, function()
                 local room = Game():GetRoom()
                 local entities, grids = {}, {}
-                local oldGrids = {}
-                for _, grid in ipairs(previous or {}) do
-                    oldGrids[grid[Grid.index]] = grid
-                end
                 for _, e in ipairs(Isaac.GetRoomEntities()) do
                     if
                         e:Exists()
@@ -21,69 +68,25 @@ return function(fields)
                         entities[#entities + 1] = entity(e)
                     end
                 end
+                -- Both snapshots enumerate occupied grid indices in ascending order.
+                local cursor, old = 1, previous and previous[1]
+                local same = previous ~= nil
                 for index = 0, room:GetGridSize() - 1 do
                     local grid = room:GetGridEntity(index)
                     if grid then
-                        local old = oldGrids[index]
-                        local door = grid:ToDoor()
-                        local oldDoor = old and old[Grid.door]
-                        local extra = door
-                                and {
-                                    [Door.slot] = door.Slot,
-                                    [Door.target] = door.TargetRoomIndex,
-                                    [Door.roomType] = door.CurrentRoomType,
-                                    [Door.targetType] = door.TargetRoomType,
-                                    [Door.direction] = door.Direction,
-                                    [Door.locked] = door:IsLocked(),
-                                    [Door.busted] = door.Busted,
-                                    [Door.visible] = door.ExtraVisible,
-                                    [Door.sprite] = sprite(
-                                        assert(native.door_sprite(door:GetSprite())),
-                                        oldDoor and oldDoor[Door.sprite]
-                                    ),
-                                }
-                            or false
-                        if extra and oldDoor then
-                            local same = true
-                            for field, value in ipairs(extra) do
-                                same = same and value == oldDoor[field]
-                            end
-                            if same then
-                                extra = oldDoor
-                            end
+                        while old and old[Grid.index] < index do
+                            cursor = cursor + 1
+                            old = previous[cursor]
                         end
-                        local value = {
-                            [Grid.index] = index,
-                            [Grid.type] = grid:GetType(),
-                            [Grid.variant] = grid:GetVariant(),
-                            [Grid.state] = grid.State,
-                            [Grid.collision] = grid.CollisionClass,
-                            [Grid.data] = grid.VarData,
-                            [Grid.sprite] = sprite(grid:GetSprite(), old and old[Grid.sprite]),
-                            [Grid.seed] = grid:GetSaveState().SpawnSeed,
-                            [Grid.door] = extra,
-                        }
-                        if old then
-                            local same = true
-                            for field, item in ipairs(value) do
-                                same = same and item == old[field]
-                            end
-                            if same then
-                                value = old
-                            end
-                        end
-                        grids[#grids + 1] = value
+                        local matched = old and old[Grid.index] == index and old or nil
+                        local record = captureGrid(index, grid, matched)
+                        local position = #grids + 1
+                        grids[position] = record
+                        same = same and record == previous[position]
                     end
                 end
-                local old = previous
-                if old and #old == #grids then
-                    local same = true
-                    for index, grid in ipairs(grids) do
-                        same = same and grid == old[index]
-                    end
-                    if same then
-                        grids = old
-                    end
+                if same and #grids == #previous then
+                    grids = previous
                 end
                 local current = room:GetWaterCurrent()
                 value = {
