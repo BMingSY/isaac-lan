@@ -190,9 +190,9 @@ assert(
 assert(#other.messages == before + 1)
 local unchangedHost, unchangedOther = #host.messages, #other.messages
 for _, case in ipairs({
-    { "/复活", 1, "2P 已复活" },
+    { "/revive", 1, "2P 已复活" },
     { "/REVIVE 1P", 0, "1P 已复活" },
-    { "/c 复活 P3", 2, "3P 已复活" },
+    { "/c revive P3", 2, "3P 已复活" },
     { "/console revive 4", 3, "4P 未在线" },
 }) do
     assert(guest.submit(case[1]))
@@ -202,7 +202,18 @@ for _, case in ipairs({
     assert(revivals[#revivals] == case[2] and guest.messages[#guest.messages].text == case[3])
 end
 assert(#host.messages == unchangedHost and #other.messages == unchangedOther and #revivals == 4)
-for _, invalid in ipairs({ "/复活 0", "/revive 5P", "/c revive 2p 3p", "/revive P2P" }) do
+assert(guest.parse("/c revive self").target == "self")
+assert(guest.parse("/c 复活 2p").kind == "native")
+for _, invalid in ipairs({
+    "/复活",
+    "/复活 2p",
+    "/revive 自己",
+    "/c revive 自己",
+    "/revive 0",
+    "/revive 5P",
+    "/c revive 2p 3p",
+    "/revive P2P",
+}) do
     assert(not guest.submit(invalid))
 end
 assert(not guest.submit("/giveitem c1"))
@@ -531,6 +542,7 @@ for _, alias in ipairs({ "/h", "/help" }) do
         "--room",
         "/c",
         "/console",
+        "/revive",
         "/lanbot help",
         "/opacity help",
         "/feedback",
@@ -540,6 +552,7 @@ for _, alias in ipairs({ "/h", "/help" }) do
     end
     assert(not help or help == result, "Help aliases returned different content")
     assert(result:find("1～999", 1, true), "Help did not show the current dice range")
+    assert(not result:find("/复活", 1, true))
     assert(not result:find("/c help", 1, true), "Help advertised a command absent from vanilla")
     help = result
 end

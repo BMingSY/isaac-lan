@@ -154,7 +154,7 @@ function _IsaacLanFrame()
             end
             if not guestSelf and actor(1):IsCoopGhost() and not split then
                 guestSelf = true
-                assert(_IsaacLanChatSubmit("/复活"))
+                assert(_IsaacLanChatSubmit("/revive"))
             elseif
                 not repeatChecked
                 and guestSelf
@@ -164,7 +164,7 @@ function _IsaacLanFrame()
                 repeatChecked = true
                 assert(_IsaacLanChatSubmit("/revive 2p"))
                 assert(_IsaacLanChatSubmit("/c revive 4p"))
-                assert(not _IsaacLanChatSubmit("/复活 5p"))
+                assert(not _IsaacLanChatSubmit("/revive 5p"))
             elseif not guestTarget and actor(0):IsCoopGhost() then
                 guestTarget = true
                 assert(_IsaacLanChatSubmit("/c revive 1p"))
