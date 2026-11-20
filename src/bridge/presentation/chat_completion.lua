@@ -2,9 +2,9 @@
 return function(roomDefinitions, maxBytes)
     assert(maxBytes, "Chat command byte limit is required")
     local revive = {
-        names = { "revive", "复活" },
+        names = { "revive" },
         detail = "复活自己或队友",
-        usage = "[玩家编号]",
+        usage = "[1p-4p]",
     }
     local commands = {
         { names = { "help", "h" }, detail = "查看命令" },
