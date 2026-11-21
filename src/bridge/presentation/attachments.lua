@@ -5,18 +5,18 @@ return function(fields)
     local LaserSubtype = { linear = 0, followingRing = 3 }
     return function(native, Vector, types, effects)
         local function capture(entity, value)
-            local parent = value[Entity.parent]
-            if entity.Type == types.ENTITY_KNIFE then
+            local parent, kind = value[Entity.parent], value[Entity.type]
+            if kind == types.ENTITY_KNIFE then
                 -- Native returning knives retain their parent even in flight.
                 -- Synergy projectiles use a distinct subtype and travel freely.
-                if parent ~= 0 and entity.SubType ~= KnifeSubtype.projectile then
+                if parent ~= 0 and value[Entity.subtype] ~= KnifeSubtype.projectile then
                     return { parent = parent }
                 end
-            elseif entity.Type == types.ENTITY_LASER then
+            elseif kind == types.ENTITY_LASER then
                 local follows = not entity:ToLaser().DisableFollowParent
                     and (
-                        entity.SubType == LaserSubtype.linear
-                        or entity.SubType == LaserSubtype.followingRing
+                        value[Entity.subtype] == LaserSubtype.linear
+                        or value[Entity.subtype] == LaserSubtype.followingRing
                     )
                 return {
                     parent = follows and parent or 0,
@@ -24,8 +24,8 @@ return function(fields)
                     endpoint = value[Entity.laserEndPoint],
                 }
             elseif
-                entity.Type == types.ENTITY_EFFECT
-                and entity.Variant == effects.LASER_IMPACT
+                kind == types.ENTITY_EFFECT
+                and value[Entity.variant] == effects.LASER_IMPACT
                 and parent ~= 0
             then
                 return { parent = parent }

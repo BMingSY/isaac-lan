@@ -103,6 +103,21 @@ assert(p.velocity.X > 0, "Local acceleration waited for a packet")
 local initialVelocity = p.velocity.X
 p:step(left, 1, speed, dt)
 assert(p.velocity.X < initialVelocity, "Local turn waited for the next sample")
+-- The render lead on a reversal cannot change the replayed position or velocity.
+local turn = prediction.new(origin)
+for sequence = 1, 7 do
+    turn:step(right, sequence, speed, dt)
+end
+local beforeTurn = turn.position
+turn:step(left, 8, speed, dt)
+assert(turn.position.X > beforeTurn.X and turn.velocity.X > 0)
+assert(turn.display.X < turn.position.X and turn.position.X - turn.display.X <= 8)
+close(turn.pending[#turn.pending].position, turn.position)
+turn:confirm(turn.position, 8, turn.velocity, 8)
+local displayed = turn.display
+close(turn:step(left, 8, speed, 0), displayed)
+turn:reset(origin, 0)
+close(turn:step(stop, 1, speed, dt), origin)
 -- Release applies friction locally, preserving native inertia rather than
 -- stopping instantly and being dragged onward by late authority positions.
 for sequence = 2, 30 do

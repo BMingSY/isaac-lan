@@ -375,7 +375,11 @@ int integrationSetting(lua_State* L) {
     }
     return 1;
 }
-std::map<std::filesystem::path, std::array<std::string, 4>> modSourceCache;
+struct ModSource {
+    std::array<std::string, 4> fields;
+    bool fingerprinted{};
+};
+std::map<std::filesystem::path, ModSource> modSourceCache;
 int modInfo(lua_State* L) {
     namespace fs = std::filesystem;
     const auto input = lua.toString(L, 1, nullptr);
@@ -413,35 +417,53 @@ int modInfo(lua_State* L) {
                                   close = std::string("</") + key + ">";
                 auto a = xml.find(open),
                      b = a == std::string::npos ? a : xml.find(close, a + open.size());
-                return b == std::string::npos ? std::string{}
-                                              : xml.substr(a + open.size(), b - a - open.size());
+                if (b == std::string::npos)
+                    return std::string{};
+                const auto value = xml.substr(a + open.size(), b - a - open.size());
+                const auto first = value.find_first_not_of(" \t\r\n");
+                return first == std::string::npos
+                           ? std::string{}
+                           : value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
             };
-            std::vector<fs::path> files;
-            for (const auto& item : fs::recursive_directory_iterator(root))
-                if (item.is_regular_file() && item.path().extension() == L".lua" &&
-                    item.path().filename() != L"gtconfig.lua" &&
-                    item.path().filename() != L"eid_config.lua")
-                    files.push_back(item.path());
-            std::sort(files.begin(), files.end());
-            app::ContentHash hash;
-            hash.text("Isaac LAN/compat-source-v1");
-            for (const auto& file : files) {
-                hash.text(fs::relative(file, root).generic_string());
-                app::ContentHash entry;
-                entry.file(file);
-                hash.text(entry.finish());
+            const auto path = root.generic_u8string();
+            found = cache
+                        .emplace(root, ModSource{{tag("id"),
+                                                  tag("version"),
+                                                  {},
+                                                  std::string(path.begin(), path.end())}})
+                        .first;
+        }
+        auto& info = found->second;
+        if (!info.fingerprinted && (lua.getTop(L) < 2 || lua.toBoolean(L, 2))) {
+            info.fingerprinted = true;
+            try {
+                std::vector<fs::path> files;
+                for (const auto& item : fs::recursive_directory_iterator(root))
+                    if (item.is_regular_file() && item.path().extension() == L".lua" &&
+                        item.path().filename() != L"gtconfig.lua" &&
+                        item.path().filename() != L"eid_config.lua")
+                        files.push_back(item.path());
+                std::sort(files.begin(), files.end());
+                app::ContentHash hash;
+                hash.text("Isaac LAN/compat-source-v1");
+                for (const auto& file : files) {
+                    const auto relative = file.lexically_relative(root).generic_u8string();
+                    hash.text(std::string(relative.begin(), relative.end()));
+                    app::ContentHash entry;
+                    entry.file(file);
+                    hash.text(entry.finish());
+                }
+                info.fields[2] = hash.finish();
+            } catch (const std::exception& error) {
+                // An optional digest must not hide a known workshop identity.
+                logger(std::string("compat_source_hash=UNKNOWN ") + error.what());
             }
-            found =
-                cache
-                    .emplace(root, std::array<std::string, 4>{tag("id"), tag("version"),
-                                                              hash.finish(), root.generic_string()})
-                    .first;
         }
         lua.createTable(L, 0, 4);
         const std::array<const char*, 4> keys{"workshopId", "metadataVersion", "sourceHash",
                                               "directory"};
         for (unsigned i = 0; i < keys.size(); ++i) {
-            lua.pushString(L, found->second[i].c_str());
+            lua.pushString(L, info.fields[i].c_str());
             lua.setField(L, -2, keys[i]);
         }
         return 1;

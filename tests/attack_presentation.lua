@@ -101,8 +101,12 @@ local policy = {
     mode = function(weapon)
         return { tears = weapon.kind == 1, charge = weapon.kind == 2 and 32 or nil }
     end,
-    defaultTear = function()
-        return true
+    initialAnimation = function()
+        return "RegularTear6"
+    end,
+    initialPattern = function() end,
+    spectral = function()
+        return false
     end,
     normalTear = function()
         return true
@@ -532,3 +536,40 @@ fresh()
 present(0, 1)
 assert(#draws > 0, "Ordinary shooting prediction did not resume")
 print("PASS remotely controlled attacks retain authority pose and clear local previews")
+
+-- A gap expires speculative shots, but a delayed old view cannot restart
+-- firing and a resumed view can immediately reuse an observed appearance.
+policy.initialAnimation = function() end
+fresh()
+present(0, 1)
+assert(#draws == 0)
+value.room[R.entities] = {
+    {
+        [E.id] = 20,
+        [E.type] = 2,
+        [E.variant] = 0,
+        [E.spawner] = 10,
+        [E.frame] = 0,
+        [E.velocity] = { 10, 0 },
+        [E.sprite] = {},
+    },
+}
+confirm(2, 1, 0.05)
+present(0.7, 2)
+assert(#draws == 0 and counters["attack.pending"] == 0)
+value.room[R.entities] = {}
+confirm(1, 0, 0.71)
+present(0.71, 3)
+assert(#draws == 0)
+confirm(3, 2, 0.75)
+present(0.75, 4)
+assert(#draws == 1, "A short outage discarded the learned tear sprite")
+-- Speed changes keep a known appearance. A new damage tier must wait for its own template.
+player.ShotSpeed = player.ShotSpeed + 0.1
+confirm(4, 3, 0.78)
+present(0.78, 5)
+assert(#draws > 0, "A cadence change discarded a valid appearance")
+player.Damage = player.Damage + 1
+confirm(5, 4, 0.81)
+present(0.81, 6)
+assert(#draws == 0, "Unobserved tear appearance used the old template")

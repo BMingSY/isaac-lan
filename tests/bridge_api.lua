@@ -264,6 +264,20 @@ assert(removed[callbacks[1][2]])
 -- Give each registration its own source identity to test version rejection.
 local isolated = peer(0)
 local registry = isolated.bridge.registry
+local digestReads = 0
+local function observeInfo(_, fingerprint)
+    if not isolated.modInfo then
+        return
+    end
+    local info = isolated.bridge.copy(isolated.modInfo)
+    if fingerprint == false then
+        info.sourceHash = ""
+    else
+        digestReads = digestReads + 1
+    end
+    return info
+end
+isolated.env._IsaacLan.api_mod_info = observeInfo
 local installs, cleanupCount, compatibilityHandle = 0, 0, nil
 isolated.modInfo = {
     directory = "mods/test",
@@ -271,6 +285,9 @@ isolated.modInfo = {
     metadataVersion = "1",
     sourceHash = string.rep("f", 64),
 }
+registry.observeMod({ Name = "No adapter" }, "other-main")
+registry.observeRequire("other-main", "module", {})
+assert(digestReads == 0, "Reading an unrelated Mod eagerly hashed its sources")
 local definition = {
     id = "test.compat",
     adapterVersion = 1,
@@ -282,10 +299,10 @@ local definition = {
     install = function(target, api)
         installs = installs + 1
         compatibilityHandle = api:Attach(target.mod, "test.compat.handle")
-        return function()
+        target.addCleanup(function()
             cleanupCount = cleanupCount + 1
             compatibilityHandle:Close()
-        end
+        end)
     end,
 }
 local invalidTarget = isolated.bridge.copy(definition)
@@ -297,12 +314,16 @@ registry.register(definition)
 isolated.modInfo.sourceHash = string.rep("0", 64)
 registry.observeMod({ Name = "Test" }, "impostor-source")
 registry.poll()
-assert(installs == 0 and registry.status()[1].state == "unsupported")
+assert(installs == 0 and digestReads == 1 and registry.status()[1].state == "unsupported")
 isolated.modInfo.sourceHash = string.rep("f", 64)
 local mod = { Name = "Test" }
 registry.observeMod(mod, "test-source")
 registry.poll()
 registry.poll()
+assert(installs == 1 and registry.status()[1].state == "active")
+isolated.modInfo.workshopId = "456"
+registry.observeMod({ Name = "Test" }, "another-package")
+isolated.modInfo.workshopId = "123"
 assert(installs == 1 and registry.status()[1].state == "active")
 isolated.api:SetAdapterEnabled("test.compat", false)
 assert(cleanupCount == 1)

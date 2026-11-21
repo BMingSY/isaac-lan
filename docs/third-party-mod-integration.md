@@ -32,7 +32,7 @@ local cancel = lan:OnLocalRender(function(view)
 end)
 ```
 
-回调跟随游戏渲染帧执行，不等待新的网络快照。SDK 自动进入本机房间和角色作用域；旧 UI 中的 `Game():GetRoom()`、`Game():GetNumPlayers()`、`Isaac.GetPlayer(i)` 也能读取本机视图。准备阶段跳过绘制；错误只停用出错的回调并恢复作用域。`cancel()` 可重复调用，`lan:Close()` 会统一清理。
+回调跟随游戏渲染帧执行，不等待新的网络快照。SDK 自动进入本机房间和角色作用域；旧 UI 中的 `Game():GetRoom()`、`Game():GetNumPlayers()`、`Isaac.GetPlayer(i)` 也能读取本机视图。准备与切房期间若本机视图暂不可用，该帧跳过绘制，下一帧继续。`WithLocalView` 此时返回 `nil, "view_not_ready"`。回调自身抛错时停用该回调并恢复作用域。`cancel()` 可重复调用，`lan:Close()` 会统一清理。
 
 这里用于读取世界和绘制 UI。造成伤害、给予道具、传送等操作通过主机动作执行。全局脚本缓存仍由 Mod 自己管理，原生角色对象应从当前视图重新取得。
 
@@ -65,7 +65,7 @@ local request = coin:Request(nil, {
 
 ## 可运行示例
 
-[`examples/mod-api/main.lua`](https://github.com/BMingSY/isaac-lan/blob/main/examples/mod-api/main.lua) 是完整 Mod：显示本机角色硬币数，按 F6 请求一枚硬币。用下列命令生成含 SDK 的独立目录，再放入隔离游戏的 `mods` 下：
+[`examples/mod-api/main.lua`](https://github.com/BMingSY/isaac-lan/blob/main/examples/mod-api/main.lua) 是完整 Mod：显示本机角色硬币数，按 F6 请求一枚硬币。示例逐渲染帧记录按下边沿，在游戏更新中提交请求，长按只触发一次。用下列命令生成含 SDK 的独立目录，再放入隔离游戏的 `mods` 下：
 
 ```sh
 python tools/export_mod_example.py /tmp/isaac_lan_api_example

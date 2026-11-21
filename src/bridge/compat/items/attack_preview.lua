@@ -9,7 +9,6 @@ return function(weapons, items, fields, flags, forms, players)
     for _, name in ipairs({
         "COLLECTIBLE_MOMS_EYE",
         "COLLECTIBLE_LOKIS_HORNS",
-        "COLLECTIBLE_THE_WIZ",
         "COLLECTIBLE_CHOCOLATE_MILK",
         "COLLECTIBLE_CURSED_EYE",
         "COLLECTIBLE_ANTI_GRAVITY",
@@ -25,24 +24,50 @@ return function(weapons, items, fields, flags, forms, players)
             excluded[#excluded + 1] = items[name]
         end
     end
+    local diagonal = math.sqrt(0.5)
+    local wizPattern = {
+        { along = diagonal, across = -diagonal, eye = 0 },
+        { along = diagonal, across = diagonal, eye = 0 },
+    }
+    local function wiz(player)
+        return items.COLLECTIBLE_THE_WIZ and player:HasCollectible(items.COLLECTIBLE_THE_WIZ)
+    end
     return {
         freeAim = function(player)
             return items.COLLECTIBLE_ANALOG_STICK
                 and player:HasCollectible(items.COLLECTIBLE_ANALOG_STICK)
         end,
         normalTear = function(player)
-            return player.TearFlags == flags.TEAR_NORMAL
+            return (
+                player.TearFlags == flags.TEAR_NORMAL
+                or (wiz(player) and player.TearFlags == flags.TEAR_SPECTRAL)
+            )
                 and not player:HasPlayerForm(forms.PLAYERFORM_BOOK_WORM)
         end,
-        defaultTear = function(player, inventory)
+        initialAnimation = function(player, inventory)
+            if inventory[fields.inventory.type] ~= players.PLAYER_ISAAC then
+                return
+            end
+            -- These stock loadouts have a known first sprite. Other appearances
+            -- are learned from the first host tear, including Modded sprites.
+            local pentagram = false
             for _, item in ipairs(inventory[fields.inventory.items]) do
-                if item[fields.item.id] ~= items.COLLECTIBLE_D6 then
-                    return false
+                local id = item[fields.item.id]
+                if id == items.COLLECTIBLE_PENTAGRAM and item[fields.item.count] == 1 then
+                    pentagram = true
+                elseif id ~= items.COLLECTIBLE_D6 and id ~= items.COLLECTIBLE_THE_WIZ then
+                    return
                 end
             end
-            return inventory[fields.inventory.type] == players.PLAYER_ISAAC
-                and player.Damage == 3.5
-                and player.TearFlags == flags.TEAR_NORMAL
+            return pentagram and "RegularTear7" or "RegularTear6"
+        end,
+        initialPattern = function(player, count)
+            if count == 2 and wiz(player) then
+                return wizPattern
+            end
+        end,
+        spectral = function(player)
+            return wiz(player) and player.TearFlags == flags.TEAR_SPECTRAL
         end,
         mode = function(weapon)
             if chargeWeapons[weapon.kind] and weapon.chargeLimit and weapon.chargeLimit > 0 then
@@ -58,6 +83,7 @@ return function(weapons, items, fields, flags, forms, players)
             end
             local count = 1
             for name, amount in pairs({
+                COLLECTIBLE_THE_WIZ = 2,
                 COLLECTIBLE_20_20 = 2,
                 COLLECTIBLE_INNER_EYE = 3,
                 COLLECTIBLE_MUTANT_SPIDER = 4,

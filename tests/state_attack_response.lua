@@ -5,7 +5,19 @@ local fields, schema = _IsaacLanModules["sync/fields"], _IsaacLanModules["sync/w
 local pose = _IsaacLanModules["sync/weapon_pose"]
 local A, E, R = fields.actor, fields.entity, fields.room
 local cases = {
-    { name = "tears", kind = WeaponType.WEAPON_TEARS },
+    { name = "tears", kind = WeaponType.WEAPON_TEARS, firstShot = true },
+    {
+        name = "pentagram",
+        item = CollectibleType.COLLECTIBLE_PENTAGRAM,
+        kind = WeaponType.WEAPON_TEARS,
+        firstShot = true,
+    },
+    {
+        name = "the-wiz",
+        item = CollectibleType.COLLECTIBLE_THE_WIZ,
+        kind = WeaponType.WEAPON_TEARS,
+        firstShot = true,
+    },
     {
         name = "analog-stick",
         item = CollectibleType.COLLECTIBLE_ANALOG_STICK,
@@ -150,7 +162,7 @@ function _IsaacLanFrame()
                 end
             end
             edge = { name = aiming, time = Isaac.GetTime(), at = at }
-            if at == 20 then
+            if aiming and not measurements[case.name].pressed then
                 measurements[case.name].pressed = edge.time
             end
             lastButtons = buttons
@@ -166,21 +178,25 @@ function _IsaacLanFrame()
     native.test_gamepad(buttons)
     if verified >= firstTick + #cases * duration and not finished then
         if not host then
-            local plain = measurements.tears
-            assert(
-                plain.firstPreview and plain.firstAuthority and plain.pressed,
-                "Missing first-shot observations"
-            )
-            plain.previewMs, plain.authorityMs =
-                plain.firstPreview - plain.pressed, plain.firstAuthority - plain.pressed
-            assert(
-                plain.previewMs >= 0 and plain.previewMs < 50,
-                "First tear did not respond locally"
-            )
-            assert(
-                plain.authorityMs > plain.previewMs + 40,
-                "Latency relay did not separate preview from confirmation"
-            )
+            for _, entry in ipairs(cases) do
+                if entry.firstShot then
+                    local m = measurements[entry.name]
+                    assert(
+                        m.firstPreview and m.firstAuthority and m.pressed,
+                        "Missing first shot: " .. entry.name
+                    )
+                    m.previewMs, m.authorityMs =
+                        m.firstPreview - m.pressed, m.firstAuthority - m.pressed
+                    assert(
+                        m.previewMs >= 0 and m.previewMs < 50,
+                        "First shot waited for the host: " .. entry.name
+                    )
+                    assert(
+                        m.authorityMs > m.previewMs + 40,
+                        "Missing delayed authority: " .. entry.name
+                    )
+                end
+            end
             assert((metrics["attack.confirmed"] or 0) > 5, "Insufficient tear handoffs")
             if not mirror then
                 assert(
@@ -301,9 +317,11 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
             for _, entity in ipairs(value.room[R.entities]) do
                 if entity[E.type] == EntityType.ENTITY_TEAR then
                     authorityTears[entity[E.id]] = true
-                    if entity[E.spawner] == owner and current and current.name == "tears" then
-                        measurements.tears.firstAuthority = measurements.tears.firstAuthority
-                            or Isaac.GetTime()
+                    if entity[E.spawner] == owner and current and current.firstShot then
+                        local m = measurements[current.name]
+                        if m.pressed and not m.firstAuthority then
+                            m.firstAuthority = Isaac.GetTime()
+                        end
                     end
                 end
             end

@@ -7,9 +7,11 @@ return function(fields)
         local shots, targets, scope, epoch, received = {}, {}, nil, nil, nil
         local function restore(ref)
             for id, shot in pairs(shots) do
-                local e = ref(id)
-                if e and shot.hidden then
-                    e.Visible = shot.visible
+                if shot.hidden then
+                    local e = ref(id)
+                    if e then
+                        e.Visible = shot.visible
+                    end
                     shot.hidden = nil
                 end
             end
@@ -78,7 +80,7 @@ return function(fields)
                 deps.metrics.counter("hit." .. name, count)
             end
         end
-        local function present(_, ref, now, _, _, status)
+        local function present(motion, ref, now, _, _, status)
             assert(deps.native.combat_present())
             restore(ref)
             if not received or now - received > 0.25 or status.pause ~= 0 then
@@ -112,12 +114,15 @@ return function(fields)
                     history.last = deps.vector(position.X, position.Y)
                 end
             end
-            local query = predicting > 0 and deps.candidates(candidates, predicting)
+            local query = #candidates > 0 and deps.candidates(candidates, predicting)
             for id, shot in pairs(shots) do
-                local e = ref(id)
-                if e and not shot.used then
+                local display = not query and motion and motion[id] and motion[id].display
+                local e = not shot.used and not display and ref(id)
+                if display then
+                    shot.last = display
+                elseif e then
                     local position = e.Position
-                    local tear = e:ToTear()
+                    local tear = query and e:ToTear()
                     if tear and tear.Height < -5 and e.Visible then
                         local hit, first, order = nil, math.huge, math.huge
                         local radius = e.Size

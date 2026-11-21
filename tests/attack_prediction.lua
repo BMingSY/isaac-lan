@@ -14,6 +14,8 @@ for index, name in ipairs({
     "COLLECTIBLE_SOY_MILK",
     "COLLECTIBLE_ALMOND_MILK",
     "COLLECTIBLE_ANALOG_STICK",
+    "COLLECTIBLE_THE_WIZ",
+    "COLLECTIBLE_PENTAGRAM",
 }) do
     enums.CollectibleType[name] = index
 end
@@ -55,6 +57,14 @@ assert(
     previewPolicy.tearCount(player) == nil,
     "Random trajectories acquired deterministic previews"
 )
+local items = enums.CollectibleType
+counts = { [items.COLLECTIBLE_THE_WIZ] = 1 }
+local lanes = previewPolicy.initialPattern(player, previewPolicy.tearCount(player))
+assert(#lanes == 2 and lanes[1].eye == 0 and lanes[2].eye == 0)
+assert(math.abs(lanes[1].along - math.sqrt(0.5)) < 0.00001 and lanes[1].across == -lanes[2].across)
+counts[items.COLLECTIBLE_20_20] = 1
+assert(previewPolicy.tearCount(player) == nil, "Complex Wiz volley acquired two guessed lanes")
+counts = {}
 local pose = module("sync/weapon_pose")
 local function snapshot(kind, delay, maximum, charge, chargeLimit)
     return {

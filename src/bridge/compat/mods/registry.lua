@@ -3,9 +3,10 @@ local native, wrapping = assert(_IsaacLan), _IsaacLanModules["compat/mods/wrappi
 local registry = {}
 bridge.registry = registry
 local definitions, targets, exports, sourceCache = {}, {}, {}, {}
+local pendingSources = {}
 local function identify(source)
     if not sourceCache[source] then
-        sourceCache[source] = native.api_mod_info(source) or false
+        sourceCache[source] = native.api_mod_info(source, false) or false
     end
     return sourceCache[source] or nil
 end
@@ -71,8 +72,10 @@ local function probe(entry)
     bridge.compatibilityInstalling = entry
     local installed, cleanup = pcall(entry.definition.install, entry.target, bridge.api)
     bridge.compatibilityInstalling = previous
-    if installed and type(cleanup) == "function" then
-        cleanups[#cleanups + 1] = cleanup
+    if installed and (type(cleanup) == "function" or (cleanup == nil and #cleanups > 0)) then
+        if cleanup then
+            cleanups[#cleanups + 1] = cleanup
+        end
         entry.cleanup = function()
             wrapping.cleanup(cleanups)
         end
@@ -87,14 +90,19 @@ local function attach(entry, target)
         return
     end
     if entry.target then
-        if entry.target.mod ~= target.mod then
-            setState(entry, "unsupported", "duplicate_target_instance")
-        end
+        -- A second registration (including another Mod using the same display
+        -- name) must not deactivate the instance already matched and probed.
         return
     end
     if not entry.enabled then
         setState(entry, "disabled", "configuration")
         return
+    end
+    local source = pendingSources[target]
+    if source then
+        local full = native.api_mod_info(source)
+        target.sourceHash = full and full.sourceHash or ""
+        pendingSources[target] = nil
     end
     if not match(entry.definition, target) then
         setState(entry, "unsupported", "source_or_version_mismatch")
@@ -122,6 +130,7 @@ function registry.observeMod(mod, source)
     target.mod, target.modules = mod, exports[info.directory] or {}
     exports[info.directory] = target.modules
     targets[#targets + 1] = target
+    pendingSources[target] = source
     for _, entry in pairs(definitions) do
         if entry.definition.modName == mod.Name then
             attach(entry, target)

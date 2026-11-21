@@ -95,7 +95,9 @@ return function(fields)
                         data.__isaac_lan_replica = v[Entity.id]
                     end
                     env.apply(e, v, registered)
-                    currentObjects[env.key(e)] = true
+                    if not cached then
+                        currentObjects[env.key(e)] = true
+                    end
                 else
                     assert(optionalTear(v), "Replica spawn failed")
                 end
@@ -118,7 +120,7 @@ return function(fields)
             local missingTears = 0
             -- The allocation/cleanup phase is complete. Resolve shared targets
             -- once for this linking pass; nothing survives into the next view.
-            local linked, keys = {}, {}
+            local linked, keys = retained or {}, {}
             local function ref(identifier)
                 if not identifier or identifier == 0 then
                     return nil

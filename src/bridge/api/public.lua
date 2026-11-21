@@ -37,6 +37,9 @@ function bridge.withView(fn)
     native.api_with_local_view(function()
         result = table.pack(fn())
     end)
+    if not result then
+        return nil, "view_not_ready"
+    end
     return table.unpack(result, 1, result.n)
 end
 bridge.lifecycle = modules["api/lifecycle"](bridge)

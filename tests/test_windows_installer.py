@@ -335,19 +335,58 @@ if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) { throw 'Get-FileHas
         self.run_installer(code="INSTALLATION_INVALID")
         (self.game / "isaac-lan").unlink()
         self.run_installer()
+        marker = self.game / ".isaac-lan-install"
+        marker.write_bytes(b"damaged")
+        self.assertIn("Previous files backed up", self.run_installer())
+        self.assertEqual(marker.read_text().strip(), "IsaacLAN/1")
+        self.assertTrue(
+            any(
+                p.read_bytes() == b"damaged"
+                for p in self.game.glob(".isaac-lan-transaction-*/old-.isaac-lan-install")
+            )
+        )
         record = self.game / "isaac-lan/installation.json"
-        original = record.read_bytes()
         for content in ("{", "null", "[]", '{"format":1}', '{"format":1,"files":[]}'):
             with self.subTest(content=content):
                 record.write_text(content)
-                before = self.installed_files()
-                self.run_installer(code="INSTALLATION_INVALID")
-                self.assertEqual(self.installed_files(), before)
-        record.write_bytes(original)
+                output = self.run_installer()
+                self.assertIn("Previous files backed up", output)
+                self.assertEqual(json.loads(record.read_text())["format"], 1)
+                self.assertTrue(
+                    any(
+                        p.read_text() == content
+                        for p in self.game.glob(".isaac-lan-transaction-*/old-installation.json")
+                    )
+                )
         (self.game / "winmm.dll").write_bytes(b"changed file")
-        before = self.installed_files()
-        self.run_installer("Uninstall", code="FILE_CONFLICT")
-        self.assertEqual(self.installed_files(), before)
+        (self.game / "isaac-ng.exe").unlink()
+        self.assertIn("Preserved existing files: winmm.dll", self.run_installer("Uninstall"))
+        self.assertEqual((self.game / "winmm.dll").read_bytes(), b"changed file")
+        self.assertFalse((self.game / "isaac_lan_probe.dll").exists())
+        self.assertFalse(record.exists())
+
+    def test_manual_files_and_partial_installation(self):
+        (self.package / "game-profile.json").unlink()
+        for name in OWNED:
+            shutil.copy2(self.package / name, self.game / name)
+        self.run_installer(game=self.game / "isaac-ng.exe")
+        (self.game / ".isaac-lan-install").unlink()
+        self.run_installer()
+        self.assertTrue((self.game / ".isaac-lan-install").exists())
+        (self.game / "isaac-lan/installation.json").unlink()
+        (self.package / "isaac_lan_check.exe").unlink()
+        self.run_installer("Uninstall")
+        self.assertFalse(any(self.installed_files().values()))
+
+    def test_uninstall_manual_binaries_after_game_removal(self):
+        for name in OWNED:
+            shutil.copy2(self.package / name, self.game / name)
+        (self.game / "isaac-ng.exe").unlink()
+        (self.package / "isaac_lan_check.exe").unlink()
+        self.run_installer("Uninstall")
+        self.assertTrue(all(value is None for value in self.installed_files().values()))
+        (self.package / "payload.json").write_text("damaged")
+        self.assertIn("not installed", self.run_installer("Uninstall"))
 
     def test_running_game_and_locked_file(self):
         self.run_installer(
@@ -357,6 +396,15 @@ function Get-Process { [pscustomobject]@{Path = (Join-Path $GameDirectory 'isaac
 """,
         )
         self.run_installer()
+        self.assertIn(
+            "already installed",
+            self.run_installer(
+                inject="""
+function Get-Process { [pscustomobject]@{Path = (Join-Path $GameDirectory 'isaac-ng.exe')} }
+"""
+            ),
+        )
+        (self.game / "isaac_lan_probe.dll").unlink()
         before = self.installed_files()
         output = self.run_installer(
             code=("FILE_IN_USE", "PERMISSION_DENIED", "FILE_EXISTS"),
