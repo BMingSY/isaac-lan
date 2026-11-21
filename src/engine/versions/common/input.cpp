@@ -369,9 +369,6 @@ int botInput(lua_State* L) {
     lua.pushBoolean(L, valid);
     return 1;
 }
-int physicalDeviceId(unsigned source) {
-    return source == 0 ? binding.keyboardDeviceId : static_cast<int>(source);
-}
 void samplePhysicalInput() {
     if (!originalQuery)
         return;
@@ -440,6 +437,9 @@ int capture(lua_State* L) {
     return 1;
 }
 } // namespace
+int physicalDeviceId(unsigned source) {
+    return source == 0 ? binding.keyboardDeviceId : static_cast<int>(source);
+}
 ViewScope::ViewScope(int slot) : previous(viewSlot) {
     viewSlot = slot;
 }
@@ -720,6 +720,10 @@ bool bind(lua_State* L, HMODULE module) {
     function("input_ready", ready);
     function("input_assign", assign);
     function("input_devices", devices);
+    lua.pushInteger(L, physicalDeviceId(0));
+    lua.setField(L, -2, "input_keyboard_device");
+    lua.pushInteger(L, XUSER_MAX_COUNT);
+    lua.setField(L, -2, "input_gamepad_count");
     function("input_capture", capture);
     function("input_bot", botInput);
     function("players_spawn", spawn);

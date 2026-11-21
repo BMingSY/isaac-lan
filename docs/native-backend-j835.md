@@ -40,6 +40,8 @@ MenuManager 全局指针 RVA `0x7fd688`，页字段 `+0x38`；标题、存档、
 
 ## 房间调度绑定
 
+随行实体沿用[共享迁移规则](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)。仅对泪弹读取 `EntityTear+0x380` 的标志高 64 位，按位 127 和父实体或生成者的归属识别鲁多维科泪弹。迁移沿用游戏的房间实体列表和所有权。
+
 [房间绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/rooms.cpp)向[共享调度](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/rooms.cpp)提供原版入口、布局和少量 ABI 适配。Room 大小为 `0x777c`，构造／析构入口为 `0x3a80f0/0x3a89f0`；分配与释放沿用游戏 CRT。PlayerManager 位于 `Game+0x1ba40`，名单向量位于管理器 `+0x10`，不能把名单头作为管理器接收对象。备用身体通过 `0x518ab0` 注销名单，只搬移指针、不析构角色；销毁角色使用 `0x518af0`，接收角色指针和布尔参数并清栈八字节。
 
 每个房间持有 Ambush `+0xc` 起的待执行波次向量及后续标量，根对象为 `Game+0x1c31b8`；前置 XML 配置保持游戏所有权。27 个进程渲染纹理句柄按原生双指针对整体交换和释放，不能只交换资源地址。 原版构造函数创建这些进程纹理，但此时仍是离开房间的作用域；目的房间激活后、原生 `Room::Init` 之前，解析边界调用 `0x3a91c0`（cdecl、无参数）补齐空槽。该入口按现有屏幕尺寸分配原生表面和引用所有者，保留非空句柄；已驻留房间、未受调度的原生换房和存储壳不额外调用。纹理创建失败时跳过原生初始化并把异常交还调度，不在下一帧绘制时补救已经使用的空纹理。原版 Boss 血条缓存为 `Game+0x1018f0/+0x1018f4/+0x1018f8`；没有 J510 `Game+0x1ad90` 的换房 Boss 缓存，也没有其结束／恢复控制使用的状态门，缺失槽不读写原生内存。
@@ -331,7 +333,7 @@ Seeds 含游戏管理的容器；传值调用由原生入口消费一次，扩�
 
 [设备绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input_devices.cpp) 使用原生扫描 `0x59d3b0` 和轮询 `0x59d720`，两者均无参数、调用方清栈。`InputManager::Update` 的 `0x56a150` 接收 ECX 中的管理器。三个入口通过[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化完整遍历、回调与释放过程；同线程原生连接回调可以重入轮询，离开联机后继续保护设备断开清理。
 
-输入管理器是 RVA `0x7e7c98` 的内嵌对象，其指针列表首尾为 `+4/+8`，元素四字节；设备 ID 位于 `+8`。只有至少四个正编号设备都存在时才分配联机 ID `1..4`，保留键盘、其他设备和容器顺序。退出只恢复仍在列表内且仍使用所分配编号的设备；不解引用已移除对象，不覆盖原生独立更改的编号。设备及容器由游戏创建和销毁，组件只保存恢复所需的身份记录，不取得所有权。
+输入管理器是 RVA `0x7e7c98` 的内嵌对象，其指针列表首尾为 `+4/+8`，元素四字节；设备 ID 位于 `+8`。内置 Mod 适配取得的 `input_keyboard_device` 为 0，`input_gamepad_count` 为 4。只有至少四个正编号设备都存在时才分配联机 ID `1..4`，保留键盘、其他设备和容器顺序。退出只恢复仍在列表内且仍使用所分配编号的设备；不解引用已移除对象，不覆盖原生独立更改的编号。设备及容器由游戏创建和销毁，组件只保存恢复所需的身份记录，不取得所有权。
 
 [输入查询适配](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j835/input_queries.cpp) 把三个原生入口连接到后端内部的统一查询接口。按住 `0x56a520` 和按下沿 `0x56a5e0` 的 ABI 为 `thiscall bool(InputManager*, int action, int controller, int* source)`；模拟量 `0x56a6c0` 参数相同，通过 x87 返回 float。适配器保持动作、控制器和来源指针的顺序，将模拟量转为同步输出参数，再还原原生 float 返回值。
 

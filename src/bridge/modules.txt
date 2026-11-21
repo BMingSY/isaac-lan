@@ -111,6 +111,7 @@ compat/mods/observation
 compat/mods/registry
 compat/mods/stats_plus
 compat/mods/eid
+compat/mods/emote_binds
 compat/mods/goodtrip/authority
 compat/mods/goodtrip/client
 runtime/session

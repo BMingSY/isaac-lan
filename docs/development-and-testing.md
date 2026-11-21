@@ -391,7 +391,7 @@ python3 tools/validate_replica.py --cases gameplay normal \
 
 画面由隔离进程渲染缓冲区采集，遮挡窗口也可记录。按本轮范围对照双端的战斗、过门、Boss 阶段和换层画面；显示专项另检查镜头、身体／蓄力和演出归属。采样间隙和黑帧候选不能证明没有短暂闪屏。操作与录像归档见 [`tools/NORMAL_GAMEPLAY.md`](https://github.com/BMingSY/isaac-lan/blob/main/tools/NORMAL_GAMEPLAY.md)，性能和堆检查见[诊断参考](https://github.com/BMingSY/isaac-lan/blob/main/docs/diagnostics-and-resource-testing.md)。
 
-[鲁多维科科技与硫磺火组合夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_ludovico_rooms.lua)使用 `run_special_routes.py --case ludovico-rooms --case room-followers --heap-check --record` 做定向回归。复用同一组主客机，检查客机持有激光环时的分房、新房间与已加载房间进入、双向汇合、重复进入、异房发起换层及移除道具后再次入房的清理；同时核对两端实体数量、归属、伤害和画面。
+[鲁多维科泪弹与激光环夹具](https://github.com/BMingSY/isaac-lan/blob/main/tests/state_ludovico_rooms.lua)使用 `run_special_routes.py --case ludovico-rooms --case room-followers --heap-check --record` 做定向回归。复用同一组主客机，让主机持有普通可控泪弹、客机持有硫磺火激光环，检查分房、双向汇合、重复进入、异房发起换层及移除两端道具后的清理。核对主客机各自房内的实体数量、归属和画面。
 
 ## 双开手动测试
 

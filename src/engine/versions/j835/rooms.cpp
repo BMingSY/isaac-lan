@@ -279,6 +279,7 @@ const Bindings bindings{
         .sprite = {
             .size = j835::layout::sprite::size,
         },
+        .tear = {.flagsHigh = j835::layout::tear::flagsHigh},
     },
     .contextOffsets = {
         0x18194, 0x18198, 0x1819c, 0x181a0, 0x181a8, 0x181ac, 0x18158,

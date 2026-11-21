@@ -1,4 +1,4 @@
--- The guest's controlled ring must travel with its owner and survive reunions.
+-- The host's controlled tear and guest's ring must follow their respective owners.
 local native, config = assert(_IsaacLan), assert(_IsaacLanTest)
 local host, port = config.host, config.port
 local frame, gate = _IsaacLanFrame, native.net_gate
@@ -34,7 +34,9 @@ local function inspect(t)
         secondFloorAt = secondFloorAt or t
         if t >= secondFloorAt + 60 and not cleanupAt then
             checkpoint = "floor"
-        elseif cleanupAt and t >= cleanupAt + 60 then
+        elseif cleanupAt and t >= cleanupAt + 170 then
+            checkpoint = "tear-cleanup"
+        elseif cleanupAt and t >= cleanupAt + 60 and t < cleanupAt + 100 then
             checkpoint = "cleanup"
         end
     end
@@ -51,10 +53,10 @@ local function inspect(t)
     assert(sameRoom ~= separated, "Room separation/reunion did not complete: " .. checkpoint)
     for slot = host and 0 or 1, 1 do
         actor(slot, function(_, room)
-            local count = 0
+            local rings, tears = 0, 0
             for _, e in ipairs(Isaac.GetRoomEntities()) do
                 if e.Type == EntityType.ENTITY_LASER and e.SubType == ringSubtype then
-                    count = count + 1
+                    rings = rings + 1
                     local parent = assert(e.Parent, "Controlled ring lost its owner")
                     assert(
                         parent:ToPlayer() and parent:ToPlayer().ControllerIndex == 2,
@@ -69,10 +71,25 @@ local function inspect(t)
                         room:IsPositionInRoom(e.Position, 0),
                         "Controlled ring is outside its room"
                     )
+                elseif e.Type == EntityType.ENTITY_TEAR then
+                    tears = tears + 1
+                    local owner = e.Parent or e.SpawnerEntity
+                    assert(owner and owner:ToPlayer() and owner:ToPlayer().ControllerIndex == 1)
+                    assert(not host or e:ToTear():HasTearFlags(TearFlags.TEAR_LUDOVICO))
+                    assert(e.Visible and room:IsPositionInRoom(e.Position, 0))
                 end
             end
-            local expected = checkpoint ~= "cleanup" and (slot == 1 or sameRoom) and 1 or 0
-            assert(count == expected, checkpoint .. " ring count=" .. count .. " slot=" .. slot)
+            local expectedRings = not cleanupAt and (slot == 1 or sameRoom) and 1 or 0
+            local expectedTears = checkpoint ~= "tear-cleanup" and (slot == 0 or sameRoom) and 1
+                or 0
+            assert(
+                rings == expectedRings,
+                checkpoint .. " ring count=" .. rings .. " slot=" .. slot
+            )
+            assert(
+                tears == expectedTears,
+                checkpoint .. " tear count=" .. tears .. " slot=" .. slot
+            )
         end)
     end
     if not checks[checkpoint] then
@@ -97,7 +114,7 @@ function _IsaacLanFrame()
         _IsaacLanCommand("start", "1XJTX49A:0:0:0:0:0")
     end
     native.test_gamepad(0)
-    if checks.cleanup and not finished then
+    if checks["tear-cleanup"] and not finished then
         for _, checkpoint in ipairs({
             "initial",
             "new-room",
@@ -106,6 +123,7 @@ function _IsaacLanFrame()
             "owner-joins-resident",
             "resident-leaves-owner",
             "floor",
+            "cleanup",
         }) do
             assert(checks[checkpoint], "Missing controlled-ring check: " .. checkpoint)
         end
@@ -128,7 +146,7 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                     or t == 370
                     or t == 490
                     or t == 610
-                    or cleanupAt and t == cleanupAt + 10
+                    or cleanupAt and (t == cleanupAt + 10 or t == cleanupAt + 120)
                 then
                     p.Position, p.Velocity = room:GetCenterPos(), Vector.Zero
                 end
@@ -142,6 +160,9 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
         end
         if Game():GetLevel():GetStage() == LevelStage.STAGE1_1 then
             if t == 30 then
+                actor(0, function(p)
+                    p:AddCollectible(CollectibleType.COLLECTIBLE_LUDOVICO_TECHNIQUE)
+                end)
                 actor(1, function(p)
                     p:AddCollectible(CollectibleType.COLLECTIBLE_LUDOVICO_TECHNIQUE)
                     p:AddCollectible(CollectibleType.COLLECTIBLE_BRIMSTONE)
@@ -176,6 +197,12 @@ native.net_gate = function(capture, before, collect, restore, present, beginFloo
                 end
             end)
             assert(native.rooms_move(1, assert(destination, "Missing cleanup room"), 0, -1))
+        elseif cleanupAt and t == cleanupAt + 110 then
+            actor(0, function(p)
+                p:RemoveCollectible(CollectibleType.COLLECTIBLE_LUDOVICO_TECHNIQUE)
+            end)
+            local guest = native.rooms_positions()["1"]
+            assert(native.rooms_move(0, guest.index, guest.dimension, -1))
         end
     end, function(slot, t)
         if slot == 1 then

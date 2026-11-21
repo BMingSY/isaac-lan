@@ -219,6 +219,12 @@ void compatibilityTargets() {
     require(items::roomFollower(1000, 123, true, 6) && !items::roomFollower(1000, 123, false, 6) &&
                 !items::roomFollower(1000, 123, true, 0) && !items::roomFollower(3, 123, true, 6),
             "Salvation's attached halo remained in the old room or another halo followed");
+    constexpr auto controlledTear = std::uint64_t{1} << 63;
+    require(items::roomFollower(2, 0, true, 0, controlledTear | 1) &&
+                !items::roomFollower(2, 0, false, 0, controlledTear) &&
+                !items::roomFollower(2, 0, true, 0, controlledTear - 1) &&
+                !items::roomFollower(7, 0, true, 0, controlledTear),
+            "Only an owned tear with TEAR_LUDOVICO should travel between rooms");
     for (unsigned variant : {1u, 2u, 3u})
         require(items::roomFollower(7, variant, true, 1) &&
                     !items::roomFollower(7, variant, false, 1) &&

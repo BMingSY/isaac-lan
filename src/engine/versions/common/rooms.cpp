@@ -994,6 +994,10 @@ std::vector<Address> followers(Address player, const Room& room, bool departingF
             jacobs.push_back(occupant);
     for (auto entity : candidates) {
         const auto type = at<unsigned>(entity, layout.entity.type);
+        const auto parent = at<Address>(entity, layout.entity.parent);
+        const bool tear = type == compat::ids::entity::tear;
+        const auto attachment =
+            tear && !parent ? at<Address>(entity, layout.entity.spawner) : parent;
         bool darkEsau = type == compat::characters::darkEsau &&
                         (at<Address>(player, layout.player.darkEsau) == entity ||
                          owned(at<Address>(entity, layout.entity.parent)) ||
@@ -1018,9 +1022,10 @@ std::vector<Address> followers(Address player, const Room& room, bool departingF
         if ((type == 3 && at<Address>(entity, layout.familiar.player) == player) ||
             (type == 8 && (owned(at<Address>(entity, layout.entity.parent)) ||
                            owned(at<Address>(entity, layout.entity.spawner)))) ||
-            compat::items::roomFollower(type, at<unsigned>(entity, layout.entity.variant),
-                                        owned(at<Address>(entity, layout.entity.parent)),
-                                        at<unsigned>(entity, layout.entity.subtype)) ||
+            compat::items::roomFollower(
+                type, at<unsigned>(entity, layout.entity.variant), owned(attachment),
+                at<unsigned>(entity, layout.entity.subtype),
+                tear ? at<std::uint64_t>(entity, layout.tear.flagsHigh) : 0) ||
             darkEsau ||
             (departingFloor &&
              compat::items::floorFollower(type, at<unsigned>(entity, layout.entity.variant),

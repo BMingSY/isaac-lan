@@ -96,7 +96,7 @@ Lua 绘制组件按权威实体 ID 维护实际绳索记录，以 `EntityPtr` �
 
 `actor_forgotten_form(playerSprite, desiredType)` 仅供客机在该玩家的房间作用域内恢复骸骨／灵魂形态，接受当前名单中玩家的借用 Sprite，目标类型限定为 16／17。后端检查 `Player+0x1d98` 的隐藏身体及两者互补类型，拒绝合作幽灵和无效配对；相同目标不再次切换。调用 `Player::SwapForgottenForm`（RVA `0x3d4e00`，`thiscall bool(Player*, bool force, bool quiet)`、`RET 8`），两个标志均为 true，以跳过输入冷却和切换演出。原生交换当前／隐藏身体状态并维护骨架引用，两份分配和所有权均留给游戏；随后同步组件分别恢复两种形态的生命。接口不接受地址、不分配或替换角色，入口受启动签名校验。
 
-角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体、子类型和归属决定；归属沿 J510 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。迁移先记录原生持久列表成员身份，再移除源列表引用并调用原生添加入口。普通添加未恢复的持久成员通过既有 `AddPersistent`（RVA `0x1c980`）登记，避免重复添加；该列表位于 Room 实体容器 `+0x30`，布局归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/layout.h)。成员身份在目的房间初始化和跟班入房回调前恢复，适用于换房、跨层聚合和离线角色停放。对象仍由游戏持有和销毁，不复制效果、不重放道具使用；没有对应持有者的效果及房间独立效果不随角色迁移。
+角色换房时，后端从原房间的持久、普通、更新及效果列表中收集随行对象并按地址去重。附着效果由[道具转场策略](https://github.com/BMingSY/isaac-lan/blob/main/src/compat/items/room_transitions.h)按类型、变体、子类型和归属决定；归属沿 J510 `Entity.Parent`（`+0x3bc`）最多追溯八级，跟班归属使用 `Familiar.Player`（`+0x410`）。仅对泪弹读取 `EntityTear+0x430` 的标志高 64 位，位 127 标识鲁多维科可控泪弹。泪弹缺少父实体时从生成者确认归属。迁移先记录原生持久列表成员身份，再移除源列表引用并调用原生添加入口。普通添加未恢复的持久成员通过既有 `AddPersistent`（RVA `0x1c980`）登记，避免重复添加；该列表位于 Room 实体容器 `+0x30`，布局归入 [layout.h](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/layout.h)。成员身份在目的房间初始化和跟班入房回调前恢复，适用于换房、跨层聚合和离线角色停放。对象仍由游戏持有和销毁，不复制效果、不重放道具使用；没有对应持有者的效果及房间独立效果不随角色迁移。
 
 迁移的原生离房回调完成后、随行实体迁出前，主机在源房间作用域内通知 `_IsaacLanRoomLeaving()`；回调只借用当前房间，不保留对象。蓝钥匙兼容组件在这里消费源房间各门目标的 `FLAG_BLUE_REDIRECT`，保留其他标记。
 
@@ -304,7 +304,7 @@ J510 全局大书位于 `Game+0x1c034`，对象大小 `0x12b8`；48 个配置从
 
 物理采集、虚拟 XInput、权威输入分发、按键沿消费和退出恢复位于[共享输入组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input.cpp)。[J510 输入绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/input.cpp) 提供原生查询／鼠标入口、布局、动作映射与菜单提示重置。查询通过输入管理器虚表 `+0x74` 安装，失败撤销本组件创建的 Hook；鼠标旁路保留原生 thiscall 参数。采集按 `Manager+0x4ae94` 的渲染帧编号去重；重复采集消费按键沿但保留按住值，不更改网络字段与编码顺序。
 
-`input_ready()` 根据同一份受锁保护的设备 ID 快照，检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在。[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化原生扫描 `0x68d4c0` 与轮询 `0x68d870` 的完整事务，允许同线程回调重入，离开联机后继续保护断开清理。J510 输入管理器 RVA `0x87f0a8` 的列表首尾为 `+8/+12`，元素八字节，设备 ID 位于 `+12`。输入采集的逻辑键盘槽 0 查询原生设备 ID −2，联机期间把四个手柄（含原生编号 0）分配到 1–4；组件不修改元素中的原生所有权字段。退出只恢复仍存在且编号未被独立更改的设备，设备对象仍由游戏分配和释放。运行协调器在就绪后请求开局；角色槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
+`input_ready()` 根据同一份受锁保护的设备 ID 快照，检查虚拟设备是否已启用、输入查询是否已安装及 ID 1–4 是否全部存在。[公共设备组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/input_devices.cpp) 串行化原生扫描 `0x68d4c0` 与轮询 `0x68d870` 的完整事务，允许同线程回调重入，离开联机后继续保护断开清理。J510 输入管理器 RVA `0x87f0a8` 的列表首尾为 `+8/+12`，元素八字节，设备 ID 位于 `+12`。输入采集与表情轮盘共用逻辑槽到物理设备的映射。逻辑键盘槽 0 查询原生设备 ID −2，联机期间把四个手柄（含原生编号 0）分配到 1–4；组件不修改元素中的原生所有权字段。内置 Mod 适配使用只读的 `input_keyboard_device` 识别本机键盘，`input_gamepad_count` 给出从 1 起分配的联机手柄编号上限。退出只恢复仍存在且编号未被独立更改的设备，设备对象仍由游戏分配和释放。运行协调器在就绪后请求开局；角色槽位绑定仍由 `input_assign` 与角色生命周期组件负责。
 
 `players_spawn` 和 `input_assign` 通过[共享玩家组件](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/player_input.cpp) 使用 [J510 绑定](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/player_input.cpp)。J510 `PlayerManager` 与其玩家向量起点均为 `Game+0x1baa8`；创建 `0x5d1340` 接收管理器和角色类型，分配 `0x3aede0` 接收角色、控制器和伴生传播标志，初始化 `0x3c52a0` 接收角色，均为 thiscall。初始化和开局奖励后重新读取向量，为新增身体设置控制器与当前／上一位置，然后由 `0x18de0` 取得 HUD 并调用 `0x5bf8f0` 分配显示槽位。已有角色保持原样；对象和向量由游戏持有，部分原生创建失败不提供回滚。
 
@@ -348,7 +348,7 @@ Lua API 不提供每个 PlayerHUD 的实际屏幕坐标，也不能独立选择�
 
 [emotes.cpp](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/j510/emotes.cpp) 复用游戏已构造的轮盘 `Game+0x25118`，不分配、复制或析构其 Sprite、环形几何和候选容器。原版 `EmoteWheel.Update` RVA `0x4dbaa0` 为 `thiscall void(Wheel*)`，原版绘制由 `Game.Render` 调用；选择、分页、开合动画保留原有行为。
 
-轮盘的本机参与者查询 RVA `0x51b240` 只在调用原版更新的作用域内提供控制器视图：临时普通缓冲仅在 `+0x378` 指向只读控制器记录，控制器 ID 在 `+0xc`，范围 0～4。作用域结束即失效，既不加入官方在线名单，也不启动 Steam 连接。原版待发送字段 `Manager+0x4d054` 在调用后读取并恢复，选中 ID 交给独立通信消息；官方模式下所有查询保留原调用。
+轮盘的本机参与者查询 RVA `0x51b240` 只在调用原版更新的作用域内提供控制器视图：临时普通缓冲仅在 `+0x378` 指向只读控制器记录，设备 ID 在 `+0xc`。键盘使用 −2，手柄使用分配后的 1～4，原版据此选择方向键或摇杆。作用域结束即失效，既不加入官方在线名单，也不启动 Steam 连接。原版待发送字段 `Manager+0x4d054` 在调用后读取并恢复，选中 ID 交给独立通信消息；官方模式下所有查询保留原调用。
 
 角色的原版 Emote 组件位于 `Player+0x26f0`，`Show` RVA `0x348c0` 为 `thiscall void(Emote*, int id, unsigned duration)`。桥接值 1～59 对应原生 ID 0～58，仅在已就绪、已连接的角色房间作用域内设置；相同表情重复发送重新开始计时。原版玩家更新与绘制管理动画和气泡寿命，所有原生对象仍由游戏拥有。离开界面关闭轮盘标量状态，不修改其原生容器。
 
