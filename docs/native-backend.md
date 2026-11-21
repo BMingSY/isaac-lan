@@ -18,7 +18,7 @@
 
 [`entity_fields_plan(type, template)`](https://github.com/BMingSY/isaac-lan/blob/main/src/engine/versions/common/entity_fields.cpp)将 Lua 同步组件提供的嵌套字段名数组编译为 userdata。仅支持泪弹、跟班、掉落物和效果实体的具名属性白名单；`false` 为由 Lua 填充的占位，其他实体类型返回 `false`。模板最多 128 个节点、三层深度，不接受地址或偏移。计划只持有字段描述符，不持有游戏对象；线上的字段顺序仍由 Lua schema 决定。
 
-`entity_fields_capture(entity:GetSprite(), plan, memo?)`返回同形数组。可选 `memo` 必须由调用方创建为空表并独占维护；接口按实时读取的原生浮点位模式共享向量和颜色叶数组，保留浮点类型及零的符号，最多缓存 256 个数组，满后仍正常采集。调用方不得修改缓存条目或返回的共享叶数组。根数组及字段容器始终新建，占位始终为 `false`；不提供 `memo` 时数组独立。`entity_fields_apply(sprite, plan, value)`只允许客机调用；一次遍历校验整份数组的形状、类型、有限数值与整数范围，将普通值保存在固定大小的栈缓冲后，再按模板顺序写入。两者要求活动实体的借用 Sprite 与计划类型相符；版本后端不跨调用保存 Sprite、实体或数组引用。对象分配、回收和实体身份仍由原有生命周期管理。
+`entity_fields_capture(entity:GetSprite(), plan, memo?)`返回同形数组。可选 `memo` 必须由调用方创建为空表并独占维护；接口按实时读取的原生浮点位模式共享向量和颜色叶数组，保留浮点类型及零的符号，最多缓存 256 个数组，满后仍正常采集。调用方不得修改缓存条目或返回的共享叶数组。根数组及字段容器始终新建，占位始终为 `false`；不提供 `memo` 时数组独立。`entity_fields_apply(sprite, plan, value)`只允许客机调用；一次遍历校验数组形状以及可写字段的类型、有限数值与整数范围，跳过由其他组件处理的占位字段，将普通值保存在固定大小的栈缓冲后，再按模板顺序写入。两者要求活动实体的借用 Sprite 与计划类型相符；版本后端不跨调用保存 Sprite、实体或数组引用。对象分配、回收和实体身份仍由原有生命周期管理。
 
 `entity_fields_encode(sprite, plan)` 将数值计划直接编码为与 `state_encode` 相同的数组字节，不生成中间 Lua 表；`entity_fields_apply` 也接受这种字节串。此路径仅支持上述四类实体的数值字段，最多 4864 字节，使用固定栈缓冲；解码按计划核对每个数组、数值范围和结束位置，完整校验后才写入该计划的字段。身份、位置、速度及引用仍单独供 Lua 同步组件使用。编码占位只能为 `false`，不接受精灵名称字段或任意内存数据。
 

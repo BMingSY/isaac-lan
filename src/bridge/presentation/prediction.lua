@@ -11,8 +11,12 @@ local inputBase, inputSpeedScale = 0.75, 0.25
 local walkingAcceleration, reverseAcceleration = 0.6, 0.04
 local correctionTime, correctionSpeed = 0.06, 120
 local brakingStart, maxPendingTime = 0.35, 0.5
+local turnLookahead, maxTurnOffset, settledTurnOffset = 1 / 30, 8, 0.01
 local function zero()
     return Vector(0, 0)
+end
+local function dot(a, b)
+    return a.X * b.X + a.Y * b.Y
 end
 function prediction.new(position)
     local self = setmetatable({}, methods)
@@ -23,6 +27,8 @@ function methods:reset(position, sequence, velocity)
     self.base, self.display, self.position = position, position, position
     self.pending, self.correction = {}, zero()
     self.pendingTime = 0
+    self.previousDirection, self.turnOffset = zero(), nil
+    self.turnDirection = nil
     self.evictedTime, self.evictedSequence = 0, sequence
     self.velocity = velocity or zero()
     self.acknowledged = sequence
@@ -88,7 +94,7 @@ local function walkingVelocity(velocity, input, dt)
         return velocity * coastingRetention ^ frames
     end
     local direction = input.direction * (1 / magnitude)
-    local along = velocity.X * direction.X + velocity.Y * direction.Y
+    local along = dot(velocity, direction)
     local across = velocity - direction * along
     local strength = magnitude * (inputBase + inputSpeedScale * input.speed)
     -- Native walking projects onto the speed-scaled input before damping the
@@ -142,6 +148,9 @@ function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
             input.position = self.position
         end
         self.correction = self.display - self.position
+        if self.turnOffset then
+            self.correction = self.correction - self.turnOffset
+        end
         self.errorSquared = self.correction:LengthSquared()
         self.rebuild = false
     end
@@ -149,6 +158,15 @@ function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
     if locked then
         self.velocity = zero()
     end
+    if
+        not locked
+        and dot(self.previousDirection, direction) < 0
+        and self.pendingTime > turnLookahead
+    then
+        self.turnDirection = direction * (1 / math.sqrt(direction:LengthSquared()))
+        self.turnSpeed = dot(self.velocity, self.turnDirection)
+    end
+    self.previousDirection = direction
     if sequence > self.acknowledged then
         local elapsed = 0
         for index = #self.pending, 1, -1 do
@@ -204,7 +222,26 @@ function methods:step(direction, sequence, speed, dt, locked, resolve, friction)
     end
     self.correctionStep = distance * (1 - decay)
     self.correction = self.correction * decay
+    -- Show the change in velocity while a confirmed turn is still in flight.
+    -- Keep the display lead out of collision integration and replay history.
+    local turn = self.turnDirection
+    local along = turn and dot(self.velocity, turn)
+    if turn and not locked and dot(turn, direction) > 0 and along < 0 then
+        local gained = math.max(0, along - self.turnSpeed)
+        self.turnOffset = turn * math.min(maxTurnOffset, gained * turnLookahead)
+    else
+        self.turnDirection = nil
+        if self.turnOffset then
+            self.turnOffset = self.turnOffset * math.exp(-dt / correctionTime)
+            if self.turnOffset:LengthSquared() < settledTurnOffset ^ 2 then
+                self.turnOffset = nil
+            end
+        end
+    end
     self.display = self.position + self.correction
+    if self.turnOffset then
+        self.display = self.display + self.turnOffset
+    end
     return self.display
 end
 function methods:clip(position)

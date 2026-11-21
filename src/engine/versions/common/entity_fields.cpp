@@ -358,10 +358,15 @@ void validate(lua_State* L, const Plan& plan, unsigned index, int value, Values&
             throw std::runtime_error("Entity field shape mismatch");
         auto child = index + 1;
         for (unsigned i = 1; i <= node.count; ++i) {
-            api.rawGetI(L, value, i);
-            validate(L, plan, child, api.getTop(L), values);
-            pop(L);
-            child = plan.nodes[child].next;
+            const auto& member = plan.nodes[child];
+            // Placeholders belong to other consumers of this Lua array. They
+            // have no native decoder or writer; only the parent shape matters.
+            if (member.field || member.array) {
+                api.rawGetI(L, value, i);
+                validate(L, plan, child, api.getTop(L), values);
+                pop(L);
+            }
+            child = member.next;
         }
         return;
     }

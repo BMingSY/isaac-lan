@@ -1,7 +1,7 @@
 -- Local aiming, charge clocks and short-lived tear drawings. No entities are spawned.
 return function(fields)
     local A, E, R, I = fields.actor, fields.entity, fields.room, fields.inventory
-    local staleAfter, handoffTime, projectileLine = 0.25, 0.06, 0
+    local staleAfter, handoffTime, projectileLine = 0.25, 0.06, 3
     local maximumPreviewTime, previewMargin = 0.5, 0.1
     local maxPreviews, axisTolerance = 32, 0.001
     local simulationRate, birthHistoryTicks = 30, 30
@@ -57,11 +57,12 @@ return function(fields)
                     local id = actor[A.entity][E.id]
                     local player = deps.player(actor[A.index])
                     local weapons = pose.read(actor[A.pose])
-                    local signature = deps.encode(actor[A.inventory][I.items])
+                    local appearance = deps.encode(actor[A.inventory][I.items])
                         .. ":"
                         .. actor[A.inventory][I.type]
                         .. ":"
                         .. player.Damage
+                    local signature = appearance
                         .. ":"
                         .. player.ShotSpeed
                         .. ":"
@@ -79,10 +80,24 @@ return function(fields)
                         signature = signature .. ":" .. (weapon and weapon.kind or 0)
                     end
                     local current = states[id]
-                    if not current or current.signature ~= signature then
+                    if
+                        not current
+                        or current.signature ~= signature
+                        or current.flags ~= player.TearFlags
+                    then
+                        local template
+                        if
+                            current
+                            and current.appearance == appearance
+                            and current.flags == player.TearFlags
+                        then
+                            template = current.template
+                        end
                         cancel(id)
                         current = {
                             signature = signature,
+                            appearance = appearance,
+                            flags = player.TearFlags,
                             actor = actor,
                             model = deps.prediction.new(weapons, ack, tick),
                             count = deps.policy.tearCount(player),
@@ -90,13 +105,22 @@ return function(fields)
                             launches = {},
                             shots = 0,
                         }
-                        -- The unmodified Isaac shot has a known appearance before
-                        -- the first acknowledgement. Other outfits learn a template.
-                        if deps.policy.defaultTear(player, actor[A.inventory]) then
-                            current.template = {}
+                        current.template = template
+                        if not template then
+                            local animation =
+                                deps.policy.initialAnimation(player, actor[A.inventory])
+                            if animation then
+                                current.template = { animation = animation }
+                            end
                         end
+                        current.pattern = deps.policy.initialPattern(player, current.count)
+                        current.spectral = deps.policy.spectral(player)
                     else
-                        current.model:confirm(weapons, ack, tick)
+                        if current.model then
+                            current.model:confirm(weapons, ack, tick)
+                        else
+                            current.model = deps.prediction.new(weapons, ack, tick)
+                        end
                         current.actor = actor
                     end
                     if
@@ -117,7 +141,7 @@ return function(fields)
                             current.launches[prior] = nil
                         end
                     end
-                    if current.count == 1 then
+                    if current.count == 1 and not current.pattern then
                         current.pattern = { { along = 1, across = 0 } }
                     end
                     retained[id] = current
@@ -247,8 +271,18 @@ return function(fields)
             end
             local previewTime =
                 math.max(staleAfter, math.min(maximumPreviewTime, latency / 1000 + previewMargin))
-            if not lastReceived or now - lastReceived > previewTime then
-                clear()
+            if not lastReceived then
+                return
+            end
+            if now - lastReceived > previewTime then
+                -- End unconfirmed shots during an outage. Keep observed appearances
+                -- and the tick watermark until a new view or a real room reset.
+                previews, handoffs, lastReceived = {}, {}, nil
+                for _, current in pairs(states) do
+                    current.model, current.fired = nil, nil
+                    current.launches, current.births = {}, {}
+                end
+                measure()
                 return
             end
             for id, current in pairs(states) do
@@ -307,7 +341,7 @@ return function(fields)
                                 deps.applySprite(sprite, current.template.sprite)
                             else
                                 sprite:Load("gfx/002.000_Tear.anm2", true)
-                                sprite:SetFrame("RegularTear6", 0)
+                                sprite:SetFrame(current.template.animation, 0)
                             end
                             -- Native inheritance reads an internal simulation cache
                             -- which is not advanced by replica players. Use the local
@@ -336,7 +370,8 @@ return function(fields)
                                 sequence = sequence,
                                 at = now,
                                 sprite = sprite,
-                                direction = direction,
+                                direction = aimDirection,
+                                spectral = current.spectral,
                                 origin = origin,
                                 velocity = velocity,
                                 height = height,
@@ -410,8 +445,16 @@ return function(fields)
                 local target, height = position(shot, now)
                 local timeout = now - shot.at > shot.lifetime
                 local ground = height >= groundHeight
-                local blocked = not deps.room()
-                    :CheckLine(shot.last, target, projectileLine, 0, false, false)
+                local room = deps.room()
+                local blocked
+                if shot.spectral then
+                    local collision = room:GetGridCollisionAtPos(target)
+                    blocked = not room:IsPositionInRoom(target, 0)
+                        or collision == GridCollisionClass.COLLISION_WALL
+                        or collision == GridCollisionClass.COLLISION_WALL_EXCEPT_PLAYER
+                else
+                    blocked = not room:CheckLine(shot.last, target, projectileLine, 0, false, false)
+                end
                 if timeout or ground or blocked then
                     table.remove(previews, index)
                     expired = expired + 1

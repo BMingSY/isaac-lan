@@ -36,7 +36,12 @@ local function add(id, kind, subtype, parent, variant, disabled)
     function entity:GetSprite()
         return id
     end
-    local value = { [E.parent] = parent or 0 }
+    local value = {
+        [E.parent] = parent or 0,
+        [E.type] = kind,
+        [E.subtype] = entity.SubType,
+        [E.variant] = entity.Variant,
+    }
     if kind == types.ENTITY_LASER then
         value[E.laserPath], value[E.laserEndPoint] = "path:" .. id, { 400, 210 }
     end
@@ -62,7 +67,7 @@ local _, body = add(20, types.ENTITY_PLAYER)
 body.display = Vector(130, 180)
 local _, other = add(30, types.ENTITY_PLAYER)
 other.display = Vector(90, 220)
-local bone, boneModel = add(1, types.ENTITY_KNIFE, 0, 20, 1)
+local bone, boneModel, boneValue = add(1, types.ENTITY_KNIFE, 0, 20, 1)
 local knife = add(2, types.ENTITY_KNIFE, 0, 30)
 local hitbox = add(3, types.ENTITY_KNIFE, 4, 20, 10)
 local projectile = add(4, types.ENTITY_KNIFE, 1, 20)
@@ -117,7 +122,8 @@ count = #writes
 present()
 assert(#writes == count + 1, "Repeated snapshots left a restored path untranslated")
 -- Parent replacement and disappearance never retain a previous body's offset.
-boneModel.attachment = attachments.capture(bone, { [E.parent] = 30 })
+boneValue[E.parent] = 30
+boneModel.attachment = attachments.capture(bone, boneValue)
 present()
 close(bone.Position, 90, 220, "Replacement parent did not take ownership")
 entities[30] = nil
@@ -125,7 +131,8 @@ boneModel.display = Vector(101, 202)
 bone.Position = boneModel.display
 present()
 close(bone.Position, 101, 202, "Removed parent kept moving an orphan")
-boneModel.attachment = attachments.capture(bone, { [E.parent] = 0 })
+boneValue[E.parent] = 0
+boneModel.attachment = attachments.capture(bone, boneValue)
 assert(boneModel.attachment == nil, "Detached weapon retained its parent")
 models, entities = {}, {}
 present()
