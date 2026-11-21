@@ -39,7 +39,23 @@ int main() {
         auto mod = isaac::app::buildManifest(directory.path, "fixture.version", log);
         require(mod.fingerprint == first.fingerprint && mod.mods != first.mods,
                 "Advisory mods changed required build identity");
-        write(directory.path / "mods/a/disable.it", "");
+        const auto renamed = directory.path / L"mods/\u672c\u5730";
+        std::filesystem::rename(directory.path / "mods/a", renamed);
+        require(isaac::app::buildManifest(directory.path, "fixture.version", log).mods == mod.mods,
+                "Renaming an installation changed the contents");
+        std::filesystem::rename(renamed / "main.lua", renamed / "other.lua");
+        require(isaac::app::buildManifest(directory.path, "fixture.version", log).mods != mod.mods,
+                "Package-internal paths were ignored");
+        std::filesystem::rename(renamed / "other.lua", renamed / "main.lua");
+        write(renamed / "main.lua", "changed content");
+        require(isaac::app::buildManifest(directory.path, "fixture.version", log).mods != mod.mods,
+                "Different content at the same path was ignored");
+        write(renamed / "main.lua", "mod");
+        write(directory.path / "mods/copy/main.lua", "mod");
+        require(isaac::app::buildManifest(directory.path, "fixture.version", log).mods != mod.mods,
+                "An extra enabled copy was ignored");
+        write(directory.path / "mods/copy/disable.it", "");
+        write(renamed / "disable.it", "");
         auto disabled = isaac::app::buildManifest(directory.path, "fixture.version", log);
         require(disabled.mods == first.mods, "Disabled mod entered the manifest");
         require(isaac::app::buildManifest(directory.path, "other.version", log).fingerprint !=

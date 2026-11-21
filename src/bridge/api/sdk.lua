@@ -196,7 +196,10 @@ function SDK.create(mod, id, backend)
             if active and self:IsReady() then
                 local ok, reason = pcall(function()
                     self:WithLocalView(function()
-                        return fn(self:View())
+                        local view = self:View()
+                        if view then
+                            return fn(view)
+                        end
                     end)
                 end)
                 if not ok then

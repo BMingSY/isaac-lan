@@ -54,6 +54,16 @@ assert(g:IsReady() and not g:View().networked and g:IsAuthority())
 guest.active, guest.networked = 1, 1
 host.bridge.commit()
 guest.bridge.commit()
+local withView = guest.env._IsaacLan.api_with_local_view
+guest.env._IsaacLan.api_with_local_view = function()
+    return false
+end
+gm:render()
+local unavailable, reason = g:WithLocalView(function()
+    error("Uncommitted view")
+end)
+assert(unavailable == nil and reason == "view_not_ready" and renders == 0)
+guest.env._IsaacLan.api_with_local_view = withView
 gm:render()
 gm:render()
 gm:render()
@@ -212,7 +222,7 @@ assert(soloRenders == 1 and next(soloMod.callbacks) == nil)
 assert(sdk.attach(soloMod, "example.solo") ~= solo)
 -- Run the published example itself: a guest F6 submits once, the host grants
 -- only that guest's coin, and the standalone copy uses the same input path.
-for _, player in ipairs(runtime.actors) do
+for _, player in ipairs({ runtime.actors[1], runtime.actors[2], secondBody }) do
     player.coins = 5
     player.AddCoins = function(self, count)
         self.coins = self.coins + count
@@ -221,7 +231,7 @@ for _, player in ipairs(runtime.actors) do
         return self.coins
     end
 end
-local function example(environment, facade)
+local function example(environment, facade, keyboardIndex)
     local mod, triggered, text = modFixture(), false, {}
     environment.ModCallbacks = { MC_POST_RENDER = 2, MC_POST_UPDATE = 3 }
     environment.RegisterMod = function()
@@ -233,23 +243,28 @@ local function example(environment, facade)
     end
     environment.Keyboard = { KEY_F6 = 6 }
     environment.Input = {
-        IsButtonTriggered = function()
-            local value = triggered
-            triggered = false
-            return value
+        IsButtonPressed = function(key, index)
+            return key == environment.Keyboard.KEY_F6 and index == keyboardIndex and triggered
         end,
     }
     environment.Isaac.RenderText = function(value)
         text[#text + 1] = value
     end
     assert(loadfile(root .. "/examples/mod-api/main.lua", "t", environment))()
-    return mod, function()
-        triggered = true
-        mod:emit(3)
-    end, text
+    return mod,
+        function()
+            triggered = true
+            mod:render()
+            mod:render()
+            triggered = false
+            mod:render()
+            mod:emit(3)
+            mod:emit(3)
+        end,
+        text
 end
-local _, hostPress = example(host.env, hs)
-local exampleGuest, guestPress, guestText = example(guest.env, gs)
+local _, hostPress = example(host.env, hs, 0)
+local exampleGuest, guestPress, guestText = example(guest.env, gs, -2)
 host.bridge.actions.poll()
 guest.bridge.actions.poll()
 guestPress()
@@ -257,13 +272,14 @@ assert(runtime.actors[2].coins == 5)
 host.bridge.actions.step()
 guest.bridge.actions.poll()
 assert(runtime.actors[2].coins == 6 and runtime.actors[1].coins == 5)
+local beforeRender = #guestText
 exampleGuest:render()
-assert(guestText[1] == "Local player 1: 6 coins")
+assert(guestText[beforeRender + 1] == "Local player 1: 6 coins")
 hostPress()
 host.bridge.actions.step()
 host.bridge.actions.poll()
 assert(runtime.actors[1].coins == 6)
-local _, soloPress = example(env, sdk)
+local _, soloPress = example(env, sdk, 0)
 soloPress()
 assert(runtime.actors[1].coins == 7)
 -- Cancelling a temporary UI or closing an action must release its captured
