@@ -20,6 +20,25 @@ A：脚本会输出 `Isaac LAN [错误类别]`、具体原因和 `Next step` 处
 
 重新运行安装可以认领与包内完全相同的手动安装、补回缺失的 DLL，也能用有效标记或记录修复另一项。已是当前版本可直接退出。有改动的 Isaac LAN 专用文件在修复前备份到输出所列的 `.isaac-lan-transaction-*` 目录。卸载时会列出并保留被替换的文件，清除其余可确认归属的文件，保留会话数据和日志。有效安装记录足以卸载，重复卸载也可完成。写入失败会逐个恢复旧文件，恢复失败时保留全部备份。
 
+## Q：Windows 上装好了 Isaac LAN，游戏里却找不到局域网联机入口怎么办？
+
+A：退出游戏，在 Steam 库中右键《以撒的结合》，选择「管理 → 浏览本地文件」。
+
+1. 找到 `isaac-ng.exe`，查看同一目录下有没有 `winmm.dll`。如果缺少，重新运行安装包里的 `Install.cmd`，选择这里的 `isaac-ng.exe`。
+2. 如果 `winmm.dll` 已经在游戏目录，右键 `isaac-ng.exe`，打开「属性 → 兼容性」，尝试勾选 **「禁用全屏优化」** 并点击「应用」。[微软全屏优化设置说明](https://devblogs.microsoft.com/directx/demystifying-full-screen-optimizations/)
+
+从 Steam 库重新启动游戏并选择存档。忏悔打开「联机模式（Online）」即可，忏悔＋还需在里面选择「局域网联机」。
+
+如果仍找不到入口，让游戏停在主菜单，在开始菜单中打开 **Windows PowerShell (x86)**，粘贴下面的命令查看游戏加载的 DLL 路径。[微软 PowerShell 命令说明](https://learn.microsoft.com/zh-cn/powershell/module/microsoft.powershell.management/get-process?view=powershell-5.1)
+
+```powershell
+Get-Process isaac-ng -Module |
+    Where-Object { $_.ModuleName -in 'winmm.dll', 'isaac_lan_probe.dll' } |
+    Select-Object -ExpandProperty FileName
+```
+
+正常时会列出两份 `winmm.dll`，一份在游戏目录，一份在 Windows 系统目录，还会列出 `isaac_lan_probe.dll`。如果只列出系统目录下的 `winmm.dll`，说明这次启动跳过了 Isaac LAN 加载器。反馈时可附上命令输出。
+
 ## Q：切换忏悔和忏悔＋需要重装吗？
 
 A：通用安装包一次装好两版。在 Steam 启用或禁用忏悔＋，等下载完成后重启游戏，加载器会根据当前游戏自动选择对应的联机扩展。
