@@ -14,6 +14,7 @@ import sys
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
+from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parents[1]
 ITEM_ID = "3817760679"
@@ -147,7 +148,7 @@ def check_archive(archive, tag):
     return json.loads(result.stdout)
 
 
-def description_with_notes(tag, formatted, original, replace_version=None):
+def description_with_notes(tag, formatted, original, replace_version=None, *, guide=None):
     if replace_version is not None:
         if not re.fullmatch(r"v\d+\.\d+\.\d+", replace_version):
             raise ValueError("Expected the version of the leading Workshop notes")
@@ -160,6 +161,8 @@ def description_with_notes(tag, formatted, original, replace_version=None):
         if previous is None or not previous[1].strip():
             raise ValueError(f"Expected leading Workshop notes for {replace_version}")
         original = previous[1]
+    if guide is not None:
+        original = guide
     description = f"Isaac LAN {tag}\n\n{formatted.rstrip()}\n\n-----\n\n{original}"
     if "\0" in description or len(description.encode("utf-8")) >= DESCRIPTION_LIMIT:
         raise ValueError("Workshop description exceeds the Steam UTF-8 limit")
@@ -182,6 +185,7 @@ def prepare(
     *,
     prepend_notes=False,
     replace_notes_version=None,
+    guide=None,
     preview=None,
     preview_upload=None,
 ):
@@ -190,6 +194,13 @@ def prepare(
     if prepend_notes and replace_notes_version is not None:
         raise ValueError("Choose either prepend or replacement notes")
     updates_notes = prepend_notes or replace_notes_version is not None
+    guide_text = None
+    if guide is not None:
+        if not updates_notes:
+            raise ValueError("A Workshop guide requires an update to both descriptions")
+        guide_text = guide.read_text(encoding="utf-8-sig").rstrip("\n")
+        if not guide_text.strip() or "\0" in guide_text or "-----" in guide_text.splitlines():
+            raise ValueError("Expected a nonempty Workshop guide without a notes separator")
     checked = check_archive(archive, tag)
     reviewed = notes.read_text(encoding="utf-8-sig")
     formatted = steam_notes(reviewed)
@@ -223,6 +234,16 @@ def prepare(
     updated, count = re.subn(r"<version>[^<]*</version>", f"<version>{tag[1:]}</version>", original)
     if count != 1:
         raise ValueError("Expected one Workshop metadata version")
+    if guide_text is not None:
+        updated, count = re.subn(
+            r"<description>.*?</description>",
+            lambda _: f"<description>{escape(guide_text)}</description>",
+            updated,
+            flags=re.DOTALL,
+        )
+        if count != 1 or ET.fromstring(updated).findtext("description") != guide_text:
+            raise ValueError("Expected one Workshop metadata description")
+        (content / "安装说明.txt").write_bytes((guide_text + "\n").encode("utf-8"))
     (content / "metadata.xml").write_bytes(updated.encode("utf-8"))
     if preview is not None:
         shutil.copy2(preview, content / "preview.png")
@@ -249,7 +270,9 @@ def prepare(
         for language in LANGUAGES if updates_notes else ("english",):
             text = before[language]["description"]
             if updates_notes:
-                text = description_with_notes(tag, formatted, text, replace_notes_version)
+                text = description_with_notes(
+                    tag, formatted, text, replace_notes_version, guide=guide_text
+                )
             path = output / f"description-{language}.txt"
             path.write_bytes(text.encode("utf-8"))
             descriptions[language] = {"file": path.name, "sha256": digest(path), "text": text}
@@ -261,6 +284,8 @@ def prepare(
         }
         if replace_notes_version is not None:
             manifest["presentation"]["replace_notes_version"] = replace_notes_version
+        if guide_text is not None:
+            manifest["presentation"]["guide_sha256"] = digest(content / "安装说明.txt")
         if preview_upload is not None:
             upload_copy = output / f"upload-preview{preview_upload.suffix.lower()}"
             shutil.copy2(preview_upload, upload_copy)
@@ -297,6 +322,16 @@ def load_prepared(output):
         if presentation["prepend_notes"] and replace_version is not None:
             raise ValueError("Choose either prepend or replacement notes")
         updates_notes = presentation["prepend_notes"] or replace_version is not None
+        guide_text = None
+        if "guide_sha256" in presentation:
+            guide_path = output / "content/安装说明.txt"
+            guide_text = guide_path.read_text(encoding="utf-8").rstrip("\n")
+            if (
+                not updates_notes
+                or digest(guide_path) != presentation["guide_sha256"]
+                or ET.parse(output / "content/metadata.xml").findtext("description") != guide_text
+            ):
+                raise ValueError("Prepared Workshop guide differs from reviewed wording")
         expected_languages = LANGUAGES if updates_notes else ("english",)
         if set(presentation["descriptions"]) != set(expected_languages):
             raise ValueError("Prepared description languages changed")
@@ -309,6 +344,7 @@ def load_prepared(output):
                     steam_notes((output / "reviewed-notes.md").read_text()),
                     expected,
                     replace_version,
+                    guide=guide_text,
                 )
             if (
                 value["file"] != path.name
@@ -418,6 +454,11 @@ def main():
     description.add_argument(
         "--replace-notes-version", help="Replace the leading notes for this exact version"
     )
+    parser.add_argument(
+        "--guide",
+        type=Path,
+        help="Reviewed guide for both pages, metadata and installation instructions",
+    )
     parser.add_argument("--preview", type=Path)
     parser.add_argument("--preview-upload", type=Path)
     args = parser.parse_args()
@@ -433,6 +474,7 @@ def main():
             args.tag,
             prepend_notes=args.prepend_notes,
             replace_notes_version=args.replace_notes_version,
+            guide=args.guide,
             preview=args.preview,
             preview_upload=args.preview_upload,
         )

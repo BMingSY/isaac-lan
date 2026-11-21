@@ -4,6 +4,7 @@ from copy import deepcopy
 import hashlib
 import json
 import shutil
+import xml.etree.ElementTree as ET
 
 import pytest
 from zipfile import ZipFile
@@ -358,6 +359,33 @@ def test_replace_notes_updates_both_languages_and_preserves_base_description(rel
         assert "v0.4.1" not in steam.metadata[language]["description"]
         for field in ("title", "owner", "visibility", "banned"):
             assert steam.metadata[language][field] == before[language][field]
+
+
+def test_reviewed_guide_reaches_pages_mod_and_downloaded_instructions(release):
+    steam, archive, notes, output = release
+    for value in steam.metadata.values():
+        value["description"] = "Isaac LAN v0.4.1\n\nNotes\n\n-----\n\nOld guide"
+    guide = notes.with_name("guide.txt")
+    wording = "联机 & 安装\n选择 <game> 目录。"
+    guide.write_text(wording + "\n", encoding="utf-8")
+    workshop.prepare(
+        steam, archive, notes, output, "v0.4.2", replace_notes_version="v0.4.1", guide=guide
+    )
+    assert workshop.publish(steam, output)["downloaded_files_match"]
+    for value in steam.metadata.values():
+        assert value["description"].split("\n\n-----\n\n") == [
+            "Isaac LAN v0.4.2\n\n[b]BUG修复[/b]\n\n- 修复崩溃。",
+            wording,
+        ]
+    assert ET.parse(steam.base / "metadata.xml").findtext("description") == wording
+    assert (steam.base / "安装说明.txt").read_text(encoding="utf-8") == wording + "\n"
+
+
+def test_reviewed_guide_cannot_update_download_without_pages(release):
+    steam, archive, notes, output = release
+    with pytest.raises(ValueError, match="both descriptions"):
+        workshop.prepare(steam, archive, notes, output, "v0.4.2", guide=notes)
+    assert not steam.calls
 
 
 @pytest.mark.parametrize(

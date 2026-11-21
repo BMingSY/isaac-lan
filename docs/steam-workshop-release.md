@@ -2,7 +2,7 @@
 
 更新现有 [Isaac LAN / 局域网联机](https://steamcommunity.com/sharedfiles/filedetails/?id=3817760679) 条目，使用 GitHub 自动发版 CI 生成的正式安装包和已确认文案。App ID 为 `250900`，条目 ID 为 `3817760679`；不为新版本创建新条目。每次发版同时更新 Mod 版本、更新记录，以及默认语言和简体中文介绍顶部的当前版本内容，完整流程见仓库 skill [isaac-lan-release](https://github.com/BMingSY/isaac-lan/blob/main/.agents/skills/isaac-lan-release/SKILL.md)。
 
-工具不带介绍参数时只更新内容和更新记录；仓库发版流程必须传入介绍参数，不能使用该默认模式漏掉顶部版本说明。常规更新用 `--replace-notes-version` 替换顶部旧版本内容；仅在原介绍没有版本前缀时用 `--prepend-notes` 首次建立版本标题与说明，以 `-----` 分隔原介绍。分隔线后的项目介绍、群号和反馈入口保留，不累积旧版本段落。
+每次发版使用 `--replace-notes-version` 更新两种语言的顶部版本说明，保留 `-----` 后的各自介绍。首次建立版本说明时使用 `--prepend-notes`。两种语言共用一份项目介绍且安装方法有变化时，使用 `--guide` 同步更新介绍和下载文件中的安装说明。
 
 更新本地化介绍时，同次提交发布前快照中非空的该语言标题；快照标题为空时不写入标题。标题、封面、标签与可见性沿用现值；用户要求更换封面时，`--preview` 指定本次封面，同时更新内容中的 `preview.png`。
 
@@ -35,11 +35,13 @@ python tools/workshop_release.py prepare \
   --replace-notes-version "$WORKSHOP_NOTES_VERSION"
 ```
 
-`prepare` 不发布。它校验安装包，查询现有条目并下载当前内容，保留原有 Lua 入口、预览图和安装说明，更新 `metadata.xml` 的版本号，只保留本次 ZIP 和校验文件。安装包声明加载器 ABI 时，同时从该 ZIP 提取各游戏版本匹配的主体 DLL 和清单到 `isaac-lan-update`，供已安装加载器采用；不重新编译，也不从上次工坊副本复用主体，契约见[原生扩展更新](https://github.com/BMingSY/isaac-lan/blob/main/docs/extension-updates.md)。更新说明只转换标题格式为 Steam BBCode，不改变措辞。
+`prepare` 不发布。它校验安装包，查询现有条目并下载当前内容，保留原有 Lua 入口和预览图，更新 `metadata.xml` 的版本号，将本次 ZIP 和校验文件放入条目内容。安装包声明加载器 ABI 时，同时从该 ZIP 提取各游戏版本匹配的主体 DLL 和清单到 `isaac-lan-update`，供已安装加载器采用；不重新编译，也不从上次工坊副本复用主体，契约见[原生扩展更新](https://github.com/BMingSY/isaac-lan/blob/main/docs/extension-updates.md)。更新说明只转换标题格式为 Steam BBCode，不改变措辞。
 
 两种语言的原介绍均没有版本前缀时，将示例中的 `--replace-notes-version` 参数改为 `--prepend-notes`，首次建立顶部版本内容。该操作不会删除旧版本段落，不能在已有版本前缀时反复使用。
 
-常规发版使用 `--replace-notes-version`，版本号必须与现有段落一致，不能同时传入 `--prepend-notes`。工具检查两种语言的介绍均以该版本标题开头，并具有 `-----` 分隔的项目介绍；只替换分隔线前的版本说明。任一语言的版本或结构不匹配时停止准备，核查并准备修正后的完整文本，不以 prepend 堆叠内容或发布部分修改。
+常规发版使用 `--replace-notes-version`，版本号必须与现有段落一致，不能同时传入 `--prepend-notes`。工具检查两种语言的介绍均以该版本标题开头，并具有 `-----` 分隔的项目介绍。任一语言的版本或结构不匹配时停止准备，核查并准备修正后的完整文本，不以 prepend 堆叠内容或发布部分修改。
+
+更新项目介绍和安装说明时，将完整文案保存到[工坊指南](https://github.com/BMingSY/isaac-lan/blob/main/package/workshop-guide.txt)，与发布说明一并审阅。在 `prepare` 命令中添加 `--guide package/workshop-guide.txt`，两种语言分隔线后的介绍、Mod 的 `metadata.xml` 描述和下载目录中的 `安装说明.txt` 均采用该文案。常规发版沿用远端原文，可省略此参数。
 
 用户明确要求更换封面时，在 `prepare` 命令中追加 `--preview docs/assets/steam-workshop-cover.png`。准备结果包含两种语言的完整介绍；指定封面时还包含其哈希，发布前核对与已确认文案、原介绍和指定图片一致。
 
