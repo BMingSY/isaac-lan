@@ -306,7 +306,7 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 
 挑战45使用 [run_delete_this.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_delete_this.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`，可加 `--heap-check --record`。`--progress-template` 可提供只读原生进度基线；工具在启动前只解锁所选角色，验证挑战及路线不依赖普通解锁，结束后恢复原资料。默认角色为以撒与抹大拉；`--characters 7 7` 可选双阿撒泻勒，`--style` 设置托管策略；`--mode route --then-natural` 复用主客机进程，先做路线检查，再以双阿撒泻勒跑无辅助场景。默认 `--mode natural` 使用 LANBOT 的正常移动、射击、拾取及主动按钮；`--mode route` 将玩家维持在已生成的 Boss 房、补充魂心和弯勺、提高泪弹伤害，并通过 LANBOT 的 `next` 命令选择原生出口，报告中明确列出辅助条件，不能当作无辅助通关。两种模式均从第一层开始，检查各层推进、??? 实际出现、错误道具拾取、客机定义／库存／属性／房间一致性、双端完成事件及个人进度恢复。离线对应 `bridge.delete-this`、`bridge.challenges`、`bridge.challenge_menu`、`bridge.lanbot`、`core.challenge-rules` 与 Windows `native.generated-challenge`、`native.generated-items`。
 
-挑战 45 的商店画面使用 `run_special_routes.py --case delete-this-shop` 检查。用例以种子 `RDQV 7PSH` 进入首层商店，比对两端首次进房和返回后的错误道具图像与价格。
+错误道具底座使用 `run_special_routes.py --case tmtrainer-pedestals --case delete-this-shop` 检查。普通局只给主机玩家错误技，两端核对商店和宝箱房的道具图像、价格、D6 重掷结果，以及移除错误技后再次进房和客机拾取的结果。挑战 45 检查首层商店首次进入和返回后的商品。两项均使用种子 `RDQV 7PSH`。
 
 超大层与射击轮换使用 [run_large_floor_aim.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_large_floor_aim.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`；可用 `--extra-client` 增加第三、四端，使用 `--heap-check --record` 保留异常与画面证据。所有用例复用同一组进程，按两人超大层、两人至指定人数的射击轮换依次开局；`--challenge 1004` 或 `--challenge 1005` 可只复测对应挑战。覆盖普通路线各层生成、妈心／妈腿奖杯、独立移动、跨房射击、鼠标、蓄力松手、幽灵与断线重连。隔离存档在启动前准备资格，结束后恢复并核对。离线对应 `core.aim-rotation`、`core.challenge-rules`、`bridge.challenges`、`bridge.challenge_menu`、`presentation.attacks` 和 Windows `native.floor-generation`、`native.challenge-hud`、`native.mouse-input`。
 
