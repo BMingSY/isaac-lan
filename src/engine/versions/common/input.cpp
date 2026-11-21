@@ -369,9 +369,6 @@ int botInput(lua_State* L) {
     lua.pushBoolean(L, valid);
     return 1;
 }
-int physicalDeviceId(unsigned source) {
-    return source == 0 ? binding.keyboardDeviceId : static_cast<int>(source);
-}
 void samplePhysicalInput() {
     if (!originalQuery)
         return;
@@ -440,6 +437,9 @@ int capture(lua_State* L) {
     return 1;
 }
 } // namespace
+int physicalDeviceId(unsigned source) {
+    return source == 0 ? binding.keyboardDeviceId : static_cast<int>(source);
+}
 ViewScope::ViewScope(int slot) : previous(viewSlot) {
     viewSlot = slot;
 }

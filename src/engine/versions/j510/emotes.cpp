@@ -43,7 +43,8 @@ int poll(lua_State* L) {
         // or enabling Steam networking. Native wheel input/draw stays intact.
         std::array<unsigned char, layout::emoteWheel::participantBytes> participant{};
         std::array<int, 4> device{};
-        device[layout::emoteWheel::controllerId / sizeof(int)] = static_cast<int>(controller);
+        device[layout::emoteWheel::controllerId / sizeof(int)] =
+            input::physicalDeviceId(static_cast<unsigned>(controller));
         at<void*>(reinterpret_cast<std::uintptr_t>(participant.data()),
                   layout::emoteWheel::participantDevice) = device.data();
         const auto manager = at<std::uintptr_t>(image, j510::globals::manager);

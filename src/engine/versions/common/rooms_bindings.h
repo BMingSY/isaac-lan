@@ -248,6 +248,9 @@ struct Bindings {
         struct Sprite {
             unsigned size;
         } sprite;
+        struct Tear {
+            unsigned flagsHigh;
+        } tear;
     } layout;
     std::array<std::optional<std::size_t>, contextFieldCount> contextOffsets;
     std::array<unsigned, renderImageCount> renderImages;

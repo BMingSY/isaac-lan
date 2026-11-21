@@ -310,6 +310,10 @@ lan::InputFrame capture() {
 }
 void physicalCapture() {
     input::reset();
+    require(input::physicalDeviceId(0) == keyboardDevice, "LAN keyboard must use its native ID");
+    for (unsigned pad = 1; pad <= 4; ++pad)
+        require(input::physicalDeviceId(pad) == static_cast<int>(pad),
+                "LAN gamepads must keep their assigned physical IDs");
     values = {};
     edges = {};
     values[0][input::action::moveRight] = 0.75f;

@@ -269,6 +269,7 @@ const Bindings bindings{
         .sprite = {
             .size = j510::layout::sprite::size,
         },
+        .tear = {.flagsHigh = j510::layout::tear::flagsHigh},
     },
     .contextOffsets = {
     0x18304, 0x18308, 0x1830c, 0x18310, 0x18318, 0x1831c, 0x182c8, 0x1ad90,

@@ -309,6 +309,7 @@ namespace npc {
 inline constexpr unsigned boss = 0xc3d;
 } // namespace npc
 namespace tear {
+inline constexpr unsigned flagsHigh = 0x428 + sizeof(std::uint64_t);
 inline constexpr unsigned height = 0x410;
 inline constexpr unsigned fallingSpeed = 0x414;
 inline constexpr unsigned fallingAcceleration = 0x418;

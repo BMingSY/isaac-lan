@@ -2,6 +2,7 @@
 #include "engine/versions/common/progress.h"
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 
 namespace isaac::engine::j835::layout {
@@ -272,6 +273,7 @@ namespace npc {
 inline constexpr unsigned boss = 0xb8d;
 } // namespace npc
 namespace tear {
+inline constexpr unsigned flagsHigh = 0x378 + sizeof(std::uint64_t);
 inline constexpr unsigned height = 0x360, fallingSpeed = 0x364, fallingAcceleration = 0x368;
 inline constexpr unsigned scale = 0x370, rotation = 0x3a8, waitFrames = 0x388;
 } // namespace tear

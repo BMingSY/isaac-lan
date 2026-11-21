@@ -57,6 +57,8 @@ void reset();
 void resetMenuPrompts();
 void prepareControllers();
 void clearAutomation();
+// LAN source 0 selects the physical keyboard. Gamepads use their assigned LAN device IDs.
+int physicalDeviceId(unsigned source);
 // Latch button edges until the next input capture.
 void pollPhysicalInput();
 // Identity of the native input/render frame, shared by all polls in that frame.
