@@ -89,7 +89,8 @@ def check(game, build_directory, output):
     valid_payload()  # Upgrade/reinstall ownership checks.
     (target / "isaac-lan/session.keep").write_bytes(b"User session data")
     (target / "winmm.dll").write_bytes(b"Modified outside installer")
-    run("Uninstall", success=False)
+    run("Uninstall")
+    assert not (target / "isaac_lan_probe.dll").exists()
     assert (target / "winmm.dll").read_bytes() == b"Modified outside installer"
     shutil.copy2(package / "winmm.dll", target)
     run("Uninstall")

@@ -42,7 +42,7 @@ def package_game(tmp_path, monkeypatch):
         },
     }
     (package / "payload.json").write_text(json.dumps(payload))
-    monkeypatch.setattr(installer, "game_running", lambda: False)
+    monkeypatch.setattr(installer, "game_running", lambda game: False)
     return package, game
 
 
@@ -85,6 +85,7 @@ def test_failed_transaction_restores_all_files(package_game, monkeypatch, instal
     package, game = package_game
     if installed:
         installer.install(package, game)
+        (game / "isaac_lan_probe.dll").unlink()
     paths = [game / name for name in installer.OWNED] + [
         game / ".isaac-lan-install",
         game / "isaac-lan/installation.json",
@@ -276,19 +277,38 @@ def test_malformed_manifests_report_actionable_error_without_changes(package_gam
         installer.install(package, game)
     path = game / "isaac-lan/installation.json" if record else package / "payload.json"
     path.write_text(content)
-    before = installed_files(game)
-    with pytest.raises(installer.InstallerError) as caught:
+    if record:
+        result = installer.install(package, game)
+        backup = Path(result["backupDirectory"]) / "old-installation.json"
+        assert backup.read_text() == content
+        assert (
+            json.loads(path.read_text())["files"]
+            == json.loads((package / "payload.json").read_text())["files"]
+        )
+    else:
+        before = installed_files(game)
+        with pytest.raises(installer.InstallerError) as caught:
+            installer.install(package, game)
+        assert "[PACKAGE_INVALID]" in installer.error_message(caught.value)
+        assert installed_files(game) == before
+
+
+def test_damaged_marker_recovery_requires_an_installed_record(package_game):
+    package, game = package_game
+    marker = game / ".isaac-lan-install"
+    marker.write_bytes(b"unrecognized")
+    with pytest.raises(installer.InstallerError, match="Unrecognized installation marker"):
         installer.install(package, game)
-    code = "INSTALLATION_INVALID" if record else "PACKAGE_INVALID"
-    message = installer.error_message(caught.value)
-    assert f"[{code}]" in message
-    assert "Next step:" in message
-    assert installed_files(game) == before
+    assert marker.read_bytes() == b"unrecognized"
+    marker.unlink()
+    installer.install(package, game)
+    marker.write_bytes(b"damaged")
+    result = installer.install(package, game)
+    assert marker.read_text().strip() == "IsaacLAN/1"
+    assert (Path(result["backupDirectory"]) / "old-.isaac-lan-install").read_bytes() == b"damaged"
 
 
-@pytest.mark.parametrize(
-    "missing", ["payload.json", "winmm.dll", "isaac_lan_check.exe", "game-profile.json"]
-)
+@pytest.mark.parametrize("missing", ["payload.json", "winmm.dll", "game-profile.json"])
 def test_missing_package_file_names_file_and_reextract_action(package_game, missing):
     package, game = package_game
     (package / missing).unlink()
@@ -318,7 +338,7 @@ def test_cli_bad_path_has_nonzero_exit_and_no_traceback(package_game):
 
 def test_running_game_refuses_mutation_but_status_is_read_only(package_game, monkeypatch):
     package, game = package_game
-    monkeypatch.setattr(installer, "game_running", lambda: True)
+    monkeypatch.setattr(installer, "game_running", lambda game: True)
     assert installer.install(package, game, "Status")["gameCompatible"]
     with pytest.raises(installer.InstallerError) as caught:
         installer.install(package, game)
@@ -430,12 +450,79 @@ def test_cleanup_failure_does_not_report_a_completed_install_as_failed(
 
 
 @pytest.mark.parametrize("missing", [".isaac-lan-install", "isaac-lan/installation.json"])
-def test_incomplete_ownership_record_is_preserved(package_game, missing):
+@pytest.mark.parametrize("mode", ["Install", "Uninstall"])
+def test_incomplete_ownership_can_be_repaired_or_removed(package_game, missing, mode):
     package, game = package_game
     installer.install(package, game)
     (game / missing).unlink()
-    before = installed_files(game)
-    with pytest.raises(installer.InstallerError) as caught:
+    result = installer.install(package, game, mode)
+    assert result["installed"] == (mode == "Install")
+    assert all((game / name).exists() == result["installed"] for name in installer.OWNED)
+    assert (game / missing).exists() == result["installed"]
+
+
+def test_manual_install_changed_proxy_and_missing_game(package_game):
+    package, game = package_game
+    (package / "isaac_lan_check.exe").unlink()
+    for name in installer.OWNED:
+        (game / name).write_bytes((package / name).read_bytes())
+    assert installer.install(package, game / "isaac-ng.exe")["installed"]
+    (game / "winmm.dll").write_bytes(b"other extension")
+    (game / "isaac-ng.exe").unlink()
+    (package / "payload.json").unlink()
+    result = installer.install(package, game, "Uninstall")
+    assert result["preservedFiles"] == ["winmm.dll"]
+    assert (game / "winmm.dll").read_bytes() == b"other extension"
+    assert not installer.install(package, game, "Uninstall")["installed"]
+    assert not (game / "isaac_lan_probe.dll").exists()
+    assert not (game / ".isaac-lan-install").exists()
+
+
+def test_remove_manual_installation_after_game_and_checker_files_are_removed(package_game):
+    package, game = package_game
+    for name in installer.OWNED:
+        (game / name).write_bytes((package / name).read_bytes())
+    (game / "isaac-ng.exe").unlink()
+    (package / "game-profile.json").unlink()
+    assert not installer.install(package, game, "Uninstall")["installed"]
+    assert all(not (game / name).exists() for name in installer.OWNED)
+    (package / "payload.json").write_text("damaged")
+    assert not installer.install(package, game, "Uninstall")["installed"]
+
+
+def test_reinstall_identical_package_while_game_is_running(package_game, monkeypatch):
+    package, game = package_game
+    installer.install(package, game)
+    monkeypatch.setattr(installer, "game_running", lambda game: True)
+    assert installer.install(package, game)["installed"]
+    (game / "isaac_lan_probe.dll").unlink()
+    with pytest.raises(installer.InstallerError, match="still running"):
         installer.install(package, game)
-    assert "[INSTALLATION_INVALID]" in installer.error_message(caught.value)
-    assert installed_files(game) == before
+
+
+def test_repair_backs_up_modified_project_dll(package_game):
+    package, game = package_game
+    installer.install(package, game)
+    probe = game / "isaac_lan_probe.dll"
+    probe.write_bytes(b"local build")
+    result = installer.install(package, game)
+    assert (
+        Path(result["backupDirectory"]) / "old-isaac_lan_probe.dll"
+    ).read_bytes() == b"local build"
+    assert probe.read_bytes() == (package / probe.name).read_bytes()
+
+
+def test_running_proton_process_belongs_to_selected_directory(tmp_path):
+    proc = tmp_path / "proc"
+    pid = proc / "123"
+    pid.mkdir(parents=True)
+    game = tmp_path / "steam library" / "game"
+    game.mkdir(parents=True)
+    other = tmp_path / "other"
+    other.mkdir()
+    (pid / "cwd").symlink_to(game, target_is_directory=True)
+    (pid / "cmdline").write_bytes(b"wine64\0isaac-ng.exe\0")
+    assert installer.game_running(game, proc)
+    assert not installer.game_running(other, proc)
+    (pid / "cmdline").write_bytes(b"python3\0install.py\0--game-directory\0isaac-ng.exe\0")
+    assert not installer.game_running(game, proc)

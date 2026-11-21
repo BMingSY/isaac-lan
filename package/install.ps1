@@ -15,7 +15,7 @@ $hints = @{
     GAME_INCOMPATIBLE = "Use the Windows game version specified in this package manifest. In Steam, check the game version and verify installed files."
     CHECKER_FAILED = 'Run the installer from a fully extracted release ZIP. Check security-software blocks and keep the error details if the checker still cannot start.'
     GAME_RUNNING = 'Close Isaac, wait for it to exit, then retry. Do not replace DLLs while the game is running.'
-    INSTALLATION_INVALID = 'Restore .isaac-lan-install and isaac-lan/installation.json from the same installation backup. Keep session data and logs; do not delete them to bypass this check.'
+    INSTALLATION_INVALID = 'Check the named installation path. Use an extracted Isaac LAN package to repair missing installation records.'
     FILE_CONFLICT = 'Back up the named file and identify its owner. Uninstall another extension with its own installer, or restore the matching Isaac LAN file from your backup, then retry.'
     PERMISSION_DENIED = 'Close programs using the named file, then check write permissions and security-software blocks. Retry as administrator only if this folder requires it.'
     FILE_IN_USE = 'Close Isaac and any program using the named file, then retry.'
@@ -130,7 +130,10 @@ function InstalledFiles($Record) {
     return $names
 }
 function ReadPayload([string]$Directory, $Manifest, [string]$Backend) {
-    $names = @('winmm.dll', 'isaac_lan_probe.dll', 'isaac_lan_check.exe')
+    $names = $ownedFiles
+    if ($Mode -ne 'Uninstall') {
+        $names += 'isaac_lan_check.exe'
+    }
     AssertManifest $Manifest $names
     foreach ($name in $names) {
         $source = if ($name -eq 'winmm.dll') {
@@ -143,15 +146,9 @@ function ReadPayload([string]$Directory, $Manifest, [string]$Backend) {
             throw "Package file failed verification: $name"
         }
     }
-    $profilePath = Join-Path $Directory 'game-profile.json'
-    $profile = ReadJson $profilePath
-    if ((Hash $profilePath) -ne $Manifest.linux_files.'game-profile.json') {
-        throw 'Package game profile failed verification.'
-    }
     if ([string]::IsNullOrWhiteSpace((Property $Manifest 'game_build')) -or
-        $profile.format -ne 1 -or $profile.game_build -cne $Manifest.game_build -or
-        $profile.backend -cne $Manifest.backend -or ($Backend -and $Backend -cne $profile.backend)) {
-        throw 'Package game profile differs from manifest.'
+        ($Backend -and $Backend -cne (Property $Manifest 'backend'))) {
+        throw 'Invalid package game build or backend.'
     }
     return $Manifest
 }
@@ -184,24 +181,42 @@ function FailureMessage($Failure, [string]$Code) {
 try {
     if (!$GameDirectory) {
         Add-Type -AssemblyName System.Windows.Forms
-        $dialog = [Windows.Forms.OpenFileDialog]::new()
-        $dialog.Title = 'Select The Binding of Isaac / isaac-ng.exe'
-        $dialog.Filter = 'Isaac executable|isaac-ng.exe'
+        if ($Mode -eq 'Uninstall') {
+            $dialog = [Windows.Forms.FolderBrowserDialog]::new()
+            $dialog.Description = 'Select the Isaac game folder'
+            $dialog.ShowNewFolderButton = $false
+        } else {
+            $dialog = [Windows.Forms.OpenFileDialog]::new()
+            $dialog.Title = 'Select The Binding of Isaac / isaac-ng.exe'
+            $dialog.Filter = 'Isaac executable|isaac-ng.exe'
+        }
         try {
             if ($dialog.ShowDialog() -ne [Windows.Forms.DialogResult]::OK) {
                 exit 0
             }
-            $GameDirectory = Split-Path -Parent $dialog.FileName
+            $GameDirectory = if ($Mode -eq 'Uninstall') {
+                $dialog.SelectedPath
+            } else {
+                Split-Path -Parent $dialog.FileName
+            }
         } finally {
             $dialog.Dispose()
         }
+    }
+    if ((Split-Path -Leaf $GameDirectory) -eq 'isaac-ng.exe' -and (Test-Path -LiteralPath $GameDirectory -PathType Leaf)) {
+        $GameDirectory = Split-Path -Parent (Resolve-Path -LiteralPath $GameDirectory).ProviderPath
     }
     if (!(Test-Path -LiteralPath $GameDirectory -PathType Container)) {
         throw "Game directory does not exist or is not a directory: $GameDirectory"
     }
     $GameDirectory = (Resolve-Path -LiteralPath $GameDirectory).ProviderPath
     $executable = Join-Path $GameDirectory 'isaac-ng.exe'
-    AssertRegular $executable
+    $marker = Join-Path $GameDirectory '.isaac-lan-install'
+    $dataDirectory = Join-Path $GameDirectory 'isaac-lan'
+    $record = Join-Path $dataDirectory 'installation.json'
+    if ($Mode -ne 'Uninstall') {
+        AssertRegular $executable
+    }
     $failureCode = 'FILE_IN_USE'
     $algorithm = [Security.Cryptography.SHA256]::Create()
     try {
@@ -218,30 +233,50 @@ try {
     if (!$lockHeld) {
         throw 'Another installer is using this game directory.'
     }
-    $marker = Join-Path $GameDirectory '.isaac-lan-install'
-    $dataDirectory = Join-Path $GameDirectory 'isaac-lan'
-    $record = Join-Path $dataDirectory 'installation.json'
-    $installed = Test-Path -LiteralPath $marker
     $failureCode = 'INSTALLATION_INVALID'
     if (Test-Path -LiteralPath $dataDirectory) {
         AssertDirectory $dataDirectory
     }
-    if (!$installed -and (Test-Path -LiteralPath $record)) {
-        throw "Installation record exists without its marker: $record"
+    $hasMarker = Test-Path -LiteralPath $marker
+    $hasRecord = Test-Path -LiteralPath $record
+    $installed = $hasMarker -or $hasRecord
+    if ($Mode -eq 'Uninstall' -and !$installed) {
+        $possibleFiles = @('winmm.dll', 'isaac_lan_probe.dll', 'isaac-lan/backends')
+        if (!($possibleFiles | Where-Object { Test-Path -LiteralPath (Join-Path $GameDirectory $_) })) {
+            Write-Output 'Isaac LAN is not installed.'
+            exit 0
+        }
     }
+    $backupModified = $false
+    $previous = $null
     $previousFiles = [ordered]@{}
-    if ($installed) {
+    $validMarker = $false
+    if ($hasMarker) {
         AssertRegular $marker
-        if ([IO.File]::ReadAllText($marker).Trim() -ne 'IsaacLAN/1') {
+        $validMarker = [IO.File]::ReadAllText($marker).Trim() -ceq 'IsaacLAN/1'
+    }
+    if ($hasRecord) {
+        AssertRegular $record
+        try {
+            $previous = ReadJson $record
+            foreach ($name in @(InstalledFiles $previous)) {
+                $previousFiles[$name] = $previous.files.$name
+            }
+        } catch {
+            if (!$validMarker) {
+                throw
+            }
+            $backupModified = $true
+        }
+    }
+    if ($hasMarker -and !$validMarker) {
+        if (!$previousFiles.Count) {
             throw "Unrecognized installation marker: $marker"
         }
-        $previous = ReadJson $record
-        foreach ($name in @(InstalledFiles $previous)) {
-            $previousFiles[$name] = $previous.files.$name
-        }
+        $backupModified = $true
     }
     $sources = [ordered]@{}
-    if ($Mode -ne 'Uninstall') {
+    if ($Mode -ne 'Uninstall' -or (!$previousFiles.Count -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'payload.json')))) {
         $failureCode = 'PACKAGE_INVALID'
         $index = ReadJson (Join-Path $PSScriptRoot 'payload.json')
         $bundled = (Property $index 'format') -eq 3
@@ -293,6 +328,9 @@ try {
                     $sources[$name] = Join-Path $directory $name
                 }
             }
+            if ($Mode -eq 'Uninstall') {
+                continue
+            }
             # Each native checker reads the selected PE without starting the game.
             $failureCode = 'CHECKER_FAILED'
             $checkOutput = (& (Join-Path $directory 'isaac_lan_check.exe') $executable | Out-String).Trim()
@@ -317,42 +355,95 @@ try {
             [ordered]@{installed = $installed; gameCompatible = $compatible; gameBuild = $expectedBuild; detail = $detail; directory = $GameDirectory } | ConvertTo-Json
             exit 0
         }
-        if (!$compatible) {
+        if (!$compatible -and $Mode -ne 'Uninstall') {
             $failureCode = 'GAME_INCOMPATIBLE'
             throw $detail
         }
+    }
+    $failureCode = 'FILE_CONFLICT'
+    $names = @(@($sources.Keys) + @($previousFiles.Keys) | Select-Object -Unique)
+    if ($Mode -eq 'Uninstall' -and !$previousFiles.Count) {
+        $candidates = $ownedFiles
+        $backendRoot = Join-Path $dataDirectory 'backends'
+        if (Test-Path -LiteralPath $backendRoot -PathType Container) {
+            $backendDirectory = Get-Item -LiteralPath $backendRoot -Force
+            if (!($backendDirectory.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                foreach ($child in Get-ChildItem -LiteralPath $backendRoot -Directory) {
+                    if ($child.Name -cmatch '^j[0-9]+$') {
+                        $candidates += BackendFile $child.Name
+                    }
+                }
+            }
+        }
+        $names = @(@($names) + $candidates | Select-Object -Unique)
+    }
+    $current = $Mode -eq 'Install' -and $validMarker -and $previousFiles.Count -gt 0 -and
+    ($previous | ConvertTo-Json -Compress -Depth 5) -ceq ($payload | ConvertTo-Json -Compress -Depth 5)
+    $parents = @{}
+    $targets = [ordered]@{}
+    $preserved = @()
+    foreach ($name in $names) {
+        $destination = [IO.Path]::GetFullPath((Join-Path $GameDirectory $name))
+        $ancestors = @()
+        for ($parent = Split-Path -Parent $destination; $parent -ne $GameDirectory; $parent = Split-Path -Parent $parent) {
+            $ancestors += $parent
+        }
+        [array]::Reverse($ancestors)
+        try {
+            foreach ($parent in $ancestors) {
+                if (Test-Path -LiteralPath $parent) {
+                    AssertDirectory $parent
+                }
+            }
+            if (Test-Path -LiteralPath $destination) {
+                AssertRegular $destination
+            }
+        } catch {
+            if ($Mode -ne 'Uninstall') {
+                throw
+            }
+            $preserved += $name
+            continue
+        }
+        if (Test-Path -LiteralPath $destination) {
+            $actual = Hash $destination
+            $fromPackage = $sources.Contains($name) -and $actual -eq $payload.files.$name
+            $current = $current -and $fromPackage
+            if (!$fromPackage -and $actual -ne $previousFiles[$name]) {
+                if ($Mode -eq 'Uninstall' -or !$sources.Contains($name)) {
+                    $preserved += $name
+                    continue
+                }
+                if (!$installed -or $name -eq 'winmm.dll') {
+                    throw "Another file uses $destination. It was left untouched."
+                }
+                $backupModified = $true
+            }
+        } elseif ($Mode -eq 'Uninstall') {
+            continue
+        } else {
+            $current = $false
+        }
+        foreach ($parent in $ancestors) {
+            $parents[$parent] = $parents[$parent] -or ($Mode -eq 'Install' -and $sources.Contains($name))
+        }
+        $targets[$destination] = $name.Replace('/', '_')
+    }
+    if ($preserved.Count) {
+        Write-Output ("Preserved existing files: " + ($preserved -join ', '))
+    }
+    if ($Mode -eq 'Uninstall' -and !$installed -and !$targets.Count) {
+        Write-Output 'Isaac LAN is not installed.'
+        exit 0
+    }
+    if ($current) {
+        Write-Output 'Isaac LAN is already installed.'; exit 0
     }
     $failureCode = 'GAME_RUNNING'
     foreach ($process in @(Get-Process -Name 'isaac-ng' -ErrorAction SilentlyContinue)) {
         if ($process.Path -eq $executable) {
             throw 'Close this game instance before installing or uninstalling.'
         }
-    }
-    $failureCode = 'FILE_CONFLICT'
-    $names = @(@($sources.Keys) + @($previousFiles.Keys) | Select-Object -Unique)
-    if (!$names.Count) {
-        $names = $ownedFiles
-    }
-    $parents = @{}
-    $targets = [ordered]@{}
-    foreach ($name in $names) {
-        $destination = [IO.Path]::GetFullPath((Join-Path $GameDirectory $name))
-        $targets[$destination] = $name.Replace('/', '_')
-        for ($parent = Split-Path -Parent $destination; $parent -ne $GameDirectory; $parent = Split-Path -Parent $parent) {
-            if (Test-Path -LiteralPath $parent) {
-                AssertDirectory $parent
-            }
-            $parents[$parent] = $parents[$parent] -or $sources.Contains($name)
-        }
-        if (Test-Path -LiteralPath $destination) {
-            AssertRegular $destination
-            if (!$previousFiles.Contains($name) -or (Hash $destination) -ne $previousFiles[$name]) {
-                throw "Existing $destination is not an unchanged Isaac LAN file. It was left untouched."
-            }
-        }
-    }
-    if ($Mode -eq 'Uninstall' -and !$installed) {
-        Write-Output 'Isaac LAN is not installed.'; exit 0
     }
     # Stage and roll back on the same volume. Never replace another extension's
     # multimedia proxy, executable, mods, or game saves.
@@ -438,6 +529,7 @@ try {
             $preserveRecovery = $false
             throw $original
         }
+        $preserveRecovery = $backupModified
     } finally {
         if (!$preserveRecovery) {
             try {
@@ -446,6 +538,9 @@ try {
                 [Console]::Error.WriteLine("Isaac LAN: Could not remove temporary folder ${transaction}: $($_.Exception.Message)")
             }
         }
+    }
+    if ($backupModified) {
+        Write-Output "Previous files backed up in $transaction"
     }
     RemoveEmptyDirectories @($parents.Keys | Where-Object { $_ -ne $dataDirectory })
     Write-Output $(if ($Mode -eq 'Install') {

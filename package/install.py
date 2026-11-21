@@ -19,7 +19,7 @@ HINTS = {
     "PACKAGE_INVALID": "Extract the entire release ZIP into a new folder and retry. Check security-software quarantine if a file is missing.",
     "GAME_INCOMPATIBLE": "Use the Windows game version specified in this package manifest. In Steam, check the game version and verify installed files; Linux/Steam Deck must use Proton.",
     "GAME_RUNNING": "Close Isaac, wait for it to exit, then retry. Do not replace DLLs while the game is running.",
-    "INSTALLATION_INVALID": "Restore .isaac-lan-install and isaac-lan/installation.json from the same installation backup. Keep session data and logs; do not delete them to bypass this check.",
+    "INSTALLATION_INVALID": "Check the named installation path. Use an extracted Isaac LAN package to repair missing installation records.",
     "FILE_CONFLICT": "Back up the named file and identify its owner. Uninstall another extension with its own installer, or restore the matching Isaac LAN file from your backup, then retry.",
     "PERMISSION_DENIED": "Check write permissions and security-software blocks for the named path. On Windows, retry as administrator only if this folder requires it; on Linux, use the Steam library owner's account.",
     "FILE_IN_USE": "Close Isaac and any program using the named file, then retry.",
@@ -49,7 +49,7 @@ def error_message(error):
 
 def read_json(path, code):
     try:
-        value = json.loads(regular(path).read_text(encoding="utf-8"))
+        value = json.loads(regular(path).read_text(encoding="utf-8-sig"))
         if not isinstance(value, dict):
             raise ValueError("Expected a JSON object")
         return value
@@ -142,15 +142,36 @@ def check_game(data, profile):
             raise ValueError(f"Game code differs at {signature['name']}")
 
 
-def game_running():
-    for entry in Path("/proc").glob("[0-9]*/cmdline"):
+def game_running(game, processes=Path("/proc")):
+    executable = game / "isaac-ng.exe"
+    for entry in processes.glob("[0-9]*/cmdline"):
         try:
-            args = entry.read_bytes().split(b"\0")
-            if any(
-                arg.replace(b"\\", b"/").rsplit(b"/", 1)[-1].lower() == b"isaac-ng.exe"
-                for arg in args
-            ):
+            args = [os.fsdecode(v).replace("\\", "/") for v in entry.read_bytes().split(b"\0") if v]
+            if not args:
+                continue
+            program = args[0].rsplit("/", 1)[-1].lower()
+            if program in ("wine", "wine64", "wine-preloader", "wine64-preloader"):
+                args = args[1:2]
+            elif program == "isaac-ng.exe":
+                args = args[:1]
+            else:
+                continue
+            if not args or args[0].rsplit("/", 1)[-1].lower() != "isaac-ng.exe":
+                continue
+            path = args[0]
+            if path[:3].lower() == "z:/":
+                path = path[2:]
+            if path.startswith("/"):
+                if Path(path).resolve() == executable:
+                    return True
+            elif (entry.parent / "cwd").resolve() == game:
                 return True
+            else:
+                # Proton drive letters can differ from the host library path.
+                # The loaded PE mapping identifies the selected installation.
+                with (entry.parent / "maps").open(errors="replace") as maps:
+                    if any(line.rstrip().endswith(" " + str(executable)) for line in maps):
+                        return True
         except OSError:
             continue
     return False
@@ -204,16 +225,16 @@ def payloads(package):
 
 
 def select_payload(package, executable):
-    image = regular(executable).read_bytes()
+    image = regular(executable).read_bytes() if executable is not None else None
     matched_build = None
     record = None
     sources = {}
     details = []
     for directory, payload, backend in payloads(package):
-        for field, names in (
-            ("files", (*OWNED, "isaac_lan_check.exe")),
-            ("linux_files", ("install.py", "game-profile.json")),
-        ):
+        files = [("files", OWNED)]
+        if image is not None:
+            files.append(("linux_files", ("install.py", "game-profile.json")))
+        for field, names in files:
             check_manifest(payload, names, "PACKAGE_INVALID", field)
             for name in names:
                 path = (package if name in ("install.py", "winmm.dll") else directory) / name
@@ -222,16 +243,12 @@ def select_payload(package, executable):
                         raise ValueError(f"Package file failed verification: {name}")
                 except (ValueError, FileNotFoundError) as error:
                     raise InstallerError("PACKAGE_INVALID", f"{path}: {error}") from error
-        profile = read_json(directory / "game-profile.json", "PACKAGE_INVALID")
         if (
             not isinstance(payload.get("game_build"), str)
             or not payload["game_build"]
-            or profile.get("format") != 1
-            or profile.get("game_build") != payload["game_build"]
-            or profile.get("backend") != payload.get("backend")
-            or (backend is not None and profile["backend"] != backend)
+            or (backend is not None and payload.get("backend") != backend)
         ):
-            raise InstallerError("PACKAGE_INVALID", "Invalid game profile")
+            raise InstallerError("PACKAGE_INVALID", "Invalid game build in payload")
         if backend is None:
             record = payload
             sources = {name: directory / name for name in OWNED}
@@ -259,9 +276,18 @@ def select_payload(package, executable):
                     "PACKAGE_INVALID", "Backend extension versions or loader ABIs differ"
                 )
             name = backend_file(backend)
-            record["backends"][backend] = profile["game_build"]
+            record["backends"][backend] = payload["game_build"]
             record["files"][name] = payload["files"]["isaac_lan_probe.dll"]
             sources[name] = directory / "isaac_lan_probe.dll"
+        if image is None:
+            continue
+        profile = read_json(directory / "game-profile.json", "PACKAGE_INVALID")
+        if (
+            profile.get("format") != 1
+            or profile.get("game_build") != payload["game_build"]
+            or profile.get("backend") != payload.get("backend")
+        ):
+            raise InstallerError("PACKAGE_INVALID", "Invalid game profile")
         try:
             check_game(image, profile)
         except (ValueError, struct.error) as error:
@@ -272,7 +298,7 @@ def select_payload(package, executable):
         if matched_build is not None:
             raise InstallerError("PACKAGE_INVALID", "Multiple game backends match this executable")
         matched_build = profile["game_build"]
-    if matched_build is None:
+    if image is not None and matched_build is None:
         raise InstallerError("GAME_INCOMPATIBLE", "\n".join(details))
     return matched_build, record, sources
 
@@ -283,7 +309,12 @@ def install(package, game, mode="Install"):
     package = package.resolve()
     try:
         game = game.resolve(strict=True)
-        regular(game / "isaac-ng.exe")
+        if game.is_file() and game.name.lower() == "isaac-ng.exe":
+            game = game.parent
+        if not game.is_dir():
+            raise ValueError("Expected the game directory")
+        if mode != "Uninstall":
+            regular(game / "isaac-ng.exe")
     except (ValueError, FileNotFoundError, NotADirectoryError) as error:
         raise InstallerError("GAME_PATH", f"Invalid game directory {game}: {error}") from error
     if os.name != "posix":
@@ -325,24 +356,43 @@ def install_files(package, game, mode):
     record = directory / "installation.json"
     if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
         raise InstallerError("INSTALLATION_INVALID", f"Expected an ordinary directory: {directory}")
-    installed = marker.exists() or marker.is_symlink()
+    has_marker = marker.exists() or marker.is_symlink()
+    has_record = record.exists() or record.is_symlink()
+    installed = has_marker or has_record
+    if mode == "Uninstall" and not installed:
+        candidates = (game / "winmm.dll", game / "isaac_lan_probe.dll", directory / "backends")
+        if not any(path.exists() or path.is_symlink() for path in candidates):
+            return {"installed": False}
     previous = {}
-    if installed:
+    previous_record = None
+    backup_metadata = False
+    for present, path in ((has_marker, marker), (has_record, record)):
+        if present and (path.is_symlink() or not path.is_file()):
+            raise InstallerError("INSTALLATION_INVALID", f"Expected an ordinary file: {path}")
+    valid_marker = (
+        has_marker
+        and marker.read_text(encoding="utf-8-sig", errors="replace").strip() == "IsaacLAN/1"
+    )
+    if has_record:
         try:
-            if regular(marker).read_text(encoding="utf-8").strip() != "IsaacLAN/1":
-                raise ValueError("Unrecognized installation marker")
-        except ValueError as error:
-            raise InstallerError("INSTALLATION_INVALID", f"{marker}: {error}") from error
-        previous = owned_hashes(read_json(record, "INSTALLATION_INVALID"))
-    elif record.exists() or record.is_symlink():
-        raise InstallerError(
-            "INSTALLATION_INVALID", f"Installation record exists without its marker: {record}"
-        )
+            previous_record = read_json(record, "INSTALLATION_INVALID")
+            previous = owned_hashes(previous_record)
+        except InstallerError:
+            if not valid_marker:
+                raise
+            backup_metadata = True
+    if has_marker and not valid_marker:
+        if not previous:
+            raise InstallerError(
+                "INSTALLATION_INVALID", f"Unrecognized installation marker: {marker}"
+            )
+        backup_metadata = True
     payload = None
     sources = {}
-    if mode != "Uninstall":
+    if mode != "Uninstall" or (not previous and (package / "payload.json").is_file()):
         try:
-            matched_build, payload, sources = select_payload(package, game / "isaac-ng.exe")
+            executable = None if mode == "Uninstall" else game / "isaac-ng.exe"
+            matched_build, payload, sources = select_payload(package, executable)
         except InstallerError as error:
             if mode != "Status" or error.code != "GAME_INCOMPATIBLE":
                 raise
@@ -358,29 +408,65 @@ def install_files(package, game, mode):
                 "gameCompatible": True,
                 "gameBuild": matched_build,
             }
-    if game_running():
-        raise InstallerError("GAME_RUNNING", "Isaac is still running")
+    package_hashes = payload["files"] if payload else {}
+    # A valid record survives a missing marker. With no record, a byte-for-byte
+    # match against the verified package also identifies a manual installation.
     names = list(dict.fromkeys((*sources, *previous)))
-    if not names and mode == "Uninstall":
-        names = list(OWNED)
+    if mode == "Uninstall" and not previous:
+        backends = directory / "backends"
+        candidates = list(OWNED)
+        if not backends.is_symlink() and backends.is_dir():
+            candidates.extend(
+                backend_file(p.name) for p in backends.iterdir() if re.fullmatch(r"j[0-9]+", p.name)
+            )
+        names = list(dict.fromkeys((*names, *candidates)))
+    current = mode == "Install" and valid_marker and bool(previous) and previous_record == payload
     parents = {directory: mode == "Install"}
+    targets = {}
+    preserved = []
+    backup_modified = backup_metadata
     for name in names:
         target = game / name
-        for parent in target.parents:
-            if parent == game:
-                break
-            parents[parent] = parents.get(parent, False) or name in sources
+        unsafe = False
+        ancestors = target.relative_to(game).parents
+        for relative in reversed(ancestors):
+            if relative == Path("."):
+                continue
+            parent = game / relative
             if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
-                raise InstallerError("FILE_CONFLICT", f"Expected an ordinary directory: {parent}")
-        if target.exists() or target.is_symlink():
-            try:
-                if name not in previous or digest(target) != previous[name]:
-                    raise ValueError(f"Existing {name} is not an unchanged Isaac LAN file")
-            except ValueError as error:
-                raise InstallerError("FILE_CONFLICT", f"{target}: {error}") from error
-    if mode == "Uninstall" and not installed:
-        return {"installed": False}
-    targets = {game / name: name.replace("/", "_") for name in names}
+                if mode == "Install":
+                    raise InstallerError(
+                        "FILE_CONFLICT", f"Expected an ordinary directory: {parent}"
+                    )
+                unsafe = True
+                break
+            parents[parent] = parents.get(parent, False) or (mode == "Install" and name in sources)
+        if unsafe or target.is_symlink() or (target.exists() and not target.is_file()):
+            if mode == "Uninstall":
+                preserved.append(name)
+                continue
+            raise InstallerError("FILE_CONFLICT", f"Expected an ordinary file: {target}")
+        if target.is_file():
+            existing = digest(target)
+            current = current and existing == package_hashes.get(name)
+            if existing not in (previous.get(name), package_hashes.get(name)):
+                if mode == "Uninstall" or name not in sources:
+                    preserved.append(name)
+                    continue
+                if not installed or name == "winmm.dll":
+                    raise InstallerError("FILE_CONFLICT", f"Another file uses {target}")
+                backup_modified = True
+        elif mode == "Uninstall":
+            continue
+        else:
+            current = False
+        targets[target] = name.replace("/", "_")
+    if mode == "Uninstall" and not installed and not targets:
+        return {"installed": False, "preservedFiles": preserved}
+    if current:
+        return {"installed": True, "directory": str(game)}
+    if game_running(game):
+        raise InstallerError("GAME_RUNNING", "This Isaac installation is still running")
     targets.update({record: record.name, marker: marker.name})
     staging = Path(tempfile.mkdtemp(prefix=".isaac-lan-transaction-", dir=game))
     preserve_recovery = False
@@ -463,6 +549,7 @@ def install_files(package, game, mode):
                 ) from original
             preserve_recovery = False
             raise
+        preserve_recovery = backup_modified
     finally:
         if not preserve_recovery:
             try:
@@ -473,7 +560,10 @@ def install_files(package, game, mode):
                     file=sys.stderr,
                 )
     remove_empty_directories(parents.keys() - {directory})
-    return {"installed": mode == "Install", "directory": str(game)}
+    result = {"installed": mode == "Install", "directory": str(game), "preservedFiles": preserved}
+    if backup_modified:
+        result["backupDirectory"] = str(staging)
+    return result
 
 
 def main():
