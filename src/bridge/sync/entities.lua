@@ -73,12 +73,21 @@ return function(fields)
                     -- native pools. Never reuse borrowed refs across that boundary.
                     retained, spawned = nil, true
                     -- Spawn subtype zero rolls a new collectible, even for an empty pedestal.
-                    local subtype = v[Entity.type] == types.ENTITY_PICKUP
-                            and v[Entity.variant] == pickups.PICKUP_COLLECTIBLE
+                    local collectible = v[Entity.type] == types.ENTITY_PICKUP
+                        and v[Entity.variant] == pickups.PICKUP_COLLECTIBLE
+                    local subtype = collectible
                             and v[Entity.subtype] == 0
                             and COLLECTIBLE_SPAWN_PLACEHOLDER
                         or v[Entity.subtype]
                     e = env.spawn(v, env.ref(v[Entity.spawner]), subtype)
+                    if
+                        e
+                        and collectible
+                        and e.SubType ~= v[Entity.subtype]
+                        and env.restorePedestal
+                    then
+                        env.restorePedestal(e, v[Entity.subtype])
+                    end
                 end
                 if e then
                     local data = e:GetData()

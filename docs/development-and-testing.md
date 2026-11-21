@@ -137,7 +137,7 @@ python tools/inspect_engine.py "$ISAAC_GAME_EXE" \
 
 离线场景通过 [`tests/offline/lua_worker.lua`](https://github.com/BMingSY/isaac-lan/blob/main/tests/offline/lua_worker.lua) 执行生产 Lua，[离线夹具](https://github.com/BMingSY/isaac-lan/tree/main/tests/fixtures) 提供有限接口和虚拟时间。新问题优先补能复现它的离线用例，再决定原生验收范围。
 
-两版的 `--case revive-command` 检查合作幽灵在同房与分房时通过联机控制台复活。`--case boss-reward-pickup` 验证主机取走第一个 Boss 奖励后，客机实际拾取弹簧锁钥匙、获得幸运与魂心、拾取两把钥匙并跨房保留效果。两版的 `--case devil-combat` 在已打开的恶魔房出口旁触发战斗，由客机实际尝试出门，并在清房后沿原路离开。
+两版的 `--case revive-command` 检查合作幽灵在同房与分房时通过 `/rebirth` 重生。`--case boss-reward-pickup` 验证主机取走第一个 Boss 奖励后，客机实际拾取弹簧锁钥匙、获得幸运与魂心、拾取两把钥匙并跨房保留效果。两版的 `--case devil-combat` 在已打开的恶魔房出口旁触发战斗，由客机实际尝试出门，并在清房后沿原路离开。
 
 实体尺寸恢复的定向检查为 `bridge.entity-codec` 和 Windows `native.entity-size`，覆盖无 XML 配置的实体、重复尺寸、实际尺寸变化、原有碰撞形状与非法输入拒绝。实机使用 [run_special_routes.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_special_routes.py) 的 `--case entity-size --case entity-fields --mod <Mod目录> --heap-check --record`，在同一对进程验证换层后的复活机、分房重聚、检查点重连及常规字段读写对照；用 Allstars 的旧实体表可覆盖配置缺失路径。Mod 文件只复制到隔离目录，不修改原安装；未订阅的创意工坊副本应准备为无 Workshop ID 的本地测试元数据，避免游戏自动移除它，保留 Lua 和资源文件原样。
 
@@ -305,6 +305,8 @@ Boss 整组时限按用例数量预留加载与转场时间，单项进度断言
 ## 开发专项入口
 
 挑战45使用 [run_delete_this.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_delete_this.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`，可加 `--heap-check --record`。`--progress-template` 可提供只读原生进度基线；工具在启动前只解锁所选角色，验证挑战及路线不依赖普通解锁，结束后恢复原资料。默认角色为以撒与抹大拉；`--characters 7 7` 可选双阿撒泻勒，`--style` 设置托管策略；`--mode route --then-natural` 复用主客机进程，先做路线检查，再以双阿撒泻勒跑无辅助场景。默认 `--mode natural` 使用 LANBOT 的正常移动、射击、拾取及主动按钮；`--mode route` 将玩家维持在已生成的 Boss 房、补充魂心和弯勺、提高泪弹伤害，并通过 LANBOT 的 `next` 命令选择原生出口，报告中明确列出辅助条件，不能当作无辅助通关。两种模式均从第一层开始，检查各层推进、??? 实际出现、错误道具拾取、客机定义／库存／属性／房间一致性、双端完成事件及个人进度恢复。离线对应 `bridge.delete-this`、`bridge.challenges`、`bridge.challenge_menu`、`bridge.lanbot`、`core.challenge-rules` 与 Windows `native.generated-challenge`、`native.generated-items`。
+
+错误道具底座使用 `run_special_routes.py --case tmtrainer-pedestals --case delete-this-shop` 检查。普通局只给主机玩家错误技，两端核对商店和宝箱房的道具图像、价格、D6 重掷结果，以及移除错误技后再次进房和客机拾取的结果。挑战 45 检查首层商店首次进入和返回后的商品。两项均使用种子 `RDQV 7PSH`。
 
 超大层与射击轮换使用 [run_large_floor_aim.py](https://github.com/BMingSY/isaac-lan/blob/main/tools/run_large_floor_aim.py)，指定 `--host`、`--client`、`--build`、`--output` 与独立 `--port`；可用 `--extra-client` 增加第三、四端，使用 `--heap-check --record` 保留异常与画面证据。所有用例复用同一组进程，按两人超大层、两人至指定人数的射击轮换依次开局；`--challenge 1004` 或 `--challenge 1005` 可只复测对应挑战。覆盖普通路线各层生成、妈心／妈腿奖杯、独立移动、跨房射击、鼠标、蓄力松手、幽灵与断线重连。隔离存档在启动前准备资格，结束后恢复并核对。离线对应 `core.aim-rotation`、`core.challenge-rules`、`bridge.challenges`、`bridge.challenge_menu`、`presentation.attacks` 和 Windows `native.floor-generation`、`native.challenge-hud`、`native.mouse-input`。
 

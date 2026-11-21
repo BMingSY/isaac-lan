@@ -33,10 +33,10 @@ assert(#model.rows == 1 and model.advance(input("/op")) == "/opacity ")
 model.update(input("/opacity "))
 assert(has("/opacity others "), "Single match did not advance to parameter suggestions")
 check("  /TP bo", "  /TP boss ")
-check("/rev", "/revive ")
-check("/revive ", "/revive 2p ")
-check("/c rev", "/c revive ")
-check("/c revive 2", "/c revive 2p ")
+check("/reb", "/rebirth ")
+check("/rebirth ", "/rebirth 2p ")
+check("/c reb", "/c rebirth ")
+check("/c rebirth 2", "/c rebirth 2p ")
 check("/tp s", "/tp s ")
 assert(model.rows[1].value == "/tp s ", "Exact alias was hidden behind partial matches")
 check("/tp ", "/tp 2p ")
@@ -71,6 +71,8 @@ for _, text in ipairs({
     "/unknown",
     "/复",
     "/复活 ",
+    "/revive ",
+    "/重生 ",
     "/console 复活 ",
     "/c custom_mod_command argument",
 }) do

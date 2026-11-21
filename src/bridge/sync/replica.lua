@@ -216,6 +216,7 @@ return function(fields)
                 local missingTears = reconcileEntities(data[Room.entities], {
                     ref = ref,
                     key = deps.hash,
+                    restorePedestal = deps.glitched.restorePedestal,
                     spawn = function(v, spawner, subtype)
                         return game:Spawn(
                             v[Entity.type],
