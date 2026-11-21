@@ -720,10 +720,6 @@ bool bind(lua_State* L, HMODULE module) {
     function("input_ready", ready);
     function("input_assign", assign);
     function("input_devices", devices);
-    lua.pushInteger(L, physicalDeviceId(0));
-    lua.setField(L, -2, "input_keyboard_device");
-    lua.pushInteger(L, XUSER_MAX_COUNT);
-    lua.setField(L, -2, "input_gamepad_count");
     function("input_capture", capture);
     function("input_bot", botInput);
     function("players_spawn", spawn);
