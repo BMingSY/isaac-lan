@@ -35,7 +35,7 @@ python tools/workshop_release.py prepare \
   --replace-notes-version "$WORKSHOP_NOTES_VERSION"
 ```
 
-`prepare` 不发布。它校验安装包，查询现有条目并下载当前内容，保留原有 Lua 入口、预览图和安装说明，更新 `metadata.xml` 的版本号，只保留本次 ZIP 和校验文件。安装包声明加载器 ABI 时，同时从该 ZIP 提取主体 DLL 和清单到 `isaac-lan-update`，供已安装加载器采用；不重新编译，也不从上次工坊副本复用主体，契约见[原生扩展更新](https://github.com/BMingSY/isaac-lan/blob/main/docs/extension-updates.md)。更新说明只转换标题格式为 Steam BBCode，不改变措辞。
+`prepare` 不发布。它校验安装包，查询现有条目并下载当前内容，保留原有 Lua 入口、预览图和安装说明，更新 `metadata.xml` 的版本号，只保留本次 ZIP 和校验文件。安装包声明加载器 ABI 时，同时从该 ZIP 提取各游戏版本匹配的主体 DLL 和清单到 `isaac-lan-update`，供已安装加载器采用；不重新编译，也不从上次工坊副本复用主体，契约见[原生扩展更新](https://github.com/BMingSY/isaac-lan/blob/main/docs/extension-updates.md)。更新说明只转换标题格式为 Steam BBCode，不改变措辞。
 
 两种语言的原介绍均没有版本前缀时，将示例中的 `--replace-notes-version` 参数改为 `--prepend-notes`，首次建立顶部版本内容。该操作不会删除旧版本段落，不能在已有版本前缀时反复使用。
 

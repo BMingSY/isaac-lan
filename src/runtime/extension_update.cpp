@@ -44,10 +44,9 @@ struct Staging {
 } // namespace
 
 Selection select(const fs::path& game, const fs::path& workshop, std::string_view baselineVersion,
-                 std::string_view gameBuild, FileHash hash) {
+                 std::string_view gameBuild, FileHash hash, const fs::path& installed) {
     Selection result;
     const auto baseline = parseVersion(baselineVersion);
-    const auto fallback = game / payloadFile;
     try {
         if (!baseline || read(game / ".isaac-lan-install") != "IsaacLAN/1\n")
             throw std::runtime_error("Automatic updates require an installed extension");
@@ -76,8 +75,10 @@ Selection select(const fs::path& game, const fs::path& workshop, std::string_vie
                 }
             }
         try {
-            if (!workshop.empty() && directory(workshop)) {
-                const auto sourceManifest = read(workshop / manifestFile);
+            if (!workshop.empty() && directory(workshop) && validGameBuild(gameBuild)) {
+                const auto specific = workshop / gameBuild;
+                const auto& source = directory(specific) ? specific : workshop;
+                const auto sourceManifest = read(source / manifestFile);
                 const auto package = parseManifest(sourceManifest);
                 if (!package || !eligible(*package))
                     throw std::runtime_error("Workshop update is incompatible or not newer");
@@ -91,11 +92,11 @@ Selection select(const fs::path& game, const fs::path& workshop, std::string_vie
                     if (!fs::create_directory(temporary))
                         throw std::runtime_error("Cannot reserve update staging directory");
                     Staging staging{temporary};
-                    if (!regular(workshop / payloadFile, maxPayloadBytes))
+                    if (!regular(source / payloadFile, maxPayloadBytes))
                         throw std::runtime_error("Invalid Workshop update DLL");
-                    fs::copy_file(workshop / payloadFile, temporary / payloadFile);
+                    fs::copy_file(source / payloadFile, temporary / payloadFile);
                     if (!verified(temporary / payloadFile, *package, hash) ||
-                        read(workshop / manifestFile) != sourceManifest)
+                        read(source / manifestFile) != sourceManifest)
                         throw std::runtime_error("Workshop update is incomplete or changed");
                     std::ofstream output(temporary / manifestFile, std::ios::binary);
                     output << sourceManifest;
@@ -133,7 +134,8 @@ Selection select(const fs::path& game, const fs::path& workshop, std::string_vie
     } catch (const std::exception& error) {
         result.detail = error.what();
     }
-    result.candidates.push_back(fallback);
+    if (!installed.empty())
+        result.candidates.push_back(installed);
     return result;
 }
 std::optional<Package> pending(const fs::path& game, const fs::path& workshop,

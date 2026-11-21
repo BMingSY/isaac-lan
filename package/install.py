@@ -57,11 +57,11 @@ def read_json(path, code):
         raise InstallerError(code, f"Cannot read {path}: {error}") from error
 
 
-def check_manifest(value, names, code, field="files"):
+def check_manifest(value, names, code, field="files", expected_format=1):
     hashes = value.get(field)
     if (
         type(value.get("format")) is not int
-        or value["format"] != 1
+        or value["format"] != expected_format
         or not isinstance(hashes, dict)
         or any(
             not isinstance(hashes.get(name), str) or not re.fullmatch(r"[0-9a-f]{64}", hashes[name])
@@ -81,8 +81,7 @@ def digest(path):
     return hashlib.sha256(regular(path).read_bytes()).hexdigest()
 
 
-def check_game(path, profile):
-    data = regular(path).read_bytes()
+def check_game(data, profile):
     if len(data) < 64 or len(data) > 512 * 1024 * 1024 or data[:2] != b"MZ":
         raise ValueError("Expected a Windows Isaac executable")
 
@@ -157,6 +156,127 @@ def game_running():
     return False
 
 
+def backend_file(backend):
+    return f"isaac-lan/backends/{backend}/isaac_lan_probe.dll"
+
+
+def owned_hashes(record):
+    names = OWNED
+    if record.get("format") == 2:
+        backends = record.get("backends")
+        if (
+            not isinstance(backends, dict)
+            or not backends
+            or not all(
+                re.fullmatch(r"j[0-9]+", b) and isinstance(v, str) and v
+                for b, v in backends.items()
+            )
+        ):
+            raise InstallerError("INSTALLATION_INVALID", "Invalid installed backend list")
+        names = ["winmm.dll", *(backend_file(b) for b in backends)]
+        check_manifest(record, names, "INSTALLATION_INVALID", expected_format=2)
+        if set(record["files"]) != set(names):
+            raise InstallerError("INSTALLATION_INVALID", "Unexpected installed file")
+    else:
+        check_manifest(record, names, "INSTALLATION_INVALID")
+    return {name: record["files"][name] for name in names}
+
+
+def payloads(package):
+    index = read_json(package / "payload.json", "PACKAGE_INVALID")
+    if index.get("format") != 3:
+        yield package, index, None
+        return
+    backends = index.get("backends")
+    if (
+        not isinstance(backends, list)
+        or not backends
+        or not all(isinstance(b, str) and re.fullmatch(r"j[0-9]+", b) for b in backends)
+        or len(set(backends)) != len(backends)
+    ):
+        raise InstallerError("PACKAGE_INVALID", "Invalid package backend list")
+    parent = package / "backends"
+    for backend in backends:
+        directory = parent / backend
+        if parent.is_symlink() or directory.is_symlink() or not directory.is_dir():
+            raise InstallerError("PACKAGE_INVALID", f"Expected an ordinary directory: {directory}")
+        yield directory, read_json(directory / "payload.json", "PACKAGE_INVALID"), backend
+
+
+def select_payload(package, executable):
+    image = regular(executable).read_bytes()
+    matched_build = None
+    record = None
+    sources = {}
+    details = []
+    for directory, payload, backend in payloads(package):
+        for field, names in (
+            ("files", (*OWNED, "isaac_lan_check.exe")),
+            ("linux_files", ("install.py", "game-profile.json")),
+        ):
+            check_manifest(payload, names, "PACKAGE_INVALID", field)
+            for name in names:
+                path = (package if name in ("install.py", "winmm.dll") else directory) / name
+                try:
+                    if digest(path) != payload[field][name]:
+                        raise ValueError(f"Package file failed verification: {name}")
+                except (ValueError, FileNotFoundError) as error:
+                    raise InstallerError("PACKAGE_INVALID", f"{path}: {error}") from error
+        profile = read_json(directory / "game-profile.json", "PACKAGE_INVALID")
+        if (
+            not isinstance(payload.get("game_build"), str)
+            or not payload["game_build"]
+            or profile.get("format") != 1
+            or profile.get("game_build") != payload["game_build"]
+            or profile.get("backend") != payload.get("backend")
+            or (backend is not None and profile["backend"] != backend)
+        ):
+            raise InstallerError("PACKAGE_INVALID", "Invalid game profile")
+        if backend is None:
+            record = payload
+            sources = {name: directory / name for name in OWNED}
+        else:
+            if (
+                not isinstance(payload.get("extension_version"), str)
+                or not payload["extension_version"]
+                or type(payload.get("loader_abi")) is not int
+            ):
+                raise InstallerError("PACKAGE_INVALID", "Invalid extension version or loader ABI")
+            if record is None:
+                record = {
+                    "format": 2,
+                    "extension_version": payload["extension_version"],
+                    "loader_abi": payload["loader_abi"],
+                    "backends": {},
+                    "files": {"winmm.dll": payload["files"]["winmm.dll"]},
+                }
+                sources["winmm.dll"] = package / "winmm.dll"
+            if (record["extension_version"], record["loader_abi"]) != (
+                payload["extension_version"],
+                payload["loader_abi"],
+            ):
+                raise InstallerError(
+                    "PACKAGE_INVALID", "Backend extension versions or loader ABIs differ"
+                )
+            name = backend_file(backend)
+            record["backends"][backend] = profile["game_build"]
+            record["files"][name] = payload["files"]["isaac_lan_probe.dll"]
+            sources[name] = directory / "isaac_lan_probe.dll"
+        try:
+            check_game(image, profile)
+        except (ValueError, struct.error) as error:
+            details.append(f"{profile['game_build']}: {error}")
+            continue
+        except (KeyError, TypeError, AttributeError) as error:
+            raise InstallerError("PACKAGE_INVALID", f"Invalid game profile: {error}") from error
+        if matched_build is not None:
+            raise InstallerError("PACKAGE_INVALID", "Multiple game backends match this executable")
+        matched_build = profile["game_build"]
+    if matched_build is None:
+        raise InstallerError("GAME_INCOMPATIBLE", "\n".join(details))
+    return matched_build, record, sources
+
+
 def install(package, game, mode="Install"):
     if mode not in ("Install", "Uninstall", "Status"):
         raise ValueError(f"Unknown installation mode: {mode}")
@@ -166,89 +286,108 @@ def install(package, game, mode="Install"):
         regular(game / "isaac-ng.exe")
     except (ValueError, FileNotFoundError, NotADirectoryError) as error:
         raise InstallerError("GAME_PATH", f"Invalid game directory {game}: {error}") from error
+    if os.name != "posix":
+        return install_files(package, game, mode)
+    import fcntl
+
+    # Hold the directory itself so the lock survives replacement of the record
+    # and is released by the OS if an installer exits unexpectedly.
+    lock = os.open(game, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        try:
+            operation = fcntl.LOCK_SH if mode == "Status" else fcntl.LOCK_EX
+            fcntl.flock(lock, operation | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise InstallerError(
+                "FILE_IN_USE", "Another installer is using this game directory"
+            ) from error
+        return install_files(package, game, mode)
+    finally:
+        os.close(lock)
+
+
+def remove_empty_directories(paths):
+    for path in sorted(paths, key=lambda p: -len(p.parts)):
+        try:
+            path.rmdir()
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            if error.errno not in (errno.ENOTEMPTY, errno.EEXIST):
+                print(
+                    f"Isaac LAN: Could not remove empty directory {path}: {error}", file=sys.stderr
+                )
+
+
+def install_files(package, game, mode):
     marker = game / ".isaac-lan-install"
     directory = game / "isaac-lan"
     record = directory / "installation.json"
     if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
         raise InstallerError("INSTALLATION_INVALID", f"Expected an ordinary directory: {directory}")
     installed = marker.exists() or marker.is_symlink()
-    previous = None
+    previous = {}
     if installed:
         try:
             if regular(marker).read_text(encoding="utf-8").strip() != "IsaacLAN/1":
                 raise ValueError("Unrecognized installation marker")
         except ValueError as error:
             raise InstallerError("INSTALLATION_INVALID", f"{marker}: {error}") from error
-        previous = read_json(record, "INSTALLATION_INVALID")
-        check_manifest(previous, OWNED, "INSTALLATION_INVALID")
+        previous = owned_hashes(read_json(record, "INSTALLATION_INVALID"))
     elif record.exists() or record.is_symlink():
         raise InstallerError(
             "INSTALLATION_INVALID", f"Installation record exists without its marker: {record}"
         )
     payload = None
+    sources = {}
     if mode != "Uninstall":
-        payload = read_json(package / "payload.json", "PACKAGE_INVALID")
-        check_manifest(payload, (*OWNED, "isaac_lan_check.exe"), "PACKAGE_INVALID")
-        check_manifest(
-            payload, ("install.py", "game-profile.json"), "PACKAGE_INVALID", "linux_files"
-        )
-        if not isinstance(payload.get("game_build"), str) or not payload["game_build"]:
-            raise InstallerError("PACKAGE_INVALID", "Invalid package game_build")
-        for field, names in (
-            ("files", (*OWNED, "isaac_lan_check.exe")),
-            ("linux_files", ("install.py", "game-profile.json")),
-        ):
-            for name in names:
-                try:
-                    if digest(package / name) != payload[field][name]:
-                        raise ValueError(f"Package file failed verification: {name}")
-                except (ValueError, FileNotFoundError) as error:
-                    raise InstallerError("PACKAGE_INVALID", f"{package / name}: {error}") from error
-        profile = read_json(package / "game-profile.json", "PACKAGE_INVALID")
-        if (
-            profile.get("format") != 1
-            or profile.get("game_build") != payload["game_build"]
-            or profile.get("backend") != payload.get("backend")
-        ):
-            raise InstallerError("PACKAGE_INVALID", "Invalid game profile")
         try:
-            check_game(game / "isaac-ng.exe", profile)
-        except (ValueError, struct.error) as error:
-            if mode != "Status":
-                raise InstallerError("GAME_INCOMPATIBLE", str(error)) from error
+            matched_build, payload, sources = select_payload(package, game / "isaac-ng.exe")
+        except InstallerError as error:
+            if mode != "Status" or error.code != "GAME_INCOMPATIBLE":
+                raise
             return {
                 "installed": installed,
                 "gameCompatible": False,
                 "detail": str(error),
-                "nextStep": HINTS["GAME_INCOMPATIBLE"],
+                "nextStep": HINTS[error.code],
             }
-        except (KeyError, TypeError, AttributeError) as error:
-            raise InstallerError("PACKAGE_INVALID", f"Invalid game profile: {error}") from error
         if mode == "Status":
             return {
                 "installed": installed,
                 "gameCompatible": True,
-                "gameBuild": profile["game_build"],
+                "gameBuild": matched_build,
             }
     if game_running():
         raise InstallerError("GAME_RUNNING", "Isaac is still running")
-    for name in OWNED:
+    names = list(dict.fromkeys((*sources, *previous)))
+    if not names and mode == "Uninstall":
+        names = list(OWNED)
+    parents = {directory: mode == "Install"}
+    for name in names:
         target = game / name
+        for parent in target.parents:
+            if parent == game:
+                break
+            parents[parent] = parents.get(parent, False) or name in sources
+            if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
+                raise InstallerError("FILE_CONFLICT", f"Expected an ordinary directory: {parent}")
         if target.exists() or target.is_symlink():
             try:
-                if not installed or digest(target) != previous["files"][name]:
+                if name not in previous or digest(target) != previous[name]:
                     raise ValueError(f"Existing {name} is not an unchanged Isaac LAN file")
             except ValueError as error:
                 raise InstallerError("FILE_CONFLICT", f"{target}: {error}") from error
     if mode == "Uninstall" and not installed:
         return {"installed": False}
-    targets = [game / name for name in OWNED] + [record, marker]
+    targets = {game / name: name.replace("/", "_") for name in names}
+    targets.update({record: record.name, marker: marker.name})
     staging = Path(tempfile.mkdtemp(prefix=".isaac-lan-transaction-", dir=game))
     preserve_recovery = False
     try:
         backups = {}
-        for target in targets:
-            backup = staging / f"old-{target.name}" if target.exists() else None
+        for target, staged_name in targets.items():
+            backup = staging / f"old-{staged_name}" if target.exists() else None
             if backup is not None:
                 shutil.copyfile(target, backup)
             backups[target] = backup
@@ -267,20 +406,32 @@ def install(package, game, mode="Install"):
             encoding="utf-8",
         )
         if mode == "Install":
-            for name in OWNED:
-                shutil.copyfile(package / name, staging / name)
+            for name, source in sources.items():
+                staged = staging / targets[game / name]
+                shutil.copyfile(source, staged)
+                if digest(staged) != payload["files"][name]:
+                    raise InstallerError(
+                        "PACKAGE_INVALID", f"Package file changed while staging: {name}"
+                    )
             (staging / "installation.json").write_text(
                 json.dumps(payload, indent=2) + "\n", encoding="utf-8"
             )
             (staging / ".isaac-lan-install").write_text("IsaacLAN/1\n", encoding="utf-8")
         touched = []
+        created = []
         try:
             if mode == "Install":
-                directory.mkdir(exist_ok=True)
-            for target in targets:
+                for parent in sorted(
+                    (p for p in parents if parents[p]), key=lambda path: len(path.parts)
+                ):
+                    if not parent.exists():
+                        parent.mkdir()
+                        created.append(parent)
+            for target, staged_name in targets.items():
                 touched.append(target)
-                if mode == "Install":
-                    os.replace(staging / target.name, target)
+                staged = staging / staged_name
+                if staged.exists():
+                    os.replace(staged, target)
                 else:
                     target.unlink(missing_ok=True)
         except BaseException as original:
@@ -303,6 +454,7 @@ def install(package, game, mode="Install"):
                         os.replace(recovery, target)
                 except OSError as error:
                     failures.append(f"{target}: {error}")
+            remove_empty_directories(created)
             if failures:
                 raise InstallerError(
                     "ROLLBACK_FAILED",
@@ -320,6 +472,7 @@ def install(package, game, mode="Install"):
                     f"Isaac LAN: Could not remove temporary folder {staging}: {error}",
                     file=sys.stderr,
                 )
+    remove_empty_directories(parents.keys() - {directory})
     return {"installed": mode == "Install", "directory": str(game)}
 
 

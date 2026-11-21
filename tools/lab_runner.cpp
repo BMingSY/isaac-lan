@@ -118,18 +118,21 @@ int wmain(int argc, wchar_t** argv) {
     auto gameDir = root + L"\\game";
     auto exe = gameDir + L"\\isaac-ng.exe";
     auto dll = gameDir + L"\\isaac_lan_probe.dll";
-    HMODULE local = LoadLibraryExW(dll.c_str(), nullptr, DONT_RESOLVE_DLL_REFERENCES);
-    if (!local) {
-        fprintf(stderr, "Cannot inspect probe DLL: %lu\n", GetLastError());
-        return 4;
-    }
-    auto bootstrap = GetProcAddress(local, "IsaacLanBootstrap");
-    if (!bootstrap) {
+    DWORD bootstrapRva{};
+    if (!automatic) {
+        HMODULE local = LoadLibraryExW(dll.c_str(), nullptr, DONT_RESOLVE_DLL_REFERENCES);
+        if (!local) {
+            fprintf(stderr, "Cannot inspect probe DLL: %lu\n", GetLastError());
+            return 4;
+        }
+        auto bootstrap = GetProcAddress(local, "IsaacLanBootstrap");
+        if (!bootstrap) {
+            FreeLibrary(local);
+            return 5;
+        }
+        bootstrapRva = reinterpret_cast<DWORD>(bootstrap) - reinterpret_cast<DWORD>(local);
         FreeLibrary(local);
-        return 5;
     }
-    auto bootstrapRva = reinterpret_cast<DWORD>(bootstrap) - reinterpret_cast<DWORD>(local);
-    FreeLibrary(local);
     SetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", root.c_str());
     SetEnvironmentVariableW(L"SteamAppId", L"250900");
     const auto readyName = L"Local\\IsaacLanLabReady-" + std::to_wstring(GetCurrentProcessId());

@@ -1,38 +1,54 @@
 # Isaac LAN
 
-《以撒的结合》2–4 人局域网联机扩展，支持 Windows 版**忏悔 v1.7.9b.J835** 和**忏悔＋ v1.9.7.19.J510**。
+《以撒的结合》的 2–4 人局域网联机扩展。一次安装即可在 Windows 版 **忏悔 v1.7.9b.J835** 和 **忏悔＋ v1.9.7.19.J510** 中使用。
 
 ## 功能
 
-- 共享楼层，分房探索与战斗，随时进入队友房间汇合。
-- 允许加载其他 Mod，保留原版多人 UI 和官方联机入口。
-- 小地图显示玩家位置，支持 Ping 显示和断线重连。
+- 玩家可以在同一楼层分头探索和战斗，通过小地图找到队友并汇合。
+- 联机时可以加载其他 Mod，使用原版多人界面。
+- 显示网络延迟，支持断线重连。
 
-## 安装
+## 安装与更新
 
-1. 忏悔选择文件名含 `j835` 的安装包，忏悔＋选择常规安装包。解压后运行 `Install.cmd`。
-2. 保持游戏是关闭状态，选择游戏目录中的 `isaac-ng.exe`。
-3. 从 Steam 启动游戏并选择存档，在主菜单选择第三项 **Online／联机模式**。忏悔直接进入局域网联机，忏悔＋需再选**局域网联机**。
+关闭游戏，解压安装包。
 
-所有玩家需要使用相同游戏版本和同一份联机扩展。
+### Windows
+
+运行 `Install.cmd`，选择游戏目录中的 `isaac-ng.exe`。
 
 ### Linux／Steam Deck（Proton）
 
-需要以上两个 Windows 游戏版本之一及 Proton 11.0-2 或更高版本。
-
-将 `ISAAC_GAME_DIRECTORY` 设为游戏安装位置后执行：
+使用 Proton 11.0-2 或更高版本。在解压后的安装包目录中运行以下命令，将路径换成游戏安装目录。
 
 ```sh
-python3 install.py --game-directory "$ISAAC_GAME_DIRECTORY"
+python3 install.py --game-directory "/path/to/The Binding of Isaac Rebirth"
 ```
 
-Steam 启动选项设为：
+在 Steam 的游戏属性中填写启动选项。
 
 ```text
 WINEDLLOVERRIDES="winmm=n,b" %command%
 ```
 
-升级时从新安装包重新运行安装命令。卸载使用同一命令加 `--mode Uninstall`，并删除上述启动选项；配置、联机存档和历史日志会保留。
+## 创建与加入
+
+所有玩家需使用相同的游戏版本和扩展版本。从 Steam 启动游戏，选择存档后打开主菜单第三项。
+
+| 游戏 | 菜单路径 |
+| --- | --- |
+| 忏悔 | 联机模式（Online） |
+| 忏悔＋ | 联机模式（Online） → 局域网联机 |
+
+1. 房主确认端口（默认 UDP 29506），选择「创建房间」，把地址和端口发给队友。
+2. 队友输入房主的 IPv4 地址、IPv6 地址或域名，填好端口，选择「加入房间」。
+3. 所有人选好角色并准备后，由房主开始游戏。
+
+## 卸载
+
+关闭游戏后运行卸载命令。配置、联机存档和日志会保留。
+
+- **Windows**　运行 `Uninstall.cmd`，选择游戏目录中的 `isaac-ng.exe`。
+- **Linux／Steam Deck**　在安装命令末尾加上 `--mode Uninstall` 并运行，再移除上文为扩展设置的 Steam 启动选项。
 
 ## 配置与日志
 
@@ -75,18 +91,6 @@ border_color = 79604C
 text_color = E8DFCB
 ```
 
-## 创建与加入
-
-1. 房主设置端口，点击“创建房间”，把自己的 IPv4 地址或域名和端口告诉队友。
-2. 队友填写房主 IP／域名和端口，点击“加入房间”。
-3. 所有人选择角色并准备，由房主开始游戏。
-
-默认使用 **UDP**，端口为 **29506**，可以在界面中修改。
-
-## 卸载
-
-关闭游戏，运行 `Uninstall.cmd`，选择同一个 `isaac-ng.exe`。卸载会保留联机存档。
-
 ## 技术文档
 
 [架构与开发文档](https://github.com/BMingSY/isaac-lan/tree/main/docs)
@@ -100,17 +104,23 @@ text_color = E8DFCB
 将 `ISAAC_IMGUI_SOURCE` 和 `ISAAC_MINHOOK_SOURCE` 设为对应依赖源码位置后执行：
 
 ```sh
-cmake -S . -B build-win32 -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86.cmake \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DIMGUI_SOURCE_DIR="$ISAAC_IMGUI_SOURCE" \
-  -DMINHOOK_SOURCE_DIR="$ISAAC_MINHOOK_SOURCE"
-cmake --build build-win32
-python3 tools/build_package.py --build build-win32 --output dist/Isaac-LAN-J510
+for backend in j835 j510
+do
+  cmake -S . -B "build-$backend" -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86.cmake \
+    -DCMAKE_BUILD_TYPE=Release -DISAAC_LAN_BACKEND="$backend" \
+    -DIMGUI_SOURCE_DIR="$ISAAC_IMGUI_SOURCE" \
+    -DMINHOOK_SOURCE_DIR="$ISAAC_MINHOOK_SOURCE"
+  cmake --build "build-$backend" --target isaac_lan_probe isaac_lan_check
+done
+cmake --build build-j510 --target isaac_lan_loader
+python3 tools/build_package.py --build build-j835 --build build-j510 --output dist/Isaac-LAN
 ```
 
 ## 问题与建议
 
-可以在游戏内直接反馈：联机时在聊天中输入 `/feedback 问题描述`。扩展会把本次和上一次启动的日志、原版 `log.txt` 与 `config.ini` 上传到作者服务器，成功后显示反馈编号，报告问题时附上编号即可。日志只有作者查看，不会公开，路径中的 Windows 用户名会被替换；上传失败时会提示本地保存的反馈包位置。收集范围见[反馈上传](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)。
+在联机聊天中输入 `/feedback 问题描述`。提交成功后，游戏会显示反馈编号。上传失败时，游戏会显示本地反馈包的位置。
 
-也可以提交到 [Issues](https://github.com/BMingSY/isaac-lan/issues)，写明游戏版本、主客机、复现步骤和使用的其他 Mod；遇到联机异常时可以附上对应启动的完整日志归档。
+反馈包包含游戏和扩展版本、最近两次启动的联机日志、游戏的 `log.txt` 和扩展的 `config.ini`。日志上传到作者服务器，仅作者可见。路径中的 Windows 用户名会隐去。[反馈收集范围](https://github.com/BMingSY/isaac-lan/blob/main/docs/feedback.md)
+
+在 GitHub 报告问题时，请写明游戏版本、你是房主还是客机、复现步骤和使用的 Mod，并附上已有的反馈编号或相关日志。[提交 Issue](https://github.com/BMingSY/isaac-lan/issues)

@@ -36,7 +36,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.build.outputs.tag }}
         run: |
-          gh release create "$RELEASE_TAG" dist/*.zip dist/*.sha256 \
+          archive="dist/Isaac-LAN-$RELEASE_TAG-windows-x86.zip"
+          gh release create "$RELEASE_TAG" "$archive" "$archive.sha256" \
             --repo "$GITHUB_REPOSITORY" --verify-tag \
             --title "Isaac LAN $RELEASE_TAG" \
             --notes-file ".github/release-notes/$RELEASE_TAG.md"

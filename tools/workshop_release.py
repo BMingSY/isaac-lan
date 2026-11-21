@@ -132,7 +132,14 @@ def query_metadata(steam, directory):
 
 def check_archive(archive, tag):
     result = subprocess.run(
-        [sys.executable, str(ROOT / "tools/check_release.py"), str(archive), "--tag", tag],
+        [
+            sys.executable,
+            str(ROOT / "tools/check_release.py"),
+            str(archive),
+            "--tag",
+            tag,
+            "--allow-legacy",
+        ],
         capture_output=True,
         text=True,
         check=True,

@@ -92,12 +92,9 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
-          python3 tools/build_release.py --build build-win32 --output dist --tag "$RELEASE_TAG"
+          python3 tools/build_release.py --build build-win32 --build build-j835 --output dist --tag "$RELEASE_TAG"
           .deps/packaging/bin/python tools/check_release.py \
             "dist/Isaac-LAN-$RELEASE_TAG-windows-x86.zip" --tag "$RELEASE_TAG" --require-stripped
-          python3 tools/build_release.py --build build-j835 --output dist --tag "$RELEASE_TAG"
-          .deps/packaging/bin/python tools/check_release.py \
-            "dist/Isaac-LAN-$RELEASE_TAG-j835-windows-x86.zip" --tag "$RELEASE_TAG" --require-stripped
           python3 tools/bundle_ctest.py export --build build-win32 --output ci
           cp build-win32/isaac_lan_heap_watch.exe build-win32/isaac_lan_heap_fixture.exe ci/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

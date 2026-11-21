@@ -83,6 +83,8 @@ public class Checker {
     public static int Main(string[] args) {
         string content = File.ReadAllText(args[0]);
         Console.WriteLine(content);
+        if (content == "j510" || content == "j835")
+            return content == new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory).Name ? 0 : 1;
         return content == "compatible" ? 0 : content == "unsupported" ? 1 : 7;
     }
 }
@@ -126,6 +128,8 @@ public class Checker {
     def write_payload(self):
         payload = {
             "format": 1,
+            "extension_version": "0.8.0",
+            "loader_abi": 1,
             "game_build": "1.9.7.19.J510",
             "backend": "j510",
             "linux_files": {
@@ -171,6 +175,72 @@ public class Checker {
             self.assertNotIn("CategoryInfo", output)
         self.assertEqual((self.game / "save.dat").read_bytes(), b"preserve saves")
         return output
+
+    def test_bundle_dispatch_and_legacy_upgrade(self):
+        self.run_installer()
+        root = self.package
+        parent = root / "backends"
+        plus = parent / "j510"
+        plus.mkdir(parents=True)
+        for name in (
+            "isaac_lan_probe.dll",
+            "isaac_lan_check.exe",
+            "game-profile.json",
+            "payload.json",
+        ):
+            (root / name).rename(plus / name)
+        vanilla = parent / "j835"
+        shutil.copytree(plus, vanilla)
+        profile = json.loads((vanilla / "game-profile.json").read_text())
+        profile.update(backend="j835", game_build="1.7.9b.J835")
+        (vanilla / "game-profile.json").write_text(json.dumps(profile))
+        manifest = json.loads((vanilla / "payload.json").read_text())
+        manifest.update(backend=profile["backend"], game_build=profile["game_build"])
+        manifest["linux_files"]["game-profile.json"] = hashlib.sha256(
+            (vanilla / "game-profile.json").read_bytes()
+        ).hexdigest()
+        probe = "isaac_lan_probe.dll"
+        (vanilla / probe).write_bytes(b"j835 probe")
+        manifest["files"][probe] = hashlib.sha256((vanilla / probe).read_bytes()).hexdigest()
+        (vanilla / "payload.json").write_text(json.dumps(manifest))
+        (root / "payload.json").write_text(json.dumps({"format": 3, "backends": ["j510", "j835"]}))
+        executable = self.game / "isaac-ng.exe"
+        executable.write_text("j835")
+        # Both identically named DLLs and the old root DLL must roll back together.
+        legacy = self.installed_files()
+        self.run_installer(
+            code="IO_ERROR",
+            inject=r"""
+function Move-Item {
+    param($LiteralPath, $Destination, [switch]$Force)
+    if ((Split-Path -Leaf $Destination) -eq 'installation.json') { throw 'injected record failure' }
+    Microsoft.PowerShell.Management\Move-Item @PSBoundParameters
+}
+""",
+        )
+        self.assertEqual(self.installed_files(), legacy)
+        self.assertFalse((self.game / "isaac-lan/backends").exists())
+        self.run_installer()
+        record = json.loads((self.game / "isaac-lan/installation.json").read_text())
+        self.assertEqual(record["format"], 2)
+        self.assertFalse((self.game / probe).exists())
+        for backend in ("j835", "j510"):
+            executable.write_text(backend)
+            self.assertEqual(
+                json.loads(self.run_installer("Status"))["gameBuild"], record["backends"][backend]
+            )
+            target = self.game / "isaac-lan/backends" / backend / probe
+            self.assertEqual(target.read_bytes(), (parent / backend / probe).read_bytes())
+        self.assertEqual((self.game / "winmm.dll").read_bytes(), (root / "winmm.dll").read_bytes())
+        before = self.installed_files()
+        executable.write_text("compatible")
+        self.run_installer(code="PACKAGE_INVALID")
+        executable.write_text("unsupported")
+        self.run_installer(code="GAME_INCOMPATIBLE")
+        self.assertEqual(self.installed_files(), before)
+        self.run_installer("Uninstall")
+        self.assertFalse(any(self.installed_files().values()))
+        self.assertFalse((self.game / "isaac-lan/backends").exists())
 
     def test_install_repair_upgrade_status_uninstall(self):
         self.run_installer()

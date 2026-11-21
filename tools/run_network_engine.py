@@ -12,7 +12,8 @@ import subprocess
 import time
 from testing.engine import check_runtime_log, finalize_result
 from testing.lua import bundle_input, literal
-from game_profiles import build_profile, lab_profile
+from game_profiles import build_profile, installer_payload, lab_profile
+from build_package import build as build_installer
 from game_logs import freeze_probe_logs, probe_text, log_path
 from lab_profile import windows
 from check_performance import summarize_tree
@@ -147,6 +148,9 @@ def main():
         action="store_true",
         help="Install/uninstall the frozen package in the marked lab; retain profile isolation",
     )
+    parser.add_argument(
+        "--installed-package", type=Path, help="Extracted installer to exercise in installed mode"
+    )
     parser.add_argument("--completion", required=True, help="Required per-peer completion evidence")
     parser.add_argument(
         "--scenario-timeout",
@@ -263,6 +267,8 @@ def main():
     args = parser.parse_args()
     if not 10 <= args.scenario_timeout <= 86400:
         parser.error("Scenario timeout must be between 10 and 86400 seconds")
+    if args.installed_package and not args.installed:
+        parser.error("--installed-package requires --installed")
     if args.installed and not args.frontend:
         parser.error("--installed requires --frontend")
     if args.release_solo_coordination and (args.solo_fixture or not args.frontend):
@@ -343,7 +349,6 @@ def main():
     result = {
         "pass": False,
         "runs": [],
-        "dll_sha256": hashlib.sha256((args.build / "isaac_lan_probe.dll").read_bytes()).hexdigest(),
         "script_sha256": hashlib.sha256(scenario).hexdigest(),
         "source_script_sha256": hashlib.sha256(source_script).hexdigest(),
     }
@@ -356,47 +361,32 @@ def main():
     args.output.mkdir(parents=True, exist_ok=False)
     # Freeze both inputs before launching either peer. A build/edit performed
     # while this test runs must not silently change the second peer's version.
+    package = args.output / "installed-package"
+    binaries = args.build
+    loader = args.build / "winmm.dll"
+    if args.installed:
+        if args.installed_package:
+            shutil.copytree(args.installed_package, package)
+        else:
+            build_installer(args.build, package)
+        binaries, manifest = installer_payload(package, selected_profile["backend"])
+        loader = package / "winmm.dll"
+        result["checker_sha256"] = manifest["files"]["isaac_lan_check.exe"]
+        result["installed_branch"] = True
+        result["automatic_loading"] = True
     tested_dll = args.output / "tested-probe.dll"
     tested_script = args.output / "test-harness.lua"
-    shutil.copy2(args.build / "isaac_lan_probe.dll", tested_dll)
+    shutil.copy2(binaries / "isaac_lan_probe.dll", tested_dll)
+    result["dll_sha256"] = hashlib.sha256(tested_dll.read_bytes()).hexdigest()
     tested_script.write_bytes(scenario)
     if args.automatic or args.installed:
-        shutil.copy2(args.build / "winmm.dll", args.output / "tested-loader.dll")
+        shutil.copy2(loader, args.output / "tested-loader.dll")
         result["loader_sha256"] = hashlib.sha256(
             (args.output / "tested-loader.dll").read_bytes()
         ).hexdigest()
     installed_labs = []
     process_watchers = []
     heap_watchers = []
-    package = args.output / "installed-package"
-    if args.installed:
-        package.mkdir()
-        shutil.copy2(tested_dll, package / "isaac_lan_probe.dll")
-        shutil.copy2(args.output / "tested-loader.dll", package / "winmm.dll")
-        shutil.copy2(source / "package/install.ps1", package)
-        shutil.copy2(args.build / "isaac_lan_check.exe", package)
-        result["checker_sha256"] = hashlib.sha256(
-            (package / "isaac_lan_check.exe").read_bytes()
-        ).hexdigest()
-        payload = {
-            "format": 1,
-            "game_build": selected_profile["game_build"],
-            "backend": selected_profile["backend"],
-            "files": {
-                "isaac_lan_probe.dll": result["dll_sha256"],
-                "winmm.dll": result["loader_sha256"],
-                "isaac_lan_check.exe": result["checker_sha256"],
-            },
-        }
-        shutil.copy2(args.build / "game-profile.json", package)
-        payload["linux_files"] = {
-            "game-profile.json": hashlib.sha256(
-                (package / "game-profile.json").read_bytes()
-            ).hexdigest()
-        }
-        (package / "payload.json").write_text(json.dumps(payload))
-        result["installed_branch"] = True
-        result["automatic_loading"] = args.automatic or args.installed
     fixtures = []
     original_mod_states = {}
     fixture_roles = {}

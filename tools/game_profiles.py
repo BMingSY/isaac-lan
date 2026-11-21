@@ -7,6 +7,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BACKEND = "j510"
+RELEASE_BACKENDS = (DEFAULT_BACKEND, "j835")
 
 
 def validate(profile):
@@ -124,10 +125,27 @@ def lab_profile(lab):
     return validate(json.loads(path.read_text()))
 
 
-def release_name(tag, backend):
-    # Keep the established Repentance+ download name for existing clients.
-    suffix = {"j510": "", "j835": "-j835"}[backend]
-    return f"Isaac-LAN-{tag}{suffix}-windows-x86"
+def bundle_backends(index):
+    if index != {"format": 3, "backends": list(RELEASE_BACKENDS)}:
+        raise ValueError("Release manifest must include both supported game backends")
+    return RELEASE_BACKENDS
+
+
+def installer_payload(package, backend):
+    directory = Path(package)
+    payload = json.loads((directory / "payload.json").read_text())
+    if payload.get("format") == 3:
+        if backend not in bundle_backends(payload):
+            raise ValueError("The installer does not contain the selected backend")
+        directory = directory / "backends" / backend
+        payload = json.loads((directory / "payload.json").read_text())
+    if payload.get("backend") != backend:
+        raise ValueError("The installer differs from the selected backend")
+    return directory, payload
+
+
+def release_name(tag):
+    return f"Isaac-LAN-{tag}-windows-x86"
 
 
 def profile_directory(lab):

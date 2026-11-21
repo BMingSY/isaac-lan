@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 #include "core/startup_error.h"
+#include "engine/game_version.h"
 
 namespace isaac::loader {
 using Bootstrap = DWORD(WINAPI*)(void*);
@@ -13,7 +14,7 @@ struct Extension {
     startup::Failure failure{startup::Code::extensionLoad, {}, {}, {}};
 };
 Extension load(const std::filesystem::path& game, std::string_view baselineVersion,
-               std::string_view gameBuild);
+               const engine::GameVersion* version);
 Extension loadInstalled(const std::filesystem::path& path);
 std::wstring failureMessage(const Extension& extension, DWORD code);
 } // namespace isaac::loader

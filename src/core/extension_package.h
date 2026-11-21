@@ -18,6 +18,11 @@ inline constexpr std::size_t maxManifestBytes = 1024;
 inline constexpr std::uintmax_t maxPayloadBytes = 64 * 1024 * 1024;
 using Version = std::array<std::uint32_t, 3>;
 
+inline bool validGameBuild(std::string_view value) {
+    return !value.empty() && value.front() >= '0' && value.front() <= '9' &&
+           value.find_first_not_of("0123456789.bJ") == std::string_view::npos;
+}
+
 inline std::optional<Version> parseVersion(std::string_view value) {
     Version result{};
     for (std::size_t i = 0; i < result.size(); ++i) {
@@ -65,8 +70,7 @@ inline std::optional<Package> parseManifest(std::string_view text) {
         return {};
     Package package{std::string(*version), std::string(*gameBuild), std::string(*sha256), 0};
     const auto parsed = std::from_chars(abi->data(), abi->data() + abi->size(), package.abi);
-    if (!parseVersion(package.version) || package.gameBuild.empty() ||
-        package.gameBuild.find_first_not_of("0123456789.J") != std::string::npos ||
+    if (!parseVersion(package.version) || !validGameBuild(package.gameBuild) ||
         parsed.ec != std::errc{} || parsed.ptr != abi->data() + abi->size() ||
         package.sha256.size() != 64 ||
         package.sha256.find_first_not_of("0123456789abcdef") != std::string::npos)
