@@ -9,8 +9,8 @@ namespace isaac::updates {
 namespace {
 namespace fs = std::filesystem;
 bool directory(const fs::path& path) {
-    const auto status = fs::symlink_status(path);
-    return fs::is_directory(status) && !fs::is_symlink(status);
+    std::error_code error;
+    return fs::is_directory(fs::symlink_status(path, error));
 }
 bool regular(const fs::path& path, std::uintmax_t limit) {
     const auto status = fs::symlink_status(path);
@@ -41,110 +41,165 @@ struct Staging {
         fs::remove(path, error);
     }
 };
+struct Candidate {
+    Package package;
+    fs::path directory, sourceManifest;
+    std::string manifest;
+};
+
+fs::path stage(const Candidate& candidate, const fs::path& cache, FileHash hash) {
+    const auto& package = candidate.package;
+    const auto destination = cache / package.directory();
+    if (!directory(destination)) {
+        fs::create_directory(cache);
+        const auto temporary = cache / (".staging-" + std::to_string(std::random_device{}()));
+        if (!fs::create_directory(temporary))
+            throw std::runtime_error("Cannot reserve update staging directory");
+        Staging staging{temporary};
+        if (!regular(candidate.directory / payloadFile, maxPayloadBytes))
+            throw std::runtime_error("Invalid Workshop update DLL");
+        fs::copy_file(candidate.directory / payloadFile, temporary / payloadFile);
+        if (!verified(temporary / payloadFile, package, hash) ||
+            read(candidate.sourceManifest) != candidate.manifest)
+            throw std::runtime_error("Workshop update is incomplete or changed");
+        std::ofstream output(temporary / manifestFile, std::ios::binary);
+        output << candidate.manifest;
+        output.close();
+        if (!output)
+            throw std::runtime_error("Cannot write staged update manifest");
+        std::error_code error;
+        fs::rename(temporary, destination, error);
+        // A concurrent launch may have committed the same immutable package.
+        if (error && !directory(destination))
+            throw std::system_error(error);
+    }
+    if (parseManifest(read(destination / manifestFile)) != package)
+        throw std::runtime_error("Cached update does not match Workshop package");
+    return destination;
+}
+
+bool conflictingBuilds(const std::vector<Candidate>& candidates) {
+    return !candidates.empty() &&
+           std::any_of(candidates.begin() + 1, candidates.end(), [&](const Candidate& candidate) {
+               const auto& first = candidates.front().package;
+               const auto& next = candidate.package;
+               return next.backend != first.backend || next.gameBuild != first.gameBuild ||
+                      next.markerRva != first.markerRva;
+           });
+}
 } // namespace
 
+bool GameTarget::accepts(const Package& package) const {
+    if (!build.empty() && build != package.gameBuild)
+        return false;
+    if (!package.markerRva)
+        return !build.empty();
+    if (!backend.empty() && backend != package.backend)
+        return false;
+    return matchesMarker ? matchesMarker(package.gameBuild, package.markerRva) : !build.empty();
+}
+
 Selection select(const fs::path& game, const fs::path& workshop, std::string_view baselineVersion,
-                 std::string_view backend, std::string_view gameBuild, FileHash hash,
-                 const fs::path& installed) {
+                 const GameTarget& target, FileHash hash, const fs::path& installed) {
     Selection result;
-    const auto baseline = parseVersion(baselineVersion);
     try {
+        const auto baseline = parseVersion(baselineVersion);
         if (!baseline || read(game / ".isaac-lan-install") != "IsaacLAN/1\n")
             throw std::runtime_error("Automatic updates require an installed extension");
         const auto data = game / "isaac-lan";
         const auto cache = data / "versions";
-        if (!directory(data))
-            throw std::runtime_error("Invalid extension data directory");
-        if (fs::exists(cache) && !directory(cache))
-            throw std::runtime_error("Invalid extension version directory");
-        auto eligible = [&](const Package& package) {
-            return package.abi == loaderABI && package.gameBuild == gameBuild &&
-                   *parseVersion(package.version) > *baseline;
-        };
-        std::vector<std::pair<Package, fs::path>> packages;
-        if (directory(cache))
-            for (const auto& entry : fs::directory_iterator(cache)) {
-                try {
-                    if (!directory(entry.path()))
-                        continue;
-                    const auto package = parseManifest(read(entry.path() / manifestFile));
-                    if (package && eligible(*package) &&
-                        entry.path().filename() == package->directory())
-                        packages.emplace_back(*package, entry.path());
-                } catch (const std::exception&) {
-                    // An interrupted or damaged cache entry cannot hide others.
-                }
-            }
-        try {
-            if (!workshop.empty() && directory(workshop) && validGameBuild(gameBuild)) {
-                auto source = workshop / backend;
-                if (!directory(source)) {
-                    const auto legacy = workshop / gameBuild;
-                    source = directory(legacy) ? legacy : workshop;
-                }
-                const auto sourceManifest = read(source / manifestFile);
-                const auto package = parseManifest(sourceManifest);
-                if (!package || !eligible(*package))
-                    throw std::runtime_error("Workshop update is incompatible or not newer");
-                const auto destination = cache / package->directory();
-                if (!directory(destination)) {
-                    fs::create_directory(cache);
-                    // Never overwrite an existing cache path, including damaged
-                    // or foreign files. Concurrent launches may stage separately.
-                    const auto temporary =
-                        cache / (".staging-" + std::to_string(std::random_device{}()));
-                    if (!fs::create_directory(temporary))
-                        throw std::runtime_error("Cannot reserve update staging directory");
-                    Staging staging{temporary};
-                    if (!regular(source / payloadFile, maxPayloadBytes))
-                        throw std::runtime_error("Invalid Workshop update DLL");
-                    fs::copy_file(source / payloadFile, temporary / payloadFile);
-                    if (!verified(temporary / payloadFile, *package, hash) ||
-                        read(source / manifestFile) != sourceManifest)
-                        throw std::runtime_error("Workshop update is incomplete or changed");
-                    std::ofstream output(temporary / manifestFile, std::ios::binary);
-                    output << sourceManifest;
-                    output.close();
-                    if (!output)
-                        throw std::runtime_error("Cannot write staged update manifest");
-                    fs::rename(temporary, destination);
-                }
-                const auto cached = parseManifest(read(destination / manifestFile));
-                if (!cached || cached->sha256 != package->sha256 ||
-                    cached->version != package->version || !eligible(*cached))
-                    throw std::runtime_error("Cached update does not match Workshop package");
-                packages.insert(packages.begin(), {*package, destination});
-            }
-        } catch (const std::exception& error) {
-            result.detail = error.what();
-        }
-        std::stable_sort(packages.begin(), packages.end(), [](const auto& left, const auto& right) {
-            return *parseVersion(left.first.version) > *parseVersion(right.first.version);
-        });
-        for (const auto& [package, path] : packages) {
+        if (!directory(data) || (fs::exists(cache) && !directory(cache)))
+            throw std::runtime_error("Invalid extension update directory");
+
+        std::vector<Candidate> candidates;
+        auto consider = [&](const fs::path& path, bool download, std::string_view edition = {}) {
             try {
+                if (!directory(path))
+                    return;
+                auto file = path / manifestFile;
+                if (download && !edition.empty() &&
+                    fs::symlink_status(path / buildManifestFile).type() != fs::file_type::not_found)
+                    file = path / buildManifestFile;
+                auto raw = read(file);
+                auto package = parseManifest(raw);
+                if (!package || package->abi != loaderABI ||
+                    *parseVersion(package->version) <= *baseline)
+                    return;
+                if (download) {
+                    if ((file.filename() == buildManifestFile) != (package->markerRva != 0) ||
+                        (package->markerRva && package->backend != edition))
+                        return;
+                } else if (path.filename() != package->directory())
+                    return;
+                if (!target.accepts(*package))
+                    return;
+                candidates.push_back(
+                    {std::move(*package), path, download ? file : fs::path{}, std::move(raw)});
+            } catch (const std::exception& error) {
+                result.detail = error.what();
+            }
+        };
+        if (!workshop.empty() && directory(workshop)) {
+            if (target.build.empty()) {
+                for (const auto edition : editions)
+                    consider(workshop / edition, true, edition);
+            } else if (validGameBuild(target.build)) {
+                auto source = workshop / target.backend;
+                if (directory(source))
+                    consider(source, true, target.backend);
+                else {
+                    const auto legacy = workshop / target.build;
+                    consider(directory(legacy) ? legacy : workshop, true);
+                }
+            }
+        }
+        if (directory(cache)) {
+            for (const auto& entry : fs::directory_iterator(cache))
+                consider(entry.path(), false);
+        }
+        // A partial download cannot create an ambiguity or hide a complete cached build.
+        if (target.build.empty() && conflictingBuilds(candidates)) {
+            std::erase_if(candidates, [&](const Candidate& candidate) {
+                try {
+                    return !verified(candidate.directory / payloadFile, candidate.package, hash);
+                } catch (const std::exception&) {
+                    return true;
+                }
+            });
+            if (conflictingBuilds(candidates))
+                throw std::runtime_error("Game matches multiple update build markers");
+        }
+        std::stable_sort(candidates.begin(), candidates.end(),
+                         [](const Candidate& left, const Candidate& right) {
+                             return *parseVersion(left.package.version) >
+                                    *parseVersion(right.package.version);
+                         });
+        for (const auto& candidate : candidates) {
+            try {
+                const auto path = candidate.sourceManifest.empty() ? candidate.directory
+                                                                   : stage(candidate, cache, hash);
                 const auto dll = path / payloadFile;
-                if (verified(dll, package, hash) &&
-                    std::find(result.candidates.begin(), result.candidates.end(), dll) ==
-                        result.candidates.end()) {
+                if (std::find(result.candidates.begin(), result.candidates.end(), dll) ==
+                        result.candidates.end() &&
+                    verified(dll, candidate.package, hash)) {
                     result.candidates.push_back(dll);
                     if (!result.newest)
-                        result.newest = package;
+                        result.newest = candidate.package;
                 }
-            } catch (const std::exception&) {
-                // Retain earlier complete packages when one version is damaged.
+            } catch (const std::exception& error) {
+                result.detail = error.what();
             }
         }
     } catch (const std::exception& error) {
         result.detail = error.what();
     }
-    if (!installed.empty())
+    if (!target.build.empty() && !installed.empty())
         result.candidates.push_back(installed);
     return result;
 }
 std::optional<Package> pending(const fs::path& game, const fs::path& workshop,
                                std::string_view runningVersion, std::string_view backend,
                                std::string_view gameBuild, FileHash hash) {
-    return select(game, workshop, runningVersion, backend, gameBuild, hash).newest;
+    return select(game, workshop, runningVersion, {backend, gameBuild}, hash).newest;
 }
 } // namespace isaac::updates

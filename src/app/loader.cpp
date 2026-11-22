@@ -6,7 +6,6 @@
 #include <cwchar>
 #include <cstring>
 #include "app/extension_loader.h"
-#include "engine/game_version.h"
 
 namespace {
 [[noreturn]] void unavailableExport(const char* name, unsigned ordinal) {
@@ -51,9 +50,8 @@ void restoreEntry() {
 DWORD WINAPI initialize(void*) {
     isaac::loader::Extension loaded;
     try {
-        const auto version = isaac::engine::identifyGame(GetModuleHandleW(nullptr), imageSize);
         loaded = isaac::loader::load(std::filesystem::path(executable).parent_path(),
-                                     ISAAC_LAN_VERSION, version);
+                                     ISAAC_LAN_VERSION, GetModuleHandleW(nullptr), imageSize);
     } catch (...) {
         loaded.failure = {isaac::startup::Code::extensionLoad, executable, {}, {}};
     }

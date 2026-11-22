@@ -1,4 +1,5 @@
 #include "app/extension_loader.h"
+#include "engine/game_version.h"
 #include "core/extension_package.h"
 #include "runtime/extension_update.h"
 #include "runtime/extension_files.h"
@@ -41,27 +42,44 @@ Extension resolve(HMODULE module, const std::filesystem::path& path) {
 } // namespace
 
 Extension load(const std::filesystem::path& game, std::string_view baselineVersion,
-               const engine::GameVersion* version) {
-    if (!version)
-        return {nullptr,
-                nullptr,
-                {startup::Code::gameCompatibility, (game / L"isaac-ng.exe").wstring(), {}, {}}};
-    const auto backends = game / "isaac-lan/backends";
-    auto fallback = backends / version->backend / updates::payloadFile;
-    // Single-backend development packages and isolated fixtures use a flat directory.
-    std::error_code error;
-    if (std::filesystem::symlink_status(backends, error).type() ==
-            std::filesystem::file_type::not_found &&
-        std::filesystem::is_regular_file(game / updates::payloadFile, error))
-        fallback = game / updates::payloadFile;
-    updates::Selection selection{{fallback}, {}, {}};
-    if (!labGame(game)) {
-        selection =
-            updates::select(game, updates::workshopSource(game), baselineVersion, version->backend,
-                            version->version, updates::fileHash, fallback);
+               const void* image, std::size_t imageSize) {
+    const auto detection = engine::identifyGame(image, imageSize);
+    const auto* version = detection.installed;
+    const auto isolated = labGame(game);
+    const Extension unsupported{
+        nullptr,
+        nullptr,
+        {startup::Code::gameCompatibility, (game / L"isaac-ng.exe").wstring(), {}, {}}};
+    if (detection.ambiguous || (isolated && !version))
+        return unsupported;
+    std::filesystem::path fallback;
+    updates::GameTarget target{};
+    if (version) {
+        target.backend = version->backend;
+        target.build = version->version;
+        const auto backends = game / "isaac-lan/backends";
+        fallback = backends / version->backend / updates::payloadFile;
+        // Single-backend development packages and isolated fixtures use a flat directory.
+        std::error_code error;
+        if (std::filesystem::symlink_status(backends, error).type() ==
+                std::filesystem::file_type::not_found &&
+            std::filesystem::is_regular_file(game / updates::payloadFile, error))
+            fallback = game / updates::payloadFile;
+    }
+    updates::Selection selection;
+    if (isolated) {
+        selection.candidates.push_back(fallback);
+    } else {
+        target.matchesMarker = [image, imageSize](std::string_view build, std::uint32_t rva) {
+            return engine::matchesGameVersion(image, imageSize, build, rva);
+        };
+        selection = updates::select(game, updates::workshopSource(game), baselineVersion, target,
+                                    updates::fileHash, fallback);
     }
     if (!selection.detail.empty())
         OutputDebugStringA(("Isaac LAN update: " + selection.detail + "\n").c_str());
+    if (selection.candidates.empty() && !version)
+        return unsupported;
     Extension last;
     for (const auto& path : selection.candidates) {
         last = loadInstalled(path);

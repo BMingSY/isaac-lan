@@ -8,6 +8,12 @@ struct GameVersion {
     std::string_view backend, version;
     std::uint32_t markerRva;
 };
-// Read the version marker of the running game before selecting an extension.
-const GameVersion* identifyGame(const void* image, std::size_t imageSize);
+struct GameDetection {
+    const GameVersion* installed{};
+    bool ambiguous{};
+};
+// Compare the complete marker and delimiter at the audited address in the running image.
+bool matchesGameVersion(const void* image, std::size_t imageSize, std::string_view version,
+                        std::uint32_t markerRva);
+GameDetection identifyGame(const void* image, std::size_t imageSize);
 } // namespace isaac::engine

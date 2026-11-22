@@ -7,9 +7,21 @@ import re
 from zipfile import ZipFile
 
 if __package__:
-    from .game_profiles import DEFAULT_BACKEND, LEGACY_BACKENDS, LEGACY_BUILDS, bundle_backends
+    from .game_profiles import (
+        DEFAULT_BACKEND,
+        LEGACY_BACKENDS,
+        LEGACY_BUILDS,
+        bundle_backends,
+        validate,
+    )
 else:
-    from game_profiles import DEFAULT_BACKEND, LEGACY_BACKENDS, LEGACY_BUILDS, bundle_backends
+    from game_profiles import (
+        DEFAULT_BACKEND,
+        LEGACY_BACKENDS,
+        LEGACY_BUILDS,
+        bundle_backends,
+        validate,
+    )
 
 ROOT = Path(__file__).resolve().parents[1]
 _HEADER = (ROOT / "src/core/extension_package.h").read_text(encoding="utf-8")
@@ -20,7 +32,7 @@ def constant(name):
     return re.search(rf'char {name}\[\] = "([^"]+)";', _HEADER)[1]
 
 
-def update_files(zipped, prefix, payload):
+def update_files(zipped, prefix, payload, edition=None):
     if type(payload["loader_abi"]) is not int or payload["loader_abi"] != LOADER_ABI:
         raise ValueError("Unsupported release loader ABI")
     dll = zipped.read(prefix + constant("payloadFile"))
@@ -34,14 +46,33 @@ def update_files(zipped, prefix, payload):
         raise ValueError("Invalid update version")
     if not re.fullmatch(r"[0-9][0-9.bJ]*", payload["game_build"]):
         raise ValueError("Invalid update game build")
-    manifest = (
-        f"{constant('manifestMagic')}\n"
+    fields = (
         f"version={payload['extension_version']}\n"
         f"game_build={payload['game_build']}\n"
         f"loader_abi={LOADER_ABI}\n"
         f"sha256={digest}\n"
     )
-    return dll, manifest
+    files = {
+        constant("payloadFile"): dll,
+        constant("manifestFile"): (constant("manifestMagic") + "\n" + fields).encode("ascii"),
+    }
+    if edition is not None:
+        raw = zipped.read(prefix + "game-profile.json")
+        if hashlib.sha256(raw).hexdigest() != payload["linux_files"]["game-profile.json"]:
+            raise ValueError("Update game profile differs from the release manifest")
+        profile = validate(json.loads(raw))
+        build, rva = profile["game_build"], profile["version_rva"]
+        if (
+            profile["backend"] != payload["backend"]
+            or build != payload["game_build"]
+            or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)+b?\.J[0-9]+", build)
+            or rva + len(build) + 1 > profile["minimum_image_size"]
+        ):
+            raise ValueError("Invalid update game build marker")
+        files[constant("buildManifestFile")] = (
+            f"{constant('buildManifestMagic')}\n{fields}backend={edition}\nversion_rva={rva}\n"
+        ).encode("ascii")
+    return files
 
 
 def prepare_update(archive, content):
@@ -56,21 +87,23 @@ def prepare_update(archive, content):
                 payload = json.loads(zipped.read(directory + "payload.json"))
                 if payload.get("backend") != backend:
                     raise ValueError("Update backend differs from release manifest")
-                files = update_files(zipped, directory, payload)
                 edition = LEGACY_BACKENDS.get(backend, backend)
+                files = update_files(zipped, directory, payload, edition)
                 updates[root / edition] = files
                 # Older loaders can only address their original build or the flat update.
                 build = payload["game_build"]
                 if LEGACY_BUILDS.get(build) == edition:
-                    updates[root if edition == DEFAULT_BACKEND else root / build] = files
+                    updates[root if edition == DEFAULT_BACKEND else root / build] = {
+                        name: data
+                        for name, data in files.items()
+                        if name != constant("buildManifestFile")
+                    }
         elif "loader_abi" in index:
             updates[root] = update_files(zipped, prefix, index)
     if updates:
         root.mkdir(parents=True)
-    for destination, (dll, manifest) in updates.items():
+    for destination, files in updates.items():
         if destination != root:
             destination.mkdir()
-        (destination / constant("payloadFile")).write_bytes(dll)
-        (destination / constant("manifestFile")).write_text(
-            manifest, encoding="ascii", newline="\n"
-        )
+        for name, data in files.items():
+            (destination / name).write_bytes(data)
