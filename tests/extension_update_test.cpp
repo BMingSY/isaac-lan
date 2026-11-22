@@ -56,8 +56,8 @@ struct Fixture {
         write(source / payloadFile, bytes);
     }
     Selection select(std::string_view baseline = "0.6.3", FileHash hasher = hash) {
-        auto selection = isaac::updates::select(game, source, baseline, "repentance_plus",
-                                                gameBuild, hasher, game / payloadFile);
+        auto selection = isaac::updates::select(
+            game, source, baseline, {"repentance_plus", gameBuild}, hasher, game / payloadFile);
         require(read(game / payloadFile) == "installed DLL", "root DLL remains unchanged");
         require(read(game / "isaac-lan/session.keep") == "saved session", "session preserved");
         require(read(game / "isaac-lan/installation.json") == "installation ownership unchanged",
@@ -68,6 +68,21 @@ struct Fixture {
 };
 void manifests() {
     require(parseManifest(manifest()).has_value(), "valid manifest");
+    auto v2 = manifest();
+    v2.replace(0, std::string_view(manifestMagic).size(), buildManifestMagic);
+    const auto marked = v2 + "backend=repentance_plus\nversion_rva=12345\n";
+    const auto parsed = parseManifest(marked);
+    require(parsed && parsed->backend == "repentance_plus" && parsed->markerRva == 12345 &&
+                parsed->directory() != parseManifest(manifest())->directory(),
+            "build-aware and legacy snapshots can coexist in the immutable cache");
+    for (const auto* suffix :
+         {"", "backend=other\nversion_rva=1\n", "backend=repentance\nversion_rva=0\n",
+          "backend=repentance\nversion_rva=-1\n", "backend=repentance\nversion_rva=4294967296\n",
+          "backend=repentance\nversion_rva=1x\n", "backend=repentance\nversion_rva=3\nextra\n"})
+        require(!parseManifest(v2 + suffix), "invalid build marker rejected");
+    require(!validBuildMarker("1.9..J987") && !validBuildMarker("987") &&
+                !validBuildMarker("1.b.J987"),
+            "only full game build strings can identify an unknown image");
     std::string crlf;
     for (auto c : manifest()) {
         if (c == '\n')
@@ -115,7 +130,7 @@ void multiversion() {
     write(specific / manifestFile, manifest("0.6.4", "next", vanilla));
     write(specific / payloadFile, "next");
     const auto plus = fixture.select();
-    const auto base = select(fixture.game, fixture.source, "0.6.3", "repentance", vanilla, hash);
+    const auto base = select(fixture.game, fixture.source, "0.6.3", {"repentance", vanilla}, hash);
     require(read(plus.candidates.front()) == "new", "Repentance+ uses the root update");
     require(read(base.candidates.front()) == "next", "Repentance uses its own update");
     fs::remove_all(fixture.game / "isaac-lan/versions");
@@ -127,7 +142,7 @@ void multiversion() {
     write(baseDirectory / payloadFile, "new");
     require(read(fixture.select().candidates.front()) == "next",
             "Repentance+ prefers its edition directory");
-    require(read(select(fixture.game, fixture.source, "0.6.3", "repentance", vanilla, hash)
+    require(read(select(fixture.game, fixture.source, "0.6.3", {"repentance", vanilla}, hash)
                      .candidates.front()) == "new",
             "Repentance prefers its edition directory");
     fs::remove_all(fixture.game / "isaac-lan/versions");

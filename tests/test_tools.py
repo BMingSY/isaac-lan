@@ -470,6 +470,16 @@ class PackagingTests(unittest.TestCase):
                 manifest = (directory / "manifest.txt").read_text().splitlines()
                 self.assertIn("game_build=" + build, manifest)
                 self.assertIn("sha256=" + hashlib.sha256(dll).hexdigest(), manifest)
+                marker = (directory / "manifest-v2.txt").read_text().splitlines()
+                self.assertEqual(
+                    marker,
+                    [
+                        "IsaacLANUpdate/2",
+                        *manifest[1:],
+                        "backend=" + backend,
+                        "version_rva=" + str(source_profile(backend)["version_rva"]),
+                    ],
+                )
 
     def test_workshop_legacy_paths_are_limited_to_the_loaders_that_use_them(self):
         for build, marker in ((self.build, "1.9.7.19.J510"), (self.vanilla, "1.7.9b.J835")):
@@ -484,6 +494,7 @@ class PackagingTests(unittest.TestCase):
         for edition, legacy in (("repentance_plus", root), ("repentance", root / "1.7.9b.J835")):
             for name in ("manifest.txt", "isaac_lan_probe.dll"):
                 self.assertEqual((root / edition / name).read_bytes(), (legacy / name).read_bytes())
+            self.assertFalse((legacy / "manifest-v2.txt").exists())
         for build, marker in ((self.build, "1.9.7.20.J999"), (self.vanilla, "1.7.9b.J998")):
             snapshot = build / "game-profile.json"
             profile = json.loads(snapshot.read_text())
@@ -494,6 +505,37 @@ class PackagingTests(unittest.TestCase):
         root = self.root / "next" / "isaac-lan-update"
         prepare_update(archive, root.parent)
         self.assertEqual({path.name for path in root.iterdir()}, {"repentance", "repentance_plus"})
+
+        self.assertIn(
+            "game_build=1.9.7.20.J999", (root / "repentance_plus/manifest-v2.txt").read_text()
+        )
+        self.assertIn("game_build=1.7.9b.J998", (root / "repentance/manifest-v2.txt").read_text())
+
+    def test_workshop_build_marker_requires_matching_release_profile(self):
+        archive = self.archive()
+        directory = archive.stem + "/backends/repentance_plus/"
+
+        def change_marker(files):
+            profile = json.loads(files[directory + "game-profile.json"])
+            profile["version_rva"] = profile["minimum_image_size"]
+            files[directory + "game-profile.json"] = json.dumps(profile).encode()
+
+        self.rewrite_archive(archive, change_marker)
+        with self.assertRaisesRegex(ValueError, "profile differs"):
+            prepare_update(archive, self.root / "workshop")
+        self.assertFalse((self.root / "workshop").exists())
+
+        def rehash(files):
+            payload = json.loads(files[directory + "payload.json"])
+            payload["linux_files"]["game-profile.json"] = hashlib.sha256(
+                files[directory + "game-profile.json"]
+            ).hexdigest()
+            files[directory + "payload.json"] = json.dumps(payload).encode()
+
+        self.rewrite_archive(archive, rehash)
+        with self.assertRaisesRegex(ValueError, "build marker"):
+            prepare_update(archive, self.root / "workshop")
+        self.assertFalse((self.root / "workshop").exists())
 
     def test_release_strips_copies_before_hashing_and_preserves_build(self):
         originals = {name: (self.build / name).read_bytes() for name in BINARIES}

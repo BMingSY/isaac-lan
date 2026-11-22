@@ -24,19 +24,35 @@ void write(const fs::path& path, const std::string& value) {
     std::ofstream(path, std::ios::binary) << value;
 }
 constexpr auto plus = &isaac::engine::supportedGameVersions[0];
-void prepare(const fs::path& directory, const fs::path& fixture, const std::string& version) {
+void prepare(const fs::path& directory, const fs::path& fixture, const std::string& version,
+             const isaac::engine::GameVersion& target = *plus, bool publishMarker = false) {
     fs::create_directories(directory);
     // Publish fresh source files, as Steam does; production only copies into a
     // newly reserved staging directory and never overwrites a source DLL.
     fs::remove(directory / payloadFile);
     fs::copy_file(fixture, directory / payloadFile);
-    write(directory / manifestFile, std::string(manifestMagic) + "\nversion=" + version +
-                                        "\ngame_build=" + std::string(plus->version) +
-                                        "\nloader_abi=" + std::to_string(loaderABI) + "\nsha256=" +
-                                        isaac::updates::fileHash(directory / payloadFile) + "\n");
+    const auto fields = "\nversion=" + version + "\ngame_build=" + std::string(target.version) +
+                        "\nloader_abi=" + std::to_string(loaderABI) +
+                        "\nsha256=" + isaac::updates::fileHash(directory / payloadFile) + "\n";
+    write(directory / manifestFile, manifestMagic + fields);
+    if (publishMarker)
+        write(directory / buildManifestFile,
+              buildManifestMagic + fields + "backend=" + std::string(target.backend) +
+                  "\nversion_rva=" + std::to_string(target.markerRva) + "\n");
+}
+std::vector<char> gameImage(const isaac::engine::GameVersion& version) {
+    const auto marker = std::string(version.version) + "-";
+    std::vector<char> image(version.markerRva + marker.size());
+    std::copy(marker.begin(), marker.end(), image.begin() + version.markerRva);
+    return image;
+}
+isaac::loader::Extension loadVersion(const fs::path& game,
+                                     const isaac::engine::GameVersion& version = *plus) {
+    const auto image = gameImage(version);
+    return isaac::loader::load(game, "0.6.3", image.data(), image.size());
 }
 fs::path load(const fs::path& game, const isaac::engine::GameVersion* version = plus) {
-    const auto loaded = isaac::loader::load(game, "0.6.3", version);
+    const auto loaded = loadVersion(game, *version);
     require(loaded.module && loaded.bootstrap, "load extension and bootstrap export");
     using ModulePath = const wchar_t*(__cdecl*)();
     const auto proc = GetProcAddress(loaded.module, "IsaacLanTestModulePath");
@@ -59,6 +75,78 @@ struct Temporary {
         fs::remove_all(root, error);
     }
 };
+void workshopGamePatches(const fs::path& root, const fs::path& compatible,
+                         const fs::path& incompatible) {
+    const auto game = root / "steamapps/common/Game";
+    const auto source =
+        root / "steamapps/workshop/content" / workshopApp / workshopItem / workshopDirectory;
+    const auto cache = game / "isaac-lan/versions";
+    const isaac::engine::GameVersion nextPlus{"repentance_plus", "1.9.7.21.J987", 0x180};
+    const isaac::engine::GameVersion nextBase{"repentance", "1.7.9b.J986", 0x240};
+    const auto plusDir = source / nextPlus.backend;
+    const auto baseDir = source / nextBase.backend;
+    write(game / ".isaac-lan-install", "IsaacLAN/1\n");
+    for (const auto& version : isaac::engine::supportedGameVersions) {
+        const auto installed = game / "isaac-lan/backends" / version.backend;
+        fs::create_directories(installed);
+        fs::copy_file(compatible, installed / payloadFile);
+    }
+    fs::copy_file(compatible, game / payloadFile);
+    auto unsupported = [&](const isaac::engine::GameVersion& version) {
+        const auto loaded = loadVersion(game, version);
+        require(!loaded.module && loaded.failure.code == isaac::startup::Code::gameCompatibility,
+                "unrecognized image must never run an old installed DLL");
+    };
+    prepare(plusDir, compatible, "0.6.4", nextPlus);
+    unsupported(nextPlus); // Legacy metadata cannot identify a new executable.
+    prepare(baseDir, compatible, "0.6.4", nextPlus, true);
+    unsupported(nextPlus); // A marker must come from its own edition.
+    prepare(plusDir, compatible, "0.6.3", nextPlus, true);
+    unsupported(nextPlus); // Installed baseline still applies.
+    prepare(plusDir, compatible, "0.6.4", nextPlus, true);
+    write(plusDir / payloadFile, "partial");
+    unsupported(nextPlus);
+    require(!fs::exists(cache) || fs::is_empty(cache),
+            "incomplete download cannot commit an update");
+    const isaac::engine::GameVersion suffix{nextPlus.backend, "9.7.21.J987",
+                                            nextPlus.markerRva + 2};
+    prepare(plusDir, compatible, "0.6.4", suffix, true);
+    unsupported(nextPlus);
+    prepare(plusDir, compatible, "0.6.4", nextPlus, true);
+    auto moved = nextPlus;
+    ++moved.markerRva;
+    unsupported(moved);
+    auto changed = nextPlus;
+    changed.version = "1.9.7.21.J988";
+    unsupported(changed);
+    prepare(baseDir, compatible, "0.6.5", nextBase, true);
+    auto ambiguous = gameImage(nextBase);
+    auto first = gameImage(nextPlus);
+    std::copy(first.begin(), first.end(), ambiguous.begin());
+    require(isaac::loader::load(game, "0.6.3", ambiguous.data(), ambiguous.size()).failure.code ==
+                isaac::startup::Code::gameCompatibility,
+            "two intact matching editions are ambiguous");
+    require(!fs::exists(cache) || fs::is_empty(cache), "ambiguous packages never enter the cache");
+    write(baseDir / payloadFile, "interrupted transfer");
+    const auto intact = isaac::loader::load(game, "0.6.3", ambiguous.data(), ambiguous.size());
+    require(intact.module, "a damaged second source cannot hide the one complete match");
+    FreeLibrary(intact.module);
+    prepare(baseDir, compatible, "0.6.5", nextBase, true);
+    const auto update = load(game, &nextPlus);
+    const auto vanilla = load(game, &nextBase);
+    require(update.parent_path().parent_path() == cache &&
+                vanilla.parent_path().parent_path() == cache && update != vanilla,
+            "both new game builds use their own private cached updates");
+    prepare(plusDir, incompatible, "0.6.6", nextPlus, true);
+    require(load(game, &nextPlus) == update,
+            "a bad ABI export falls back within the same game build");
+    fs::remove_all(source);
+    require(load(game, &nextPlus) == update && load(game, &nextBase) == vanilla,
+            "each future game build restarts from its own cache with Steam offline");
+    unsupported(changed);
+    fs::remove(game / ".isaac-lan-install");
+    unsupported(nextPlus);
+}
 } // namespace
 int wmain(int argc, wchar_t** argv) {
     // Deliberately invalid DLLs must return a load error instead of opening a
@@ -76,6 +164,7 @@ int wmain(int argc, wchar_t** argv) {
         const auto failing = binaryDirectory / fs::path(argv[3]).filename();
         const auto missingExport = binaryDirectory / fs::path(argv[4]).filename();
         Temporary temporary;
+        workshopGamePatches(temporary.root / "updates", compatible, incompatible);
         const auto missing = temporary.root / L"缺失.dll";
         auto rejected = isaac::loader::loadInstalled(missing);
         require(!rejected.module && !rejected.bootstrap &&
@@ -126,17 +215,17 @@ int wmain(int argc, wchar_t** argv) {
             const auto marker = std::string(expected.version) + "-";
             image.assign(expected.markerRva + marker.size(), 0);
             std::copy(marker.begin(), marker.end(), image.begin() + expected.markerRva);
-            auto version = isaac::engine::identifyGame(image.data(), image.size());
+            auto version = isaac::engine::identifyGame(image.data(), image.size()).installed;
             require(version == &expected, "identify the running game's exact version marker");
             const auto body = split / "isaac-lan/backends" / version->backend / payloadFile;
             fs::create_directories(body.parent_path());
             fs::copy_file(compatible, body);
             require(load(split, version) == body,
                     "one installation routes each game to its own DLL");
-            require(!isaac::engine::identifyGame(image.data(), image.size() - 1),
+            require(!isaac::engine::identifyGame(image.data(), image.size() - 1).installed,
                     "reject truncated version marker");
             image.back() = 'X';
-            require(!isaac::engine::identifyGame(image.data(), image.size()),
+            require(!isaac::engine::identifyGame(image.data(), image.size()).installed,
                     "reject changed marker delimiter");
         }
         image.clear();
@@ -145,14 +234,13 @@ int wmain(int argc, wchar_t** argv) {
             image.resize(std::max(image.size(), candidate.markerRva + marker.size()), 0);
             std::copy(marker.begin(), marker.end(), image.begin() + candidate.markerRva);
         }
-        require(!isaac::engine::identifyGame(image.data(), image.size()),
+        require(isaac::engine::identifyGame(image.data(), image.size()).ambiguous,
                 "ambiguous markers cannot choose a backend");
-        require(!isaac::loader::load(split, "0.6.3", nullptr).module,
+        require(!isaac::loader::load(split, "0.6.3", image.data(), image.size()).module,
                 "unknown game cannot load a baseline");
         fs::remove(split / "isaac-lan/backends" / plus->backend / payloadFile);
         fs::copy_file(compatible, split / payloadFile);
-        require(!isaac::loader::load(split, "0.6.3", plus).module,
-                "missing backend cannot adopt a leftover root DLL");
+        require(!loadVersion(split).module, "missing backend cannot adopt a leftover root DLL");
         prepare(source, compatible, "0.6.4");
         auto active = load(game);
         require(active != game / payloadFile &&
@@ -160,7 +248,7 @@ int wmain(int argc, wchar_t** argv) {
                 "raw Workshop source is adopted before any mods refresh");
         require(isaac::updates::fileHash(active) == isaac::updates::fileHash(compatible),
                 "BCrypt verifies exact cached bytes");
-        const auto held = isaac::loader::load(game, "0.6.3", plus);
+        const auto held = loadVersion(game);
         require(held.module != nullptr, "hold an existing session DLL open");
         prepare(source, compatible, "0.6.5");
         const auto newer = load(game);
@@ -192,7 +280,7 @@ int wmain(int argc, wchar_t** argv) {
         write(labGame / "isaac-lan/session.keep", "preserved fixture");
         fs::copy_file(compatible, labGame / payloadFile);
         prepare(source, compatible, "0.6.4");
-        isaac::updates::select(labGame, source, "0.6.3", plus->backend, plus->version,
+        isaac::updates::select(labGame, source, "0.6.3", {plus->backend, plus->version},
                                isaac::updates::fileHash);
         wchar_t previous[32768]{};
         GetEnvironmentVariableW(L"ISAAC_LAN_LAB_ROOT", previous, std::size(previous));
